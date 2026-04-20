@@ -28,7 +28,7 @@
     global.NW.Dom = factory(global, Export);
   }
 
-})(this, function Factory(global, Export) {
+})(this, function Factory(global: NwsGlobal, Export: Function) {
 
   var version = 'nwsapi-2.2.23',
 
@@ -123,9 +123,14 @@
     adjacent: RegExp('^' + WSP + '?\\+' + WSP + '?(.*)'),
     relative: RegExp('^' + WSP + '?\\~' + WSP + '?(.*)'),
     ancestor: RegExp('^' + WSP + '+(.*)'),
-   // universal & namespace
-   universal: RegExp('^(\\*)(.*)'),
-   namespace: RegExp('^(\\*|[\\w-]+)?\\|(.*)')
+    // universal & namespace
+    universal: RegExp('^(\\*)(.*)'),
+    namespace: RegExp('^(\\*|[\\w-]+)?\\|(.*)'),
+    // id, class, tag
+    id: RegExp(''),
+    tagName: RegExp(''),
+    className: RegExp(''),
+    attribute: RegExp(''),
   },
 
   // regexp to better aproximate detection of RTL languages (Arabic)
@@ -140,11 +145,11 @@
   reNthType = RegExp('(:nth(?:-last)?-of-type)', 'i'),
 
   // placeholder for global regexp
-  reOptimizer,
-  reValidator,
+  reOptimizer: RegExp,
+  reValidator: RegExp,
 
   // special handling configuration flags
-  Config = {
+  Config: Record<ConfigKey, boolean> = {
     IDS_DUPES: true,
     FORGIVING: true,
     NODE_LIST: false,
@@ -153,15 +158,15 @@
     VERBOSITY: true
   },
 
-  NAMESPACE,
-  QUIRKS_MODE,
-  HTML_DOCUMENT,
+  NAMESPACE: string | null = null,
+  QUIRKS_MODE: boolean,
+  HTML_DOCUMENT: boolean,
 
   ATTR_STD_OPS = {
     '=': 1, '^=': 1, '$=': 1, '|=': 1, '*=': 1, '~=': 1
   },
 
-  HTML_TABLE = {
+  HTML_TABLE: Record<string, number> = {
     'accept': 1, 'accept-charset': 1, 'align': 1, 'alink': 1, 'axis': 1,
     'bgcolor': 1, 'charset': 1, 'checked': 1, 'clear': 1, 'codetype': 1, 'color': 1,
     'compact': 1, 'declare': 1, 'defer': 1, 'dir': 1, 'direction': 1, 'disabled': 1,
@@ -172,11 +177,11 @@
     'text': 1, 'type': 1, 'valign': 1, 'valuetype': 1, 'vlink': 1
   },
 
-  Combinators = { },
+  Combinators: Record<string, string> = { },
 
-  Selectors = { },
+  Selectors: Record<string, SelectorExtension> = { },
 
-  Operators = {
+  Operators: Record<string, AttrMatcherParts> = {
      '=': { p1: '^',
             p2: '$',
             p3: 'true' },
@@ -198,7 +203,7 @@
   },
 
   concatCall =
-    function(nodes, callback) {
+    function(nodes: Element[] | NodeListOf<Element>, callback: QueryCallback) {
       var i = 0, l = nodes.length, list = Array(l);
       while (l > i) {
         if (false === callback(list[i] = nodes[i])) break;
@@ -208,7 +213,7 @@
     },
 
   concatList =
-    function(list, nodes) {
+    function(list: Element[], nodes: ArrayLike<Element>) {
       var i = -1, l = nodes.length;
       while (l--) { list[list.length] = nodes[++i]; }
       return list;
@@ -216,18 +221,17 @@
 
   // only define the toNodeList helper if explicitly enabled in Config,
   // a safety measure for headless hosts missing feature/implementation
-  toNodeList =
-    Config.NODE_LIST == false ?
-    function(x) { return x; } :
+  toNodeList: toNodeListFn =
+    Config.NODE_LIST == false ? function(nodeArray: Element[]) { return nodeArray; } :
     function() {
       // create a DocumentFragment
       var emptyNL = doc.createDocumentFragment().childNodes;
 
       // this is returned from a self-executing function so that
       // the DocumentFragment isn't repeatedly created
-      return function(nodeArray) {
+      return function(nodeArray: Element[] | NodeListOf<Element>): FakeNodeList {
         // check if it is already a nodelist
-        if (isInstanceOf(nodeArray)) return nodeArray;
+        if (isNodeList(nodeArray)) return nodeArray;
 
         // if it's a single element, wrap it in a classic array
         if (!Array.isArray(nodeArray)) nodeArray = [nodeArray];
@@ -238,7 +242,7 @@
             value: nodeArray.length, enumerable: false
           },
           'item': {
-            'value': function(i) {
+            'value': function(i: string | number) {
               return this[+i || 0];
             },
             enumerable: false
@@ -253,13 +257,13 @@
       };
     }(),
 
-  isInstanceOf =
-    function(nodes) {
+  isNodeList =
+    function(nodes: Element[] | NodeListOf<Element>): nodes is NodeListOf<Element> {
       return nodes instanceof global.NodeList;
     },
 
   documentOrder =
-    function(a, b) {
+    function(a: Node, b: Node) {
       if (!hasDupes && a === b) {
         hasDupes = true;
         return 0;
@@ -270,7 +274,7 @@
   hasDupes = false,
 
   unique =
-    function(nodes) {
+    function(nodes: Element[]) {
       var i = 0, j = -1, l = nodes.length + 1, list = [ ];
       while (--l) {
         if (nodes[i++] === nodes[i]) continue;
@@ -281,7 +285,7 @@
     },
 
   switchContext =
-    function(context, force) {
+    function(context: QueryContext, force = false) {
       var oldDoc = doc;
       doc = context.ownerDocument || context;
       if (force || oldDoc !== doc) {
@@ -300,7 +304,7 @@
 
   // convert single codepoint to UTF-16 encoding
   codePointToUTF16 =
-    function(codePoint) {
+    function(codePoint: number) {
       // out of range, use replacement character
       if (codePoint < 1 || codePoint > 0x10ffff ||
         (codePoint > 0xd7ff && codePoint < 0xe000)) {
@@ -318,7 +322,7 @@
 
   // convert single codepoint to string
   stringFromCodePoint =
-    function(codePoint) {
+    function(codePoint: number) {
       // out of range, use replacement character
       if (codePoint < 1 || codePoint > 0x10ffff ||
         (codePoint > 0xd7ff && codePoint < 0xe000)) {
@@ -338,10 +342,10 @@
   // to javascript string with javascript escape sequences
   escapeIdentifier =
     global.CSS && typeof global.CSS.escape == 'function' ?
-    function(str) {
+    function(str: string) {
       return global.CSS.escape(str);
     } :
-    function(str) {
+    function(str: string) {
       return REX.HasEscapes.test(str) ?
         str.replace(REX.FixEscapes,
           function(substring, p1, p2) {
@@ -360,7 +364,7 @@
   // convert escape sequence in a CSS string or identifier
   // to javascript string with characters representations
   unescapeIdentifier =
-    function(str) {
+    function(str: string) {
       return REX.HasEscapes.test(str) ?
         str.replace(REX.FixEscapes,
           function(substring, p1, p2) {
@@ -381,19 +385,21 @@
     '*': 'getElementsByTagName',
     '|': 'getElementsByTagNameNS',
     '.': 'getElementsByClassName'
-    },
+    }
 
-  compat = {
-    '#': (c, n) => (e, f) => byId(n, c),
-    '*': (c, n) => (e, f) => byTag(n, c),
-    '|': (c, n) => (e, f) => byTagNS(n, c),
-    '.': (c, n) => (e, f) => byClass(n, c),
-    },
+  const compat: Record<CompatKey, CompatFactory> = {
+    '#': (c, n) => () => byId(n, c),
+    '*': (c, n) => () => byTag(n, c),
+    '|': (c, n) => () => byTagNS(n, c),
+    '.': (c, n) => () => byClass(n, c),
+  }
+
+  var
 
   // find duplicate ids using iterative walk
   byIdRaw =
-    function(id, context) {
-      var node = context, nodes = [ ], next = node.firstElementChild;
+    function(id: string, context: QueryContext) {
+      var node: QueryContext | null = context, nodes = [ ], next = node.firstElementChild;
       while ((node = next)) {
         node.id == id && (nodes[nodes.length] = node);
         if ((next = node.firstElementChild || node.nextElementSibling)) continue;
@@ -406,25 +412,10 @@
 
   // context agnostic getElementById
   byId =
-    function(id, context) {
-      var e, i, l, nodes, api = method['#'];
-
-      // duplicates id allowed
-      if (Config.IDS_DUPES === false) {
-        if (api in context) {
-          return (e = context[api](id)) ? [ e ] : none;
-        }
-      } else {
-        if ('all' in context) {
-          if ((e = context.all[id])) {
-            if (e.nodeType == 1) return e.getAttribute('id') != id ? [ ] : [ e ];
-            else if (id == 'length') return (e = context[api](id)) ? [ e ] : none;
-            for (i = 0, l = e.length, nodes = [ ]; l > i; ++i) {
-              if (e[i].id == id) nodes[nodes.length] = e[i];
-            }
-            return nodes && nodes.length ? nodes : [ nodes ];
-          } else return none;
-        }
+    function(id: string, context: QueryContext): Element[] {
+      if (Config.IDS_DUPES === false && 'getElementById' in context) {
+        const e = context.getElementById(id);
+        return e ? [e] : [];
       }
 
       return byIdRaw(id, context);
@@ -432,84 +423,84 @@
 
   // wrapped up namespaced TagName api calls
   byTagNS =
-    function(context, tag) {
+    function(tag: string, context: QueryContext) {
       return byTag(tag, context);
   },
 
   // context agnostic getElementsByTagName
   byTag =
-    function(tag, context) {
-      var e, nodes, api = method['*'];
+    function(tag: string, context: QueryContext) {
+      let el: Element | null
+      let nodes: Element[];
       // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-      if (api in context) {
-        return slice.call(context[api](tag));
+      if ('getElementsByTagName' in context) {
+        return Array.from(context.getElementsByTagName(tag));
       } else {
         tag = tag.toLowerCase();
         // DOCUMENT_FRAGMENT_NODE (11)
-        if ((e = context.firstElementChild)) {
-          if (!(e.nextElementSibling || tag == '*' || e.localName == tag)) {
-            return slice.call(e[api](tag));
+        if ((el = context.firstElementChild)) {
+          if (!(el.nextElementSibling || tag == '*' || el.localName == tag)) {
+            return Array.from(el.getElementsByTagName(tag));
           } else {
             nodes = [ ];
             do {
-              if (tag == '*' || e.localName == tag) nodes[nodes.length] = e;
-              concatList(nodes, e[api](tag));
-            } while ((e = e.nextElementSibling));
+              if (tag == '*' || el.localName == tag) nodes[nodes.length] = el;
+              concatList(nodes, el.getElementsByTagName(tag));
+            } while ((el = el.nextElementSibling));
           }
-        } else nodes = none;
+        } else nodes = [];
       }
-      return !Config.NODE_LIST ?
-        nodes : isInstanceOf(nodes) ?
-        nodes : toNodeList(nodes);
+      return nodes;
     },
+
 
   // context agnostic getElementsByClassName
   byClass =
-    function(cls, context) {
-      var e, nodes, api = method['.'], reCls;
+    function(cls: string, context: QueryContext) {
+      let el: Element | null;
+      let nodes: Element[];
       // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-      if (api in context) {
-        return slice.call(context[api](cls));
+      if ('getElementsByClassName' in context) {
+        return Array.from(context.getElementsByClassName(cls));
       } else {
         // DOCUMENT_FRAGMENT_NODE (11)
-        if ((e = context.firstElementChild)) {
-          reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', QUIRKS_MODE ? 'i' : '');
-          if (!(e.nextElementSibling || reCls.test(e.className))) {
-            return slice.call(e[api](cls));
+        if ((el = context.firstElementChild)) {
+          const reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', QUIRKS_MODE ? 'i' : '');
+          if (!(el.nextElementSibling || reCls.test(el.className))) {
+            return Array.from(el.getElementsByClassName(cls));
           } else {
             nodes = [ ];
             do {
-              if (reCls.test(e.className)) nodes[nodes.length] = e;
-              concatList(nodes, e[api](cls));
-            } while ((e = e.nextElementSibling));
+              if (reCls.test(el.className)) nodes[nodes.length] = el;
+              concatList(nodes, el.getElementsByClassName(cls));
+            } while ((el = el.nextElementSibling));
           }
-        } else nodes = none;
+        } else nodes = [];
       }
-      return !Config.NODE_LIST ?
-        nodes : isInstanceOf(nodes) ?
-        nodes : toNodeList(nodes);
+      return nodes;
     },
+
 
   // namespace aware hasAttribute
   // helper for XML/XHTML documents
   hasAttributeNS =
-    function(e, name) {
+    function(e: Element, name: string) {
       var i, l, attr = e.getAttributeNames();
-      name = RegExp(':?' + name + '$', HTML_DOCUMENT ? 'i' : '');
+      const reName = new RegExp(':?' + name + '$', HTML_DOCUMENT ? 'i' : '');
       for (i = 0, l = attr.length; l > i; ++i) {
-        if (name.test(attr[i])) return true;
+        if (reName.test(attr[i])) return true;
       }
       return false;
     },
 
   // fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
   nthElement = (function() {
-    var idx = 0, len = 0, set = 0, parent = undefined, parents = Array(), nodes = Array();
-    return function(element, dir) {
+    var idx = 0, len = 0, set = 0, parent: Element | null = null, parents = Array(), nodes = Array();
+    return function(element: Element, dir: number) {
       // ensure caches are emptied after each run, invoking with dir = 2
       if (dir == 2) {
         idx = 0; len = 0; set = 0; nodes.length = 0;
-        parents.length = 0; parent = undefined;
+        parents.length = 0; parent = null;
         return -1;
       }
       var e, i, j, k, l;
@@ -547,12 +538,12 @@
 
   // fast resolver for the :nth-of-type() and :nth-last-of-type() pseudo-classes
   nthOfType = (function() {
-    var idx = 0, len = 0, set = 0, parent = undefined, parents = Array(), nodes = Array();
-    return function(element, dir) {
+    var idx = 0, len = 0, set = 0, parent: Element | null = null, parents = Array(), nodes = Array();
+    return function(element: Element, dir: number) {
       // ensure caches are emptied after each run, invoking with dir = 2
       if (dir == 2) {
         idx = 0; len = 0; set = 0; nodes.length = 0;
-        parents.length = 0; parent = undefined;
+        parents.length = 0; parent = null;
         return -1;
       }
       var e, i, j, k, l, name = element.localName;
@@ -591,7 +582,7 @@
 
   // check if the document type is HTML
   isHTML =
-    function(node) {
+    function(node: Document) {
       var doc = node.ownerDocument || node;
       return doc.nodeType == 9 &&
         // contentType not in IE <= 11
@@ -603,21 +594,27 @@
   // return node if node is focusable
   // or false if node isn't focusable
   isFocusable =
-    function(node) {
-      var doc = node.ownerDocument;
-       if (node.contentDocument&&node.localName== 'iframe') { return false; }
-       if (doc.hasFocus() && node === doc.activeElement) {
-        if (node.type || node.href || typeof node.tabIndex == 'number') {
+    function(node: HTMLElement): HTMLElement | false {
+      const doc = node.ownerDocument;
+      if (!doc) return false;
+
+      if ('contentDocument' in node && node.localName == 'iframe') {
+        return false;
+      }
+
+      if (doc.hasFocus() && node === doc.activeElement) {
+        if ('type' in node || 'href' in node || typeof node.tabIndex == 'number') {
           return node;
         }
       }
+
       return false;
     },
 
   // check if node content is editable
   isContentEditable =
-    function(node) {
-      var attrValue = 'inherit';
+    function(node: HTMLElement): boolean {
+      let attrValue: string | null = 'inherit';
       if (node.hasAttribute('contenteditable')) {
         attrValue = node.getAttribute('contenteditable');
       }
@@ -629,30 +626,32 @@
         case 'false':
           return false;
         default:
-          if (node.parentNode && node.parentNode.nodeType === 1) {
-            return isContentEditable(node.parentNode);
+          const parent = node.parentElement;
+          if (parent && parent.nodeType === 1) {
+            return isContentEditable(parent);
           }
           return false;
       }
     },
 
-  // check media resources is playing
-  isPlaying =
-    function(media) {
-      // for <audio>, <video>, <source> and <track> elements
-      var parent = media instanceof HTMLMediaElement ? null : media.parentElement;
-      return (
-        !!( media &&  media.currentTime > 0 &&  !media.paused &&  !media.ended &&  media.readyState > 2) ||
-        !!(parent && parent.currentTime > 0 && !parent.paused && !parent.ended && parent.readyState > 2));
-    },
+  // // check media resources is playing
+  // isPlaying =
+  //   function(media) {
+  //     // for <audio>, <video>, <source> and <track> elements
+  //     var parent = media instanceof HTMLMediaElement ? null : media.parentElement;
+  //     return (
+  //       !!( media &&  media.currentTime > 0 &&  !media.paused &&  !media.ended &&  media.readyState > 2) ||
+  //       !!(parent && parent.currentTime > 0 && !parent.paused && !parent.ended && parent.readyState > 2));
+  //   },
 
   // configure the engine to use special handling
   configure =
-    function(option, clear) {
+    function(option?: ConfigKey | Partial<Record<ConfigKey, boolean>>, clear = false) {
       if (typeof option == 'string') { return !!Config[option]; }
       if (typeof option != 'object') { return Config; }
-      for (var i in option) {
-        Config[i] = !!option[i];
+
+      for (let i in option) {
+        Config[i as ConfigKey] = !!option[i as ConfigKey];
       }
       // clear lambda cache
       if (clear) {
@@ -665,7 +664,7 @@
 
   // centralized error and exceptions handling
   emit =
-    function(message, proto) {
+    function(message: string, proto?: typeof Error) {
       var err;
       if (Config.VERBOSITY) {
         if (proto) {
@@ -682,7 +681,7 @@
 
   // execute the engine initialization code
   initialize =
-    function(doc) {
+    function(doc: Document) {
       setIdentifierSyntax();
       lastContext = switchContext(doc, true);
     },
@@ -834,25 +833,14 @@
   M_TEST = 'f(c);',
   N_TEST = 'if(f(c.item(k))){break main;}',
 
-  S_VARS = [ ],
-  M_VARS = [ ],
-  N_VARS = [ ],
-
-  // compile groups or single selector strings into
-  // executable functions for matching or selecting
-
-  S_TEST = 'if(f(c[k])){break main;}',
-  M_TEST = 'f(c);',
-  N_TEST = 'if(f(c.item(k))){break main;}',
-
-  S_VARS = [ ],
-  M_VARS = [ ],
-  N_VARS = [ ],
+  S_VARS: string[] = [ ],
+  M_VARS: string[] = [ ],
+  N_VARS: string[] = [ ],
 
   // compile groups or single selector strings into
   // executable functions for matching or selecting
   compile =
-    function(selector, mode, callback) {
+    function(selector: string, mode: boolean | null, callback: QueryCallback | null): SelectLambda | MatchLambda {
       var factory, token, head = '', loop = '', macro = '', source = '', vars = '';
 
       // 'mode' can be boolean or null
@@ -861,19 +849,19 @@
       switch (mode) {
         case true:
           if (selectLambdas[selector]) { return selectLambdas[selector]; }
-          macro = S_BODY + (callback ? S_TEST : '') + S_TAIL;
+          macro = S_BODY + (!!callback ? S_TEST : '') + S_TAIL;
           head = S_HEAD;
           loop = S_LOOP;
           break;
         case false:
           if (matchLambdas[selector]) { return matchLambdas[selector]; }
-          macro = M_BODY + (callback ? M_TEST : '') + M_TAIL;
+          macro = M_BODY + (!!callback ? M_TEST : '') + M_TAIL;
           head = M_HEAD;
           loop = M_LOOP;
           break;
         case null:
           if (selectLambdas[selector]) { return selectLambdas[selector]; }
-          macro = N_BODY + (callback ? N_TEST : '') + N_TAIL;
+          macro = N_BODY + (!!callback ? N_TEST : '') + N_TAIL;
           head = N_HEAD;
           loop = N_LOOP;
           break;
@@ -904,11 +892,13 @@
 
   // build conditional code to check components of selector strings
   compileSelector =
-    function(expression, source, mode, callback) {
+    function(expression: string, source: string, mode: boolean | null, callback: QueryCallback | null) {
 
       var a, b, n, f, k = 0, name, NS, referenceElement,
-      compat, expr, match, result, status, symbol, test,
-      type, selector = expression, vars;
+      compat, expr, result, status, symbol,
+      type, vars;
+
+      let selector: string | undefined = expression;
 
       // isolate selector combinators
       selector = selector.replace(STD.combinator, '$1');
@@ -924,22 +914,29 @@
         // get namespace prefix if present or get first char of selector
         symbol = STD.apimethods.test(selector) ? '|' : selector[0];
 
+        let test: AttrMatcherParts | undefined;
+        // let match: RegExpMatchArray | null = null;
+        let match: string[] | null = null;
         switch (symbol) {
 
           // universal resolver
           case '*':
             match = selector.match(Patterns.universal);
+            if (!match) throw new Error('Invalid universal selector: ' + selector);
             break;
 
           // id resolver
           case '#':
             match = selector.match(Patterns.id);
+            if (!match) throw new Error('Invalid ID selector: ' + selector);
             source = 'if((/^' + match[1] + '$/.test(e.getAttribute("id")))){' + source + '}';
             break;
 
           // class name resolver
           case '.':
             match = selector.match(Patterns.className);
+            if (!match) throw new Error('Invalid class selector: ' + selector);
+
             compat = (QUIRKS_MODE ? 'i' : '') + '.test(e.getAttribute("class"))';
             source = 'if((/(^|\\s)' + match[1] + '(\\s|$)/' + compat + ')){' + source + '}';
             break;
@@ -947,12 +944,16 @@
           // tag name resolver
           case (/[_a-z]/i.test(symbol) ? symbol : undefined):
             match = selector.match(Patterns.tagName);
+            if (!match) throw new Error('Invalid tag selector: ' + selector);
+
             source = 'if((e.localName=="' + match[1] + '")){' + source + '}';
             break;
 
           // namespace resolver
           case '|':
             match = selector.match(Patterns.namespace);
+            if (!match) throw new Error('Invalid namespace selector: ' + selector);
+
             if (match[1] == '*') {
               source = 'if(true){' + source + '}';
             } else if (!match[1]) {
@@ -967,6 +968,8 @@
           // attributes resolver
           case '[':
             match = selector.match(Patterns.attribute);
+            if (!match) throw new Error('Invalid attribute selector: ' + selector);
+
             NS = match[0].match(STD.namespaces);
             name = match[1];
             expr = name.split(':');
@@ -987,9 +990,10 @@
               match[4] = escapeIdentifier(match[4]).replace(REX.RegExpChar, '\\$&');
             }
             type = match[5] == 'i' || (HTML_DOCUMENT && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
+            if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`); // shouldn't happen
             source = 'if((' +
               (!match[2] ? (NS ? 's.hasAttributeNS(e,"' + name + '")' : 'e.hasAttribute&&e.hasAttribute("' + name + '")') :
-              !match[4] && ATTR_STD_OPS[match[2]] && match[2] != '~=' ? 'e.getAttribute&&e.getAttribute("' + name + '")==""' :
+              !match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=' ? 'e.getAttribute&&e.getAttribute("' + name + '")==""' :
               '(/' + test.p1 + match[4] + test.p2 + '/' + type + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3) +
               ')){' + source + '}';
             break;
@@ -1026,9 +1030,10 @@
           // *** user supplied combinators extensions
           case (symbol in Combinators ? symbol : undefined):
             // for other registered combinators extensions
-            match[match.length - 1] = '*';
-            source = Combinators[symbol](match) + source;
-            break;
+            throw new Error('FIXME: custom combinators are not supported yet'); // TODO: implement custom combinators
+            // match[match.length - 1] = '*';
+            // source = Combinators[symbol](match) + source;
+            // break;
 
           // *** tree-structural pseudo-classes
           // :root, :empty, :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :only-of-type
@@ -1090,6 +1095,7 @@
                 case 'nth-last-child':
                 case 'nth-last-of-type':
                   expr = /-of-type/i.test(match[1]);
+                  let test: string;
                   if (match[1] && match[2]) {
                     type = /last/i.test(match[1]);
                     if (match[2] == 'n') {
@@ -1529,14 +1535,31 @@
       return source;
     },
 
+  isDocument =
+    function(element: QueryContext): element is Document {
+      return element.nodeType === 9;
+    },
+  isDocumentFragment =
+    function(element: QueryContext): element is DocumentFragment {
+      return element.nodeType === 11;
+    },
+
+
+  // TODO: `makeref()` is a non-unique `:scope` rewrite and cannot represent 
+  // `DocumentFragment`; needs resolver-based handling.
+
   // replace :scope context element as a
   // a reference in the selector string
   makeref =
-    function(selectors, element) {
+    function(selectors: string, element: QueryContext) {
       // replace DOCUMENT with first element (root)
-      if (element.nodeType === 9) {
-        element = element.documentElement;
+      if (isDocument(element)) {
+          element = element.documentElement;
       }
+      if (isDocumentFragment(element)) {
+        throw new Error(':scope replacement for DocumentFragment is not supported');
+      }
+
       return selectors.replace(/:scope/i,
         (element.localName) +
         (element.id ? '#' + escapeIdentifier(element.id) : '') +
@@ -1545,44 +1568,45 @@
 
   // equivalent of w3c 'closest' method
   ancestor =
-    function _closest(selectors, element, callback) {
-      parse(selectors, true);
+    function _closest(selectors: string, element: Element, callback: QueryCallback | null = null) {
+      parse(selectors);
       selectors = makeref(selectors, element);
-      while (element) {
-        if (match(selectors, element, callback)) break;
-        element = element.parentElement;
+      let el: Element | null = element;
+      while (el) {
+        if (match(selectors, el, callback)) break;
+        el = el.parentElement;
       }
-      return element;
+      return el;
     },
 
   match_assert =
-    function(f, element, callback) {
+    function(f: MatchLambda[], element: Element, callback: QueryCallback | null) {
       for (var i = 0, l = f.length, r = false; l > i; ++i)
         f[i](element, callback, null, false) && (r = true);
       return r;
     },
 
   match_collect =
-    function(selectors, callback) {
+    function(selectors: string[], callback: QueryCallback | null) {
       for (var i = 0, l = selectors.length, f = [ ]; l > i; ++i)
-        f[i] = compile(selectors[i], false, callback);
+        f[i] = compile(selectors[i], false, callback) as MatchLambda; // FIXME: type assertion to MatchLambda[] is not safe, but compile() can return either MatchLambda or SelectLambda
       return { factory: f };
     },
 
   // unique parser entry point for all
   // methods (type matching/selecting)
   parse =
-    function(selectors, type) {
-
-      var parsed;
+    function(selectors: string): string[] {
 
       // arguments validation
       if (arguments.length === 0) {
         emit(qsNotArgs, TypeError);
-        return Config.VERBOSITY ? undefined : (type ? none : false);
+        if (Config.VERBOSITY) throw new TypeError(qsNotArgs);
+        return [];
       } else if (arguments[0] === '') {
         emit('\'\'' + qsInvalid);
-        return Config.VERBOSITY ? undefined : (type ? none : false);
+        if (Config.VERBOSITY) throw new SyntaxError('\'' + qsInvalid);
+        return [];
       }
 
       // input NULL or UNDEFINED
@@ -1595,7 +1619,7 @@
       }
 
       // normalize input string
-      parsed = selectors.
+      const parsed = selectors.
         replace(/\x00|\\$/g, '\ufffd').
         replace(REX.CombineWSP, '\x20').
         replace(REX.PseudosWSP, '$1').
@@ -1604,41 +1628,43 @@
         replace(REX.TrimSpaces, '');
 
       // parse, validate and split possible compound selectors
-      if ((selectors = parsed.match(reValidator)) && selectors.join('') == parsed) {
-        selectors = parsed.match(REX.SplitGroup);
+      const validated = parsed.match(reValidator);
+      if (validated?.join('') == parsed) {
         if (parsed[parsed.length - 1] == ',') {
           emit(qsInvalid);
-          return Config.VERBOSITY ? undefined : (type ? none : false);
+          if (Config.VERBOSITY) throw new SyntaxError(qsInvalid);
+          return [];
         }
+        return parsed.match(REX.SplitGroup) ?? [];
       } else {
         if (Config.FORGIVING) {
           // forgiving pseudos allow to continue even after parse errors
           if (!(parsed.includes(':is(') || parsed.includes(':where('))) {
             emit('\'' + selectors + '\'' + qsInvalid);
-            return Config.VERBOSITY ? undefined : (type ? none : false);
+            if (Config.VERBOSITY) throw new SyntaxError('\'' + selectors + '\'' + qsInvalid);
+            return [];
           }
         }
+        return [];
       }
-
-      return selectors;
     },
 
   // equivalent of w3c 'matches' method
   match =
-    function _matches(selectors, element, callback) {
+    function _matches(selectors: string, element: Element, callback: QueryCallback | null = null) {
 
       if (element && matchResolvers[selectors]) {
         return match_assert(matchResolvers[selectors].factory, element, callback);
       }
 
-      matchResolvers[selectors] = match_collect(parse(selectors, false), callback);
+      matchResolvers[selectors] = match_collect(parse(selectors), callback);
 
       return match_assert(matchResolvers[selectors].factory, element, callback);
     },
 
   // equivalent of w3c 'querySelector' method
   first =
-    function _querySelector(selectors, context, callback) {
+    function _querySelector(selectors: string, context: QueryContext, callback: QueryCallback | null = null) {
       return select(selectors, context,
         typeof callback == 'function' ?
         function firstMatch(element) {
@@ -1653,9 +1679,10 @@
 
   // equivalent of w3c 'querySelectorAll' method
   select =
-    function _querySelectorAll(selectors, context, callback) {
+    function _querySelectorAll(selectors: string, context: QueryContext, callback: QueryCallback | null = null) {
 
-      var nodes = [ ], resolver;
+      var nodes: Element[] = [];
+      let resolver;
 
       arguments.length == 0 &&
         emit(qsNotArgs, TypeError);
@@ -1668,20 +1695,23 @@
         if ((resolver = selectResolvers[selectors])) {
           if (resolver.context === context &&
             resolver.callback === callback) {
-            var i, l, list,
-              f = resolver.factory,
-              h = resolver.htmlset,
-              n = resolver.nodeset;
+            let list: Element[];
+            const f = resolver.factory;
+            const h = resolver.htmlset;
+            const n = resolver.nodeset;
+            let len = n.length;
             if (n.length > 1) {
-              for (i = 0, l = n.length; l > i; ++i) {
-                list = compat[n[i][0]](context, n[i].slice(1))();
-                if (f[i] !== null) {
-                  f[i](list, callback, context, nodes);
+              for (let i = 0; len > i; ++i) {
+                const compatFact = compat[n[i][0] as CompatKey];
+                list = compatFact(context, n[i].slice(1))();
+                const lambda = f[i];
+                if (lambda) {
+                  lambda(list, callback, context, nodes);
                 } else {
                   nodes = nodes.concat(list);
                 }
               }
-              if (l > 1 && nodes.length > 1) {
+              if (len > 1 && nodes.length > 1) {
                 nodes.sort(documentOrder);
                 hasDupes && (nodes = unique(nodes));
               }
@@ -1695,31 +1725,29 @@
             if (typeof callback == 'function') {
               nodes = concatCall(nodes, callback);
             }
-            return !Config.NODE_LIST ?
-              nodes : isInstanceOf(nodes) ?
-              nodes : toNodeList(nodes);
+            return nodes;
           }
         }
       }
 
       // save/reuse factory and closure collection
-      selectResolvers[selectors] = collect(parse(selectors, true), context, callback);
+      selectResolvers[selectors] = collect(parse(selectors), context, callback);
 
       nodes = selectResolvers[selectors].results;
 
       if (typeof callback == 'function') {
         nodes = concatCall(nodes, callback);
       }
-      return !Config.NODE_LIST ?
-        nodes : isInstanceOf(nodes) ?
-        nodes : toNodeList(nodes);
+      return nodes;
     },
 
   // optimize selectors avoiding duplicated checks
   optimize =
-    function(selector, token) {
-      var index = token.index,
-      length = token[1].length + token[2].length;
+    function(selector: string, token: RegExpMatchArray) {
+      const index = token.index;
+      if (index === undefined) throw new Error('Invalid token: ' + token);
+
+      const length = token[1].length + token[2].length;
       return selector.slice(0, index) +
         (' >+~'.indexOf(selector.charAt(index - 1)) > -1 ?
           (':['.indexOf(selector.charAt(index + length + 1)) > -1 ?
@@ -1728,36 +1756,49 @@
 
   // prepare factory resolvers and closure collections
   collect =
-    function(selectors, context, callback) {
+    function(selectors: string[], context: QueryContext, callback: QueryCallback | null) {
+      const nodeset: CompatSeed[] = [];
+      const htmlset: CompatThunk[] = [];
+      const factory: SelectLambda[] = [];
+      const optimized = selectors;
+      const seen: Record<string, boolean> = {};
+      const token: [string, '.' | '#' | '*', string] = ['', '*', '*'];
+      let results: Element[] = [];
 
-      var i, l, seen = { }, token = ['', '*', '*'], optimized = selectors,
-      factory = [ ], htmlset = [ ], nodeset = [ ], results = [ ], type;
-
-      for (i = 0, l = selectors.length; l > i; ++i) {
+      for (let i = 0, l = selectors.length; l > i; ++i) {
 
         if (!seen[selectors[i]] && (seen[selectors[i]] = true)) {
-          type = selectors[i].match(reOptimizer);
-          if (type && type[1] != ':' && (token = type)) {
-            token[1] || (token[1] = '*');
+          const type = selectors[i].match(reOptimizer);
+          if (type && type[1] != ':') {
+            token[0] = type[0];
+            const t1 = type[1] || '*';
+            if (t1 !== '.' && t1 !== '#' && t1 !== '*') {
+              throw new SyntaxError(`invalid selector for optimization '${selectors[i]}'`);
+            }
+            token[1] = t1;
+            token[2] = type[2];
             optimized[i] = optimize(optimized[i], token);
           } else {
-            token = ['', '*', '*'];
+            token[0] = '';
+            token[1] = '*';
+            token[2] = '*';
           }
         }
 
-        nodeset[i] = token[1] + token[2];
+        nodeset[i] = `${token[1]}${token[2]}`;
         token[2] = unescapeIdentifier(token[2]);
         htmlset[i] = compat[token[1]](context, token[2]);
-        factory[i] = compile(optimized[i], true, null);
+        factory[i] = compile(optimized[i], true, null) as SelectLambda; // TODO: type assertion to be removed after refactor
 
-        factory[i] ?
-          factory[i](htmlset[i](), callback, context, results) :
-          results.concat(htmlset[i]());
+        results = factory[i](htmlset[i](), callback, context, results);
+        // factory[i] ?
+        //   factory[i](htmlset[i](), callback, context, results) :
+        //   results.concat(htmlset[i]());
       }
 
-      if (l > 1) {
+      if (selectors.length > 1) {
         results.sort(documentOrder);
-        hasDupes && (results = unique(results));
+        if (hasDupes) results = unique(results);
       }
 
       return {
@@ -1780,13 +1821,16 @@
     })(),
 
   // QSA placeholders to native references
-  _closest, _matches,
-  _querySelector, _querySelectorAll,
-  _querySelectorDoc, _querySelectorAllDoc,
+  _closest: any,
+  _matches: any,
+  _querySelector: any,
+  _querySelectorAll: any,
+  _querySelectorDoc: any,
+  _querySelectorAllDoc: any,
 
   // overrides QSA methods (only for browsers)
   install =
-    function(all) {
+    function(all: boolean) {
       // save references
       _closest = Element.prototype.closest;
       _matches = Element.prototype.matches;
@@ -1797,65 +1841,70 @@
       _querySelectorDoc = Document.prototype.querySelector;
       _querySelectorAllDoc = Document.prototype.querySelectorAll;
 
-      function parseQSArgs() {
-        var method = arguments[arguments.length - 1];
-        return (
-          arguments.length < 2 ?
-            method.apply(this, [ ]) :
-          arguments.length < 3 ?
-            method.apply(this, [ arguments[0], this ]) :
-            method.apply(this, [ arguments[0], this,
-              typeof arguments[1] == 'function' ? arguments[1] : undefined ]));
+      function parseQSArgs(this: QueryContext, ...args: any[]) {
+        const method = args[args.length - 1];
+        if (args.length < 2) return method.apply(this, []);
+        if (args.length < 3) return method.apply(this, [args[0], this]);
+        const args1 = typeof args[1] === 'function' ? args[1] : undefined
+        return method.apply(this, [args[0], this, args1]);
       }
 
       Element.prototype.closest =
       HTMLElement.prototype.closest =
-        function closest() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(ancestor));
+        function closest(this: Element, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, ancestor]);
         };
 
       Element.prototype.matches =
       HTMLElement.prototype.matches =
-        function matches() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(match));
-        };
+        function matches(this: Element, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, match]);
+        } as Element['matches'];
 
       Element.prototype.querySelector =
       HTMLElement.prototype.querySelector =
-        function querySelector() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(first));
+        function querySelector(this: Element, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, first]);
         };
 
       Element.prototype.querySelectorAll =
       HTMLElement.prototype.querySelectorAll =
-        function querySelectorAll() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(select));
+        function querySelectorAll(this: Element, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, select]);
         };
 
       Document.prototype.querySelector =
       DocumentFragment.prototype.querySelector =
-        function querySelector() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(first));
+        function querySelector(this: QueryContext, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, first]);
         };
 
       Document.prototype.querySelectorAll =
       DocumentFragment.prototype.querySelectorAll =
-        function querySelectorAll() {
-          return parseQSArgs.apply(this, [].slice.call(arguments).concat(select));
+        function querySelectorAll(this: QueryContext, ...args: any[]) {
+          return parseQSArgs.apply(this, [...args, select]);
       };
 
       if (all) {
-        doc.addEventListener('load', function(e) {
-          var c, d, r, s, t = e.target;
-          if (/iframe/i.test(t.localName)) {
-            c = '(' + Export + ')(this, ' + Factory + ');'; d = t.ownerDocument;
-            s = d.createElement('script'); s.textContent = c + 'NW.Dom.install(true)';
-            r = d.documentElement; r.removeChild(r.insertBefore(s, r.firstChild));
-          }
+        doc.addEventListener('load', function (e) {
+          const evTarget = e.target;
+          if (!isIFrame(evTarget)) return;
+
+          const iife = '(' + Export + ')(this, ' + Factory + ');';
+          const doc = evTarget.ownerDocument;
+          const script = doc.createElement('script');
+          script.textContent = iife + 'NW.Dom.install(true)';
+          const root = doc.documentElement;
+          root.removeChild(root.insertBefore(script, root.firstChild));
         }, true);
       }
 
     },
+
+  isIFrame = function(x: unknown): x is HTMLIFrameElement {
+    // TODO: rework iframe target check; avoid realm-specific instanceof narrowing.
+    return typeof HTMLIFrameElement !== 'undefined' && x instanceof HTMLIFrameElement;
+  },
 
   // restore QSA methods (only for browsers)
   uninstall =
@@ -1883,25 +1932,22 @@
       }
     },
 
-  // empty set
-  none = Array(),
-
   // context
-  lastContext,
+  lastContext: QueryContext,
 
   // cached lambdas
-  matchLambdas = { },
-  selectLambdas = { },
+  matchLambdas: Record<string, MatchLambda> = { },
+  selectLambdas: Record<string, SelectLambda> = { },
 
   // cached resolvers
-  matchResolvers = { },
-  selectResolvers = { },
+  matchResolvers: Record<string, MatchResolver> = { },
+  selectResolvers: Record<string, SelectResolver> = { },
 
   // passed to resolvers
   Snapshot = {
 
     doc: doc,
-    from: doc,
+    from: doc as QueryContext,
     root: root,
 
     byTag: byTag,
@@ -1917,7 +1963,9 @@
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
-    hasAttributeNS: hasAttributeNS
+    hasAttributeNS: hasAttributeNS,
+
+    HOVER: null as null | EventTarget
   },
 
   // public exported methods/objects
@@ -1945,13 +1993,13 @@
 
     // exported engine methods
 
-    byId: byId,
-    byTag: byTag,
-    byClass: byClass,
+    byId: (id: string, ctx: QueryContext) => toNodeList(byId(id, ctx)),
+    byTag: (tag: string, ctx: QueryContext) => toNodeList(byTag(tag, ctx)),
+    byClass: (cls: string, ctx: QueryContext) => toNodeList(byClass(cls, ctx)),
 
     first: first,
     match: match,
-    select: select,
+    select: (sel: string, ctx: QueryContext, cb: QueryCallback | null = null) => toNodeList(select(sel, ctx, cb)),
 
     closest: ancestor,
 
@@ -1972,14 +2020,16 @@
 
     // register a new selector combinator symbol and its related function resolver
     registerCombinator:
-      function(combinator, resolver) {
-        var i = 0, l = combinator.length, symbol;
-        for (; l > i; ++i) {
+      function(combinator: string, resolver: string) {
+        const l = combinator.length;
+        let symbol;
+        for (let i = 0; l > i; ++i) {
           if (combinator[i] != '=') {
             symbol = combinator[i];
             break;
           }
         }
+        if (!symbol) throw new Error('Invalid combinator: ' + combinator);
         if (CFG.combinators.indexOf(symbol) < 0) {
           CFG.combinators = CFG.combinators.replace('](', symbol + '](');
           CFG.combinators = CFG.combinators.replace('])', symbol + '])');
@@ -1991,15 +2041,18 @@
       },
 
     // register a new attribute operator symbol and its related function resolver
+    // NW.Dom.registerOperator( '!=', { p1: '^', p2: '$', p3: 'false' } );
     registerOperator:
-      function(operator, resolver) {
-        var i = 0, l = operator.length, symbol;
-        for (; l > i; ++i) {
+      function(operator: string, resolver: AttrMatcherParts) {
+        const l = operator.length;
+        let symbol;
+        for (let i = 0; l > i; ++i) {
           if (operator[i] != '=') {
             symbol = operator[i];
             break;
           }
         }
+        if (!symbol) throw new Error('Invalid operator: ' + operator);
         if (CFG.operators.indexOf(symbol) < 0 && !Operators[operator]) {
           CFG.operators = CFG.operators.replace(']=', symbol + ']=');
           Operators[operator] = resolver;
@@ -2011,7 +2064,7 @@
 
     // register a new selector symbol and its related function resolver
     registerSelector:
-      function(name, rexp, func) {
+      function(name: string, rexp: RegExp, func: SelectorExtFn) {
         Selectors[name] || (Selectors[name] = {
           Expression: rexp,
           Callback: func

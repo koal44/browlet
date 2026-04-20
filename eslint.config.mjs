@@ -2,10 +2,30 @@ import { defineConfig } from "eslint/config";
 import js from '@eslint/js';
 import globals from 'globals';
 
+const relaxedRules = {
+  'no-console': 'off',
+  'no-unused-vars': 'off',
+  'no-cond-assign': 'off',
+  'no-control-regex': 'off',
+  'no-useless-escape': 'off',
+  'no-redeclare': 'off',
+  'no-empty': 'off',
+
+  'default-case': 'error',
+  'no-duplicate-case': 'error',
+  'radix': 'error',
+  'no-with': 'error',
+};
+
 export default defineConfig([
-  js.configs.recommended,
   {
-    files: ['src/**/*.js', 'scripts/**/*.js', 'test_new/**/*.js'],
+    ignores: ['dist/**'],
+  },
+
+  js.configs.recommended,
+
+  {
+    files: ['src/**/*.js', 'test_new/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
@@ -16,21 +36,21 @@ export default defineConfig([
         NW: 'readonly',
       },
     },
-    rules: {
-      'no-console': 'off',
-      'no-unused-vars': 'off',
-      'no-cond-assign': 'off',
-      'no-control-regex': 'off',
-      'no-useless-escape': 'off',
-      'no-redeclare': 'off',
-      'no-empty': 'off',
-
-      'default-case': 'error',
-      'no-duplicate-case': 'error',
-      'radix': 'error',
-      'no-with': 'error',
-    },
+    rules: relaxedRules,
   },
+
+  {
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: relaxedRules,
+  },
+
   {
     files: ['test/**/*.js'],
     languageOptions: {

@@ -386,12 +386,12 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
   }
 
   if (!state.hasNwsapi) {
-    await page.addScriptTag({ path: 'src/nwsapi.js' });
+    await page.addScriptTag({ path: 'dist/nwsapi.js' });
   }
 }
 
 async function installNwsapi(page: Page): Promise<void> {
-  const script = await page.addScriptTag({ path: 'src/nwsapi.js' });
+  const script = await page.addScriptTag({ path: 'dist/nwsapi.js' });
   await script.evaluate((el) => {
     (el as HTMLScriptElement).id = 'nwsapi-bootstrap' satisfies NwsapiId;
   });

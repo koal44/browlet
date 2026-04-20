@@ -3,7 +3,7 @@
   "version": "2.2.23",
   "description": "Fast CSS Selectors API Engine",
   "homepage": "https://github.com/dperini/nwsapi/",
-  "main": "./src/nwsapi",
+  "main": "./dist/nwsapi.js",
   "keywords": [
     "css",
     "css3",
@@ -32,10 +32,13 @@
     "url": "git://github.com/dperini/nwsapi.git"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "clean": "node ./scripts/clean.mjs",
     "min": "node ./scripts/min.mjs",
     "lint": "npx eslint src/nwsapi.js",
+    "pretest:browser": "npm run build",
     "test:browser": "cross-env HARNESS_MODE=normal playwright test",
+    "pretest:browser:fixme": "npm run build",
     "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test"
   },
   "devDependencies": {
@@ -44,6 +47,7 @@
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
     "playwright": "^1.59.1",
-    "terser": "5.46.1"
+    "terser": "5.46.1",
+    "typescript": "^6.0.3"
   }
 }
