@@ -65,10 +65,10 @@ export function installBrowserHelpers(): void {
     return json.replace(/"/g, "'").replace(/\s+/g, ' ');
   }
 
-  function runQuery(query: () => Element[]) {
+  function runQuery(query: () => Element[] | NodeListOf<Element>) {
     try {
       const id: NwsapiId = 'nwsapi-bootstrap';
-      const els = query().filter((el) => el.getAttribute('id') !== id);
+      const els = [...query()].filter((el) => el.getAttribute('id') !== id);
       return { elements: els, error: '' };
     } catch (e) {
       return { elements: [], error: e instanceof Error ? e.message : String(e) };

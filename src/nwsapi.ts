@@ -15,6 +15,66 @@
  *  https://javascript.nwbox.com/nwsapi/nwsapi.js
  */
 
+const HSP = '[\\x20\\t]';
+const VSP = '[\\r\\n\\f]';
+const WSP = '[\\x20\\t\\r\\n\\f]';
+
+const HAS = {
+  nestedself: ':has\\x28(?::has\\x28|.*)\\x29)\\x29',
+};
+
+const NOT = {
+  // not enclosed in double/single/parens/square
+  double_enc: '(?=(?:[^"]*["][^"]*["])*[^"]*$)',
+  single_enc: "(?=(?:[^']*['][^']*['])*[^']*$)",
+  parens_enc: '(?![^\\x28]*\\x29)',
+  square_enc: '(?![^\\x5b]*\\x5d)'
+};
+
+const REX = {
+  // regular expressions
+  HasEscapes: RegExp('\\\\'),
+  HexNumbers: RegExp('^[0-9a-fA-F]'),
+  EscOrQuote: RegExp('^\\\\|[\\x22\\x27]'),
+  RegExpChar: RegExp('(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]', 'g'),
+  TrimSpaces: RegExp('^' + WSP + '+|' + WSP + '+$|' + VSP, 'g'),
+  SplitGroup: RegExp('(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+', 'g'),
+  CommaGroup: RegExp('(\\s*,\\s*)' + NOT.square_enc + NOT.parens_enc, 'g'),
+  FixEscapes: RegExp('\\\\([0-9a-fA-F]{1,6}' + WSP + '?|.)|([\\x22\\x27])', 'g'),
+  CombineWSP: RegExp('[\\n\\r\\f\\x20]+' + NOT.single_enc + NOT.double_enc, 'g'),
+  TabCharWSP: RegExp('(\\x20?\\t+\\x20?)' + NOT.single_enc + NOT.double_enc, 'g'),
+  PseudosWSP: RegExp('\\s+([-+])\\s+' + NOT.square_enc, 'g')
+};
+
+const STD = {
+  combinator: RegExp('\\s?([>+~])\\s?', 'g'),
+  apimethods: RegExp('^(?:\\w+|\\*)\\|'),
+  namespaces: RegExp('(\\*|\\w+)\\|[\\w-]+')
+};
+
+const GROUPS = {
+  // pseudo-classes requiring parameters
+  linguistic: '(dir|lang)(?:\\x28\\s?([-\\w]{2,})\\s?\\x29)',
+  logicalsel: '(is|where|matches|not|has)(?:\\x28\\s?(' + '[^()]*|.*' + ')\\s?\\x29)',
+  treestruct: '(nth(?:-last)?(?:-child|-of\\-type))(?:\\x28\\s?(even|odd|(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)?)\\s?\\x29)',
+  // pseudo-classes not requiring parameters
+  locationpc: '(any\\-link|link|visited|target|defined)\\b',
+  useraction: '(hover|active|focus\\-within|focus\\-visible|focus)\\b',
+  structural: '(scope|root|empty|(?:(?:first|last|only)(?:-child|\\-of\\-type)))\\b',
+  inputstate: '(enabled|disabled|read\\-only|read\\-write|placeholder\\-shown|default)\\b',
+  inputvalue: '(checked|indeterminate|required|optional|valid|invalid|in\\-range|out\\-of\\-range)\\b',
+  // pseudo-classes not requiring parameters and describing functional state
+  rsrc_state: '(playing|paused|seeking|buffering|stalled|muted|volume-locked)\\b',
+  disp_state: '(open|closed|modal|fullscreen|picture-in-picture)\\b',
+  time_state: '(current|past|future)\\b',
+  // pseudo-classes for parsing only selectors
+  pseudo_nop: '(autofill|-webkit\\-autofill)\\b',
+  // pseudo-elements starting with single colon (:)
+  pseudo_sng: '(after|before|first\\-letter|first\\-line)\\b',
+  // pseudo-elements starting with double colon (::)
+  pseudo_dbl: ':(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b'
+};
+
 (function Export(global, factory) {
 
   'use strict';
@@ -28,78 +88,20 @@
     global.NW.Dom = factory(global, Export);
   }
 
-})(this, function Factory(global: NwsGlobal, Export: Function) {
+})(this, Factory);
 
-  var version = 'nwsapi-2.2.23',
+function Factory(global: Glob, Export: Function) {
 
+  const version = 'nwsapi-2.2.23';
+
+  var
   doc = global.document,
   root = doc.documentElement,
-  slice = Array.prototype.slice,
-
-  HSP = '[\\x20\\t]',
-  VSP = '[\\r\\n\\f]',
-  WSP = '[\\x20\\t\\r\\n\\f]',
 
   CFG = {
     // extensions
     operators: '[~*^$|]=|=',
     combinators: '[\\x20\\t>+~](?=[^>+~])'
-  },
-
-  HAS = {
-    nestedself: ':has\\x28(?::has\\x28|.*)\\x29)\\x29',
-  },
-
-  NOT = {
-    // not enclosed in double/single/parens/square
-    double_enc: '(?=(?:[^"]*["][^"]*["])*[^"]*$)',
-    single_enc: "(?=(?:[^']*['][^']*['])*[^']*$)",
-    parens_enc: '(?![^\\x28]*\\x29)',
-    square_enc: '(?![^\\x5b]*\\x5d)'
-  },
-
-  REX = {
-    // regular expressions
-    HasEscapes: RegExp('\\\\'),
-    HexNumbers: RegExp('^[0-9a-fA-F]'),
-    EscOrQuote: RegExp('^\\\\|[\\x22\\x27]'),
-    RegExpChar: RegExp('(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]', 'g'),
-    TrimSpaces: RegExp('^' + WSP + '+|' + WSP + '+$|' + VSP, 'g'),
-    SplitGroup: RegExp('(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+', 'g'),
-    CommaGroup: RegExp('(\\s*,\\s*)' + NOT.square_enc + NOT.parens_enc, 'g'),
-    FixEscapes: RegExp('\\\\([0-9a-fA-F]{1,6}' + WSP + '?|.)|([\\x22\\x27])', 'g'),
-    CombineWSP: RegExp('[\\n\\r\\f\\x20]+' + NOT.single_enc + NOT.double_enc, 'g'),
-    TabCharWSP: RegExp('(\\x20?\\t+\\x20?)' + NOT.single_enc + NOT.double_enc, 'g'),
-    PseudosWSP: RegExp('\\s+([-+])\\s+' + NOT.square_enc, 'g')
-  },
-
-  STD = {
-    combinator: RegExp('\\s?([>+~])\\s?', 'g'),
-    apimethods: RegExp('^(?:\\w+|\\*)\\|'),
-    namespaces: RegExp('(\\*|\\w+)\\|[\\w-]+')
-  },
-
-  GROUPS = {
-    // pseudo-classes requiring parameters
-    linguistic: '(dir|lang)(?:\\x28\\s?([-\\w]{2,})\\s?\\x29)',
-    logicalsel: '(is|where|matches|not|has)(?:\\x28\\s?(' + '[^()]*|.*' + ')\\s?\\x29)',
-    treestruct: '(nth(?:-last)?(?:-child|-of\\-type))(?:\\x28\\s?(even|odd|(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)?)\\s?\\x29)',
-    // pseudo-classes not requiring parameters
-    locationpc: '(any\\-link|link|visited|target|defined)\\b',
-    useraction: '(hover|active|focus\\-within|focus\\-visible|focus)\\b',
-    structural: '(scope|root|empty|(?:(?:first|last|only)(?:-child|\\-of\\-type)))\\b',
-    inputstate: '(enabled|disabled|read\\-only|read\\-write|placeholder\\-shown|default)\\b',
-    inputvalue: '(checked|indeterminate|required|optional|valid|invalid|in\\-range|out\\-of\\-range)\\b',
-    // pseudo-classes not requiring parameters and describing functional state
-    rsrc_state: '(playing|paused|seeking|buffering|stalled|muted|volume-locked)\\b',
-    disp_state: '(open|closed|modal|fullscreen|picture-in-picture)\\b',
-    time_state: '(current|past|future)\\b',
-    // pseudo-classes for parsing only selectors
-    pseudo_nop: '(autofill|-webkit\\-autofill)\\b',
-    // pseudo-elements starting with single colon (:)
-    pseudo_sng: '(after|before|first\\-letter|first\\-line)\\b',
-    // pseudo-elements starting with double colon (::)
-    pseudo_dbl: ':(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b'
   },
 
   Patterns = {
@@ -149,7 +151,7 @@
   reValidator: RegExp,
 
   // special handling configuration flags
-  Config: Record<ConfigKey, boolean> = {
+  Config: NwsConfig = {
     IDS_DUPES: true,
     FORGIVING: true,
     NODE_LIST: false,
@@ -157,10 +159,6 @@
     USR_EVENT: true,
     VERBOSITY: true
   },
-
-  NAMESPACE: string | null = null,
-  QUIRKS_MODE: boolean,
-  HTML_DOCUMENT: boolean,
 
   ATTR_STD_OPS = {
     '=': 1, '^=': 1, '$=': 1, '|=': 1, '*=': 1, '~=': 1
@@ -182,203 +180,13 @@
   Selectors: Record<string, SelectorExtension> = { },
 
   Operators: Record<string, AttrMatcherParts> = {
-     '=': { p1: '^',
-            p2: '$',
-            p3: 'true' },
-    '^=': { p1: '^',
-            p2: '',
-            p3: 'true' },
-    '$=': { p1: '',
-            p2: '$',
-            p3: 'true' },
-    '*=': { p1: '',
-            p2: '',
-            p3: 'true' },
-    '|=': { p1: '^',
-            p2: '(-|$)',
-            p3: 'true' },
-    '~=': { p1: '(^|\\s)',
-            p2: '(\\s|$)',
-            p3: 'true' }
+     '=': { p1: '^',       p2: '$',       p3: 'true' },
+    '^=': { p1: '^',       p2: '',        p3: 'true' },
+    '$=': { p1: '',        p2: '$',       p3: 'true' },
+    '*=': { p1: '',        p2: '',        p3: 'true' },
+    '|=': { p1: '^',       p2: '(-|$)',   p3: 'true' },
+    '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: 'true' }
   },
-
-  concatCall =
-    function(nodes: Element[] | NodeListOf<Element>, callback: QueryCallback) {
-      var i = 0, l = nodes.length, list = Array(l);
-      while (l > i) {
-        if (false === callback(list[i] = nodes[i])) break;
-        ++i;
-      }
-      return list;
-    },
-
-  concatList =
-    function(list: Element[], nodes: ArrayLike<Element>) {
-      var i = -1, l = nodes.length;
-      while (l--) { list[list.length] = nodes[++i]; }
-      return list;
-    },
-
-  // only define the toNodeList helper if explicitly enabled in Config,
-  // a safety measure for headless hosts missing feature/implementation
-  toNodeList: toNodeListFn =
-    Config.NODE_LIST == false ? function(nodeArray: Element[]) { return nodeArray; } :
-    function() {
-      // create a DocumentFragment
-      var emptyNL = doc.createDocumentFragment().childNodes;
-
-      // this is returned from a self-executing function so that
-      // the DocumentFragment isn't repeatedly created
-      return function(nodeArray: Element[] | NodeListOf<Element>): FakeNodeList {
-        // check if it is already a nodelist
-        if (isNodeList(nodeArray)) return nodeArray;
-
-        // if it's a single element, wrap it in a classic array
-        if (!Array.isArray(nodeArray)) nodeArray = [nodeArray];
-
-        // base an object on emptyNL
-        var fakeNL = Object.create(emptyNL, {
-          'length': {
-            value: nodeArray.length, enumerable: false
-          },
-          'item': {
-            'value': function(i: string | number) {
-              return this[+i || 0];
-            },
-            enumerable: false
-          }
-        });
-
-        // copy the array elemnts
-        nodeArray.forEach(function (v, i) { fakeNL[i] = v; });
-
-        // return an object pretending to be a NodeList.
-        return fakeNL;
-      };
-    }(),
-
-  isNodeList =
-    function(nodes: Element[] | NodeListOf<Element>): nodes is NodeListOf<Element> {
-      return nodes instanceof global.NodeList;
-    },
-
-  documentOrder =
-    function(a: Node, b: Node) {
-      if (!hasDupes && a === b) {
-        hasDupes = true;
-        return 0;
-      }
-      return a.compareDocumentPosition(b) & 4 ? -1 : 1;
-    },
-
-  hasDupes = false,
-
-  unique =
-    function(nodes: Element[]) {
-      var i = 0, j = -1, l = nodes.length + 1, list = [ ];
-      while (--l) {
-        if (nodes[i++] === nodes[i]) continue;
-        list[++j] = nodes[i - 1];
-      }
-      hasDupes = false;
-      return list;
-    },
-
-  switchContext =
-    function(context: QueryContext, force = false) {
-      var oldDoc = doc;
-      doc = context.ownerDocument || context;
-      if (force || oldDoc !== doc) {
-        // force a new check for each document change
-        // performed before the next select operation
-        root = doc.documentElement;
-        HTML_DOCUMENT = isHTML(doc);
-        QUIRKS_MODE = HTML_DOCUMENT &&
-          doc.compatMode.indexOf('CSS') < 0;
-        NAMESPACE = root && root.namespaceURI;
-        Snapshot.doc = doc;
-        Snapshot.root = root;
-      }
-      return (Snapshot.from = context);
-    },
-
-  // convert single codepoint to UTF-16 encoding
-  codePointToUTF16 =
-    function(codePoint: number) {
-      // out of range, use replacement character
-      if (codePoint < 1 || codePoint > 0x10ffff ||
-        (codePoint > 0xd7ff && codePoint < 0xe000)) {
-        return '\\ufffd';
-      }
-      // javascript strings are UTF-16 encoded
-      if (codePoint < 0x10000) {
-        var lowHex = '000' + codePoint.toString(16);
-        return '\\u' + lowHex.substr(lowHex.length - 4);
-      }
-      // supplementary high + low surrogates
-      return '\\u' + (((codePoint - 0x10000) >> 0x0a) + 0xd800).toString(16) +
-             '\\u' + (((codePoint - 0x10000) % 0x400) + 0xdc00).toString(16);
-    },
-
-  // convert single codepoint to string
-  stringFromCodePoint =
-    function(codePoint: number) {
-      // out of range, use replacement character
-      if (codePoint < 1 || codePoint > 0x10ffff ||
-        (codePoint > 0xd7ff && codePoint < 0xe000)) {
-        return '\ufffd';
-      }
-      if (codePoint < 0x10000) {
-        return String.fromCharCode(codePoint);
-      }
-      return String.fromCodePoint ?
-        String.fromCodePoint(codePoint) :
-        String.fromCharCode(
-          ((codePoint - 0x10000) >> 0x0a) + 0xd800,
-          ((codePoint - 0x10000) % 0x400) + 0xdc00);
-    },
-
-  // convert escape sequence in a CSS string or identifier
-  // to javascript string with javascript escape sequences
-  escapeIdentifier =
-    global.CSS && typeof global.CSS.escape == 'function' ?
-    function(str: string) {
-      return global.CSS.escape(str);
-    } :
-    function(str: string) {
-      return REX.HasEscapes.test(str) ?
-        str.replace(REX.FixEscapes,
-          function(substring, p1, p2) {
-            // unescaped " or '
-            return p2 ? '\\' + p2 :
-              // javascript strings are UTF-16 encoded
-              REX.HexNumbers.test(p1) ? codePointToUTF16(parseInt(p1, 16)) :
-              // \' \"
-              REX.EscOrQuote.test(p1) ? substring :
-              // \g \h \. \# etc
-              p1;
-          }
-        ) : str;
-    },
-
-  // convert escape sequence in a CSS string or identifier
-  // to javascript string with characters representations
-  unescapeIdentifier =
-    function(str: string) {
-      return REX.HasEscapes.test(str) ?
-        str.replace(REX.FixEscapes,
-          function(substring, p1, p2) {
-            // unescaped " or '
-            return p2 ? p2 :
-              // javascript strings are UTF-16 encoded
-              REX.HexNumbers.test(p1) ? stringFromCodePoint(parseInt(p1, 16)) :
-              // \' \"
-              REX.EscOrQuote.test(p1) ? substring :
-              // \g \h \. \# etc
-              p1;
-          }
-        ) : str;
-    },
 
   method = {
     '#': 'getElementById',
@@ -397,8 +205,9 @@
   var
 
   // find duplicate ids using iterative walk
-  byIdRaw =
-    function(id: string, context: QueryContext) {
+  byIdRaw: RawByIdFn =
+    function(id: string, context?: QueryContext) {
+      context ??= doc;
       var node: QueryContext | null = context, nodes = [ ], next = node.firstElementChild;
       while ((node = next)) {
         node.id == id && (nodes[nodes.length] = node);
@@ -411,8 +220,9 @@
     },
 
   // context agnostic getElementById
-  byId =
-    function(id: string, context: QueryContext): Element[] {
+  byId: RawByIdFn =
+    function(id: string, context?: QueryContext): Element[] {
+      context ??= doc;
       if (Config.IDS_DUPES === false && 'getElementById' in context) {
         const e = context.getElementById(id);
         return e ? [e] : [];
@@ -422,16 +232,17 @@
     },
 
   // wrapped up namespaced TagName api calls
-  byTagNS =
-    function(tag: string, context: QueryContext) {
+  byTagNS: RawByTagFn =
+    function(tag: string, context?: QueryContext) {
       return byTag(tag, context);
   },
 
   // context agnostic getElementsByTagName
-  byTag =
-    function(tag: string, context: QueryContext) {
+  byTag: RawByTagFn =
+    function(tag: string, context?: QueryContext) {
       let el: Element | null
       let nodes: Element[];
+      context ??= doc;
       // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
       if ('getElementsByTagName' in context) {
         return Array.from(context.getElementsByTagName(tag));
@@ -455,17 +266,18 @@
 
 
   // context agnostic getElementsByClassName
-  byClass =
-    function(cls: string, context: QueryContext) {
+  byClass: RawByClassFn =
+    function(cls: string, context?: QueryContext) {
       let el: Element | null;
       let nodes: Element[];
+      context ??= doc;
       // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
       if ('getElementsByClassName' in context) {
         return Array.from(context.getElementsByClassName(cls));
       } else {
         // DOCUMENT_FRAGMENT_NODE (11)
         if ((el = context.firstElementChild)) {
-          const reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', QUIRKS_MODE ? 'i' : '');
+          const reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', isQuirksMode(doc) ? 'i' : '');
           if (!(el.nextElementSibling || reCls.test(el.className))) {
             return Array.from(el.getElementsByClassName(cls));
           } else {
@@ -486,7 +298,7 @@
   hasAttributeNS =
     function(e: Element, name: string) {
       var i, l, attr = e.getAttributeNames();
-      const reName = new RegExp(':?' + name + '$', HTML_DOCUMENT ? 'i' : '');
+      const reName = new RegExp(':?' + name + '$', isHTML(doc) ? 'i' : '');
       for (i = 0, l = attr.length; l > i; ++i) {
         if (reName.test(attr[i])) return true;
       }
@@ -494,7 +306,7 @@
     },
 
   // fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
-  nthElement = (function() {
+  nthElement: NthFn = (function() {
     var idx = 0, len = 0, set = 0, parent: Element | null = null, parents = Array(), nodes = Array();
     return function(element: Element, dir: number) {
       // ensure caches are emptied after each run, invoking with dir = 2
@@ -537,7 +349,7 @@
   })(),
 
   // fast resolver for the :nth-of-type() and :nth-last-of-type() pseudo-classes
-  nthOfType = (function() {
+  nthOfType: NthFn = (function() {
     var idx = 0, len = 0, set = 0, parent: Element | null = null, parents = Array(), nodes = Array();
     return function(element: Element, dir: number) {
       // ensure caches are emptied after each run, invoking with dir = 2
@@ -580,20 +392,9 @@
     };
   })(),
 
-  // check if the document type is HTML
-  isHTML =
-    function(node: Document) {
-      var doc = node.ownerDocument || node;
-      return doc.nodeType == 9 &&
-        // contentType not in IE <= 11
-        'contentType' in doc ?
-          doc.contentType.indexOf('/html') > 0 :
-          doc.createElement('DiV').localName == 'div';
-    },
-
   // return node if node is focusable
   // or false if node isn't focusable
-  isFocusable =
+  isFocusable: IsFocusableFn =
     function(node: HTMLElement): HTMLElement | false {
       const doc = node.ownerDocument;
       if (!doc) return false;
@@ -612,7 +413,7 @@
     },
 
   // check if node content is editable
-  isContentEditable =
+  isContentEditable: IsContentEditableFn =
     function(node: HTMLElement): boolean {
       let attrValue: string | null = 'inherit';
       if (node.hasAttribute('contenteditable')) {
@@ -683,7 +484,10 @@
   initialize =
     function(doc: Document) {
       setIdentifierSyntax();
-      lastContext = switchContext(doc, true);
+      console.log('NW.Dom initialize');
+      console.log('context:', typeof doc);
+      lastContext = updateSnapshot(Snapshot, doc, true).from;
+      console.log('lastContext:', lastContext);
     },
 
   // build validation regexps used by the engine
@@ -839,7 +643,7 @@
 
   // compile groups or single selector strings into
   // executable functions for matching or selecting
-  compile =
+  compile: CompileFn =
     function(selector: string, mode: boolean | null, callback: QueryCallback | null): SelectLambda | MatchLambda {
       var factory, token, head = '', loop = '', macro = '', source = '', vars = '';
 
@@ -937,7 +741,7 @@
             match = selector.match(Patterns.className);
             if (!match) throw new Error('Invalid class selector: ' + selector);
 
-            compat = (QUIRKS_MODE ? 'i' : '') + '.test(e.getAttribute("class"))';
+            compat = (isQuirksMode(doc) ? 'i' : '') + '.test(e.getAttribute("class"))';
             source = 'if((/(^|\\s)' + match[1] + '(\\s|$)/' + compat + ')){' + source + '}';
             break;
 
@@ -959,7 +763,7 @@
             } else if (!match[1]) {
               source = 'if((!e.namespaceURI)){' + source + '}';
             } else if (typeof match[1] == 'string' && root.prefix == match[1]) {
-              source = 'if((e.namespaceURI=="' + NAMESPACE + '")){' + source + '}';
+              source = 'if((e.namespaceURI=="' + getNamespace(doc) + '")){' + source + '}';
             } else {
               emit('\'' + expression + '\'' + qsInvalid);
             }
@@ -987,15 +791,30 @@
               // whitespace separated list but value contains space
               break;
             } else if (match[4]) {
-              match[4] = escapeIdentifier(match[4]).replace(REX.RegExpChar, '\\$&');
+              match[4] = escapeIdentifier(match[4], global).replace(REX.RegExpChar, '\\$&');
             }
-            type = match[5] == 'i' || (HTML_DOCUMENT && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
-            if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`); // shouldn't happen
-            source = 'if((' +
-              (!match[2] ? (NS ? 's.hasAttributeNS(e,"' + name + '")' : 'e.hasAttribute&&e.hasAttribute("' + name + '")') :
-              !match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=' ? 'e.getAttribute&&e.getAttribute("' + name + '")==""' :
-              '(/' + test.p1 + match[4] + test.p2 + '/' + type + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3) +
-              ')){' + source + '}';
+            // type = match[5] == 'i' || (HTML_DOCUMENT && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
+            // if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`); // shouldn't happen
+            // source = 'if((' +
+            //   (!match[2] ? (NS ? 's.hasAttributeNS(e,"' + name + '")' : 'e.hasAttribute&&e.hasAttribute("' + name + '")') :
+            //   !match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=' ? 'e.getAttribute&&e.getAttribute("' + name + '")==""' :
+            //   '(/' + test.p1 + match[4] + test.p2 + '/' + type + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3) +
+            //   ')){' + source + '}';
+            // break;
+            type = match[5] == 'i' || (isHTML(doc) && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
+            let attrExpr: string;
+            if (!match[2]) {
+              attrExpr = NS
+                ? 's.hasAttributeNS(e,"' + name + '")'
+                : 'e.hasAttribute&&e.hasAttribute("' + name + '")';
+            } else if (!match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=') {
+              attrExpr = 'e.getAttribute&&e.getAttribute("' + name + '")==""';
+            } else {
+              if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`);
+              attrExpr =
+                '(/' + test.p1 + match[4] + test.p2 + '/' + type + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3;
+            }
+            source = 'if((' + attrExpr + ')){' + source + '}';
             break;
 
           // *** General sibling combinator
@@ -1562,12 +1381,12 @@
 
       return selectors.replace(/:scope/i,
         (element.localName) +
-        (element.id ? '#' + escapeIdentifier(element.id) : '') +
-        (element.className ? '.' + escapeIdentifier(element.classList[0]) : ''));
+        (element.id ? '#' + escapeIdentifier(element.id, global) : '') +
+        (element.className ? '.' + escapeIdentifier(element.classList[0], global) : ''));
     },
 
   // equivalent of w3c 'closest' method
-  ancestor =
+  ancestor: AncestorFn =
     function _closest(selectors: string, element: Element, callback: QueryCallback | null = null) {
       parse(selectors);
       selectors = makeref(selectors, element);
@@ -1650,7 +1469,7 @@
     },
 
   // equivalent of w3c 'matches' method
-  match =
+  match: MatchFn =
     function _matches(selectors: string, element: Element, callback: QueryCallback | null = null) {
 
       if (element && matchResolvers[selectors]) {
@@ -1663,8 +1482,9 @@
     },
 
   // equivalent of w3c 'querySelector' method
-  first =
-    function _querySelector(selectors: string, context: QueryContext, callback: QueryCallback | null = null) {
+  first: FirstFn =
+    function _querySelector(selectors: string, context?: QueryContext, callback: QueryCallback | null = null) {
+      context ??= doc;
       return select(selectors, context,
         typeof callback == 'function' ?
         function firstMatch(element) {
@@ -1678,18 +1498,16 @@
     },
 
   // equivalent of w3c 'querySelectorAll' method
-  select =
-    function _querySelectorAll(selectors: string, context: QueryContext, callback: QueryCallback | null = null) {
-
-      var nodes: Element[] = [];
+  select: RawSelectFn =
+    function _querySelectorAll(selectors: string, context?: QueryContext, callback: QueryCallback | null = null) {
+      let nodes: Element[] = [];
       let resolver;
+      context ??= doc;
 
-      arguments.length == 0 &&
-        emit(qsNotArgs, TypeError);
-
-      context || (context = doc);
-        lastContext !== context &&
-          (lastContext = switchContext(context));
+      if (lastContext !== context) {
+        updateSnapshot(Snapshot, context);
+        lastContext = context;
+      }
 
       if (selectors) {
         if ((resolver = selectResolvers[selectors])) {
@@ -1712,8 +1530,7 @@
                 }
               }
               if (len > 1 && nodes.length > 1) {
-                nodes.sort(documentOrder);
-                hasDupes && (nodes = unique(nodes));
+                nodes = sortUnique(nodes);
               }
             } else {
               if (f[0]) {
@@ -1777,7 +1594,7 @@
             }
             token[1] = t1;
             token[2] = type[2];
-            optimized[i] = optimize(optimized[i], token);
+            optimized[i] = optimize(optimized[i], type);
           } else {
             token[0] = '';
             token[1] = '*';
@@ -1797,8 +1614,7 @@
       }
 
       if (selectors.length > 1) {
-        results.sort(documentOrder);
-        if (hasDupes) results = unique(results);
+        results = sortUnique(results);
       }
 
       return {
@@ -1830,7 +1646,9 @@
 
   // overrides QSA methods (only for browsers)
   install =
-    function(all: boolean) {
+    function(all?: boolean) {
+      console.log('NW.Dom install');
+
       // save references
       _closest = Element.prototype.closest;
       _matches = Element.prototype.matches;
@@ -1944,11 +1762,14 @@
   selectResolvers: Record<string, SelectResolver> = { },
 
   // passed to resolvers
-  Snapshot = {
+  Snapshot: SnapshotState = {
 
     doc: doc,
-    from: doc as QueryContext,
+    from: doc,
     root: root,
+    isHtml: isHTML(doc),
+    isQuirksMode: isQuirksMode(doc),
+    namespace: getNamespace(doc),
 
     byTag: byTag,
 
@@ -1965,11 +1786,11 @@
     isContentEditable: isContentEditable,
     hasAttributeNS: hasAttributeNS,
 
-    HOVER: null as null | EventTarget
+    HOVER: null,
   },
 
   // public exported methods/objects
-  Dom = {
+  Dom: DomApi = {
 
     // exported cache objects
 
@@ -1992,14 +1813,20 @@
     N_TEST: N_TEST,
 
     // exported engine methods
+    byId: (id, ctx) =>
+      Config.NODE_LIST ? toNodeList(byId(id, ctx), doc) : byId(id, ctx),
 
-    byId: (id: string, ctx: QueryContext) => toNodeList(byId(id, ctx)),
-    byTag: (tag: string, ctx: QueryContext) => toNodeList(byTag(tag, ctx)),
-    byClass: (cls: string, ctx: QueryContext) => toNodeList(byClass(cls, ctx)),
+    byTag: (tag, ctx) =>
+      Config.NODE_LIST ? toNodeList(byTag(tag, ctx), doc) : byTag(tag, ctx),
+
+    byClass: (cls, ctx) =>
+      Config.NODE_LIST ? toNodeList(byClass(cls, ctx), doc) : byClass(cls, ctx),
 
     first: first,
     match: match,
-    select: (sel: string, ctx: QueryContext, cb: QueryCallback | null = null) => toNodeList(select(sel, ctx, cb)),
+
+    select: (sel, ctx, cb) =>
+      Config.NODE_LIST ? toNodeList(select(sel, ctx, cb), doc) : select(sel, ctx, cb),
 
     closest: ancestor,
 
@@ -2072,7 +1899,181 @@
       }
   };
 
+  console.log('NW.Dom initialize');
   initialize(doc);
+  console.log('NW.Dom initialized');
 
   return Dom;
-});
+}
+
+function concatCall(nodes: Element[] | NodeListOf<Element>, callback: QueryCallback): Element[] {
+  const list: Element[] = Array(nodes.length);
+  for (let i = 0, l = nodes.length; i < l; ++i) {
+    if (false === callback((list[i] = nodes[i]))) break;
+  }
+  return list;
+}
+
+function concatList(list: Element[], nodes: ArrayLike<Element>): Element[] {
+  const l = nodes.length;
+  let i = 0;
+  while (i < l) list[list.length] = nodes[i++];
+  return list;
+}
+
+// create a NodeList-like object from an element array
+let emptyNL: NodeListOf<ChildNode> | undefined;
+function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList {
+  // create a DocumentFragment
+  emptyNL ??= doc.createDocumentFragment().childNodes;
+
+  // base an object on emptyNL
+  const fakeNL = Object.create(emptyNL, {
+    length: {
+      value: nodeArray.length,
+      enumerable: false
+    },
+    item: {
+      value: function(i: string | number) {
+        return this[+i || 0];
+      },
+      enumerable: false
+    }
+  });
+
+  // copy the array elements
+  nodeArray.forEach(function(v, i) { fakeNL[i] = v; });
+
+  // return an object pretending to be a NodeList.
+  return fakeNL;
+}
+
+function unique(nodes: Element[]): Element[] {
+  let i = 0;
+  let j = -1;
+  let l = nodes.length + 1;
+  const list: Element[] = [];
+
+  while (--l) {
+    if (nodes[i++] === nodes[i]) continue;
+    list[++j] = nodes[i - 1];
+  }
+
+  return list;
+}
+
+function sortUnique(nodes: Element[]): Element[] {
+  let hasDupes = false;
+  nodes.sort((a, b) => {
+    if (a === b) {
+      hasDupes = true;
+      return 0;
+    }
+    return a.compareDocumentPosition(b) & 4 ? -1 : 1;
+  });
+
+  return hasDupes ? unique(nodes) : nodes;
+}
+
+// check if the document type is HTML
+function isHTML(doc: Document) {
+  return doc.nodeType == 9 &&
+    // contentType not in IE <= 11
+    'contentType' in doc ?
+      doc.contentType.indexOf('/html') > 0 :
+      doc.createElement('DiV').localName == 'div';
+}
+
+function isQuirksMode(doc: Document): boolean {
+  return isHTML(doc) && doc.compatMode.indexOf('CSS') < 0;
+}
+
+function getNamespace(doc: Document): string | null {
+  return doc.documentElement ? doc.documentElement.namespaceURI : null;
+}
+
+function updateSnapshot(snap: SnapshotState, ctx: QueryContext, force = false): SnapshotState {
+  const doc = ctx.ownerDocument ?? ctx;
+
+  if (force || snap.doc !== doc) {
+    snap.doc = doc;
+    snap.root = doc.documentElement;
+    snap.isHtml = isHTML(doc);
+    snap.isQuirksMode = isQuirksMode(doc);
+    snap.namespace = getNamespace(doc);
+  }
+
+  snap.from = ctx;
+  return snap;
+}
+
+// convert single codepoint to UTF-16 encoding
+function codePointToUTF16(codePoint: number) {
+  // out of range, use replacement character
+  if (codePoint < 1 || codePoint > 0x10ffff ||
+    (codePoint > 0xd7ff && codePoint < 0xe000)) {
+    return '\\ufffd';
+  }
+  // javascript strings are UTF-16 encoded
+  if (codePoint < 0x10000) {
+    var lowHex = '000' + codePoint.toString(16);
+    return '\\u' + lowHex.substr(lowHex.length - 4);
+  }
+  // supplementary high + low surrogates
+  return '\\u' + (((codePoint - 0x10000) >> 0x0a) + 0xd800).toString(16) +
+         '\\u' + (((codePoint - 0x10000) % 0x400) + 0xdc00).toString(16);
+}
+
+// convert single codepoint to string
+function stringFromCodePoint(codePoint: number) {
+  // out of range, use replacement character
+  if (codePoint < 1 || codePoint > 0x10ffff ||
+    (codePoint > 0xd7ff && codePoint < 0xe000)) {
+    return '\ufffd';
+  }
+  if (codePoint < 0x10000) {
+    return String.fromCharCode(codePoint);
+  }
+  return String.fromCodePoint ?
+    String.fromCodePoint(codePoint) :
+    String.fromCharCode(
+      ((codePoint - 0x10000) >> 0x0a) + 0xd800,
+      ((codePoint - 0x10000) % 0x400) + 0xdc00);
+}
+
+let cachedCssEscape: CssEscapeFn | undefined;
+function escapeIdentifier(str: string, glob: Glob): string {
+  cachedCssEscape ??= typeof glob.CSS?.escape === 'function'
+    ? (ident: string) => glob.CSS!.escape(ident)
+    : (ident: string) =>
+      REX.HasEscapes.test(ident)
+        ? ident.replace(REX.FixEscapes, (substring, p1, p2) =>
+            // unescaped " or '
+            p2 ? '\\' + p2 :
+            // javascript strings are UTF-16 encoded
+            REX.HexNumbers.test(p1) ? codePointToUTF16(parseInt(p1, 16)) :
+            // \' \"
+            REX.EscOrQuote.test(p1) ? substring :
+            // \g \h \. \# etc
+            p1)
+        : ident;
+
+  return cachedCssEscape(str);
+}
+
+// convert escape sequence in a CSS string or identifier
+// to javascript string with characters representations
+function unescapeIdentifier(str: string) {
+  return REX.HasEscapes.test(str) ?
+    str.replace(REX.FixEscapes, (substring, p1, p2) =>
+      // unescaped " or '
+      p2 ? p2 :
+      // javascript strings are UTF-16 encoded
+      REX.HexNumbers.test(p1) ? stringFromCodePoint(parseInt(p1, 16)) :
+      // \' \"
+      REX.EscOrQuote.test(p1) ? substring :
+      // \g \h \. \# etc
+      p1
+    ) : str;
+}
+
