@@ -15,6 +15,10 @@ declare var NW: {
 
 type NwsConfig = Record<ConfigKey, boolean>;
 type ConfigKey = 'IDS_DUPES' | 'FORGIVING' | 'NODE_LIST' | 'LOGERRORS' | 'USR_EVENT' | 'VERBOSITY';
+type NwsExtensions = {
+  combinators: string;
+  operators: string;
+}
 
 type QueryContext = Document | Element | DocumentFragment;
 type QueryCallback = (element: Element) => unknown;
@@ -110,6 +114,10 @@ type SnapshotState = {
   isQuirksMode: boolean;
   namespace: string | null;
   config: NwsConfig;
+  ext: NwsExtensions;
+  selectors: Record<string, SelectorExtension>;
+  combinators: Record<string, string>;
+  operators: Record<string, AttrMatcherParts>
 
   byTag: ByTagFn;
 
@@ -125,31 +133,28 @@ type SnapshotState = {
   isContentEditable: IsContentEditableFn;
   hasAttributeNS: HasAttributeNSFn;
 
-  HOVER: EventTarget | null;
+  hoverTarget: EventTarget | null;
 
   isDebug: boolean;
   debugCompile?: string;
   debugCollect?: DebugCollect;
-};
 
-type CssEscapeFn = (ident: string) => string;
+  re: Rex;
 
-type DomApi = {
   matchLambdas: Record<string, MatchLambda>;
   selectLambdas: Record<string, SelectLambda>;
 
   matchResolvers: Record<string, MatchResolver>;
   selectResolvers: Record<string, SelectResolver>;
+};
 
-  CFG: { operators: string, combinators: string };
+type CssEscapeFn = (ident: string) => string;
 
-  S_BODY: string;
-  M_BODY: string;
-  N_BODY: string;
-
-  S_TEST: string;
-  M_TEST: string;
-  N_TEST: string;
+type DomApi = {
+  version: string;
+  extensions: NwsExtensions;
+  config: NwsConfig;
+  snapshot: SnapshotState;
 
   byId: ByIdFn;
   byTag: ByTagFn;
@@ -160,20 +165,10 @@ type DomApi = {
   select: SelectFn;
   closest: ClosestFn;
 
-  compile: CompileFn;
   configure: (option?: ConfigKey | Partial<Record<ConfigKey, boolean>> | undefined, clear?: boolean) => boolean | NwsConfig;
-
-  emit: (message: string, proto?: ErrorConstructor | undefined) => void;
-  Config: NwsConfig;
-  Snapshot: SnapshotState;
-
-  Version: string;
 
   install: (all?: boolean) => void;
   uninstall: () => void;
-
-  Operators: Record<string, AttrMatcherParts>;
-  Selectors: Record<string, SelectorExtension>;
 
   registerCombinator: RegisterCombinatorFn;
   registerOperator: RegisterOperatorFn;
@@ -215,3 +210,64 @@ type QueryContextDescription = {
 }
 
 type NodeLike = { nodeType: number; nodeName: string; };
+
+type Rex = {
+  HasEscapes: RegExp;
+  HexNumbers: RegExp;
+  EscOrQuote: RegExp;
+  RegExpChar: RegExp;
+  TrimSpaces: RegExp;
+  SplitGroup: RegExp;
+  CommaGroup: RegExp;
+  FixEscapes: RegExp;
+  CombineWSP: RegExp;
+  TabCharWSP: RegExp;
+  PseudosWSP: RegExp;
+
+  STD: {
+    combinator: RegExp;
+    apimethods: RegExp;
+    namespaces: RegExp;
+  };
+
+  Patterns: {
+    treestruct: RegExp;
+    structural: RegExp;
+    linguistic: RegExp;
+    useraction: RegExp;
+    inputstate: RegExp;
+    inputvalue: RegExp;
+    rsrc_state: RegExp;
+    disp_state: RegExp;
+    time_state: RegExp;
+    locationpc: RegExp;
+    logicalsel: RegExp;
+    pseudo_nop: RegExp;
+    pseudo_sng: RegExp;
+    pseudo_dbl: RegExp;
+
+    children: RegExp;
+    adjacent: RegExp;
+    relative: RegExp;
+    ancestor: RegExp;
+
+    universal: RegExp;
+    namespace: RegExp;
+
+    id: RegExp;
+    tagName: RegExp;
+    className: RegExp;
+    attribute: RegExp;
+  };
+
+  RTL: RegExp;
+  nthElem: RegExp;
+  nthType: RegExp;
+
+  optimizer: RegExp;
+  validator: RegExp;
+}
+
+type QsaKey =
+  'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |
+  'querySelectorDoc' | 'querySelectorAllDoc';

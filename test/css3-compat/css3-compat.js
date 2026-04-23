@@ -13,7 +13,7 @@ var CDN = 'http://ajax.googleapis.com/ajax/libs/',
 engines = {
   'querySelectorAll':   [ 'document.querySelectorAll(s)',    '' ],
 
-  'scratch':            [ 'NW.Dom.select(s)',                '../../scratch/nwsapi.js' ],
+  'scratch':            [ 'NW.Dom.select(s)',                '../../scratch/nwsapi-2.2.23.1.js' ],
   'nwsapi':             [ 'NW.Dom.select(s)',                '../../dist/nwsapi.js' ]
 
 //  'base2-2.0alpha1':    [ 'base2.dom.querySelectorAll(c,s)', 'lib/base2+dom.js' ],
