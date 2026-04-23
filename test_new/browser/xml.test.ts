@@ -6,7 +6,9 @@ runScenarios('xml', 'normal', [
     name: 'jsdom/svg-test',
     markup: `
       <!doctype html>
+      <html>
       <svg xlink:href="foo"></svg>
+      </html>
     `,
     markupMode: 'html-document',
     cases: [

@@ -349,7 +349,9 @@ function getTestFn(mode?: ScenarioStatus) {
 }
 
 async function initPage(page: Page, scenario: Scenario): Promise<void> {
-  if (scenario.url && page.url() !== scenario.url) {
+  const targetUrl = scenario.url ?? 'about:blank';
+
+  if (scenario.url) {
     await page.route(scenario.url, async route => {
       await route.fulfill({
         status: 200,
@@ -362,7 +364,7 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
   }
 
   if (scenario.markupMode === 'xml-document') {
-    await page.goto('about:blank');
+    await page.goto(targetUrl);
     await page.setContent(`<!DOCTYPE html><html><body>dummy content</body></html>`);
     await page.evaluate((xmlString) => {
       const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
@@ -376,7 +378,7 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
     if (!hasHtml) {
       throw new Error(`markupMode="html-document" requires full HTML document markup including <html>`);
     }
-    await page.goto('about:blank');
+    await page.goto(targetUrl);
     await page.setContent(scenario.markup);
   } else if (scenario.markupMode === 'html-body' || !scenario.markupMode) {
     await page.evaluate((bodyHtml) => {

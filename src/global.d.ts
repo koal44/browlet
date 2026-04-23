@@ -22,7 +22,7 @@ type QueryCallback = (element: Element) => unknown;
 type OptimizerKey = '#' | '*' | '.';
 type CompatKey = '#' | '*' | '|' | '.';
 type CompatThunk = () => Element[];
-type CompatFactory = (c: QueryContext, n: string) => CompatThunk;
+type CompatFactory = (c: QueryContext, n: string, s: SnapshotState) => CompatThunk;
 type CompatSeed = `${CompatKey}${string}`;
 
 type MatchLambda = (
@@ -109,6 +109,7 @@ type SnapshotState = {
   isHtml: boolean;
   isQuirksMode: boolean;
   namespace: string | null;
+  config: NwsConfig;
 
   byTag: ByTagFn;
 

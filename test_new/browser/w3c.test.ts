@@ -1967,6 +1967,7 @@ runScenarios('w3c', 'normal', [
     // browsers: ['chromium', 'webkit'], // Firefox doesn't support :focus inside iframe ??
     markup: `
     <!DOCTYPE html>
+    <html id=html>
     <title>Selector: pseudo-classes (:focus)</title>
     <link rel="author" title="Denis Ah-Kang" href="mailto:denis@w3.org" id=link1>
     <link rel=help href="https://html.spec.whatwg.org/multipage/#pseudo-classes" id=link2>
@@ -1981,6 +1982,7 @@ runScenarios('w3c', 'normal', [
         <div contenteditable id=div2>content</div>
         <iframe id=iframe srcdoc='<input id="inputiframe" type="text" value="foobar">'></iframe>
       </body>
+    </html>
     `,
     markupMode: 'html-document',
     setupPage: async (page) => {
@@ -2417,7 +2419,6 @@ runScenarios('w3c', 'normal', [
       <p id=p2 contenteditable>paragraph2.</p>
       </div>
     `,
-    markupMode: 'html-document',
     steps: [
       {
         cases: [

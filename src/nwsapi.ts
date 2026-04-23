@@ -164,10 +164,10 @@ function Factory(factGlob: Glob, factExport: Function) {
   }
 
   const compat: Record<CompatKey, CompatFactory> = {
-    '#': (c, n) => () => byId(n, c),
-    '*': (c, n) => () => byTagRaw(n, c),
-    '|': (c, n) => () => byTagNSRaw(n, c),
-    '.': (c, n) => () => byClassRaw(n, c),
+    '#': (c, n, s) => () => byId(n, c, s),
+    '*': (c, n, _s) => () => byTagRaw(n, c),
+    '|': (c, n, _s) => () => byTagNSRaw(n, c),
+    '.': (c, n, _s) => () => byClassRaw(n, c),
   }
 
   var
@@ -1337,7 +1337,7 @@ function Factory(factGlob: Glob, factExport: Function) {
             if (n.length > 1) {
               for (let i = 0; len > i; ++i) {
                 const compatFact = compat[n[i][0] as CompatKey];
-                list = compatFact(context, n[i].slice(1))();
+                list = compatFact(context, n[i].slice(1), snap)();
                 const lambda = f[i];
                 if (lambda) {
                   lambda(list, callback, context, nodes);
@@ -1430,7 +1430,7 @@ function Factory(factGlob: Glob, factExport: Function) {
         nodeset[i] = `${token[1]}${rawTokenValue}`;
 
         const unescapedTokenValue = unescapeIdentifier(rawTokenValue);
-        htmlset[i] = compat[token[1]](context, unescapedTokenValue);
+        htmlset[i] = compat[token[1]](context, unescapedTokenValue, snap);
         const factoryInput = htmlset[i]();
 
         if (snap.isDebug) snap.debugCompile = undefined;
@@ -1608,6 +1608,7 @@ function Factory(factGlob: Glob, factExport: Function) {
     isHtml: isHTML(_doc),
     isQuirksMode: isQuirksMode(_doc),
     namespace: getNamespace(_doc),
+    config: _config,
 
     byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? _snapshot.doc),
     first: (sel: string, context?: QueryContext, cb?: QueryCallback | null) => firstRaw(sel, context ?? _snapshot.doc, cb ?? null, _snapshot),
@@ -1653,7 +1654,7 @@ function Factory(factGlob: Glob, factExport: Function) {
     // exported engine methods
     byId: (id, ctx) => {
       ctx ??= _snapshot.doc;
-      return _config.NODE_LIST ? toNodeList(byId(id, ctx, _config.IDS_DUPES), _snapshot.doc) : byId(id, ctx, _config.IDS_DUPES);
+      return _config.NODE_LIST ? toNodeList(byId(id, ctx, _snapshot), _snapshot.doc) : byId(id, ctx, _snapshot);
     },
 
     byTag: (tag, ctx) => {
@@ -1965,7 +1966,7 @@ function byIdRaw(id: string, context: QueryContext) {
   let node: QueryContext | null = context;
   let next = node.firstElementChild;
   while ((node = next)) {
-    node.id == id && (nodes[nodes.length] = node);
+    node.getAttribute('id') === id && (nodes[nodes.length] = node);
     if ((next = node.firstElementChild || node.nextElementSibling)) continue;
     while (!next && (node = node.parentElement) && node !== context) {
       next = node.nextElementSibling;
@@ -1975,9 +1976,8 @@ function byIdRaw(id: string, context: QueryContext) {
 }
 
 // context agnostic getElementById
-function byId(id: string, context?: QueryContext, dupes = false): Element[] {
-  context ??= document;
-  if (!dupes && 'getElementById' in context) {
+function byId(id: string, context: QueryContext, snap: SnapshotState): Element[] {
+  if (!snap.config.IDS_DUPES && 'getElementById' in context) {
     const e = context.getElementById(id);
     return e ? [e] : [];
   }

@@ -15,7 +15,7 @@ runScenarios('issues', 'normal',  [
     `,
     cases: [
       { select: '.neighbor + div .target', expect: { count: 1 } },
-      { select: '.neighbor + * .target', expect: { count: 1 }, status: 'fixme' },
+      { select: '.neighbor + * .target', expect: { count: 1 } },
     ],
   },
 ]);

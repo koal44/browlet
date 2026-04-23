@@ -98,7 +98,7 @@ runScenarios('scope', 'normal', [
       </html>
     `,
     cases: [
-      { select: ':scope > [data-test="foo"]', ref: { by: 'first', selector: 'body' }, expect: { count: 1 }, status: 'fixme' },
+      { select: ':scope > [data-test="foo"]', ref: { by: 'first', selector: 'body' }, expect: { count: 1 } },
     ],
   },
 

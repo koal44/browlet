@@ -2289,6 +2289,6 @@ async function initPage(page: Page, template: TemplateKey): Promise<void> {
 }
 
 function getMarkupMode(template: TemplateKey): Scenario['markupMode'] {
-  if (template === 'xhtml' || template === 'xml') return 'xml-document';
+  if (template === 'xhtml' || template === 'xml' || template === 'svg') return 'xml-document';
   return 'html-document';
 }
