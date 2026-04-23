@@ -1,20 +1,3 @@
-/*
- * Copyright (C) 2007-2025 Diego Perini
- * All rights reserved.
- *
- * nwsapi.js - Fast CSS Selectors API Engine
- *
- * Author: Diego Perini <diego.perini at gmail com>
- * Version: 2.2.23
- * Created: 20070722
- * Release: 20251205
- *
- * License:
- *  https://javascript.nwbox.com/nwsapi/MIT-LICENSE
- * Download:
- *  https://javascript.nwbox.com/nwsapi/nwsapi.js
- */
-
 const HSP = '[\\x20\\t]';
 const VSP = '[\\r\\n\\f]';
 const WSP = '[\\x20\\t\\r\\n\\f]';
@@ -75,30 +58,15 @@ const GROUPS = {
   pseudo_dbl: ':(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b'
 };
 
-(function Export(global, factory) {
+function Factory(factGlob: Glob, factExport: Function) {
 
-  'use strict';
-
-  if (typeof module == 'object' && typeof exports == 'object') {
-    module.exports = factory;
-  } else if (typeof define == 'function' && define['amd']) {
-    define(factory);
-  } else {
-    global.NW || (global.NW = { });
-    global.NW.Dom = factory(global, Export);
-  }
-
-})(this, Factory);
-
-function Factory(global: Glob, Export: Function) {
-
-  const version = 'nwsapi-2.2.23';
+  const version = 'nwsapi-__VERSION__';
 
   var
-  doc = global.document,
-  root = doc.documentElement,
+  _doc = factGlob.document,
+  _root = _doc.documentElement,
 
-  CFG = {
+  _CFG = {
     // extensions
     operators: '[~*^$|]=|=',
     combinators: '[\\x20\\t>+~](?=[^>+~])'
@@ -151,7 +119,7 @@ function Factory(global: Glob, Export: Function) {
   reValidator: RegExp,
 
   // special handling configuration flags
-  Config: NwsConfig = {
+  _config: NwsConfig = {
     IDS_DUPES: true,
     FORGIVING: true,
     NODE_LIST: false,
@@ -175,11 +143,11 @@ function Factory(global: Glob, Export: Function) {
     'text': 1, 'type': 1, 'valign': 1, 'valuetype': 1, 'vlink': 1
   },
 
-  Combinators: Record<string, string> = { },
+  _combinators: Record<string, string> = { },
 
-  Selectors: Record<string, SelectorExtension> = { },
+  _selectors: Record<string, SelectorExtension> = { },
 
-  Operators: Record<string, AttrMatcherParts> = {
+  _operators: Record<string, AttrMatcherParts> = {
      '=': { p1: '^',       p2: '$',       p3: 'true' },
     '^=': { p1: '^',       p2: '',        p3: 'true' },
     '$=': { p1: '',        p2: '$',       p3: 'true' },
@@ -193,160 +161,16 @@ function Factory(global: Glob, Export: Function) {
     '*': 'getElementsByTagName',
     '|': 'getElementsByTagNameNS',
     '.': 'getElementsByClassName'
-    }
+  }
 
   const compat: Record<CompatKey, CompatFactory> = {
     '#': (c, n) => () => byId(n, c),
-    '*': (c, n) => () => byTag(n, c),
-    '|': (c, n) => () => byTagNS(n, c),
-    '.': (c, n) => () => byClass(n, c),
+    '*': (c, n) => () => byTagRaw(n, c),
+    '|': (c, n) => () => byTagNSRaw(n, c),
+    '.': (c, n) => () => byClassRaw(n, c),
   }
 
   var
-
-  // find duplicate ids using iterative walk
-  byIdRaw: RawByIdFn =
-    function(id: string, context?: QueryContext) {
-      context ??= doc;
-      var node: QueryContext | null = context, nodes = [ ], next = node.firstElementChild;
-      while ((node = next)) {
-        node.id == id && (nodes[nodes.length] = node);
-        if ((next = node.firstElementChild || node.nextElementSibling)) continue;
-        while (!next && (node = node.parentElement) && node !== context) {
-          next = node.nextElementSibling;
-        }
-      }
-      return nodes;
-    },
-
-  // context agnostic getElementById
-  byId: RawByIdFn =
-    function(id: string, context?: QueryContext): Element[] {
-      context ??= doc;
-      if (Config.IDS_DUPES === false && 'getElementById' in context) {
-        const e = context.getElementById(id);
-        return e ? [e] : [];
-      }
-
-      return byIdRaw(id, context);
-    },
-
-  // wrapped up namespaced TagName api calls
-  byTagNS: RawByTagFn =
-    function(tag: string, context?: QueryContext) {
-      return byTag(tag, context);
-  },
-
-  // context agnostic getElementsByTagName
-  byTag: RawByTagFn =
-    function(tag: string, context?: QueryContext) {
-      let el: Element | null
-      let nodes: Element[];
-      context ??= doc;
-      // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-      if ('getElementsByTagName' in context) {
-        return Array.from(context.getElementsByTagName(tag));
-      } else {
-        tag = tag.toLowerCase();
-        // DOCUMENT_FRAGMENT_NODE (11)
-        if ((el = context.firstElementChild)) {
-          if (!(el.nextElementSibling || tag == '*' || el.localName == tag)) {
-            return Array.from(el.getElementsByTagName(tag));
-          } else {
-            nodes = [ ];
-            do {
-              if (tag == '*' || el.localName == tag) nodes[nodes.length] = el;
-              concatList(nodes, el.getElementsByTagName(tag));
-            } while ((el = el.nextElementSibling));
-          }
-        } else nodes = [];
-      }
-      return nodes;
-    },
-
-
-  // context agnostic getElementsByClassName
-  byClass: RawByClassFn =
-    function(cls: string, context?: QueryContext) {
-      let el: Element | null;
-      let nodes: Element[];
-      context ??= doc;
-      // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-      if ('getElementsByClassName' in context) {
-        return Array.from(context.getElementsByClassName(cls));
-      } else {
-        // DOCUMENT_FRAGMENT_NODE (11)
-        if ((el = context.firstElementChild)) {
-          const reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', isQuirksMode(doc) ? 'i' : '');
-          if (!(el.nextElementSibling || reCls.test(el.className))) {
-            return Array.from(el.getElementsByClassName(cls));
-          } else {
-            nodes = [ ];
-            do {
-              if (reCls.test(el.className)) nodes[nodes.length] = el;
-              concatList(nodes, el.getElementsByClassName(cls));
-            } while ((el = el.nextElementSibling));
-          }
-        } else nodes = [];
-      }
-      return nodes;
-    },
-
-
-  // namespace aware hasAttribute
-  // helper for XML/XHTML documents
-  hasAttributeNS =
-    function(e: Element, name: string) {
-      var i, l, attr = e.getAttributeNames();
-      const reName = new RegExp(':?' + name + '$', isHTML(doc) ? 'i' : '');
-      for (i = 0, l = attr.length; l > i; ++i) {
-        if (reName.test(attr[i])) return true;
-      }
-      return false;
-    },
-
-  // fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
-  nthElement: NthFn = (function() {
-    var idx = 0, len = 0, set = 0, parent: Element | null = null, parents = Array(), nodes = Array();
-    return function(element: Element, dir: number) {
-      // ensure caches are emptied after each run, invoking with dir = 2
-      if (dir == 2) {
-        idx = 0; len = 0; set = 0; nodes.length = 0;
-        parents.length = 0; parent = null;
-        return -1;
-      }
-      var e, i, j, k, l;
-      if (parent === element.parentElement) {
-        i = set; j = idx; l = len;
-      } else {
-        l = parents.length;
-        parent = element.parentElement;
-        for (i = -1, j = 0, k = l - 1; l > j; ++j, --k) {
-          if (parents[j] === parent) { i = j; break; }
-          if (parents[k] === parent) { i = k; break; }
-        }
-        if (i < 0) {
-          parents[i = l] = parent;
-          l = 0; nodes[i] = Array();
-          e = parent && parent.firstElementChild || element;
-          while (e) { nodes[i][l] = e; if (e === element) j = l; e = e.nextElementSibling; ++l; }
-          set = i; idx = 0; len = l;
-          if (l < 2) return l;
-        } else {
-          l = nodes[i].length;
-          set = i;
-        }
-      }
-      if (element !== nodes[i][j] && element !== nodes[i][j = 0]) {
-        for (j = 0, e = nodes[i], k = l - 1; l > j; ++j, --k) {
-          if (e[j] === element) { break; }
-          if (e[k] === element) { j = k; break; }
-        }
-      }
-      idx = j + 1; len = l;
-      return dir ? l - j : idx;
-    };
-  })(),
 
   // fast resolver for the :nth-of-type() and :nth-last-of-type() pseudo-classes
   nthOfType: NthFn = (function() {
@@ -414,10 +238,10 @@ function Factory(global: Glob, Export: Function) {
 
   // check if node content is editable
   isContentEditable: IsContentEditableFn =
-    function(node: HTMLElement): boolean {
+    function(el: HTMLElement): boolean {
       let attrValue: string | null = 'inherit';
-      if (node.hasAttribute('contenteditable')) {
-        attrValue = node.getAttribute('contenteditable');
+      if (el.hasAttribute('contenteditable')) {
+        attrValue = el.getAttribute('contenteditable');
       }
       switch (attrValue) {
         case '':
@@ -427,7 +251,7 @@ function Factory(global: Glob, Export: Function) {
         case 'false':
           return false;
         default:
-          const parent = node.parentElement;
+          const parent = el.parentElement;
           if (parent && parent.nodeType === 1) {
             return isContentEditable(parent);
           }
@@ -448,16 +272,16 @@ function Factory(global: Glob, Export: Function) {
   // configure the engine to use special handling
   configure =
     function(option?: ConfigKey | Partial<Record<ConfigKey, boolean>>, clear = false) {
-      if (typeof option == 'string') { return !!Config[option]; }
-      if (typeof option != 'object') { return Config; }
+      if (typeof option == 'string') { return !!_config[option]; }
+      if (typeof option != 'object') { return _config; }
 
       for (let i in option) {
-        Config[i as ConfigKey] = !!option[i as ConfigKey];
+        _config[i as ConfigKey] = !!option[i as ConfigKey];
       }
       // clear lambda cache
       if (clear) {
-        matchResolvers = { };
-        selectResolvers = { };
+        _matchResolvers = { };
+        _selectResolvers = { };
       }
       setIdentifierSyntax();
       return true;
@@ -467,27 +291,25 @@ function Factory(global: Glob, Export: Function) {
   emit =
     function(message: string, proto?: typeof Error) {
       var err;
-      if (Config.VERBOSITY) {
+      if (_config.VERBOSITY) {
         if (proto) {
           err = new proto(message);
         } else {
-          err = new global.DOMException(message, 'SyntaxError');
+          err = new factGlob.DOMException(message, 'SyntaxError');
         }
         throw err;
       }
-      if (Config.LOGERRORS && console && console.log) {
+      if (_config.LOGERRORS && console && console.log) {
         console.log(message);
       }
     },
 
   // execute the engine initialization code
   initialize =
-    function(doc: Document) {
+    function(docArg: Document) {
       setIdentifierSyntax();
-      console.log('NW.Dom initialize');
-      console.log('context:', typeof doc);
-      lastContext = updateSnapshot(Snapshot, doc, true).from;
-      console.log('lastContext:', lastContext);
+      // doc = docArg;
+      _lastContext = updateSnapshot(_snapshot, docArg, true).from;
     },
 
   // build validation regexps used by the engine
@@ -542,7 +364,7 @@ function Factory(global: Glob, Export: Function) {
           '(' + identifier + '(?::' + identifier + ')?)' +
           WSP + '?' +
           '(?:' +
-            '(' + CFG.operators + ')' + WSP + '?' +
+            '(' + _CFG.operators + ')' + WSP + '?' +
             '(?:' + attrparser + ')' +
           ')?' +
           // attribute case sensitivity
@@ -579,7 +401,7 @@ function Factory(global: Glob, Export: Function) {
           '(?:[.#]?' + identifier + ')+|' +
           '(?:' + attributes + ')+|' +
           '(?:::?' + pseudonames + pseudoclass + ')|' +
-          '(?:' + WSP + '?' + CFG.combinators + WSP + '?)|' +
+          '(?:' + WSP + '?' + _CFG.combinators + WSP + '?)|' +
           '(?:' + WSP + '?,' + WSP + '?)|' +
           '(?:' + WSP + '?)' +
         ')+';
@@ -644,36 +466,35 @@ function Factory(global: Glob, Export: Function) {
   // compile groups or single selector strings into
   // executable functions for matching or selecting
   compile: CompileFn =
-    function(selector: string, mode: boolean | null, callback: QueryCallback | null): SelectLambda | MatchLambda {
-      var factory, token, head = '', loop = '', macro = '', source = '', vars = '';
+    function(selector: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState): SelectLambda | MatchLambda {
 
       // 'mode' can be boolean or null
       // true = select / false = match
       // null to use collection.item()
+      let [macro, head, loop] = ['', '', ''];
       switch (mode) {
         case true:
-          if (selectLambdas[selector]) { return selectLambdas[selector]; }
-          macro = S_BODY + (!!callback ? S_TEST : '') + S_TAIL;
+          if (_selectLambdas[selector]) { return _selectLambdas[selector]; }
+          macro = S_BODY + (!!cb ? S_TEST : '') + S_TAIL;
           head = S_HEAD;
           loop = S_LOOP;
           break;
         case false:
-          if (matchLambdas[selector]) { return matchLambdas[selector]; }
-          macro = M_BODY + (!!callback ? M_TEST : '') + M_TAIL;
+          if (_matchLambdas[selector]) { return _matchLambdas[selector]; }
+          macro = M_BODY + (!!cb ? M_TEST : '') + M_TAIL;
           head = M_HEAD;
           loop = M_LOOP;
           break;
         case null:
-          if (selectLambdas[selector]) { return selectLambdas[selector]; }
-          macro = N_BODY + (!!callback ? N_TEST : '') + N_TAIL;
+          if (_selectLambdas[selector]) { return _selectLambdas[selector]; }
+          macro = N_BODY + (!!cb ? N_TEST : '') + N_TAIL;
           head = N_HEAD;
           loop = N_LOOP;
           break;
-        default:
-          break;
+        default: assertNever(mode);
       }
 
-      source = compileSelector(selector, macro, mode, callback);
+      const source = compileSelector(selector, macro, mode, cb, snap);
 
       loop += mode || mode === null ? '{' + source + '}' : source;
 
@@ -682,6 +503,7 @@ function Factory(global: Glob, Export: Function) {
         loop += reNthType.test(selector) ? 's.nthOfType(null, 2);' : '';
       }
 
+      let vars = '';
       if (S_VARS[0] || M_VARS[0] || N_VARS[0]) {
         vars = ',' + (S_VARS.join(',') || M_VARS.join(',') || N_VARS[0]);
         S_VARS.length = 0;
@@ -689,14 +511,16 @@ function Factory(global: Glob, Export: Function) {
         N_VARS.length = 0;
       }
 
-      factory = Function('s', F_INIT + '{' + head + vars + ';' + loop + 'return r;}')(Snapshot);
+      const f = F_INIT + '{' + head + vars + ';' + loop + 'return r;}';
+      if (snap.isDebug) snap.debugCompile = f;
+      const factory = Function('s', f)(snap);
 
-      return mode || mode === null ? (selectLambdas[selector] = factory) : (matchLambdas[selector] = factory);
+      return mode || mode === null ? (_selectLambdas[selector] = factory) : (_matchLambdas[selector] = factory);
     },
 
   // build conditional code to check components of selector strings
   compileSelector =
-    function(expression: string, source: string, mode: boolean | null, callback: QueryCallback | null) {
+    function(expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState) {
 
       var a, b, n, f, k = 0, name, NS, referenceElement,
       compat, expr, result, status, symbol,
@@ -713,7 +537,7 @@ function Factory(global: Glob, Export: Function) {
 
       while (selector) {
 
-	++k;
+        ++k;
 
         // get namespace prefix if present or get first char of selector
         symbol = STD.apimethods.test(selector) ? '|' : selector[0];
@@ -741,7 +565,7 @@ function Factory(global: Glob, Export: Function) {
             match = selector.match(Patterns.className);
             if (!match) throw new Error('Invalid class selector: ' + selector);
 
-            compat = (isQuirksMode(doc) ? 'i' : '') + '.test(e.getAttribute("class"))';
+            compat = (snap.isQuirksMode ? 'i' : '') + '.test(e.getAttribute("class"))';
             source = 'if((/(^|\\s)' + match[1] + '(\\s|$)/' + compat + ')){' + source + '}';
             break;
 
@@ -762,8 +586,8 @@ function Factory(global: Glob, Export: Function) {
               source = 'if(true){' + source + '}';
             } else if (!match[1]) {
               source = 'if((!e.namespaceURI)){' + source + '}';
-            } else if (typeof match[1] == 'string' && root.prefix == match[1]) {
-              source = 'if((e.namespaceURI=="' + getNamespace(doc) + '")){' + source + '}';
+            } else if (typeof match[1] == 'string' && _root.prefix == match[1]) {
+              source = 'if((e.namespaceURI=="' + snap.namespace + '")){' + source + '}';
             } else {
               emit('\'' + expression + '\'' + qsInvalid);
             }
@@ -778,7 +602,7 @@ function Factory(global: Glob, Export: Function) {
             name = match[1];
             expr = name.split(':');
             expr = expr.length == 2 ? expr[1] : expr[0];
-            if (match[2] && !(test = Operators[match[2]])) {
+            if (match[2] && !(test = _operators[match[2]])) {
               emit('\'' + expression + '\'' + qsInvalid);
               return '';
             }
@@ -791,17 +615,9 @@ function Factory(global: Glob, Export: Function) {
               // whitespace separated list but value contains space
               break;
             } else if (match[4]) {
-              match[4] = escapeIdentifier(match[4], global).replace(REX.RegExpChar, '\\$&');
+              match[4] = decodeCssEscapes(match[4]).replace(REX.RegExpChar, '\\$&');
             }
-            // type = match[5] == 'i' || (HTML_DOCUMENT && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
-            // if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`); // shouldn't happen
-            // source = 'if((' +
-            //   (!match[2] ? (NS ? 's.hasAttributeNS(e,"' + name + '")' : 'e.hasAttribute&&e.hasAttribute("' + name + '")') :
-            //   !match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=' ? 'e.getAttribute&&e.getAttribute("' + name + '")==""' :
-            //   '(/' + test.p1 + match[4] + test.p2 + '/' + type + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3) +
-            //   ')){' + source + '}';
-            // break;
-            type = match[5] == 'i' || (isHTML(doc) && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
+            type = match[5] == 'i' || (snap.isHtml && HTML_TABLE[expr.toLowerCase()]) ? 'i' : '';
             let attrExpr: string;
             if (!match[2]) {
               attrExpr = NS
@@ -847,7 +663,7 @@ function Factory(global: Glob, Export: Function) {
             break;
 
           // *** user supplied combinators extensions
-          case (symbol in Combinators ? symbol : undefined):
+          case (symbol in _combinators ? symbol : undefined):
             // for other registered combinators extensions
             throw new Error('FIXME: custom combinators are not supported yet'); // TODO: implement custom combinators
             // match[match.length - 1] = '*';
@@ -867,6 +683,7 @@ function Factory(global: Glob, Export: Function) {
                 case 'root':
                   // there can only be one :root element, so exit the loop once found
                   source = 'if((e===s.root)){' + source + (mode ? 'break main;' : '') + '}';
+                  // throw new Error(source);
                   break;
                 case 'empty':
                   // matches elements that don't contain elements or text nodes
@@ -969,7 +786,7 @@ function Factory(global: Glob, Export: Function) {
               switch (match[1]) {
                 case 'is':
                 case 'where':
-                  if (Config.FORGIVING) {
+                  if (_config.FORGIVING) {
                     source =
                       'try{' +
                         'if(s.match("' + expr + '",e)){' + source + '}' +
@@ -1288,9 +1105,9 @@ function Factory(global: Glob, Export: Function) {
               status = false;
 
               // process registered selector extensions
-              for (expr in Selectors) {
-                if ((match = selector.match(Selectors[expr].Expression))) {
-                  result = Selectors[expr].Callback(match, source, mode, callback);
+              for (expr in _selectors) {
+                if ((match = selector.match(_selectors[expr].Expression))) {
+                  result = _selectors[expr].Callback(match, source, mode, cb);
                   if ('match' in result) { match = result.match; }
                   vars = result.modvar;
                   if (mode) {
@@ -1310,7 +1127,7 @@ function Factory(global: Glob, Export: Function) {
               }
 
               if (!status) {
-                if (Config.FORGIVING &&
+                if (_config.FORGIVING &&
                   selector.match(/(:(?:is|where)\x28)/)) {
                   return '';
                 }
@@ -1319,7 +1136,7 @@ function Factory(global: Glob, Export: Function) {
               }
 
               if (!expr) {
-                if (Config.FORGIVING &&
+                if (_config.FORGIVING &&
                   selector.match(/(:(?:is|where)\x28)/)) {
                   return '';
                 }
@@ -1338,7 +1155,7 @@ function Factory(global: Glob, Export: Function) {
         // end of switch symbol
 
         if (!match) {
-          if (Config.FORGIVING &&
+          if (_config.FORGIVING &&
             selector.match(/(:(?:is|where)\x28)/)) {
             return '';
           }
@@ -1381,18 +1198,18 @@ function Factory(global: Glob, Export: Function) {
 
       return selectors.replace(/:scope/i,
         (element.localName) +
-        (element.id ? '#' + escapeIdentifier(element.id, global) : '') +
-        (element.className ? '.' + escapeIdentifier(element.classList[0], global) : ''));
+        (element.id ? '#' + cssEscape(element.id, factGlob) : '') +
+        (element.className ? '.' + cssEscape(element.classList[0], factGlob) : ''));
     },
 
   // equivalent of w3c 'closest' method
-  ancestor: AncestorFn =
-    function _closest(selectors: string, element: Element, callback: QueryCallback | null = null) {
+  ancestorRaw: RawAncestorFn =
+    function _closest(selectors: string, element: Element, callback: QueryCallback | null = null, snap: SnapshotState) {
       parse(selectors);
       selectors = makeref(selectors, element);
       let el: Element | null = element;
       while (el) {
-        if (match(selectors, el, callback)) break;
+        if (matchRaw(selectors, el, callback, snap)) break;
         el = el.parentElement;
       }
       return el;
@@ -1406,9 +1223,9 @@ function Factory(global: Glob, Export: Function) {
     },
 
   match_collect =
-    function(selectors: string[], callback: QueryCallback | null) {
+    function(selectors: string[], cb: QueryCallback | null) {
       for (var i = 0, l = selectors.length, f = [ ]; l > i; ++i)
-        f[i] = compile(selectors[i], false, callback) as MatchLambda; // FIXME: type assertion to MatchLambda[] is not safe, but compile() can return either MatchLambda or SelectLambda
+        f[i] = compile(selectors[i], false, cb, _snapshot) as MatchLambda; // FIXME: type assertion to MatchLambda[] is not safe, but compile() can return either MatchLambda or SelectLambda
       return { factory: f };
     },
 
@@ -1420,11 +1237,11 @@ function Factory(global: Glob, Export: Function) {
       // arguments validation
       if (arguments.length === 0) {
         emit(qsNotArgs, TypeError);
-        if (Config.VERBOSITY) throw new TypeError(qsNotArgs);
+        if (_config.VERBOSITY) throw new TypeError(qsNotArgs);
         return [];
       } else if (arguments[0] === '') {
         emit('\'\'' + qsInvalid);
-        if (Config.VERBOSITY) throw new SyntaxError('\'' + qsInvalid);
+        if (_config.VERBOSITY) throw new SyntaxError('\'' + qsInvalid);
         return [];
       }
 
@@ -1434,7 +1251,7 @@ function Factory(global: Glob, Export: Function) {
       }
 
       if ((/:scope/i).test(selectors)) {
-        selectors = makeref(selectors, Snapshot.from);
+        selectors = makeref(selectors, _snapshot.from);
       }
 
       // normalize input string
@@ -1451,16 +1268,16 @@ function Factory(global: Glob, Export: Function) {
       if (validated?.join('') == parsed) {
         if (parsed[parsed.length - 1] == ',') {
           emit(qsInvalid);
-          if (Config.VERBOSITY) throw new SyntaxError(qsInvalid);
+          if (_config.VERBOSITY) throw new SyntaxError(qsInvalid);
           return [];
         }
         return parsed.match(REX.SplitGroup) ?? [];
       } else {
-        if (Config.FORGIVING) {
+        if (_config.FORGIVING) {
           // forgiving pseudos allow to continue even after parse errors
           if (!(parsed.includes(':is(') || parsed.includes(':where('))) {
             emit('\'' + selectors + '\'' + qsInvalid);
-            if (Config.VERBOSITY) throw new SyntaxError('\'' + selectors + '\'' + qsInvalid);
+            if (_config.VERBOSITY) throw new SyntaxError('\'' + selectors + '\'' + qsInvalid);
             return [];
           }
         }
@@ -1469,23 +1286,22 @@ function Factory(global: Glob, Export: Function) {
     },
 
   // equivalent of w3c 'matches' method
-  match: MatchFn =
-    function _matches(selectors: string, element: Element, callback: QueryCallback | null = null) {
+  matchRaw: RawMatchFn =
+    function _matches(selectors: string, element: Element, callback: QueryCallback | null = null, snap: SnapshotState) {
 
-      if (element && matchResolvers[selectors]) {
-        return match_assert(matchResolvers[selectors].factory, element, callback);
+      if (element && _matchResolvers[selectors]) {
+        return match_assert(_matchResolvers[selectors].factory, element, callback);
       }
 
-      matchResolvers[selectors] = match_collect(parse(selectors), callback);
+      _matchResolvers[selectors] = match_collect(parse(selectors), callback);
 
-      return match_assert(matchResolvers[selectors].factory, element, callback);
+      return match_assert(_matchResolvers[selectors].factory, element, callback);
     },
 
   // equivalent of w3c 'querySelector' method
-  first: FirstFn =
-    function _querySelector(selectors: string, context?: QueryContext, callback: QueryCallback | null = null) {
-      context ??= doc;
-      return select(selectors, context,
+  firstRaw: RawFirstFn =
+    function _querySelector(selectors: string, context: QueryContext, callback: QueryCallback | null = null, snap: SnapshotState) {
+      return selectRaw(selectors, context,
         typeof callback == 'function' ?
         function firstMatch(element) {
           callback(element);
@@ -1493,24 +1309,24 @@ function Factory(global: Glob, Export: Function) {
         } :
         function firstMatch() {
           return false;
-        }
+        },
+        snap,
       )[0] || null;
     },
 
   // equivalent of w3c 'querySelectorAll' method
-  select: RawSelectFn =
-    function _querySelectorAll(selectors: string, context?: QueryContext, callback: QueryCallback | null = null) {
+  selectRaw: RawSelectFn =
+    function _querySelectorAll(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState) {
       let nodes: Element[] = [];
       let resolver;
-      context ??= doc;
 
-      if (lastContext !== context) {
-        updateSnapshot(Snapshot, context);
-        lastContext = context;
+      if (_lastContext !== context) {
+        updateSnapshot(snap, context);
+        _lastContext = context;
       }
 
       if (selectors) {
-        if ((resolver = selectResolvers[selectors])) {
+        if ((resolver = _selectResolvers[selectors])) {
           if (resolver.context === context &&
             resolver.callback === callback) {
             let list: Element[];
@@ -1548,9 +1364,9 @@ function Factory(global: Glob, Export: Function) {
       }
 
       // save/reuse factory and closure collection
-      selectResolvers[selectors] = collect(parse(selectors), context, callback);
-
-      nodes = selectResolvers[selectors].results;
+      const r = collect(parse(selectors), context, callback, snap);
+      nodes = r.results;
+      _selectResolvers[selectors] = r;
 
       if (typeof callback == 'function') {
         nodes = concatCall(nodes, callback);
@@ -1573,44 +1389,70 @@ function Factory(global: Glob, Export: Function) {
 
   // prepare factory resolvers and closure collections
   collect =
-    function(selectors: string[], context: QueryContext, callback: QueryCallback | null) {
+    function(selectors: string[], context: QueryContext, cb: QueryCallback | null, snap: SnapshotState) {
       const nodeset: CompatSeed[] = [];
       const htmlset: CompatThunk[] = [];
       const factory: SelectLambda[] = [];
-      const optimized = selectors;
+      const optimized = selectors.slice();
       const seen: Record<string, boolean> = {};
       const token: [string, '.' | '#' | '*', string] = ['', '*', '*'];
       let results: Element[] = [];
 
-      for (let i = 0, l = selectors.length; l > i; ++i) {
+      if (snap.isDebug) {
+        snap.debugCollect = { callback: cb, context: describeQueryContext(context), steps: [] };
+      }
 
-        if (!seen[selectors[i]] && (seen[selectors[i]] = true)) {
-          const type = selectors[i].match(reOptimizer);
+      for (let i = 0, l = selectors.length; i < l; ++i) {
+        const original = selectors[i];
+        const seenBefore = seen[original];
+
+        if (!seenBefore) {
+          seen[original] = true;
+          const type = original.match(reOptimizer);
           if (type && type[1] != ':') {
             token[0] = type[0];
             const t1 = type[1] || '*';
             if (t1 !== '.' && t1 !== '#' && t1 !== '*') {
-              throw new SyntaxError(`invalid selector for optimization '${selectors[i]}'`);
+              throw new SyntaxError(`invalid selector for optimization '${original}'`);
             }
             token[1] = t1;
             token[2] = type[2];
-            optimized[i] = optimize(optimized[i], type);
+            optimized[i] = optimize(original, type);
           } else {
             token[0] = '';
             token[1] = '*';
             token[2] = '*';
+            optimized[i] = original;
           }
         }
 
-        nodeset[i] = `${token[1]}${token[2]}`;
-        token[2] = unescapeIdentifier(token[2]);
-        htmlset[i] = compat[token[1]](context, token[2]);
-        factory[i] = compile(optimized[i], true, null) as SelectLambda; // TODO: type assertion to be removed after refactor
+        const rawTokenValue = token[2];
+        nodeset[i] = `${token[1]}${rawTokenValue}`;
 
-        results = factory[i](htmlset[i](), callback, context, results);
-        // factory[i] ?
-        //   factory[i](htmlset[i](), callback, context, results) :
-        //   results.concat(htmlset[i]());
+        const unescapedTokenValue = unescapeIdentifier(rawTokenValue);
+        htmlset[i] = compat[token[1]](context, unescapedTokenValue);
+        const factoryInput = htmlset[i]();
+
+        if (snap.isDebug) snap.debugCompile = undefined;
+        factory[i] = compile(optimized[i], true, null, snap) as SelectLambda;
+
+        results = factory[i](factoryInput, cb, context, results);
+
+        if (snap.isDebug) {
+          snap.debugCollect!.steps.push({
+            index: i,
+            original,
+            optimized: optimized[i],
+            seenBefore,
+            token: [token[0], token[1], token[2]],
+            rawTokenValue,
+            unescapedTokenValue,
+            nodeset: nodeset[i],
+            factoryInput: describeElements(factoryInput),
+            factorySource: snap.debugCompile ?? String(factory[i]),
+            factoryResults: describeElements(results),
+          });
+        }
       }
 
       if (selectors.length > 1) {
@@ -1618,22 +1460,21 @@ function Factory(global: Glob, Export: Function) {
       }
 
       return {
-        callback: callback,
+        callback: cb,
         context: context,
         factory: factory,
         htmlset: htmlset,
         nodeset: nodeset,
         results: results
       };
-
     },
 
   // handlers needed for the :hover pseudo-class
   // track state change in browsers and headless
   initEnv =
     (function() {
-      doc.addEventListener('mouseover', function(e) { Snapshot.HOVER = e.target; }, true);
-      doc.addEventListener('mouseout', function(e) { Snapshot.HOVER = null; }, true);
+      _doc.addEventListener('mouseover', function(e) { _snapshot.HOVER = e.target; }, true);
+      _doc.addEventListener('mouseout', function(e) { _snapshot.HOVER = null; }, true);
     })(),
 
   // QSA placeholders to native references
@@ -1647,8 +1488,6 @@ function Factory(global: Glob, Export: Function) {
   // overrides QSA methods (only for browsers)
   install =
     function(all?: boolean) {
-      console.log('NW.Dom install');
-
       // save references
       _closest = Element.prototype.closest;
       _matches = Element.prototype.matches;
@@ -1670,45 +1509,45 @@ function Factory(global: Glob, Export: Function) {
       Element.prototype.closest =
       HTMLElement.prototype.closest =
         function closest(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, ancestor]);
+          return parseQSArgs.apply(this, [...args, Dom.closest]);
         };
 
       Element.prototype.matches =
       HTMLElement.prototype.matches =
         function matches(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, match]);
+          return parseQSArgs.apply(this, [...args, Dom.match]);
         } as Element['matches'];
 
       Element.prototype.querySelector =
       HTMLElement.prototype.querySelector =
         function querySelector(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, first]);
+          return parseQSArgs.apply(this, [...args, Dom.first]);
         };
 
       Element.prototype.querySelectorAll =
       HTMLElement.prototype.querySelectorAll =
         function querySelectorAll(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, select]);
+          return parseQSArgs.apply(this, [...args, Dom.select]);
         };
 
       Document.prototype.querySelector =
       DocumentFragment.prototype.querySelector =
         function querySelector(this: QueryContext, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, first]);
+          return parseQSArgs.apply(this, [...args, Dom.first]);
         };
 
       Document.prototype.querySelectorAll =
       DocumentFragment.prototype.querySelectorAll =
         function querySelectorAll(this: QueryContext, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, select]);
+          return parseQSArgs.apply(this, [...args, Dom.select]);
       };
 
       if (all) {
-        doc.addEventListener('load', function (e) {
+        _doc.addEventListener('load', function (e) {
           const evTarget = e.target;
           if (!isIFrame(evTarget)) return;
 
-          const iife = '(' + Export + ')(this, ' + Factory + ');';
+          const iife = '(' + factExport + ')(this, ' + Factory + ');';
           const doc = evTarget.ownerDocument;
           const script = doc.createElement('script');
           script.textContent = iife + 'NW.Dom.install(true)';
@@ -1740,7 +1579,7 @@ function Factory(global: Glob, Export: Function) {
         Element.prototype.querySelector =
         HTMLElement.prototype.querySelector = _querySelector;
         Element.prototype.querySelectorAll =
-        HTMLElement.prototype.querySelectorAll = _querySelector;
+        HTMLElement.prototype.querySelectorAll = _querySelectorAll;
       }
       if (_querySelectorAllDoc) {
         Document.prototype.querySelector =
@@ -1751,42 +1590,41 @@ function Factory(global: Glob, Export: Function) {
     },
 
   // context
-  lastContext: QueryContext,
+  _lastContext: QueryContext,
 
   // cached lambdas
-  matchLambdas: Record<string, MatchLambda> = { },
-  selectLambdas: Record<string, SelectLambda> = { },
+  _matchLambdas: Record<string, MatchLambda> = { },
+  _selectLambdas: Record<string, SelectLambda> = { },
 
   // cached resolvers
-  matchResolvers: Record<string, MatchResolver> = { },
-  selectResolvers: Record<string, SelectResolver> = { },
+  _matchResolvers: Record<string, MatchResolver> = { },
+  _selectResolvers: Record<string, SelectResolver> = { },
 
   // passed to resolvers
-  Snapshot: SnapshotState = {
+  _snapshot: SnapshotState = {
+    doc: _doc,
+    from: _doc,
+    root: _root,
+    isHtml: isHTML(_doc),
+    isQuirksMode: isQuirksMode(_doc),
+    namespace: getNamespace(_doc),
 
-    doc: doc,
-    from: doc,
-    root: root,
-    isHtml: isHTML(doc),
-    isQuirksMode: isQuirksMode(doc),
-    namespace: getNamespace(doc),
-
-    byTag: byTag,
-
-    first: first,
-    match: match,
-    select: select,
-
-    ancestor: ancestor,
+    byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? _snapshot.doc),
+    first: (sel: string, context?: QueryContext, cb?: QueryCallback | null) => firstRaw(sel, context ?? _snapshot.doc, cb ?? null, _snapshot),
+    match: (sel: string, context: Element, cb?: QueryCallback | null) => matchRaw(sel, context, cb ?? null, _snapshot),
+    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null) => selectRaw(sel, context ?? _snapshot.doc, cb ?? null, _snapshot),
+    ancestor: (sel: string, context: Element, cb?: QueryCallback | null) => ancestorRaw(sel, context, cb ?? null, _snapshot),
 
     nthOfType: nthOfType,
     nthElement: nthElement,
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
-    hasAttributeNS: hasAttributeNS,
+    hasAttributeNS: (e: Element, name: string) => hasAttributeNS(e, name, _snapshot.isHtml),
 
     HOVER: null,
+
+    isDebug: false,
   },
 
   // public exported methods/objects
@@ -1794,56 +1632,72 @@ function Factory(global: Glob, Export: Function) {
 
     // exported cache objects
 
-    matchLambdas: matchLambdas,
-    selectLambdas: selectLambdas,
+    matchLambdas: _matchLambdas,
+    selectLambdas: _selectLambdas,
 
-    matchResolvers: matchResolvers,
-    selectResolvers: selectResolvers,
+    matchResolvers: _matchResolvers,
+    selectResolvers: _selectResolvers,
 
     // exported compiler macros
 
-    CFG: CFG,
+    CFG: _CFG,
 
     S_BODY: S_BODY,
     M_BODY: M_BODY,
-    N_BODY: M_BODY,
+    N_BODY: N_BODY,
 
     S_TEST: S_TEST,
     M_TEST: M_TEST,
     N_TEST: N_TEST,
 
     // exported engine methods
-    byId: (id, ctx) =>
-      Config.NODE_LIST ? toNodeList(byId(id, ctx), doc) : byId(id, ctx),
+    byId: (id, ctx) => {
+      ctx ??= _snapshot.doc;
+      return _config.NODE_LIST ? toNodeList(byId(id, ctx, _config.IDS_DUPES), _snapshot.doc) : byId(id, ctx, _config.IDS_DUPES);
+    },
 
-    byTag: (tag, ctx) =>
-      Config.NODE_LIST ? toNodeList(byTag(tag, ctx), doc) : byTag(tag, ctx),
+    byTag: (tag, ctx) => {
+      ctx ??= _snapshot.doc;
+      return _config.NODE_LIST ? toNodeList(byTagRaw(tag, ctx), _snapshot.doc) : byTagRaw(tag, ctx);
+    },
 
-    byClass: (cls, ctx) =>
-      Config.NODE_LIST ? toNodeList(byClass(cls, ctx), doc) : byClass(cls, ctx),
+    byClass: (cls, ctx) => {
+      ctx ??= _snapshot.doc;
+      return _config.NODE_LIST ? toNodeList(byClassRaw(cls, ctx), _snapshot.doc) : byClassRaw(cls, ctx);
+    },
 
-    first: first,
-    match: match,
+    first: (sel, ctx, cb) => {
+      ctx ??= _snapshot.doc;
+      return firstRaw(sel, ctx, cb ?? null, _snapshot);
+    },
 
-    select: (sel, ctx, cb) =>
-      Config.NODE_LIST ? toNodeList(select(sel, ctx, cb), doc) : select(sel, ctx, cb),
+    match: (sel, ctx, cb) => {
+      return matchRaw(sel, ctx, cb ?? null, _snapshot);
+    },
 
-    closest: ancestor,
+    select: (sel, ctx, cb) => {
+      ctx ??= _snapshot.doc;
+      return _config.NODE_LIST ? toNodeList(selectRaw(sel, ctx, cb ?? null, _snapshot), _snapshot.doc) : selectRaw(sel, ctx, cb ?? null, _snapshot);
+    },
+
+    closest: (sel, ctx, cb) => {
+      return ancestorRaw(sel, ctx, cb ?? null, _snapshot);
+    },
 
     compile: compile,
     configure: configure,
 
     emit: emit,
-    Config: Config,
-    Snapshot: Snapshot,
+    Config: _config,
+    Snapshot: _snapshot,
 
     Version: version,
 
     install: install,
     uninstall: uninstall,
 
-    Operators: Operators,
-    Selectors: Selectors,
+    Operators: _operators,
+    Selectors: _selectors,
 
     // register a new selector combinator symbol and its related function resolver
     registerCombinator:
@@ -1857,10 +1711,10 @@ function Factory(global: Glob, Export: Function) {
           }
         }
         if (!symbol) throw new Error('Invalid combinator: ' + combinator);
-        if (CFG.combinators.indexOf(symbol) < 0) {
-          CFG.combinators = CFG.combinators.replace('](', symbol + '](');
-          CFG.combinators = CFG.combinators.replace('])', symbol + '])');
-          Combinators[combinator] = resolver;
+        if (_CFG.combinators.indexOf(symbol) < 0) {
+          _CFG.combinators = _CFG.combinators.replace('](', symbol + '](');
+          _CFG.combinators = _CFG.combinators.replace('])', symbol + '])');
+          _combinators[combinator] = resolver;
           setIdentifierSyntax();
         } else {
           console.warn('Warning: the \'' + combinator + '\' combinator is already registered.');
@@ -1880,9 +1734,9 @@ function Factory(global: Glob, Export: Function) {
           }
         }
         if (!symbol) throw new Error('Invalid operator: ' + operator);
-        if (CFG.operators.indexOf(symbol) < 0 && !Operators[operator]) {
-          CFG.operators = CFG.operators.replace(']=', symbol + ']=');
-          Operators[operator] = resolver;
+        if (_CFG.operators.indexOf(symbol) < 0 && !_operators[operator]) {
+          _CFG.operators = _CFG.operators.replace(']=', symbol + ']=');
+          _operators[operator] = resolver;
           setIdentifierSyntax();
         } else {
           console.warn('Warning: the \'' + operator + '\' operator is already registered.');
@@ -1892,16 +1746,42 @@ function Factory(global: Glob, Export: Function) {
     // register a new selector symbol and its related function resolver
     registerSelector:
       function(name: string, rexp: RegExp, func: SelectorExtFn) {
-        Selectors[name] || (Selectors[name] = {
+        _selectors[name] || (_selectors[name] = {
           Expression: rexp,
           Callback: func
         });
-      }
+      },
+
+    setDebug(enabled: boolean) {
+      _snapshot.isDebug = enabled;
+      if (enabled) Dom.clearDebug();
+    },
+
+    clearDebug() {
+      _snapshot.debugCompile = undefined;
+      _snapshot.debugCollect = undefined;
+    },
+
+    printDebug() {
+      const docDesc = describeQueryContext(_snapshot.doc);
+      const fromDesc = describeQueryContext(_snapshot.from);
+      return JSON.stringify({
+        snapshot: {
+          isHtml: _snapshot.isHtml,
+          isQuirksMode: _snapshot.isQuirksMode,
+          namespace: _snapshot.namespace,
+          doc: docDesc,
+          from: _snapshot.from === _snapshot.doc ? '(same as doc)' : fromDesc,
+          root: { summary: describeElement(_snapshot.root) },
+        },
+        debugCollect: _snapshot.debugCollect,
+        debugCompile: _snapshot.debugCompile,
+      }, null, 2);
+    },
+
   };
 
-  console.log('NW.Dom initialize');
-  initialize(doc);
-  console.log('NW.Dom initialized');
+  initialize(_doc);
 
   return Dom;
 }
@@ -2042,23 +1922,25 @@ function stringFromCodePoint(codePoint: number) {
 }
 
 let cachedCssEscape: CssEscapeFn | undefined;
-function escapeIdentifier(str: string, glob: Glob): string {
+function cssEscape(str: string, glob: Glob): string {
   cachedCssEscape ??= typeof glob.CSS?.escape === 'function'
     ? (ident: string) => glob.CSS!.escape(ident)
-    : (ident: string) =>
-      REX.HasEscapes.test(ident)
-        ? ident.replace(REX.FixEscapes, (substring, p1, p2) =>
-            // unescaped " or '
-            p2 ? '\\' + p2 :
-            // javascript strings are UTF-16 encoded
-            REX.HexNumbers.test(p1) ? codePointToUTF16(parseInt(p1, 16)) :
-            // \' \"
-            REX.EscOrQuote.test(p1) ? substring :
-            // \g \h \. \# etc
-            p1)
-        : ident;
-
+    : (ident: string) => ident;
   return cachedCssEscape(str);
+}
+
+function decodeCssEscapes(ident: string): string {
+  return REX.HasEscapes.test(ident)
+    ? ident.replace(REX.FixEscapes, (substring, p1, p2) =>
+        // unescaped " or '
+        p2 ? '\\' + p2 :
+        // javascript strings are UTF-16 encoded
+        REX.HexNumbers.test(p1) ? codePointToUTF16(parseInt(p1, 16)) :
+        // \' \"
+        REX.EscOrQuote.test(p1) ? substring :
+        // \g \h \. \# etc
+        p1)
+    : ident;
 }
 
 // convert escape sequence in a CSS string or identifier
@@ -2075,5 +1957,234 @@ function unescapeIdentifier(str: string) {
       // \g \h \. \# etc
       p1
     ) : str;
+}
+
+// find duplicate ids using iterative walk
+function byIdRaw(id: string, context: QueryContext) {
+  const nodes = [ ]
+  let node: QueryContext | null = context;
+  let next = node.firstElementChild;
+  while ((node = next)) {
+    node.id == id && (nodes[nodes.length] = node);
+    if ((next = node.firstElementChild || node.nextElementSibling)) continue;
+    while (!next && (node = node.parentElement) && node !== context) {
+      next = node.nextElementSibling;
+    }
+  }
+  return nodes;
+}
+
+// context agnostic getElementById
+function byId(id: string, context?: QueryContext, dupes = false): Element[] {
+  context ??= document;
+  if (!dupes && 'getElementById' in context) {
+    const e = context.getElementById(id);
+    return e ? [e] : [];
+  }
+
+  return byIdRaw(id, context);
+}
+
+// wrapped up namespaced TagName api calls
+function byTagNSRaw(tag: string, context: QueryContext) {
+  return byTagRaw(tag, context);
+}
+
+// context agnostic getElementsByTagName
+function byTagRaw(tag: string, context: QueryContext) {
+  let el: Element | null
+  let nodes: Element[];
+  // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
+  if ('getElementsByTagName' in context) {
+    return Array.from(context.getElementsByTagName(tag));
+  } else {
+    tag = tag.toLowerCase();
+    // DOCUMENT_FRAGMENT_NODE (11)
+    if ((el = context.firstElementChild)) {
+      if (!(el.nextElementSibling || tag == '*' || el.localName == tag)) {
+        return Array.from(el.getElementsByTagName(tag));
+      } else {
+        nodes = [ ];
+        do {
+          if (tag == '*' || el.localName == tag) nodes[nodes.length] = el;
+          concatList(nodes, el.getElementsByTagName(tag));
+        } while ((el = el.nextElementSibling));
+      }
+    } else nodes = [];
+  }
+  return nodes;
+}
+
+// context agnostic getElementsByClassName
+function byClassRaw(cls: string, context: QueryContext) {
+  let el: Element | null;
+  let nodes: Element[];
+  // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
+  if ('getElementsByClassName' in context) {
+    return Array.from(context.getElementsByClassName(cls));
+  } else {
+    // DOCUMENT_FRAGMENT_NODE (11)
+    if ((el = context.firstElementChild)) {
+      const reCls = RegExp('(^|\\s)' + cls + '(\\s|$)', isQuirksMode(document) ? 'i' : '');
+      if (!(el.nextElementSibling || reCls.test(el.className))) {
+        return Array.from(el.getElementsByClassName(cls));
+      } else {
+        nodes = [ ];
+        do {
+          if (reCls.test(el.className)) nodes[nodes.length] = el;
+          concatList(nodes, el.getElementsByClassName(cls));
+        } while ((el = el.nextElementSibling));
+      }
+    } else nodes = [];
+  }
+  return nodes;
+}
+
+function assertNever(value: never, message?: string): never {
+  throw new Error(message ?? `Unexpected value: ${value}`);
+}
+
+// namespace aware hasAttribute
+// helper for XML/XHTML documents
+function hasAttributeNS(e: Element, name: string, isHtml: boolean) {
+  var i, l, attr = e.getAttributeNames();
+  const reName = new RegExp(':?' + name + '$', isHtml ? 'i' : '');
+  for (i = 0, l = attr.length; l > i; ++i) {
+    if (reName.test(attr[i])) return true;
+  }
+  return false;
+}
+
+type NthElementState = {
+  idx: number; len: number; set: number; parent: Element | null | undefined; parents: (Element | null)[]; nodes: Element[][];
+}
+const nthState: NthElementState = {
+  idx: 0, len: 0, set: 0, parent: undefined, parents: [], nodes: []
+};
+// fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
+function nthElement(element: Element, dir: number): number {
+  // ensure caches are emptied after each run, invoking with dir = 2
+  if (dir == 2) {
+    nthState.idx = 0; nthState.len = 0; nthState.set = 0; nthState.nodes.length = 0;
+    nthState.parents.length = 0; nthState.parent = undefined;
+    return -1;
+  }
+  let e: Element | null, i: number, j: number, k: number, l: number;
+  if (nthState.parent === element.parentElement) {
+    i = nthState.set; j = nthState.idx; l = nthState.len;
+  } else {
+    l = nthState.parents.length;
+    nthState.parent = element.parentElement;
+    for (i = -1, j = 0, k = l - 1; l > j; ++j, --k) {
+      if (nthState.parents[j] === nthState.parent) { i = j; break; }
+      if (nthState.parents[k] === nthState.parent) { i = k; break; }
+    }
+    if (i < 0) {
+      nthState.parents[i = l] = nthState.parent;
+      l = 0; nthState.nodes[i] = [];
+      e = nthState.parent?.firstElementChild ?? element;
+      while (e) { nthState.nodes[i][l] = e; if (e === element) j = l; e = e.nextElementSibling; ++l; }
+      nthState.set = i; nthState.idx = 0; nthState.len = l;
+      if (l < 2) return l;
+    } else {
+      l = nthState.nodes[i].length;
+      nthState.set = i;
+    }
+  }
+  if (element !== nthState.nodes[i][j] && element !== nthState.nodes[i][j = 0]) {
+    for (j = 0, k = l - 1; l > j; ++j, --k) {
+      const nodes = nthState.nodes[i]
+      if (nodes[j] === element) { break; }
+      if (nodes[k] === element) { j = k; break; }
+    }
+  }
+  nthState.idx = j + 1; nthState.len = l;
+  return dir ? l - j : nthState.idx;
+};
+
+// function getContextName(ctx: QueryContext): string {
+//   if (ctx.nodeType === 9) return '#document';
+//   if (ctx.nodeType === 11) return '#fragment';
+//   if (ctx.nodeType === 1) return (ctx as Element).localName;
+//   return '#unknown';
+// }
+
+function previewText(s: string, max = 240): string {
+  s = s.replace(/\s+/g, ' ').trim();
+  return s.length <= max ? s : s.slice(0, max) + '…';
+}
+
+function describeElement(el: Element | null | undefined): string {
+  if (!el) return '(missing)';
+  const id = el.getAttribute('id');
+  const cls = el.getAttribute('class');
+  return `<${el.tagName.toLowerCase()}${id ? ` id='${id}'` : ''}${cls ? ` class='${cls}'` : ''}>`;
+}
+
+function describeElements(els: Element[], max = 10): string[] {
+  const out = els.slice(0, max).map(describeElement);
+  if (els.length > max) out.push(`… (${els.length - max} more)`);
+  return out;
+}
+
+function describeQueryContext(ctx: QueryContext): QueryContextDescription {
+  if (isDocument(ctx)) {
+    const root = ctx.documentElement;
+    const body = ctx.body;
+    return {
+      kind: 'document',
+      summary: '#document',
+      preview: previewText(body?.outerHTML || root?.outerHTML || ''),
+    };
+  }
+
+  if (isDocumentFragment(ctx)) {
+    const children = Array.from(ctx.childNodes)
+      .map((n) => {
+        if (isElement(n)) return n.outerHTML;
+        if (n.nodeType === Node.TEXT_NODE) return n.textContent ?? '';
+        return '';
+      }).join('');
+    return {
+      kind: 'fragment',
+      summary: '#document-fragment',
+      preview: previewText(children),
+    };
+  }
+
+  if (isElement(ctx)) {
+    return {
+      kind: 'element',
+      summary: describeElement(ctx),
+      preview: previewText(ctx.outerHTML),
+    };
+  }
+
+  return {
+    kind: 'unknown',
+    summary: '(unknown context)',
+  };
+}
+
+function isNode(x: unknown): x is NodeLike {
+  return !!x && typeof x === 'object' && 'nodeType' in x && 'nodeName' in x &&
+    typeof (x as { nodeType?: unknown }).nodeType === 'number' &&
+    typeof (x as { nodeName?: unknown }).nodeName === 'string';
+}
+
+function isElement(x: unknown): x is Element {
+  return isNode(x) && x.nodeType === 1;
+}
+
+function isDocument(x: unknown): x is Document {
+  return isNode(x) && x.nodeType === 9;
+}
+
+function isDocumentFragment(x: unknown): x is DocumentFragment {
+  return isNode(x) && x.nodeType === 11;
+}
+
+function isComment(x: unknown): x is Comment {
+  return isNode(x) && x.nodeType === 8;
 }
 

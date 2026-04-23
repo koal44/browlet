@@ -297,12 +297,18 @@ runScenarios('css3 compat', 'normal',  [
   },
   {
     name: 'not pseudo-class selector',
+    markupMode: 'html-document',
     markup: `
+      <!DOCTYPE html>
+      <html lang="en">
+      <body>
       <div class="test not">
         <div class="blox14 unitTest"></div>
         <div class="blox15 unitTest" foo="blox15"></div>
         <div class="blox16 unitTest" foo="blox15"></div>
       </div>
+      </body>
+      </html>
     `,
     cases: [
       /* :not() tests */
@@ -311,6 +317,11 @@ runScenarios('css3 compat', 'normal',  [
       { select: '.blox16', expect: { count: 1 } },
       { select: '.blox16:not(.blox15)', expect: { count: 1 } },
       { select: '.blox16:not(.blox15[foo="blox14"])', expect: { count: 1 } },
+
+      { select: '.unitTest', expect: { count: 3 } },
+      { select: '.unitTest:not(.blox15)', expect: { count: 2 } },
+      { select: '.unitTest:not([foo="blox15"])', expect: { count: 1 } },
+      { select: '.unitTest:not(.blox15[foo="blox14"])', expect: { count: 3 } },
       { select: '.unitTest:not(.blox15[foo="blox15"])', expect: { count: 2 } },
     ],
   },

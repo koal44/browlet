@@ -75,10 +75,13 @@ type SelectorExtFn = (
     status: boolean,
   }
 
-type RawByTagFn = (tag: string, context?: QueryContext) => Element[];
-type RawByClassFn = (cls: string, context?: QueryContext) => Element[];
-type RawByIdFn = (id: string, context?: QueryContext) => Element[];
-type RawSelectFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => Element[];
+type RawByTagFn = (tag: string, context: QueryContext) => Element[];
+type RawByClassFn = (cls: string, context: QueryContext) => Element[];
+type RawByIdFn = (id: string, context: QueryContext) => Element[];
+type RawSelectFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState) => Element[];
+type RawFirstFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState) => Element | null;
+type RawMatchFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: SnapshotState) => boolean;
+type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: SnapshotState) => Element | null;
 
 type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
 type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
@@ -94,7 +97,7 @@ type IsFocusableFn = (node: HTMLElement) => false | HTMLElement;
 type IsContentEditableFn = (node: HTMLElement) => boolean;
 type HasAttributeNSFn = (element: Element, name: string) => boolean;
 
-type CompileFn = (selector: string, mode: boolean | null, callback: QueryCallback | null) => SelectLambda | MatchLambda;
+type CompileFn = (selector: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState) => SelectLambda | MatchLambda;
 type RegisterCombinatorFn = (combinator: string, resolver: string) => void;
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
@@ -122,6 +125,10 @@ type SnapshotState = {
   hasAttributeNS: HasAttributeNSFn;
 
   HOVER: EventTarget | null;
+
+  isDebug: boolean;
+  debugCompile?: string;
+  debugCollect?: DebugCollect;
 };
 
 type CssEscapeFn = (ident: string) => string;
@@ -170,4 +177,40 @@ type DomApi = {
   registerCombinator: RegisterCombinatorFn;
   registerOperator: RegisterOperatorFn;
   registerSelector: RegisterSelectorFn;
+
+  setDebug: (enabled: boolean) => void;
+  clearDebug: () => void;
+  printDebug: () => string;
 };
+
+type DebugCollect = {
+  callback: QueryCallback | null;
+  context: QueryContextDescription;
+  steps: DebugCollectStep[];
+};
+
+type DebugCollectStep = {
+  index: number;
+
+  original: string;
+  optimized: string;
+  seenBefore: boolean;
+
+  token: [string, '.' | '#' | '*', string];
+  rawTokenValue: string;
+  unescapedTokenValue: string;
+
+  nodeset: CompatSeed;
+
+  factorySource: string;
+  factoryInput: string[];
+  factoryResults: string[];
+};
+
+type QueryContextDescription = {
+  kind: 'document' | 'fragment' | 'element' | 'unknown';
+  summary: string;
+  preview?: string;
+}
+
+type NodeLike = { nodeType: number; nodeName: string; };

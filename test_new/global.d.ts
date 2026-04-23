@@ -24,6 +24,8 @@ declare global {
       closest(selector: string, ctx: Element, callback?: NwCallback | null): Element | null;
 
       configure(options: Record<string, boolean>): void;
+      Snapshot: any;
+      [key: string]: any;
     };
   };
 }

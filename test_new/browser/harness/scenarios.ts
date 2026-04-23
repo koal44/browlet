@@ -24,6 +24,7 @@ type CaseBase = {
   status?: CaseStatus;
   browsers?: BrowserName[];
   engines?: Engine[];
+  debug?: boolean;
 };
 
 export type TestCase = SelectCase | ByIdCase | ByTagCase | ByClassCase | MatchCase | FirstCase | ClosestCase;
@@ -170,8 +171,10 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
     let stepCaseIndex = 0;
     for (let stepIndex = 0; stepIndex < steps.length; ++stepIndex) {
       const step = steps[stepIndex];
-      if (step.setupPage) await step.setupPage(wrappedPage);
-      ensureHarnessInstalled(wrappedPage);
+      if (step.setupPage) {
+        await step.setupPage(wrappedPage);
+        await ensureHarnessInstalled(wrappedPage);
+      }
       for (let caseIndex = 0; caseIndex < step.cases.length; ++caseIndex) {
         const c = step.cases[caseIndex];
         if (hasOnlyCases && c.status !== 'only') continue;
@@ -259,6 +262,11 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
   return await page.evaluate(({c, isXml} ) => {
     const pw = window.__pwHelpers;
     const doc = isXml ? window.__pwXml : window.document;
+    const nwdom = NW.Dom;
+    if (c.debug) {
+      nwdom.setDebug?.(true);
+      nwdom.clearDebug?.();
+    }
 
     const query = pw.getCaseQuery(c);
     const ctx = pw.resolveContext(doc, c.ref);
@@ -307,6 +315,12 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
       }
     }
 
+    if (c.debug) {
+      const debugText = nwdom.printDebug?.() ?? 'NW.Dom debug unavailable';
+      nwdom.setDebug?.(false);
+      throw new Error(debugText);
+    }
+
     return {
       info: query, mismatchMsg, equivMismatchMsg,
       engineResults: Object.fromEntries(
@@ -347,9 +361,8 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
     await page.goto(scenario.url);
   }
 
-  await ensureHarnessInstalled(page);
-
   if (scenario.markupMode === 'xml-document') {
+    await page.goto('about:blank');
     await page.setContent(`<!DOCTYPE html><html><body>dummy content</body></html>`);
     await page.evaluate((xmlString) => {
       const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
@@ -359,8 +372,12 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
       window.__pwXml = xml;
     }, scenario.markup);
   } else if (scenario.markupMode === 'html-document') {
+    const hasHtml = /<html[\s>]/i.test(scenario.markup.trim());
+    if (!hasHtml) {
+      throw new Error(`markupMode="html-document" requires full HTML document markup including <html>`);
+    }
+    await page.goto('about:blank');
     await page.setContent(scenario.markup);
-    await installNwsapi(page);
   } else if (scenario.markupMode === 'html-body' || !scenario.markupMode) {
     await page.evaluate((bodyHtml) => {
       document.body.innerHTML = bodyHtml;
@@ -368,6 +385,8 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
   } else {
     assertNever(scenario.markupMode);
   }
+
+  await ensureHarnessInstalled(page);
 
   if (scenario.setupPage) {
     await scenario.setupPage(page);
@@ -386,15 +405,12 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
   }
 
   if (!state.hasNwsapi) {
-    await page.addScriptTag({ path: 'dist/nwsapi.js' });
+    const script = await page.addScriptTag({ path: 'dist/nwsapi.js' });
+    // const script = await page.addScriptTag({ path: 'scratch/nwsapi-2.2.23.0.js' });
+    await script.evaluate((el) => {
+      (el as HTMLScriptElement).id = 'nwsapi-bootstrap' satisfies NwsapiId;
+    });
   }
-}
-
-async function installNwsapi(page: Page): Promise<void> {
-  const script = await page.addScriptTag({ path: 'dist/nwsapi.js' });
-  await script.evaluate((el) => {
-    (el as HTMLScriptElement).id = 'nwsapi-bootstrap' satisfies NwsapiId;
-  });
 }
 
 function runEngineChecks(
