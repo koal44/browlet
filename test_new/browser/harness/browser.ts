@@ -79,7 +79,8 @@ export function installBrowserHelpers(): void {
     if (!el) return '(missing)';
     const id = el.getAttribute('id');
     const className = el.getAttribute('class');
-    return `<${el.tagName.toLowerCase()}${id ? ` id='${id}'` : ''}${className ? ` class='${className}'` : ''}>`;
+    const tag = el.namespaceURI === 'http://www.w3.org/1999/xhtml' ? el.localName : el.tagName;
+    return `<${tag}${id ? ` id='${id}'` : ''}${className ? ` class='${className}'` : ''}>`;
   }
 
   function compareQueryResults(a: NamedQueryResult, b: NamedQueryResult): string | undefined {
@@ -157,8 +158,8 @@ export function installBrowserHelpers(): void {
       const frag = doc.createDocumentFragment();
       frag.appendChild(clone);
 
-      // Return the clone rehomed so matches/closest stay sane.
-      return clone;
+      // Return the fragment container. Use `within` to resolve the cloned element inside it.
+      return frag;
     }
 
     return null;
@@ -208,7 +209,7 @@ export function installBrowserHelpers(): void {
         if (ng === 'native') {
           return (query, ctx) => () =>
             isDocFrag(ctx)
-              ? [...ctx.querySelectorAll(query)]
+              ? [...ctx.querySelectorAll(query === '*' ? '*' : CSS.escape(query))]
               : [...ctx.getElementsByTagName(query)];
         }
         if (ng === 'nw') return (query, ctx) => () => NW.Dom.byTag(query, ctx);
@@ -218,7 +219,7 @@ export function installBrowserHelpers(): void {
         if (ng === 'native') {
           return (query, ctx) => () =>
             isDocFrag(ctx)
-              ? [...ctx.querySelectorAll(`.${query}`)]
+              ? [...ctx.querySelectorAll(`.${CSS.escape(query)}`)]
               : [...ctx.getElementsByClassName(query)];
         }
         if (ng === 'nw') return (query, ctx) => () => NW.Dom.byClass(query, ctx);
@@ -309,17 +310,17 @@ export function installBrowserHelpers(): void {
 
       case 'byTag' in c:
         return engine === 'native'
-          ? `byTag:${c.byTag}`
+          ? `byTag(${c.byTag})`
           : `NW.Dom.byTag(${c.byTag})`;
 
       case 'byClass' in c:
         return engine === 'native'
-          ? `byClass:${c.byClass}`
+          ? `byClass(${c.byClass})`
           : `NW.Dom.byClass(${c.byClass})`;
 
       case 'byId' in c:
         return engine === 'native'
-          ? `byId:${c.byId}`
+          ? `byId(${c.byId})`
           : `NW.Dom.byId(${c.byId})`;
 
       case 'match' in c:

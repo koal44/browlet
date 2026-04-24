@@ -40,17 +40,17 @@ runScenarios('scope', 'normal', [
       // Inherited state should differ by home
       { match: ':lang(en)', ref: { by: 'id', id: 'lang-child' }, expect: { ids: ['lang-child'] } },
       { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', home: 'detached' }, expect: { ids: [] } },
-      { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', home: 'fragment' }, expect: { ids: [] } },
+      { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', within: { by: 'id', id: 'lang-child', home: 'fragment'} }, expect: { ids: [] } },
 
       // Element-local matching should survive rehoming
       { match: '.foo', ref: { by: 'id', id: 'class-child' }, expect: { ids: ['class-child'] } },
       { match: '.foo', ref: { by: 'id', id: 'class-child', home: 'detached' }, expect: { ids: ['class-child'] } },
-      { match: '.foo', ref: { by: 'id', id: 'class-child', home: 'fragment' }, expect: { ids: ['class-child'] } },
+      { match: '.foo', ref: { by: 'id', id: 'class-child', within: { by: 'id', id: 'class-child', home: 'fragment' } }, expect: { ids: ['class-child'] } },
 
       // Ancestor traversal depends on whether the ancestor chain is preserved
       { closest: '.box', ref: { by: 'id', id: 'class-child' }, expect: { ids: ['class-parent'] } },
       { closest: '.box', ref: { by: 'id', id: 'class-child', home: 'detached' }, expect: { ids: [] } },
-      { closest: '.box', ref: { by: 'id', id: 'class-child', home: 'fragment' }, expect: { ids: [] } },
+      { closest: '.box', ref: { by: 'id', id: 'class-child', within: { by: 'id', id: 'class-child', home: 'fragment' } }, expect: { ids: [] } },
     ],
   },
 

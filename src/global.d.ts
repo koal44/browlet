@@ -68,16 +68,16 @@ type SelectorExtension = {
 };
 
 type SelectorExtFn = (
-    match: string[],
+    match: RegExpMatchArray | null,
     source: string,
     mode: boolean | null,
     callback: QueryCallback | null
   ) => {
-    match: string[] | null,
+    match: RegExpMatchArray | null,
     modvar: string,
     source: string,
     status: boolean,
-  }
+  };
 
 type RawByTagFn = (tag: string, context: QueryContext) => Element[];
 type RawByClassFn = (cls: string, context: QueryContext) => Element[];
