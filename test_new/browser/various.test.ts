@@ -691,6 +691,89 @@ runScenarios('various', 'normal', [
     },
   },
 
+  {
+    name: 'native attribute-name selector edge cases',
+    // status: 'only',
+    engines: ['native'],
+    // browsers: ['webkit'],
+    markup: `
+      <div id="wrapper"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const wrapper = document.getElementById('wrapper')!;
+
+        const add = (id: string, attrs: Record<string, string>) => {
+          const el = document.createElement('span');
+          el.id = id;
+          for (const [name, value] of Object.entries(attrs)) {
+            el.setAttribute(name, value);
+          }
+          wrapper.appendChild(el);
+        };
+
+        add('plain-attr', { foo: 'yes' });
+        add('hyphen-attr', { 'foo-bar': 'yes' });
+        add('underscore-attr', { 'foo_bar': 'yes' });
+        add('digit-attr', { 'foo123': 'yes' });
+        // add('digit-start-attr', { '123': 'yes' }); // ff
+        add('colon-attr', { 'foo:bar': 'yes' });
+        // add('plus-attr', { 'foo+bar': 'yes' }); // ff
+        add('non-ascii-attr', { föo: 'yes' });
+        // add('unicode-attr', { 名前: 'yes' }); // chrome
+      });
+    },
+    cases: [
+      // Plain / normal-ish attribute names.
+      { select: '[foo]', expect: { ids: ['plain-attr'] } },
+      { select: '[foo-bar]', expect: { ids: ['hyphen-attr'] } },
+      { select: '[foo_bar]', expect: { ids: ['underscore-attr'] } },
+      { select: '[foo123]', expect: { ids: ['digit-attr'] } },
+
+      // Digit-starting attribute names need CSS escaping.
+      // { select: '[123]', expect: { throws: true } },
+      // { select: '[\\31 23]', expect: { ids: ['digit-start-attr'] } },
+
+      // Literal colon and plus in attribute names need CSS escaping.
+      { select: '[foo:bar]', expect: { throws: true } },
+      { select: '[foo\\:bar]', expect: { ids: ['colon-attr'] } },
+
+      // { select: '[foo+bar]', expect: { throws: true } },
+      // { select: '[foo\\+bar]', expect: { ids: ['plus-attr'] } },
+
+      // Non-ASCII identifiers should work directly.
+      // föo = f + U+00F6 + o
+      { select: '[föo]', expect: { ids: ['non-ascii-attr'] } },
+      { select: '[f\\F6 o]', expect: { ids: ['non-ascii-attr'] } },
+
+      // 名 = U+540D, 前 = U+524D
+      // { select: '[名前]', expect: { ids: ['unicode-attr'] } },
+      // { select: '[\\540D \\524D ]', expect: { ids: ['unicode-attr'] } },
+    ],
+  },
+
+  {
+    name: 'logical pseudo followed by functional pseudo',
+    // status: 'only',
+    // engines: ['native'],
+    markup: `
+      <div id="root">
+        <span id="s1" class="a"></span>
+        <span id="s2" class="b"></span>
+        <span id="s3"></span>
+        <span id="s4" class="a b"></span>
+        <span id="s5" class="b"></span>
+      </div>
+    `,
+    cases: [
+      {
+        select: ':is(:not(.a), .b):nth-child(2n+1)', ref: { by: 'id', id: 'root' },
+        expect: { ids: ['s3', 's5'] },
+        // debug: true,
+      },
+    ],
+  },
+
   // {
   //   name: 'attribute namespace selectors on xml attributes',
   //   status: 'only',

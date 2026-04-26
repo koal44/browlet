@@ -491,9 +491,65 @@ export function unescapeIdentifier(str: string, RE: Rex): string {
     ) : str;
 }
 
-// TODO: implement
-export function cssEscape(str: string): string {
-  return CSS?.escape ? CSS.escape(str) : str;
+export function cssEscape(ident: string): string {
+  if (typeof CSS !== 'undefined' && CSS.escape) {
+    return CSS.escape(ident);
+  }
+
+  const string = String(ident);
+  const length = string.length;
+  let index = -1;
+  let result = '';
+  const firstCodeUnit = string.charCodeAt(0);
+
+  if (length === 1 && firstCodeUnit === 0x002D) {
+    return '\\' + string;
+  }
+
+  while (++index < length) {
+    const codeUnit = string.charCodeAt(index);
+
+    if (codeUnit === 0x0000) {
+      result += '\uFFFD';
+      continue;
+    }
+
+    if (
+      (codeUnit >= 0x0001 && codeUnit <= 0x001F) ||
+      codeUnit === 0x007F ||
+      (index === 0 && codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
+      (index === 1 && codeUnit >= 0x0030 && codeUnit <= 0x0039 && firstCodeUnit === 0x002D)
+    ) {
+      result += '\\' + codeUnit.toString(16) + ' ';
+      continue;
+    }
+
+    if (
+      codeUnit >= 0x0080 ||
+      codeUnit === 0x002D ||
+      codeUnit === 0x005F ||
+      (codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
+      (codeUnit >= 0x0041 && codeUnit <= 0x005A) ||
+      (codeUnit >= 0x0061 && codeUnit <= 0x007A)
+    ) {
+      result += string.charAt(index);
+      continue;
+    }
+
+    result += '\\' + string.charAt(index);
+  }
+
+  return result;
+}
+
+function escapeRegExp(pattern: string): string {
+  // return pattern.replace(/[\\^$.,*+?()[\]{}|/]/g, '\\$&');
+  return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function decodeAttrForRegex(value: string, rex: Rex): string {
+  // return escapeRegExp(decodeCssEscapes(value, rex));
+  return decodeCssEscapes(value, rex).replace(rex.RegExpChar, '\\$&');
 }
 
 // find duplicate ids using iterative walk
@@ -846,10 +902,6 @@ function isQuirksMode(doc: Document): doc is HTMLDocument {
   return isHtmlDoc(doc) && doc.compatMode.indexOf('CSS') < 0;
 }
 
-function escapeRegExp(pattern: string): string {
-  return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export function buildRex(ext: NwsExtensions): Rex {
   const WSH = '[\\x20\\t]';
   const WSV = '[\\r\\n\\f]';
@@ -986,6 +1038,9 @@ export function buildRex(ext: NwsExtensions): Rex {
       '\\x28[^\\x29]+(?:\\x29|$)' +
     ')*)$');
 
+  const namespacePrefix = '(\\*|' + identifier + ')?';
+  const namespaceLocal = '(?:\\*|' + identifier + ')';
+
   // global
   const reValidator = RegExp(standardValidator, 'g');
 
@@ -995,7 +1050,7 @@ export function buildRex(ext: NwsExtensions): Rex {
     HexNumbers: RegExp('^[0-9a-fA-F]'),
     EscOrQuote: RegExp('^\\\\|[\\x22\\x27]'),
     RegExpChar: RegExp('(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]', 'g'),
-    TrimSpaces: RegExp('^' + WSP + '+|' + WSP + '+$|' + WSV, 'g'),
+    TrimSpaces: RegExp('^' + WSP + '+|' + WSP + '+$|', 'g'),
     SplitGroup: RegExp('(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+', 'g'),
     CommaGroup: RegExp('(\\s*,\\s*)' + NOT.square_enc + NOT.parens_enc, 'g'),
     FixEscapes: RegExp('\\\\([0-9a-fA-F]{1,6}' + WSP + '?|.)|([\\x22\\x27])', 'g'),
@@ -1004,8 +1059,8 @@ export function buildRex(ext: NwsExtensions): Rex {
     PseudosWSP: RegExp('\\s+([-+])\\s+' + NOT.square_enc, 'g'),
     STD: {
       combinator: RegExp('\\s?([>+~])\\s?', 'g'),
-      apimethods: RegExp('^(?:\\w+|\\*)\\|'),
-      namespaces: RegExp('(\\*|\\w+)\\|[\\w-]+')
+      apimethods: RegExp('^(?:\\*|' + identifier + ')?\\|'),
+      namespaces: RegExp('(' + namespacePrefix + ')\\|' + namespaceLocal),
     },
     Patterns: {
       // pseudo-classes
@@ -1257,7 +1312,8 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
           // whitespace separated list but value contains space
           break;
         } else if (match[4]) {
-          match[4] = decodeCssEscapes(match[4], snap.re).replace(snap.re.RegExpChar, '\\$&');
+          match[4] = decodeAttrForRegex(match[4], snap.re);
+          // match[4] = decodeCssEscapes(match[4], snap.re).replace(snap.re.RegExpChar, '\\$&');
         }
         const sensitivity = match[5] == 'i' || (snap.isHtml && HTML_TABLE[localName.toLowerCase()]) ? 'i' : '';
         let attrExpr: string;
@@ -1420,7 +1476,8 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
         // :is( s1, [ s2, ... ]), :not( s1, [ s2, ... ]),
         // :has( s1, [ s2, ... ]) no nesting is allowed for
         // :where( s1, [ s2, ... ]), :matches( s1, [ s2, ... ]),
-        else if ((match = selector.match(snap.re.Patterns.logicalsel))) {
+        // else if ((match = selector.match(snap.re.Patterns.logicalsel))) {
+        else if ((match = matchLogicalSelector(selector))) {
           match[1] = match[1].toLowerCase();
           const expr = match[2]
             .replace(snap.re.CommaGroup, ',')
@@ -1870,7 +1927,8 @@ export function parse(selectors: string, re: Rex, config: NwsConfig): string[] {
       emit(`[parse] Selector cannot end with a comma: '${selectors}'`, config);
       return [];
     }
-    return parsed.match(re.SplitGroup) ?? [];
+    return splitSelectorGroups(parsed);
+    // return parsed.match(re.SplitGroup) ?? [];
   } else {
     if (config.FORGIVING) {
       // forgiving pseudos allow to continue even after parse errors
@@ -2118,4 +2176,67 @@ function prepareScope(selectors: string, context: QueryContext) {
       ? element?.removeAttribute(SCOPE_ATTR)
       : element?.setAttribute(SCOPE_ATTR, oldValue),
   };
+}
+
+export function matchLogicalSelector(selector: string): RegExpMatchArray | null {
+  const head = /^:(is|where|matches|not|has)\(/i.exec(selector);
+  if (!head) return null;
+
+  const open = head[0].length - 1;
+  const close = findClosingParen(selector, open);
+  if (close < 0) return null;
+
+  const argStart = open + 1;
+  const arg = selector.slice(argStart, close).trim();
+  const tail = selector.slice(close + 1);
+
+  return Object.assign([selector, head[1], arg, tail], {
+    index: 0,
+    input: selector,
+  }) as RegExpMatchArray;
+}
+
+function findClosingParen(input: string, openIndex: number): number {
+  let depth = 1;
+  let quote: '"' | "'" | null = null;
+  let inAttr = false;
+
+  for (let i = openIndex + 1; i < input.length; i++) {
+    const ch = input[i];
+
+    if (ch === '\\') { i++; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (inAttr) { if (ch === ']') inAttr = false; continue; }
+    if (ch === '[') { inAttr = true; continue; }
+    if (ch === '(') depth++;
+    else if (ch === ')' && --depth === 0) return i;
+  }
+
+  return -1;
+}
+
+export function splitSelectorGroups(selector: string): string[] {
+  const out: string[] = [];
+  let start = 0, depth = 0, quote = '', inAttr = false;
+
+  for (let i = 0; i < selector.length; i++) {
+    const ch = selector[i];
+
+    if (ch === '\\') { i++; continue; }
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (inAttr) { if (ch === ']') inAttr = false; continue; }
+    if (ch === '[') { inAttr = true; continue; }
+    if (ch === '(') { depth++; continue; }
+    if (ch === ')') { if (depth) depth--; continue; }
+
+    if (ch === ',' && depth === 0) {
+      out.push(selector.slice(start, i));
+      start = i + 1;
+    }
+  }
+
+  out.push(selector.slice(start));
+  return out;
 }

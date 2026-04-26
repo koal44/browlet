@@ -584,11 +584,6 @@ function attachPageDiagnostics(page: Page): void {
     if (msg.text().includes('Cookie')) return;
     console.error(`[browser console:${msg.type()}] ${msg.text()}`);
   });
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      console.error(`[browser console:${msg.type()}] ${msg.text()}`);
-    }
-  });
 
   page.on('requestfailed', (request) => {
     console.error(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ''}`);

@@ -2,8 +2,9 @@ import fs from 'node:fs';
 
 // list of internal exported functions/constants
 const EXPORT_FUNCTIONS = new Set([
-  'parse', 'initSnapshot', 'codePointToUTF16', 'stringFromCodePoint',
-  'decodeCssEscapes', 'unescapeIdentifier', 'cssEscape', 'buildRex'
+  'parse', 'initSnapshot', 'codePointToUTF16', 'stringFromCodePoint', 'decodeAttrForRegex',
+  'decodeCssEscapes', 'unescapeIdentifier', 'cssEscape', 'buildRex', 'matchLogicalSelector',
+  'splitSelectorGroups',
 ]);
 
 const EXPORT_CONSTANTS = new Set([
