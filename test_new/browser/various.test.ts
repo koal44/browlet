@@ -774,6 +774,50 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'malformed combinator placement rejects',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="child"></span>
+      </div>
+    `,
+    cases: [
+      { select: '> div', expect: { throws: true } },
+      { select: 'div >> span', expect: { throws: true } },
+      { select: 'div + > span', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'functional pseudo validation with namespace types and combinators',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <section id="card">
+          <h1 id="title"></h1>
+          <span id="badge" class="item"></span>
+        </section>
+        <div id="after" class="after"></div>
+        <div id="tail" class="tail"></div>
+      </div>
+    `,
+    cases: [
+      // namespace type selectors inside functional pseudos
+      { select: ':is(*|section)', expect: { ids: ['card'] } },
+      { select: '#card > :is(*|h1)', expect: { ids: ['title'] } },
+      { select: '#card:has(> *|h1)', expect: { ids: ['card'] } },
+      { select: '#card:has(> *|span)', expect: { ids: ['card'] } },
+      { select: '#card:has(> |span)', expect: { ids: [] } },
+
+      // explicit combinators inside functional pseudos
+      { select: '#card:has(> h1)', expect: { ids: ['card'] } },
+      { select: '#card:has(>h1)', expect: { ids: ['card'] } },
+      { select: '#card:has(+ .after)', expect: { ids: ['card'] } },
+      { select: '#card:has(~ .tail)', expect: { ids: ['card'] } },
+    ],
+  },
+
   // {
   //   name: 'attribute namespace selectors on xml attributes',
   //   status: 'only',

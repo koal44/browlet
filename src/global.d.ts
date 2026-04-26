@@ -16,8 +16,8 @@ declare var NW: {
 type NwsConfig = Record<ConfigKey, boolean>;
 type ConfigKey = 'IDS_DUPES' | 'FORGIVING' | 'NODE_LIST' | 'LOGERRORS' | 'USR_EVENT' | 'VERBOSITY';
 type NwsExtensions = {
-  combinators: string;
-  operators: string;
+  combinators: string[];
+  operators: string[];
 }
 
 type QueryContext = Document | Element | DocumentFragment;

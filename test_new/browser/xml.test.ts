@@ -33,7 +33,7 @@ runScenarios('xml', 'normal', [
     cases: [
       { select: 'coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, status: 'fixme' },
       { select: '*|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, status: 'fixme' },
-      { select: '|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, status: 'fixme' },
+      { select: '|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 0 } },
     ],
   },
 
@@ -49,7 +49,7 @@ runScenarios('xml', 'normal', [
     cases: [
       { select: 'coreProperties', expect: { count: 1 }, status: 'fixme' },
       { select: '*|coreProperties', expect: { count: 1 }, status: 'fixme' },
-      { select: '|coreProperties', expect: { count: 0 }, status: 'fixme' },
+      { select: '|coreProperties', expect: { count: 0 } },
     ],
   },
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import {
   buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, unescapeIdentifier,
   decodeCssEscapes, decodeAttrForRegex, cssEscape,
@@ -142,9 +142,9 @@ describe('Rex selector normalization helpers', () => {
   });
 
   it('removes whitespace around nth-expression signs outside attribute selectors', () => {
-    expect(':nth-child(2n + 1)'.replace(rex.PseudosWSP, '$1')).toBe(':nth-child(2n+1)');
-    expect(':nth-child(2n - 1)'.replace(rex.PseudosWSP, '$1')).toBe(':nth-child(2n-1)');
-    expect('[data-x="a + b"]'.replace(rex.PseudosWSP, '$1')).toBe('[data-x="a + b"]');
+    expect(':nth-child(2n + 1)'.replace(rex.PseudosWSP, '$1$2')).toBe(':nth-child(2n+1)');
+    expect(':nth-child(2n - 1)'.replace(rex.PseudosWSP, '$1$2')).toBe(':nth-child(2n-1)');
+    expect('[data-x="a + b"]'.replace(rex.PseudosWSP, '$1$2')).toBe('[data-x="a + b"]');
   });
 
 });
@@ -282,6 +282,14 @@ describe('Rex STD helpers', () => {
     m = execRe(rex.STD.namespaces, 'foo|bar-baz');
     expect(m?.[0]).toBe('foo|bar-baz');
     expect(m?.[1]).toBe('foo');
+
+    m = execRe(rex.STD.namespaces, 'föo|item');
+    expect(m?.[0]).toBe('föo|item');
+    expect(m?.[1] ?? '').toBe('föo');
+
+    m = execRe(rex.STD.namespaces, 'foo\\+bar|item');
+    expect(m?.[0]).toBe('foo\\+bar|item');
+    expect(m?.[1] ?? '').toBe('foo\\+bar');
   });
 
   it('captures escaped and non-ASCII namespace prefixes', () => {
@@ -412,6 +420,7 @@ describe('Rex pseudo-class patterns', () => {
   //   expectCaptures(rex.Patterns.logicalsel, ':is(.a):has(+ .b)', ['is', '.a', ':has(+ .b)']);
   // });
 
+  // Failing because logicalsel cannot handle nested parens. Use matchLogicalSelector instead.
   // it('does not over-consume nested logical selectors followed by functional pseudos', () => {
   //   expectCaptures(rex.Patterns.logicalsel, ':is(:not(.a), .b):nth-child(2n+1)', ['is', ':not(.a), .b', ':nth-child(2n+1)']);
   //   expectCaptures(rex.Patterns.logicalsel, ':where(:has(> .a)):lang(en)', ['where', ':has(> .a)', ':lang(en)']);
@@ -432,6 +441,84 @@ describe('Rex pseudo-class patterns', () => {
   it('parses double-colon pseudo-elements', () => {
     expectCaptures(rex.Patterns.pseudo_dbl, '::before.foo', ['before', '.foo']);
     expectCaptures(rex.Patterns.pseudo_dbl, '::-webkit-scrollbar-thumb > span', ['-webkit-scrollbar-thumb', ' > span']);
+  });
+
+  it('parses combinator selector tails', () => {
+    expectCaptures(rex.Patterns.children, '> span', ['span']);
+    expectCaptures(rex.Patterns.children, ' > .item', ['.item']);
+
+    expectCaptures(rex.Patterns.adjacent, '+ span', ['span']);
+    expectCaptures(rex.Patterns.adjacent, ' + .item', ['.item']);
+
+    expectCaptures(rex.Patterns.relative, '~ span', ['span']);
+    expectCaptures(rex.Patterns.relative, ' ~ .item', ['.item']);
+
+    expectCaptures(rex.Patterns.ancestor, ' span', ['span']);
+    expectCaptures(rex.Patterns.ancestor, '   .item', ['.item']);
+  });
+
+  it('parses universal and namespace selector components', () => {
+    expectCaptures(rex.Patterns.universal, '*', ['*', '']);
+    expectCaptures(rex.Patterns.universal, '*.item', ['*', '.item']);
+
+    expectCaptures(rex.Patterns.namespace, 'foo|bar', ['foo', 'bar']);
+    expectCaptures(rex.Patterns.namespace, 'foo-bar|item', ['foo-bar', 'item']);
+    expectCaptures(rex.Patterns.namespace, 'foo_bar|item', ['foo_bar', 'item']);
+    expectCaptures(rex.Patterns.namespace, 'foo123|item', ['foo123', 'item']);
+    expectCaptures(rex.Patterns.namespace, '*|item', ['*', 'item']);
+    expectCaptures(rex.Patterns.namespace, '|item', ['', 'item']);
+  });
+
+  it('parses namespace prefixes using CSS identifier syntax', () => {
+    expectCaptures(rex.Patterns.namespace, 'föo|item', ['föo', 'item']);
+    expectCaptures(rex.Patterns.namespace, '名前|item', ['名前', 'item']);
+    expectCaptures(rex.Patterns.namespace, 'foo\\+bar|item', ['foo\\+bar', 'item']);
+    expectCaptures(rex.Patterns.namespace, 'foo\\:bar|item', ['foo\\:bar', 'item']);
+    expectCaptures(rex.Patterns.namespace, '\\31 23|item', ['\\31 23', 'item']);
+    expectCaptures(rex.Patterns.namespace, 'foo|\\31 23', ['foo', '\\31 23']);
+  });
+
+  it('parses id, class, and tag selector components', () => {
+    expectCaptures(rex.Patterns.id, '#foo.bar', ['foo', '.bar']);
+    expectCaptures(rex.Patterns.id, '#foo\\:bar.item', ['foo\\:bar', '.item']);
+
+    expectCaptures(rex.Patterns.className, '.foo#id', ['foo', '#id']);
+    expectCaptures(rex.Patterns.className, '.foo\\+bar > span', ['foo\\+bar', ' > span']);
+
+    expectCaptures(rex.Patterns.tagName, 'div.foo', ['div', '.foo']);
+    expectCaptures(rex.Patterns.tagName, 'foo-bar[attr]', ['foo-bar', '[attr]']);
+    expectCaptures(rex.Patterns.tagName, 'föo.item', ['föo', '.item']);
+  });
+
+  it('parses basic attribute selector components', () => {
+    expectCaptures(rex.Patterns.attribute, '[foo]', ['foo', undefined, undefined, undefined, undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[foo="bar"].item', ['foo', '=', '"', 'bar', undefined, '.item']);
+    expectCaptures(rex.Patterns.attribute, '[foo~="bar" i] > span', ['foo', '~=', '"', 'bar', 'i', ' > span']);
+    expectCaptures(rex.Patterns.attribute, '[foo\\:bar]', ['foo\\:bar', undefined, undefined, undefined, undefined, '']);
+  });
+
+  it('detects RTL character ranges used by the engine heuristic', () => {
+    expect(testRe(rex.RTL, 'مرحبا')).toBe(true);
+    expect(testRe(rex.RTL, 'שלום')).toBe(true);
+
+    expect(testRe(rex.RTL, 'hello')).toBe(false);
+    expect(testRe(rex.RTL, 'مرحبا hello')).toBe(false);
+  });
+
+  it('detects nth-child structural pseudo-classes', () => {
+    expect(testRe(rex.nthElem, ':nth-child(2n+1)')).toBe(true);
+    expect(testRe(rex.nthElem, ':nth-last-child(odd)')).toBe(true);
+
+    expect(testRe(rex.nthElem, ':nth-of-type(2)')).toBe(false);
+    expect(testRe(rex.nthElem, ':first-child')).toBe(false);
+  });
+
+  it('detects nth-of-type structural pseudo-classes', () => {
+    expect(testRe(rex.nthType, ':nth-of-type(2)')).toBe(true);
+    expect(testRe(rex.nthType, ':nth-last-of-type(odd)')).toBe(true);
+
+    expect(testRe(rex.nthType, ':nth-child(2n+1)')).toBe(false);
+    expect(testRe(rex.nthType, ':only-of-type')).toBe(false);
   });
 });
 
@@ -474,9 +561,152 @@ describe('splitSelectorGroups', () => {
   });
 });
 
-describe('parse', () => {
+describe('Rex optimizer', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+
+  function expectOptimizer(input: string, expected: [string, string] | null): void {
+    const m = execRe(rex.optimizer, input);
+    const actual = m ? [m[1] || '', m[2]] : null;
+
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new AssertionError({
+        message: `Unexpected optimizer match for ${input}`,
+        actual,
+        expected,
+        operator: 'deepStrictEqual',
+        stackStartFn: expectOptimizer,
+      });
+    }
+  }
+
+  it('extracts simple seed tokens from selector tails', () => {
+    expectOptimizer('div', ['', 'div']);
+    expectOptimizer('.item', ['.', 'item']);
+    expectOptimizer('#target', ['#', 'target']);
+    expectOptimizer('section .item', ['.', 'item']);
+    expectOptimizer('section > #target', ['#', 'target']);
+  });
+
+  it('extracts tag seeds with trailing pseudo or attribute syntax', () => {
+    expectOptimizer('input:checked', ['', 'input']);
+    expectOptimizer('button[disabled]', ['', 'button']);
+    expectOptimizer('li:nth-child(2n+1)', ['', 'li']);
+  });
+
+  it('extracts escaped and non-ASCII identifier seeds', () => {
+    expectOptimizer('.foo\\:bar', ['.', 'foo\\:bar']);
+    expectOptimizer('föo.item', ['.', 'item']);
+    expectOptimizer('名前', ['', '名前']);
+  });
+
+  it('does not optimize pseudo-class-only tails', () => {
+    expectOptimizer(':scope', [':', 'scope']);
+    expectOptimizer(':not(.a)', [':', 'not']);
+  });
+});
+
+describe('unescapeIdentifier', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+  it('should unescape valid identifiers', () => {
+    expect(unescapeIdentifier('[data-nwsapi-scope] > *|item', rex)).toBe('[data-nwsapi-scope] > *|item');
+  });
+});
+
+describe('parse validator', () => {
   const rex = buildRex(DEFAULT_EXTENSIONS);
   const config = { ...DEFAULT_CONFIG, VERBOSITY: false, LOGERRORS: false };
+
+  function expectParse(input: string, expected: string[], cfg = config): void {
+    const actual = parse(input, rex, cfg);
+
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new AssertionError({
+        message: `Unexpected parse result for ${input}`,
+        actual,
+        expected,
+        operator: 'deepStrictEqual',
+        stackStartFn: expectParse,
+      });
+    }
+  }
+
+  function expectParseRejects(input: string, cfg = config): void {
+    let actual: string[] | undefined;
+    let thrown = false;
+
+    try { actual = parse(input, rex, cfg); }
+    catch { thrown = true; }
+
+    const shouldThrow = !!cfg.VERBOSITY;
+    const pass = shouldThrow ? thrown : !thrown && Array.isArray(actual) && actual.length === 0;
+
+    if (!pass) {
+      throw new AssertionError({
+        message: `Expected parse rejection for ${input}`,
+        actual: thrown ? 'threw' : actual,
+        expected: shouldThrow ? 'throw' : [],
+        operator: shouldThrow ? 'throws' : 'deepStrictEqual',
+        stackStartFn: expectParseRejects,
+      });
+    }
+  }
+
+  it('accepts common selector forms', () => {
+    expectParse('div', ['div']);
+    expectParse('div.item#id', ['div.item#id']);
+    expectParse('[data-x="a, b"]', ['[data-x="a, b"]']);
+    expectParse('div > span', ['div > span']);
+    expectParse('div + span', ['div + span']);
+    expectParse(':nth-child(2n + 1)', [':nth-child(2n+1)']);
+    expectParse('div > span + a ~ em', ['div > span + a ~ em']);
+  });
+
+  it('accepts logical and structural pseudo selectors', () => {
+    expectParse(':is(.a, .b)', [':is(.a, .b)']);
+    expectParse(':not(.disabled)', [':not(.disabled)']);
+    expectParse(':has(+ .item)', [':has(+ .item)']);
+    expectParse(':nth-child(2n + 1)', [':nth-child(2n+1)']);
+  });
+
+  it('splits only top-level selector groups after validation', () => {
+    expectParse('div, span', ['div', 'span']);
+    expectParse(':is(:not(.a), .b):nth-child(2n+1), span', [':is(:not(.a), .b):nth-child(2n+1)', 'span']);
+  });
+
+  it('rejects empty and trailing-comma selectors', () => {
+    expectParseRejects('');
+    expectParseRejects('div,');
+  });
+
+  it('rejects obviously malformed combinator placement', () => {
+    expectParseRejects('> div');
+    expectParseRejects('div >> span');
+    expectParseRejects('div + > span');
+  });
+
+  it('validates namespace type selectors inside functional pseudos', () => {
+    expectParse(':is(*|item)', [':is(*|item)']);
+    expectParse(':is(|item)', [':is(|item)']);
+    expectParse(':is(test|item)', [':is(test|item)']);
+    expectParse(':has(> *|item)', [':has(> *|item)']);
+  });
+
+  it('validates explicit combinators inside functional pseudos', () => {
+    expectParse(':has(> h1)', [':has(> h1)']);
+    expectParse(':has(>h1)', [':has(>h1)']);
+    expectParse(':has(+ .item)', [':has(+ .item)']);
+    expectParse(':has(~ .item)', [':has(~ .item)']);
+  });
+
+  it('validates nested logical selectors inside functional pseudos', () => {
+    expectParse(':is(:where(:not(.a, .b)), .c)', [':is(:where(:not(.a, .b)), .c)']);
+    expectParse(':has(:is(.a, .b):not(.c))', [':has(:is(.a, .b):not(.c))']);
+  });
+});
+
+describe('parse', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+  const config = { ...DEFAULT_CONFIG, VERBOSITY: true, LOGERRORS: false };
 
   it('normalizes vertical whitespace through parse pipeline', () => {
     expect(parse('div\nspan', rex, config)).toEqual(['div span']);
@@ -489,32 +719,21 @@ describe('parse', () => {
     expect(parse('div\nspan', rex, config)).toEqual(['div span']);
     expect(parse(':nth-child(2n + 1)', rex, config)).toEqual([':nth-child(2n+1)']);
   });
-});
 
-describe('unescapeIdentifier', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-  it('should unescape valid identifiers', () => {
-    expect(unescapeIdentifier('[data-nwsapi-scope] > *|item', rex)).toBe('[data-nwsapi-scope] > *|item');
-  });
-});
-
-describe('parse namespace selectors', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-  const config = { ...DEFAULT_CONFIG, VERBOSITY: false, LOGERRORS: false };
-
-  it.each([
+  test.each([
     'div',
     'div p',
     'div > p',
     '[data-nwsapi-scope] > p',
-    // '*|p',
-    // 'test|p',
-    // '|p',
-    // ':scope > *|item',
-    // '[data-nwsapi-scope] > *|item',
-    // '[data-nwsapi-scope] > |item',
+    '*|p',
+    'test|p',
+    '|p',
+    ':scope > *|item',
+    '[data-nwsapi-scope] > *|item',
+    '[data-nwsapi-scope] > |item',
   ])('accepts %s', (selector) => {
     // expect(parse(unescapeIdentifier(selector, rex), rex, config)).toEqual([selector]);
     expect(parse(selector, rex, config)).toEqual([selector]);
   });
+
 });

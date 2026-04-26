@@ -1225,7 +1225,7 @@ runScenarios('w3c', 'normal', [
       { select: '#not>:not(div)', expect: { ids: ['not-p1', 'not-p2', 'not-p3'] } },
       { select: '#not * :not(:first-child)', expect: { ids: ['not-em1', 'not-em2', 'not-em3'] } },
       { select: ':not(*)', expect: { ids: [] } },
-      { select: ':not(*|*)', expect: { ids: [] }, status: 'fixme' },
+      { select: ':not(*|*)', expect: { ids: [] } },
 
       // Pseudo-elements
       // - ::first-line
@@ -1273,9 +1273,9 @@ runScenarios('w3c', 'normal', [
 
       // Namespaces
       // XXX runMatchesTest() in level2-lib.js can't handle these because non-HTML elements don't have a recognised id
-      { select: '#any-namespace *|div', expect: { ids: ['any-namespace-div1', 'any-namespace-div2', 'any-namespace-div3', 'any-namespace-div4'] }, status: 'fixme' },
-      { select: '#no-namespace |div', expect: { ids: ['no-namespace-div3'] }, status: 'fixme' },
-      { select: '#no-namespace |*', expect: { ids: ['no-namespace-div3'] }, status: 'fixme' },
+      { select: '#any-namespace *|div', expect: { ids: ['any-namespace-div1', 'any-namespace-div2', 'any-namespace-div3', 'any-namespace-div4'] } },
+      { select: '#no-namespace |div', expect: { ids: ['no-namespace-div3'] } },
+      { select: '#no-namespace |*', expect: { ids: ['no-namespace-div3'] } },
 
       // Combinators
       // - Descendant combinator ' '

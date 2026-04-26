@@ -186,43 +186,30 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
     // register a new selector combinator symbol and its related function resolver
     registerCombinator(combinator: string, resolver: string) {
-      const l = combinator.length;
-      let symbol;
-      for (let i = 0; l > i; ++i) {
-        if (combinator[i] != '=') {
-          symbol = combinator[i];
-          break;
-        }
+      if ([...combinator].length !== 1) {
+        throw new Error('Invalid combinator: ' + combinator);
       }
-      if (!symbol) throw new Error('Invalid combinator: ' + combinator);
-      if (_snap.ext.combinators.indexOf(symbol) < 0) {
-        _snap.ext.combinators = _snap.ext.combinators.replace('](', symbol + '](');
-        _snap.ext.combinators = _snap.ext.combinators.replace('])', symbol + '])');
+
+      if (!_snap.ext.combinators.includes(combinator)) {
+        _snap.ext.combinators.push(combinator);
         _snap.combinators[combinator] = resolver;
         _snap.re = buildRex(_snap.ext);
       } else {
-        console.warn('Warning: the \'' + combinator + '\' combinator is already registered.');
+        console.warn(`Warning: the '${combinator}' combinator is already registered.`);
       }
     },
 
     // register a new attribute operator symbol and its related function resolver
     // NW.Dom.registerOperator( '!=', { p1: '^', p2: '$', p3: 'false' } );
     registerOperator(operator: string, resolver: AttrMatcherParts) {
-      const l = operator.length;
-      let symbol;
-      for (let i = 0; l > i; ++i) {
-        if (operator[i] != '=') {
-          symbol = operator[i];
-          break;
-        }
-      }
-      if (!symbol) throw new Error('Invalid operator: ' + operator);
-      if (_snap.ext.operators.indexOf(symbol) < 0 && !_snap.operators[operator]) {
-        _snap.ext.operators = _snap.ext.operators.replace(']=', symbol + ']=');
+      if (!operator || !operator.includes('=')) throw new Error('Invalid operator: ' + operator);
+
+      if (!_snap.ext.operators.includes(operator) && !_snap.operators[operator]) {
+        _snap.ext.operators.push(operator);
         _snap.operators[operator] = resolver;
         _snap.re = buildRex(_snap.ext);
       } else {
-        console.warn('Warning: the \'' + operator + '\' operator is already registered.');
+        console.warn(`Warning: the '${operator}' operator is already registered.`);
       }
     },
 
@@ -279,8 +266,8 @@ export const DEFAULT_CONFIG: NwsConfig = {
 };
 
 export const DEFAULT_EXTENSIONS: NwsExtensions = {
-  operators: '[~*^$|]=|=',
-  combinators: '[\\x20\\t>+~](?=[^>+~])'
+  operators: ['~=', '*=', '^=', '$=', '|=', '='],
+  combinators: ['>', '+', '~', ' ', '\t'],
 };
 
 export function initSnapshot(doc: Document): SnapshotState {
@@ -297,7 +284,10 @@ export function initSnapshot(doc: Document): SnapshotState {
 
     // special handling configuration flags
     config: { ...DEFAULT_CONFIG },
-    ext: { ...DEFAULT_EXTENSIONS },
+    ext: {
+      operators: [...DEFAULT_EXTENSIONS.operators],
+      combinators: [...DEFAULT_EXTENSIONS.combinators],
+    },
     selectors: {},
     combinators: {}, // TODO: ???
     operators: {
@@ -903,42 +893,6 @@ function isQuirksMode(doc: Document): doc is HTMLDocument {
 }
 
 export function buildRex(ext: NwsExtensions): Rex {
-  const WSH = '[\\x20\\t]';
-  const WSV = '[\\r\\n\\f]';
-  const WSP = '[\\x20\\t\\r\\n\\f]';
-  const HAS = {
-    nestedself: ':has\\x28(?::has\\x28|.*)\\x29)\\x29',
-  };
-  const NOT = {
-    // not enclosed in double/single/parens/square
-    double_enc: '(?=(?:[^"]*["][^"]*["])*[^"]*$)',
-    single_enc: "(?=(?:[^']*['][^']*['])*[^']*$)",
-    parens_enc: '(?![^\\x28]*\\x29)',
-    square_enc: '(?![^\\x5b]*\\x5d)'
-  };
-  const GROUPS = {
-    // pseudo-classes requiring parameters
-    linguistic: '(dir|lang)(?:\\x28\\s?([-\\w]{2,})\\s?\\x29)',
-    logicalsel: '(is|where|matches|not|has)(?:\\x28\\s?(' + '[^()]*|.*' + ')\\s?\\x29)',
-    treestruct: '(nth(?:-last)?(?:-child|-of\\-type))(?:\\x28\\s?(even|odd|(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)?)\\s?\\x29)',
-    // pseudo-classes not requiring parameters
-    locationpc: '(any\\-link|link|visited|target|defined)\\b',
-    useraction: '(hover|active|focus\\-within|focus\\-visible|focus)\\b',
-    structural: '(scope|root|empty|(?:(?:first|last|only)(?:-child|\\-of\\-type)))\\b',
-    inputstate: '(enabled|disabled|read\\-only|read\\-write|placeholder\\-shown|default)\\b',
-    inputvalue: '(checked|indeterminate|required|optional|valid|invalid|in\\-range|out\\-of\\-range)\\b',
-    // pseudo-classes not requiring parameters and describing functional state
-    rsrc_state: '(playing|paused|seeking|buffering|stalled|muted|volume-locked)\\b',
-    disp_state: '(open|closed|modal|fullscreen|picture-in-picture)\\b',
-    time_state: '(current|past|future)\\b',
-    // pseudo-classes for parsing only selectors
-    pseudo_nop: '(autofill|-webkit\\-autofill)\\b',
-    // pseudo-elements starting with single colon (:)
-    pseudo_sng: '(after|before|first\\-letter|first\\-line)\\b',
-    // pseudo-elements starting with double colon (::)
-    pseudo_dbl: ':(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b'
-  };
-
   // NOTE: SPECIAL CASES IN CSS SYNTAX PARSING RULES
   //
   // The <EOF-token> https://drafts.csswg.org/css-syntax/#typedef-eof-token
@@ -954,151 +908,203 @@ export function buildRex(ext: NwsExtensions): Rex {
   // using hex format prevents false matches of opened/closed instances
   // pairs, coloring breakage and other editors highlightning problems.
 
+  const SP = `\\x20`; // space
+  const HT = `\\t`;   // horizontal tab
+  const LF = `\\n`;   // line feed
+  const CR = `\\r`;   // carriage return
+  const FF = `\\f`;   // form feed
+  const DQ = `\\x22`; // "
+  const SQ = `\\x27`; // '
+  const BT = `\\x60`; // `
+  const BS = `\\x5c`; // backslash
+  const LP = `\\x28`; // (
+  const RP = `\\x29`; // )
+  const LB = `\\x5b`; // [
+  const RB = `\\x5d`; // ]
+
+  const WSH = `[${SP}${HT}]`;
+  const WSV = `[${CR}${LF}${FF}]`;
+  const WSP = `[${SP}${HT}${CR}${LF}${FF}]`;
+  const HAS = {
+    nestedself: `:has${LP}(?::has${LP}|.*)${RP})${RP}`,
+  };
+  const NOT = {
+    // not enclosed in double/single/parens/square
+    double_enc: `(?=(?:[^"]*["][^"]*["])*[^"]*$)`,
+    single_enc: `(?=(?:[^']*['][^']*['])*[^']*$)`,
+    parens_enc: `(?![^${LP}]*${RP})`,
+    square_enc: `(?![^${LB}]*${RB})`,
+  };
+  const GROUPS = {
+    // pseudo-classes requiring parameters
+    linguistic: `(dir|lang)(?:${LP}\\s?([-\\w]{2,})\\s?${RP})`,
+    logicalsel: `(is|where|matches|not|has)(?:${LP}\\s?([^()]*|.*)\\s?${RP})`,
+    treestruct: `(nth(?:-last)?(?:-child|-of\\-type))(?:${LP}\\s?(even|odd|(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)?)\\s?${RP})`,
+    // pseudo-classes not requiring parameters
+    locationpc: `(any\\-link|link|visited|target|defined)\\b`,
+    useraction: `(hover|active|focus\\-within|focus\\-visible|focus)\\b`,
+    structural: `(scope|root|empty|(?:(?:first|last|only)(?:-child|\\-of\\-type)))\\b`,
+    inputstate: `(enabled|disabled|read\\-only|read\\-write|placeholder\\-shown|default)\\b`,
+    inputvalue: `(checked|indeterminate|required|optional|valid|invalid|in\\-range|out\\-of\\-range)\\b`,
+    // pseudo-classes not requiring parameters and describing functional state
+    rsrc_state: `(playing|paused|seeking|buffering|stalled|muted|volume-locked)\\b`,
+    disp_state: `(open|closed|modal|fullscreen|picture-in-picture)\\b`,
+    time_state: `(current|past|future)\\b`,
+    // pseudo-classes for parsing only selectors
+    pseudo_nop: `(autofill|-webkit\\-autofill)\\b`,
+    // pseudo-elements starting with single colon (:)
+    pseudo_sng: `(after|before|first\\-letter|first\\-line)\\b`,
+    // pseudo-elements starting with double colon (::)
+    pseudo_dbl: `:(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b`,
+  };
+
+  const universal = `\\*`;
   // non-ascii chars
-  const noascii = '[^\\x00-\\x9f]';
+  const noascii = `[^\\x00-\\x9f]`;
   // escaped chars
-  const escaped = '\\\\[^\\r\\n\\f0-9a-fA-F]';
+  const escaped = `\\\\[^${CR}${LF}${FF}0-9a-fA-F]`;
   // unicode chars
-  const unicode = '\\\\[0-9a-fA-F]{1,6}(?:\\r\\n|\\s)?';
+  const unicode = `\\\\[0-9a-fA-F]{1,6}(?:${CR}${LF}|\\s)?`;
 
   // can start with single/double dash
   // but it can not start with a digit
-  const identifier = '-?(?:[a-zA-Z_-]|' + noascii + '|' + escaped + '|' + unicode + ')' +
-      '(?:-{2}|[0-9]|[a-zA-Z_-]|' + noascii + '|' + escaped + '|' + unicode + ')*';
+  const identifier = `-?(?:[a-zA-Z_-]|${noascii}|${escaped}|${unicode})` +
+      `(?:-{2}|[0-9]|[a-zA-Z_-]|${noascii}|${escaped}|${unicode})*`;
 
-  const pseudonames = '[-\\w]+';
-  const pseudoparms = '(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)';
-  const doublequote = '"[^"\\\\]*(?:\\\\.[^"\\\\]*)*(?:"|$)';
-  const singlequote = "'[^'\\\\]*(?:\\\\.[^'\\\\]*)*(?:'|$)";
+  const pseudonames = `[-\\w]+`;
+  const pseudoparms = `(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)`;
+  const doublequote = `"[^"\\\\]*(?:\\\\.[^"\\\\]*)*(?:"|$)`;
+  const singlequote = `'[^'\\\\]*(?:\\\\.[^'\\\\]*)*(?:'|$)`;
 
-  const attrparser = identifier + '|' + doublequote + '|' + singlequote;
+  const attrparser = `${identifier}|${doublequote}|${singlequote}`;
+  const attrvalues = `([${DQ}${SQ}]?)((?!\\3)*|(?:\\\\?.)*?)(?:\\3|$)`;
 
-  const attrvalues = '([\\x22\\x27]?)((?!\\3)*|(?:\\\\?.)*?)(?:\\3|$)';
+  const combinatorRaw = ext.combinators.map(escapeRegExp).join('');
+  const combinator = `[${combinatorRaw}]${WSP}?(?=[^${combinatorRaw}])`;
+  const operators = ext.operators.map(escapeRegExp).join('|');
+
+  const namespaceName = `(?:${universal}|${identifier})`;
+  const namespacePrefix = `(?:${namespaceName})?`;
+  const namespaceType = `(?:${namespacePrefix}\\|${namespaceName})`;
 
   const attributes =
-    '\\[' +
+    `\\[` +
       // attribute presence
-      '(?:\\*\\|)?' +
-      WSP + '?' +
-      '(' + identifier + '(?::' + identifier + ')?)' +
-      WSP + '?' +
-      '(?:' +
-        '(' + ext.operators + ')' + WSP + '?' +
-        '(?:' + attrparser + ')' +
-      ')?' +
+      `(?:${universal}\\|)?` +
+      `${WSP}?` +
+      `(${identifier}(?::${identifier})?)` +
+      `${WSP}?` +
+      `(?:` +
+        `(${operators})${WSP}?` +
+        `(?:${attrparser})` +
+      `)?` +
       // attribute case sensitivity
-      '(?:' + WSP + '?\\b(i))?' + WSP + '?' +
-    '(?:\\]|$)';
+      `(?:${WSP}?\\b(i))?${WSP}?` +
+    `(?:\\]|$)`;
 
   const attrmatcher = attributes.replace(attrparser, attrvalues);
 
   const pseudoclass =
-    '(?:\\x28' + WSP + '*' +
-      '(?:' + pseudoparms + '?)?|' +
-      // universal * &
-      // namespace *|*
-      '(?:\\*|\\*\\|)|' +
-      '(?:' +
-        '(?::' + pseudonames +
-          '(?:\\x28' + pseudoparms + '?(?:\\x29|$))?|' +
-        ')|' +
-        '(?:[.#]?' + identifier + ')|' +
-        '(?:' + attributes + ')' +
-      ')+|' +
-      '(?:' + WSP + '?[>+~][^>+~]' + WSP + '?)|' +
-      '(?:' + WSP + '?,' + WSP + '?)|' +
-      '(?:' + WSP + '?)|' +
-      '(?:\\x29|$)' +
-    ')*';
+    `(?:${LP}${WSP}*` +
+      `(?:${pseudoparms}?)?|` +
+      `(?:${namespaceType}|${universal})|` +
+      `(?:` +
+        `(?::${pseudonames}` +
+          `(?:${LP}${pseudoparms}?(?:${RP}|$))?|` +
+        `)|` +
+        `(?:[.#]?${identifier})|` +
+        `(?:${attributes})` +
+      `)+|` +
+      `(?:${WSP}?${combinator})|` +
+      `(?:${WSP}?,${WSP}?)|` +
+      `(?:${WSP}?)|` +
+      `(?:${RP}|$)` +
+    `)*`;
 
   const standardValidator =
-    '(?=' + WSP + '?[^>+~(){}<>])' +
-    '(?:' +
-      // universal * &
-      // namespace *|*
-      '(?:\\*|\\*\\|)|' +
-      '(?:[.#]?' + identifier + ')+|' +
-      '(?:' + attributes + ')+|' +
-      '(?:::?' + pseudonames + pseudoclass + ')|' +
-      '(?:' + WSP + '?' + ext.combinators + WSP + '?)|' +
-      '(?:' + WSP + '?,' + WSP + '?)|' +
-      '(?:' + WSP + '?)' +
-    ')+';
+    `(?=${WSP}?[^>+~(){}<>])` +
+    `(?:` +
+      `(?:${namespaceType})|` +
+      `(?:${universal})|` +
+      `(?:[.#]?${identifier})+|` +
+      `(?:${attributes})+|` +
+      `(?:::?${pseudonames}${pseudoclass})|` +
+      `(?:${WSP}?${combinator}${WSP}?)|` +
+      `(?:${WSP}?,${WSP}?)|` +
+      `(?:${WSP}?)` +
+    `)+`;
 
   // the following global RE is used to return the
   // deepest localName in selector strings and then
   // use it to retrieve all possible matching nodes
   // that will be filtered by compiled resolvers
   const reOptimizer = RegExp(
-    '(?:([.:#*]?)' +
-    '(' + identifier + ')' +
-    '(?:' +
-      ':[-\\w]+|' +
-      '\\[[^\\]]+(?:\\]|$)|' +
-      '\\x28[^\\x29]+(?:\\x29|$)' +
-    ')*)$');
-
-  const namespacePrefix = '(\\*|' + identifier + ')?';
-  const namespaceLocal = '(?:\\*|' + identifier + ')';
+    `(?:([.:#*]?)` +
+    `(${identifier})` +
+    `(?:` +
+      `:[-\\w]+|` +
+      `\\[[^\\]]+(?:\\]|$)|` +
+      `${LP}[^${RP}]+(?:${RP}|$)` +
+    `)*)$`);
 
   // global
   const reValidator = RegExp(standardValidator, 'g');
 
   const rex: Rex = {
     // regular expressions
-    HasEscapes: RegExp('\\\\'),
-    HexNumbers: RegExp('^[0-9a-fA-F]'),
-    EscOrQuote: RegExp('^\\\\|[\\x22\\x27]'),
-    RegExpChar: RegExp('(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]', 'g'),
-    TrimSpaces: RegExp('^' + WSP + '+|' + WSP + '+$|', 'g'),
-    SplitGroup: RegExp('(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+', 'g'),
-    CommaGroup: RegExp('(\\s*,\\s*)' + NOT.square_enc + NOT.parens_enc, 'g'),
-    FixEscapes: RegExp('\\\\([0-9a-fA-F]{1,6}' + WSP + '?|.)|([\\x22\\x27])', 'g'),
-    CombineWSP: RegExp('[\\n\\r\\f\\x20]+' + NOT.single_enc + NOT.double_enc, 'g'),
-    TabCharWSP: RegExp('(\\x20?\\t+\\x20?)' + NOT.single_enc + NOT.double_enc, 'g'),
-    PseudosWSP: RegExp('\\s+([-+])\\s+' + NOT.square_enc, 'g'),
+    HasEscapes: RegExp(`\\\\`),
+    HexNumbers: RegExp(`^[0-9a-fA-F]`),
+    EscOrQuote: RegExp(`^\\\\|[${DQ}${SQ}]`),
+    RegExpChar: RegExp(`(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]`, 'g'),
+    TrimSpaces: RegExp(`^${WSP}+|${WSP}+$`, 'g'),
+    SplitGroup: RegExp(`(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+`, 'g'),
+    CommaGroup: RegExp(`(\\s*,\\s*)${NOT.square_enc}${NOT.parens_enc}`, 'g'),
+    FixEscapes: RegExp(`\\\\([0-9a-fA-F]{1,6}${WSP}?|.)|([${DQ}${SQ}])`, 'g'),
+    CombineWSP: RegExp(`[${LF}${CR}${FF}${SP}]+${NOT.single_enc}${NOT.double_enc}`, 'g'),
+    TabCharWSP: RegExp(`(${SP}?${HT}+${SP}?)${NOT.single_enc}${NOT.double_enc}`, 'g'),
+    PseudosWSP: RegExp(`([0-9n])\\s*([-+])\\s*(?=[0-9n])${NOT.square_enc}`, 'gi'),
     STD: {
-      combinator: RegExp('\\s?([>+~])\\s?', 'g'),
-      apimethods: RegExp('^(?:\\*|' + identifier + ')?\\|'),
-      namespaces: RegExp('(' + namespacePrefix + ')\\|' + namespaceLocal),
+      combinator: RegExp(`\\s?([>+~])\\s?`, 'g'),
+      apimethods: RegExp(`^${namespacePrefix}\\|`),
+      namespaces: RegExp(`(${namespacePrefix})\\|` + namespaceName),
     },
     Patterns: {
       // pseudo-classes
-      treestruct: RegExp('^:(?:' + GROUPS.treestruct + ')(.*)', 'i'),
-      structural: RegExp('^:(?:' + GROUPS.structural + ')(.*)', 'i'),
-      linguistic: RegExp('^:(?:' + GROUPS.linguistic + ')(.*)', 'i'),
-      useraction: RegExp('^:(?:' + GROUPS.useraction + ')(.*)', 'i'),
-      inputstate: RegExp('^:(?:' + GROUPS.inputstate + ')(.*)', 'i'),
-      inputvalue: RegExp('^:(?:' + GROUPS.inputvalue + ')(.*)', 'i'),
-      rsrc_state: RegExp('^:(?:' + GROUPS.rsrc_state + ')(.*)', 'i'),
-      disp_state: RegExp('^:(?:' + GROUPS.disp_state + ')(.*)', 'i'),
-      time_state: RegExp('^:(?:' + GROUPS.time_state + ')(.*)', 'i'),
-      locationpc: RegExp('^:(?:' + GROUPS.locationpc + ')(.*)', 'i'),
-      logicalsel: RegExp('^:(?:' + GROUPS.logicalsel + ')(.*)', 'i'),
-      pseudo_nop: RegExp('^:(?:' + GROUPS.pseudo_nop + ')(.*)', 'i'),
-      pseudo_sng: RegExp('^:(?:' + GROUPS.pseudo_sng + ')(.*)', 'i'),
-      pseudo_dbl: RegExp('^:(?:' + GROUPS.pseudo_dbl + ')(.*)', 'i'),
+      treestruct: RegExp(`^:(?:${GROUPS.treestruct})(.*)`, 'i'),
+      structural: RegExp(`^:(?:${GROUPS.structural})(.*)`, 'i'),
+      linguistic: RegExp(`^:(?:${GROUPS.linguistic})(.*)`, 'i'),
+      useraction: RegExp(`^:(?:${GROUPS.useraction})(.*)`, 'i'),
+      inputstate: RegExp(`^:(?:${GROUPS.inputstate})(.*)`, 'i'),
+      inputvalue: RegExp(`^:(?:${GROUPS.inputvalue})(.*)`, 'i'),
+      rsrc_state: RegExp(`^:(?:${GROUPS.rsrc_state})(.*)`, 'i'),
+      disp_state: RegExp(`^:(?:${GROUPS.disp_state})(.*)`, 'i'),
+      time_state: RegExp(`^:(?:${GROUPS.time_state})(.*)`, 'i'),
+      locationpc: RegExp(`^:(?:${GROUPS.locationpc})(.*)`, 'i'),
+      logicalsel: RegExp(`^:(?:${GROUPS.logicalsel})(.*)`, 'i'),
+      pseudo_nop: RegExp(`^:(?:${GROUPS.pseudo_nop})(.*)`, 'i'),
+      pseudo_sng: RegExp(`^:(?:${GROUPS.pseudo_sng})(.*)`, 'i'),
+      pseudo_dbl: RegExp(`^:(?:${GROUPS.pseudo_dbl})(.*)`, 'i'),
       // combinator symbols
-      children: RegExp('^' + WSP + '?\\>' + WSP + '?(.*)'),
-      adjacent: RegExp('^' + WSP + '?\\+' + WSP + '?(.*)'),
-      relative: RegExp('^' + WSP + '?\\~' + WSP + '?(.*)'),
-      ancestor: RegExp('^' + WSP + '+(.*)'),
+      children: RegExp(`^${WSP}?\\>${WSP}?(.*)`),
+      adjacent: RegExp(`^${WSP}?\\+${WSP}?(.*)`),
+      relative: RegExp(`^${WSP}?\\~${WSP}?(.*)`),
+      ancestor: RegExp(`^${WSP}+(.*)`),
       // universal & namespace
-      universal: RegExp('^(\\*)(.*)'),
-      namespace: RegExp('^(\\*|[\\w-]+)?\\|(.*)'),
+      universal: RegExp(`^(${universal})(.*)`),
+      namespace: RegExp(`^(${namespacePrefix})\\|(.*)`),
       // id, class, tag
-      id: RegExp('^#(' + identifier + ')(.*)'),
-      tagName: RegExp('^(' + identifier + ')(.*)'),
-      className: RegExp('^\\.(' + identifier + ')(.*)'),
-      attribute: RegExp('^(?:' + attrmatcher + ')(.*)'),
+      id: RegExp(`^#(${identifier})(.*)`),
+      tagName: RegExp(`^(${identifier})(.*)`),
+      className: RegExp(`^\\.(${identifier})(.*)`),
+      attribute: RegExp(`^(?:${attrmatcher})(.*)`),
     },
 
     // regexp to better aproximate detection of RTL languages (Arabic)
-    RTL: RegExp('^(?:[\\u0627-\\u064a]|[\\u0591-\\u08ff]|[\\ufb1d-\\ufdfd]|[\\ufe70-\\ufefc])+$'),
+    RTL: RegExp(`^(?:[\\u0627-\\u064a]|[\\u0591-\\u08ff]|[\\ufb1d-\\ufdfd]|[\\ufe70-\\ufefc])+$`),
 
     // detect structural pseudo-classes in selectors
-    nthElem: RegExp('(:nth(?:-last)?-child)', 'i'),
-    nthType: RegExp('(:nth(?:-last)?-of-type)', 'i'),
+    nthElem: RegExp(`(:nth(?:-last)?-child)`, 'i'),
+    nthType: RegExp(`(:nth(?:-last)?-of-type)`, 'i'),
 
     optimizer: reOptimizer,
     validator: reValidator,
@@ -1336,6 +1342,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
       // E ~ F (F relative sibling of E)
       case '~':
         match = selector.match(snap.re.Patterns.relative);
+        if(!match) throw new Error('Invalid relative sibling combinator in selector: ' + selector);
         source = 'var N' + k + '=e;while(e&&(e=e.previousElementSibling)){' + source + '}e=N' + k + ';';
         break;
 
@@ -1343,6 +1350,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
       // E + F (F adiacent sibling of E)
       case '+':
         match = selector.match(snap.re.Patterns.adjacent);
+        if(!match) throw new Error('Invalid adjacent sibling combinator in selector: ' + selector);
         source = 'var N' + k + '=e;if(e&&(e=e.previousElementSibling)){' + source + '}e=N' + k + ';';
         break;
 
@@ -1351,6 +1359,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
       case '\x09':
       case '\x20':
         match = selector.match(snap.re.Patterns.ancestor);
+        if(!match) throw new Error('Invalid descendant combinator in selector: ' + selector);
         source = 'var N' + k + '=e;while(e&&(e=e.parentElement)){' + source + '}e=N' + k + ';';
         break;
 
@@ -1358,6 +1367,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
       // E > F (F children of E)
       case '>':
         match = selector.match(snap.re.Patterns.children);
+        if(!match) throw new Error('Invalid child combinator in selector: ' + selector);
         source = 'var N' + k + '=e;if(e&&(e=e.parentElement)){' + source + '}e=N' + k + ';';
         break;
 
@@ -1912,28 +1922,27 @@ export function parse(selectors: string, re: Rex, config: NwsConfig): string[] {
   }
 
   // normalize input string
-  const parsed = selectors.
-    replace(/\x00|\\$/g, '\ufffd').
-    replace(re.CombineWSP, '\x20').
-    replace(re.PseudosWSP, '$1').
-    replace(re.TabCharWSP, '\t').
-    replace(re.CommaGroup, ',').
-    replace(re.TrimSpaces, '');
+  const normalized = selectors
+    .replace(/\x00|\\$/g, '\ufffd')
+    .replace(re.CombineWSP, '\x20')
+    .replace(re.PseudosWSP, '$1$2')
+    .replace(re.TabCharWSP, '\t')
+    .replace(re.CommaGroup, ',')
+    .replace(re.TrimSpaces, '');
 
   // parse, validate and split possible compound selectors
-  const validated = parsed.match(re.validator);
-  if (validated?.join('') == parsed) {
-    if (parsed[parsed.length - 1] == ',') {
+  const validated = normalized.match(re.validator);
+  if (validated?.join('') == normalized) {
+    if (normalized[normalized.length - 1] == ',') {
       emit(`[parse] Selector cannot end with a comma: '${selectors}'`, config);
       return [];
     }
-    return splitSelectorGroups(parsed);
-    // return parsed.match(re.SplitGroup) ?? [];
+    return splitSelectorGroups(normalized);
   } else {
     if (config.FORGIVING) {
       // forgiving pseudos allow to continue even after parse errors
-      if (!(parsed.includes(':is(') || parsed.includes(':where('))) {
-        emit(`[parse] Failed to parse selector: '${selectors}'`, config);
+      if (!(normalized.includes(':is(') || normalized.includes(':where('))) {
+        emit(`[parse] Failed to validate selector: '${normalized}'`, config);
         return [];
       }
     }
@@ -2233,10 +2242,16 @@ export function splitSelectorGroups(selector: string): string[] {
 
     if (ch === ',' && depth === 0) {
       out.push(selector.slice(start, i));
+      // out.push(trimWsp(selector.slice(start, i)));
       start = i + 1;
     }
   }
 
   out.push(selector.slice(start));
+  // out.push(trimWsp(selector.slice(start)));
   return out;
+}
+
+function trimWsp(str: string): string {
+  return str.replace(/^[ \t\r\n\f]+|[ \t\r\n\f]+$/g, '')
 }
