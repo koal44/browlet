@@ -3,11 +3,11 @@ import { runScenarios } from "./harness/scenarios";
 
 const setupNw = async (page: Page) => {
   await page.evaluate(() => {
-    NW.Dom.configure({
-      SELECTOR3: true,
-      NON_ASCII: true,
-      UNICODE16: true,
-      ESCAPECHR: true,
+    NW?.Dom?.configure({
+      // SELECTOR3: true,
+      // NON_ASCII: true,
+      // UNICODE16: true,
+      // ESCAPECHR: true,
       VERBOSITY: false,
     });
   });

@@ -141,11 +141,11 @@ type SnapshotState = {
 
   re: Rex;
 
-  matchLambdas: Record<string, MatchLambda>;
-  selectLambdas: Record<string, SelectLambda>;
+  matchLambdas: Partial<Record<string, MatchLambda>>;
+  selectLambdas: Partial<Record<string, SelectLambda>>;
 
-  matchResolvers: Record<string, MatchResolver>;
-  selectResolvers: Record<string, SelectResolver>;
+  matchResolvers: Partial<Record<string, MatchResolver>>;
+  selectResolvers: Partial<Record<string, SelectResolver>>;
 };
 
 type CssEscapeFn = (ident: string) => string;

@@ -114,12 +114,8 @@ runScenarios('scope', 'normal', [
     `,
     cases: [
       {
-        select: ':scope > div',
-        ref: { by: 'first', selector: 'div' },
-        expect: {
-          classes: ['outer', 'other-outer']
-        },
-        status: 'fixme',
+        select: ':scope > div', ref: { by: 'first', selector: 'div' },
+        expect: { classes: ['outer', 'other-outer'] },
       },
     ],
   },

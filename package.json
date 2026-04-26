@@ -39,7 +39,9 @@
     "pretest:browser": "npm run build",
     "test:browser": "cross-env HARNESS_MODE=normal playwright test",
     "pretest:browser:fixme": "npm run build",
-    "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test"
+    "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test",
+    "pretest:unit": "npm run build",
+    "test:unit": "vitest run"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
@@ -48,6 +50,8 @@
     "eslint": "9.31.0",
     "playwright": "^1.59.1",
     "terser": "5.46.1",
-    "typescript": "^6.0.3"
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }

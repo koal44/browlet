@@ -183,11 +183,17 @@ export function installBrowserHelpers(): void {
     return { queryResult, engineResult };
   }
 
+  function toArr(list: ElementList): Element[] {
+    return Array.isArray(list) ? list : [...list];
+  }
+
   function getEngineQuery(c: EquivalentCase, ng: Engine): EngineQuery {
+    const nwdom = NW && NW.Dom;
+    if (!nwdom) throw new Error('NW.Dom is not available');
     switch (true) {
       case 'select' in c:
         if (ng === 'native') return (query, ctx) => () => [...ctx.querySelectorAll(query)];
-        if (ng === 'nw') return (query, ctx) => () => NW.Dom.select(query, ctx);
+        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.select(query, ctx));
         break;
 
       case 'first' in c:
@@ -199,7 +205,7 @@ export function installBrowserHelpers(): void {
         }
         if (ng === 'nw') {
           return (query, ctx) => () => {
-            const el = NW.Dom.first(query, ctx);
+            const el = nwdom.first(query, ctx);
             return el ? [el] : [];
           };
         }
@@ -212,7 +218,7 @@ export function installBrowserHelpers(): void {
               ? [...ctx.querySelectorAll(query === '*' ? '*' : CSS.escape(query))]
               : [...ctx.getElementsByTagName(query)];
         }
-        if (ng === 'nw') return (query, ctx) => () => NW.Dom.byTag(query, ctx);
+        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byTag(query, ctx));
         break;
 
       case 'byClass' in c:
@@ -222,7 +228,7 @@ export function installBrowserHelpers(): void {
               ? [...ctx.querySelectorAll(`.${CSS.escape(query)}`)]
               : [...ctx.getElementsByClassName(query)];
         }
-        if (ng === 'nw') return (query, ctx) => () => NW.Dom.byClass(query, ctx);
+        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byClass(query, ctx));
         break;
 
       case 'byId' in c:
@@ -237,7 +243,7 @@ export function installBrowserHelpers(): void {
             return el ? [el] : [];
           };
         }
-        if (ng === 'nw') return (query, ctx) => () => NW.Dom.byId(query, ctx);
+        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byId(query, ctx));
         break;
 
       case 'match' in c:
@@ -252,7 +258,7 @@ export function installBrowserHelpers(): void {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
             const el = ctx;
-            return NW.Dom.match(query, el) ? [el] : [];
+            return nwdom.match(query, el) ? [el] : [];
           };
         }
         break;
@@ -270,7 +276,7 @@ export function installBrowserHelpers(): void {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'closest' case must be an Element`);
             const el = ctx;
-            const hit = NW.Dom.closest(query, el);
+            const hit = nwdom.closest(query, el);
             return hit ? [hit] : [];
           };
         }

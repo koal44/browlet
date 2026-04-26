@@ -827,10 +827,10 @@ runScenarios('slick', 'normal', [
             host.remove();
 
             const native = [...host.querySelectorAll('#someuniqueid')];
-            const nw = NW.Dom.select('#someuniqueid', host);
+            const nw = NW?.Dom?.select('#someuniqueid', host);
 
-            const same = native.length === nw.length && native.every((el, i) => el === nw[i]);
-            if (!same) return `Detached query mismatch: native=${native.length}, nw=${nw.length}`;
+            const same = native.length === nw?.length && native.every((el, i) => el === nw[i]);
+            if (!same) return `Detached query mismatch: native=${native.length}, nw=${nw?.length}`;
             return undefined;
           });
 

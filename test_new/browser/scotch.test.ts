@@ -97,8 +97,8 @@ const html = `
 
 const setupNw = async (page: Page) => {
   await page.evaluate(() => {
-    NW.Dom.configure({
-      'SIMPLENOT': true,
+    NW?.Dom?.configure({
+      // 'SIMPLENOT': true,
       'VERBOSITY': true
     });
   });

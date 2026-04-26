@@ -1,13 +1,33 @@
 import fs from 'node:fs';
 
+// list of internal exported functions/constants
+const EXPORT_FUNCTIONS = new Set([
+  'parse', 'initSnapshot', 'codePointToUTF16', 'stringFromCodePoint',
+  'decodeCssEscapes', 'unescapeIdentifier', 'cssEscape', 'buildRex'
+]);
+
+const EXPORT_CONSTANTS = new Set([
+  'DEFAULT_CONFIG', 'DEFAULT_EXTENSIONS'
+]);
+
 const outFile = 'dist/nwsapi.js';
 const pkgFile = 'package.json';
 
 const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
 const version = pkg.version;
 
-const source = fs.readFileSync(outFile, 'utf8');
-const replacedSource = source.replaceAll('__VERSION__', version);
+let source = fs.readFileSync(outFile, 'utf8');
+source = source.replaceAll('__VERSION__', version);
+
+source = source.replace(
+  /(^|\n)export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/g,
+  (match, prefix, name) => EXPORT_FUNCTIONS.has(name) ? `${prefix}function ${name}(` : match
+);
+
+source = source.replace(
+  /(^|\n)export\s+const\s+([A-Za-z_$][\w$]*)\s*=/g,
+  (match, prefix, name) => EXPORT_CONSTANTS.has(name) ? `${prefix}const ${name} =` : match
+);
 
 const banner = `/*
  * Copyright (C) 2007-2025 Diego Perini
@@ -27,7 +47,6 @@ const banner = `/*
  */
 
 (function (global) {
-  'use strict';
 
 `;
 
@@ -48,8 +67,5 @@ Export(global, Factory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;
 
-
-
-
-fs.writeFileSync(outFile, banner + replacedSource + footer, 'utf8');
+fs.writeFileSync(outFile, banner + source + footer, 'utf8');
 console.log(`wrapped ${outFile} with version ${version}`);

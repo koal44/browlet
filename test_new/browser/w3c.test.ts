@@ -386,7 +386,7 @@ runScenarios('w3c', 'normal', [
 
           let nw: Result = 'nomatch';
           try {
-            nw = NW.Dom.select(selector, div)[0] === span ? 'match' : 'nomatch';
+            nw = NW?.Dom?.select(selector, div)[0] === span ? 'match' : 'nomatch';
           } catch (e) {
             nw = 'throws';
           }
@@ -1577,7 +1577,7 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':checked')].map(el => el.id);
-        const nwIds = () => NW.Dom.select(':checked', document).map(el => el.id);
+        const nwIds = () => [...NW?.Dom?.select(':checked', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
         const nw_initial = nwIds();
@@ -1672,7 +1672,7 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':default')].map(el => el.id);
-        const nwIds = () => NW.Dom.select(':default', document).map(el => el.id);
+        const nwIds = () => [...NW?.Dom?.select(':default', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
         const nw_initial = nwIds();
@@ -1738,13 +1738,13 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_ltr = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const nw_ltr = NW.Dom.select(':dir(ltr)', document).map(el => el.id);
+        const nw_ltr = [...NW?.Dom?.select(':dir(ltr)', document) ?? []].map(el => el.id);
 
         const bdo = document.createElement('bdo');
         bdo.setAttribute('dir', 'ltr');
 
         const native_ltr_afterDetached = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const nw_ltr_afterDetached = NW.Dom.select(':dir(ltr)', document).map(el => el.id);
+        const nw_ltr_afterDetached = [...NW?.Dom?.select(':dir(ltr)', document) ?? []].map(el => el.id);
 
         return {
           native_ltr,
@@ -1816,7 +1816,7 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = (sel: string) => [...document.querySelectorAll(sel)].map(el => el.id);
-        const nwIds = (sel: string) => NW.Dom.select(sel, document).map(el => el.id);
+        const nwIds = (sel: string) => [...NW?.Dom?.select(sel, document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds(':disabled');
         const nw_initial = nwIds(':disabled');
@@ -1992,7 +1992,7 @@ runScenarios('w3c', 'normal', [
         if (!inputiframe) throw new Error('Failed to find input inside iframe');
 
         const nativeIds = () => [...document.querySelectorAll(':focus')].map(el => el.id);
-        const nwIds = () => NW.Dom.select(':focus', document).map(el => el.id);
+        const nwIds = () => [...NW?.Dom?.select(':focus', document) ?? []].map(el => el.id);
 
         (document.getElementById('input1'))?.focus();
         const native_input1 = nativeIds();
@@ -2070,7 +2070,7 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_before = [...document.querySelectorAll(':indeterminate + span')].map(el => el.id);
-        const nw_before = NW.Dom.select(':indeterminate + span', document).map(el => el.id);
+        const nw_before = [...NW?.Dom?.select(':indeterminate + span', document) ?? []].map(el => el.id);
 
         (document.getElementById('indeterminate') as HTMLInputElement).type = 'radio';
 
@@ -2104,7 +2104,7 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':indeterminate')].map(el => el.id);
-        const nwIds = () => NW.Dom.select(':indeterminate', document).map(el => el.id);
+        const nwIds = () => [...NW?.Dom?.select(':indeterminate', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
         const nw_initial = nwIds();
@@ -2172,10 +2172,10 @@ runScenarios('w3c', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_inRange_before = [...document.querySelectorAll('#t1:in-range + span')].map(el => el.id);
-        const nw_inRange_before = NW.Dom.select('#t1:in-range + span', document).map(el => el.id);
+        const nw_inRange_before = [...NW?.Dom?.select('#t1:in-range + span', document) ?? []].map(el => el.id);
 
         const native_outOfRange_before = [...document.querySelectorAll('#t2:out-of-range + span')].map(el => el.id);
-        const nw_outOfRange_before = NW.Dom.select('#t2:out-of-range + span', document).map(el => el.id);
+        const nw_outOfRange_before = [...NW?.Dom?.select('#t2:out-of-range + span', document) ?? []].map(el => el.id);
 
         (document.getElementById('t1') as HTMLInputElement).type = 'number';
         (document.getElementById('t2') as HTMLInputElement).type = 'number';
@@ -3413,8 +3413,8 @@ runScenarios('w3c', 'normal', [
         cases: [
           { select: '#group', expect: { ids: ['group'] } },
           { select: '#group', ref: { by: 'first', selector: 'svg' }, expect: { count: 1 } },
-          { select: ':scope > *', ref: { by: 'first', selector: 'svg' }, expect: { count: 1 }, status: 'fixme' },
-          { select: '#group', ref: { by: 'first', selector: 'svg' }, expect: { equivalentCase: { first: ':scope > *', ref: { by: 'first', selector: 'svg' } } }, status: 'fixme' },
+          { select: ':scope > *', ref: { by: 'first', selector: 'svg' }, expect: { count: 1 } },
+          { select: '#group', ref: { by: 'first', selector: 'svg' }, expect: { equivalentCase: { first: ':scope > *', ref: { by: 'first', selector: 'svg' } } } },
           { select: '#group', expect: { equivalentCase: { first: '#first > *'} } },
         ],
       },

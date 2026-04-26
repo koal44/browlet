@@ -118,6 +118,7 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
       };
 
       for (const page of Object.values(pages)) {
+        attachPageDiagnostics(page);
         await page.setContent('<!doctype html><html><body></body></html>');
       }
     });
@@ -262,7 +263,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
   return await page.evaluate(({c, isXml} ) => {
     const pw = window.__pwHelpers;
     const doc = isXml ? window.__pwXml : window.document;
-    const nwdom = NW.Dom;
+    const nwdom = NW?.Dom;
+    if (!nwdom) throw new Error('NW.Dom is not available');
     if (c.debug) {
       nwdom.setDebug?.(true);
       nwdom.clearDebug?.();
@@ -572,4 +574,23 @@ function wrapPageForXml(page: Page): Page {
       };
     },
   }) as Page;
+}
+
+function attachPageDiagnostics(page: Page): void {
+  page.on('pageerror', (err) => { throw err; });
+
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (msg.text().includes('Cookie')) return;
+    console.error(`[browser console:${msg.type()}] ${msg.text()}`);
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      console.error(`[browser console:${msg.type()}] ${msg.text()}`);
+    }
+  });
+
+  page.on('requestfailed', (request) => {
+    console.error(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ''}`);
+  });
 }

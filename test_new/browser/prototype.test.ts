@@ -473,9 +473,9 @@ runScenarios('prototype 2', 'normal', [
         wrapper.innerHTML = "<table><tr><td id='myTD'></td></tr></table>";
 
         return {
-          byAttr: NW.Dom.select('[id=myTD]', wrapper).map(el => el.getAttribute('id')),
-          byTag: NW.Dom.select('td', wrapper).map(el => el.getAttribute('id')),
-          byId: NW.Dom.select('#myTD', wrapper).map(el => el.getAttribute('id')),
+          byAttr: [...NW?.Dom?.select('[id=myTD]', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byTag: [...NW?.Dom?.select('td', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byId: [...NW?.Dom?.select('#myTD', wrapper) ?? []].map(el => el.getAttribute('id')),
         };
       });
 
@@ -496,7 +496,7 @@ runScenarios('prototype 2', 'normal', [
         document.body.appendChild(el);
 
         const nativeCount = el.querySelectorAll('ul li').length;
-        const nwCount = NW.Dom.select('ul li', el).length;
+        const nwCount = NW?.Dom?.select('ul li', el).length;
 
         document.body.removeChild(el);
         return { nativeCount, nwCount };
