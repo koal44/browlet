@@ -21,7 +21,6 @@ runScenarios('various', 'normal', [
   {
     name: 'native byTag fragment oracle handles selector-sensitive tag names',
     // status: 'only',
-    // engines: ['native'],
     markup: `
       <div id="root">
         <x-foo id="custom"></x-foo>
@@ -173,54 +172,6 @@ runScenarios('various', 'normal', [
     ],
   },
 
-  // {
-  //   name: ':scope test 1',
-  //   status: 'only',
-  //   engines: ['native'],
-  //   markupMode: 'html-document',
-  //   markup: `
-  //     <!doctype html>
-  //     <html id="html1">
-  //     <body id="body1">
-  //       <div id="container1">
-  //         <div id="subcontainer1" class="subcontainer">
-  //           <span id="item1" class="item"></span>
-  //           <span id="item2" class="item"></span>
-  //         </div>
-  //         <div id="subcontainer2" class="subcontainer">
-  //           <span id="item3" class="item"></span>
-  //           <span id="item4"></span>
-  //         </div>
-  //       </div>
-  //     </body>
-  //     </html>
-  //   `,
-  //   cases: [
-  //     { select: ':scope', ref: { by: 'document' }, expect: { ids: ['html1'] } },
-  //     { select: ':scope > .item', ref: { by: 'document' }, expect: { ids: [] } },
-  //     { select: ':scope > .item', ref: { by: 'id', id: 'subcontainer1' }, expect: { ids: ['item1', 'item2'] } },
-  //   ],
-  // },
-
-  // {
-  //   name: ':scope test 2',
-  //   status: 'only',
-  //   engines: ['native'],
-  //   markup: `
-  //     <div id="outer">
-  //       <div id="inner">
-  //         <span class="x"></span>
-  //       </div>
-  //     </div>
-  //   `,
-  //   cases: [
-  //     // inner.querySelectorAll('#outer .x')
-  //     { select: '#outer .x', ref: { by: 'id', id: 'inner' }, expect: { classes: ['x'] } },
-  //     // inner.querySelectorAll(':scope #outer .x')
-  //     { select: ':scope #outer .x', ref: { by: 'id', id: 'inner' }, expect: { ids: [] } },
-  //   ],
-  // },
-
   {
     name: ':scope native behavior in HTML document and element contexts',
     // status: 'only',
@@ -337,7 +288,6 @@ runScenarios('various', 'normal', [
 
   {
     name: ':scope native behavior in fragments and template content',
-    // engines: ['native'],
     // status: 'only',
     markupMode: 'html-document',
     markup: `
@@ -434,7 +384,6 @@ runScenarios('various', 'normal', [
   {
     name: ':scope native behavior in XML document contexts',
     // status: 'only',
-    engines: ['native'],
     markupMode: 'xml-document',
     markup: `
       <root id="root1" xmlns="http://example/default" xmlns:test="http://example/test">
@@ -503,7 +452,6 @@ runScenarios('various', 'normal', [
 
   {
     name: 'escaped colon type selector in HTML-created element',
-    engines: ['native'],
     markupMode: 'html-document',
     // status: 'only',
     markup: `
@@ -522,6 +470,146 @@ runScenarios('various', 'normal', [
     cases: [
       { select: 'test\\:item', ref: { by: 'document' }, expect: { ids: ['literal-colon-item'] } },
     ],
+  },
+
+  {
+    name: 'native probe: type selector qSA vs getElementsByTagName in HTML and XML',
+    // status: 'only',
+    status: 'skip', // exploratory test for understanding native engine behavior
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+      <body>
+        <div id="html-root"></div>
+      </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const htmlRoot = document.getElementById('html-root')!;
+
+        const addHtml = (name: string, id: string) => {
+          const el = document.createElement(name);
+          el.id = id;
+          htmlRoot.appendChild(el);
+        };
+
+        const xmlDoc = document.implementation.createDocument(null, 'root');
+        const xmlRoot = xmlDoc.documentElement;
+        xmlRoot.setAttribute('id', 'xml-root');
+        xmlRoot.setAttribute('xmlns:test', 'http://example/test');
+
+        const addXml = (qname: string, id: string, ns: string | null = null) => {
+          const el = xmlDoc.createElementNS(ns, qname);
+          el.setAttribute('id', id);
+          xmlRoot.appendChild(el);
+        };
+
+        // <div id="html-root">
+        //   <test.item id="html-dot"></test.item>
+        //   <test_item id="html-underscore"></test_item>
+        //   <test-item id="html-hyphen"></test-item>
+        //   <item id="html-item"></item>
+        //   <test:item id="html-colon"></test:item>
+        // </div>
+        //
+        // XML tree:
+        //
+        // <root id="xml-root" xmlns:test="http://example/test">
+        //   <test.item id="xml-dot" />
+        //   <test_item id="xml-underscore" />
+        //   <test-item id="xml-hyphen" />
+        //   <item id="xml-item" />
+        //   <test:item id="xml-ns-colon" />
+        // </root>
+
+        addHtml('test.item', 'html-dot');
+        addXml( 'test.item', 'xml-dot');
+
+        addHtml('test_item', 'html-underscore');
+        addXml( 'test_item', 'xml-underscore');
+
+        addHtml('test-item', 'html-hyphen');
+        addXml( 'test-item', 'xml-hyphen');
+
+        addHtml('item', 'html-item');
+        addXml( 'item', 'xml-item');
+
+        // Colon case: same visual qname, different DOM name model.
+        addHtml('test:item', 'html-colon');
+        addXml( 'test:item', 'xml-ns-colon', 'http://example/test');
+
+        // Local copy of CSS ident unescape for browser-native probe.
+        // Equivalent to cssIdentUnescape for the cases under test.
+        const cssIdentUnescapeLocal = (str: string): string =>
+          /\\/.test(str)
+            ? str.replace(/\\([0-9a-fA-F]{1,6}[\t\n\f\r ]?|.)/g, (_m, esc: string) => {
+                if (/^[0-9a-fA-F]/.test(esc)) {
+                  const cp = parseInt(esc, 16);
+                  return cp === 0 ? '\uFFFD' : String.fromCodePoint(cp);
+                }
+                return esc;
+              })
+            : str;
+
+        const ids = (nodes: Iterable<Element>): string[] =>
+          Array.from(nodes, el => el.id);
+
+        const qsaIds = (root: ParentNode, selector: string): string[] =>
+          ids(root.querySelectorAll(selector));
+
+        const tagIds = (root: Document | Element, name: string): string[] =>
+          ids(root.getElementsByTagName(name));
+
+        const assertSame = (label: string, actual: string[], expected: string[]) => {
+          if (actual.length !== expected.length || actual.some((id, i) => id !== expected[i])) {
+            throw new Error(`${label}\nexpected ${JSON.stringify(expected)}\nactual   ${JSON.stringify(actual)}`);
+          }
+        };
+
+        const assertPair = (
+          label: string,
+          root: Document | Element,
+          selector: string,
+          expectedQsa: string[],
+          expectedTag: string[],
+        ) => {
+          const tagName = cssIdentUnescapeLocal(selector);
+
+          assertSame(`${label} qSA(${selector})`, qsaIds(root, selector), expectedQsa);
+          assertSame(`${label} tag(${tagName})`, tagIds(root, tagName), expectedTag);
+        };
+
+        // Dot: escaped CSS type selector and DOM tag-name lookup agree in both HTML and XML.
+        assertPair('html dot', htmlRoot, 'test\\.item', ['html-dot'], ['html-dot']);
+        assertPair('xml dot',  xmlRoot,  'test\\.item', ['xml-dot'],  ['xml-dot']);
+
+        // Underscore: no escaping required; qSA and tag lookup agree.
+        assertPair('html underscore', htmlRoot, 'test_item', ['html-underscore'], ['html-underscore']);
+        assertPair('xml underscore',  xmlRoot,  'test_item', ['xml-underscore'],  ['xml-underscore']);
+
+        // Hyphen: no escaping required; qSA and tag lookup agree.
+        assertPair('html hyphen', htmlRoot, 'test-item', ['html-hyphen'], ['html-hyphen']);
+        assertPair('xml hyphen',  xmlRoot,  'test-item', ['xml-hyphen'],  ['xml-hyphen']);
+
+        // Bare item in XML qSA matches localName item in any namespace.
+        // getElementsByTagName('item') appears to do the same here.
+        assertPair('html item', htmlRoot, 'item', ['html-item'], ['html-item']);
+        assertPair('xml item',  xmlRoot,  'item', ['xml-item', 'xml-ns-colon'], ['xml-item']);
+
+        // Colon: this is the exception.
+        //
+        // HTML:
+        //   qSA('test\\:item') and getElementsByTagName('test:item') agree.
+        //
+        // XML:
+        //   qSA('test\\:item') does NOT match <test:item>,
+        //   but getElementsByTagName('test:item') DOES match by qualified name.
+        assertPair('html escaped colon', htmlRoot, 'test\\:item', ['html-colon'], ['html-colon']);
+        assertPair('xml escaped colon',  xmlRoot,  'test\\:item', [],            ['xml-ns-colon']);
+      });
+    },
   },
 
   {
@@ -561,7 +649,6 @@ runScenarios('various', 'normal', [
   {
     name: ':scope native behavior in DocumentFragment selector composition',
     // status: 'only',
-    // engines: ['native'],
     markup: `
       <div id="frag-source">
         <section id="frag-section" class="scope-root">
@@ -694,7 +781,6 @@ runScenarios('various', 'normal', [
   {
     name: 'native attribute-name selector edge cases',
     // status: 'only',
-    engines: ['native'],
     // browsers: ['webkit'],
     markup: `
       <div id="wrapper"></div>
@@ -744,7 +830,7 @@ runScenarios('various', 'normal', [
       // Non-ASCII identifiers should work directly.
       // föo = f + U+00F6 + o
       { select: '[föo]', expect: { ids: ['non-ascii-attr'] } },
-      { select: '[f\\F6 o]', expect: { ids: ['non-ascii-attr'] } },
+      { select: '[f\\F6 o]', expect: { ids: ['non-ascii-attr'] }, debug: false },
 
       // 名 = U+540D, 前 = U+524D
       // { select: '[名前]', expect: { ids: ['unicode-attr'] } },
@@ -753,9 +839,27 @@ runScenarios('various', 'normal', [
   },
 
   {
+    name: 'escaped colon attribute selector',
+    // status: 'only',
+    markup: `<div id="wrapper"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const wrapper = document.getElementById('wrapper')!;
+        const el = document.createElement('span');
+        el.id = 'colon-attr';
+        el.setAttribute('foo:bar', 'yes');
+        wrapper.appendChild(el);
+      });
+    },
+    cases: [
+      { select: '[foo:bar]', expect: { throws: true } },
+      { select: '[foo\\:bar]', expect: { ids: ['colon-attr'] } },
+    ],
+  },
+
+  {
     name: 'logical pseudo followed by functional pseudo',
     // status: 'only',
-    // engines: ['native'],
     markup: `
       <div id="root">
         <span id="s1" class="a"></span>
@@ -818,55 +922,235 @@ runScenarios('various', 'normal', [
     ],
   },
 
-  // {
-  //   name: 'attribute namespace selectors on xml attributes',
-  //   status: 'only',
-  //   // browsers: ['firefox'],
-  //   markupMode: 'xml-document',
-  //   markup: `
-  //     <root id="myroot">
-  //       <item id="xml-lang" xml:lang="en"/>
-  //       <item id="plain-lang" lang="en"/>
-  //       <item id="xml-space" xml:space="preserve"/>
-  //       <item id="plain-other" other="x"/>
-  //     </root>
-  //   `,
-  //   cases: [
-  //     { select: '[lang]', expect: { ids: ['plain-lang'] } },
-  //     { select: '[*|lang]', expect: { ids: ['xml-lang', 'plain-lang'] } },
-  //     { select: '[|lang]', expect: { ids: [] }, status: 'fixme' },
-  //     { select: '[*|l.ng]', expect: { throws: true } },
-  //     { select: '[*|l\\.ng]', expect: { count: 0 } },
-  //     { select: '[xml|lang]', expect: { throws: true } },
-  //     { select: '[*|*]', expect: { throws: true }, status: 'fixme' },
-  //     { select: '[xml:lang]', expect: { ids: ['xml-lang'] }, status : 'fixme' },
-  //     { select: '[xml\:lang]', expect: { ids: ['xml-lang'] }, status: 'fixme' },
-  //     { select: '[xml\\:lang]', expect: { ids: ['xml-lang'] }, status: 'fixme' },
-  //   ],
-  // },
+  {
+    name: 'attribute namespace selectors on xml attributes',
+    // status: 'only',
+    // browsers: ['firefox'],
+    markupMode: 'xml-document',
+    markup: `
+      <root id="myroot">
+        <item id="xml-lang" xml:lang="en"/>
+        <item id="plain-lang" lang="en"/>
+        <item id="xml-space" xml:space="preserve"/>
+        <item id="plain-other" other="x"/>
+      </root>
+    `,
+    cases: [
+      { select: '[lang]', expect: { ids: ['plain-lang'] } },
+      { select: '[*|lang]', expect: { ids: ['xml-lang', 'plain-lang'] } },
+      { select: '[|lang]', expect: { ids: ['plain-lang'] } },
+      { select: '[*|l.ng]', expect: { throws: true } },
+      { select: '[*|l\\.ng]', expect: { count: 0 } },
+      { select: '[xml|lang]', expect: { throws: true } },
 
-  // {
-  //   name: 'https://stackoverflow.com/questions/62209922/',
-  //   status: 'only',
-  //   // browsers: ['firefox'],
-  //   markupMode: 'xml-document',
-  //   markup: `
-  //     <!DOCTYPE html>
-  //     <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:test="http://example/test">
-  //     <head>
-  //       <title>Selectors</title>
-  //       <link href="selectors.css" rel="stylesheet" type="text/css" />
-  //     </head>
-  //     <body>
-  //       <test:p>Hello</test:p>
-  //     </body>
-  //     </html>
-  //   `,
-  //   cases: [
-  //     { select: '*|p', expect: { count: 1 } },
-  //     { select: 'test\\:p', expect: { count: 1 } },
-  //   ],
-  // },
+      // Chromium/Firefox throw; WebKit accepts this form.
+      { select: '[*|*]', expect: { throws: true }, status: 'fail' },
 
+      { select: '[xml:lang]', expect: { throws: true } },
+      { select: '[xml\:lang]', expect: { throws: true } },
+      { select: '[xml\\:lang]', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'xml type selectors with XHTML default namespace and foreign prefix',
+    // status: 'only',
+    // browsers: ['firefox'],
+    markupMode: 'xml-document',
+    markup: `
+      <!DOCTYPE html>
+      <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:test="http://example/test">
+      <head>
+        <title>Selectors</title>
+        <link href="selectors.css" rel="stylesheet" type="text/css" />
+      </head>
+      <body>
+        <test:p>Hello</test:p>
+      </body>
+      </html>
+    `,
+    cases: [
+      { select: '*|p', expect: { count: 1 } },
+      { select: 'test\\:p', expect: { count: 0 } },
+      { select: 'test|p', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'callback compile cache does not leak across select calls',
+    // status: 'only',
+    markup: `
+      <div id="d">
+        <span id="a" class="x"></span>
+        <span id="b" class="x"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const calls: string[] = [];
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        // First compile/cache without callback.
+        const plain = nwdom.select('#d .x', document);
+
+        // Then same selector with callback.
+        const withCb = nwdom.select('#d .x', document, (el: Element) => {
+          calls.push(el.id);
+          return false;
+        });
+
+        if (plain.length !== 2) throw new Error(`plain length ${plain.length}`);
+        if (withCb.length !== 1) throw new Error(`withCb length ${withCb.length}`);
+        if (calls.join(',') !== 'a') throw new Error(`callback calls ${calls.join(',')}`);
+      });
+    },
+  },
+
+  {
+    name: 'callback compile cache does not leak into later non-callback select',
+    // status: 'only',
+    markup: `
+      <div id="d">
+        <span id="a" class="x"></span>
+        <span id="b" class="x"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const calls: string[] = [];
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        const withCb = nwdom.select('#d .x', document, (el: Element) => {
+          calls.push(el.id);
+          return false;
+        });
+
+        const plain = nwdom.select('#d .x', document);
+
+        if (withCb.length !== 1) throw new Error(`withCb length ${withCb.length}`);
+        if (plain.length !== 2) throw new Error(`plain length ${plain.length}`);
+        if (calls.join(',') !== 'a') throw new Error(`callback calls ${calls.join(',')}`);
+      });
+    },
+  },
+
+  {
+    name: 'select callback order and early stop',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="a" class="x"></span>
+        <span id="b" class="x"></span>
+        <span id="c" class="x"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const calls: string[] = [];
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        const results = nwdom.select('#root > .x', document, (el: Element) => {
+          calls.push(el.id);
+          return el.id !== 'b';
+        });
+
+        const resultIds = [...results].map((el: Element) => el.id);
+
+        if (calls.join(',') !== 'a,b') {
+          throw new Error(`Expected callback calls a,b; got ${calls.join(',')}`);
+        }
+
+        if (resultIds.join(',') !== 'a,b') {
+          throw new Error(`Expected results a,b; got ${resultIds.join(',')}`);
+        }
+      });
+    },
+  },
+
+  {
+    name: 'select callback false does not cache partial results for later callbacks',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="a"></span>
+        <span id="b"></span>
+        <span id="c"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        const firstCalls: string[] = [];
+        const first = nwdom.select('#a, #b, #c', document, (el: Element) => {
+          firstCalls.push(el.id);
+          return false;
+        });
+
+        const secondCalls: string[] = [];
+        const second = nwdom.select('#a, #b, #c', document, (el: Element) => {
+          secondCalls.push(el.id);
+          return true;
+        });
+
+        const firstIds = [...first].map((el: Element) => el.id);
+        const secondIds = [...second].map((el: Element) => el.id);
+
+        if (firstCalls.join(',') !== 'a') {
+          throw new Error(`Expected first callback calls a; got ${firstCalls.join(',')}`);
+        }
+
+        if (firstIds.join(',') !== 'a') {
+          throw new Error(`Expected first results a; got ${firstIds.join(',')}`);
+        }
+
+        if (secondCalls.join(',') !== 'a,b,c') {
+          throw new Error(`Expected second callback calls a,b,c; got ${secondCalls.join(',')}`);
+        }
+
+        if (secondIds.join(',') !== 'a,b,c') {
+          throw new Error(`Expected second results a,b,c; got ${secondIds.join(',')}`);
+        }
+      });
+    },
+  },
+
+  {
+    name: 'select callback false stops across selector groups',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="a" class="x"></span>
+        <span id="b" class="y"></span>
+        <span id="c" class="z"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const calls: string[] = [];
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        const results = nwdom.select('#a, #b, #c', document, (el: Element) => {
+          calls.push(el.id);
+          return false;
+        });
+
+        const resultIds = [...results].map((el: Element) => el.id);
+
+        if (calls.join(',') !== 'a') {
+          throw new Error(`Expected callback calls a; got ${calls.join(',')}`);
+        }
+
+        if (resultIds.join(',') !== 'a') {
+          throw new Error(`Expected results a; got ${resultIds.join(',')}`);
+        }
+      });
+    },
+  },
 
 ]);

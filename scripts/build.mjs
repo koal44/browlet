@@ -1,16 +1,5 @@
 import fs from 'node:fs';
 
-// list of internal exported functions/constants
-const EXPORT_FUNCTIONS = new Set([
-  'parse', 'initSnapshot', 'codePointToUTF16', 'stringFromCodePoint', 'decodeAttrForRegex',
-  'decodeCssEscapes', 'unescapeIdentifier', 'cssEscape', 'buildRex', 'matchLogicalSelector',
-  'splitSelectorGroups',
-]);
-
-const EXPORT_CONSTANTS = new Set([
-  'DEFAULT_CONFIG', 'DEFAULT_EXTENSIONS'
-]);
-
 const outFile = 'dist/nwsapi.js';
 const pkgFile = 'package.json';
 
@@ -21,13 +10,8 @@ let source = fs.readFileSync(outFile, 'utf8');
 source = source.replaceAll('__VERSION__', version);
 
 source = source.replace(
-  /(^|\n)export\s+function\s+([A-Za-z_$][\w$]*)\s*\(/g,
-  (match, prefix, name) => EXPORT_FUNCTIONS.has(name) ? `${prefix}function ${name}(` : match
-);
-
-source = source.replace(
-  /(^|\n)export\s+const\s+([A-Za-z_$][\w$]*)\s*=/g,
-  (match, prefix, name) => EXPORT_CONSTANTS.has(name) ? `${prefix}const ${name} =` : match
+  /(^|\n)export\s+(function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g,
+  '$1$2 $3'
 );
 
 const banner = `/*

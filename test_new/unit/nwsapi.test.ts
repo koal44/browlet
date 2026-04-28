@@ -1,9 +1,8 @@
 import { describe, expect, it, test } from 'vitest';
 import {
-  buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, unescapeIdentifier,
-  decodeCssEscapes, decodeAttrForRegex, cssEscape,
-  matchLogicalSelector,
-  splitSelectorGroups,
+  buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
+  escapeRegexAttrValue, cssIdentEscape, matchLogicalSelector, splitSelectorGroups,
+  escapeRegExp,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -162,77 +161,120 @@ describe('Rex selector splitting helpers', () => {
   });
 });
 
-describe('decodeCssEscapes', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
+// describe('decodeCssEscapes', () => {
+//   const rex = buildRex(DEFAULT_EXTENSIONS);
 
-  it('matches CSS escape sequences and raw quotes for escape decoding', () => {
-    expect(matchRe0(rex.FixEscapes, '\\e9')).toEqual(['\\e9']);
-    expect(matchRe0(rex.FixEscapes, '\\31 23')).toEqual(['\\31 ']);
-    expect(matchRe0(rex.FixEscapes, '\\.')).toEqual(['\\.']);
-    expect(matchRe0(rex.FixEscapes, '"')).toEqual(['"']);
-    expect(matchRe0(rex.FixEscapes, "'")).toEqual(["'"]);
-  });
+//   it('matches CSS escape sequences and raw quotes for escape decoding', () => {
+//     expect(matchRe0(rex.FixEscapes, '\\e9')).toEqual(['\\e9']);
+//     expect(matchRe0(rex.FixEscapes, '\\31 23')).toEqual(['\\31 ']);
+//     expect(matchRe0(rex.FixEscapes, '\\.')).toEqual(['\\.']);
+//     expect(matchRe0(rex.FixEscapes, '"')).toEqual(['"']);
+//     expect(matchRe0(rex.FixEscapes, "'")).toEqual(["'"]);
+//   });
 
-  it('characterizes CSS escape decoding used by attribute regex generation', () => {
-    expect(decodeCssEscapes('\\e9', rex)).toBe('\\u00e9');
-    expect(decodeCssEscapes('foo\\"bar', rex)).toBe('foo\\"bar');
-  });
-});
+//   it('characterizes CSS escape decoding used by attribute regex generation', () => {
+//     expect(decodeCssEscapes('\\e9', rex)).toBe('\\u00e9');
+//     expect(decodeCssEscapes('foo\\"bar', rex)).toBe('foo\\"bar');
+//   });
 
-describe('decodeAttrForRegex', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
+//   it('decodes CSS hex escapes to actual characters', () => {
+//     const rex = buildRex(DEFAULT_EXTENSIONS);
+//     expect(decodeCssEscapes('f\\F6 o', rex)).toBe('föo');
+//   });
+// });
 
-  function matchesPrepared(pattern: string, value: string): boolean {
-    const re = new RegExp('^' + decodeAttrForRegex(pattern, rex) + '$');
-    return re.test(value);
+describe('attribute value regex preparation', () => {
+  function attrValuePatternSource(rawAttrVal: string): string {
+    return escapeRegExp(cssIdentUnescape(rawAttrVal));
   }
 
-  it('escapes regex metacharacters while preserving generated escape sequences', () => {
-    expect(decodeAttrForRegex('a.b', rex)).toBe('a\\.b');
-    expect(decodeAttrForRegex('[x]', rex)).toBe('\\[x\\]');
-    expect(decodeAttrForRegex('a/b', rex)).toBe('a\\/b');
+  function makeAttrValueRegex(rawAttrVal: string, p1 = '^', p2 = '$', flags = ''): RegExp {
+    const source = `${p1}${attrValuePatternSource(rawAttrVal)}${p2}`;
 
-    // CSS escapes are decoded into generated regex-source escapes,
-    // and those backslashes must remain meaningful in the generated regex.
-    expect(decodeAttrForRegex('\\e9', rex)).toBe('\\u00e9');
-    expect(decodeAttrForRegex('foo\\"bar', rex)).toBe('foo\\"bar');
+    // Mirror generated selector code:
+    // new RegExp(JSON.stringify(source), JSON.stringify(flags))
+    return new RegExp(JSON.parse(JSON.stringify(source)), JSON.parse(JSON.stringify(flags)));
+  }
+
+  function matches(rawAttrVal: string, actual: string, p1 = '^', p2 = '$', flags = ''): boolean {
+    return makeAttrValueRegex(rawAttrVal, p1, p2, flags).test(actual);
+  }
+
+  it('decodes CSS escapes before escaping the value for regex syntax', () => {
+    expect(attrValuePatternSource('\\e9')).toBe('é');
+    expect(attrValuePatternSource('\\31 23')).toBe('123');
+    expect(attrValuePatternSource('foo\\"bar')).toBe('foo"bar');
+    expect(attrValuePatternSource('foo\\\\bar')).toBe('foo\\\\bar');
+    expect(attrValuePatternSource('foo\\a bar')).toBe('foo\nbar');
   });
 
-  it('matches CSS-escaped attribute values', () => {
-    expect(matchesPrepared('\\e9', 'é')).toBe(true);
-    expect(matchesPrepared('\\31 23', '123')).toBe(true);
-    expect(matchesPrepared('foo\\"bar', 'foo"bar')).toBe(true);
+  it('prevents selector values from becoming regex syntax', () => {
+    expect(matches('a.b', 'a.b')).toBe(true);
+    expect(matches('a.b', 'acb')).toBe(false);
+
+    expect(matches('a+b', 'a+b')).toBe(true);
+    expect(matches('a+b', 'aaab')).toBe(false);
+
+    expect(matches('[x]', '[x]')).toBe(true);
+    expect(matches('[x]', 'x')).toBe(false);
+
+    expect(matches('a|b', 'a|b')).toBe(true);
+    expect(matches('a|b', 'a')).toBe(false);
+    expect(matches('a|b', 'b')).toBe(false);
   });
 
-  it('does not let regex metacharacters become regex syntax', () => {
-    expect(matchesPrepared('a.b', 'a.b')).toBe(true);
-    expect(matchesPrepared('a.b', 'acb')).toBe(false);
-
-    expect(matchesPrepared('a+b', 'a+b')).toBe(true);
-    expect(matchesPrepared('a+b', 'aaab')).toBe(false);
-
-    expect(matchesPrepared('[x]', '[x]')).toBe(true);
-    expect(matchesPrepared('[x]', 'x')).toBe(false);
+  it('handles decoded line terminators through RegExp string construction', () => {
+    expect(matches('foo\\a bar', 'foo\nbar')).toBe(true);
+    expect(matches('foo\\00000d bar', 'foo\rbar')).toBe(true);
   });
 
-  it('escapes slash because generated code uses regex literal syntax', () => {
-    expect(matchesPrepared('a/b', 'a/b')).toBe(true);
-    expect(decodeAttrForRegex('a/b', rex)).toBe('a\\/b');
+  it('can be embedded through JSON.stringify for generated RegExp construction', () => {
+    const source = `^${attrValuePatternSource('foo\\a bar')}$`;
+    const expr = `new RegExp(${JSON.stringify(source)})`;
+    const re = Function(`return ${expr}`)() as RegExp;
+
+    expect(re.test('foo\nbar')).toBe(true);
   });
 
-  it.each([
-    'plain',
-    'a.b',
-    'a+b',
-    '[x]',
-    '(x)',
-    'a/b',
-    'a|b',
-    'a$b',
-    '^x',
-  ])('round-trips CSS-escaped selector value for %s', (literal) => {
-    const selectorValue = cssEscape(literal);
-    expect(matchesPrepared(selectorValue, literal)).toBe(true);
+  it('does not need slash escaping when using new RegExp source strings', () => {
+    expect(attrValuePatternSource('a/b')).toBe('a/b');
+    expect(matches('a/b', 'a/b')).toBe(true);
+  });
+
+  it('supports operator-style regex templates', () => {
+    // ^= starts with
+    expect(matches('foo.bar', 'foo.bar-baz', '^', '')).toBe(true);
+    expect(matches('foo.bar', 'xfoo.bar', '^', '')).toBe(false);
+
+    // *= contains
+    expect(matches('foo.bar', 'x foo.bar y', '', '')).toBe(true);
+    expect(matches('foo.bar', 'x fooXbar y', '', '')).toBe(false);
+
+    // $= ends with
+    expect(matches('foo.bar', 'baz-foo.bar', '', '$')).toBe(true);
+    expect(matches('foo.bar', 'foo.bar-baz', '', '$')).toBe(false);
+  });
+
+  it('round-trips escaped selector values into literal regex matches', () => {
+    for (const literal of [
+      'plain',
+      'a.b',
+      'a+b',
+      '[x]',
+      '(x)',
+      'a/b',
+      'a|b',
+      'a$b',
+      '^x',
+      'foo"bar',
+      "foo'bar",
+      'foo\\bar',
+      'foo\nbar',
+      'é',
+    ]) {
+      const selectorValue = cssIdentEscape(literal);
+      expect(matches(selectorValue, literal)).toBe(true);
+    }
   });
 });
 
@@ -497,6 +539,14 @@ describe('Rex pseudo-class patterns', () => {
     expectCaptures(rex.Patterns.attribute, '[foo\\:bar]', ['foo\\:bar', undefined, undefined, undefined, undefined, '']);
   });
 
+  it('parses attribute selector components with namespace prefixes', () => {
+    expectCaptures(rex.Patterns.attribute, '[foo|href]', ['foo|href', undefined, undefined, undefined, undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[*|href]', ['*|href', undefined, undefined, undefined, undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[|href]', ['|href', undefined, undefined, undefined, undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[xlink|href]', ['xlink|href', undefined, undefined, undefined, undefined, '']);
+    // expectCaptures(rex.Patterns.attribute, '#attr-presence [*|TiTlE]', []);
+  });
+
   it('detects RTL character ranges used by the engine heuristic', () => {
     expect(testRe(rex.RTL, 'مرحبا')).toBe(true);
     expect(testRe(rex.RTL, 'שלום')).toBe(true);
@@ -608,7 +658,122 @@ describe('Rex optimizer', () => {
 describe('unescapeIdentifier', () => {
   const rex = buildRex(DEFAULT_EXTENSIONS);
   it('should unescape valid identifiers', () => {
-    expect(unescapeIdentifier('[data-nwsapi-scope] > *|item', rex)).toBe('[data-nwsapi-scope] > *|item');
+    expect(cssIdentUnescape('[data-nwsapi-scope] > *|item')).toBe('[data-nwsapi-scope] > *|item');
+  });
+});
+
+describe('cssIdentEscape', () => {
+  it('escapes identifier syntax characters', () => {
+    expect(cssIdentEscape('.foo#bar')).toBe('\\.foo\\#bar');
+    expect(cssIdentEscape('()[]{}')).toBe('\\(\\)\\[\\]\\{\\}');
+    expect(cssIdentEscape('foo.bar')).toBe('foo\\.bar');
+    expect(cssIdentEscape('foo+bar')).toBe('foo\\+bar');
+    expect(cssIdentEscape('foo[bar]')).toBe('foo\\[bar\\]');
+    expect(cssIdentEscape('foo\\bar')).toBe('foo\\\\bar');
+  });
+
+  it('preserves ordinary identifier characters', () => {
+    expect(cssIdentEscape('foo')).toBe('foo');
+    expect(cssIdentEscape('foo_bar')).toBe('foo_bar');
+    expect(cssIdentEscape('foo-bar')).toBe('foo-bar');
+    expect(cssIdentEscape('--a')).toBe('--a');
+    expect(cssIdentEscape('a0b9')).toBe('a0b9');
+  });
+
+  it('handles leading digit rules', () => {
+    expect(cssIdentEscape('0')).toBe('\\30 ');
+    expect(cssIdentEscape('1abc')).toBe('\\31 abc');
+    expect(cssIdentEscape('-1abc')).toBe('-\\31 abc');
+    expect(cssIdentEscape('a1')).toBe('a1');
+  });
+
+  it('escapes a lone hyphen', () => {
+    expect(cssIdentEscape('-')).toBe('\\-');
+  });
+
+  it('handles NUL, controls, and delete', () => {
+    expect(cssIdentEscape('\0')).toBe('\ufffd');
+    expect(cssIdentEscape('\n')).toBe('\\a ');
+    expect(cssIdentEscape('\r')).toBe('\\d ');
+    expect(cssIdentEscape('\f')).toBe('\\c ');
+    expect(cssIdentEscape('\t')).toBe('\\9 ');
+    expect(cssIdentEscape(String.fromCharCode(0x7f))).toBe('\\7f ');
+  });
+
+  it('preserves non-ASCII characters', () => {
+    expect(cssIdentEscape('föo')).toBe('föo');
+    expect(cssIdentEscape('你好')).toBe('你好');
+  });
+
+  it('terminates hex escapes so following hex digits are not consumed', () => {
+    expect(cssIdentEscape('1a')).toBe('\\31 a');
+    expect(cssIdentEscape('\na')).toBe('\\a a');
+  });
+});
+
+describe('cssIdentUnescape', () => {
+  it('decodes simple escaped punctuation', () => {
+    expect(cssIdentUnescape('foo\\.bar')).toBe('foo.bar');
+    expect(cssIdentUnescape('foo\\#bar')).toBe('foo#bar');
+    expect(cssIdentUnescape('foo\\+bar')).toBe('foo+bar');
+    expect(cssIdentUnescape('\\(\\)\\[\\]\\{\\}')).toBe('()[]{}');
+  });
+
+  it('decodes hex escapes', () => {
+    expect(cssIdentUnescape('\\30 ')).toBe('0');
+    expect(cssIdentUnescape('\\31 abc')).toBe('1abc');
+    expect(cssIdentUnescape('-\\31 abc')).toBe('-1abc');
+    expect(cssIdentUnescape('f\\F6 o')).toBe('föo');
+    expect(cssIdentUnescape('f\\f6 o')).toBe('föo');
+    expect(cssIdentUnescape('f\\0000F6 o')).toBe('föo');
+  });
+
+  it('consumes optional whitespace after hex escapes', () => {
+    expect(cssIdentUnescape('\\31 a')).toBe('1a');
+    expect(cssIdentUnescape('\\31  a')).toBe('1 a');
+    expect(cssIdentUnescape('\\000031a')).toBe('1a');
+  });
+
+  it('decodes escaped quotes and backslashes as semantic identifier characters', () => {
+    expect(cssIdentUnescape('\\"')).toBe('"');
+    expect(cssIdentUnescape("\\'")).toBe("'");
+    expect(cssIdentUnescape('foo\\\\bar')).toBe('foo\\bar');
+  });
+
+  it('replaces NUL code point escapes with U+FFFD if following CSS parser behavior', () => {
+    expect(cssIdentUnescape('\\0 ')).toBe('\ufffd');
+    expect(cssIdentUnescape('\\000000 ')).toBe('\ufffd');
+  });
+
+  it('decodes escaped identifiers back to their semantic value', () => {
+    const cases = [
+      'foo',
+      'foo.bar',
+      '.foo#bar',
+      '()[]{}',
+      '--a',
+      '-1abc',
+      '1abc',
+      'a0b9',
+      'foo_bar',
+      'foo-bar',
+      'föo',
+      '你好',
+      'foo\\bar',
+      '"quote"',
+      "'quote'",
+      '\n',
+      '\t',
+      String.fromCharCode(0x7f),
+    ];
+
+    for (const value of cases) {
+      expect(cssIdentUnescape(cssIdentEscape(value))).toBe(value);
+    }
+  });
+
+  it('round-trips NUL as U+FFFD, matching CSS.escape behavior', () => {
+    expect(cssIdentUnescape(cssIdentEscape('\0'))).toBe('\ufffd');
   });
 });
 
@@ -701,6 +866,20 @@ describe('parse validator', () => {
   it('validates nested logical selectors inside functional pseudos', () => {
     expectParse(':is(:where(:not(.a, .b)), .c)', [':is(:where(:not(.a, .b)), .c)']);
     expectParse(':has(:is(.a, .b):not(.c))', [':has(:is(.a, .b):not(.c))']);
+  });
+
+  it('rejects raw colon in attribute names', () => {
+    expectParseRejects('[foo:bar]');
+  });
+
+  it('accepts escaped colon in attribute names', () => {
+    expectParse('[foo\\:bar]', ['[foo\\:bar]']);
+  });
+
+  it('accepts CSS namespace attribute syntax', () => {
+    expectParse('[*|href]', ['[*|href]']);
+    expectParse('[|href]', ['[|href]']);
+    expectParse('[xlink|href]', ['[xlink|href]']);
   });
 });
 

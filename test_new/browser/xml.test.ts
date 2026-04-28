@@ -4,6 +4,7 @@ import { runScenarios } from "./harness/scenarios";
 runScenarios('xml', 'normal', [
   {
     name: 'jsdom/svg-test',
+    // status: 'only',
     markup: `
       <!doctype html>
       <html>
@@ -13,8 +14,31 @@ runScenarios('xml', 'normal', [
     markupMode: 'html-document',
     cases: [
       { select: '[*|href]', expect: { count: 1 } },
-      { select: '[xlink:href=foo]', expect: { count: 1 }, status: 'fixme' },
-      { select: '[xlink\\:href=foo]', expect: { count: 1 }, status: 'fixme' },
+      { select: '[|href]', expect: { count: 0 } },
+      { select: '[xlink:href=foo]', expect: { throws: true } },
+      { select: '[*|href="foo"]', expect: { count: 1 } },
+      { select: '[xlink\\:href=foo]', expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'jsdom/svg-test in xml mode',
+    // status: 'only',
+    markup: `<?xml version="1.0"?>
+      <html xmlns="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <body>
+          <svg xmlns="http://www.w3.org/2000/svg" xlink:href="foo" />
+        </body>
+      </html>
+    `,
+    markupMode: 'xml-document',
+    cases: [
+      { select: '[*|href]', expect: { count: 1 } },
+      { select: '[xlink:href=foo]', expect: { throws: true } },
+      { select: '[xlink|href=foo]', expect: { throws: true } },
+      { select: '[xlink|href="foo"]', expect: { throws: true } },
+      { select: '[*|href="foo"]', expect: { count: 1 } },
+      { select: '[xlink\\:href=foo]', expect: { count: 0 } },
     ],
   },
 
@@ -47,8 +71,8 @@ runScenarios('xml', 'normal', [
       </cp:coreProperties>`,
     markupMode: 'xml-document',
     cases: [
-      { select: 'coreProperties', expect: { count: 1 }, status: 'fixme' },
-      { select: '*|coreProperties', expect: { count: 1 }, status: 'fixme' },
+      { select: 'coreProperties', expect: { count: 1 } },
+      { select: '*|coreProperties', expect: { count: 1 } },
       { select: '|coreProperties', expect: { count: 0 } },
     ],
   },

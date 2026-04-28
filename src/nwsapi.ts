@@ -228,13 +228,12 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
     },
 
     clearDebug() {
-      _snap.debugCompile = undefined;
       _snap.debugCollect = undefined;
     },
 
     printDebug() {
-      const docDesc = describeQueryContext(_snap.doc);
-      const fromDesc = describeQueryContext(_snap.from);
+      const docDesc = describeContext(_snap.doc);
+      const fromDesc = describeContext(_snap.from);
       return JSON.stringify({
         snapshot: {
           isHtml: _snap.isHtml,
@@ -245,7 +244,6 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
           root: { summary: describeElement(_snap.root) },
         },
         debugCollect: _snap.debugCollect,
-        debugCompile: _snap.debugCompile,
       }, null, 2);
     },
 
@@ -270,7 +268,7 @@ export const DEFAULT_EXTENSIONS: NwsExtensions = {
   combinators: ['>', '+', '~', ' ', '\t'],
 };
 
-export function initSnapshot(doc: Document): SnapshotState {
+export function initSnapshot(doc: Document): Snapshot {
   const snap = {
     doc: doc,
     from: doc,
@@ -318,7 +316,9 @@ export function initSnapshot(doc: Document): SnapshotState {
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
-    hasAttributeNS: undefined as any,
+    // hasAttributeNS: undefined as any,
+    hasAttribute: undefined as any,
+    getAttribute: undefined as any,
   };
 
   snap.re = buildRex(snap.ext);
@@ -327,19 +327,11 @@ export function initSnapshot(doc: Document): SnapshotState {
   snap.match = (sel: string, context: Element, cb?: QueryCallback | null) => matchRaw(sel, context, cb ?? null, snap);
   snap.select = (sel: string, context?: QueryContext, cb?: QueryCallback | null) => selectRaw(sel, context ?? snap.doc, cb ?? null, snap);
   snap.ancestor = (sel: string, context: Element, cb?: QueryCallback | null) => ancestorRaw(sel, context, cb ?? null, snap);
-  snap.hasAttributeNS = (e: Element, name: string) => hasAttributeNS(e, name, snap);
+  // snap.hasAttributeNS = (e: Element, name: string) => hasAttributeNS(e, name, snap);
+  snap.hasAttribute = (element: Element, ns: string | null, local: string) => hasAttribute(element, ns, local, snap);
+  snap.getAttribute = (element: Element, ns: string | null, local: string) => getAttribute(element, ns, local, snap);
 
   return snap;
-}
-
-function concatCall(nodes: Element[], callback: QueryCallback): Element[] {
-  const list: Element[] = [];
-  for (let i = 0, l = nodes.length; i < l; ++i) {
-    const node = nodes[i];
-    list.push(node);
-    if (callback(node) === false) break;
-  }
-  return list;
 }
 
 function concatList(list: Element[], nodes: ArrayLike<Element>): Element[] {
@@ -402,7 +394,7 @@ function getNamespace(doc: Document): string | null {
   return doc.documentElement ? doc.documentElement.namespaceURI : null;
 }
 
-function updateSnapshot(snap: SnapshotState, ctx: QueryContext, force = false): SnapshotState {
+function updateSnapshot(snap: Snapshot, ctx: QueryContext, force = false): Snapshot {
   const doc = ctx.ownerDocument ?? ctx;
 
   if (force || snap.doc !== doc) {
@@ -418,7 +410,7 @@ function updateSnapshot(snap: SnapshotState, ctx: QueryContext, force = false): 
 }
 
 // convert single codepoint to UTF-16 encoding
-export function codePointToUTF16(codePoint: number): string {
+export function codePointToJsEscape(codePoint: number): string {
   // out of range, use replacement character
   if (codePoint < 1 || codePoint > 0x10ffff ||
     (codePoint > 0xd7ff && codePoint < 0xe000)) {
@@ -435,111 +427,95 @@ export function codePointToUTF16(codePoint: number): string {
 }
 
 // convert single codepoint to string
-export function stringFromCodePoint(codePoint: number): string {
-  // out of range, use replacement character
-  if (codePoint < 1 || codePoint > 0x10ffff ||
-    (codePoint > 0xd7ff && codePoint < 0xe000)) {
-    return '\ufffd';
+export function stringFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ) {
+    return "\ufffd";
   }
-  if (codePoint < 0x10000) {
-    return String.fromCharCode(codePoint);
-  }
-  return String.fromCodePoint ?
-    String.fromCodePoint(codePoint) :
-    String.fromCharCode(
-      ((codePoint - 0x10000) >> 0x0a) + 0xd800,
-      ((codePoint - 0x10000) % 0x400) + 0xdc00);
+  return String.fromCodePoint(cp);
 }
 
-export function decodeCssEscapes(ident: string, RE: Rex): string {
-  return RE.HasEscapes.test(ident)
-    ? ident.replace(RE.FixEscapes, (substring, p1, p2) =>
-        // unescaped " or '
-        p2 ? '\\' + p2 :
-        // javascript strings are UTF-16 encoded
-        RE.HexNumbers.test(p1) ? codePointToUTF16(parseInt(p1, 16)) :
-        // \' \"
-        RE.EscOrQuote.test(p1) ? substring :
-        // \g \h \. \# etc
-        p1)
-    : ident;
+// export function decodeCssEscapes(ident: string, RE: Rex): string {
+//   return RE.HasEscapes.test(ident)
+//     ? ident.replace(RE.FixEscapes, (substring, p1, p2) =>
+//         // unescaped " or '
+//         p2 ? '\\' + p2 :
+//         // javascript strings are UTF-16 encoded
+//         RE.HexNumbers.test(p1) ? stringFromCodePoint(parseInt(p1, 16)) :
+//         // \' \"
+//         RE.EscOrQuote.test(p1) ? substring :
+//         // \g \h \. \# etc
+//         p1)
+//     : ident;
+// }
+
+// // convert escape sequence in a CSS string or identifier
+// // to javascript string with characters representations
+export function cssIdentUnescape(str: string): string {
+  return /\\/.test(str) ?
+    str.replace(/\\([0-9a-fA-F]{1,6}\s?|.)/g, (_match, escaped: string) => {
+      if (/^[0-9a-fA-F]/.test(escaped)) {
+        const codePoint = parseInt(escaped, 16);
+        return codePoint === 0 ? '\uFFFD' : stringFromCodePoint(codePoint);
+      }
+      // CSS simple escape: backslash + non-hex char => that char.
+      return escaped;
+    }) :
+    str;
 }
 
-// convert escape sequence in a CSS string or identifier
-// to javascript string with characters representations
-export function unescapeIdentifier(str: string, RE: Rex): string {
-  return RE.HasEscapes.test(str) ?
-    str.replace(RE.FixEscapes, (substring, p1, p2) =>
-      // unescaped " or '
-      p2 ? p2 :
-      // javascript strings are UTF-16 encoded
-      RE.HexNumbers.test(p1) ? stringFromCodePoint(parseInt(p1, 16)) :
-      // \' \"
-      RE.EscOrQuote.test(p1) ? substring :
-      // \g \h \. \# etc
-      p1
-    ) : str;
-}
-
-export function cssEscape(ident: string): string {
-  if (typeof CSS !== 'undefined' && CSS.escape) {
+export function cssIdentEscape(ident: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(ident);
   }
 
-  const string = String(ident);
-  const length = string.length;
-  let index = -1;
-  let result = '';
-  const firstCodeUnit = string.charCodeAt(0);
+  if (ident === '-') return '\\-';
 
-  if (length === 1 && firstCodeUnit === 0x002D) {
-    return '\\' + string;
+  let out = '';
+  const first = ident.charCodeAt(0);
+
+  for (let i = 0, l = ident.length; i < l; i++) {
+    const c = ident.charCodeAt(i);
+    const digit = c >= 0x30 && c <= 0x39;
+    out +=
+      c === 0x00 ?                         '\uFFFD' :               // NUL
+      c >= 0x01 && c <= 0x1F ?             `\\${c.toString(16)} ` : // control chars
+      c === 0x7F ?                         `\\${c.toString(16)} ` : // delete
+      digit && i === 0 ?                   `\\${c.toString(16)} ` : // leading digit
+      digit && i === 1 && first === 0x2D ? `\\${c.toString(16)} ` : // second char digit after -
+      digit ?                              ident.charAt(i) :        // 0-9
+      c >= 0x80 ?                          ident.charAt(i) :        // non-ASCII
+      c === 0x2D || c === 0x5F ?           ident.charAt(i) :        // - or _
+      c >= 0x41 && c <= 0x5A ?             ident.charAt(i) :        // A-Z
+      c >= 0x61 && c <= 0x7A ?             ident.charAt(i) :        // a-z
+                                           `\\${ident.charAt(i)}`;  // ASCII punctuation / syntax
   }
-
-  while (++index < length) {
-    const codeUnit = string.charCodeAt(index);
-
-    if (codeUnit === 0x0000) {
-      result += '\uFFFD';
-      continue;
-    }
-
-    if (
-      (codeUnit >= 0x0001 && codeUnit <= 0x001F) ||
-      codeUnit === 0x007F ||
-      (index === 0 && codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
-      (index === 1 && codeUnit >= 0x0030 && codeUnit <= 0x0039 && firstCodeUnit === 0x002D)
-    ) {
-      result += '\\' + codeUnit.toString(16) + ' ';
-      continue;
-    }
-
-    if (
-      codeUnit >= 0x0080 ||
-      codeUnit === 0x002D ||
-      codeUnit === 0x005F ||
-      (codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
-      (codeUnit >= 0x0041 && codeUnit <= 0x005A) ||
-      (codeUnit >= 0x0061 && codeUnit <= 0x007A)
-    ) {
-      result += string.charAt(index);
-      continue;
-    }
-
-    result += '\\' + string.charAt(index);
-  }
-
-  return result;
+  return out;
 }
 
-function escapeRegExp(pattern: string): string {
-  // return pattern.replace(/[\\^$.,*+?()[\]{}|/]/g, '\\$&');
+export function cssStringEscape(str: string, quote: '"' | "'" = '"'): string {
+  let out = '';
+  for (let i = 0, l = str.length; i < l; i++) {
+    const c = str.charCodeAt(i);
+    out +=
+      c === 0x00 ?                  `\uFFFD` :               // NUL
+      c >= 0x01 && c <= 0x1F ?      `\\${c.toString(16)} ` : // control chars
+      c === 0x7F ?                  `\\7f ` :                // delete
+      c === 0x22 && quote === '"' ? `\\"` :                  // "
+      c === 0x27 && quote === "'" ? `\\'` :                  // '
+      c === 0x5C ?                  `\\\\` :                 // backslash
+                                    str.charAt(i);           // everything else
+  }
+  return out;
+}
+
+export function escapeRegExp(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function decodeAttrForRegex(value: string, rex: Rex): string {
-  // return escapeRegExp(decodeCssEscapes(value, rex));
-  return decodeCssEscapes(value, rex).replace(rex.RegExpChar, '\\$&');
+export function escapeRegexAttrValue(value: string, rex: Rex): string {
+  // RegExpChar: RegExp(`(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]`, 'g'),
+  // return decodeCssEscapes(value, rex).replace(rex.RegExpChar, '\\$&');
+  return escapeRegExp(cssIdentUnescape(value));
 }
 
 // find duplicate ids using iterative walk
@@ -558,7 +534,7 @@ function byIdRaw(id: string, context: QueryContext): Element[] {
 }
 
 // context agnostic getElementById
-function byId(id: string, context: QueryContext, snap: SnapshotState): Element[] {
+function byId(id: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
   if (!snap.config.IDS_DUPES && 'getElementById' in context) {
     const e = context.getElementById(id);
@@ -570,13 +546,13 @@ function byId(id: string, context: QueryContext, snap: SnapshotState): Element[]
 
 // TODO: namespace-aware tag lookup
 // wrapped up namespaced TagName api calls
-function byTagNSRaw(tag: string, context: QueryContext, snap: SnapshotState): Element[] {
+function byTagNSRaw(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
   return byTagRaw(tag, context, snap);
 }
 
 // context agnostic getElementsByTagName
-function byTagRaw(tag: string, context: QueryContext, snap: SnapshotState): Element[] {
+function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
   let el: Element | null
   let nodes: Element[];
@@ -602,7 +578,7 @@ function byTagRaw(tag: string, context: QueryContext, snap: SnapshotState): Elem
 }
 
 // context agnostic getElementsByClassName
-function byClassRaw(cls: string, context: QueryContext, snap: SnapshotState): Element[] {
+function byClassRaw(cls: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
 
   let el: Element | null;
@@ -632,15 +608,68 @@ function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${value}`);
 }
 
-// namespace aware hasAttribute
-// helper for XML/XHTML documents
-function hasAttributeNS(e: Element, name: string, snap: SnapshotState): boolean {
-  const attr = e.getAttributeNames();
-  const reName = new RegExp(':?' + escapeRegExp(name) + '$', snap.isHtml ? 'i' : '');
-  for (let i = 0, l = attr.length; l > i; ++i) {
-    if (reName.test(attr[i])) return true;
+function hasAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): boolean {
+  const attrs = e.attributes;
+  // throw new Error(`localName: ${JSON.stringify(localName)}, nsPrefix: ${nsPrefix}, snap.isHtml: ${snap.isHtml}, attrs.length: ${attrs.length}`);
+
+  if (nsPrefix === null) {
+    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      if (attr.namespaceURI != null) continue;
+      const actual = snap.isHtml ? attr.localName.toLowerCase() : attr.localName;
+      if (actual === expected) return true;
+    }
+    return false;
   }
-  return false;
+
+  if (nsPrefix === '*') {
+    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    // return e.hasAttribute(localName);
+    for (let i = 0; i < attrs.length; i++) {
+      const actual = snap.isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
+      if (actual === expected) return true;
+    }
+    return false;
+  }
+
+  if (nsPrefix === '') {
+    return e.hasAttributeNS?.(null, localName) ?? false;
+  }
+
+  const uri = e.lookupNamespaceURI?.(nsPrefix) ?? snap.doc.lookupNamespaceURI?.(nsPrefix);
+  return !!uri && e.hasAttributeNS(uri, localName);
+}
+
+function getAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): string | null {
+  const attrs = e.attributes;
+
+  if (nsPrefix === null) {
+    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      if (attr.namespaceURI != null) continue;
+      const actual = snap.isHtml ? attr.localName.toLowerCase() : attr.localName;
+      if (actual === expected) return attr.value;
+    }
+    return null;
+  }
+
+  if (nsPrefix === null || nsPrefix === '*') {
+    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    for (let i = 0; i < attrs.length; i++) {
+      const actual = snap.isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
+      if (actual === expected) return attrs[i].value;
+    }
+    return null;
+  }
+
+  if (nsPrefix === '') {
+    return e.getAttributeNS?.(null, localName) ?? null;
+  }
+
+  const uri = e.lookupNamespaceURI?.(nsPrefix) ?? snap.doc.lookupNamespaceURI?.(nsPrefix);
+  return uri && e.getAttributeNS ? e.getAttributeNS(uri, localName) : null;
 }
 
 type NthElementState = {
@@ -811,7 +840,7 @@ function describeElements(els: Element[], max = 10): string[] {
   return out;
 }
 
-function describeQueryContext(ctx: QueryContext): QueryContextDescription {
+function describeContext(ctx: QueryContext): QueryContextDescription {
   if (isDocument(ctx)) {
     const root = ctx.documentElement;
     const body = ctx.body;
@@ -986,13 +1015,15 @@ export function buildRex(ext: NwsExtensions): Rex {
   const namespaceName = `(?:${universal}|${identifier})`;
   const namespacePrefix = `(?:${namespaceName})?`;
   const namespaceType = `(?:${namespacePrefix}\\|${namespaceName})`;
+  const attrName = `(?:(?:${namespacePrefix}\\|)?${identifier})`;
 
   const attributes =
     `\\[` +
       // attribute presence
-      `(?:${universal}\\|)?` +
+      // `(?:${universal}\\|)?` +
       `${WSP}?` +
-      `(${identifier}(?::${identifier})?)` +
+      // `(${identifier}(?::${identifier})?)` +
+      `(${attrName})` +
       `${WSP}?` +
       `(?:` +
         `(${operators})${WSP}?` +
@@ -1129,11 +1160,11 @@ function emit(message: string, config: NwsConfig, proto?: typeof Error): void {
 const F_INIT = '"use strict";return function Resolver(c,f,x,r)';
 const MACROS = {
   S: { // SELECT
-    HEAD: 'var e,n,o,j=r.length-1,k=-1',
+    HEAD: 'var e,n,o,j=r.length-1,k=-1,p=false',
     LOOP: 'main:while((e=c[++k]))',
     BODY: 'r[++j]=c[k];',
     TAIL: 'continue main;',
-    TEST: 'if(f(c[k])){break main;}',
+    TEST: 'if(f(c[k])===false){p=true;break main;}',
     VARS: [] as string[],
   },
 
@@ -1147,42 +1178,51 @@ const MACROS = {
   },
 
   N: { // NONE
-    HEAD: 'var e,n,o',
+    HEAD: 'var e,n,o,p=false',
     LOOP: 'main:while((e=c.item(++k)))',
     BODY: 'r[++j]=c.item(k);',
     TAIL: 'r=true;',
-    TEST: 'if(f(c.item(k))){break main;}',
+    TEST: 'if(f(c.item(k))===false){p=true;break main;}',
     VARS: [] as string[],
   },
 } as const;
 
 // compile groups or single selector strings into
 // executable functions for matching or selecting
-function compile(selector: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState): SelectLambda | MatchLambda {
+function compile(selector: string, mode: true, cb: QueryCallback | null, snap: Snapshot): SelectLambda;
+function compile(selector: string, mode: false, cb: QueryCallback | null, snap: Snapshot): MatchLambda;
+function compile(selector: string, mode: null, cb: QueryCallback | null, snap: Snapshot): SelectLambda;
+function compile(selector: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot): SelectLambda | MatchLambda {
 
   // 'mode' can be boolean or null
   // true = select / false = match
   // null to use collection.item()
   let [macro, head, loop] = ['', '', ''];
   switch (mode) {
-    case true:
-      if (snap.selectLambdas[selector]) { return snap.selectLambdas[selector]; }
+    case true: {
+      const cached = snap.selectLambdas[selector];
+      if (cached && cached.hasCallback === !!cb) return cached.fn;
       macro = MACROS.S.BODY + (!!cb ? MACROS.S.TEST : '') + MACROS.S.TAIL;
       head = MACROS.S.HEAD;
       loop = MACROS.S.LOOP;
       break;
-    case false:
-      if (snap.matchLambdas[selector]) { return snap.matchLambdas[selector]; }
+    }
+    case false: {
+      const cached = snap.matchLambdas[selector];
+      if (cached && cached.hasCallback === !!cb) return cached.fn;
       macro = MACROS.M.BODY + (!!cb ? MACROS.M.TEST : '') + MACROS.M.TAIL;
       head = MACROS.M.HEAD;
       loop = MACROS.M.LOOP;
       break;
-    case null:
-      if (snap.selectLambdas[selector]) { return snap.selectLambdas[selector]; }
+    }
+    case null: {
+      const cached = snap.selectLambdas[selector];
+      if (cached && cached.hasCallback === !!cb) return cached.fn;
       macro = MACROS.N.BODY + (!!cb ? MACROS.N.TEST : '') + MACROS.N.TAIL;
       head = MACROS.N.HEAD;
       loop = MACROS.N.LOOP;
       break;
+    }
     default: assertNever(mode);
   }
 
@@ -1203,18 +1243,18 @@ function compile(selector: string, mode: boolean | null, cb: QueryCallback | nul
     MACROS.N.VARS.length = 0;
   }
 
-  const f = F_INIT + '{' + head + vars + ';' + loop + 'return r;}';
-  if (snap.isDebug) snap.debugCompile = f;
-  const factory = Function('s', f)(snap);
+  const returnValue = mode === false ? 'return r;' : 'return p;';
+  const f = F_INIT + '{' + head + vars + ';' + loop + returnValue + '}';
+  const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
-  if (mode || mode === null) snap.selectLambdas[selector] = factory;
-  if (!mode) snap.matchLambdas[selector] = factory;
+  if (mode || mode === null) snap.selectLambdas[selector] = { hasCallback: !!cb, fn: factory as SelectLambda };
+  if (!mode) snap.matchLambdas[selector] = { hasCallback: !!cb, fn: factory as MatchLambda };
 
   return factory;
 }
 
 // build conditional code to check components of selector strings
-function compileSelector(expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState): string {
+function compileSelector(expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot): string {
   const ATTR_STD_OPS = {
     '=': 1, '^=': 1, '$=': 1, '|=': 1, '*=': 1, '~=': 1
   };
@@ -1246,7 +1286,6 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
     // get namespace prefix if present or get first char of selector
     const symbol = snap.re.STD.apimethods.test(selector) ? '|' : selector[0];
 
-    let test: AttrMatcherParts | undefined;
     let match: RegExpMatchArray | null = null;
     switch (symbol) {
 
@@ -1301,39 +1340,57 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
         match = selector.match(snap.re.Patterns.attribute);
         if (!match) throw new Error('Invalid attribute selector: ' + selector);
 
-        const ns = match[0].match(snap.re.STD.namespaces);
-        const name = match[1];
-        const splitName = name.split(':');
-        const localName = splitName.length == 2 ? splitName[1] : splitName[0];
-        if (match[2] && !(test = snap.operators[match[2]])) {
-          emit(`Unsupported attributes operator: ${match[2]}, in selector: ${expression}`, snap.config);
+        const attrName = match[1];
+        const attrOp = match[2] as string | undefined;
+        const rawAttrVal = match[4] as string | undefined;
+        const attrFlag = match[5] as string | undefined;
+
+        const pipe = findUnescapedPipe(attrName);
+        const nsPrefix = pipe >= 0 ? attrName.slice(0, pipe) : null;
+        const rawLocalName = pipe >= 0 ? attrName.slice(pipe + 1) : attrName;
+        const localName = cssIdentUnescape(rawLocalName);
+
+        const attrVal = rawAttrVal === undefined ? undefined : cssIdentUnescape(rawAttrVal);
+
+        if (nsPrefix !== null && nsPrefix !== '' && nsPrefix !== '*') {
+          emit(`Unsupported namespace prefix "${nsPrefix}" in attribute selector: ${selector}`, snap.config);
           return '';
         }
-        if (match[4] === '') {
-          test = match[2] == '~=' ?
-            { p1: '^\\s', p2: '+$', p3: 'true' } :
-              match[2] in ATTR_STD_OPS && match[2] != '~=' ?
-            { p1: '^',    p2: '$',  p3: 'true' } : test;
-        } else if (match[2] == '~=' && match[4].includes(' ')) {
-          // whitespace separated list but value contains space
-          break;
-        } else if (match[4]) {
-          match[4] = decodeAttrForRegex(match[4], snap.re);
-          // match[4] = decodeCssEscapes(match[4], snap.re).replace(snap.re.RegExpChar, '\\$&');
-        }
-        const sensitivity = match[5] == 'i' || (snap.isHtml && HTML_TABLE[localName.toLowerCase()]) ? 'i' : '';
+
+        const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
+        const localArg = JSON.stringify(localName);
+
         let attrExpr: string;
-        if (!match[2]) {
-          attrExpr = ns
-            ? 's.hasAttributeNS(e,"' + name + '")'
-            : 'e.hasAttribute&&e.hasAttribute("' + name + '")';
-        } else if (!match[4] && match[2] in ATTR_STD_OPS && match[2] != '~=') {
-          attrExpr = 'e.getAttribute&&e.getAttribute("' + name + '")==""';
+        if (!attrOp) {
+          attrExpr = `s.hasAttribute(e,${nsArg},${localArg})`;
+        } else if (attrVal === undefined) {
+          emit(`Missing attribute value in selector: ${selector}`, snap.config);
+          return '';
+        } else if (attrOp == '~=' && /[\t\n\f\r ]/.test(attrVal)) {
+          emit(`Invalid attribute selector: value for ~= operator cannot contain whitespace in selector: ${selector}`, snap.config);
+          return '';
         } else {
-          if (!test) throw new Error(`test wasn't defined for attribute selector: ${selector}`);
-          attrExpr =
-            '(/' + test.p1 + match[4] + test.p2 + '/' + sensitivity + ').test(e.getAttribute&&e.getAttribute("' + name + '"))==' + test.p3;
+          const baseTest = snap.operators[attrOp];
+          if (!baseTest) {
+            emit(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`, snap.config);
+            return '';
+          }
+          const isStdOp = attrOp in ATTR_STD_OPS && attrOp != '~=';
+          const test =
+              attrVal === '' && attrOp == '~=' ? { p1: '^\\s', p2: '+$', p3: 'true' }
+            : attrVal === '' && isStdOp        ? { p1: '^',    p2: '$',  p3: 'true' }
+            : baseTest;
+
+          if (attrVal === '' && isStdOp) {
+            attrExpr = `s.getAttribute(e,${nsArg},${localArg})==""`;
+          } else {
+            const sensitivity = attrFlag == 'i' || (snap.isHtml && HTML_TABLE[localName.toLowerCase()]) ? 'i' : '';
+            const rxSource = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
+            attrExpr =
+              `(new RegExp(${JSON.stringify(rxSource)},${JSON.stringify(sensitivity)})).test(s.getAttribute(e,${nsArg},${localArg}))==${test.p3}`;
+          }
         }
+
         source = 'if((' + attrExpr + ')){' + source + '}';
         break;
       }
@@ -1883,7 +1940,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
 }
 
 // equivalent of w3c 'closest' method
-function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: SnapshotState): Element | null {
+function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
   updateSnapshot(snap, element);
 
   const scoped = prepareScope(selectors, element);
@@ -1899,9 +1956,10 @@ function ancestorRaw(selectors: string, element: Element, callback: QueryCallbac
   }
 }
 
-function match_collect(selectors: string[], cb: QueryCallback | null, snap: SnapshotState): { factory: MatchLambda[] } {
-  for (var i = 0, l = selectors.length, f = [ ]; l > i; ++i)
-    f[i] = compile(selectors[i], false, cb, snap) as MatchLambda; // FIXME: type assertion to MatchLambda[] is not safe, but compile() can return either MatchLambda or SelectLambda
+function match_collect(selectors: string[], cb: QueryCallback | null, snap: Snapshot): { factory: MatchLambda[] } {
+  const f: MatchLambda[] = [];
+  for (let i = 0, l = selectors.length; l > i; ++i)
+    f[i] = compile(selectors[i], false, cb, snap);
   return { factory: f };
 }
 
@@ -1951,7 +2009,7 @@ export function parse(selectors: string, re: Rex, config: NwsConfig): string[] {
 }
 
 // equivalent of w3c 'matches' method
-function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: SnapshotState): boolean {
+function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot): boolean {
   updateSnapshot(snap, element);
 
   if (!selectors) {
@@ -1973,7 +2031,7 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
 }
 
 // equivalent of w3c 'querySelector' method
-function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState): Element | null {
+function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot): Element | null {
   updateSnapshot(snap, context);
   return selectRaw(selectors, context,
     typeof callback == 'function' ?
@@ -1996,61 +2054,56 @@ const compat: Record<CompatKey, CompatFactory> = {
 };
 
 // equivalent of w3c 'querySelectorAll' method
-function selectRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState): Element[] {
+function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): Element[] {
+  updateSnapshot(snap, ctx);
+
   let nodes: Element[] = [];
-  let resolver;
-
-  updateSnapshot(snap, context);
-
-  if (!selectors) {
+  if (!sel) {
     emit(`[select] Empty selector is not valid`, snap.config);
     return [];
   }
 
-  const scoped = prepareScope(selectors, context);
+  const scoped = prepareScope(sel, ctx);
 
   try {
     if (!scoped.selectors) return nodes;
-    if ((resolver = snap.selectResolvers[scoped.selectors])) {
-      if (resolver.context === context && resolver.callback === callback) {
-        const { factory: f, htmlset: h, nodeset: n } = resolver;
-        const len = n.length;
-        if (n.length > 1) {
-          for (let i = 0; len > i; ++i) {
-            const compatFact = compat[n[i][0] as CompatKey];
-            const list = compatFact(context, n[i].slice(1), snap)();
-            const lambda = f[i];
-            if (lambda) {
-              lambda(list, callback, context, nodes);
-            } else {
-              nodes = nodes.concat(list);
-            }
-          }
-          if (len > 1 && nodes.length > 1) {
-            nodes = sortUnique(nodes);
-          }
-        } else {
-          if (f[0]) {
-            nodes = f[0](h[0](), callback, context, nodes);
-          } else {
-            nodes = h[0]();
-          }
-        }
-        if (typeof callback == 'function') {
-          nodes = concatCall(nodes, callback);
-        }
-        return nodes;
-      }
+
+    let resolver = snap.selectResolvers[scoped.selectors];
+
+    // try to reuse cached resolver
+    if (!resolver || resolver.context !== ctx || resolver.callback !== cb) {
+      const parsed = parse(scoped.selectors, snap.re, snap.config);
+      resolver = buildResolver(parsed, ctx, cb, snap);
+      snap.selectResolvers[scoped.selectors] = resolver;
     }
 
-    // save/reuse factory and closure collection
-    const parsed = parse(scoped.selectors, snap.re, snap.config);
-    const r = collect(parsed, context, callback, snap);
-    nodes = r.results;
-    snap.selectResolvers[scoped.selectors] = r;
-    if (typeof callback == 'function') {
-      nodes = concatCall(nodes, callback);
+    if (snap.isDebug) {
+      snap.debugCollect = { callback: cb, context: describeContext(ctx), steps: [] };
     }
+
+    // execute resolver seeds and collect results
+    for (const seed of resolver.seeds) {
+      const candidates = seed.getCandidates();
+      const stopped = seed.lambda(candidates, cb, ctx, nodes);
+
+      if (snap.isDebug) {
+        snap.debugCollect!.steps.push({
+          compatKey: seed.compatKey,
+          compatQuery: seed.compatQuery,
+          compileQuery: seed.compileQuery,
+          candidates: describeElements(candidates),
+          lambdaSource: String(seed.lambda),
+          results: describeElements(nodes),
+        });
+      }
+
+      if (stopped) break;
+    }
+
+    if (resolver.seeds.length > 1 && nodes.length > 1) {
+      nodes = sortUnique(nodes);
+    }
+
     return nodes;
   } finally {
     scoped.cleanup();
@@ -2069,98 +2122,49 @@ function optimize(selector: string, token: RegExpMatchArray): string {
       '*' : '') : '') + selector.slice(index + length - (token[1] == '*' ? 1 : 0));
 }
 
-// prepare factory resolvers and closure collections
-function collect(
-  selectors: string[],
-  context: QueryContext,
-  cb: QueryCallback | null,
-  snap: SnapshotState
-): {
-  callback: QueryCallback | null,
-  context: QueryContext,
-  factory: SelectLambda[],
-  htmlset: CompatThunk[],
-  nodeset: CompatSeed[],
-  results: Element[]
-} {
-  const nodeset: CompatSeed[] = [];
-  const htmlset: CompatThunk[] = [];
-  const factory: SelectLambda[] = [];
-  const optimized = selectors.slice();
-  const seen: Record<string, boolean> = {};
-  const token: [string, '.' | '#' | '*', string] = ['', '*', '*'];
-  let results: Element[] = [];
-
-  if (snap.isDebug) {
-    snap.debugCollect = { callback: cb, context: describeQueryContext(context), steps: [] };
-  }
-
-  for (let i = 0, l = selectors.length; i < l; ++i) {
-    const original = selectors[i];
-    const seenBefore = seen[original];
-
-    if (!seenBefore) {
-      seen[original] = true;
-      const type = original.match(snap.re.optimizer);
-      if (type && type[1] != ':') {
-        token[0] = type[0];
-        const t1 = type[1] || '*';
-        if (t1 !== '.' && t1 !== '#' && t1 !== '*') {
-          throw new SyntaxError(`invalid selector for optimization '${original}'`);
-        }
-        token[1] = t1;
-        token[2] = type[2];
-        optimized[i] = optimize(original, type);
-      } else {
-        token[0] = '';
-        token[1] = '*';
-        token[2] = '*';
-        optimized[i] = original;
-      }
-    }
-
-    const rawTokenValue = token[2];
-    nodeset[i] = `${token[1]}${rawTokenValue}`;
-
-    const unescapedTokenValue = unescapeIdentifier(rawTokenValue, snap.re);
-    htmlset[i] = compat[token[1]](context, unescapedTokenValue, snap);
-    // htmlset[i] = compat[token[1]](context, rawTokenValue, snap);
-    const factoryInput = htmlset[i]();
-
-    if (snap.isDebug) snap.debugCompile = undefined;
-    factory[i] = compile(optimized[i], true, null, snap) as SelectLambda;
-
-    results = factory[i](factoryInput, cb, context, results);
-
-    if (snap.isDebug) {
-      snap.debugCollect!.steps.push({
-        index: i,
-        original,
-        optimized: optimized[i],
-        seenBefore,
-        token: [token[0], token[1], token[2]],
-        rawTokenValue,
-        unescapedTokenValue,
-        nodeset: nodeset[i],
-        factoryInput: describeElements(factoryInput),
-        factorySource: snap.debugCompile ?? String(factory[i]),
-        factoryResults: describeElements(results),
-      });
-    }
-  }
-
-  if (selectors.length > 1) {
-    results = sortUnique(results);
-  }
-
-  return {
+function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): SelectResolver {
+  const out: SelectResolver = {
     callback: cb,
-    context: context,
-    factory: factory,
-    htmlset: htmlset,
-    nodeset: nodeset,
-    results: results
+    context: ctx,
+    seeds: [],
   };
+
+  for (const sel of selectors) {
+    let compatKey: CompatKey = '*';
+    let compatQuery = '*';
+    let compileQuery = sel;
+
+    const type = sel.match(snap.re.optimizer);
+
+    if (type && type[1] !== ':') {
+      const key = type[1] || '*';
+
+      if (key !== '.' && key !== '#' && key !== '*') {
+        throw new SyntaxError(`invalid selector for optimization '${sel}'`);
+      }
+
+      compatKey = key;
+      compatQuery = type[2];
+      compileQuery = optimize(sel, type);
+    }
+
+    // XML type selectors are not equivalent to DOM tag-name lookup.
+    if (!snap.isHtml && compatKey === '*' && compatQuery !== '*') {
+      compatKey = '*';
+      compatQuery = '*';
+      compileQuery = sel;
+    }
+
+    compatQuery = cssIdentUnescape(compatQuery);
+
+    out.seeds.push({
+      compatKey, compatQuery, compileQuery,
+      getCandidates: compat[compatKey](ctx, compatQuery, snap),
+      lambda: compile(compileQuery, true, cb, snap),
+    });
+  }
+
+  return out;
 }
 
 function prepareScope(selectors: string, context: QueryContext) {
@@ -2254,4 +2258,12 @@ export function splitSelectorGroups(selector: string): string[] {
 
 function trimWsp(str: string): string {
   return str.replace(/^[ \t\r\n\f]+|[ \t\r\n\f]+$/g, '')
+}
+
+function findUnescapedPipe(str: string): number {
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '\\') { i++; continue; }
+    if (str[i] === '|') return i;
+  }
+  return -1;
 }

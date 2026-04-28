@@ -21,13 +21,21 @@ type NwsExtensions = {
 }
 
 type QueryContext = Document | Element | DocumentFragment;
-type QueryCallback = (element: Element) => unknown;
+type QueryCallback = (element: Element) => boolean | void;
 
 type OptimizerKey = '#' | '*' | '.';
 type CompatKey = '#' | '*' | '|' | '.';
 type CompatThunk = () => Element[];
-type CompatFactory = (c: QueryContext, n: string, s: SnapshotState) => CompatThunk;
+type CompatFactory = (c: QueryContext, n: string, s: Snapshot) => CompatThunk;
 type CompatSeed = `${CompatKey}${string}`;
+
+type CandidateSeed = {
+  compatKey: CompatKey;
+  compatQuery: string;
+  compileQuery: string;
+  getCandidates: CompatThunk;
+  lambda: SelectLambda;
+};
 
 type MatchLambda = (
   element: Element,
@@ -41,7 +49,12 @@ type SelectLambda = (
   callback: QueryCallback | null,
   context: QueryContext,
   nodes: Element[]
-) => Element[];
+) => Stopped
+
+type Stopped = boolean;
+
+type SelectLambdaEntry = { fn: SelectLambda; hasCallback: boolean; };
+type MatchLambdaEntry = { fn: MatchLambda; hasCallback: boolean; };
 
 type MatchResolver = {
   factory: MatchLambda[];
@@ -50,10 +63,7 @@ type MatchResolver = {
 type SelectResolver = {
   callback: QueryCallback | null;
   context: QueryContext;
-  factory: SelectLambda[];
-  htmlset: CompatThunk[];
-  nodeset: CompatSeed[];
-  results: Element[];
+  seeds: CandidateSeed[];
 };
 
 type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };
@@ -82,10 +92,10 @@ type SelectorExtFn = (
 type RawByTagFn = (tag: string, context: QueryContext) => Element[];
 type RawByClassFn = (cls: string, context: QueryContext) => Element[];
 type RawByIdFn = (id: string, context: QueryContext) => Element[];
-type RawSelectFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState) => Element[];
-type RawFirstFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: SnapshotState) => Element | null;
-type RawMatchFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: SnapshotState) => boolean;
-type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: SnapshotState) => Element | null;
+type RawSelectFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot) => Element[];
+type RawFirstFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot) => Element | null;
+type RawMatchFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot) => boolean;
+type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot) => Element | null;
 
 type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
 type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
@@ -99,14 +109,15 @@ type ClosestFn = AncestorFn;
 type NthFn = (element: Element, dir: number) => number;
 type IsFocusableFn = (node: HTMLElement) => false | HTMLElement;
 type IsContentEditableFn = (node: HTMLElement) => boolean;
-type HasAttributeNSFn = (element: Element, name: string) => boolean;
+type HasAttributeFn = (element: Element, ns: string | null, local: string) => boolean;
+type GetAttributeFn = (element: Element, ns: string | null, local: string) => string | null;
 
-type CompileFn = (selector: string, mode: boolean | null, cb: QueryCallback | null, snap: SnapshotState) => SelectLambda | MatchLambda;
+type CompileFn = (selector: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot) => SelectLambda | MatchLambda;
 type RegisterCombinatorFn = (combinator: string, resolver: string) => void;
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
 
-type SnapshotState = {
+type Snapshot = {
   doc: Document;
   from: QueryContext;
   root: Element;
@@ -131,18 +142,18 @@ type SnapshotState = {
 
   isFocusable: IsFocusableFn;
   isContentEditable: IsContentEditableFn;
-  hasAttributeNS: HasAttributeNSFn;
+  hasAttribute: HasAttributeFn;
+  getAttribute: GetAttributeFn;
 
   hoverTarget: EventTarget | null;
 
   isDebug: boolean;
-  debugCompile?: string;
   debugCollect?: DebugCollect;
 
   re: Rex;
 
-  matchLambdas: Partial<Record<string, MatchLambda>>;
-  selectLambdas: Partial<Record<string, SelectLambda>>;
+  matchLambdas: Partial<Record<string, MatchLambdaEntry>>;
+  selectLambdas: Partial<Record<string, SelectLambdaEntry>>;
 
   matchResolvers: Partial<Record<string, MatchResolver>>;
   selectResolvers: Partial<Record<string, SelectResolver>>;
@@ -154,7 +165,7 @@ type DomApi = {
   version: string;
   extensions: NwsExtensions;
   config: NwsConfig;
-  snapshot: SnapshotState;
+  snapshot: Snapshot;
 
   byId: ByIdFn;
   byTag: ByTagFn;
@@ -186,21 +197,12 @@ type DebugCollect = {
 };
 
 type DebugCollectStep = {
-  index: number;
-
-  original: string;
-  optimized: string;
-  seenBefore: boolean;
-
-  token: [string, '.' | '#' | '*', string];
-  rawTokenValue: string;
-  unescapedTokenValue: string;
-
-  nodeset: CompatSeed;
-
-  factorySource: string;
-  factoryInput: string[];
-  factoryResults: string[];
+  compatKey: CompatKey;
+  compatQuery: string;
+  compileQuery: string;
+  candidates: string[];
+  lambdaSource: string;
+  results: string[];
 };
 
 type QueryContextDescription = {
