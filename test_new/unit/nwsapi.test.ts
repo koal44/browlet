@@ -1,8 +1,7 @@
 import { describe, expect, it, test } from 'vitest';
 import {
   buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
-  escapeRegexAttrValue, cssIdentEscape, matchLogicalSelector, splitSelectorGroups,
-  escapeRegExp,
+  matchLogicalSelector, splitSelectorGroups, escapeRegExp,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -63,18 +62,42 @@ function expectCapturesFrom(
   }
 }
 
-// function expectCaptures(re: RegExp, input: string, expected: ExpectedCapture[]): void {
-//   const m = execRe(re, input);
-//   const actual = m ? Array.from(m).slice(1) : null;
+// Test-only CSS.escape() polyfill.
+//
+// cssIdentUnescape() maps many valid selector spellings onto the same semantic
+// string, while cssIdentEscape() chooses only one valid spelling. Ergo, it CANNOT
+// reconstruct the spelling the author used.
+//
+// Do not use this in the selector engine. Matching must decode selector tokens
+// to semantic DOM values, not re-escape DOM values and compare selector text.
+function cssIdentEscape(ident: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(ident);
+  }
 
-//   expect(actual, `Expected ${input} to match ${re}`).not.toBeNull();
-//   expect(actual!.length, `Unexpected capture length for ${input}`).toBe(expected.length);
+  if (ident === '-') return '\\-';
 
-//   expected.forEach((value, index) => {
-//     if (value === ANY) return;
-//     expect(actual![index], `Mismatch at capture[${index + 1}] for ${input}`).toBe(value);
-//   });
-// }
+  let out = '';
+  const first = ident.charCodeAt(0);
+
+  for (let i = 0, l = ident.length; i < l; i++) {
+    const c = ident.charCodeAt(i);
+    const digit = c >= 0x30 && c <= 0x39;
+    out +=
+      c === 0x00 ?                         '\uFFFD' :               // NUL
+      c >= 0x01 && c <= 0x1F ?             `\\${c.toString(16)} ` : // control chars
+      c === 0x7F ?                         `\\${c.toString(16)} ` : // delete
+      digit && i === 0 ?                   `\\${c.toString(16)} ` : // leading digit
+      digit && i === 1 && first === 0x2D ? `\\${c.toString(16)} ` : // second char digit after -
+      digit ?                              ident.charAt(i) :        // 0-9
+      c >= 0x80 ?                          ident.charAt(i) :        // non-ASCII
+      c === 0x2D || c === 0x5F ?           ident.charAt(i) :        // - or _
+      c >= 0x41 && c <= 0x5A ?             ident.charAt(i) :        // A-Z
+      c >= 0x61 && c <= 0x7A ?             ident.charAt(i) :        // a-z
+                                           `\\${ident.charAt(i)}`;  // ASCII punctuation / syntax
+  }
+  return out;
+}
 
 describe('Rex basic recognizers', () => {
   const rex = buildRex(DEFAULT_EXTENSIONS);

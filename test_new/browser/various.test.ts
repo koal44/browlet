@@ -1226,4 +1226,164 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'HTML attribute value case sensitivity',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <div id="align-upper" align="CENTER"></div>
+        <div id="dir-upper" dir="RTL"></div>
+        <p id="lang-upper" lang="EN-us"></p>
+        <input id="type-upper" type="TEXT">
+        <input id="checked-upper" checked="CHECKED">
+        <button id="disabled-upper" disabled="DISABLED"></button>
+        <option id="selected-upper" selected="SELECTED"></option>
+        <a id="target-upper" target="_BLANK"></a>
+
+        <div id="data-upper" data-mode="ON"></div>
+        <div id="title-upper" title="HELLO"></div>
+        <div id="role-upper" role="BUTTON"></div>
+        <div id="class-upper" class="LOUD"></div>
+      </div>
+    `,
+    cases: [
+      // HTML attributes whose values are matched case-insensitively by default.
+      { select: '[align="center"]',      expect: { ids: ['align-upper'] } },
+      { select: '[dir="rtl"]',           expect: { ids: ['dir-upper'] } },
+      { select: '[lang="en-us"]',        expect: { ids: ['lang-upper'] } },
+      { select: '[type="text"]',         expect: { ids: ['type-upper'] } },
+      { select: '[checked="checked"]',   expect: { ids: ['checked-upper'] } },
+      { select: '[disabled="disabled"]', expect: { ids: ['disabled-upper'] } },
+      { select: '[selected="selected"]', expect: { ids: ['selected-upper'] } },
+      { select: '[target="_blank"]',     expect: { ids: ['target-upper'] } },
+
+      // Ordinary/custom attribute values are case-sensitive by default.
+      { select: '[data-mode="on"]', expect: { ids: [] } },
+      { select: '[title="hello"]',  expect: { ids: [] } },
+      { select: '[role="button"]',  expect: { ids: [] } },
+      { select: '[class="loud"]',   expect: { ids: [] } },
+
+      // Explicit i flag makes ordinary/custom attribute values case-insensitive.
+      { select: '[data-mode="on" i]', expect: { ids: ['data-upper'] } },
+      { select: '[title="hello" i]',  expect: { ids: ['title-upper'] } },
+      { select: '[role="button" i]',  expect: { ids: ['role-upper'] } },
+      { select: '[class="loud" i]',   expect: { ids: ['class-upper'] } },
+    ],
+  },
+
+  {
+    name: 'XML attribute value case sensitivity',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root id="root">
+        <item id="align-upper" align="CENTER" />
+        <item id="dir-upper" dir="RTL" />
+        <item id="lang-upper" lang="EN-us" />
+        <item id="type-upper" type="TEXT" />
+        <item id="checked-upper" checked="CHECKED" />
+        <item id="disabled-upper" disabled="DISABLED" />
+        <item id="selected-upper" selected="SELECTED" />
+        <item id="target-upper" target="_BLANK" />
+
+        <item id="data-upper" data-mode="ON" />
+        <item id="title-upper" title="HELLO" />
+        <item id="role-upper" role="BUTTON" />
+        <item id="class-upper" class="LOUD" />
+      </root>
+    `,
+    cases: [
+      // XML does not get HTML's default case-insensitive attribute value matching.
+      { select: '[align="center"]',      expect: { ids: [] } },
+      { select: '[dir="rtl"]',           expect: { ids: [] } },
+      { select: '[lang="en-us"]',        expect: { ids: [] } },
+      { select: '[type="text"]',         expect: { ids: [] } },
+      { select: '[checked="checked"]',   expect: { ids: [] } },
+      { select: '[disabled="disabled"]', expect: { ids: [] } },
+      { select: '[selected="selected"]', expect: { ids: [] } },
+      { select: '[target="_blank"]',     expect: { ids: [] } },
+
+      // Ordinary/custom values are also case-sensitive by default.
+      { select: '[data-mode="on"]', expect: { ids: [] } },
+      { select: '[title="hello"]',  expect: { ids: [] } },
+      { select: '[role="button"]',  expect: { ids: [] } },
+      { select: '[class="loud"]',   expect: { ids: [] } },
+
+      // Explicit i flag works in XML too.
+      { select: '[align="center" i]', expect: { ids: ['align-upper'] } },
+      { select: '[type="text" i]',    expect: { ids: ['type-upper'] } },
+      { select: '[data-mode="on" i]', expect: { ids: ['data-upper'] } },
+      { select: '[title="hello" i]',  expect: { ids: ['title-upper'] } },
+    ],
+  },
+
+  {
+    name: 'escaped ID selector values in compiled ancestor filter',
+    // status: 'only',
+    markup: `
+      <div id="foo.bar">
+        <span id="dot" class="x"></span>
+      </div>
+
+      <div id="foo+bar">
+        <span id="plus" class="x"></span>
+      </div>
+
+      <div id="foo[bar]">
+        <span id="bracket" class="x"></span>
+      </div>
+
+      <div id="foo\\bar">
+        <span id="backslash" class="x"></span>
+      </div>
+
+      <div id="123">
+        <span id="digit" class="x"></span>
+      </div>
+
+      <div id="é">
+        <span id="unicode" class="x"></span>
+      </div>
+
+      <div id="foo&#10;bar">
+        <span id="newline" class="x"></span>
+      </div>
+    `,
+    cases: [
+      // The rightmost .x is the optimized seed; the escaped ID is checked by the compiled ancestor filter.
+      { select: '#foo.bar > .x', expect: { ids: [] } },
+      { select: '#foo\\.bar > .x', expect: { ids: ['dot'] } },
+      { select: '#foo\\+bar > .x', expect: { ids: ['plus'] } },
+      { select: '#foo\\[bar\\] > .x', expect: { ids: ['bracket'] } },
+      { select: '#foo\\\\bar > .x', expect: { ids: ['backslash'] } },
+      { select: '#\\31 23 > .x', expect: { ids: ['digit'] } },
+      { select: '#\\e9 > .x', expect: { ids: ['unicode'] } },
+      { select: '#foo\\a bar > .x', expect: { ids: ['newline'] } },
+    ],
+  },
+
+  {
+    name: 'class seed rejects whitespace after CSS unescape',
+    // status: 'only',
+    markup: `<div id="root"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const root = document.getElementById('root')!;
+        const el = document.createElement('div');
+        el.id = 'newline-class';
+        el.setAttribute('class', 'foo\nbar');
+        root.appendChild(el);
+      });
+    },
+    cases: [
+      // .foo\a bar decodes to the class query "foo\nbar", but selector class
+      // matching is token-based. getElementsByClassName has different behavior,
+      // so the optimizer must not use it for decoded whitespace class names.
+      { select: '.foo\\a bar', expect: { ids: [] } },
+      { select: '.foo\nbar', expect:   { ids: [] } },
+      { byClass: 'foo\nbar', expect:   { ids: ['newline-class'] } },
+    ],
+  },
+
+
 ]);

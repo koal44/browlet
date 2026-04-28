@@ -1,3 +1,9 @@
+import type { Snapshot } from './nwsapi';
+
+export {};
+
+declare global {
+
 type Glob = typeof globalThis
 
 interface AmdDefine {
@@ -6,9 +12,9 @@ interface AmdDefine {
   amd?: unknown;
 }
 
-declare var define: AmdDefine | undefined;
+var define: AmdDefine | undefined;
 
-declare var NW: {
+var NW: {
   Dom?: DomApi;
   [key: string]: unknown;
 } | undefined;
@@ -23,18 +29,21 @@ type NwsExtensions = {
 type QueryContext = Document | Element | DocumentFragment;
 type QueryCallback = (element: Element) => boolean | void;
 
-type OptimizerKey = '#' | '*' | '.';
-type CompatKey = '#' | '*' | '|' | '.';
-type CompatThunk = () => Element[];
-type CompatFactory = (c: QueryContext, n: string, s: Snapshot) => CompatThunk;
-type CompatSeed = `${CompatKey}${string}`;
+type SeedKey = '#' | '*' | '.';
+type GetCandidates = () => Element[];
 
 type CandidateSeed = {
-  compatKey: CompatKey;
-  compatQuery: string;
+  key: SeedKey;
+  query: string;
   compileQuery: string;
-  getCandidates: CompatThunk;
+  getCandidates: GetCandidates;
   lambda: SelectLambda;
+};
+
+type CandidatePlan = {
+  key: SeedKey;
+  query: string;
+  compileQuery: string;
 };
 
 type MatchLambda = (
@@ -52,9 +61,6 @@ type SelectLambda = (
 ) => Stopped
 
 type Stopped = boolean;
-
-type SelectLambdaEntry = { fn: SelectLambda; hasCallback: boolean; };
-type MatchLambdaEntry = { fn: MatchLambda; hasCallback: boolean; };
 
 type MatchResolver = {
   factory: MatchLambda[];
@@ -117,47 +123,8 @@ type RegisterCombinatorFn = (combinator: string, resolver: string) => void;
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
 
-type Snapshot = {
-  doc: Document;
-  from: QueryContext;
-  root: Element;
-  isHtml: boolean;
-  isQuirksMode: boolean;
-  namespace: string | null;
-  config: NwsConfig;
-  ext: NwsExtensions;
-  selectors: Record<string, SelectorExtension>;
-  combinators: Record<string, string>;
-  operators: Record<string, AttrMatcherParts>
-
-  byTag: ByTagFn;
-
-  first: FirstFn;
-  match: MatchFn;
-  select: SelectFn;
-  ancestor: AncestorFn;
-
-  nthOfType: NthFn;
-  nthElement: NthFn;
-
-  isFocusable: IsFocusableFn;
-  isContentEditable: IsContentEditableFn;
-  hasAttribute: HasAttributeFn;
-  getAttribute: GetAttributeFn;
-
-  hoverTarget: EventTarget | null;
-
-  isDebug: boolean;
-  debugCollect?: DebugCollect;
-
-  re: Rex;
-
-  matchLambdas: Partial<Record<string, MatchLambdaEntry>>;
-  selectLambdas: Partial<Record<string, SelectLambdaEntry>>;
-
-  matchResolvers: Partial<Record<string, MatchResolver>>;
-  selectResolvers: Partial<Record<string, SelectResolver>>;
-};
+type SelectLambdaEntry = { fn: SelectLambda; hasCallback: boolean; };
+type MatchLambdaEntry = { fn: MatchLambda; hasCallback: boolean; };
 
 type CssEscapeFn = (ident: string) => string;
 
@@ -190,19 +157,28 @@ type DomApi = {
   printDebug: () => string;
 };
 
-type DebugCollect = {
-  callback: QueryCallback | null;
-  context: QueryContextDescription;
-  steps: DebugCollectStep[];
+type DebugSelect = {
+  callback?: QueryCallback | null;
+  context?: QueryContextDescription;
+  build?: DebugSelectBuildStep[];
+  run?: DebugSelectRunStep[];
+  error?: string;
 };
 
-type DebugCollectStep = {
-  compatKey: CompatKey;
-  compatQuery: string;
+type DebugSelectRunStep = {
+  seedKey: SeedKey;
+  seedQuery: string;
   compileQuery: string;
   candidates: string[];
   lambdaSource: string;
   results: string[];
+};
+
+type DebugSelectBuildStep = {
+  selector: string;
+  seedKey: SeedKey;
+  seedQuery: string;
+  compileQuery: string;
 };
 
 type QueryContextDescription = {
@@ -213,63 +189,6 @@ type QueryContextDescription = {
 
 type NodeLike = { nodeType: number; nodeName: string; };
 
-type Rex = {
-  HasEscapes: RegExp;
-  HexNumbers: RegExp;
-  EscOrQuote: RegExp;
-  RegExpChar: RegExp;
-  TrimSpaces: RegExp;
-  SplitGroup: RegExp;
-  CommaGroup: RegExp;
-  FixEscapes: RegExp;
-  CombineWSP: RegExp;
-  TabCharWSP: RegExp;
-  PseudosWSP: RegExp;
-
-  STD: {
-    combinator: RegExp;
-    apimethods: RegExp;
-    namespaces: RegExp;
-  };
-
-  Patterns: {
-    treestruct: RegExp;
-    structural: RegExp;
-    linguistic: RegExp;
-    useraction: RegExp;
-    inputstate: RegExp;
-    inputvalue: RegExp;
-    rsrc_state: RegExp;
-    disp_state: RegExp;
-    time_state: RegExp;
-    locationpc: RegExp;
-    logicalsel: RegExp;
-    pseudo_nop: RegExp;
-    pseudo_sng: RegExp;
-    pseudo_dbl: RegExp;
-
-    children: RegExp;
-    adjacent: RegExp;
-    relative: RegExp;
-    ancestor: RegExp;
-
-    universal: RegExp;
-    namespace: RegExp;
-
-    id: RegExp;
-    tagName: RegExp;
-    className: RegExp;
-    attribute: RegExp;
-  };
-
-  RTL: RegExp;
-  nthElem: RegExp;
-  nthType: RegExp;
-
-  optimizer: RegExp;
-  validator: RegExp;
-}
-
 type QsaKey =
   'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |
   'querySelectorDoc' | 'querySelectorAllDoc';
@@ -279,3 +198,6 @@ type CompileSelectorResult = {
   post: string;
   modvar: string[];
 };
+
+} // end global declaration
+
