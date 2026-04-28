@@ -1153,4 +1153,77 @@ runScenarios('various', 'normal', [
     },
   },
 
+  {
+    name: 'nth selector caches reset between select calls',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="a"></span>
+        <span id="b"></span>
+        <span id="c"></span>
+      </div>
+    `,
+    steps: [
+      {
+        cases: [
+          { select: '#root > span:nth-child(2)', expect: { ids: ['b'] } },
+          { select: '#root > span:nth-of-type(2)', expect: { ids: ['b'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => {
+          await page.evaluate(() => {
+            const root = document.getElementById('root')!;
+            const x = document.createElement('span');
+            x.id = 'x';
+            root.insertBefore(x, root.firstElementChild);
+          });
+        },
+        cases: [
+          // Current span order: x, a, b, c
+          { select: '#root > span:nth-child(2)', expect: { ids: ['a'] } },
+          { select: '#root > span:nth-of-type(2)', expect: { ids: ['a'] } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'registered selector extension can inject resolver vars',
+    // status: 'only',
+    engines: ['nw'],
+    markup: `
+      <div id="root">
+        <button id="button1"></button>
+        <input id="input1" />
+        <textarea id="textarea1"></textarea>
+        <span id="span1"></span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        nwdom.registerSelector(
+          'XControl',
+          /^:(x-control)(.*)/i,
+          (match, source) => {
+            return {
+              match,
+              modvar: 'q',
+              source: 'q=e.nodeName;if(/^(BUTTON|INPUT|SELECT|TEXTAREA)$/i.test(q)){' + source + '}',
+              status: true,
+            };
+          },
+        );
+      });
+    },
+    cases: [
+      { select: ':x-control', expect: { ids: ['button1', 'input1', 'textarea1'] } },
+      { select: '#root > :x-control', expect: { ids: ['button1', 'input1', 'textarea1'] } },
+      { select: 'span:x-control', expect: { ids: [] } },
+    ],
+  },
+
 ]);

@@ -83,8 +83,8 @@ type SelectorExtFn = (
     mode: boolean | null,
     callback: QueryCallback | null
   ) => {
-    match: RegExpMatchArray | null,
-    modvar: string,
+    match?: RegExpMatchArray | null,
+    modvar?: string,
     source: string,
     status: boolean,
   };
@@ -106,7 +106,7 @@ type FirstFn = (selectors: string, context?: QueryContext, callback?: QueryCallb
 type MatchFn = (selectors: string, element: Element, callback?: QueryCallback | null) => boolean;
 type AncestorFn = (selectors: string, element: Element, callback?: QueryCallback | null) => Element | null;
 type ClosestFn = AncestorFn;
-type NthFn = (element: Element, dir: number) => number;
+type NthFn = (element: Element, dir: boolean | 2) => number;
 type IsFocusableFn = (node: HTMLElement) => false | HTMLElement;
 type IsContentEditableFn = (node: HTMLElement) => boolean;
 type HasAttributeFn = (element: Element, ns: string | null, local: string) => boolean;
@@ -273,3 +273,9 @@ type Rex = {
 type QsaKey =
   'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |
   'querySelectorDoc' | 'querySelectorAllDoc';
+
+type CompileSelectorResult = {
+  source: string;
+  post: string;
+  modvar: string[];
+};

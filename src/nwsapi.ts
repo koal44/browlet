@@ -679,7 +679,7 @@ const nthState: NthElementState = {
   idx: 0, len: 0, set: 0, parent: undefined, parents: [], nodes: []
 };
 // fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
-function nthElement(element: Element, dir: number): number {
+function nthElement(element: Element, dir: boolean | 2): number {
   // ensure caches are emptied after each run, invoking with dir = 2
   if (dir == 2) {
     nthState.idx = 0; nthState.len = 0; nthState.set = 0; nthState.nodes.length = 0;
@@ -727,7 +727,7 @@ const nthOfTypeState: NthOfTypeState = {
 };
 
 // fast resolver for the :nth-of-type() and :nth-last-of-type() pseudo-classes
-const nthOfType: NthFn = function(element: Element, dir: number): number {
+const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
   // ensure caches are emptied after each run, invoking with dir = 2
   if (dir == 2) {
     nthOfTypeState.idx = 0; nthOfTypeState.len = 0; nthOfTypeState.set = 0; nthOfTypeState.nodes.length = 0;
@@ -1226,35 +1226,29 @@ function compile(selector: string, mode: boolean | null, cb: QueryCallback | nul
     default: assertNever(mode);
   }
 
-  const source = compileSelector(selector, macro, mode, cb, snap);
+  const { source, post, modvar } = compileSelector(selector, macro, mode, cb, snap);
+  const isSelectMode = mode === true || mode === null;
 
-  loop += mode || mode === null ? '{' + source + '}' : source;
+  loop += isSelectMode ? '{' + source + '}' : source;
 
-  if (mode || mode === null && selector.includes(':nth')) {
-    loop += snap.re.nthElem.test(selector) ? 's.nthElement(null, 2);' : '';
-    loop += snap.re.nthType.test(selector) ? 's.nthOfType(null, 2);' : '';
-  }
-
-  let vars = '';
-  if (MACROS.S.VARS[0] || MACROS.M.VARS[0] || MACROS.N.VARS[0]) {
-    vars = ',' + (MACROS.S.VARS.join(',') || MACROS.M.VARS.join(',') || MACROS.N.VARS[0]);
-    MACROS.S.VARS.length = 0;
-    MACROS.M.VARS.length = 0;
-    MACROS.N.VARS.length = 0;
-  }
-
-  const returnValue = mode === false ? 'return r;' : 'return p;';
-  const f = F_INIT + '{' + head + vars + ';' + loop + returnValue + '}';
+  const vars = modvar.length ? ',' + modvar.join(',') : '';
+  const returnValue = isSelectMode ? 'return p;' : 'return r;';
+  const f = F_INIT + '{' + head + vars + ';' + loop + post + returnValue + '}';
   const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
-  if (mode || mode === null) snap.selectLambdas[selector] = { hasCallback: !!cb, fn: factory as SelectLambda };
-  if (!mode) snap.matchLambdas[selector] = { hasCallback: !!cb, fn: factory as MatchLambda };
+  if (isSelectMode) {
+    snap.selectLambdas[selector] = { hasCallback: !!cb, fn: factory as SelectLambda };
+  } else {
+    snap.matchLambdas[selector]  = { hasCallback: !!cb, fn: factory as MatchLambda };
+  }
 
   return factory;
 }
 
 // build conditional code to check components of selector strings
-function compileSelector(expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot): string {
+function compileSelector(
+  expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot
+): CompileSelectorResult {
   const ATTR_STD_OPS = {
     '=': 1, '^=': 1, '$=': 1, '|=': 1, '*=': 1, '~=': 1
   };
@@ -1269,6 +1263,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
     'text': 1, 'type': 1, 'valign': 1, 'valuetype': 1, 'vlink': 1
   };
 
+  const out: CompileSelectorResult = { source: '', post: '', modvar: [] };
   let k = 0;
   let selector: string | undefined = expression;
 
@@ -1354,7 +1349,7 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
 
         if (nsPrefix !== null && nsPrefix !== '' && nsPrefix !== '*') {
           emit(`Unsupported namespace prefix "${nsPrefix}" in attribute selector: ${selector}`, snap.config);
-          return '';
+          return out;
         }
 
         const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
@@ -1365,15 +1360,15 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
           attrExpr = `s.hasAttribute(e,${nsArg},${localArg})`;
         } else if (attrVal === undefined) {
           emit(`Missing attribute value in selector: ${selector}`, snap.config);
-          return '';
+          return out;
         } else if (attrOp == '~=' && /[\t\n\f\r ]/.test(attrVal)) {
           emit(`Invalid attribute selector: value for ~= operator cannot contain whitespace in selector: ${selector}`, snap.config);
-          return '';
+          return out;
         } else {
           const baseTest = snap.operators[attrOp];
           if (!baseTest) {
             emit(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`, snap.config);
-            return '';
+            return out;
           }
           const isStdOp = attrOp in ATTR_STD_OPS && attrOp != '~=';
           const test =
@@ -1525,9 +1520,11 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
                     a <= -1 ? (f ? 'n<' + (b + 1) + (Math.abs(a) != 1 ? '&&' + test : '') : 'n==' + a) :
                     a === 0 ? (n[0] ? 'n==' + b : 'n>' + (b - 1)) : 'false';
                 }
-                const expr = isOfType ? 'OfType' : 'Element';
-                const type = isLastType ? 'true' : 'false';
-                source = 'n=s.nth' + expr + '(e,' + type + ');if((' + test + ')){' + source + '}';
+                const nthCall = isOfType ? `s.nthOfType(e,${isLastType})` : `s.nthElement(e,${isLastType})`;
+                source = `n=${nthCall};if((${test})){${source}}`;
+
+                const cleanup = isOfType ? `s.nthOfType(null, 2);` : `s.nthElement(null, 2);`;
+                if (!out.post.includes(cleanup)) out.post += cleanup;
               } else {
                 emit(`Invalid syntax for child-indexed pseudo-class ${match[2] != null ? `:${match[1]}(${match[2]})` : `:${match[1]}`} in selector: ${expression}`, snap.config);
               }
@@ -1876,15 +1873,9 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
           for (expr in snap.selectors) {
             if ((match = selector.match(snap.selectors[expr].Expression))) {
               const result = snap.selectors[expr].Callback(match, source, mode, cb);
-              if ('match' in result) { match = result.match; }
-              const vars = result.modvar;
-              if (mode) {
-                  // add extra select() vars
-                  vars && MACROS.S.VARS.indexOf(vars) < 0 && (MACROS.S.VARS[MACROS.S.VARS.length] = vars);
-              } else {
-                  // add extra match() vars
-                  vars && MACROS.M.VARS.indexOf(vars) < 0 && (MACROS.M.VARS[MACROS.M.VARS.length] = vars);
-              }
+              if ('match' in result) { match = result.match ?? null; }
+              const modvar = result.modvar;
+              if (modvar && !out.modvar.includes(modvar)) { out.modvar.push(modvar); }
               // extension source code
               source = result.source;
               // extension status code
@@ -1897,19 +1888,19 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
           if (!status) {
             if (snap.config.FORGIVING &&
               selector.match(/(:(?:is|where)\x28)/)) {
-              return '';
+              return out;
             }
             emit(`Unrecognized selector component: ${selector} in selector: ${expression}`, snap.config);
-            return '';
+            return out;
           }
 
           if (!expr) {
             if (snap.config.FORGIVING &&
               selector.match(/(:(?:is|where)\x28)/)) {
-              return '';
+              return out;
             }
             emit('Unknown token in selector: ' + selector + ' in selector: ' + expression, snap.config);
-            return '';
+            return out;
           }
 
         }
@@ -1925,10 +1916,10 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
     if (!match) {
       if (snap.config.FORGIVING &&
         selector.match(/(:(?:is|where)\x28)/)) {
-        return '';
+        return out;
       }
       emit(`Failed to parse selector component: ${selector} in selector: ${expression}`, snap.config);
-      return '';
+      return out;
     }
 
     // pop last component
@@ -1936,7 +1927,8 @@ function compileSelector(expression: string, source: string, mode: boolean | nul
   }
   // end of while selector
 
-  return source;
+  out.source = source;
+  return out;
 }
 
 // equivalent of w3c 'closest' method
