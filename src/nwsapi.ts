@@ -1190,7 +1190,9 @@ function compileSelector(
     ++k;
 
     // get namespace prefix if present or get first char of selector
-    const symbol = snap.re.STD.apimethods.test(selector) ? '|' : selector[0];
+    const symbol = snap.re.STD.apimethods.test(selector) ? '|'
+      : /^-?(?:[_a-zA-Z]|[^\0-\x7f]|\\)/.test(selector) ? '<tag>'
+      : selector[0];
 
     let match: RegExpMatchArray | null = null;
     switch (symbol) {
@@ -1208,42 +1210,68 @@ function compileSelector(
         if (!match) throw new Error('Invalid ID selector: ' + selector);
 
         const id = cssIdentUnescape(match[1]);
-        source = `if((e.getAttribute("id")===${JSON.stringify(id)})){${source}}`;
+        const idLit = JSON.stringify(id);
+
+        source = `if((e.getAttribute("id")===${idLit})){${source}}`;
         break;
       }
 
       // class name resolver
-      case '.':
+      case '.': {
         match = selector.match(snap.re.Patterns.className);
         if (!match) throw new Error('Invalid class selector: ' + selector);
 
-        const compat = (snap.isQuirksMode ? 'i' : '') + '.test(e.getAttribute("class"))';
-        source = 'if((/(^|\\s)' + match[1] + '(\\s|$)/' + compat + ')){' + source + '}';
+        const className = cssIdentUnescape(match[1]);
+
+        // Class selectors match whitespace-separated tokens. If the decoded selector
+        // fragment itself contains whitespace, it cannot denote one class token.
+        if (/[\t\n\f\r ]/.test(className)) {
+          source = `if(false){${source}}`;
+          break;
+        }
+
+        const classPattern = `(^|\\s)${escapeRegExp(className)}(\\s|$)`;
+        const classPatternLit = JSON.stringify(classPattern);
+        const flagsLit = JSON.stringify(snap.isQuirksMode ? 'i' : '');
+
+        source = `if((new RegExp(${classPatternLit},${flagsLit})).test(e.getAttribute("class")||"")){${source}}`;
         break;
+      }
 
       // tag name resolver
-      case (/[_a-z]/i.test(symbol) ? symbol : undefined):
+      case '<tag>': {
         match = selector.match(snap.re.Patterns.tagName);
         if (!match) throw new Error('Invalid tag selector: ' + selector);
 
-        source = 'if((e.localName=="' + match[1] + '")){' + source + '}';
+        const tagName = cssIdentUnescape(match[1]);
+        const localName = snap.isHtml ? tagName.toLowerCase() : tagName;
+        const localNameLit = JSON.stringify(localName);
+
+        source = `if((e.localName===${localNameLit})){${source}}`;
         break;
+      }
 
       // namespace resolver
-      case '|':
+      case '|': {
         match = selector.match(snap.re.Patterns.namespace);
         if (!match) throw new Error('Invalid namespace selector: ' + selector);
 
-        if (match[1] == '*') {
-          source = 'if(true){' + source + '}';
-        } else if (!match[1]) {
-          source = 'if((!e.namespaceURI)){' + source + '}';
-        } else if (typeof match[1] == 'string' && snap.root.prefix == match[1]) {
-          source = 'if((e.namespaceURI=="' + snap.namespace + '")){' + source + '}';
+        const rawPrefix = match[1] as string | undefined;
+        const nsPrefix = rawPrefix ? cssIdentUnescape(rawPrefix) : rawPrefix;
+
+        if (nsPrefix === '*') {
+          source = `if(true){${source}}`;
+        } else if (!nsPrefix) {
+          source = `if((!e.namespaceURI)){${source}}`;
+        } else if (snap.root.prefix === nsPrefix) {
+          emit(`Namespace prefix "${nsPrefix}" is declared in this document but cannot be used in DOM selector APIs: ${expression}`, snap.config);
+          return out;
         } else {
-          emit(`Unresolvable namespace prefix "${match[1]}" in selector: ${expression}`, snap.config);
+          emit(`Unresolvable namespace prefix "${nsPrefix}" in selector: ${expression}`, snap.config);
+          return out;
         }
         break;
+      }
 
       // attributes resolver
       case '[': {
@@ -1256,7 +1284,8 @@ function compileSelector(
         const attrFlag = match[5] as string | undefined;
 
         const pipe = findUnescapedPipe(attrName);
-        const nsPrefix = pipe >= 0 ? attrName.slice(0, pipe) : null;
+        const rawNsPrefix = pipe >= 0 ? attrName.slice(0, pipe) : null;
+        const nsPrefix = rawNsPrefix === null ? null : cssIdentUnescape(rawNsPrefix);
         const rawLocalName = pipe >= 0 ? attrName.slice(pipe + 1) : attrName;
         const localName = cssIdentUnescape(rawLocalName);
 
@@ -1269,14 +1298,16 @@ function compileSelector(
 
         const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
         const localArg = JSON.stringify(localName);
+        const hasExpr = `s.hasAttribute(e,${nsArg},${localArg})`;
+        const getExpr = `s.getAttribute(e,${nsArg},${localArg})`;
 
         let attrExpr: string;
         if (!attrOp) {
-          attrExpr = `s.hasAttribute(e,${nsArg},${localArg})`;
+          attrExpr = hasExpr;
         } else if (attrVal === undefined) {
           emit(`Missing attribute value in selector: ${selector}`, snap.config);
           return out;
-        } else if (attrOp == '~=' && /[\t\n\f\r ]/.test(attrVal)) {
+        } else if (attrOp === '~=' && /[\t\n\f\r ]/.test(attrVal)) {
           emit(`Invalid attribute selector: value for ~= operator cannot contain whitespace in selector: ${selector}`, snap.config);
           return out;
         } else {
@@ -1285,23 +1316,26 @@ function compileSelector(
             emit(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`, snap.config);
             return out;
           }
-          const isStdOp = ATTR_STD_OPS.has(attrOp) && attrOp != '~=';
+
+          const isStdOp = ATTR_STD_OPS.has(attrOp) && attrOp !== '~=';
           const test =
-              attrVal === '' && attrOp == '~=' ? { p1: '^\\s', p2: '+$', p3: 'true' }
+              attrVal === '' && attrOp === '~=' ? { p1: '^\\s', p2: '+$', p3: 'true' }
             : attrVal === '' && isStdOp        ? { p1: '^',    p2: '$',  p3: 'true' }
             : baseTest;
 
           if (attrVal === '' && isStdOp) {
-            attrExpr = `s.getAttribute(e,${nsArg},${localArg})==""`;
+            attrExpr = `${hasExpr}&&${getExpr}===""`;
           } else {
-            const sensitivity = attrFlag == 'i' || (snap.isHtml && ATTR_INSENSITIVE.has(localName.toLowerCase())) ? 'i' : '';
-            const rxSource = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
-            attrExpr =
-              `(new RegExp(${JSON.stringify(rxSource)},${JSON.stringify(sensitivity)})).test(s.getAttribute(e,${nsArg},${localArg}))==${test.p3}`;
+            const sensitivity = attrFlag === 'i' || (snap.isHtml && ATTR_INSENSITIVE.has(localName.toLowerCase())) ? 'i' : '';
+            const attrPattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
+            const attrPatternLit = JSON.stringify(attrPattern);
+            const sensitivityLit = JSON.stringify(sensitivity);
+
+            attrExpr = `${hasExpr}&&((new RegExp(${attrPatternLit},${sensitivityLit})).test(${getExpr})===${test.p3})`;
           }
         }
 
-        source = 'if((' + attrExpr + ')){' + source + '}';
+        source = `if((${attrExpr})){${source}}`;
         break;
       }
 

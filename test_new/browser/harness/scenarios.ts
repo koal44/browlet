@@ -98,9 +98,17 @@ type CaseInfo = {
   misfixes: Record<number, PassTracker>;
 };
 
-export function runScenarios(label: string, status: ScenariosStatus, scenarios: Scenario[]): void {
+type RunScenariosOptions = {
+  parallel?: boolean;
+};
+
+export function runScenarios(label: string, status: ScenariosStatus, scenarios: Scenario[], options: RunScenariosOptions = {}): void {
   const describeFn = getDescribeFn(status);
   describeFn(label, () => {
+    if (options.parallel) {
+      test.describe.configure({ mode: 'parallel' });
+    }
+
     let browsers: Record<BrowserName, Browser>;
     let pages: Record<BrowserName, Page>;
 

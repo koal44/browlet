@@ -532,8 +532,8 @@ runScenarios('slick', 'normal', [
 
       // case sensitivity
       { select: 'span.baz', expect: { count: 1 } },
-      { select: 'sPaN.baz', expect: { count: 1 }, status: 'fixme' },
-      { select: 'SPAN.baz', expect: { count: 1 }, status: 'fixme' },
+      { select: 'sPaN.baz', expect: { count: 1 } },
+      { select: 'SPAN.baz', expect: { count: 1 } },
       { select: '[class = "foo bar"]', expect: { count: 1 } },
       { select: '[foo~="bar"]', expect: { count: 2 } },
       { select: '[ foo ~= "bar" ]', expect: { count: 2 } },
@@ -1130,8 +1130,8 @@ runScenarios('slick', 'normal', [
 
       // testCaseSensitivity
       { select: 'span.baz', expect: { count: 1 } },
-      { select: 'sPaN.baz', expect: { count: 1 }, status: 'fixme' },
-      { select: 'SPAN.baz', expect: { count: 1 }, status: 'fixme' },
+      { select: 'sPaN.baz', expect: { count: 1 } },
+      { select: 'SPAN.baz', expect: { count: 1 } },
       { select: '[class = "foo bar"]', expect: { count: 1 } },
       { select: '[foo~="bar"]', expect: { count: 2 } },
       { select: '[ foo ~= "bar" ]', expect: { count: 2 } },
@@ -1582,8 +1582,8 @@ runScenarios('slick', 'normal', [
       ...triFind(12, 'div p a:not([href^="tel:"])'),
       ...triFind(683, 'div,p,a:not([href^="tel:"])'),
 
-      ...triFind(43, 'DIV.example', 'fixme'),
-      ...triFind(43, 'DiV.example', 'fixme'),
+      ...triFind(43, 'DIV.example'),
+      ...triFind(43, 'DiV.example'),
       ...triFind(12, 'ul .tocline2'),
       ...triFind(44, 'div.example,div.note'),
 
@@ -2207,7 +2207,7 @@ runScenarios('slick', 'normal', [
     ],
   },
 
-]);
+], { parallel: true });
 
 function triFind(count: number, selector: string, status?: TestCase['status']): TestCase[] {
   const cases: TestCase[] = [
