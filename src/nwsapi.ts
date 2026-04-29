@@ -185,14 +185,16 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
     },
 
     // register a new selector combinator symbol and its related function resolver
-    registerCombinator(combinator: string, resolver: string) {
-      if ([...combinator].length !== 1) {
-        throw new Error('Invalid combinator: ' + combinator);
+    registerCombinator(combinator: string, compiler: CombinatorCompiler) {
+      if ([...combinator].length !== 1) throw new Error('Invalid combinator: ' + combinator);
+      if (typeof compiler !== 'function') throw new Error('Invalid combinator resolver for: ' + combinator);
+      if (DEFAULT_EXTENSIONS.combinators.includes(combinator)) {
+        throw new Error(`Cannot override default combinator: '${combinator}'`);
       }
 
       if (!_snap.ext.combinators.includes(combinator)) {
         _snap.ext.combinators.push(combinator);
-        _snap.combinators[combinator] = resolver;
+        _snap.combinators[combinator] = compiler;
         _snap.re = buildRex(_snap.ext);
       } else {
         console.warn(`Warning: the '${combinator}' combinator is already registered.`);
@@ -288,7 +290,7 @@ export function initSnapshot(doc: Document) {
       combinators: [...DEFAULT_EXTENSIONS.combinators],
     } as NwsExtensions,
     selectors: {} as Record<string, SelectorExtension>,
-    combinators: {} as Record<string, string>, // TODO: ???
+    combinators: {} as Record<string, CombinatorCompiler>,
     operators: {
       '=':  { p1: '^',       p2: '$',       p3: 'true' },
       '^=': { p1: '^',       p2: '',        p3: 'true' },
@@ -436,7 +438,7 @@ export function cssIdentUnescape(str: string): string {
 }
 
 export function escapeRegExp(pattern: string): string {
-  return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return pattern.replace(/[.*+?^${}()|[\]\-\\]/g, '\\$&');
 }
 
 // find duplicate ids using iterative walk
@@ -1007,7 +1009,8 @@ export function buildRex(ext: NwsExtensions) {
     TabCharWSP: RegExp(`(${SP}?${HT}+${SP}?)${NOT.single_enc}${NOT.double_enc}`, 'g'),
     PseudosWSP: RegExp(`([0-9n])\\s*([-+])\\s*(?=[0-9n])${NOT.square_enc}`, 'gi'),
     STD: {
-      combinator: RegExp(`\\s?([>+~])\\s?`, 'g'),
+      combinator: RegExp(`${WSP}?([${combinatorRaw}])${WSP}?`, 'g'),
+      // combinator: RegExp(`\\s?([>+~])\\s?`, 'g'),
       apimethods: RegExp(`^${namespacePrefix}\\|`),
       namespaces: RegExp(`(${namespacePrefix})\\|` + namespaceName),
     },
@@ -1072,7 +1075,7 @@ function emit(message: string, config: NwsConfig, proto?: typeof Error): void {
 const F_INIT = '"use strict";return function Resolver(c,f,x,r)';
 const MACROS = {
   S: { // SELECT
-    HEAD: 'var e,n,o,j=r.length-1,k=-1,p=false',
+    HEAD: 'var e,m,n,o,j=r.length-1,k=-1,p=false',
     LOOP: 'main:while((e=c[++k]))',
     BODY: 'r[++j]=c[k];',
     TAIL: 'continue main;',
@@ -1081,7 +1084,7 @@ const MACROS = {
   },
 
   M: { // MATCH
-    HEAD: 'var e,n,o',
+    HEAD: 'var e,m,n,o',
     LOOP: 'e=c;',
     BODY: '',
     TAIL: 'r=true;',
@@ -1090,7 +1093,7 @@ const MACROS = {
   },
 
   N: { // NONE
-    HEAD: 'var e,n,o,p=false',
+    HEAD: 'var e,m,n,o,p=false',
     LOOP: 'main:while((e=c.item(++k)))',
     BODY: 'r[++j]=c.item(k);',
     TAIL: 'r=true;',
@@ -1190,7 +1193,7 @@ function compileSelector(
     ++k;
 
     // get namespace prefix if present or get first char of selector
-    const symbol = snap.re.STD.apimethods.test(selector) ? '|'
+    const symbol: string = snap.re.STD.apimethods.test(selector) ? '|'
       : /^-?(?:[_a-zA-Z]|[^\0-\x7f]|\\)/.test(selector) ? '<tag>'
       : selector[0];
 
@@ -1341,44 +1344,55 @@ function compileSelector(
 
       // *** General sibling combinator
       // E ~ F (F relative sibling of E)
-      case '~':
+      case '~': {
         match = selector.match(snap.re.Patterns.relative);
-        if(!match) throw new Error('Invalid relative sibling combinator in selector: ' + selector);
-        source = 'var N' + k + '=e;while(e&&(e=e.previousElementSibling)){' + source + '}e=N' + k + ';';
+        if (!match) throw new Error('Invalid relative sibling combinator in selector: ' + selector);
+
+        source = `var N${k}=e;while(e&&(e=e.previousElementSibling)){${source}}e=N${k};`;
         break;
+      }
 
       // *** Adjacent sibling combinator
       // E + F (F adiacent sibling of E)
-      case '+':
+      case '+': {
         match = selector.match(snap.re.Patterns.adjacent);
-        if(!match) throw new Error('Invalid adjacent sibling combinator in selector: ' + selector);
-        source = 'var N' + k + '=e;if(e&&(e=e.previousElementSibling)){' + source + '}e=N' + k + ';';
+        if (!match) throw new Error('Invalid adjacent sibling combinator in selector: ' + selector);
+
+        source = `var N${k}=e;if(e&&(e=e.previousElementSibling)){${source}}e=N${k};`;
         break;
+      }
 
       // *** Descendant combinator
       // E F (E ancestor of F)
       case '\x09':
-      case '\x20':
+      case '\x20': {
         match = selector.match(snap.re.Patterns.ancestor);
-        if(!match) throw new Error('Invalid descendant combinator in selector: ' + selector);
-        source = 'var N' + k + '=e;while(e&&(e=e.parentElement)){' + source + '}e=N' + k + ';';
+        if (!match) throw new Error('Invalid descendant combinator in selector: ' + selector);
+
+        source = `var N${k}=e;while(e&&(e=e.parentElement)){${source}}e=N${k};`;
         break;
+      }
 
       // *** Child combinator
       // E > F (F children of E)
-      case '>':
+      case '>': {
         match = selector.match(snap.re.Patterns.children);
-        if(!match) throw new Error('Invalid child combinator in selector: ' + selector);
-        source = 'var N' + k + '=e;if(e&&(e=e.parentElement)){' + source + '}e=N' + k + ';';
+        if (!match) throw new Error('Invalid child combinator in selector: ' + selector);
+
+        source = `var N${k}=e;if(e&&(e=e.parentElement)){${source}}e=N${k};`;
         break;
+      }
 
       // *** user supplied combinators extensions
-      case (symbol in snap.combinators ? symbol : undefined):
-        // for other registered combinators extensions
-        throw new Error('FIXME: custom combinators are not supported yet'); // TODO: implement custom combinators
-        // match[match.length - 1] = '*';
-        // source = Combinators[symbol](match) + source;
-        // break;
+      case (symbol in snap.combinators ? symbol : undefined): {
+        const symbolPattern = new RegExp(`^\\s?${escapeRegExp(symbol)}\\s?(.*)`);
+        match = selector.match(symbolPattern);
+        if (!match) throw new Error(`Invalid combinator "${symbol}" in selector: ` + selector);
+
+        const compiler = snap.combinators[symbol];
+        source = `var N${k}=e;${compiler(source)}e=N${k};`;
+        break;
+      }
 
       // *** tree-structural pseudo-classes
       // :root, :empty, :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :only-of-type
@@ -1386,43 +1400,45 @@ function compileSelector(
         if ((match = selector.match(snap.re.Patterns.structural))) {
           match[1] = match[1].toLowerCase();
           switch (match[1]) {
-            case 'scope':
-              // use the root (documentElement) when comparing against a document
-              source = 'if(e===(s.from.nodeType===9?s.root:s.from)){' + source + '}';
-              break;
+            // case 'scope' is bypassed by `prepareScope` method, which replaces :scope with a unique selector fingerpint
             case 'root':
               // there can only be one :root element, so exit the loop once found
-              source = 'if((e===s.root)){' + source + (mode ? 'break main;' : '') + '}';
+              source = `if((e===s.root)){${source}${mode ? 'break main;' : ''}}`;
               break;
             case 'empty':
               // matches elements that don't contain elements or text nodes
-              source = 'n=e.firstChild;while(n&&!(/1|3/).test(n.nodeType)){n=n.nextSibling}if(!n){' + source + '}';
+              source = `n=e.firstChild;while(n&&n.nodeType!==1&&n.nodeType!==3){n=n.nextSibling}if(!n){${source}}`;
               break;
 
             // *** child-indexed pseudo-classes
             // :first-child, :last-child, :only-child
             case 'only-child':
-              source = 'if((!e.nextElementSibling&&!e.previousElementSibling)){' + source + '}';
+              source = `if((!e.nextElementSibling&&!e.previousElementSibling)){${source}}`;
               break;
             case 'last-child':
-              source = 'if((!e.nextElementSibling)){' + source + '}';
+              source = `if((!e.nextElementSibling)){${source}}`;
               break;
             case 'first-child':
-              source = 'if((!e.previousElementSibling)){' + source + '}';
+              source = `if((!e.previousElementSibling)){${source}}`;
               break;
 
             // *** typed child-indexed pseudo-classes
             // :only-of-type, :last-of-type, :first-of-type
             case 'only-of-type':
-              source = 'o=e.localName;' +
-                'n=e;while((n=n.nextElementSibling)&&n.localName!=o);if(!n){' +
-                'n=e;while((n=n.previousElementSibling)&&n.localName!=o);}if(!n){' + source + '}';
+              source =
+                `o=e.localName;m=e.namespaceURI;` +
+                `n=e;while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){` +
+                `n=e;while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));}if(!n){${source}}`;
               break;
             case 'last-of-type':
-              source = 'n=e;o=e.localName;while((n=n.nextElementSibling)&&n.localName!=o);if(!n){' + source + '}';
+              source =
+                `n=e;o=e.localName;m=e.namespaceURI;` +
+                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){${source}}`;
               break;
             case 'first-of-type':
-              source = 'n=e;o=e.localName;while((n=n.previousElementSibling)&&n.localName!=o);if(!n){' + source + '}';
+              source =
+                `n=e;o=e.localName;m=e.namespaceURI;` +
+                `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){${source}}`;
               break;
             default:
               emit(`Unsupported structural-tree pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);

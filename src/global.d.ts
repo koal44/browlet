@@ -119,7 +119,8 @@ type HasAttributeFn = (element: Element, ns: string | null, local: string) => bo
 type GetAttributeFn = (element: Element, ns: string | null, local: string) => string | null;
 
 type CompileFn = (selector: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot) => SelectLambda | MatchLambda;
-type RegisterCombinatorFn = (combinator: string, resolver: string) => void;
+type CombinatorCompiler = (source: string) => string;
+type RegisterCombinatorFn = (combinator: string, compiler: CombinatorCompiler) => void;
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
 

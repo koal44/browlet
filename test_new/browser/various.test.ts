@@ -1666,4 +1666,211 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'general sibling combinator traversal',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <div id="a1" class="a"></div>
+        <div id="a2" class="a"></div>
+        <span id="once" class="x"></span>
+
+        <div id="b1" class="b"></div>
+        <span id="chain-1" class="x"></span>
+
+        <div id="b2" class="b"></div>
+        <span id="chain-2" class="x"></span>
+
+        <section>
+          <span id="nested" class="x"></span>
+          <div class="a"></div>
+        </section>
+      </div>
+    `,
+    cases: [
+      // Two previous .a siblings should not duplicate the same right-hand match.
+      { select: '.a ~ #once', expect: { ids: ['once'] } },
+
+      // The nested .a is not a sibling of outer .x elements; the outer .a siblings
+      // are not siblings of #nested.
+      { select: '.a ~ .x', expect: { ids: ['once', 'chain-1', 'chain-2'] } },
+
+      // Chained sibling walks must restore the candidate after each inner scan.
+      { select: '.a ~ .b ~ .x', expect: { ids: ['chain-1', 'chain-2'] } },
+    ],
+  },
+
+  {
+    name: 'compiled combinator traversal',
+    // status: 'only',
+    markup: `
+      <div id="root" class="a">
+        <section id="section" class="a">
+          <article id="article">
+            <span id="deep" class="x"></span>
+          </article>
+
+          <span id="section-child" class="x"></span>
+        </section>
+
+        <span id="root-child" class="x"></span>
+        <div id="self" class="x"></div>
+
+        <div id="sib-a1" class="sib-a"></div>
+        <div id="sib-a2" class="sib-a"></div>
+        <span id="general-sibling" class="sib-x"></span>
+
+        <div id="adj-a" class="adj-a"></div>
+        <span id="adjacent" class="adj-x"></span>
+        <em id="gap"></em>
+        <span id="not-adjacent" class="adj-x"></span>
+      </div>
+    `,
+    cases: [
+      // Descendant: multiple matching ancestors should not duplicate #deep.
+      { select: '.a .x', expect: { ids: ['deep', 'section-child', 'root-child', 'self'] } },
+
+      // Descendant does not include the candidate itself as its own ancestor.
+      { select: '.x .x', expect: { ids: [] } },
+
+      // Child: only the immediate parent is checked.
+      { select: '.a > .x', expect: { ids: ['section-child', 'root-child', 'self'] } },
+      { select: '#root > #deep', expect: { ids: [] } },
+
+      // General sibling: multiple matching previous siblings should not duplicate.
+      { select: '.sib-a ~ .sib-x', expect: { ids: ['general-sibling'] } },
+
+      // Adjacent sibling: only the immediately preceding element is checked.
+      { select: '.adj-a + .adj-x', expect: { ids: ['adjacent'] } },
+
+      // Chained combinators must restore candidate state across inner checks.
+      { select: '#root > .a > .x', expect: { ids: ['section-child'] } },
+      { select: '.a ~ .sib-a + .sib-x', expect: { ids: ['general-sibling'] } },
+    ],
+  },
+
+  {
+    name: 'registered combinator extension',
+    // status: 'only',
+    engines: ['nw'],
+    markup: `
+      <div class="card">
+        <section>
+          <h2 id="grandchild" class="title"></h2>
+        </section>
+      </div>
+
+      <div class="card">
+        <h2 id="child" class="title"></h2>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom not found');
+
+        nwdom.registerCombinator('^', source =>
+          `if(e&&(e=e.parentElement)&&(e=e.parentElement)){${source}}`
+        );
+      });
+    },
+    cases: [
+      { select: '.card ^ .title', expect: { ids: ['grandchild'] }, debug: false },
+    ],
+  },
+
+  {
+    name: 'root and empty structural pseudo-classes',
+    // status: 'only',
+    markup: `
+      <div id="empty"></div>
+      <div id="comment"><!-- comment --></div>
+      <div id="text"> </div>
+      <div id="child"><span></span></div>
+      <div id="marked" class="x">not empty</div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        document.documentElement.id = 'html-root';
+      });
+    },
+    cases: [
+      { select: ':root, .x', expect: { ids: ['html-root', 'marked'] } },
+      { select: '.x, :root', expect: { ids: ['html-root', 'marked'] } },
+      { select: 'div:empty', expect: { ids: ['empty', 'comment'] } },
+    ],
+  },
+
+  {
+    name: 'child-indexed structural pseudo-classes',
+    // status: 'only',
+    markup: `
+      <div id="single">
+        text before
+        <!-- comment before -->
+        <span id="only"></span>
+        <!-- comment after -->
+        text after
+      </div>
+
+      <div id="multi">
+        text before
+        <span id="first"></span>
+        <!-- comment between -->
+        text between
+        <span id="middle"></span>
+        <span id="last"></span>
+        text after
+      </div>
+    `,
+    cases: [
+      // Text and comment nodes do not count as element siblings.
+      { select: 'span:only-child', expect: { ids: ['only'] } },
+      { select: 'span:first-child', expect: { ids: ['only', 'first'] } },
+      { select: 'span:last-child', expect: { ids: ['only', 'last'] } },
+
+      // Element siblings do count.
+      { select: '#middle:first-child', expect: { ids: [] } },
+      { select: '#middle:last-child', expect: { ids: [] } },
+      { select: '#middle:only-child', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'of-type structural pseudo-classes distinguish XML namespaces',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root xmlns:a="http://example/a" xmlns:b="http://example/b">
+        <a:item id="a-first" class="x" />
+        <b:item id="b-first" class="x" />
+        <a:item id="a-last" class="x" />
+        <b:item id="b-last" class="x" />
+      </root>
+    `,
+    cases: [
+      // Same localName, different namespaceURI: these should be different types.
+      { select: '*|item:first-of-type', expect: { ids: ['a-first', 'b-first'] } },
+      { select: '*|item:last-of-type', expect: { ids: ['a-last', 'b-last'] } },
+      { select: '*|item:only-of-type', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'of-type structural pseudo-classes',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <span id="span-first"></span>
+        <em id="em-only"></em>
+        <span id="span-last"></span>
+      </div>
+    `,
+    cases: [
+      { select: 'span:first-of-type', expect: { ids: ['span-first'] } },
+      { select: 'span:last-of-type', expect: { ids: ['span-last'] } },
+      { select: 'em:only-of-type', expect: { ids: ['em-only'] } },
+    ],
+  },
+
 ]);
