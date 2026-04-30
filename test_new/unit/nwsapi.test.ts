@@ -185,28 +185,6 @@ describe('Rex selector splitting helpers', () => {
   });
 });
 
-// describe('decodeCssEscapes', () => {
-//   const rex = buildRex(DEFAULT_EXTENSIONS);
-
-//   it('matches CSS escape sequences and raw quotes for escape decoding', () => {
-//     expect(matchRe0(rex.FixEscapes, '\\e9')).toEqual(['\\e9']);
-//     expect(matchRe0(rex.FixEscapes, '\\31 23')).toEqual(['\\31 ']);
-//     expect(matchRe0(rex.FixEscapes, '\\.')).toEqual(['\\.']);
-//     expect(matchRe0(rex.FixEscapes, '"')).toEqual(['"']);
-//     expect(matchRe0(rex.FixEscapes, "'")).toEqual(["'"]);
-//   });
-
-//   it('characterizes CSS escape decoding used by attribute regex generation', () => {
-//     expect(decodeCssEscapes('\\e9', rex)).toBe('\\u00e9');
-//     expect(decodeCssEscapes('foo\\"bar', rex)).toBe('foo\\"bar');
-//   });
-
-//   it('decodes CSS hex escapes to actual characters', () => {
-//     const rex = buildRex(DEFAULT_EXTENSIONS);
-//     expect(decodeCssEscapes('f\\F6 o', rex)).toBe('föo');
-//   });
-// });
-
 describe('attribute value regex preparation', () => {
   function attrValuePatternSource(rawAttrVal: string): string {
     return escapeRegExp(cssIdentUnescape(rawAttrVal));
@@ -477,16 +455,15 @@ describe('Rex pseudo-class patterns', () => {
     // expectCaptures(rex.Patterns.logicalsel, ':is(.a)) .tail', ['is', '.a)', ' .tail']);
   });
 
-  // Removing because logicalsel cannot handle nested parens. Use matchLogicalSelector instead.
-  // it('does not over-consume valid logical selectors followed by functional pseudos', () => {
-  //   expectCaptures(rex.Patterns.logicalsel, ':is(.a):nth-child(2n+1)', ['is', '.a', ':nth-child(2n+1)']);
-  //   expectCaptures(rex.Patterns.logicalsel, ':not(.a):nth-of-type(2)', ['not', '.a', ':nth-of-type(2)']);
-  //   expectCaptures(rex.Patterns.logicalsel, ':has(> .a):not(.disabled)', ['has', '> .a', ':not(.disabled)']);
-  //   expectCaptures(rex.Patterns.logicalsel, ':where(.a):lang(en)', ['where', '.a', ':lang(en)']);
-  //   expectCaptures(rex.Patterns.logicalsel, ':is(.a):has(+ .b)', ['is', '.a', ':has(+ .b)']);
-  // });
+  it('does not over-consume valid logical selectors followed by functional pseudos', () => {
+    expectCaptures(rex.Patterns.logicalsel, ':is(.a):nth-child(2n+1)', ['is', '.a', ':nth-child(2n+1)']);
+    expectCaptures(rex.Patterns.logicalsel, ':not(.a):nth-of-type(2)', ['not', '.a', ':nth-of-type(2)']);
+    expectCaptures(rex.Patterns.logicalsel, ':has(> .a):not(.disabled)', ['has', '> .a', ':not(.disabled)']);
+    expectCaptures(rex.Patterns.logicalsel, ':where(.a):lang(en)', ['where', '.a', ':lang(en)']);
+    expectCaptures(rex.Patterns.logicalsel, ':is(.a):has(+ .b)', ['is', '.a', ':has(+ .b)']);
+  });
 
-  // Failing because logicalsel cannot handle nested parens. Use matchLogicalSelector instead.
+  // // Failing because logicalsel cannot handle nested parens. Use matchLogicalSelector instead.
   // it('does not over-consume nested logical selectors followed by functional pseudos', () => {
   //   expectCaptures(rex.Patterns.logicalsel, ':is(:not(.a), .b):nth-child(2n+1)', ['is', ':not(.a), .b', ':nth-child(2n+1)']);
   //   expectCaptures(rex.Patterns.logicalsel, ':where(:has(> .a)):lang(en)', ['where', ':has(> .a)', ':lang(en)']);
@@ -661,6 +638,13 @@ describe('Rex optimizer', () => {
   it('does not optimize pseudo-class-only tails', () => {
     expectOptimizer(':scope', [':', 'scope']);
     expectOptimizer(':not(.a)', [':', 'not']);
+  });
+
+  it('skips attribute and pseudo/function suffixes when finding optimizer seed', () => {
+    expectCaptures(rex.optimizer, 'div[attr=value]', ['', 'div']);
+    expectCaptures(rex.optimizer, 'div:not(.x)', ['', 'div']);
+    expectCaptures(rex.optimizer, '.item[attr="abc"]', ['.', 'item']);
+    // expectCaptures(rex.optimizer, '.item[attr="a[b]"]', ['.', 'item']); // TODO: make pass
   });
 });
 
@@ -921,30 +905,43 @@ describe('parse validator', () => {
     expectParse('#\\35 cm', ['#\\35 cm']);
   });
 
-it('validates namespace-qualified attribute names', () => {
-  expectParse('[lang]', ['[lang]']);
-  expectParse('[*|lang]', ['[*|lang]']);
-  expectParse('[|lang]', ['[|lang]']);
-  expectParse('[xml|lang]', ['[xml|lang]']);
-});
+  it('validates namespace-qualified attribute names', () => {
+    expectParse('[lang]', ['[lang]']);
+    expectParse('[*|lang]', ['[*|lang]']);
+    expectParse('[|lang]', ['[|lang]']);
+    expectParse('[xml|lang]', ['[xml|lang]']);
+  });
 
-it('rejects universal local names in attribute selectors', () => {
-  expectParseRejects('[*|*]');
-  expectParseRejects('[|*]');
-});
+  it('rejects universal local names in attribute selectors', () => {
+    expectParseRejects('[*|*]');
+    expectParseRejects('[|*]');
+  });
 
-it('validates compound :scope selectors', () => {
-  expectParse('div:scope > *', ['div:scope > *']);
-  expectParse(':scope > *', [':scope > *']);
-});
+  it('validates compound :scope selectors', () => {
+    expectParse('div:scope > *', ['div:scope > *']);
+    expectParse(':scope > *', [':scope > *']);
+  });
 
+  it('accepts missing right bracket at EOF for attribute selectors', () => {
+    expectParse('meta[charset="utf-8"', ['meta[charset="utf-8"']);
+    expectParse('#attr-value [align="center"', ['#attr-value [align="center"']);
+  });
 
+  it('rejects invalid unquoted attribute values', () => {
+    expectParseRejects('[id*=2]');
+    expectParseRejects('a[href=#]');
+    expectParseRejects('[class= space unquoted ]');
+    expectParseRejects('.blox23s1[foo="blox" erroneous]');
+  });
 
+  it('accepts missing right bracket at EOF for attribute selectors', () => {
+    expectParse('meta[charset="utf-8"', ['meta[charset="utf-8"']);
+    expectParse('#attr-value [align="center"', ['#attr-value [align="center"']);
+  });
 
-
-
-
-
+  it('accepts universal selectors inside functional pseudos', () => {
+    expectParse(':not(*)', [':not(*)']);
+  });
 
 });
 
@@ -1286,10 +1283,30 @@ describe('validator functional pseudo bodies', () => {
     }
   });
 
-
   it('captures :scope with selector suffixes', () => {
     expectCaptures(rex.Patterns.structural, ':scope > *', ['scope', ' > *']);
     expectCaptures(rex.Patterns.structural, ':scope.item', ['scope', '.item']);
+  });
+
+  it('captures quoted attribute values containing brackets', () => {
+    const rex = buildRex(DEFAULT_EXTENSIONS);
+
+    for (const [input, name, op, q, value] of [
+      [`[name='types[]']`, 'name', '=', "'", 'types[]'],
+      [`[name^='foo[']`, 'name', '^=', "'", 'foo['],
+      [`[name="brackets[5][]"]`, 'name', '=', '"', 'brackets[5][]'],
+    ] as const) {
+      expectCaptures(rex.Patterns.attribute, input, [name, op, q, value, undefined, '']);
+    }
+  });
+
+  it('validates universal and namespace type selectors inside functional pseudos', () => {
+    expectValid(':not(*)');
+    expectValid(':is(*)');
+    expectValid(':is(*|item)');
+    expectValid(':is(|item)');
+    expectValid(':is(test|item)');
+    expectValid(':is(*|*)');
   });
 
 
@@ -1396,14 +1413,27 @@ describe('Rex source fragments', () => {
       expectNoFullMatch(identifier, '\\');
     });
 
+    describe('attribute value fragments', () => {
+      const { attrValue } = rexStrings;
 
+      it('matches identifier and quoted attribute values', () => {
+        for (const value of ['foo', 'foo-bar', `"foo"`, `'foo'`, `"types[]"`, `"brackets[5][]"`, `'foo['`]) {
+          expectFullMatch(attrValue, value);
+        }
+      });
 
+      it('matches escaped quotes inside quoted attribute values', () => {
+        expectFullMatch(attrValue, `"a\\"b"`);
+        expectFullMatch(attrValue, `'a\\'b'`);
+      });
 
+      it('does not match raw numeric unquoted values', () => {
+        expectNoFullMatch(attrValue, '2');
+        expectNoFullMatch(attrValue, '123');
+      });
+    });
 
   });
-
-
-
 
 });
 
@@ -1421,5 +1451,31 @@ describe('Rex tree-structural nth patterns', () => {
     ] as const) {
       expectCaptures(rex.Patterns.treestruct, input, [pseudo, arg, rest]);
     }
+  });
+});
+
+describe('Rex attribute pattern', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+
+  it('captures quoted attribute values containing brackets', () => {
+    for (const [input, name, op, quote, value] of [
+      [`[name='types[]']`, 'name', '=', "'", 'types[]'],
+      [`[name^='foo[']`, 'name', '^=', "'", 'foo['],
+      [`[name="brackets[5][]"]`, 'name', '=', '"', 'brackets[5][]'],
+    ] as const) {
+      expectCaptures(rex.Patterns.attribute, input, [name, op, quote, value, undefined, '']);
+    }
+  });
+});
+
+describe('Rex attribute selector fragments', () => {
+  const rexStrings = buildRexStrings(DEFAULT_EXTENSIONS);
+
+  it('validates missing right bracket at EOF', () => {
+    const re = new RegExp(`^(?:${rexStrings.attributeSelector})$`);
+
+    expect(re.test(`[charset="utf-8"`)).toBe(true);
+    expect(re.test(`[align="center"`)).toBe(true);
+    expect(re.test(`[name='types[]'`)).toBe(true);
   });
 });

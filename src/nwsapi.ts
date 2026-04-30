@@ -880,6 +880,7 @@ export function buildRexStrings(ext: NwsExtensions) {
   const wsp = `[${WSP}]`;
   const digitCh = `[${DIGIT}]`;
   const slugCh = `[${SLUG}]`;
+  const quote = `[${DQ}${SQ}]`;
   const identHeadCh = `[${IDENT_HEAD}]`;
   const identTailCh = `[${IDENT_TAIL}]`;
   const hexCh = `[${HEX}]`;
@@ -912,16 +913,18 @@ export function buildRexStrings(ext: NwsExtensions) {
   // configurable combinators and operators
   const COMBINATOR = ext.combinators.map(escapeRegExp).join('');
   const combinator = `[${COMBINATOR}]${wsp}?(?=[^${COMBINATOR}])`;
-  const operators = ext.operators.map(escapeRegExp).join('|');
+  const operators = `(?:${ext.operators.map(escapeRegExp).join('|')})`;
 
   // attribute selectors
-  const doublequote = `"[^"${BS}]*(?:${BS}.[^"${BS}]*)*(?:"|$)`;
-  const singlequote = `'[^'${BS}]*(?:${BS}.[^'${BS}]*)*(?:'|$)`;
-  const attrparser = `${identifier}|${doublequote}|${singlequote}`;
-  const attrvalues = `([${DQ}${SQ}]?)((?!\\3)*|(?:${BS}?.)*?)(?:\\3|$)`;
-  // const SENSE_FLAG = `i?`;
+  const dqString = `"[^"${BS}]*(?:${BS}.[^"${BS}]*)*(?:"|$)`;
+  const sqString = `'[^'${BS}]*(?:${BS}.[^'${BS}]*)*(?:'|$)`;
+  const attrValue = `(?:${identifier}|${dqString}|${sqString})`;
+  const attrvalueCap = `(${quote}?)((?!\\3)*|(?:${BS}?.)*?)(?:\\3|$)`;
+  const attrFlag = `(?:\\bi\\b)`;
 
-  const attributes =
+  // [ attrName (operator attrValue)? attrFlag? ]
+  // [attr], [attr=value], [attr~=value], [attr~="value'], [ns|attr=value i], etc.
+  const attributeSelector =
     `${LB}` +
       `${wsp}?` +
       `(${attrName})` +
@@ -929,51 +932,80 @@ export function buildRexStrings(ext: NwsExtensions) {
       `(?:` +
         `(${operators})` +
         `${wsp}?` +
-        `(?:${attrparser})` +
+        `${attrValue}` +
       `)?` +
-      `(?:${wsp}?\\b(i))?${wsp}?` +
+      `${wsp}?` +
+      `(${attrFlag})?` +
+      `${wsp}?` +
     `(?:${RB}|$)`;
 
-  const attrmatcher = attributes.replace(attrparser, attrvalues);
+  const attrMatcher = attributeSelector.replace(attrValue, attrvalueCap);
 
-  const pseudoclass =
+  // selector components
+  const pseudoName = `${slugCh}+`;
+  const typeSelector = `(?:${nsType}|${UNIVERSAL}|${identifier})`;
+  const classSelector = `\\.${identifier}`;
+  const idSelector = `#${identifier}`;
+  const pseudoSelector = `:${pseudoName}`;
+
+  // const pseudoSelector = `:${pseudoName}(?:${pseudoBody}*)?`;
+  // const simpleSelector = `(?:${classSelector}|${idSelector}|${attributes}|${pseudoSelector})`;
+  // const compoundSelector = `(?:${typeSelector}${simpleSelector}*|${simpleSelector}+)`;
+  // const relativeSelector = `(?:${compoundSelector}?${wsp}?${combinator}${wsp}?)+${compoundSelector}?`;
+  // const complexSelector = `(?:${relativeSelector}|${compoundSelector})`;
+  // const selectorList = `${complexSelector}(?:${wsp}?,${wsp}?${complexSelector})*`;
+
+  // Loose token walker for functional pseudo-class arguments.
+  // Handles selector-list-ish and relative-selector-ish bodies such as:
+  //   :not(*)
+  //   :is(.a, #b, div, *|item, [attr=value])
+  //   :has(> .item, + dt)
+  //   :is(:scope > .item)
+  // TODO: replace this with parser-side validation for functional pseudo bodies.
+  const pseudoBody =
     `(?:${LP}` +
       `(?:${wsp}?)|` +
-      `(?:${nsType}|${UNIVERSAL})|` +
-      `(?::${slugCh}+)|` +
+      `(?:${typeSelector})|` +
       `(?:${nthFormula})|` +
-      `(?:[.#]?${identifier})|` +
-      `(?:${attributes})|` +
+      `(?:${pseudoSelector})|` +
+      `(?:${classSelector}|${idSelector})|` +
+      `(?:${attributeSelector})|` +
       `(?:${wsp}?${combinator})|` +
       `(?:,${wsp}?)|` +
     `${RP})`;
 
+  // Cheated because regex can't do recursion, but here's the full version after the fact.
+  const pseudoSelectorFull = `:{1,2}${pseudoName}${pseudoBody}*`;
+
   const validator =
     `(?=${wsp}?[^>+~(){}<>])` +
     `(?:` +
-      `(?:${nsType})|` +
-      `(?:${UNIVERSAL})|` +
-      `(?:[.#]?${identifier})+|` +
-      `(?:${attributes})+|` +
-      `(?::${nthFunction})|` +
-      `(?:::?${slugCh}+${pseudoclass}*)|` +
+      `(?:${typeSelector})|` +
+      `(?:${classSelector}|${idSelector})|` +
+      `(?:${attributeSelector})+|` +
+      `(?:${pseudoSelectorFull})|` +
       `(?:${wsp}?${combinator}${wsp}?)|` +
       `(?:${wsp}?,${wsp}?)|` +
       `(?:${wsp}?)` +
     `)+`;
 
-  // the following global RE is used to return the
-  // deepest localName in selector strings and then
-  // use it to retrieve all possible matching nodes
-  // that will be filtered by compiled resolvers
+  // TODO: replace this regex heuristic with a rightmost-compound seed picker.
+  // Current behavior is order-dependent inside a compound selector; a selector like
+  // `.foo#bar` should seed on `#bar` regardless of whether the id appears last.
+  // Desired priority: #id > .class > type/tag > universal/fallback.
+
+  // The following global RE is used to return the deepest localName in selector strings and then
+  // use it to retrieve all possible matching nodes that will be filtered by compiled resolvers
   const optimizer =
-    `(?:([.:#*]?)` +
-    `(${identifier})` +
     `(?:` +
-      `:[-\\w]+|` +
-      `\\[[^\\]]+(?:\\]|$)|` +
-      `${LP}[^${RP}]+(?:${RP}|$)` +
-    `)*)$`;
+      `([.:#*]?)` +
+      `(${identifier})` +
+      `(?:` +
+        `:${pseudoName}|` +
+        `${LB}[^${RB}]+(?:${RB}|$)|` +
+        `${LP}[^${RP}]+(?:${RP}|$)` +
+      `)*` +
+    `)$`;
 
   const Not = {
     // not enclosed in double/single/parens/square
@@ -1006,36 +1038,36 @@ export function buildRexStrings(ext: NwsExtensions) {
   };
 
   return {
-    Groups, Not, optimizer, validator,
-    BS, DQ, SQ, LF, CR, FF, SP, HT, UNIVERSAL, COMBINATOR, PIPE,
-    hexCh, wsp, nsPart, nsName: nsPart, attrmatcher, identifier,
+    Groups, Not, optimizer, validator, hexCh, wsp, nsPart, attrmatcher: attrMatcher, identifier, quote,
+    LP, RP, LB, RB, BS, LF, CR, FF, SP, HT, UNIVERSAL, PIPE, COMBINATOR,
+    // for testing
+    attrValue, attributeSelector,
   }
 }
 
 export function buildRex(ext: NwsExtensions) {
   const {
-    Groups, Not, optimizer, validator,
-    BS, DQ, SQ, LF, CR, FF, SP, HT, UNIVERSAL, COMBINATOR, PIPE,
-    hexCh, wsp, nsPart, nsName, attrmatcher, identifier,
+    Groups, Not, optimizer, validator, hexCh, wsp, nsPart, attrmatcher, identifier, quote,
+    LP, RP, LB, RB, BS, LF, CR, FF, SP, HT, UNIVERSAL, PIPE, COMBINATOR
   } = buildRexStrings(ext);
 
   const rex = {
     // regular expressions
     HasEscapes: RegExp(`${BS}`),
     HexNumbers: RegExp(`^${hexCh}`),
-    EscOrQuote: RegExp(`^${BS}|[${DQ}${SQ}]`),
-    RegExpChar: RegExp(`(?!${BS})[${BS}^$.,*+?()[\\]{}|\\/]`, 'g'),
+    EscOrQuote: RegExp(`^${BS}|${quote}`),
+    RegExpChar: RegExp(`(?!${BS})[${BS}^$.,*+?()[${RB}{}|\\/]`, 'g'),
     TrimSpaces: RegExp(`^${wsp}+|${wsp}+$`, 'g'),
-    SplitGroup: RegExp(`(\\([^)]*\\)|\\[[^[]*\\]|${BS}.|[^,])+`, 'g'),
-    CommaGroup: RegExp(`(\\s*,\\s*)${Not.square_enc}${Not.parens_enc}`, 'g'),
-    FixEscapes: RegExp(`${BS}([0-9a-fA-F]{1,6}${wsp}?|.)|([${DQ}${SQ}])`, 'g'),
+    SplitGroup: RegExp(`(${LP}[^${RP}]*${RP}|${LB}[^${LB}]*${RB}|${BS}.|[^,])+`, 'g'),
+    CommaGroup: RegExp(`(${wsp}*,${wsp}*)${Not.square_enc}${Not.parens_enc}`, 'g'),
+    FixEscapes: RegExp(`${BS}(${hexCh}{1,6}${wsp}?|.)|(${quote})`, 'g'),
     CombineWSP: RegExp(`[${LF}${CR}${FF}${SP}]+${Not.single_enc}${Not.double_enc}`, 'g'),
     TabCharWSP: RegExp(`(${SP}?${HT}+${SP}?)${Not.single_enc}${Not.double_enc}`, 'g'),
-    PseudosWSP: RegExp(`([0-9n])\\s*([-+])\\s*(?=[0-9n])${Not.square_enc}`, 'gi'),
+    PseudosWSP: RegExp(`([0-9n])${wsp}*([-+])${wsp}*(?=[0-9n])${Not.square_enc}`, 'gi'),
     STD: {
       combinator: RegExp(`${wsp}?([${COMBINATOR}])${wsp}?`, 'g'),
       apimethods: RegExp(`^${nsPart}?${PIPE}`),
-      namespaces: RegExp(`(${nsPart}?)${PIPE}` + nsName),
+      namespaces: RegExp(`(${nsPart}?)${PIPE}${nsPart}`),
     },
     Patterns: {
       // pseudo-classes
@@ -1068,7 +1100,7 @@ export function buildRex(ext: NwsExtensions) {
       attribute: RegExp(`^(?:${attrmatcher})(.*)`),
     },
 
-    // regexp to better aproximate detection of RTL languages (Arabic)
+    // regexp to better approximate detection of RTL languages (Arabic)
     RTL: RegExp(`^(?:[\\u0627-\\u064a]|[\\u0591-\\u08ff]|[\\ufb1d-\\ufdfd]|[\\ufe70-\\ufefc])+$`),
 
     optimizer: RegExp(optimizer),
