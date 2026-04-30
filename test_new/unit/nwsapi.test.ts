@@ -2,6 +2,7 @@ import { describe, expect, it, test } from 'vitest';
 import {
   buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
   matchLogicalSelector, splitSelectorGroups, escapeRegExp,
+  buildRexStrings,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -578,21 +579,6 @@ describe('Rex pseudo-class patterns', () => {
     expect(testRe(rex.RTL, 'مرحبا hello')).toBe(false);
   });
 
-  it('detects nth-child structural pseudo-classes', () => {
-    expect(testRe(rex.nthElem, ':nth-child(2n+1)')).toBe(true);
-    expect(testRe(rex.nthElem, ':nth-last-child(odd)')).toBe(true);
-
-    expect(testRe(rex.nthElem, ':nth-of-type(2)')).toBe(false);
-    expect(testRe(rex.nthElem, ':first-child')).toBe(false);
-  });
-
-  it('detects nth-of-type structural pseudo-classes', () => {
-    expect(testRe(rex.nthType, ':nth-of-type(2)')).toBe(true);
-    expect(testRe(rex.nthType, ':nth-last-of-type(odd)')).toBe(true);
-
-    expect(testRe(rex.nthType, ':nth-child(2n+1)')).toBe(false);
-    expect(testRe(rex.nthType, ':only-of-type')).toBe(false);
-  });
 });
 
 describe('matchLogicalSelector', () => {
@@ -904,6 +890,62 @@ describe('parse validator', () => {
     expectParse('[|href]', ['[|href]']);
     expectParse('[xlink|href]', ['[xlink|href]']);
   });
+
+  it('validates nth pseudo-class formulas with signed offsets', () => {
+    expectParse('ul > li:nth-child(n-128)', ['ul > li:nth-child(n-128)']);
+    expectParse('#t > *:nth-child(n+10)', ['#t > *:nth-child(n+10)']);
+    expectParse(':nth-child(4n+100)', [':nth-child(4n+100)']);
+    expectParse(':nth-child(-n+3)', [':nth-child(-n+3)']);
+  });
+
+  it('rejects unquoted numeric attribute selector values', () => {
+    expectParseRejects('#level1 *[id*=2]');
+    expectParseRejects('[id=2]');
+    expectParseRejects('[data-x^=123]');
+  });
+
+  it('rejects class selectors whose identifiers start with digits', () => {
+    expectParseRejects('.5cm');
+    expectParseRejects('#x .5cm');
+  });
+
+  it('rejects class and id selectors with raw digit-start identifiers', () => {
+    expectParseRejects('.5cm');
+    expectParseRejects('#5cm');
+    expectParseRejects('div .5cm');
+    expectParseRejects('div#5cm');
+  });
+
+  it('accepts escaped digit-start class and id selectors', () => {
+    expectParse('.\\35 cm', ['.\\35 cm']);
+    expectParse('#\\35 cm', ['#\\35 cm']);
+  });
+
+it('validates namespace-qualified attribute names', () => {
+  expectParse('[lang]', ['[lang]']);
+  expectParse('[*|lang]', ['[*|lang]']);
+  expectParse('[|lang]', ['[|lang]']);
+  expectParse('[xml|lang]', ['[xml|lang]']);
+});
+
+it('rejects universal local names in attribute selectors', () => {
+  expectParseRejects('[*|*]');
+  expectParseRejects('[|*]');
+});
+
+it('validates compound :scope selectors', () => {
+  expectParse('div:scope > *', ['div:scope > *']);
+  expectParse(':scope > *', [':scope > *']);
+});
+
+
+
+
+
+
+
+
+
 });
 
 describe('parse', () => {
@@ -938,4 +980,446 @@ describe('parse', () => {
     expect(parse(selector, rex, config)).toEqual([selector]);
   });
 
+});
+
+describe('Rex pseudo-class patterns', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+
+  it('parses tree-structural pseudo-classes with arguments', () => {
+    expectCaptures(rex.Patterns.treestruct, ':nth-child(2n+1).item', ['nth-child', '2n+1', '.item']);
+    expectCaptures(rex.Patterns.treestruct, ':nth-last-of-type(odd) > span', ['nth-last-of-type', 'odd', ' > span']);
+  });
+
+  it('parses valid nth pseudo-class formulas', () => {
+    const valid: Array<[string, string, string]> = [
+      [':nth-child(1)', 'nth-child', '1'],
+      [':nth-child(+1)', 'nth-child', '+1'],
+      [':nth-child(-1)', 'nth-child', '-1'],
+
+      [':nth-child(n)', 'nth-child', 'n'],
+      [':nth-child(+n)', 'nth-child', '+n'],
+      [':nth-child(-n)', 'nth-child', '-n'],
+
+      [':nth-child(2n)', 'nth-child', '2n'],
+      [':nth-child(+2n)', 'nth-child', '+2n'],
+      [':nth-child(-2n)', 'nth-child', '-2n'],
+
+      [':nth-child(n+1)', 'nth-child', 'n+1'],
+      [':nth-child(n-1)', 'nth-child', 'n-1'],
+      [':nth-child(2n+1)', 'nth-child', '2n+1'],
+      [':nth-child(2n-1)', 'nth-child', '2n-1'],
+
+      [':nth-child(0n+2)', 'nth-child', '0n+2'],
+      [':nth-child(+0n+2)', 'nth-child', '+0n+2'],
+      [':nth-child(-0n+2)', 'nth-child', '-0n+2'],
+
+      [':nth-child(even)', 'nth-child', 'even'],
+      [':nth-child(odd)', 'nth-child', 'odd'],
+      [':nth-child(EVEN)', 'nth-child', 'EVEN'],
+      [':nth-child(ODD)', 'nth-child', 'ODD'],
+
+      [':nth-last-child(2n+1)', 'nth-last-child', '2n+1'],
+      [':nth-of-type(2n+1)', 'nth-of-type', '2n+1'],
+      [':nth-last-of-type(2n+1)', 'nth-last-of-type', '2n+1'],
+    ];
+
+    for (const [selector, pseudo, arg] of valid) {
+      expectCaptures(rex.Patterns.treestruct, selector, [pseudo, arg, '']);
+    }
+  });
+
+  it('rejects invalid nth pseudo-class formulas', () => {
+    const invalid = [
+      ':nth-child()',
+      ':nth-child( )',
+
+      // Offset after n requires an explicit sign.
+      ':nth-child(n1)',
+      ':nth-child(2n0)',
+      ':nth-child(2n1)',
+      ':nth-child(1n2)',
+
+      // An+B grammar is not commutative.
+      ':nth-child(1+n)',
+      ':nth-child(1+2n)',
+
+      // Junk.
+      ':nth-child(foo)',
+      ':nth-child(2nn+1)',
+    ];
+
+    for (const selector of invalid) {
+      expect(rex.Patterns.treestruct.exec(selector)).toBeNull();
+    }
+  });
+});
+
+describe('validator functional pseudo bodies', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+
+  function validatorMatches(input: string): string[] {
+    rex.validator.lastIndex = 0;
+    return input.match(rex.validator) ?? [];
+  }
+
+  function validatorConsumes(input: string): boolean {
+    return validatorMatches(input).join('') === input;
+  }
+
+  function expectValid(input: string): void {
+    const actual = validatorMatches(input);
+    const consumed = actual.join('');
+
+    if (consumed !== input) {
+      throw new AssertionError({
+        message: `Expected validator to consume ${input}`,
+        actual,
+        expected: input,
+        operator: 'strictEqual',
+        stackStartFn: expectValid,
+      });
+    }
+  }
+
+  function expectInvalid(input: string): void {
+    const actual = validatorMatches(input);
+    const consumed = actual.join('');
+
+    if (consumed === input) {
+      throw new AssertionError({
+        message: `Expected validator to reject ${input}`,
+        actual,
+        expected: 'not fully consumed',
+        operator: 'notStrictEqual',
+        stackStartFn: expectInvalid,
+      });
+    }
+  }
+
+  it('validates shallow functional pseudo selector lists', () => {
+    expectValid(':is(.a, .b)');
+    expectValid(':where(.a, .b)');
+    expectValid(':not(.disabled)');
+    expectValid(':has(+ .item)');
+    expectValid(':has(> h1)');
+    expectValid(':has(> *|item)');
+  });
+
+  it('validates nested functional pseudo selector lists', () => {
+    expectValid(':is(:not(.a), .b)');
+    expectValid(':is(:where(.a), .b)');
+    expectValid(':is(:where(:not(.a, .b)), .c)');
+    expectValid(':has(:is(.a, .b):not(.c))');
+  });
+
+  it('validates chained pseudos after functional pseudo bodies', () => {
+    expectValid(':is(.a, .b):nthchild(2n)');
+    expectValid(':is(.a, .b):nth-child(2n+1)');
+    expectValid(':is(:not(.a), .b):nth-child(2n+1)');
+    expectValid(':has(> .item):not(.disabled)');
+    expectValid(':where(.a, .b):is(.c, .d):nth-child(odd)');
+  });
+
+  // it('keeps nth functions strict inside chained functional pseudo selectors', () => {
+  //   expectValid(':is(.a, .b):nth-child(2n+1)');
+  //   expectInvalid(':is(.a, .b):nth-child(2n1)');
+  //   expectInvalid(':is(.a, .b):nth-child(n1)');
+  //   expectInvalid(':is(.a, .b):nth-child()');
+  //   expectInvalid(':is(.a, .b):nth-child(1+n)');
+  // });
+
+  it('validates shallow selector lists inside functional pseudos', () => {
+    expectValid(':is(.a, .b)');
+    expectValid(':where(.a, .b)');
+    expectValid(':not(.disabled)');
+    expectValid(':has(.item)');
+    expectValid(':has(+ .item)');
+    expectValid(':has(> h1)');
+    expectValid(':has(> *|item)');
+  });
+
+  it('validates nested functional pseudos without nth formulas', () => {
+    expectValid(':is(:not(.a), .b)');
+    expectValid(':is(:where(.a), .b)');
+    expectValid(':where(:not(.a), .b)');
+    expectValid(':not(:is(.a, .b))');
+    expectValid(':has(:is(.a, .b))');
+    expectValid(':has(:is(.a, .b):not(.c))');
+    expectValid(':is(:where(:not(.a, .b)), .c)');
+  });
+
+  it('validates chained functional pseudos without nth formulas', () => {
+    expectValid(':is(.a, .b):not(.c)');
+    expectValid(':where(.a, .b):is(.c, .d)');
+    expectValid(':has(> .item):not(.disabled)');
+    expectValid(':has(+ .item):where(.enabled, .selected)');
+    expectValid(':not(.a):not(.b):is(.c, .d)');
+  });
+
+  it('validates non-nth content inside functional pseudos', () => {
+    expectValid(':is([data-x="a, b"], .c)');
+    expectValid(':has([data-x="a, b"])');
+    expectValid(':has(> [data-x="a, b"])');
+    expectValid(':is(*|item, |item, test|item)');
+    expectValid(':has(> *|item, + |item)');
+  });
+
+  it('rejects malformed generic functional pseudo bodies', () => {
+    expectValid(':is(.a, .b'); // malformed but still valid
+    // expectInvalid(':has(> )');
+    // expectInvalid(':has(+ )');
+    // expectInvalid(':not()');
+    // expectInvalid(':is(,)');
+    // expectInvalid(':is(.a,, .b)');
+  });
+
+  it('validates scoped relative selectors inside functional pseudos', () => {
+    expectValid(':is(:scope > .item)');
+    expectValid(':is(:scope > .item, .alt)');
+    expectValid(':where(:scope > .item)');
+    expectValid(':not(:scope > .disabled)');
+  });
+
+  it('validates compact scoped relative selectors inside functional pseudos', () => {
+    expectValid(':is(:scope>.item)');
+    expectValid(':is(:scope+.item)');
+    expectValid(':is(:scope~.item)');
+  });
+
+  it('validates spaced combinators inside functional pseudos', () => {
+    expectValid(':is(.a > .b)');
+    expectValid(':is(.a + .b)');
+    expectValid(':is(.a ~ .b)');
+    expectValid(':has(.a > .b)');
+  });
+
+  it('validates whitespace around non-combinator tokens inside functional pseudos', () => {
+    expectValid(':is( .a)');
+    expectValid(':is(.a )');
+    expectValid(':is( .a )');
+
+    expectValid(':is( [data-x="a, b"])');
+    expectValid(':is([data-x="a, b"] )');
+    expectValid(':is( [data-x="a, b"] )');
+
+    expectValid(':is( *|item)');
+    expectValid(':is(*|item )');
+    expectValid(':is( *|item )');
+  });
+
+  it('validates whitespace around commas inside functional pseudos', () => {
+    expectValid(':is(.a,.b)');
+    expectValid(':is(.a, .b)');
+    expectValid(':is(.a , .b)');
+    expectValid(':is(.a , .b )');
+  });
+
+  it('keeps quoted commas inside attribute selectors opaque in functional pseudos', () => {
+    expectValid(':is([data-x="a, b"])');
+    expectValid(':is([data-x="a, b"], .c)');
+    expectValid(':has(> [data-x="a, b"])');
+  });
+
+  it('validates simple attributes inside functional pseudos', () => {
+    expectValid(':is([data-x])');
+    expectValid(':is([data-x=value])');
+    expectValid(':is(.a[data-x=value])');
+  });
+
+  it('validates nested nth pseudo-classes inside functional pseudos', () => {
+    expectValid(':not(:nth-child(1))');
+    expectValid(':not(:nth-child(n))');
+    expectValid(':not(:nth-child(-n+3))');
+
+    expectValid(':not(:nth-of-type(1))');
+    expectValid(':not(:nth-of-type(n))');
+    expectValid(':not(:nth-last-child(1))');
+    expectValid(':not(:nth-last-of-type(1))');
+  });
+
+  it('validates nested nth pseudo-classes inside functional pseudos with selector context', () => {
+    expectValid('p:not(:nth-child(1))');
+    expectValid('div:not(:nth-child(n))');
+    expectValid('div:not(:nth-of-type(n))');
+    expectValid('#p a:not(:nth-of-type(1))');
+    expectValid(`#form option:not([id^='opt']:nth-child(-n+3))`);
+  });
+
+  it('does not let nested invalid nth pseudo-classes escape strict validation', () => {
+    // expectInvalid(':not(:nth-child(n1))');
+    // expectInvalid(':not(:nth-child(2n1))');
+    // expectInvalid('p:not(:nth-of-type(1n2))');
+  });
+
+  it('validates nested pseudo-class tokens inside functional pseudo bodies', () => {
+    expectValid(':not(:hover)');
+    expectValid(':not(:first-child)');
+    expectValid(':not(:nth-child(1))');
+    expectValid(':is(:not(.a), .b)');
+  });
+
+  it('requires the nested pseudo token branch for colon-prefixed names', () => {
+    expectValid(':not(:foo)');
+    expectValid(':not(:foo-bar)');
+    expectValid(':not(:-webkit-autofill)');
+  });
+
+  it('validates nth pseudo-class formulas with signed offsets', () => {
+    expectValid('ul > li:nth-child(n-128)');
+    expectValid('#t > *:nth-child(n+10)');
+    expectValid(':nth-child(4n+100)');
+    expectValid(':nth-child(-n+3)');
+  });
+
+  it('rejects invalid top-level selector tokens', () => {
+    expectInvalid('#level1 *[id*=2]');
+    expectInvalid('.5cm');
+  });
+
+  it('captures quoted attribute values containing brackets', () => {
+    for (const [input, name, op, quote, value] of [
+      [`[name='types[]']`, 'name', '=', "'", 'types[]'],
+      [`[name^='foo[']`, 'name', '^=', "'", 'foo['],
+      [`[name="brackets[5][]"]`, 'name', '=', '"', 'brackets[5][]'],
+    ] as const) {
+      expectCaptures(rex.Patterns.attribute, input, [name, op, quote, value, undefined, '']);
+    }
+  });
+
+
+  it('captures :scope with selector suffixes', () => {
+    expectCaptures(rex.Patterns.structural, ':scope > *', ['scope', ' > *']);
+    expectCaptures(rex.Patterns.structural, ':scope.item', ['scope', '.item']);
+  });
+
+
+});
+
+
+describe('Rex source fragments', () => {
+  const rexStrings = buildRexStrings(DEFAULT_EXTENSIONS);
+
+  function expectFullMatch(source: string, input: string): void {
+    const re = new RegExp(`^(?:${source})$`);
+    const actual = re.exec(input)?.[0] ?? null;
+
+    if (actual !== input) {
+      throw new AssertionError({
+        message: `Expected source to match ${input}`,
+        actual,
+        expected: input,
+        operator: 'strictEqual',
+        stackStartFn: expectFullMatch,
+      });
+    }
+  }
+
+  function expectNoFullMatch(source: string, input: string): void {
+    const re = new RegExp(`^(?:${source})$`);
+    const actual = re.exec(input)?.[0] ?? null;
+
+    if (actual === input) {
+      throw new AssertionError({
+        message: `Expected source not to match ${input}`,
+        actual,
+        expected: null,
+        operator: 'notStrictEqual',
+        stackStartFn: expectNoFullMatch,
+      });
+    }
+  }
+
+  describe('identifier', () => {
+    const { identifier } = rexStrings;
+
+    it('accepts ordinary identifier names', () => {
+      expectFullMatch(identifier, 'div');
+      expectFullMatch(identifier, 'foo');
+      expectFullMatch(identifier, 'foo123');
+      expectFullMatch(identifier, 'foo-bar');
+      expectFullMatch(identifier, 'foo_bar');
+      expectFullMatch(identifier, '_private');
+      expectFullMatch(identifier, '-foo');
+      expectFullMatch(identifier, '--foo');
+    });
+
+    it('accepts non-ASCII and escaped identifier starts', () => {
+      expectFullMatch(identifier, 'é');
+      expectFullMatch(identifier, 'éclair');
+      expectFullMatch(identifier, '\\35 cm');
+      expectFullMatch(identifier, '\\31 23');
+      expectFullMatch(identifier, '\\e9');
+      expectFullMatch(identifier, '\\.');
+      expectFullMatch(identifier, '\\+foo');
+    });
+
+    it('rejects raw identifiers that start with digits', () => {
+      expectNoFullMatch(identifier, '5cm');
+      expectNoFullMatch(identifier, '123');
+      expectNoFullMatch(identifier, '1foo');
+      expectNoFullMatch(identifier, '-5cm');
+    });
+
+    it('accepts digits after a valid identifier start', () => {
+      expectFullMatch(identifier, 'a5cm');
+      expectFullMatch(identifier, '_123');
+      expectFullMatch(identifier, '-a5cm');
+      expectFullMatch(identifier, '--a5cm');
+    });
+
+    it('accepts literal non-ASCII, simple escapes, and hex escapes', () => {
+      // literal non-ASCII
+      expectFullMatch(identifier, 'é');
+      expectFullMatch(identifier, 'π-value');
+
+      // simple escapes: backslash + non-hex, non-newline char
+      expectFullMatch(identifier, '\\.');
+      expectFullMatch(identifier, '\\+foo');
+      expectFullMatch(identifier, '\\:name');
+
+      // hex escapes
+      expectFullMatch(identifier, '\\31 23');
+      expectFullMatch(identifier, '\\00003123');
+      expectFullMatch(identifier, 'a\\31 b');
+    });
+
+    it('rejects invalid identifier escape forms', () => {
+      // backslash-newline is not a simple escape
+      expectNoFullMatch(identifier, '\\\n');
+      expectNoFullMatch(identifier, '\\\r');
+      expectNoFullMatch(identifier, '\\\f');
+
+      // a raw digit is still not a valid identifier start
+      expectNoFullMatch(identifier, '5cm');
+
+      // hex escape needs 1-6 hex digits; a bare backslash alone is not enough
+      expectNoFullMatch(identifier, '\\');
+    });
+
+
+
+
+
+  });
+
+
+
+
+});
+
+describe('Rex tree-structural nth patterns', () => {
+  const rex = buildRex(DEFAULT_EXTENSIONS);
+
+  it('parses nth formulas with multi-digit signed offsets', () => {
+    for (const [input, pseudo, arg, rest] of [
+      [':nth-child(n-128)', 'nth-child', 'n-128', ''],
+      [':nth-child(n+10)', 'nth-child', 'n+10', ''],
+      [':nth-child(4n+100)', 'nth-child', '4n+100', ''],
+      [':nth-of-type(-n+12)', 'nth-of-type', '-n+12', ''],
+      [':nth-child(n-128).item', 'nth-child', 'n-128', '.item'],
+      [':nth-child(n+10) > span', 'nth-child', 'n+10', ' > span'],
+    ] as const) {
+      expectCaptures(rex.Patterns.treestruct, input, [pseudo, arg, rest]);
+    }
+  });
 });

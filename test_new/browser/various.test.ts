@@ -1873,4 +1873,128 @@ runScenarios('various', 'normal', [
     ],
   },
 
+
+  {
+    name: 'nth-of-type distinguishes XML namespaces',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root xmlns:a="http://example/a" xmlns:b="http://example/b">
+        <a:item id="a-first" class="x" />
+        <b:item id="b-first" class="x" />
+        <a:item id="a-last" class="x" />
+        <b:item id="b-last" class="x" />
+      </root>
+    `,
+    cases: [
+      { select: '*|item:nth-of-type(1)', expect: { ids: ['a-first', 'b-first'] } },
+      { select: '*|item:nth-last-of-type(1)', expect: { ids: ['a-last', 'b-last'] } },
+      { select: '*|item:nth-of-type(2)', expect: { ids: ['a-last', 'b-last'] } },
+      { select: '*|item:nth-last-of-type(2)', expect: { ids: ['a-first', 'b-first'] } },
+    ],
+  },
+
+  {
+    name: 'nth pseudo-class arguments are ASCII case-insensitive',
+    // status: 'only',
+    markup: `
+      <div>
+        <span id="one"></span>
+        <span id="two"></span>
+        <span id="three"></span>
+      </div>
+    `,
+    cases: [
+      { select: 'span:nth-child(odd)', expect: { ids: ['one', 'three'] } },
+      { select: 'span:nth-child(ODD)', expect: { ids: ['one', 'three'] } },
+      { select: 'span:nth-child(EVEN)', expect: { ids: ['two'] } },
+      { select: 'span:nth-child(2N+1)', expect: { ids: ['one', 'three'] } },
+    ],
+  },
+
+  {
+    name: 'nth pseudo-class zero-step arguments',
+    // status: 'only',
+    markup: `
+      <div>
+        <span id="one"></span>
+        <span id="two"></span>
+        <span id="three"></span>
+        <span id="four"></span>
+        <span id="five"></span>
+      </div>
+    `,
+    cases: [
+      { select: 'span:nth-child(0n+2)', expect: { ids: ['two'] } },
+      { select: 'span:nth-child(+0n+2)', expect: { ids: ['two'] } },
+      { select: 'span:nth-child(-0n+2)', expect: { ids: ['two'] } },
+      { select: 'span:nth-child(0n)', expect: { ids: [] } },
+      { select: 'span:nth-child(0n-1)', expect: { ids: [] } },
+
+      { select: 'span:nth-child(2n0)', expect: { throws: true } },
+      { select: 'span:nth-child(2n+0)', expect: { ids: ['two', 'four'] } },
+      { select: 'span:nth-child(2n)', expect: { ids: ['two', 'four'] } },
+      { select: 'span:nth-child(2n1)', expect: { throws: true } },
+      { select: 'span:nth-child(2n+1)', expect: { ids: ['one', 'three', 'five'] } },
+      { select: 'span:nth-child(1n2)', expect: { throws: true } },
+      { select: 'span:nth-child(1+2n)', expect: { throws: true } },
+      { select: 'span:nth-child(n1)', expect: { throws: true } },
+      { select: 'span:nth-child(n+1)', expect: { ids: ['one', 'two', 'three', 'four', 'five'] } },
+      { select: 'span:nth-child(2n+)', expect: { throws: true } },
+      { select: 'span:nth-child()', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'nth pseudo-class rejects reversed an+b syntax',
+    // status: 'only',
+    markup: `
+      <div>
+        <span id="one"></span>
+        <span id="two"></span>
+      </div>
+    `,
+    cases: [
+      { select: 'span:nth-child(n+1)', expect: { ids: ['one', 'two'] } },
+      { select: 'span:nth-child(1+n)', expect: { throws: true } },
+    ],
+  },
+
+  // {
+  //   name: 'native handling of malformed functional pseudo endings',
+  //   status: 'only',
+  //   // engines: ['native'],
+  //   markup: `
+  //     <div id="root">
+  //       <div id="a" class="a"></div>
+  //       <div id="b" class="b"></div>
+  //     </div>
+  //   `,
+  //   cases: [
+  //     { select: ':is(.a, .b)', expect: { ids: ['a', 'b'] } },
+
+  //     // Missing final ')' on the functional pseudo.
+  //     { select: ':is(.a, .b', expect: { throws: false } },
+
+  //     // A few neighboring malformed forms for comparison.
+  //     { select: ':not(.a', expect: { throws: true } },
+  //     { select: ':where(.a, .b', expect: { throws: true } },
+  //     { select: ':has(.a', expect: { throws: true } },
+  //   ],
+  // },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ]);

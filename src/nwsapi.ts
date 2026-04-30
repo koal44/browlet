@@ -651,8 +651,10 @@ const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
 
   let e: Element | null, i: number, j: number, k: number, l: number;
   const name = element.localName;
+  const namespace = element.namespaceURI ?? '';
+  const typeKey = `${namespace}\x00${name}`;
 
-  if (nthOfTypeState.nodes[nthOfTypeState.set]?.[name] && nthOfTypeState.parent === element.parentElement) {
+  if (nthOfTypeState.nodes[nthOfTypeState.set]?.[typeKey] && nthOfTypeState.parent === element.parentElement) {
     i = nthOfTypeState.set; j = nthOfTypeState.idx; l = nthOfTypeState.len;
   } else {
     l = nthOfTypeState.parents.length;
@@ -661,29 +663,38 @@ const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
       if (nthOfTypeState.parents[j] === nthOfTypeState.parent) { i = j; break; }
       if (nthOfTypeState.parents[k] === nthOfTypeState.parent) { i = k; break; }
     }
-    if (i < 0 || !nthOfTypeState.nodes[i]?.[name]) {
+    if (i < 0 || !nthOfTypeState.nodes[i]?.[typeKey]) {
       nthOfTypeState.parents[i = l] = nthOfTypeState.parent;
       nthOfTypeState.nodes[i] || (nthOfTypeState.nodes[i] = {});
-      l = 0; nthOfTypeState.nodes[i][name] = [];
+      l = 0; nthOfTypeState.nodes[i][typeKey] = [];
       e = nthOfTypeState.parent?.firstElementChild ?? element;
-      while (e) { if (e === element) j = l; if (e.localName == name) { nthOfTypeState.nodes[i][name][l] = e; ++l; } e = e.nextElementSibling; }
+      while (e) {
+        if (e.localName === name && (e.namespaceURI ?? '') === namespace) {
+          if (e === element) j = l;
+          nthOfTypeState.nodes[i][typeKey][l] = e;
+          ++l;
+        }
+        e = e.nextElementSibling;
+      }
       nthOfTypeState.set = i; nthOfTypeState.idx = j; nthOfTypeState.len = l;
       if (l < 2) return l;
     } else {
-      l = nthOfTypeState.nodes[i][name].length;
+      l = nthOfTypeState.nodes[i][typeKey].length;
       nthOfTypeState.set = i;
     }
   }
 
-  if (element !== nthOfTypeState.nodes[i][name][j] && element !== nthOfTypeState.nodes[i][name][j = 0]) {
-    const nodes = nthOfTypeState.nodes[i][name];
+  if (element !== nthOfTypeState.nodes[i][typeKey][j] && element !== nthOfTypeState.nodes[i][typeKey][j = 0]) {
+    const nodes = nthOfTypeState.nodes[i][typeKey];
     for (j = 0, k = l - 1; l > j; ++j, --k) {
       if (nodes[j] === element) { break; }
       if (nodes[k] === element) { j = k; break; }
     }
   }
 
-  nthOfTypeState.idx = j + 1; nthOfTypeState.len = l;
+  nthOfTypeState.idx = j + 1;
+  nthOfTypeState.len = l;
+
   return dir ? l - j : nthOfTypeState.idx;
 };
 
@@ -835,54 +846,147 @@ function isQuirksMode(doc: Document): doc is HTMLDocument {
   return isHtmlDoc(doc) && doc.compatMode.indexOf('CSS') < 0;
 }
 
-export function buildRex(ext: NwsExtensions) {
+export function buildRexStrings(ext: NwsExtensions) {
   // NOTE: SPECIAL CASES IN CSS SYNTAX PARSING RULES
-  //
   // The <EOF-token> https://drafts.csswg.org/css-syntax/#typedef-eof-token
   // allow mangled|unclosed selector syntax at the end of selectors strings
-  //
-  // Literal equivalent hex representations of the characters: " ' ` ] )
-  //
-  //     \\x22 = " - double quotes    \\x5b = [ - open square bracket
-  //     \\x27 = ' - single quote     \\x5d = ] - closed square bracket
-  //     \\x60 = ` - back tick        \\x28 = ( - open round parens
-  //     \\x5c = \ - back slash       \\x29 = ) - closed round parens
-  //
-  // using hex format prevents false matches of opened/closed instances
-  // pairs, coloring breakage and other editors highlightning problems.
 
-  const SP = `\\x20`; // space
-  const HT = `\\t`;   // horizontal tab
-  const LF = `\\n`;   // line feed
-  const CR = `\\r`;   // carriage return
-  const FF = `\\f`;   // form feed
-  const DQ = `\\x22`; // "
-  const SQ = `\\x27`; // '
-  const BT = `\\x60`; // `
-  const BS = `\\x5c`; // backslash
-  const LP = `\\x28`; // (
-  const RP = `\\x29`; // )
-  const LB = `\\x5b`; // [
-  const RB = `\\x5d`; // ]
+  // string literals and character escapes
+  const SP = `\\ `;           // space
+  const HT = `\\t`;           // horizontal tab
+  const LF = `\\n`;           // line feed
+  const CR = `\\r`;           // carriage return
+  const FF = `\\f`;           // form feed
+  const DQ = `\\"`;           // double quote
+  const SQ = `\\'`;           // single quote
+  const BS = `\\\\`;          // backslash
+  const LP = `\\(`;           // left parenthesis
+  const RP = `\\)`;           // right parenthesis
+  const LB = `\\[`;           // left bracket
+  const RB = `\\]`;           // right bracket
+  const PIPE = `\\|`;         // pipe
+  const UNIVERSAL = `\\*`;    // universal
+  const HEX = `0-9a-fA-F`;    // hex digit
+  const ALPHA = `a-zA-Z`;     // alpha char
+  const DIGIT = `0-9`;        // digit char
+  const SLUG = `a-zA-Z0-9_-`; // loose name char, used for pseudo names
+  const IDENT_HEAD = `${ALPHA}_`; // identifier head char
+  const IDENT_TAIL = `${IDENT_HEAD}${DIGIT}-`; // identifier tail char
+  const VSP = `${CR}${LF}${FF}`;  // vertical whitespace
+  const HSP = `${SP}${HT}`;       // horizontal whitespace
+  const WSP = `${VSP}${HSP}`;     // any whitespace
 
-  const WSH = `[${SP}${HT}]`;
-  const WSV = `[${CR}${LF}${FF}]`;
-  const WSP = `[${SP}${HT}${CR}${LF}${FF}]`;
-  const HAS = {
-    nestedself: `:has${LP}(?::has${LP}|.*)${RP})${RP}`,
-  };
-  const NOT = {
+  // character classes
+  const wsp = `[${WSP}]`;
+  const digitCh = `[${DIGIT}]`;
+  const slugCh = `[${SLUG}]`;
+  const identHeadCh = `[${IDENT_HEAD}]`;
+  const identTailCh = `[${IDENT_TAIL}]`;
+  const hexCh = `[${HEX}]`;
+  const nonAsciiCh = `[^\\x00-\\x9f]`;
+  const esc = `${BS}[^${VSP}${HEX}]`;
+  const ucEsc = `${BS}${hexCh}{1,6}(?:${CR}${LF}|${wsp})?`;
+
+  // character sequences
+  const identHead = `(?:${identHeadCh}|${nonAsciiCh}|${esc}|${ucEsc})`;
+  const identTail = `(?:${identTailCh}|${nonAsciiCh}|${esc}|${ucEsc})`;
+  const identifier =
+    `(?:` +
+      `-?${identHead}${identTail}*|` +
+      `--${identTail}*` +
+    `)`;
+
+  // :nth
+  const nthFormula = `(?:[-+]?${digitCh}+|[-+]?${digitCh}*[nN](?:${wsp}*[-+]${wsp}*${digitCh}+)?)`;
+  const even = `[eE][vV][eE][nN]`;
+  const odd = `[oO][dD][dD]`;
+  const nthArg = `(?:${even}|${odd}|${nthFormula})`;
+  const nthPseudo = `nth(?:-last)?(?:-child|-of\\-type)`;
+  const nthFunction = `(?:${nthPseudo}${LP}${wsp}*${nthArg}${wsp}*${RP})`;
+
+  // namespace
+  const nsPart = `(?:${UNIVERSAL}|${identifier})`;
+  const nsType = `(?:${nsPart}?${PIPE}${nsPart})`;
+  const attrName = `(?:(?:${nsPart}?${PIPE})?${identifier})`;
+
+  // configurable combinators and operators
+  const COMBINATOR = ext.combinators.map(escapeRegExp).join('');
+  const combinator = `[${COMBINATOR}]${wsp}?(?=[^${COMBINATOR}])`;
+  const operators = ext.operators.map(escapeRegExp).join('|');
+
+  // attribute selectors
+  const doublequote = `"[^"${BS}]*(?:${BS}.[^"${BS}]*)*(?:"|$)`;
+  const singlequote = `'[^'${BS}]*(?:${BS}.[^'${BS}]*)*(?:'|$)`;
+  const attrparser = `${identifier}|${doublequote}|${singlequote}`;
+  const attrvalues = `([${DQ}${SQ}]?)((?!\\3)*|(?:${BS}?.)*?)(?:\\3|$)`;
+  // const SENSE_FLAG = `i?`;
+
+  const attributes =
+    `${LB}` +
+      `${wsp}?` +
+      `(${attrName})` +
+      `${wsp}?` +
+      `(?:` +
+        `(${operators})` +
+        `${wsp}?` +
+        `(?:${attrparser})` +
+      `)?` +
+      `(?:${wsp}?\\b(i))?${wsp}?` +
+    `(?:${RB}|$)`;
+
+  const attrmatcher = attributes.replace(attrparser, attrvalues);
+
+  const pseudoclass =
+    `(?:${LP}` +
+      `(?:${wsp}?)|` +
+      `(?:${nsType}|${UNIVERSAL})|` +
+      `(?::${slugCh}+)|` +
+      `(?:${nthFormula})|` +
+      `(?:[.#]?${identifier})|` +
+      `(?:${attributes})|` +
+      `(?:${wsp}?${combinator})|` +
+      `(?:,${wsp}?)|` +
+    `${RP})`;
+
+  const validator =
+    `(?=${wsp}?[^>+~(){}<>])` +
+    `(?:` +
+      `(?:${nsType})|` +
+      `(?:${UNIVERSAL})|` +
+      `(?:[.#]?${identifier})+|` +
+      `(?:${attributes})+|` +
+      `(?::${nthFunction})|` +
+      `(?:::?${slugCh}+${pseudoclass}*)|` +
+      `(?:${wsp}?${combinator}${wsp}?)|` +
+      `(?:${wsp}?,${wsp}?)|` +
+      `(?:${wsp}?)` +
+    `)+`;
+
+  // the following global RE is used to return the
+  // deepest localName in selector strings and then
+  // use it to retrieve all possible matching nodes
+  // that will be filtered by compiled resolvers
+  const optimizer =
+    `(?:([.:#*]?)` +
+    `(${identifier})` +
+    `(?:` +
+      `:[-\\w]+|` +
+      `\\[[^\\]]+(?:\\]|$)|` +
+      `${LP}[^${RP}]+(?:${RP}|$)` +
+    `)*)$`;
+
+  const Not = {
     // not enclosed in double/single/parens/square
     double_enc: `(?=(?:[^"]*["][^"]*["])*[^"]*$)`,
     single_enc: `(?=(?:[^']*['][^']*['])*[^']*$)`,
     parens_enc: `(?![^${LP}]*${RP})`,
     square_enc: `(?![^${LB}]*${RB})`,
   };
-  const GROUPS = {
+  const Groups = {
     // pseudo-classes requiring parameters
-    linguistic: `(dir|lang)(?:${LP}\\s?([-\\w]{2,})\\s?${RP})`,
-    logicalsel: `(is|where|matches|not|has)(?:${LP}\\s?([^()]*|.*)\\s?${RP})`,
-    treestruct: `(nth(?:-last)?(?:-child|-of\\-type))(?:${LP}\\s?(even|odd|(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)?)\\s?${RP})`,
+    linguistic: `(dir|lang)(?:${LP}${wsp}?(${slugCh}{2,})${wsp}?${RP})`,
+    logicalsel: `(is|where|matches|not|has)(?:${LP}${wsp}?([^()]*|.*)${wsp}?${RP})`,
+    treestruct: `(${nthPseudo})(?:${LP}${wsp}*(${nthArg})${wsp}*${RP})`,
     // pseudo-classes not requiring parameters
     locationpc: `(any\\-link|link|visited|target|defined)\\b`,
     useraction: `(hover|active|focus\\-within|focus\\-visible|focus)\\b`,
@@ -898,146 +1002,65 @@ export function buildRex(ext: NwsExtensions) {
     // pseudo-elements starting with single colon (:)
     pseudo_sng: `(after|before|first\\-letter|first\\-line)\\b`,
     // pseudo-elements starting with double colon (::)
-    pseudo_dbl: `:(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-[-a-zA-Z0-9]{2,})\\b`,
+    pseudo_dbl: `:(after|before|first\\-letter|first\\-line|selection|placeholder|-webkit-${slugCh}{2,})\\b`,
   };
 
-  const universal = `\\*`;
-  // non-ascii chars
-  const noascii = `[^\\x00-\\x9f]`;
-  // escaped chars
-  const escaped = `\\\\[^${CR}${LF}${FF}0-9a-fA-F]`;
-  // unicode chars
-  const unicode = `\\\\[0-9a-fA-F]{1,6}(?:${CR}${LF}|\\s)?`;
+  return {
+    Groups, Not, optimizer, validator,
+    BS, DQ, SQ, LF, CR, FF, SP, HT, UNIVERSAL, COMBINATOR, PIPE,
+    hexCh, wsp, nsPart, nsName: nsPart, attrmatcher, identifier,
+  }
+}
 
-  // can start with single/double dash
-  // but it can not start with a digit
-  const identifier = `-?(?:[a-zA-Z_-]|${noascii}|${escaped}|${unicode})` +
-      `(?:-{2}|[0-9]|[a-zA-Z_-]|${noascii}|${escaped}|${unicode})*`;
-
-  const pseudonames = `[-\\w]+`;
-  const pseudoparms = `(?:[-+]?\\d*)(?:n\\s?[-+]?\\s?\\d*)`;
-  const doublequote = `"[^"\\\\]*(?:\\\\.[^"\\\\]*)*(?:"|$)`;
-  const singlequote = `'[^'\\\\]*(?:\\\\.[^'\\\\]*)*(?:'|$)`;
-
-  const attrparser = `${identifier}|${doublequote}|${singlequote}`;
-  const attrvalues = `([${DQ}${SQ}]?)((?!\\3)*|(?:\\\\?.)*?)(?:\\3|$)`;
-
-  const combinatorRaw = ext.combinators.map(escapeRegExp).join('');
-  const combinator = `[${combinatorRaw}]${WSP}?(?=[^${combinatorRaw}])`;
-  const operators = ext.operators.map(escapeRegExp).join('|');
-
-  const namespaceName = `(?:${universal}|${identifier})`;
-  const namespacePrefix = `(?:${namespaceName})?`;
-  const namespaceType = `(?:${namespacePrefix}\\|${namespaceName})`;
-  const attrName = `(?:(?:${namespacePrefix}\\|)?${identifier})`;
-
-  const attributes =
-    `\\[` +
-      // attribute presence
-      // `(?:${universal}\\|)?` +
-      `${WSP}?` +
-      // `(${identifier}(?::${identifier})?)` +
-      `(${attrName})` +
-      `${WSP}?` +
-      `(?:` +
-        `(${operators})${WSP}?` +
-        `(?:${attrparser})` +
-      `)?` +
-      // attribute case sensitivity
-      `(?:${WSP}?\\b(i))?${WSP}?` +
-    `(?:\\]|$)`;
-
-  const attrmatcher = attributes.replace(attrparser, attrvalues);
-
-  const pseudoclass =
-    `(?:${LP}${WSP}*` +
-      `(?:${pseudoparms}?)?|` +
-      `(?:${namespaceType}|${universal})|` +
-      `(?:` +
-        `(?::${pseudonames}` +
-          `(?:${LP}${pseudoparms}?(?:${RP}|$))?|` +
-        `)|` +
-        `(?:[.#]?${identifier})|` +
-        `(?:${attributes})` +
-      `)+|` +
-      `(?:${WSP}?${combinator})|` +
-      `(?:${WSP}?,${WSP}?)|` +
-      `(?:${WSP}?)|` +
-      `(?:${RP}|$)` +
-    `)*`;
-
-  const standardValidator =
-    `(?=${WSP}?[^>+~(){}<>])` +
-    `(?:` +
-      `(?:${namespaceType})|` +
-      `(?:${universal})|` +
-      `(?:[.#]?${identifier})+|` +
-      `(?:${attributes})+|` +
-      `(?:::?${pseudonames}${pseudoclass})|` +
-      `(?:${WSP}?${combinator}${WSP}?)|` +
-      `(?:${WSP}?,${WSP}?)|` +
-      `(?:${WSP}?)` +
-    `)+`;
-
-  // the following global RE is used to return the
-  // deepest localName in selector strings and then
-  // use it to retrieve all possible matching nodes
-  // that will be filtered by compiled resolvers
-  const reOptimizer = RegExp(
-    `(?:([.:#*]?)` +
-    `(${identifier})` +
-    `(?:` +
-      `:[-\\w]+|` +
-      `\\[[^\\]]+(?:\\]|$)|` +
-      `${LP}[^${RP}]+(?:${RP}|$)` +
-    `)*)$`);
-
-  // global
-  const reValidator = RegExp(standardValidator, 'g');
+export function buildRex(ext: NwsExtensions) {
+  const {
+    Groups, Not, optimizer, validator,
+    BS, DQ, SQ, LF, CR, FF, SP, HT, UNIVERSAL, COMBINATOR, PIPE,
+    hexCh, wsp, nsPart, nsName, attrmatcher, identifier,
+  } = buildRexStrings(ext);
 
   const rex = {
     // regular expressions
-    HasEscapes: RegExp(`\\\\`),
-    HexNumbers: RegExp(`^[0-9a-fA-F]`),
-    EscOrQuote: RegExp(`^\\\\|[${DQ}${SQ}]`),
-    RegExpChar: RegExp(`(?!\\\\)[\\\\^$.,*+?()[\\]{}|\\/]`, 'g'),
-    TrimSpaces: RegExp(`^${WSP}+|${WSP}+$`, 'g'),
-    SplitGroup: RegExp(`(\\([^)]*\\)|\\[[^[]*\\]|\\\\.|[^,])+`, 'g'),
-    CommaGroup: RegExp(`(\\s*,\\s*)${NOT.square_enc}${NOT.parens_enc}`, 'g'),
-    FixEscapes: RegExp(`\\\\([0-9a-fA-F]{1,6}${WSP}?|.)|([${DQ}${SQ}])`, 'g'),
-    CombineWSP: RegExp(`[${LF}${CR}${FF}${SP}]+${NOT.single_enc}${NOT.double_enc}`, 'g'),
-    TabCharWSP: RegExp(`(${SP}?${HT}+${SP}?)${NOT.single_enc}${NOT.double_enc}`, 'g'),
-    PseudosWSP: RegExp(`([0-9n])\\s*([-+])\\s*(?=[0-9n])${NOT.square_enc}`, 'gi'),
+    HasEscapes: RegExp(`${BS}`),
+    HexNumbers: RegExp(`^${hexCh}`),
+    EscOrQuote: RegExp(`^${BS}|[${DQ}${SQ}]`),
+    RegExpChar: RegExp(`(?!${BS})[${BS}^$.,*+?()[\\]{}|\\/]`, 'g'),
+    TrimSpaces: RegExp(`^${wsp}+|${wsp}+$`, 'g'),
+    SplitGroup: RegExp(`(\\([^)]*\\)|\\[[^[]*\\]|${BS}.|[^,])+`, 'g'),
+    CommaGroup: RegExp(`(\\s*,\\s*)${Not.square_enc}${Not.parens_enc}`, 'g'),
+    FixEscapes: RegExp(`${BS}([0-9a-fA-F]{1,6}${wsp}?|.)|([${DQ}${SQ}])`, 'g'),
+    CombineWSP: RegExp(`[${LF}${CR}${FF}${SP}]+${Not.single_enc}${Not.double_enc}`, 'g'),
+    TabCharWSP: RegExp(`(${SP}?${HT}+${SP}?)${Not.single_enc}${Not.double_enc}`, 'g'),
+    PseudosWSP: RegExp(`([0-9n])\\s*([-+])\\s*(?=[0-9n])${Not.square_enc}`, 'gi'),
     STD: {
-      combinator: RegExp(`${WSP}?([${combinatorRaw}])${WSP}?`, 'g'),
-      // combinator: RegExp(`\\s?([>+~])\\s?`, 'g'),
-      apimethods: RegExp(`^${namespacePrefix}\\|`),
-      namespaces: RegExp(`(${namespacePrefix})\\|` + namespaceName),
+      combinator: RegExp(`${wsp}?([${COMBINATOR}])${wsp}?`, 'g'),
+      apimethods: RegExp(`^${nsPart}?${PIPE}`),
+      namespaces: RegExp(`(${nsPart}?)${PIPE}` + nsName),
     },
     Patterns: {
       // pseudo-classes
-      treestruct: RegExp(`^:(?:${GROUPS.treestruct})(.*)`, 'i'),
-      structural: RegExp(`^:(?:${GROUPS.structural})(.*)`, 'i'),
-      linguistic: RegExp(`^:(?:${GROUPS.linguistic})(.*)`, 'i'),
-      useraction: RegExp(`^:(?:${GROUPS.useraction})(.*)`, 'i'),
-      inputstate: RegExp(`^:(?:${GROUPS.inputstate})(.*)`, 'i'),
-      inputvalue: RegExp(`^:(?:${GROUPS.inputvalue})(.*)`, 'i'),
-      rsrc_state: RegExp(`^:(?:${GROUPS.rsrc_state})(.*)`, 'i'),
-      disp_state: RegExp(`^:(?:${GROUPS.disp_state})(.*)`, 'i'),
-      time_state: RegExp(`^:(?:${GROUPS.time_state})(.*)`, 'i'),
-      locationpc: RegExp(`^:(?:${GROUPS.locationpc})(.*)`, 'i'),
-      logicalsel: RegExp(`^:(?:${GROUPS.logicalsel})(.*)`, 'i'),
-      pseudo_nop: RegExp(`^:(?:${GROUPS.pseudo_nop})(.*)`, 'i'),
-      pseudo_sng: RegExp(`^:(?:${GROUPS.pseudo_sng})(.*)`, 'i'),
-      pseudo_dbl: RegExp(`^:(?:${GROUPS.pseudo_dbl})(.*)`, 'i'),
+      treestruct: RegExp(`^:(?:${Groups.treestruct})(.*)`, 'i'),
+      structural: RegExp(`^:(?:${Groups.structural})(.*)`, 'i'),
+      linguistic: RegExp(`^:(?:${Groups.linguistic})(.*)`, 'i'),
+      useraction: RegExp(`^:(?:${Groups.useraction})(.*)`, 'i'),
+      inputstate: RegExp(`^:(?:${Groups.inputstate})(.*)`, 'i'),
+      inputvalue: RegExp(`^:(?:${Groups.inputvalue})(.*)`, 'i'),
+      rsrc_state: RegExp(`^:(?:${Groups.rsrc_state})(.*)`, 'i'),
+      disp_state: RegExp(`^:(?:${Groups.disp_state})(.*)`, 'i'),
+      time_state: RegExp(`^:(?:${Groups.time_state})(.*)`, 'i'),
+      locationpc: RegExp(`^:(?:${Groups.locationpc})(.*)`, 'i'),
+      logicalsel: RegExp(`^:(?:${Groups.logicalsel})(.*)`, 'i'),
+      pseudo_nop: RegExp(`^:(?:${Groups.pseudo_nop})(.*)`, 'i'),
+      pseudo_sng: RegExp(`^:(?:${Groups.pseudo_sng})(.*)`, 'i'),
+      pseudo_dbl: RegExp(`^:(?:${Groups.pseudo_dbl})(.*)`, 'i'),
       // combinator symbols
-      children: RegExp(`^${WSP}?\\>${WSP}?(.*)`),
-      adjacent: RegExp(`^${WSP}?\\+${WSP}?(.*)`),
-      relative: RegExp(`^${WSP}?\\~${WSP}?(.*)`),
-      ancestor: RegExp(`^${WSP}+(.*)`),
+      children: RegExp(`^${wsp}?\\>${wsp}?(.*)`),
+      adjacent: RegExp(`^${wsp}?\\+${wsp}?(.*)`),
+      relative: RegExp(`^${wsp}?\\~${wsp}?(.*)`),
+      ancestor: RegExp(`^${wsp}+(.*)`),
       // universal & namespace
-      universal: RegExp(`^(${universal})(.*)`),
-      namespace: RegExp(`^(${namespacePrefix})\\|(.*)`),
+      universal: RegExp(`^(${UNIVERSAL})(.*)`),
+      namespace: RegExp(`^(${nsPart}?)${PIPE}(.*)`),
       // id, class, tag
       id: RegExp(`^#(${identifier})(.*)`),
       tagName: RegExp(`^(${identifier})(.*)`),
@@ -1048,12 +1071,8 @@ export function buildRex(ext: NwsExtensions) {
     // regexp to better aproximate detection of RTL languages (Arabic)
     RTL: RegExp(`^(?:[\\u0627-\\u064a]|[\\u0591-\\u08ff]|[\\ufb1d-\\ufdfd]|[\\ufe70-\\ufefc])+$`),
 
-    // detect structural pseudo-classes in selectors
-    nthElem: RegExp(`(:nth(?:-last)?-child)`, 'i'),
-    nthType: RegExp(`(:nth(?:-last)?-of-type)`, 'i'),
-
-    optimizer: reOptimizer,
-    validator: reValidator,
+    optimizer: RegExp(optimizer),
+    validator: RegExp(validator, 'g'),
   };
 
   return rex;
@@ -1449,56 +1468,55 @@ function compileSelector(
         // *** child-indexed & typed child-indexed pseudo-classes
         // :nth-child, :nth-of-type, :nth-last-child, :nth-last-of-type
         else if ((match = selector.match(snap.re.Patterns.treestruct))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
-            case 'nth-child':
-            case 'nth-of-type':
-            case 'nth-last-child':
-            case 'nth-last-of-type': {
-              const isOfType = /-of-type/i.test(match[1]);
-              let test: string;
-              if (match[1] && match[2]) {
-                const isLastType = /last/i.test(match[1]);
-                if (match[2] == 'n') {
-                  source = 'if(true){' + source + '}';
-                  break;
-                } else if (match[2] == '1') {
-                  test = isLastType ? 'next' : 'previous';
-                  source = isOfType ? 'n=e;o=e.localName;' +
-                    'while((n=n.' + test + 'ElementSibling)&&n.localName!=o);if(!n){' + source + '}' :
-                    'if(!e.' + test + 'ElementSibling){' + source + '}';
-                  break;
-                } else if (match[2] == 'even' || match[2] == '2n0' || match[2] == '2n+0' || match[2] == '2n') {
-                  test = 'n%2==0';
-                } else if (match[2] == 'odd'  || match[2] == '2n1' || match[2] == '2n+1') {
-                  test = 'n%2==1';
-                } else {
-                  const f = /n/i.test(match[2]);
-                  const n = match[2].split('n');
-                  let a = parseInt(n[0], 10) || 0;
-                  const b = parseInt(n[1], 10) || 0;
-                  if (n[0] == '-') { a = -1; }
-                  if (n[0] == '+') { a = +1; }
-                  test = (b ? '(n' + (b > 0 ? '-' : '+') + Math.abs(b) + ')' : 'n') + '%' + a + '==0' ;
-                  test =
-                    a >= +1 ? (f ? 'n>' + (b - 1) + (Math.abs(a) != 1 ? '&&' + test : '') : 'n==' + a) :
-                    a <= -1 ? (f ? 'n<' + (b + 1) + (Math.abs(a) != 1 ? '&&' + test : '') : 'n==' + a) :
-                    a === 0 ? (n[0] ? 'n==' + b : 'n>' + (b - 1)) : 'false';
-                }
-                const nthCall = isOfType ? `s.nthOfType(e,${isLastType})` : `s.nthElement(e,${isLastType})`;
-                source = `n=${nthCall};if((${test})){${source}}`;
+          const pseudo = match[1].toLowerCase();
+          let nthArg = match[2].toLowerCase().replace(/\s+/g, '');
+          nthArg = nthArg.replace(/^[+-]?0n/, '') || '0';
 
-                const cleanup = isOfType ? `s.nthOfType(null, 2);` : `s.nthElement(null, 2);`;
-                if (!out.post.includes(cleanup)) out.post += cleanup;
-              } else {
-                emit(`Invalid syntax for child-indexed pseudo-class ${match[2] != null ? `:${match[1]}(${match[2]})` : `:${match[1]}`} in selector: ${expression}`, snap.config);
-              }
-              break;
-            }
-            default:
-              emit(`Unsupported child-indexed pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
-              break;
+          if (pseudo !== 'nth-child' && pseudo !== 'nth-last-child' && pseudo !== 'nth-of-type' && pseudo !== 'nth-last-of-type') {
+            emit(`Unsupported pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
+            return out;
           }
+
+          if (!nthArg) {
+            emit(`Missing argument for pseudo-class ${pseudo} in selector: ${expression}`, snap.config);
+            return out;
+          }
+
+          const isOfType = pseudo.endsWith('-of-type');
+          const isLast = pseudo.includes('last');
+
+          if (nthArg === 'n') {
+            source = `if(true){${source}}`;
+            break;
+          }
+
+          let nthTest: string;
+          if (nthArg === 'even' || nthArg === '2n0' || nthArg === '2n+0' || nthArg === '2n') {
+            nthTest = 'n%2===0';
+          } else if (nthArg === 'odd' || nthArg === '2n1' || nthArg === '2n+1') {
+            nthTest = 'n%2===1';
+          } else if (!nthArg.includes('n')) {
+            const index = parseInt(nthArg, 10);
+            nthTest = `n===${index}`;
+          } else {
+            const [rawStep, rawOffset = ''] = nthArg.split('n');
+            const step = /\d/.test(rawStep) ? parseInt(rawStep, 10) : parseInt(`${rawStep}1`, 10);
+            const absStep = Math.abs(step);
+            const offset = rawOffset ? parseInt(rawOffset, 10) : 0;
+            const shifted = offset ? `(n${offset > 0 ? '-' : '+'}${Math.abs(offset)})` : 'n';
+            const periodic = absStep === 1 ? '' : `${shifted}%${absStep}===0`;
+            nthTest =
+              step > 0 ? `n>${offset - 1}${periodic ? `&&${periodic}` : ''}` :
+              step < 0 ? `n<${offset + 1}${periodic ? `&&${periodic}` : ''}` :
+              'false';
+          }
+
+          const nthCall = isOfType ? `s.nthOfType(e,${isLast})` : `s.nthElement(e,${isLast})`;
+          source = `n=${nthCall};if((${nthTest})){${source}}`;
+
+          const cleanup = isOfType ? `s.nthOfType(null, 2);` : `s.nthElement(null, 2);`;
+          if (!out.post.includes(cleanup)) out.post += cleanup;
+          break;
         }
 
         // *** logical combination pseudo-classes
