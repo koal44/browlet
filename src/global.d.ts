@@ -182,6 +182,17 @@ type DebugSelectBuildStep = {
   compileQuery: string;
 };
 
+type DebugMatch = {
+  callback?: QueryCallback | null;
+  element?: QueryContextDescription;
+  selector?: string;
+  scopedSelector?: string;
+  parsed?: string[];
+  lambdaSource?: string[];
+  result?: boolean;
+  error?: string;
+};
+
 type QueryContextDescription = {
   kind: 'document' | 'fragment' | 'element' | 'unknown';
   summary: string;
@@ -194,10 +205,55 @@ type QsaKey =
   'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |
   'querySelectorDoc' | 'querySelectorAllDoc';
 
+// --- parsing ---
+
 type CompileSelectorResult = {
   source: string;
   post: string;
   modvar: string[];
+};
+
+type SelectorList = {
+  kind: 'selector-list';
+  source: string;
+  selectors: ComplexSelector[];
+};
+
+type ComplexSelector = {
+  kind: 'complex';
+  source: string;
+  steps: ComplexStep[];
+};
+
+type ComplexStep = {
+  kind: 'step';
+  combinator: SelectorCombinator | null;
+  compound: CompoundSelector;
+};
+
+type SelectorCombinator = ' ' | '>' | '+' | '~';
+
+type CompoundSelector = {
+  kind: 'compound';
+  source: string;
+};
+
+type RelativeSelectorList = {
+  kind: 'relative-selector-list';
+  source: string;
+  selectors: RelativeSelector[];
+};
+
+type RelativeSelector = {
+  kind: 'relative';
+  source: string;
+  steps: RelativeStep[];
+};
+
+type RelativeStep = {
+  kind: 'relative-step';
+  combinator: SelectorCombinator;
+  compound: CompoundSelector;
 };
 
 } // end global declaration

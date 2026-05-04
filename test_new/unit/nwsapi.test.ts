@@ -1,8 +1,8 @@
 import { describe, expect, it, test } from 'vitest';
 import {
   buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
-  matchLogicalSelector, splitSelectorGroups, escapeRegExp,
-  buildRexStrings,
+  matchLogicalSelector, splitSelectorGroups, escapeRegExp, buildRexStrings,
+  parseRelativeSelectorList,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -1477,5 +1477,183 @@ describe('Rex attribute selector fragments', () => {
     expect(re.test(`[charset="utf-8"`)).toBe(true);
     expect(re.test(`[align="center"`)).toBe(true);
     expect(re.test(`[name='types[]'`)).toBe(true);
+  });
+});
+
+describe('parseRelativeSelectorList', () => {
+  const stepsOf = (source: string) =>
+    parseRelativeSelectorList(source).selectors.map(selector =>
+      selector.steps.map(step => [step.combinator, step.compound.source])
+    );
+
+  it('parses a single implicit descendant step', () => {
+    expect(stepsOf('.a')).toEqual([
+      [[' ', '.a']],
+    ]);
+  });
+
+  it('parses implicit descendant chains', () => {
+    expect(stepsOf('.a .b .c')).toEqual([
+      [
+        [' ', '.a'],
+        [' ', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('parses a leading child combinator', () => {
+    expect(stepsOf('> .a')).toEqual([
+      [['>', '.a']],
+    ]);
+  });
+
+  it('parses a leading adjacent sibling combinator', () => {
+    expect(stepsOf('+ .next')).toEqual([
+      [['+', '.next']],
+    ]);
+  });
+
+  it('parses a leading following sibling combinator', () => {
+    expect(stepsOf('~ .after')).toEqual([
+      [['~', '.after']],
+    ]);
+  });
+
+  it('parses mixed child, sibling, and descendant steps', () => {
+    expect(stepsOf('> .a + .b .c')).toEqual([
+      [
+        ['>', '.a'],
+        ['+', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('parses general sibling followed by child and descendant steps', () => {
+    expect(stepsOf('~ .a > .b .c')).toEqual([
+      [
+        ['~', '.a'],
+        ['>', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('ignores whitespace around explicit combinators', () => {
+    expect(stepsOf('  >   .a   +   .b   ~   .c  ')).toEqual([
+      [
+        ['>', '.a'],
+        ['+', '.b'],
+        ['~', '.c'],
+      ],
+    ]);
+  });
+
+  it('splits selector-list branches at top-level commas', () => {
+    expect(stepsOf('.a, > .b, + .c')).toEqual([
+      [[' ', '.a']],
+      [['>', '.b']],
+      [['+', '.c']],
+    ]);
+  });
+
+  it('does not split commas inside functional pseudos', () => {
+    expect(stepsOf('.a:is(.x, .y), > .b:not(.c, .d)')).toEqual([
+      [[' ', '.a:is(.x, .y)']],
+      [['>', '.b:not(.c, .d)']],
+    ]);
+  });
+
+  it('does not split combinators inside functional pseudos', () => {
+    expect(stepsOf('.a:is(.x > .y) > .b:not(.c + .d)')).toEqual([
+      [
+        [' ', '.a:is(.x > .y)'],
+        ['>', '.b:not(.c + .d)'],
+      ],
+    ]);
+  });
+
+  it('does not split combinators inside attribute selectors', () => {
+    expect(stepsOf('[data-x="a>b"] + [data-y="c+d"] ~ [data-z="e~f"]')).toEqual([
+      [
+        [' ', '[data-x="a>b"]'],
+        ['+', '[data-y="c+d"]'],
+        ['~', '[data-z="e~f"]'],
+      ],
+    ]);
+  });
+
+  it('does not split commas inside quoted attribute values', () => {
+    expect(stepsOf('[data-x=","] , [data-y="a,b"]')).toEqual([
+      [[' ', '[data-x=","]']],
+      [[' ', '[data-y="a,b"]']],
+    ]);
+  });
+
+  it('preserves escaped combinator-like characters in compounds', () => {
+    expect(stepsOf('.a\\+b > .c\\~d + .e\\>f')).toEqual([
+      [
+        [' ', '.a\\+b'],
+        ['>', '.c\\~d'],
+        ['+', '.e\\>f'],
+      ],
+    ]);
+  });
+
+  it('preserves escaped commas in compounds', () => {
+    expect(stepsOf('.a\\,b, .c')).toEqual([
+      [[' ', '.a\\,b']],
+      [[' ', '.c']],
+    ]);
+  });
+
+  it('parses nested :has as an opaque compound', () => {
+    expect(stepsOf('.a:has(> .x + .y) > .b')).toEqual([
+      [
+        [' ', '.a:has(> .x + .y)'],
+        ['>', '.b'],
+      ],
+    ]);
+  });
+
+  it('parses nested logical pseudos with selector lists as opaque compounds', () => {
+    expect(stepsOf(':is(.a > .b, .c + .d) ~ .e')).toEqual([
+      [
+        [' ', ':is(.a > .b, .c + .d)'],
+        ['~', '.e'],
+      ],
+    ]);
+  });
+
+  it('keeps source on the returned list and branches', () => {
+    const parsed = parseRelativeSelectorList('> .a + .b, .c');
+
+    expect(parsed.kind).toBe('relative-selector-list');
+    expect(parsed.source).toBe('> .a + .b, .c');
+    expect(parsed.selectors).toHaveLength(2);
+
+    expect(parsed.selectors[0]).toMatchObject({
+      kind: 'relative',
+      source: '> .a + .b',
+    });
+
+    expect(parsed.selectors[1]).toMatchObject({
+      kind: 'relative',
+      source: '.c',
+    });
+  });
+
+  it('returns compound nodes with source', () => {
+    const parsed = parseRelativeSelectorList('> div.foo[attr="x"]');
+
+    expect(parsed.selectors[0].steps[0]).toEqual({
+      kind: 'relative-step',
+      combinator: '>',
+      compound: {
+        kind: 'compound',
+        source: 'div.foo[attr="x"]',
+      },
+    });
   });
 });

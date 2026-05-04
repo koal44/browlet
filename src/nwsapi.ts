@@ -231,6 +231,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
     clearDebug() {
       _snap.debugSelect = undefined;
+      _snap.debugMatch = undefined;
     },
 
     printDebug() {
@@ -245,7 +246,8 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
           from: _snap.from === _snap.doc ? '(same as doc)' : fromDesc,
           root: { summary: describeElement(_snap.root) },
         },
-        debugCollect: _snap.debugSelect,
+        debugSelect: _snap.debugSelect,
+        debugMatch: _snap.debugMatch,
       }, null, 2);
     },
 
@@ -282,6 +284,7 @@ export function initSnapshot(doc: Document) {
 
     isDebug: false,
     debugSelect: undefined as DebugSelect | undefined,
+    debugMatch: undefined as DebugMatch | undefined,
 
     // special handling configuration flags
     config: { ...DEFAULT_CONFIG } as NwsConfig,
@@ -316,6 +319,7 @@ export function initSnapshot(doc: Document) {
 
     nthOfType: nthOfType,
     nthElement: nthElement,
+    matchHas: (steps: [SelectorCombinator, string][], anchor: Element) => matchHasFrom(steps, 0, anchor, snap),
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
@@ -745,6 +749,64 @@ function isPlaying(el: Element): boolean {
   const media = isHtmlMediaElement(el) ? el : isHtmlMediaElement(el.parentElement) ? el.parentElement : null;
   if (!media) return false;
   return media.currentTime > 0 && !media.paused && !media.ended && media.readyState > 2;
+}
+
+function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot): boolean {
+  // steps: RelativeStep[]
+  if (index >= steps.length) {
+    return true;
+  }
+
+  const step = steps[index];
+  const source = step[1];
+  const combinator = step[0];
+  const next = index + 1;
+
+  switch (combinator) {
+    case ' ':
+      for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
+        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+          return true;
+        }
+      }
+      return false;
+
+    case '>':
+      for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
+        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+          return true;
+        }
+      }
+      return false;
+
+    case '+': {
+      const node = base.nextElementSibling;
+      return !!node && snap.match(source, node) && matchHasFrom(steps, next, node, snap);
+    }
+
+    case '~':
+      for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
+        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+          return true;
+        }
+      }
+      return false;
+  }
+}
+
+function nextDescendant(root: Element, node: Element): Element | null {
+  if (node.firstElementChild) return node.firstElementChild;
+
+  while (node !== root) {
+    if (node.nextElementSibling) return node.nextElementSibling;
+
+    const parent = node.parentElement;
+    if (!parent) return null;
+
+    node = parent;
+  }
+
+  return null;
 }
 
 function previewText(s: string, max = 240): string {
@@ -1551,47 +1613,46 @@ function compileSelector(
           break;
         }
 
-        // *** logical combination pseudo-classes
-        // :is( s1, [ s2, ... ]), :not( s1, [ s2, ... ]),
-        // :has( s1, [ s2, ... ]) no nesting is allowed for
-        // :where( s1, [ s2, ... ]), :matches( s1, [ s2, ... ]),
-        // else if ((match = selector.match(snap.re.Patterns.logicalsel))) {
+        // *** Logical/relational pseudo-classes.
+        // :is(), :where(), and legacy :matches() test the current element against a selector list.
+        // :not() negates a selector-list match.
+        // :has() evaluates a relative selector list anchored at the current element.
         else if ((match = matchLogicalSelector(selector))) {
-          match[1] = match[1].toLowerCase();
+          const pseudo = match[1].toLowerCase();
           const expr = match[2]
             .replace(snap.re.CommaGroup, ',')
-            .replace(snap.re.TrimSpaces, '')
-            .replace(/\x22/g, '\\"');
-          switch (match[1]) {
+            .replace(snap.re.TrimSpaces, '');
+          const exprLit = JSON.stringify(expr);
+
+          switch (pseudo) {
             case 'is':
             case 'where':
-              if (snap.config.FORGIVING) {
-                source =
-                  'try{' +
-                    'if(s.match("' + expr + '",e)){' + source + '}' +
-                  '}catch(E){}';
-              } else {
-                source = 'if(s.match("' + expr + '",e)){' + source + '}';
-              }
-              break;
             case 'matches':
-              source = 'if(s.match("' + expr + '",e)){' + source + '}';
+              source = snap.config.FORGIVING
+                ? `try{if(s.match(${exprLit},e)){${source}}}catch(E){}`
+                : `if(s.match(${exprLit},e)){${source}}`;
               break;
             case 'not':
-              source = 'if(!s.match("' + expr + '",e)){' + source + '}';
+              source = `if(!s.match(${exprLit},e)){${source}}`;
               break;
-            case 'has':
-              if (/^\s*(\+|\~)/.test(match[2])) {
-                source = 'if(e.parentElement&&Array.from(e.parentElement' +
-                  (/^\s*[+]/.test(match[2]) ?
-                    '.querySelectorAll("*' + expr + '")' : '.children') +
-                    ').includes(e.nextElementSibling)){' + source + '}';
-              } else {
-                source = 'if(s.first(":scope ' + expr + '",e)){' + source + '}';
+            case 'has': {
+              const list = parseRelativeSelectorList(expr);
+              let hasSource = 'o=false;';
+
+              for (const selector of list.selectors) {
+                const steps = selector.steps.map(step => [
+                  step.combinator,
+                  step.compound.source,
+                ]);
+
+                hasSource += `if(!o){o=s.matchHas(${JSON.stringify(steps)},e);}`;
               }
+
+              source = `${hasSource}if(o){${source}}`;
               break;
+            }
             default:
-              emit(`Unsupported combinator pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported combinator pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }
@@ -2026,12 +2087,39 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
 
   const scoped = prepareScope(selectors, element);
   try {
-    let resolver = snap.matchResolvers[selectors];
+    if (snap.isDebug) {
+      snap.debugMatch = {
+        callback: cb,
+        element: describeContext(element),
+        selector: selectors,
+        scopedSelector: scoped.selectors,
+      };
+    }
+
+    let resolver = snap.matchResolvers[scoped.selectors];
     if (!resolver) {
       const parsed = parse(scoped.selectors, snap.re, snap.config);
-      resolver = snap.matchResolvers[selectors] = match_collect(parsed, cb, snap);
+
+      if (snap.isDebug && snap.debugMatch) {
+        snap.debugMatch.parsed = parsed;
+      }
+
+      resolver = snap.matchResolvers[scoped.selectors] = match_collect(parsed, cb, snap);
     }
-    return resolver.factory.some(f => f(element, cb, null, false));
+    const result = resolver.factory.some(f => f(element, cb, null, false));
+
+    if (snap.isDebug && snap.debugMatch) {
+      snap.debugMatch.lambdaSource = resolver.factory.map(f => String(f));
+      snap.debugMatch.result = result;
+    }
+
+    return result;
+  } catch (e) {
+    if (snap.isDebug) {
+      if (!snap.debugMatch) snap.debugMatch = {};
+      snap.debugMatch.error = e instanceof Error ? e.message : String(e);
+    }
+    throw e;
   } finally {
     scoped.cleanup();
   }
@@ -2203,8 +2291,8 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
   };
 }
 
+let scopeId = 0;
 function prepareScope(selectors: string, context: QueryContext) {
-  const SCOPE_ATTR = 'data-nwsapi-scope';
   const HAS_SCOPE = /:scope\b/i;
   const RE_SCOPE = /:scope\b/gi;
 
@@ -2216,14 +2304,12 @@ function prepareScope(selectors: string, context: QueryContext) {
     : isElement(context) ? context
     : null;
 
-  const oldValue = element?.getAttribute(SCOPE_ATTR);
-  element?.setAttribute(SCOPE_ATTR, '');
+  const scopeAttr = `data-nwsapi-scope-${++scopeId}`;
+  element?.setAttribute(scopeAttr, '');
 
   return {
-    selectors: selectors.replace(RE_SCOPE, `[${SCOPE_ATTR}]`),
-    cleanup: () => oldValue == null
-      ? element?.removeAttribute(SCOPE_ATTR)
-      : element?.setAttribute(SCOPE_ATTR, oldValue),
+    selectors: selectors.replace(RE_SCOPE, `[${scopeAttr}]`),
+    cleanup: () => element?.removeAttribute(scopeAttr),
   };
 }
 
@@ -2232,12 +2318,15 @@ export function matchLogicalSelector(selector: string): RegExpMatchArray | null 
   if (!head) return null;
 
   const open = head[0].length - 1;
-  const close = findClosingParen(selector, open);
-  if (close < 0) return null;
+  let close = findClosingParen(selector, open);
+
+  // Browser-compatible tolerance: a missing final ")" on these functional
+  // pseudos is treated as if the pseudo closed at EOF.
+  if (close < 0) close = selector.length;
 
   const argStart = open + 1;
   const arg = selector.slice(argStart, close).trim();
-  const tail = selector.slice(close + 1);
+  const tail = close < selector.length ? selector.slice(close + 1) : '';
 
   return Object.assign([selector, head[1], arg, tail], {
     index: 0,
@@ -2265,26 +2354,62 @@ function findClosingParen(input: string, openIndex: number): number {
   return -1;
 }
 
-export function splitSelectorGroups(selector: string): string[] {
-  const out: string[] = [];
-  let start = 0, depth = 0, quote = '', inAttr = false;
+// Scans selector chars that are top-level with respect to escapes, strings, attribute selectors, and parentheses.
+// The visitor returns how many chars it consumed from `index`.
+function scanTopLevel(source: string, visit: (index: number, ch: string) => number): void {
+  let depth = 0;
+  let quote = '';
+  let inAttr = false;
 
-  for (let i = 0; i < selector.length; i++) {
-    const ch = selector[i];
+  for (let i = 0; i < source.length;) {
+    const ch = source[i];
 
-    if (ch === '\\') { i++; continue; }
-    if (quote) { if (ch === quote) quote = ''; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (inAttr) { if (ch === ']') inAttr = false; continue; }
-    if (ch === '[') { inAttr = true; continue; }
-    if (ch === '(') { depth++; continue; }
-    if (ch === ')') { if (depth) depth--; continue; }
+    if (ch === '\\') {
+      i += 2;
+    } else if (quote) {
+      if (ch === quote) quote = '';
+      i++;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      i++;
+    } else if (inAttr) {
+      if (ch === ']') inAttr = false;
+      i++;
+    } else if (ch === '[') {
+      inAttr = true;
+      i++;
+    } else if (ch === '(') {
+      depth++;
+      i++;
+    } else if (ch === ')' && depth) {
+      depth--;
+      i++;
+    } else if (depth !== 0) {
+      i++;
+    } else {
+      const consumed = visit(i, ch);
 
-    if (ch === ',' && depth === 0) {
-      out.push(selector.slice(start, i));
-      start = i + 1;
+      if (consumed <= 0) {
+        throw new Error('scanTopLevel visitor must consume at least one character');
+      }
+
+      i += consumed;
     }
   }
+}
+
+export function splitSelectorGroups(selector: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+
+  scanTopLevel(selector, (index, ch) => {
+    if (ch === ',') {
+      out.push(selector.slice(start, index));
+      start = index + 1;
+    }
+
+    return 1;
+  });
 
   out.push(selector.slice(start));
   return out;
@@ -2296,4 +2421,113 @@ function findUnescapedPipe(str: string): number {
     if (str[i] === '|') return i;
   }
   return -1;
+}
+
+export function parseRelativeSelectorList(source: string): RelativeSelectorList {
+  const selectors = splitSelectorGroups(source).map(raw => {
+    const branch = raw.trim();
+
+    return parseRelativeSelector(branch);
+  });
+
+  return {
+    kind: 'relative-selector-list',
+    source,
+    selectors,
+  };
+}
+
+function parseRelativeSelector(source: string): RelativeSelector {
+  return {
+    kind: 'relative',
+    source,
+    steps: parseRelativeSteps(source),
+  };
+}
+
+function parseRelativeSteps(source: string): RelativeStep[] {
+  const steps: RelativeStep[] = [];
+
+  let combinator: SelectorCombinator = ' ';
+  let start = skipSelectorSpaces(source, 0);
+
+  const push = (end: number) => {
+    const compound = source.slice(start, end).trim();
+
+    if (!compound) {
+      return false;
+    }
+
+    steps.push({
+      kind: 'relative-step',
+      combinator,
+      compound: {
+        kind: 'compound',
+        source: compound,
+      },
+    });
+
+    combinator = ' ';
+    return true;
+  };
+
+  scanTopLevel(source, (index, ch) => {
+    if (index < start) {
+      return 1;
+    }
+
+    if (isExplicitCombinator(ch)) {
+      push(index);
+      combinator = ch;
+
+      const next = skipSelectorSpaces(source, index + 1);
+      start = next;
+
+      return next - index;
+    }
+
+    if (isSelectorSpace(ch)) {
+      const next = skipSelectorSpaces(source, index + 1);
+      const nextChar = source[next];
+
+      // Whitespace before explicit combinator is padding:
+      // `.a   > .b`
+      if (isExplicitCombinator(nextChar)) {
+        return next - index;
+      }
+
+      // Trailing whitespace.
+      if (next >= source.length) {
+        return source.length - index;
+      }
+
+      // Otherwise whitespace is a descendant combinator.
+      push(index);
+      combinator = ' ';
+      start = next;
+
+      return next - index;
+    }
+
+    return 1;
+  });
+
+  push(source.length);
+
+  return steps;
+}
+
+function isExplicitCombinator(ch: string): ch is '>' | '+' | '~' {
+  return ch === '>' || ch === '+' || ch === '~';
+}
+
+function skipSelectorSpaces(source: string, index: number): number {
+  while (index < source.length && isSelectorSpace(source[index])) {
+    index++;
+  }
+  return index;
+}
+
+function isSelectorSpace(ch: string): boolean {
+  return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
 }
