@@ -2912,14 +2912,292 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'shadow-root/declarative-slot',
+    // status: 'only',
+    markup: `
+      <div id="host">
+        <span id="light" slot="x"></span>
+        <template shadowrootmode="open">
+          <slot name="x"></slot>
+        </template>
+      </div>
+    `,
+    cases: [
+      { select: '#light', ref: { by: 'id', id: 'host' }, expect: { ids: ['light'] } },
+      { select: '#light', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 0 } },
+      { select: 'slot', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 1 } },
+    ],
+  },
 
+  {
+    name: 'shadow-root/basic-query-context',
+    // status: 'only',
+    markup: `<div id="host"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' })!.innerHTML =
+          `<section><p id="inside" class="x"></p></section>`;
+      });
+    },
+    cases: [
+      { select: '#inside', expect: { count: 0 } },
+      { select: '.x', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+      { select: 'section .x', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+    ],
+  },
 
+  {
+    name: 'shadow-root/closest-stays-inside-shadow-tree',
+    // status: 'only',
+    markup: `<div id="host"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' })!.innerHTML =
+          `<section id="section"><p id="inside"></p></section>`;
+      });
+    },
+    cases: [
+      { closest: 'section', ref: { by: 'id', id: 'inside', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['section'] } },
+      { closest: '#host', ref: { by: 'id', id: 'inside', within: { by: 'shadowRoot', id: 'host' } }, expect: { count: 0 } },
+    ],
+  },
 
+  {
+    name: 'shadow-root/slotted-light-dom-is-not-shadow-descendant',
+    // status: 'only',
+    markup: `<div id="host"><span id="light" slot="x"></span></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' })!.innerHTML = `<slot name="x"></slot>`;
+      });
+    },
+    cases: [
+      { select: '#light', ref: { by: 'id', id: 'host' }, expect: { ids: ['light'] } },
+      { select: '#light', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 0 } },
+      { select: 'slot', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 1 } },
+    ],
+  },
 
+  {
+    name: 'shadow-root/nested-shadow-context',
+    // status: 'only',
+    markup: `<div id="outer"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const outer = document.getElementById('outer')!;
+        const outerRoot = outer.attachShadow({ mode: 'open' })!;
+        outerRoot.innerHTML = `<div id="inner-host"></div>`;
+        outerRoot.getElementById('inner-host')!.attachShadow({ mode: 'open' })!.innerHTML =
+          `<p id="deep" class="x"></p>`;
+      });
+    },
+    cases: [
+      { select: '#deep', expect: { count: 0 } },
+      { select: '#deep', ref: { by: 'shadowRoot', id: 'outer' }, expect: { count: 0 } },
+      { select: '.x', ref: { by: 'shadowRoot', id: 'inner-host', within: { by: 'shadowRoot', id: 'outer' } }, expect: { ids: ['deep'] } },
+    ],
+  },
 
+  {
+    name: 'shadow-root/declarative-basic',
+    // status: 'only',
+    markup: `
+      <div id="host">
+        <template shadowrootmode="open">
+          <p id="inside" class="x"></p>
+        </template>
+      </div>
+    `,
+    cases: [
+      { select: '#inside', expect: { count: 0 } },
+      { select: '.x', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+    ],
+  },
 
+  {
+    name: 'user action focus-within crosses shadow boundary',
+    status: 'fixme',
+    // engines: ['native'],
+    markup: `
+      <div id="outer">
+        <div id="host">
+          <template shadowrootmode="open">
+            <section id="shadowOuter">
+              <input id="inner">
+            </section>
+          </template>
+        </div>
+        <div id="other"></div>
+      </div>
+    `,
+    setupPage: async page => {
+      await page.locator('#host').evaluate(host => {
+        const input = (host as HTMLElement).shadowRoot!.getElementById('inner') as HTMLInputElement;
+        input.focus();
+      });
+    },
+    cases: [
+      { select: '#inner:focus', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+      { select: '#shadowOuter:focus-within', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['shadowOuter'] } },
 
+      // These are the cross-boundary cases parentElement walking will miss.
+      { select: '#host:focus-within', expect: { ids: ['host'] } },
+      { select: '#outer:focus-within', expect: { ids: ['outer'] } },
+      { select: '#other:focus-within', expect: { ids: [] } },
+    ],
+  },
 
+  {
+    name: 'user action hover crosses shadow boundary',
+    status: 'fixme',
+    // engines: ['native'],
+    markup: `
+      <div id="outer" style="width:80px;height:80px;">
+        <div id="host" style="display:block;width:60px;height:60px;">
+          <template shadowrootmode="open">
+            <section id="shadowOuter" style="display:block;width:40px;height:40px;">
+              <div id="inner" style="width:20px;height:20px;"></div>
+            </section>
+          </template>
+        </div>
+        <div id="other" style="width:20px;height:20px;"></div>
+      </div>
+    `,
+    steps: [
+      {
+        setupPage: async page => {
+          await page.mouse.move(200, 200);
+        },
+        cases: [
+          { select: '#inner:hover', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+          { select: '#shadowOuter:hover', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+          { select: '#host:hover', expect: { ids: [] } },
+          { select: '#outer:hover', expect: { ids: [] } },
+        ],
+      },
+      {
+        setupPage: async page => {
+          await page.locator('#host').evaluate(host => {
+            const inner = (host as HTMLElement).shadowRoot!.getElementById('inner') as HTMLElement;
+            inner.scrollIntoView();
+          });
+          const box = await page.locator('#host').boundingBox();
+          if (!box) throw new Error('missing host box');
+          await page.mouse.move(box.x + 10, box.y + 10);
+        },
+        cases: [
+          { select: '#inner:hover', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+          { select: '#shadowOuter:hover', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['shadowOuter'] } },
 
+          // Cross-boundary propagation.
+          { select: '#host:hover', expect: { ids: ['host'] } },
+          { select: '#outer:hover', expect: { ids: ['outer'] } },
+          { select: '#other:hover', expect: { ids: [] } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'user action active crosses shadow boundary',
+    status: 'fixme',
+    // engines: ['native'],
+    markup: `
+      <div id="outer" style="width:80px;height:80px;">
+        <div id="host" style="display:block;width:60px;height:60px;">
+          <template shadowrootmode="open">
+            <section id="shadowOuter" style="display:block;width:40px;height:40px;">
+              <button id="inner" style="display:block;width:20px;height:20px;padding:0;"></button>
+            </section>
+          </template>
+        </div>
+        <div id="other" style="width:20px;height:20px;"></div>
+      </div>
+    `,
+    steps: [
+      {
+        setupPage: async page => {
+          await page.mouse.move(200, 200);
+        },
+        cases: [
+          { select: '#inner:active', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+          { select: '#shadowOuter:active', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+          { select: '#host:active', expect: { ids: [] } },
+          { select: '#outer:active', expect: { ids: [] } },
+        ],
+      },
+      {
+        setupPage: async page => {
+          const box = await page.locator('#host').boundingBox();
+          if (!box) throw new Error('missing host box');
+          await page.mouse.move(box.x + 10, box.y + 10);
+          await page.mouse.down();
+        },
+        cases: [
+          { select: '#inner:active', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+          { select: '#shadowOuter:active', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['shadowOuter'] } },
+
+          // Cross-boundary propagation.
+          { select: '#host:active', expect: { ids: ['host'] } },
+          { select: '#outer:active', expect: { ids: ['outer'] } },
+          { select: '#other:active', expect: { ids: [] } },
+        ],
+      },
+      {
+        setupPage: async page => {
+          await page.mouse.up();
+        },
+        cases: [
+          { select: '#inner:active', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+          { select: '#host:active', expect: { ids: [] } },
+          { select: '#outer:active', expect: { ids: [] } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'user action active propagates from label to labeled control',
+    status: 'fixme',
+    // engines: ['native'],
+    markup: `
+      <label id="label" for="control" style="display:block;width:80px;height:30px;">label</label>
+      <input id="control" style="display:block;width:80px;height:30px;">
+    `,
+    steps: [
+      {
+        setupPage: async page => {
+          await page.mouse.move(200, 200);
+        },
+        cases: [
+          { select: '#label:active', expect: { ids: [] } },
+          { select: '#control:active', expect: { ids: [] } },
+        ],
+      },
+      {
+        setupPage: async page => {
+          await page.locator('#label').hover();
+          await page.mouse.down();
+        },
+        cases: [
+          { select: '#label:active', expect: { ids: ['label'] } },
+          { select: '#control:active', expect: { ids: ['control'] } },
+        ],
+      },
+      {
+        setupPage: async page => {
+          await page.mouse.up();
+        },
+        cases: [
+          { select: '#label:active', expect: { ids: [] } },
+          { select: '#control:active', expect: { ids: [] } },
+        ],
+      },
+    ],
+  },
 
 ]);

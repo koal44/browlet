@@ -140,6 +140,11 @@ export function installBrowserHelpers(): void {
       return tmpl.content;
     }
 
+    if (ref.by === 'shadowRoot') {
+      const host = queryId(base, ref.id);
+      return host?.shadowRoot ?? null;
+    }
+
     const el = ref.by === 'id' ? queryId(base, ref.id)
       : ref.by === 'first' ? base.querySelector(ref.selector)
       : ref.by === 'documentElement' ? doc.documentElement

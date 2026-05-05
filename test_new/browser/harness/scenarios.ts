@@ -81,6 +81,7 @@ export type ContextRef =
   | { by: 'documentElement'; home?: ContextHome; }
   | { by: 'iframe'; id: string; within?: ContextRef }
   | { by: 'template'; id: string; within?: ContextRef }
+  | { by: 'shadowRoot'; id: string; within?: ContextRef };
 
 export type ContextHome = 'document' | 'detached' | 'fragment';
 export type NwsapiId = 'nwsapi-bootstrap';
@@ -549,6 +550,7 @@ function formatContextRef(ref?: ContextRef): string {
     case 'documentElement': base = 'documentElement'; break;
     case 'iframe': base = `iframe(${ref.id})`; break;
     case 'template': base = `template(${ref.id})`; break;
+    case 'shadowRoot': base = `shadowRoot(${ref.id})`; break;
     default: assertNever(ref);
   }
   if ('home' in ref && ref.home) base += `:${ref.home}`;
