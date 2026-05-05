@@ -164,6 +164,10 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
   const misfails: Record<number, PassTracker> = {};
   const misfixes: Record<number, PassTracker> = {};
 
+  if (s.steps?.length && s.cases?.length) {
+    throw new Error(`${s.name}: use either steps or top-level cases, not both`);
+  }
+
   const steps: ScenarioStep[] = [
     ...(s.steps ?? []),
     ...(s.cases?.length ? [{ cases: s.cases }] : []),
@@ -391,9 +395,8 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
     await page.goto(targetUrl);
     await page.setContent(scenario.markup);
   } else if (scenario.markupMode === 'html-body' || !scenario.markupMode) {
-    await page.evaluate((bodyHtml) => {
-      document.body.innerHTML = bodyHtml;
-    }, scenario.markup);
+    await page.goto(targetUrl);
+    await page.setContent(`<!doctype html><html><body>${scenario.markup}</body></html>`);
   } else {
     assertNever(scenario.markupMode);
   }

@@ -1092,6 +1092,8 @@ runScenarios('slick', 'normal', [
       </body>
       </html>
     `,
+    steps: [
+  {
     cases: [
       // testBasicSelectors
       { select: 'h3', expect: { count: 4 } },
@@ -1201,7 +1203,7 @@ runScenarios('slick', 'normal', [
       // testOrder
       { select: '.myupperclass .myclass input', expect: { ids: ['myid1', 'myid2'], count: 2 } },
     ],
-    steps: [
+  },
       // testCorrectDocumentInFrame
       {
         setupPage: async (page) => {

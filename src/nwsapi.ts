@@ -3,7 +3,16 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
   // handlers needed for the :hover pseudo-class; track state change in browsers and headless
   _doc.addEventListener('mouseover', (e) => { _snap.hoverTarget = isElement(e.target) ? e.target : null; }, true);
-  _doc.addEventListener('mouseout', (_e) => { _snap.hoverTarget = null; }, true);
+  _doc.addEventListener('mouseout', () => { _snap.hoverTarget = null; }, true);
+
+  // Track pointer-down state for :active. This approximates native activation for common HTML activatable/focusable elements;
+  // full formal activation state is browser-internal and not modeled here.
+  _doc.addEventListener('pointerdown', (e) => {
+    const target = e.target;
+    _snap.activeTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
+  }, true);
+  _doc.addEventListener('pointerup', () => { _snap.activeTarget = null; }, true);
+  _doc.addEventListener('pointercancel', () => { _snap.activeTarget = null; }, true);
 
   // QSA placeholders to native references
   const _qsaStore: Partial<Record<QsaKey, any>> = {};
@@ -304,6 +313,7 @@ export function initSnapshot(doc: Document) {
     } as Record<string, AttrMatcherParts>,
 
     hoverTarget: null as EventTarget | null,
+    activeTarget: null as EventTarget | null,
 
     // cached
     matchLambdas: {} as Partial<Record<string, MatchLambdaEntry>>,
@@ -324,7 +334,7 @@ export function initSnapshot(doc: Document) {
     matchLang: matchLang,
     defined: (element: Element) => isDefined(element, snap),
 
-    isFocusable: isFocusable,
+    isFocused: isFocused,
     isContentEditable: isContentEditable,
     hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
     getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
@@ -707,21 +717,11 @@ const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
 
 // return node if node is focusable
 // or false if node isn't focusable
-function isFocusable(node: HTMLElement): HTMLElement | false {
+function isFocused(node: HTMLElement): HTMLElement | false {
   const doc = node.ownerDocument;
-  if (!doc) return false;
-
-  if ('contentDocument' in node && node.localName == 'iframe') {
-    return false;
-  }
-
-  if (doc.hasFocus() && node === doc.activeElement) {
-    if ('type' in node || 'href' in node || typeof node.tabIndex == 'number') {
-      return node;
-    }
-  }
-
-  return false;
+  if (!doc || !doc.hasFocus()) return false;
+  if (node.localName === 'iframe' && 'contentDocument' in node) return false;
+  return node === doc.activeElement ? node : false;
 }
 
 // check if node content is editable
@@ -979,6 +979,10 @@ function isDocumentFragment(x: unknown): x is DocumentFragment {
 
 function isComment(x: unknown): x is Comment {
   return isNode(x) && x.nodeType === 8;
+}
+
+function isText(x: unknown): x is Text {
+  return isNode(x) && x.nodeType === 3;
 }
 
 function isHtmlMediaElement(x: unknown): x is HTMLMediaElement {
@@ -1805,29 +1809,39 @@ function compileSelector(
         // *** user actions pseudo-classes
         // :hover, :active, :focus, :focus-visible, :focus-within
         else if ((match = selector.match(snap.re.Patterns.useraction))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+
+          switch (pseudo) {
             case 'hover':
-              source = 'if(e===s.hoverTarget){' + source + '}';
+              source =
+                `for(n=s.hoverTarget;n;n=n.parentElement){` +
+                  `if(n===e){${source}break;}` +
+                `}`;
               break;
+
             case 'active':
-              source = 'if(e===s.doc.activeElement){' + source + '}';
+              source =
+                `for(n=s.activeTarget;n;n=n.parentElement){` +
+                  `if(n===e){${source}break;}` +
+                `}`;
               break;
+
             case 'focus':
-              source = 'if(s.isFocusable(e)){' + source + '}';
+              source = `if(s.isFocused(e)){${source}}`;
               break;
+
+            // TODO: distinguish :focus-visible from :focus 
             case 'focus-visible':
-              source = 'if(n=s.isFocusable(e)){' +
-                'if(e!==n){while(e){e=e.parentElement;if(e===n)break;}}}' +
-                'if((e===n||e.autofocus)){' + source + '}';
+              source = `if(s.isFocused(e)){${source}}`;
               break;
+
             case 'focus-within':
-              source = 'if(n=s.isFocusable(e)){' +
-                'if(n!==e){while(n){n=n.parentElement;if(n===e)break;}}}' +
-                'if((n===e||n.autofocus)){' + source + '}';
+              source =
+                `if((n=s.doc.activeElement)&&(e===n||e.contains(n))){${source}}`;
               break;
+
             default:
-              emit(`Unsupported user action pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported user action pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }
@@ -2623,4 +2637,21 @@ function skipSelectorSpaces(source: string, index: number): number {
 
 function isSelectorSpace(ch: string): boolean {
   return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
+}
+
+function isActiveEligible(node: Element): boolean {
+  const name = node.localName;
+
+  if (name === 'button') return true;
+
+  if (name === 'input') {
+    const type = (node as HTMLInputElement).type;
+    return /^(?:submit|image|reset|button)$/i.test(type);
+  }
+
+  if ((name === 'a' || name === 'area') && node.hasAttribute('href')) {
+    return true;
+  }
+
+  return (node as HTMLElement).tabIndex >= 0;
 }
