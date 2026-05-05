@@ -320,6 +320,9 @@ export function initSnapshot(doc: Document) {
     nthOfType: nthOfType,
     nthElement: nthElement,
     matchHas: (steps: [SelectorCombinator, string][], anchor: Element) => matchHasFrom(steps, 0, anchor, snap),
+    matchDir: matchDir,
+    matchLang: matchLang,
+    defined: (element: Element) => isDefined(element, snap),
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
@@ -807,6 +810,96 @@ function nextDescendant(root: Element, node: Element): Element | null {
   }
 
   return null;
+}
+
+
+function matchLang(value: string, element: Element): boolean {
+  const wanted = value.toLowerCase();
+
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const actual = node.getAttribute('lang');
+
+    if (actual) {
+      const lang = actual.toLowerCase();
+      return lang === wanted || lang.startsWith(wanted + '-');
+    }
+  }
+
+  return false;
+}
+
+function matchDir(value: string, element: Element): boolean {
+  const wanted = value.toLowerCase();
+
+  if (wanted !== 'ltr' && wanted !== 'rtl') {
+    return false;
+  }
+
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const actual = node.getAttribute('dir');
+
+    if (actual) {
+      const dir = actual.toLowerCase();
+
+      if (dir === 'ltr' || dir === 'rtl') {
+        return dir === wanted;
+      }
+
+      if (dir === 'auto') {
+        const auto = autoDir(node.textContent || '');
+        return auto ? auto === wanted : wanted === 'ltr';
+      }
+    }
+
+    // <bdi> defaults to auto directionality even without a dir attribute.
+    if (node === element && node.localName === 'bdi') {
+      const auto = autoDir(node.textContent || '');
+      return auto ? auto === wanted : wanted === 'ltr';
+    }
+  }
+
+  return wanted === 'ltr';
+}
+
+// TODO: cover more edge cases
+// Minimal first-strong direction check for :dir(auto) / <bdi>.
+function autoDir(text: string): 'ltr' | 'rtl' | null {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+
+    if (
+      (code >= 0x0590 && code <= 0x08ff) || // Hebrew, Arabic, Syriac, Thaana, etc.
+      (code >= 0xfb1d && code <= 0xfdff) || // Hebrew/Arabic presentation forms
+      (code >= 0xfe70 && code <= 0xfeff)    // Arabic presentation forms-B
+    ) {
+      return 'rtl';
+    }
+
+    if (
+      (code >= 0x0041 && code <= 0x005a) || // Latin uppercase
+      (code >= 0x0061 && code <= 0x007a) || // Latin lowercase
+      (code >= 0x00c0 && code <= 0x02af) || // Latin extended / IPA
+      (code >= 0x0370 && code <= 0x052f)    // Greek and Cyrillic
+    ) {
+      return 'ltr';
+    }
+  }
+
+  return null;
+}
+
+function isDefined(element: Element, snap: Snapshot): boolean {
+  if (!snap.isHtml) {
+    return true;
+  }
+
+  const name = element.localName;
+
+  if (!name.includes('-')) {
+    return true;
+  }
+
+  return !!snap.doc.defaultView?.customElements?.get(name);
 }
 
 function previewText(s: string, max = 240): string {
@@ -1658,27 +1751,23 @@ function compileSelector(
         }
 
         // *** linguistic pseudo-classes
-        // :dir( ltr / rtl ), :lang( en )
+        // :dir(ltr / rtl), :lang(en)
         else if ((match = selector.match(snap.re.Patterns.linguistic))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+          const expr = match[2].replace(snap.re.TrimSpaces, '');
+          const exprLit = JSON.stringify(expr);
+
+          switch (pseudo) {
             case 'dir':
-              source = 'var p;if((' +
-                '(/' + match[2] + '/i.test(e.dir))||(p=s.ancestor("[dir]", e))&&' +
-                '(/' + match[2] + '/i.test(p.dir))||(e.dir==""||e.dir=="auto")&&' +
-                '(' + (match[2] == 'ltr' ? '!':'')+ snap.re.RTL +'.test(e.textContent)))' +
-                '){' + source + '};';
+              source = `if(s.matchDir(${exprLit},e)){${source}}`;
               break;
-            case 'lang': {
-              const expr = '(?:^|-)' + match[2] + '(?:-|$)';
-              source = 'var p;if((' +
-                '(e.isConnected&&(e.lang==""&&(p=s.ancestor("[lang]",e)))&&' +
-                '(p.lang=="' + match[2] + '")||/'+ expr +'/i.test(e.lang)))' +
-                '){' + source + '};';
+
+            case 'lang':
+              source = `if(s.matchLang(${exprLit},e)){${source}}`;
               break;
-            }
+
             default:
-              emit(`Unsupported linguistic pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported linguistic pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }
@@ -1686,25 +1775,29 @@ function compileSelector(
         // *** location pseudo-classes
         // :any-link, :link, :visited, :target, :defined
         else if ((match = selector.match(snap.re.Patterns.locationpc))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+
+          switch (pseudo) {
             case 'any-link':
-              source = 'if((/^a|area$/i.test(e.localName)&&e.hasAttribute("href")||e.visited)){' + source + '}';
-              break;
             case 'link':
-              source = 'if((/^a|area$/i.test(e.localName)&&e.hasAttribute("href"))){' + source + '}';
+              source = `if((/^(?:a|area)$/i.test(e.localName)&&e.hasAttribute("href"))){${source}}`;
               break;
+
             case 'visited':
-              source = 'if((/^a|area$/i.test(e.localName)&&e.hasAttribute("href")&&e.visited)){' + source + '}';
+              // Browser selector APIs do not expose history state to script.
+              source = `if(false){${source}}`;
               break;
+
             case 'target':
-              source = 'if(((s.doc.compareDocumentPosition(e)&16)&&s.doc.location.hash&&e.id==s.doc.location.hash.slice(1))){' + source + '}';
+              source = `if(((s.doc.compareDocumentPosition(e)&16)&&s.doc.location.hash&&e.id===s.doc.location.hash.slice(1))){${source}}`;
               break;
+
             case 'defined':
-              source = 'n=s.doc.defaultView.customElements.get(e.localName);if(n&&e instanceof n){' + source + '}';
+              source = `if(s.defined(e)){${source}}`;
               break;
+
             default:
-              emit(`Unsupported location pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported location pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }
