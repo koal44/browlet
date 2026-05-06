@@ -31,7 +31,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
     // exported engine methods
     byId(id, ctx) {
       ctx ??= _snap.doc;
-      return _snap.config.NODE_LIST ? toNodeList(byId(id, ctx, _snap), _snap.doc) : byId(id, ctx, _snap);
+      return byId(id, ctx, _snap);
     },
 
     byTag(tag, ctx) {
@@ -268,7 +268,6 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 }
 
 export const DEFAULT_CONFIG: NwsConfig = {
-  IDS_DUPES: true,
   FORGIVING: true,
   NODE_LIST: false,
   LOGERRORS: true,
@@ -474,55 +473,75 @@ export function escapeRegExp(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\-\\]/g, '\\$&');
 }
 
-// find duplicate ids using iterative walk
-function byIdRaw(id: string, context: QueryContext): Element[] {
-  const nodes = [ ]
-  let node: QueryContext | null = context;
-  let next = node.firstElementChild;
-  while ((node = next)) {
-    if (node.getAttribute('id') === id) nodes.push(node);
-    if ((next = node.firstElementChild || node.nextElementSibling)) continue;
-    while (!next && (node = node.parentElement) && node !== context) {
-      next = node.nextElementSibling;
+function walkElements(context: QueryContext, visit: (e: Element) => boolean | void): void {
+  let node: Element | null = context.firstElementChild;
+
+  while (node) {
+    if (visit(node) === false) return;
+
+    if (node.firstElementChild) {
+      node = node.firstElementChild;
+      continue;
     }
+
+    while (node && node !== context && !node.nextElementSibling) {
+      node = node.parentElement;
+    }
+
+    node = node && node !== context ? node.nextElementSibling : null;
   }
+}
+
+// find duplicate ids using tree-order walk
+function byIdRaw(id: string, context: QueryContext, snap: Snapshot): Element[] {
+  updateSnapshot(snap, context);
+  if (!id) return [];
+
+  const nodes: Element[] = [];
+  walkElements(context, e => {
+    if (e.getAttribute('id') === id) nodes.push(e);
+  });
+
   return nodes;
 }
 
-// context agnostic getElementById
-function byId(id: string, context: QueryContext, snap: Snapshot): Element[] {
+// context-agnostic getElementById
+function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
   updateSnapshot(snap, context);
-  if (!snap.config.IDS_DUPES && 'getElementById' in context) {
-    const e = context.getElementById(id);
-    return e ? [e] : [];
-  }
+  if (!id) return null;
 
-  return byIdRaw(id, context);
+  if (!isElement(context)) return context.getElementById(id);
+
+  let found: Element | null = null;
+  walkElements(context, e => {
+    if (e.getAttribute('id') === id) {
+      found = e;
+      return false;
+    }
+  });
+
+  return found;
 }
 
 // context agnostic getElementsByTagName
 function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
-  let el: Element | null
-  let nodes: Element[];
-  // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-  if ('getElementsByTagName' in context) {
+
+  if (isDocument(context) || isElement(context)) {
     return Array.from(context.getElementsByTagName(tag));
-  } else {
-    // DOCUMENT_FRAGMENT_NODE (11)
-    if (snap.isHtml) tag = tag.toLowerCase();
-    if ((el = context.firstElementChild)) {
-      if (!(el.nextElementSibling || tag == '*' || el.localName == tag)) {
-        return Array.from(el.getElementsByTagName(tag));
-      } else {
-        nodes = [ ];
-        do {
-          if (tag == '*' || el.localName == tag) nodes[nodes.length] = el;
-          concatList(nodes, el.getElementsByTagName(tag));
-        } while ((el = el.nextElementSibling));
-      }
-    } else nodes = [];
   }
+
+  if (snap.isHtml) tag = tag.toLowerCase();
+
+  const nodes: Element[] = [];
+  let el = context.firstElementChild;
+
+  while (el) {
+    if (tag === '*' || el.localName === tag) nodes.push(el);
+    concatList(nodes, el.getElementsByTagName(tag));
+    el = el.nextElementSibling;
+  }
+
   return nodes;
 }
 
@@ -530,26 +549,20 @@ function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[]
 function byClassRaw(cls: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
 
-  let el: Element | null;
-  let nodes: Element[];
-  // DOCUMENT_NODE (9) & ELEMENT_NODE (1)
-  if ('getElementsByClassName' in context) {
+  if (isDocument(context) || isElement(context)) {
     return Array.from(context.getElementsByClassName(cls));
-  } else {
-    // DOCUMENT_FRAGMENT_NODE (11)
-    if ((el = context.firstElementChild)) {
-      const reCls = RegExp('(^|\\s)' + escapeRegExp(cls) + '(\\s|$)', snap.isQuirksMode ? 'i' : '');
-      if (!(el.nextElementSibling || reCls.test(el.className))) {
-        return Array.from(el.getElementsByClassName(cls));
-      } else {
-        nodes = [ ];
-        do {
-          if (reCls.test(el.className)) nodes[nodes.length] = el;
-          concatList(nodes, el.getElementsByClassName(cls));
-        } while ((el = el.nextElementSibling));
-      }
-    } else nodes = [];
   }
+
+  const nodes: Element[] = [];
+  const reCls = RegExp('(^|\\s)' + escapeRegExp(cls) + '(\\s|$)', snap.isQuirksMode ? 'i' : '');
+  let el = context.firstElementChild;
+
+  while (el) {
+    if (reCls.test(el.getAttribute('class') || '')) nodes.push(el);
+    concatList(nodes, el.getElementsByClassName(cls));
+    el = el.nextElementSibling;
+  }
+
   return nodes;
 }
 
@@ -913,11 +926,57 @@ function isDisabled(e: Element): boolean {
   return false;
 }
 
-const READ_WRITE_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
+// https://html.spec.whatwg.org/multipage/semantics-other.html#selector-read-only
+const READONLY_APPLIES_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
 function isReadWrite(e: Element): boolean {
+  if (isHtmlInput(e)) {
+    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !e.readOnly && !isDisabled(e);
+  }
   if (isHtmlTextArea(e)) return !e.readOnly && !isDisabled(e);
-  if (isHtmlInput(e)) return READ_WRITE_INPUT_TYPES.has(e.type) && !e.readOnly && !isDisabled(e);
-  return isHtmlElement(e) && e.isContentEditable;
+  return isEditingHostOrEditable(e);
+}
+
+function isEditingHostOrEditable(e: Element): boolean {
+  if (!isHtmlSvgOrMathElement(e)) return false;
+
+  // Editing host: HTML element with contenteditable in the true or plaintext-only state.
+  const attr = e.getAttribute('contenteditable')?.toLowerCase();
+  if (isHtmlElement(e) && (attr === '' || attr === 'true' || attr === 'plaintext-only')) {
+    return true;
+  }
+
+  // Editable: the node itself must not have contenteditable=false.
+  if (attr === 'false') {
+    return false;
+  }
+
+  // Editing host: child HTML element of a Document whose designMode is enabled.
+  // DesignMode: eligible descendants of a designMode document are editable unless blocked.
+  if (e.ownerDocument.designMode.toLowerCase() === 'on') {
+    for (let n: Element | null = e; n; n = n.parentElement) {
+      if (n.getAttribute('contenteditable')?.toLowerCase() === 'false') {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Editable: not an editing host, does not have contenteditable=false,
+  // parent is an editing host or editable, and the element is HTML/SVG/Math.
+  for (let n: Element | null = e.parentElement; n; n = n.parentElement) {
+    const parentAttr = n.getAttribute('contenteditable')?.toLowerCase();
+
+    if (parentAttr === 'false') {
+      return false;
+    }
+
+    if (isHtmlElement(n) && (parentAttr === '' || parentAttr === 'true' || parentAttr === 'plaintext-only')) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 const PLACEHOLDER_INPUT_TYPES = new Set(['email', 'number', 'password', 'search', 'tel', 'text', 'url']);
@@ -986,29 +1045,47 @@ function isChecked(e: Element): boolean {
 }
 
 function isIndeterminate(e: Element): boolean {
+  // progress elements with no value content attribute
   if (isHtmlProgress(e)) return !e.hasAttribute('value');
 
   if (!isHtmlInput(e)) return false;
 
+  // input elements whose type attribute is in the Checkbox state
+  // and whose indeterminate IDL attribute is set to true
   if (e.type === 'checkbox') return e.indeterminate;
-  if (e.type !== 'radio' || !e.name) return false;
 
-  const radio = e;
-  let hasChecked = false;
-  const inputs = radio.ownerDocument.getElementsByTagName('input');
+  // input elements whose type attribute is in the Radio Button state
+  // and whose radio button group contains no checked input
+  if (e.type !== 'radio') return false;
+  if (e.checked) return false;
+
+
+  // Radio groups require a non-empty name attribute; an unnamed unchecked radio is alone,
+  // so its group contains no checked input.
+  const name = e.getAttribute('name');
+  if (!name) return true;
+
+  const root = e.getRootNode();
+  const inputs = e.ownerDocument.getElementsByTagName('input');
+
   for (let i = 0; i < inputs.length; i++) {
     const input = inputs[i];
+
+    // Same radio group: radio state, same form owner, same tree,
+    // non-empty equal name attribute, and checkedness state is true.
     if (
+      input !== e &&
       input.type === 'radio' &&
-      input.name === radio.name &&
-      input.form === radio.form &&
+      input.form === e.form &&
+      input.getRootNode() === root &&
+      input.getAttribute('name') === name &&
       input.checked
     ) {
-      hasChecked = true;
-      break;
+      return false;
     }
   }
-  return !hasChecked;
+
+  return true;
 }
 
 const REQUIRED_INPUT_TYPES = new Set([
@@ -1225,6 +1302,20 @@ function isQuirksMode(doc: Document): doc is HTMLDocument {
 const HTML_NS = 'http://www.w3.org/1999/xhtml';
 function isHtmlElement(e: Element): e is HTMLElement {
   return e.namespaceURI === HTML_NS;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function isSvgElement(e: Element): e is SVGElement {
+  return e.namespaceURI === SVG_NS;
+}
+
+const MATH_NS = 'http://www.w3.org/1998/Math/MathML';
+function isMathElement(e: Element): e is MathMLElement {
+  return e.namespaceURI === MATH_NS;
+}
+
+function isHtmlSvgOrMathElement(e: Element): e is HTMLElement | SVGElement | MathMLElement {
+  return isHtmlElement(e) || isSvgElement(e) || isMathElement(e);
 }
 
 function isHtmlInput(e: Element): e is HTMLInputElement {
@@ -2310,30 +2401,6 @@ function compileSelector(
   return out;
 }
 
-// equivalent of w3c 'closest' method
-function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
-  updateSnapshot(snap, element);
-
-  const scoped = prepareScope(selectors, element);
-  try {
-    let el: Element | null = element;
-    while (el) {
-      if (matchRaw(scoped.selectors, el, callback, snap)) break;
-      el = el.parentElement;
-    }
-    return el;
-  } finally {
-    scoped.cleanup();
-  }
-}
-
-function match_collect(selectors: string[], cb: QueryCallback | null, snap: Snapshot): { factory: MatchLambda[] } {
-  const f: MatchLambda[] = [];
-  for (let i = 0, l = selectors.length; l > i; ++i)
-    f[i] = compile(selectors[i], false, cb, snap);
-  return { factory: f };
-}
-
 // unique parser entry point for all
 // methods (type matching/selecting)
 export function parse(selectors: string, re: Rex, config: NwsConfig): string[] {
@@ -2400,19 +2467,19 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
     }
 
     let resolver = snap.matchResolvers[scoped.selectors];
-    if (!resolver) {
+    if (!resolver || resolver.callback !== cb) {
       const parsed = parse(scoped.selectors, snap.re, snap.config);
 
       if (snap.isDebug && snap.debugMatch) {
         snap.debugMatch.parsed = parsed;
       }
 
-      resolver = snap.matchResolvers[scoped.selectors] = match_collect(parsed, cb, snap);
+      resolver = snap.matchResolvers[scoped.selectors] = buildMatchResolver(parsed, cb, snap);
     }
-    const result = resolver.factory.some(f => f(element, cb, null, false));
+    const result = resolver.lambdas.some(f => f(element, cb, null, false));
 
     if (snap.isDebug && snap.debugMatch) {
-      snap.debugMatch.lambdaSource = resolver.factory.map(f => String(f));
+      snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
       snap.debugMatch.result = result;
     }
 
@@ -2428,20 +2495,14 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
   }
 }
 
-// equivalent of w3c 'querySelector' method
-function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot): Element | null {
-  updateSnapshot(snap, context);
-  return selectRaw(selectors, context,
-    typeof callback == 'function' ?
-    function firstMatch(element) {
-      callback(element);
-      return false;
-    } :
-    function firstMatch() {
-      return false;
-    },
-    snap,
-  )[0] || null;
+function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap: Snapshot): MatchResolver {
+  const lambdas: MatchLambda[] = [];
+
+  for (let i = 0, l = selectors.length; i < l; ++i) {
+    lambdas[i] = compile(selectors[i], false, cb, snap);
+  }
+
+  return { callback: cb, lambdas };
 }
 
 // equivalent of w3c 'querySelectorAll' method
@@ -2522,7 +2583,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback
     switch (key) {
       case '#': {
         query = cssIdentUnescape(query);
-        getCandidates = () => byId(query, ctx, snap);
+        getCandidates = () => byIdRaw(query, ctx, snap);
         break;
       }
       case '.': {
@@ -2616,6 +2677,37 @@ function prepareScope(selectors: string, context: QueryContext) {
   };
 }
 
+// equivalent of w3c 'closest' method
+function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
+  updateSnapshot(snap, element);
+
+  const scoped = prepareScope(selectors, element);
+  try {
+    let el: Element | null = element;
+    while (el) {
+      if (matchRaw(scoped.selectors, el, callback, snap)) break;
+      el = el.parentElement;
+    }
+    return el;
+  } finally {
+    scoped.cleanup();
+  }
+}
+
+const stopAfterFirst: QueryCallback = () => false;
+
+// equivalent of w3c 'querySelector' method
+function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot): Element | null {
+  updateSnapshot(snap, context);
+
+  // TODO: firstRaw wraps callbacks for early stop, which hurts resolver caching; future parser-level caching should make callbacks irrelevant.
+  const cb = callback
+    ? (e: Element) => { callback(e); return false; }
+    : stopAfterFirst;
+
+  return selectRaw(selectors, context, cb, snap)[0] || null;
+}
+
 export function matchLogicalSelector(selector: string): RegExpMatchArray | null {
   const head = /^:(is|where|matches|not|has)\(/i.exec(selector);
   if (!head) return null;
@@ -2666,36 +2758,17 @@ function scanTopLevel(source: string, visit: (index: number, ch: string) => numb
 
   for (let i = 0; i < source.length;) {
     const ch = source[i];
-
-    if (ch === '\\') {
-      i += 2;
-    } else if (quote) {
-      if (ch === quote) quote = '';
-      i++;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-      i++;
-    } else if (inAttr) {
-      if (ch === ']') inAttr = false;
-      i++;
-    } else if (ch === '[') {
-      inAttr = true;
-      i++;
-    } else if (ch === '(') {
-      depth++;
-      i++;
-    } else if (ch === ')' && depth) {
-      depth--;
-      i++;
-    } else if (depth !== 0) {
-      i++;
-    } else {
+    if (ch === '\\') i += 2;
+    else if (quote) { if (ch === quote) quote = ''; i++; }
+    else if (ch === '"' || ch === "'") { quote = ch; i++; }
+    else if (inAttr) { if (ch === ']') inAttr = false; i++; }
+    else if (ch === '[') { inAttr = true; i++; }
+    else if (ch === '(') { depth++; i++; }
+    else if (ch === ')' && depth) { depth--; i++; }
+    else if (depth !== 0) i++;
+    else {
       const consumed = visit(i, ch);
-
-      if (consumed <= 0) {
-        throw new Error('scanTopLevel visitor must consume at least one character');
-      }
-
+      if (consumed <= 0) throw new Error('scanTopLevel visitor must consume at least one character');
       i += consumed;
     }
   }
@@ -2729,22 +2802,17 @@ function findUnescapedPipe(str: string): number {
 export function parseRelativeSelectorList(source: string): RelativeSelectorList {
   const selectors = splitSelectorGroups(source).map(raw => {
     const branch = raw.trim();
-
     return parseRelativeSelector(branch);
   });
 
   return {
-    kind: 'relative-selector-list',
-    source,
-    selectors,
+    kind: 'relative-selector-list', source, selectors,
   };
 }
 
 function parseRelativeSelector(source: string): RelativeSelector {
   return {
-    kind: 'relative',
-    source,
-    steps: parseRelativeSteps(source),
+    kind: 'relative', source, steps: parseRelativeSteps(source),
   };
 }
 

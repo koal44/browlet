@@ -978,7 +978,7 @@ runScenarios('slick', 'normal', [
         },
         cases: [
           { select: '#getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode2', 'tmpNode4'], count: 2 } },
-          { byId: 'getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode2', 'tmpNode4'], count: 2 }, status: 'fixme' },
+          { byId: 'getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode2'], count: 1 } },
         ],
       },
 
@@ -996,7 +996,7 @@ runScenarios('slick', 'normal', [
         },
         cases: [
           { select: '#getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode1'], count: 1 }, status: 'fail' }, // legacy is wrong..
-          { byId: 'getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode1'], count: 1 }, status: 'fixme' }, // mismatch
+          { byId: 'getelementbyid', ref: { by: 'id', id: 'host' }, expect: { classes: ['tmpNode1'], count: 1 } }, // mismatch
         ],
       },
 

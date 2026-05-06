@@ -2063,6 +2063,7 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'html/semantics/selectors/pseudo-classes/indeterminate-type-change',
+    // status: 'only',
     markup: `
       <input id="indeterminate" type="text">
       <span id="sibling">This text should be green.</span>
@@ -2084,7 +2085,7 @@ runScenarios('w3c', 'normal', [
       expect(result.nw_before).toEqual([]);
     },
     cases: [
-      { select: ':indeterminate + span', expect: { ids: ['sibling'] }, status: 'fixme'},
+      { select: ':indeterminate + span', expect: { ids: ['sibling'] } },
     ]
   },
 
@@ -2301,33 +2302,40 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'html/semantics/selectors/pseudo-classes/link',
-    status: 'fixme', // the original test is sus. link3 doesn't even exist in the DOM...
     markup: `
       <!DOCTYPE html>
-      <meta charset=utf-8>
-      <title>Selector: pseudo-classes (:link)</title>
-      <link rel="author" title="Denis Ah-Kang" href="mailto:denis@w3.org" id=link1>
-      <link rel=help href="https://html.spec.whatwg.org/multipage/#pseudo-classes" id=link2>
-      <div id="log"></div>
-      <a id=link4></a>
-      <area id=link5></area>
-      <link id=link6></link>
-      <a href="http://www.w3.org" id=link7></a>
-      <area href="http://www.w3.org" id=link8></area>
-      <link href="http://www.w3.org" id=link9></link>
-      <a href="http://[" id=link10></a>
+      <html id=html>
+        <head>
+          <meta charset=utf-8>
+          <title>Selector: pseudo-classes (:link)</title>
+          <link rel="author" title="Denis Ah-Kang" href="mailto:denis@w3.org" id=link1>
+          <link rel=help href="https://html.spec.whatwg.org/multipage/#pseudo-classes" id=link2>
+        </head>
+        <body id=body>
+          <div id="log"></div>
+          <a id=link4></a>
+          <area id=link5></area>
+          <link id=link6></link>
+          <a href="http://www.w3.org" id=link7></a>
+          <area href="http://www.w3.org" id=link8></area>
+          <link href="http://www.w3.org" id=link9></link>
+          <a href="http://[" id=link10></a>
+        </body>
+      </html>
     `,
     markupMode: 'html-document',
     steps: [
       {
         cases: [
-          { select: ':link', expect: { ids: ['link1', 'link2', 'link3', 'link7', 'link8', 'link9', 'link10'] } },
+          // Modern native engines match <a href> and <area href>, not HTML <link href>.
+          // Invalid href syntax still counts for :link selector state.
+          { select: ':link', expect: { ids: ['link7', 'link8', 'link10'] } },
         ],
       },
       {
-        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('link9')?.removeAttribute('href'); }); },
+        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('link7')?.removeAttribute('href'); }); },
         cases: [
-          { select: ':link', expect: { ids: ['link1', 'link2', 'link3', 'link7', 'link8', 'link10'] } },
+          { select: ':link', expect: { ids: ['link8', 'link10'] } },
         ],
       },
     ],
@@ -2381,7 +2389,7 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'html/semantics/selectors/pseudo-classes/readwrite-readonly',
-    // browsers: ['webkit'], 
+    // status: 'only',
     markup: `
       <div id=set0>
       <!-- The readonly attribute does not apply to the following input types -->
@@ -2423,9 +2431,12 @@ runScenarios('w3c', 'normal', [
     steps: [
       {
         cases: [
-          // WebKit differs here on input[type=color]; expected browser variance.
           { select: '#set0 :read-write', expect: { ids: [] }, status: 'fail' },
-          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'color1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, status: 'fail' },
+
+          // WebKit differs here on input[type=color]; expected browser variance.
+          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'color1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['chromium', 'firefox'] },
+          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['webkit'] },
+
           { select: '#set1 :read-write', expect: { ids: ['input1'] } },
           { select: '#set1 :read-only', expect: { ids: ['input2', 'input3', 'input4', 'input5'] } },
         ],
@@ -2468,8 +2479,8 @@ runScenarios('w3c', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => { document.designMode = 'on'; }); },
         cases: [
-          { select: '#set4 :read-write', expect: { ids: ['p1', 'p2'] }, status: 'fixme' },
-          { select: '#set4 :read-only', expect: { ids: [] }, status: 'fixme' },
+          { select: '#set4 :read-write', expect: { ids: ['p1', 'p2'] } },
+          { select: '#set4 :read-only', expect: { ids: [] } },
         ],
       },
     ],
@@ -3310,6 +3321,7 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'jsdom/dom/nodes/documentfragment-getelementbyid',
+    // status: 'only',
     markup: `
       <div id="frag-root"></div>
 
@@ -3345,18 +3357,18 @@ runScenarios('w3c', 'normal', [
       {
         cases: [
           { select: '#foo', ref: { by: 'id', id: 'frag-dupes', home: 'fragment' }, expect: { count: 2 } },
-          { byId: 'foo', ref: { by: 'id', id: 'frag-dupes', home: 'fragment' }, expect: { ids: ['foo'] }, status: 'fixme' },
+          { byId:    'foo', ref: { by: 'id', id: 'frag-dupes', home: 'fragment' }, expect: { ids: ['foo'] } },
         ],
       },
       {
         cases: [
-          { byId: '', ref: { by: 'id', id: 'frag-empty-id', home: 'fragment' }, expect: { count: 0 }, status: 'fixme' },
+          { byId: '', ref: { by: 'id', id: 'frag-empty-id', home: 'fragment' }, expect: { count: 0 } },
         ],
       },
       {
         cases: [
           { select: '#foo', ref: { by: 'template', id: 'tmpl' }, expect: { count: 4 } },
-          { byId: 'foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['foo'], classes: ['first-foo'] }, status: 'fixme' },
+          { byId: 'foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['foo'], classes: ['first-foo'] } },
         ],
       },
     ],

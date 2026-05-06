@@ -20,7 +20,7 @@ var NW: {
 } | undefined;
 
 type NwsConfig = Record<ConfigKey, boolean>;
-type ConfigKey = 'IDS_DUPES' | 'FORGIVING' | 'NODE_LIST' | 'LOGERRORS' | 'USR_EVENT' | 'VERBOSITY';
+type ConfigKey = 'FORGIVING' | 'NODE_LIST' | 'LOGERRORS' | 'USR_EVENT' | 'VERBOSITY';
 type NwsExtensions = {
   combinators: string[];
   operators: string[];
@@ -63,7 +63,8 @@ type SelectLambda = (
 type Stopped = boolean;
 
 type MatchResolver = {
-  factory: MatchLambda[];
+  lambdas: MatchLambda[];
+  callback: QueryCallback | null;
 };
 
 type SelectResolver = {
@@ -105,7 +106,7 @@ type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallba
 
 type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
 type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
-type ByIdFn = (id: string, context?: QueryContext) => ElementList;
+type ByIdFn = (id: string, context?: QueryContext) => Element | null;
 type SelectFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => ElementList;
 
 type FirstFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => Element | null;

@@ -4333,4 +4333,129 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'closest/basic-inclusive-ancestor-walk',
+    markup: `<div id="outer" class="x"><section id="mid"><p id="target"></p></section></div>`,
+    cases: [
+      { closest: '.x', ref: { by: 'id', id: 'target' }, expect: { ids: ['outer'] } },
+      { closest: 'p', ref: { by: 'id', id: 'target' }, expect: { ids: ['target'] } },
+      { closest: '.missing', ref: { by: 'id', id: 'target' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'closest/scope-is-original-element',
+    markup: `<div id="outer"><section id="mid"><p id="target"></p></section></div>`,
+    cases: [
+      { closest: ':scope', ref: { by: 'id', id: 'target' }, expect: { ids: ['target'] } },
+      { closest: ':scope', ref: { by: 'id', id: 'mid' }, expect: { ids: ['mid'] } },
+    ],
+  },
+
+  {
+    name: 'readwrite-readonly/contenteditable-inherited-svg',
+    // status: 'only',
+    markup: `
+      <div id=host contenteditable>
+        <p id=p1>html</p>
+        <svg id=svg1 width=10 height=10><circle id=circle1 cx=5 cy=5 r=5 /></svg>
+        <svg id=svg2 contenteditable=false width=10 height=10><circle id=circle2 cx=5 cy=5 r=5 /></svg>
+      </div>
+    `,
+    cases: [
+      // Native engines disagree on inherited SVG editability; NW follows the spec-shaped rule:
+      // SVG can inherit editability, but contenteditable=false blocks inheritance.
+      { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['nw'] },
+      { select: '#host :read-write', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium', 'webkit'] },
+      { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox'] },
+
+      { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['nw'] },
+      { select: '#host :read-only', expect: { ids: [] }, engines: ['native'], browsers: ['chromium', 'firefox'] },
+      { select: '#host :read-only', expect: { ids: ['svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['webkit'] },
+    ],
+  },
+
+  {
+    name: 'readwrite-readonly/designmode-svg',
+    // status: 'only',
+    markup: `
+      <div id=host>
+        <p id=p1>html</p>
+        <svg id=svg1 width=10 height=10><circle id=circle1 cx=5 cy=5 r=5 /></svg>
+        <svg id=svg2 contenteditable=false width=10 height=10><circle id=circle2 cx=5 cy=5 r=5 /></svg>
+      </div>
+    `,
+    steps: [
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.designMode = 'on'; }); },
+        cases: [
+          // Native engines disagree on inherited SVG editability under designMode; NW follows the spec-shaped rule.
+          { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['nw'] },
+          { select: '#host :read-write', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium', 'webkit'] },
+          { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox'] },
+
+          { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['nw'] },
+          { select: '#host :read-only', expect: { ids: [] }, engines: ['native'], browsers: ['chromium', 'firefox'] },
+          { select: '#host :read-only', expect: { ids: ['svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['webkit'] },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.designMode = 'off'; }); },
+        cases: [
+          { select: '#host :read-only', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['nw'] },
+          { select: '#host :read-only', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium'] },
+          { select: '#host :read-only', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox', 'webkit'] },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'indeterminate/radio-group-form-owner-outside-form',
+    // status: 'only',
+    markup: `
+      <form id=f><input id=a type=radio name=g><span id=sibling></span></form>
+      <input id=b type=radio name=g form=f checked>
+    `,
+    cases: [
+      { select: '#a:indeterminate', expect: { ids: [] } },
+      { select: '#a + span', expect: { ids: ['sibling'] } },
+      { select: ':indeterminate + span', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'indeterminate/radio-group-same-tree',
+    // status: 'only',
+    markup: `
+      <input id=a type=radio name=g><span id=sibling></span>
+      <div id=host></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const root = document.getElementById('host')!.attachShadow({ mode: 'open' });
+        root.innerHTML = `<input id=b type=radio name=g checked>`;
+      });
+    },
+    cases: [
+      { select: ':indeterminate + span', expect: { ids: ['sibling'] } },
+    ],
+  },
+
+  {
+    name: 'byclass/document-fragment-svg-top-level-class',
+    // status: 'only',
+    markup: `
+      <template id=tmpl>
+        <svg id=svg1 class="foo" width=10 height=10>
+          <circle id=circle1 class="foo" cx=5 cy=5 r=5></circle>
+        </svg>
+      </template>
+    `,
+    cases: [
+      { byClass: 'foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['svg1', 'circle1'] } },
+    ],
+  },
+
+
 ]);

@@ -239,16 +239,16 @@ export function installBrowserHelpers(): void {
       case 'byId' in c:
         if (ng === 'native') {
           return (query, ctx) => () => {
-            const useFragmentBase = c.ref && 'home' in c.ref && c.ref.home === 'fragment' && isDocFrag(ctx.parentNode);
-            const base = useFragmentBase ? ctx.parentNode : ctx;
-            const el = isElement(base)
-              ? base.querySelector(`#${CSS.escape(query)}`)
-              : base.getElementById(query);
-
-            return el ? [el] : [];
+            const found = queryId(ctx, query);
+            return found ? [found] : [];
           };
         }
-        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byId(query, ctx));
+        if (ng === 'nw') {
+          return (query, ctx) => () => {
+            const found = nwdom.byId(query, ctx);
+            return found ? [found] : [];
+          };
+        }
         break;
 
       case 'match' in c:
