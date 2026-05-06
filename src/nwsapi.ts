@@ -333,9 +333,13 @@ export function initSnapshot(doc: Document) {
     matchDir: matchDir,
     matchLang: matchLang,
     defined: (element: Element) => isDefined(element, snap),
+    isDisabled: isDisabled,
+    isReadWrite: isReadWrite,
+    isFormStateElement: isFormStateElement,
+    isPlaceholderShown: isPlaceholderShown,
+    isDefault: isDefault,
 
     isFocused: isFocused,
-    isContentEditable: isContentEditable,
     hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
     getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
   };
@@ -724,28 +728,6 @@ function isFocused(node: HTMLElement): HTMLElement | false {
   return node === doc.activeElement ? node : false;
 }
 
-// check if node content is editable
-function isContentEditable(el: HTMLElement): boolean {
-  let attrValue: string | null = 'inherit';
-  if (el.hasAttribute('contenteditable')) {
-    attrValue = el.getAttribute('contenteditable');
-  }
-  switch (attrValue) {
-    case '':
-    case 'plaintext-only':
-    case 'true':
-      return true;
-    case 'false':
-      return false;
-    default:
-      const parent = el.parentElement;
-      if (parent && parent.nodeType === 1) {
-        return isContentEditable(parent);
-      }
-      return false;
-  }
-}
-
 // check media resources is playing
 function isPlaying(el: Element): boolean {
   // for <audio>, <video>, <source> and <track> elements
@@ -811,7 +793,6 @@ function nextDescendant(root: Element, node: Element): Element | null {
 
   return null;
 }
-
 
 function matchLang(value: string, element: Element): boolean {
   const wanted = value.toLowerCase();
@@ -900,6 +881,107 @@ function isDefined(element: Element, snap: Snapshot): boolean {
   }
 
   return !!snap.doc.defaultView?.customElements?.get(name);
+}
+
+function isDisabled(e: Element): boolean {
+  if (!isFormStateElement(e)) return false;
+  if (e.disabled) return true;
+
+  if (isHtmlOption(e)) {
+    const parent = e.parentElement;
+    return !!parent && isHtmlOptGroup(parent) && parent.disabled;
+  }
+
+  if (isHtmlOptGroup(e)) return false;
+
+  for (let n = e.parentElement; n; n = n.parentElement) {
+    if (!isHtmlFieldSet(n) || !n.disabled) continue;
+
+    for (const child of n.children) {
+      if (isHtmlLegend(child)) {
+        return !child.contains(e);
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+const READ_WRITE_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
+function isReadWrite(e: Element): boolean {
+  if (isHtmlTextArea(e)) return !e.readOnly && !isDisabled(e);
+  if (isHtmlInput(e)) return READ_WRITE_INPUT_TYPES.has(e.type) && !e.readOnly && !isDisabled(e);
+  return isHtmlElement(e) && e.isContentEditable;
+}
+
+const PLACEHOLDER_INPUT_TYPES = new Set(['email', 'number', 'password', 'search', 'tel', 'text', 'url']);
+
+function isPlaceholderShown(e: Element): boolean {
+  if (!e.hasAttribute('placeholder')) return false;
+
+  if (isHtmlTextArea(e)) {
+    return e.value === '';
+  }
+
+  if (isHtmlInput(e)) {
+    return PLACEHOLDER_INPUT_TYPES.has(e.type) && e.value === '';
+  }
+
+  return false;
+}
+
+function isDefault(e: Element): boolean {
+  if (isHtmlOption(e)) return e.defaultSelected;
+
+  if (isHtmlInput(e)) {
+    if (e.type === 'checkbox' || e.type === 'radio') return e.defaultChecked;
+    if (e.type === 'submit' || e.type === 'image') return isDefaultSubmit(e);
+    return false;
+  }
+
+  if (isHtmlButton(e)) {
+    return e.type === 'submit' && isDefaultSubmit(e);
+  }
+
+  return false;
+}
+
+function isDefaultSubmit(e: HTMLInputElement | HTMLButtonElement): boolean {
+  const form = e.form;
+  if (!form) return false;
+
+  function isBefore(a: Element, b: Element): boolean {
+    return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+
+  let firstInput = null;
+  const inputs = form.ownerDocument.getElementsByTagName('input')
+  for (let i = 0; i < inputs.length; i++) {
+    const input = inputs[i];
+    if (input.form === form && (input.type === 'submit' || input.type === 'image')) {
+      firstInput = input;
+      break;
+    }
+  }
+
+  let firstButton = null;
+  const buttons = form.ownerDocument.getElementsByTagName('button');
+  for (let i = 0; i < buttons.length; i++) {
+    const button = buttons[i];
+    if (button.form === form && button.type === 'submit') {
+      firstButton = button;
+      break;
+    }
+  }
+
+  const firstSubmit =
+    !firstInput ? firstButton :
+    !firstButton ? firstInput :
+    isBefore(firstInput, firstButton) ? firstInput : firstButton;
+
+  return firstSubmit === e;
 }
 
 function previewText(s: string, max = 240): string {
@@ -1005,6 +1087,46 @@ function isQuirksMode(doc: Document): doc is HTMLDocument {
   return isHtmlDoc(doc) && doc.compatMode.indexOf('CSS') < 0;
 }
 
+const HTML_NS = 'http://www.w3.org/1999/xhtml';
+function isHtmlElement(e: Element): e is HTMLElement {
+  return e.namespaceURI === HTML_NS;
+}
+
+function isHtmlInput(e: Element): e is HTMLInputElement {
+  return e.localName === 'input' && isHtmlElement(e);
+}
+
+function isHtmlButton(e: Element): e is HTMLButtonElement {
+  return e.localName === 'button' && isHtmlElement(e);
+}
+
+type FormStateElement = HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLOptGroupElement | HTMLOptionElement | HTMLSelectElement | HTMLTextAreaElement;
+const FORM_STATE_ELEMENTS = new Set(['button', 'fieldset', 'input', 'optgroup', 'option', 'select', 'textarea']);
+function isFormStateElement(e: Element): e is FormStateElement {
+  return FORM_STATE_ELEMENTS.has(e.localName) && 'disabled' in e;
+}
+
+function isHtmlTextArea(e: Element): e is HTMLTextAreaElement {
+  return e.localName === 'textarea' && isHtmlElement(e);
+}
+
+function isHtmlFieldSet(e: Element): e is HTMLFieldSetElement {
+  return e.localName === 'fieldset' && isHtmlElement(e);
+}
+
+function isHtmlLegend(e: Element): e is HTMLLegendElement {
+  return e.localName === 'legend' && isHtmlElement(e);
+}
+
+function isHtmlOptGroup(e: Element): e is HTMLOptGroupElement {
+  return e.localName === 'optgroup' && isHtmlElement(e);
+}
+
+function isHtmlOption(e: Element): e is HTMLOptionElement {
+  return e.localName === 'option' && 'disabled' in e;
+}
+
+
 export function buildRexStrings(ext: NwsExtensions) {
   // NOTE: SPECIAL CASES IN CSS SYNTAX PARSING RULES
   // The <EOF-token> https://drafts.csswg.org/css-syntax/#typedef-eof-token
@@ -1062,7 +1184,6 @@ export function buildRexStrings(ext: NwsExtensions) {
   const odd = `[oO][dD][dD]`;
   const nthArg = `(?:${even}|${odd}|${nthFormula})`;
   const nthPseudo = `nth(?:-last)?(?:-child|-of\\-type)`;
-  const nthFunction = `(?:${nthPseudo}${LP}${wsp}*${nthArg}${wsp}*${RP})`;
 
   // namespace
   const nsPart = `(?:${UNIVERSAL}|${identifier})`;
@@ -1849,82 +1970,34 @@ function compileSelector(
         // *** user interface and form pseudo-classes
         // :enabled, :disabled, :read-only, :read-write, :placeholder-shown, :default
         else if ((match = selector.match(snap.re.Patterns.inputstate))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+          switch (pseudo) {
             case 'enabled':
-              source = 'if((("form" in e||/^optgroup$/i.test(e.localName))&&"disabled" in e &&e.disabled===false' +
-                ')){' + source + '}';
+              source = `if(s.isFormStateElement(e)&&!s.isDisabled(e)){${source}}`;
               break;
+
             case 'disabled':
-              // https://html.spec.whatwg.org/#enabling-and-disabling-form-controls:-the-disabled-attribute
-              source = 'if((("form" in e||/^optgroup$/i.test(e.localName))&&"disabled" in e)){' +
-                // F is true if any of the fieldset elements in the ancestry chain has the disabled attribute specified
-                // L is true if the first legend element of the fieldset contains the element
-                'var x=0,N=[],F=false,L=false;' +
-                'if(!(/^(optgroup|option)$/i.test(e.localName))){' +
-                  'n=e.parentElement;' +
-                  'while(n){' +
-                    'if(n.localName=="fieldset"){' +
-                      'N[x++]=n;' +
-                      'if(n.disabled===true){' +
-                        'F=true;' +
-                        'break;' +
-                      '}' +
-                    '}' +
-                    'n=n.parentElement;' +
-                  '}' +
-                  'for(var x=0;x<N.length;x++){' +
-                    'if((n=s.first("legend",N[x]))&&n.contains(e)){' +
-                      'L=true;' +
-                      'break;' +
-                    '}' +
-                  '}' +
-                '}' +
-                'if(e.disabled===true||(F&&!L)){' + source + '}}';
+              source = `if(s.isDisabled(e)){${source}}`;
               break;
+
             case 'read-only':
-              source =
-                'if(' +
-                  '(/^textarea$/i.test(e.localName)&&(e.readOnly||e.disabled))||' +
-                  '(/^input$/i.test(e.localName)&&("|date|datetime-local|email|month|number|password|search|tel|text|time|url|week|".includes("|"+e.type+"|")?(e.readOnly||e.disabled):true))||' +
-                  '(!/^(?:input|textarea)$/i.test(e.localName) && !s.isContentEditable(e))' +
-                '){' + source + '}';
+              source = `if(!s.isReadWrite(e)){${source}}`;
               break;
+
             case 'read-write':
-              source =
-                'if(' +
-                  '(/^textarea$/i.test(e.localName)&&!e.readOnly&&!e.disabled)||' +
-                  '(/^input$/i.test(e.localName)&&"|date|datetime-local|email|month|number|password|search|tel|text|time|url|week|".includes("|"+e.type+"|")&&!e.readOnly&&!e.disabled)||' +
-                  '(!/^(?:input|textarea)$/i.test(e.localName) && s.isContentEditable(e))' +
-                '){' + source + '}';
+              source = `if(s.isReadWrite(e)){${source}}`;
               break;
+
             case 'placeholder-shown':
-              source =
-                'if((' +
-                  '(/^input|textarea$/i.test(e.localName))&&e.hasAttribute("placeholder")&&' +
-                  '("|textarea|password|number|search|email|text|tel|url|".includes("|"+e.type+"|"))&&' +
-                  '(!s.match(":focus",e))' +
-                ')){' + source + '}';
+              source = `if(s.isPlaceholderShown(e)){${source}}`;
               break;
+
             case 'default':
-              source =
-                'if(("form" in e && e.form)){' +
-                  'var x=0;n=[];' +
-                  'if(e.type=="image")n=e.form.getElementsByTagName("input");' +
-                  'if(e.type=="submit")n=e.form.elements;' +
-                  'while(n[x]&&e!==n[x]){' +
-                    'if(n[x].type=="image")break;' +
-                    'if(n[x].type=="submit")break;' +
-                    'x++;' +
-                  '}' +
-                '}' +
-                'if((e.form&&(e===n[x]&&"|image|submit|".includes("|"+e.type+"|"))||' +
-                  '((/^option$/i.test(e.localName))&&e.defaultSelected)||' +
-                  '(("|radio|checkbox|".includes("|"+e.type+"|"))&&e.defaultChecked)' +
-                ')){' + source + '}';
+              source = `if(s.isDefault(e)){${source}}`;
               break;
+
             default:
-              emit(`Unsupported ui/form pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported ui/form pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }

@@ -3200,4 +3200,421 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'input state enabled includes option and optgroup',
+    // status: 'only',
+    markup: `
+      <select id="select">
+        <optgroup id="group">
+          <option id="option">x</option>
+        </optgroup>
+      </select>
+    `,
+    cases: [
+      { select: '#select:enabled', expect: { ids: ['select'] } },
+      { select: '#group:enabled', expect: { ids: ['group'] } },
+      { select: '#option:enabled', expect: { ids: ['option'] } },
+    ],
+  },
+
+  {
+    name: 'input state enabled respects disabled fieldset',
+    // status: 'only',
+    markup: `
+      <fieldset id="fs" disabled>
+        <input id="inside">
+        <button id="button">x</button>
+      </fieldset>
+      <input id="outside">
+    `,
+    cases: [
+      { select: '#inside:enabled', expect: { ids: [] } },
+      { select: '#button:enabled', expect: { ids: [] } },
+      { select: '#outside:enabled', expect: { ids: ['outside'] } },
+      { select: '#inside:disabled', expect: { ids: ['inside'] } },
+      { select: '#button:disabled', expect: { ids: ['button'] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled fieldset first legend exception',
+    // status: 'only',
+    markup: `
+      <fieldset id="fs" disabled>
+        <legend id="legend">
+          <input id="legendInput">
+        </legend>
+        <input id="inside">
+      </fieldset>
+    `,
+    cases: [
+      { select: '#legendInput:enabled', expect: { ids: ['legendInput'] } },
+      { select: '#legendInput:disabled', expect: { ids: [] } },
+      { select: '#inside:enabled', expect: { ids: [] } },
+      { select: '#inside:disabled', expect: { ids: ['inside'] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled fieldset only first legend excepted',
+    // status: 'only',
+    markup: `
+      <fieldset disabled>
+        <legend id="first"><input id="firstInput"></legend>
+        <legend id="second"><input id="secondInput"></legend>
+        <input id="inside">
+      </fieldset>
+    `,
+    cases: [
+      { select: '#firstInput:enabled', expect: { ids: ['firstInput'] } },
+      { select: '#firstInput:disabled', expect: { ids: [] } },
+      { select: '#secondInput:enabled', expect: { ids: [] } },
+      { select: '#secondInput:disabled', expect: { ids: ['secondInput'] } },
+      { select: '#inside:enabled', expect: { ids: [] } },
+      { select: '#inside:disabled', expect: { ids: ['inside'] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled fieldset legend exception is scoped',
+    // status: 'only',
+    markup: `
+      <fieldset id="outer" disabled>
+        <fieldset id="inner">
+          <legend id="innerLegend">
+            <input id="innerLegendInput">
+          </legend>
+        </fieldset>
+        <legend id="outerLegend">
+          <input id="outerLegendInput">
+        </legend>
+      </fieldset>
+    `,
+    cases: [
+      // Inner fieldset legend does not exempt from outer disabled fieldset.
+      { select: '#innerLegendInput:disabled', expect: { ids: ['innerLegendInput'] } },
+      { select: '#innerLegendInput:enabled', expect: { ids: [] } },
+      { select: '#outerLegendInput:disabled', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled fieldset only first direct legend is excepted',
+    // status: 'only',
+    markup: `
+      <fieldset id="outer" disabled>
+        <legend id="firstLegend">
+          <input id="firstLegendInput">
+        </legend>
+        <legend id="secondLegend">
+          <input id="secondLegendInput">
+        </legend>
+      </fieldset>
+    `,
+    cases: [
+      { select: '#firstLegendInput:disabled', expect: { ids: [] } },
+      { select: '#secondLegendInput:disabled', expect: { ids: ['secondLegendInput'] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled fieldset first legend exception still applies',
+    // status: 'only',
+    markup: `
+      <fieldset id="outer" disabled>
+        <legend id="outerLegend">
+          <input id="outerLegendInput">
+        </legend>
+        <input id="inside">
+      </fieldset>
+    `,
+    cases: [
+      { select: '#outerLegendInput:disabled', expect: { ids: [] } },
+      { select: '#inside:disabled', expect: { ids: ['inside'] } },
+    ],
+  },
+
+  {
+    name: 'input state read-write respects disabled fieldset',
+    // status: 'only',
+    markup: `
+      <fieldset disabled>
+        <input id="inside" value="x">
+        <textarea id="text"></textarea>
+      </fieldset>
+      <input id="outside" value="x">
+    `,
+    cases: [
+      { select: '#inside:read-only', expect: { ids: ['inside'] } },
+      { select: '#inside:read-write', expect: { ids: [] } },
+      { select: '#text:read-only', expect: { ids: ['text'] } },
+      { select: '#text:read-write', expect: { ids: [] } },
+      { select: '#outside:read-only', expect: { ids: [] } },
+      { select: '#outside:read-write', expect: { ids: ['outside'] } },
+    ],
+  },
+
+  {
+    name: 'input state read-only read-write input types',
+    // status: 'only',
+    markup: `
+      <input id="text" type="text">
+      <input id="email" type="email">
+      <input id="checkbox" type="checkbox">
+      <input id="range" type="range">
+      <input id="file" type="file">
+      <input id="button" type="button">
+    `,
+    cases: [
+      { select: '#text:read-write', expect: { ids: ['text'] } },
+      { select: '#email:read-write', expect: { ids: ['email'] } },
+
+      { select: '#checkbox:read-only', expect: { ids: ['checkbox'] } },
+      { select: '#range:read-only', expect: { ids: ['range'] } },
+      { select: '#file:read-only', expect: { ids: ['file'] } },
+      { select: '#button:read-only', expect: { ids: ['button'] } },
+    ],
+  },
+
+  {
+    name: 'input state read-write follows contenteditable inheritance',
+    // status: 'only',
+    markup: `
+      <div id="outer" contenteditable>
+        <p id="inner"></p>
+      </div>
+      <div id="plain"></div>
+    `,
+    cases: [
+      { select: '#outer:read-write', expect: { ids: ['outer'] } },
+      { select: '#inner:read-write', expect: { ids: ['inner'] } },
+      { select: '#plain:read-only', expect: { ids: ['plain'] } },
+    ],
+  },
+
+  {
+    name: 'input state read-only respects contenteditable false',
+    // status: 'only',
+    markup: `
+      <div id="outer" contenteditable>
+        <p id="editable"></p>
+        <p id="notEditable" contenteditable="false"></p>
+      </div>
+    `,
+    cases: [
+      { select: '#editable:read-write', expect: { ids: ['editable'] } },
+      { select: '#notEditable:read-only', expect: { ids: ['notEditable'] } },
+      { select: '#notEditable:read-write', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state read-only read-write readonly controls',
+    // status: 'only',
+    markup: `
+      <input id="input" readonly>
+      <textarea id="textarea" readonly></textarea>
+      <input id="normal">
+    `,
+    cases: [
+      { select: '#input:read-only', expect: { ids: ['input'] } },
+      { select: '#input:read-write', expect: { ids: [] } },
+      { select: '#textarea:read-only', expect: { ids: ['textarea'] } },
+      { select: '#textarea:read-write', expect: { ids: [] } },
+      { select: '#normal:read-write', expect: { ids: ['normal'] } },
+    ],
+  },
+
+  {
+    name: 'input state disabled option follows disabled optgroup',
+    // status: 'only',
+    markup: `
+      <select id="select">
+        <optgroup id="group" disabled>
+          <option id="option">x</option>
+        </optgroup>
+      </select>`,
+    cases: [
+      { select: '#group:disabled', expect: { ids: ['group'] } },
+      { select: '#option:disabled', expect: { ids: ['option'] } },
+      { select: '#option:enabled', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state placeholder-shown matches focused empty input',
+    // status: 'only',
+    markup: `<input id="x" placeholder="name"><input id="other">`,
+    setupPage: async page => {
+      await page.locator('#x').focus();
+    },
+    cases: [
+      { select: '#x:focus', expect: { ids: ['x'] } },
+      { select: '#x:placeholder-shown', expect: { ids: ['x'] } },
+    ],
+  },
+
+  {
+    name: 'input state placeholder-shown does not match non-empty values',
+    // status: 'only',
+    markup: `
+      <input id="empty" placeholder="name">
+      <input id="filled" placeholder="name" value="Eric">
+      <textarea id="textEmpty" placeholder="text"></textarea>
+      <textarea id="textFilled" placeholder="text">hello</textarea>
+    `,
+    cases: [
+      { select: '#empty:placeholder-shown', expect: { ids: ['empty'] } },
+      { select: '#filled:placeholder-shown', expect: { ids: [] } },
+      { select: '#textEmpty:placeholder-shown', expect: { ids: ['textEmpty'] } },
+      { select: '#textFilled:placeholder-shown', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state placeholder-shown empty placeholder attribute',
+    // status: 'only',
+    markup: `<input id="x" placeholder="">`,
+    cases: [
+      { select: '#x:placeholder-shown', expect: { ids: ['x'] }, browsers: ['chromium', 'firefox'] },
+      { select: '#x:placeholder-shown', expect: { ids: [] }, browsers: ['webkit'], status: 'fail' }, // webkit does not consider empty placeholder to be "shown"
+    ],
+  },
+
+  {
+    name: 'input state default matches first submit button element',
+    // status: 'only',
+    markup: `
+      <form id="form">
+        <button id="first">first</button>
+        <button id="second" type="submit">second</button>
+        <input id="input" type="submit">
+      </form>
+    `,
+    cases: [
+      { select: '#first:default', expect: { ids: ['first'] } },
+      { select: '#second:default', expect: { ids: [] } },
+      { select: '#input:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default ignores non-submit buttons',
+    // status: 'only',
+    markup: `
+      <form id="form">
+        <button id="plainButton" type="button">button</button>
+        <input id="submit" type="submit">
+      </form>
+    `,
+    cases: [
+      { select: '#plainButton:default', expect: { ids: [] } },
+      { select: '#submit:default', expect: { ids: ['submit'] } },
+    ],
+  },
+
+  {
+    name: 'input state default includes image submit controls',
+    // status: 'only',
+    markup: `
+      <form id="form">
+        <input id="image" type="image" alt="go">
+        <input id="submit" type="submit">
+      </form>
+    `,
+    cases: [
+      { select: '#image:default', expect: { ids: ['image'] } },
+      { select: '#submit:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default submit precedes image submit',
+    // status: 'only',
+    markup: `
+      <form id="form">
+        <input id="submit" type="submit">
+        <input id="image" type="image" alt="go">
+      </form>
+    `,
+    cases: [
+      { select: '#submit:default', expect: { ids: ['submit'] } },
+      { select: '#image:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default matches default checked controls',
+    // status: 'only',
+    markup: `
+      <input id="checkedBox" type="checkbox" checked>
+      <input id="uncheckedBox" type="checkbox">
+      <input id="checkedRadio" type="radio" name="r" checked>
+      <input id="uncheckedRadio" type="radio" name="r">
+    `,
+    cases: [
+      { select: '#checkedBox:default', expect: { ids: ['checkedBox'] } },
+      { select: '#uncheckedBox:default', expect: { ids: [] } },
+      { select: '#checkedRadio:default', expect: { ids: ['checkedRadio'] } },
+      { select: '#uncheckedRadio:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default uses option default selectedness',
+    // status: 'only',
+    markup: `
+      <select id="selectedSelect">
+        <option id="first">first</option>
+        <option id="selected" selected>selected</option>
+      </select>
+      <select id="autoSelect">
+        <option id="autoFirst">auto first</option>
+        <option id="autoSecond">auto second</option>
+      </select>
+    `,
+    cases: [
+      { select: '#first:default', expect: { ids: [] } },
+      { select: '#selected:default', expect: { ids: ['selected'] } },
+      { select: '#autoFirst:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default includes form-associated submit outside form',
+    // status: 'only',
+    markup: `
+      <input id="outside" type="submit" form="form">
+      <form id="form">
+        <input id="inside" type="submit">
+      </form>
+    `,
+    cases: [
+      { select: '#outside:default', expect: { ids: ['outside'] } },
+      { select: '#inside:default', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input state default includes outside image submit',
+    // status: 'only',
+    markup: `
+      <input id="outsideImage" type="image" form="form" alt="go">
+      <form id="form">
+        <input id="insideSubmit" type="submit">
+      </form>
+    `,
+    cases: [
+      { select: '#outsideImage:default', expect: { ids: ['outsideImage'] } },
+      { select: '#insideSubmit:default', expect: { ids: [] } },
+    ],
+  },
+
+
+
+
+
+
+
+
 ]);
