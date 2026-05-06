@@ -4121,4 +4121,216 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'parse-only autofill pseudos match nothing',
+    // status: 'only',
+    markup: `<input id="x" autocomplete="email" value="a@b.com">`,
+    cases: [
+      { select: '#x:autofill', expect: { ids: [] } },
+      { select: '#x:-webkit-autofill', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'pseudo element legacy single colon generated content matches nothing',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <head>
+          <style>
+            #x:before { content: "before"; display: inline; }
+            #x:after { content: "after"; display: inline; }
+          </style>
+        </head>
+        <body>
+          <div id="x">text</div>
+        </body>
+      </html>`,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        const x = document.getElementById('x')!;
+        const before = getComputedStyle(x, '::before').content;
+        const after = getComputedStyle(x, '::after').content;
+
+        if (before !== '"before"') throw new Error(`expected ::before content, got ${before}`);
+        if (after !== '"after"') throw new Error(`expected ::after content, got ${after}`);
+      });
+    },
+    cases: [
+      { select: '#x:before', expect: { ids: [] } },
+      { select: '#x:after', expect: { ids: [] } },
+      { select: 'div:before', expect: { ids: [] } },
+      { select: 'div:after', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'pseudo element double colon generated content matches nothing',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <head>
+          <style>
+            #x::before { content: "before"; display: inline; }
+            #x::after { content: "after"; display: inline; }
+          </style>
+        </head>
+        <body>
+          <div id="x">text</div>
+        </body>
+      </html>`,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        const x = document.getElementById('x')!;
+        const before = getComputedStyle(x, '::before').content;
+        const after = getComputedStyle(x, '::after').content;
+
+        if (before !== '"before"') throw new Error(`expected ::before content, got ${before}`);
+        if (after !== '"after"') throw new Error(`expected ::after content, got ${after}`);
+      });
+    },
+    cases: [
+      { select: '#x::before', expect: { ids: [] } },
+      { select: '#x::after', expect: { ids: [] } },
+      { select: 'div::before', expect: { ids: [] } },
+      { select: 'div::after', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'pseudo element legacy single colon first letter and line match nothing',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <head>
+          <style>
+            #x:first-letter { font-size: 40px; }
+            #x:first-line { text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <p id="x">hello world</p>
+        </body>
+      </html>`,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        const x = document.getElementById('x')!;
+        const firstLetterSize = getComputedStyle(x, '::first-letter').fontSize;
+        const firstLineTransform = getComputedStyle(x, '::first-line').textTransform;
+
+        if (firstLetterSize !== '40px') throw new Error(`expected ::first-letter font-size, got ${firstLetterSize}`);
+        if (firstLineTransform !== 'uppercase') throw new Error(`expected ::first-line transform, got ${firstLineTransform}`);
+      });
+    },
+    cases: [
+      { select: '#x:first-letter', expect: { ids: [] } },
+      { select: '#x:first-line', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'selector extension handles registered pseudo',
+    // status: 'only',
+    engines: ['nw'],
+    markup: `<div id="x"></div><span id="y"></span>`,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        NW?.Dom?.registerSelector(
+          'test-ext',
+          /^:test-ext\b(.*)/,
+          (match, source) => {
+            return {
+              source: `if(e.localName==="div"){${source}}`,
+              status: true,
+            };
+          },
+        );
+      });
+    },
+    cases: [
+      { select: '#x:test-ext', expect: { ids: ['x'] } },
+      { select: '#y:test-ext', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'unknown pseudo extension throws',
+    // status: 'only',
+    markup: `<div id="x"></div>`,
+    cases: [
+      { select: '#x:unknown-ext', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'forgiving is where ignore invalid pseudo arms',
+    status: 'fixme',
+    markup: `<div id="a" class="a"></div><div id="b" class="b"></div><div id="c"></div>`,
+    cases: [
+      { select: ':is(.a, :bogus-pseudo, .b)', expect: { ids: ['a', 'b'] } },
+      { select: ':where(.a, :bogus-pseudo, .b)', expect: { ids: ['a', 'b'] } },
+      { select: ':is(:bogus-pseudo)', expect: { ids: [] } },
+      { select: ':where(:bogus-pseudo)', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'unknown pseudo outside forgiving selector throws',
+    // status: 'only',
+    markup: `<div id="a"></div>`,
+    cases: [
+      { select: ':bogus-pseudo', expect: { throws: true } },
+      { select: 'div:bogus-pseudo', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'forgiving is with only invalid arms matches nothing',
+    // status: 'only',
+    markup: `<div id="a"></div>`,
+    cases: [
+      { select: ':is(:bogus-pseudo)', expect: { ids: [] } },
+      { select: ':where(:bogus-pseudo)', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'forgiving is treats unterminated attribute arm as invalid through list end',
+    status: 'fixme',
+    markup: `<div id="a" class="a"></div><div id="b" class="b"></div>`,
+    cases: [
+      { select: ':is(.a, [broken, .b)', expect: { ids: ['a',] } },
+    ],
+  },
+
+  {
+    name: 'invalid unexpected selector tokens throw',
+    // status: 'only',
+    markup: `<div id="a"></div>`,
+    cases: [
+      { select: '#a@foo', expect: { throws: true } },
+      { select: '#a`foo', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'invalid selector does not return partial matches when logging errors',
+    status: 'fixme',
+    markup: `<div id="x"></div>`,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        NW?.Dom?.configure({ LOGERRORS: true, VERBOSITY: false });
+      });
+    },
+    cases: [
+      { select: '#x@bad', expect: { throws: true } },
+    ],
+  },
+
 ]);

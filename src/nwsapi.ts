@@ -2223,23 +2223,23 @@ function compileSelector(
 
         // placeholder for parse only no-op selectors
         else if ((match = selector.match(snap.re.Patterns.pseudo_nop))) {
-          break;
+          const pseudo = match[1].toLowerCase();
+          switch (pseudo) {
+            case 'autofill':
+            case '-webkit-autofill':
+              source = `if(false){${source}}`;
+              break;
+          }
         }
 
-        // allow pseudo-elements starting with single colon (:)
-        // :after, :before, :first-letter, :first-line
-        // assert: e.type is in double-colon format, like ::after
+        // parse-valid legacy single-colon pseudo-elements; match no DOM elements
         else if ((match = selector.match(snap.re.Patterns.pseudo_sng))) {
-          source = 'if(e.element&&e.type.toLowerCase()=="' +
-            ':' + match[0].toLowerCase() + '"){e=e.element;' + source + '}';
+          source = `if(false){${source}}`;
         }
 
-        // allow pseudo-elements starting with double colon (::)
-        // ::after, ::before, ::marker, ::placeholder, ::inactive-selection, ::selection, ::-webkit-<foo-bar>
-        // assert: e.type is in double-colon format, like ::after
+        // parse-valid double-colon pseudo-elements; match no DOM elements
         else if ((match = selector.match(snap.re.Patterns.pseudo_dbl))) {
-          source = 'if(e.element&&e.type.toLowerCase()=="' +
-            match[0].toLowerCase() + '"){e=e.element;' + source + '}';
+          source = `if(false){${source}}`;
         }
 
         else {
