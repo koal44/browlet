@@ -3610,7 +3610,466 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'input value checked matches checked controls and selected options',
+    // status: 'only',
+    markup: `
+      <input id="checkedBox" type="checkbox" checked>
+      <input id="uncheckedBox" type="checkbox">
+      <input id="checkedRadio" type="radio" name="r" checked>
+      <input id="uncheckedRadio" type="radio" name="r">
+      <select>
+        <option id="unselected">a</option>
+        <option id="selected" selected>b</option>
+      </select>
+    `,
+    cases: [
+      { select: '#checkedBox:checked', expect: { ids: ['checkedBox'] } },
+      { select: '#uncheckedBox:checked', expect: { ids: [] } },
+      { select: '#checkedRadio:checked', expect: { ids: ['checkedRadio'] } },
+      { select: '#uncheckedRadio:checked', expect: { ids: [] } },
+      { select: '#selected:checked', expect: { ids: ['selected'] } },
+      { select: '#unselected:checked', expect: { ids: [] } },
+    ],
+  },
 
+  {
+    name: 'input value checked follows current option selectedness',
+    // status: 'only',
+    markup: `
+      <select>
+        <option id="first" selected>first</option>
+        <option id="second">second</option>
+      </select>
+    `,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        const first = document.getElementById('first') as HTMLOptionElement;
+        const second = document.getElementById('second') as HTMLOptionElement;
+        first.selected = false;
+        second.selected = true;
+      });
+    },
+    cases: [
+      { select: '#first:checked', expect: { ids: [] } },
+      { select: '#second:checked', expect: { ids: ['second'] } },
+    ],
+  },
+
+  {
+    name: 'input value checked excludes non-checkable input types',
+    // status: 'only',
+    markup: `
+      <input id="text" type="text">
+      <input id="button" type="button">
+      <input id="hidden" type="hidden">
+    `,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        for (const id of ['text', 'button', 'hidden']) {
+          (document.getElementById(id) as HTMLInputElement).checked = true;
+        }
+      });
+    },
+    cases: [
+      { select: '#text:checked', expect: { ids: [] } },
+      { select: '#button:checked', expect: { ids: [] } },
+      { select: '#hidden:checked', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value checked matches auto-selected first option',
+    // status: 'only',
+    markup: `
+      <select>
+        <option id="first">first</option>
+        <option id="second">second</option>
+      </select>
+    `,
+    cases: [
+      { select: '#first:checked', expect: { ids: ['first'] } },
+      { select: '#second:checked', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate matches progress and checkbox states',
+    // status: 'only',
+    markup: `
+      <progress id="progressNoValue"></progress>
+      <progress id="progressValue" value="0.5"></progress>
+      <input id="box" type="checkbox">
+      <input id="plainBox" type="checkbox">
+    `,
+    setupPage: async page => {
+      await page.evaluate(() => {
+        (document.getElementById('box') as HTMLInputElement).indeterminate = true;
+      });
+    },
+    cases: [
+      { select: '#progressNoValue:indeterminate', expect: { ids: ['progressNoValue'] } },
+      { select: '#progressValue:indeterminate', expect: { ids: [] } },
+      { select: '#box:indeterminate', expect: { ids: ['box'] } },
+      { select: '#plainBox:indeterminate', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio group outside form',
+    // status: 'only',
+    markup: `
+      <input id="a" type="radio" name="r">
+      <input id="b" type="radio" name="r">
+      <input id="other" type="radio" name="other" checked>
+    `,
+    cases: [
+      { select: '#a:indeterminate', expect: { ids: ['a'] } },
+      { select: '#b:indeterminate', expect: { ids: ['b'] } },
+      { select: '#other:indeterminate', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio group outside form with checked member',
+    // status: 'only',
+    markup: `
+      <input id="a" type="radio" name="r">
+      <input id="b" type="radio" name="r" checked>
+    `,
+    cases: [
+      { select: '#a:indeterminate', expect: { ids: [] } },
+      { select: '#b:indeterminate', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio name does not use raw selector text',
+    // status: 'only',
+    markup: `
+      <input id="a" type="radio" name="a b">
+      <input id="b" type="radio" name="a b">
+    `,
+    cases: [
+      { select: '#a:indeterminate', expect: { ids: ['a'] } },
+      { select: '#b:indeterminate', expect: { ids: ['b'] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio name with selector syntax',
+    // status: 'only',
+    markup: `
+      <input id="a" type="radio" name="x]y">
+      <input id="b" type="radio" name="x]y">
+    `,
+    cases: [
+      { select: '#a:indeterminate', expect: { ids: ['a'] } },
+      { select: '#b:indeterminate', expect: { ids: ['b'] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio group uses form owner',
+    // status: 'only',
+    markup: `
+      <input id="outsideA" type="radio" name="r" form="f">
+      <form id="f">
+        <input id="insideB" type="radio" name="r">
+      </form>
+    `,
+    cases: [
+      { select: '#outsideA:indeterminate', expect: { ids: ['outsideA'] } },
+      { select: '#insideB:indeterminate', expect: { ids: ['insideB'] } },
+    ],
+  },
+
+  {
+    name: 'input value indeterminate radio group form owner with checked member',
+    // status: 'only',
+    markup: `
+      <input id="outsideA" type="radio" name="r" form="f" checked>
+      <form id="f">
+        <input id="insideB" type="radio" name="r">
+      </form>
+    `,
+    cases: [
+      { select: '#outsideA:indeterminate', expect: { ids: [] } },
+      { select: '#insideB:indeterminate', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value required excludes unsupported input types',
+    // status: 'only',
+    markup: `
+      <input id="text" type="text" required>
+      <input id="hidden" type="hidden" required>
+      <input id="button" type="button" required>
+      <input id="submit" type="submit" required>
+      <input id="reset" type="reset" required>
+      <input id="range" type="range" required>
+      <input id="color" type="color" required>
+    `,
+    cases: [
+      { select: '#text:required', expect: { ids: ['text'] } },
+      { select: '#hidden:required', expect: { ids: [] } },
+      { select: '#button:required', expect: { ids: [] } },
+      { select: '#submit:required', expect: { ids: [] } },
+      { select: '#reset:required', expect: { ids: [] } },
+      { select: '#range:required', expect: { ids: [] } },
+      { select: '#color:required', expect: { ids: [] }, browsers: ['chromium', 'firefox'] },
+      { select: '#color:required', expect: { ids: ['color'] }, browsers: ['webkit'] },
+    ],
+  },
+
+  {
+    name: 'input value required matches supported controls',
+    // status: 'only',
+    markup: `
+      <input id="text" required>
+      <input id="email" type="email" required>
+      <input id="checkbox" type="checkbox" required>
+      <input id="file" type="file" required>
+      <select id="select" required><option>x</option></select>
+      <textarea id="textarea" required></textarea>
+      <input id="optional">
+    `,
+    cases: [
+      { select: '#text:required', expect: { ids: ['text'] } },
+      { select: '#email:required', expect: { ids: ['email'] } },
+      { select: '#checkbox:required', expect: { ids: ['checkbox'] } },
+      { select: '#file:required', expect: { ids: ['file'] } },
+      { select: '#select:required', expect: { ids: ['select'] } },
+      { select: '#textarea:required', expect: { ids: ['textarea'] } },
+      { select: '#optional:required', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value required radio group behavior',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <input id="a" type="radio" name="r" required>
+      <input id="b" type="radio" name="r">
+      <input id="c" type="radio" name="other">
+    `,
+    cases: [
+      { select: '#a:required', expect: { ids: ['a'] } },
+      { select: '#b:required', expect: { ids: [] } },
+      { select: '#c:required', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value optional matches supported non-required controls',
+    // status: 'only',
+    markup: `
+      <input id="text" type="text">
+      <input id="requiredText" type="text" required>
+      <select id="select"><option>x</option></select>
+      <select id="requiredSelect" required><option>x</option></select>
+      <textarea id="textarea"></textarea>
+      <textarea id="requiredTextarea" required></textarea>
+    `,
+    cases: [
+      { select: '#text:optional', expect: { ids: ['text'] } },
+      { select: '#requiredText:optional', expect: { ids: [] } },
+      { select: '#select:optional', expect: { ids: ['select'] } },
+      { select: '#requiredSelect:optional', expect: { ids: [] } },
+      { select: '#textarea:optional', expect: { ids: ['textarea'] } },
+      { select: '#requiredTextarea:optional', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value optional unsupported input type divergence',
+    status: 'fail',
+    markup: `
+      <input id="hidden" type="hidden">
+      <input id="button" type="button">
+    `,
+    cases: [
+      { select: '#hidden:optional', expect: { ids: ['hidden'] }, browsers: ['chromium', 'webkit'] },
+      { select: '#hidden:optional', expect: { ids: [] }, browsers: ['firefox'] },
+      { select: '#button:optional', expect: { ids: ['button'] }, browsers: ['chromium', 'webkit'] },
+      { select: '#button:optional', expect: { ids: [] }, browsers: ['firefox'] },
+    ],
+  },
+
+  {
+    name: 'input value invalid ignores form novalidate',
+    // status: 'only',
+    markup: `
+      <form id="form" novalidate>
+        <input id="input" required>
+      </form>
+    `,
+    cases: [
+      { select: '#form:invalid', expect: { ids: ['form'] } },
+      { select: '#input:invalid', expect: { ids: ['input'] } },
+      { select: '#input:valid', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value fieldset valid requires no invalid descendants',
+    // status: 'only',
+    markup: `
+      <fieldset id="fieldset">
+        <input id="validInput" required value="x">
+        <input id="invalidInput" required>
+      </fieldset>
+    `,
+    cases: [
+      { select: '#validInput:valid', expect: { ids: ['validInput'] } },
+      { select: '#invalidInput:invalid', expect: { ids: ['invalidInput'] } },
+      { select: '#fieldset:invalid', expect: { ids: ['fieldset'] } },
+      { select: '#fieldset:valid', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value empty form and fieldset validity',
+    // status: 'only',
+    markup: `
+      <form id="form"></form>
+      <fieldset id="fieldset"></fieldset>
+    `,
+    cases: [
+      { select: '#form:valid', expect: { ids: ['form'] } },
+      { select: '#form:invalid', expect: { ids: [] } },
+      { select: '#fieldset:valid', expect: { ids: ['fieldset'] } },
+      { select: '#fieldset:invalid', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value form validity includes associated controls outside form',
+    // status: 'only',
+    markup: `
+      <input id="outside" required form="form">
+      <form id="form"></form>
+    `,
+    cases: [
+      { select: '#outside:invalid', expect: { ids: ['outside'] } },
+      { select: '#form:invalid', expect: { ids: ['form'] } },
+      { select: '#form:valid', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range basic number bounds',
+    // status: 'only',
+    markup: `
+      <input id="in" type="number" min="1" max="10" value="5">
+      <input id="under" type="number" min="1" max="10" value="0">
+      <input id="over" type="number" min="1" max="10" value="11">
+      <input id="empty" type="number" min="1" max="10">
+    `,
+    cases: [
+      { select: '#in:in-range', expect: { ids: ['in'] } },
+      { select: '#in:out-of-range', expect: { ids: [] } },
+
+      { select: '#under:in-range', expect: { ids: [] } },
+      { select: '#under:out-of-range', expect: { ids: ['under'] } },
+
+      { select: '#over:in-range', expect: { ids: [] } },
+      { select: '#over:out-of-range', expect: { ids: ['over'] } },
+
+      // Empty value is not range underflow/overflow.
+      { select: '#empty:in-range', expect: { ids: ['empty'] } },
+      { select: '#empty:out-of-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range requires bounds for non-range inputs',
+    // status: 'only',
+    markup: `
+      <input id="number" type="number" value="5">
+      <input id="date" type="date" value="2024-01-01">
+    `,
+    cases: [
+      { select: '#number:in-range', expect: { ids: [] } },
+      { select: '#number:out-of-range', expect: { ids: [] } },
+      { select: '#date:in-range', expect: { ids: [] } },
+      { select: '#date:out-of-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range input has implicit bounds',
+    // status: 'only',
+    markup: `
+      <input id="range" type="range" value="50">
+    `,
+    cases: [
+      { select: '#range:in-range', expect: { ids: ['range'] } },
+      { select: '#range:out-of-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range ignores formnovalidate',
+    // status: 'only',
+    markup: `
+      <input id="submit" type="submit" formnovalidate>
+      <input id="number" type="number" min="1" max="10" value="11" formnovalidate>
+    `,
+    cases: [
+      { select: '#number:out-of-range', expect: { ids: ['number'] } },
+      { select: '#number:in-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range does not use formnovalidate submitter state',
+    // status: 'only',
+    markup: `
+      <form>
+        <input id="number" type="number" min="1" max="10" value="11">
+        <button id="submit" formnovalidate>submit</button>
+      </form>
+    `,
+    cases: [
+      { select: '#number:out-of-range', expect: { ids: ['number'] } },
+      { select: '#submit:out-of-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range ignores disabled fieldset controls',
+    // status: 'only',
+    markup: `
+      <fieldset disabled>
+        <input id="number" type="number" min="1" max="10" value="11">
+      </fieldset>
+    `,
+    cases: [
+      { select: '#number:out-of-range', expect: { ids: [] } },
+      { select: '#number:in-range', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'input value range excludes unsupported input types',
+    // status: 'only',
+    markup: `
+      <input id="text" type="text" min="1" max="10" value="11">
+      <input id="email" type="email" min="1" max="10" value="x@y.com">
+      <input id="hidden" type="hidden" min="1" max="10" value="11">
+    `,
+    cases: [
+      { select: '#text:in-range', expect: { ids: [] } },
+      { select: '#text:out-of-range', expect: { ids: [] } },
+      { select: '#email:in-range', expect: { ids: [] } },
+      { select: '#email:out-of-range', expect: { ids: [] } },
+      { select: '#hidden:in-range', expect: { ids: [] } },
+      { select: '#hidden:out-of-range', expect: { ids: [] } },
+    ],
+  },
 
 
 

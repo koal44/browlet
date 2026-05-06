@@ -2364,8 +2364,9 @@ runScenarios('w3c', 'normal', [
     steps: [
       {
         cases: [
-          { select: ':required + span', expect: { ids: [] }, status: 'fixme' },
-          { select: ':not(:optional) + span', expect: { ids: [] }, status: 'fixme' },
+          { select: ':required + span', expect: { ids: [] } },
+          { select: ':not(:optional) + span', expect: { ids: [] }, browsers: ['chromium', 'webkit'] },
+          { select: ':not(:optional) + span', expect: { ids: ['sibling'] }, browsers: ['firefox'], status: 'fail' },
         ],
       },
       {
@@ -2483,8 +2484,9 @@ runScenarios('w3c', 'normal', [
     steps: [
       {
         cases: [
-          { select: ':required + span', expect: { ids: [] }, status: 'fixme' },
-          { select: ':not(:optional) + span', expect: { ids: [] }, status: 'fixme' },
+          { select: ':required + span', expect: { ids: [] } },
+          { select: ':not(:optional) + span', expect: { ids: [] }, browsers: ['chromium', 'webkit'] },
+          { select: ':not(:optional) + span', expect: { ids: ['sibling'] }, browsers: ['firefox'], status: 'fail' },
         ],
       },
       {
@@ -2670,7 +2672,7 @@ runScenarios('w3c', 'normal', [
 
       {
         cases: [
-          { select: '#styleTests fieldset:valid', expect: { count: 2 }, status: 'fixme' },
+          { select: '#styleTests fieldset:valid', expect: { count: 2 } },
           { select: '#styleTests fieldset:invalid', expect: { count: 1 } },
         ],
       },
@@ -2690,7 +2692,7 @@ runScenarios('w3c', 'normal', [
           (invalidInput as HTMLInputElement).type = 'text';
         }); },
         cases: [
-          { select: '#styleTests fieldset:valid', expect: { count: 1 }, status: 'fixme' },
+          { select: '#styleTests fieldset:valid', expect: { count: 1 } },
           { select: '#styleTests fieldset:invalid', expect: { count: 2 } },
         ],
       },

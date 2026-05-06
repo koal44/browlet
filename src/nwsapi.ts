@@ -338,6 +338,14 @@ export function initSnapshot(doc: Document) {
     isFormStateElement: isFormStateElement,
     isPlaceholderShown: isPlaceholderShown,
     isDefault: isDefault,
+    isChecked: isChecked,
+    isIndeterminate: isIndeterminate,
+    isRequired: isRequired,
+    isOptional: isOptional,
+    isValid: (e: Element) => isValid(e, snap),
+    isInvalid: (e: Element) => isInvalid(e, snap),
+    isInRange: isInRange,
+    isOutOfRange: isOutOfRange,
 
     isFocused: isFocused,
     hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
@@ -934,27 +942,16 @@ function isPlaceholderShown(e: Element): boolean {
 
 function isDefault(e: Element): boolean {
   if (isHtmlOption(e)) return e.defaultSelected;
+  const isInput = isHtmlInput(e);
+  if (isInput && (e.type === 'checkbox' || e.type === 'radio')) return e.defaultChecked;
+  const isButton = isHtmlButton(e);
+  if (!isInput && !isButton) return false;
+  const isSubmit = (isInput && (e.type === 'submit' || e.type === 'image')) || (isButton && e.type === 'submit');
+  if (!isSubmit) return false;
 
-  if (isHtmlInput(e)) {
-    if (e.type === 'checkbox' || e.type === 'radio') return e.defaultChecked;
-    if (e.type === 'submit' || e.type === 'image') return isDefaultSubmit(e);
-    return false;
-  }
-
-  if (isHtmlButton(e)) {
-    return e.type === 'submit' && isDefaultSubmit(e);
-  }
-
-  return false;
-}
-
-function isDefaultSubmit(e: HTMLInputElement | HTMLButtonElement): boolean {
+  // find the first submit button, which may be in or outside the form
   const form = e.form;
   if (!form) return false;
-
-  function isBefore(a: Element, b: Element): boolean {
-    return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-  }
 
   let firstInput = null;
   const inputs = form.ownerDocument.getElementsByTagName('input')
@@ -979,9 +976,125 @@ function isDefaultSubmit(e: HTMLInputElement | HTMLButtonElement): boolean {
   const firstSubmit =
     !firstInput ? firstButton :
     !firstButton ? firstInput :
-    isBefore(firstInput, firstButton) ? firstInput : firstButton;
+    (firstInput.compareDocumentPosition(firstButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+      ? firstInput
+      : firstButton;
 
   return firstSubmit === e;
+}
+
+function isChecked(e: Element): boolean {
+  if (isHtmlInput(e)) return (e.type === 'checkbox' || e.type === 'radio') && e.checked;
+  if (isHtmlOption(e)) return e.selected;
+  return false;
+}
+
+function isIndeterminate(e: Element): boolean {
+  if (isHtmlProgress(e)) return !e.hasAttribute('value');
+
+  if (!isHtmlInput(e)) return false;
+
+  if (e.type === 'checkbox') return e.indeterminate;
+  if (e.type !== 'radio' || !e.name) return false;
+
+  const radio = e;
+  let hasChecked = false;
+  const inputs = radio.ownerDocument.getElementsByTagName('input');
+  for (let i = 0; i < inputs.length; i++) {
+    const input = inputs[i];
+    if (
+      input.type === 'radio' &&
+      input.name === radio.name &&
+      input.form === radio.form &&
+      input.checked
+    ) {
+      hasChecked = true;
+      break;
+    }
+  }
+  return !hasChecked;
+}
+
+const REQUIRED_INPUT_TYPES = new Set([
+  'checkbox', 'date', 'datetime-local', 'email', 'file', 'month', 'number',
+  'password', 'radio', 'search', 'tel', 'text', 'time', 'url', 'week',
+  // 'color' for webkit?
+]);
+
+function isRequired(e: Element): boolean {
+  if (isHtmlSelect(e) || isHtmlTextArea(e)) return e.required;
+  if (isHtmlInput(e)) return REQUIRED_INPUT_TYPES.has(e.type) && e.required;
+  return false;
+}
+
+function isOptional(e: Element): boolean {
+  if (isHtmlInput(e)) return !isRequired(e);
+  if (isHtmlSelect(e) || isHtmlTextArea(e)) return !e.required;
+  return false;
+}
+
+// function isFormValueElement(e: Element): e is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
+//   return isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e);
+// }
+
+// function isOptional(e: Element): boolean {
+//   return isFormValueElement(e) && !isRequired(e);
+// }
+
+function isInvalid(e: Element, snap: Snapshot): boolean {
+  if (isHtmlForm(e)) return !e.checkValidity();
+
+  if (isHtmlFieldSet(e)) {
+    return !!snap.first(':invalid', e);
+  }
+
+  if (isValidityElement(e)) {
+    return e.willValidate && !e.checkValidity();
+  }
+
+  return false;
+}
+
+function isValid(e: Element, snap: Snapshot): boolean {
+  if (isHtmlForm(e)) return e.checkValidity();
+
+  if (isHtmlFieldSet(e)) {
+    return !snap.first(':invalid', e);
+  }
+
+  if (isValidityElement(e)) {
+    return e.willValidate && e.checkValidity();
+  }
+
+  return false;
+}
+
+type ValidityElement =
+  HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLObjectElement |
+  HTMLOutputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+function isValidityElement(e: Element): e is ValidityElement {
+  return 'willValidate' in e && typeof (e as ValidityElement).checkValidity === 'function';
+}
+
+const RANGE_INPUT_TYPES = new Set(['date', 'datetime-local', 'month', 'number', 'range', 'time', 'week']);
+function isRangeInput(e: Element): e is HTMLInputElement {
+  return isHtmlInput(e) &&
+    RANGE_INPUT_TYPES.has(e.type) &&
+    (e.type === 'range' || e.hasAttribute('min') || e.hasAttribute('max'));
+}
+
+function isInRange(e: Element): boolean {
+  return isRangeInput(e) &&
+    e.willValidate &&
+    !e.validity.rangeUnderflow &&
+    !e.validity.rangeOverflow;
+}
+
+function isOutOfRange(e: Element): boolean {
+  return isRangeInput(e) &&
+    e.willValidate &&
+    (e.validity.rangeUnderflow || e.validity.rangeOverflow);
 }
 
 function previewText(s: string, max = 240): string {
@@ -1124,6 +1237,18 @@ function isHtmlOptGroup(e: Element): e is HTMLOptGroupElement {
 
 function isHtmlOption(e: Element): e is HTMLOptionElement {
   return e.localName === 'option' && 'disabled' in e;
+}
+
+function isHtmlProgress(e: Element): e is HTMLProgressElement {
+  return e.localName === 'progress';
+}
+
+function isHtmlSelect(e: Element): e is HTMLSelectElement {
+  return e.localName === 'select';
+}
+
+function isHtmlForm(e: Element): e is HTMLFormElement {
+  return e.localName === 'form';
 }
 
 
@@ -2005,67 +2130,42 @@ function compileSelector(
         // *** input pseudo-classes (for form validation)
         // :checked, :indeterminate, :valid, :invalid, :in-range, :out-of-range, :required, :optional
         else if ((match = selector.match(snap.re.Patterns.inputvalue))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+          switch (pseudo) {
             case 'checked':
-              source = 'if((/^input$/i.test(e.localName)&&' +
-                '("|radio|checkbox|".includes("|"+e.type+"|")&&e.checked)||' +
-                '(/^option$/i.test(e.localName)&&(e.selected||e.checked))' +
-                ')){' + source + '}';
+              source = `if(s.isChecked(e)){${source}}`;
               break;
+            
             case 'indeterminate':
-              source =
-                'if((/^progress$/i.test(e.localName)&&!e.hasAttribute("value"))||' +
-                  '(/^input$/i.test(e.localName)&&("checkbox"==e.type&&e.indeterminate)||' +
-                  '("radio"==e.type&&e.name&&!s.first("input[name="+e.name+"]:checked",e.form))' +
-                ')){' + source + '}';
+              source = `if(s.isIndeterminate(e)){${source}}`;
               break;
+
             case 'required':
-              source =
-                'if((/^input|select|textarea$/i.test(e.localName)&&e.required)' +
-                '){' + source + '}';
+              source = `if(s.isRequired(e)){${source}}`;
               break;
+
             case 'optional':
-              source =
-                'if((/^input|select|textarea$/i.test(e.localName)&&!e.required)' +
-                '){' + source + '}';
+              source = `if(s.isOptional(e)){${source}}`;
               break;
+
             case 'invalid':
-              source =
-                'if(((' +
-                  '(/^form$/i.test(e.localName)&&!e.noValidate)||' +
-                  '(e.willValidate&&!e.formNoValidate))&&!e.checkValidity())||' +
-                  '(/^fieldset$/i.test(e.localName)&&s.first(":invalid",e))' +
-                '){' + source + '}';
+              source = `if(s.isInvalid(e)){${source}}`;
               break;
+
             case 'valid':
-              source =
-                'if(((' +
-                  '(/^form$/i.test(e.localName)&&!e.noValidate)||' +
-                  '(e.willValidate&&!e.formNoValidate))&&e.checkValidity())||' +
-                  '(/^fieldset$/i.test(e.localName)&&s.first(":valid",e))' +
-                '){' + source + '}';
+              source = `if(s.isValid(e)){${source}}`;
               break;
+
             case 'in-range':
-              source =
-                'if((/^input$/i.test(e.localName))&&' +
-                  '(e.willValidate&&!e.formNoValidate)&&' +
-                  '(!e.validity.rangeUnderflow&&!e.validity.rangeOverflow)&&' +
-                  '("|date|datetime-local|month|number|range|time|week|".includes("|"+e.type+"|"))&&' +
-                  '("range"==e.type||e.getAttribute("min")||e.getAttribute("max"))' +
-                '){' + source + '}';
+              source = `if(s.isInRange(e)){${source}}`;
               break;
+
             case 'out-of-range':
-              source =
-                'if((/^input$/i.test(e.localName))&&' +
-                  '(e.willValidate&&!e.formNoValidate)&&' +
-                  '(e.validity.rangeUnderflow||e.validity.rangeOverflow)&&' +
-                  '("|date|datetime-local|month|number|range|time|week|".includes("|"+e.type+"|"))&&' +
-                  '("range"==e.type||e.getAttribute("min")||e.getAttribute("max"))' +
-                '){' + source + '}';
+              source = `if(s.isOutOfRange(e)){${source}}`;
               break;
+
             default:
-              emit(`Unsupported input pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
+              emit(`Unsupported input pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
               break;
           }
         }
@@ -2710,21 +2810,4 @@ function skipSelectorSpaces(source: string, index: number): number {
 
 function isSelectorSpace(ch: string): boolean {
   return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
-}
-
-function isActiveEligible(node: Element): boolean {
-  const name = node.localName;
-
-  if (name === 'button') return true;
-
-  if (name === 'input') {
-    const type = (node as HTMLInputElement).type;
-    return /^(?:submit|image|reset|button)$/i.test(type);
-  }
-
-  if ((name === 'a' || name === 'area') && node.hasAttribute('href')) {
-    return true;
-  }
-
-  return (node as HTMLElement).tabIndex >= 0;
 }
