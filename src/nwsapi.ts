@@ -346,6 +346,10 @@ export function initSnapshot(doc: Document) {
     isInvalid: (e: Element) => isInvalid(e, snap),
     isInRange: isInRange,
     isOutOfRange: isOutOfRange,
+    isPlaying: isPlaying,
+    isPaused: isPaused,
+    isSeeking: isSeeking,
+    isMuted: isMuted,
 
     isFocused: isFocused,
     hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
@@ -736,14 +740,6 @@ function isFocused(node: HTMLElement): HTMLElement | false {
   return node === doc.activeElement ? node : false;
 }
 
-// check media resources is playing
-function isPlaying(el: Element): boolean {
-  // for <audio>, <video>, <source> and <track> elements
-  const media = isHtmlMediaElement(el) ? el : isHtmlMediaElement(el.parentElement) ? el.parentElement : null;
-  if (!media) return false;
-  return media.currentTime > 0 && !media.paused && !media.ended && media.readyState > 2;
-}
-
 function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot): boolean {
   // steps: RelativeStep[]
   if (index >= steps.length) {
@@ -1095,6 +1091,32 @@ function isOutOfRange(e: Element): boolean {
   return isRangeInput(e) &&
     e.willValidate &&
     (e.validity.rangeUnderflow || e.validity.rangeOverflow);
+}
+
+function getMediaElement(e: Element): HTMLMediaElement | null {
+  if (isHtmlMediaElement(e)) return e;
+  const parent = e.parentElement;
+  return parent && isHtmlMediaElement(parent) ? parent : null;
+}
+
+function isPlaying(e: Element): boolean {
+  const media = getMediaElement(e);
+  return !!media && media.currentTime > 0 && !media.paused && !media.ended && media.readyState > 2;
+}
+
+function isPaused(e: Element): boolean {
+  const media = getMediaElement(e);
+  return !!media && media.paused;
+}
+
+function isSeeking(e: Element): boolean {
+  const media = getMediaElement(e);
+  return !!media && media.seeking;
+}
+
+function isMuted(e: Element): boolean {
+  const media = getMediaElement(e);
+  return !!media && media.muted;
 }
 
 function previewText(s: string, max = 240): string {
@@ -2173,27 +2195,28 @@ function compileSelector(
         // resources state pseudo-classes (multimedia state)
         // :playing, :paused, :seeking, :buffering, :stalled, :muted, :volume-locked
         else if ((match = selector.match(snap.re.Patterns.rsrc_state))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+          switch (pseudo) {
             case 'playing':
-              source = 'if(s.isPlaying(e)){' + source + '}';
+              source = `if(s.isPlaying(e)){${source}}`;
               break;
+
             case 'paused':
-              source = 'if(!s.isPlaying(e)){' + source + '}';
+              source = `if(s.isPaused(e)){${source}}`;
               break;
+
             case 'seeking':
-              source = 'if(!s.isPlaying(e)){' + source + '}';
+              source = `if(s.isSeeking(e)){${source}}`;
               break;
-            case 'buffering':
-              break;
-            case 'stalled':
-              break;
+
             case 'muted':
-              source = 'if(e.localName=="audio"&&e.getAttribute("muted")){' + source + '}';
+              source = `if(s.isMuted(e)){${source}}`;
               break;
+
+            case 'buffering':
+            case 'stalled':
             case 'volume-locked':
-              break;
-            default:
+              source = `if(false){${source}}`;
               break;
           }
         }
