@@ -33,6 +33,8 @@ export type NamedQueryResult = { name: string; result: QueryResult; };
 export type QueryResult = { elements: Element[]; error: string };
 
 export function installBrowserHelpers(): void {
+  const HARNESS_NODE_ID = 'data-harness-node-id';
+
   function assertNever(x: never): never {
     throw new Error(`Unexpected key: ${x}`);
   }
@@ -103,7 +105,7 @@ export function installBrowserHelpers(): void {
 
     const maxLen = Math.max(aElems.length, bElems.length);
     for (let i = 0; i < maxLen; ++i) {
-      if (aElems[i] !== bElems[i]) {
+      if (!sameHarnessElement(aElems[i], bElems[i])) {
         mismatchMsg = mismatchMsg ? mismatchMsg + '\n' : '';
         mismatchMsg += `First element mismatch at index ${i}:\n` +
           `  ${a.name}[${i}] = ${describe(aElems[i])}\n` +
@@ -115,10 +117,18 @@ export function installBrowserHelpers(): void {
     return mismatchMsg;
   }
 
+  function sameHarnessElement(a: Element | undefined, b: Element | undefined): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+
+    const aid = a.getAttribute(HARNESS_NODE_ID);
+    const bid = b.getAttribute(HARNESS_NODE_ID);
+
+    return !!aid && aid === bid;
+  }
+
   function queryId(base: QueryContext, id: string): Element | null {
-    if ('getElementById' in base && typeof base.getElementById === 'function') {
-      return base.getElementById(id);
-    }
+    if (isDocument(base) || isDocFrag(base)) return base.getElementById(id);
     return base.querySelector(`#${CSS.escape(id)}`);
   }
 
@@ -195,6 +205,7 @@ export function installBrowserHelpers(): void {
   function getEngineQuery(c: EquivalentCase, ng: Engine): EngineQuery {
     const nwdom = NW && NW.Dom;
     if (!nwdom) throw new Error('NW.Dom is not available');
+
     switch (true) {
       case 'select' in c:
         if (ng === 'native') return (query, ctx) => () => [...ctx.querySelectorAll(query)];
@@ -218,20 +229,36 @@ export function installBrowserHelpers(): void {
 
       case 'byTag' in c:
         if (ng === 'native') {
-          return (query, ctx) => () =>
-            isDocFrag(ctx)
-              ? [...ctx.querySelectorAll(query === '*' ? '*' : CSS.escape(query))]
-              : [...ctx.getElementsByTagName(query)];
+          return (query, ctx) => () => {
+            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+            return [...base.getElementsByTagName(query)];
+          };
         }
         if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byTag(query, ctx));
         break;
 
+      case 'byTagNs' in c:
+        if (ng === 'native') {
+          return (_query, ctx) => () => {
+            const { ns, local } = c.byTagNs;
+            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+            return [...base.getElementsByTagNameNS(ns, local)];
+          };
+        }
+        if (ng === 'nw') {
+          return (_query, ctx) => () => {
+            const { ns, local } = c.byTagNs;
+            return toArr(nwdom.byTagNs(ns, local, ctx));
+          };
+        }
+        break;
+
       case 'byClass' in c:
         if (ng === 'native') {
-          return (query, ctx) => () =>
-            isDocFrag(ctx)
-              ? [...ctx.querySelectorAll(`.${CSS.escape(query)}`)]
-              : [...ctx.getElementsByClassName(query)];
+          return (query, ctx) => () => {
+            const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+            return [...base.getElementsByClassName(query)];
+          };
         }
         if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byClass(query, ctx));
         break;
@@ -294,11 +321,34 @@ export function installBrowserHelpers(): void {
     throw assertNever(ng);
   }
 
+  function fragmentAsElementContext(ctx: DocumentFragment): Element {
+    tagFragmentElements(ctx);
+
+    const isHtml = isHtmlDoc(ctx.ownerDocument);
+    const doc = ctx.ownerDocument;
+    const wrapper = isHtml ? doc.createElement('div') : doc.createElementNS(null, 'wrapper');
+
+    wrapper.appendChild(doc.importNode(ctx.cloneNode(true), true));
+    return wrapper;
+  }
+
+  function isHtmlDoc(doc: Document): doc is HTMLDocument {
+    return doc.contentType?.includes('/html') === true;
+  }
+
+  let nextHarnessNodeId = 1;
+  function tagFragmentElements(ctx: DocumentFragment): void {
+    for (const el of ctx.querySelectorAll('*')) {
+      el.setAttribute(HARNESS_NODE_ID, String(nextHarnessNodeId++));
+    }
+  }
+
   function getCaseQuery(c: EquivalentCase): string {
     switch (true) {
       case 'select' in c: return c.select;
       case 'first' in c: return c.first;
       case 'byTag' in c: return c.byTag;
+      case 'byTagNs' in c: return `${c.byTagNs.ns}:${c.byTagNs.local}`;
       case 'byClass' in c: return c.byClass;
       case 'byId' in c: return c.byId;
       case 'match' in c: return c.match;
@@ -323,6 +373,11 @@ export function installBrowserHelpers(): void {
         return engine === 'native'
           ? `byTag(${c.byTag})`
           : `NW.Dom.byTag(${c.byTag})`;
+
+      case 'byTagNs' in c:
+        return engine === 'native'
+          ? `byTag(${c.byTagNs.ns}:${c.byTagNs.local})`
+          : `NW.Dom.byTagNs(${c.byTagNs.ns}:${c.byTagNs.local})`;
 
       case 'byClass' in c:
         return engine === 'native'

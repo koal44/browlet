@@ -930,10 +930,12 @@ runScenarios('w3c', 'normal', [
           anyNS.id = "any-namespace";
           noNS.id = "no-namespace";
 
-          let div = [doc.createElement("div"),
-                doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
-                doc.createElementNS("", "div"),
-                doc.createElementNS("http://www.example.org/ns", "div")];
+          let div = [
+            doc.createElement("div"),
+            doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
+            doc.createElementNS("", "div"),
+            doc.createElementNS("http://www.example.org/ns", "div")
+          ];
 
           div[0].id = "any-namespace-div1";
           div[1].id = "any-namespace-div2";
@@ -944,10 +946,12 @@ runScenarios('w3c', 'normal', [
             anyNS.appendChild(div[i])
           }
 
-          div = [doc.createElement("div"),
-                doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
-                doc.createElementNS("", "div"),
-                doc.createElementNS("http://www.example.org/ns", "div")];
+          div = [
+            doc.createElement("div"),
+            doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
+            doc.createElementNS("", "div"),
+            doc.createElementNS("http://www.example.org/ns", "div")
+          ];
 
           div[0].id = "no-namespace-div1";
           div[1].id = "no-namespace-div2";
@@ -1089,7 +1093,7 @@ runScenarios('w3c', 'normal', [
       { select: "#attr-whitespace a[rel~='bookmark'],  #attr-whitespace a[rel~='nofollow']", expect: { ids: ['attr-whitespace-a1', 'attr-whitespace-a2', 'attr-whitespace-a3', 'attr-whitespace-a5', 'attr-whitespace-a7'] } },
       { select: "#attr-whitespace a[rel~=\"bookmark\"],#attr-whitespace a[rel~='nofollow']", expect: { ids: ['attr-whitespace-a1', 'attr-whitespace-a2', 'attr-whitespace-a3', 'attr-whitespace-a5', 'attr-whitespace-a7'] } },
       { select: '#attr-whitespace a[rel~=bookmark],    #attr-whitespace a[rel~=nofollow]', expect: { ids: ['attr-whitespace-a1', 'attr-whitespace-a2', 'attr-whitespace-a3', 'attr-whitespace-a5', 'attr-whitespace-a7'] } },
-      { select: '#attr-whitespace a[rel~="book mark"]', expect: { ids: [] }, status: 'fixme' } , // fixme
+      { select: '#attr-whitespace a[rel~="book mark"]', expect: { ids: [] } },
       { select: '#attr-whitespace [title~=中文]', expect: { ids: ['attr-whitespace-p1'] } },
 
       // - hyphen-separated list     [att|=val]
@@ -1954,16 +1958,23 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'html/semantics/selectors/pseudo-classes/focus-none',
+    // status: 'only',
     markup: `
-      <input id="input1">
+      <html id=html>
+        <body id=body>
+          <input id="input1">
+        </body>
+      </html>
     `,
+    markupMode: 'html-document',
     cases: [
-      { select: ':focus', expect: { ids: [] }, status: 'fixme'},
+      { select: ':focus', expect: { ids: [] } },
     ]
   },
 
   {
     name: 'html/semantics/selectors/pseudo-classes/focus',
+    // status: 'only',
     // browsers: ['chromium', 'webkit'], // Firefox doesn't support :focus inside iframe ??
     markup: `
     <!DOCTYPE html>
@@ -1985,63 +1996,55 @@ runScenarios('w3c', 'normal', [
     </html>
     `,
     markupMode: 'html-document',
-    setupPage: async (page) => {
-      const result = await page.evaluate(async () => {
-        const iframe = document.getElementById('iframe') as HTMLIFrameElement;
-        const inputiframe = iframe.contentDocument?.getElementById('inputiframe');
-        if (!inputiframe) throw new Error('Failed to find input inside iframe');
-
-        const nativeIds = () => [...document.querySelectorAll(':focus')].map(el => el.id);
-        const nwIds = () => [...NW?.Dom?.select(':focus', document) ?? []].map(el => el.id);
-
-        (document.getElementById('input1'))?.focus();
-        const native_input1 = nativeIds();
-        const nw_input1 = nwIds();
-
-        (document.getElementById('div1'))?.focus();
-        const native_div1 = nativeIds();
-        const nw_div1 = nwIds();
-
-        (document.getElementById('div2'))?.focus();
-        const native_div2 = nativeIds();
-        const nw_div2 = nwIds();
-
-        (document.getElementById('body'))?.focus();
-        const native_body = nativeIds();
-        const nw_body = nwIds();
-
-        inputiframe.focus();
-        const native_iframe = nativeIds();
-        const nw_iframe = nwIds();
-
-        return {
-          native_input1, nw_input1,
-          native_div1, nw_div1,
-          native_div2, nw_div2,
-          native_body, nw_body,
-          native_iframe, nw_iframe,
-        };
-      });
-
-      expect(result.native_input1).toEqual(['input1']);
-      expect(result.nw_input1).toEqual(['input1']);
-
-      expect(result.native_div1).toEqual(['div1']);
-      expect(result.nw_div1).toEqual(['div1']);
-
-      expect(result.native_div2).toEqual(['div2']);
-      expect(result.nw_div2).toEqual(['div2']);
-
-      expect(result.native_body).toEqual(['body']);
-      expect(result.nw_body).toEqual(['body']);
-
-      // expect(result.native_iframe).toEqual(['inputiframe']);
-      // expect(result.nw_iframe).toEqual(['inputiframe']);
-    },
-    cases: [
-      { select: 'input', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: ['inputiframe'] } },
-      { select: 'input:focus', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: ['inputiframe'] }, status: 'fail' },
-    ]
+    steps: [
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('input1')!.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['input1'] } },
+          { select: 'input:focus', expect: { ids: ['input1'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('div1')!.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['div1'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('div2')!.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['div2'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.body.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['body'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.documentElement.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['body'] }, browsers: ['chromium', 'webkit'] },
+          { select: ':focus', expect: { ids: [] }, browsers: ['firefox'] },
+        ],
+      },
+      {
+        setupPage: async (page) => {
+          await page.evaluate(() => {
+            const iframe = document.getElementById('iframe') as HTMLIFrameElement;
+            iframe.contentDocument!.getElementById('inputiframe')!.focus();
+          });
+        },
+        cases: [
+          { select: 'input', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: ['inputiframe'] } },
+          { select: ':focus', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: ['inputiframe'] }, browsers: ['chromium', 'webkit'] },
+          { select: ':focus', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: [] }, browsers: ['firefox'] },
+          { select: 'input:focus', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: ['inputiframe'] }, browsers: ['chromium', 'webkit'] },
+          { select: 'input:focus', ref: { by: 'iframe', id: 'iframe' }, expect: { ids: [] }, browsers: ['firefox'] },
+        ],
+      },
+    ],
   },
 
   {

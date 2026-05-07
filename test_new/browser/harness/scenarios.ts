@@ -18,6 +18,7 @@ export type ByClassCase = { byClass: string; ref?: ContextRef; } & CaseBase;
 export type FirstCase =   { first: string;   ref?: ContextRef; } & CaseBase;
 export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
 export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
+export type ByTagNsCase = { byTagNs: { ns: string | null; local: string }; ref?: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -27,7 +28,7 @@ type CaseBase = {
   debug?: boolean;
 };
 
-export type TestCase = SelectCase | ByIdCase | ByTagCase | ByClassCase | MatchCase | FirstCase | ClosestCase;
+export type TestCase = SelectCase | ByIdCase | ByTagCase | ByClassCase | MatchCase | FirstCase | ClosestCase | ByTagNsCase;
 
 export type Scenario = {
   name: string;

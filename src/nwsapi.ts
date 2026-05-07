@@ -1,5 +1,8 @@
+import { get } from "node:http";
+
 function Factory(fGlobal: Glob, fExport: Function): DomApi {
   const _doc = fGlobal.document;
+  const _snap = initSnapshot(_doc);
 
   // handlers needed for the :hover pseudo-class; track state change in browsers and headless
   _doc.addEventListener('mouseover', (e) => { _snap.hoverTarget = isElement(e.target) ? e.target : null; }, true);
@@ -14,11 +17,22 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
   _doc.addEventListener('pointerup', () => { _snap.activeTarget = null; }, true);
   _doc.addEventListener('pointercancel', () => { _snap.activeTarget = null; }, true);
 
+  // handlers needed for the :focus pseudo-class; activeElement can fall back to body/html
+  // even when no element actually matches :focus.
+  _doc.addEventListener('focusin', (e) => {
+    const target = e.target;
+    _snap.focusTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
+  }, true);
+
+  _doc.addEventListener('focusout', (e) => {
+    const target = e.target;
+    const el = isElement(target) ? target : isText(target) ? target.parentElement : null;
+    if (_snap.focusTarget === el) _snap.focusTarget = null;
+  }, true);
+
   // QSA placeholders to native references
   const _qsaStore: Partial<Record<QsaKey, any>> = {};
   const _qsaHooks: { type: string, listener: EventListenerOrEventListenerObject }[] = [];
-
-  const _snap = initSnapshot(_doc);
 
   // public exported methods/objects
   const Dom: DomApi = {
@@ -37,6 +51,11 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
     byTag(tag, ctx) {
       ctx ??= _snap.doc;
       return _snap.config.NODE_LIST ? toNodeList(byTagRaw(tag, ctx, _snap), _snap.doc) : byTagRaw(tag, ctx, _snap);
+    },
+
+    byTagNs(ns, local, ctx) {
+      ctx ??= _snap.doc;
+      return _snap.config.NODE_LIST ? toNodeList(byTagNsRaw(ns, local, ctx, _snap), _snap.doc) : byTagNsRaw(ns, local, ctx, _snap);
     },
 
     byClass(cls, ctx) {
@@ -313,6 +332,7 @@ export function initSnapshot(doc: Document) {
 
     hoverTarget: null as EventTarget | null,
     activeTarget: null as EventTarget | null,
+    focusTarget: null as EventTarget | null,
 
     // cached
     matchLambdas: {} as Partial<Record<string, MatchLambdaEntry>>,
@@ -326,6 +346,7 @@ export function initSnapshot(doc: Document) {
     select: (() => nr('select')) as SelectFn,
     ancestor: (() => nr('ancestor')) as AncestorFn,
 
+    isType: isType,
     nthOfType: nthOfType,
     nthElement: nthElement,
     matchHas: (steps: [SelectorCombinator, string][], anchor: Element) => matchHasFrom(steps, 0, anchor, snap),
@@ -350,7 +371,7 @@ export function initSnapshot(doc: Document) {
     isSeeking: isSeeking,
     isMuted: isMuted,
 
-    isFocused: isFocused,
+    isFocused: (node: Element) => isFocused(node, snap),
     hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
     getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
   };
@@ -527,20 +548,74 @@ function byId(id: string, context: QueryContext, snap: Snapshot): Element | null
 function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
 
+  if (!tag) return [];
+
   if (isDocument(context) || isElement(context)) {
     return Array.from(context.getElementsByTagName(tag));
   }
 
-  if (snap.isHtml) tag = tag.toLowerCase();
+  const lowerTag = tag.toLowerCase();
+  const nodes: Element[] = [];
+  let el = context.firstElementChild;
+
+  while (el) {
+    const isHtml = isHtmlElement(el);
+    const name = isHtml ? el.localName : el.tagName;
+    const wanted = isHtml ? lowerTag : tag;
+
+    if (tag === '*' || name === wanted) nodes.push(el);
+
+    concatList(nodes, el.getElementsByTagName(tag));
+    el = el.nextElementSibling;
+  }
+
+  return nodes;
+}
+
+// context agnostic getElementsByTagNameNS
+function byTagNsRaw(ns: string | null, local: string, context: QueryContext, snap: Snapshot): Element[] {
+  updateSnapshot(snap, context);
+
+  if (!local) return [];
+
+  if (isDocument(context) || isElement(context)) {
+    return Array.from(context.getElementsByTagNameNS(ns, local));
+  }
 
   const nodes: Element[] = [];
   let el = context.firstElementChild;
 
   while (el) {
-    if (tag === '*' || el.localName === tag) nodes.push(el);
-    concatList(nodes, el.getElementsByTagName(tag));
+    const nsMatch = ns === '*' || el.namespaceURI === ns;
+    const localMatch = local === '*' || el.localName === local;
+
+    if (nsMatch && localMatch) nodes.push(el);
+
+    concatList(nodes, el.getElementsByTagNameNS(ns, local));
     el = el.nextElementSibling;
   }
+
+  return nodes;
+}
+
+// Selector type seeds cannot use byTagRaw because qualified-name lookup can miss
+// namespaced local-name matches; byTagNsRaw is exact-case and misses HTML folding.
+function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
+  updateSnapshot(snap, context);
+
+  if (!tag) return [];
+  if (tag === '*') return byTagRaw('*', context, snap);
+
+  const nodes: Element[] = [];
+  const lowerTag = tag.toLowerCase();
+
+  walkElements(context, e => {
+    if (snap.isHtml && isHtmlElement(e)) {
+      if (e.localName === lowerTag) nodes.push(e);
+    } else if (e.localName === tag) {
+      nodes.push(e);
+    }
+  });
 
   return nodes;
 }
@@ -568,6 +643,14 @@ function byClassRaw(cls: string, context: QueryContext, snap: Snapshot): Element
 
 function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${value}`);
+}
+
+function isType(e: Element, name: string): boolean {
+  // console.error('isType', { e, name });
+  // console.error('isHtmlElement', isHtmlElement(e));
+  return isHtmlElement(e)
+    ? e.localName === name.toLowerCase()
+    : e.localName === name;
 }
 
 function hasAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): boolean {
@@ -744,13 +827,17 @@ const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
   return dir ? l - j : nthOfTypeState.idx;
 };
 
-// return node if node is focusable
-// or false if node isn't focusable
-function isFocused(node: HTMLElement): HTMLElement | false {
+function isFocused(node: Element, snap: Snapshot): boolean {
   const doc = node.ownerDocument;
+
   if (!doc || !doc.hasFocus()) return false;
-  if (node.localName === 'iframe' && 'contentDocument' in node) return false;
-  return node === doc.activeElement ? node : false;
+  if (isIFrame(node)) return false;
+
+  if (node === doc.body || node === doc.documentElement) {
+    return node === snap.focusTarget;
+  }
+
+  return node === doc.activeElement;
 }
 
 function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot): boolean {
@@ -1816,10 +1903,7 @@ function compileSelector(
         if (!match) throw new Error('Invalid tag selector: ' + selector);
 
         const tagName = cssIdentUnescape(match[1]);
-        const localName = snap.isHtml ? tagName.toLowerCase() : tagName;
-        const localNameLit = JSON.stringify(localName);
-
-        source = `if((e.localName===${localNameLit})){${source}}`;
+        source = `if(s.isType(e,${JSON.stringify(tagName)})){${source}}`;
         break;
       }
 
@@ -1880,8 +1964,8 @@ function compileSelector(
           emit(`Missing attribute value in selector: ${selector}`, snap.config);
           return out;
         } else if (attrOp === '~=' && /[\t\n\f\r ]/.test(attrVal)) {
-          emit(`Invalid attribute selector: value for ~= operator cannot contain whitespace in selector: ${selector}`, snap.config);
-          return out;
+          // [attr~="a b"] is syntactically valid but can never match a single whitespace-separated token.
+          attrExpr = 'false';
         } else {
           const baseTest = snap.operators[attrOp];
           if (!baseTest) {
@@ -2595,14 +2679,8 @@ function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback
         break;
       }
       case '*': {
-        if (!snap.isHtml && query !== '*') {
-          // XML type selectors are not equivalent to DOM tag-name lookup.
-          query = '*';
-          compileQuery = sel;
-        } else {
-          query = cssIdentUnescape(query);
-        }
-        getCandidates = () => byTagRaw(query, ctx, snap);
+        query = cssIdentUnescape(query);
+        getCandidates = () => seedsByTag(query, ctx, snap);
         break;
       }
       default: assertNever(key);

@@ -117,6 +117,7 @@ runScenarios('slick', 'normal', [
   ...browserBugTemplates.map(([name, markup]) => (
   {
     name: `browser-bugs/${name}`,
+    // status: 'only',
     markup,
     markupMode: 'html-document',
     setupPage: async (page) => {
@@ -338,7 +339,8 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          { first: 'div #queryselectorall', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, status: 'fixme' }, // probably legacy behavior
+          // Scoped QSA filters returned descendants, but ancestor selectors may still match outside the context.
+          { first: 'div #queryselectorall', ref: { by: 'id', id: 'host' }, expect: { ids: ['queryselectorall'] } },
         ],
       },
       {
@@ -376,7 +378,8 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          { select: 'div #queryselectorall', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, status: 'fixme' }, // probably legacy behavior
+          // Scoped QSA filters returned descendants, but ancestor selectors may still match outside the context.
+          { select: 'div #queryselectorall', ref: { by: 'id', id: 'host' }, expect: { ids: ['queryselectorall'] } },
         ],
       },
       {
@@ -1645,7 +1648,7 @@ runScenarios('slick', 'normal', [
 
   ...allTemplates.map(([name, markup]) => ({
     name: `selectExhaustive/${name}`,
-    status: name === 'html-quirks' ? 'fixme' : 'normal',
+    // status: 'only',
     markup,
     markupMode: name === 'xhtml' || name === 'xml' || name === 'svg' ? 'xml-document' : 'html-document',
     setupPage: async (page) => {
@@ -1802,6 +1805,7 @@ runScenarios('slick', 'normal', [
 
   {
     name: 'yui',
+    // status: 'only',
     markupMode: 'html-document',
     markup: `
       <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -2062,7 +2066,8 @@ runScenarios('slick', 'normal', [
 
       // testScoped
       { select: '#demo > p' },
-      { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { equivalentCase: { select: '#demo > p' } }, status: 'fixme' },
+      // { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { equivalentCase: { select: '#demo > p' } }, status: 'fixme' },
+      { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { throws: true }, status: 'fixme' },
 
       // // Old rooted bare-combinator queries like `+ div` / `~ p` do not map to modern element-scoped selectors
       // { select: '+ div', ref: { by: 'id', id: 'demo' }, expect: { ids: ['demo2'] } },

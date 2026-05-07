@@ -44,20 +44,43 @@ runScenarios('xml', 'normal', [
 
   {
     name: 'jsdom/xml-import-test',
+    // status: 'only',
+    // browsers: ['chromium'],
+    // engines: ['native'],
     markup: `<div id="host"></div>`,
     setupPage: async (page) => { await page.evaluate(() => {
       const parser = new DOMParser();
       const xml = `<?xml version="1.0"?>
         <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
           <dc:title></dc:title>
+          <dc:div></dc:div>
         </cp:coreProperties>`;
       const dom = parser.parseFromString(xml, 'text/xml');
       document.getElementById('host')!.appendChild(document.importNode(dom.documentElement, true));
     }); },
     cases: [
-      { select: 'coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, status: 'fixme' },
-      { select: '*|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, status: 'fixme' },
+      { select: 'coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, debug: false },
+      { select: '*|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, debug: false },
       { select: '|coreProperties', ref: { by: 'id', id: 'host' }, expect: { count: 0 } },
+      { select: 'title', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, debug: false },
+      { select: '*|div', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, debug: false },
+    ],
+  },
+
+  {
+    name: 'jsdom/xml-import-test 2',
+    // status: 'only',
+    browsers: ['chromium'],
+    // engines: ['native'],
+    markup: `<?xml version="1.0"?>
+      <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:title></dc:title>
+      </cp:coreProperties>`,
+    markupMode: 'xml-document',
+    cases: [
+      { select: 'coreProperties', expect: { count: 1 } },
+      { select: '*|coreProperties', expect: { count: 1 } },
+      { select: '|coreProperties', expect: { count: 0 } },
     ],
   },
 
@@ -79,6 +102,8 @@ runScenarios('xml', 'normal', [
 
   {
     name: 'xml-import-case-insensitivity',
+    // status: 'only',
+    // engines: ['native'],
     markup: `<div id="host"></div>`,
     setupPage: async (page) => {
       await page.evaluate(() => {
@@ -91,9 +116,14 @@ runScenarios('xml', 'normal', [
     },
     cases: [
       { select: 'Foo', ref: { by: 'id', id: 'host' }, expect: { count: 1 } },
-      { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, status: 'fixme' },
+
+      { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw']  },
+
       { select: 'bar', ref: { by: 'id', id: 'host' }, expect: { count: 1 } },
-      { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, status: 'fixme' },
+
+      { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw']  },
     ],
   },
 

@@ -67,6 +67,7 @@ runScenarios('various', 'normal', [
   {
     name: 'byClass quirks mode matches class names case-insensitively',
     // status: 'only',
+    // engines: ['native'],
     markupMode: 'html-document',
     markup: `
       <html>
@@ -79,6 +80,9 @@ runScenarios('various', 'normal', [
       </html>
     `,
     cases: [
+      { byClass: 'foo', expect: { ids: ['upper', 'lower'] } },
+      { byClass: 'FOO', expect: { ids: ['upper', 'lower'] } },
+
       // { select: '.foo', ref: { by: 'id', id: 'root', home: 'fragment' }, expect: { ids: ['upper', 'lower'] }, debug: true },
       { byClass: 'foo', ref: { by: 'id', id: 'root', home: 'fragment' }, expect: { ids: ['upper', 'lower'] } },
       { byClass: 'FOO', ref: { by: 'id', id: 'root', home: 'fragment' }, expect: { ids: ['upper', 'lower'] } },
@@ -135,6 +139,7 @@ runScenarios('various', 'normal', [
   {
     name: 'byTag fragment is case-insensitive in HTML mode',
     // status: 'only',
+    browsers: ['chromium'],
     markupMode: 'html-document',
     markup: `
       <!doctype html>
@@ -147,6 +152,7 @@ runScenarios('various', 'normal', [
       </html>
     `,
     cases: [
+      { byTag: 'Foo', expect: { ids: ['upper', 'lower'] } },
       { byTag: 'Foo', ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['upper', 'lower'] } },
       { byTag: 'foo', ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['upper', 'lower'] } },
 
@@ -416,7 +422,7 @@ runScenarios('various', 'normal', [
 
       // Escaped colon is an identifier escape, not namespace-prefix syntax.
       // In XML, <test:item> has localName "item", not localName "test:item".
-      { byTag: 'test:item', ref: { by: 'document' }, expect: { ids: ['test-item-1', 'test-item-2'] } },
+      { byTag: 'test:item', ref: { by: 'document' }, expect: { ids: ['test-item-1', 'test-item-2'] }, debug: false },
       { byTag: 'test\\:item', ref: { by: 'document' }, expect: { ids: [] } },
       { select: 'test\\:item', ref: { by: 'document' }, expect: { ids: [] }, debug: false },
       { select: ':scope > test\\:item', ref: { by: 'document' }, expect: { ids: [] } },
@@ -4457,5 +4463,218 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'focus tracks body html and input explicitly',
+    // status: 'only',
+    // engines: ['native'],
+    markupMode: 'html-document',
+    markup: `<!doctype html><html id=html tabindex="-1"><body id=body tabindex="-1"><input id=input1></body></html>`,
+    steps: [
+      {
+        cases: [
+          { select: ':focus', expect: { ids: [] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.body.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['body'] } },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.documentElement.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['html'] }, browsers: ['chromium', 'webkit'] },
+          { select: ':focus', expect: { ids: [] }, browsers: ['firefox'] },
+        ],
+      },
+      {
+        setupPage: async (page) => { await page.evaluate(() => { document.getElementById('input1')!.focus(); }); },
+        cases: [
+          { select: ':focus', expect: { ids: ['input1'] } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'tag lookup case behavior across html xml and imported xml',
+    // status: 'only',
+    // engines: ['native'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id=html>
+        <head id=head></head>
+        <body id=body>
+          <div id=myroot>
+            <Foo id=upper-html></Foo>
+            <foo id=lower-html></foo>
+          </div>
+          <div id=import-host></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const xml = `<?xml version="1.0"?>
+          <root xmlns:dc="http://purl.org/dc/elements/1.1/" id="xml-root">
+            <Foo id="upper-null"></Foo>
+            <foo id="lower-null"></foo>
+            <dc:Foo id="upper-ns"></dc:Foo>
+            <dc:foo id="lower-ns"></dc:foo>
+          </root>`;
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        const xmlRoot = xmlDoc.documentElement;
+        const importedRoot = document.importNode(xmlRoot, true);
+        document.getElementById('import-host')!.appendChild(importedRoot);
+      });
+    },
+    cases: [
+      // byTag
+      { byTag: '*', expect: { ids: ['html', 'head', 'body', 'myroot', 'upper-html', 'lower-html', 'import-host', 'xml-root', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] } },
+      { byTag: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null'] } },
+      { byTag: 'foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null'] } },
+      { byTag: ':Foo', expect: { ids: [] } },
+      { byTag: ':foo', expect: { ids: [] } },
+      { byTag: '*:Foo', expect: { ids: [] } },
+      { byTag: '*:foo', expect: { ids: [] } },
+      { byTag: 'dc:Foo', expect: { ids: ['upper-ns'] } },
+      { byTag: 'dc:foo', expect: { ids: ['lower-ns'] } },
+
+      // byTagNs
+      { byTagNs: { ns: '*', local: '*' }, expect: { ids: ['html', 'head', 'body', 'myroot', 'upper-html', 'lower-html', 'import-host', 'xml-root', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] } },
+      { byTagNs: { ns: '*', local: 'Foo' }, expect: { ids: ['upper-null', 'upper-ns'] } },
+      { byTagNs: { ns: '*', local: 'foo' }, expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] } },
+      { byTagNs: { ns: null, local: 'Foo' }, expect: { ids: ['upper-null'] } },
+      { byTagNs: { ns: null, local: 'foo' }, expect: { ids: ['lower-null'] } },
+      { byTagNs: { ns: 'http://www.w3.org/1999/xhtml', local: 'Foo' }, expect: { ids: [] } },
+      { byTagNs: { ns: 'http://www.w3.org/1999/xhtml', local: 'foo' }, expect: { ids: ['upper-html', 'lower-html'] } },
+      { byTagNs: { ns: 'http://purl.org/dc/elements/1.1/', local: 'Foo' }, expect: { ids: ['upper-ns'] } },
+      { byTagNs: { ns: 'http://purl.org/dc/elements/1.1/', local: 'foo' }, expect: { ids: ['lower-ns'] } },
+      { byTagNs: { ns: '*', local: '' }, expect: { ids: [] } },
+      { byTagNs: { ns: null, local: '' }, expect: { ids: [] } },
+
+      // select
+      { select: '*', expect: { ids: ['html', 'head', 'body', 'myroot', 'upper-html', 'lower-html', 'import-host', 'xml-root', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] } },
+
+      { select: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: 'foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: '|Foo', expect: { ids: ['upper-null', 'lower-null'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '|Foo', expect: { ids: ['upper-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: '|foo', expect: { ids: ['upper-null', 'lower-null'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '|foo', expect: { ids: ['lower-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: '*|Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '*|Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: '*|foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '*|foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+      { select: 'dc|Foo', expect: { throws: true } },
+      { select: 'dc|foo', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'fragment tag helpers preserve qualified and namespace lookup behavior',
+    // status: 'only',
+    // engines: ['native'],
+    // engines: ['nw'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <div id=myroot>
+            <Foo id=upper-html></Foo>
+            <foo id=lower-html></foo>
+          </div>
+          <template id=tmpl>
+            <root xmlns:dc="http://purl.org/dc/elements/1.1/" id="xml-root">
+              <Foo id="upper-null"></Foo>
+              <foo id="lower-null"></foo>
+              <dc:Foo id="upper-ns"></dc:Foo>
+              <dc:foo id="lower-ns"></dc:foo>
+            </root>
+          </template>
+        </body>
+      </html>
+    `,
+    cases: [
+      // Fragment-rooted HTML clone.
+      { byTag: '*', ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['myroot', 'upper-html', 'lower-html'] } },
+      { byTag: 'Foo', ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['upper-html', 'lower-html'] } },
+      { byTag: 'foo', ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['upper-html', 'lower-html'] } },
+
+      { byTagNs: { ns: '*', local: '*' }, ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['myroot', 'upper-html', 'lower-html'] } },
+      { byTagNs: { ns: '*', local: 'Foo' }, ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: [] } },
+      { byTagNs: { ns: '*', local: 'foo' }, ref: { by: 'id', id: 'myroot', home: 'fragment' }, expect: { ids: ['upper-html', 'lower-html'] } },
+
+      // Template content gives us a real DocumentFragment with XML-ish descendants.
+      { byTag: '*', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['xml-root', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] } },
+      { byTag: 'Foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-null', 'lower-null'] } },
+      { byTag: 'foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-null', 'lower-null'] } },
+      { byTag: 'dc:Foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-ns', 'lower-ns'] } },
+      { byTag: 'dc:foo', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-ns', 'lower-ns'] } },
+
+      { byTagNs: { ns: '*', local: 'Foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: [] } },
+      { byTagNs: { ns: '*', local: 'foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-null', 'lower-null'] } },
+      { byTagNs: { ns: null, local: 'Foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: [] } },
+      { byTagNs: { ns: null, local: 'foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: [] } },
+      { byTagNs: { ns: 'http://purl.org/dc/elements/1.1/', local: 'Foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: [] } },
+      { byTagNs: { ns: 'http://purl.org/dc/elements/1.1/', local: 'foo' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'type predicate runs after non-type seed in mixed html xml tree',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id=html>
+        <body id=body>
+          <div id=myroot>
+            <Foo id=upper-html class=hit></Foo>
+            <foo id=lower-html class=hit></foo>
+          </div>
+          <div id=import-host></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const xml = `<?xml version="1.0"?>
+          <root xmlns:dc="http://purl.org/dc/elements/1.1/" id="xml-root">
+            <Foo id="upper-null" class="hit"></Foo>
+            <foo id="lower-null" class="hit"></foo>
+            <dc:Foo id="upper-ns" class="hit"></dc:Foo>
+            <dc:foo id="lower-ns" class="hit"></dc:foo>
+          </root>`;
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        document.getElementById('import-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+      });
+    },
+    cases: [
+      // Class seed should collect all .hit nodes; type predicate must filter.
+      { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, engines: ['nw'] },
+      { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, engines: ['nw'] },
+
+      // Native split documented separately.
+      { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native'] },
+
+      { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native'] },
+    ],
+  },
 
 ]);

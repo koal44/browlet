@@ -105,6 +105,7 @@ type RawMatchFn = (selectors: string, element: Element, callback: QueryCallback 
 type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot) => Element | null;
 
 type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
+type ByTagNsFn = (ns: string | null, local: string, context?: QueryContext) => ElementList;
 type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
 type ByIdFn = (id: string, context?: QueryContext) => Element | null;
 type SelectFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => ElementList;
@@ -138,6 +139,7 @@ type DomApi = {
 
   byId: ByIdFn;
   byTag: ByTagFn;
+  byTagNs: ByTagNsFn;
   byClass: ByClassFn;
 
   first: FirstFn;
