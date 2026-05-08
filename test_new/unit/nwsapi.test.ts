@@ -101,41 +101,40 @@ function cssIdentEscape(ident: string): string {
 }
 
 const rex = buildRex(DEFAULT_EXTENSIONS);
-const config = { ...DEFAULT_CONFIG, VERBOSITY: false, LOGERRORS: false };
 
-function expectParse(input: string, expected: string[], cfg = config): void {
-  const actual = parse(input, rex);
+function expectParse(input: string, expected: string[] | boolean = true, forgiving = false): void {
+  let actual: string[] | undefined;
+  let thrown: unknown;
 
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  try {
+    actual = parse(input, rex, forgiving);
+  } catch (e) {
+    thrown = e;
+  }
+
+  const pass = expected === true
+    ? !thrown
+    : expected === false
+      ? !!thrown
+      : !thrown && JSON.stringify(actual) === JSON.stringify(expected);
+
+  if (!pass) {
     throw new AssertionError({
       message: `Unexpected parse result for ${input}`,
-      actual,
-      expected,
-      operator: 'deepStrictEqual',
+      actual: thrown ? String(thrown) : actual,
+      expected: expected === true ? 'parse success' : expected === false ? 'throw' : expected,
+      operator: expected === false ? 'throws' : 'deepStrictEqual',
       stackStartFn: expectParse,
     });
   }
 }
 
 function expectParseRejects(input: string): void {
-  let actual: string[] | undefined;
-  let thrown = false;
+  expectParse(input, false);
+}
 
-  try { actual = parse(input, rex); }
-  catch { thrown = true; }
-
-  const shouldThrow = true;
-  const pass = shouldThrow ? thrown : !thrown && Array.isArray(actual) && actual.length === 0;
-
-  if (!pass) {
-    throw new AssertionError({
-      message: `Expected parse rejection for ${input}`,
-      actual: thrown ? 'threw' : actual,
-      expected: shouldThrow ? 'throw' : [],
-      operator: shouldThrow ? 'throws' : 'deepStrictEqual',
-      stackStartFn: expectParseRejects,
-    });
-  }
+function expectForgivingParse(input: string, expected: string[] | boolean = true): void {
+  expectParse(input, expected, true);
 }
 
 describe('Rex basic recognizers', () => {

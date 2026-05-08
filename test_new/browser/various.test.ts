@@ -4281,9 +4281,23 @@ runScenarios('various', 'normal', [
   {
     name: 'forgiving is treats unterminated attribute arm as invalid through list end',
     status: 'fixme',
-    markup: `<div id="a" class="a"></div><div id="b" class="b"></div>`,
+    // engines: ['native'],
+    markup: `<div id="a" class="a"></div><div id="b" class="b"></div><div id="c" class="c"></div>`,
     cases: [
-      { select: ':is(.a, [broken, .b)', expect: { ids: ['a',] } },
+      { select: ':is(.a, [broken, .b)', expect: { ids: ['a'] } },
+      { select: ':is(.a, [broken, .b, .c)', expect: { ids: ['a'] } },
+      { select: ':is(.a, [broken], .b)', expect: { ids: ['a', 'b'] } },
+      { select: ':is(.a, [broken, .b], .c)', expect: { ids: ['a', 'c'] } },
+      { select: ':is([broken, .b)', expect: { ids: [] } },
+      { select: ':is(.a, [broken, .b), .b', expect: { ids: ['a'] } },
+      { select: ':is(.a', expect: { ids: ['a'] } },
+
+      { select: ':is([broken.a)', expect: { ids: [] } },
+      { select: ':is([broken.a', expect: { ids: [] } },
+      { select: ':is(.a [broken)', expect: { ids: [] } },
+      { select: ':is(.a, .b [broken)', expect: { ids: ['a'] } },
+      { select: ':is(.a, .b', expect: { ids: ['a', 'b'] } },
+      { select: ':is(.a, [broken, .b], .c)', expect: { ids: ['a', 'c'] } },
     ],
   },
 

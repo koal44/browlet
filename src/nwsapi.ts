@@ -1637,6 +1637,7 @@ export function buildRexStrings(ext: NwsExtensions) {
   const classSelector = `\\.${identifier}` + afterSubSelector;
   const idSelector = `#${identifier}` + afterSubSelector;
   const pseudoSelector = `:${pseudoName}`;
+  // const brokenAttrInPseudo = `${LB}[^${RB}${RP}]*(?=${RP}|$)`;
 
   // const pseudoSelector = `:${pseudoName}(?:${pseudoBody}*)?`;
   // const simpleSelector = `(?:${classSelector}|${idSelector}|${attributes}|${pseudoSelector})`;
@@ -1653,7 +1654,8 @@ export function buildRexStrings(ext: NwsExtensions) {
   //   :is(:scope > .item)
   // TODO: replace this with parser-side validation for functional pseudo bodies.
   const pseudoBody =
-    `(?:${LP}` +
+    `(?:` +
+    `${LP}` +
       `(?:${wsp}?)|` +
       `(?:${typeSelector})|` +
       `(?:${nthFormula})|` +
@@ -1662,7 +1664,8 @@ export function buildRexStrings(ext: NwsExtensions) {
       `(?:${attributeSelector})|` +
       `(?:${wsp}?${combinator})|` +
       `(?:,${wsp}?)|` +
-    `${RP})`;
+    `(?:${RP}|$)` +
+    `)`;
 
   // Cheated because regex can't do recursion, but here's the full version after the fact.
   const pseudoSelectorFull = `:{1,2}${pseudoName}${pseudoBody}*` + afterSubSelector;
