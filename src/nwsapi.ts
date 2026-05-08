@@ -1,5 +1,3 @@
-import { get } from "node:http";
-
 function Factory(fGlobal: Glob, fExport: Function): DomApi {
   const _doc = fGlobal.document;
   const _snap = initSnapshot(_doc);
@@ -44,41 +42,39 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
     // exported engine methods
     byId(id, ctx) {
-      ctx ??= _snap.doc;
-      return byId(id, ctx, _snap);
+      return _snap.byId(id, ctx);
     },
 
     byTag(tag, ctx) {
-      ctx ??= _snap.doc;
-      return _snap.config.NODE_LIST ? toNodeList(byTagRaw(tag, ctx, _snap), _snap.doc) : byTagRaw(tag, ctx, _snap);
+      const result = _snap.byTag(tag, ctx);
+      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
     byTagNs(ns, local, ctx) {
-      ctx ??= _snap.doc;
-      return _snap.config.NODE_LIST ? toNodeList(byTagNsRaw(ns, local, ctx, _snap), _snap.doc) : byTagNsRaw(ns, local, ctx, _snap);
+      const result = _snap.byTagNs(ns, local, ctx);
+      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
     byClass(cls, ctx) {
-      ctx ??= _snap.doc;
-      return _snap.config.NODE_LIST ? toNodeList(byClassRaw(cls, ctx, _snap), _snap.doc) : byClassRaw(cls, ctx, _snap);
+      const result = _snap.byClass(cls, ctx);
+      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
     first(sel, ctx, cb) {
-      ctx ??= _snap.doc;
-      return firstRaw(sel, ctx, cb ?? null, _snap);
+      return _snap.first(sel, ctx, cb ?? null, true);
     },
 
     match(sel, ctx, cb) {
-      return matchRaw(sel, ctx, cb ?? null, _snap);
+      return _snap.match(sel, ctx, cb ?? null, true);
     },
 
     select(sel, ctx, cb) {
-      ctx ??= _snap.doc;
-      return _snap.config.NODE_LIST ? toNodeList(selectRaw(sel, ctx, cb ?? null, _snap), _snap.doc) : selectRaw(sel, ctx, cb ?? null, _snap);
+      const result = _snap.select(sel, ctx, cb ?? null, true);
+      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
     closest(sel, ctx, cb) {
-      return ancestorRaw(sel, ctx, cb ?? null, _snap);
+      return _snap.ancestor(sel, ctx, cb ?? null, true);
     },
 
     // configure the engine to use special handling
@@ -272,6 +268,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
           namespace: _snap.namespace,
           doc: docDesc,
           from: _snap.from === _snap.doc ? '(same as doc)' : fromDesc,
+          scopeEl: _snap.scopeEl ? describeElement(_snap.scopeEl) : null,
           root: { summary: describeElement(_snap.root) },
         },
         debugSelect: _snap.debugSelect,
@@ -281,7 +278,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
   };
 
-  updateSnapshot(_snap, _doc, true)
+  updateSnapshot(_snap, _doc);
 
   return Dom;
 }
@@ -302,6 +299,7 @@ export function initSnapshot(doc: Document) {
     doc: doc,
     from: doc as QueryContext,
     root: doc.documentElement as Element,
+    scopeEl: null as Element | null,
     isHtml: isHtmlDoc(doc),
     isQuirksMode: isQuirksMode(doc),
     namespace: getNamespace(doc) as string | null,
@@ -338,11 +336,28 @@ export function initSnapshot(doc: Document) {
     matchResolvers: {} as Partial<Record<string, MatchResolver>>,
     selectResolvers: {} as Partial<Record<string, SelectResolver>>,
 
-    byTag: (() => nr('byTag')) as ByTagFn,
-    first: (() => nr('first')) as FirstFn,
-    match: (() => nr('match')) as MatchFn,
-    select: (() => nr('select')) as SelectFn,
-    ancestor: (() => nr('ancestor')) as AncestorFn,
+    byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
+    byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? snap.doc, snap),
+    byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNsRaw(ns, local, context ?? snap.doc, snap),
+    byClass: (cls: string, context?: QueryContext) => byClassRaw(cls, context ?? snap.doc, snap),
+    first: (sel: string, context?: QueryContext, cb?: QueryCallback | null, updateScope = false) => {
+      context ??= snap.doc;
+      updateSnapshot(snap, context, updateScope);
+      return firstRaw(sel, context, cb ?? null, snap);
+    },
+    match: (sel: string, context: Element, cb?: QueryCallback | null, updateScope = false) => {
+      updateSnapshot(snap, context, updateScope);
+      return matchRaw(sel, context, cb ?? null, snap);
+    },
+    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, updateScope = false) => {
+      context ??= snap.doc;
+      updateSnapshot(snap, context, updateScope);
+      return selectRaw(sel, context, cb ?? null, snap);
+    },
+    ancestor: (sel: string, context: Element, cb?: QueryCallback | null, updateScope = false) => {
+      updateSnapshot(snap, context, updateScope);
+      return ancestorRaw(sel, context, cb ?? null, snap);
+    },
 
     isType: isType,
     nthOfType: nthOfType,
@@ -370,22 +385,10 @@ export function initSnapshot(doc: Document) {
     isMuted: isMuted,
     matchAttribute: (e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null) => matchAttribute(e, ns, local, pattern, flag, snap),
     attrValueCaseFlag: (e: Element, localName: string, attrFlag: string | undefined) => attrValueCaseFlag(e, localName, attrFlag, snap),
-
     isFocused: (node: Element) => isFocused(node, snap),
-    // hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
-    // getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
   };
 
-  function nr(name: string): never { throw new Error(`Snapshot member used before initialization: ${name}`); };
-
   snap.re = buildRex(snap.ext);
-  snap.byTag = (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? snap.doc, snap);
-  snap.first = (sel: string, context?: QueryContext, cb?: QueryCallback | null) => firstRaw(sel, context ?? snap.doc, cb ?? null, snap);
-  snap.match = (sel: string, context: Element, cb?: QueryCallback | null) => matchRaw(sel, context, cb ?? null, snap);
-  snap.select = (sel: string, context?: QueryContext, cb?: QueryCallback | null) => selectRaw(sel, context ?? snap.doc, cb ?? null, snap);
-  snap.ancestor = (sel: string, context: Element, cb?: QueryCallback | null) => ancestorRaw(sel, context, cb ?? null, snap);
-  // snap.hasAttribute = (element: Element, ns: string | null, local: string) => hasAttribute(element, ns, local, snap);
-  // snap.getAttribute = (element: Element, ns: string | null, local: string) => getAttribute(element, ns, local, snap);
 
   return snap;
 }
@@ -452,10 +455,10 @@ function getNamespace(doc: Document): string | null {
   return doc.documentElement?.namespaceURI ?? null;
 }
 
-function updateSnapshot(snap: Snapshot, ctx: QueryContext, force = false): Snapshot {
+function updateSnapshot(snap: Snapshot, ctx: QueryContext, updateScope = false): Snapshot {
   const doc = ctx.ownerDocument ?? ctx;
 
-  if (force || snap.doc !== doc) {
+  if (snap.doc !== doc) {
     snap.doc = doc;
     snap.root = doc.documentElement;
     snap.isHtml = isHtmlDoc(doc);
@@ -463,7 +466,13 @@ function updateSnapshot(snap: Snapshot, ctx: QueryContext, force = false): Snaps
     snap.namespace = getNamespace(doc);
   }
 
+  // Debug breadcrumb only
   snap.from = ctx;
+
+  if (updateScope) {
+    snap.scopeEl = isDocument(ctx) ? ctx.documentElement : isElement(ctx) ? ctx : null;
+  }
+
   return snap;
 }
 
@@ -2124,6 +2133,10 @@ function compileSelector(
         if ((match = selector.match(snap.re.Patterns.structural))) {
           match[1] = match[1].toLowerCase();
           switch (match[1]) {
+            case 'scope':
+              // there can only be one :root element, so exit the loop once found
+              source = `if((e===s.scopeEl)){${source}}`;
+              break;
             // case 'scope' is bypassed by `prepareScope` method, which replaces :scope with a unique selector fingerpint
             case 'root':
               // there can only be one :root element, so exit the loop once found
@@ -2620,44 +2633,32 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
     return false;
   }
 
-  const scoped = prepareScope(selectors, element, snap.re);
-  try {
-    if (snap.isDebug) {
-      snap.debugMatch = {
-        callback: cb,
-        element: describeContext(element),
-        selector: selectors,
-        scopedSelector: scoped.selectors,
-      };
-    }
+  if (snap.isDebug) {
+    snap.debugMatch = {
+      callback: cb,
+      element: describeContext(element),
+      selector: selectors,
+    };
+  }
 
-    let resolver = snap.matchResolvers[scoped.selectors];
-    if (!resolver || resolver.callback !== cb) {
-      const parsed = parse(scoped.selectors, snap.re);
-
-      if (snap.isDebug && snap.debugMatch) {
-        snap.debugMatch.parsed = parsed;
-      }
-
-      resolver = snap.matchResolvers[scoped.selectors] = buildMatchResolver(parsed, cb, snap);
-    }
-    const result = resolver.lambdas.some(f => f(element, cb, null, false));
+  let resolver = snap.matchResolvers[selectors];
+  if (!resolver || resolver.callback !== cb) {
+    const parsed = parse(selectors, snap.re);
 
     if (snap.isDebug && snap.debugMatch) {
-      snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
-      snap.debugMatch.result = result;
+      snap.debugMatch.parsed = parsed;
     }
 
-    return result;
-  } catch (e) {
-    if (snap.isDebug) {
-      if (!snap.debugMatch) snap.debugMatch = {};
-      snap.debugMatch.error = e instanceof Error ? e.message : String(e);
-    }
-    throw e;
-  } finally {
-    scoped.cleanup();
+    resolver = snap.matchResolvers[selectors] = buildMatchResolver(parsed, cb, snap);
   }
+  const result = resolver.lambdas.some(f => f(element, cb, null, false));
+
+  if (snap.isDebug && snap.debugMatch) {
+    snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
+    snap.debugMatch.result = result;
+  }
+
+  return result;
 }
 
 function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap: Snapshot): MatchResolver {
@@ -2680,55 +2681,42 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     return [];
   }
 
-  const scoped = prepareScope(sel, ctx, snap.re);
-
-  try {
-    if (!scoped.selectors) return nodes;
-    if (snap.isDebug) {
-      snap.debugSelect = { callback: cb, context: describeContext(ctx), run: [] };
-    }
-
-    // try to reuse cached resolver
-    let resolver = snap.selectResolvers[scoped.selectors];
-    if (!resolver || resolver.context !== ctx || resolver.callback !== cb) {
-      const parsed = parse(scoped.selectors, snap.re);
-      resolver = buildResolver(parsed, ctx, cb, snap);
-      snap.selectResolvers[scoped.selectors] = resolver;
-    }
-
-    // execute resolver seeds and collect results
-    for (const seed of resolver.seeds) {
-      const candidates = seed.getCandidates();
-      const stopped = seed.lambda(candidates, cb, ctx, nodes);
-
-      if (snap.isDebug) {
-        snap.debugSelect!.run!.push({
-          seedKey: seed.key,
-          seedQuery: seed.query,
-          compileQuery: seed.compileQuery,
-          candidates: describeElements(candidates),
-          lambdaSource: String(seed.lambda),
-          results: describeElements(nodes),
-        });
-      }
-
-      if (stopped) break;
-    }
-
-    if (resolver.seeds.length > 1 && nodes.length > 1) {
-      nodes = sortUnique(nodes);
-    }
-
-    return nodes;
-  } catch (e) {
-    if (snap.isDebug) {
-      if (!snap.debugSelect) snap.debugSelect = {};
-      snap.debugSelect.error = e instanceof Error ? e.message : String(e);
-    }
-    throw e;
-  } finally {
-    scoped.cleanup();
+  if (snap.isDebug) {
+    snap.debugSelect = { callback: cb, context: describeContext(ctx), run: [] };
   }
+
+  // try to reuse cached resolver
+  let resolver = snap.selectResolvers[sel];
+  if (!resolver || resolver.context !== ctx || resolver.callback !== cb) {
+    const parsed = parse(sel, snap.re);
+    resolver = buildResolver(parsed, ctx, cb, snap);
+    snap.selectResolvers[sel] = resolver;
+  }
+
+  // execute resolver seeds and collect results
+  for (const seed of resolver.seeds) {
+    const candidates = seed.getCandidates();
+    const stopped = seed.lambda(candidates, cb, ctx, nodes);
+
+    if (snap.isDebug) {
+      snap.debugSelect!.run!.push({
+        seedKey: seed.key,
+        seedQuery: seed.query,
+        compileQuery: seed.compileQuery,
+        candidates: describeElements(candidates),
+        lambdaSource: String(seed.lambda),
+        results: describeElements(nodes),
+      });
+    }
+
+    if (stopped) break;
+  }
+
+  if (resolver.seeds.length > 1 && nodes.length > 1) {
+    nodes = sortUnique(nodes);
+  }
+
+  return nodes;
 }
 
 function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): SelectResolver {
@@ -2814,45 +2802,16 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
   };
 }
 
-let scopeId = 0;
-function prepareScope(selectors: string, context: QueryContext, re: Rex) {
-  const HAS_SCOPE = /:scope\b/i;
-  const RE_SCOPE = /:scope\b/gi;
-
-  selectors = normalizeSelectorInput(selectors, re);
-
-  if (!HAS_SCOPE.test(selectors)) {
-    return { selectors, cleanup: () => {} };
-  }
-
-  const element = isDocument(context) ? context.documentElement
-    : isElement(context) ? context
-    : null;
-
-  const scopeAttr = `data-nwsapi-scope-${++scopeId}`;
-  element?.setAttribute(scopeAttr, '');
-
-  return {
-    selectors: selectors.replace(RE_SCOPE, `[${scopeAttr}]`),
-    cleanup: () => element?.removeAttribute(scopeAttr),
-  };
-}
-
 // equivalent of w3c 'closest' method
 function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
   updateSnapshot(snap, element);
 
-  const scoped = prepareScope(selectors, element, snap.re);
-  try {
-    let el: Element | null = element;
-    while (el) {
-      if (matchRaw(scoped.selectors, el, callback, snap)) break;
-      el = el.parentElement;
-    }
-    return el;
-  } finally {
-    scoped.cleanup();
+  let el: Element | null = element;
+  while (el) {
+    if (matchRaw(selectors, el, callback, snap)) break;
+    el = el.parentElement;
   }
+  return el;
 }
 
 const stopAfterFirst: QueryCallback = () => false;

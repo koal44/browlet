@@ -718,7 +718,7 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: ':scope marker is cleaned after select',
+    name: ':scope select callback preserves unmodified context element',
     engines: ['nw'],
     markup: `
       <div id="ctx">
@@ -729,56 +729,28 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const ctx = document.getElementById('ctx')!;
-        const results = [...NW?.Dom?.select(':scope > *', ctx) ?? []];
-
-        const ids = results.map((e) => e.id);
-        if (ids.join(',') !== 'child-1,child-2') {
-          throw new Error(`Expected child-1,child-2; got ${ids.join(',')}`);
-        }
-
-        const marked = [...document.querySelectorAll('[data-nwsapi-scope]')].map((e) => e.id || e.localName);
-        if (marked.length) {
-          throw new Error(`scope marker leaked after select: ${marked.join(',')}`);
-        }
-      });
-    }
-  },
-
-  {
-    name: ':scope marker is not visible during select callback',
-    status: 'fixme',
-    engines: ['nw'],
-    markup: `
-      <div id="ctx">
-        <span id="child-1"></span>
-        <span id="child-2"></span>
-      </div>
-    `,
-    setupPage: async (page) => {
-      await page.evaluate(() => {
-        const ctx = document.getElementById('ctx')!;
+        const before = ctx.outerHTML;
         const observed: string[] = [];
 
-        const cb = (el: Element) => {
+        const cb = () => {
           observed.push(ctx.outerHTML);
           return true;
         };
 
         const results = [...NW?.Dom?.select(':scope > *', ctx, cb) ?? []];
 
-        const resultIds = results.map((e) => e.id);
-        if (resultIds.join(',') !== 'child-1,child-2') {
-          throw new Error(`Expected result ids child-1,child-2; got ${resultIds.join(',')}`);
+        const ids = results.map((e) => e.id);
+        if (ids.join(',') !== 'child-1,child-2') {
+          throw new Error(`Expected child-1,child-2; got ${ids.join(',')}`);
         }
 
-        const exposed = observed.filter((html) => html.includes('data-nwsapi-scope'));
-        if (exposed.length) {
-          throw new Error(`callback observed scope marker:\n${exposed.join('\n')}`);
+        if (ctx.outerHTML !== before) {
+          throw new Error(`context mutated after select:\nbefore: ${before}\nafter: ${ctx.outerHTML}`);
         }
 
-        const marked = [...document.querySelectorAll('[data-nwsapi-scope]')].map((e) => e.id || e.localName);
-        if (marked.length) {
-          throw new Error(`scope marker leaked after callback select: ${marked.join(',')}`);
+        const changed = observed.filter((html) => html !== before);
+        if (changed.length) {
+          throw new Error(`callback observed mutated context:\n${changed.join('\n')}`);
         }
       });
     },
@@ -4855,7 +4827,7 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: 'native ampersand nesting selector behavior',
+    name: 'ampersand nesting selector behavior',
     // status: 'only',
     // engines: ['native'],
     markupMode: 'html-document',
@@ -4926,6 +4898,49 @@ runScenarios('various', 'normal', [
     cases: [
       { select: 'div[class~=brothers]', expect: { ids: ['father', 'uncle'] }, debug: false },
     ],
-  }
+  },
+
+  {
+    name: ':scope without marker mutation',
+    // status: 'only',
+    // engines: ['nw'],
+    markup: `
+      <section id="outer">
+        <div id="ctx">
+          <span id="child-1" class="x"></span>
+          <span id="child-2"></span>
+          <em id="em-1"><span id="nested" class="x"></span></em>
+        </div>
+        <span id="outside" class="x"></span>
+      </section>
+    `,
+    cases: [
+      { select: ':scope', ref: { by: 'id', id: 'ctx' }, expect: { ids: [] } },
+      { select: ':scope > *', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['child-1', 'child-2', 'em-1'] } },
+      { select: ':scope .x', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['child-1', 'nested'] } },
+      { select: ':scope > .x', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['child-1'] } },
+      { select: 'span', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['child-1', 'child-2', 'nested'] } },
+    ],
+  },
+
+  {
+    name: ':scope inside :is/:where/:not preserves query scope',
+    // status: 'only',
+    markup: `
+      <div id="inner">
+        <span id="x1" class="item"></span>
+        <span id="x2" class="item"></span>
+        <em id="em1" class="item"></em>
+        <strong id="nope"></strong>
+      </div>
+    `,
+    cases: [
+      { match: ':scope.item', ref: { by: 'id', id: 'x1' }, expect: { ids: ['x1'] } },
+      { select: ':scope > .item', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1'] } },
+      { select: ':is(:scope > .item)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1'] }, debug: false },
+      { select: ':where(:scope > .item)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1'] } },
+      { select: ':not(:scope)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1', 'nope'] } },
+    ],
+  },
 
 ]);

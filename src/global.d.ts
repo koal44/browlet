@@ -189,7 +189,6 @@ type DebugMatch = {
   callback?: QueryCallback | null;
   element?: QueryContextDescription;
   selector?: string;
-  scopedSelector?: string;
   parsed?: string[];
   lambdaSource?: string[];
   result?: boolean;
