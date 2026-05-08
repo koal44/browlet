@@ -78,23 +78,29 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
     },
 
     // configure the engine to use special handling
-    configure(
-      opt?: ConfigKey | Partial<Record<ConfigKey, boolean>>,
-      clear = false
-    ) {
-      if (typeof opt == 'string') { return !!_snap.config[opt]; }
-      if ((typeof opt != 'object') || opt == null) { return _snap.config; }
+    configure(opt?: ConfigKey | Partial<Record<string, boolean>> | null, clear = false) {
+      if (opt == null) return _snap.config;
 
-      for (let i in opt) {
-        _snap.config[i as ConfigKey] = !!opt[i as ConfigKey];
+      if (typeof opt === 'string') {
+        return opt in _snap.config ? !!_snap.config[opt as ConfigKey] : false;
       }
 
-      // clear cache
-      const clearObject = (obj: Record<string, unknown>) => { for (const k in obj) delete obj[k]; };
+      if (typeof opt !== 'object') {
+        throw new TypeError('Invalid configuration argument');
+      }
+
+      for (const k in opt) {
+        // only allow known config keys to be set; ignore others
+        if (k in _snap.config) {
+          _snap.config[k as ConfigKey] = !!opt[k];
+        }
+      }
+
       if (clear) {
-        clearObject(_snap.matchResolvers);
-        clearObject(_snap.selectResolvers);
+        for (const k in _snap.matchResolvers) delete _snap.matchResolvers[k];
+        for (const k in _snap.selectResolvers) delete _snap.selectResolvers[k];
       }
+
       return true;
     },
 
@@ -285,8 +291,6 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 
 export const DEFAULT_CONFIG: NwsConfig = {
   NODE_LIST: false,
-  LOGERRORS: true,
-  VERBOSITY: true,
 };
 
 export const DEFAULT_EXTENSIONS: NwsExtensions = {
@@ -1798,17 +1802,6 @@ export function buildRex(ext: NwsExtensions) {
 
 type Rex = ReturnType<typeof buildRex>;
 
-// centralized error and exceptions handling
-function emit(message: string, config: NwsConfig, proto?: typeof Error): void {
-  if (config.VERBOSITY) {
-    if (proto) throw new proto(message);
-    throw new DOMException(message, 'SyntaxError');
-  }
-  if (config.LOGERRORS && typeof console?.log === 'function') {
-    console.log(message);
-  }
-}
-
 const F_INIT = '"use strict";return function Resolver(c,f,x,r)';
 const MACROS = {
   S: { // SELECT
@@ -2001,11 +1994,9 @@ function compileSelector(
         } else if (!nsPrefix) {
           source = `if((!e.namespaceURI)){${source}}`;
         } else if (snap.root.prefix === nsPrefix) {
-          emit(`Namespace prefix "${nsPrefix}" is declared in this document but cannot be used in DOM selector APIs: ${expression}`, snap.config);
-          return out;
+          throw new Error(`Namespace prefix "${nsPrefix}" is declared in this document but cannot be used in DOM selector APIs: ${expression}`);
         } else {
-          emit(`Unresolvable namespace prefix "${nsPrefix}" in selector: ${expression}`, snap.config);
-          return out;
+          throw new Error(`Unresolvable namespace prefix "${nsPrefix}" in selector: ${expression}`);
         }
         break;
       }
@@ -2029,8 +2020,7 @@ function compileSelector(
         const attrVal = rawAttrVal === undefined ? undefined : cssIdentUnescape(rawAttrVal);
 
         if (nsPrefix !== null && nsPrefix !== '' && nsPrefix !== '*') {
-          emit(`Unsupported namespace prefix "${nsPrefix}" in attribute selector: ${selector}`, snap.config);
-          return out;
+          throw new Error(`Unsupported namespace prefix "${nsPrefix}" in attribute selector: ${selector}`);
         }
 
         const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
@@ -2049,16 +2039,14 @@ function compileSelector(
         if (!attrOp) {
           attrExpr = matchAttrExpr(null);
         } else if (attrVal === undefined) {
-          emit(`Missing attribute value in selector: ${selector}`, snap.config);
-          return out;
+          throw new Error(`Missing attribute value in selector: ${selector}`);
         } else if (attrOp === '~=' && /[\t\n\f\r ]/.test(attrVal)) {
           // [attr~="a b"] is syntactically valid but can never match a single whitespace-separated token.
           attrExpr = 'false';
         } else {
           const baseTest = snap.operators[attrOp];
           if (!baseTest) {
-            emit(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`, snap.config);
-            return out;
+            throw new Error(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`);
           }
 
           const isStdOp = ATTR_STD_OPS.has(attrOp) && attrOp !== '~=';
@@ -2131,8 +2119,8 @@ function compileSelector(
       // :root, :empty, :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :only-of-type
       case ':':
         if ((match = selector.match(snap.re.Patterns.structural))) {
-          match[1] = match[1].toLowerCase();
-          switch (match[1]) {
+          const pseudo = match[1].toLowerCase();
+          switch (pseudo) {
             case 'scope':
               // there can only be one :root element, so exit the loop once found
               source = `if((e===s.scopeEl)){${source}}`;
@@ -2178,8 +2166,7 @@ function compileSelector(
                 `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){${source}}`;
               break;
             default:
-              emit(`Unsupported structural-tree pseudo-class: ${match[1]}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported structural-tree pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2191,13 +2178,11 @@ function compileSelector(
           nthArg = nthArg.replace(/^[+-]?0n/, '') || '0';
 
           if (pseudo !== 'nth-child' && pseudo !== 'nth-last-child' && pseudo !== 'nth-of-type' && pseudo !== 'nth-last-of-type') {
-            emit(`Unsupported pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-            return out;
+            throw new Error(`Unsupported tree-structural pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
 
           if (!nthArg) {
-            emit(`Missing argument for pseudo-class ${pseudo} in selector: ${expression}`, snap.config);
-            return out;
+            throw new Error(`Missing argument for pseudo-class ${pseudo} in selector: ${expression}`);
           }
 
           const isOfType = pseudo.endsWith('-of-type');
@@ -2282,8 +2267,7 @@ function compileSelector(
               break;
             }
             default:
-              emit(`Unsupported combinator pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported logical/relational pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2304,8 +2288,7 @@ function compileSelector(
               break;
 
             default:
-              emit(`Unsupported linguistic pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported linguistic pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2334,8 +2317,7 @@ function compileSelector(
               break;
 
             default:
-              emit(`Unsupported location pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported location pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2374,8 +2356,7 @@ function compileSelector(
               break;
 
             default:
-              emit(`Unsupported user action pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported user action pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2409,8 +2390,7 @@ function compileSelector(
               break;
 
             default:
-              emit(`Unsupported ui/form pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported user interface pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2452,8 +2432,7 @@ function compileSelector(
               break;
 
             default:
-              emit(`Unsupported input pseudo-class: ${pseudo}, in selector: ${expression}`, snap.config);
-              break;
+              throw new Error(`Unsupported form validation pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
         }
 
@@ -2530,28 +2509,24 @@ function compileSelector(
           }
 
           if (!status) {
-            emit(`Unrecognized selector component: ${selector} in selector: ${expression}`, snap.config);
-            return out;
+            throw new Error(`Unrecognized selector component: ${selector} in selector: ${expression}`);
           }
 
           if (!expr) {
-            emit('Unknown token in selector: ' + selector + ' in selector: ' + expression, snap.config);
-            return out;
+            throw new Error(`Selector extension did not specify an expression: ${selector} in selector: ${expression}`);
           }
 
         }
         break;
 
     default:
-      emit(`Unexpected token '${symbol}' in selector: ${expression}`, snap.config);
-      break selector_recursion_label;
+      throw new Error(`Unexpected token '${symbol}' in selector: ${expression}`);
 
     }
     // end of switch symbol
 
     if (!match) {
-      emit(`Failed to parse selector component: ${selector} in selector: ${expression}`, snap.config);
-      return out;
+      throw new Error(`Failed to parse selector component: ${selector} in selector: ${expression}`);
     }
 
     // pop last component
@@ -2629,8 +2604,7 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
   updateSnapshot(snap, element);
 
   if (!selectors) {
-    emit(`[match] Empty selector is not valid`, snap.config);
-    return false;
+    throw new Error(`[match] Empty selector is not valid`);
   }
 
   if (snap.isDebug) {
@@ -2677,8 +2651,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
 
   let nodes: Element[] = [];
   if (!sel) {
-    emit(`[select] Empty selector is not valid`, snap.config);
-    return [];
+    throw new Error(`[select] Empty selector is not valid`);
   }
 
   if (snap.isDebug) {

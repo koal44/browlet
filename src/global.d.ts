@@ -20,7 +20,7 @@ var NW: {
 } | undefined;
 
 type NwsConfig = Record<ConfigKey, boolean>;
-type ConfigKey = 'NODE_LIST' | 'LOGERRORS' | 'VERBOSITY';
+type ConfigKey = 'NODE_LIST';
 type NwsExtensions = {
   combinators: string[];
   operators: string[];

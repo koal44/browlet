@@ -4298,20 +4298,6 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: 'invalid selector does not return partial matches when logging errors',
-    status: 'fixme',
-    markup: `<div id="x"></div>`,
-    setupPage: async page => {
-      await page.evaluate(() => {
-        NW?.Dom?.configure({ LOGERRORS: true, VERBOSITY: false });
-      });
-    },
-    cases: [
-      { select: '#x@bad', expect: { throws: true } },
-    ],
-  },
-
-  {
     name: 'closest/basic-inclusive-ancestor-walk',
     markup: `<div id="outer" class="x"><section id="mid"><p id="target"></p></section></div>`,
     cases: [
