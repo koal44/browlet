@@ -623,6 +623,7 @@ runScenarios('jquery', 'normal', [
 
   {
     name: 'attribute selectors',
+    // status: 'only',
     markup: html,
     markupMode: 'html-document',
     setupPage: async (page) => {
@@ -690,15 +691,10 @@ runScenarios('jquery', 'normal', [
 
       { select: "input[name='foo[bar]']", expect: { ids: ['hidden2'] } },
 
-      { select: ':matches(#form select[multiple])', expect: { ids: ['select3'] }, status: 'fixme' },
-      { select: ':matches(#form select[name=select1], #form select[name=select2])', expect: { ids: ['select1', 'select2'] }, status: 'fixme' },
-      { select: ':matches(#form select[name=select1], #form select[name=select2])', expect: { ids: ['select1', 'select2'] }, status: 'fixme' },
-      { select: ':matches(#form select[multiple], :-test-invalid)', expect: { throws: true }, status: 'fixme' },
-
       { select: ':is(#form select[multiple])', expect: { ids: ['select3'] } },
       { select: ':is(#form select[name=select1], #form select[name=select2])', expect: { ids: ['select1', 'select2'] } },
       { select: ':is(#form select[name=select1], #form select[name=select2])', expect: { ids: ['select1', 'select2'] } },
-      { select: ':is(#form select[multiple], :-test-invalid)', expect: { ids: ['select3'] }, status: 'fixme' },
+      { select: ':is(#form select[multiple], :-test-invalid)', expect: { ids: ['select3'] } },
 
       { select: '#form select:not([multiple])', expect: { ids: ['select1', 'select2'] } },
       { select: '#form select:not([name=select1])', expect: { ids: ['select2', 'select3'] } },

@@ -20,7 +20,7 @@ var NW: {
 } | undefined;
 
 type NwsConfig = Record<ConfigKey, boolean>;
-type ConfigKey = 'FORGIVING' | 'NODE_LIST' | 'LOGERRORS' | 'USR_EVENT' | 'VERBOSITY';
+type ConfigKey = 'NODE_LIST' | 'LOGERRORS' | 'VERBOSITY';
 type NwsExtensions = {
   combinators: string[];
   operators: string[];
@@ -77,7 +77,7 @@ type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: 
 type ToNodeListFn = (nodeArray: Element[]) => IndexedNodeList;
 type ElementList = Element[] | IndexedNodeList;
 
-type AttrMatcherParts = { p1: string; p2: string; p3: string; };
+type AttrMatcherParts = { p1: string; p2: string; p3: boolean; };
 
 type SelectorExtension = {
   Expression: RegExp;

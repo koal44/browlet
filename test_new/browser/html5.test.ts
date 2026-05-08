@@ -39,6 +39,7 @@ runScenarios('html5', 'normal', [
 
   {
     name: 'table :not() selector test',
+    // status: 'only',
     markup: `
       <div>
         <h1>&nbsp;Your Search Results</h1>
@@ -84,7 +85,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1428&amp;src=881407&amp;pn=0">LD64FKO</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1428&amp;src=881407&amp;pn=0" id="LD64FKO">LD64FKO</a></td>
               <td>Honda CB500F  </td>
               <td>Black <br>    </td>
               <td>London</td>
@@ -95,7 +96,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1427&amp;src=881407&amp;pn=0">YN58 LXV</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1427&amp;src=881407&amp;pn=0" id="YN58LXV">YN58 LXV</a></td>
               <td>Peugeot XPS CT 125  </td>
               <td>Black <br>    </td>
               <td>Shropshire</td>
@@ -106,7 +107,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1426&amp;src=881407&amp;pn=0">YA08JZR</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1426&amp;src=881407&amp;pn=0" id="YA08JZR">YA08JZR</a></td>
               <td>PEUYGEOT PARTNER ORIGIN  </td>
               <td>White <br>    </td>
               <td>Staffordshire</td>
@@ -117,7 +118,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1425&amp;src=881407&amp;pn=0">DF03 KXB</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1425&amp;src=881407&amp;pn=0" id="DF03KXB">DF03 KXB</a></td>
               <td>Baimo RSR 125  </td>
               <td>Blue <br>    </td>
               <td>Hampshire</td>
@@ -128,7 +129,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1424&amp;src=881407&amp;pn=0">YG62 CM0</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1424&amp;src=881407&amp;pn=0" id="YG62CM0">YG62 CM0</a></td>
               <td>Audi A4  </td>
               <td>Grey <br>    </td>
               <td>West Midlands</td>
@@ -139,7 +140,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1423&amp;src=881407&amp;pn=0">FT10 FDV</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1423&amp;src=881407&amp;pn=0" id="FT10FDV">FT10 FDV</a></td>
               <td>Seat Ibiza  </td>
               <td>White <br>    </td>
               <td>South Yorkshire</td>
@@ -150,7 +151,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1422&amp;src=881407&amp;pn=0">RJ61 WRE</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1422&amp;src=881407&amp;pn=0" id="RJ61WRE">RJ61 WRE</a></td>
               <td>Volkswagen Golf 1.6 TDi Bluemotion Tech Match </td>
               <td>Red <br>    </td>
               <td>Dyfed</td>
@@ -161,7 +162,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1421&amp;src=881407&amp;pn=0">SR11 HLO</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1421&amp;src=881407&amp;pn=0" id="SR11HLO">SR11 HLO</a></td>
               <td>Mazda Mazda3 Takuya </td>
               <td>Silver <br>    </td>
               <td>London</td>
@@ -172,7 +173,7 @@ runScenarios('html5', 'normal', [
             </tr>
             <tr>
               <td align="center"><img src="" style="padding-top:2px;padding-bottom:2px;"></td>
-              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1420&amp;src=881407&amp;pn=0">TNZ 9284</a></td>
+              <td><a href="http://www.twoc.co.uk/view_rec.htm?id=1420&amp;src=881407&amp;pn=0" id="TNZ9284">TNZ 9284</a></td>
               <td>Citroen Berlingo GB9HXC </td>
               <td>White <br>    </td>
               <td>Bedfordshire</td>
@@ -191,8 +192,7 @@ runScenarios('html5', 'normal', [
     cases: [
       {
         select: 'tbody > tr:nth-of-type(n+6):not(:nth-of-type(17)) > td:nth-of-type(2) > a:not(:nth-of-type(2))',
-        expect: { ids: ['AV11UXA'] },
-        status: 'fixme',
+        expect: { ids: ['AV11UXA', 'LD64FKO', 'YN58LXV', 'YA08JZR', 'DF03KXB', 'YG62CM0', 'FT10FDV', 'RJ61WRE', 'SR11HLO', 'TNZ9284'] },
       },
     ],
   },

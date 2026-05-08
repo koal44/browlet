@@ -154,6 +154,7 @@ runScenarios('scotch', 'normal', [
   },
   {
     name: 'Attribute Selectors',
+    // status: 'only',
     markup: html,
     markupMode: 'html-document',
     setupPage: setupNw,
@@ -175,8 +176,8 @@ runScenarios('scotch', 'normal', [
       { select: '#troubleForm2 input[name="brackets[5][]"]', expect: { ids: ['chk_1', 'chk_2'] } },
       { select: '#troubleForm2 input[name="brackets[5][]"]:checked', expect: { ids: ['chk_1'] } },
       { select: 'cite[title="hello world!"]', expect: { ids: ['with_title'] } },
-      { select: '[xml:lang]', expect: { count: 2, includesIds: ['item_3'], equivalentCase: { select: '*[xml:lang]' } }, status: 'fixme' },
-      { select: '*[xml:lang]', expect: { count: 2, includesIds: ['item_3'] }, status: 'fixme' },
+      { select: '[xml\\:lang]', expect: { count: 2, includesIds: ['item_3'], equivalentCase: { select: '*[xml\\:lang]' } } },
+      { select: '*[xml\\:lang]', expect: { count: 2, includesIds: ['item_3'] } },
 
       // E[foo="bar"]
       { select: 'a[href="#"]', expect: { ids: ['link_1', 'link_2', 'link_3'] } },
@@ -189,8 +190,8 @@ runScenarios('scotch', 'normal', [
       { select: 'a[class~=external][href="#"]', expect: { ids: ['link_3'] } },
 
       // E[foo|="en"]
-      { select: '*[xml:lang|="es"]', expect: { ids: ['item_3'] }, status: 'fixme' },
-      { select: '*[xml:lang|="ES"]', expect: { ids: ['item_3'] }, status: 'fixme' },
+      { select: '*[xml\\:lang|="es"]', expect: { ids: ['item_3'] } },
+      { select: '*[xml\\:lang|="ES"]', expect: { ids: [] } },
 
       // E[foo^="bar"]
       { select: 'div[class^=bro]', expect: { ids: ['father', 'uncle'] } },
@@ -232,7 +233,7 @@ runScenarios('scotch', 'normal', [
     markup: html,
     markupMode: 'html-document',
     setupPage: setupNw,
-    status: 'fixme',
+    // status: 'only',
     cases: [
       // should throw SYNTAX_ERR
       { select: '#level1 *[id=-1]', expect: { throws: true } },
@@ -459,12 +460,13 @@ runScenarios('scotch', 'normal', [
 
   {
     name: 'Multiple Selectors',
+    // status: 'only',
     markup: html,
     markupMode: 'html-document',
     setupPage: setupNw,
     cases: [
-      { select: '#list, .first,*[xml:lang="es-us"] , #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] }, status: 'fixme' },
-      { select: '#list, .first, *[xml:lang="es-us"], #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] }, status: 'fixme' },
+      { select: '#list, .first,*[xml\\:lang="es-us"] , #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] } },
+      { select: '#list, .first, *[xml\\:lang="es-us"], #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] } },
       { select: 'form[title*="commas,"], input[value="#commaOne,#commaTwo"]', expect: { ids: ['commaParent', 'commaChild'] } },
       { select: 'form[title*="commas,"], input[value="#commaOne,#commaTwo"]', expect: { ids: ['commaParent', 'commaChild'] } },
     ],

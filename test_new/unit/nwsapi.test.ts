@@ -100,6 +100,44 @@ function cssIdentEscape(ident: string): string {
   return out;
 }
 
+const rex = buildRex(DEFAULT_EXTENSIONS);
+const config = { ...DEFAULT_CONFIG, VERBOSITY: false, LOGERRORS: false };
+
+function expectParse(input: string, expected: string[], cfg = config): void {
+  const actual = parse(input, rex);
+
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new AssertionError({
+      message: `Unexpected parse result for ${input}`,
+      actual,
+      expected,
+      operator: 'deepStrictEqual',
+      stackStartFn: expectParse,
+    });
+  }
+}
+
+function expectParseRejects(input: string): void {
+  let actual: string[] | undefined;
+  let thrown = false;
+
+  try { actual = parse(input, rex); }
+  catch { thrown = true; }
+
+  const shouldThrow = true;
+  const pass = shouldThrow ? thrown : !thrown && Array.isArray(actual) && actual.length === 0;
+
+  if (!pass) {
+    throw new AssertionError({
+      message: `Expected parse rejection for ${input}`,
+      actual: thrown ? 'threw' : actual,
+      expected: shouldThrow ? 'throw' : [],
+      operator: shouldThrow ? 'throws' : 'deepStrictEqual',
+      stackStartFn: expectParseRejects,
+    });
+  }
+}
+
 describe('Rex basic recognizers', () => {
   const rex = buildRex(DEFAULT_EXTENSIONS);
 
@@ -538,6 +576,15 @@ describe('Rex pseudo-class patterns', () => {
     expectCaptures(rex.Patterns.attribute, '[foo="bar"].item', ['foo', '=', '"', 'bar', undefined, '.item']);
     expectCaptures(rex.Patterns.attribute, '[foo~="bar" i] > span', ['foo', '~=', '"', 'bar', 'i', ' > span']);
     expectCaptures(rex.Patterns.attribute, '[foo\\:bar]', ['foo\\:bar', undefined, undefined, undefined, undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[class~=brothers]', ['class', '~=', '', 'brothers', undefined, '']);
+
+    expectCaptures(rex.Patterns.attribute, '[class~=brothers]', ['class', '~=', '', 'brothers', undefined, '']);
+    expectCaptures(rex.Patterns.attribute, '[class~=brother s]', ['class', '~=', '', 'brother', 's', '']);
+    expectCaptures(rex.Patterns.attribute, "[foo='bar'i]", ['foo', '=', "'", 'bar', 'i', '']);
+    expectCaptures(rex.Patterns.attribute, "[foo='bar' \\i]", ['foo', '=', "'", 'bar', '\\i', '']);
+    expectCaptures(rex.Patterns.attribute, "[foo='bar'\\i]", ['foo', '=', "'", 'bar', '\\i', '']);
+    expectCaptures(rex.Patterns.attribute, "[foo='bar' \\69]", ['foo', '=', "'", 'bar', '\\69', '']);
+    expectCaptures(rex.Patterns.attribute, "[foo='bar'\\69]", ['foo', '=', "'", 'bar', '\\69', '']);
   });
 
   it('parses attribute selector components with namespace prefixes', () => {
@@ -771,44 +818,6 @@ describe('cssIdentUnescape', () => {
 });
 
 describe('parse validator', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-  const config = { ...DEFAULT_CONFIG, VERBOSITY: false, LOGERRORS: false };
-
-  function expectParse(input: string, expected: string[], cfg = config): void {
-    const actual = parse(input, rex, cfg);
-
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      throw new AssertionError({
-        message: `Unexpected parse result for ${input}`,
-        actual,
-        expected,
-        operator: 'deepStrictEqual',
-        stackStartFn: expectParse,
-      });
-    }
-  }
-
-  function expectParseRejects(input: string, cfg = config): void {
-    let actual: string[] | undefined;
-    let thrown = false;
-
-    try { actual = parse(input, rex, cfg); }
-    catch { thrown = true; }
-
-    const shouldThrow = !!cfg.VERBOSITY;
-    const pass = shouldThrow ? thrown : !thrown && Array.isArray(actual) && actual.length === 0;
-
-    if (!pass) {
-      throw new AssertionError({
-        message: `Expected parse rejection for ${input}`,
-        actual: thrown ? 'threw' : actual,
-        expected: shouldThrow ? 'throw' : [],
-        operator: shouldThrow ? 'throws' : 'deepStrictEqual',
-        stackStartFn: expectParseRejects,
-      });
-    }
-  }
-
   it('accepts common selector forms', () => {
     expectParse('div', ['div']);
     expectParse('div.item#id', ['div.item#id']);
@@ -943,6 +952,112 @@ describe('parse validator', () => {
     expectParse(':not(*)', [':not(*)']);
   });
 
+  it('rejects type selectors after subclass selectors in a compound', () => {
+    expectParseRejects("[foo='bar']i");
+    expectParseRejects('[foo]div');
+    expectParseRejects('[foo]*');
+    expectParseRejects('.foo div[attr]span'); // no combinator before span
+    expectParseRejects('#foo span[attr]div');
+
+    expectParseRejects('.foo)');
+    expectParseRejects('[foo])');
+    expectParseRejects('[foo i]');
+    // expectParseRejects(':empty)');
+  });
+
+  it('accepts subclass selectors after type selectors and combinators', () => {
+    expectParse('div[foo]', ['div[foo]']);
+    expectParse('[foo].bar', ['[foo].bar']);
+    expectParse('[foo]#bar', ['[foo]#bar']);
+    expectParse('[foo]:empty', ['[foo]:empty']);
+    expectParse('[foo] [bar]', ['[foo] [bar]']);
+    expectParse('[foo] > i', ['[foo] > i']);
+    expectParse('[foo], i', ['[foo]', 'i']);
+  });
+
+  it('handles parentheses in compound selectors', () => {
+    expectParseRejects("[foo='bar']i");
+    expectParseRejects('[foo]div');
+    expectParseRejects('.foo)');
+
+    expectParse(':is(.a)', [':is(.a)']);
+    expectParse(':is(.a,.b)', [':is(.a,.b)']);
+    expectParse(':is([data-x])', [':is([data-x])']);
+    expectParse(':is(:not(.a), .b)', [':is(:not(.a), .b)']);
+  });
+
+});
+
+describe('parse attribute selector case-sensitivity flag syntax', () => {
+  it('accepts valid attribute selector case flags, comments, and whitespace', () => {
+    expectParse("[foo='BAR'] /* sanity check (valid) */", ["[foo='BAR']"]);
+    expectParse("[foo='bar' i]", ["[foo='bar' i]"]);
+    expectParse("[foo='bar' I]", ["[foo='bar' I]"]);
+    expectParse("[foo=bar i]", ["[foo=bar i]"]);
+    expectParse('[foo="bar" i]', ['[foo="bar" i]']);
+    expectParse("[foo='bar'i]", ["[foo='bar'i]"]);
+    expectParse("[foo='bar'i ]", ["[foo='bar'i ]"]);
+    expectParse("[foo='bar' i ]", ["[foo='bar' i ]"]);
+    expectParse("[foo='bar' /**/ i]", ["[foo='bar' i]"]);
+    expectParse("[foo='bar' i /**/ ]", ["[foo='bar' i ]"]);
+    expectParse("[foo='bar'/**/i/**/]", ["[foo='bar' i ]"]);
+    expectParse("[foo=bar/**/i]", ["[foo=bar i]"]);
+    expectParse("[foo='bar'\ti\t] /* \\t */", ["[foo='bar'\ti\t]"]);
+    expectParse("[foo='bar'\ni\n] /* \\n */", ["[foo='bar' i ]"]);
+    expectParse("[foo='bar'\ri\r] /* \\r */", ["[foo='bar' i ]"]);
+    expectParse("[foo='bar' \\i]", ["[foo='bar' \\i]"]);
+    expectParse("[foo='bar' \\69]", ["[foo='bar' \\69]"]);
+    expectParse("[foo~='bar' i]", ["[foo~='bar' i]"]);
+    expectParse("[foo^='bar' i]", ["[foo^='bar' i]"]);
+    expectParse("[foo$='bar' i]", ["[foo$='bar' i]"]);
+    expectParse("[foo*='bar' i]", ["[foo*='bar' i]"]);
+    expectParse("[foo|='bar' i]", ["[foo|='bar' i]"]);
+    expectParse("[|foo='bar' i]", ["[|foo='bar' i]"]);
+    expectParse("[*|foo='bar' i]", ["[*|foo='bar' i]"]);
+
+    expectParse('div[class~=brothers]', ['div[class~=brothers]']);
+  });
+
+  it('rejects invalid attribute selector case flag syntax', () => {
+    expectParseRejects("[foo[ /* sanity check (invalid) */");
+    expectParseRejects("[foo='bar' i i]");
+    expectParseRejects("[foo i ='bar']");
+    expectParseRejects("[foo= i 'bar']");
+    expectParseRejects("[i foo='bar']");
+    expectParseRejects("[foo='bar' i\u0000] /* \\0 */");
+    expectParseRejects("[foo='bar' \u0130]");
+    expectParseRejects("[foo='bar' \u0131]");
+    expectParseRejects("[foo='bar' ii]");
+    expectParseRejects("[foo='bar' ij]");
+    expectParseRejects("[foo='bar' j]");
+    expectParseRejects("[foo='bar' \\\\i]");
+    expectParseRejects("[foo='bar' \\\\69]");
+    expectParseRejects("[foo='bar' i()]");
+    expectParseRejects("[foo='bar' i ()]");
+    expectParseRejects("[foo='bar' () i]");
+    expectParseRejects("[foo='bar' (i)]");
+    expectParseRejects("[foo='bar' i []]");
+    expectParseRejects("[foo='bar' [] i]");
+    expectParseRejects("[foo='bar' [i]]");
+    expectParseRejects("[foo='bar' i {}]");
+    expectParseRejects("[foo='bar' {} i]");
+    expectParseRejects("[foo='bar' {i}]");
+    expectParseRejects("[foo='bar' 1i]");
+    expectParseRejects("[foo='bar' 1]");
+    expectParseRejects("[foo='bar' 'i']");
+    expectParseRejects("[foo='bar' url(i)]");
+    expectParseRejects("[foo='bar' ,i]");
+    expectParseRejects("[foo='bar' i,]");
+    expectParseRejects("[foo='bar']i");
+    expectParseRejects("[foo='bar' |i]");
+    expectParseRejects("[foo='bar' \\|i]");
+    expectParseRejects("[foo='bar' *|i]");
+    expectParseRejects("[foo='bar' \\*|i]");
+    expectParseRejects("[foo='bar' *]");
+    expectParseRejects("[foo='bar' \\*]");
+    expectParseRejects("[foo i]");
+    expectParseRejects("[foo/**/i]");
+  });
 });
 
 describe('parse', () => {
@@ -950,15 +1065,15 @@ describe('parse', () => {
   const config = { ...DEFAULT_CONFIG, VERBOSITY: true, LOGERRORS: false };
 
   it('normalizes vertical whitespace through parse pipeline', () => {
-    expect(parse('div\nspan', rex, config)).toEqual(['div span']);
-    expect(parse('div\r\nspan', rex, config)).toEqual(['div span']);
-    expect(parse('div\fspan', rex, config)).toEqual(['div span']);
+    expect(parse('div\nspan', rex)).toEqual(['div span']);
+    expect(parse('div\r\nspan', rex)).toEqual(['div span']);
+    expect(parse('div\fspan', rex)).toEqual(['div span']);
   });
 
   it('normalizes common whitespace through the parse pipeline', () => {
-    expect(parse('div , span', rex, config)).toEqual(['div', 'span']);
-    expect(parse('div\nspan', rex, config)).toEqual(['div span']);
-    expect(parse(':nth-child(2n + 1)', rex, config)).toEqual([':nth-child(2n+1)']);
+    expect(parse('div , span', rex)).toEqual(['div', 'span']);
+    expect(parse('div\nspan', rex)).toEqual(['div span']);
+    expect(parse(':nth-child(2n + 1)', rex)).toEqual([':nth-child(2n+1)']);
   });
 
   test.each([
@@ -974,7 +1089,7 @@ describe('parse', () => {
     '[data-nwsapi-scope] > |item',
   ])('accepts %s', (selector) => {
     // expect(parse(unescapeIdentifier(selector, rex), rex, config)).toEqual([selector]);
-    expect(parse(selector, rex, config)).toEqual([selector]);
+    expect(parse(selector, rex)).toEqual([selector]);
   });
 
 });

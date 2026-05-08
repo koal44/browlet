@@ -272,7 +272,7 @@ runScenarios('speed', 'normal', [
   {
     // active/focus does not seem to be stable. also, not supported in any of the browsers.
     name: 'matches_and_negation_dynamic_and_user_actions - active/focus',
-    status: 'fixme',
+    // status: 'fixme',
     markup: html,
     markupMode: 'html-document',
     cases: [

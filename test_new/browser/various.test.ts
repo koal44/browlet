@@ -4276,7 +4276,7 @@ runScenarios('various', 'normal', [
 
   {
     name: 'forgiving is where ignore invalid pseudo arms',
-    status: 'fixme',
+    // status: 'only',
     markup: `<div id="a" class="a"></div><div id="b" class="b"></div><div id="c"></div>`,
     cases: [
       { select: ':is(.a, :bogus-pseudo, .b)', expect: { ids: ['a', 'b'] } },
@@ -4676,5 +4676,256 @@ runScenarios('various', 'normal', [
       { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native'] },
     ],
   },
+
+  {
+    name: 'attribute name casing across html and imported xml',
+    // status: 'only',
+    // engines: ['native'],
+    // browsers: ['chromium'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id=html>
+        <body id=body>
+          <div id=html-el DATA-X=html-upper data-y=html-lower></div>
+          <div id=import-host></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const xml = `<?xml version="1.0"?>
+          <root id="xml-root">
+            <item id="xml-upper" DATA-X="xml-upper"></item>
+            <item id="xml-lower" data-x="xml-lower"></item>
+            <item id="xml-both" DATA-X="upper" data-x="lower"></item>
+          </root>`;
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        document.getElementById('import-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+      });
+    },
+    cases: [
+      { select: '[data-x]', expect: { ids: ['html-el', 'xml-upper', 'xml-lower', 'xml-both'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '[data-x]', expect: { ids: ['html-el', 'xml-lower', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '[DATA-X]', expect: { ids: ['html-el', 'xml-upper', 'xml-lower', 'xml-both'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '[DATA-X]', expect: { ids: ['html-el', 'xml-upper', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+
+    ],
+  },
+
+  {
+    name: 'attribute value html-insensitive table does not leak to imported xml',
+    // status: 'only',
+    // engines: ['native'],
+    // browsers: ['chromium'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <input id=html-input type=TEXT>
+          <div id=import-host></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const xml = `<?xml version="1.0"?>
+          <root>
+            <input id="xml-input-upper" type="TEXT"></input>
+            <input id="xml-input-lower" type="text"></input>
+          </root>`;
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        document.getElementById('import-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+      });
+    },
+    cases: [
+      // Native expectations should be discovered first.
+      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'], },
+    ],
+  },
+
+  {
+    name: 'defined pseudo does not treat imported xml custom-looking tags as html custom elements',
+    // status: 'only',
+    // engines: ['native'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id=html>
+        <body id=body>
+          <div id=html-host>
+            <x-plain id=html-undefined></x-plain>
+            <x-ready id=html-defined></x-ready>
+            <div id=html-div></div>
+          </div>
+          <div id=import-host></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        if (!customElements.get('x-ready')) {
+          customElements.define('x-ready', class extends HTMLElement {});
+        }
+
+        const xml = `<?xml version="1.0"?>
+          <root id="xml-root">
+            <x-plain id="xml-hyphen"></x-plain>
+            <plain id="xml-plain"></plain>
+          </root>`;
+
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        document.getElementById('import-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+      });
+    },
+    cases: [
+      // HTML custom-element behavior.
+      { select: '#html-host > :defined', expect: { ids: ['html-defined', 'html-div'] } },
+      { select: '#html-host > x-plain:defined', expect: { ids: [] } },
+      { select: '#html-host > x-ready:defined', expect: { ids: ['html-defined'] } },
+
+      // Imported XML elements should not be treated as unresolved HTML custom elements.
+      { select: '#import-host :defined', expect: { ids: ['xml-root', 'xml-hyphen', 'xml-plain'] } },
+      { select: '#import-host x-plain:defined', expect: { ids: ['xml-hyphen'] } },
+    ],
+  },
+
+  {
+    name: 'xml document xhtml namespace keeps xml casing but applies defined custom-element rules',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root xmlns:h="http://www.w3.org/1999/xhtml">
+        <h:input id="xhtml-input-upper" type="TEXT" />
+        <h:input id="xhtml-input-lower" type="text" />
+        <h:X-Plain id="xhtml-custom-upper" />
+        <h:x-plain id="xhtml-custom-lower" />
+      </root>
+    `,
+    cases: [
+      // Type selector casing remains XML-sensitive even for XHTML-namespace elements.
+      { select: '*|input', expect: { ids: ['xhtml-input-upper', 'xhtml-input-lower'] } },
+      { select: '*|Input', expect: { ids: [] } },
+
+      // Attribute names and values remain XML-sensitive; HTML folding must not leak here.
+      { select: '*|input[TYPE]', expect: { ids: [] } },
+      { select: '*|input[type]', expect: { ids: ['xhtml-input-upper', 'xhtml-input-lower'] } },
+      { select: '*|input[type="text"]', expect: { ids: ['xhtml-input-lower'] } },
+      { select: '*|input[type="TEXT"]', expect: { ids: ['xhtml-input-upper'] } },
+
+      // :defined still applies valid-custom-element-name logic to XHTML-namespace elements.
+      // Uppercase names are not valid custom element names, so they are defined.
+      // Lowercase valid custom element names are unresolved unless registered.
+      { select: '*|X-Plain:defined', expect: { ids: ['xhtml-custom-upper'] } },
+      { select: '*|x-plain:defined', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'defined pseudo respects custom element name blacklist',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root xmlns:h="http://www.w3.org/1999/xhtml">
+        <h:x-plain id="x-plain"></h:x-plain>
+        <h:font-face id="font-face"></h:font-face>
+        <h:annotation-xml id="annotation-xml"></h:annotation-xml>
+        <h:color-profile id="color-profile"></h:color-profile>
+      </root>
+    `,
+    cases: [
+      { select: '*|x-plain:defined', expect: { ids: [] } },
+
+      // These look like custom-element names syntactically, but are reserved names,
+      // so they are not unresolved custom elements and should match :defined.
+      { select: '*|font-face:defined', expect: { ids: ['font-face'] } },
+      { select: '*|annotation-xml:defined', expect: { ids: ['annotation-xml'] } },
+      { select: '*|color-profile:defined', expect: { ids: ['color-profile'] } },
+    ],
+  },
+
+  {
+    name: 'native ampersand nesting selector behavior',
+    // status: 'only',
+    // engines: ['native'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id="html">
+        <body id="body">
+          <div id="outer" class="foo">
+            <span id="direct" class="direct bar"></span>
+            <div id="middle">
+              <span id="deep" class="deep bar"></span>
+            </div>
+          </div>
+          <span id="outside" class="direct deep bar"></span>
+        </body>
+      </html>
+    `,
+    cases: [
+      // Document context: & behaves like :scope, i.e. the document element.
+      { select: '&', ref: { by: 'document' }, expect: { ids: ['html'] } },
+      { select: ':scope', ref: { by: 'document' }, expect: { ids: ['html'] } },
+
+      // No direct .direct children under <html>.
+      { select: '& > .direct', ref: { by: 'document' }, expect: { ids: [] } },
+      { select: ':scope > .direct', ref: { by: 'document' }, expect: { ids: [] } },
+
+      // Element querySelectorAll does not include the context element itself.
+      { select: '&', ref: { by: 'id', id: 'outer' }, expect: { ids: [] } },
+      { select: ':scope', ref: { by: 'id', id: 'outer' }, expect: { ids: [] } },
+
+      { select: '& span', ref: { by: 'id', id: 'outer' }, expect: { ids: ['direct', 'deep'] } },
+      { select: ':scope span', ref: { by: 'id', id: 'outer' }, expect: { ids: ['direct', 'deep'] } },
+      { select: '& span', ref: { by: 'id', id: 'outer' }, expect: { equivalentCase: { select: ':scope span', ref: { by: 'id', id: 'outer' } } } },
+
+      // Element context: & behaves like :scope for descendant/child anchoring.
+      { select: '& > .direct', ref: { by: 'id', id: 'outer' }, expect: { ids: ['direct'] } },
+      { select: ':scope > .direct', ref: { by: 'id', id: 'outer' }, expect: { ids: ['direct'] } },
+
+      { select: '& .deep', ref: { by: 'id', id: 'outer' }, expect: { ids: ['deep'] } },
+      { select: ':scope .deep', ref: { by: 'id', id: 'outer' }, expect: { ids: ['deep'] } },
+
+      // Compound with &: the context element is .foo, but qSA returns descendants,
+      // so this still does not return the context element.
+      { select: '&.foo', ref: { by: 'id', id: 'outer' }, expect: { ids: [] } },
+
+      // matches() does test the element itself.
+      { match: '&', ref: { by: 'id', id: 'outer' }, expect: { ids: ['outer'], classes: ['foo'] } },
+      { match: ':scope', ref: { by: 'id', id: 'outer' }, expect: { ids: ['outer'] } },
+      { match: '&.foo', ref: { by: 'id', id: 'outer' }, expect: { ids: ['outer'] } },
+
+      // These are valid selectors, but they do not match this tree.
+      { select: '#outer & > .direct', ref: { by: 'document' }, expect: { ids: [] } },
+      { select: 'div & span', ref: { by: 'document' }, expect: { ids: [] } },
+
+      // QSA takes selectors, not stylesheet rules.
+      { select: '#outer { & > .direct }', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'debug attribute ~= unquoted value',
+    // status: 'only',
+    markup: `
+      <div id="father" class="brothers men"></div>
+      <div id="uncle" class="brothers men"></div>
+      <div id="son" class="men"></div>
+    `,
+    cases: [
+      { select: 'div[class~=brothers]', expect: { ids: ['father', 'uncle'] }, debug: false },
+    ],
+  }
 
 ]);

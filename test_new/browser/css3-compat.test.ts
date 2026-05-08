@@ -592,6 +592,7 @@ runScenarios('css3 compat', 'normal',  [
   },
   {
     name: 'attribute case sensitivity identifier tests',
+    // status: 'only',
     markup: `
       <div class="test attrCaseInsensitive">
         <div class="blox23s1 unitTest" foo="blox"></div>
@@ -621,16 +622,17 @@ runScenarios('css3 compat', 'normal',  [
       { select: '.blox23s1[foo="blox" erroneous]', expect: { throws: true } },
       { select: '.blox19[class="BLOX19 UNITTEST" i]', expect: { count: 1 } },
       { select: '.blox20[class="BLOX20 UNITTEST" i]', expect: { count: 1 } },
-      { select: '.blox20[class="blox20 unitTest" s]', status: 'fixme' },
+      { select: '.blox20[class="blox20 unitTest" s]', expect: { count: 1 }, browsers: ['firefox'] },
+      { select: '.blox20[class="blox20 unitTest" s]', expect: { throws: true }, browsers: ['chromium', 'webkit'], engines: ['native'] },
       { select: '.blox21[class*="21 UN" i]', expect: { count: 1 } },
-      { select: '.blox22[class*="22 unitt" s]', status: 'fixme' },
-      { select: '.blox22[class*="22 unitT" s]', status: 'fixme' },
+      { select: '.blox22[class*="22 unitt" s]', expect: { count: 0 }, browsers: ['firefox'] },
+      { select: '.blox22[class*="22 unitT" s]', expect: { count: 1 }, browsers: ['firefox'] },
       { select: '.blox24[class^="BLOX" i]', expect: { count: 1 } },
       { select: '.blox25[class^="BLOX"]', expect: { count: 0 } },
-      { select: '.blox25[class^="blox" s]', status: 'fixme' },
+      { select: '.blox25[class^="blox" s]', expect: { count: 1 }, browsers: ['firefox'] },
       { select: '.blox26[class$="tEST" i]', expect: { count: 1 } },
-      { select: '.blox27[class$="TEst" s]', status: 'fixme' },
-      { select: '.blox27[class$="Test" s]', status: 'fixme' },
+      { select: '.blox27[class$="TEst" s]', expect: { count: 0 }, browsers: ['firefox'] },
+      { select: '.blox27[class$="Test" s]', expect: { count: 1 }, browsers: ['firefox'] },
       { select: '.blox28[class~="unitTEST" i]', expect: { count: 1 } },
     ],
   },

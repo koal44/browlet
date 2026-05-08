@@ -287,10 +287,8 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 }
 
 export const DEFAULT_CONFIG: NwsConfig = {
-  FORGIVING: true,
   NODE_LIST: false,
   LOGERRORS: true,
-  USR_EVENT: true,
   VERBOSITY: true,
 };
 
@@ -322,12 +320,12 @@ export function initSnapshot(doc: Document) {
     selectors: {} as Record<string, SelectorExtension>,
     combinators: {} as Record<string, CombinatorCompiler>,
     operators: {
-      '=':  { p1: '^',       p2: '$',       p3: 'true' },
-      '^=': { p1: '^',       p2: '',        p3: 'true' },
-      '$=': { p1: '',        p2: '$',       p3: 'true' },
-      '*=': { p1: '',        p2: '',        p3: 'true' },
-      '|=': { p1: '^',       p2: '(-|$)',   p3: 'true' },
-      '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: 'true' },
+      '=':  { p1: '^',       p2: '$',       p3: true },
+      '^=': { p1: '^',       p2: '',        p3: true },
+      '$=': { p1: '',        p2: '$',       p3: true },
+      '*=': { p1: '',        p2: '',        p3: true },
+      '|=': { p1: '^',       p2: '(-|$)',   p3: true },
+      '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: true },
     } as Record<string, AttrMatcherParts>,
 
     hoverTarget: null as EventTarget | null,
@@ -370,10 +368,12 @@ export function initSnapshot(doc: Document) {
     isPaused: isPaused,
     isSeeking: isSeeking,
     isMuted: isMuted,
+    matchAttribute: (e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null) => matchAttribute(e, ns, local, pattern, flag, snap),
+    attrValueCaseFlag: (e: Element, localName: string, attrFlag: string | undefined) => attrValueCaseFlag(e, localName, attrFlag, snap),
 
     isFocused: (node: Element) => isFocused(node, snap),
-    hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
-    getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
+    // hasAttribute: (() => nr('hasAttribute')) as HasAttributeFn,
+    // getAttribute: (() => nr('getAttribute')) as GetAttributeFn,
   };
 
   function nr(name: string): never { throw new Error(`Snapshot member used before initialization: ${name}`); };
@@ -384,8 +384,8 @@ export function initSnapshot(doc: Document) {
   snap.match = (sel: string, context: Element, cb?: QueryCallback | null) => matchRaw(sel, context, cb ?? null, snap);
   snap.select = (sel: string, context?: QueryContext, cb?: QueryCallback | null) => selectRaw(sel, context ?? snap.doc, cb ?? null, snap);
   snap.ancestor = (sel: string, context: Element, cb?: QueryCallback | null) => ancestorRaw(sel, context, cb ?? null, snap);
-  snap.hasAttribute = (element: Element, ns: string | null, local: string) => hasAttribute(element, ns, local, snap);
-  snap.getAttribute = (element: Element, ns: string | null, local: string) => getAttribute(element, ns, local, snap);
+  // snap.hasAttribute = (element: Element, ns: string | null, local: string) => hasAttribute(element, ns, local, snap);
+  // snap.getAttribute = (element: Element, ns: string | null, local: string) => getAttribute(element, ns, local, snap);
 
   return snap;
 }
@@ -655,22 +655,23 @@ function isType(e: Element, name: string): boolean {
 
 function hasAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): boolean {
   const attrs = e.attributes;
+  const isHtml = snap.isHtml && isHtmlElement(e);
 
   if (nsPrefix === null) {
-    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    const expected = isHtml ? localName.toLowerCase() : localName;
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
       if (attr.namespaceURI != null) continue;
-      const actual = snap.isHtml ? attr.localName.toLowerCase() : attr.localName;
+      const actual = isHtml ? attr.localName.toLowerCase() : attr.localName;
       if (actual === expected) return true;
     }
     return false;
   }
 
   if (nsPrefix === '*') {
-    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    const expected = isHtml ? localName.toLowerCase() : localName;
     for (let i = 0; i < attrs.length; i++) {
-      const actual = snap.isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
+      const actual = isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
       if (actual === expected) return true;
     }
     return false;
@@ -686,22 +687,23 @@ function hasAttribute(e: Element, nsPrefix: string | null, localName: string, sn
 
 function getAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): string | null {
   const attrs = e.attributes;
+  const isHtml = snap.isHtml && isHtmlElement(e);
 
   if (nsPrefix === null) {
-    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+    const expected = isHtml ? localName.toLowerCase() : localName;
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
       if (attr.namespaceURI != null) continue;
-      const actual = snap.isHtml ? attr.localName.toLowerCase() : attr.localName;
+      const actual = isHtml ? attr.localName.toLowerCase() : attr.localName;
       if (actual === expected) return attr.value;
     }
     return null;
   }
 
-  if (nsPrefix === null || nsPrefix === '*') {
-    const expected = snap.isHtml ? localName.toLowerCase() : localName;
+  if (nsPrefix === '*') {
+    const expected = isHtml ? localName.toLowerCase() : localName;
     for (let i = 0; i < attrs.length; i++) {
-      const actual = snap.isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
+      const actual = isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
       if (actual === expected) return attrs[i].value;
     }
     return null;
@@ -714,6 +716,59 @@ function getAttribute(e: Element, nsPrefix: string | null, localName: string, sn
   const uri = e.lookupNamespaceURI?.(nsPrefix) ?? snap.doc.lookupNamespaceURI?.(nsPrefix);
   return uri && e.getAttributeNS ? e.getAttributeNS(uri, localName) : null;
 }
+
+function attrValueCaseFlag(e: Element, localName: string, attrFlag: string | undefined, snap: Snapshot): string {
+  if (attrFlag === 'i') return 'i';
+  if (attrFlag === 's') return '';
+  return snap.isHtml && isHtmlElement(e) && ATTR_INSENSITIVE.has(localName.toLowerCase()) ? 'i' : '';
+}
+
+function matchAttribute(e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null, snap: Snapshot): boolean {
+  const attrs = e.attributes;
+  const isHtml = snap.isHtml && isHtmlElement(e);
+  const expectedName = isHtml ? local.toLowerCase() : local;
+
+  const insensitive =
+    flag === 'i' ? true :
+    flag === 's' ? false :
+    isHtml && ATTR_INSENSITIVE.has(local.toLowerCase());
+
+  const nsUri =
+    ns && ns !== '*'
+      ? e.lookupNamespaceURI?.(ns) ?? snap.doc.lookupNamespaceURI?.(ns)
+      : null;
+
+  if (ns && ns !== '*' && !nsUri) return false;
+
+  for (let i = 0; i < attrs.length; i++) {
+    const attr = attrs[i];
+
+    if (ns === null || ns === '') {
+      if (attr.namespaceURI !== null) continue;
+    } else if (ns !== '*') {
+      if (attr.namespaceURI !== nsUri) continue;
+    }
+
+    const actualName = isHtml ? attr.localName.toLowerCase() : attr.localName;
+    if (actualName !== expectedName) continue;
+
+    if (pattern === null) return true;
+    if (matchAttrValue(attr.value, pattern, insensitive)) return true;
+  }
+
+  return false;
+}
+
+function matchAttrValue(value: string, pattern: string, insensitive: boolean): boolean {
+  const source = insensitive ? asciiLower(pattern) : pattern;
+  const actual = insensitive ? asciiLower(value) : value;
+  return new RegExp(source).test(actual);
+}
+
+function asciiLower(s: string): string {
+  return s.replace(/[A-Z]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 32));
+}
+
 
 type NthElementState = {
   idx: number; len: number; set: number; parent: Element | null | undefined; parents: (Element | null)[]; nodes: Element[][];
@@ -973,16 +1028,23 @@ function autoDir(text: string): 'ltr' | 'rtl' | null {
   return null;
 }
 
+const CUSTOM_ELEMENT_NAME_BLACKLIST = new Set([
+  'annotation-xml', 'color-profile', 'font-face', 'font-face-src', 'font-face-uri',
+  'font-face-format', 'font-face-name', 'missing-glyph',
+]);
+const PCEN = String.raw`[-.0-9_a-z\u00B7\u0300-\u036F\u203F-\u2040]`;
+const CUSTOM_ELEMENT_NAME = new RegExp(String.raw`^[a-z]${PCEN}*-${PCEN}*$`);
+
+function isPotentialCustomElementName(name: string): boolean {
+  return CUSTOM_ELEMENT_NAME.test(name) &&
+    !CUSTOM_ELEMENT_NAME_BLACKLIST.has(name);
+}
+
 function isDefined(element: Element, snap: Snapshot): boolean {
-  if (!snap.isHtml) {
-    return true;
-  }
+  if (!isHtmlElement(element)) return true;
 
   const name = element.localName;
-
-  if (!name.includes('-')) {
-    return true;
-  }
+  if (!isPotentialCustomElementName(name)) return true;
 
   return !!snap.doc.defaultView?.customElements?.get(name);
 }
@@ -1525,7 +1587,17 @@ export function buildRexStrings(ext: NwsExtensions) {
   const sqString = `'[^'${BS}]*(?:${BS}.[^'${BS}]*)*(?:'|$)`;
   const attrValue = `(?:${identifier}|${dqString}|${sqString})`;
   const attrvalueCap = `(${quote}?)((?!\\3)*|(?:${BS}?.)*?)(?:\\3|$)`;
-  const attrFlag = `(?:\\bi\\b)`;
+  // const attrFlag = `(?:\\b[is]\\b)`;
+  const attrFlag =
+    `(?:` +
+      `\\b[iIsS]|` +
+      `${BS}(?:[iIsS]|(?:0{0,5}(?:49|53|69|73))(?:${CR}${LF}|${wsp})?)` +
+    `)`;
+
+  // const simpleSelector = `(?:${classSelector}|${idSelector}|${attributes}|${pseudoSelector})`;
+  // const compoundSelector = `(?:${typeSelector}${simpleSelector}*|${simpleSelector}+)`;
+  // after simple selector
+  const afterSubSelector = `(?=$|[${WSP},)>+~.#\\[:])`;
 
   // [ attrName (operator attrValue)? attrFlag? ]
   // [attr], [attr=value], [attr~=value], [attr~="value'], [ns|attr=value i], etc.
@@ -1538,19 +1610,19 @@ export function buildRexStrings(ext: NwsExtensions) {
         `(${operators})` +
         `${wsp}?` +
         `${attrValue}` +
+        `${wsp}?` +
+        `(${attrFlag})?` +
       `)?` +
       `${wsp}?` +
-      `(${attrFlag})?` +
-      `${wsp}?` +
-    `(?:${RB}|$)`;
+    `(?:${RB}|$)` + afterSubSelector;
 
   const attrMatcher = attributeSelector.replace(attrValue, attrvalueCap);
 
   // selector components
   const pseudoName = `${slugCh}+`;
   const typeSelector = `(?:${nsType}|${UNIVERSAL}|${identifier})`;
-  const classSelector = `\\.${identifier}`;
-  const idSelector = `#${identifier}`;
+  const classSelector = `\\.${identifier}` + afterSubSelector;
+  const idSelector = `#${identifier}` + afterSubSelector;
   const pseudoSelector = `:${pseudoName}`;
 
   // const pseudoSelector = `:${pseudoName}(?:${pseudoBody}*)?`;
@@ -1580,14 +1652,14 @@ export function buildRexStrings(ext: NwsExtensions) {
     `${RP})`;
 
   // Cheated because regex can't do recursion, but here's the full version after the fact.
-  const pseudoSelectorFull = `:{1,2}${pseudoName}${pseudoBody}*`;
+  const pseudoSelectorFull = `:{1,2}${pseudoName}${pseudoBody}*` + afterSubSelector;
 
   const validator =
     `(?=${wsp}?[^>+~(){}<>])` +
     `(?:` +
       `(?:${typeSelector})|` +
       `(?:${classSelector}|${idSelector})|` +
-      `(?:${attributeSelector})+|` +
+      `(?:${attributeSelector})|` +
       `(?:${pseudoSelectorFull})|` +
       `(?:${wsp}?${combinator}${wsp}?)|` +
       `(?:${wsp}?,${wsp}?)|` +
@@ -1937,7 +2009,7 @@ function compileSelector(
         const attrName = match[1];
         const attrOp = match[2] as string | undefined;
         const rawAttrVal = match[4] as string | undefined;
-        const attrFlag = match[5] as string | undefined;
+        const rawAttrFlag = match[5] as string | undefined;
 
         const pipe = findUnescapedPipe(attrName);
         const rawNsPrefix = pipe >= 0 ? attrName.slice(0, pipe) : null;
@@ -1954,12 +2026,19 @@ function compileSelector(
 
         const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
         const localArg = JSON.stringify(localName);
-        const hasExpr = `s.hasAttribute(e,${nsArg},${localArg})`;
-        const getExpr = `s.getAttribute(e,${nsArg},${localArg})`;
+        const attrFlag = rawAttrFlag === undefined ? undefined : cssIdentUnescape(rawAttrFlag).toLowerCase();
+        if (attrFlag !== undefined && attrFlag !== 'i' && attrFlag !== 's') throw new Error(`Invalid attribute selector flag: ${rawAttrFlag}`);
+        const flagArg = attrFlag === undefined ? 'null' : JSON.stringify(attrFlag);
+
+        const matchAttrExpr = (pattern: string | null, negate = false): string => {
+          const patternArg = pattern === null ? 'null' : JSON.stringify(pattern);
+          const match = `s.matchAttribute(e,${nsArg},${localArg},${patternArg},${flagArg})`;
+          return negate ? `!${match}` : match;
+        };
 
         let attrExpr: string;
         if (!attrOp) {
-          attrExpr = hasExpr;
+          attrExpr = matchAttrExpr(null);
         } else if (attrVal === undefined) {
           emit(`Missing attribute value in selector: ${selector}`, snap.config);
           return out;
@@ -1975,20 +2054,12 @@ function compileSelector(
 
           const isStdOp = ATTR_STD_OPS.has(attrOp) && attrOp !== '~=';
           const test =
-              attrVal === '' && attrOp === '~=' ? { p1: '^\\s', p2: '+$', p3: 'true' }
-            : attrVal === '' && isStdOp        ? { p1: '^',    p2: '$',  p3: 'true' }
+              attrVal === '' && attrOp === '~=' ? { p1: '^\\s', p2: '+$', p3: true }
+            : attrVal === '' && isStdOp         ? { p1: '^',    p2: '$',  p3: true }
             : baseTest;
 
-          if (attrVal === '' && isStdOp) {
-            attrExpr = `${hasExpr}&&${getExpr}===""`;
-          } else {
-            const sensitivity = attrFlag === 'i' || (snap.isHtml && ATTR_INSENSITIVE.has(localName.toLowerCase())) ? 'i' : '';
-            const attrPattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
-            const attrPatternLit = JSON.stringify(attrPattern);
-            const sensitivityLit = JSON.stringify(sensitivity);
-
-            attrExpr = `${hasExpr}&&((new RegExp(${attrPatternLit},${sensitivityLit})).test(${getExpr})===${test.p3})`;
-          }
+          const attrPattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
+          attrExpr = matchAttrExpr(attrPattern, !test.p3);
         }
 
         source = `if((${attrExpr})){${source}}`;
@@ -2166,12 +2237,18 @@ function compileSelector(
 
           switch (pseudo) {
             case 'is':
-            case 'where':
-            case 'matches':
-              source = snap.config.FORGIVING
-                ? `try{if(s.match(${exprLit},e)){${source}}}catch(E){}`
-                : `if(s.match(${exprLit},e)){${source}}`;
+            case 'where': {
+              const selectors = parse(expr, snap.re, true);
+              const test = selectors.length
+                ? selectors
+                    .map(sel => `(function(){try{return s.match(${JSON.stringify(sel)},e);}catch(E){return false;}})()`)
+                    .join('||')
+                : 'false';
+              source = `if(${test}){${source}}`;
               break;
+            }
+            case 'matches':
+              throw new Error(`Unsupported pseudo-class :matches(); use :is()`);
             case 'not':
               source = `if(!s.match(${exprLit},e)){${source}}`;
               break;
@@ -2440,19 +2517,11 @@ function compileSelector(
           }
 
           if (!status) {
-            if (snap.config.FORGIVING &&
-              selector.match(/(:(?:is|where)\x28)/)) {
-              return out;
-            }
             emit(`Unrecognized selector component: ${selector} in selector: ${expression}`, snap.config);
             return out;
           }
 
           if (!expr) {
-            if (snap.config.FORGIVING &&
-              selector.match(/(:(?:is|where)\x28)/)) {
-              return out;
-            }
             emit('Unknown token in selector: ' + selector + ' in selector: ' + expression, snap.config);
             return out;
           }
@@ -2468,10 +2537,6 @@ function compileSelector(
     // end of switch symbol
 
     if (!match) {
-      if (snap.config.FORGIVING &&
-        selector.match(/(:(?:is|where)\x28)/)) {
-        return out;
-      }
       emit(`Failed to parse selector component: ${selector} in selector: ${expression}`, snap.config);
       return out;
     }
@@ -2485,49 +2550,65 @@ function compileSelector(
   return out;
 }
 
-// unique parser entry point for all
-// methods (type matching/selecting)
-export function parse(selectors: string, re: Rex, config: NwsConfig): string[] {
-  // arguments validation
-  if (arguments.length === 0) {
-    throw new Error('[parse] Missing argument: selector');
-  } else if (arguments[0] === '') {
-    emit(`[parse] '' is not a valid selector`, config);
-    return [];
+// Parse a normal selector list. In forgiving mode, invalid selector-list arms
+// are dropped; this is intended for :is()/:where() argument parsing.
+export function parse(selectors: string, re: Rex, forgiving = false): string[] {
+  if (selectors === '') {
+    throw new Error(`[parse] '' is not a valid selector`);
   }
 
-  // input NULL or UNDEFINED
-  if (typeof selectors != 'string') {
-    selectors = '' + selectors;
+  const normalized = normalizeSelectorInput(selectors, re);
+
+  if (!forgiving && normalized.endsWith(',')) {
+    throw new Error(`[parse] Selector cannot end with a comma: '${selectors}'`);
   }
 
-  // normalize input string
-  const normalized = selectors
+  const groups = splitSelectorGroups(normalized)
+    .map(group => group.replace(re.TrimSpaces, ''));
+
+  const valid: string[] = [];
+
+  for (const group of groups) {
+    if (!group) {
+      if (!forgiving) {
+        throw new Error(`[parse] Empty selector-list item in selector: '${selectors}'`);
+      }
+      continue;
+    }
+
+    if (/^[>+~]/.test(group)) {
+      if (!forgiving) {
+        throw new Error(`[parse] Relative selector is not valid here: '${group}'`);
+      }
+      continue;
+    }
+
+    const validated = group.match(re.validator);
+    if (validated?.join('') === group) {
+      valid.push(group);
+      continue;
+    }
+
+    if (!forgiving) {
+      throw new Error(`[parse] Failed to validate selector: '${group}'`);
+    }
+  }
+
+  return valid;
+}
+
+function normalizeSelectorInput(selectors: string, re: Rex): string {
+  let
+  normalized = stripCssComments(selectors);
+  normalized = normalizeNestingSelector(normalized);
+  normalized = normalized
     .replace(/\x00|\\$/g, '\ufffd')
     .replace(re.CombineWSP, '\x20')
     .replace(re.PseudosWSP, '$1$2')
     .replace(re.TabCharWSP, '\t')
     .replace(re.CommaGroup, ',')
     .replace(re.TrimSpaces, '');
-
-  // parse, validate and split possible compound selectors
-  const validated = normalized.match(re.validator);
-  if (validated?.join('') == normalized) {
-    if (normalized[normalized.length - 1] == ',') {
-      emit(`[parse] Selector cannot end with a comma: '${selectors}'`, config);
-      return [];
-    }
-    return splitSelectorGroups(normalized);
-  } else {
-    if (config.FORGIVING) {
-      // forgiving pseudos allow to continue even after parse errors
-      if (!(normalized.includes(':is(') || normalized.includes(':where('))) {
-        emit(`[parse] Failed to validate selector: '${normalized}'`, config);
-        return [];
-      }
-    }
-    return [];
-  }
+  return normalized;
 }
 
 // equivalent of w3c 'matches' method
@@ -2539,7 +2620,7 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
     return false;
   }
 
-  const scoped = prepareScope(selectors, element);
+  const scoped = prepareScope(selectors, element, snap.re);
   try {
     if (snap.isDebug) {
       snap.debugMatch = {
@@ -2552,7 +2633,7 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
 
     let resolver = snap.matchResolvers[scoped.selectors];
     if (!resolver || resolver.callback !== cb) {
-      const parsed = parse(scoped.selectors, snap.re, snap.config);
+      const parsed = parse(scoped.selectors, snap.re);
 
       if (snap.isDebug && snap.debugMatch) {
         snap.debugMatch.parsed = parsed;
@@ -2599,7 +2680,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     return [];
   }
 
-  const scoped = prepareScope(sel, ctx);
+  const scoped = prepareScope(sel, ctx, snap.re);
 
   try {
     if (!scoped.selectors) return nodes;
@@ -2610,7 +2691,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     // try to reuse cached resolver
     let resolver = snap.selectResolvers[scoped.selectors];
     if (!resolver || resolver.context !== ctx || resolver.callback !== cb) {
-      const parsed = parse(scoped.selectors, snap.re, snap.config);
+      const parsed = parse(scoped.selectors, snap.re);
       resolver = buildResolver(parsed, ctx, cb, snap);
       snap.selectResolvers[scoped.selectors] = resolver;
     }
@@ -2734,9 +2815,11 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
 }
 
 let scopeId = 0;
-function prepareScope(selectors: string, context: QueryContext) {
+function prepareScope(selectors: string, context: QueryContext, re: Rex) {
   const HAS_SCOPE = /:scope\b/i;
   const RE_SCOPE = /:scope\b/gi;
+
+  selectors = normalizeSelectorInput(selectors, re);
 
   if (!HAS_SCOPE.test(selectors)) {
     return { selectors, cleanup: () => {} };
@@ -2759,7 +2842,7 @@ function prepareScope(selectors: string, context: QueryContext) {
 function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
   updateSnapshot(snap, element);
 
-  const scoped = prepareScope(selectors, element);
+  const scoped = prepareScope(selectors, element, snap.re);
   try {
     let el: Element | null = element;
     while (el) {
@@ -2979,4 +3062,69 @@ function skipSelectorSpaces(source: string, index: number): number {
 
 function isSelectorSpace(ch: string): boolean {
   return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
+}
+
+function stripCssComments(s: string): string {
+  let out = '';
+  let quote = '';
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+
+    if (ch === '\\') {
+      out += ch;
+      if (i + 1 < s.length) out += s[++i];
+    } else if (quote) {
+      out += ch;
+      if (ch === quote) quote = '';
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      out += ch;
+    } else if (ch === '/' && s[i + 1] === '*') {
+      i += 2;
+      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++;
+      if (i < s.length) i++;
+      out += ' ';
+    } else {
+      out += ch;
+    }
+  }
+
+  return out;
+}
+
+function normalizeNestingSelector(s: string): string {
+  let out = '';
+  let quote = '';
+  let inAttr = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+
+    if (ch === '\\') {
+      out += ch + (s[++i] ?? '');
+      continue;
+    }
+
+    if (quote) {
+      out += ch;
+      if (ch === quote) quote = '';
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      out += ch;
+    } else if (inAttr) {
+      if (ch === ']') inAttr = false;
+      out += ch;
+    } else if (ch === '[') {
+      inAttr = true;
+      out += ch;
+    } else {
+      out += ch === '&' ? ':scope' : ch;
+    }
+  }
+
+  return out;
 }

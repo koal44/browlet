@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { runScenarios } from './harness/scenarios';
+import { runScenarios, type ScenarioStep } from './harness/scenarios';
 
 runScenarios('w3c iframes', 'normal', [
   {
@@ -204,7 +204,8 @@ runScenarios('w3c iframes', 'normal', [
 runScenarios('w3c', 'normal', [
   {
     name: 'css/selectors/syntax',
-    status: 'fixme',
+    // status: 'only',
+    // engines: ['native'],
     markup: `
       <!doctype html>
       <title>Selectors: syntax of case-sensitivity attribute selector</title>
@@ -216,30 +217,30 @@ runScenarios('w3c', 'normal', [
       <iframe id="xml"></iframe>
     `,
     cases: [
-      { select: "[foo='BAR'] /* sanity check (valid) */" },
-      { select: "[foo='bar' i]" },
-      { select: "[foo='bar' I]" },
-      { select: "[foo=bar i]" },
-      { select: '[foo="bar" i]' },
-      { select: "[foo='bar'i]" },
-      { select: "[foo='bar'i ]" },
-      { select: "[foo='bar' i ]" },
-      { select: "[foo='bar' /**/ i]" },
-      { select: "[foo='bar' i /**/ ]" },
-      { select: "[foo='bar'/**/i/**/]" },
-      { select: "[foo=bar/**/i]" },
-      { select: "[foo='bar'\ti\t] /* \\t */" },
-      { select: "[foo='bar'\ni\n] /* \\n */" },
-      { select: "[foo='bar'\ri\r] /* \\r */" },
-      { select: "[foo='bar' \\i]" },
-      { select: "[foo='bar' \\69]" },
-      { select: "[foo~='bar' i]" },
-      { select: "[foo^='bar' i]" },
-      { select: "[foo$='bar' i]" },
-      { select: "[foo*='bar' i]" },
-      { select: "[foo|='bar' i]" },
-      { select: "[|foo='bar' i]" },
-      { select: "[*|foo='bar' i]" },
+      { select: "[foo='BAR'] /* sanity check (valid) */", expect: { throws: false } },
+      { select: "[foo='bar' i]", expect: { throws: false } },
+      { select: "[foo='bar' I]", expect: { throws: false } },
+      { select: "[foo=bar i]", expect: { throws: false } },
+      { select: '[foo="bar" i]', expect: { throws: false } },
+      { select: "[foo='bar'i]", expect: { throws: false } },
+      { select: "[foo='bar'i ]", expect: { throws: false } },
+      { select: "[foo='bar' i ]", expect: { throws: false } },
+      { select: "[foo='bar' /**/ i]", expect: { throws: false } },
+      { select: "[foo='bar' i /**/ ]", expect: { throws: false } },
+      { select: "[foo='bar'/**/i/**/]", expect: { throws: false } },
+      { select: "[foo=bar/**/i]", expect: { throws: false } },
+      { select: "[foo='bar'\ti\t] /* \\t */", expect: { throws: false } },
+      { select: "[foo='bar'\ni\n] /* \\n */", expect: { throws: false } },
+      { select: "[foo='bar'\ri\r] /* \\r */", expect: { throws: false } },
+      { select: "[foo='bar' \\i]", expect: { throws: false } },
+      { select: "[foo='bar' \\69]", expect: { throws: false } },
+      { select: "[foo~='bar' i]", expect: { throws: false } },
+      { select: "[foo^='bar' i]", expect: { throws: false } },
+      { select: "[foo$='bar' i]", expect: { throws: false } },
+      { select: "[foo*='bar' i]", expect: { throws: false } },
+      { select: "[foo|='bar' i]", expect: { throws: false } },
+      { select: "[|foo='bar' i]", expect: { throws: false } },
+      { select: "[*|foo='bar' i]", expect: { throws: false } },
 
       { select: "[foo[ /* sanity check (invalid) */", expect: { throws: true } },
       { select: "[foo='bar' i i]", expect: { throws: true } },
@@ -281,136 +282,106 @@ runScenarios('w3c', 'normal', [
       { select: "[foo/**/i]", expect: { throws: true } },
     ],
   },
+]);
 
+type Attr = [ns: string, name: string, value: string];
+const attrStep = (select: string, attrs: Attr[], ids: string[] = ['target']): ScenarioStep => ({
+  setupPage: async page => page.evaluate((attrs) => {
+    const root = document.getElementById('root')!;
+    root.textContent = '';
+
+    const span = document.createElement('span');
+    span.id = 'target';
+
+    for (const [ns, name, value] of attrs) {
+      ns ? span.setAttributeNS(ns, name, value) : span.setAttribute(name, value);
+    }
+
+    root.appendChild(span);
+  }, attrs),
+  cases: [{ select, ref: { by: 'id', id: 'root' }, expect: { ids } }],
+});
+
+runScenarios('w3c iframes 2', 'normal', [
   {
-    name: 'css/selectors/semantics',
-    status: 'fixme',
-    markup: `<div id="test"></div>`,
-    cases: [],
-    setupPage: async (page) => {
-      page.on('console', (msg) => { console.log(`[browser:${msg.type()}] ${msg.text()}`); });
-
-      const results = await page.evaluate(async () => {
-        type Attr = [ns: string, name: string, value: string];
-        type TestCase = [selector: string, ...attrs: Attr[]];
-
-        const match: TestCase[] = [
-          ["[foo='BAR'] /* sanity check (match) */", ["", "foo", "BAR"]],
-          ["[foo='bar' i]", ["", "foo", "BAR"]],
-          ["[foo='' i]", ["", "foo", ""]],
-          ["[foo='a\u0308' i] /* COMBINING in both */", ["", "foo", "A\u0308"]],
-          ["[foo='A\u0308' i] /* COMBINING in both */", ["", "foo", "a\u0308"]],
-          ["[*|foo='bar' i]", ["", "foo", "x"], ["a", "foo", "x"], ["b", "foo", "BAR"], ["c", "foo", "x"]],
-          ["[*|foo='bar' i]", ["", "foo", "BAR"], ["a", "foo", "x"], ["b", "foo", "x"], ["c", "foo", "x"]],
-          ["[align='left' i]", ["", "align", "LEFT"]],
-          ["[align='LEFT' i]", ["", "align", "left"]],
-          ["[class~='a' i]", ["", "class", "X A B"]],
-          ["[class~='A' i]", ["", "class", "x a b"]],
-          ["[id^='a' i]", ["", "id", "AB"]],
-          ["[id$='A' i]", ["", "id", "xa"]],
-          ["[lang|='a' i]", ["", "lang", "A-B"]],
-          ["[lang*='A' i]", ["", "lang", "xab"]],
-          ["[*|lang='a' i]", ["http://www.w3.org/XML/1998/namespace", "lang", "A"]],
-          ["[*|lang='A' i]", ["http://www.w3.org/XML/1998/namespace", "lang", "a"]],
-          // ["@namespace x 'http://www.w3.org/XML/1998/namespace'; [x|lang='A' i]", ["http://www.w3.org/XML/1998/namespace", "lang", "a"]],
-          ["[foo='bar' i][foo='bar' i]", ["", "foo", "BAR"]],
-          ["[foo='BAR'][foo='bar' i]", ["", "foo", "BAR"]],
-          ["[foo='bar' i][foo='BAR']", ["", "foo", "BAR"]],
-          ["[foo='bar' i]", ["", "FOO", "bar"]],
-        ];
-        const nomatch: TestCase[] = [
-          ["[missingattr] /* sanity check (no match) */", ["", "foo", "BAR"]],
-          ["[foo='' i]", ["", "foo", "BAR"]],
-          ["[foo='\u0000' i] /* \\0 in selector */", ["", "foo", ""]],
-          ["[foo='' i] /* \\0 in attribute */", ["", "foo", "\u0000"]],
-          ["[foo='\u00E4' i]", ["", "foo", "\u00C4"]],
-          ["[foo='\u00C4' i]", ["", "foo", "\u00E4"]],
-          ["[foo='a\u0308' i] /* COMBINING in selector */", ["", "foo", "\u00C4"]],
-          ["[foo~='a\u0308' i] /* COMBINING in selector */", ["", "foo", "\u00E4"]],
-          ["[foo^='A\u0308' i] /* COMBINING in selector */", ["", "foo", "\u00C4"]],
-          ["[foo$='A\u0308' i] /* COMBINING in selector */", ["", "foo", "\u00E4"]],
-          ["[foo*='\u00E4' i] /* COMBINING in attribute */", ["", "foo", "a\u0308"]],
-          ["[foo|='\u00E4' i] /* COMBINING in attribute */", ["", "foo", "A\u0308"]],
-          ["[foo='\u00C4' i] /* COMBINING in attribute */", ["", "foo", "a\u0308"]],
-          ["[foo='\u00C4' i] /* COMBINING in attribute */", ["", "foo", "A\u0308"]],
-          ["[foo='a\u0308' i] /* COMBINING in selector */", ["", "foo", "a"]],
-          ["[foo='a\u0308' i] /* COMBINING in selector */", ["", "foo", "A"]],
-          ["[foo='A\u0308' i] /* COMBINING in selector */", ["", "foo", "a"]],
-          ["[foo='A\u0308' i] /* COMBINING in selector */", ["", "foo", "A"]],
-          ["[foo='a' i] /* COMBINING in attribute */", ["", "foo", "a\u0308"]],
-          ["[foo='A' i] /* COMBINING in attribute */", ["", "foo", "a\u0308"]],
-          ["[foo='a' i] /* COMBINING in attribute */", ["", "foo", "A\u0308"]],
-          ["[foo='A' i] /* COMBINING in attribute */", ["", "foo", "A\u0308"]],
-          ["[foo='i' i]", ["", "foo", "\u0130"]],
-          ["[foo='i' i]", ["", "foo", "\u0131"]],
-          ["[foo='I' i]", ["", "foo", "\u0130"]],
-          ["[foo='I' i]", ["", "foo", "\u0131"]],
-          ["[foo='\u0130' i]", ["", "foo", "i"]],
-          ["[foo='\u0131' i]", ["", "foo", "i"]],
-          ["[foo='\u0130' i]", ["", "foo", "I"]],
-          ["[foo='\u0131' i]", ["", "foo", "I"]],
-          ["[foo='bar' i]", ["", "foo", "x"], ["a", "foo", "BAR"]],
-          ["[|foo='bar' i]", ["", "foo", "x"], ["a", "foo", "BAR"]],
-          // ["[foo='bar' i]", ["", "FOO", "bar"]],
-          ["[foo='\t' i] /* tab in selector */", ["", "foo", " "]],
-          ["[foo=' ' i] /* tab in attribute */", ["", "foo", "\t"]],
-          // ["@namespace x 'a'; [x|foo='' i]", ["A", "foo", ""]],
-          // ["@namespace x 'A'; [x|foo='' i]", ["a", "foo", ""]],
-          ["[foo='bar' i][foo='bar']", ["", "foo", "BAR"]],
-          ["[foo='bar' i]", ["", "baz", "BAR"]],
-        ];
-
-        type Result = 'match' | 'nomatch' | 'throws';
-        const results: { selector: string, attrsLabel: string, expected: Result, nw: Result, native: Result }[] = [];
-
-        const runTestCase = (testCase: TestCase, expected: Result) => {
-          const [selector, ...attrs] = testCase;
-          
-          const span = document.createElement('span');
-          for (const [ns, name, value] of attrs) {
-            if (ns) {
-              span.setAttributeNS(ns, name, value);
-            } else {
-              span.setAttribute(name, value);
-            }
-          }
-          const div = document.createElement('div');
-          div.appendChild(span);
-
-          let native: Result = 'nomatch';
-          try {
-            native = div.querySelector(selector) === span ? 'match' : 'nomatch';
-          } catch (e) {
-            native = 'throws';
-          }
-
-          let nw: Result = 'nomatch';
-          try {
-            nw = NW?.Dom?.select(selector, div)[0] === span ? 'match' : 'nomatch';
-          } catch (e) {
-            nw = 'throws';
-          }
-
-          const attrsLabel = attrs.map(([ns, name, value]) => `${ns ? `${ns}:` : ''}${name}="${value}"`).join(' ');
-          results.push({ selector, attrsLabel, expected, native, nw });
-        }
-
-        match.forEach(testCase => runTestCase(testCase, 'match'));
-        nomatch.forEach(testCase => runTestCase(testCase, 'nomatch'));
-
-        return results;
-      });
-
-      // console.log(results);
-      for (const r of results) {
-        const label = `${r.selector} on <span ${r.attrsLabel}>`;
-        expect(r.nw, `${label}: nw/native mismatch (${r.nw} vs ${r.native})`).toBe(r.native);
-        expect(r.native, `${label}: native expected ${r.expected}, got ${r.native}`).toBe(r.expected);
-        // expect(r.nw, `${label}: nw expected ${r.expected}, got ${r.nw}`).toBe(r.expected);
-      }
-    },
+    name: 'css/selectors/semantics attribute case-insensitive matches',
+    // status: 'only',
+    markup: `<div id="root"></div>`,
+    steps: [
+      attrStep("[foo='BAR'] /* sanity check (match) */", [['', 'foo', 'BAR']]),
+      attrStep("[foo='bar' i]", [['', 'foo', 'BAR']]),
+      attrStep("[foo='' i]", [['', 'foo', '']]),
+      attrStep("[foo='a\u0308' i] /* COMBINING in both */", [['', 'foo', 'A\u0308']]),
+      attrStep("[foo='A\u0308' i] /* COMBINING in both */", [['', 'foo', 'a\u0308']]),
+      attrStep("[*|foo='bar' i]", [['', 'foo', 'x'], ['a', 'foo', 'x'], ['b', 'foo', 'BAR'], ['c', 'foo', 'x']]),
+      attrStep("[*|foo='bar' i]", [['', 'foo', 'BAR'], ['a', 'foo', 'x'], ['b', 'foo', 'x'], ['c', 'foo', 'x']]),
+      attrStep("[align='left' i]", [['', 'align', 'LEFT']]),
+      attrStep("[align='LEFT' i]", [['', 'align', 'left']]),
+      attrStep("[class~='a' i]", [['', 'class', 'X A B']]),
+      attrStep("[class~='A' i]", [['', 'class', 'x a b']]),
+      attrStep("[id^='a' i]", [['', 'id', 'AB']], ['AB']),
+      attrStep("[id$='A' i]", [['', 'id', 'xa']], ['xa']),
+      attrStep("[lang|='a' i]", [['', 'lang', 'A-B']]),
+      attrStep("[lang*='A' i]", [['', 'lang', 'xab']]),
+      attrStep("[*|lang='a' i]", [['http://www.w3.org/XML/1998/namespace', 'lang', 'A']]),
+      attrStep("[*|lang='A' i]", [['http://www.w3.org/XML/1998/namespace', 'lang', 'a']]),
+      // ["@namespace x 'http://www.w3.org/XML/1998/namespace'; [x|lang='A' i]", ["http://www.w3.org/XML/1998/namespace", "lang", "a"]],
+      attrStep("[foo='bar' i][foo='bar' i]", [['', 'foo', 'BAR']]),
+      attrStep("[foo='BAR'][foo='bar' i]", [['', 'foo', 'BAR']]),
+      attrStep("[foo='bar' i][foo='BAR']", [['', 'foo', 'BAR']]),
+      attrStep("[foo='bar' i]", [['', 'FOO', 'bar']]),
+    ],
   },
 
+  {
+    name: 'css/selectors/semantics attribute case-insensitive non-matches',
+    // status: 'only',
+    markup: `<div id="root"></div>`,
+    steps: [
+      attrStep("[missingattr] /* sanity check (no match) */", [['', 'foo', 'BAR']], []),
+      attrStep("[foo='' i]", [['', 'foo', 'BAR']], []),
+      attrStep("[foo='\u0000' i] /* \\0 in selector */", [['', 'foo', '']], []),
+      attrStep("[foo='' i] /* \\0 in attribute */", [['', 'foo', '\u0000']], []),
+      attrStep("[foo='\u00E4' i]", [['', 'foo', '\u00C4']], []),
+      attrStep("[foo='\u00C4' i]", [['', 'foo', '\u00E4']], []),
+      attrStep("[foo='a\u0308' i] /* COMBINING in selector */", [['', 'foo', '\u00C4']], []),
+      attrStep("[foo~='a\u0308' i] /* COMBINING in selector */", [['', 'foo', '\u00E4']], []),
+      attrStep("[foo^='A\u0308' i] /* COMBINING in selector */", [['', 'foo', '\u00C4']], []),
+      attrStep("[foo$='A\u0308' i] /* COMBINING in selector */", [['', 'foo', '\u00E4']], []),
+      attrStep("[foo*='\u00E4' i] /* COMBINING in attribute */", [['', 'foo', 'a\u0308']], []),
+      attrStep("[foo|='\u00E4' i] /* COMBINING in attribute */", [['', 'foo', 'A\u0308']], []),
+      attrStep("[foo='\u00C4' i] /* COMBINING in attribute */", [['', 'foo', 'a\u0308']], []),
+      attrStep("[foo='\u00C4' i] /* COMBINING in attribute */", [['', 'foo', 'A\u0308']], []),
+      attrStep("[foo='a\u0308' i] /* COMBINING in selector */", [['', 'foo', 'a']], []),
+      attrStep("[foo='a\u0308' i] /* COMBINING in selector */", [['', 'foo', 'A']], []),
+      attrStep("[foo='A\u0308' i] /* COMBINING in selector */", [['', 'foo', 'a']], []),
+      attrStep("[foo='A\u0308' i] /* COMBINING in selector */", [['', 'foo', 'A']], []),
+      attrStep("[foo='a' i] /* COMBINING in attribute */", [['', 'foo', 'a\u0308']], []),
+      attrStep("[foo='A' i] /* COMBINING in attribute */", [['', 'foo', 'a\u0308']], []),
+      attrStep("[foo='a' i] /* COMBINING in attribute */", [['', 'foo', 'A\u0308']], []),
+      attrStep("[foo='A' i] /* COMBINING in attribute */", [['', 'foo', 'A\u0308']], []),
+      attrStep("[foo='i' i]", [['', 'foo', '\u0130']], []),
+      attrStep("[foo='i' i]", [['', 'foo', '\u0131']], []),
+      attrStep("[foo='I' i]", [['', 'foo', '\u0130']], []),
+      attrStep("[foo='I' i]", [['', 'foo', '\u0131']], []),
+      attrStep("[foo='\u0130' i]", [['', 'foo', 'i']], []),
+      attrStep("[foo='\u0131' i]", [['', 'foo', 'i']], []),
+      attrStep("[foo='\u0130' i]", [['', 'foo', 'I']], []),
+      attrStep("[foo='\u0131' i]", [['', 'foo', 'I']], []),
+      attrStep("[foo='bar' i]", [['', 'foo', 'x'], ['a', 'foo', 'BAR']], []),
+      attrStep("[|foo='bar' i]", [['', 'foo', 'x'], ['a', 'foo', 'BAR']], []),
+      // ["[foo='bar' i]", ["", "FOO", "bar"]],
+      attrStep("[foo='\t' i] /* tab in selector */", [['', 'foo', ' ']], []),
+      attrStep("[foo=' ' i] /* tab in attribute */", [['', 'foo', '\t']], []),
+      // ["@namespace x 'a'; [x|foo='' i]", ["A", "foo", ""]],
+      // ["@namespace x 'A'; [x|foo='' i]", ["a", "foo", ""]],
+      attrStep("[foo='bar' i][foo='bar']", [['', 'foo', 'BAR']], []),
+      attrStep("[foo='bar' i]", [['', 'baz', 'BAR']], []),
+    ],
+  },
+]);
+
+runScenarios('w3c iframes 3', 'normal', [
   {
     name: 'dom/nodes/child-indexed-pseudo-class',
     markup: `<div></div>`,
@@ -536,6 +507,7 @@ runScenarios('w3c', 'normal', [
 
   {
     name: 'dom/nodes/selectors',
+    // status: 'only',
     markupMode: 'html-document',
     markup: `
       <!DOCTYPE html>
@@ -1000,7 +972,7 @@ runScenarios('w3c', 'normal', [
       { match: '.foo..quux', ref: { by: 'id', id: 'root' }, expect: { throws: true } },
       { closest: '.bar.', ref: { by: 'id', id: 'root' }, expect: { throws: true } },
 
-      { select: 'div & address, p', expect: { throws: true }, status: 'fixme' },
+      { select: 'div & address, p', expect: { throws: false } },
       { first: 'div ++ address, p', expect: { throws: true } },
       { match: 'div ~~ address, p', ref: { by: 'id', id: 'root' }, expect: { throws: true } },
       { closest: '[*=test]', ref: { by: 'id', id: 'root' }, expect: { throws: true } },

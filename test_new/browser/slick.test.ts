@@ -2067,7 +2067,7 @@ runScenarios('slick', 'normal', [
       // testScoped
       { select: '#demo > p' },
       // { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { equivalentCase: { select: '#demo > p' } }, status: 'fixme' },
-      { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { throws: true }, status: 'fixme' },
+      { select: 'foo, > p', ref: { by: 'id', id: 'demo' }, expect: { throws: true } },
 
       // // Old rooted bare-combinator queries like `+ div` / `~ p` do not map to modern element-scoped selectors
       // { select: '+ div', ref: { by: 'id', id: 'demo' }, expect: { ids: ['demo2'] } },

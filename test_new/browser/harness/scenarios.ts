@@ -45,7 +45,7 @@ export type Scenario = {
   cases?: TestCase[];
 };
 
-type ScenarioStep = {
+export type ScenarioStep = {
   setupPage?: (page: Page) => void | Promise<void>;
   cases: TestCase[];
 };
