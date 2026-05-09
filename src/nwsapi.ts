@@ -390,6 +390,19 @@ export function initSnapshot(doc: Document) {
     matchAttribute: (e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null) => matchAttribute(e, ns, local, pattern, flag, snap),
     attrValueCaseFlag: (e: Element, localName: string, attrFlag: string | undefined) => attrValueCaseFlag(e, localName, attrFlag, snap),
     isFocused: (node: Element) => isFocused(node, snap),
+
+    probe: {
+      select: 0,
+      selBuild: 0,
+      match: 0,
+      matBuild: 0,
+      reset: () => {
+        snap.probe.select = 0;
+        snap.probe.selBuild = 0;
+        snap.probe.match = 0;
+        snap.probe.matBuild = 0;
+      }
+    }
   };
 
   snap.re = buildRex(snap.ext);
@@ -2605,6 +2618,7 @@ function normalizeSelectorInput(selectors: string, re: Rex): string {
 // equivalent of w3c 'matches' method
 function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot): boolean {
   updateSnapshot(snap, element);
+  snap.probe.match++;
 
   if (!selectors) {
     throw new Error(`[match] Empty selector is not valid`);
@@ -2640,6 +2654,7 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
 
 function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap: Snapshot): MatchResolver {
   const lambdas: MatchLambda[] = [];
+  snap.probe.matBuild++;
 
   for (let i = 0, l = selectors.length; i < l; ++i) {
     lambdas[i] = compile(selectors[i], false, cb, snap);
@@ -2651,6 +2666,7 @@ function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap:
 // equivalent of w3c 'querySelectorAll' method
 function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): Element[] {
   updateSnapshot(snap, ctx);
+  snap.probe.select++;
 
   let nodes: Element[] = [];
   if (!sel) {
@@ -2701,6 +2717,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback
     context: ctx,
     seeds: [],
   };
+  snap.probe.selBuild++;
 
   if (snap.isDebug && snap.debugSelect) snap.debugSelect.build = [];
 

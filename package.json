@@ -36,10 +36,16 @@
     "clean": "node ./scripts/clean.mjs",
     "min": "node ./scripts/min.mjs",
     "lint": "npx eslint src/nwsapi.js",
+
     "pretest:browser": "npm run build",
-    "test:browser": "cross-env HARNESS_MODE=normal playwright test",
+    "test:browser": "cross-env HARNESS_MODE=normal playwright test --project=browser",
+
     "pretest:browser:fixme": "npm run build",
-    "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test",
+    "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test --project=browser",
+
+    "pretest:browser:perf": "npm run build",
+    "test:browser:perf": "playwright test --project=perf --workers=1",
+
     "pretest:unit": "npm run build",
     "test:unit": "vitest run"
   },
