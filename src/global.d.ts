@@ -65,12 +65,18 @@ type Stopped = boolean;
 type MatchResolver = {
   lambdas: MatchLambda[];
   callback: QueryCallback | null;
+  flags: ResolverFlags;
 };
 
 type SelectResolver = {
   callback: QueryCallback | null;
   context: QueryContext;
   seeds: CandidateSeed[];
+  flags: ResolverFlags;
+};
+
+type ResolverFlags = {
+  usesScope: boolean;
 };
 
 type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };

@@ -3,13 +3,17 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
   const _snap = initSnapshot(_doc);
 
   // handlers needed for the :hover pseudo-class; track state change in browsers and headless
-  _doc.addEventListener('mouseover', (e) => { _snap.hoverTarget = isElement(e.target) ? e.target : null; }, true);
+  _doc.addEventListener('mouseover', (e) => {
+    if (!isNode(e.target)) return;
+    _snap.hoverTarget = isElement(e.target) ? e.target : null;
+  }, true);
   _doc.addEventListener('mouseout', () => { _snap.hoverTarget = null; }, true);
 
   // Track pointer-down state for :active. This approximates native activation for common HTML activatable/focusable elements;
   // full formal activation state is browser-internal and not modeled here.
   _doc.addEventListener('pointerdown', (e) => {
     const target = e.target;
+    if (!isNode(target)) return;
     _snap.activeTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
   }, true);
   _doc.addEventListener('pointerup', () => { _snap.activeTarget = null; }, true);
@@ -19,11 +23,13 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
   // even when no element actually matches :focus.
   _doc.addEventListener('focusin', (e) => {
     const target = e.target;
+    if (!isNode(target)) return;
     _snap.focusTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
   }, true);
 
   _doc.addEventListener('focusout', (e) => {
     const target = e.target;
+    if (!isNode(target)) return;
     const el = isElement(target) ? target : isText(target) ? target.parentElement : null;
     if (_snap.focusTarget === el) _snap.focusTarget = null;
   }, true);
@@ -166,7 +172,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
       if (all) {
         const fn = function(this: Document, e: Event) {
           const evTarget = e.target;
-          if (!isIFrame(evTarget)) return;
+          if (!isNode(evTarget) || !isElement(evTarget) || !isIFrame(evTarget)) return;
 
           const iife = '(' + fExport + ')(this, ' + Factory + ');';
           const doc = evTarget.ownerDocument;
@@ -344,23 +350,17 @@ export function initSnapshot(doc: Document) {
     byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? snap.doc, snap),
     byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNsRaw(ns, local, context ?? snap.doc, snap),
     byClass: (cls: string, context?: QueryContext) => byClassRaw(cls, context ?? snap.doc, snap),
-    first: (sel: string, context?: QueryContext, cb?: QueryCallback | null, updateScope = false) => {
-      context ??= snap.doc;
-      updateSnapshot(snap, context, updateScope);
-      return firstRaw(sel, context, cb ?? null, snap);
+    first: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
+      return firstRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
     },
-    match: (sel: string, context: Element, cb?: QueryCallback | null, updateScope = false) => {
-      updateSnapshot(snap, context, updateScope);
-      return matchRaw(sel, context, cb ?? null, snap);
+    match: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false) => {
+      return matchRaw(sel, context, cb ?? null, snap, isEntryCall);
     },
-    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, updateScope = false) => {
-      context ??= snap.doc;
-      updateSnapshot(snap, context, updateScope);
-      return selectRaw(sel, context, cb ?? null, snap);
+    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
+      return selectRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
     },
-    ancestor: (sel: string, context: Element, cb?: QueryCallback | null, updateScope = false) => {
-      updateSnapshot(snap, context, updateScope);
-      return ancestorRaw(sel, context, cb ?? null, snap);
+    ancestor: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false) => {
+      return ancestorRaw(sel, context, cb ?? null, snap, isEntryCall);
     },
 
     isType: isType,
@@ -472,7 +472,7 @@ function getNamespace(doc: Document): string | null {
   return doc.documentElement?.namespaceURI ?? null;
 }
 
-function updateSnapshot(snap: Snapshot, ctx: QueryContext, updateScope = false): Snapshot {
+function updateSnapshot(snap: Snapshot, ctx: QueryContext, updateScope = false) {
   const doc = ctx.ownerDocument ?? ctx;
 
   if (snap.doc !== doc) {
@@ -489,8 +489,6 @@ function updateSnapshot(snap: Snapshot, ctx: QueryContext, updateScope = false):
   if (updateScope) {
     snap.scopeEl = isDocument(ctx) ? ctx.documentElement : isElement(ctx) ? ctx : null;
   }
-
-  return snap;
 }
 
 // convert single codepoint to string
@@ -671,76 +669,10 @@ function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${value}`);
 }
 
-function isType(e: Element, name: string): boolean {
-  // console.error('isType', { e, name });
-  // console.error('isHtmlElement', isHtmlElement(e));
+function isType(e: Element, htmlName: string, xmlName: string): boolean {
   return isHtmlElement(e)
-    ? e.localName === name.toLowerCase()
-    : e.localName === name;
-}
-
-function hasAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): boolean {
-  const attrs = e.attributes;
-  const isHtml = snap.isHtml && isHtmlElement(e);
-
-  if (nsPrefix === null) {
-    const expected = isHtml ? localName.toLowerCase() : localName;
-    for (let i = 0; i < attrs.length; i++) {
-      const attr = attrs[i];
-      if (attr.namespaceURI != null) continue;
-      const actual = isHtml ? attr.localName.toLowerCase() : attr.localName;
-      if (actual === expected) return true;
-    }
-    return false;
-  }
-
-  if (nsPrefix === '*') {
-    const expected = isHtml ? localName.toLowerCase() : localName;
-    for (let i = 0; i < attrs.length; i++) {
-      const actual = isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
-      if (actual === expected) return true;
-    }
-    return false;
-  }
-
-  if (nsPrefix === '') {
-    return e.hasAttributeNS?.(null, localName) ?? false;
-  }
-
-  const uri = e.lookupNamespaceURI?.(nsPrefix) ?? snap.doc.lookupNamespaceURI?.(nsPrefix);
-  return !!uri && e.hasAttributeNS(uri, localName);
-}
-
-function getAttribute(e: Element, nsPrefix: string | null, localName: string, snap: Snapshot): string | null {
-  const attrs = e.attributes;
-  const isHtml = snap.isHtml && isHtmlElement(e);
-
-  if (nsPrefix === null) {
-    const expected = isHtml ? localName.toLowerCase() : localName;
-    for (let i = 0; i < attrs.length; i++) {
-      const attr = attrs[i];
-      if (attr.namespaceURI != null) continue;
-      const actual = isHtml ? attr.localName.toLowerCase() : attr.localName;
-      if (actual === expected) return attr.value;
-    }
-    return null;
-  }
-
-  if (nsPrefix === '*') {
-    const expected = isHtml ? localName.toLowerCase() : localName;
-    for (let i = 0; i < attrs.length; i++) {
-      const actual = isHtml ? attrs[i].localName.toLowerCase() : attrs[i].localName;
-      if (actual === expected) return attrs[i].value;
-    }
-    return null;
-  }
-
-  if (nsPrefix === '') {
-    return e.getAttributeNS?.(null, localName) ?? null;
-  }
-
-  const uri = e.lookupNamespaceURI?.(nsPrefix) ?? snap.doc.lookupNamespaceURI?.(nsPrefix);
-  return uri && e.getAttributeNS ? e.getAttributeNS(uri, localName) : null;
+    ? e.localName === htmlName
+    : e.localName === xmlName;
 }
 
 function attrValueCaseFlag(e: Element, localName: string, attrFlag: string | undefined, snap: Snapshot): string {
@@ -1428,103 +1360,97 @@ function describeContext(ctx: QueryContext): QueryContextDescription {
   };
 }
 
-function isNode(x: unknown): x is NodeLike {
-  return !!x && typeof x === 'object' && 'nodeType' in x && 'nodeName' in x &&
-    typeof (x as { nodeType?: unknown }).nodeType === 'number' &&
-    typeof (x as { nodeName?: unknown }).nodeName === 'string';
+function isNode(x: unknown): x is Node {
+  return !!x &&
+    typeof x === 'object' &&
+    typeof (x as any).nodeType === 'number' &&
+    typeof (x as any).nodeName === 'string';
 }
 
-function isElement(x: unknown): x is Element {
-  return isNode(x) && x.nodeType === 1;
+function isElement(n: Node): n is Element {
+  return n.nodeType === 1;
 }
 
-function isDocument(x: unknown): x is Document {
-  return isNode(x) && x.nodeType === 9;
+function isDocument(n: Node): n is Document {
+  return n.nodeType === 9;
 }
 
-function isDocumentFragment(x: unknown): x is DocumentFragment {
-  return isNode(x) && x.nodeType === 11;
+function isDocumentFragment(n: Node): n is DocumentFragment {
+  return n.nodeType === 11;
 }
 
-function isComment(x: unknown): x is Comment {
-  return isNode(x) && x.nodeType === 8;
+function isComment(n: Node): n is Comment {
+  return n.nodeType === 8;
 }
 
-function isText(x: unknown): x is Text {
-  return isNode(x) && x.nodeType === 3;
-}
-
-function isHtmlMediaElement(x: unknown): x is HTMLMediaElement {
-  return isElement(x) && 'currentTime' in x && 'paused' in x && 'ended' in x && 'readyState' in x;
-}
-
-function isIFrame(x: unknown): x is HTMLIFrameElement {
-  return isElement(x) && x.nodeName.toUpperCase() === 'IFRAME';
+function isText(n: Node): n is Text {
+  return n.nodeType === 3;
 }
 
 function isHtmlDoc(doc: Document): doc is HTMLDocument {
-  return doc.nodeType == 9 &&
-    // contentType not in IE <= 11
-    'contentType' in doc ?
-      doc.contentType.includes('/html') :
-      doc.createElement('DiV').localName == 'div';
+  return doc.contentType.includes('/html') || doc.createElement('DiV').localName == 'div';
 }
 
-function isQuirksMode(doc: Document): doc is HTMLDocument {
-  return isHtmlDoc(doc) && doc.compatMode.indexOf('CSS') < 0;
+function isQuirksMode(doc: Document): boolean {
+  return doc.compatMode !== 'CSS1Compat';
 }
 
-const HTML_NS = 'http://www.w3.org/1999/xhtml';
 function isHtmlElement(e: Element): e is HTMLElement {
-  return e.namespaceURI === HTML_NS;
+  return e.namespaceURI === 'http://www.w3.org/1999/xhtml';
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 function isSvgElement(e: Element): e is SVGElement {
-  return e.namespaceURI === SVG_NS;
+  return e.namespaceURI === 'http://www.w3.org/2000/svg';
 }
 
-const MATH_NS = 'http://www.w3.org/1998/Math/MathML';
 function isMathElement(e: Element): e is MathMLElement {
-  return e.namespaceURI === MATH_NS;
+  return e.namespaceURI === 'http://www.w3.org/1998/Math/MathML';
 }
 
 function isHtmlSvgOrMathElement(e: Element): e is HTMLElement | SVGElement | MathMLElement {
   return isHtmlElement(e) || isSvgElement(e) || isMathElement(e);
 }
 
+function isHtmlMediaElement(e: Element): e is HTMLMediaElement {
+  return 'currentTime' in e && 'paused' in e && 'ended' in e && 'readyState' in e;
+}
+
+function isIFrame(e: Element): e is HTMLIFrameElement {
+  return e.localName === 'iframe' && 'contentWindow' in e;
+}
+
 function isHtmlInput(e: Element): e is HTMLInputElement {
-  return e.localName === 'input' && isHtmlElement(e);
+  return e.localName === 'input';
 }
 
 function isHtmlButton(e: Element): e is HTMLButtonElement {
-  return e.localName === 'button' && isHtmlElement(e);
+  return e.localName === 'button';
 }
 
 type FormStateElement = HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLOptGroupElement | HTMLOptionElement | HTMLSelectElement | HTMLTextAreaElement;
 const FORM_STATE_ELEMENTS = new Set(['button', 'fieldset', 'input', 'optgroup', 'option', 'select', 'textarea']);
 function isFormStateElement(e: Element): e is FormStateElement {
-  return FORM_STATE_ELEMENTS.has(e.localName) && 'disabled' in e;
+  return FORM_STATE_ELEMENTS.has(e.localName);
 }
 
 function isHtmlTextArea(e: Element): e is HTMLTextAreaElement {
-  return e.localName === 'textarea' && isHtmlElement(e);
+  return e.localName === 'textarea';
 }
 
 function isHtmlFieldSet(e: Element): e is HTMLFieldSetElement {
-  return e.localName === 'fieldset' && isHtmlElement(e);
+  return e.localName === 'fieldset';
 }
 
 function isHtmlLegend(e: Element): e is HTMLLegendElement {
-  return e.localName === 'legend' && isHtmlElement(e);
+  return e.localName === 'legend';
 }
 
 function isHtmlOptGroup(e: Element): e is HTMLOptGroupElement {
-  return e.localName === 'optgroup' && isHtmlElement(e);
+  return e.localName === 'optgroup';
 }
 
 function isHtmlOption(e: Element): e is HTMLOptionElement {
-  return e.localName === 'option' && 'disabled' in e;
+  return e.localName === 'option';
 }
 
 function isHtmlProgress(e: Element): e is HTMLProgressElement {
@@ -1930,10 +1856,6 @@ function compileSelector(
   // isolate selector combinators
   selector = selector.replace(snap.re.STD.combinator, '$1');
 
-  // javascript needs a label to break
-  // out of the while loops processing
-  selector_recursion_label:
-
   while (selector) {
 
     ++k;
@@ -1992,8 +1914,10 @@ function compileSelector(
         match = selector.match(snap.re.Patterns.tagName);
         if (!match) throw new Error('Invalid tag selector: ' + selector);
 
-        const tagName = cssIdentUnescape(match[1]);
-        source = `if(s.isType(e,${JSON.stringify(tagName)})){${source}}`;
+        const rawTagName = cssIdentUnescape(match[1]);
+        const htmlTagName = rawTagName.toLowerCase();
+
+        source = `if(s.isType(e,${JSON.stringify(htmlTagName)},${JSON.stringify(rawTagName)})){${source}}`;
         break;
       }
 
@@ -2616,13 +2540,12 @@ function normalizeSelectorInput(selectors: string, re: Rex): string {
 }
 
 // equivalent of w3c 'matches' method
-function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot): boolean {
-  updateSnapshot(snap, element);
+function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): boolean {
   snap.probe.match++;
 
-  if (!selectors) {
-    throw new Error(`[match] Empty selector is not valid`);
-  }
+  // if (!selectors) {
+  //   throw new Error(`[match] Empty selector is not valid`);
+  // }
 
   if (snap.isDebug) {
     snap.debugMatch = {
@@ -2642,6 +2565,11 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
 
     resolver = snap.matchResolvers[selectors] = buildMatchResolver(parsed, cb, snap);
   }
+
+  if (isEntryCall && resolver.flags.usesScope) {
+    updateSnapshot(snap, element, true);
+  }
+
   const result = resolver.lambdas.some(f => f(element, cb, null, false));
 
   if (snap.isDebug && snap.debugMatch) {
@@ -2660,11 +2588,15 @@ function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap:
     lambdas[i] = compile(selectors[i], false, cb, snap);
   }
 
-  return { callback: cb, lambdas };
+  const flags: ResolverFlags = {
+    usesScope: hasScopeSelector(selectors),
+  };
+
+  return { callback: cb, lambdas, flags };
 }
 
 // equivalent of w3c 'querySelectorAll' method
-function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): Element[] {
+function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element[] {
   updateSnapshot(snap, ctx);
   snap.probe.select++;
 
@@ -2684,6 +2616,8 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     resolver = buildResolver(parsed, ctx, cb, snap);
     snap.selectResolvers[sel] = resolver;
   }
+
+  updateSnapshot(snap, ctx, isEntryCall && resolver.flags.usesScope);
 
   // execute resolver seeds and collect results
   for (const seed of resolver.seeds) {
@@ -2716,6 +2650,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback
     callback: cb,
     context: ctx,
     seeds: [],
+    flags: { usesScope: hasScopeSelector(selectors) },
   };
   snap.probe.selBuild++;
 
@@ -2796,12 +2731,11 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
 }
 
 // equivalent of w3c 'closest' method
-function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot): Element | null {
-  updateSnapshot(snap, element);
-
+function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element | null {
   let el: Element | null = element;
   while (el) {
-    if (matchRaw(selectors, el, callback, snap)) break;
+    if (matchRaw(selectors, el, callback, snap, isEntryCall)) break;
+    isEntryCall = false;
     el = el.parentElement;
   }
   return el;
@@ -2810,15 +2744,13 @@ function ancestorRaw(selectors: string, element: Element, callback: QueryCallbac
 const stopAfterFirst: QueryCallback = () => false;
 
 // equivalent of w3c 'querySelector' method
-function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot): Element | null {
-  updateSnapshot(snap, context);
-
+function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element | null {
   // TODO: firstRaw wraps callbacks for early stop, which hurts resolver caching; future parser-level caching should make callbacks irrelevant.
   const cb = callback
     ? (e: Element) => { callback(e); return false; }
     : stopAfterFirst;
 
-  return selectRaw(selectors, context, cb, snap)[0] || null;
+  return selectRaw(selectors, context, cb, snap, isEntryCall)[0] || null;
 }
 
 export function matchLogicalSelector(selector: string): RegExpMatchArray | null {
@@ -3079,4 +3011,8 @@ function normalizeNestingSelector(s: string): string {
   }
 
   return out;
+}
+
+function hasScopeSelector(selectors: string[]) {
+  return selectors.some(sel => /:scope\b/i.test(sel));
 }

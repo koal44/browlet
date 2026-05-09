@@ -4943,29 +4943,29 @@ runScenarios('various', 'normal', [
     ],
   },
 
-  {
-    name: 'debug match lambda shapes',
-    status: 'only',
-    engines: ['nw'],
-    markup: `
-      <div id="root">
-        <button id="btn" data-testid="x" popover></button>
-        <textarea id="feedback"></textarea>
-        <a id="commit" href="/commits/abc"></a>
-        <pre id="pre"><code id="code"></code></pre>
-        <div id="blob" class="codeBlobInner"><textarea id="inner"></textarea></div>
-      </div>
-    `,
-    cases: [
-      { match: 'div', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-      { match: 'button', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-      { match: '[popover]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-      { match: '[data-testid="x"]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-      { match: 'a[href*="commits"]', ref: { by: 'id', id: 'commit' }, expect: { ids: ['commit'] }, debug: true },
-      { match: '.codeBlobInner textarea', ref: { by: 'id', id: 'inner' }, expect: { ids: ['inner'] }, debug: true },
-      { match: ':not(button)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-      { match: ':is(div, span, a)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-    ],
-  },
+  // {
+  //   name: 'debug match lambda shapes',
+  //   status: 'only',
+  //   engines: ['nw'],
+  //   markup: `
+  //     <div id="root">
+  //       <button id="btn" data-testid="x" popover></button>
+  //       <textarea id="feedback"></textarea>
+  //       <a id="commit" href="/commits/abc"></a>
+  //       <pre id="pre"><code id="code"></code></pre>
+  //       <div id="blob" class="codeBlobInner"><textarea id="inner"></textarea></div>
+  //     </div>
+  //   `,
+  //   cases: [
+  //     { match: 'div', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
+  //     { match: 'button', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
+  //     { match: '[popover]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
+  //     { match: '[data-testid="x"]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
+  //     { match: 'a[href*="commits"]', ref: { by: 'id', id: 'commit' }, expect: { ids: ['commit'] }, debug: true },
+  //     { match: '.codeBlobInner textarea', ref: { by: 'id', id: 'inner' }, expect: { ids: ['inner'] }, debug: true },
+  //     { match: ':not(button)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
+  //     { match: ':is(div, span, a)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
+  //   ],
+  // },
 
 ]);
