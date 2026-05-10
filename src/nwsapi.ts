@@ -391,6 +391,10 @@ export function initSnapshot(doc: Document) {
     attrValueCaseFlag: (e: Element, localName: string, attrFlag: string | undefined) => attrValueCaseFlag(e, localName, attrFlag, snap),
     isFocused: (node: Element) => isFocused(node, snap),
 
+    regexCache: {} as Record<string, RegExp>,
+    getCachedRegex: (source: string, flags: string) => getCachedRegex(source, flags, snap),
+
+
     probe: {
       select: 0,
       selBuild: 0,
@@ -1905,7 +1909,7 @@ function compileSelector(
         const classPatternLit = JSON.stringify(classPattern);
         const flagsLit = JSON.stringify(snap.isQuirksMode ? 'i' : '');
 
-        source = `if((new RegExp(${classPatternLit},${flagsLit})).test(e.getAttribute("class")||"")){${source}}`;
+        source = `if(s.getCachedRegex(${classPatternLit},${flagsLit}).test(e.getAttribute("class")||"")){${source}}`;
         break;
       }
 
@@ -3015,4 +3019,9 @@ function normalizeNestingSelector(s: string): string {
 
 function hasScopeSelector(selectors: string[]) {
   return selectors.some(sel => /:scope\b/i.test(sel));
+}
+
+function getCachedRegex(source: string, flags: string, snap: Snapshot): RegExp {
+  const key = flags + '\0' + source;
+  return snap.regexCache[key] || (snap.regexCache[key] = new RegExp(source, flags));
 }
