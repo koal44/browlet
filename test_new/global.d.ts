@@ -9,6 +9,6 @@ declare global {
     __pwXml: XMLDocument;
     __pwArg: unknown;
     __perfHelpers: PerfHelpers;
-    __perfXml: XMLDocument;
+    __perfXml: XMLDocument | undefined;
   }
 }

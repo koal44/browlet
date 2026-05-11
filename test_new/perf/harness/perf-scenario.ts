@@ -2,7 +2,11 @@ import { chromium, firefox, webkit, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
 export interface PerfHelpers {
-  runPerfBenches(engineName: 'native' | 'nw', benches: PerfBench[]): BenchResult[];
+  runPerfBenches(
+    engineName: 'native' | 'nw',
+    benches: PerfBench[],
+    options?: { quickIters?: number, focused?: boolean },
+  ): BenchResult[];
 }
 
 const BROWSER_NAMES = ['chromium', 'firefox', 'webkit'] as const;
@@ -25,7 +29,7 @@ type MatchBench =   { op: 'match';     selector:  string;    context:  string   
 type ClosestBench = { op: 'closest';   selector:  string;    context:  string        } & PerfBenchBase;
 type WalkBench =    { op: 'matchWalk'; selectors: string[];  context?: string | null } & PerfBenchBase;
 
-type PerfBenchBase = { label: string; iters: number; maxRatio?: number };
+type PerfBenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number };
 type PerfBench = SelectBench | FirstBench | MatchBench | ClosestBench | WalkBench;
 
 type PerfScenario = {
@@ -37,7 +41,8 @@ type PerfScenario = {
   markupMode?: 'html-body' | 'html-document' | 'xml-document';
   setupPage?: (page: Page) => void | Promise<void>;
   probeKeys?: string[];
-  branches: PerfBench[];
+  benches: PerfBench[];
+  quickIters?: number;
 };
 
 type BenchResult = {
@@ -99,7 +104,9 @@ export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void
 
 async function runPerfScenario(scenario: PerfScenario, pages: Record<BrowserName, Page>): Promise<void> {
   const scenarioBrowsers = scenario.browsers ?? BROWSER_NAMES;
-  const scenarioEngines = resolvePerfEngines(scenario.engines);
+  const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map(e => e.name))];
+  if (!engineNames.includes('nw-current')) engineNames.push('nw-current');
+  const scenarioEngines = resolvePerfEngines(engineNames);
 
   for (const browserName of scenarioBrowsers) {
     const page = pages[browserName];
@@ -121,8 +128,14 @@ async function runPerfScenario(scenario: PerfScenario, pages: Record<BrowserName
       const mode: 'native' | 'nw' = engine.name === 'native' ? 'native' : 'nw';
 
       all[engine.name] = await page.evaluate(
-        ({ mode, branches }) => window.__perfHelpers.runPerfBenches(mode, branches),
-        { mode, branches: scenario.branches },
+        ({ mode, benches, quickIters, focused }) =>
+          window.__perfHelpers.runPerfBenches(mode, benches, { quickIters, focused }),
+        {
+          mode,
+          benches: scenario.benches,
+          quickIters: scenario.quickIters,
+          focused: scenario.status === 'only',
+        },
       );
     }
 
@@ -139,9 +152,10 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
   const current = all[currentName];
   if (!current) throw new Error(`Missing current perf engine: ${currentName}`);
 
-  let failedMaxRatio = false;
+  const displayLabels = uniqueDisplayLabels(current.map(r => r.label), 56);
 
-  const rows = Object.fromEntries(current.map((cur) => {
+  let failedMaxRatio = false;
+  const rows = Object.fromEntries(current.map((cur, i) => {
     const row: Record<string, unknown> = {
       ms: cur.ms.toFixed(2),
     };
@@ -157,7 +171,7 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
 
     row.probe = JSON.stringify(pickProbe(cur.probe, probeKeys));
 
-    return [cur.label, row];
+    return [displayLabels[i], row];
   }));
 
   return { rows, failedMaxRatio };
@@ -176,9 +190,45 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
     for (const key of keys) out[key] = (probe as any)[key];
     return out;
   }
+
+  function uniqueDisplayLabels(labels: string[], max = 56): string[] {
+    const seen = new Set<string>();
+
+    return labels.map((label) => {
+      let out = truncateLabel(label, max);
+
+      if (!seen.has(out)) {
+        seen.add(out);
+        return out;
+      }
+
+      let n = 2;
+
+      while (true) {
+        const suffix = ` (${n})`;
+        const base = truncateLabel(label, Math.max(0, max - suffix.length));
+        out = `${base}${suffix}`;
+
+        if (!seen.has(out)) {
+          seen.add(out);
+          return out;
+        }
+
+        n++;
+      }
+    });
+  }
+
+  function truncateLabel(label: string, max: number): string {
+    if (label.length <= max) return label;
+    if (max <= 1) return label.slice(0, max);
+    return `${label.slice(0, max - 1)}…`;
+  }
 }
 
 async function initPage(page: Page, scenario: PerfScenario): Promise<void> {
+  await page.evaluate(() => { window.__perfXml = undefined; });
+
   if (scenario.markupMode === 'xml-document') {
     await page.setContent('<!doctype html><html><body>dummy content</body></html>');
     await page.evaluate((xmlString) => {
@@ -210,9 +260,7 @@ function getPerfTestFn(status?: PerfScenarioStatus) {
   return test;
 }
 
-function resolvePerfEngines(names?: EngineName[]): PerfEngine[] {
-  if (!names) return DEFAULT_ENGINES;
-
+function resolvePerfEngines(names: EngineName[]): PerfEngine[] {
   return names.map((name) => {
     const engine = DEFAULT_ENGINES.find(e => e.name === name);
     if (!engine) throw new Error(`Unknown perf engine: ${name}`);
@@ -313,33 +361,77 @@ async function installPerfHelpers(page: Page) {
       return { hits, calls };
     }
 
-    function runPerfBenches(engineName: 'native' | 'nw', benches: PerfBench[]): BenchResult[] {
+    function runPerfBenches(
+      engineName: 'native' | 'nw',
+      benches: PerfBench[],
+      options: { quickIters?: number, focused?: boolean } = {},
+    ): BenchResult[] {
       const engine = engineName === 'native' ? nativeEngine : nwEngine;
 
-      return benches.map((b) => {
+      const labels = benches.map(perfBenchLabel);
+      assertUniqueBenchLabels(labels);
+
+      return benches.map((b, i) => {
+        const label = labels[i];
         const ctx = resolvePerfContext(b.context);
+        const iters = options.focused
+          ? b.iters
+          : b.quickIters ?? options.quickIters ?? b.iters;
 
         switch (b.op) {
           case 'match':
-            if (!(ctx instanceof Element)) throw new Error(`${b.label}: match needs Element context`);
-            return bench(b.label, () => engine.match(b.selector, ctx), b.iters, b.maxRatio);
+            if (!(ctx instanceof Element)) throw new Error(`${label}: match needs Element context`);
+            return bench(label, () => engine.match(b.selector, ctx), iters, b.maxRatio);
 
           case 'closest':
-            if (!(ctx instanceof Element)) throw new Error(`${b.label}: closest needs Element context`);
-            return bench(b.label, () => engine.closest(b.selector, ctx), b.iters, b.maxRatio);
+            if (!(ctx instanceof Element)) throw new Error(`${label}: closest needs Element context`);
+            return bench(label, () => engine.closest(b.selector, ctx), iters, b.maxRatio);
 
           case 'select':
-            return bench(b.label, () => engine.select(b.selector, ctx), b.iters, b.maxRatio);
+            return bench(label, () => engine.select(b.selector, ctx), iters, b.maxRatio);
 
           case 'first':
-            return bench(b.label, () => engine.first(b.selector, ctx), b.iters, b.maxRatio);
+            return bench(label, () => engine.first(b.selector, ctx), iters, b.maxRatio);
 
           case 'matchWalk':
-            return bench(b.label, () => matchWalk(engine, ctx, b.selectors), b.iters, b.maxRatio);
+            return bench(label, () => matchWalk(engine, ctx, b.selectors), iters, b.maxRatio);
 
-          default: assertNever(b);
+          default:
+            return assertNever(b);
         }
       });
+    }
+
+    function perfBenchLabel(b: PerfBench): string {
+      if (b.label) return b.label;
+
+      switch (b.op) {
+        case 'select':
+        case 'first':
+        case 'match':
+        case 'closest':
+          return `${b.op} ${b.selector}`;
+
+        case 'matchWalk':
+          return `${b.op} ${b.selectors.join(', ')}`;
+
+        default:
+          return assertNever(b);
+      }
+    }
+
+    function assertUniqueBenchLabels(labels: string[]): void {
+      const seen = new Set<string>();
+      const dupes = new Set<string>();
+
+      for (const label of labels) {
+        if (seen.has(label)) dupes.add(label);
+        else seen.add(label);
+      }
+
+      if (dupes.size) {
+        throw new Error(`Duplicate bench labels: ${[...dupes].join(', ')}`);
+      }
     }
 
     function resolvePerfContext(ref?: string | null): Document | Element {

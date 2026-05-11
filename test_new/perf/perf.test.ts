@@ -11,7 +11,7 @@ runPerfScenarios('perf', [
     browsers: ['chromium'],
     markup: htmlStandard,
     probeKeys: ['select', 'selBuild', 'match', 'matBuild'],
-    branches: [
+    benches: [
       { label: 'select div',                op: 'select', selector: 'div',                    context: null, iters: 200 },
       { label: 'select .comment',           op: 'select', selector: '.comment',               context: null, iters: 200 },
       { label: 'select [data-testid]',      op: 'select', selector: '[data-testid]',          context: null, iters: 200 },
@@ -46,7 +46,8 @@ runPerfScenarios('perf', [
     browsers: ['chromium'],
     markup: `<div id="hit"></div>`,
     probeKeys: ['match'],
-    branches: [
+    quickIters: 200_000,
+    benches: [
       { label: 'match universal hit', op: 'match', selector: '*', context: 'hit', iters: 5_000_000 },
     ],
   },
@@ -59,8 +60,9 @@ runPerfScenarios('perf', [
       <button id="miss"></button>
       <span id="search-icon"></span>
     `,
+    quickIters: 200_000,
     probeKeys: ['match'],
-    branches: [
+    benches: [
       { label: 'match id hit',  op: 'match', selector: '#search-icon', context: 'search-icon', iters: 5_000_000 },
       { label: 'match id miss', op: 'match', selector: '#search-icon', context: 'miss',        iters: 5_000_000 },
     ],
@@ -74,8 +76,9 @@ runPerfScenarios('perf', [
       <button id="miss"></button>
       <span id="hit" class="octicon"></span>
     `,
+    quickIters: 200_000,
     probeKeys: ['match'],
-    branches: [
+    benches: [
       { label: 'match class hit',  op: 'match', selector: '.octicon', context: 'hit',  iters: 5_000_000 },
       { label: 'match class miss', op: 'match', selector: '.octicon', context: 'miss', iters: 5_000_000 },
     ],
@@ -90,12 +93,291 @@ runPerfScenarios('perf', [
       <button id="button"></button>
       <textarea id="textarea"></textarea>
     `,
+    quickIters: 200_000,
     probeKeys: ['match'],
-    branches: [
+    benches: [
       { label: 'match tag div hit',     op: 'match', selector: 'div',      context: 'div',      iters: 5_000_000 },
       { label: 'match tag div miss',    op: 'match', selector: 'div',      context: 'button',   iters: 5_000_000 },
       { label: 'match tag button hit',  op: 'match', selector: 'button',   context: 'button',   iters: 5_000_000 },
       { label: 'match tag textarea hit',op: 'match', selector: 'textarea', context: 'textarea', iters: 5_000_000 },
     ],
   },
+
+  {
+    name: 'match namespace',
+    // status: 'only',
+    browsers: ['chromium'],
+    markupMode: 'xml-document',
+    engines: ['native'],
+    markup: `
+      <root xmlns:ns="http://example.test/ns">
+        <foo id="null-foo"></foo>
+        <ns:foo id="ns-foo"></ns:foo>
+        <bar id="null-bar"></bar>
+      </root>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'match namespace any hit null', op: 'match', selector: '*|foo', context: 'null-foo', iters: 5_000_000 },
+      { label: 'match namespace any hit ns',   op: 'match', selector: '*|foo', context: 'ns-foo',   iters: 5_000_000 },
+      { label: 'match namespace null hit',     op: 'match', selector: '|foo',  context: 'null-foo', iters: 5_000_000 },
+      { label: 'match namespace null miss ns', op: 'match', selector: '|foo',  context: 'ns-foo',   iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-testid="author-avatar"
+        data-kind="primary-action"
+        data-tags="foo octicon bar"
+        data-path="/repos/example/commits/abc"
+        data-prefix="commit-start"
+        data-suffix="end-commit"
+        lang="en-US"
+        type="BUTTON"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exists',       op: 'match', selector: '[data-testid]',                  context: 'hit', iters: 5_000_000 },
+      { label: 'exact',        op: 'match', selector: '[data-testid="author-avatar"]',  context: 'hit', iters: 5_000_000 },
+      { label: 'contains',     op: 'match', selector: '[data-path*="commits"]',         context: 'hit', iters: 5_000_000 },
+      { label: 'token',        op: 'match', selector: '[data-tags~="octicon"]',         context: 'hit', iters: 5_000_000 },
+      { label: 'prefix',       op: 'match', selector: '[data-prefix^="commit"]',        context: 'hit', iters: 5_000_000 },
+      { label: 'suffix',       op: 'match', selector: '[data-suffix$="commit"]',        context: 'hit', iters: 5_000_000 },
+      { label: 'ns dash',      op: 'match', selector: '[lang|="en"]',                   context: 'hit', iters: 5_000_000 },
+      { label: 'star dash',    op: 'match', selector: '[*|lang|="en"]',                 context: 'hit', iters: 5_000_000, maxRatio: 18 },
+      { label: 'flag i',       op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', context: 'hit', iters: 5_000_000 },
+      { label: 'html default', op: 'match', selector: '[type="button"]',                context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute existence',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-testid="author-avatar"
+        data-kind="primary-action"
+        data-tags="foo octicon bar"
+        data-path="/repos/example/commits/abc"
+        data-prefix="commit-start"
+        data-suffix="end-commit"
+        lang="en-US"
+        type="BUTTON"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exists hit',  op: 'match', selector: '[data-testid]', context: 'hit', iters: 5_000_000 },
+      { label: 'exists miss', op: 'match', selector: '[data-missing]', context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute existence namespace paths',
+    // status: 'only',
+    browsers: ['chromium'],
+    // browsers: ['firefox'],
+    markup: `
+      <div id="html-hit" title="x" foo:bar="x"></div>
+      <div id="html-miss" data-x="x"></div>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'wildcard html hit', op: 'match', selector: '[*|TiTlE]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
+      { label: 'wildcard html miss', op: 'match', selector: '[*|missing]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
+      { label: 'colon html hit', op: 'match', selector: '[foo\\:bar]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
+      { label: 'colon html miss', op: 'match', selector: '[bar\\:foo]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
+    ],
+  },
+
+  {
+    name: 'match attribute value operators',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-testid="author-avatar"
+        data-tags="foo octicon bar"
+        data-path="/repos/example/commits/abc"
+        data-prefix="commit-start"
+        data-suffix="end-commit"
+        lang="en-US"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exact hit',    op: 'match', selector: '[data-testid="author-avatar"]', context: 'hit', iters: 5_000_000 },
+      { label: 'contains hit', op: 'match', selector: '[data-path*="commits"]',         context: 'hit', iters: 5_000_000 },
+      { label: 'prefix hit',   op: 'match', selector: '[data-prefix^="commit"]',        context: 'hit', iters: 5_000_000 },
+      { label: 'suffix hit',   op: 'match', selector: '[data-suffix$="commit"]',        context: 'hit', iters: 5_000_000 },
+      { label: 'dash hit',     op: 'match', selector: '[lang|="en"]',                   context: 'hit', iters: 5_000_000 },
+      { label: 'token hit',    op: 'match', selector: '[data-tags~="octicon"]',         context: 'hit', iters: 5_000_000 },
+
+      { label: 'dash miss prefix only', op: 'match', selector: '[lang|="e"]',  context: 'hit', iters: 5_000_000 },
+      { label: 'dash miss different',   op: 'match', selector: '[lang|="fr"]', context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute value operator misses',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-testid="author-avatar"
+        data-tags="foo octicon bar"
+        data-path="/repos/example/commits/abc"
+        data-prefix="commit-start"
+        data-suffix="end-commit"
+        data-lang="en-US"
+        lang="en-US"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exact miss',          op: 'match', selector: '[data-testid="other"]',   context: 'hit', iters: 5_000_000 },
+      { label: 'contains miss',       op: 'match', selector: '[data-path*="branches"]', context: 'hit', iters: 5_000_000 },
+      { label: 'prefix miss',         op: 'match', selector: '[data-prefix^="start"]',  context: 'hit', iters: 5_000_000 },
+      { label: 'suffix miss',         op: 'match', selector: '[data-suffix$="start"]',  context: 'hit', iters: 5_000_000 },
+      { label: 'dash miss',           op: 'match', selector: '[lang|="fr"]',            context: 'hit', iters: 5_000_000 },
+      { label: 'token miss',          op: 'match', selector: '[data-tags~="missing"]',  context: 'hit', iters: 5_000_000 },
+      { label: 'dash miss custom',    op: 'match', selector: '[data-lang|="fr"]',       context: 'hit', iters: 5_000_000 },
+      { label: 'dash miss html-dflt', op: 'match', selector: '[lang|="fr"]',            context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute value operators forced insensitive',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-exact="AlphaBeta"
+        data-path="/Repos/Example/Commits/ABC"
+        data-prefix="Commit-Start"
+        data-suffix="End-Commit"
+        data-lang="EN-us"
+        data-tags="foo UnitTest bar"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exact i hit',       op: 'match', selector: '[data-exact="alphabeta" i]',       context: 'hit', iters: 5_000_000 },
+      { label: 'contains i hit',    op: 'match', selector: '[data-path*="commits" i]',         context: 'hit', iters: 5_000_000 },
+      { label: 'prefix i hit',      op: 'match', selector: '[data-prefix^="commit" i]',        context: 'hit', iters: 5_000_000 },
+      { label: 'suffix i hit',      op: 'match', selector: '[data-suffix$="commit" i]',        context: 'hit', iters: 5_000_000 },
+      { label: 'dash i hit',        op: 'match', selector: '[data-lang|="en" i]',              context: 'hit', iters: 5_000_000 },
+      { label: 'token i hit',       op: 'match', selector: '[data-tags~="unittest" i]',        context: 'hit', iters: 5_000_000 },
+
+      { label: 'exact i miss',      op: 'match', selector: '[data-exact="other" i]',           context: 'hit', iters: 5_000_000 },
+      { label: 'contains i miss',   op: 'match', selector: '[data-path*="branches" i]',        context: 'hit', iters: 5_000_000 },
+      { label: 'prefix i miss',     op: 'match', selector: '[data-prefix^="start" i]',         context: 'hit', iters: 5_000_000 },
+      { label: 'suffix i miss',     op: 'match', selector: '[data-suffix$="start" i]',         context: 'hit', iters: 5_000_000 },
+      { label: 'dash i miss',       op: 'match', selector: '[data-lang|="fr" i]',              context: 'hit', iters: 5_000_000 },
+      { label: 'token i miss',      op: 'match', selector: '[data-tags~="missing" i]',         context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute value case insensitive',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-kind="primary-action"
+        data-tags="foo unitTest bar"
+        lang="EN-us"
+        type="BUTTON"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exact flag i',      op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', context: 'hit', iters: 5_000_000 },
+      { label: 'token flag i',      op: 'match', selector: '[data-tags~="unitTEST" i]',      context: 'hit', iters: 5_000_000 },
+      { label: 'dash flag i',       op: 'match', selector: '[lang|="en" i]',                 context: 'hit', iters: 5_000_000 },
+      { label: 'html default type', op: 'match', selector: '[type="button"]',                context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match attribute namespace modes',
+    // status: 'only',
+    browsers: ['chromium'],
+    engines: ['native'],
+    markup: `
+      <button
+        id="hit"
+        lang="en-US"
+        data-x="value"
+      ></button>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { op: 'match', selector: '[lang]',          context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[|lang]',         context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang]',        context: 'hit', iters: 5_000_000 },
+
+      { op: 'match', selector: '[lang="en-US"]',  context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[|lang="en-US"]', context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang="en-US"]',context: 'hit', iters: 5_000_000, maxRatio: 6 },
+
+      { op: 'match', selector: '[lang|="en"]',    context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[|lang|="en"]',   context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang|="en"]',  context: 'hit', iters: 5_000_000, maxRatio: 6 },
+
+      { op: 'match', selector: '[*|data-x="value"]', context: 'hit', iters: 5_000_000, maxRatio: 6 },
+      { op: 'match', selector: '[*|data-x*="alu"]',  context: 'hit', iters: 5_000_000, maxRatio: 6 },
+    ],
+  },
+
+  // wildcard namespace value selectors are slow because they must scan attributes;
+  // duplicate same-localName attrs scale linearly;
+  // misses are worse than hits because they cannot early-exit.
+  {
+    name: 'match attribute wildcard duplicate local names',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `<span id="hit"></span>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const el = document.getElementById('hit')!;
+        el.setAttribute('foo', 'x');
+        el.setAttributeNS('a', 'foo', 'x');
+        el.setAttributeNS('b', 'foo', 'BAR');
+        el.setAttributeNS('c', 'foo', 'x');
+        el.setAttributeNS('d', 'foo', 'x');
+        el.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:lang', 'en-US');
+      });
+    },
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { op: 'match', selector: '[*|foo="bar" i]',  context: 'hit', iters: 5_000_000, maxRatio: 9 },
+      { op: 'match', selector: '[*|foo="nope" i]', context: 'hit', iters: 5_000_000, maxRatio: 15 },
+      { op: 'match', selector: '[*|lang|="en"]',   context: 'hit', iters: 5_000_000, maxRatio: 15 },
+    ],
+  },
+
 ]);

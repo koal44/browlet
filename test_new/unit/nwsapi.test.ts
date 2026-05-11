@@ -3,6 +3,13 @@ import {
   buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
   matchLogicalSelector, splitSelectorGroups, escapeRegExp, buildRexStrings,
   parseRelativeSelectorList,
+  asciiEquals,
+  asciiStartsWith,
+  asciiEndsWith,
+  asciiIncludes,
+  asciiDashMatch,
+  hasCssToken,
+  asciiHasCssToken,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -1769,5 +1776,219 @@ describe('parseRelativeSelectorList', () => {
         source: 'div.foo[attr="x"]',
       },
     });
+  });
+});
+
+describe('ASCII-insensitive string predicates', () => {
+  describe('asciiEquals', () => {
+    it('matches ASCII case-insensitively', () => {
+      expect(asciiEquals('AlphaBeta', 'alphabeta')).toBe(true);
+      expect(asciiEquals('ALPHABETA', 'alphabeta')).toBe(true);
+      expect(asciiEquals('alphabeta', 'alphabeta')).toBe(true);
+    });
+
+    it('requires equal length and exact non-ASCII code units', () => {
+      expect(asciiEquals('Alpha', 'alpha!')).toBe(false);
+      expect(asciiEquals('föo', 'föo')).toBe(true);
+      expect(asciiEquals('FöO', 'föo')).toBe(true);
+      expect(asciiEquals('FÖO', 'föo')).toBe(false);
+      expect(asciiEquals('FÖO', 'fÖo')).toBe(true);
+    });
+
+    it('handles empty strings', () => {
+      expect(asciiEquals('', '')).toBe(true);
+      expect(asciiEquals('x', '')).toBe(false);
+      expect(asciiEquals('', 'x')).toBe(false);
+    });
+  });
+
+  describe('asciiStartsWith', () => {
+    it('matches ASCII prefixes case-insensitively', () => {
+      expect(asciiStartsWith('Commit-Start', 'commit')).toBe(true);
+      expect(asciiStartsWith('commit-start', 'commit')).toBe(true);
+      expect(asciiStartsWith('xcommit-start', 'commit')).toBe(false);
+    });
+
+    it('does not Unicode-fold non-ASCII characters', () => {
+      expect(asciiStartsWith('FöO-bar', 'föo')).toBe(true);
+      expect(asciiStartsWith('FÖO-bar', 'föo')).toBe(false);
+      expect(asciiStartsWith('FÖO-bar', 'fÖo')).toBe(true);
+    });
+
+    it('handles empty prefix consistently with startsWith', () => {
+      expect(asciiStartsWith('abc', '')).toBe(true);
+      expect(asciiStartsWith('', '')).toBe(true);
+      expect(asciiStartsWith('', 'a')).toBe(false);
+    });
+  });
+
+  describe('asciiEndsWith', () => {
+    it('matches ASCII suffixes case-insensitively', () => {
+      expect(asciiEndsWith('End-Commit', 'commit')).toBe(true);
+      expect(asciiEndsWith('end-commit', 'commit')).toBe(true);
+      expect(asciiEndsWith('end-commit-x', 'commit')).toBe(false);
+    });
+
+    it('does not Unicode-fold non-ASCII characters', () => {
+      expect(asciiEndsWith('xx-FöO', 'föo')).toBe(true);
+      expect(asciiEndsWith('xx-FÖO', 'föo')).toBe(false);
+      expect(asciiEndsWith('xx-FÖO', 'fÖo')).toBe(true);
+    });
+
+    it('handles empty suffix consistently with endsWith', () => {
+      expect(asciiEndsWith('abc', '')).toBe(true);
+      expect(asciiEndsWith('', '')).toBe(true);
+      expect(asciiEndsWith('', 'a')).toBe(false);
+    });
+  });
+
+  describe('asciiIncludes', () => {
+    it('matches ASCII substrings case-insensitively', () => {
+      expect(asciiIncludes('/Repos/Example/Commits/ABC', 'commits')).toBe(true);
+      expect(asciiIncludes('/repos/example/commits/abc', 'commits')).toBe(true);
+      expect(asciiIncludes('/repos/example/branches/abc', 'commits')).toBe(false);
+    });
+
+    it('finds matches at beginning, middle, and end', () => {
+      expect(asciiIncludes('ABCxxx', 'abc')).toBe(true);
+      expect(asciiIncludes('xxxABCxxx', 'abc')).toBe(true);
+      expect(asciiIncludes('xxxABC', 'abc')).toBe(true);
+    });
+
+    it('does not Unicode-fold non-ASCII characters', () => {
+      expect(asciiIncludes('xxFöOxx', 'föo')).toBe(true);
+      expect(asciiIncludes('xxFÖOxx', 'föo')).toBe(false);
+      expect(asciiIncludes('xxFÖOxx', 'fÖo')).toBe(true);
+    });
+
+    it('treats empty expected as no match for selector-operator use', () => {
+      expect(asciiIncludes('abc', '')).toBe(false);
+      expect(asciiIncludes('', '')).toBe(false);
+    });
+  });
+
+  describe('asciiDashMatch', () => {
+    it('matches exact or prefix followed by hyphen', () => {
+      expect(asciiDashMatch('en', 'en')).toBe(true);
+      expect(asciiDashMatch('en-US', 'en')).toBe(true);
+      expect(asciiDashMatch('english', 'en')).toBe(false);
+      expect(asciiDashMatch('fr-US', 'en')).toBe(false);
+    });
+
+    it('matches ASCII case-insensitively', () => {
+      expect(asciiDashMatch('EN', 'en')).toBe(true);
+      expect(asciiDashMatch('EN-us', 'en')).toBe(true);
+      expect(asciiDashMatch('eN-us', 'en')).toBe(true);
+    });
+
+    it('does not Unicode-fold non-ASCII characters', () => {
+      expect(asciiDashMatch('föo-bar', 'föo')).toBe(true);
+      expect(asciiDashMatch('FöO-bar', 'föo')).toBe(true);
+      expect(asciiDashMatch('FÖO-bar', 'föo')).toBe(false);
+      expect(asciiDashMatch('FÖO-bar', 'fÖo')).toBe(true);
+    });
+
+    it('handles empty expected according to dash-match selector semantics', () => {
+      expect(asciiDashMatch('', '')).toBe(true);
+      expect(asciiDashMatch('-', '')).toBe(true);
+      expect(asciiDashMatch('-x', '')).toBe(true);
+      expect(asciiDashMatch('x', '')).toBe(false);
+      expect(asciiDashMatch('x-', '')).toBe(false);
+    });
+
+    it('uses UTF-16 indexing consistently for astral-plane prefixes', () => {
+      expect(asciiDashMatch('a😀b', 'a😀b')).toBe(true);
+      expect(asciiDashMatch('a😀b-c', 'a😀b')).toBe(true);
+      expect(asciiDashMatch('a😀bc', 'a😀b')).toBe(false);
+
+      expect(asciiDashMatch('😀', '😀')).toBe(true);
+      expect(asciiDashMatch('😀-x', '😀')).toBe(true);
+      expect(asciiDashMatch('😀x', '😀')).toBe(false);
+    });
+  });
+});
+
+describe('hasCssToken', () => {
+  it('matches whole whitespace-separated tokens', () => {
+    expect(hasCssToken('foo octicon bar', 'octicon')).toBe(true);
+    expect(hasCssToken('foo octicon bar', 'foo')).toBe(true);
+    expect(hasCssToken('foo octicon bar', 'bar')).toBe(true);
+  });
+
+  it('does not match substrings inside tokens', () => {
+    expect(hasCssToken('foo octicon bar', 'oct')).toBe(false);
+    expect(hasCssToken('foo octicon bar', 'icon')).toBe(false);
+    expect(hasCssToken('foobar', 'foo')).toBe(false);
+  });
+
+  it('uses CSS whitespace only', () => {
+    expect(hasCssToken('foo\tbar', 'bar')).toBe(true);
+    expect(hasCssToken('foo\nbar', 'bar')).toBe(true);
+    expect(hasCssToken('foo\fbar', 'bar')).toBe(true);
+    expect(hasCssToken('foo\rbar', 'bar')).toBe(true);
+    expect(hasCssToken('foo bar', 'bar')).toBe(true);
+
+    // Vertical tab U+000B is not CSS whitespace.
+    expect(hasCssToken('foo\vbar', 'bar')).toBe(false);
+    expect(hasCssToken('foo\vbar', 'foo\vbar')).toBe(true);
+  });
+
+  it('handles leading, trailing, and repeated CSS whitespace', () => {
+    expect(hasCssToken('  foo   bar  ', 'foo')).toBe(true);
+    expect(hasCssToken('  foo   bar  ', 'bar')).toBe(true);
+    expect(hasCssToken('     ', 'foo')).toBe(false);
+  });
+
+  it('does not match an empty token', () => {
+    expect(hasCssToken('foo bar', '')).toBe(false);
+    expect(hasCssToken('', '')).toBe(false);
+  });
+
+  it('is case-sensitive by itself', () => {
+    expect(hasCssToken('foo UnitTest bar', 'UnitTest')).toBe(true);
+    expect(hasCssToken('foo UnitTest bar', 'unittest')).toBe(false);
+  });
+});
+
+describe('asciiHasCssToken', () => {
+  it('matches whole CSS whitespace-separated tokens ASCII-insensitively', () => {
+    expect(asciiHasCssToken('foo UnitTest bar', 'unittest')).toBe(true);
+    expect(asciiHasCssToken('foo UNITTEST bar', 'unittest')).toBe(true);
+    expect(asciiHasCssToken('foo unittest bar', 'unittest')).toBe(true);
+  });
+
+  it('does not match substrings inside tokens', () => {
+    expect(asciiHasCssToken('foo UnitTest bar', 'unit')).toBe(false);
+    expect(asciiHasCssToken('foo UnitTest bar', 'test')).toBe(false);
+    expect(asciiHasCssToken('fooUnitTestbar', 'unittest')).toBe(false);
+  });
+
+  it('uses CSS whitespace only', () => {
+    expect(asciiHasCssToken('foo\tBAR', 'bar')).toBe(true);
+    expect(asciiHasCssToken('foo\nBAR', 'bar')).toBe(true);
+    expect(asciiHasCssToken('foo\fBAR', 'bar')).toBe(true);
+    expect(asciiHasCssToken('foo\rBAR', 'bar')).toBe(true);
+    expect(asciiHasCssToken('foo BAR', 'bar')).toBe(true);
+
+    // U+000B vertical tab is not CSS whitespace.
+    expect(asciiHasCssToken('foo\vBAR', 'bar')).toBe(false);
+    expect(asciiHasCssToken('foo\vBAR', 'foo\vbar')).toBe(true);
+  });
+
+  it('handles leading, trailing, and repeated CSS whitespace', () => {
+    expect(asciiHasCssToken('  FOO   BAR  ', 'foo')).toBe(true);
+    expect(asciiHasCssToken('  FOO   BAR  ', 'bar')).toBe(true);
+    expect(asciiHasCssToken('     ', 'foo')).toBe(false);
+  });
+
+  it('does not match an empty token', () => {
+    expect(asciiHasCssToken('foo bar', '')).toBe(false);
+    expect(asciiHasCssToken('', '')).toBe(false);
+  });
+
+  it('does not Unicode-fold non-ASCII characters', () => {
+    expect(asciiHasCssToken('foo FöO bar', 'föo')).toBe(true);
+    expect(asciiHasCssToken('foo FÖO bar', 'föo')).toBe(false);
+    expect(asciiHasCssToken('foo FÖO bar', 'fÖo')).toBe(true);
   });
 });

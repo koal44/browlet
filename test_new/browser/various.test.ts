@@ -922,7 +922,8 @@ runScenarios('various', 'normal', [
       { select: '[xml|lang]', expect: { throws: true } },
 
       // Chromium/Firefox throw; WebKit accepts this form.
-      { select: '[*|*]', expect: { throws: true }, status: 'fail' },
+      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'] },
+      { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], status: 'fail' },
 
       { select: '[xml:lang]', expect: { throws: true } },
       { select: '[xml\:lang]', expect: { throws: true } },
@@ -4716,7 +4717,6 @@ runScenarios('various', 'normal', [
       });
     },
     cases: [
-      // Native expectations should be discovered first.
       { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
       { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
       { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
@@ -4940,6 +4940,425 @@ runScenarios('various', 'normal', [
       { select: ':is(:scope > .item)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1'] }, debug: false },
       { select: ':where(:scope > .item)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1'] } },
       { select: ':not(:scope)', ref: { by: 'id', id: 'inner' }, expect: { ids: ['x1', 'x2', 'em1', 'nope'] } },
+    ],
+  },
+
+  {
+    name: 'attribute existence namespace and casing',
+    // status: 'only',
+    // browsers: ['firefox'],
+    // engines: ['native'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <div id="html-host">
+            <span id="html-lower" data-x="1" title="lower"></span>
+            <span id="html-upper" DATA-X="1" TITLE="upper"></span>
+            <span id="html-colon"></span>
+            <svg id="svg-root" xmlns="http://www.w3.org/2000/svg">
+              <g id="svg-lower" data-x="1" viewBox="0 0 1 1"></g>
+              <g id="svg-upper" DATA-X="1" VIEWBOX="0 0 1 1"></g>
+            </svg>
+            <div id="svg-import-host"></div>
+            <math id="math-root" xmlns="http://www.w3.org/1998/Math/MathML">
+              <mi id="math-lower" data-x="1" mathvariant="bold">x</mi>
+              <mi id="math-upper" DATA-X="1" MATHVARIANT="bold">y</mi>
+            </math>
+            <div id="import-host"></div>
+          </div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        document.getElementById('html-colon')!.setAttribute('foo:bar', '1');
+
+        const xml = `<?xml version="1.0"?>
+          <root id="xml-root">
+            <item id="xml-lower" data-x="1" lang="en" />
+            <item id="xml-upper" DATA-X="1" LANG="en" />
+            <item id="xml-ns-lang" xml:lang="en" />
+            <item id="xml-both-lang" lang="en" xml:lang="en" />
+          </root>`;
+
+        const xmlDoc = new DOMParser().parseFromString(xml, 'text/xml');
+        document.getElementById('import-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+
+        const svg = `<?xml version="1.0"?>
+          <svg xmlns="http://www.w3.org/2000/svg">
+            <g id="svg-import-lower" data-x="1" viewBox="0 0 1 1" />
+            <g id="svg-import-upper" DATA-X="1" VIEWBOX="0 0 1 1" />
+          </svg>`;
+
+        const svgDoc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        document.getElementById('svg-import-host')!.appendChild(
+          document.importNode(svgDoc.documentElement, true)
+        );
+
+      });
+    },
+    cases: [
+      // Plain HTML attribute existence is ASCII case-insensitive.
+      { select: '#html-host > span[data-x]', expect: { ids: ['html-lower', 'html-upper'] } },
+      { select: '#html-host > span[DATA-X]', expect: { ids: ['html-lower', 'html-upper'] } },
+      { select: '#html-host > span[title]',  expect: { ids: ['html-lower', 'html-upper'] } },
+      { select: '#html-host > span[TITLE]',  expect: { ids: ['html-lower', 'html-upper'] } },
+
+      // Escaped literal colon is an attribute name; unescaped colon is selector syntax and should throw.
+      { select: '#html-colon[foo:bar]', expect: { throws: true } },
+      { select: '#html-colon[foo\\:bar]', expect: { ids: ['html-colon'] } },
+
+      // Imported XML attribute names remain case-sensitive.
+      { select: '#xml-root > item[data-x]', expect: { ids: ['xml-lower', 'xml-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[data-x]', expect: { ids: ['xml-lower'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-root > item[DATA-X]', expect: { ids: ['xml-lower', 'xml-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[DATA-X]', expect: { ids: ['xml-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-root > item[lang]',   expect: { ids: ['xml-lower', 'xml-upper', 'xml-both-lang'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[lang]',   expect: { ids: ['xml-lower', 'xml-both-lang'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-root > item[LANG]',   expect: { ids: ['xml-lower', 'xml-upper', 'xml-both-lang'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[LANG]',   expect: { ids: ['xml-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      // Namespace existence:
+      // [lang] / [|lang] are no-namespace only; [*|lang] also sees xml:lang.
+      { select: '#xml-root > item[lang]',   expect: { ids: ['xml-lower', 'xml-upper', 'xml-both-lang'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[lang]',   expect: { ids: ['xml-lower', 'xml-both-lang'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-root > item[|lang]',  expect: { ids: ['xml-lower', 'xml-upper', 'xml-both-lang'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[|lang]',  expect: { ids: ['xml-lower', 'xml-both-lang'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-root > item[*|lang]', expect: { ids: ['xml-lower', 'xml-upper', 'xml-ns-lang', 'xml-both-lang'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-root > item[*|lang]', expect: { ids: ['xml-lower', 'xml-ns-lang', 'xml-both-lang'] }, browsers: ['firefox', 'webkit'] },
+
+      // SVG/MathML inside HTML: check whether attribute existence follows element-local casing.
+      { select: '#svg-root > g[data-x]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-root > g[data-x]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-root > g[DATA-X]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-root > g[DATA-X]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-root > g[viewBox]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-root > g[viewBox]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-root > g[VIEWBOX]', expect: { ids: ['svg-lower', 'svg-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-root > g[VIEWBOX]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#math-root > mi[data-x]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#math-root > mi[data-x]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#math-root > mi[DATA-X]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#math-root > mi[DATA-X]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#math-root > mi[mathvariant]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#math-root > mi[mathvariant]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#math-root > mi[MATHVARIANT]', expect: { ids: ['math-lower', 'math-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#math-root > mi[MATHVARIANT]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      // Imported SVG parsed as XML/SVG: check whether it behaves like inline SVG or imported XML.
+      { select: '#svg-import-host > svg > g[data-x]', expect: { ids: ['svg-import-lower', 'svg-import-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-import-host > svg > g[data-x]', expect: { ids: ['svg-import-lower'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-import-host > svg > g[DATA-X]', expect: { ids: ['svg-import-lower', 'svg-import-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-import-host > svg > g[DATA-X]', expect: { ids: ['svg-import-upper'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-import-host > svg > g[viewBox]', expect: { ids: ['svg-import-lower', 'svg-import-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-import-host > svg > g[viewBox]', expect: { ids: ['svg-import-lower'] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#svg-import-host > svg > g[VIEWBOX]', expect: { ids: ['svg-import-lower', 'svg-import-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#svg-import-host > svg > g[VIEWBOX]', expect: { ids: ['svg-import-upper'] }, browsers: ['firefox', 'webkit'] },
+    ],
+  },
+
+  {
+    name: 'attribute existence ascii name folding',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <div id="root">
+            <span id="html-ascii"></span>
+            <span id="html-nonascii-lower"></span>
+            <span id="html-nonascii-upper"></span>
+            <span id="html-colon"></span>
+            <div id="xml-host"></div>
+          </div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        document.getElementById('html-ascii')!.setAttribute('DATA-X', '1');
+
+        // HTML setAttribute lowercases ASCII name chars but should not Unicode-fold Ö -> ö.
+        document.getElementById('html-nonascii-lower')!.setAttribute('föo', '1');
+        document.getElementById('html-nonascii-upper')!.setAttribute('FÖO', '1');
+
+        document.getElementById('html-colon')!.setAttribute('FOO:BAR', '1');
+
+        const xmlDoc = new DOMParser().parseFromString(`
+          <root>
+            <item id="xml-nonascii-lower" föo="1" />
+            <item id="xml-nonascii-upper" FÖO="1" />
+          </root>
+        `, 'text/xml');
+
+        document.getElementById('xml-host')!.appendChild(
+          document.importNode(xmlDoc.documentElement, true)
+        );
+      });
+    },
+    cases: [
+      // HTML ASCII attribute names are ASCII case-insensitive.
+      { select: '#html-ascii[data-x]', expect: { ids: ['html-ascii'] } },
+      { select: '#html-ascii[DATA-X]', expect: { ids: ['html-ascii'] } },
+      { select: '#html-ascii[*|data-x]', expect: { ids: ['html-ascii'] } },
+      { select: '#html-ascii[*|DATA-X]', expect: { ids: ['html-ascii'] } },
+
+      // Non-ASCII name chars should not be Unicode-folded.
+      //
+      // setAttribute('föo') remains föo.
+      // setAttribute('FÖO') becomes fÖo on HTML elements: ASCII F/O fold, Ö preserved.
+      { select: '#html-nonascii-lower[föo]', expect: { ids: ['html-nonascii-lower'] } },
+      { select: '#html-nonascii-lower[FöO]', expect: { ids: ['html-nonascii-lower'] } },
+      { select: '#html-nonascii-lower[fÖo]', expect: { ids: [] } },
+      { select: '#html-nonascii-lower[FÖO]', expect: { ids: [] } },
+
+      { select: '#html-nonascii-upper[fÖo]', expect: { ids: ['html-nonascii-upper'] } },
+      { select: '#html-nonascii-upper[FÖO]', expect: { ids: ['html-nonascii-upper'] } },
+      { select: '#html-nonascii-upper[föo]', expect: { ids: [] } },
+      { select: '#html-nonascii-upper[FöO]', expect: { ids: [] } },
+
+      // Same checks under wildcard namespace. This is the branch that needs asciiLower(local).
+      { select: '#html-nonascii-lower[*|föo]', expect: { ids: ['html-nonascii-lower'] } },
+      { select: '#html-nonascii-lower[*|FöO]', expect: { ids: ['html-nonascii-lower'] } },
+      { select: '#html-nonascii-lower[*|fÖo]', expect: { ids: [] } },
+      { select: '#html-nonascii-lower[*|FÖO]', expect: { ids: [] } },
+
+      { select: '#html-nonascii-upper[*|fÖo]', expect: { ids: ['html-nonascii-upper'] } },
+      { select: '#html-nonascii-upper[*|FÖO]', expect: { ids: ['html-nonascii-upper'] } },
+      { select: '#html-nonascii-upper[*|föo]', expect: { ids: [] } },
+      { select: '#html-nonascii-upper[*|FöO]', expect: { ids: [] } },
+
+      // Escaped colon plus ASCII folding on HTML names.
+      { select: '#html-colon[foo\\:bar]', expect: { ids: ['html-colon'] } },
+      { select: '#html-colon[FOO\\:BAR]', expect: { ids: ['html-colon'] } },
+      { select: '#html-colon[*|foo\\:bar]', expect: { ids: ['html-colon'] } },
+      { select: '#html-colon[*|FOO\\:BAR]', expect: { ids: ['html-colon'] } },
+
+      // Imported XML stays case-sensitive, including ASCII.
+      { select: '#xml-nonascii-lower[föo]', expect: { ids: ['xml-nonascii-lower'] } },
+
+      { select: '#xml-nonascii-lower[FöO]', expect: { ids: ['xml-nonascii-lower'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-nonascii-lower[FöO]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-nonascii-lower[fÖo]', expect: { ids: [] } },
+      { select: '#xml-nonascii-lower[FÖO]', expect: { ids: [] } },
+
+      { select: '#xml-nonascii-upper[FÖO]', expect: { ids: ['xml-nonascii-upper'] } },
+
+      { select: '#xml-nonascii-upper[fÖo]', expect: { ids: ['xml-nonascii-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-nonascii-upper[fÖo]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-nonascii-upper[föo]', expect: { ids: [] } },
+
+      // XML wildcard namespace still compares exact localName.
+      { select: '#xml-nonascii-lower[*|föo]', expect: { ids: ['xml-nonascii-lower'] } },
+
+      { select: '#xml-nonascii-lower[*|FöO]', expect: { ids: ['xml-nonascii-lower'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-nonascii-lower[*|FöO]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+
+      { select: '#xml-nonascii-upper[*|FÖO]', expect: { ids: ['xml-nonascii-upper'] } },
+
+      { select: '#xml-nonascii-upper[*|fÖo]', expect: { ids: ['xml-nonascii-upper'] }, browsers: ['chromium'], engines: ['native'] },
+      { select: '#xml-nonascii-upper[*|fÖo]', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
+    ],
+  },
+
+  {
+    name: 'attribute operators with empty string values',
+    // status: 'only',
+    // engines: ['native'],
+    markup: `
+      <div id="root">
+        <div id="empty" data-x=""></div>
+        <div id="word" data-x="abc"></div>
+        <div id="dash" data-x="abc-def"></div>
+        <div id="space" data-x="abc def"></div>
+        <div id="spaces" data-x="   "></div>
+        <div id="missing"></div>
+      </div>
+    `,
+    cases: [
+      { select: '[data-x]', expect: { ids: ['empty', 'word', 'dash', 'space', 'spaces'] } },
+      { select: '[data-x=""]', expect: { ids: ['empty'] } },
+      { select: '[data-x^=""]', expect: { ids: [] } },
+      { select: '[data-x$=""]', expect: { ids: [] } },
+      { select: '[data-x*=""]', expect: { ids: [] } },
+      { select: '[data-x|=""]', expect: { ids: ['empty'] } },
+      { select: '[data-x~=""]', expect: { ids: [] } },
+      { select: '#missing[data-x=""]', expect: { ids: [] } },
+      { select: '#missing[data-x^=""]', expect: { ids: [] } },
+      { select: '#missing[data-x$=""]', expect: { ids: [] } },
+      { select: '#missing[data-x*=""]', expect: { ids: [] } },
+      { select: '#missing[data-x|=""]', expect: { ids: [] } },
+      { select: '#missing[data-x~=""]', expect: { ids: [] } },
+      { select: '#empty[data-x^=""]', expect: { ids: [] } },
+      { select: '#word[data-x^=""]', expect: { ids: [] } },
+      { select: '#word[data-x$=""]', expect: { ids: [] } },
+      { select: '#word[data-x*=""]', expect: { ids: [] } },
+      { select: '#empty[data-x~=""]', expect: { ids: [] } },
+      { select: '#spaces[data-x~=""]', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'debug wildcard namespace value scans all same-local attrs',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `<div id="root"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const root = document.getElementById('root')!;
+        root.textContent = '';
+
+        const span = document.createElement('span');
+        span.id = 'target';
+
+        span.setAttribute('foo', 'x');
+        span.setAttributeNS('a', 'foo', 'x');
+        span.setAttributeNS('b', 'foo', 'BAR');
+        span.setAttributeNS('c', 'foo', 'x');
+
+        root.appendChild(span);
+      });
+    },
+    cases: [
+      {
+        select: "[*|foo='bar' i]",
+        ref: { by: 'id', id: 'root' },
+        expect: { ids: ['target'] },
+        // debug: true,
+      },
+    ],
+  },
+
+  {
+    name: 'attribute dash-match astral prefix',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <div id="plain" data-x="abc"></div>
+        <div id="dash" data-x="abc-def"></div>
+
+        <div id="astral-exact" data-x="a😀b"></div>
+        <div id="astral-dash" data-x="a😀b-c"></div>
+        <div id="astral-wrong-continuation" data-x="a😀bc"></div>
+        <div id="astral-different" data-x="a😃b-c"></div>
+
+        <div id="leading-astral-exact" data-x="😀"></div>
+        <div id="leading-astral-dash" data-x="😀-x"></div>
+        <div id="leading-astral-wrong" data-x="😀x"></div>
+
+        <div id="multi-astral-exact" data-x="𠮷😀z"></div>
+        <div id="multi-astral-dash" data-x="𠮷😀z-tail"></div>
+        <div id="multi-astral-wrong" data-x="𠮷😀ztail"></div>
+      </div>
+    `,
+    cases: [
+      // Baseline dash-match semantics.
+      { select: '[data-x|="abc"]', expect: { ids: ['plain', 'dash'] } },
+
+      // Prefix contains an astral-plane character.
+      { select: '[data-x|="a😀b"]', expect: { ids: ['astral-exact', 'astral-dash'] } },
+
+      // Similar but different astral char should not match.
+      { select: '[data-x|="a😃b"]', expect: { ids: ['astral-different'] } },
+
+      // Prefix is only an astral-plane character.
+      { select: '[data-x|="😀"]', expect: { ids: ['leading-astral-exact', 'leading-astral-dash'] } },
+
+      // Multiple non-BMP chars before the dash.
+      { select: '[data-x|="𠮷😀z"]', expect: { ids: ['multi-astral-exact', 'multi-astral-dash'] } },
+
+      // Scoped non-matches make off-by-one/surrogate bugs obvious.
+      { select: '#astral-wrong-continuation[data-x|="a😀b"]', expect: { ids: [] } },
+      { select: '#leading-astral-wrong[data-x|="😀"]', expect: { ids: [] } },
+      { select: '#multi-astral-wrong[data-x|="𠮷😀z"]', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'attribute dash-match value semantics',
+    // status: 'only',
+    // engines: ['native'],
+    markup: `
+      <div id="root">
+        <div id="exact" data-lang="en"></div>
+        <div id="dash" data-lang="en-US"></div>
+        <div id="wrong-continuation" data-lang="english"></div>
+        <div id="wrong-prefix" data-lang="fr-US"></div>
+        <div id="upper-exact" data-lang="EN"></div>
+        <div id="upper-dash" data-lang="EN-us"></div>
+        <div id="nonascii-lower" data-lang="föo-bar"></div>
+        <div id="nonascii-upper" data-lang="FÖO-bar"></div>
+        <div id="empty" data-lang=""></div>
+        <div id="hyphen-only" data-lang="-"></div>
+        <div id="missing"></div>
+      </div>
+    `,
+    cases: [
+      // Sensitive dash-match.
+      { select: '[data-lang|="en"]', expect: { ids: ['exact', 'dash'] } },
+      { select: '[data-lang|="EN"]', expect: { ids: ['upper-exact', 'upper-dash'] } },
+      { select: '[data-lang|="e"]', expect: { ids: [] } },
+      { select: '[data-lang|="fr"]', expect: { ids: ['wrong-prefix'] } },
+
+      // Explicit i flag.
+      { select: '[data-lang|="en" i]', expect: { ids: ['exact', 'dash', 'upper-exact', 'upper-dash'] } },
+      { select: '[data-lang|="EN" i]', expect: { ids: ['exact', 'dash', 'upper-exact', 'upper-dash'] } },
+      { select: '[data-lang|="e" i]', expect: { ids: [] } },
+
+      // ASCII-only folding: Ö should not fold to ö.
+      { select: '[data-lang|="föo" i]', expect: { ids: ['nonascii-lower'] } },
+      { select: '[data-lang|="FöO" i]', expect: { ids: ['nonascii-lower'] } },
+      { select: '[data-lang|="fÖo" i]', expect: { ids: ['nonascii-upper'] } },
+      { select: '[data-lang|="FÖO" i]', expect: { ids: ['nonascii-upper'] } },
+
+      { select: '[data-lang|=""]', expect: { ids: ['empty', 'hyphen-only'] } },
+      { select: '[data-lang^=""]', expect: { ids: [] } },
+      { select: '[data-lang$=""]', expect: { ids: [] } },
+      { select: '[data-lang*=""]', expect: { ids: [] } },
+      { select: '[data-lang~=""]', expect: { ids: [] } },
+
+      // Missing attr never matches.
+      { select: '#missing[data-lang|="en"]', expect: { ids: [] } },
+      { select: '#missing[data-lang|="" ]', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'attribute value i flag is ascii-only',
+    status: 'only',
+    markup: `
+      <div id="root">
+        <div id="lower" data-x="föo"></div>
+        <div id="upper" data-x="fÖo"></div>
+      </div>
+    `,
+    cases: [
+      { select: '[data-x="FöO" i]', expect: { ids: ['lower'] } },
+      { select: '[data-x="FÖO" i]', expect: { ids: ['upper'] } },
+      { select: '[data-x^="Fö" i]', expect: { ids: ['lower'] } },
+      { select: '[data-x$="Öo" i]', expect: { ids: ['upper'] } },
     ],
   },
 

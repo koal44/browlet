@@ -387,9 +387,12 @@ export function initSnapshot(doc: Document) {
     isPaused: isPaused,
     isSeeking: isSeeking,
     isMuted: isMuted,
-    matchAttribute: (e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null) => matchAttribute(e, ns, local, pattern, flag, snap),
-    attrValueCaseFlag: (e: Element, localName: string, attrFlag: string | undefined) => attrValueCaseFlag(e, localName, attrFlag, snap),
-    isFocused: (node: Element) => isFocused(node, snap),
+    hasAttr: (e: Element, anyNs: boolean, local: string, htmlLocal: string, hasColon: boolean): boolean =>
+      hasAttr(e, anyNs, local, htmlLocal, hasColon, snap),
+    matchAttribute: (e: Element, anyNs: boolean, name: string, htmlName: string, hasColonName: boolean, pattern: string, expected: string, htmlExpected: string, sensitivity: number) =>
+      matchAttribute(e, anyNs, name, htmlName, hasColonName, pattern, expected, htmlExpected, sensitivity, snap),
+    isFocused: (node: Element) =>
+      isFocused(node, snap),
 
     regexCache: {} as Record<string, RegExp>,
     getCachedRegex: (source: string, flags: string) => getCachedRegex(source, flags, snap),
@@ -679,58 +682,289 @@ function isType(e: Element, htmlName: string, xmlName: string): boolean {
     : e.localName === xmlName;
 }
 
-function attrValueCaseFlag(e: Element, localName: string, attrFlag: string | undefined, snap: Snapshot): string {
-  if (attrFlag === 'i') return 'i';
-  if (attrFlag === 's') return '';
-  return snap.isHtml && isHtmlElement(e) && ATTR_INSENSITIVE.has(localName.toLowerCase()) ? 'i' : '';
-}
+function hasAttr(
+  e: Element,
+  anyNs: boolean,
+  name: string,
+  htmlName: string | null, // null implies same as name
+  hasColonName: boolean,
+  snap: Snapshot
+): boolean {
+  // Fast path for non-namespaced attributes without colons, which are common in HTML and SVG
+  if (!anyNs && !hasColonName) {
+    return e.hasAttribute(name);
+  }
 
-function matchAttribute(e: Element, ns: string | null, local: string, pattern: string | null, flag: string | null, snap: Snapshot): boolean {
   const attrs = e.attributes;
-  const isHtml = snap.isHtml && isHtmlElement(e);
-  const expectedName = isHtml ? local.toLowerCase() : local;
+  const expected = htmlName !== null && snap.isHtml && isHtmlElement(e) ? htmlName : name;
 
-  const insensitive =
-    flag === 'i' ? true :
-    flag === 's' ? false :
-    isHtml && ATTR_INSENSITIVE.has(local.toLowerCase());
-
-  const nsUri =
-    ns && ns !== '*'
-      ? e.lookupNamespaceURI?.(ns) ?? snap.doc.lookupNamespaceURI?.(ns)
-      : null;
-
-  if (ns && ns !== '*' && !nsUri) return false;
+  if (anyNs) {
+    for (let i = 0; i < attrs.length; i++) {
+      if (attrs[i].localName === expected) return true;
+    }
+    return false;
+  }
 
   for (let i = 0; i < attrs.length; i++) {
     const attr = attrs[i];
-
-    if (ns === null || ns === '') {
-      if (attr.namespaceURI !== null) continue;
-    } else if (ns !== '*') {
-      if (attr.namespaceURI !== nsUri) continue;
-    }
-
-    const actualName = isHtml ? attr.localName.toLowerCase() : attr.localName;
-    if (actualName !== expectedName) continue;
-
-    if (pattern === null) return true;
-    if (matchAttrValue(attr.value, pattern, insensitive)) return true;
+    if (attr.localName === expected && attr.namespaceURI === null) return true;
   }
 
   return false;
 }
 
-function matchAttrValue(value: string, pattern: string, insensitive: boolean): boolean {
-  const source = insensitive ? asciiLower(pattern) : pattern;
-  const actual = insensitive ? asciiLower(value) : value;
-  return new RegExp(source).test(actual);
+function matchAttribute(
+  e: Element,
+  anyNs: boolean,
+  name: string,
+  htmlName: string | null, // null implies same as name
+  hasColonName: boolean,
+  pattern: string,
+  expected: string,
+  htmlExpected: string,
+  sensitivity: number,
+  snap: Snapshot
+): boolean {
+  if (!anyNs && !hasColonName) {
+    const attrValue = e.getAttribute(name);
+
+    const insensitive = sensitivity === 1 || (sensitivity === 2 && snap.isHtml && isHtmlElement(e));
+    return attrValue !== null &&
+      matchAttrValueOp(attrValue, pattern, expected, htmlExpected, insensitive, snap);
+  }
+
+  let expectedName = name;
+  let insensitive = sensitivity === 1;
+
+  const needsHtmlInfo = htmlName !== null || sensitivity === 2;
+  if (needsHtmlInfo && snap.isHtml) {
+    const isHtml = isHtmlElement(e);
+
+    if (isHtml) {
+      if (htmlName !== null) expectedName = htmlName;
+      if (sensitivity === 2) insensitive = true;
+    }
+  }
+
+  const attrs = e.attributes;
+
+  if (anyNs) {
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+
+      if (
+        attr.localName === expectedName &&
+        matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  for (let i = 0; i < attrs.length; i++) {
+    const attr = attrs[i];
+
+    if (
+      attr.localName === expectedName &&
+      attr.namespaceURI === null &&
+      matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function matchAttrValueOp(
+  attrValue: string,
+  pattern: string,
+  expected: string,
+  htmlExpected: string,
+  insensitive: boolean,
+  snap: Snapshot
+): boolean {
+  // For ASCII-insensitive matching, avoid asciiLower(attrValue) in the hot path.
+  if (insensitive) {
+    switch (pattern) {
+      case '=': return asciiEquals(attrValue, htmlExpected);
+      case '^': return asciiStartsWith(attrValue, htmlExpected);
+      case '$': return asciiEndsWith(attrValue, htmlExpected);
+      case '|': return asciiDashMatch(attrValue, htmlExpected);
+      case '*': return asciiIncludes(attrValue, htmlExpected);
+      case '~': return asciiHasCssToken(attrValue, htmlExpected);
+      default: return getCachedRegex(pattern, 'i', snap).test(attrValue);
+    }
+  }
+
+  switch (pattern) {
+    case '=': return attrValue === expected;
+    case '~': return hasCssToken(attrValue, expected);
+    case '^': return attrValue.startsWith(expected);
+    case '$': return attrValue.endsWith(expected);
+    case '*': return attrValue.includes(expected);
+    case '|':
+      return attrValue === expected ||
+        (
+          attrValue.length > expected.length &&
+          attrValue.at(expected.length) === '-' &&
+          attrValue.startsWith(expected)
+        );
+
+    default: return getCachedRegex(pattern, '', snap).test(attrValue);
+  }
+}
+
+export function asciiEquals(actual: string, expectedLower: string): boolean {
+  const n = expectedLower.length;
+  if (actual.length !== n) return false;
+
+  for (let i = 0; i < n; i++) {
+    let c = actual.charCodeAt(i);
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== expectedLower.charCodeAt(i)) return false;
+  }
+
+  return true;
+}
+
+export function asciiStartsWith(actual: string, expectedLower: string): boolean {
+  const n = expectedLower.length;
+  if (actual.length < n) return false;
+
+  for (let i = 0; i < n; i++) {
+    let c = actual.charCodeAt(i);
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== expectedLower.charCodeAt(i)) return false;
+  }
+
+  return true;
+}
+
+export function asciiEndsWith(actual: string, expectedLower: string): boolean {
+  const n = expectedLower.length;
+  const offset = actual.length - n;
+  if (offset < 0) return false;
+
+  for (let i = 0; i < n; i++) {
+    let c = actual.charCodeAt(offset + i);
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== expectedLower.charCodeAt(i)) return false;
+  }
+
+  return true;
+}
+
+export function asciiIncludes(actual: string, expectedLower: string): boolean {
+  const m = expectedLower.length;
+
+  // Native `[attr*=""]` matches nothing in selector semantics, and the compiler
+  // should short-circuit that case before reaching here.
+  if (m === 0) return false;
+  if (actual.length < m) return false;
+
+  const limit = actual.length - m;
+
+  outer:
+  for (let start = 0; start <= limit; start++) {
+    for (let i = 0; i < m; i++) {
+      let c = actual.charCodeAt(start + i);
+      if (c >= 65 && c <= 90) c += 32;
+
+      if (c !== expectedLower.charCodeAt(i)) continue outer;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+export function asciiDashMatch(actual: string, expectedLower: string): boolean {
+  const n = expectedLower.length;
+
+  if (actual.length < n) return false;
+
+  for (let i = 0; i < n; i++) {
+    let c = actual.charCodeAt(i);
+    if (c >= 65 && c <= 90) c += 32;
+
+    if (c !== expectedLower.charCodeAt(i)) return false;
+  }
+
+  return actual.length === n || actual.at(n) === '-';
+}
+
+export function hasCssToken(actual: string, token: string): boolean {
+  const n = actual.length;
+  const m = token.length;
+
+  if (m === 0) return false;
+
+  let i = 0;
+  while (i < n) {
+    while (i < n && isCssSpace(actual.charCodeAt(i))) i++;
+    const start = i;
+    while (i < n && !isCssSpace(actual.charCodeAt(i))) i++;
+    if (i - start === m && actual.slice(start, i) === token) return true;
+  }
+
+  return false;
+}
+
+export function asciiHasCssToken(actual: string, expectedLower: string): boolean {
+  const n = actual.length;
+  const m = expectedLower.length;
+
+  if (m === 0) return false;
+
+  let i = 0;
+
+  while (i < n) {
+    // Skip leading CSS whitespace.
+    while (i < n && isCssSpace(actual.charCodeAt(i))) {
+      i++;
+    }
+
+    const start = i;
+
+    // Find end of this token.
+    while (i < n && !isCssSpace(actual.charCodeAt(i))) {
+      i++;
+    }
+
+    if (i - start === m) {
+      let matched = true;
+
+      for (let j = 0; j < m; j++) {
+        let c = actual.charCodeAt(start + j);
+
+        if (c >= 65 && c <= 90) {
+          c += 32;
+        }
+
+        if (c !== expectedLower.charCodeAt(j)) {
+          matched = false;
+          break;
+        }
+      }
+
+      if (matched) return true;
+    }
+  }
+
+  return false;
+}
+
+function isCssSpace(code: number): boolean {
+  return code === 9 || code === 10 || code === 12 || code === 13 || code === 32;
 }
 
 function asciiLower(s: string): string {
   return s.replace(/[A-Z]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 32));
 }
-
 
 type NthElementState = {
   idx: number; len: number; set: number; parent: Element | null | undefined; parents: (Element | null)[]; nodes: Element[][];
@@ -1951,59 +2185,117 @@ function compileSelector(
         if (!match) throw new Error('Invalid attribute selector: ' + selector);
 
         const attrName = match[1];
-        const attrOp = match[2] as string | undefined;
-        const rawAttrVal = match[4] as string | undefined;
-        const rawAttrFlag = match[5] as string | undefined;
-
         const pipe = findUnescapedPipe(attrName);
+
+        // nsPrefix can be '*', '', or null. Named prefixes are rejected for now.
         const rawNsPrefix = pipe >= 0 ? attrName.slice(0, pipe) : null;
         const nsPrefix = rawNsPrefix === null ? null : cssIdentUnescape(rawNsPrefix);
-        const rawLocalName = pipe >= 0 ? attrName.slice(pipe + 1) : attrName;
-        const localName = cssIdentUnescape(rawLocalName);
-
-        const attrVal = rawAttrVal === undefined ? undefined : cssIdentUnescape(rawAttrVal);
 
         if (nsPrefix !== null && nsPrefix !== '' && nsPrefix !== '*') {
           throw new Error(`Unsupported namespace prefix "${nsPrefix}" in attribute selector: ${selector}`);
         }
 
-        const nsArg = nsPrefix === null ? 'null' : JSON.stringify(nsPrefix);
-        const localArg = JSON.stringify(localName);
-        const attrFlag = rawAttrFlag === undefined ? undefined : cssIdentUnescape(rawAttrFlag).toLowerCase();
-        if (attrFlag !== undefined && attrFlag !== 'i' && attrFlag !== 's') throw new Error(`Invalid attribute selector flag: ${rawAttrFlag}`);
-        const flagArg = attrFlag === undefined ? 'null' : JSON.stringify(attrFlag);
+        const anyNsArg = nsPrefix === '*' ? 'true' : 'false';
 
-        const matchAttrExpr = (pattern: string | null, negate = false): string => {
-          const patternArg = pattern === null ? 'null' : JSON.stringify(pattern);
-          const match = `s.matchAttribute(e,${nsArg},${localArg},${patternArg},${flagArg})`;
-          return negate ? `!${match}` : match;
-        };
+        const rawLocalName = pipe >= 0 ? attrName.slice(pipe + 1) : attrName;
+        const localName = cssIdentUnescape(rawLocalName);
+        const htmlName = asciiLower(localName);
 
-        let attrExpr: string;
+        const nameArg = JSON.stringify(localName);
+        const htmlNameArg = htmlName === localName ? 'null' : JSON.stringify(htmlName); // null = no HTML-name folding needed; use name directly
+        const hasColonNameArg = localName.indexOf(':') >= 0 ? 'true' : 'false';
+
+        const attrOp = match[2] as string | undefined;
+
+        // Existence: [attr], [|attr], [*|attr]
         if (!attrOp) {
-          attrExpr = matchAttrExpr(null);
-        } else if (attrVal === undefined) {
+          source = `if(s.hasAttr(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg})){${source}}`;
+          break;
+        }
+
+        const rawAttrVal = match[4] as string | undefined;
+        const attrVal = rawAttrVal === undefined ? undefined : cssIdentUnescape(rawAttrVal);
+
+        if (attrVal === undefined) {
           throw new Error(`Missing attribute value in selector: ${selector}`);
-        } else if (attrOp === '~=' && /[\t\n\f\r ]/.test(attrVal)) {
-          // [attr~="a b"] is syntactically valid but can never match a single whitespace-separated token.
-          attrExpr = 'false';
+        }
+
+        const rawAttrFlag = match[5] as string | undefined;
+        const attrFlag = rawAttrFlag === undefined ? null : cssIdentUnescape(rawAttrFlag).toLowerCase();
+
+        if (attrFlag !== null && attrFlag !== 'i' && attrFlag !== 's') {
+          throw new Error(`Invalid attribute selector flag: ${rawAttrFlag}`);
+        }
+
+        const sensitivity =
+            attrFlag === 'i' ? 1
+          : attrFlag === 's' ? 0
+          : ATTR_INSENSITIVE.has(htmlName) ? 2
+          : 0;
+
+        let pattern: string;
+        let negate = false;
+
+        if (attrVal === '') {
+          if (attrOp === '=') {
+            // Native: [attr=""] and [attr|=""] match only empty values.
+            pattern = '=';
+          } else if (attrOp === '|=') {
+            // Native: [attr|=""] matches only empty or hyphen-only values, not values with non-hyphen characters.
+            pattern = '|';
+          } else if (attrOp === '^=' || attrOp === '$=' || attrOp === '*=' || attrOp === '~=') {
+            // Native: prefix/suffix/contains/token with empty expected value match nothing.
+            source = `if(false){${source}}`;
+            break;
+          } else {
+            const test = snap.operators[attrOp];
+            if (!test) {
+              throw new Error(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`);
+            }
+
+            pattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
+            negate = !test.p3;
+          }
+        } else if (attrOp === '=') {
+          pattern = '=';
+        } else if (attrOp === '^=') {
+          pattern = '^';
+        } else if (attrOp === '$=') {
+          pattern = '$';
+        } else if (attrOp === '*=') {
+          pattern = '*';
+        } else if (attrOp === '|=') {
+          // '|=': { p1: '^',       p2: '(-|$)',   p3: true },
+          // pattern = `^${escapeRegExp(attrVal)}(-|$)`;
+          pattern = '|';
+        } else if (attrOp === '~=') {
+          if (/[\t\n\f\r ]/.test(attrVal)) {
+            // [attr~="a b"] is syntactically valid but can never match one whitespace-separated token.
+            source = `if(false){${source}}`;
+            break;
+          }
+          pattern = '~';
+
+          // pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
         } else {
-          const baseTest = snap.operators[attrOp];
-          if (!baseTest) {
+          const test = snap.operators[attrOp];
+          if (!test) {
             throw new Error(`Unsupported attributes operator: ${attrOp}, in selector: ${expression}`);
           }
 
-          const isStdOp = ATTR_STD_OPS.has(attrOp) && attrOp !== '~=';
-          const test =
-              attrVal === '' && attrOp === '~=' ? { p1: '^\\s', p2: '+$', p3: true }
-            : attrVal === '' && isStdOp         ? { p1: '^',    p2: '$',  p3: true }
-            : baseTest;
-
-          const attrPattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
-          attrExpr = matchAttrExpr(attrPattern, !test.p3);
+          pattern = `${test.p1}${escapeRegExp(attrVal)}${test.p2}`;
+          negate = !test.p3;
         }
 
-        source = `if((${attrExpr})){${source}}`;
+        const patternArg = JSON.stringify(pattern);
+        const valueArg = JSON.stringify(attrVal);
+        const htmlValueArg = JSON.stringify(asciiLower(attrVal));
+
+        const attrExpr =
+          `s.matchAttribute(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg},` +
+          `${patternArg},${valueArg},${htmlValueArg},${sensitivity})`;
+
+        source = `if(${negate ? `!${attrExpr}` : attrExpr}){${source}}`;
         break;
       }
 
