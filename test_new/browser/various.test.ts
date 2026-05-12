@@ -5347,7 +5347,7 @@ runScenarios('various', 'normal', [
 
   {
     name: 'attribute value i flag is ascii-only',
-    status: 'only',
+    // status: 'only',
     markup: `
       <div id="root">
         <div id="lower" data-x="föo"></div>
@@ -5362,29 +5362,82 @@ runScenarios('various', 'normal', [
     ],
   },
 
-  // {
-  //   name: 'debug match lambda shapes',
-  //   status: 'only',
-  //   engines: ['nw'],
-  //   markup: `
-  //     <div id="root">
-  //       <button id="btn" data-testid="x" popover></button>
-  //       <textarea id="feedback"></textarea>
-  //       <a id="commit" href="/commits/abc"></a>
-  //       <pre id="pre"><code id="code"></code></pre>
-  //       <div id="blob" class="codeBlobInner"><textarea id="inner"></textarea></div>
-  //     </div>
-  //   `,
-  //   cases: [
-  //     { match: 'div', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-  //     { match: 'button', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-  //     { match: '[popover]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-  //     { match: '[data-testid="x"]', ref: { by: 'id', id: 'btn' }, expect: { ids: ['btn'] }, debug: true },
-  //     { match: 'a[href*="commits"]', ref: { by: 'id', id: 'commit' }, expect: { ids: ['commit'] }, debug: true },
-  //     { match: '.codeBlobInner textarea', ref: { by: 'id', id: 'inner' }, expect: { ids: ['inner'] }, debug: true },
-  //     { match: ':not(button)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-  //     { match: ':is(div, span, a)', ref: { by: 'id', id: 'root' }, expect: { ids: ['root'] }, debug: true },
-  //   ],
-  // },
+  {
+    name: 'class escaped whitespace is not one class token',
+    // status: 'only',
+    // engines: ['native'],
+    markup: `
+      <div id="a" class="foo bar"></div>
+      <div id="b"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        document.getElementById('b')!.setAttribute('class', 'foo\nbar');
+      });
+    },
+    cases: [
+      { select: '.foo ', expect: { count: 2 } },
+      { select: '.foo\\ ', expect: { count: 0 } },
+      { select: '.foo\\a bar', expect: { count: 0 } },
+      { match: '.foo\\a bar', ref: { by: 'id', id: 'a' }, expect: { count: 0 } },
+      { match: '.foo\\a bar', ref: { by: 'id', id: 'b' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'match descendant short-circuit keeps searching after partial left failure',
+    // status: 'only',
+    markup: `
+      <div class="grand">
+        <div class="x">
+          <div class="parent">
+            <span id="hit" class="target"></span>
+          </div>
+        </div>
+      </div>
+      <div class="parent">
+        <span id="miss" class="target"></span>
+      </div>
+    `,
+    cases: [
+      { match: '.grand .parent .target', ref: { by: 'id', id: 'hit' }, expect: { count: 1 } },
+      { match: '.grand .parent .target', ref: { by: 'id', id: 'miss' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'match general sibling short-circuit after full left match only',
+    markup: `
+      <div id="box">
+        <i class="grand"></i>
+        <b class="noise"></b>
+        <i class="left"></i>
+        <span id="hit" class="target"></span>
+        <span id="miss" class="target"></span>
+      </div>
+    `,
+    cases: [
+      { match: '.grand ~ .left ~ .target', ref: { by: 'id', id: 'hit' }, expect: { count: 1 } },
+    ],
+  },
+
+  {
+    name: 'match general sibling short-circuit full chain',
+    markup: `
+      <div>
+        <i class="grand"></i>
+        <i class="left"></i>
+        <span id="hit" class="target"></span>
+      </div>
+      <div>
+        <i class="left"></i>
+        <span id="miss" class="target"></span>
+      </div>
+    `,
+    cases: [
+      { match: '.grand ~ .left ~ .target', ref: { by: 'id', id: 'hit' }, expect: { count: 1 } },
+      { match: '.grand ~ .left ~ .target', ref: { by: 'id', id: 'miss' }, expect: { count: 0 } },
+    ],
+  },
 
 ]);

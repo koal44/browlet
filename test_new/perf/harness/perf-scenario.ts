@@ -14,6 +14,12 @@ type BrowserName = typeof BROWSER_NAMES[number];
 
 type PerfScenarioStatus = 'normal' | 'skip' | 'only';
 
+type Engine = {
+  select(sel: string, ctx: QueryContext): Element[];
+  first(sel: string, ctx: QueryContext): Element | null;
+  match(sel: string, el: Element): boolean;
+  closest(sel: string, el: Element): Element | null;
+};
 type EngineName = 'native' | 'nw-current' | 'nw-2.2.23';
 
 type PerfEngine = {
@@ -29,7 +35,7 @@ type MatchBench =   { op: 'match';     selector:  string;    context:  string   
 type ClosestBench = { op: 'closest';   selector:  string;    context:  string        } & PerfBenchBase;
 type WalkBench =    { op: 'matchWalk'; selectors: string[];  context?: string | null } & PerfBenchBase;
 
-type PerfBenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number };
+type PerfBenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean };
 type PerfBench = SelectBench | FirstBench | MatchBench | ClosestBench | WalkBench;
 
 type PerfScenario = {
@@ -62,81 +68,82 @@ const DEFAULT_ENGINES: PerfEngine[] = [
 ];
 
 export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void {
+  const hasOnly = scenarios.some(s => s.status === 'only');
+  const active = hasOnly ? scenarios.filter(s => s.status === 'only') : scenarios;
+
+  const browserSet = new Set<BrowserName>();
+  for (const s of active) {
+    for (const b of s.browsers ?? BROWSER_NAMES) browserSet.add(b);
+  }
+
   test.describe(label, () => {
-    let browsers: Record<BrowserName, Browser>;
-    let pages: Record<BrowserName, Page>;
+    let browsers: Record<BrowserName, Browser | null>;
 
     test.beforeAll(async () => {
       browsers = {
-        chromium: await chromium.launch(),
-        firefox: await firefox.launch(),
-        webkit: await webkit.launch(),
+        chromium: browserSet.has('chromium') ? await chromium.launch() : null,
+        firefox: browserSet.has('firefox') ? await firefox.launch() : null,
+        webkit: browserSet.has('webkit') ? await webkit.launch() : null,
       };
-
-      pages = {
-        chromium: await browsers.chromium.newPage(),
-        firefox: await browsers.firefox.newPage(),
-        webkit: await browsers.webkit.newPage(),
-      };
-
-      for (const page of Object.values(pages)) {
-        attachPageDiagnostics(page);
-        await page.setContent('<!doctype html><html><body></body></html>');
-      }
     });
 
     test.afterAll(async () => {
-      await Promise.all(BROWSER_NAMES.map((name) => browsers[name].close()));
+      await Promise.all(BROWSER_NAMES.map((name) => browsers[name]?.close()));
     });
-
-    const hasOnly = scenarios.some(s => s.status === 'only');
 
     for (const scenario of scenarios) {
       if (hasOnly && scenario.status !== 'only') continue;
 
       const testFn = getPerfTestFn(scenario.status);
       testFn(scenario.name, async () => {
-        await runPerfScenario(scenario, pages);
+        await runPerfScenario(scenario, browsers);
       });
     }
   });
 }
 
-async function runPerfScenario(scenario: PerfScenario, pages: Record<BrowserName, Page>): Promise<void> {
+async function runPerfScenario(
+  scenario: PerfScenario,
+  browsers: Record<BrowserName, Browser | null>,
+): Promise<void> {
   const scenarioBrowsers = scenario.browsers ?? BROWSER_NAMES;
   const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map(e => e.name))];
   if (!engineNames.includes('nw-current')) engineNames.push('nw-current');
   const scenarioEngines = resolvePerfEngines(engineNames);
 
   for (const browserName of scenarioBrowsers) {
-    const page = pages[browserName];
+    const browser = browsers[browserName];
+    if (!browser) throw new Error(`Browser not available: ${browserName}`);
+
     const all: Record<EngineName, BenchResult[]> = {} as any;
 
     for (const engine of scenarioEngines) {
-      await initPage(page, scenario);
+      const context = await browser.newContext();
+      const page = await context.newPage();
 
-      if (scenario.setupPage) {
-        await scenario.setupPage(page);
+      try {
+        attachPageDiagnostics(page);
+        await initPage(page, scenario);
+
+        if (scenario.setupPage) await scenario.setupPage(page);
+        if (engine.script) await installNwsapi(page, engine.script);
+        await installPerfHelpers(page);
+
+        const mode: 'native' | 'nw' = engine.name === 'native' ? 'native' : 'nw';
+
+        all[engine.name] = await page.evaluate(
+          ({ mode, benches, quickIters, focused }) =>
+            window.__perfHelpers.runPerfBenches(mode, benches, { quickIters, focused }),
+          {
+            mode,
+            benches: scenario.benches,
+            quickIters: scenario.quickIters,
+            focused: scenario.status === 'only',
+          },
+        );
+      } finally {
+        await context.close();
       }
-
-      if (engine.script) {
-        await installNwsapi(page, engine.script);
-      }
-
-      await installPerfHelpers(page);
-
-      const mode: 'native' | 'nw' = engine.name === 'native' ? 'native' : 'nw';
-
-      all[engine.name] = await page.evaluate(
-        ({ mode, benches, quickIters, focused }) =>
-          window.__perfHelpers.runPerfBenches(mode, benches, { quickIters, focused }),
-        {
-          mode,
-          benches: scenario.benches,
-          quickIters: scenario.quickIters,
-          focused: scenario.status === 'only',
-        },
-      );
     }
 
     const { rows, failedMaxRatio } = buildTable(all, 'nw-current', scenario.probeKeys ?? []);
@@ -227,8 +234,6 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
 }
 
 async function initPage(page: Page, scenario: PerfScenario): Promise<void> {
-  await page.evaluate(() => { window.__perfXml = undefined; });
-
   if (scenario.markupMode === 'xml-document') {
     await page.setContent('<!doctype html><html><body>dummy content</body></html>');
     await page.evaluate((xmlString) => {
@@ -290,28 +295,6 @@ async function installPerfHelpers(page: Page) {
   await page.evaluate(() => {
     const DEFAULT_MAX_RATIO = 5;
 
-    type Engine = {
-      select(sel: string, ctx: QueryContext): Element[];
-      first(sel: string, ctx: QueryContext): Element | null;
-      match(sel: string, el: Element): boolean;
-      closest(sel: string, el: Element): Element | null;
-    };
-
-    const nativeEngine: Engine = {
-      select: (s, c) => [...c.querySelectorAll(s)],
-      first: (s, c) => c.querySelector(s),
-      match: (s, e) => e.matches(s),
-      closest: (s, e) => e.closest(s),
-    };
-
-    const nwDom = (globalThis as any).NW?.Dom;
-    const nwEngine: Engine = {
-      select: (s, c) => [...nwDom.select(s, c)],
-      first: (s, c) => nwDom.first(s, c),
-      match: (s, e) => nwDom.match(s, e),
-      closest: (s, e) => nwDom.closest(s, e),
-    };
-
     function bench(label: string, fn: () => unknown, iters = 1000, maxRatio = DEFAULT_MAX_RATIO): BenchResult {
       for (let i = 0; i < 50; i++) fn();
       const probe = (globalThis as any).NW?.Dom?.snapshot?.probe;
@@ -366,10 +349,16 @@ async function installPerfHelpers(page: Page) {
       benches: PerfBench[],
       options: { quickIters?: number, focused?: boolean } = {},
     ): BenchResult[] {
-      const engine = engineName === 'native' ? nativeEngine : nwEngine;
-
       const labels = benches.map(perfBenchLabel);
       assertUniqueBenchLabels(labels);
+
+      const hasDebugBench = benches.some(b => b.debug);
+      if (hasDebugBench) {
+        if (engineName === 'native') return [];
+        if (!supportsNwDebug()) return [];
+      }
+
+      const engine = getEngine(engineName);
 
       return benches.map((b, i) => {
         const label = labels[i];
@@ -381,25 +370,51 @@ async function installPerfHelpers(page: Page) {
         switch (b.op) {
           case 'match':
             if (!(ctx instanceof Element)) throw new Error(`${label}: match needs Element context`);
+            if (b.debug) debugBench(label, () => engine.match(b.selector, ctx));
             return bench(label, () => engine.match(b.selector, ctx), iters, b.maxRatio);
 
           case 'closest':
             if (!(ctx instanceof Element)) throw new Error(`${label}: closest needs Element context`);
+            if (b.debug) debugBench(label, () => engine.closest(b.selector, ctx));
             return bench(label, () => engine.closest(b.selector, ctx), iters, b.maxRatio);
 
           case 'select':
+            if (b.debug) debugBench(label, () => engine.select(b.selector, ctx));
             return bench(label, () => engine.select(b.selector, ctx), iters, b.maxRatio);
 
           case 'first':
+            if (b.debug) debugBench(label, () => engine.first(b.selector, ctx));
             return bench(label, () => engine.first(b.selector, ctx), iters, b.maxRatio);
 
           case 'matchWalk':
+            if (b.debug) debugBench(label, () => matchWalk(engine, ctx, b.selectors));
             return bench(label, () => matchWalk(engine, ctx, b.selectors), iters, b.maxRatio);
 
           default:
             return assertNever(b);
         }
       });
+    }
+
+    function getEngine(engineName: 'native' | 'nw'): Engine {
+      if (engineName === 'native') {
+        return {
+          select: (s, c) => [...c.querySelectorAll(s)],
+          first: (s, c) => c.querySelector(s),
+          match: (s, e) => e.matches(s),
+          closest: (s, e) => e.closest(s),
+        };
+      }
+
+      const nwDom = (globalThis as any).NW?.Dom;
+      if (!nwDom) throw new Error('NW.Dom is not available');
+
+      return {
+        select: (s, c) => [...nwDom.select(s, c)],
+        first: (s, c) => nwDom.first(s, c),
+        match: (s, e) => nwDom.match(s, e),
+        closest: (s, e) => nwDom.closest(s, e),
+      };
     }
 
     function perfBenchLabel(b: PerfBench): string {
@@ -445,6 +460,38 @@ async function installPerfHelpers(page: Page) {
 
     function assertNever(value: never, message?: string): never {
       throw new Error(message ?? `Unexpected value: ${value}`);
+    }
+
+    function debugBench(label: string, fn: () => unknown): never {
+      const nwdom = (globalThis as any).NW?.Dom;
+      if (
+        !nwdom ||
+        typeof nwdom.setDebug !== 'function' ||
+        typeof nwdom.clearDebug !== 'function' ||
+        typeof nwdom.printDebug !== 'function'
+      ) {
+        throw new Error('NW.Dom debug is not available');
+      }
+
+      nwdom.setDebug(true);
+      nwdom.clearDebug();
+
+      try {
+        fn();
+        throw new Error(`[perf debug] ${label}\n${nwdom.printDebug()}`);
+      } finally {
+        nwdom.setDebug(false);
+      }
+    }
+
+    function supportsNwDebug(): boolean {
+      const nwdom = (globalThis as any).NW?.Dom;
+      return !!(
+        nwdom &&
+        typeof nwdom.setDebug === 'function' &&
+        typeof nwdom.clearDebug === 'function' &&
+        typeof nwdom.printDebug === 'function'
+      );
     }
 
     window.__perfHelpers = {

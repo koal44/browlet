@@ -914,6 +914,62 @@ export function hasCssToken(actual: string, token: string): boolean {
   return false;
 }
 
+// export function hasCssToken(actual: string, token: string): boolean {
+//   const n = actual.length;
+//   const m = token.length;
+
+//   if (m === 0) return false;
+
+//   let i = 0;
+//   while (i < n) {
+//     while (i < n && isCssSpace(actual.charCodeAt(i))) i++;
+//     const start = i;
+//     while (i < n && !isCssSpace(actual.charCodeAt(i))) i++;
+
+//     if (i - start === m) {
+//       let matched = true;
+
+//       for (let j = 0; j < m; j++) {
+//         if (actual.charCodeAt(start + j) !== token.charCodeAt(j)) {
+//           matched = false;
+//           break;
+//         }
+//       }
+
+//       if (matched) return true;
+//     }
+//   }
+
+//   return false;
+// }
+
+// export function hasCssToken(actual: string, token: string): boolean {
+//   const n = actual.length;
+//   const m = token.length;
+
+//   if (m === 0 || m > n) return false;
+//   if (actual === token) return true;
+
+//   const first = token.charCodeAt(0);
+
+//   let i = 0;
+
+//   while (i < n) {
+//     while (i < n && isCssSpace(actual.charCodeAt(i))) i++;
+
+//     const start = i;
+//     const firstMatches = i < n && actual.charCodeAt(i) === first;
+
+//     while (i < n && !isCssSpace(actual.charCodeAt(i))) i++;
+
+//     if (firstMatches && i - start === m && actual.startsWith(token, start)) {
+//       return true;
+//     }
+//   }
+
+//   return false;
+// }
+
 export function asciiHasCssToken(actual: string, expectedLower: string): boolean {
   const n = actual.length;
   const m = expectedLower.length;
@@ -1990,6 +2046,7 @@ const MACROS = {
     BODY: 'r[++j]=c[k];',
     TAIL: 'continue main;',
     TEST: 'if(f(c[k])===false){p=true;break main;}',
+    RETURN: 'return p;',
     VARS: [] as string[],
   },
 
@@ -1997,17 +2054,9 @@ const MACROS = {
     HEAD: 'var e,m,n,o',
     LOOP: 'e=c;',
     BODY: '',
-    TAIL: 'r=true;',
+    TAIL: 'return true;',
     TEST: 'f(c);',
-    VARS: [] as string[],
-  },
-
-  N: { // NONE
-    HEAD: 'var e,m,n,o,p=false',
-    LOOP: 'main:while((e=c.item(++k)))',
-    BODY: 'r[++j]=c.item(k);',
-    TAIL: 'r=true;',
-    TEST: 'if(f(c.item(k))===false){p=true;break main;}',
+    RETURN: 'return false;',
     VARS: [] as string[],
   },
 } as const;
@@ -2016,55 +2065,30 @@ const MACROS = {
 // executable functions for matching or selecting
 function compile(selector: string, mode: true, cb: QueryCallback | null, snap: Snapshot): SelectLambda;
 function compile(selector: string, mode: false, cb: QueryCallback | null, snap: Snapshot): MatchLambda;
-function compile(selector: string, mode: null, cb: QueryCallback | null, snap: Snapshot): SelectLambda;
-function compile(selector: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot): SelectLambda | MatchLambda {
+function compile(selector: string, mode: boolean, cb: QueryCallback | null, snap: Snapshot): SelectLambda | MatchLambda {
+  const hasCallback = !!cb;
+  const isSelectMode = mode === true;
+  const cache = isSelectMode ? snap.selectLambdas : snap.matchLambdas;
+  const cached = cache[selector];
 
-  // 'mode' can be boolean or null
-  // true = select / false = match
-  // null to use collection.item()
-  let [macro, head, loop] = ['', '', ''];
-  switch (mode) {
-    case true: {
-      const cached = snap.selectLambdas[selector];
-      if (cached && cached.hasCallback === !!cb) return cached.fn;
-      macro = MACROS.S.BODY + (!!cb ? MACROS.S.TEST : '') + MACROS.S.TAIL;
-      head = MACROS.S.HEAD;
-      loop = MACROS.S.LOOP;
-      break;
-    }
-    case false: {
-      const cached = snap.matchLambdas[selector];
-      if (cached && cached.hasCallback === !!cb) return cached.fn;
-      macro = MACROS.M.BODY + (!!cb ? MACROS.M.TEST : '') + MACROS.M.TAIL;
-      head = MACROS.M.HEAD;
-      loop = MACROS.M.LOOP;
-      break;
-    }
-    case null: {
-      const cached = snap.selectLambdas[selector];
-      if (cached && cached.hasCallback === !!cb) return cached.fn;
-      macro = MACROS.N.BODY + (!!cb ? MACROS.N.TEST : '') + MACROS.N.TAIL;
-      head = MACROS.N.HEAD;
-      loop = MACROS.N.LOOP;
-      break;
-    }
-    default: assertNever(mode);
+  if (cached && cached.hasCallback === hasCallback) {
+    return cached.fn;
   }
 
+  const spec = isSelectMode ? MACROS.S : MACROS.M;
+  const macro = `${spec.BODY}${hasCallback ? spec.TEST : ''}${spec.TAIL}`;
+
   const { source, post, modvar } = compileSelector(selector, macro, mode, cb, snap);
-  const isSelectMode = mode === true || mode === null;
 
-  loop += isSelectMode ? '{' + source + '}' : source;
-
-  const vars = modvar.length ? ',' + modvar.join(',') : '';
-  const returnValue = isSelectMode ? 'return p;' : 'return r;';
-  const f = F_INIT + '{' + head + vars + ';' + loop + post + returnValue + '}';
+  const loop = `${spec.LOOP}${isSelectMode ? `{${source}}` : source}`;
+  const vars = modvar.length ? `,${modvar.join(',')}` : '';
+  const f = `${F_INIT}{${spec.HEAD}${vars};${loop}${post}${spec.RETURN}}`;
   const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
   if (isSelectMode) {
-    snap.selectLambdas[selector] = { hasCallback: !!cb, fn: factory as SelectLambda };
+    snap.selectLambdas[selector] = { hasCallback, fn: factory as SelectLambda };
   } else {
-    snap.matchLambdas[selector]  = { hasCallback: !!cb, fn: factory as MatchLambda };
+    snap.matchLambdas[selector] = { hasCallback, fn: factory as MatchLambda };
   }
 
   return factory;
@@ -2139,10 +2163,9 @@ function compileSelector(
           break;
         }
 
-        const classPattern = `(^|\\s)${escapeRegExp(className)}(\\s|$)`;
+        const classPattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(className)}([\\t\\n\\f\\r ]|$)`;
         const classPatternLit = JSON.stringify(classPattern);
         const flagsLit = JSON.stringify(snap.isQuirksMode ? 'i' : '');
-
         source = `if(s.getCachedRegex(${classPatternLit},${flagsLit}).test(e.getAttribute("class")||"")){${source}}`;
         break;
       }
@@ -2265,8 +2288,6 @@ function compileSelector(
         } else if (attrOp === '*=') {
           pattern = '*';
         } else if (attrOp === '|=') {
-          // '|=': { p1: '^',       p2: '(-|$)',   p3: true },
-          // pattern = `^${escapeRegExp(attrVal)}(-|$)`;
           pattern = '|';
         } else if (attrOp === '~=') {
           if (/[\t\n\f\r ]/.test(attrVal)) {
@@ -2274,9 +2295,11 @@ function compileSelector(
             source = `if(false){${source}}`;
             break;
           }
-          pattern = '~';
-
-          // pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
+          // Keep ~= on the manual token path. A CSS-space regex is faster for one
+          // hot repeated token selector, but token-selector churn favors avoiding
+          // distinct regex patterns and cache/JIT overhead.
+          // pattern = '~';
+          pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
         } else {
           const test = snap.operators[attrOp];
           if (!test) {
@@ -2299,7 +2322,7 @@ function compileSelector(
         break;
       }
 
-      // *** General sibling combinator
+      // *** Subsequent-sibling combinator
       // E ~ F (F relative sibling of E)
       case '~': {
         match = selector.match(snap.re.Patterns.relative);
@@ -2309,7 +2332,7 @@ function compileSelector(
         break;
       }
 
-      // *** Adjacent sibling combinator
+      // *** Adjacent-sibling combinator
       // E + F (F adiacent sibling of E)
       case '+': {
         match = selector.match(snap.re.Patterns.adjacent);
@@ -2788,7 +2811,7 @@ export function parse(selectors: string, re: Rex, forgiving = false): string[] {
   }
 
   const groups = splitSelectorGroups(normalized)
-    .map(group => group.replace(re.TrimSpaces, ''));
+    .map(group => trimSelectorSpaces(group));
 
   const valid: string[] = [];
 
@@ -2821,7 +2844,7 @@ export function parse(selectors: string, re: Rex, forgiving = false): string[] {
   return valid;
 }
 
-function normalizeSelectorInput(selectors: string, re: Rex): string {
+export function normalizeSelectorInput(selectors: string, re: Rex): string {
   let
   normalized = stripCssComments(selectors);
   normalized = normalizeNestingSelector(normalized);
@@ -2831,7 +2854,8 @@ function normalizeSelectorInput(selectors: string, re: Rex): string {
     .replace(re.PseudosWSP, '$1$2')
     .replace(re.TabCharWSP, '\t')
     .replace(re.CommaGroup, ',')
-    .replace(re.TrimSpaces, '');
+    // .replace(re.TrimSpaces, '');
+  normalized = trimSelectorSpaces(normalized);
   return normalized;
 }
 
@@ -3316,4 +3340,28 @@ function hasScopeSelector(selectors: string[]) {
 function getCachedRegex(source: string, flags: string, snap: Snapshot): RegExp {
   const key = flags + '\0' + source;
   return snap.regexCache[key] || (snap.regexCache[key] = new RegExp(source, flags));
+}
+
+export function trimSelectorSpaces(input: string): string {
+  let start = 0;
+  let end = input.length;
+
+  while (start < end && isCssSpace(input.charCodeAt(start))) {
+    start++;
+  }
+
+  while (end > start && isCssSpace(input.charCodeAt(end - 1))) {
+    if (isEscapedAt(input, end - 1, start)) break;
+    end--;
+  }
+
+  return input.slice(start, end);
+}
+
+function isEscapedAt(input: string, index: number, start = 0): boolean {
+  let slashCount = 0;
+  for (let i = index - 1; i >= start && input[i] === '\\'; i--) {
+    slashCount++;
+  }
+  return slashCount % 2 === 1;
 }

@@ -10,6 +10,8 @@ import {
   asciiDashMatch,
   hasCssToken,
   asciiHasCssToken,
+  normalizeSelectorInput,
+  trimSelectorSpaces,
 } from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
 
@@ -108,6 +110,8 @@ function cssIdentEscape(ident: string): string {
 }
 
 const rex = buildRex(DEFAULT_EXTENSIONS);
+const rexStrings = buildRexStrings(DEFAULT_EXTENSIONS);
+
 
 function expectParse(input: string, expected: string[] | boolean = true, forgiving = false): void {
   let actual: string[] | undefined;
@@ -144,9 +148,31 @@ function expectForgivingParse(input: string, expected: string[] | boolean = true
   expectParse(input, expected, true);
 }
 
-describe('Rex basic recognizers', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
+function validatorMatches(input: string): string[] {
+  rex.validator.lastIndex = 0;
+  return input.match(rex.validator) ?? [];
+}
 
+function validatorConsumes(input: string): boolean {
+  return validatorMatches(input).join('') === input;
+}
+
+function expectValid(input: string): void {
+  const actual = validatorMatches(input);
+  const consumed = actual.join('');
+
+  if (consumed !== input) {
+    throw new AssertionError({
+      message: `Expected validator to consume ${input}`,
+      actual,
+      expected: input,
+      operator: 'strictEqual',
+      stackStartFn: expectValid,
+    });
+  }
+}
+
+describe('Rex basic recognizers', () => {
   it('detects CSS escapes', () => {
     expect(testRe(rex.HasEscapes, 'abc')).toBe(false);
     expect(testRe(rex.HasEscapes, 'a\\:b')).toBe(true);
@@ -179,8 +205,6 @@ describe('Rex basic recognizers', () => {
 });
 
 describe('Rex selector normalization helpers', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('trims leading and trailing selector whitespace without deleting interior vertical whitespace', () => {
     expect('  div  '.replace(rex.TrimSpaces, '')).toBe('div');
     expect('div\nspan'.replace(rex.TrimSpaces, '')).toBe('div\nspan');
@@ -217,8 +241,6 @@ describe('Rex selector normalization helpers', () => {
 });
 
 describe('Rex selector splitting helpers', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('splits selector groups without splitting inside parens, brackets, or escapes', () => {
     expect('div, span'.match(rex.SplitGroup)).toEqual(['div', ' span']);
     expect(':is(div, span), a'.match(rex.SplitGroup)).toEqual([':is(div, span)', ' a']);
@@ -325,8 +347,6 @@ describe('attribute value regex preparation', () => {
 });
 
 describe('Rex STD helpers', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('captures combinator symbols and surrounding whitespace', () => {
     expect(matchRe1(rex.STD.combinator, '>')).toEqual(['>']);
     expect(matchRe1(rex.STD.combinator, ' + ')).toEqual(['+']);
@@ -436,8 +456,6 @@ describe('Rex STD helpers', () => {
 });
 
 describe('Rex pseudo-class patterns', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('parses tree-structural pseudo-classes with arguments', () => {
     expectCaptures(rex.Patterns.treestruct, ':nth-child(2n+1).item', ['nth-child', '2n+1', '.item']);
     expectCaptures(rex.Patterns.treestruct, ':nth-last-of-type(odd) > span', ['nth-last-of-type', 'odd', ' > span']);
@@ -651,8 +669,6 @@ describe('splitSelectorGroups', () => {
 });
 
 describe('Rex optimizer', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   function expectOptimizer(input: string, expected: [string, string] | null): void {
     const m = execRe(rex.optimizer, input);
     const actual = m ? [m[1] || '', m[2]] : null;
@@ -702,7 +718,6 @@ describe('Rex optimizer', () => {
 });
 
 describe('unescapeIdentifier', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
   it('should unescape valid identifiers', () => {
     expect(cssIdentUnescape('[data-nwsapi-scope] > *|item')).toBe('[data-nwsapi-scope] > *|item');
   });
@@ -1067,9 +1082,6 @@ describe('parse attribute selector case-sensitivity flag syntax', () => {
 });
 
 describe('parse', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-  const config = { ...DEFAULT_CONFIG, VERBOSITY: true, LOGERRORS: false };
-
   it('normalizes vertical whitespace through parse pipeline', () => {
     expect(parse('div\nspan', rex)).toEqual(['div span']);
     expect(parse('div\r\nspan', rex)).toEqual(['div span']);
@@ -1101,8 +1113,6 @@ describe('parse', () => {
 });
 
 describe('Rex pseudo-class patterns', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('parses tree-structural pseudo-classes with arguments', () => {
     expectCaptures(rex.Patterns.treestruct, ':nth-child(2n+1).item', ['nth-child', '2n+1', '.item']);
     expectCaptures(rex.Patterns.treestruct, ':nth-last-of-type(odd) > span', ['nth-last-of-type', 'odd', ' > span']);
@@ -1173,32 +1183,6 @@ describe('Rex pseudo-class patterns', () => {
 });
 
 describe('validator functional pseudo bodies', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
-  function validatorMatches(input: string): string[] {
-    rex.validator.lastIndex = 0;
-    return input.match(rex.validator) ?? [];
-  }
-
-  function validatorConsumes(input: string): boolean {
-    return validatorMatches(input).join('') === input;
-  }
-
-  function expectValid(input: string): void {
-    const actual = validatorMatches(input);
-    const consumed = actual.join('');
-
-    if (consumed !== input) {
-      throw new AssertionError({
-        message: `Expected validator to consume ${input}`,
-        actual,
-        expected: input,
-        operator: 'strictEqual',
-        stackStartFn: expectValid,
-      });
-    }
-  }
-
   function expectInvalid(input: string): void {
     const actual = validatorMatches(input);
     const consumed = actual.join('');
@@ -1410,8 +1394,6 @@ describe('validator functional pseudo bodies', () => {
   });
 
   it('captures quoted attribute values containing brackets', () => {
-    const rex = buildRex(DEFAULT_EXTENSIONS);
-
     for (const [input, name, op, q, value] of [
       [`[name='types[]']`, 'name', '=', "'", 'types[]'],
       [`[name^='foo[']`, 'name', '^=', "'", 'foo['],
@@ -1435,8 +1417,6 @@ describe('validator functional pseudo bodies', () => {
 
 
 describe('Rex source fragments', () => {
-  const rexStrings = buildRexStrings(DEFAULT_EXTENSIONS);
-
   function expectFullMatch(source: string, input: string): void {
     const re = new RegExp(`^(?:${source})$`);
     const actual = re.exec(input)?.[0] ?? null;
@@ -1559,8 +1539,6 @@ describe('Rex source fragments', () => {
 });
 
 describe('Rex tree-structural nth patterns', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('parses nth formulas with multi-digit signed offsets', () => {
     for (const [input, pseudo, arg, rest] of [
       [':nth-child(n-128)', 'nth-child', 'n-128', ''],
@@ -1576,8 +1554,6 @@ describe('Rex tree-structural nth patterns', () => {
 });
 
 describe('Rex attribute pattern', () => {
-  const rex = buildRex(DEFAULT_EXTENSIONS);
-
   it('captures quoted attribute values containing brackets', () => {
     for (const [input, name, op, quote, value] of [
       [`[name='types[]']`, 'name', '=', "'", 'types[]'],
@@ -1590,8 +1566,6 @@ describe('Rex attribute pattern', () => {
 });
 
 describe('Rex attribute selector fragments', () => {
-  const rexStrings = buildRexStrings(DEFAULT_EXTENSIONS);
-
   it('validates missing right bracket at EOF', () => {
     const re = new RegExp(`^(?:${rexStrings.attributeSelector})$`);
 
@@ -1990,5 +1964,88 @@ describe('asciiHasCssToken', () => {
     expect(asciiHasCssToken('foo FöO bar', 'föo')).toBe(true);
     expect(asciiHasCssToken('foo FÖO bar', 'föo')).toBe(false);
     expect(asciiHasCssToken('foo FÖO bar', 'fÖo')).toBe(true);
+  });
+});
+
+describe('escaped whitespace in class identifiers', () => {
+  it('validates escaped whitespace in class selectors', () => {
+    expectValid('.foo\\ ');
+    expectValid('.foo\\a bar');
+  });
+
+  it('parses escaped whitespace in class selectors', () => {
+    expectParse('.foo\\ ');
+    expectParse('.foo\\a bar');
+  });
+});
+
+describe('normalizeSelectorInput', () => {
+  function expectNormalized(input: string, expected: string): void {
+    const actual = normalizeSelectorInput(input, rex);
+
+    if (actual !== expected) {
+      throw new AssertionError({
+        message: `Unexpected normalized selector for ${JSON.stringify(input)}`,
+        actual,
+        expected,
+        operator: 'strictEqual',
+        stackStartFn: expectNormalized,
+      });
+    }
+  }
+
+  it('normalizes ordinary selector whitespace', () => {
+    expectNormalized('  .foo  ', '.foo');
+    expectNormalized('  .foo,\n.bar\t', '.foo,.bar');
+    expectNormalized('div   >   .foo', 'div > .foo');
+    expectNormalized(':not( .foo )', ':not( .foo )');
+  });
+
+  it('preserves escaped trailing whitespace inside identifiers', () => {
+    expectNormalized('.foo\\ ', '.foo\\ ');
+    expectNormalized('  .foo\\   ', '.foo\\ ');
+  });
+
+  it('preserves hex-escape terminator whitespace inside identifiers', () => {
+    expectNormalized('.foo\\a bar', '.foo\\a bar');
+    expectNormalized('  .foo\\a bar  ', '.foo\\a bar');
+  });
+
+  it('does not preserve a dangling final escape', () => {
+    expectNormalized('.foo\\', '.foo\ufffd');
+  });
+});
+
+describe('trimSelectorSpaces', () => {
+  function expectTrimmed(input: string, expected: string): void {
+    const actual = trimSelectorSpaces(input);
+
+    if (actual !== expected) {
+      throw new AssertionError({
+        message: `Unexpected trimmed selector for ${JSON.stringify(input)}`,
+        actual,
+        expected,
+        operator: 'strictEqual',
+        stackStartFn: expectTrimmed,
+      });
+    }
+  }
+
+  it('trims ordinary leading and trailing CSS whitespace', () => {
+    expectTrimmed('  .foo  ', '.foo');
+    expectTrimmed('\n\t.foo\r\f', '.foo');
+    expectTrimmed('  .foo, .bar  ', '.foo, .bar');
+  });
+
+  it('preserves trailing whitespace escaped by an odd backslash run', () => {
+    expectTrimmed('.foo\\ ', '.foo\\ ');
+    expectTrimmed('  .foo\\ ', '.foo\\ ');
+    expectTrimmed('  .foo\\   ', '.foo\\ ');
+    expectTrimmed('.foo\\\\\\ ', '.foo\\\\\\ ');
+  });
+
+  it('trims trailing whitespace after an even backslash run', () => {
+    expectTrimmed('.foo\\\\ ', '.foo\\\\');
+    expectTrimmed('  .foo\\\\   ', '.foo\\\\');
   });
 });

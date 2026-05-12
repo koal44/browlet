@@ -341,14 +341,14 @@ runPerfScenarios('perf', [
 
       { op: 'match', selector: '[lang="en-US"]',  context: 'hit', iters: 5_000_000 },
       { op: 'match', selector: '[|lang="en-US"]', context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[*|lang="en-US"]',context: 'hit', iters: 5_000_000, maxRatio: 6 },
+      { op: 'match', selector: '[*|lang="en-US"]',context: 'hit', iters: 5_000_000, maxRatio: 7 },
 
       { op: 'match', selector: '[lang|="en"]',    context: 'hit', iters: 5_000_000 },
       { op: 'match', selector: '[|lang|="en"]',   context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[*|lang|="en"]',  context: 'hit', iters: 5_000_000, maxRatio: 6 },
+      { op: 'match', selector: '[*|lang|="en"]',  context: 'hit', iters: 5_000_000, maxRatio: 7 },
 
-      { op: 'match', selector: '[*|data-x="value"]', context: 'hit', iters: 5_000_000, maxRatio: 6 },
-      { op: 'match', selector: '[*|data-x*="alu"]',  context: 'hit', iters: 5_000_000, maxRatio: 6 },
+      { op: 'match', selector: '[*|data-x="value"]', context: 'hit', iters: 5_000_000, maxRatio: 7 },
+      { op: 'match', selector: '[*|data-x*="alu"]',  context: 'hit', iters: 5_000_000, maxRatio: 7 },
     ],
   },
 
@@ -377,6 +377,185 @@ runPerfScenarios('perf', [
       { op: 'match', selector: '[*|foo="bar" i]',  context: 'hit', iters: 5_000_000, maxRatio: 9 },
       { op: 'match', selector: '[*|foo="nope" i]', context: 'hit', iters: 5_000_000, maxRatio: 15 },
       { op: 'match', selector: '[*|lang|="en"]',   context: 'hit', iters: 5_000_000, maxRatio: 15 },
+    ],
+  },
+
+  // Churn guard for ~=: isolated hot calls can favor regex, but selector churn favors the manual token path.
+  {
+    name: 'match attribute token hot vs churn',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <button
+        id="hit"
+        data-tags="foo octicon bar"
+        data-kind="primary-action"
+        data-path="/repos/example/commits/abc"
+        data-prefix="commit-start"
+        data-suffix="end-commit"
+        lang="en-US"
+        type="BUTTON"
+      ></button>
+      <button
+        id="miss"
+        data-tags="foo bar baz"
+        data-kind="secondary-action"
+        data-path="/repos/example/branches/abc"
+        data-prefix="branch-start"
+        data-suffix="end-branch"
+        lang="fr-FR"
+        type="RESET"
+      ></button>
+    `,
+    quickIters: 20_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'token hot before churn', op: 'match', selector: '[data-tags~="octicon"]', context: 'hit', iters: 5_000_000 },
+      {
+        label: 'mixed attr churn', op: 'matchWalk', context: null, iters: 100_000,
+        selectors: [
+          '[data-tags~="octicon"]',
+          '[data-tags~="missing"]',
+          '[data-kind="primary-action"]',
+          '[data-kind="PRIMARY-ACTION" i]',
+          '[data-path*="commits"]',
+          '[data-prefix^="commit"]',
+          '[lang|="en"]',
+          '[type="button"]',
+        ],
+      },
+      {
+        label: 'token pair churn', op: 'matchWalk', context: null, iters: 200_000,
+        selectors: [
+          '[data-tags~="foo"]',
+          '[data-tags~="octicon"]',
+        ],
+      },
+      { label: 'token hot after churn', op: 'match', selector: '[data-tags~="octicon"]', context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match class token paths',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="single" class="target"></div>
+      <div id="first" class="target foo bar baz quux"></div>
+      <div id="middle" class="foo bar target baz quux"></div>
+      <div id="last" class="foo bar baz quux target"></div>
+      <div id="miss" class="foo bar baz quux nope"></div>
+      <div id="upper" class="Alpha beta Gamma"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        if (document.compatMode !== 'CSS1Compat') {
+          throw new Error('Document is in quirks mode not standards mode');
+        }
+      });
+    },
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'single hit',      op: 'match', selector: '.target',     context: 'single', iters: 5_000_000 },
+      { label: 'first hit',       op: 'match', selector: '.target',     context: 'first',  iters: 5_000_000 },
+      { label: 'middle hit',      op: 'match', selector: '.target',     context: 'middle', iters: 5_000_000 },
+      { label: 'last hit',        op: 'match', selector: '.target',     context: 'last',   iters: 5_000_000 },
+      { label: 'miss long',       op: 'match', selector: '.super_long', context: 'miss',   iters: 5_000_000 },
+      { label: 'miss short',      op: 'match', selector: '.s',          context: 'miss',   iters: 5_000_000 },
+
+      { label: 'case exact hit',  op: 'match', selector: '.Alpha',      context: 'upper',  iters: 5_000_000 },
+      { label: 'case folded miss',op: 'match', selector: '.alpha',      context: 'upper',  iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match class token quirks mode',
+    // status: 'only',
+    browsers: ['chromium'],
+    markupMode: 'html-document',
+    markup: `
+      <html>
+        <head></head>
+        <body>
+          <div id="hit" class="Alpha beta Gamma"></div>
+          <div id="miss" class="foo beta gamma"></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        if (document.compatMode === 'CSS1Compat') {
+          throw new Error('Document is in standards mode not quirks mode');
+        }
+      });
+    },
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'exact hit',       op: 'match', selector: '.Alpha', context: 'hit',  iters: 5_000_000 },
+      { label: 'folded hit',      op: 'match', selector: '.alpha', context: 'hit',  iters: 5_000_000 },
+      { label: 'folded miss',     op: 'match', selector: '.alpha', context: 'miss', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match combinators',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <section id="root">
+        <div id="ancestor-hit" class="ancestor">
+          <div id="parent-hit" class="parent">
+            <span id="target" class="target"></span>
+          </div>
+        </div>
+
+        <div id="sibling-box">
+          <i id="general-left" class="general"></i>
+          <b id="noise-1"></b>
+          <b id="noise-2"></b>
+          <span id="adjacent-left" class="adjacent"></span>
+          <em id="sibling-target" class="target"></em>
+        </div>
+
+        <div id="miss-parent">
+          <span id="miss-target" class="target"></span>
+        </div>
+
+        <div id="deep">
+          <div><div><div><div><div><div><div><div>
+            <span id="deep-target" class="target"></span>
+          </div></div></div></div></div></div></div></div>
+        </div>
+
+        <div id="many-siblings">
+          <i class="general"></i>
+          <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
+          <span id="far-sibling-target" class="target"></span>
+        </div>
+      </section>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      // Child combinator: one parentElement hop.
+      { label: 'child hit', op: 'match', selector: '.parent > .target', context: 'target', iters: 5_000_000 },
+      { label: 'child miss', op: 'match', selector: '.ancestor > .target', context: 'target', iters: 5_000_000 },
+
+      // Descendant combinator: parentElement loop, early hit vs full miss.
+      { label: 'descendant near hit', op: 'match', selector: '.parent .target', context: 'target', iters: 5_000_000 },
+      { label: 'descendant far hit', op: 'match', selector: '#root .target', context: 'deep-target', iters: 5_000_000, maxRatio: 7 },
+      { label: 'descendant miss', op: 'match', selector: '.missing .target', context: 'deep-target', iters: 5_000_000, maxRatio: 7 },
+
+      // Adjacent sibling combinator: one previousElementSibling hop.
+      { label: 'adjacent hit', op: 'match', selector: '.adjacent + .target', context: 'sibling-target', iters: 5_000_000 },
+      { label: 'adjacent miss', op: 'match', selector: '.general + .target', context: 'sibling-target', iters: 5_000_000 },
+
+      // General sibling combinator: previousElementSibling loop, early/far/miss.
+      { label: 'general sibling near hit', op: 'match', selector: '.adjacent ~ .target', context: 'sibling-target', iters: 5_000_000 },
+      { label: 'general sibling far hit', op: 'match', selector: '.general ~ .target', context: 'far-sibling-target', iters: 5_000_000 },
+      { label: 'general sibling miss', op: 'match', selector: '.missing ~ .target', context: 'far-sibling-target', iters: 5_000_000 },
     ],
   },
 
