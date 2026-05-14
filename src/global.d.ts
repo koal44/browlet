@@ -49,27 +49,27 @@ type CandidatePlan = {
 type MatchLambda = (
   element: Element,
   callback: QueryCallback | null,
-  context: null,
-  results: false
+  h: HashCache | null,
 ) => boolean;
 
 type SelectLambda = (
   list: Element[],
   callback: QueryCallback | null,
   context: QueryContext,
-  nodes: Element[]
+  nodes: Element[],
+  h: HashCache,
 ) => Stopped
 
 type Stopped = boolean;
 
 type MatchResolver = {
   lambdas: MatchLambda[];
-  callback: QueryCallback | null;
+  hasCb: boolean;
   flags: ResolverFlags;
 };
 
 type SelectResolver = {
-  callback: QueryCallback | null;
+  hasCb: boolean;
   context: QueryContext;
   seeds: CandidateSeed[];
   flags: ResolverFlags;
@@ -94,7 +94,6 @@ type SelectorExtFn = (
     match: RegExpMatchArray | null,
     source: string,
     mode: boolean | null,
-    callback: QueryCallback | null
   ) => {
     match?: RegExpMatchArray | null,
     modvar?: string,
@@ -132,8 +131,8 @@ type RegisterCombinatorFn = (combinator: string, compiler: CombinatorCompiler) =
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
 
-type SelectLambdaEntry = { fn: SelectLambda; hasCallback: boolean; };
-type MatchLambdaEntry = { fn: MatchLambda; hasCallback: boolean; };
+type SelectLambdaEntry = { fn: SelectLambda; hasCb: boolean };
+type MatchLambdaEntry = { fn: MatchLambda; hasCb: boolean };
 
 type CssEscapeFn = (ident: string) => string;
 
@@ -262,6 +261,19 @@ type RelativeStep = {
   kind: 'relative-step';
   combinator: SelectorCombinator;
   compound: CompoundSelector;
+};
+
+type HashCache = {
+  nthElement?: WeakMap<ParentNode, NthElementIndexMap>;
+  nthOfType?: WeakMap<ParentNode, NthOfTypeParentMap>;
+};
+
+type NthElementIndexMap = WeakMap<Element, number>;
+
+type NthOfTypeParentMap = Map<string, NthOfTypeIndexEntry>;
+type NthOfTypeIndexEntry = {
+  length: number;
+  indexMap: WeakMap<Element, number>;
 };
 
 } // end global declaration

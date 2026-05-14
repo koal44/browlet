@@ -559,4 +559,159 @@ runPerfScenarios('perf', [
     ],
   },
 
+  {
+    name: 'match structural pseudo root empty scope',
+    // status: 'only',
+    browsers: ['chromium'],
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html id="html">
+        <body id="body">
+          <div id="host">
+            <section id="empty"></section>
+            <section id="comment-only"><!-- comment --></section>
+            <section id="element-child"><span></span></section>
+            <section id="text-child">text</section>
+            <section id="ws-text">
+            </section>
+          </div>
+        </body>
+      </html>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'root hit html',          op: 'match', selector: ':root',  context: 'html',          iters: 5_000_000 },
+      { label: 'root miss body',         op: 'match', selector: ':root',  context: 'body',          iters: 5_000_000 },
+
+      { label: 'scope hit context',      op: 'match', selector: ':scope', context: 'host',          iters: 5_000_000 },
+      { label: 'scope miss child',       op: 'match', selector: ':scope', context: 'empty',         iters: 5_000_000 },
+
+      { label: 'empty hit empty',        op: 'match', selector: ':empty', context: 'empty',         iters: 5_000_000 },
+      { label: 'empty hit comment-only', op: 'match', selector: ':empty', context: 'comment-only',  iters: 5_000_000 },
+      { label: 'empty miss element',     op: 'match', selector: ':empty', context: 'element-child', iters: 5_000_000 },
+      { label: 'empty miss text',        op: 'match', selector: ':empty', context: 'text-child',    iters: 5_000_000 },
+      { label: 'empty miss whitespace',  op: 'match', selector: ':empty', context: 'ws-text',       iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match structural pseudo child indexed',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="many">
+        <span id="first"></span>
+        <span id="middle"></span>
+        <span id="last"></span>
+      </div>
+      <div id="single-parent">
+        <span id="only"></span>
+      </div>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'first-child hit',  op: 'match', selector: ':first-child', context: 'first',  iters: 5_000_000 },
+      { label: 'first-child miss', op: 'match', selector: ':first-child', context: 'middle', iters: 5_000_000 },
+
+      { label: 'last-child hit',   op: 'match', selector: ':last-child',  context: 'last',   iters: 5_000_000 },
+      { label: 'last-child miss',  op: 'match', selector: ':last-child',  context: 'middle', iters: 5_000_000 },
+
+      { label: 'only-child hit',   op: 'match', selector: ':only-child',  context: 'only',   iters: 5_000_000 },
+      { label: 'only-child miss',  op: 'match', selector: ':only-child',  context: 'middle', iters: 5_000_000 },
+
+      { label: 'first-child hit2',  op: 'match', selector: ':first-child', context: 'first',  iters: 5_000_000 },
+      { label: 'first-child miss2', op: 'match', selector: ':first-child', context: 'middle', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match structural pseudo typed child indexed',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="typed">
+        <i id="i-first"></i>
+        <span id="span-only"></span>
+        <b id="b1"></b>
+        <i id="i-middle"></i>
+        <b id="b2"></b>
+        <i id="i-last"></i>
+      </div>
+      <div id="single-type">
+        <em id="em-only"></em>
+      </div>
+      <div id="far-type">
+        <u id="u-first"></u>
+        <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
+        <u id="u-last"></u>
+      </div>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'first-of-type hit first',  op: 'match', selector: ':first-of-type', context: 'i-first',  iters: 5_000_000 },
+      { label: 'first-of-type miss middle',op: 'match', selector: ':first-of-type', context: 'i-middle', iters: 5_000_000 },
+      { label: 'first-of-type far miss',   op: 'match', selector: ':first-of-type', context: 'u-last',   iters: 5_000_000 },
+
+      { label: 'last-of-type hit last',    op: 'match', selector: ':last-of-type',  context: 'i-last',   iters: 5_000_000 },
+      { label: 'last-of-type miss middle', op: 'match', selector: ':last-of-type',  context: 'i-middle', iters: 5_000_000 },
+      { label: 'last-of-type far miss',    op: 'match', selector: ':last-of-type',  context: 'u-first',  iters: 5_000_000 },
+
+      { label: 'only-of-type hit only',    op: 'match', selector: ':only-of-type',  context: 'span-only', iters: 5_000_000 },
+      { label: 'only-of-type hit single',  op: 'match', selector: ':only-of-type',  context: 'em-only',   iters: 5_000_000 },
+      { label: 'only-of-type miss first',  op: 'match', selector: ':only-of-type',  context: 'i-first',   iters: 5_000_000 },
+      { label: 'only-of-type miss middle', op: 'match', selector: ':only-of-type',  context: 'i-middle',  iters: 5_000_000 },
+      { label: 'only-of-type far miss',    op: 'match', selector: ':only-of-type',  context: 'u-first',   iters: 5_000_000 },
+    ],
+  },
+
+
+  {
+    name: 'match structural pseudo nth indexed',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <ul id="list">
+        <li id="n1"></li><li id="n2"></li><li id="n3"></li><li id="n4"></li><li id="n5"></li><li id="n6"></li>
+      </ul>
+      <div id="typed">
+        <i id="i1"></i><span id="s1"></span><i id="i2"></i><span id="s2"></span><i id="i3"></i><span id="s3"></span>
+      </div>
+      <div id="far">
+        <b id="b1"></b><b id="b2"></b><b id="b3"></b><b id="b4"></b><b id="b5"></b>
+        <b id="b6"></b><b id="b7"></b><b id="b8"></b><b id="b9"></b><b id="b10"></b>
+      </div>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      // nth-child / nth-last-child use element index among all element siblings.
+      { label: 'nth-child fixed hit',       op: 'match', selector: ':nth-child(3)',       context: 'n3',  iters: 5_000_000 },
+      { label: 'nth-child fixed miss',      op: 'match', selector: ':nth-child(3)',       context: 'n4',  iters: 5_000_000 },
+      { label: 'nth-child odd hit',         op: 'match', selector: ':nth-child(odd)',     context: 'n5',  iters: 5_000_000 },
+      { label: 'nth-child even hit',        op: 'match', selector: ':nth-child(even)',    context: 'n6',  iters: 5_000_000 },
+      { label: 'nth-child formula hit',     op: 'match', selector: ':nth-child(2n+1)',    context: 'n5',  iters: 5_000_000 },
+      { label: 'nth-child formula miss',    op: 'match', selector: ':nth-child(2n+1)',    context: 'n6',  iters: 5_000_000 },
+
+      { label: 'nth-last-child fixed hit',  op: 'match', selector: ':nth-last-child(2)',  context: 'n5',  iters: 5_000_000 },
+      { label: 'nth-last-child fixed miss', op: 'match', selector: ':nth-last-child(2)',  context: 'n4',  iters: 5_000_000 },
+
+      // nth-of-type / nth-last-of-type count only same localName/namespace siblings.
+      { label: 'nth-of-type fixed hit',        op: 'match', selector: ':nth-of-type(2)',       context: 'i2', iters: 5_000_000 },
+      { label: 'nth-of-type fixed miss',       op: 'match', selector: ':nth-of-type(2)',       context: 'i3', iters: 5_000_000 },
+      { label: 'nth-of-type odd hit',          op: 'match', selector: ':nth-of-type(odd)',     context: 'i3', iters: 5_000_000 },
+      { label: 'nth-of-type even hit',         op: 'match', selector: ':nth-of-type(even)',    context: 'i2', iters: 5_000_000 },
+
+      { label: 'nth-last-of-type fixed hit',   op: 'match', selector: ':nth-last-of-type(1)',  context: 'i3', iters: 5_000_000 },
+      { label: 'nth-last-of-type fixed miss',  op: 'match', selector: ':nth-last-of-type(1)',  context: 'i2', iters: 5_000_000 },
+
+      // Longer sibling chain, mostly to expose counting/caching cost.
+      { label: 'nth-child far fixed hit',      op: 'match', selector: ':nth-child(10)',        context: 'b10', iters: 5_000_000 },
+      { label: 'nth-last-child far fixed hit', op: 'match', selector: ':nth-last-child(10)',   context: 'b1',  iters: 5_000_000 },
+    ],
+  },
+
 ]);

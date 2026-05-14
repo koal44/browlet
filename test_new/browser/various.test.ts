@@ -5440,4 +5440,198 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'match nth-child cleanup runs after successful match',
+    // status: 'only',
+    markup: `
+      <ul id="list">
+        <li id="a"></li>
+        <li id="b"></li>
+        <li id="c"></li>
+      </ul>
+    `,
+    steps: [
+      {
+        cases: [
+          // Successful match is the important part: current early return skips nth cleanup.
+          { match: ':nth-child(3)', ref: { by: 'id', id: 'c' }, expect: { count: 1 } },
+        ],
+      },
+      {
+        setupPage: async (page) => {
+          await page.evaluate(() => {
+            const list = document.getElementById('list')!;
+            const a = document.getElementById('a')!;
+            const c = document.getElementById('c')!;
+            list.insertBefore(c, a);
+          });
+        },
+        cases: [
+          // Order is now c, a, b.
+          { match: ':nth-child(1)', ref: { by: 'id', id: 'c' }, expect: { count: 1 } },
+          { match: ':nth-child(3)', ref: { by: 'id', id: 'c' }, expect: { count: 0 } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'match nth-of-type cleanup runs after successful match',
+    // status: 'only',
+    markup: `
+      <div id="list">
+        <i id="a"></i>
+        <span id="noise"></span>
+        <i id="b"></i>
+        <i id="c"></i>
+      </div>
+    `,
+    steps: [
+      {
+        cases: [
+          // Among <i> siblings, c is initially third.
+          { match: ':nth-of-type(3)', ref: { by: 'id', id: 'c' }, expect: { count: 1 } },
+        ],
+      },
+      {
+        setupPage: async (page) => {
+          await page.evaluate(() => {
+            const list = document.getElementById('list')!;
+            const a = document.getElementById('a')!;
+            const c = document.getElementById('c')!;
+            list.insertBefore(c, a);
+          });
+        },
+        cases: [
+          // Among <i> siblings, c is now first.
+          { match: ':nth-of-type(1)', ref: { by: 'id', id: 'c' }, expect: { count: 1 } },
+          { match: ':nth-of-type(3)', ref: { by: 'id', id: 'c' }, expect: { count: 0 } },
+        ],
+      },
+    ],
+  },
+
+  {
+    name: 'template fragment top-level nth match pseudos',
+    // status: 'only',
+    markup: `
+      <template id="frag-template">
+        <i id="top-i1"></i>
+        <span id="top-span1"></span>
+        <i id="top-i2"></i>
+        <i id="top-i3"></i>
+      </template>
+    `,
+    cases: [
+      { match: ':nth-child(1)', ref: { by: 'id', id: 'top-i1', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-child(2)', ref: { by: 'id', id: 'top-span1', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-child(3)', ref: { by: 'id', id: 'top-i2', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+
+      { match: ':nth-of-type(1)', ref: { by: 'id', id: 'top-i1', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-of-type(1)', ref: { by: 'id', id: 'top-span1', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-of-type(2)', ref: { by: 'id', id: 'top-i2', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-of-type(3)', ref: { by: 'id', id: 'top-i3', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+
+      { match: ':nth-last-child(1)', ref: { by: 'id', id: 'top-i3', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-last-of-type(1)', ref: { by: 'id', id: 'top-i3', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+    ],
+  },
+
+  {
+    name: 'nth structural pseudos cover local and cached helper paths',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <ul id="list">
+          <li id="li1"></li>
+          <li id="li2"></li>
+          <li id="li3"></li>
+          <li id="li4"></li>
+          <li id="li5"></li>
+        </ul>
+
+        <div id="typed">
+          <i id="i1"></i>
+          <span id="s1"></span>
+          <i id="i2"></i>
+          <span id="s2"></span>
+          <i id="i3"></i>
+        </div>
+
+        <template id="frag-template">
+          <i id="top-i1"></i>
+          <span id="top-s1"></span>
+          <i id="top-i2"></i>
+          <i id="top-i3"></i>
+        </template>
+      </div>
+    `,
+    cases: [
+      // MATCH: exact integer path, h === null, local isNthElement/isNthOfType.
+      { match: ':nth-child(3)', ref: { by: 'id', id: 'li3' }, expect: { count: 1 } },
+      { match: ':nth-child(3)', ref: { by: 'id', id: 'li4' }, expect: { count: 0 } },
+      { match: ':nth-last-child(2)', ref: { by: 'id', id: 'li4' }, expect: { count: 1 } },
+      { match: ':nth-last-child(2)', ref: { by: 'id', id: 'li3' }, expect: { count: 0 } },
+
+      { match: ':nth-of-type(2)', ref: { by: 'id', id: 'i2' }, expect: { count: 1 } },
+      { match: ':nth-of-type(2)', ref: { by: 'id', id: 'i3' }, expect: { count: 0 } },
+      { match: ':nth-last-of-type(1)', ref: { by: 'id', id: 'i3' }, expect: { count: 1 } },
+      { match: ':nth-last-of-type(1)', ref: { by: 'id', id: 'i2' }, expect: { count: 0 } },
+
+      // MATCH: formula path, h === null, local nthElement/nthOfType.
+      { match: ':nth-child(odd)', ref: { by: 'id', id: 'li3' }, expect: { count: 1 } },
+      { match: ':nth-child(even)', ref: { by: 'id', id: 'li3' }, expect: { count: 0 } },
+      { match: ':nth-child(2n+1)', ref: { by: 'id', id: 'li5' }, expect: { count: 1 } },
+      { match: ':nth-child(2n)', ref: { by: 'id', id: 'li4' }, expect: { count: 1 } },
+
+      { match: ':nth-of-type(odd)', ref: { by: 'id', id: 'i3' }, expect: { count: 1 } },
+      { match: ':nth-of-type(even)', ref: { by: 'id', id: 'i3' }, expect: { count: 0 } },
+
+      // SELECT: exact integer path, h exists, cached isNthElement/isNthOfType.
+      { select: '#list > li:nth-child(3)', expect: { ids: ['li3'] } },
+      { select: '#list > li:nth-last-child(2)', expect: { ids: ['li4'] } },
+      { select: '#typed > i:nth-of-type(2)', expect: { ids: ['i2'] } },
+      { select: '#typed > i:nth-last-of-type(1)', expect: { ids: ['i3'] } },
+
+      // SELECT: formula path, h exists, cached nthElement/nthOfType.
+      { select: '#list > li:nth-child(odd)', expect: { ids: ['li1', 'li3', 'li5'] } },
+      { select: '#list > li:nth-child(even)', expect: { ids: ['li2', 'li4'] } },
+      { select: '#list > li:nth-child(2n+1)', expect: { ids: ['li1', 'li3', 'li5'] } },
+      { select: '#list > li:nth-child(2n)', expect: { ids: ['li2', 'li4'] } },
+
+      { select: '#typed > i:nth-of-type(odd)', expect: { ids: ['i1', 'i3'] } },
+      { select: '#typed > i:nth-of-type(even)', expect: { ids: ['i2'] } },
+
+      // Logical pseudo: select-owned h is passed into internal s.match(..., h).
+      { select: '#list > li:is(:nth-child(3), .missing)', expect: { ids: ['li3'] } },
+      { select: '#list > li:not(:nth-child(even))', expect: { ids: ['li1', 'li3', 'li5'] } },
+      { select: '#typed > i:is(:nth-of-type(2), .missing)', expect: { ids: ['i2'] } },
+      { select: '#typed > i:not(:nth-of-type(even))', expect: { ids: ['i1', 'i3'] } },
+
+      // Template DocumentFragment top-level match: guards parentNode/ParentNode behavior.
+      { match: ':nth-child(2)', ref: { by: 'id', id: 'top-s1', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-of-type(2)', ref: { by: 'id', id: 'top-i2', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+      { match: ':nth-last-of-type(1)', ref: { by: 'id', id: 'top-i3', within: { by: 'template', id: 'frag-template' } }, expect: { count: 1 } },
+    ],
+  },
+
+  {
+    name: 'nth structural pseudo legacy numeric aliases match native',
+    // status: 'only',
+    markup: `
+      <ul id="list">
+        <li id="li1"></li>
+        <li id="li2"></li>
+        <li id="li3"></li>
+        <li id="li4"></li>
+      </ul>
+    `,
+    cases: [
+      { select: '#list > li:nth-child(2n0)', expect: { throws: true } },
+      { select: '#list > li:nth-child(2n1)', expect: { throws: true } },
+      { match: ':nth-child(2n0)', ref: { by: 'id', id: 'li2' }, expect: { throws: true } },
+      { match: ':nth-child(2n1)', ref: { by: 'id', id: 'li3' }, expect: { throws: true } },
+    ],
+  },
+
 ]);

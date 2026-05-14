@@ -353,8 +353,8 @@ export function initSnapshot(doc: Document) {
     first: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
       return firstRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
     },
-    match: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false) => {
-      return matchRaw(sel, context, cb ?? null, snap, isEntryCall);
+    match: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false, h: HashCache | null = null) => {
+      return matchRaw(sel, context, cb ?? null, snap, isEntryCall, h);
     },
     select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
       return selectRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
@@ -366,6 +366,8 @@ export function initSnapshot(doc: Document) {
     isType: isType,
     nthOfType: nthOfType,
     nthElement: nthElement,
+    isNthElement: isNthElement,
+    isNthOfType: isNthOfType,
     matchHas: (steps: [SelectorCombinator, string][], anchor: Element) => matchHasFrom(steps, 0, anchor, snap),
     matchDir: matchDir,
     matchLang: matchLang,
@@ -1022,117 +1024,180 @@ function asciiLower(s: string): string {
   return s.replace(/[A-Z]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 32));
 }
 
-type NthElementState = {
-  idx: number; len: number; set: number; parent: Element | null | undefined; parents: (Element | null)[]; nodes: Element[][];
+// fast resolver for :nth-child() and :nth-last-child()
+// use cache if available to get the 1-based index of element among its siblings
+function nthElement(element: Element, fromLast: boolean, h: HashCache | null): number {
+  if (!h) return nthElementLocal(element, fromLast);
+
+  const parent = element.parentNode;
+  if (!parent) return 1; // detached/rootless/root
+
+  const cache = h.nthElement ??= new WeakMap<ParentNode, NthElementIndexMap>();
+
+  let indexMap = cache.get(parent);
+  if (!indexMap) {
+    indexMap = new WeakMap<Element, number>();
+
+    let index = 0;
+    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
+      indexMap.set(node, index++);
+    }
+    cache.set(parent, indexMap);
+  }
+
+  const index = indexMap.get(element);
+  if (index === undefined) {
+    throw new Error('nthElement cache did not contain the target element');
+  }
+
+  return fromLast ? parent.childElementCount - index : index + 1;
 }
-const nthState: NthElementState = {
-  idx: 0, len: 0, set: 0, parent: undefined, parents: [], nodes: []
-};
-// fast resolver for the :nth-child() and :nth-last-child() pseudo-classes
-function nthElement(element: Element, dir: boolean | 2): number {
-  // ensure caches are emptied after each run, invoking with dir = 2
-  if (dir == 2) {
-    nthState.idx = 0; nthState.len = 0; nthState.set = 0; nthState.nodes.length = 0;
-    nthState.parents.length = 0; nthState.parent = undefined;
-    return -1;
-  }
-  let e: Element | null, i: number, j: number, k: number, l: number;
-  if (nthState.parent === element.parentElement) {
-    i = nthState.set; j = nthState.idx; l = nthState.len;
-  } else {
-    l = nthState.parents.length;
-    nthState.parent = element.parentElement;
-    for (i = -1, j = 0, k = l - 1; l > j; ++j, --k) {
-      if (nthState.parents[j] === nthState.parent) { i = j; break; }
-      if (nthState.parents[k] === nthState.parent) { i = k; break; }
-    }
-    if (i < 0) {
-      nthState.parents[i = l] = nthState.parent;
-      l = 0; nthState.nodes[i] = [];
-      e = nthState.parent?.firstElementChild ?? element;
-      while (e) { nthState.nodes[i][l] = e; if (e === element) j = l; e = e.nextElementSibling; ++l; }
-      nthState.set = i; nthState.idx = 0; nthState.len = l;
-      if (l < 2) return l;
-    } else {
-      l = nthState.nodes[i].length;
-      nthState.set = i;
-    }
-  }
-  if (element !== nthState.nodes[i][j] && element !== nthState.nodes[i][j = 0]) {
-    for (j = 0, k = l - 1; l > j; ++j, --k) {
-      const nodes = nthState.nodes[i]
-      if (nodes[j] === element) { break; }
-      if (nodes[k] === element) { j = k; break; }
-    }
-  }
-  nthState.idx = j + 1; nthState.len = l;
-  return dir ? l - j : nthState.idx;
-};
 
-type NthOfTypeState = {
-  idx: number; len: number; set: number; parent: Element | null; parents: (Element | null)[]; nodes: Record<string, Element[]>[];
+function nthElementLocal(element: Element, fromLast: boolean): number {
+  let n = 1;
+  let e: Element | null = element;
+
+  while ((e = fromLast ? e.nextElementSibling : e.previousElementSibling)) {
+    n++;
+  }
+
+  return n;
 }
-const nthOfTypeState: NthOfTypeState = {
-  idx: 0, len: 0, set: 0, parent: null, parents: [], nodes: []
-};
 
-// fast resolver for the :nth-of-type() and :nth-last-of-type() pseudo-classes
-const nthOfType: NthFn = function(element: Element, dir: boolean | 2): number {
-  // ensure caches are emptied after each run, invoking with dir = 2
-  if (dir == 2) {
-    nthOfTypeState.idx = 0; nthOfTypeState.len = 0; nthOfTypeState.set = 0; nthOfTypeState.nodes.length = 0;
-    nthOfTypeState.parents.length = 0; nthOfTypeState.parent = null;
-    return -1;
+// fast resolver for :nth-of-type() and :nth-last-of-type()
+// use cache if available to get the 1-based index of element among same-type siblings
+function nthOfType(element: Element, fromLast: boolean, h: HashCache | null): number {
+  if (!h) return nthOfTypeLocal(element, fromLast);
+
+  const parent = element.parentNode;
+  if (!parent) return 1;
+
+  const namespaceURI = element.namespaceURI;
+  const localName = element.localName;
+  const typeKey = `${namespaceURI ?? ''}\x00${localName}`;
+
+  const cache = h.nthOfType ??= new WeakMap<ParentNode, NthOfTypeParentMap>();
+
+  let typeMap = cache.get(parent);
+  if (!typeMap) {
+    typeMap = new Map<string, NthOfTypeIndexEntry>();
+    cache.set(parent, typeMap);
   }
 
-  let e: Element | null, i: number, j: number, k: number, l: number;
-  const name = element.localName;
-  const namespace = element.namespaceURI ?? '';
-  const typeKey = `${namespace}\x00${name}`;
+  let entry = typeMap.get(typeKey);
+  if (!entry) {
+    const indexMap = new WeakMap<Element, number>();
 
-  if (nthOfTypeState.nodes[nthOfTypeState.set]?.[typeKey] && nthOfTypeState.parent === element.parentElement) {
-    i = nthOfTypeState.set; j = nthOfTypeState.idx; l = nthOfTypeState.len;
-  } else {
-    l = nthOfTypeState.parents.length;
-    nthOfTypeState.parent = element.parentElement;
-    for (i = -1, j = 0, k = l - 1; l > j; ++j, --k) {
-      if (nthOfTypeState.parents[j] === nthOfTypeState.parent) { i = j; break; }
-      if (nthOfTypeState.parents[k] === nthOfTypeState.parent) { i = k; break; }
-    }
-    if (i < 0 || !nthOfTypeState.nodes[i]?.[typeKey]) {
-      nthOfTypeState.parents[i = l] = nthOfTypeState.parent;
-      nthOfTypeState.nodes[i] || (nthOfTypeState.nodes[i] = {});
-      l = 0; nthOfTypeState.nodes[i][typeKey] = [];
-      e = nthOfTypeState.parent?.firstElementChild ?? element;
-      while (e) {
-        if (e.localName === name && (e.namespaceURI ?? '') === namespace) {
-          if (e === element) j = l;
-          nthOfTypeState.nodes[i][typeKey][l] = e;
-          ++l;
-        }
-        e = e.nextElementSibling;
+    let index = 0;
+    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
+      if (node.localName === localName && node.namespaceURI === namespaceURI) {
+        indexMap.set(node, index++);
       }
-      nthOfTypeState.set = i; nthOfTypeState.idx = j; nthOfTypeState.len = l;
-      if (l < 2) return l;
-    } else {
-      l = nthOfTypeState.nodes[i][typeKey].length;
-      nthOfTypeState.set = i;
+    }
+
+    entry = { length: index, indexMap };
+    typeMap.set(typeKey, entry);
+  }
+
+  const index = entry.indexMap.get(element);
+  if (index === undefined) {
+    throw new Error('nthOfType cache did not contain the target element');
+  }
+
+  return fromLast ? entry.length - index : index + 1;
+}
+
+function nthOfTypeLocal(element: Element, fromLast: boolean): number {
+  const namespaceURI = element.namespaceURI;
+  const localName = element.localName;
+  let n = 1;
+  let e: Element | null = element;
+
+  while ((e = fromLast ? e.nextElementSibling : e.previousElementSibling)) {
+    if (e.localName === localName && e.namespaceURI === namespaceURI) {
+      n++;
     }
   }
 
-  if (element !== nthOfTypeState.nodes[i][typeKey][j] && element !== nthOfTypeState.nodes[i][typeKey][j = 0]) {
-    const nodes = nthOfTypeState.nodes[i][typeKey];
-    for (j = 0, k = l - 1; l > j; ++j, --k) {
-      if (nodes[j] === element) { break; }
-      if (nodes[k] === element) { j = k; break; }
+  return n;
+}
+
+
+function isNthElement(element: Element, index: number, fromLast: boolean, h: HashCache | null): boolean {
+  if (!h) return isNthElementLocal(element, index, fromLast);
+  return nthElement(element, fromLast, h) === index;
+}
+
+function isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null): boolean {
+  if (!h) return isNthOfTypeLocal(element, index, fromLast);
+  return nthOfType(element, fromLast, h) === index;
+}
+
+function isNthElementLocal(element: Element, target: number, fromLast: boolean): boolean {
+  if (target < 1) {
+    throw new Error(`Invalid nth-child index: ${target}`);
+  }
+
+  const parent = element.parentNode;
+  if (!parent) return target === 1;
+
+  const length = parent.childElementCount;
+  if (target > length) return false;
+
+  const forwardTarget = fromLast ? length - target + 1 : target;
+
+  let node: Element | null;
+
+  if (forwardTarget <= length - forwardTarget + 1) {
+    node = parent.firstElementChild;
+    for (let i = 1; node && i < forwardTarget; ++i) {
+      node = node.nextElementSibling;
+    }
+  } else {
+    node = parent.lastElementChild;
+    for (let i = length; node && i > forwardTarget; --i) {
+      node = node.previousElementSibling;
     }
   }
 
-  nthOfTypeState.idx = j + 1;
-  nthOfTypeState.len = l;
+  return node === element;
+}
 
-  return dir ? l - j : nthOfTypeState.idx;
-};
+function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): boolean {
+  if (target < 1) {
+    throw new Error(`Invalid nth-of-type index: ${target}`);
+  }
+
+  const parent = element.parentNode;
+  if (!parent) return target === 1;
+
+  const namespaceURI = element.namespaceURI;
+  const localName = element.localName;
+
+  let index = 0;
+
+  if (!fromLast) {
+    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
+      if (node.localName === localName && node.namespaceURI === namespaceURI) {
+        ++index;
+        if (node === element) return index === target;
+        if (index >= target) return false;
+      }
+    }
+  } else {
+    for (let node = parent.lastElementChild; node; node = node.previousElementSibling) {
+      if (node.localName === localName && node.namespaceURI === namespaceURI) {
+        ++index;
+        if (node === element) return index === target;
+        if (index >= target) return false;
+      }
+    }
+  }
+
+  return false;
+}
+
+
 
 function isFocused(node: Element, snap: Snapshot): boolean {
   const doc = node.ownerDocument;
@@ -2038,9 +2103,9 @@ export function buildRex(ext: NwsExtensions) {
 
 type Rex = ReturnType<typeof buildRex>;
 
-const F_INIT = '"use strict";return function Resolver(c,f,x,r)';
 const MACROS = {
   S: { // SELECT
+    INIT: '"use strict";return function Resolver(c,f,x,r,h)',
     HEAD: 'var e,m,n,o,j=r.length-1,k=-1,p=false',
     LOOP: 'main:while((e=c[++k]))',
     BODY: 'r[++j]=c[k];',
@@ -2051,6 +2116,7 @@ const MACROS = {
   },
 
   M: { // MATCH
+    INIT: '"use strict";return function Resolver(c,f,h)',
     HEAD: 'var e,m,n,o',
     LOOP: 'e=c;',
     BODY: '',
@@ -2063,38 +2129,35 @@ const MACROS = {
 
 // compile groups or single selector strings into
 // executable functions for matching or selecting
-function compile(selector: string, mode: true, cb: QueryCallback | null, snap: Snapshot): SelectLambda;
-function compile(selector: string, mode: false, cb: QueryCallback | null, snap: Snapshot): MatchLambda;
-function compile(selector: string, mode: boolean, cb: QueryCallback | null, snap: Snapshot): SelectLambda | MatchLambda {
-  const hasCallback = !!cb;
+function compile(selector: string, mode: true, hasCb: boolean, snap: Snapshot): SelectLambda;
+function compile(selector: string, mode: false, hasCb: boolean, snap: Snapshot): MatchLambda;
+function compile(selector: string, mode: boolean, hasCb: boolean, snap: Snapshot): SelectLambda | MatchLambda {
   const isSelectMode = mode === true;
   const cache = isSelectMode ? snap.selectLambdas : snap.matchLambdas;
   const cached = cache[selector];
 
-  if (cached && cached.hasCallback === hasCallback) {
+  if (cached && cached.hasCb === hasCb) {
     return cached.fn;
   }
 
   const spec = isSelectMode ? MACROS.S : MACROS.M;
-  const macro = `${spec.BODY}${hasCallback ? spec.TEST : ''}${spec.TAIL}`;
+  const macro = `${spec.BODY}${hasCb ? spec.TEST : ''}${spec.TAIL}`;
 
-  const { source, post, modvar } = compileSelector(selector, macro, mode, cb, snap);
+  const { source, post, modvar } = compileSelector(selector, macro, mode, snap);
 
   const loop = `${spec.LOOP}${isSelectMode ? `{${source}}` : source}`;
   const vars = modvar.length ? `,${modvar.join(',')}` : '';
-  const f = `${F_INIT}{${spec.HEAD}${vars};${loop}${post}${spec.RETURN}}`;
+  const f = `${spec.INIT}{${spec.HEAD}${vars};${loop}${post}${spec.RETURN}}`;
   const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
   if (isSelectMode) {
-    snap.selectLambdas[selector] = { hasCallback, fn: factory as SelectLambda };
+    snap.selectLambdas[selector] = { hasCb, fn: factory as SelectLambda };
   } else {
-    snap.matchLambdas[selector] = { hasCallback, fn: factory as MatchLambda };
+    snap.matchLambdas[selector] = { hasCb, fn: factory as MatchLambda };
   }
 
   return factory;
 }
-
-const ATTR_STD_OPS = new Set(['=', '^=', '$=', '|=', '*=', '~=']);
 
 const ATTR_INSENSITIVE = new Set([
   'accept', 'accept-charset', 'align', 'alink', 'axis',
@@ -2109,7 +2172,7 @@ const ATTR_INSENSITIVE = new Set([
 
 // build conditional code to check components of selector strings
 function compileSelector(
-  expression: string, source: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot
+  expression: string, source: string, mode: boolean | null, snap: Snapshot
 ): CompileSelectorResult {
   const out: CompileSelectorResult = { source: '', post: '', modvar: [] };
   let k = 0;
@@ -2382,12 +2445,11 @@ function compileSelector(
           switch (pseudo) {
             case 'scope':
               // there can only be one :root element, so exit the loop once found
-              source = `if((e===s.scopeEl)){${source}}`;
+              source = `if(e===s.scopeEl){${source}}`;
               break;
-            // case 'scope' is bypassed by `prepareScope` method, which replaces :scope with a unique selector fingerpint
             case 'root':
               // there can only be one :root element, so exit the loop once found
-              source = `if((e===s.root)){${source}${mode ? 'break main;' : ''}}`;
+              source = `if(e===s.root){${source}${mode ? 'break main;' : ''}}`;
               break;
             case 'empty':
               // matches elements that don't contain elements or text nodes
@@ -2397,33 +2459,48 @@ function compileSelector(
             // *** child-indexed pseudo-classes
             // :first-child, :last-child, :only-child
             case 'only-child':
-              source = `if((!e.nextElementSibling&&!e.previousElementSibling)){${source}}`;
+              source = `if(!e.nextElementSibling&&!e.previousElementSibling){${source}}`;
               break;
             case 'last-child':
-              source = `if((!e.nextElementSibling)){${source}}`;
+              source = `if(!e.nextElementSibling){${source}}`;
               break;
             case 'first-child':
-              source = `if((!e.previousElementSibling)){${source}}`;
+              source = `if(!e.previousElementSibling){${source}}`;
               break;
 
             // *** typed child-indexed pseudo-classes
             // :only-of-type, :last-of-type, :first-of-type
-            case 'only-of-type':
+            case 'only-of-type': {
               source =
-                `o=e.localName;m=e.namespaceURI;` +
-                `n=e;while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){` +
-                `n=e;while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));}if(!n){${source}}`;
+                `o=e.localName;` +
+                `m=e.namespaceURI;` +
+                `n=e;` +
+                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
+                `if(!n){` +
+                  `n=e;` +
+                  `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
+                `}` +
+                `if(!n){${source}}`;
               break;
-            case 'last-of-type':
+            }
+            case 'last-of-type': {
               source =
-                `n=e;o=e.localName;m=e.namespaceURI;` +
-                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){${source}}`;
+                `n=e;` +
+                `o=e.localName;` +
+                `m=e.namespaceURI;` +
+                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
+                `if(!n){${source}}`;
               break;
-            case 'first-of-type':
+            }
+            case 'first-of-type': {
               source =
-                `n=e;o=e.localName;m=e.namespaceURI;` +
-                `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));if(!n){${source}}`;
+                `n=e;` +
+                `o=e.localName;` +
+                `m=e.namespaceURI;` +
+                `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
+                `if(!n){${source}}`;
               break;
+            }
             default:
               throw new Error(`Unsupported structural-tree pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
@@ -2433,33 +2510,39 @@ function compileSelector(
         // :nth-child, :nth-of-type, :nth-last-child, :nth-last-of-type
         else if ((match = selector.match(snap.re.Patterns.treestruct))) {
           const pseudo = match[1].toLowerCase();
-          let nthArg = match[2].toLowerCase().replace(/\s+/g, '');
-          nthArg = nthArg.replace(/^[+-]?0n/, '') || '0';
 
-          if (pseudo !== 'nth-child' && pseudo !== 'nth-last-child' && pseudo !== 'nth-of-type' && pseudo !== 'nth-last-of-type') {
+          let isOfType = false, isLast = false;
+          if      (pseudo === 'nth-child')        { /*defaults*/ }
+          else if (pseudo === 'nth-last-child')   { isLast = true; }
+          else if (pseudo === 'nth-of-type')      { isOfType = true; }
+          else if (pseudo === 'nth-last-of-type') { isOfType = isLast = true; }
+          else {
             throw new Error(`Unsupported tree-structural pseudo-class: ${pseudo}, in selector: ${expression}`);
           }
 
+          let nthArg = match[2].toLowerCase().replace(/\s+/g, '');
+          nthArg = nthArg.replace(/^[+-]?0n/, '') || '0';
           if (!nthArg) {
             throw new Error(`Missing argument for pseudo-class ${pseudo} in selector: ${expression}`);
           }
 
-          const isOfType = pseudo.endsWith('-of-type');
-          const isLast = pseudo.includes('last');
-
           if (nthArg === 'n') {
-            source = `if(true){${source}}`;
+            // source = `if(true){${source}}`;
             break;
           }
 
           let nthTest: string;
-          if (nthArg === 'even' || nthArg === '2n0' || nthArg === '2n+0' || nthArg === '2n') {
+          if (nthArg === 'even' || nthArg === '2n+0' || nthArg === '2n') {
             nthTest = 'n%2===0';
-          } else if (nthArg === 'odd' || nthArg === '2n1' || nthArg === '2n+1') {
+          } else if (nthArg === 'odd' || nthArg === '2n+1') {
             nthTest = 'n%2===1';
           } else if (!nthArg.includes('n')) {
             const index = parseInt(nthArg, 10);
-            nthTest = `n===${index}`;
+            nthTest = isOfType
+              ? `s.isNthOfType(e,${index},${isLast},h)`
+              : `s.isNthElement(e,${index},${isLast},h)`;
+            source = `if(${nthTest}){${source}}`;
+            break;
           } else {
             const [rawStep, rawOffset = ''] = nthArg.split('n');
             const step = /\d/.test(rawStep) ? parseInt(rawStep, 10) : parseInt(`${rawStep}1`, 10);
@@ -2473,11 +2556,10 @@ function compileSelector(
               'false';
           }
 
-          const nthCall = isOfType ? `s.nthOfType(e,${isLast})` : `s.nthElement(e,${isLast})`;
-          source = `n=${nthCall};if((${nthTest})){${source}}`;
-
-          const cleanup = isOfType ? `s.nthOfType(null, 2);` : `s.nthElement(null, 2);`;
-          if (!out.post.includes(cleanup)) out.post += cleanup;
+          const nthCall = isOfType
+            ? `s.nthOfType(e,${isLast},h)`
+            : `s.nthElement(e,${isLast},h)`;
+          source = `n=${nthCall};if(${nthTest}){${source}}`;
           break;
         }
 
@@ -2498,7 +2580,7 @@ function compileSelector(
               const selectors = parse(expr, snap.re, true);
               const test = selectors.length
                 ? selectors
-                    .map(sel => `(function(){try{return s.match(${JSON.stringify(sel)},e);}catch(E){return false;}})()`)
+                    .map(sel => `(function(){try{return s.match(${JSON.stringify(sel)},e,null,false,h);}catch(E){return false;}})()`)
                     .join('||')
                 : 'false';
               source = `if(${test}){${source}}`;
@@ -2507,7 +2589,7 @@ function compileSelector(
             case 'matches':
               throw new Error(`Unsupported pseudo-class :matches(); use :is()`);
             case 'not':
-              source = `if(!s.match(${exprLit},e)){${source}}`;
+              source = `if(!s.match(${exprLit},e,null,false,h)){${source}}`;
               break;
             case 'has': {
               const list = parseRelativeSelectorList(expr);
@@ -2754,7 +2836,7 @@ function compileSelector(
           // process registered selector extensions
           for (expr in snap.selectors) {
             if ((match = selector.match(snap.selectors[expr].Expression))) {
-              const result = snap.selectors[expr].Callback(match, source, mode, cb);
+              const result = snap.selectors[expr].Callback(match, source, mode);
               if ('match' in result) { match = result.match ?? null; }
               const modvar = result.modvar;
               if (modvar && !out.modvar.includes(modvar)) { out.modvar.push(modvar); }
@@ -2860,12 +2942,8 @@ export function normalizeSelectorInput(selectors: string, re: Rex): string {
 }
 
 // equivalent of w3c 'matches' method
-function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): boolean {
+function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean, h: HashCache | null): boolean {
   snap.probe.match++;
-
-  // if (!selectors) {
-  //   throw new Error(`[match] Empty selector is not valid`);
-  // }
 
   if (snap.isDebug) {
     snap.debugMatch = {
@@ -2876,21 +2954,21 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
   }
 
   let resolver = snap.matchResolvers[selectors];
-  if (!resolver || resolver.callback !== cb) {
+  if (!resolver || resolver.hasCb !== !!cb) {
     const parsed = parse(selectors, snap.re);
 
     if (snap.isDebug && snap.debugMatch) {
       snap.debugMatch.parsed = parsed;
     }
 
-    resolver = snap.matchResolvers[selectors] = buildMatchResolver(parsed, cb, snap);
+    resolver = snap.matchResolvers[selectors] = buildMatchResolver(parsed, !!cb, snap);
   }
 
   if (isEntryCall && resolver.flags.usesScope) {
     updateSnapshot(snap, element, true);
   }
 
-  const result = resolver.lambdas.some(f => f(element, cb, null, false));
+  const result = resolver.lambdas.some(f => f(element, cb, h));
 
   if (snap.isDebug && snap.debugMatch) {
     snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
@@ -2900,30 +2978,24 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
   return result;
 }
 
-function buildMatchResolver(selectors: string[], cb: QueryCallback | null, snap: Snapshot): MatchResolver {
+function buildMatchResolver(selectors: string[], hasCb: boolean, snap: Snapshot): MatchResolver {
   const lambdas: MatchLambda[] = [];
   snap.probe.matBuild++;
 
   for (let i = 0, l = selectors.length; i < l; ++i) {
-    lambdas[i] = compile(selectors[i], false, cb, snap);
+    lambdas[i] = compile(selectors[i], false, hasCb, snap);
   }
 
   const flags: ResolverFlags = {
     usesScope: hasScopeSelector(selectors),
   };
 
-  return { callback: cb, lambdas, flags };
+  return { hasCb, lambdas, flags };
 }
 
 // equivalent of w3c 'querySelectorAll' method
 function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element[] {
-  updateSnapshot(snap, ctx);
   snap.probe.select++;
-
-  let nodes: Element[] = [];
-  if (!sel) {
-    throw new Error(`[select] Empty selector is not valid`);
-  }
 
   if (snap.isDebug) {
     snap.debugSelect = { callback: cb, context: describeContext(ctx), run: [] };
@@ -2931,18 +3003,20 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
 
   // try to reuse cached resolver
   let resolver = snap.selectResolvers[sel];
-  if (!resolver || resolver.context !== ctx || resolver.callback !== cb) {
+  if (!resolver || resolver.context !== ctx || resolver.hasCb !== !!cb) {
     const parsed = parse(sel, snap.re);
-    resolver = buildResolver(parsed, ctx, cb, snap);
+    resolver = buildResolver(parsed, ctx, !!cb, snap);
     snap.selectResolvers[sel] = resolver;
   }
 
   updateSnapshot(snap, ctx, isEntryCall && resolver.flags.usesScope);
 
   // execute resolver seeds and collect results
+  let results: Element[] = [];
+  const cache: HashCache = {};
   for (const seed of resolver.seeds) {
     const candidates = seed.getCandidates();
-    const stopped = seed.lambda(candidates, cb, ctx, nodes);
+    const stopped = seed.lambda(candidates, cb, ctx, results, cache);
 
     if (snap.isDebug) {
       snap.debugSelect!.run!.push({
@@ -2951,26 +3025,28 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
         compileQuery: seed.compileQuery,
         candidates: describeElements(candidates),
         lambdaSource: String(seed.lambda),
-        results: describeElements(nodes),
+        results: describeElements(results),
       });
     }
 
     if (stopped) break;
   }
 
-  if (resolver.seeds.length > 1 && nodes.length > 1) {
-    nodes = sortUnique(nodes);
+  if (resolver.seeds.length > 1 && results.length > 1) {
+    results = sortUnique(results);
   }
 
-  return nodes;
+  return results;
 }
 
-function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot): SelectResolver {
+function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, snap: Snapshot): SelectResolver {
   const out: SelectResolver = {
-    callback: cb,
+    hasCb,
     context: ctx,
     seeds: [],
-    flags: { usesScope: hasScopeSelector(selectors) },
+    flags: {
+      usesScope: hasScopeSelector(selectors),
+    },
   };
   snap.probe.selBuild++;
 
@@ -3009,7 +3085,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, cb: QueryCallback
 
     out.seeds.push({
       key, query, compileQuery, getCandidates,
-      lambda: compile(compileQuery, true, cb, snap),
+      lambda: compile(compileQuery, true, hasCb, snap),
     });
   }
 
@@ -3054,7 +3130,7 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
 function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element | null {
   let el: Element | null = element;
   while (el) {
-    if (matchRaw(selectors, el, callback, snap, isEntryCall)) break;
+    if (matchRaw(selectors, el, callback, snap, isEntryCall, null)) break;
     isEntryCall = false;
     el = el.parentElement;
   }
