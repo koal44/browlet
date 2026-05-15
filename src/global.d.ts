@@ -48,7 +48,6 @@ type CandidatePlan = {
 
 type MatchLambda = (
   element: Element,
-  callback: QueryCallback | null,
   h: HashCache | null,
 ) => boolean;
 
@@ -64,23 +63,17 @@ type Stopped = boolean;
 
 type MatchResolver = {
   lambdas: MatchLambda[];
-  hasCb: boolean;
-  flags: ResolverFlags;
+  usesScope: boolean;
 };
 
 type SelectResolver = {
   hasCb: boolean;
   context: QueryContext;
   seeds: CandidateSeed[];
-  flags: ResolverFlags;
-};
-
-type ResolverFlags = {
   usesScope: boolean;
 };
 
 type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };
-type ToNodeListFn = (nodeArray: Element[]) => IndexedNodeList;
 type ElementList = Element[] | IndexedNodeList;
 
 type AttrMatcherParts = { p1: string; p2: string; p3: boolean; };
@@ -101,40 +94,21 @@ type SelectorExtFn = (
     status: boolean,
   };
 
-type RawByTagFn = (tag: string, context: QueryContext) => Element[];
-type RawByClassFn = (cls: string, context: QueryContext) => Element[];
-type RawByIdFn = (id: string, context: QueryContext) => Element[];
-type RawSelectFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot) => Element[];
-type RawFirstFn = (selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot) => Element | null;
-type RawMatchFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot) => boolean;
-type RawAncestorFn = (selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot) => Element | null;
-
 type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
 type ByTagNsFn = (ns: string | null, local: string, context?: QueryContext) => ElementList;
 type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
 type ByIdFn = (id: string, context?: QueryContext) => Element | null;
 type SelectFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => ElementList;
 
-type FirstFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => Element | null;
-type MatchFn = (selectors: string, element: Element, callback?: QueryCallback | null) => boolean;
-type AncestorFn = (selectors: string, element: Element, callback?: QueryCallback | null) => Element | null;
+type FirstFn = (selectors: string, context?: QueryContext) => Element | null;
+type MatchFn = (selectors: string, element: Element) => boolean;
+type AncestorFn = (selectors: string, element: Element) => Element | null;
 type ClosestFn = AncestorFn;
-type NthFn = (element: Element, dir: boolean | 2) => number;
-type IsFocusableFn = (node: HTMLElement) => false | HTMLElement;
-type IsContentEditableFn = (node: HTMLElement) => boolean;
-type HasAttributeFn = (element: Element, ns: string | null, local: string) => boolean;
-type GetAttributeFn = (element: Element, ns: string | null, local: string) => string | null;
 
-type CompileFn = (selector: string, mode: boolean | null, cb: QueryCallback | null, snap: Snapshot) => SelectLambda | MatchLambda;
 type CombinatorCompiler = (source: string) => string;
 type RegisterCombinatorFn = (combinator: string, compiler: CombinatorCompiler) => void;
 type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
 type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
-
-type SelectLambdaEntry = { fn: SelectLambda; hasCb: boolean };
-type MatchLambdaEntry = { fn: MatchLambda; hasCb: boolean };
-
-type CssEscapeFn = (ident: string) => string;
 
 type DomApi = {
   version: string;
@@ -167,10 +141,13 @@ type DomApi = {
 };
 
 type DebugSelect = {
+  kind: 'select';
+  isApiEntry: boolean;
+  selector: string;
   callback?: QueryCallback | null;
   context?: QueryContextDescription;
-  build?: DebugSelectBuildStep[];
-  run?: DebugSelectRunStep[];
+  build: DebugSelectBuildStep[];
+  run: DebugSelectRunStep[];
   error?: string;
 };
 
@@ -191,7 +168,8 @@ type DebugSelectBuildStep = {
 };
 
 type DebugMatch = {
-  callback?: QueryCallback | null;
+  kind: 'match';
+  isApiEntry: boolean;
   element?: QueryContextDescription;
   selector?: string;
   parsed?: string[];
@@ -205,8 +183,6 @@ type QueryContextDescription = {
   summary: string;
   preview?: string;
 }
-
-type NodeLike = { nodeType: number; nodeName: string; };
 
 type QsaKey =
   'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |

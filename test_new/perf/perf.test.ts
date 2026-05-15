@@ -714,4 +714,131 @@ runPerfScenarios('perf', [
     ],
   },
 
+  {
+    name: 'match logical pseudo is/not',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <main id="root">
+        <div id="hit" class="item foo bar" data-kind="primary"></div>
+        <div id="miss" class="item baz" data-kind="secondary"></div>
+      </main>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      // Baselines
+      { label: 'match class baseline hit', op: 'match', selector: '.foo', context: 'hit', iters: 5_000_000 },
+      { label: 'match class baseline miss', op: 'match', selector: '.foo', context: 'miss', iters: 5_000_000 },
+
+      // :is() single arm
+      { label: 'match :is single hit', op: 'match', selector: ':is(.foo)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :is single miss', op: 'match', selector: ':is(.foo)', context: 'miss', iters: 5_000_000 },
+
+      // :is() multi-arm, early hit / late hit / miss
+      { label: 'match :is list early hit', op: 'match', selector: ':is(.foo, .nope, [data-x])', context: 'hit', iters: 5_000_000 },
+      { label: 'match :is list late hit', op: 'match', selector: ':is(.nope, [data-x], .foo)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :is list miss', op: 'match', selector: ':is(.nope, [data-x], #absent)', context: 'hit', iters: 5_000_000 },
+
+      // :not() simple
+      { label: 'match :not simple pass', op: 'match', selector: ':not(.nope)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :not simple reject', op: 'match', selector: ':not(.foo)', context: 'hit', iters: 5_000_000 },
+
+      // :not() list
+      { label: 'match :not list pass', op: 'match', selector: ':not(.nope, [data-x], #absent)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :not list early reject', op: 'match', selector: ':not(.foo, .nope, [data-x])', context: 'hit', iters: 5_000_000 },
+      { label: 'match :not list late reject', op: 'match', selector: ':not(.nope, [data-x], .foo)', context: 'hit', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match relational pseudo has',
+    status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <main id="root">
+        <section id="hit-desc" class="box">
+          <div><div><span class="target"></span></div></div>
+        </section>
+
+        <section id="miss-desc" class="box">
+          <div><div><span class="other"></span></div></div>
+        </section>
+
+        <section id="hit-child" class="box">
+          <span class="target"></span>
+        </section>
+
+        <section id="miss-child" class="box">
+          <div><span class="target"></span></div>
+        </section>
+
+        <section id="hit-adjacent" class="box"></section>
+        <span class="target"></span>
+
+        <section id="miss-adjacent" class="box"></section>
+        <span class="other"></span>
+
+        <section id="hit-sibling" class="box"></section>
+        <span class="other"></span>
+        <span class="target"></span>
+
+        <section id="miss-sibling" class="box"></section>
+        <span class="other"></span>
+        <span class="other"></span>
+
+        <section id="hit-nth-child" class="box">
+          <span class="other"></span>
+          <span class="target"></span>
+          <span class="other"></span>
+        </section>
+
+        <section id="miss-nth-child" class="box">
+          <span class="target"></span>
+          <span class="other"></span>
+          <span class="other"></span>
+        </section>
+
+        <section id="hit-nth-desc" class="box">
+          <div>
+            <span class="other"></span>
+            <span class="target"></span>
+            <span class="other"></span>
+          </div>
+        </section>
+
+        <section id="miss-nth-desc" class="box">
+          <div>
+            <span class="target"></span>
+            <span class="other"></span>
+            <span class="other"></span>
+          </div>
+        </section>
+      </main>
+    `,
+    quickIters: 200_000,
+    probeKeys: ['match'],
+    benches: [
+      // Baselines
+      { label: 'match class baseline hit',  op: 'match', selector: '.box', context: 'hit-desc',  iters: 1_000_000 },
+      { label: 'match class baseline miss', op: 'match', selector: '.nope', context: 'hit-desc', iters: 1_000_000 },
+
+      // Basic :has() combinators
+      { label: 'match :has desc hit',     op: 'match', selector: ':has(.target)',    context: 'hit-desc',      iters: 1_000_000 },
+      { label: 'match :has desc miss',    op: 'match', selector: ':has(.target)',    context: 'miss-desc',     iters: 1_000_000 },
+      { label: 'match :has child hit',    op: 'match', selector: ':has(> .target)',  context: 'hit-child',     iters: 1_000_000 },
+      { label: 'match :has child miss',   op: 'match', selector: ':has(> .target)',  context: 'miss-child',    iters: 1_000_000 },
+      { label: 'match :has next hit',     op: 'match', selector: ':has(+ .target)',  context: 'hit-adjacent',  iters: 1_000_000 },
+      { label: 'match :has next miss',    op: 'match', selector: ':has(+ .target)',  context: 'miss-adjacent', iters: 1_000_000 },
+      { label: 'match :has sibling hit',  op: 'match', selector: ':has(~ .target)',  context: 'hit-sibling',   iters: 1_000_000 },
+      { label: 'match :has sibling miss', op: 'match', selector: ':has(~ .target)',  context: 'miss-sibling',  iters: 1_000_000 },
+
+      // :has() with nth selectors inside the relative selector.
+      { label: 'match :has child nth hit',  op: 'match', selector: ':has(> .target:nth-child(2))', context: 'hit-nth-child',  iters: 1_000_000 },
+      { label: 'match :has child nth miss', op: 'match', selector: ':has(> .target:nth-child(2))', context: 'miss-nth-child', iters: 1_000_000 },
+      { label: 'match :has desc nth hit',   op: 'match', selector: ':has(.target:nth-child(2))',   context: 'hit-nth-desc',   iters: 1_000_000 },
+      { label: 'match :has desc nth miss',  op: 'match', selector: ':has(.target:nth-child(2))',   context: 'miss-nth-desc',  iters: 1_000_000 },
+    ],
+  },
+
 ]);

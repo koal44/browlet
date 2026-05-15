@@ -179,7 +179,7 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: ':scope native behavior in HTML document and element contexts',
+    name: 'f',
     // status: 'only',
     markupMode: 'html-document',
     markup: `

@@ -1,3 +1,5 @@
+import { debug } from "node:util";
+
 function Factory(fGlobal: Glob, fExport: Function): DomApi {
   const _doc = fGlobal.document;
   const _snap = initSnapshot(_doc);
@@ -66,21 +68,21 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    first(sel, ctx, cb) {
-      return _snap.first(sel, ctx, cb ?? null, true);
+    first(sel, ctx) {
+      return _snap.first(sel, ctx, true /* isApiEntry */);
     },
 
-    match(sel, ctx, cb) {
-      return _snap.match(sel, ctx, cb ?? null, true);
+    match(sel, ctx) {
+      return _snap.match(sel, ctx);
     },
 
     select(sel, ctx, cb) {
-      const result = _snap.select(sel, ctx, cb ?? null, true);
+      const result = _snap.select(sel, ctx, cb ?? null, true /* isApiEntry */);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    closest(sel, ctx, cb) {
-      return _snap.ancestor(sel, ctx, cb ?? null, true);
+    closest(sel, el) {
+      return _snap.ancestor(sel, el);
     },
 
     // configure the engine to use special handling
@@ -103,7 +105,10 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
       }
 
       if (clear) {
-        for (const k in _snap.matchResolvers) delete _snap.matchResolvers[k];
+        for (const k in _snap.matchLambdas) delete _snap.matchLambdas[k];
+        for (const k in _snap.selectLambdas) delete _snap.selectLambdas[k];
+        for (const k in _snap.strictMatchResolvers) delete _snap.strictMatchResolvers[k];
+        for (const k in _snap.forgivingMatchResolvers) delete _snap.forgivingMatchResolvers[k];
         for (const k in _snap.selectResolvers) delete _snap.selectResolvers[k];
       }
 
@@ -283,8 +288,7 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
           scopeEl: _snap.scopeEl ? describeElement(_snap.scopeEl) : null,
           root: { summary: describeElement(_snap.root) },
         },
-        debugSelect: _snap.debugSelect,
-        debugMatch: _snap.debugMatch,
+        debugStack: _snap.debugStack,
       }, null, 2);
     },
 
@@ -318,6 +322,7 @@ export function initSnapshot(doc: Document) {
     isDebug: false,
     debugSelect: undefined as DebugSelect | undefined,
     debugMatch: undefined as DebugMatch | undefined,
+    debugStack: [] as (DebugSelect | DebugMatch)[],
 
     // special handling configuration flags
     config: { ...DEFAULT_CONFIG } as NwsConfig,
@@ -341,34 +346,40 @@ export function initSnapshot(doc: Document) {
     focusTarget: null as EventTarget | null,
 
     // cached
-    matchLambdas: {} as Partial<Record<string, MatchLambdaEntry>>,
-    selectLambdas: {} as Partial<Record<string, SelectLambdaEntry>>,
-    matchResolvers: {} as Partial<Record<string, MatchResolver>>,
+    matchLambdas: {} as Partial<Record<string, MatchLambda>>,
+    selectLambdas: {} as Partial<Record<string, SelectLambda>>,
+    strictMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
+    forgivingMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
     selectResolvers: {} as Partial<Record<string, SelectResolver>>,
 
     byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
     byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? snap.doc, snap),
     byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNsRaw(ns, local, context ?? snap.doc, snap),
     byClass: (cls: string, context?: QueryContext) => byClassRaw(cls, context ?? snap.doc, snap),
-    first: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
-      return firstRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
+    first: (sel: string, context?: QueryContext, isApiEntry?: boolean) => {
+      return firstRaw(sel, context ?? snap.doc, snap, isApiEntry);
     },
-    match: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false, h: HashCache | null = null) => {
-      return matchRaw(sel, context, cb ?? null, snap, isEntryCall, h);
+    match: (sel: string, context: Element, h: HashCache | null = null) => {
+      return matchRaw(sel, context, snap, h);
     },
-    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isEntryCall = false) => {
-      return selectRaw(sel, context ?? snap.doc, cb ?? null, snap, isEntryCall);
+    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isApiEntry?: boolean) => {
+      return selectRaw(sel, context ?? snap.doc, cb ?? null, snap, isApiEntry);
     },
-    ancestor: (sel: string, context: Element, cb?: QueryCallback | null, isEntryCall = false) => {
-      return ancestorRaw(sel, context, cb ?? null, snap, isEntryCall);
+    ancestor: (sel: string, context: Element) => {
+      return ancestorRaw(sel, context, snap);
     },
+
+    matchStrict: (selectors: string, element: Element, h: HashCache | null = null) =>
+      matchStrict(selectors, element, snap, h),
+    matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
+      matchForgiving(selectors, element, snap, h),
 
     isType: isType,
     nthOfType: nthOfType,
     nthElement: nthElement,
     isNthElement: isNthElement,
     isNthOfType: isNthOfType,
-    matchHas: (steps: [SelectorCombinator, string][], anchor: Element) => matchHasFrom(steps, 0, anchor, snap),
+    matchHas: (steps: [SelectorCombinator, string][], anchor: Element, h: HashCache) => matchHasFrom(steps, 0, anchor, snap, h),
     matchDir: matchDir,
     matchLang: matchLang,
     defined: (element: Element) => isDefined(element, snap),
@@ -398,7 +409,6 @@ export function initSnapshot(doc: Document) {
 
     regexCache: {} as Record<string, RegExp>,
     getCachedRegex: (source: string, flags: string) => getCachedRegex(source, flags, snap),
-
 
     probe: {
       select: 0,
@@ -916,62 +926,6 @@ export function hasCssToken(actual: string, token: string): boolean {
   return false;
 }
 
-// export function hasCssToken(actual: string, token: string): boolean {
-//   const n = actual.length;
-//   const m = token.length;
-
-//   if (m === 0) return false;
-
-//   let i = 0;
-//   while (i < n) {
-//     while (i < n && isCssSpace(actual.charCodeAt(i))) i++;
-//     const start = i;
-//     while (i < n && !isCssSpace(actual.charCodeAt(i))) i++;
-
-//     if (i - start === m) {
-//       let matched = true;
-
-//       for (let j = 0; j < m; j++) {
-//         if (actual.charCodeAt(start + j) !== token.charCodeAt(j)) {
-//           matched = false;
-//           break;
-//         }
-//       }
-
-//       if (matched) return true;
-//     }
-//   }
-
-//   return false;
-// }
-
-// export function hasCssToken(actual: string, token: string): boolean {
-//   const n = actual.length;
-//   const m = token.length;
-
-//   if (m === 0 || m > n) return false;
-//   if (actual === token) return true;
-
-//   const first = token.charCodeAt(0);
-
-//   let i = 0;
-
-//   while (i < n) {
-//     while (i < n && isCssSpace(actual.charCodeAt(i))) i++;
-
-//     const start = i;
-//     const firstMatches = i < n && actual.charCodeAt(i) === first;
-
-//     while (i < n && !isCssSpace(actual.charCodeAt(i))) i++;
-
-//     if (firstMatches && i - start === m && actual.startsWith(token, start)) {
-//       return true;
-//     }
-//   }
-
-//   return false;
-// }
-
 export function asciiHasCssToken(actual: string, expectedLower: string): boolean {
   const n = actual.length;
   const m = expectedLower.length;
@@ -1122,7 +1076,6 @@ function nthOfTypeLocal(element: Element, fromLast: boolean): number {
   return n;
 }
 
-
 function isNthElement(element: Element, index: number, fromLast: boolean, h: HashCache | null): boolean {
   if (!h) return isNthElementLocal(element, index, fromLast);
   return nthElement(element, fromLast, h) === index;
@@ -1197,8 +1150,6 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): 
   return false;
 }
 
-
-
 function isFocused(node: Element, snap: Snapshot): boolean {
   const doc = node.ownerDocument;
 
@@ -1212,7 +1163,7 @@ function isFocused(node: Element, snap: Snapshot): boolean {
   return node === doc.activeElement;
 }
 
-function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot): boolean {
+function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, h: HashCache): boolean {
   // steps: RelativeStep[]
   if (index >= steps.length) {
     return true;
@@ -1226,7 +1177,7 @@ function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base
   switch (combinator) {
     case ' ':
       for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
-        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
           return true;
         }
       }
@@ -1234,7 +1185,7 @@ function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base
 
     case '>':
       for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
-        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
           return true;
         }
       }
@@ -1242,12 +1193,12 @@ function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base
 
     case '+': {
       const node = base.nextElementSibling;
-      return !!node && snap.match(source, node) && matchHasFrom(steps, next, node, snap);
+      return !!node && snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h);
     }
 
     case '~':
       for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
-        if (snap.match(source, node) && matchHasFrom(steps, next, node, snap)) {
+        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
           return true;
         }
       }
@@ -2130,15 +2081,14 @@ const MACROS = {
 // compile groups or single selector strings into
 // executable functions for matching or selecting
 function compile(selector: string, mode: true, hasCb: boolean, snap: Snapshot): SelectLambda;
-function compile(selector: string, mode: false, hasCb: boolean, snap: Snapshot): MatchLambda;
+function compile(selector: string, mode: false, hasCb: false, snap: Snapshot): MatchLambda;
 function compile(selector: string, mode: boolean, hasCb: boolean, snap: Snapshot): SelectLambda | MatchLambda {
   const isSelectMode = mode === true;
-  const cache = isSelectMode ? snap.selectLambdas : snap.matchLambdas;
-  const cached = cache[selector];
 
-  if (cached && cached.hasCb === hasCb) {
-    return cached.fn;
-  }
+  const cache = isSelectMode ? snap.selectLambdas : snap.matchLambdas;
+  const key = isSelectMode ? selectLambdaKey(selector, hasCb) : selector;
+  const cached = cache[key];
+  if (cached) return cached;
 
   const spec = isSelectMode ? MACROS.S : MACROS.M;
   const macro = `${spec.BODY}${hasCb ? spec.TEST : ''}${spec.TAIL}`;
@@ -2151,9 +2101,9 @@ function compile(selector: string, mode: boolean, hasCb: boolean, snap: Snapshot
   const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
   if (isSelectMode) {
-    snap.selectLambdas[selector] = { hasCb, fn: factory as SelectLambda };
+    snap.selectLambdas[key] = factory as SelectLambda;
   } else {
-    snap.matchLambdas[selector] = { hasCb, fn: factory as MatchLambda };
+    snap.matchLambdas[key] = factory as MatchLambda;
   }
 
   return factory;
@@ -2577,19 +2527,13 @@ function compileSelector(
           switch (pseudo) {
             case 'is':
             case 'where': {
-              const selectors = parse(expr, snap.re, true);
-              const test = selectors.length
-                ? selectors
-                    .map(sel => `(function(){try{return s.match(${JSON.stringify(sel)},e,null,false,h);}catch(E){return false;}})()`)
-                    .join('||')
-                : 'false';
-              source = `if(${test}){${source}}`;
+              source = `if(s.matchForgiving(${exprLit},e,h)){${source}}`;
               break;
             }
             case 'matches':
               throw new Error(`Unsupported pseudo-class :matches(); use :is()`);
             case 'not':
-              source = `if(!s.match(${exprLit},e,null,false,h)){${source}}`;
+              source = `if(!s.matchStrict(${exprLit},e,h)){${source}}`;
               break;
             case 'has': {
               const list = parseRelativeSelectorList(expr);
@@ -2601,7 +2545,7 @@ function compileSelector(
                   step.compound.source,
                 ]);
 
-                hasSource += `if(!o){o=s.matchHas(${JSON.stringify(steps)},e);}`;
+                hasSource += `if(!o){o=s.matchHas(${JSON.stringify(steps)},e,h);}`;
               }
 
               source = `${hasSource}if(o){${source}}`;
@@ -2942,33 +2886,29 @@ export function normalizeSelectorInput(selectors: string, re: Rex): string {
 }
 
 // equivalent of w3c 'matches' method
-function matchRaw(selectors: string, element: Element, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean, h: HashCache | null): boolean {
+function matchRaw(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
   snap.probe.match++;
 
   if (snap.isDebug) {
+    snap.debugStack.length = 0;
+
     snap.debugMatch = {
-      callback: cb,
+      kind: 'match',
+      isApiEntry: true,
       element: describeContext(element),
       selector: selectors,
     };
+
+    snap.debugStack.push(snap.debugMatch!);
   }
 
-  let resolver = snap.matchResolvers[selectors];
-  if (!resolver || resolver.hasCb !== !!cb) {
-    const parsed = parse(selectors, snap.re);
+  const resolver = getStrictMatchResolver(selectors, snap);
 
-    if (snap.isDebug && snap.debugMatch) {
-      snap.debugMatch.parsed = parsed;
-    }
-
-    resolver = snap.matchResolvers[selectors] = buildMatchResolver(parsed, !!cb, snap);
-  }
-
-  if (isEntryCall && resolver.flags.usesScope) {
+  if (resolver.usesScope) {
     updateSnapshot(snap, element, true);
   }
 
-  const result = resolver.lambdas.some(f => f(element, cb, h));
+  const result = resolver.lambdas.some(f => f(element, h));
 
   if (snap.isDebug && snap.debugMatch) {
     snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
@@ -2978,28 +2918,99 @@ function matchRaw(selectors: string, element: Element, cb: QueryCallback | null,
   return result;
 }
 
-function buildMatchResolver(selectors: string[], hasCb: boolean, snap: Snapshot): MatchResolver {
+function matchStrict(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
+  const resolver = getStrictMatchResolver(selectors, snap);
+  return resolver.lambdas.some(f => f(element, h));
+}
+
+function matchForgiving(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
+  const resolver = getForgivingMatchResolver(selectors, snap);
+  return resolver.lambdas.some(f => f(element, h));
+}
+
+function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
+  let resolver = snap.strictMatchResolvers[selectors];
+
+  if (!resolver) {
+    const parsed = parse(selectors, snap.re);
+
+    if (snap.isDebug && snap.debugMatch) {
+      snap.debugMatch.parsed = parsed;
+    }
+
+    resolver = snap.strictMatchResolvers[selectors] = buildStrictMatchResolver(parsed, snap);
+  }
+
+  return resolver;
+}
+
+function getForgivingMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
+  let resolver = snap.forgivingMatchResolvers[selectors];
+
+  if (!resolver) {
+    const parsed = parse(selectors, snap.re, true);
+
+    if (snap.isDebug && snap.debugMatch) {
+      snap.debugMatch.parsed = parsed;
+    }
+
+    resolver = snap.forgivingMatchResolvers[selectors] = buildForgivingMatchResolver(parsed, snap);
+  }
+
+  return resolver;
+}
+
+function buildStrictMatchResolver(selectors: string[], snap: Snapshot): MatchResolver {
   const lambdas: MatchLambda[] = [];
   snap.probe.matBuild++;
 
   for (let i = 0, l = selectors.length; i < l; ++i) {
-    lambdas[i] = compile(selectors[i], false, hasCb, snap);
+    lambdas[i] = compile(selectors[i], false /*select/match mode*/, false /*cb*/, snap);
   }
 
-  const flags: ResolverFlags = {
+  return {
+    lambdas,
     usesScope: hasScopeSelector(selectors),
   };
+}
 
-  return { hasCb, lambdas, flags };
+function buildForgivingMatchResolver(selectors: string[], snap: Snapshot): MatchResolver {
+  const lambdas: MatchLambda[] = [];
+  snap.probe.matBuild++;
+
+  for (let i = 0, l = selectors.length; i < l; ++i) {
+    try {
+      lambdas.push(compile(selectors[i], false, false, snap));
+    } catch {
+      // Invalid arm in a forgiving selector list.
+    }
+  }
+
+  return {
+    lambdas,
+    usesScope: false, // forgiving match is only used for :is()/:where() arms, which are not entry points.
+  };
 }
 
 // equivalent of w3c 'querySelectorAll' method
-function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element[] {
+function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
   snap.probe.select++;
 
-  if (snap.isDebug) {
-    snap.debugSelect = { callback: cb, context: describeContext(ctx), run: [] };
-  }
+    if (snap.isDebug) {
+      if (isApiEntry) snap.debugStack.length = 0;
+
+      snap.debugSelect = {
+        kind: 'select',
+        isApiEntry,
+        selector: sel,
+        callback: cb,
+        context: describeContext(ctx),
+        build: [],
+        run: [],
+      };
+
+      snap.debugStack.push(snap.debugSelect!);
+    }
 
   // try to reuse cached resolver
   let resolver = snap.selectResolvers[sel];
@@ -3009,7 +3020,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     snap.selectResolvers[sel] = resolver;
   }
 
-  updateSnapshot(snap, ctx, isEntryCall && resolver.flags.usesScope);
+  updateSnapshot(snap, ctx, isApiEntry && resolver.usesScope);
 
   // execute resolver seeds and collect results
   let results: Element[] = [];
@@ -3018,8 +3029,8 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
     const candidates = seed.getCandidates();
     const stopped = seed.lambda(candidates, cb, ctx, results, cache);
 
-    if (snap.isDebug) {
-      snap.debugSelect!.run!.push({
+    if (snap.isDebug && snap.debugSelect) {
+      snap.debugSelect.run.push({
         seedKey: seed.key,
         seedQuery: seed.query,
         compileQuery: seed.compileQuery,
@@ -3044,13 +3055,9 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
     hasCb,
     context: ctx,
     seeds: [],
-    flags: {
-      usesScope: hasScopeSelector(selectors),
-    },
+    usesScope: hasScopeSelector(selectors),
   };
   snap.probe.selBuild++;
-
-  if (snap.isDebug && snap.debugSelect) snap.debugSelect.build = [];
 
   for (const sel of selectors) {
     let { key, query, compileQuery } = getOptimizedPlan(sel, snap);
@@ -3080,7 +3087,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
     }
 
     if (snap.isDebug) {
-      snap.debugSelect?.build?.push({ selector: sel, seedKey: key, seedQuery: query, compileQuery });
+      snap.debugSelect?.build.push({ selector: sel, seedKey: key, seedQuery: query, compileQuery });
     }
 
     out.seeds.push({
@@ -3127,11 +3134,11 @@ function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
 }
 
 // equivalent of w3c 'closest' method
-function ancestorRaw(selectors: string, element: Element, callback: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element | null {
+function ancestorRaw(selectors: string, element: Element, snap: Snapshot): Element | null {
   let el: Element | null = element;
+  updateSnapshot(snap, element, true);
   while (el) {
-    if (matchRaw(selectors, el, callback, snap, isEntryCall, null)) break;
-    isEntryCall = false;
+    if (matchStrict(selectors, el, snap, null)) break;
     el = el.parentElement;
   }
   return el;
@@ -3140,13 +3147,8 @@ function ancestorRaw(selectors: string, element: Element, callback: QueryCallbac
 const stopAfterFirst: QueryCallback = () => false;
 
 // equivalent of w3c 'querySelector' method
-function firstRaw(selectors: string, context: QueryContext, callback: QueryCallback | null, snap: Snapshot, isEntryCall: boolean): Element | null {
-  // TODO: firstRaw wraps callbacks for early stop, which hurts resolver caching; future parser-level caching should make callbacks irrelevant.
-  const cb = callback
-    ? (e: Element) => { callback(e); return false; }
-    : stopAfterFirst;
-
-  return selectRaw(selectors, context, cb, snap, isEntryCall)[0] || null;
+function firstRaw(selectors: string, context: QueryContext, snap: Snapshot, isApiEntry = true): Element | null {
+  return selectRaw(selectors, context, stopAfterFirst, snap, isApiEntry)[0] || null;
 }
 
 export function matchLogicalSelector(selector: string): RegExpMatchArray | null {
@@ -3440,4 +3442,8 @@ function isEscapedAt(input: string, index: number, start = 0): boolean {
     slashCount++;
   }
   return slashCount % 2 === 1;
+}
+
+function selectLambdaKey(selector: string, hasCb: boolean): string {
+  return `${hasCb ? '\x01' : '\x00'}${selector}`;
 }
