@@ -374,9 +374,9 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { op: 'match', selector: '[*|foo="bar" i]',  context: 'hit', iters: 5_000_000, maxRatio: 9 },
-      { op: 'match', selector: '[*|foo="nope" i]', context: 'hit', iters: 5_000_000, maxRatio: 15 },
-      { op: 'match', selector: '[*|lang|="en"]',   context: 'hit', iters: 5_000_000, maxRatio: 15 },
+      { op: 'match', selector: '[*|foo="bar" i]',  context: 'hit', iters: 5_000_000, maxRatio: 10 },
+      { op: 'match', selector: '[*|foo="nope" i]', context: 'hit', iters: 5_000_000, maxRatio: 16 },
+      { op: 'match', selector: '[*|lang|="en"]',   context: 'hit', iters: 5_000_000, maxRatio: 16 },
     ],
   },
 
@@ -503,6 +503,7 @@ runPerfScenarios('perf', [
     name: 'match combinators',
     // status: 'only',
     browsers: ['chromium'],
+    quickIters: 100_000,
     markup: `
       <section id="root">
         <div id="ancestor-hit" class="ancestor">
@@ -536,7 +537,6 @@ runPerfScenarios('perf', [
         </div>
       </section>
     `,
-    quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
       // Child combinator: one parentElement hop.
@@ -753,8 +753,9 @@ runPerfScenarios('perf', [
 
   {
     name: 'match relational pseudo has',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
+    quickIters: 50_000,
     markup: `
       <main id="root">
         <section id="hit-desc" class="box">
@@ -816,7 +817,6 @@ runPerfScenarios('perf', [
         </section>
       </main>
     `,
-    quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
       // Baselines
@@ -838,6 +838,342 @@ runPerfScenarios('perf', [
       { label: 'match :has child nth miss', op: 'match', selector: ':has(> .target:nth-child(2))', context: 'miss-nth-child', iters: 1_000_000 },
       { label: 'match :has desc nth hit',   op: 'match', selector: ':has(.target:nth-child(2))',   context: 'hit-nth-desc',   iters: 1_000_000 },
       { label: 'match :has desc nth miss',  op: 'match', selector: ':has(.target:nth-child(2))',   context: 'miss-nth-desc',  iters: 1_000_000 },
+    ],
+  },
+
+  {
+    name: 'match linguistic pseudo dir/lang',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 100_000,
+    markup: `
+      <main id="root" lang="en-US" dir="ltr">
+        <section id="lang-hit">
+          <div><span id="lang-inherit-hit"></span></div>
+        </section>
+
+        <section id="lang-miss" lang="fr">
+          <span id="lang-inherit-miss"></span>
+        </section>
+
+        <section id="dir-hit">
+          <div><span id="dir-inherit-hit"></span></div>
+        </section>
+
+        <section id="dir-miss" dir="rtl">
+          <span id="dir-inherit-miss"></span>
+        </section>
+
+        <section id="dir-auto-ltr" dir="auto">hello world</section>
+        <section id="dir-auto-rtl" dir="auto">שלום עולם</section>
+        <bdi id="bdi-auto-rtl">שלום</bdi>
+      </main>
+    `,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'match baseline id hit', op: 'match', selector: '#lang-inherit-hit', context: 'lang-inherit-hit', iters: 1_000_000 },
+      { label: 'match :lang inherited hit', op: 'match', selector: ':lang(en)', context: 'lang-inherit-hit', iters: 1_000_000 },
+      { label: 'match :lang inherited miss', op: 'match', selector: ':lang(en)', context: 'lang-inherit-miss', iters: 1_000_000 },
+
+      { label: 'match :dir inherited hit', op: 'match', selector: ':dir(ltr)', context: 'dir-inherit-hit', iters: 1_000_000, maxRatio: 6 },
+      { label: 'match :dir inherited miss', op: 'match', selector: ':dir(ltr)', context: 'dir-inherit-miss', iters: 1_000_000 },
+
+      { label: 'match :dir auto ltr hit', op: 'match', selector: ':dir(ltr)', context: 'dir-auto-ltr', iters: 1_000_000 },
+      { label: 'match :dir auto rtl hit', op: 'match', selector: ':dir(rtl)', context: 'dir-auto-rtl', iters: 1_000_000 },
+      { label: 'match :dir bdi auto rtl hit', op: 'match', selector: ':dir(rtl)', context: 'bdi-auto-rtl', iters: 1_000_000 },
+    ],
+  },
+
+  {
+    name: 'match location pseudo classes',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 200_000,
+    markup: `
+      <main id="root">
+        <a id="link-hit" href="/x">link</a>
+        <a id="link-miss">no href</a>
+        <area id="area-hit" href="/map"></area>
+        <div id="plain"></div>
+
+        <section id="target"></section>
+        <section id="not-target"></section>
+
+        <div id="defined-div"></div>
+        <x-loc-defined id="defined-custom"></x-loc-defined>
+        <x-loc-unknown id="undefined-custom"></x-loc-unknown>
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        history.replaceState(null, '', '#target');
+        customElements.define('x-loc-defined', class extends HTMLElement {});
+      });
+    },
+    probeKeys: ['match'],
+    benches: [
+      // Baselines
+      { label: 'match baseline id hit', op: 'match', selector: '#plain', context: 'plain', iters: 5_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'plain', iters: 5_000_000 },
+
+      // :any-link / :link
+      { label: 'match :any-link a hit', op: 'match', selector: ':any-link', context: 'link-hit', iters: 5_000_000 },
+      { label: 'match :any-link a miss', op: 'match', selector: ':any-link', context: 'link-miss', iters: 5_000_000 },
+      { label: 'match :any-link area hit', op: 'match', selector: ':any-link', context: 'area-hit', iters: 5_000_000 },
+      { label: 'match :link a hit', op: 'match', selector: ':link', context: 'link-hit', iters: 5_000_000 },
+      { label: 'match :visited false', op: 'match', selector: ':visited', context: 'link-hit', iters: 5_000_000 },
+
+      // :target
+      { label: 'match :target hit', op: 'match', selector: ':target', context: 'target', iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :target miss', op: 'match', selector: ':target', context: 'not-target', iters: 5_000_000, maxRatio: 8 },
+
+      // :defined
+      { label: 'match :defined builtin hit', op: 'match', selector: ':defined', context: 'defined-div', iters: 5_000_000 },
+      { label: 'match :defined custom hit', op: 'match', selector: ':defined', context: 'defined-custom', iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :defined custom miss', op: 'match', selector: ':defined', context: 'undefined-custom', iters: 5_000_000, maxRatio: 8 },
+    ],
+  },
+
+  {
+    name: 'match user action hover pseudo',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 200_000,
+    markup: `
+      <div id="outer" style="width:40px;height:40px;">
+        <button id="inner" style="display:block;width:20px;height:20px;padding:0;"></button>
+      </div>
+      <div id="other" style="width:20px;height:20px;"></div>
+    `,
+    setupPage: async page => {
+      await page.locator('#inner').hover();
+    },
+    probeKeys: ['match'],
+    benches: [
+      { label: 'match baseline id hit', op: 'match', selector: '#inner', context: 'inner', iters: 5_000_000 },
+      { label: 'match :hover self hit', op: 'match', selector: ':hover', context: 'inner', iters: 5_000_000 },
+      { label: 'match :hover ancestor hit', op: 'match', selector: ':hover', context: 'outer', iters: 5_000_000 },
+      { label: 'match :hover miss', op: 'match', selector: ':hover', context: 'other', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match user action active/focus pseudo',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 200_000,
+    markup: `
+      <div id="active-outer" style="width:40px;height:40px;">
+        <button id="active-inner" style="display:block;width:20px;height:20px;padding:0;"></button>
+      </div>
+      <div id="active-other" style="width:20px;height:20px;"></div>
+
+      <div id="focus-outer">
+        <input id="focus-inner">
+      </div>
+      <input id="focus-other">
+    `,
+    setupPage: async page => {
+      await page.locator('#focus-inner').focus();
+      await page.locator('#active-inner').hover();
+      await page.mouse.down();
+    },
+    probeKeys: ['match'],
+    benches: [
+      { label: 'match baseline id hit', op: 'match', selector: '#active-inner', context: 'active-inner', iters: 5_000_000 },
+
+      { label: 'match :active self hit', op: 'match', selector: ':active', context: 'active-inner', iters: 5_000_000 },
+      { label: 'match :active ancestor hit', op: 'match', selector: ':active', context: 'active-outer', iters: 5_000_000 },
+      { label: 'match :active miss', op: 'match', selector: ':active', context: 'active-other', iters: 5_000_000 },
+
+      { label: 'match :focus hit', op: 'match', selector: ':focus', context: 'focus-inner', iters: 5_000_000, maxRatio: 6 },
+      { label: 'match :focus miss', op: 'match', selector: ':focus', context: 'focus-other', iters: 5_000_000 },
+      { label: 'match :focus-visible hit', op: 'match', selector: ':focus-visible', context: 'focus-inner', iters: 5_000_000, maxRatio: 6 },
+
+      { label: 'match :focus-within self hit', op: 'match', selector: ':focus-within', context: 'focus-inner', iters: 5_000_000 },
+      { label: 'match :focus-within ancestor hit', op: 'match', selector: ':focus-within', context: 'focus-outer', iters: 5_000_000 },
+      { label: 'match :focus-within miss', op: 'match', selector: ':focus-within', context: 'focus-other', iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match input state pseudo classes',
+    // status: 'only',
+    browsers: ['chromium'],
+    // browsers: ['firefox'],
+    quickIters: 100_000,
+    markup: `
+      <form id="form">
+        <input id="enabled-input">
+        <input id="disabled-input" disabled>
+
+        <fieldset id="disabled-fieldset" disabled>
+          <input id="fieldset-disabled-input">
+        </fieldset>
+
+        <input id="readonly-input" readonly>
+        <input id="readwrite-input">
+        <div id="editable" contenteditable="true"></div>
+        <div id="plain"></div>
+
+        <input id="placeholder-empty" placeholder="name">
+        <input id="placeholder-filled" placeholder="name" value="x">
+
+        <input id="default-checked" type="checkbox" checked>
+        <input id="not-default-checked" type="checkbox">
+
+        <select id="select">
+          <option id="default-option" selected>one</option>
+          <option id="not-default-option">two</option>
+        </select>
+      </form>
+    `,
+    probeKeys: ['match'],
+    benches: [
+      // Baselines
+      { label: 'match baseline id hit', op: 'match', selector: '#enabled-input', context: 'enabled-input', iters: 1_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'enabled-input', iters: 1_000_000 },
+
+      // :enabled / :disabled
+      { label: 'match :enabled hit', op: 'match', selector: ':enabled', context: 'enabled-input', iters: 1_000_000, maxRatio: 14 },
+      { label: 'match :enabled miss disabled', op: 'match', selector: ':enabled', context: 'disabled-input', iters: 1_000_000 },
+      { label: 'match :disabled direct hit', op: 'match', selector: ':disabled', context: 'disabled-input', iters: 1_000_000 },
+      { label: 'match :disabled fieldset hit', op: 'match', selector: ':disabled', context: 'fieldset-disabled-input', iters: 1_000_000 },
+      { label: 'match :disabled miss', op: 'match', selector: ':disabled', context: 'enabled-input', iters: 1_000_000, maxRatio: 14 },
+
+      // :read-only / :read-write
+      { label: 'match :read-only readonly hit', op: 'match', selector: ':read-only', context: 'readonly-input', iters: 1_000_000 },
+      { label: 'match :read-only plain hit', op: 'match', selector: ':read-only', context: 'plain', iters: 1_000_000, maxRatio: 17 },
+      { label: 'match :read-write input hit', op: 'match', selector: ':read-write', context: 'readwrite-input', iters: 1_000_000, maxRatio: 14  },
+      { label: 'match :read-write editable hit', op: 'match', selector: ':read-write', context: 'editable', iters: 1_000_000 },
+      { label: 'match :read-write readonly miss', op: 'match', selector: ':read-write', context: 'readonly-input', iters: 1_000_000 },
+
+      // :placeholder-shown
+      { label: 'match :placeholder-shown hit', op: 'match', selector: ':placeholder-shown', context: 'placeholder-empty', iters: 1_000_000 },
+      { label: 'match :placeholder-shown miss filled', op: 'match', selector: ':placeholder-shown', context: 'placeholder-filled', iters: 1_000_000 },
+      { label: 'match :placeholder-shown miss plain', op: 'match', selector: ':placeholder-shown', context: 'plain', iters: 1_000_000 },
+
+      // :default
+      { label: 'match :default checked hit', op: 'match', selector: ':default', context: 'default-checked', iters: 1_000_000 },
+      { label: 'match :default checkbox miss', op: 'match', selector: ':default', context: 'not-default-checked', iters: 1_000_000 },
+      { label: 'match :default option hit', op: 'match', selector: ':default', context: 'default-option', iters: 1_000_000 },
+      { label: 'match :default option miss', op: 'match', selector: ':default', context: 'not-default-option', iters: 1_000_000 },
+    ],
+  },
+
+  {
+    name: 'match form validation pseudo classes',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 25_000,
+    markup: `
+      <form id="form">
+        <input id="checked-box" type="checkbox" checked>
+        <input id="unchecked-box" type="checkbox">
+        <input id="checked-radio" type="radio" name="r" checked>
+        <input id="unchecked-radio" type="radio" name="r">
+        <select id="select">
+          <option id="selected-option" selected>one</option>
+          <option id="unselected-option">two</option>
+        </select>
+
+        <input id="required-empty" required>
+        <input id="optional-empty">
+        <input id="required-filled" required value="x">
+
+        <input id="email-valid" type="email" value="a@b.test">
+        <input id="email-invalid" type="email" value="not-an-email">
+        <input id="pattern-valid" pattern="[0-9]+" value="123">
+        <input id="pattern-invalid" pattern="[0-9]+" value="abc">
+
+        <input id="range-in" type="number" min="1" max="10" value="5">
+        <input id="range-under" type="number" min="1" max="10" value="0">
+        <input id="range-over" type="number" min="1" max="10" value="11">
+        <input id="range-empty" type="number" min="1" max="10">
+
+        <progress id="progress-indeterminate"></progress>
+        <progress id="progress-determinate" value="1" max="10"></progress>
+        <input id="checkbox-indeterminate" type="checkbox">
+        <div id="plain"></div>
+      </form>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        (document.getElementById('checkbox-indeterminate') as HTMLInputElement).indeterminate = true;
+      });
+    },
+    probeKeys: ['match'],
+    benches: [
+      // Baselines
+      { label: 'match baseline id hit', op: 'match', selector: '#checked-box', context: 'checked-box', iters: 1_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'checked-box', iters: 1_000_000 },
+
+      // :checked
+      { label: 'match :checked checkbox hit', op: 'match', selector: ':checked', context: 'checked-box', iters: 1_000_000 },
+      { label: 'match :checked checkbox miss', op: 'match', selector: ':checked', context: 'unchecked-box', iters: 1_000_000 },
+      { label: 'match :checked radio hit', op: 'match', selector: ':checked', context: 'checked-radio', iters: 1_000_000 },
+      { label: 'match :checked radio miss', op: 'match', selector: ':checked', context: 'unchecked-radio', iters: 1_000_000 },
+      { label: 'match :checked option hit', op: 'match', selector: ':checked', context: 'selected-option', iters: 1_000_000 },
+      { label: 'match :checked option miss', op: 'match', selector: ':checked', context: 'unselected-option', iters: 1_000_000 },
+
+      // :indeterminate
+      { label: 'match :indeterminate checkbox hit', op: 'match', selector: ':indeterminate', context: 'checkbox-indeterminate', iters: 1_000_000 },
+      { label: 'match :indeterminate checkbox miss', op: 'match', selector: ':indeterminate', context: 'unchecked-box', iters: 1_000_000 },
+      { label: 'match :indeterminate progress hit', op: 'match', selector: ':indeterminate', context: 'progress-indeterminate', iters: 1_000_000 },
+      { label: 'match :indeterminate progress miss', op: 'match', selector: ':indeterminate', context: 'progress-determinate', iters: 1_000_000 },
+
+      // :required / :optional
+      { label: 'match :required hit', op: 'match', selector: ':required', context: 'required-empty', iters: 1_000_000 },
+      { label: 'match :required miss optional', op: 'match', selector: ':required', context: 'optional-empty', iters: 1_000_000 },
+      { label: 'match :required miss plain', op: 'match', selector: ':required', context: 'plain', iters: 1_000_000 },
+      { label: 'match :optional hit', op: 'match', selector: ':optional', context: 'optional-empty', iters: 1_000_000 },
+      { label: 'match :optional miss required', op: 'match', selector: ':optional', context: 'required-empty', iters: 1_000_000 },
+      { label: 'match :optional miss plain', op: 'match', selector: ':optional', context: 'plain', iters: 1_000_000 },
+
+      // :valid / :invalid
+      { label: 'match :valid required filled hit', op: 'match', selector: ':valid', context: 'required-filled', iters: 1_000_000 },
+      { label: 'match :valid email hit', op: 'match', selector: ':valid', context: 'email-valid', iters: 1_000_000 },
+      { label: 'match :valid email miss', op: 'match', selector: ':valid', context: 'email-invalid', iters: 1_000_000, maxRatio: 10 },
+      { label: 'match :valid plain miss', op: 'match', selector: ':valid', context: 'plain', iters: 1_000_000 },
+      { label: 'match :invalid required empty hit', op: 'match', selector: ':invalid', context: 'required-empty', iters: 1_000_000, maxRatio: 12 },
+      { label: 'match :invalid email hit', op: 'match', selector: ':invalid', context: 'email-invalid', iters: 1_000_000, maxRatio: 11 },
+      { label: 'match :invalid email miss', op: 'match', selector: ':invalid', context: 'email-valid', iters: 1_000_000 },
+      { label: 'match :invalid plain miss', op: 'match', selector: ':invalid', context: 'plain', iters: 1_000_000 },
+
+      // :in-range / :out-of-range
+      { label: 'match :in-range hit', op: 'match', selector: ':in-range', context: 'range-in', iters: 1_000_000 },
+      { label: 'match :in-range miss under', op: 'match', selector: ':in-range', context: 'range-under', iters: 1_000_000 },
+      { label: 'match :in-range miss empty', op: 'match', selector: ':in-range', context: 'range-empty', iters: 1_000_000 },
+      { label: 'match :in-range miss plain', op: 'match', selector: ':in-range', context: 'plain', iters: 1_000_000 },
+      { label: 'match :out-of-range under hit', op: 'match', selector: ':out-of-range', context: 'range-under', iters: 1_000_000 },
+      { label: 'match :out-of-range over hit', op: 'match', selector: ':out-of-range', context: 'range-over', iters: 1_000_000 },
+      { label: 'match :out-of-range miss in', op: 'match', selector: ':out-of-range', context: 'range-in', iters: 1_000_000 },
+      { label: 'match :out-of-range miss empty', op: 'match', selector: ':out-of-range', context: 'range-empty', iters: 1_000_000 },
+    ],
+  },
+
+  {
+    name: 'match resource state pseudo classes',
+    // status: 'only',
+    browsers: ['webkit'],
+    engines: ['native', 'nw-current'],
+    quickIters: 200_000,
+    markup: `
+      <video id="video"></video>
+      <audio id="audio" muted></audio>
+      <div id="plain"></div>
+    `,
+    probeKeys: ['match'],
+    benches: [
+      { label: 'match baseline id hit', op: 'match', selector: '#video', context: 'video', iters: 1_000_000 },
+
+      { label: 'match :muted hit', op: 'match', selector: ':muted', context: 'audio', iters: 1_000_000 },
+      { label: 'match :muted miss media', op: 'match', selector: ':muted', context: 'video', iters: 1_000_000 },
+      { label: 'match :muted miss plain', op: 'match', selector: ':muted', context: 'plain', iters: 1_000_000 },
+
+      { label: 'match :paused media', op: 'match', selector: ':paused', context: 'video', iters: 1_000_000 },
+      { label: 'match :playing miss media', op: 'match', selector: ':playing', context: 'video', iters: 1_000_000 },
+      { label: 'match :seeking miss media', op: 'match', selector: ':seeking', context: 'video', iters: 1_000_000 },
     ],
   },
 

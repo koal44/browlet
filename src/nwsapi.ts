@@ -384,6 +384,7 @@ export function initSnapshot(doc: Document) {
     matchLang: matchLang,
     defined: (element: Element) => isDefined(element, snap),
     isDisabled: isDisabled,
+    isEnabled: isEnabled,
     isReadWrite: isReadWrite,
     isFormStateElement: isFormStateElement,
     isPlaceholderShown: isPlaceholderShown,
@@ -392,8 +393,8 @@ export function initSnapshot(doc: Document) {
     isIndeterminate: isIndeterminate,
     isRequired: isRequired,
     isOptional: isOptional,
-    isValid: (e: Element) => isValid(e, snap),
-    isInvalid: (e: Element) => isInvalid(e, snap),
+    isValid: isValid,
+    isInvalid: isInvalid,
     isInRange: isInRange,
     isOutOfRange: isOutOfRange,
     isPlaying: isPlaying,
@@ -1152,15 +1153,13 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): 
 
 function isFocused(node: Element, snap: Snapshot): boolean {
   const doc = node.ownerDocument;
-
-  if (!doc || !doc.hasFocus()) return false;
-  if (isIFrame(node)) return false;
+  if (!doc || isIFrame(node)) return false;
 
   if (node === doc.body || node === doc.documentElement) {
-    return node === snap.focusTarget;
+    return node === snap.focusTarget && doc.hasFocus();
   }
 
-  return node === doc.activeElement;
+  return node === doc.activeElement && doc.hasFocus();
 }
 
 function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, h: HashCache): boolean {
@@ -1221,28 +1220,22 @@ function nextDescendant(root: Element, node: Element): Element | null {
   return null;
 }
 
-function matchLang(value: string, element: Element): boolean {
-  const wanted = value.toLowerCase();
+function matchLang(wanted: string, element: Element): boolean {
+  const n = wanted.length;
 
   for (let node: Element | null = element; node; node = node.parentElement) {
     const actual = node.getAttribute('lang');
 
     if (actual) {
       const lang = actual.toLowerCase();
-      return lang === wanted || lang.startsWith(wanted + '-');
+      return lang === wanted || (lang.length > n && lang.charAt(n) === '-' && lang.startsWith(wanted));
     }
   }
 
   return false;
 }
 
-function matchDir(value: string, element: Element): boolean {
-  const wanted = value.toLowerCase();
-
-  if (wanted !== 'ltr' && wanted !== 'rtl') {
-    return false;
-  }
-
+function matchDir(wanted: string, element: Element): boolean {
   for (let node: Element | null = element; node; node = node.parentElement) {
     const actual = node.getAttribute('dir');
 
@@ -1318,7 +1311,14 @@ function isDefined(element: Element, snap: Snapshot): boolean {
 }
 
 function isDisabled(e: Element): boolean {
-  if (!isFormStateElement(e)) return false;
+  return isFormStateElement(e) && isDisabledFormStateElement(e);
+}
+
+function isEnabled(e: Element): boolean {
+  return isFormStateElement(e) && !isDisabledFormStateElement(e);
+}
+
+function isDisabledFormStateElement(e: FormStateElement): boolean {
   if (e.disabled) return true;
 
   if (isHtmlOption(e)) {
@@ -1328,15 +1328,20 @@ function isDisabled(e: Element): boolean {
 
   if (isHtmlOptGroup(e)) return false;
 
+  // Ancestor disabled fieldsets may disable form controls, unless the control is
+  // inside that fieldset's first legend child.
   for (let n = e.parentElement; n; n = n.parentElement) {
-    if (!isHtmlFieldSet(n) || !n.disabled) continue;
+    if (!(n as HTMLFieldSetElement).disabled || !isHtmlFieldSet(n)) continue; // re-ordered for perf
 
-    for (const child of n.children) {
-      if (isHtmlLegend(child)) {
-        return !child.contains(e);
-      }
+    let exempt = false;
+
+    for (let child = n.firstElementChild; child; child = child.nextElementSibling) {
+      if (!isHtmlLegend(child)) continue;
+      exempt = child.contains(e);
+      break;
     }
 
+    if (exempt) continue;
     return true;
   }
 
@@ -1523,19 +1528,11 @@ function isOptional(e: Element): boolean {
   return false;
 }
 
-// function isFormValueElement(e: Element): e is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement {
-//   return isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e);
-// }
-
-// function isOptional(e: Element): boolean {
-//   return isFormValueElement(e) && !isRequired(e);
-// }
-
-function isInvalid(e: Element, snap: Snapshot): boolean {
+function isInvalid(e: Element): boolean {
   if (isHtmlForm(e)) return !e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return !!snap.first(':invalid', e);
+    return hasInvalidDescendant(e);
   }
 
   if (isValidityElement(e)) {
@@ -1545,11 +1542,11 @@ function isInvalid(e: Element, snap: Snapshot): boolean {
   return false;
 }
 
-function isValid(e: Element, snap: Snapshot): boolean {
+function isValid(e: Element): boolean {
   if (isHtmlForm(e)) return e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return !snap.first(':invalid', e);
+    return !hasInvalidDescendant(e);
   }
 
   if (isValidityElement(e)) {
@@ -1559,32 +1556,40 @@ function isValid(e: Element, snap: Snapshot): boolean {
   return false;
 }
 
-type ValidityElement =
-  HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLObjectElement |
-  HTMLOutputElement | HTMLSelectElement | HTMLTextAreaElement;
-
-function isValidityElement(e: Element): e is ValidityElement {
-  return 'willValidate' in e && typeof (e as ValidityElement).checkValidity === 'function';
+function hasInvalidDescendant(root: Element): boolean {
+  for (let node = root.firstElementChild; node; node = nextDescendant(root, node)) {
+    if (isInvalid(node)) return true;
+  }
+  return false;
 }
 
-const RANGE_INPUT_TYPES = new Set(['date', 'datetime-local', 'month', 'number', 'range', 'time', 'week']);
 function isRangeInput(e: Element): e is HTMLInputElement {
-  return isHtmlInput(e) &&
-    RANGE_INPUT_TYPES.has(e.type) &&
-    (e.type === 'range' || e.hasAttribute('min') || e.hasAttribute('max'));
+  if (!isHtmlInput(e)) return false;
+
+  switch (e.type) {
+    case 'range':
+      return true;
+
+    case 'date': case 'datetime-local': case 'month': case 'number': case 'time': case 'week':
+      return e.hasAttribute('min') || e.hasAttribute('max');
+
+    default:
+      return false;
+  }
 }
 
 function isInRange(e: Element): boolean {
-  return isRangeInput(e) &&
-    e.willValidate &&
-    !e.validity.rangeUnderflow &&
-    !e.validity.rangeOverflow;
+  if (!isRangeInput(e) || !e.willValidate) return false;
+
+  const validity = e.validity;
+  return !validity.rangeUnderflow && !validity.rangeOverflow;
 }
 
 function isOutOfRange(e: Element): boolean {
-  return isRangeInput(e) &&
-    e.willValidate &&
-    (e.validity.rangeUnderflow || e.validity.rangeOverflow);
+  if (!isRangeInput(e) || !e.willValidate) return false;
+
+  const validity = e.validity;
+  return validity.rangeUnderflow || validity.rangeOverflow;
 }
 
 function getMediaElement(e: Element): HTMLMediaElement | null {
@@ -1726,7 +1731,7 @@ function isHtmlMediaElement(e: Element): e is HTMLMediaElement {
 }
 
 function isIFrame(e: Element): e is HTMLIFrameElement {
-  return e.localName === 'iframe' && 'contentWindow' in e;
+  return e.localName === 'iframe';
 }
 
 function isHtmlInput(e: Element): e is HTMLInputElement {
@@ -1773,6 +1778,14 @@ function isHtmlSelect(e: Element): e is HTMLSelectElement {
 
 function isHtmlForm(e: Element): e is HTMLFormElement {
   return e.localName === 'form';
+}
+
+type ValidityElement =
+  HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLObjectElement |
+  HTMLOutputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+function isValidityElement(e: Element): e is ValidityElement {
+  return 'willValidate' in e;
 }
 
 
@@ -2560,12 +2573,14 @@ function compileSelector(
         // :dir(ltr / rtl), :lang(en)
         else if ((match = selector.match(snap.re.Patterns.linguistic))) {
           const pseudo = match[1].toLowerCase();
-          const expr = match[2].replace(snap.re.TrimSpaces, '');
+          const expr = match[2].replace(snap.re.TrimSpaces, '').toLowerCase();
           const exprLit = JSON.stringify(expr);
 
           switch (pseudo) {
             case 'dir':
-              source = `if(s.matchDir(${exprLit},e)){${source}}`;
+              source = expr === 'ltr' || expr === 'rtl'
+                ? `if(s.matchDir(${exprLit},e)){${source}}`
+                : `if(false){${source}}`;
               break;
 
             case 'lang':
@@ -2585,7 +2600,7 @@ function compileSelector(
           switch (pseudo) {
             case 'any-link':
             case 'link':
-              source = `if((/^(?:a|area)$/i.test(e.localName)&&e.hasAttribute("href"))){${source}}`;
+              source = `if(((e.localName==="a"||e.localName==="area"||((m=e.localName.toLowerCase())==="a"||m==="area"))&&e.hasAttribute("href"))){${source}}`;
               break;
 
             case 'visited':
@@ -2594,7 +2609,7 @@ function compileSelector(
               break;
 
             case 'target':
-              source = `if(((s.doc.compareDocumentPosition(e)&16)&&s.doc.location.hash&&e.id===s.doc.location.hash.slice(1))){${source}}`;
+              source = `if((m=s.doc.location.hash).length>1&&e.id===m.slice(1)&&(s.doc.compareDocumentPosition(e)&16)){${source}}`;
               break;
 
             case 'defined':
@@ -2651,7 +2666,7 @@ function compileSelector(
           const pseudo = match[1].toLowerCase();
           switch (pseudo) {
             case 'enabled':
-              source = `if(s.isFormStateElement(e)&&!s.isDisabled(e)){${source}}`;
+              source = `if(s.isEnabled(e)){${source}}`;
               break;
 
             case 'disabled':

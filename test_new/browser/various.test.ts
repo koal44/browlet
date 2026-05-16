@@ -5634,4 +5634,151 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'fieldset validity checks descendant invalid controls',
+    // status: 'only',
+    markup: `
+      <fieldset id="bad-fs">
+        <input id="bad" required>
+      </fieldset>
+      <fieldset id="good-fs">
+        <input id="good" required value="x">
+      </fieldset>
+    `,
+    cases: [
+      { select: '#bad-fs:invalid', expect: { ids: ['bad-fs'] } },
+      { select: '#good-fs:invalid', expect: { ids: [] } },
+      { select: '#bad-fs:valid', expect: { ids: [] } },
+      { select: '#good-fs:valid', expect: { ids: ['good-fs'] } },
+    ],
+  },
+
+  {
+    name: 'fieldset-disabled/inner-first-legend-does-not-escape-outer-fieldset',
+    // status: 'only',
+    browsers: ['chromium', 'firefox'], // webkit is bugged
+    markup: `
+      <fieldset id="outer" disabled>
+        <legend id="outer-legend">outer legend</legend>
+
+        <fieldset id="inner" disabled>
+          <legend id="inner-legend">
+            <input id="x">
+          </legend>
+        </fieldset>
+      </fieldset>
+    `,
+    cases: [
+      { select: '#x:disabled', expect: { ids: ['x'] } },
+      { select: '#x:enabled', expect: { ids: [] } },
+
+      { match: ':disabled', ref: { by: 'id', id: 'x' }, expect: { count: 1 } },
+      { match: ':enabled', ref: { by: 'id', id: 'x' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'fieldset-disabled/first-legend-escapes-own-fieldset',
+    // status: 'only',
+    markup: `
+      <fieldset id="inner" disabled>
+        <legend id="inner-legend">
+          <input id="x">
+        </legend>
+      </fieldset>
+    `,
+    cases: [
+      { select: '#x:enabled', expect: { ids: ['x'] } },
+      { select: '#x:disabled', expect: { ids: [] } },
+      { match: ':enabled', ref: { by: 'id', id: 'x' }, expect: { count: 1 } },
+      { match: ':disabled', ref: { by: 'id', id: 'x' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'fieldset-disabled/first-legend-child-vs-nested-legend',
+    // status: 'only',
+    markup: `
+      <fieldset id="first-legend-child" disabled>
+        <div id="before-legend"></div>
+        <legend id="direct-legend">
+          <input id="direct-legend-input">
+        </legend>
+        <input id="direct-outside-input">
+      </fieldset>
+
+      <fieldset id="nested-legend-fieldset" disabled>
+        <div id="legend-wrapper">
+          <legend id="nested-legend">
+            <input id="nested-legend-input">
+          </legend>
+        </div>
+        <input id="nested-outside-input">
+      </fieldset>
+    `,
+    cases: [
+      // First legend *child* exempts descendants, even if not first element child.
+      { select: '#direct-legend-input:enabled', expect: { ids: ['direct-legend-input'] } },
+      { select: '#direct-legend-input:disabled', expect: { ids: [] } },
+      { match: ':enabled', ref: { by: 'id', id: 'direct-legend-input' }, expect: { count: 1 } },
+      { match: ':disabled', ref: { by: 'id', id: 'direct-legend-input' }, expect: { count: 0 } },
+
+      // Non-legend descendants outside the first legend child are disabled.
+      { select: '#direct-outside-input:disabled', expect: { ids: ['direct-outside-input'] } },
+      { select: '#direct-outside-input:enabled', expect: { ids: [] } },
+      { match: ':disabled', ref: { by: 'id', id: 'direct-outside-input' }, expect: { count: 1 } },
+      { match: ':enabled', ref: { by: 'id', id: 'direct-outside-input' }, expect: { count: 0 } },
+
+      // A nested legend is not a legend child of the fieldset, so it does not exempt.
+      { select: '#nested-legend-input:disabled', expect: { ids: ['nested-legend-input'] } },
+      { select: '#nested-legend-input:enabled', expect: { ids: [] } },
+      { match: ':disabled', ref: { by: 'id', id: 'nested-legend-input' }, expect: { count: 1 } },
+      { match: ':enabled', ref: { by: 'id', id: 'nested-legend-input' }, expect: { count: 0 } },
+
+      // Ordinary descendant also disabled.
+      { select: '#nested-outside-input:disabled', expect: { ids: ['nested-outside-input'] } },
+      { select: '#nested-outside-input:enabled', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'form-validation/empty-range-limited-inputs',
+    // status: 'only',
+    markup: `
+      <input id="empty-number" type="number" min="1" max="10">
+      <input id="empty-date" type="date" min="2020-01-01" max="2020-12-31">
+      <input id="empty-required-number" type="number" min="1" max="10" required>
+      <input id="in-number" type="number" min="1" max="10" value="5">
+      <input id="under-number" type="number" min="1" max="10" value="0">
+      <input id="over-number" type="number" min="1" max="10" value="11">
+    `,
+    cases: [
+      { select: '#empty-number:in-range', expect: { ids: ['empty-number'] } },
+      { select: '#empty-number:out-of-range', expect: { ids: [] } },
+      { match: ':in-range', ref: { by: 'id', id: 'empty-number' }, expect: { count: 1 } },
+      { match: ':out-of-range', ref: { by: 'id', id: 'empty-number' }, expect: { count: 0 } },
+
+      { select: '#empty-date:in-range', expect: { ids: ['empty-date'] }, browsers: ['chromium', 'firefox'] },
+      { select: '#empty-date:in-range', expect: { ids: [] }, browsers: ['webkit'] },
+      { select: '#empty-date:out-of-range', expect: { ids: [] } },
+      { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 1 }, browsers: ['chromium', 'firefox'] },
+      { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 0 }, browsers: ['webkit'] },
+      { match: ':out-of-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 0 } },
+
+      // Even required-empty is invalid for valueMissing, not rangeUnderflow/rangeOverflow.
+      { select: '#empty-required-number:in-range', expect: { ids: ['empty-required-number'] } },
+      { select: '#empty-required-number:out-of-range', expect: { ids: [] } },
+      { select: '#empty-required-number:invalid', expect: { ids: ['empty-required-number'] } },
+
+      { select: '#in-number:in-range', expect: { ids: ['in-number'] } },
+      { select: '#in-number:out-of-range', expect: { ids: [] } },
+
+      { select: '#under-number:out-of-range', expect: { ids: ['under-number'] } },
+      { select: '#under-number:in-range', expect: { ids: [] } },
+
+      { select: '#over-number:out-of-range', expect: { ids: ['over-number'] } },
+      { select: '#over-number:in-range', expect: { ids: [] } },
+    ],
+  },
+
 ]);

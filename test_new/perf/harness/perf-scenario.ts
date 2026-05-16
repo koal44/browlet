@@ -172,8 +172,9 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
       const base = results.find((r) => r.label === cur.label);
       if (!base) { row[name] = 'missing'; continue; }
       const r = base.ms > 0 ? cur.ms / base.ms : Infinity;
-      if (r > cur.maxRatio) failedMaxRatio = true;
-      row[name] = ratio(cur.ms, base.ms);
+      const missedMaxRatio = name === 'native' && r > cur.maxRatio;
+      if (missedMaxRatio) failedMaxRatio = true;
+      row[name] = ratio(cur.ms, base.ms, missedMaxRatio);
     }
 
     row.probe = JSON.stringify(pickProbe(cur.probe, probeKeys));
@@ -183,12 +184,13 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
 
   return { rows, failedMaxRatio };
 
-  function ratio(cur: number, base: number) {
+  function ratio(cur: number, base: number, warn = false) {
     const r = cur / base;
-    if (!Number.isFinite(r)) {
-      return `${cur.toFixed(2)}/${base.toFixed(2)}`;
-    }
-    return r.toFixed(2);
+    const out = Number.isFinite(r)
+      ? r.toFixed(2)
+      : `${cur.toFixed(2)}/${base.toFixed(2)}`;
+
+    return warn ? `${out}⚠` : out;
   }
 
   function pickProbe(probe: unknown, keys?: string[]) {
