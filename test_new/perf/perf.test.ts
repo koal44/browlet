@@ -12,31 +12,31 @@ runPerfScenarios('perf', [
     markup: htmlStandard,
     probeKeys: ['select', 'selBuild', 'match', 'matBuild'],
     benches: [
-      { label: 'select div',                op: 'select', selector: 'div',                    context: null, iters: 200 },
-      { label: 'select .comment',           op: 'select', selector: '.comment',               context: null, iters: 200 },
-      { label: 'select [data-testid]',      op: 'select', selector: '[data-testid]',          context: null, iters: 200 },
-      { label: 'select a[href*="commits"]', op: 'select', selector: 'a[href*="commits"]',     context: null, iters: 200 },
-      { label: 'select textarea',           op: 'select', selector: 'textarea',               context: null, iters: 200 },
-      { label: 'select button',             op: 'select', selector: 'button',                 context: null, iters: 200 },
-      { label: 'select [popover]',          op: 'select', selector: '[popover]',              context: null, iters: 200 },
-      { label: 'select :not(button)',       op: 'select', selector: ':not(button)',           context: null, iters: 200 },
-      { label: 'select :is(div, span, a)',  op: 'select', selector: ':is(div, span, a)',      context: null, iters: 200 },
+      { label: 'select div',                op: 'select', selector: 'div',                   iters: 200 },
+      { label: 'select .comment',           op: 'select', selector: '.comment',              iters: 200 },
+      { label: 'select [data-testid]',      op: 'select', selector: '[data-testid]',         iters: 200 },
+      { label: 'select a[href*="commits"]', op: 'select', selector: 'a[href*="commits"]',    iters: 200 },
+      { label: 'select textarea',           op: 'select', selector: 'textarea',              iters: 200 },
+      { label: 'select button',             op: 'select', selector: 'button',                iters: 200 },
+      { label: 'select [popover]',          op: 'select', selector: '[popover]',             iters: 200 },
+      { label: 'select :not(button)',       op: 'select', selector: ':not(button)',          iters: 200 },
+      { label: 'select :is(div, span, a)',  op: 'select', selector: ':is(div, span, a)',     iters: 200 },
 
-      { label: 'first div',                 op: 'first', selector: 'div',                    context: null, iters: 500 },
-      { label: 'first .comment',            op: 'first', selector: '.comment',               context: null, iters: 500 },
-      { label: 'first [data-testid]',       op: 'first', selector: '[data-testid]',          context: null, iters: 500 },
-      { label: 'first a[href*="commits"]',  op: 'first', selector: 'a[href*="commits"]',     context: null, iters: 500 },
-      { label: 'first textarea',            op: 'first', selector: 'textarea',               context: null, iters: 500 },
-      { label: 'first button',              op: 'first', selector: 'button',                 context: null, iters: 500 },
-      { label: 'first [popover]',           op: 'first', selector: '[popover]',              context: null, iters: 500 },
-      { label: 'first :not(button)',        op: 'first', selector: ':not(button)',           context: null, iters: 500 },
-      { label: 'first :is(div, span, a)',   op: 'first', selector: ':is(div, span, a)',      context: null, iters: 500 },
+      { label: 'first div',                 op: 'first', selector: 'div',                    iters: 500 },
+      { label: 'first .comment',            op: 'first', selector: '.comment',               iters: 500 },
+      { label: 'first [data-testid]',       op: 'first', selector: '[data-testid]',          iters: 500 },
+      { label: 'first a[href*="commits"]',  op: 'first', selector: 'a[href*="commits"]',     iters: 500 },
+      { label: 'first textarea',            op: 'first', selector: 'textarea',               iters: 500 },
+      { label: 'first button',              op: 'first', selector: 'button',                 iters: 500 },
+      { label: 'first [popover]',           op: 'first', selector: '[popover]',              iters: 500 },
+      { label: 'first :not(button)',        op: 'first', selector: ':not(button)',           iters: 500 },
+      { label: 'first :is(div, span, a)',   op: 'first', selector: ':is(div, span, a)',      iters: 500 },
 
-      { label: 'match walk remove group',   op: 'matchWalk', context: null, selectors: ['button', '[popover]', '[data-testid="author-avatar"]'], iters: 20 },
-      { label: 'match walk replace group',  op: 'matchWalk', context: null, selectors: ['textarea', 'div', 'p'], iters: 20 },
-      { label: 'match walk links group',    op: 'matchWalk', context: null, selectors: ['a[href*="commits"]', '[class*="codeBlobInner"] textarea'], iters: 20 },
-      { label: 'match walk code group',     op: 'matchWalk', context: null, selectors: ['pre', 'code', '.highlight'], iters: 20 },
-      { label: 'walk only',                 op: 'matchWalk', context: null, selectors: [], iters: 50 },
+      { label: 'match walk remove group',   op: 'matchWalk', selectors: ['button', '[popover]', '[data-testid="author-avatar"]'], iters: 20 },
+      { label: 'match walk replace group',  op: 'matchWalk', selectors: ['textarea', 'div', 'p'], iters: 20 },
+      { label: 'match walk links group',    op: 'matchWalk', selectors: ['a[href*="commits"]', '[class*="codeBlobInner"] textarea'], iters: 20 },
+      { label: 'match walk code group',     op: 'matchWalk', selectors: ['pre', 'code', '.highlight'], iters: 20 },
+      { label: 'walk only',                 op: 'matchWalk', selectors: [], iters: 50 },
     ],
   },
 
@@ -48,7 +48,7 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     quickIters: 200_000,
     benches: [
-      { label: 'match universal hit', op: 'match', selector: '*', context: 'hit', iters: 5_000_000 },
+      { label: 'match universal hit', op: 'match', selector: '*', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -63,8 +63,8 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'match id hit',  op: 'match', selector: '#search-icon', context: 'search-icon', iters: 5_000_000 },
-      { label: 'match id miss', op: 'match', selector: '#search-icon', context: 'miss',        iters: 5_000_000 },
+      { label: 'match id hit',  op: 'match', selector: '#search-icon', ref: { by: 'id', id: 'search-icon' }, iters: 5_000_000 },
+      { label: 'match id miss', op: 'match', selector: '#search-icon', ref: { by: 'id', id: 'miss' },        iters: 5_000_000 },
     ],
   },
 
@@ -79,8 +79,8 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'match class hit',  op: 'match', selector: '.octicon', context: 'hit',  iters: 5_000_000 },
-      { label: 'match class miss', op: 'match', selector: '.octicon', context: 'miss', iters: 5_000_000 },
+      { label: 'match class hit',  op: 'match', selector: '.octicon', ref: { by: 'id', id: 'hit' },  iters: 5_000_000 },
+      { label: 'match class miss', op: 'match', selector: '.octicon', ref: { by: 'id', id: 'miss' }, iters: 5_000_000 },
     ],
   },
 
@@ -96,10 +96,10 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'match tag div hit',     op: 'match', selector: 'div',      context: 'div',      iters: 5_000_000 },
-      { label: 'match tag div miss',    op: 'match', selector: 'div',      context: 'button',   iters: 5_000_000 },
-      { label: 'match tag button hit',  op: 'match', selector: 'button',   context: 'button',   iters: 5_000_000 },
-      { label: 'match tag textarea hit',op: 'match', selector: 'textarea', context: 'textarea', iters: 5_000_000 },
+      { label: 'match tag div hit',     op: 'match', selector: 'div',      ref: { by: 'id', id: 'div' },      iters: 5_000_000 },
+      { label: 'match tag div miss',    op: 'match', selector: 'div',      ref: { by: 'id', id: 'button' },   iters: 5_000_000 },
+      { label: 'match tag button hit',  op: 'match', selector: 'button',   ref: { by: 'id', id: 'button' },   iters: 5_000_000 },
+      { label: 'match tag textarea hit',op: 'match', selector: 'textarea', ref: { by: 'id', id: 'textarea' }, iters: 5_000_000 },
     ],
   },
 
@@ -119,10 +119,10 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'match namespace any hit null', op: 'match', selector: '*|foo', context: 'null-foo', iters: 5_000_000 },
-      { label: 'match namespace any hit ns',   op: 'match', selector: '*|foo', context: 'ns-foo',   iters: 5_000_000 },
-      { label: 'match namespace null hit',     op: 'match', selector: '|foo',  context: 'null-foo', iters: 5_000_000 },
-      { label: 'match namespace null miss ns', op: 'match', selector: '|foo',  context: 'ns-foo',   iters: 5_000_000 },
+      { label: 'match namespace any hit null', op: 'match', selector: '*|foo', ref: { by: 'id', id: 'null-foo' }, iters: 5_000_000 },
+      { label: 'match namespace any hit ns',   op: 'match', selector: '*|foo', ref: { by: 'id', id: 'ns-foo' },   iters: 5_000_000 },
+      { label: 'match namespace null hit',     op: 'match', selector: '|foo',  ref: { by: 'id', id: 'null-foo' }, iters: 5_000_000 },
+      { label: 'match namespace null miss ns', op: 'match', selector: '|foo',  ref: { by: 'id', id: 'ns-foo' },   iters: 5_000_000 },
     ],
   },
 
@@ -146,16 +146,16 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exists',       op: 'match', selector: '[data-testid]',                  context: 'hit', iters: 5_000_000 },
-      { label: 'exact',        op: 'match', selector: '[data-testid="author-avatar"]',  context: 'hit', iters: 5_000_000 },
-      { label: 'contains',     op: 'match', selector: '[data-path*="commits"]',         context: 'hit', iters: 5_000_000 },
-      { label: 'token',        op: 'match', selector: '[data-tags~="octicon"]',         context: 'hit', iters: 5_000_000 },
-      { label: 'prefix',       op: 'match', selector: '[data-prefix^="commit"]',        context: 'hit', iters: 5_000_000 },
-      { label: 'suffix',       op: 'match', selector: '[data-suffix$="commit"]',        context: 'hit', iters: 5_000_000 },
-      { label: 'ns dash',      op: 'match', selector: '[lang|="en"]',                   context: 'hit', iters: 5_000_000 },
-      { label: 'star dash',    op: 'match', selector: '[*|lang|="en"]',                 context: 'hit', iters: 5_000_000, maxRatio: 18 },
-      { label: 'flag i',       op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', context: 'hit', iters: 5_000_000 },
-      { label: 'html default', op: 'match', selector: '[type="button"]',                context: 'hit', iters: 5_000_000 },
+      { label: 'exists',       op: 'match', selector: '[data-testid]',                  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'exact',        op: 'match', selector: '[data-testid="author-avatar"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'contains',     op: 'match', selector: '[data-path*="commits"]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token',        op: 'match', selector: '[data-tags~="octicon"]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'prefix',       op: 'match', selector: '[data-prefix^="commit"]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'suffix',       op: 'match', selector: '[data-suffix$="commit"]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'ns dash',      op: 'match', selector: '[lang|="en"]',                   ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'star dash',    op: 'match', selector: '[*|lang|="en"]',                 ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 18 },
+      { label: 'flag i',       op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'html default', op: 'match', selector: '[type="button"]',                ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -179,8 +179,8 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exists hit',  op: 'match', selector: '[data-testid]', context: 'hit', iters: 5_000_000 },
-      { label: 'exists miss', op: 'match', selector: '[data-missing]', context: 'hit', iters: 5_000_000 },
+      { label: 'exists hit',  op: 'match', selector: '[data-testid]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'exists miss', op: 'match', selector: '[data-missing]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -196,10 +196,10 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'wildcard html hit', op: 'match', selector: '[*|TiTlE]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
-      { label: 'wildcard html miss', op: 'match', selector: '[*|missing]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
-      { label: 'colon html hit', op: 'match', selector: '[foo\\:bar]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
-      { label: 'colon html miss', op: 'match', selector: '[bar\\:foo]', context: 'html-hit', iters: 5_000_000, maxRatio: 6 },
+      { label: 'wildcard html hit', op: 'match', selector: '[*|TiTlE]',    ref: { by: 'id', id: 'html-hit' }, iters: 5_000_000, maxRatio: 6 },
+      { label: 'wildcard html miss', op: 'match', selector: '[*|missing]', ref: { by: 'id', id: 'html-hit' }, iters: 5_000_000, maxRatio: 7 },
+      { label: 'colon html hit', op: 'match', selector: '[foo\\:bar]',     ref: { by: 'id', id: 'html-hit' }, iters: 5_000_000, maxRatio: 7 },
+      { label: 'colon html miss', op: 'match', selector: '[bar\\:foo]',    ref: { by: 'id', id: 'html-hit' }, iters: 5_000_000, maxRatio: 7 },
     ],
   },
 
@@ -221,15 +221,15 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exact hit',    op: 'match', selector: '[data-testid="author-avatar"]', context: 'hit', iters: 5_000_000 },
-      { label: 'contains hit', op: 'match', selector: '[data-path*="commits"]',         context: 'hit', iters: 5_000_000 },
-      { label: 'prefix hit',   op: 'match', selector: '[data-prefix^="commit"]',        context: 'hit', iters: 5_000_000 },
-      { label: 'suffix hit',   op: 'match', selector: '[data-suffix$="commit"]',        context: 'hit', iters: 5_000_000 },
-      { label: 'dash hit',     op: 'match', selector: '[lang|="en"]',                   context: 'hit', iters: 5_000_000 },
-      { label: 'token hit',    op: 'match', selector: '[data-tags~="octicon"]',         context: 'hit', iters: 5_000_000 },
+      { label: 'exact hit',    op: 'match', selector: '[data-testid="author-avatar"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'contains hit', op: 'match', selector: '[data-path*="commits"]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'prefix hit',   op: 'match', selector: '[data-prefix^="commit"]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'suffix hit',   op: 'match', selector: '[data-suffix$="commit"]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash hit',     op: 'match', selector: '[lang|="en"]',                   ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token hit',    op: 'match', selector: '[data-tags~="octicon"]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
 
-      { label: 'dash miss prefix only', op: 'match', selector: '[lang|="e"]',  context: 'hit', iters: 5_000_000 },
-      { label: 'dash miss different',   op: 'match', selector: '[lang|="fr"]', context: 'hit', iters: 5_000_000 },
+      { label: 'dash miss prefix only', op: 'match', selector: '[lang|="e"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash miss different',   op: 'match', selector: '[lang|="fr"]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -252,14 +252,14 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exact miss',          op: 'match', selector: '[data-testid="other"]',   context: 'hit', iters: 5_000_000 },
-      { label: 'contains miss',       op: 'match', selector: '[data-path*="branches"]', context: 'hit', iters: 5_000_000 },
-      { label: 'prefix miss',         op: 'match', selector: '[data-prefix^="start"]',  context: 'hit', iters: 5_000_000 },
-      { label: 'suffix miss',         op: 'match', selector: '[data-suffix$="start"]',  context: 'hit', iters: 5_000_000 },
-      { label: 'dash miss',           op: 'match', selector: '[lang|="fr"]',            context: 'hit', iters: 5_000_000 },
-      { label: 'token miss',          op: 'match', selector: '[data-tags~="missing"]',  context: 'hit', iters: 5_000_000 },
-      { label: 'dash miss custom',    op: 'match', selector: '[data-lang|="fr"]',       context: 'hit', iters: 5_000_000 },
-      { label: 'dash miss html-dflt', op: 'match', selector: '[lang|="fr"]',            context: 'hit', iters: 5_000_000 },
+      { label: 'exact miss',          op: 'match', selector: '[data-testid="other"]',   ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'contains miss',       op: 'match', selector: '[data-path*="branches"]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'prefix miss',         op: 'match', selector: '[data-prefix^="start"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'suffix miss',         op: 'match', selector: '[data-suffix$="start"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash miss',           op: 'match', selector: '[lang|="fr"]',            ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token miss',          op: 'match', selector: '[data-tags~="missing"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash miss custom',    op: 'match', selector: '[data-lang|="fr"]',       ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash miss html-dflt', op: 'match', selector: '[lang|="fr"]',            ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -281,19 +281,19 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exact i hit',       op: 'match', selector: '[data-exact="alphabeta" i]',       context: 'hit', iters: 5_000_000 },
-      { label: 'contains i hit',    op: 'match', selector: '[data-path*="commits" i]',         context: 'hit', iters: 5_000_000 },
-      { label: 'prefix i hit',      op: 'match', selector: '[data-prefix^="commit" i]',        context: 'hit', iters: 5_000_000 },
-      { label: 'suffix i hit',      op: 'match', selector: '[data-suffix$="commit" i]',        context: 'hit', iters: 5_000_000 },
-      { label: 'dash i hit',        op: 'match', selector: '[data-lang|="en" i]',              context: 'hit', iters: 5_000_000 },
-      { label: 'token i hit',       op: 'match', selector: '[data-tags~="unittest" i]',        context: 'hit', iters: 5_000_000 },
+      { label: 'exact i hit',       op: 'match', selector: '[data-exact="alphabeta" i]',       ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'contains i hit',    op: 'match', selector: '[data-path*="commits" i]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'prefix i hit',      op: 'match', selector: '[data-prefix^="commit" i]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'suffix i hit',      op: 'match', selector: '[data-suffix$="commit" i]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash i hit',        op: 'match', selector: '[data-lang|="en" i]',              ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token i hit',       op: 'match', selector: '[data-tags~="unittest" i]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
 
-      { label: 'exact i miss',      op: 'match', selector: '[data-exact="other" i]',           context: 'hit', iters: 5_000_000 },
-      { label: 'contains i miss',   op: 'match', selector: '[data-path*="branches" i]',        context: 'hit', iters: 5_000_000 },
-      { label: 'prefix i miss',     op: 'match', selector: '[data-prefix^="start" i]',         context: 'hit', iters: 5_000_000 },
-      { label: 'suffix i miss',     op: 'match', selector: '[data-suffix$="start" i]',         context: 'hit', iters: 5_000_000 },
-      { label: 'dash i miss',       op: 'match', selector: '[data-lang|="fr" i]',              context: 'hit', iters: 5_000_000 },
-      { label: 'token i miss',      op: 'match', selector: '[data-tags~="missing" i]',         context: 'hit', iters: 5_000_000 },
+      { label: 'exact i miss',      op: 'match', selector: '[data-exact="other" i]',           ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'contains i miss',   op: 'match', selector: '[data-path*="branches" i]',        ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'prefix i miss',     op: 'match', selector: '[data-prefix^="start" i]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'suffix i miss',     op: 'match', selector: '[data-suffix$="start" i]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash i miss',       op: 'match', selector: '[data-lang|="fr" i]',              ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token i miss',      op: 'match', selector: '[data-tags~="missing" i]',         ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -313,10 +313,10 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exact flag i',      op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', context: 'hit', iters: 5_000_000 },
-      { label: 'token flag i',      op: 'match', selector: '[data-tags~="unitTEST" i]',      context: 'hit', iters: 5_000_000 },
-      { label: 'dash flag i',       op: 'match', selector: '[lang|="en" i]',                 context: 'hit', iters: 5_000_000 },
-      { label: 'html default type', op: 'match', selector: '[type="button"]',                context: 'hit', iters: 5_000_000 },
+      { label: 'exact flag i',      op: 'match', selector: '[data-kind="PRIMARY-ACTION" i]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'token flag i',      op: 'match', selector: '[data-tags~="unitTEST" i]',      ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'dash flag i',       op: 'match', selector: '[lang|="en" i]',                 ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'html default type', op: 'match', selector: '[type="button"]',                ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -335,20 +335,20 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { op: 'match', selector: '[lang]',          context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[|lang]',         context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[*|lang]',        context: 'hit', iters: 5_000_000 },
+      { op: 'match', selector: '[lang]',             ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[|lang]',            ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang]',           ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
 
-      { op: 'match', selector: '[lang="en-US"]',  context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[|lang="en-US"]', context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[*|lang="en-US"]',context: 'hit', iters: 5_000_000, maxRatio: 7 },
+      { op: 'match', selector: '[lang="en-US"]',     ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[|lang="en-US"]',    ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang="en-US"]',   ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 7 },
 
-      { op: 'match', selector: '[lang|="en"]',    context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[|lang|="en"]',   context: 'hit', iters: 5_000_000 },
-      { op: 'match', selector: '[*|lang|="en"]',  context: 'hit', iters: 5_000_000, maxRatio: 7 },
+      { op: 'match', selector: '[lang|="en"]',       ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[|lang|="en"]',      ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { op: 'match', selector: '[*|lang|="en"]',     ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 7 },
 
-      { op: 'match', selector: '[*|data-x="value"]', context: 'hit', iters: 5_000_000, maxRatio: 7 },
-      { op: 'match', selector: '[*|data-x*="alu"]',  context: 'hit', iters: 5_000_000, maxRatio: 7 },
+      { op: 'match', selector: '[*|data-x="value"]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 7 },
+      { op: 'match', selector: '[*|data-x*="alu"]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 7 },
     ],
   },
 
@@ -374,9 +374,9 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { op: 'match', selector: '[*|foo="bar" i]',  context: 'hit', iters: 5_000_000, maxRatio: 10 },
-      { op: 'match', selector: '[*|foo="nope" i]', context: 'hit', iters: 5_000_000, maxRatio: 16 },
-      { op: 'match', selector: '[*|lang|="en"]',   context: 'hit', iters: 5_000_000, maxRatio: 16 },
+      { op: 'match', selector: '[*|foo="bar" i]',  ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 10 },
+      { op: 'match', selector: '[*|foo="nope" i]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 16 },
+      { op: 'match', selector: '[*|lang|="en"]',   ref: { by: 'id', id: 'hit' }, iters: 5_000_000, maxRatio: 16 },
     ],
   },
 
@@ -410,9 +410,9 @@ runPerfScenarios('perf', [
     quickIters: 20_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'token hot before churn', op: 'match', selector: '[data-tags~="octicon"]', context: 'hit', iters: 5_000_000 },
+      { label: 'token hot before churn', op: 'match', selector: '[data-tags~="octicon"]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
       {
-        label: 'mixed attr churn', op: 'matchWalk', context: null, iters: 100_000,
+        label: 'mixed attr churn', op: 'matchWalk', iters: 100_000,
         selectors: [
           '[data-tags~="octicon"]',
           '[data-tags~="missing"]',
@@ -425,13 +425,13 @@ runPerfScenarios('perf', [
         ],
       },
       {
-        label: 'token pair churn', op: 'matchWalk', context: null, iters: 200_000,
+        label: 'token pair churn', op: 'matchWalk', iters: 200_000,
         selectors: [
           '[data-tags~="foo"]',
           '[data-tags~="octicon"]',
         ],
       },
-      { label: 'token hot after churn', op: 'match', selector: '[data-tags~="octicon"]', context: 'hit', iters: 5_000_000 },
+      { label: 'token hot after churn', op: 'match', selector: '[data-tags~="octicon"]', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -457,15 +457,15 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'single hit',      op: 'match', selector: '.target',     context: 'single', iters: 5_000_000 },
-      { label: 'first hit',       op: 'match', selector: '.target',     context: 'first',  iters: 5_000_000 },
-      { label: 'middle hit',      op: 'match', selector: '.target',     context: 'middle', iters: 5_000_000 },
-      { label: 'last hit',        op: 'match', selector: '.target',     context: 'last',   iters: 5_000_000 },
-      { label: 'miss long',       op: 'match', selector: '.super_long', context: 'miss',   iters: 5_000_000 },
-      { label: 'miss short',      op: 'match', selector: '.s',          context: 'miss',   iters: 5_000_000 },
+      { label: 'single hit',      op: 'match', selector: '.target',     ref: { by: 'id', id: 'single' }, iters: 5_000_000 },
+      { label: 'first hit',       op: 'match', selector: '.target',     ref: { by: 'id', id: 'first' },  iters: 5_000_000 },
+      { label: 'middle hit',      op: 'match', selector: '.target',     ref: { by: 'id', id: 'middle' }, iters: 5_000_000 },
+      { label: 'last hit',        op: 'match', selector: '.target',     ref: { by: 'id', id: 'last' },   iters: 5_000_000 },
+      { label: 'miss long',       op: 'match', selector: '.super_long', ref: { by: 'id', id: 'miss' },   iters: 5_000_000 },
+      { label: 'miss short',      op: 'match', selector: '.s',          ref: { by: 'id', id: 'miss' },   iters: 5_000_000 },
 
-      { label: 'case exact hit',  op: 'match', selector: '.Alpha',      context: 'upper',  iters: 5_000_000 },
-      { label: 'case folded miss',op: 'match', selector: '.alpha',      context: 'upper',  iters: 5_000_000 },
+      { label: 'case exact hit',  op: 'match', selector: '.Alpha',      ref: { by: 'id', id: 'upper' },  iters: 5_000_000 },
+      { label: 'case folded miss',op: 'match', selector: '.alpha',      ref: { by: 'id', id: 'upper' },  iters: 5_000_000 },
     ],
   },
 
@@ -493,9 +493,9 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'exact hit',       op: 'match', selector: '.Alpha', context: 'hit',  iters: 5_000_000 },
-      { label: 'folded hit',      op: 'match', selector: '.alpha', context: 'hit',  iters: 5_000_000 },
-      { label: 'folded miss',     op: 'match', selector: '.alpha', context: 'miss', iters: 5_000_000 },
+      { label: 'exact hit',       op: 'match', selector: '.Alpha', ref: { by: 'id', id: 'hit' },  iters: 5_000_000 },
+      { label: 'folded hit',      op: 'match', selector: '.alpha', ref: { by: 'id', id: 'hit' },  iters: 5_000_000 },
+      { label: 'folded miss',     op: 'match', selector: '.alpha', ref: { by: 'id', id: 'miss' }, iters: 5_000_000 },
     ],
   },
 
@@ -540,22 +540,22 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Child combinator: one parentElement hop.
-      { label: 'child hit', op: 'match', selector: '.parent > .target', context: 'target', iters: 5_000_000 },
-      { label: 'child miss', op: 'match', selector: '.ancestor > .target', context: 'target', iters: 5_000_000 },
+      { label: 'child hit', op: 'match', selector: '.parent > .target', ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { label: 'child miss', op: 'match', selector: '.ancestor > .target', ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
 
       // Descendant combinator: parentElement loop, early hit vs full miss.
-      { label: 'descendant near hit', op: 'match', selector: '.parent .target', context: 'target', iters: 5_000_000 },
-      { label: 'descendant far hit', op: 'match', selector: '#root .target', context: 'deep-target', iters: 5_000_000, maxRatio: 7 },
-      { label: 'descendant miss', op: 'match', selector: '.missing .target', context: 'deep-target', iters: 5_000_000, maxRatio: 7 },
+      { label: 'descendant near hit', op: 'match', selector: '.parent .target', ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { label: 'descendant far hit', op: 'match', selector: '#root .target', ref: { by: 'id', id: 'deep-target' }, iters: 5_000_000, maxRatio: 7 },
+      { label: 'descendant miss', op: 'match', selector: '.missing .target', ref: { by: 'id', id: 'deep-target' }, iters: 5_000_000, maxRatio: 7 },
 
       // Adjacent sibling combinator: one previousElementSibling hop.
-      { label: 'adjacent hit', op: 'match', selector: '.adjacent + .target', context: 'sibling-target', iters: 5_000_000 },
-      { label: 'adjacent miss', op: 'match', selector: '.general + .target', context: 'sibling-target', iters: 5_000_000 },
+      { label: 'adjacent hit', op: 'match', selector: '.adjacent + .target', ref: { by: 'id', id: 'sibling-target' }, iters: 5_000_000 },
+      { label: 'adjacent miss', op: 'match', selector: '.general + .target', ref: { by: 'id', id: 'sibling-target' }, iters: 5_000_000 },
 
       // General sibling combinator: previousElementSibling loop, early/far/miss.
-      { label: 'general sibling near hit', op: 'match', selector: '.adjacent ~ .target', context: 'sibling-target', iters: 5_000_000 },
-      { label: 'general sibling far hit', op: 'match', selector: '.general ~ .target', context: 'far-sibling-target', iters: 5_000_000 },
-      { label: 'general sibling miss', op: 'match', selector: '.missing ~ .target', context: 'far-sibling-target', iters: 5_000_000 },
+      { label: 'general sibling near hit', op: 'match', selector: '.adjacent ~ .target', ref: { by: 'id', id: 'sibling-target' }, iters: 5_000_000 },
+      { label: 'general sibling far hit', op: 'match', selector: '.general ~ .target', ref: { by: 'id', id: 'far-sibling-target' }, iters: 5_000_000 },
+      { label: 'general sibling miss', op: 'match', selector: '.missing ~ .target', ref: { by: 'id', id: 'far-sibling-target' }, iters: 5_000_000 },
     ],
   },
 
@@ -582,17 +582,17 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'root hit html',          op: 'match', selector: ':root',  context: 'html',          iters: 5_000_000 },
-      { label: 'root miss body',         op: 'match', selector: ':root',  context: 'body',          iters: 5_000_000 },
+      { label: 'root hit html',          op: 'match', selector: ':root',  ref: { by: 'id', id: 'html' },          iters: 5_000_000 },
+      { label: 'root miss body',         op: 'match', selector: ':root',  ref: { by: 'id', id: 'body' },          iters: 5_000_000 },
 
-      { label: 'scope hit context',      op: 'match', selector: ':scope', context: 'host',          iters: 5_000_000 },
-      { label: 'scope miss child',       op: 'match', selector: ':scope', context: 'empty',         iters: 5_000_000 },
+      { label: 'scope hit context',      op: 'match', selector: ':scope', ref: { by: 'id', id: 'host' },          iters: 5_000_000 },
+      { label: 'scope miss child',       op: 'match', selector: ':scope', ref: { by: 'id', id: 'empty' },         iters: 5_000_000 },
 
-      { label: 'empty hit empty',        op: 'match', selector: ':empty', context: 'empty',         iters: 5_000_000 },
-      { label: 'empty hit comment-only', op: 'match', selector: ':empty', context: 'comment-only',  iters: 5_000_000 },
-      { label: 'empty miss element',     op: 'match', selector: ':empty', context: 'element-child', iters: 5_000_000 },
-      { label: 'empty miss text',        op: 'match', selector: ':empty', context: 'text-child',    iters: 5_000_000 },
-      { label: 'empty miss whitespace',  op: 'match', selector: ':empty', context: 'ws-text',       iters: 5_000_000 },
+      { label: 'empty hit empty',        op: 'match', selector: ':empty', ref: { by: 'id', id: 'empty' },         iters: 5_000_000 },
+      { label: 'empty hit comment-only', op: 'match', selector: ':empty', ref: { by: 'id', id: 'comment-only' },  iters: 5_000_000 },
+      { label: 'empty miss element',     op: 'match', selector: ':empty', ref: { by: 'id', id: 'element-child' }, iters: 5_000_000 },
+      { label: 'empty miss text',        op: 'match', selector: ':empty', ref: { by: 'id', id: 'text-child' },    iters: 5_000_000 },
+      { label: 'empty miss whitespace',  op: 'match', selector: ':empty', ref: { by: 'id', id: 'ws-text' },       iters: 5_000_000 },
     ],
   },
 
@@ -613,17 +613,17 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'first-child hit',  op: 'match', selector: ':first-child', context: 'first',  iters: 5_000_000 },
-      { label: 'first-child miss', op: 'match', selector: ':first-child', context: 'middle', iters: 5_000_000 },
+      { label: 'first-child hit',  op: 'match', selector: ':first-child', ref: { by: 'id', id: 'first' },  iters: 5_000_000 },
+      { label: 'first-child miss', op: 'match', selector: ':first-child', ref: { by: 'id', id: 'middle' }, iters: 5_000_000 },
 
-      { label: 'last-child hit',   op: 'match', selector: ':last-child',  context: 'last',   iters: 5_000_000 },
-      { label: 'last-child miss',  op: 'match', selector: ':last-child',  context: 'middle', iters: 5_000_000 },
+      { label: 'last-child hit',   op: 'match', selector: ':last-child',  ref: { by: 'id', id: 'last' },   iters: 5_000_000 },
+      { label: 'last-child miss',  op: 'match', selector: ':last-child',  ref: { by: 'id', id: 'middle' }, iters: 5_000_000 },
 
-      { label: 'only-child hit',   op: 'match', selector: ':only-child',  context: 'only',   iters: 5_000_000 },
-      { label: 'only-child miss',  op: 'match', selector: ':only-child',  context: 'middle', iters: 5_000_000 },
+      { label: 'only-child hit',   op: 'match', selector: ':only-child',  ref: { by: 'id', id: 'only' },   iters: 5_000_000 },
+      { label: 'only-child miss',  op: 'match', selector: ':only-child',  ref: { by: 'id', id: 'middle' }, iters: 5_000_000 },
 
-      { label: 'first-child hit2',  op: 'match', selector: ':first-child', context: 'first',  iters: 5_000_000 },
-      { label: 'first-child miss2', op: 'match', selector: ':first-child', context: 'middle', iters: 5_000_000 },
+      { label: 'first-child hit2',  op: 'match', selector: ':first-child', ref: { by: 'id', id: 'first' },  iters: 5_000_000 },
+      { label: 'first-child miss2', op: 'match', selector: ':first-child', ref: { by: 'id', id: 'middle' }, iters: 5_000_000 },
     ],
   },
 
@@ -652,19 +652,19 @@ runPerfScenarios('perf', [
     quickIters: 200_000,
     probeKeys: ['match'],
     benches: [
-      { label: 'first-of-type hit first',  op: 'match', selector: ':first-of-type', context: 'i-first',  iters: 5_000_000 },
-      { label: 'first-of-type miss middle',op: 'match', selector: ':first-of-type', context: 'i-middle', iters: 5_000_000 },
-      { label: 'first-of-type far miss',   op: 'match', selector: ':first-of-type', context: 'u-last',   iters: 5_000_000 },
+      { label: 'first-of-type hit first',  op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'i-first' },  iters: 5_000_000 },
+      { label: 'first-of-type miss middle',op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'i-middle' }, iters: 5_000_000 },
+      { label: 'first-of-type far miss',   op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'u-last' },   iters: 5_000_000 },
 
-      { label: 'last-of-type hit last',    op: 'match', selector: ':last-of-type',  context: 'i-last',   iters: 5_000_000 },
-      { label: 'last-of-type miss middle', op: 'match', selector: ':last-of-type',  context: 'i-middle', iters: 5_000_000 },
-      { label: 'last-of-type far miss',    op: 'match', selector: ':last-of-type',  context: 'u-first',  iters: 5_000_000 },
+      { label: 'last-of-type hit last',    op: 'match', selector: ':last-of-type',  ref: { by: 'id', id: 'i-last' },   iters: 5_000_000 },
+      { label: 'last-of-type miss middle', op: 'match', selector: ':last-of-type',  ref: { by: 'id', id: 'i-middle' }, iters: 5_000_000 },
+      { label: 'last-of-type far miss',    op: 'match', selector: ':last-of-type',  ref: { by: 'id', id: 'u-first' },  iters: 5_000_000 },
 
-      { label: 'only-of-type hit only',    op: 'match', selector: ':only-of-type',  context: 'span-only', iters: 5_000_000 },
-      { label: 'only-of-type hit single',  op: 'match', selector: ':only-of-type',  context: 'em-only',   iters: 5_000_000 },
-      { label: 'only-of-type miss first',  op: 'match', selector: ':only-of-type',  context: 'i-first',   iters: 5_000_000 },
-      { label: 'only-of-type miss middle', op: 'match', selector: ':only-of-type',  context: 'i-middle',  iters: 5_000_000 },
-      { label: 'only-of-type far miss',    op: 'match', selector: ':only-of-type',  context: 'u-first',   iters: 5_000_000 },
+      { label: 'only-of-type hit only',    op: 'match', selector: ':only-of-type',  ref: { by: 'id', id: 'span-only' }, iters: 5_000_000 },
+      { label: 'only-of-type hit single',  op: 'match', selector: ':only-of-type',  ref: { by: 'id', id: 'em-only' },   iters: 5_000_000 },
+      { label: 'only-of-type miss first',  op: 'match', selector: ':only-of-type',  ref: { by: 'id', id: 'i-first' },   iters: 5_000_000 },
+      { label: 'only-of-type miss middle', op: 'match', selector: ':only-of-type',  ref: { by: 'id', id: 'i-middle' },  iters: 5_000_000 },
+      { label: 'only-of-type far miss',    op: 'match', selector: ':only-of-type',  ref: { by: 'id', id: 'u-first' },   iters: 5_000_000 },
     ],
   },
 
@@ -689,28 +689,28 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // nth-child / nth-last-child use element index among all element siblings.
-      { label: 'nth-child fixed hit',       op: 'match', selector: ':nth-child(3)',       context: 'n3',  iters: 5_000_000 },
-      { label: 'nth-child fixed miss',      op: 'match', selector: ':nth-child(3)',       context: 'n4',  iters: 5_000_000 },
-      { label: 'nth-child odd hit',         op: 'match', selector: ':nth-child(odd)',     context: 'n5',  iters: 5_000_000 },
-      { label: 'nth-child even hit',        op: 'match', selector: ':nth-child(even)',    context: 'n6',  iters: 5_000_000 },
-      { label: 'nth-child formula hit',     op: 'match', selector: ':nth-child(2n+1)',    context: 'n5',  iters: 5_000_000 },
-      { label: 'nth-child formula miss',    op: 'match', selector: ':nth-child(2n+1)',    context: 'n6',  iters: 5_000_000 },
+      { label: 'nth-child fixed hit',       op: 'match', selector: ':nth-child(3)',       ref: { by: 'id', id: 'n3' },  iters: 5_000_000 },
+      { label: 'nth-child fixed miss',      op: 'match', selector: ':nth-child(3)',       ref: { by: 'id', id: 'n4' },  iters: 5_000_000 },
+      { label: 'nth-child odd hit',         op: 'match', selector: ':nth-child(odd)',     ref: { by: 'id', id: 'n5' },  iters: 5_000_000 },
+      { label: 'nth-child even hit',        op: 'match', selector: ':nth-child(even)',    ref: { by: 'id', id: 'n6' },  iters: 5_000_000 },
+      { label: 'nth-child formula hit',     op: 'match', selector: ':nth-child(2n+1)',    ref: { by: 'id', id: 'n5' },  iters: 5_000_000 },
+      { label: 'nth-child formula miss',    op: 'match', selector: ':nth-child(2n+1)',    ref: { by: 'id', id: 'n6' },  iters: 5_000_000 },
 
-      { label: 'nth-last-child fixed hit',  op: 'match', selector: ':nth-last-child(2)',  context: 'n5',  iters: 5_000_000 },
-      { label: 'nth-last-child fixed miss', op: 'match', selector: ':nth-last-child(2)',  context: 'n4',  iters: 5_000_000 },
+      { label: 'nth-last-child fixed hit',  op: 'match', selector: ':nth-last-child(2)',  ref: { by: 'id', id: 'n5' },  iters: 5_000_000 },
+      { label: 'nth-last-child fixed miss', op: 'match', selector: ':nth-last-child(2)',  ref: { by: 'id', id: 'n4' },  iters: 5_000_000 },
 
       // nth-of-type / nth-last-of-type count only same localName/namespace siblings.
-      { label: 'nth-of-type fixed hit',        op: 'match', selector: ':nth-of-type(2)',       context: 'i2', iters: 5_000_000 },
-      { label: 'nth-of-type fixed miss',       op: 'match', selector: ':nth-of-type(2)',       context: 'i3', iters: 5_000_000 },
-      { label: 'nth-of-type odd hit',          op: 'match', selector: ':nth-of-type(odd)',     context: 'i3', iters: 5_000_000 },
-      { label: 'nth-of-type even hit',         op: 'match', selector: ':nth-of-type(even)',    context: 'i2', iters: 5_000_000 },
+      { label: 'nth-of-type fixed hit',        op: 'match', selector: ':nth-of-type(2)',       ref: { by: 'id', id: 'i2' }, iters: 5_000_000 },
+      { label: 'nth-of-type fixed miss',       op: 'match', selector: ':nth-of-type(2)',       ref: { by: 'id', id: 'i3' }, iters: 5_000_000 },
+      { label: 'nth-of-type odd hit',          op: 'match', selector: ':nth-of-type(odd)',     ref: { by: 'id', id: 'i3' }, iters: 5_000_000 },
+      { label: 'nth-of-type even hit',         op: 'match', selector: ':nth-of-type(even)',    ref: { by: 'id', id: 'i2' }, iters: 5_000_000 },
 
-      { label: 'nth-last-of-type fixed hit',   op: 'match', selector: ':nth-last-of-type(1)',  context: 'i3', iters: 5_000_000 },
-      { label: 'nth-last-of-type fixed miss',  op: 'match', selector: ':nth-last-of-type(1)',  context: 'i2', iters: 5_000_000 },
+      { label: 'nth-last-of-type fixed hit',   op: 'match', selector: ':nth-last-of-type(1)',  ref: { by: 'id', id: 'i3' }, iters: 5_000_000 },
+      { label: 'nth-last-of-type fixed miss',  op: 'match', selector: ':nth-last-of-type(1)',  ref: { by: 'id', id: 'i2' }, iters: 5_000_000 },
 
-      // Longer sibling chain, mostly to expose counting/caching cost.
-      { label: 'nth-child far fixed hit',      op: 'match', selector: ':nth-child(10)',        context: 'b10', iters: 5_000_000 },
-      { label: 'nth-last-child far fixed hit', op: 'match', selector: ':nth-last-child(10)',   context: 'b1',  iters: 5_000_000 },
+      // Longer sibling chain, mostly to expose counting/caching cost.{ by: 'id', id:  }
+      { label: 'nth-child far fixed hit',      op: 'match', selector: ':nth-child(10)',        ref: { by: 'id', id: 'b10' }, iters: 5_000_000 },
+      { label: 'nth-last-child far fixed hit', op: 'match', selector: ':nth-last-child(10)',   ref: { by: 'id', id: 'b1' },  iters: 5_000_000 },
     ],
   },
 
@@ -728,26 +728,26 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Baselines
-      { label: 'match class baseline hit', op: 'match', selector: '.foo', context: 'hit', iters: 5_000_000 },
-      { label: 'match class baseline miss', op: 'match', selector: '.foo', context: 'miss', iters: 5_000_000 },
+      { label: 'match class baseline hit', op: 'match', selector: '.foo', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match class baseline miss', op: 'match', selector: '.foo', ref: { by: 'id', id: 'miss' }, iters: 5_000_000 },
 
       // :is() single arm
-      { label: 'match :is single hit', op: 'match', selector: ':is(.foo)', context: 'hit', iters: 5_000_000 },
-      { label: 'match :is single miss', op: 'match', selector: ':is(.foo)', context: 'miss', iters: 5_000_000 },
+      { label: 'match :is single hit', op: 'match', selector: ':is(.foo)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :is single miss', op: 'match', selector: ':is(.foo)', ref: { by: 'id', id: 'miss' }, iters: 5_000_000 },
 
       // :is() multi-arm, early hit / late hit / miss
-      { label: 'match :is list early hit', op: 'match', selector: ':is(.foo, .nope, [data-x])', context: 'hit', iters: 5_000_000 },
-      { label: 'match :is list late hit', op: 'match', selector: ':is(.nope, [data-x], .foo)', context: 'hit', iters: 5_000_000 },
-      { label: 'match :is list miss', op: 'match', selector: ':is(.nope, [data-x], #absent)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :is list early hit', op: 'match', selector: ':is(.foo, .nope, [data-x])', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :is list late hit', op: 'match', selector: ':is(.nope, [data-x], .foo)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :is list miss', op: 'match', selector: ':is(.nope, [data-x], #absent)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
 
       // :not() simple
-      { label: 'match :not simple pass', op: 'match', selector: ':not(.nope)', context: 'hit', iters: 5_000_000 },
-      { label: 'match :not simple reject', op: 'match', selector: ':not(.foo)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :not simple pass', op: 'match', selector: ':not(.nope)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :not simple reject', op: 'match', selector: ':not(.foo)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
 
       // :not() list
-      { label: 'match :not list pass', op: 'match', selector: ':not(.nope, [data-x], #absent)', context: 'hit', iters: 5_000_000 },
-      { label: 'match :not list early reject', op: 'match', selector: ':not(.foo, .nope, [data-x])', context: 'hit', iters: 5_000_000 },
-      { label: 'match :not list late reject', op: 'match', selector: ':not(.nope, [data-x], .foo)', context: 'hit', iters: 5_000_000 },
+      { label: 'match :not list pass', op: 'match', selector: ':not(.nope, [data-x], #absent)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :not list early reject', op: 'match', selector: ':not(.foo, .nope, [data-x])', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
+      { label: 'match :not list late reject', op: 'match', selector: ':not(.nope, [data-x], .foo)', ref: { by: 'id', id: 'hit' }, iters: 5_000_000 },
     ],
   },
 
@@ -820,24 +820,24 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Baselines
-      { label: 'match class baseline hit',  op: 'match', selector: '.box', context: 'hit-desc',  iters: 1_000_000 },
-      { label: 'match class baseline miss', op: 'match', selector: '.nope', context: 'hit-desc', iters: 1_000_000 },
+      { label: 'match class baseline hit',  op: 'match', selector: '.box', ref: { by: 'id', id: 'hit-desc' },  iters: 1_000_000 },
+      { label: 'match class baseline miss', op: 'match', selector: '.nope', ref: { by: 'id', id: 'hit-desc' }, iters: 1_000_000 },
 
       // Basic :has() combinators
-      { label: 'match :has desc hit',     op: 'match', selector: ':has(.target)',    context: 'hit-desc',      iters: 1_000_000 },
-      { label: 'match :has desc miss',    op: 'match', selector: ':has(.target)',    context: 'miss-desc',     iters: 1_000_000 },
-      { label: 'match :has child hit',    op: 'match', selector: ':has(> .target)',  context: 'hit-child',     iters: 1_000_000 },
-      { label: 'match :has child miss',   op: 'match', selector: ':has(> .target)',  context: 'miss-child',    iters: 1_000_000 },
-      { label: 'match :has next hit',     op: 'match', selector: ':has(+ .target)',  context: 'hit-adjacent',  iters: 1_000_000 },
-      { label: 'match :has next miss',    op: 'match', selector: ':has(+ .target)',  context: 'miss-adjacent', iters: 1_000_000 },
-      { label: 'match :has sibling hit',  op: 'match', selector: ':has(~ .target)',  context: 'hit-sibling',   iters: 1_000_000 },
-      { label: 'match :has sibling miss', op: 'match', selector: ':has(~ .target)',  context: 'miss-sibling',  iters: 1_000_000 },
+      { label: 'match :has desc hit',     op: 'match', selector: ':has(.target)',    ref: { by: 'id', id: 'hit-desc' },      iters: 1_000_000 },
+      { label: 'match :has desc miss',    op: 'match', selector: ':has(.target)',    ref: { by: 'id', id: 'miss-desc' },     iters: 1_000_000 },
+      { label: 'match :has child hit',    op: 'match', selector: ':has(> .target)',  ref: { by: 'id', id: 'hit-child' },     iters: 1_000_000 },
+      { label: 'match :has child miss',   op: 'match', selector: ':has(> .target)',  ref: { by: 'id', id: 'miss-child' },    iters: 1_000_000 },
+      { label: 'match :has next hit',     op: 'match', selector: ':has(+ .target)',  ref: { by: 'id', id: 'hit-adjacent' },  iters: 1_000_000 },
+      { label: 'match :has next miss',    op: 'match', selector: ':has(+ .target)',  ref: { by: 'id', id: 'miss-adjacent' }, iters: 1_000_000 },
+      { label: 'match :has sibling hit',  op: 'match', selector: ':has(~ .target)',  ref: { by: 'id', id: 'hit-sibling' },   iters: 1_000_000 },
+      { label: 'match :has sibling miss', op: 'match', selector: ':has(~ .target)',  ref: { by: 'id', id: 'miss-sibling' },  iters: 1_000_000 },
 
       // :has() with nth selectors inside the relative selector.
-      { label: 'match :has child nth hit',  op: 'match', selector: ':has(> .target:nth-child(2))', context: 'hit-nth-child',  iters: 1_000_000 },
-      { label: 'match :has child nth miss', op: 'match', selector: ':has(> .target:nth-child(2))', context: 'miss-nth-child', iters: 1_000_000 },
-      { label: 'match :has desc nth hit',   op: 'match', selector: ':has(.target:nth-child(2))',   context: 'hit-nth-desc',   iters: 1_000_000 },
-      { label: 'match :has desc nth miss',  op: 'match', selector: ':has(.target:nth-child(2))',   context: 'miss-nth-desc',  iters: 1_000_000 },
+      { label: 'match :has child nth hit',  op: 'match', selector: ':has(> .target:nth-child(2))', ref: { by: 'id', id: 'hit-nth-child' },  iters: 1_000_000 },
+      { label: 'match :has child nth miss', op: 'match', selector: ':has(> .target:nth-child(2))', ref: { by: 'id', id: 'miss-nth-child' }, iters: 1_000_000 },
+      { label: 'match :has desc nth hit',   op: 'match', selector: ':has(.target:nth-child(2))',   ref: { by: 'id', id: 'hit-nth-desc' },   iters: 1_000_000 },
+      { label: 'match :has desc nth miss',  op: 'match', selector: ':has(.target:nth-child(2))',   ref: { by: 'id', id: 'miss-nth-desc' },  iters: 1_000_000 },
     ],
   },
 
@@ -871,16 +871,16 @@ runPerfScenarios('perf', [
     `,
     probeKeys: ['match'],
     benches: [
-      { label: 'match baseline id hit', op: 'match', selector: '#lang-inherit-hit', context: 'lang-inherit-hit', iters: 1_000_000 },
-      { label: 'match :lang inherited hit', op: 'match', selector: ':lang(en)', context: 'lang-inherit-hit', iters: 1_000_000 },
-      { label: 'match :lang inherited miss', op: 'match', selector: ':lang(en)', context: 'lang-inherit-miss', iters: 1_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#lang-inherit-hit', ref: { by: 'id', id: 'lang-inherit-hit' }, iters: 1_000_000 },
+      { label: 'match :lang inherited hit', op: 'match', selector: ':lang(en)', ref: { by: 'id', id: 'lang-inherit-hit' }, iters: 1_000_000 },
+      { label: 'match :lang inherited miss', op: 'match', selector: ':lang(en)', ref: { by: 'id', id: 'lang-inherit-miss' }, iters: 1_000_000 },
 
-      { label: 'match :dir inherited hit', op: 'match', selector: ':dir(ltr)', context: 'dir-inherit-hit', iters: 1_000_000, maxRatio: 6 },
-      { label: 'match :dir inherited miss', op: 'match', selector: ':dir(ltr)', context: 'dir-inherit-miss', iters: 1_000_000 },
+      { label: 'match :dir inherited hit', op: 'match', selector: ':dir(ltr)', ref: { by: 'id', id: 'dir-inherit-hit' }, iters: 1_000_000, maxRatio: 6 },
+      { label: 'match :dir inherited miss', op: 'match', selector: ':dir(ltr)', ref: { by: 'id', id: 'dir-inherit-miss' }, iters: 1_000_000 },
 
-      { label: 'match :dir auto ltr hit', op: 'match', selector: ':dir(ltr)', context: 'dir-auto-ltr', iters: 1_000_000 },
-      { label: 'match :dir auto rtl hit', op: 'match', selector: ':dir(rtl)', context: 'dir-auto-rtl', iters: 1_000_000 },
-      { label: 'match :dir bdi auto rtl hit', op: 'match', selector: ':dir(rtl)', context: 'bdi-auto-rtl', iters: 1_000_000 },
+      { label: 'match :dir auto ltr hit', op: 'match', selector: ':dir(ltr)', ref: { by: 'id', id: 'dir-auto-ltr' }, iters: 1_000_000 },
+      { label: 'match :dir auto rtl hit', op: 'match', selector: ':dir(rtl)', ref: { by: 'id', id: 'dir-auto-rtl' }, iters: 1_000_000 },
+      { label: 'match :dir bdi auto rtl hit', op: 'match', selector: ':dir(rtl)', ref: { by: 'id', id: 'bdi-auto-rtl' }, iters: 1_000_000 },
     ],
   },
 
@@ -913,24 +913,24 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Baselines
-      { label: 'match baseline id hit', op: 'match', selector: '#plain', context: 'plain', iters: 5_000_000 },
-      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'plain', iters: 5_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#plain', ref: { by: 'id', id: 'plain' }, iters: 5_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', ref: { by: 'id', id: 'plain' }, iters: 5_000_000 },
 
       // :any-link / :link
-      { label: 'match :any-link a hit', op: 'match', selector: ':any-link', context: 'link-hit', iters: 5_000_000 },
-      { label: 'match :any-link a miss', op: 'match', selector: ':any-link', context: 'link-miss', iters: 5_000_000 },
-      { label: 'match :any-link area hit', op: 'match', selector: ':any-link', context: 'area-hit', iters: 5_000_000 },
-      { label: 'match :link a hit', op: 'match', selector: ':link', context: 'link-hit', iters: 5_000_000 },
-      { label: 'match :visited false', op: 'match', selector: ':visited', context: 'link-hit', iters: 5_000_000 },
+      { label: 'match :any-link a hit', op: 'match', selector: ':any-link', ref: { by: 'id', id: 'link-hit' }, iters: 5_000_000 },
+      { label: 'match :any-link a miss', op: 'match', selector: ':any-link', ref: { by: 'id', id: 'link-miss' }, iters: 5_000_000 },
+      { label: 'match :any-link area hit', op: 'match', selector: ':any-link', ref: { by: 'id', id: 'area-hit' }, iters: 5_000_000 },
+      { label: 'match :link a hit', op: 'match', selector: ':link', ref: { by: 'id', id: 'link-hit' }, iters: 5_000_000 },
+      { label: 'match :visited false', op: 'match', selector: ':visited', ref: { by: 'id', id: 'link-hit' }, iters: 5_000_000 },
 
       // :target
-      { label: 'match :target hit', op: 'match', selector: ':target', context: 'target', iters: 5_000_000, maxRatio: 8 },
-      { label: 'match :target miss', op: 'match', selector: ':target', context: 'not-target', iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :target hit', op: 'match', selector: ':target', ref: { by: 'id', id: 'target' }, iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :target miss', op: 'match', selector: ':target', ref: { by: 'id', id: 'not-target' }, iters: 5_000_000, maxRatio: 8 },
 
       // :defined
-      { label: 'match :defined builtin hit', op: 'match', selector: ':defined', context: 'defined-div', iters: 5_000_000 },
-      { label: 'match :defined custom hit', op: 'match', selector: ':defined', context: 'defined-custom', iters: 5_000_000, maxRatio: 8 },
-      { label: 'match :defined custom miss', op: 'match', selector: ':defined', context: 'undefined-custom', iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :defined builtin hit', op: 'match', selector: ':defined', ref: { by: 'id', id: 'defined-div' }, iters: 5_000_000 },
+      { label: 'match :defined custom hit', op: 'match', selector: ':defined', ref: { by: 'id', id: 'defined-custom' }, iters: 5_000_000, maxRatio: 8 },
+      { label: 'match :defined custom miss', op: 'match', selector: ':defined', ref: { by: 'id', id: 'undefined-custom' }, iters: 5_000_000, maxRatio: 8 },
     ],
   },
 
@@ -950,10 +950,10 @@ runPerfScenarios('perf', [
     },
     probeKeys: ['match'],
     benches: [
-      { label: 'match baseline id hit', op: 'match', selector: '#inner', context: 'inner', iters: 5_000_000 },
-      { label: 'match :hover self hit', op: 'match', selector: ':hover', context: 'inner', iters: 5_000_000 },
-      { label: 'match :hover ancestor hit', op: 'match', selector: ':hover', context: 'outer', iters: 5_000_000 },
-      { label: 'match :hover miss', op: 'match', selector: ':hover', context: 'other', iters: 5_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#inner', ref: { by: 'id', id: 'inner' }, iters: 5_000_000 },
+      { label: 'match :hover self hit', op: 'match', selector: ':hover', ref: { by: 'id', id: 'inner' }, iters: 5_000_000 },
+      { label: 'match :hover ancestor hit', op: 'match', selector: ':hover', ref: { by: 'id', id: 'outer' }, iters: 5_000_000 },
+      { label: 'match :hover miss', op: 'match', selector: ':hover', ref: { by: 'id', id: 'other' }, iters: 5_000_000 },
     ],
   },
 
@@ -980,19 +980,19 @@ runPerfScenarios('perf', [
     },
     probeKeys: ['match'],
     benches: [
-      { label: 'match baseline id hit', op: 'match', selector: '#active-inner', context: 'active-inner', iters: 5_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#active-inner', ref: { by: 'id', id: 'active-inner' }, iters: 5_000_000 },
 
-      { label: 'match :active self hit', op: 'match', selector: ':active', context: 'active-inner', iters: 5_000_000 },
-      { label: 'match :active ancestor hit', op: 'match', selector: ':active', context: 'active-outer', iters: 5_000_000 },
-      { label: 'match :active miss', op: 'match', selector: ':active', context: 'active-other', iters: 5_000_000 },
+      { label: 'match :active self hit', op: 'match', selector: ':active', ref: { by: 'id', id: 'active-inner' }, iters: 5_000_000 },
+      { label: 'match :active ancestor hit', op: 'match', selector: ':active', ref: { by: 'id', id: 'active-outer' }, iters: 5_000_000 },
+      { label: 'match :active miss', op: 'match', selector: ':active', ref: { by: 'id', id: 'active-other' }, iters: 5_000_000 },
 
-      { label: 'match :focus hit', op: 'match', selector: ':focus', context: 'focus-inner', iters: 5_000_000, maxRatio: 6 },
-      { label: 'match :focus miss', op: 'match', selector: ':focus', context: 'focus-other', iters: 5_000_000 },
-      { label: 'match :focus-visible hit', op: 'match', selector: ':focus-visible', context: 'focus-inner', iters: 5_000_000, maxRatio: 6 },
+      { label: 'match :focus hit', op: 'match', selector: ':focus', ref: { by: 'id', id: 'focus-inner' }, iters: 5_000_000, maxRatio: 7 },
+      { label: 'match :focus miss', op: 'match', selector: ':focus', ref: { by: 'id', id: 'focus-other' }, iters: 5_000_000 },
+      { label: 'match :focus-visible hit', op: 'match', selector: ':focus-visible', ref: { by: 'id', id: 'focus-inner' }, iters: 5_000_000, maxRatio: 7 },
 
-      { label: 'match :focus-within self hit', op: 'match', selector: ':focus-within', context: 'focus-inner', iters: 5_000_000 },
-      { label: 'match :focus-within ancestor hit', op: 'match', selector: ':focus-within', context: 'focus-outer', iters: 5_000_000 },
-      { label: 'match :focus-within miss', op: 'match', selector: ':focus-within', context: 'focus-other', iters: 5_000_000 },
+      { label: 'match :focus-within self hit', op: 'match', selector: ':focus-within', ref: { by: 'id', id: 'focus-inner' }, iters: 5_000_000 },
+      { label: 'match :focus-within ancestor hit', op: 'match', selector: ':focus-within', ref: { by: 'id', id: 'focus-outer' }, iters: 5_000_000 },
+      { label: 'match :focus-within miss', op: 'match', selector: ':focus-within', ref: { by: 'id', id: 'focus-other' }, iters: 5_000_000 },
     ],
   },
 
@@ -1031,33 +1031,33 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Baselines
-      { label: 'match baseline id hit', op: 'match', selector: '#enabled-input', context: 'enabled-input', iters: 1_000_000 },
-      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'enabled-input', iters: 1_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#enabled-input', ref: { by: 'id', id: 'enabled-input' }, iters: 1_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', ref: { by: 'id', id: 'enabled-input' }, iters: 1_000_000 },
 
       // :enabled / :disabled
-      { label: 'match :enabled hit', op: 'match', selector: ':enabled', context: 'enabled-input', iters: 1_000_000, maxRatio: 14 },
-      { label: 'match :enabled miss disabled', op: 'match', selector: ':enabled', context: 'disabled-input', iters: 1_000_000 },
-      { label: 'match :disabled direct hit', op: 'match', selector: ':disabled', context: 'disabled-input', iters: 1_000_000 },
-      { label: 'match :disabled fieldset hit', op: 'match', selector: ':disabled', context: 'fieldset-disabled-input', iters: 1_000_000 },
-      { label: 'match :disabled miss', op: 'match', selector: ':disabled', context: 'enabled-input', iters: 1_000_000, maxRatio: 14 },
+      { label: 'match :enabled hit', op: 'match', selector: ':enabled', ref: { by: 'id', id: 'enabled-input' }, iters: 1_000_000, maxRatio: 14 },
+      { label: 'match :enabled miss disabled', op: 'match', selector: ':enabled', ref: { by: 'id', id: 'disabled-input' }, iters: 1_000_000 },
+      { label: 'match :disabled direct hit', op: 'match', selector: ':disabled', ref: { by: 'id', id: 'disabled-input' }, iters: 1_000_000 },
+      { label: 'match :disabled fieldset hit', op: 'match', selector: ':disabled', ref: { by: 'id', id: 'fieldset-disabled-input' }, iters: 1_000_000 },
+      { label: 'match :disabled miss', op: 'match', selector: ':disabled', ref: { by: 'id', id: 'enabled-input' }, iters: 1_000_000, maxRatio: 14 },
 
       // :read-only / :read-write
-      { label: 'match :read-only readonly hit', op: 'match', selector: ':read-only', context: 'readonly-input', iters: 1_000_000 },
-      { label: 'match :read-only plain hit', op: 'match', selector: ':read-only', context: 'plain', iters: 1_000_000, maxRatio: 17 },
-      { label: 'match :read-write input hit', op: 'match', selector: ':read-write', context: 'readwrite-input', iters: 1_000_000, maxRatio: 14  },
-      { label: 'match :read-write editable hit', op: 'match', selector: ':read-write', context: 'editable', iters: 1_000_000 },
-      { label: 'match :read-write readonly miss', op: 'match', selector: ':read-write', context: 'readonly-input', iters: 1_000_000 },
+      { label: 'match :read-only readonly hit', op: 'match', selector: ':read-only', ref: { by: 'id', id: 'readonly-input' }, iters: 1_000_000 },
+      { label: 'match :read-only plain hit', op: 'match', selector: ':read-only', ref: { by: 'id', id: 'plain' }, iters: 1_000_000, maxRatio: 17 },
+      { label: 'match :read-write input hit', op: 'match', selector: ':read-write', ref: { by: 'id', id: 'readwrite-input' }, iters: 1_000_000, maxRatio: 14  },
+      { label: 'match :read-write editable hit', op: 'match', selector: ':read-write', ref: { by: 'id', id: 'editable' }, iters: 1_000_000 },
+      { label: 'match :read-write readonly miss', op: 'match', selector: ':read-write', ref: { by: 'id', id: 'readonly-input' }, iters: 1_000_000 },
 
       // :placeholder-shown
-      { label: 'match :placeholder-shown hit', op: 'match', selector: ':placeholder-shown', context: 'placeholder-empty', iters: 1_000_000 },
-      { label: 'match :placeholder-shown miss filled', op: 'match', selector: ':placeholder-shown', context: 'placeholder-filled', iters: 1_000_000 },
-      { label: 'match :placeholder-shown miss plain', op: 'match', selector: ':placeholder-shown', context: 'plain', iters: 1_000_000 },
+      { label: 'match :placeholder-shown hit', op: 'match', selector: ':placeholder-shown', ref: { by: 'id', id: 'placeholder-empty' }, iters: 1_000_000 },
+      { label: 'match :placeholder-shown miss filled', op: 'match', selector: ':placeholder-shown', ref: { by: 'id', id: 'placeholder-filled' }, iters: 1_000_000 },
+      { label: 'match :placeholder-shown miss plain', op: 'match', selector: ':placeholder-shown', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
 
       // :default
-      { label: 'match :default checked hit', op: 'match', selector: ':default', context: 'default-checked', iters: 1_000_000 },
-      { label: 'match :default checkbox miss', op: 'match', selector: ':default', context: 'not-default-checked', iters: 1_000_000 },
-      { label: 'match :default option hit', op: 'match', selector: ':default', context: 'default-option', iters: 1_000_000 },
-      { label: 'match :default option miss', op: 'match', selector: ':default', context: 'not-default-option', iters: 1_000_000 },
+      { label: 'match :default checked hit', op: 'match', selector: ':default', ref: { by: 'id', id: 'default-checked' }, iters: 1_000_000 },
+      { label: 'match :default checkbox miss', op: 'match', selector: ':default', ref: { by: 'id', id: 'not-default-checked' }, iters: 1_000_000 },
+      { label: 'match :default option hit', op: 'match', selector: ':default', ref: { by: 'id', id: 'default-option' }, iters: 1_000_000 },
+      { label: 'match :default option miss', op: 'match', selector: ':default', ref: { by: 'id', id: 'not-default-option' }, iters: 1_000_000 },
     ],
   },
 
@@ -1105,50 +1105,50 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       // Baselines
-      { label: 'match baseline id hit', op: 'match', selector: '#checked-box', context: 'checked-box', iters: 1_000_000 },
-      { label: 'match baseline id miss', op: 'match', selector: '#absent', context: 'checked-box', iters: 1_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#checked-box', ref: { by: 'id', id: 'checked-box' }, iters: 1_000_000 },
+      { label: 'match baseline id miss', op: 'match', selector: '#absent', ref: { by: 'id', id: 'checked-box' }, iters: 1_000_000 },
 
       // :checked
-      { label: 'match :checked checkbox hit', op: 'match', selector: ':checked', context: 'checked-box', iters: 1_000_000 },
-      { label: 'match :checked checkbox miss', op: 'match', selector: ':checked', context: 'unchecked-box', iters: 1_000_000 },
-      { label: 'match :checked radio hit', op: 'match', selector: ':checked', context: 'checked-radio', iters: 1_000_000 },
-      { label: 'match :checked radio miss', op: 'match', selector: ':checked', context: 'unchecked-radio', iters: 1_000_000 },
-      { label: 'match :checked option hit', op: 'match', selector: ':checked', context: 'selected-option', iters: 1_000_000 },
-      { label: 'match :checked option miss', op: 'match', selector: ':checked', context: 'unselected-option', iters: 1_000_000 },
+      { label: 'match :checked checkbox hit', op: 'match', selector: ':checked', ref: { by: 'id', id: 'checked-box' }, iters: 1_000_000 },
+      { label: 'match :checked checkbox miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unchecked-box' }, iters: 1_000_000 },
+      { label: 'match :checked radio hit', op: 'match', selector: ':checked', ref: { by: 'id', id: 'checked-radio' }, iters: 1_000_000 },
+      { label: 'match :checked radio miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unchecked-radio' }, iters: 1_000_000 },
+      { label: 'match :checked option hit', op: 'match', selector: ':checked', ref: { by: 'id', id:  'selected-option'}, iters: 1_000_000 },
+      { label: 'match :checked option miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unselected-option' }, iters: 1_000_000 },
 
       // :indeterminate
-      { label: 'match :indeterminate checkbox hit', op: 'match', selector: ':indeterminate', context: 'checkbox-indeterminate', iters: 1_000_000 },
-      { label: 'match :indeterminate checkbox miss', op: 'match', selector: ':indeterminate', context: 'unchecked-box', iters: 1_000_000 },
-      { label: 'match :indeterminate progress hit', op: 'match', selector: ':indeterminate', context: 'progress-indeterminate', iters: 1_000_000 },
-      { label: 'match :indeterminate progress miss', op: 'match', selector: ':indeterminate', context: 'progress-determinate', iters: 1_000_000 },
+      { label: 'match :indeterminate checkbox hit', op: 'match', selector: ':indeterminate', ref: { by: 'id', id: 'checkbox-indeterminate' }, iters: 1_000_000 },
+      { label: 'match :indeterminate checkbox miss', op: 'match', selector: ':indeterminate', ref: { by: 'id', id: 'unchecked-box' }, iters: 1_000_000 },
+      { label: 'match :indeterminate progress hit', op: 'match', selector: ':indeterminate', ref: { by: 'id', id: 'progress-indeterminate' }, iters: 1_000_000 },
+      { label: 'match :indeterminate progress miss', op: 'match', selector: ':indeterminate', ref: { by: 'id', id: 'progress-determinate' }, iters: 1_000_000 },
 
       // :required / :optional
-      { label: 'match :required hit', op: 'match', selector: ':required', context: 'required-empty', iters: 1_000_000 },
-      { label: 'match :required miss optional', op: 'match', selector: ':required', context: 'optional-empty', iters: 1_000_000 },
-      { label: 'match :required miss plain', op: 'match', selector: ':required', context: 'plain', iters: 1_000_000 },
-      { label: 'match :optional hit', op: 'match', selector: ':optional', context: 'optional-empty', iters: 1_000_000 },
-      { label: 'match :optional miss required', op: 'match', selector: ':optional', context: 'required-empty', iters: 1_000_000 },
-      { label: 'match :optional miss plain', op: 'match', selector: ':optional', context: 'plain', iters: 1_000_000 },
+      { label: 'match :required hit', op: 'match', selector: ':required', ref: { by: 'id', id: 'required-empty' }, iters: 1_000_000 },
+      { label: 'match :required miss optional', op: 'match', selector: ':required', ref: { by: 'id', id: 'optional-empty' }, iters: 1_000_000 },
+      { label: 'match :required miss plain', op: 'match', selector: ':required', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
+      { label: 'match :optional hit', op: 'match', selector: ':optional', ref: { by: 'id', id: 'optional-empty' }, iters: 1_000_000 },
+      { label: 'match :optional miss required', op: 'match', selector: ':optional', ref: { by: 'id', id: 'required-empty' }, iters: 1_000_000 },
+      { label: 'match :optional miss plain', op: 'match', selector: ':optional', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
 
       // :valid / :invalid
-      { label: 'match :valid required filled hit', op: 'match', selector: ':valid', context: 'required-filled', iters: 1_000_000 },
-      { label: 'match :valid email hit', op: 'match', selector: ':valid', context: 'email-valid', iters: 1_000_000 },
-      { label: 'match :valid email miss', op: 'match', selector: ':valid', context: 'email-invalid', iters: 1_000_000, maxRatio: 10 },
-      { label: 'match :valid plain miss', op: 'match', selector: ':valid', context: 'plain', iters: 1_000_000 },
-      { label: 'match :invalid required empty hit', op: 'match', selector: ':invalid', context: 'required-empty', iters: 1_000_000, maxRatio: 12 },
-      { label: 'match :invalid email hit', op: 'match', selector: ':invalid', context: 'email-invalid', iters: 1_000_000, maxRatio: 11 },
-      { label: 'match :invalid email miss', op: 'match', selector: ':invalid', context: 'email-valid', iters: 1_000_000 },
-      { label: 'match :invalid plain miss', op: 'match', selector: ':invalid', context: 'plain', iters: 1_000_000 },
+      { label: 'match :valid required filled hit', op: 'match', selector: ':valid', ref: { by: 'id', id: 'required-filled' }, iters: 1_000_000 },
+      { label: 'match :valid email hit', op: 'match', selector: ':valid', ref: { by: 'id', id: 'email-valid' }, iters: 1_000_000 },
+      { label: 'match :valid email miss', op: 'match', selector: ':valid', ref: { by: 'id', id: 'email-invalid' }, iters: 1_000_000, maxRatio: 10 },
+      { label: 'match :valid plain miss', op: 'match', selector: ':valid', ref: { by: 'id', id:  'plain'}, iters: 1_000_000 },
+      { label: 'match :invalid required empty hit', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'required-empty' }, iters: 1_000_000, maxRatio: 12 },
+      { label: 'match :invalid email hit', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'email-invalid' }, iters: 1_000_000, maxRatio: 12 },
+      { label: 'match :invalid email miss', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'email-valid' }, iters: 1_000_000 },
+      { label: 'match :invalid plain miss', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
 
       // :in-range / :out-of-range
-      { label: 'match :in-range hit', op: 'match', selector: ':in-range', context: 'range-in', iters: 1_000_000 },
-      { label: 'match :in-range miss under', op: 'match', selector: ':in-range', context: 'range-under', iters: 1_000_000 },
-      { label: 'match :in-range miss empty', op: 'match', selector: ':in-range', context: 'range-empty', iters: 1_000_000 },
-      { label: 'match :in-range miss plain', op: 'match', selector: ':in-range', context: 'plain', iters: 1_000_000 },
-      { label: 'match :out-of-range under hit', op: 'match', selector: ':out-of-range', context: 'range-under', iters: 1_000_000 },
-      { label: 'match :out-of-range over hit', op: 'match', selector: ':out-of-range', context: 'range-over', iters: 1_000_000 },
-      { label: 'match :out-of-range miss in', op: 'match', selector: ':out-of-range', context: 'range-in', iters: 1_000_000 },
-      { label: 'match :out-of-range miss empty', op: 'match', selector: ':out-of-range', context: 'range-empty', iters: 1_000_000 },
+      { label: 'match :in-range hit', op: 'match', selector: ':in-range', ref: { by: 'id', id: 'range-in' }, iters: 1_000_000 },
+      { label: 'match :in-range miss under', op: 'match', selector: ':in-range', ref: { by: 'id', id: 'range-under' }, iters: 1_000_000 },
+      { label: 'match :in-range miss empty', op: 'match', selector: ':in-range', ref: { by: 'id', id: 'range-empty' }, iters: 1_000_000 },
+      { label: 'match :in-range miss plain', op: 'match', selector: ':in-range', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
+      { label: 'match :out-of-range under hit', op: 'match', selector: ':out-of-range', ref: { by: 'id', id: 'range-under' }, iters: 1_000_000 },
+      { label: 'match :out-of-range over hit', op: 'match', selector: ':out-of-range', ref: { by: 'id', id: 'range-over' }, iters: 1_000_000 },
+      { label: 'match :out-of-range miss in', op: 'match', selector: ':out-of-range', ref: { by: 'id', id: 'range-in' }, iters: 1_000_000 },
+      { label: 'match :out-of-range miss empty', op: 'match', selector: ':out-of-range', ref: { by: 'id', id: 'range-empty' }, iters: 1_000_000 },
     ],
   },
 
@@ -1165,15 +1165,432 @@ runPerfScenarios('perf', [
     `,
     probeKeys: ['match'],
     benches: [
-      { label: 'match baseline id hit', op: 'match', selector: '#video', context: 'video', iters: 1_000_000 },
+      { label: 'match baseline id hit', op: 'match', selector: '#video', ref: { by: 'id', id: 'video' }, iters: 1_000_000 },
 
-      { label: 'match :muted hit', op: 'match', selector: ':muted', context: 'audio', iters: 1_000_000 },
-      { label: 'match :muted miss media', op: 'match', selector: ':muted', context: 'video', iters: 1_000_000 },
-      { label: 'match :muted miss plain', op: 'match', selector: ':muted', context: 'plain', iters: 1_000_000 },
+      { label: 'match :muted hit', op: 'match', selector: ':muted', ref: { by: 'id', id: 'audio' }, iters: 1_000_000 },
+      { label: 'match :muted miss media', op: 'match', selector: ':muted', ref: { by: 'id', id: 'video' }, iters: 1_000_000 },
+      { label: 'match :muted miss plain', op: 'match', selector: ':muted', ref: { by: 'id', id: 'plain' }, iters: 1_000_000 },
 
-      { label: 'match :paused media', op: 'match', selector: ':paused', context: 'video', iters: 1_000_000 },
-      { label: 'match :playing miss media', op: 'match', selector: ':playing', context: 'video', iters: 1_000_000 },
-      { label: 'match :seeking miss media', op: 'match', selector: ':seeking', context: 'video', iters: 1_000_000 },
+      { label: 'match :paused media', op: 'match', selector: ':paused', ref: { by: 'id', id: 'video' }, iters: 1_000_000 },
+      { label: 'match :playing miss media', op: 'match', selector: ':playing', ref: { by: 'id', id: 'video' }, iters: 1_000_000 },
+      { label: 'match :seeking miss media', op: 'match', selector: ':seeking', ref: { by: 'id', id: 'video' }, iters: 1_000_000 },
+    ],
+  },
+
+  {
+    name: 'select id candidate paths 1 / document.all',
+    status: 'skip',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+        nwdom.snapshot.hasDocumentAll = true;
+        nwdom.snapshot.hasTreeWalker = true;
+      });
+    },
+    probeKeys: ['select'],
+    benches: [
+      { label: 'select id hit document', op: 'select', selector: '#item-100', iters: 100_000 },
+      { label: 'select id miss document', op: 'select', selector: '#absent', iters: 100_000 },
+      { label: 'select id plus class document', op: 'select', selector: '#item-100.item', iters: 100_000 },
+      { label: 'select id hit element', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id miss element', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select context id element', op: 'select', selector: '#root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id hit detached', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id miss detached', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id hit fragment', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'select id miss fragment', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select id candidate paths 2 / mutation fallback',
+    status: 'skip',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: true });
+        nwdom.snapshot.hasDocumentAll = false;
+        nwdom.snapshot.hasTreeWalker = true;
+      });
+    },
+    probeKeys: ['select'],
+    benches: [
+      { label: 'select id hit document', op: 'select', selector: '#item-100', iters: 100_000 },
+      { label: 'select id miss document', op: 'select', selector: '#absent', iters: 100_000 },
+      { label: 'select id plus class document', op: 'select', selector: '#item-100.item', iters: 100_000 },
+      { label: 'select id hit element', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id miss element', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select context id element', op: 'select', selector: '#root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id hit detached', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id miss detached', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id hit fragment', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'select id miss fragment', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select id candidate paths 3 / treewalker fallback',
+    status: 'skip',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+        nwdom.snapshot.hasDocumentAll = false;
+        nwdom.snapshot.hasTreeWalker = true;
+      });
+    },
+    probeKeys: ['select'],
+    benches: [
+      { label: 'select id hit document', op: 'select', selector: '#item-100', iters: 100_000 },
+      { label: 'select id miss document', op: 'select', selector: '#absent', iters: 100_000 },
+      { label: 'select id plus class document', op: 'select', selector: '#item-100.item', iters: 100_000 },
+      { label: 'select id hit element', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id miss element', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select context id element', op: 'select', selector: '#root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id hit detached', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id miss detached', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id hit fragment', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'select id miss fragment', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select id candidate paths 4 / manual walk fallback',
+    status: 'skip',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+        nwdom.snapshot.hasDocumentAll = false;
+        nwdom.snapshot.hasTreeWalker = false;
+      });
+    },
+    probeKeys: ['select'],
+    benches: [
+      { label: 'select id hit document', op: 'select', selector: '#item-100', iters: 100_000 },
+      { label: 'select id miss document', op: 'select', selector: '#absent', iters: 100_000 },
+      { label: 'select id plus class document', op: 'select', selector: '#item-100.item', iters: 100_000 },
+      { label: 'select id hit element', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id miss element', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select context id element', op: 'select', selector: '#root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id hit detached', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id miss detached', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id hit fragment', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'select id miss fragment', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select id candidate paths',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: true });
+
+        // nwdom.configure({ MUTATE_IDS: false });
+        // nwdom.snapshot.hasDocumentAll = false;
+        // nwdom.snapshot.hasTreeWalker = false;
+      });
+    },
+    probeKeys: ['select'],
+    benches: [
+      // document context: document.all fast path
+      { label: 'select id hit document', op: 'select', selector: '#item-100', iters: 100_000 },
+      { label: 'select id miss document', op: 'select', selector: '#absent', iters: 100_000 },
+
+      // compound ID selector remains a separate hotspot
+      { label: 'select id plus class document', op: 'select', selector: '#item-100.item', iters: 100_000 },
+
+      // connected element context: ownerDocument.all + containment filter
+      { label: 'select id hit element', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select id miss element', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'select context id element', op: 'select', selector: '#root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+
+      // detached element context: traversal fallback
+      { label: 'select id hit detached', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'select id miss detached', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+
+      // fragment context: mutation path when enabled, traversal otherwise
+      { label: 'select id hit fragment', op: 'select', selector: '#item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'select id miss fragment', op: 'select', selector: '#absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'byId candidate paths 1 / document.all',
+    status: 'skip',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+        nwdom.snapshot.hasDocumentAll = true;
+      });
+    },
+    probeKeys: [''],
+    benches: [
+      { label: 'byId hit document', op: 'byId', id: 'item-100', iters: 100_000 },
+      { label: 'byId miss document', op: 'byId', id: 'absent', iters: 100_000 },
+      { label: 'byId hit element', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId miss element', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId context id element', op: 'byId', id: 'root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId hit detached', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId miss detached', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId hit fragment', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'byId miss fragment', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'byId candidate paths 2 / mutation fallback',
+    status: 'skip',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: true });
+        nwdom.snapshot.hasDocumentAll = false;
+      });
+    },
+    probeKeys: [''],
+    benches: [
+      { label: 'byId hit document', op: 'byId', id: 'item-100', iters: 100_000 },
+      { label: 'byId miss document', op: 'byId', id: 'absent', iters: 100_000 },
+      { label: 'byId hit element', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId miss element', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId context id element', op: 'byId', id: 'root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId hit detached', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId miss detached', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId hit fragment', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'byId miss fragment', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'byId candidate paths 3 / manual walk fallback',
+    status: 'skip',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+        nwdom.snapshot.hasDocumentAll = false;
+      });
+    },
+    probeKeys: [''],
+    benches: [
+      { label: 'byId hit document', op: 'byId', id: 'item-100', iters: 100_000 },
+      { label: 'byId miss document', op: 'byId', id: 'absent', iters: 100_000 },
+      { label: 'byId hit element', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId miss element', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId context id element', op: 'byId', id: 'root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId hit detached', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId miss detached', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId hit fragment', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'byId miss fragment', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'byId candidate paths',
+    // status: 'only',
+    browsers: ['chromium'],
+    quickIters: 20_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom?.snapshot) return;
+        nwdom.configure({ MUTATE_IDS: false });
+      });
+    },
+    probeKeys: [''],
+    benches: [
+      // document context: native getElementById / NW document path
+      { label: 'byId hit document', op: 'byId', id: 'item-100', iters: 100_000 },
+      { label: 'byId miss document', op: 'byId', id: 'absent', iters: 100_000 },
+
+      // connected element context: native selector approximation / NW scoped byId
+      { label: 'byId hit element', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId miss element', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+      { label: 'byId context id element', op: 'byId', id: 'root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
+
+      // detached element context: traversal fallback
+      { label: 'byId hit detached', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+      { label: 'byId miss detached', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
+
+      // fragment context: getElementById/native fallback vs NW fragment path
+      { label: 'byId hit fragment', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+      { label: 'byId miss fragment', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select basic selector families',
+    // status: 'only',
+    // browsers: ['firefox'],
+    browsers: ['chromium'],
+    quickIters: 5_000,
+    markup: `
+      <main id="root">
+        ${Array.from({ length: 200 }, (_, i) => `
+          <section class="group ${i % 2 ? 'odd' : 'even'}" data-group="${i}">
+            <div id="item-${i}" class="item ${i % 3 ? 'cold' : 'hot'}" data-kind="${i % 4 ? 'normal' : 'special'}">
+              <span class="label">label ${i}</span>
+            </div>
+          </section>
+        `).join('')}
+      </main>
+    `,
+    probeKeys: ['select'],
+    benches: [
+      // Baselines / optimizer seed families
+      { label: 'select id hit',        op: 'select', selector: '#item-100',      iters: 100_000 },
+      { label: 'select id miss',       op: 'select', selector: '#absent',        iters: 100_000 },
+      { label: 'select class many',    op: 'select', selector: '.item',          iters: 50_000 },
+      { label: 'select class subset',  op: 'select', selector: '.hot',           iters: 50_000 },
+      { label: 'select tag many',      op: 'select', selector: 'div',            iters: 50_000 },
+      { label: 'select tag nested',    op: 'select', selector: 'span',           iters: 50_000 },
+
+      // Attribute path / likely non-seed or less optimized path
+      { label: 'select attr exists',   op: 'select', selector: '[data-kind]',              iters: 20_000 },
+      { label: 'select attr exact',    op: 'select', selector: '[data-kind="special"]',    iters: 20_000 },
+      { label: 'select attr contains', op: 'select', selector: '[data-group*="1"]',        iters: 20_000 },
+
+      // Combined seed + filter
+      { label: 'select id plus class hit',    op: 'select', selector: '#item-100.item',              iters: 100_000 },
+      { label: 'select class plus attr',      op: 'select', selector: '.item[data-kind="special"]',  iters: 20_000 },
+      { label: 'select tag plus class',       op: 'select', selector: 'div.item',                    iters: 50_000 },
+
+      // Descendant combinator: candidate seed plus ancestry/filtering
+      { label: 'select descendant class',     op: 'select', selector: 'section .label',              iters: 20_000 },
+      { label: 'select descendant attr',      op: 'select', selector: 'section [data-kind="special"]', iters: 20_000 },
     ],
   },
 

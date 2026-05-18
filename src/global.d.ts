@@ -20,7 +20,7 @@ var NW: {
 } | undefined;
 
 type NwsConfig = Record<ConfigKey, boolean>;
-type ConfigKey = 'NODE_LIST';
+type ConfigKey = 'NODE_LIST' | 'MUTATE_IDS';
 type NwsExtensions = {
   combinators: string[];
   operators: string[];

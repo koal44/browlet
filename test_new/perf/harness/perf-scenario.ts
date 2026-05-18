@@ -2,9 +2,9 @@ import { chromium, firefox, webkit, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
 export interface PerfHelpers {
-  runPerfBenches(
+  runBenches(
     engineName: 'native' | 'nw',
-    benches: PerfBench[],
+    benches: Bench[],
     options?: { quickIters?: number, focused?: boolean },
   ): BenchResult[];
 }
@@ -14,29 +14,46 @@ type BrowserName = typeof BROWSER_NAMES[number];
 
 type PerfScenarioStatus = 'normal' | 'skip' | 'only';
 
-type Engine = {
+type BenchOps = {
+  match(sel: string, el: Element): boolean;
   select(sel: string, ctx: QueryContext): Element[];
   first(sel: string, ctx: QueryContext): Element | null;
-  match(sel: string, el: Element): boolean;
   closest(sel: string, el: Element): Element | null;
+  byId(id: string, ctx: QueryContext): Element | null;
+  byClass(cls: string, ctx: QueryContext): Element[];
+  byTag(tag: string, ctx: QueryContext): Element[];
 };
+
 type EngineName = 'native' | 'nw-current' | 'nw-2.2.23';
 
-type PerfEngine = {
+type EngineTarget = {
   name: EngineName;
   script?: string;
 };
 
-type PerfOp = 'select' | 'first' | 'match' | 'closest' | 'matchWalk';
+type MatchBench =   { op: 'match';     selector:  string;    ref:  ContextRef } & BenchBase;
+type SelectBench =  { op: 'select';    selector:  string;    ref?: ContextRef } & BenchBase;
+type FirstBench =   { op: 'first';     selector:  string;    ref?: ContextRef } & BenchBase;
+type ClosestBench = { op: 'closest';   selector:  string;    ref:  ContextRef } & BenchBase;
+type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: ContextRef } & BenchBase;
+type ByIdBench =    { op: 'byId';      id:        string;    ref?: ContextRef } & BenchBase;
+type ByClassBench = { op: 'byClass';   cls:       string;    ref?: ContextRef } & BenchBase;
+type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef } & BenchBase;
 
-type SelectBench =  { op: 'select';    selector:  string;    context?: string | null } & PerfBenchBase;
-type FirstBench =   { op: 'first';     selector:  string;    context?: string | null } & PerfBenchBase;
-type MatchBench =   { op: 'match';     selector:  string;    context:  string        } & PerfBenchBase;
-type ClosestBench = { op: 'closest';   selector:  string;    context:  string        } & PerfBenchBase;
-type WalkBench =    { op: 'matchWalk'; selectors: string[];  context?: string | null } & PerfBenchBase;
+type BenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean };
+type Bench =
+  MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench;
 
-type PerfBenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean };
-type PerfBench = SelectBench | FirstBench | MatchBench | ClosestBench | WalkBench;
+export type ContextRef =
+  | { by: 'document' }
+  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef }
+  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef }
+  | { by: 'documentElement'; home?: ContextHome; }
+  | { by: 'iframe'; id: string; within?: ContextRef }
+  | { by: 'template'; id: string; within?: ContextRef }
+  | { by: 'shadowRoot'; id: string; within?: ContextRef };
+
+export type ContextHome = 'document' | 'detached' | 'fragment';
 
 type PerfScenario = {
   name: string;
@@ -47,7 +64,7 @@ type PerfScenario = {
   markupMode?: 'html-body' | 'html-document' | 'xml-document';
   setupPage?: (page: Page) => void | Promise<void>;
   probeKeys?: string[];
-  benches: PerfBench[];
+  benches: Bench[];
   quickIters?: number;
 };
 
@@ -61,7 +78,7 @@ type BenchResult = {
   maxRatio: number;
 };
 
-const DEFAULT_ENGINES: PerfEngine[] = [
+const DEFAULT_ENGINES: EngineTarget[] = [
   { name: 'native' },
   { name: 'nw-2.2.23', script: 'test_new/perf/engines/nwsapi-2.2.23.js' },
   { name: 'nw-current', script: 'dist/nwsapi.js' },
@@ -94,7 +111,7 @@ export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void
     for (const scenario of scenarios) {
       if (hasOnly && scenario.status !== 'only') continue;
 
-      const testFn = getPerfTestFn(scenario.status);
+      const testFn = getTestFn(scenario.status);
       testFn(scenario.name, async () => {
         await runPerfScenario(scenario, browsers);
       });
@@ -109,7 +126,7 @@ async function runPerfScenario(
   const scenarioBrowsers = scenario.browsers ?? BROWSER_NAMES;
   const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map(e => e.name))];
   if (!engineNames.includes('nw-current')) engineNames.push('nw-current');
-  const scenarioEngines = resolvePerfEngines(engineNames);
+  const scenarioEngines = resolveEngines(engineNames);
 
   for (const browserName of scenarioBrowsers) {
     const browser = browsers[browserName];
@@ -125,15 +142,15 @@ async function runPerfScenario(
         attachPageDiagnostics(page);
         await initPage(page, scenario);
 
-        if (scenario.setupPage) await scenario.setupPage(page);
         if (engine.script) await installNwsapi(page, engine.script);
+        if (scenario.setupPage) await scenario.setupPage(page);
         await installPerfHelpers(page);
 
         const mode: 'native' | 'nw' = engine.name === 'native' ? 'native' : 'nw';
 
         all[engine.name] = await page.evaluate(
           ({ mode, benches, quickIters, focused }) =>
-            window.__perfHelpers.runPerfBenches(mode, benches, { quickIters, focused }),
+            window.__perfHelpers.runBenches(mode, benches, { quickIters, focused }),
           {
             mode,
             benches: scenario.benches,
@@ -261,13 +278,13 @@ async function initPage(page: Page, scenario: PerfScenario): Promise<void> {
   });
 }
 
-function getPerfTestFn(status?: PerfScenarioStatus) {
+function getTestFn(status?: PerfScenarioStatus) {
   if (status === 'skip') return test.skip;
   if (status === 'only') return test.only;
   return test;
 }
 
-function resolvePerfEngines(names: EngineName[]): PerfEngine[] {
+function resolveEngines(names: EngineName[]): EngineTarget[] {
   return names.map((name) => {
     const engine = DEFAULT_ENGINES.find(e => e.name === name);
     if (!engine) throw new Error(`Unknown perf engine: ${name}`);
@@ -317,41 +334,57 @@ async function installPerfHelpers(page: Page) {
 
     function summarize(value: unknown) {
       if (Array.isArray(value)) return value.length;
-      if (value instanceof Element) return value.id || value.localName;
+      if (isElement(value)) return value.getAttribute('id') || value.localName;
       return value;
     }
 
-    function walkElements(root: Element, fn: (el: Element) => void) {
-      const walk = (node: ParentNode) => {
-        for (let child = node.firstElementChild; child; child = child.nextElementSibling) {
-          fn(child);
-          walk(child);
+    function walkElements(root: QueryContext, fn: (el: Element) => void) {
+      if (isElement(root)) {
+        fn(root);
+        walkChildren(root, fn);
+        return;
+      }
+
+      if (isDocument(root)) {
+        const el = root.documentElement;
+        if (el) {
+          fn(el);
+          walkChildren(el, fn);
         }
-      };
-      walk(root);
+        return;
+      }
+
+      // docfrag
+      walkChildren(root, fn);
     }
 
-    function matchWalk(engine: Engine, root: Element | Document, selectors: string[]) {
-      root = root instanceof Element ? root : root.documentElement;
+    function walkChildren(root: ParentNode, fn: (el: Element) => void) {
+      for (let child = root.firstElementChild; child; child = child.nextElementSibling) {
+        fn(child);
+        walkChildren(child, fn);
+      }
+    }
+
+    function matchWalk(ops: BenchOps, root: QueryContext, selectors: string[]) {
       let hits = 0;
       let calls = 0;
 
       walkElements(root, (el) => {
         for (const sel of selectors) {
           calls++;
-          if (engine.match(sel, el)) hits++;
+          if (ops.match(sel, el)) hits++;
         }
       });
 
       return { hits, calls };
     }
 
-    function runPerfBenches(
+    function runBenches(
       engineName: 'native' | 'nw',
-      benches: PerfBench[],
+      benches: Bench[],
       options: { quickIters?: number, focused?: boolean } = {},
     ): BenchResult[] {
-      const labels = benches.map(perfBenchLabel);
+      const labels = benches.map(benchLabel);
       assertUniqueBenchLabels(labels);
 
       const hasDebugBench = benches.some(b => b.debug);
@@ -360,37 +393,46 @@ async function installPerfHelpers(page: Page) {
         if (!supportsNwDebug()) return [];
       }
 
-      const engine = getEngine(engineName);
+      const ops = getBenchOps(engineName);
 
       return benches.map((b, i) => {
         const label = labels[i];
-        const ctx = resolvePerfContext(b.context);
+        const ctx = resolveContext(b.ref);
         const iters = options.focused
           ? b.iters
           : b.quickIters ?? options.quickIters ?? b.iters;
 
         switch (b.op) {
           case 'match':
-            if (!(ctx instanceof Element)) throw new Error(`${label}: match needs Element context`);
-            if (b.debug) debugBench(label, () => engine.match(b.selector, ctx));
-            return bench(label, () => engine.match(b.selector, ctx), iters, b.maxRatio);
-
-          case 'closest':
-            if (!(ctx instanceof Element)) throw new Error(`${label}: closest needs Element context`);
-            if (b.debug) debugBench(label, () => engine.closest(b.selector, ctx));
-            return bench(label, () => engine.closest(b.selector, ctx), iters, b.maxRatio);
+            if (!isElement(ctx)) throw new Error(`${label}: match needs Element context`);
+            if (b.debug) debugBench(label, () => ops.match(b.selector, ctx));
+            return bench(label, () => ops.match(b.selector, ctx), iters, b.maxRatio);
 
           case 'select':
-            if (b.debug) debugBench(label, () => engine.select(b.selector, ctx));
-            return bench(label, () => engine.select(b.selector, ctx), iters, b.maxRatio);
+            if (b.debug) debugBench(label, () => ops.select(b.selector, ctx));
+            return bench(label, () => ops.select(b.selector, ctx), iters, b.maxRatio);
 
           case 'first':
-            if (b.debug) debugBench(label, () => engine.first(b.selector, ctx));
-            return bench(label, () => engine.first(b.selector, ctx), iters, b.maxRatio);
+            if (b.debug) debugBench(label, () => ops.first(b.selector, ctx));
+            return bench(label, () => ops.first(b.selector, ctx), iters, b.maxRatio);
+
+          case 'closest':
+            if (!isElement(ctx)) throw new Error(`${label}: closest needs Element context`);
+            if (b.debug) debugBench(label, () => ops.closest(b.selector, ctx));
+            return bench(label, () => ops.closest(b.selector, ctx), iters, b.maxRatio);
 
           case 'matchWalk':
-            if (b.debug) debugBench(label, () => matchWalk(engine, ctx, b.selectors));
-            return bench(label, () => matchWalk(engine, ctx, b.selectors), iters, b.maxRatio);
+            if (b.debug) debugBench(label, () => matchWalk(ops, ctx, b.selectors));
+            return bench(label, () => matchWalk(ops, ctx, b.selectors), iters, b.maxRatio);
+
+          case 'byId':
+            return bench(label, () => ops.byId(b.id, ctx), iters, b.maxRatio);
+
+          case 'byClass':
+            return bench(label, () => ops.byClass(b.cls, ctx), iters, b.maxRatio);
+
+          case 'byTag':
+            return bench(label, () => ops.byTag(b.tag, ctx), iters, b.maxRatio);
 
           default:
             return assertNever(b);
@@ -398,13 +440,16 @@ async function installPerfHelpers(page: Page) {
       });
     }
 
-    function getEngine(engineName: 'native' | 'nw'): Engine {
+    function getBenchOps(engineName: 'native' | 'nw'): BenchOps {
       if (engineName === 'native') {
         return {
+          match: (s, e) => e.matches(s),
           select: (s, c) => [...c.querySelectorAll(s)],
           first: (s, c) => c.querySelector(s),
-          match: (s, e) => e.matches(s),
           closest: (s, e) => e.closest(s),
+          byId: (id, ctx) => queryId(ctx, id),
+          byClass: (cls, ctx) => queryClass(ctx, cls),
+          byTag: (tag, ctx) => queryTag(ctx, tag),
         };
       }
 
@@ -412,26 +457,30 @@ async function installPerfHelpers(page: Page) {
       if (!nwDom) throw new Error('NW.Dom is not available');
 
       return {
+        match: (s, e) => nwDom.match(s, e),
         select: (s, c) => [...nwDom.select(s, c)],
         first: (s, c) => nwDom.first(s, c),
-        match: (s, e) => nwDom.match(s, e),
         closest: (s, e) => nwDom.closest(s, e),
+        byId: (id, ctx) => nwDom.byId(id, ctx),
+        byClass: (cls, ctx) => nwDom.byClass(cls, ctx),
+        byTag: (tag, ctx) => nwDom.byTag(tag, ctx),
       };
     }
 
-    function perfBenchLabel(b: PerfBench): string {
+    function benchLabel(b: Bench): string {
       if (b.label) return b.label;
 
       switch (b.op) {
+        case 'match':
         case 'select':
         case 'first':
-        case 'match':
         case 'closest':
           return `${b.op} ${b.selector}`;
-
         case 'matchWalk':
           return `${b.op} ${b.selectors.join(', ')}`;
-
+        case 'byId':    return `${b.op} ${b.id}`;
+        case 'byClass': return `${b.op} ${b.cls}`;
+        case 'byTag':   return `${b.op} ${b.tag}`;
         default:
           return assertNever(b);
       }
@@ -451,13 +500,110 @@ async function installPerfHelpers(page: Page) {
       }
     }
 
-    function resolvePerfContext(ref?: string | null): Document | Element {
+    function resolveContext(ref?: ContextRef): QueryContext {
       const doc = window.__perfXml ?? document;
-      if (ref == null) return doc;
+      if (!ref || ref.by === 'document') return doc;
 
-      const el = doc.getElementById(ref);
-      if (!el) throw new Error(`Missing perf context: #${ref}`);
-      return el;
+      const base = 'within' in ref && ref.within ? resolveContext(ref.within) : doc;
+
+      if (ref.by === 'iframe') {
+        const iframe = queryId(base, ref.id);
+        if (!isIFrameElement(iframe)) {
+          throw new Error(`Missing iframe context: ${JSON.stringify(ref)}`);
+        }
+        const child = iframe.contentDocument;
+        if (!child) {
+          throw new Error(`Iframe has no contentDocument: ${JSON.stringify(ref)}`);
+        }
+        return child;
+      }
+
+      if (ref.by === 'template') {
+        const tmpl = queryId(base, ref.id);
+        if (!isTemplateElement(tmpl)) {
+          throw new Error(`Missing template context: ${JSON.stringify(ref)}`);
+        }
+        return tmpl.content;
+      }
+
+      if (ref.by === 'shadowRoot') {
+        const host = queryId(base, ref.id);
+        if (!host) {
+          throw new Error(`Missing shadow host: ${JSON.stringify(ref)}`);
+        }
+        if (!host.shadowRoot) {
+          throw new Error(`Host has no shadowRoot: ${JSON.stringify(ref)}`);
+        }
+        return host.shadowRoot;
+      }
+
+      const el = ref.by === 'id' ? queryId(base, ref.id)
+        : ref.by === 'first' ? base.querySelector(ref.selector)
+        : ref.by === 'documentElement' ? doc.documentElement
+        : assertNever(ref);
+
+      if (!el) {
+        throw new Error(`Missing context element: ${JSON.stringify(ref)}`);
+      }
+
+      const home: ContextHome = ref.home ?? 'document';
+      if (home === 'document') return el;
+
+      const clone = el.cloneNode(true);
+      if (!isElement(clone)) {
+        throw new Error(`Context clone is not an Element: ${JSON.stringify(ref)}`);
+      }
+
+      if (home === 'detached') return clone;
+
+      if (home === 'fragment') {
+        const frag = doc.createDocumentFragment();
+        frag.appendChild(clone);
+        return frag;
+      }
+
+      return assertNever(home);
+    }
+
+    function isElement(x: unknown): x is Element {
+      return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 1;
+    }
+
+    function isDocument(x: unknown): x is Document {
+      return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 9;
+    }
+
+    function isDocumentFragment(x: unknown): x is DocumentFragment {
+      return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 11;
+    }
+
+    function isHtmlElement(x: unknown): x is HTMLElement {
+      return isElement(x) && x.namespaceURI === 'http://www.w3.org/1999/xhtml';
+    }
+
+    function isIFrameElement(x: unknown): x is HTMLIFrameElement {
+      return isHtmlElement(x) && x.localName === 'iframe';
+    }
+
+    function isTemplateElement(x: unknown): x is HTMLTemplateElement {
+      return isHtmlElement(x) && x.localName === 'template';
+    }
+
+    // Native fallbacks approximate missing Element/Fragment APIs for perf only.
+    // Some paths use selector-backed approximations rather than exact native API equivalents.
+    function queryId(base: QueryContext, id: string): Element | null {
+      if (isDocument(base) || isDocumentFragment(base)) return base.getElementById(id);
+      return base.querySelector(`#${CSS.escape(id)}`);
+    }
+
+    function queryClass(base: QueryContext, cls: string): Element[] {
+      if (isDocument(base) || isElement(base)) return [...base.getElementsByClassName(cls)];
+      return [...base.querySelectorAll(`.${CSS.escape(cls)}`)];
+    }
+
+    function queryTag(base: QueryContext, tag: string): Element[] {
+      if (isDocument(base) || isElement(base)) return [...base.getElementsByTagName(tag)];
+      return [...base.querySelectorAll(tag)];
     }
 
     function assertNever(value: never, message?: string): never {
@@ -497,7 +643,7 @@ async function installPerfHelpers(page: Page) {
     }
 
     window.__perfHelpers = {
-      runPerfBenches,
+      runBenches,
     };
 
   });

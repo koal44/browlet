@@ -1,3 +1,4 @@
+import { get } from "node:http";
 import { debug } from "node:util";
 
 function Factory(fGlobal: Glob, fExport: Function): DomApi {
@@ -300,7 +301,14 @@ function Factory(fGlobal: Glob, fExport: Function): DomApi {
 }
 
 export const DEFAULT_CONFIG: NwsConfig = {
+  // When enabled, methods that return multiple elements will return a NodeList-like object instead of an array.
   NODE_LIST: false,
+
+  // Allows duplicate-ID candidate lookup to temporarily remove and restore id
+  // attributes in contexts where no fast id collection is available.
+  // Faster for DocumentFragment/template contexts, but observable by mutation
+  // observers and other DOM-inspection code. Disabled by default.
+  MUTATE_IDS: false,
 };
 
 export const DEFAULT_EXTENSIONS: NwsExtensions = {
@@ -317,6 +325,8 @@ export function initSnapshot(doc: Document) {
     isHtml: isHtmlDoc(doc),
     isQuirksMode: isQuirksMode(doc),
     namespace: getNamespace(doc) as string | null,
+    hasDocumentAll: 'all' in doc,
+    hasTreeWalker: 'createTreeWalker' in doc,
     re: {} as Rex,
 
     isDebug: false,
@@ -501,6 +511,8 @@ function updateSnapshot(snap: Snapshot, ctx: QueryContext, updateScope = false) 
     snap.isHtml = isHtmlDoc(doc);
     snap.isQuirksMode = isQuirksMode(doc);
     snap.namespace = getNamespace(doc);
+    snap.hasDocumentAll = 'all' in doc;
+    snap.hasTreeWalker = 'createTreeWalker' in doc;
   }
 
   // Debug breadcrumb only
@@ -557,35 +569,243 @@ function walkElements(context: QueryContext, visit: (e: Element) => boolean | vo
   }
 }
 
-// find duplicate ids using tree-order walk
-function byIdRaw(id: string, context: QueryContext, snap: Snapshot): Element[] {
-  updateSnapshot(snap, context);
+function getCandidatesById(id: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!id) return [];
 
+  if (isDocument(context)) {  // Document
+    if (snap.hasDocumentAll) return byId_All(id, context);
+    if (snap.config.MUTATE_IDS) return byId_MutateInDoc(id, context);
+  } else if (isElement(context)) {  // Element
+    if (context.isConnected) {
+      if (snap.hasDocumentAll) return byId_All(id, context);
+      if (snap.config.MUTATE_IDS) return byId_MutateInEl(id, context);
+    }
+  } else {  // DocumentFragment
+    if (snap.config.MUTATE_IDS) return byId_MutateInDoc(id, context);
+  }
+
+  return snap.hasTreeWalker ? byId_TreeWalk(id, context) : byId_Walk(id, context);
+}
+
+function byId_All(id: string, context: Document | Element): Element[] {
+  // document.all only sees connected document-tree elements.
+  // Detached elements, fragments, and template contents need local traversal.
+
+  const isDoc = isDocument(context);
+
+  let doc: Document;
+  if (isDoc) {
+    doc = context;
+  } else {
+    if (!context.isConnected) throw new Error('byId_All cannot be used on a disconnected element or fragment');
+    doc = context.ownerDocument;
+  }
+
+  const item = doc.all.namedItem(id);
+  if (item === null) return [];
+
   const nodes: Element[] = [];
-  walkElements(context, e => {
-    if (e.getAttribute('id') === id) nodes.push(e);
-  });
+  if (isNamedItemAnElement(item)) {  // Element
+    const e = item;
+    if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
+      nodes.push(e);
+    }
+  } else {  // HTMLCollection
+    for (let i = 0; i < item.length; i++) {
+      const e = item[i];
+      if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
+        nodes.push(e);
+      }
+    }
+  }
 
   return nodes;
 }
 
-// context-agnostic getElementById
+function byId_MutateInDoc(id: string, context: Document | DocumentFragment): Element[] {
+  const nodes: Element[] = [];
+
+  try {
+    for (;;) {
+      const e = context.getElementById(id);
+      if (!e) break;
+      nodes.push(e);
+      e.removeAttribute('id');
+    }
+  } finally {
+    for (const e of nodes) e.setAttribute('id', id);
+  }
+
+  return nodes;
+}
+
+function byId_MutateInEl(id: string, context: Element): Element[] {
+  if (!context.isConnected) {
+    throw new Error('byId_MutateInEl cannot be used on a disconnected element');
+  }
+
+  const doc = context.ownerDocument;
+  const nodes: Element[] = [];
+  const mutated: Element[] = [];
+
+  try {
+    for (;;) {
+      const e = doc.getElementById(id);
+      if (!e) break;
+
+      if (e !== context && context.contains(e)) {
+        nodes.push(e);
+      }
+      e.removeAttribute('id');
+      mutated.push(e);
+    }
+  } finally {
+    for (const e of mutated) e.setAttribute('id', id);
+  }
+
+  return nodes;
+}
+
+function byId_Walk(id: string, context: QueryContext): Element[] {
+  const nodes: Element[] = [];
+
+  if (isDocument(context)) {
+    const root = context.documentElement;
+    if (sameId(root, id)) nodes.push(root);
+    walk(root);
+    return nodes;
+  } else if (isElement(context)) {
+    walk(context);
+    return nodes;
+  } else {  // DocumentFragment
+    for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
+      if (sameId(root, id)) nodes.push(root);
+      walk(root);
+    }
+    return nodes;
+  }
+
+  function walk(context: Element): void {
+    let node: Element | null = context;
+    let next: Element | null = context.firstElementChild;
+
+    while ((node = next)) {
+      if (sameId(node, id)) nodes.push(node);
+
+      next = node.firstElementChild || node.nextElementSibling;
+      if (next) continue;
+
+      while (!next && (node = node.parentElement) && node !== context) {
+        next = node.nextElementSibling;
+      }
+    }
+  }
+}
+
+function byId_TreeWalk(id: string, context: QueryContext): Element[] {
+  const nodes: Element[] = [];
+
+  let root: Element | DocumentFragment;
+  let doc: Document;
+  if (isDocument(context)) {
+    root = context.documentElement;
+    doc = context;
+    if (sameId(root, id)) nodes.push(root);
+  } else {
+    root = context;
+    doc = context.ownerDocument;
+  }
+
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const e = node as Element; // TypeScript doesn't know the filter is effectively applied.
+    if (sameId(e, id)) nodes.push(e);
+  }
+
+  return nodes;
+}
+
+function sameId(e: Element, id: string): boolean {
+  // return e.id === id; // fast but can be wrong
+  // return e.getAttribute('id') === id; // slower but correct
+  // return isHtmlForm(e) ? e.getAttribute('id') === id : e.id === id;  // compromise
+  const v = e.id;
+  return typeof v === 'string' ? v === id : e.getAttribute('id') === id; // best compromise
+}
+
+// scoped getElementById for Document, DocumentFragment, and Element contexts
 function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
   updateSnapshot(snap, context);
   if (!id) return null;
 
   if (!isElement(context)) return context.getElementById(id);
 
-  let found: Element | null = null;
-  walkElements(context, e => {
-    if (e.getAttribute('id') === id) {
-      found = e;
-      return false;
-    }
-  });
+  if (context.isConnected) {
+    if (snap.hasDocumentAll) return byId_AllFirst(id, context);
+    if (snap.config.MUTATE_IDS) return byId_MutateFirst(id, context);
+  }
 
-  return found;
+  return byId_WalkFirst(id, context);
+}
+
+function byId_AllFirst(id: string, context: Element): Element | null {
+  if (!context.isConnected) throw new Error('byId_AllFirst cannot be used on a disconnected element');
+
+  const item = context.ownerDocument.all.namedItem(id);
+  if (item === null) {  // null
+    return null;
+  } else if (isNamedItemAnElement(item)) {  // Element
+    const e = item;
+    if (e !== context && sameId(e, id) && context.contains(e)) {
+      return e;
+    }
+    return null;
+  } else {  // HTMLCollection
+    for (let i = 0; i < item.length; i++) {
+      const e = item[i];
+      if (e !== context && sameId(e, id) && context.contains(e)) {
+        return e;
+      }
+    }
+    return null;
+  }
+}
+
+function byId_MutateFirst(id: string, context: Element): Element | null {
+  if (!context.isConnected) throw new Error('byId_MutateFirst cannot be used on a disconnected element');
+
+  const doc = context.ownerDocument;
+  const mutated: Element[] = [];
+
+  try {
+    for (;;) {
+      const e = doc.getElementById(id);
+      if (!e) return null;
+      if (e !== context && context.contains(e)) return e;
+      e.removeAttribute('id');
+      mutated.push(e);
+    }
+  } finally {
+    for (const e of mutated) e.setAttribute('id', id);
+  }
+}
+
+function byId_WalkFirst(id: string, context: Element): Element | null {
+  let node: Element = context;
+  let next: Element | null = node.firstElementChild;
+
+  while ((node = next as Element)) {
+    if (sameId(node, id)) return node;
+
+    next = node.firstElementChild || node.nextElementSibling;
+    if (next) continue;
+
+    while (!next && (node = node.parentElement as Element) && node !== context) {
+      next = node.nextElementSibling;
+    }
+  }
+
+  return null;
 }
 
 // context agnostic getElementsByTagName
@@ -1786,6 +2006,10 @@ type ValidityElement =
 
 function isValidityElement(e: Element): e is ValidityElement {
   return 'willValidate' in e;
+}
+
+function isNamedItemAnElement(item: Element | HTMLCollection): item is Element {
+  return (item as { nodeType?: unknown }).nodeType === 1;
 }
 
 
@@ -3082,7 +3306,15 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
     switch (key) {
       case '#': {
         query = cssIdentUnescape(query);
-        getCandidates = () => byIdRaw(query, ctx, snap);
+        // getCandidates = () => byIdRaw(query, ctx, snap);
+        // getCandidates = () => byIdTagStarRaw(query, ctx);
+        // getCandidates = () => byIdTreeWalker(query, ctx);
+        // getCandidates = () => byIdTreeWalkerRaw(query, ctx);
+        // getCandidates = () => byIdTreeWalkerFilterRaw(query, ctx);
+        // getCandidates = () => byIdDocumentAllRaw(query, ctx);
+        // getCandidates = () => byIdMutationRemoveRaw(query, ctx);
+        // getCandidates = () => byIdDocumentAllRaw2(query, ctx);
+        getCandidates = () => getCandidatesById(query, ctx, snap);
         break;
       }
       case '.': {
