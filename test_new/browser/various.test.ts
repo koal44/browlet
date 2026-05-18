@@ -6211,4 +6211,15 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'select grouped id sort/dedupe',
+    status: 'only',
+    markup: `
+      <div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div>
+    `,
+    cases: [
+      { select: '#e, #a, #d, #b, #a, #c, #e, #b', expect: { ids: ['a', 'b', 'c', 'd', 'e'] } },
+    ],
+  },
+
 ]);

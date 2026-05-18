@@ -3,6 +3,33 @@ import { runPerfScenarios } from './harness/perf-scenario';
 
 const htmlStandard = readFileSync('test_new/browser/fixtures/slick/template-standard.html', 'utf8');
 
+const idMarkup = (n: number) =>
+  Array.from({ length: n }, (_, i) => `<div id="n${i}"></div>`).join('');
+
+const shuffled = (n: number) => {
+  const xs = Array.from({ length: n }, (_, i) => i);
+  let x = 7;
+
+  for (let i = n - 1; i > 0; --i) {
+    x = (x * 1664525 + 1013904223) >>> 0;
+    const j = x % (i + 1);
+    const t = xs[i];
+    xs[i] = xs[j];
+    xs[j] = t;
+  }
+
+  return xs;
+};
+
+const groupedIds = (n: number) =>
+  shuffled(n).map(i => `#n${i}`).join(', ');
+
+const groupedDupedIds = (n: number) => {
+  const xs = shuffled(n);
+  const dupes = xs.filter((_, i) => i % 3 === 0);
+  return xs.concat(dupes).map(i => `#n${i}`).join(', ');
+};
+
 runPerfScenarios('perf', [
   {
     name: 'blob mixed overview',
@@ -1591,6 +1618,59 @@ runPerfScenarios('perf', [
       // Descendant combinator: candidate seed plus ancestry/filtering
       { label: 'select descendant class',     op: 'select', selector: 'section .label',              iters: 20_000 },
       { label: 'select descendant attr',      op: 'select', selector: 'section [data-kind="special"]', iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'select grouped id sort/dedupe',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div>
+    `,
+    probeKeys: ['select'],
+    quickIters: 20_000,
+    benches: [
+      { label: 'select grouped ids sort dedupe', op: 'select', selector: '#e, #a, #d, #b, #a, #c, #e, #b', iters: 200_000 },
+      { label: 'select grouped ids sort no dedupe', op: 'select', selector: '#e, #d, #b, #a, #c', iters: 200_000 },
+    ],
+  },
+
+  {
+    name: 'select grouped id sort no dedupe',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: idMarkup(80),
+    probeKeys: ['select'],
+    quickIters: 3_000,
+    benches: [
+      { label: 'grouped ids sort 4',  op: 'select', selector: groupedIds(4),  iters: 1_000_000 },
+      { label: 'grouped ids sort 8',  op: 'select', selector: groupedIds(8),  iters: 1_000_000 },
+      { label: 'grouped ids sort 12', op: 'select', selector: groupedIds(12), iters: 700_000 },
+      { label: 'grouped ids sort 16', op: 'select', selector: groupedIds(16), iters: 500_000 },
+      { label: 'grouped ids sort 24', op: 'select', selector: groupedIds(24), iters: 300_000 },
+      { label: 'grouped ids sort 32', op: 'select', selector: groupedIds(32), iters: 200_000 },
+      { label: 'grouped ids sort 48', op: 'select', selector: groupedIds(48), iters: 100_000 },
+      { label: 'grouped ids sort 64', op: 'select', selector: groupedIds(64), iters: 75_000 },
+    ],
+  },
+
+  {
+    name: 'select grouped id sort dedupe',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: idMarkup(80),
+    probeKeys: ['select'],
+    quickIters: 2_000,
+    benches: [
+      { label: 'grouped ids sort dedupe 4',  op: 'select', selector: groupedDupedIds(4),  iters: 1_000_000 },
+      { label: 'grouped ids sort dedupe 8',  op: 'select', selector: groupedDupedIds(8),  iters: 1_000_000 },
+      { label: 'grouped ids sort dedupe 12', op: 'select', selector: groupedDupedIds(12), iters: 700_000 },
+      { label: 'grouped ids sort dedupe 16', op: 'select', selector: groupedDupedIds(16), iters: 500_000 },
+      { label: 'grouped ids sort dedupe 24', op: 'select', selector: groupedDupedIds(24), iters: 300_000 },
+      { label: 'grouped ids sort dedupe 32', op: 'select', selector: groupedDupedIds(32), iters: 200_000 },
+      { label: 'grouped ids sort dedupe 48', op: 'select', selector: groupedDupedIds(48), iters: 100_000 },
+      { label: 'grouped ids sort dedupe 64', op: 'select', selector: groupedDupedIds(64), iters: 75_000 },
     ],
   },
 

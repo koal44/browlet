@@ -490,9 +490,13 @@ function sortUnique(nodes: Element[]): Element[] {
 
   if (!hasDupes) return nodes;
 
-  const list: Element[] = [];
-  for (let i = 0, l = nodes.length; i < l; ++i) {
-    if (i === 0 || nodes[i] !== nodes[i - 1]) list.push(nodes[i]);
+  const list: Element[] = [nodes[0]];
+  let last = nodes[0];
+
+  for (let i = 1, l = nodes.length; i < l; ++i) {
+    const cur = nodes[i];
+    if (cur !== last) list.push(cur);
+    last = cur;
   }
 
   return list;
