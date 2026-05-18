@@ -3127,19 +3127,8 @@ export function normalizeSelectorInput(selectors: string, re: Rex): string {
 // equivalent of w3c 'matches' method
 function matchRaw(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
   snap.probe.match++;
-
-  if (snap.isDebug) {
-    snap.debugStack.length = 0;
-
-    snap.debugMatch = {
-      kind: 'match',
-      isApiEntry: true,
-      element: describeContext(element),
-      selector: selectors,
-    };
-
-    snap.debugStack.push(snap.debugMatch!);
-  }
+  const isDebug = snap.isDebug;
+  if (isDebug) initDebugMatch(snap, selectors, element, true /*isApiEntry*/);
 
   const resolver = getStrictMatchResolver(selectors, snap);
 
@@ -3149,10 +3138,7 @@ function matchRaw(selectors: string, element: Element, snap: Snapshot, h: HashCa
 
   const result = resolver.lambdas.some(f => f(element, h));
 
-  if (snap.isDebug && snap.debugMatch) {
-    snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
-    snap.debugMatch.result = result;
-  }
+  if (isDebug) updateDebugMatch(snap, resolver, result);
 
   return result;
 }
@@ -3234,68 +3220,42 @@ function buildForgivingMatchResolver(selectors: string[], snap: Snapshot): Match
 // equivalent of w3c 'querySelectorAll' method
 function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
   snap.probe.select++;
-
-    if (snap.isDebug) {
-      if (isApiEntry) snap.debugStack.length = 0;
-
-      snap.debugSelect = {
-        kind: 'select',
-        isApiEntry,
-        selector: sel,
-        callback: cb,
-        context: describeContext(ctx),
-        build: [],
-        run: [],
-      };
-
-      snap.debugStack.push(snap.debugSelect!);
-    }
+  const isDebug = snap.isDebug;
+  if (isDebug) initDebugSelect(snap, sel, cb, ctx, isApiEntry);
 
   // try to reuse cached resolver
   let resolver = snap.selectResolvers[sel];
-  if (!resolver || resolver.context !== ctx || resolver.hasCb !== !!cb) {
+  if (!resolver || resolver.hasCb !== !!cb) {
     const parsed = parse(sel, snap.re);
-    resolver = buildResolver(parsed, ctx, !!cb, snap);
+    resolver = buildSelectResolver(parsed, !!cb, snap);
     snap.selectResolvers[sel] = resolver;
   }
 
   updateSnapshot(snap, ctx, isApiEntry && resolver.usesScope);
 
-  // execute resolver seeds and collect results
   let results: Element[] = [];
   const cache: HashCache = {};
-  for (const seed of resolver.seeds) {
-    const candidates = seed.getCandidates();
+  const seeds = resolver.seeds;
+
+  for (const seed of seeds) {
+    const candidates = seed.getCandidates(ctx);
     const stopped = seed.lambda(candidates, cb, ctx, results, cache);
 
-    if (snap.isDebug && snap.debugSelect) {
-      snap.debugSelect.run.push({
-        seedKey: seed.key,
-        seedQuery: seed.query,
-        compileQuery: seed.compileQuery,
-        candidates: describeElements(candidates),
-        lambdaSource: String(seed.lambda),
-        results: describeElements(results),
-      });
-    }
-
+    if (isDebug) updateDebugSelectRun(snap, seed, candidates, results);
     if (stopped) break;
   }
 
-  if (resolver.seeds.length > 1 && results.length > 1) {
+  if (seeds.length > 1 && results.length > 1) {
     results = sortUnique(results);
   }
 
   return results;
 }
 
-function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, snap: Snapshot): SelectResolver {
-  const out: SelectResolver = {
-    hasCb,
-    context: ctx,
-    seeds: [],
-    usesScope: hasScopeSelector(selectors),
-  };
+function buildSelectResolver(selectors: string[], hasCb: boolean, snap: Snapshot): SelectResolver {
+  const seeds: CandidateSeed[] = [];
+  const usesScope = hasScopeSelector(selectors);
+
   snap.probe.selBuild++;
 
   for (const sel of selectors) {
@@ -3306,15 +3266,7 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
     switch (key) {
       case '#': {
         query = cssIdentUnescape(query);
-        // getCandidates = () => byIdRaw(query, ctx, snap);
-        // getCandidates = () => byIdTagStarRaw(query, ctx);
-        // getCandidates = () => byIdTreeWalker(query, ctx);
-        // getCandidates = () => byIdTreeWalkerRaw(query, ctx);
-        // getCandidates = () => byIdTreeWalkerFilterRaw(query, ctx);
-        // getCandidates = () => byIdDocumentAllRaw(query, ctx);
-        // getCandidates = () => byIdMutationRemoveRaw(query, ctx);
-        // getCandidates = () => byIdDocumentAllRaw2(query, ctx);
-        getCandidates = () => getCandidatesById(query, ctx, snap);
+        getCandidates = (ctx) => getCandidatesById(query, ctx, snap);
         break;
       }
       case '.': {
@@ -3322,12 +3274,12 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
         // classname lookup accepts whitespace queries that QSA class selectors do not.
         getCandidates = /[\t\n\f\r ]/.test(query)
           ? () => []
-          : () => byClassRaw(query, ctx, snap);
+          : (ctx) => byClassRaw(query, ctx, snap);
         break;
       }
       case '*': {
         query = cssIdentUnescape(query);
-        getCandidates = () => seedsByTag(query, ctx, snap);
+        getCandidates = (ctx) => seedsByTag(query, ctx, snap);
         break;
       }
       default: assertNever(key);
@@ -3337,14 +3289,43 @@ function buildResolver(selectors: string[], ctx: QueryContext, hasCb: boolean, s
       snap.debugSelect?.build.push({ selector: sel, seedKey: key, seedQuery: query, compileQuery });
     }
 
-    out.seeds.push({
+    seeds.push({
       key, query, compileQuery, getCandidates,
       lambda: compile(compileQuery, true, hasCb, snap),
     });
   }
 
-  return out;
+  return {
+    seeds, usesScope, hasCb,
+  }
 }
+
+// function buildSelectRunner(seeds: CandidateSeed[], hasCb: boolean, snap: Snapshot): SelectRunner {
+//   if (!hasCb && seeds.length === 1 && seeds[0].pass) {
+//     const seed = seeds[0];
+//     return (ctx) => seed.getCandidates(ctx);
+//   }
+
+//   return (ctx, cb) => {
+//     let results: Element[] = [];
+//     const cache: HashCache = {};
+//     const isDebug = snap.isDebug;
+
+//     for (const seed of seeds) {
+//       const candidates = seed.getCandidates(ctx);
+//       const stopped = seed.lambda(candidates, cb, ctx, results, cache);
+
+//       // if (isDebug) updateDebugSelectRun(snap, seed, candidates, results);
+//       if (stopped) break;
+//     }
+
+//     if (seeds.length > 1 && results.length > 1) {
+//       results = sortUnique(results);
+//     }
+
+//     return results;
+//   }
+// }
 
 function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
   const token = selector.match(snap.re.optimizer);
@@ -3693,4 +3674,50 @@ function isEscapedAt(input: string, index: number, start = 0): boolean {
 
 function selectLambdaKey(selector: string, hasCb: boolean): string {
   return `${hasCb ? '\x01' : '\x00'}${selector}`;
+}
+
+function initDebugMatch(snap: Snapshot, selectors: string, element: Element, isApiEntry: boolean): void {
+  snap.debugStack.length = 0;
+  const dbg: DebugMatch = {
+    kind: 'match',
+    isApiEntry,
+    element: describeContext(element),
+    selector: selectors,
+  };
+
+  snap.debugMatch = dbg;
+  snap.debugStack.push(dbg);
+}
+
+function updateDebugMatch(snap: Snapshot, resolver: MatchResolver, result: boolean): void {
+  if (snap.debugMatch) {
+    snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
+    snap.debugMatch.result = result;
+  }
+}
+
+function initDebugSelect(snap: Snapshot, sel: string, cb: QueryCallback | null, ctx: QueryContext, isApiEntry: boolean): void {
+  if (isApiEntry) snap.debugStack.length = 0;
+  const dbgSelect: DebugSelect = {
+    kind: 'select',
+    isApiEntry,
+    selector: sel,
+    callback: cb,
+    context: describeContext(ctx),
+    build: [],
+    run: [],
+  };
+  snap.debugSelect = dbgSelect;
+  snap.debugStack.push(dbgSelect);
+}
+
+function updateDebugSelectRun(snap: Snapshot, seed: CandidateSeed, candidates: Element[], results: Element[]): void {
+  snap.debugSelect?.run.push({
+    seedKey: seed.key,
+    seedQuery: seed.query,
+    compileQuery: seed.compileQuery,
+    candidates: describeElements(candidates),
+    lambdaSource: String(seed.lambda),
+    results: describeElements(results),
+  });
 }

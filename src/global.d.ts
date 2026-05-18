@@ -30,7 +30,7 @@ type QueryContext = Document | Element | DocumentFragment;
 type QueryCallback = (element: Element) => boolean | void;
 
 type SeedKey = '#' | '*' | '.';
-type GetCandidates = () => Element[];
+type GetCandidates = (ctx: QueryContext) => Element[];
 
 type CandidateSeed = {
   key: SeedKey;
@@ -68,7 +68,6 @@ type MatchResolver = {
 
 type SelectResolver = {
   hasCb: boolean;
-  context: QueryContext;
   seeds: CandidateSeed[];
   usesScope: boolean;
 };
