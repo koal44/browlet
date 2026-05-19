@@ -75,4 +75,16 @@ export default defineConfig([
       radix: 'off',
     },
   },
+
+  {
+    files: ['test_new/artifact/**/*.cjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: relaxedRules,
+  },
 ]);

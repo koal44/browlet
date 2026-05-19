@@ -360,8 +360,8 @@ export function initSnapshot(doc: Document) {
     selectResolvers: {} as Partial<Record<string, SelectResolver>>,
 
     byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
-    byTag: (tag: string, context?: QueryContext) => byTagRaw(tag, context ?? snap.doc, snap),
-    byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNsRaw(ns, local, context ?? snap.doc, snap),
+    byTag: (tag: string, context?: QueryContext) => byTag(tag, context ?? snap.doc, snap),
+    byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNs(ns, local, context ?? snap.doc, snap),
     byClass: (cls: string, context?: QueryContext) => byClassRaw(cls, context ?? snap.doc, snap),
     first: (sel: string, context?: QueryContext, isApiEntry?: boolean) => {
       return firstRaw(sel, context ?? snap.doc, snap, isApiEntry);
@@ -567,44 +567,25 @@ export function escapeRegExp(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\-\\]/g, '\\$&');
 }
 
-function walkElements(context: QueryContext, visit: (e: Element) => boolean | void): void {
-  let node: Element | null = context.firstElementChild;
-
-  while (node) {
-    if (visit(node) === false) return;
-
-    if (node.firstElementChild) {
-      node = node.firstElementChild;
-      continue;
-    }
-
-    while (node && node !== context && !node.nextElementSibling) {
-      node = node.parentElement;
-    }
-
-    node = node && node !== context ? node.nextElementSibling : null;
-  }
-}
-
-function getCandidatesById(id: string, context: QueryContext, snap: Snapshot): Element[] {
+function seedsById(id: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!id) return [];
 
   if (isDocument(context)) {  // Document
-    if (snap.hasDocumentAll) return byId_All(id, context);
-    if (snap.config.MUTATE_IDS) return byId_MutateInDoc(id, context);
+    if (snap.hasDocumentAll) return seedsById_All(id, context);
+    if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
   } else if (isElement(context)) {  // Element
     if (context.isConnected) {
-      if (snap.hasDocumentAll) return byId_All(id, context);
-      if (snap.config.MUTATE_IDS) return byId_MutateInEl(id, context);
+      if (snap.hasDocumentAll) return seedsById_All(id, context);
+      if (snap.config.MUTATE_IDS) return seedsById_MutateInEl(id, context);
     }
   } else {  // DocumentFragment
-    if (snap.config.MUTATE_IDS) return byId_MutateInDoc(id, context);
+    if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
   }
 
-  return snap.hasTreeWalker ? byId_TreeWalk(id, context) : byId_Walk(id, context);
+  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
 }
 
-function byId_All(id: string, context: Document | Element): Element[] {
+function seedsById_All(id: string, context: Document | Element): Element[] {
   // document.all only sees connected document-tree elements.
   // Detached elements, fragments, and template contents need local traversal.
 
@@ -619,10 +600,11 @@ function byId_All(id: string, context: Document | Element): Element[] {
   }
 
   const item = doc.all.namedItem(id);
-  if (item === null) return [];
 
   const nodes: Element[] = [];
-  if (isNamedItemAnElement(item)) {  // Element
+  if (item === null) {  // null
+    return nodes;
+  } else if (isNamedItemAnElement(item)) {  // Element
     const e = item;
     if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
       nodes.push(e);
@@ -639,7 +621,7 @@ function byId_All(id: string, context: Document | Element): Element[] {
   return nodes;
 }
 
-function byId_MutateInDoc(id: string, context: Document | DocumentFragment): Element[] {
+function seedsById_MutateInDoc(id: string, context: Document | DocumentFragment): Element[] {
   const nodes: Element[] = [];
 
   try {
@@ -656,7 +638,7 @@ function byId_MutateInDoc(id: string, context: Document | DocumentFragment): Ele
   return nodes;
 }
 
-function byId_MutateInEl(id: string, context: Element): Element[] {
+function seedsById_MutateInEl(id: string, context: Element): Element[] {
   if (!context.isConnected) {
     throw new Error('byId_MutateInEl cannot be used on a disconnected element');
   }
@@ -683,7 +665,7 @@ function byId_MutateInEl(id: string, context: Element): Element[] {
   return nodes;
 }
 
-function byId_Walk(id: string, context: QueryContext): Element[] {
+function seedsById_Walk(id: string, context: QueryContext): Element[] {
   const nodes: Element[] = [];
 
   if (isDocument(context)) {
@@ -719,7 +701,7 @@ function byId_Walk(id: string, context: QueryContext): Element[] {
   }
 }
 
-function byId_TreeWalk(id: string, context: QueryContext): Element[] {
+function seedsById_TreeWalk(id: string, context: QueryContext): Element[] {
   const nodes: Element[] = [];
 
   let root: Element | DocumentFragment;
@@ -826,7 +808,7 @@ function byId_WalkFirst(id: string, context: Element): Element | null {
 }
 
 // context agnostic getElementsByTagName
-function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[] {
+function byTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
 
   if (!tag) return [];
@@ -854,7 +836,7 @@ function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[]
 }
 
 // context agnostic getElementsByTagNameNS
-function byTagNsRaw(ns: string | null, local: string, context: QueryContext, _snap: Snapshot): Element[] {
+function byTagNs(ns: string | null, local: string, context: QueryContext, _snap: Snapshot): Element[] {
   if (!local) return [];
 
   if (isDocument(context) || isElement(context)) {
@@ -877,42 +859,9 @@ function byTagNsRaw(ns: string | null, local: string, context: QueryContext, _sn
   return nodes;
 }
 
-// // Selector type seeds cannot use byTagRaw because qualified-name lookup can miss
-// // namespaced local-name matches; byTagNsRaw is exact-case and misses HTML folding.
-// function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
-//   updateSnapshot(snap, context);
-
-//   if (!tag) return [];
-//   if (tag === '*') return byTagRaw('*', context, snap);
-
-//   const lowerTag = asciiLower(tag);
-
-//   // if (tag === asciiLower(tag) && !isDocumentFragment(context)) {
-//   //   return collectionToArray(context.getElementsByTagNameNS('*', tag));
-//   // }
-
-//   // return snap.hasTreeWalker
-//   //   ? seedsByTag_TreeWalk(tag, lowerTag, context, snap)
-//   //   : seedsByTag_Walk(tag, lowerTag, context, snap);
-
-//   return seedsByTag_TreeWalk(tag, lowerTag, context, snap);
-//   // return seedsByTag_Walk(tag, lowerTag, context, snap);
-
-//   // const nodes: Element[] = [];
-//   // walkElements(context, e => {
-//   //   if (snap.isHtml && isHtmlElement(e)) {
-//   //     if (e.localName === lowerTag) nodes.push(e);
-//   //   } else if (e.localName === tag) {
-//   //     nodes.push(e);
-//   //   }
-//   // });
-
-//   // return nodes;
-// }
-
 function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!tag) return [];
-  if (tag === '*') return byTagRaw('*', context, snap);
+  if (tag === '*') return byTag('*', context, snap);
 
   const lowerTag = asciiLower(tag);
 
@@ -925,10 +874,6 @@ function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element
   }
 
   return seedsByTagFragment(tag, lowerTag, context, snap);
-
-  // return snap.hasTreeWalker
-  //   ? seedsByTag_TreeWalk(tag, lowerTag, context, snap)
-  //   : seedsByTag_Walk(tag, lowerTag, context, snap);
 }
 
 function seedsByTagFragment(tag: string, lowerTag: string, context: DocumentFragment, snap: Snapshot): Element[] {
@@ -1007,72 +952,6 @@ function sameSelectorTag(e: Element, tag: string, lowerTag: string, snap: Snapsh
   return snap.isHtml && isHtmlElement(e)
     ? e.localName === lowerTag
     : e.localName === tag;
-}
-
-function seedsByTag_TreeWalk(tag: string, lowerTag: string, context: QueryContext, snap: Snapshot): Element[] {
-  const nodes: Element[] = [];
-
-  let root: Element | DocumentFragment;
-  let doc: Document;
-
-  if (isDocument(context)) {
-    root = context.documentElement;
-    doc = context;
-
-    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
-  } else {
-    root = context;
-    doc = context.ownerDocument;
-  }
-
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const e = node as Element;
-    if (sameSelectorTag(e, tag, lowerTag, snap)) nodes.push(e);
-  }
-
-  return nodes;
-}
-
-function seedsByTag_Walk(tag: string, lowerTag: string, context: QueryContext, snap: Snapshot): Element[] {
-  const nodes: Element[] = [];
-
-  if (isDocument(context)) {
-    const root = context.documentElement;
-    if (root && sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
-    if (root) walk(root);
-    return nodes;
-  }
-
-  if (isElement(context)) {
-    walk(context);
-    return nodes;
-  }
-
-  // DocumentFragment
-  for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
-    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
-    walk(root);
-  }
-
-  return nodes;
-
-  function walk(context: Element): void {
-    let node: Element | null = context;
-    let next: Element | null = context.firstElementChild;
-
-    while ((node = next)) {
-      if (sameSelectorTag(node, tag, lowerTag, snap)) nodes.push(node);
-
-      next = node.firstElementChild || node.nextElementSibling;
-      if (next) continue;
-
-      while (!next && (node = node.parentElement) && node !== context) {
-        next = node.nextElementSibling;
-      }
-    }
-  }
 }
 
 
@@ -3473,7 +3352,7 @@ function buildSelectResolver(selectors: string[], hasCb: boolean, snap: Snapshot
     switch (key) {
       case '#': {
         query = cssIdentUnescape(query);
-        getCandidates = (ctx) => getCandidatesById(query, ctx, snap);
+        getCandidates = (ctx) => seedsById(query, ctx, snap);
         break;
       }
       case '.': {
@@ -3506,33 +3385,6 @@ function buildSelectResolver(selectors: string[], hasCb: boolean, snap: Snapshot
     seeds, usesScope, hasCb,
   }
 }
-
-// function buildSelectRunner(seeds: CandidateSeed[], hasCb: boolean, snap: Snapshot): SelectRunner {
-//   if (!hasCb && seeds.length === 1 && seeds[0].pass) {
-//     const seed = seeds[0];
-//     return (ctx) => seed.getCandidates(ctx);
-//   }
-
-//   return (ctx, cb) => {
-//     let results: Element[] = [];
-//     const cache: HashCache = {};
-//     const isDebug = snap.isDebug;
-
-//     for (const seed of seeds) {
-//       const candidates = seed.getCandidates(ctx);
-//       const stopped = seed.lambda(candidates, cb, ctx, results, cache);
-
-//       // if (isDebug) updateDebugSelectRun(snap, seed, candidates, results);
-//       if (stopped) break;
-//     }
-
-//     if (seeds.length > 1 && results.length > 1) {
-//       results = sortUnique(results);
-//     }
-
-//     return results;
-//   }
-// }
 
 function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
   const token = selector.match(snap.re.optimizer);

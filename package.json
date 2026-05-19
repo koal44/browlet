@@ -47,7 +47,10 @@
     "test:browser:perf": "playwright test --project=perf --workers=1",
 
     "pretest:unit": "npm run build",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+
+    "pretest:artifact": "npm run build",
+    "test:artifact": "node test_new/artifact/cjs.test.cjs && node test_new/artifact/global.test.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
