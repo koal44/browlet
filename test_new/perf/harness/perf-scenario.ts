@@ -22,6 +22,7 @@ type BenchOps = {
   byId(id: string, ctx: QueryContext): Element | null;
   byClass(cls: string, ctx: QueryContext): Element[];
   byTag(tag: string, ctx: QueryContext): Element[];
+  byTagNs(byTagNs: { ns: string | null, local: string }, ctx: QueryContext): Element[];
 };
 
 type EngineName = 'native' | 'nw-current' | 'nw-2.2.23';
@@ -39,10 +40,12 @@ type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: ContextRef } 
 type ByIdBench =    { op: 'byId';      id:        string;    ref?: ContextRef } & BenchBase;
 type ByClassBench = { op: 'byClass';   cls:       string;    ref?: ContextRef } & BenchBase;
 type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef } & BenchBase;
+// Note: byTagNs perf won't really be useful as the comparisons would be apples ≈ apples.
+type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null, local: string }, ref?: ContextRef } & BenchBase;
 
 type BenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean };
 type Bench =
-  MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench;
+  MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench | ByTagNsBench;
 
 export type ContextRef =
   | { by: 'document' }
@@ -207,7 +210,7 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
       ? r.toFixed(2)
       : `${cur.toFixed(2)}/${base.toFixed(2)}`;
 
-    return warn ? `${out}⚠` : out;
+    return warn && Number.isFinite(r) ? `${out}⚠` : out;
   }
 
   function pickProbe(probe: unknown, keys?: string[]) {
@@ -434,6 +437,9 @@ async function installPerfHelpers(page: Page) {
           case 'byTag':
             return bench(label, () => ops.byTag(b.tag, ctx), iters, b.maxRatio);
 
+          case 'byTagNs':
+            return bench(label, () => ops.byTagNs(b.byTagNs, ctx), iters, b.maxRatio);
+
           default:
             return assertNever(b);
         }
@@ -450,6 +456,7 @@ async function installPerfHelpers(page: Page) {
           byId: (id, ctx) => queryId(ctx, id),
           byClass: (cls, ctx) => queryClass(ctx, cls),
           byTag: (tag, ctx) => queryTag(ctx, tag),
+          byTagNs: (byTagNs, ctx) => queryTagNs(ctx, byTagNs),
         };
       }
 
@@ -464,6 +471,7 @@ async function installPerfHelpers(page: Page) {
         byId: (id, ctx) => nwDom.byId(id, ctx),
         byClass: (cls, ctx) => nwDom.byClass(cls, ctx),
         byTag: (tag, ctx) => nwDom.byTag(tag, ctx),
+        byTagNs: (byTagNs, ctx) => nwDom.byTagNs(byTagNs.ns, byTagNs.local, ctx),
       };
     }
 
@@ -481,6 +489,7 @@ async function installPerfHelpers(page: Page) {
         case 'byId':    return `${b.op} ${b.id}`;
         case 'byClass': return `${b.op} ${b.cls}`;
         case 'byTag':   return `${b.op} ${b.tag}`;
+        case 'byTagNs': return `${b.op} ${b.byTagNs.ns ? `${b.byTagNs.ns}|` : ''}${b.byTagNs.local}`;
         default:
           return assertNever(b);
       }
@@ -604,6 +613,21 @@ async function installPerfHelpers(page: Page) {
     function queryTag(base: QueryContext, tag: string): Element[] {
       if (isDocument(base) || isElement(base)) return [...base.getElementsByTagName(tag)];
       return [...base.querySelectorAll(tag)];
+    }
+
+    function queryTagNs(base: QueryContext, q: { ns: string | null; local: string }): Element[] {
+      const { ns, local } = q;
+      if (!isDocumentFragment(base)) {
+        return [...base.getElementsByTagNameNS(ns, local)];
+      }
+      const nodes: Element[] = [];
+      for (let root = base.firstElementChild; root; root = root.nextElementSibling) {
+        if ((ns === '*' || root.namespaceURI === ns) && (local === '*' || root.localName === local)) {
+          nodes.push(root);
+        }
+        nodes.concat([...root.getElementsByTagNameNS(ns, local)]);
+      }
+      return nodes;
     }
 
     function assertNever(value: never, message?: string): never {

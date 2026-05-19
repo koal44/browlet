@@ -4439,7 +4439,6 @@ runScenarios('various', 'normal', [
   {
     name: 'focus tracks body html and input explicitly',
     // status: 'only',
-    // engines: ['native'],
     markupMode: 'html-document',
     markup: `<!doctype html><html id=html tabindex="-1"><body id=body tabindex="-1"><input id=input1></body></html>`,
     steps: [
@@ -4473,7 +4472,6 @@ runScenarios('various', 'normal', [
   {
     name: 'tag lookup case behavior across html xml and imported xml',
     // status: 'only',
-    // engines: ['native'],
     markupMode: 'html-document',
     markup: `
       <!doctype html>
@@ -4557,8 +4555,6 @@ runScenarios('various', 'normal', [
   {
     name: 'fragment tag helpers preserve qualified and namespace lookup behavior',
     // status: 'only',
-    // engines: ['native'],
-    // engines: ['nw'],
     markupMode: 'html-document',
     markup: `
       <!doctype html>
@@ -4691,8 +4687,6 @@ runScenarios('various', 'normal', [
   {
     name: 'attribute value html-insensitive table does not leak to imported xml',
     // status: 'only',
-    // engines: ['native'],
-    // browsers: ['chromium'],
     markupMode: 'html-document',
     markup: `
       <!doctype html>
@@ -4727,7 +4721,6 @@ runScenarios('various', 'normal', [
   {
     name: 'defined pseudo does not treat imported xml custom-looking tags as html custom elements',
     // status: 'only',
-    // engines: ['native'],
     markupMode: 'html-document',
     markup: `
       <!doctype html>
@@ -4818,7 +4811,7 @@ runScenarios('various', 'normal', [
     cases: [
       { select: '*|x-plain:defined', expect: { ids: [] } },
 
-      // These look like custom-element names syntactically, but are reserved names,
+      // These look like custom-element names, but are reserved names,
       // so they are not unresolved custom elements and should match :defined.
       { select: '*|font-face:defined', expect: { ids: ['font-face'] } },
       { select: '*|annotation-xml:defined', expect: { ids: ['annotation-xml'] } },
@@ -5274,7 +5267,7 @@ runScenarios('various', 'normal', [
       </div>
     `,
     cases: [
-      // Baseline dash-match semantics.
+      // Baseline dash-match.
       { select: '[data-x|="abc"]', expect: { ids: ['plain', 'dash'] } },
 
       // Prefix contains an astral-plane character.
@@ -6201,7 +6194,6 @@ runScenarios('various', 'normal', [
           // Document context uses native getElementById in public byId(), not byId_AllFirst.
           { byId: 'nodeType', expect: { classes: ['outside-a'] } },
 
-          // Connected element context should force byId_AllFirst.
           // If document.all.namedItem('nodeType') returns a collection and
           // `'nodeType' in item` misclassifies it as an Element, these will fail/throw.
           { byId: 'nodeType', ref: { by: 'id', id: 'scope' }, expect: { classes: ['scope-a'] } },
@@ -6213,12 +6205,323 @@ runScenarios('various', 'normal', [
 
   {
     name: 'select grouped id sort/dedupe',
-    status: 'only',
+    // status: 'only',
     markup: `
       <div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div>
     `,
     cases: [
       { select: '#e, #a, #d, #b, #a, #c, #e, #b', expect: { ids: ['a', 'b', 'c', 'd', 'e'] } },
+    ],
+  },
+
+  {
+    name: 'class lookup compound and rehomed contexts',
+    // status: 'only',
+    markup: `
+      <section id="root">
+        <div id="a" class="foo bar"></div>
+        <div id="b" class="bar foo"></div>
+        <div id="c" class="foo"></div>
+        <div id="d" class="bar"></div>
+        <div id="e" class="foo bar baz"><span id="ee" class="foo bar"></span></div>
+      </section>
+    `,
+    cases: [
+      { select: '.foo.bar', expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { select: '.bar.foo', expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { select: '.foo.baz', expect: { ids: ['e'] } },
+      { select: '.missing.foo', expect: { count: 0 } },
+
+      { byClass: 'foo bar', expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { byClass: 'bar foo', expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { byClass: 'foo baz', expect: { ids: ['e'] } },
+      { byClass: 'missing foo', expect: { count: 0 } },
+
+      { select: '.foo.bar', ref: { by: 'id', id: 'root' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { byClass: 'foo bar', ref: { by: 'id', id: 'root' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+
+      { select: '.foo.bar', ref: { by: 'id', id: 'e' }, expect: { ids: ['ee'] } },
+      { byClass: 'foo bar', ref: { by: 'id', id: 'e' }, expect: { ids: ['ee'] } },
+
+      { select: '.foo.bar', ref: { by: 'id', id: 'root', home: 'detached' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { byClass: 'foo bar', ref: { by: 'id', id: 'root', home: 'detached' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+
+      { select: '.foo.bar', ref: { by: 'id', id: 'root', home: 'fragment' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+      { byClass: 'foo bar', ref: { by: 'id', id: 'root', home: 'fragment' }, expect: { ids: ['a', 'b', 'e', 'ee'] } },
+    ],
+  },
+
+  {
+    name: 'tag lookup includes fragment roots',
+    // status: 'only',
+    markup: `
+      <template id="tpl">
+        <div id="a"><span id="aa"></span></div>
+        <p id="b"></p>
+      </template>
+    `,
+    cases: [
+      { byTag: 'div', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { byTag: 'span', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+      { byTag: '*', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a', 'aa', 'b'] } },
+
+      { select: 'div', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { select: 'span', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+      { select: '*', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a', 'aa', 'b'] } },
+    ],
+  },
+
+  {
+    name: 'tag lookup case behavior in fragment roots',
+    // status: 'only',
+    markup: `
+      <template id="tpl">
+        <div id="a"><span id="aa"></span></div>
+        <p id="b"></p>
+      </template>
+    `,
+    cases: [
+      { byTag: 'div', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { byTag: 'DIV', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { byTag: 'span', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+      { byTag: 'SPAN', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+
+      { select: 'div', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { select: 'DIV', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['a'] } },
+      { select: 'span', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+      { select: 'SPAN', ref: { by: 'template', id: 'tpl' }, expect: { ids: ['aa'] } },
+    ],
+  },
+
+  {
+    name: 'tag lookup case behavior in xml fragment roots',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root>
+        <item id="lower"></item>
+        <Item id="upper"></Item>
+      </root>
+    `,
+    cases: [
+      { byTag: 'item', ref: { by: 'documentElement' }, expect: { ids: ['lower'] } },
+      { byTag: 'Item', ref: { by: 'documentElement' }, expect: { ids: ['upper'] } },
+
+      { select: 'item', ref: { by: 'documentElement' }, expect: { ids: ['lower'] } },
+      { select: 'Item', ref: { by: 'documentElement' }, expect: { ids: ['upper'] } },
+    ],
+  },
+
+  {
+    name: 'html namespace created element tag casing behavior',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <div id="host"></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        const ns = 'http://www.w3.org/1999/xhtml';
+
+        const mixed = document.createElementNS(ns, 'MiXeD');
+        mixed.id = 'mixed-html-ns';
+
+        const upper = document.createElementNS(ns, 'UPPER');
+        upper.id = 'upper-html-ns';
+
+        const lower = document.createElementNS(ns, 'lower');
+        lower.id = 'lower-html-ns';
+
+        host.append(mixed, upper, lower);
+      });
+    },
+    cases: [
+      // Native selector behavior: this is the important part.
+      { select: 'mixed', expect: { ids: [] } },
+      { select: 'MiXeD', expect: { ids: [] } },
+      { select: 'upper', expect: { ids: [] } },
+      { select: 'UPPER', expect: { ids: [] } },
+      { select: 'lower', expect: { ids: ['lower-html-ns'] } },
+      { select: 'LOWER', expect: { ids: ['lower-html-ns'] } },
+      { select: 'LoWeR', expect: { ids: ['lower-html-ns'] } },
+
+      { match: 'mixed', ref: { by: 'id', id: 'mixed-html-ns' }, expect: { count: 0 } },
+      { match: 'MiXeD', ref: { by: 'id', id: 'mixed-html-ns' }, expect: { count: 0 } },
+      { match: 'upper', ref: { by: 'id', id: 'upper-html-ns' }, expect: { count: 0 } },
+      { match: 'UPPER', ref: { by: 'id', id: 'upper-html-ns' }, expect: { count: 0 } },
+
+      // DOM helper behavior: this may or may not match selector behavior.
+      { byTag: 'mixed', expect: { ids: [] } },
+      { byTag: 'MiXeD', expect: { ids: [] } },
+      { byTag: 'upper', expect: { ids: [] } },
+      { byTag: 'UPPER', expect: { ids: [] } },
+      { byTag: 'lower', expect: { ids: ['lower-html-ns'] } },
+      { byTag: 'LOWER', expect: { ids: ['lower-html-ns'] } },
+
+      { byTagNs: { ns: '*', local: 'mixed' }, expect: { ids: [] } },
+      { byTagNs: { ns: '*', local: 'MiXeD' }, expect: { ids: ['mixed-html-ns'] } },
+      { byTagNs: { ns: '*', local: 'upper' }, expect: { ids: [] } },
+      { byTagNs: { ns: '*', local: 'UPPER' }, expect: { ids: ['upper-html-ns'] } },
+      { byTagNs: { ns: '*', local: 'lower' }, expect: { ids: ['lower-html-ns'] } },
+      { byTagNs: { ns: '*', local: 'LOWER' }, expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'html type selector folding is ascii only',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <div id="host"></div>
+        </body>
+      </html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+
+        // createElement in an HTML document ASCII-lowercases only A-Z.
+        // So "FÖÖd" becomes localName "fÖÖd", not "fööd".
+        const upperO = document.createElement('FÖÖd');
+        upperO.id = 'upper-o-food';
+
+        const lowerO = document.createElement('fööd');
+        lowerO.id = 'lower-o-food';
+
+        host.append(upperO, lowerO);
+      });
+    },
+    cases: [
+      // Controls.
+      { select: 'fÖÖd', expect: { ids: ['upper-o-food'] } },
+      { select: 'FÖÖd', expect: { ids: ['upper-o-food'] } },
+      { select: 'fööd', expect: { ids: ['lower-o-food'] } },
+      { select: 'Fööd', expect: { ids: ['lower-o-food'] } },
+
+      // Unicode toLowerCase would produce "fööd" and can incorrectly seed/match lower-o-food.
+      { select: 'FÖÖD', expect: { ids: ['upper-o-food'] } },
+
+      { match: 'FÖÖD', ref: { by: 'id', id: 'upper-o-food' }, expect: { count: 1 } },
+      { match: 'FÖÖD', ref: { by: 'id', id: 'lower-o-food' }, expect: { count: 0 } },
+
+      // DOM namespace lookup is exact localName.
+      { byTagNs: { ns: '*', local: 'fÖÖd' }, expect: { ids: ['upper-o-food'] } },
+      { byTagNs: { ns: '*', local: 'fööd' }, expect: { ids: ['lower-o-food'] } },
+
+      { byTag: 'fÖÖd', expect: { ids: ['upper-o-food'] } },
+      { byTag: 'FÖÖd', expect: { ids: ['upper-o-food'] } },
+      { byTag: 'fööd', expect: { ids: ['lower-o-food'] } },
+      { byTag: 'Fööd', expect: { ids: ['lower-o-food'] } },
+    ],
+  },
+
+  {
+    name: 'fragment byTag folding is ascii only',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html>
+        <body>
+          <template id="tmpl">
+            <FÖÖd id="upper-o-food"></FÖÖd>
+            <fööd id="lower-o-food"></fööd>
+          </template>
+        </body>
+      </html>
+    `,
+    cases: [
+      { byTag: 'fÖÖd', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-o-food'] } },
+      { byTag: 'fööd', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['lower-o-food'] } },
+      { byTag: 'FÖÖD', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-o-food'] } },
+    ],
+  },
+
+  {
+    name: 'mixed case tag seed union preserves document order',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!doctype html>
+      <html><body><div id="host"></div></body></html>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        const xml = new DOMParser().parseFromString(`
+          <root xmlns:dc="http://example/dc">
+            <Foo id="x1"></Foo>
+            <dc:Foo id="x3"></dc:Foo>
+            <Foo id="x6"></Foo>
+            <dc:Foo id="x8"></dc:Foo>
+          </root>
+        `, 'text/xml');
+
+        const x1 = document.importNode(xml.documentElement.children[0], true);
+        const x3 = document.importNode(xml.documentElement.children[1], true);
+        const x6 = document.importNode(xml.documentElement.children[2], true);
+        const x8 = document.importNode(xml.documentElement.children[3], true);
+
+        const h2 = document.createElement('foo'); h2.id = 'h2';
+        const h4 = document.createElement('FOO'); h4.id = 'h4';
+        const skip = document.createElement('bar'); skip.id = 'skip';
+        const h7 = document.createElement('FoO'); h7.id = 'h7';
+
+        host.append(x1, h2, x3, h4, skip, x6, h7, x8);
+      });
+    },
+    cases: [
+      { select: 'Foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] } },
+      { select: '*|Foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] } },
+      { select: 'foo', expect: { ids: ['h2', 'h4', 'h7'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] }, browsers: ['chromium'], engines: ['native'] },
+    ],
+  },
+
+  {
+    name: 'template fragment tag selectors preserve roots casing and order',
+    // status: 'only',
+    markup: `
+      <template id="tmpl">
+        <div id="d1"><p id="p1"><a id="a1"></a><code id="c1"></code></p></div>
+        <section id="s1"><h2 id="h1"></h2><p id="p2"><code id="c2"></code></p></section>
+        <article id="ar1"><p id="p3"><a id="a2"></a></p></article>
+        <div id="d2"><span id="sp1"></span><p id="p4"></p></div>
+        <FÖÖd id="upper-o-food"></FÖÖd>
+        <fööd id="lower-o-food"></fööd>
+      </template>
+    `,
+    cases: [
+      { select: 'div', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['d1', 'd2'] } },
+      { select: 'p', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['p1', 'p2', 'p3', 'p4'] } },
+      { select: 'a', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['a1', 'a2'] } },
+      { select: 'code', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['c1', 'c2'] } },
+      { select: 'section', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['s1'] } },
+      { select: 'article', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['ar1'] } },
+      { select: 'madeup', ref: { by: 'template', id: 'tmpl' }, expect: { count: 0 } },
+      { select: '*', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['d1', 'p1', 'a1', 'c1', 's1', 'h1', 'p2', 'c2', 'ar1', 'p3', 'a2', 'd2', 'sp1', 'p4', 'upper-o-food', 'lower-o-food'] } },
+
+      { select: 'DIV', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['d1', 'd2'] } },
+      { select: 'P', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['p1', 'p2', 'p3', 'p4'] } },
+
+      // HTML parser/type selector folding is ASCII-only.
+      { select: 'FÖÖD', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-o-food'] } },
+      { select: 'fööd', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['lower-o-food'] } },
+
+      // byTag on template fragments should include top-level children and descendants.
+      { byTag: 'div', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['d1', 'd2'] } },
+      { byTag: 'FÖÖD', ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-o-food'] } },
+      { byTagNs: { ns: '*', local: 'fÖÖd' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['upper-o-food'] } },
+      { byTagNs: { ns: '*', local: 'fööd' }, ref: { by: 'template', id: 'tmpl' }, expect: { ids: ['lower-o-food'] } },
     ],
   },
 

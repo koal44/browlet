@@ -1,6 +1,3 @@
-import { get } from "node:http";
-import { debug } from "node:util";
-
 function Factory(fGlobal: Glob, fExport: Function): DomApi {
   const _doc = fGlobal.document;
   const _snap = initSnapshot(_doc);
@@ -442,9 +439,23 @@ export function initSnapshot(doc: Document) {
 
 export type Snapshot = ReturnType<typeof initSnapshot>;
 
-function concatList(list: Element[], nodes: ArrayLike<Element>): Element[] {
+// function concatList(list: Element[], nodes: ArrayLike<Element>): Element[] {
+//   for (let i = 0, l = nodes.length; i < l; ++i) {
+//     list.push(nodes[i]);
+//   }
+//   return list;
+// }
+
+function concatCollection(list: Element[], nodes: HTMLCollectionOf<Element>): void {
+  for (let i = 0, j = list.length, l = nodes.length; i < l; ++i) {
+    list[j++] = nodes[i];
+  }
+}
+
+function collectionToArray(nodes: HTMLCollectionOf<Element>): Element[] {
+  const list: Element[] = [];
   for (let i = 0, l = nodes.length; i < l; ++i) {
-    list.push(nodes[i]);
+    list[i] = nodes[i];
   }
   return list;
 }
@@ -476,7 +487,7 @@ function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList {
   return fakeNL;
 }
 
-function sortUnique(nodes: Element[]): Element[] {
+function sortUnique(nodes: Element[]): void {
   let hasDupes = false;
 
   nodes.sort((a, b) => {
@@ -488,18 +499,20 @@ function sortUnique(nodes: Element[]): Element[] {
     return a.compareDocumentPosition(b) & 4 ? -1 : 1;
   });
 
-  if (!hasDupes) return nodes;
+  if (!hasDupes) return;
 
-  const list: Element[] = [nodes[0]];
+  let j = 1;
   let last = nodes[0];
 
   for (let i = 1, l = nodes.length; i < l; ++i) {
     const cur = nodes[i];
-    if (cur !== last) list.push(cur);
-    last = cur;
+    if (cur !== last) {
+      nodes[j++] = cur;
+      last = cur;
+    }
   }
 
-  return list;
+  nodes.length = j;
 }
 
 function getNamespace(doc: Document): string | null {
@@ -818,22 +831,22 @@ function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[]
 
   if (!tag) return [];
 
-  if (isDocument(context) || isElement(context)) {
-    return Array.from(context.getElementsByTagName(tag));
+  if (!isDocumentFragment(context)) {
+    return collectionToArray(context.getElementsByTagName(tag));
   }
 
-  const lowerTag = tag.toLowerCase();
   const nodes: Element[] = [];
+  const any = tag === '*';
+  const lowerTag = asciiLower(tag);
+
   let el = context.firstElementChild;
 
   while (el) {
-    const isHtml = isHtmlElement(el);
-    const name = isHtml ? el.localName : el.tagName;
-    const wanted = isHtml ? lowerTag : tag;
+    if (any || sameSelectorTag(el, tag, lowerTag, snap)) {
+      nodes.push(el);
+    }
 
-    if (tag === '*' || name === wanted) nodes.push(el);
-
-    concatList(nodes, el.getElementsByTagName(tag));
+    concatCollection(nodes, el.getElementsByTagName(tag));
     el = el.nextElementSibling;
   }
 
@@ -841,13 +854,11 @@ function byTagRaw(tag: string, context: QueryContext, snap: Snapshot): Element[]
 }
 
 // context agnostic getElementsByTagNameNS
-function byTagNsRaw(ns: string | null, local: string, context: QueryContext, snap: Snapshot): Element[] {
-  updateSnapshot(snap, context);
-
+function byTagNsRaw(ns: string | null, local: string, context: QueryContext, _snap: Snapshot): Element[] {
   if (!local) return [];
 
   if (isDocument(context) || isElement(context)) {
-    return Array.from(context.getElementsByTagNameNS(ns, local));
+    return collectionToArray(context.getElementsByTagNameNS(ns, local));
   }
 
   const nodes: Element[] = [];
@@ -859,50 +870,226 @@ function byTagNsRaw(ns: string | null, local: string, context: QueryContext, sna
 
     if (nsMatch && localMatch) nodes.push(el);
 
-    concatList(nodes, el.getElementsByTagNameNS(ns, local));
+    concatCollection(nodes, el.getElementsByTagNameNS(ns, local));
     el = el.nextElementSibling;
   }
 
   return nodes;
 }
 
-// Selector type seeds cannot use byTagRaw because qualified-name lookup can miss
-// namespaced local-name matches; byTagNsRaw is exact-case and misses HTML folding.
-function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
-  updateSnapshot(snap, context);
+// // Selector type seeds cannot use byTagRaw because qualified-name lookup can miss
+// // namespaced local-name matches; byTagNsRaw is exact-case and misses HTML folding.
+// function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
+//   updateSnapshot(snap, context);
 
+//   if (!tag) return [];
+//   if (tag === '*') return byTagRaw('*', context, snap);
+
+//   const lowerTag = asciiLower(tag);
+
+//   // if (tag === asciiLower(tag) && !isDocumentFragment(context)) {
+//   //   return collectionToArray(context.getElementsByTagNameNS('*', tag));
+//   // }
+
+//   // return snap.hasTreeWalker
+//   //   ? seedsByTag_TreeWalk(tag, lowerTag, context, snap)
+//   //   : seedsByTag_Walk(tag, lowerTag, context, snap);
+
+//   return seedsByTag_TreeWalk(tag, lowerTag, context, snap);
+//   // return seedsByTag_Walk(tag, lowerTag, context, snap);
+
+//   // const nodes: Element[] = [];
+//   // walkElements(context, e => {
+//   //   if (snap.isHtml && isHtmlElement(e)) {
+//   //     if (e.localName === lowerTag) nodes.push(e);
+//   //   } else if (e.localName === tag) {
+//   //     nodes.push(e);
+//   //   }
+//   // });
+
+//   // return nodes;
+// }
+
+function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!tag) return [];
   if (tag === '*') return byTagRaw('*', context, snap);
 
-  const nodes: Element[] = [];
-  const lowerTag = tag.toLowerCase();
+  const lowerTag = asciiLower(tag);
 
-  walkElements(context, e => {
-    if (snap.isHtml && isHtmlElement(e)) {
-      if (e.localName === lowerTag) nodes.push(e);
-    } else if (e.localName === tag) {
-      nodes.push(e);
+  if (!isDocumentFragment(context)) {
+    if (tag === lowerTag || !snap.isHtml) {
+      return collectionToArray(context.getElementsByTagNameNS('*', tag));
     }
-  });
+
+    return seedsByTagNsUnion(tag, lowerTag, context);
+  }
+
+  return seedsByTagFragment(tag, lowerTag, context, snap);
+
+  // return snap.hasTreeWalker
+  //   ? seedsByTag_TreeWalk(tag, lowerTag, context, snap)
+  //   : seedsByTag_Walk(tag, lowerTag, context, snap);
+}
+
+function seedsByTagFragment(tag: string, lowerTag: string, context: DocumentFragment, snap: Snapshot): Element[] {
+  const nodes: Element[] = [];
+
+  for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
+    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
+
+    const found = seedsByTag(tag, root, snap);
+    for (let i = 0, l = found.length; i < l; ++i) {
+      nodes.push(found[i]);
+    }
+  }
 
   return nodes;
 }
 
-// context agnostic getElementsByClassName
+function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | Element): Element[] {
+  const exact = context.getElementsByTagNameNS('*', tag);
+  const lower = context.getElementsByTagNameNS('*', lowerTag);
+
+  const exactNodes: Element[] = [];
+  const lowerNodes: Element[] = [];
+
+  for (let i = 0, l = exact.length; i < l; ++i) {
+    const e = exact[i];
+
+    // Exact-cased selector tag should keep XML/foreign localName matches,
+    // but not weird XHTML-namespace mixed-case elements created via createElementNS.
+    if (!isHtmlElement(e)) exactNodes.push(e);
+  }
+
+  for (let i = 0, l = lower.length; i < l; ++i) {
+    const e = lower[i];
+
+    // Folded lowerTag side is only for HTML elements in an HTML document.
+    // XML/imported XML lowercase localName matches are false positives for e.g. selector "Foo".
+    if (isHtmlElement(e)) lowerNodes.push(e);
+  }
+
+  if (!exactNodes.length) return lowerNodes;
+  if (!lowerNodes.length) return exactNodes;
+
+  return mergeDocumentOrder(exactNodes, lowerNodes);
+}
+
+function mergeDocumentOrder(a: Element[], b: Element[]): Element[] {
+  const nodes: Element[] = [];
+  let i = 0, j = 0, k = 0;
+
+  while (i < a.length && j < b.length) {
+    const x = a[i];
+    const y = b[j];
+
+    if (x === y) {
+      nodes[k++] = x;
+      ++i;
+      ++j;
+    } else if (x.compareDocumentPosition(y) & 4) {
+      nodes[k++] = x;
+      ++i;
+    } else {
+      nodes[k++] = y;
+      ++j;
+    }
+  }
+
+  while (i < a.length) nodes[k++] = a[i++];
+  while (j < b.length) nodes[k++] = b[j++];
+
+  return nodes;
+}
+
+
+function sameSelectorTag(e: Element, tag: string, lowerTag: string, snap: Snapshot): boolean {
+  return snap.isHtml && isHtmlElement(e)
+    ? e.localName === lowerTag
+    : e.localName === tag;
+}
+
+function seedsByTag_TreeWalk(tag: string, lowerTag: string, context: QueryContext, snap: Snapshot): Element[] {
+  const nodes: Element[] = [];
+
+  let root: Element | DocumentFragment;
+  let doc: Document;
+
+  if (isDocument(context)) {
+    root = context.documentElement;
+    doc = context;
+
+    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
+  } else {
+    root = context;
+    doc = context.ownerDocument;
+  }
+
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const e = node as Element;
+    if (sameSelectorTag(e, tag, lowerTag, snap)) nodes.push(e);
+  }
+
+  return nodes;
+}
+
+function seedsByTag_Walk(tag: string, lowerTag: string, context: QueryContext, snap: Snapshot): Element[] {
+  const nodes: Element[] = [];
+
+  if (isDocument(context)) {
+    const root = context.documentElement;
+    if (root && sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
+    if (root) walk(root);
+    return nodes;
+  }
+
+  if (isElement(context)) {
+    walk(context);
+    return nodes;
+  }
+
+  // DocumentFragment
+  for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
+    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
+    walk(root);
+  }
+
+  return nodes;
+
+  function walk(context: Element): void {
+    let node: Element | null = context;
+    let next: Element | null = context.firstElementChild;
+
+    while ((node = next)) {
+      if (sameSelectorTag(node, tag, lowerTag, snap)) nodes.push(node);
+
+      next = node.firstElementChild || node.nextElementSibling;
+      if (next) continue;
+
+      while (!next && (node = node.parentElement) && node !== context) {
+        next = node.nextElementSibling;
+      }
+    }
+  }
+}
+
+
 function byClassRaw(cls: string, context: QueryContext, snap: Snapshot): Element[] {
   updateSnapshot(snap, context);
 
   if (isDocument(context) || isElement(context)) {
-    return Array.from(context.getElementsByClassName(cls));
+    return collectionToArray(context.getElementsByClassName(cls));
   }
 
   const nodes: Element[] = [];
-  const reCls = RegExp('(^|\\s)' + escapeRegExp(cls) + '(\\s|$)', snap.isQuirksMode ? 'i' : '');
+  const reCls = getCachedRegex('(^|\\s)' + escapeRegExp(cls) + '(\\s|$)', snap.isQuirksMode ? 'i' : '', snap);
   let el = context.firstElementChild;
 
   while (el) {
     if (reCls.test(el.getAttribute('class') || '')) nodes.push(el);
-    concatList(nodes, el.getElementsByClassName(cls));
+    concatCollection(nodes, el.getElementsByClassName(cls));
     el = el.nextElementSibling;
   }
 
@@ -1199,8 +1386,23 @@ function isCssSpace(code: number): boolean {
   return code === 9 || code === 10 || code === 12 || code === 13 || code === 32;
 }
 
+// function asciiLower(s: string): string {
+//   return s.replace(/[A-Z]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 32));
+// }
+
 function asciiLower(s: string): string {
-  return s.replace(/[A-Z]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 32));
+  for (let i = 0, l = s.length; i < l; ++i) {
+    const c = s.charCodeAt(i);
+    if (c >= 65 && c <= 90) {
+      let out = s.slice(0, i) + String.fromCharCode(c + 32);
+      for (++i; i < l; ++i) {
+        const d = s.charCodeAt(i);
+        out += d >= 65 && d <= 90 ? String.fromCharCode(d + 32) : s[i];
+      }
+      return out;
+    }
+  }
+  return s;
 }
 
 // fast resolver for :nth-child() and :nth-last-child()
@@ -2430,7 +2632,8 @@ function compileSelector(
         if (!match) throw new Error('Invalid tag selector: ' + selector);
 
         const rawTagName = cssIdentUnescape(match[1]);
-        const htmlTagName = rawTagName.toLowerCase();
+        // const htmlTagName = rawTagName.toLowerCase();
+        const htmlTagName = asciiLower(rawTagName);
 
         source = `if(s.isType(e,${JSON.stringify(htmlTagName)},${JSON.stringify(rawTagName)})){${source}}`;
         break;
@@ -3237,7 +3440,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
 
   updateSnapshot(snap, ctx, isApiEntry && resolver.usesScope);
 
-  let results: Element[] = [];
+  const results: Element[] = [];
   const cache: HashCache = {};
   const seeds = resolver.seeds;
 
@@ -3250,7 +3453,7 @@ function selectRaw(sel: string, ctx: QueryContext, cb: QueryCallback | null, sna
   }
 
   if (seeds.length > 1 && results.length > 1) {
-    results = sortUnique(results);
+    sortUnique(results);
   }
 
   return results;
