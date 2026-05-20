@@ -32,23 +32,18 @@
     "url": "git://github.com/dperini/nwsapi.git"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/build.mjs",
+    "build": "node scripts/build.mjs",
     "clean": "node ./scripts/clean.mjs",
     "min": "node ./scripts/min.mjs",
     "lint": "npx eslint src/nwsapi.js",
-
     "pretest:browser": "npm run build",
     "test:browser": "cross-env HARNESS_MODE=normal playwright test --project=browser",
-
     "pretest:browser:fixme": "npm run build",
     "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test --project=browser",
-
     "pretest:browser:perf": "npm run build",
     "test:browser:perf": "playwright test --project=perf --workers=1",
-
     "pretest:unit": "npm run build",
     "test:unit": "vitest run",
-
     "pretest:artifact": "npm run build",
     "test:artifact": "node test_new/artifact/cjs.test.cjs && node test_new/artifact/global.test.cjs"
   },
@@ -58,6 +53,7 @@
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
     "playwright": "^1.59.1",
+    "rollup": "^4.60.4",
     "terser": "5.46.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",

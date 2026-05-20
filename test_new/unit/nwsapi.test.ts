@@ -1,19 +1,9 @@
 import { describe, expect, it, test } from 'vitest';
-import {
-  buildRex, DEFAULT_EXTENSIONS, DEFAULT_CONFIG, parse, cssIdentUnescape,
-  matchLogicalSelector, splitSelectorGroups, escapeRegExp, buildRexStrings,
-  parseRelativeSelectorList,
-  asciiEquals,
-  asciiStartsWith,
-  asciiEndsWith,
-  asciiIncludes,
-  asciiDashMatch,
-  hasCssToken,
-  asciiHasCssToken,
-  normalizeSelectorInput,
-  trimSelectorSpaces,
-} from '../../src/nwsapi';
 import { AssertionError } from 'node:assert';
+import { buildRex, buildRexStrings } from '../../src/rex';
+import { matchLogicalSelector, normalizeSelectorInput, parse, parseRelativeSelectorList, splitSelectorGroups, trimSelectorSpaces } from '../../src/parser';
+import { asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, cssIdentUnescape, escapeRegExp, hasCssToken } from '../../src/utils/css';
+import { DEFAULT_EXTENSIONS } from '../../src/snapshot';
 
 function testRe(re: RegExp, input: string): boolean {
   re.lastIndex = 0;

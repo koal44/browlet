@@ -1,0 +1,173 @@
+import { byClass, byId, byTag, byTagNs } from "./api/lookup";
+import { queryClosest, queryFirst, matchForgiving, queryMatch, matchStrict, querySelect } from "./api/query";
+import {
+  hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
+  isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
+  isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, isType, isValid, matchAttribute,
+  matchDir, matchHasFrom, matchLang, nthElement, nthOfType
+} from "./compile/runtime";
+import { buildRex } from "./rex";
+import { getNamespace, isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from "./utils/dom";
+
+export const DEFAULT_CONFIG: NwsConfig = {
+  // When enabled, methods that return multiple elements will return a
+  // NodeList-like object instead of an array.
+  NODE_LIST: false,
+
+  // Allows duplicate-ID candidate lookup to temporarily remove and restore id
+  // attributes in contexts where no fast id collection is available.
+  // Faster for DocumentFragment/template contexts, but observable by mutation
+  // observers and other DOM-inspection code. Disabled by default.
+  MUTATE_IDS: false,
+};
+
+export const DEFAULT_EXTENSIONS: NwsExtensions = {
+  operators: ['~=', '*=', '^=', '$=', '|=', '='],
+  combinators: ['>', '+', '~', ' ', '\t'],
+};
+
+export function initSnapshot(doc: Document) {
+  const snap = {
+    doc: doc,
+    from: doc as QueryContext,
+    root: doc.documentElement as Element,
+    scopeEl: null as Element | null,
+    isHtml: isHtmlDoc(doc),
+    isQuirksMode: isQuirksMode(doc),
+    namespace: getNamespace(doc) as string | null,
+    hasDocumentAll: 'all' in doc,
+    hasTreeWalker: 'createTreeWalker' in doc,
+    re: {} as Rex,
+
+    isDebug: false,
+    debugSelect: undefined as DebugSelect | undefined,
+    debugMatch: undefined as DebugMatch | undefined,
+    debugStack: [] as (DebugSelect | DebugMatch)[],
+
+    // special handling configuration flags
+    config: { ...DEFAULT_CONFIG } as NwsConfig,
+    ext: {
+      operators: [...DEFAULT_EXTENSIONS.operators],
+      combinators: [...DEFAULT_EXTENSIONS.combinators],
+    } as NwsExtensions,
+    selectors: {} as Record<string, SelectorExtension>,
+    combinators: {} as Record<string, CombinatorCompiler>,
+    operators: {
+      '=':  { p1: '^',       p2: '$',       p3: true },
+      '^=': { p1: '^',       p2: '',        p3: true },
+      '$=': { p1: '',        p2: '$',       p3: true },
+      '*=': { p1: '',        p2: '',        p3: true },
+      '|=': { p1: '^',       p2: '(-|$)',   p3: true },
+      '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: true },
+    } as Record<string, AttrMatcherParts>,
+
+    hoverTarget: null as EventTarget | null,
+    activeTarget: null as EventTarget | null,
+    focusTarget: null as EventTarget | null,
+
+    // cached
+    matchLambdas: {} as Partial<Record<string, MatchLambda>>,
+    selectLambdas: {} as Partial<Record<string, SelectLambda>>,
+    strictMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
+    forgivingMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
+    selectResolvers: {} as Partial<Record<string, SelectResolver>>,
+
+    byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
+    byTag: (tag: string, context?: QueryContext) => byTag(tag, context ?? snap.doc, snap),
+    byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNs(ns, local, context ?? snap.doc, snap),
+    byClass: (cls: string, context?: QueryContext) => byClass(cls, context ?? snap.doc, snap),
+    first: (sel: string, context?: QueryContext, isApiEntry?: boolean) => {
+      return queryFirst(sel, context ?? snap.doc, snap, isApiEntry);
+    },
+    match: (sel: string, context: Element, h: HashCache | null = null) => {
+      return queryMatch(sel, context, snap, h);
+    },
+    select: (sel: string, context?: QueryContext, cb?: QueryCallback | null, isApiEntry?: boolean) => {
+      return querySelect(sel, context ?? snap.doc, cb ?? null, snap, isApiEntry);
+    },
+    ancestor: (sel: string, context: Element) => {
+      return queryClosest(sel, context, snap);
+    },
+
+    matchStrict: (selectors: string, element: Element, h: HashCache | null = null) =>
+      matchStrict(selectors, element, snap, h),
+    matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
+      matchForgiving(selectors, element, snap, h),
+
+    isType: isType,
+    nthOfType: nthOfType,
+    nthElement: nthElement,
+    isNthElement: isNthElement,
+    isNthOfType: isNthOfType,
+    matchHas: (steps: [SelectorCombinator, string][], anchor: Element, h: HashCache) => matchHasFrom(steps, 0, anchor, snap, h),
+    matchDir: matchDir,
+    matchLang: matchLang,
+    defined: (element: Element) => isDefined(element, snap),
+    isDisabled: isDisabled,
+    isEnabled: isEnabled,
+    isReadWrite: isReadWrite,
+    isFormStateElement: isFormStateElement,
+    isPlaceholderShown: isPlaceholderShown,
+    isDefault: isDefault,
+    isChecked: isChecked,
+    isIndeterminate: isIndeterminate,
+    isRequired: isRequired,
+    isOptional: isOptional,
+    isValid: isValid,
+    isInvalid: isInvalid,
+    isInRange: isInRange,
+    isOutOfRange: isOutOfRange,
+    isPlaying: isPlaying,
+    isPaused: isPaused,
+    isSeeking: isSeeking,
+    isMuted: isMuted,
+    hasAttr: (e: Element, anyNs: boolean, local: string, htmlLocal: string, hasColon: boolean): boolean =>
+      hasAttr(e, anyNs, local, htmlLocal, hasColon, snap),
+    matchAttribute: (e: Element, anyNs: boolean, name: string, htmlName: string, hasColonName: boolean, pattern: string, expected: string, htmlExpected: string, sensitivity: number) =>
+      matchAttribute(e, anyNs, name, htmlName, hasColonName, pattern, expected, htmlExpected, sensitivity, snap),
+    isFocused: (node: Element) =>
+      isFocused(node, snap),
+
+    regexCache: {} as Record<string, RegExp>,
+    getCachedRegex: (source: string, flags: string): RegExp => {
+      const key = flags + '\0' + source;
+      return snap.regexCache[key] || (snap.regexCache[key] = new RegExp(source, flags));
+    },
+
+    update: (ctx: QueryContext, updateScope = false) => {
+      const doc = ctx.ownerDocument ?? ctx;
+      if (snap.doc !== doc) {
+        snap.doc = doc;
+        snap.root = doc.documentElement;
+        snap.isHtml = isHtmlDoc(doc);
+        snap.isQuirksMode = isQuirksMode(doc);
+        snap.namespace = getNamespace(doc);
+        snap.hasDocumentAll = 'all' in doc;
+        snap.hasTreeWalker = 'createTreeWalker' in doc;
+      }
+      snap.from = ctx; // Debug breadcrumb only
+      if (updateScope) {
+        snap.scopeEl = isDocument(ctx) ? ctx.documentElement : isElement(ctx) ? ctx : null;
+      }
+    },
+
+    probe: {
+      select: 0,
+      selBuild: 0,
+      match: 0,
+      matBuild: 0,
+      reset: () => {
+        snap.probe.select = 0;
+        snap.probe.selBuild = 0;
+        snap.probe.match = 0;
+        snap.probe.matBuild = 0;
+      }
+    }
+  };
+
+  snap.re = buildRex(snap.ext);
+
+  return snap;
+}
+
+export type Snapshot = ReturnType<typeof initSnapshot>;

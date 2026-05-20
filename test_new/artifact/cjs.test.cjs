@@ -6,4 +6,4 @@ if (typeof Factory !== "function") {
   throw new Error(`Expected CommonJS require(dist/nwsapi.js) to return factory function, got ${typeof Factory}`);
 }
 
-console.log("cjs artifact smoke passed");
+console.log("cjs artifact passed");

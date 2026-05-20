@@ -20,4 +20,4 @@ if (typeof context.NW.Dom.select !== 'function') throw new Error('Expected NW.Do
 if (typeof context.NW.Dom.match !== 'function') throw new Error('Expected NW.Dom.match');
 if (typeof context.NW.Dom.configure !== 'function') throw new Error('Expected NW.Dom.configure');
 
-console.log('global artifact smoke passed');
+console.log('global artifact passed');

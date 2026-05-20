@@ -1,4 +1,5 @@
-import type { Snapshot } from './nwsapi';
+import type { Rex as RexType } from './rex';
+import type { Snapshot as SnapshotType } from './snapshot';
 
 export {};
 
@@ -25,6 +26,9 @@ type NwsExtensions = {
   combinators: string[];
   operators: string[];
 }
+
+type Rex = RexType;
+type Snapshot = SnapshotType;
 
 type QueryContext = Document | Element | DocumentFragment;
 type QueryCallback = (element: Element) => boolean | void;
@@ -252,4 +256,3 @@ type NthOfTypeIndexEntry = {
 };
 
 } // end global declaration
-

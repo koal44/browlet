@@ -1,17 +1,42 @@
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
+import { rollup } from 'rollup';
 
+const tmpDir = 'dist/.tmp';
+const tscOutFile = 'dist/.tmp/nwsapi.js';
+const bundleFile = 'dist/.tmp/nwsapi.bundle.js';
 const outFile = 'dist/nwsapi.js';
-const pkgFile = 'package.json';
 
-const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const version = pkg.version;
 
-let source = fs.readFileSync(outFile, 'utf8');
+fs.rmSync('dist', { recursive: true, force: true });
+fs.mkdirSync(tmpDir, { recursive: true });
+
+execSync('npx tsc -p tsconfig.build.json', { stdio: 'inherit' });
+
+const bundle = await rollup({
+  input: tscOutFile,
+});
+
+await bundle.write({
+  file: bundleFile,
+  format: 'es',
+});
+
+await bundle.close();
+
+let source = fs.readFileSync(bundleFile, 'utf8');
 source = source.replaceAll('__VERSION__', version);
 
+// source = source.replace(
+//   /(^|\n)export\s+(function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g,
+//   '$1$2 $3'
+// );
+
 source = source.replace(
-  /(^|\n)export\s+(function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g,
-  '$1$2 $3'
+  /(^|\n)export\s*\{[\s\S]*?\};?\s*(?=\n|$)/g,
+  '$1'
 );
 
 const banner = `/*
@@ -53,4 +78,5 @@ Export(global, Factory);
 `;
 
 fs.writeFileSync(outFile, banner + source + footer, 'utf8');
-console.log(`wrapped ${outFile} with version ${version}`);
+fs.rmSync(tmpDir, { recursive: true, force: true });
+console.log(`built '${outFile}' v${version}!`);
