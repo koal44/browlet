@@ -1,4 +1,6 @@
-* linguist-vendored
-*.js linguist-vendored=false
-bin/* -crlf -diff -merge
-* eol=cr
+* text=auto eol=lf
+
+dist/** linguist-generated
+test/browser/fixtures/** linguist-vendored
+test/perf/engines/** linguist-vendored
+examples/** linguist-documentation

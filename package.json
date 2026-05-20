@@ -1,9 +1,14 @@
 {
   "name": "nwsapi",
-  "version": "2.2.23",
+  "version": "2.2.23-fork.0",
   "description": "Fast CSS Selectors API Engine",
-  "homepage": "https://github.com/dperini/nwsapi/",
+  "homepage": "https://github.com/koal44/nwsapi-lab",
   "main": "./dist/nwsapi.js",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "keywords": [
     "css",
     "css3",
@@ -13,39 +18,28 @@
   ],
   "license": "MIT",
   "author": {
-    "name": "Diego Perini",
-    "email": "diego.perini@gmail.com",
-    "web": "https://www.iport.it/"
+    "name": "Diego Perini"
   },
   "maintainers": [
     {
-      "name": "Diego Perini",
-      "email": "diego.perini@gmail.com",
-      "web": "https://www.iport.it/"
+      "name": "Eric Knowlton"
     }
   ],
   "bugs": {
-    "url": "https://github.com/dperini/nwsapi/issues"
+    "url": "https://github.com/koal44/nwsapi-lab/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/dperini/nwsapi.git"
+    "url": "git+https://github.com/koal44/nwsapi-lab.git"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "clean": "node ./scripts/clean.mjs",
-    "min": "node ./scripts/min.mjs",
-    "lint": "npx eslint src/nwsapi.js",
-    "pretest:browser": "npm run build",
-    "test:browser": "cross-env HARNESS_MODE=normal playwright test --project=browser",
-    "pretest:browser:fixme": "npm run build",
-    "test:browser:fixme": "cross-env HARNESS_MODE=fixme playwright test --project=browser",
-    "pretest:browser:perf": "npm run build",
-    "test:browser:perf": "playwright test --project=perf --workers=1",
-    "pretest:unit": "npm run build",
-    "test:unit": "vitest run",
-    "pretest:artifact": "npm run build",
-    "test:artifact": "node test_new/artifact/cjs.test.cjs && node test_new/artifact/global.test.cjs"
+    "lint": "eslint src test scripts",
+    "test:browser": "npm run build && cross-env HARNESS_MODE=normal playwright test --project=browser",
+    "test:browser:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=browser",
+    "test:perf": "npm run build && playwright test --project=perf --workers=1",
+    "test:unit": "npm run build && vitest run",
+    "test:artifact": "npm run build && node test/artifact/cjs.test.cjs && node test/artifact/global.test.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
@@ -54,7 +48,6 @@
     "eslint": "9.31.0",
     "playwright": "^1.59.1",
     "rollup": "^4.60.4",
-    "terser": "5.46.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

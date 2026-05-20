@@ -7,12 +7,12 @@ export default defineConfig({
   projects: [
     {
       name: 'browser',
-      testDir: 'test_new/browser',
+      testDir: 'test/browser',
       workers: 8,
     },
     {
       name: 'perf',
-      testDir: 'test_new/perf',
+      testDir: 'test/perf',
       workers: 1,
       timeout: 120_000,
     },

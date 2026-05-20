@@ -40,20 +40,9 @@ source = source.replace(
 );
 
 const banner = `/*
- * Copyright (C) 2007-2025 Diego Perini
- * All rights reserved.
- *
- * nwsapi.js - Fast CSS Selectors API Engine
- *
- * Author: Diego Perini <diego.perini at gmail com>
- * Version: ${version}
- * Created: 20070722
- * Release: 20251205
- *
- * License:
- *  https://javascript.nwbox.com/nwsapi/MIT-LICENSE
- * Download:
- *  https://javascript.nwbox.com/nwsapi/nwsapi.js
+ * nwsapi v${version} | MIT
+ * Copyright (c) 2007-2025 Diego Perini
+ * Copyright (c) 2026 Eric Knowlton
  */
 
 (function (global) {

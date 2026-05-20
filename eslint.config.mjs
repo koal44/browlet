@@ -19,13 +19,13 @@ const relaxedRules = {
 
 export default defineConfig([
   {
-    ignores: ['dist/**'],
+    ignores: ['dist/**', 'test/perf/engines/**', 'test/browser/fixtures/**'],
   },
 
   js.configs.recommended,
 
   {
-    files: ['src/**/*.js', 'test_new/**/*.js'],
+    files: ['src/**/*.js', 'test/**/*.js', 'examples/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
@@ -77,7 +77,7 @@ export default defineConfig([
   },
 
   {
-    files: ['test_new/artifact/**/*.cjs'],
+    files: ['test/artifact/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',
