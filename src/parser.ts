@@ -345,3 +345,526 @@ function isEscapedAt(input: string, index: number, start = 0): boolean {
   }
   return slashCount % 2 === 1;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+import { Cursor } from './cursor';
+
+export type SelectorList = {
+  selectors: ComplexSelector[];
+};
+
+export type Combinator = ' ' | '>' | '+' | '~';
+
+export type ComplexSelector = {
+  parts: ComplexPart[];
+};
+
+export type ComplexPart = {
+  // null for the first compound in the complex selector
+  combinator: Combinator | null;
+  compound: CompoundSelector;
+};
+
+export type CompoundSelector = {
+  id?: IdSelector;
+  classes?: ClassSelector[];
+  tag?: TagSelector;
+
+  // Generated JS source for non-planner simple-selector tests
+  // such as attrs and pseudos. ID/class/tag are deferred for the planner.
+  // TODO: maybe a list so that planner can reorder for perf?
+  testSource: string;
+};
+
+export type IdSelector = {
+  // Raw CSS identifier payload, without "#", before CSS unescaping.
+  raw: string;
+};
+
+export type ClassSelector = {
+  // Raw CSS identifier payload, without ".", before CSS unescaping.
+  raw: string;
+};
+
+export type TagSelector = {
+  prefixRaw?: '' | '*';
+  localRaw: string;
+};
+
+export function parseSelectorList(input: string): SelectorList {
+  const c = new Cursor(input);
+  return parseSelectorListFrom(c);
+}
+
+export function parseSelectorListFrom(c: Cursor): SelectorList {
+  const selectors: ComplexSelector[] = [];
+
+  consumeWhitespace(c);
+
+  if (c.eof()) {
+    c.error('Expected selector');
+  }
+
+  while (!c.eof()) {
+    selectors.push(parseComplexSelector(c));
+
+    consumeWhitespace(c);
+
+    if (!c.match(',')) break;
+
+    consumeWhitespace(c);
+
+    if (c.eof()) {
+      c.error('Expected selector after comma');
+    }
+  }
+
+  consumeWhitespace(c);
+
+  if (!c.eof()) {
+    c.error(`Unexpected character ${JSON.stringify(c.peek())}`);
+  }
+
+  return { selectors };
+}
+
+export function parseComplexSelector(c: Cursor): ComplexSelector {
+  const parts: ComplexPart[] = [];
+
+  parts.push({
+    combinator: null,
+    compound: parseCompoundSelector(c),
+  });
+
+  while (true) {
+    const sawWs = consumeWhitespace(c);
+
+    if (c.eof() || c.peek() === ',' || c.peek() === ')') break;
+
+    let combinator: Combinator | null = null;
+    const ch = c.peek();
+
+    if (ch === '>' || ch === '+' || ch === '~') {
+      combinator = ch;
+      c.next();
+      consumeWhitespace(c);
+    } else if (sawWs) {
+      combinator = ' ';
+    } else {
+      c.error('Expected combinator');
+    }
+
+    if (c.eof() || c.peek() === ',' || c.peek() === ')') {
+      c.error('Expected compound selector after combinator');
+    }
+
+    parts.push({
+      combinator,
+      compound: parseCompoundSelector(c),
+    });
+  }
+
+  return { parts };
+}
+
+export function parseCompoundSelector(c: Cursor): CompoundSelector {
+  const compound: CompoundSelector = {
+    testSource: '',
+  };
+
+  let count = 0;
+
+  while (!c.eof() && canStartSimpleSelector(c)) {
+    parseSimpleSelectorInto(c, compound, count === 0);
+    count++;
+  }
+
+  if (count === 0) {
+    c.error('Expected compound selector');
+  }
+
+  return compound;
+}
+
+function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstInCompound: boolean): void {
+  const ch = c.peek();
+
+  if (ch === '#') {
+    if (compound.id) c.error('Duplicate id selector in compound');
+    compound.id = parseIdSelector(c);
+    return;
+  }
+
+  if (ch === '.') {
+    (compound.classes ??= []).push(parseClassSelector(c));
+    return;
+  }
+
+  if (ch === '[') {
+    compound.testSource += _emitAttributeTest(_parseAttributeSelector(c));
+    return;
+  }
+
+  if (ch === ':') {
+    compound.testSource += emitPseudoTest(_parsePseudoSelector(c));
+    return;
+  }
+
+  if ((ch === '*' || ch === '|' || canStartIdent(c)) && isFirstInCompound) {
+    if (compound.tag) c.error('Duplicate tag selector in compound');
+    compound.tag = parseTagSelector(c);
+    return;
+  }
+
+  c.error(`Unexpected simple selector ${JSON.stringify(ch)}`);
+}
+
+function parseIdSelector(c: Cursor): IdSelector {
+  c.expect('#');
+
+  return {
+    raw: consumeIdent(c),
+  };
+}
+
+function parseClassSelector(c: Cursor): ClassSelector {
+  c.expect('.');
+
+  return {
+    raw: consumeIdent(c),
+  };
+}
+
+function parseTagSelector(c: Cursor): TagSelector {
+  if (c.match('*')) {
+    if (c.match('|')) {
+      return { prefixRaw: '*', localRaw: parseLocalTagName(c) };
+    }
+
+    return { localRaw: '*' };
+  }
+
+  if (c.match('|')) {
+    return { prefixRaw: '', localRaw: parseLocalTagName(c) };
+  }
+
+  const first = consumeIdent(c);
+
+  if (c.match('|')) {
+    c.error(`Unsupported namespace prefix ${JSON.stringify(first)}`);
+  }
+
+  return { localRaw: first };
+}
+
+function parseLocalTagName(c: Cursor): string {
+  if (c.match('*')) return '*';
+  return consumeIdent(c);
+}
+
+
+export type _AttributeSelector = {
+  raw: string;
+};
+
+function _parseAttributeSelector(c: Cursor): _AttributeSelector {
+  const start = c.pos();
+
+  _consumeBracketBlock(c);
+
+  return {
+    raw: c.slice(start),
+  };
+}
+
+function _emitAttributeTest(attr: _AttributeSelector): string {
+  return `/* attr ${JSON.stringify(attr)} */`;
+}
+
+export type PseudoSelector = {
+  raw: string;
+};
+
+function _parsePseudoSelector(c: Cursor): PseudoSelector {
+  const start = c.pos();
+
+  c.expect(':');
+
+  // Allow pseudo-elements for now.
+  if (c.match(':')) {
+    // keep going
+  }
+
+  consumeIdent(c);
+
+  if (c.peek() === '(') {
+    _consumeParenBlock(c);
+  }
+
+  return {
+    raw: c.slice(start),
+  };
+}
+
+function emitPseudoTest(pseudo: PseudoSelector): string {
+  return `/* pseudo ${JSON.stringify(pseudo)} */`;
+}
+
+
+function isCssWhitespace(ch: string): boolean {
+  return ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r' || ch === '\f';
+}
+
+function consumeWhitespace(c: Cursor): boolean {
+  const n = c.consumeWhile(isCssWhitespace);
+  return n !== 0;
+}
+
+function canStartSimpleSelector(c: Cursor): boolean {
+  const ch = c.peek();
+
+  return (
+    ch === '#' ||
+    ch === '.' ||
+    ch === '[' ||
+    ch === ':' ||
+    ch === '*' ||
+    ch === '|' ||
+    canStartIdent(c)
+  );
+}
+
+
+function canStartIdent(c: Cursor): boolean {
+  const ch = c.peek();
+
+  return (
+    ch === '-' ||
+    ch === '\\' ||
+    isIdentHeadChar(ch)
+  );
+}
+
+function _consumeBracketBlock(c: Cursor): void {
+  c.expect('[');
+
+  while (!c.eof()) {
+    const ch = c.peek();
+
+    if (ch === ']') {
+      c.next();
+      return;
+    }
+
+    if (ch === '"' || ch === "'") {
+      consumeString(c);
+      continue;
+    }
+
+    if (consumeEscapedChar(c)) {
+      continue;
+    }
+
+    c.next();
+  }
+
+  c.error('Unclosed attribute selector');
+}
+
+function _consumeParenBlock(c: Cursor): void {
+  c.expect('(');
+
+  let depth = 1;
+
+  while (!c.eof()) {
+    const ch = c.peek();
+
+    if (ch === '"' || ch === "'") {
+      consumeString(c);
+      continue;
+    }
+
+    if (consumeEscapedChar(c)) {
+      continue;
+    }
+
+    if (ch === '(') {
+      depth++;
+      c.next();
+      continue;
+    }
+
+    if (ch === ')') {
+      depth--;
+      c.next();
+      if (depth === 0) return;
+      continue;
+    }
+
+    c.next();
+  }
+
+  c.error('Unclosed pseudo arguments');
+}
+
+function consumeString(c: Cursor): void {
+  const quote = c.next();
+
+  while (!c.eof()) {
+    if (c.match(quote)) return;
+    if (consumeEscapedChar(c)) continue;
+    c.next();
+  }
+
+  c.error('Unclosed string');
+}
+
+function consumeEscapedChar(c: Cursor): boolean {
+  if (!c.match('\\')) return false;
+  if (!c.eof()) c.next();
+  return true;
+}
+
+
+function isVerticalWhitespace(ch: string): boolean {
+  return ch === '\n' || ch === '\r' || ch === '\f';
+}
+
+function isHexDigit(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 48 && code <= 57) ||  // 0-9
+    (code >= 65 && code <= 70) ||  // A-F
+    (code >= 97 && code <= 102)    // a-f
+  );
+}
+
+function isAlpha(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122)
+  );
+}
+
+function isDigit(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return code >= 48 && code <= 57;
+}
+
+function isNonAsciiIdentChar(ch: string): boolean {
+  return ch !== '' && ch.charCodeAt(0) > 0x9f;
+}
+
+function isIdentHeadChar(ch: string): boolean {
+  return isAlpha(ch) || ch === '_' || isNonAsciiIdentChar(ch);
+}
+
+function isIdentTailChar(ch: string): boolean {
+  return isIdentHeadChar(ch) || isDigit(ch) || ch === '-';
+}
+
+
+function consumeCssEscape(c: Cursor): boolean {
+  const start = c.pos();
+
+  if (!c.match('\\')) return false;
+
+  const ch = c.peek();
+
+  if (ch === '') {
+    c.restore(start);
+    return false;
+  }
+
+  if (isHexDigit(ch)) {
+    let n = 0;
+
+    while (n < 6 && isHexDigit(c.peek())) {
+      c.next();
+      n++;
+    }
+
+    // Old regex allows either CRLF or one CSS whitespace after hex escape.
+    if (c.peek() === '\r' && c.peek(1) === '\n') {
+      c.consume(2);
+    } else if (isCssWhitespace(c.peek())) {
+      c.next();
+    }
+
+    return true;
+  }
+
+  // Old regex: backslash followed by a char that is not vertical whitespace
+  // and not hex.
+  if (!isVerticalWhitespace(ch) && !isHexDigit(ch)) {
+    c.next();
+    return true;
+  }
+
+  c.restore(start);
+  return false;
+}
+
+function consumeIdentHead(c: Cursor): boolean {
+  if (isIdentHeadChar(c.peek())) {
+    c.next();
+    return true;
+  }
+
+  return consumeCssEscape(c);
+}
+
+function consumeIdentTail(c: Cursor): boolean {
+  if (isIdentTailChar(c.peek())) {
+    c.next();
+    return true;
+  }
+
+  return consumeCssEscape(c);
+}
+
+export function consumeIdent(c: Cursor): string {
+  const start = c.pos();
+
+  if (c.matchString('--')) {
+    while (consumeIdentTail(c)) {
+      // consume
+    }
+
+    return c.slice(start);
+  }
+
+  if (c.match('-')) {
+    if (!consumeIdentHead(c)) {
+      c.restore(start);
+      c.error('Expected identifier');
+    }
+
+    while (consumeIdentTail(c)) {
+      // consume
+    }
+
+    return c.slice(start);
+  }
+
+  if (!consumeIdentHead(c)) {
+    c.error('Expected identifier');
+  }
+
+  while (consumeIdentTail(c)) {
+    // consume
+  }
+
+  return c.slice(start);
+}
