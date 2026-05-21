@@ -1927,6 +1927,13 @@
     matchResolvers: matchResolvers,
     selectResolvers: selectResolvers,
 
+    clearCache: function() {
+      matchLambdas = {};
+      selectLambdas = {};
+      matchResolvers = {};
+      selectResolvers = {};
+    },
+
     // exported compiler macros
 
     CFG: CFG,

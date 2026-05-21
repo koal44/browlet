@@ -1,10 +1,19 @@
 import { asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken } from "../utils/css";
-import { FormStateElement, isFormStateElement, isHtmlButton, isHtmlElement, isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup, isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame, isValidityElement } from "../utils/dom";
+import { FormStateElement, getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup, isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame, isValidityElement } from "../utils/dom";
 
-export function isType(e: Element, htmlName: string, xmlName: string): boolean {
+export function checkId(e: Element, id: string): boolean {
+  return getIdAttr(e) === id;
+}
+
+export function checkClass(e: Element, cls: string, snap: Snapshot): boolean {
+  return snap.getClassRegex(cls).test(getClassAttr(e));
+}
+
+export function checkTag(e: Element, lowerTag: string, tag: string): boolean {
+  // perf if lowerTag==tag, but only caller already checks, so no null lowerTag case here
   return isHtmlElement(e)
-    ? e.localName === htmlName
-    : e.localName === xmlName;
+    ? e.localName === lowerTag
+    : e.localName === tag;
 }
 
 export function hasAttr(
@@ -120,7 +129,7 @@ function matchAttrValueOp(
       case '|': return asciiDashMatch(attrValue, htmlExpected);
       case '*': return asciiIncludes(attrValue, htmlExpected);
       case '~': return asciiHasCssToken(attrValue, htmlExpected);
-      default: return snap.getCachedRegex(pattern, 'i').test(attrValue);
+      default: return snap.getCachedRegex(pattern, true /* ignoreCase */).test(attrValue);
     }
   }
 
@@ -138,7 +147,7 @@ function matchAttrValueOp(
           attrValue.startsWith(expected)
         );
 
-    default: return snap.getCachedRegex(pattern, '').test(attrValue);
+    default: return snap.getCachedRegex(pattern, false /* ignoreCase */).test(attrValue);
   }
 }
 

@@ -6,29 +6,36 @@ export function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): 
   if (!tag) return [];
   if (tag === '*') return seedsByAllTag(context);
 
-  const lowerTag = asciiLower(tag);
-
-  if (!isDocumentFragment(context)) {
-    if (tag === lowerTag || !snap.isHtml) {
-      return collectionToArray(context.getElementsByTagNameNS('*', tag));
-    }
-
-    return seedsByTagNsUnion(tag, lowerTag, context);
+  if (isDocumentFragment(context)) {
+    return seedsByTagFragment(tag, context, snap);
   }
 
-  return seedsByTagFragment(tag, lowerTag, context, snap);
+  if (!snap.isHtml) {
+    return collectionToArray(context.getElementsByTagNameNS('*', tag));
+  }
+
+  const lowerTag = asciiLower(tag);
+  if (tag === lowerTag) {
+    return collectionToArray(context.getElementsByTagNameNS('*', tag));
+  }
+  return seedsByTagNsUnion(tag, lowerTag, context);
 }
 
-function seedsByTagFragment(tag: string, lowerTag: string, context: DocumentFragment, snap: Snapshot): Element[] {
+function seedsByTagFragment(tag: string, context: DocumentFragment, snap: Snapshot): Element[] {
   const nodes: Element[] = [];
+  const lowerTag = asciiLower(tag);
+  const tagIsLower = tag === lowerTag;
 
   for (let root = context.firstElementChild; root; root = root.nextElementSibling) {
-    if (sameSelectorTag(root, tag, lowerTag, snap)) nodes.push(root);
-
-    const found = seedsByTag(tag, root, snap);
-    for (let i = 0, l = found.length; i < l; ++i) {
-      nodes.push(found[i]);
+    if (sameSelectorTag(root, tag, tagIsLower ? null : lowerTag, snap)) {
+      nodes.push(root);
     }
+
+    const found = tagIsLower || !snap.isHtml
+      ? root.getElementsByTagNameNS('*', tag)
+      : seedsByTagNsUnion(tag, lowerTag, root);
+
+    for (let i = 0, l = found.length; i < l; ++i) nodes.push(found[i]);
   }
 
   return nodes;
@@ -77,7 +84,9 @@ function seedsByAllTag(context: QueryContext): Element[] {
   return nodes;
 }
 
-export function sameSelectorTag(e: Element, tag: string, lowerTag: string, snap: Snapshot): boolean {
+// null lowerTag means tag==lowerTag
+export function sameSelectorTag(e: Element, tag: string, lowerTag: string |  null, snap: Snapshot): boolean {
+  if (lowerTag === null) return e.localName === tag;
   return snap.isHtml && isHtmlElement(e)
     ? e.localName === lowerTag
     : e.localName === tag;

@@ -129,7 +129,8 @@ type DomApi = {
   select: SelectFn;
   closest: ClosestFn;
 
-  configure: (option?: ConfigKey | Partial<Record<ConfigKey, boolean>> | undefined, clear?: boolean) => boolean | NwsConfig;
+  configure: (option: Partial<Record<ConfigKey, boolean>>) => void;
+  clearCache: () => void;
 
   install: (all?: boolean) => void;
   uninstall: () => void;

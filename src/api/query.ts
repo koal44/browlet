@@ -38,7 +38,7 @@ export function matchForgiving(selectors: string, element: Element, snap: Snapsh
 }
 
 function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
-  let resolver = snap.strictMatchResolvers[selectors];
+  let resolver = snap.strictMatchResolvers.get(selectors);
 
   if (!resolver) {
     const parsed = parse(selectors, snap.re);
@@ -47,14 +47,15 @@ function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolve
       snap.debugMatch.parsed = parsed;
     }
 
-    resolver = snap.strictMatchResolvers[selectors] = buildStrictMatchResolver(parsed, snap);
+    resolver = buildStrictMatchResolver(parsed, snap);
+    snap.strictMatchResolvers.set(selectors, resolver);
   }
 
   return resolver;
 }
 
 function getForgivingMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
-  let resolver = snap.forgivingMatchResolvers[selectors];
+  let resolver = snap.forgivingMatchResolvers.get(selectors);
 
   if (!resolver) {
     const parsed = parse(selectors, snap.re, true);
@@ -63,7 +64,8 @@ function getForgivingMatchResolver(selectors: string, snap: Snapshot): MatchReso
       snap.debugMatch.parsed = parsed;
     }
 
-    resolver = snap.forgivingMatchResolvers[selectors] = buildForgivingMatchResolver(parsed, snap);
+    resolver = buildForgivingMatchResolver(parsed, snap);
+    snap.forgivingMatchResolvers.set(selectors, resolver);
   }
 
   return resolver;
@@ -108,11 +110,11 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
   if (isDebug) initDebugSelect(snap, sel, cb, ctx, isApiEntry);
 
   // try to reuse cached resolver
-  let resolver = snap.selectResolvers[sel];
+  let resolver = snap.selectResolvers.get(sel);
   if (!resolver || resolver.hasCb !== !!cb) {
     const parsed = parse(sel, snap.re);
     resolver = buildSelectResolver(parsed, !!cb, snap);
-    snap.selectResolvers[sel] = resolver;
+    snap.selectResolvers.set(sel, resolver);
   }
 
   snap.update(ctx, isApiEntry && resolver.usesScope);

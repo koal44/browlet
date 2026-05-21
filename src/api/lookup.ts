@@ -2,7 +2,7 @@ import { sameId } from "../candidates/seedsById";
 import { sameSelectorTag } from "../candidates/seedsByTag";
 import { collectionToArray, concatCollection } from "../utils/collections";
 import { asciiLower, escapeRegExp } from "../utils/css";
-import { isDocument, isDocumentFragment, isElement, isNamedItemAnElement } from "../utils/dom";
+import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from "../utils/dom";
 
 // scoped getElementById for Document, DocumentFragment, and Element contexts
 export function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
@@ -82,16 +82,16 @@ function byId_WalkFirst(id: string, context: Element): Element | null {
 export function byClass(cls: string, context: QueryContext, snap: Snapshot): Element[] {
   snap.update(context);
 
-  if (isDocument(context) || isElement(context)) {
+  if (!isDocumentFragment(context)) {
     return collectionToArray(context.getElementsByClassName(cls));
   }
 
   const nodes: Element[] = [];
-  const reCls = snap.getCachedRegex('(^|\\s)' + escapeRegExp(cls) + '(\\s|$)', snap.isQuirksMode ? 'i' : '');
+  const reCls = snap.getClassRegex(cls);
   let el = context.firstElementChild;
 
   while (el) {
-    if (reCls.test(el.getAttribute('class') || '')) nodes.push(el);
+    if (reCls.test(getClassAttr(el))) nodes.push(el);
     concatCollection(nodes, el.getElementsByClassName(cls));
     el = el.nextElementSibling;
   }
@@ -112,11 +112,12 @@ export function byTag(tag: string, context: QueryContext, snap: Snapshot): Eleme
   const nodes: Element[] = [];
   const any = tag === '*';
   const lowerTag = asciiLower(tag);
+  const lowerTagOrNull = tag === lowerTag ? null : lowerTag;
 
   let el = context.firstElementChild;
 
   while (el) {
-    if (any || sameSelectorTag(el, tag, lowerTag, snap)) {
+    if (any || sameSelectorTag(el, tag, lowerTagOrNull, snap)) {
       nodes.push(el);
     }
 
@@ -131,7 +132,7 @@ export function byTag(tag: string, context: QueryContext, snap: Snapshot): Eleme
 export function byTagNs(ns: string | null, local: string, context: QueryContext, _snap: Snapshot): Element[] {
   if (!local) return [];
 
-  if (isDocument(context) || isElement(context)) {
+  if (!isDocumentFragment(context)) {
     return collectionToArray(context.getElementsByTagNameNS(ns, local));
   }
 

@@ -38,7 +38,7 @@ export function compile(selector: string, mode: boolean, hasCb: boolean, snap: S
 
   const cache = isSelectMode ? snap.selectLambdas : snap.matchLambdas;
   const key = isSelectMode ? selectLambdaKey(selector, hasCb) : selector;
-  const cached = cache[key];
+  const cached = cache.get(key);
   if (cached) return cached;
 
   const spec = isSelectMode ? MACROS.S : MACROS.M;
@@ -52,9 +52,9 @@ export function compile(selector: string, mode: boolean, hasCb: boolean, snap: S
   const factory = Function('s', f)(snap) as SelectLambda | MatchLambda;
 
   if (isSelectMode) {
-    snap.selectLambdas[key] = factory as SelectLambda;
+    snap.selectLambdas.set(key, factory as SelectLambda);
   } else {
-    snap.matchLambdas[key] = factory as MatchLambda;
+    snap.matchLambdas.set(key, factory as MatchLambda);
   }
 
   return factory;
@@ -96,9 +96,8 @@ function compileSelector(
         if (!match) throw new Error('Invalid ID selector: ' + selector);
 
         const id = cssIdentUnescape(match[1]);
-        const idLit = JSON.stringify(id);
-
-        source = `if((e.getAttribute("id")===${idLit})){${source}}`;
+        
+        source = `if(s.checkId(e,${JSON.stringify(id)})){${source}}`;
         break;
       }
 
@@ -107,19 +106,16 @@ function compileSelector(
         match = selector.match(snap.re.Patterns.className);
         if (!match) throw new Error('Invalid class selector: ' + selector);
 
-        const className = cssIdentUnescape(match[1]);
+        const cls = cssIdentUnescape(match[1]);
 
         // Class selectors match whitespace-separated tokens. If the decoded selector
         // fragment itself contains whitespace, it cannot denote one class token.
-        if (/[\t\n\f\r ]/.test(className)) {
+        if (/[\t\n\f\r ]/.test(cls)) {
           source = `if(false){${source}}`;
           break;
         }
 
-        const classPattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(className)}([\\t\\n\\f\\r ]|$)`;
-        const classPatternLit = JSON.stringify(classPattern);
-        const flagsLit = JSON.stringify(snap.isQuirksMode ? 'i' : '');
-        source = `if(s.getCachedRegex(${classPatternLit},${flagsLit}).test(e.getAttribute("class")||"")){${source}}`;
+        source = `if(s.checkClass(e,${JSON.stringify(cls)})){${source}}`;
         break;
       }
 
@@ -128,11 +124,13 @@ function compileSelector(
         match = selector.match(snap.re.Patterns.tagName);
         if (!match) throw new Error('Invalid tag selector: ' + selector);
 
-        const rawTagName = cssIdentUnescape(match[1]);
-        // const htmlTagName = rawTagName.toLowerCase();
-        const htmlTagName = asciiLower(rawTagName);
+        const tag = cssIdentUnescape(match[1]);
+        const lowerTag = asciiLower(tag);
 
-        source = `if(s.isType(e,${JSON.stringify(htmlTagName)},${JSON.stringify(rawTagName)})){${source}}`;
+        source = tag === lowerTag
+          ? `if(e.localName===${JSON.stringify(tag)}){${source}}`
+          : `if(s.checkTag(e,${JSON.stringify(lowerTag)},${JSON.stringify(tag)})){${source}}`;
+
         break;
       }
 

@@ -1955,4 +1955,68 @@ runPerfScenarios('perf', [
     ],
   },
 
+  {
+    name: 'select fragment class cache',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="host">
+        <div class="foo"></div>
+        <div class="bar"></div>
+        <div class="foo"></div>
+      </div>
+    `,
+    probeKeys: ['select'],
+    quickIters: 20_000,
+    benches: [
+      { op: 'select', selector: '.foo', ref: { by: 'id', id: 'host', home: 'fragment' }, iters: 5_000_000 },
+      { op: 'select', selector: '.nope', ref: { by: 'id', id: 'host', home: 'fragment' }, iters: 5_000_000 },
+      { op: 'byClass', cls: 'foo', ref: { by: 'id', id: 'host', home: 'fragment' }, iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match cached simple selectors',
+    // status: 'only',
+    browsers: ['chromium'],
+    markup: `
+      <div id="target" class="foo bar" data-x="value"></div>
+    `,
+    probeKeys: ['match'],
+    quickIters: 20_000,
+    benches: [
+      { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { op: 'match', selector: '.nope',            ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+      { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 5_000_000 },
+    ],
+  },
+
+  {
+    name: 'match hot cold simple selectors',
+    status: 'only',
+    browsers: ['chromium'],
+    markup: `<div id="target" class="foo bar" data-x="value"></div>`,
+    probeKeys: ['match'],
+    quickIters: 20_000,
+    benches: [
+      { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
+
+      { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
+
+      { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
+
+      { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
+
+      { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
+    ],
+  },
+
 ]);

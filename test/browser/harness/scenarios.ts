@@ -1,5 +1,5 @@
 import { test, chromium, expect, firefox, webkit } from '@playwright/test';
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { assertNever, type Permutations, type DistributiveOmit } from '../../utils/type';
 import { installBrowserHelpers } from './browser';
 import type { EngineResult, EvalResult, EngineAndQueryResult, NamedQueryResult } from './browser';
@@ -112,6 +112,7 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
     }
 
     let browsers: Record<BrowserName, Browser>;
+    let contexts: Record<BrowserName, BrowserContext>;
     let pages: Record<BrowserName, Page>;
 
     test.beforeAll(async () => {
@@ -121,10 +122,20 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
         webkit: await webkit.launch(),
       };
 
+      contexts = {
+        chromium: await browsers.chromium.newContext(),
+        firefox: await browsers.firefox.newContext(),
+        webkit: await browsers.webkit.newContext(),
+      };
+
+      for (const context of Object.values(contexts)) {
+        await blockExternalRequests(context);
+      }
+
       pages = {
-        chromium: await browsers.chromium.newPage(),
-        firefox: await browsers.firefox.newPage(),
-        webkit: await browsers.webkit.newPage(),
+        chromium: await contexts.chromium.newPage(),
+        firefox: await contexts.firefox.newPage(),
+        webkit: await contexts.webkit.newPage(),
       };
 
       for (const page of Object.values(pages)) {
@@ -601,5 +612,23 @@ function attachPageDiagnostics(page: Page): void {
 
   page.on('requestfailed', (request) => {
     console.error(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ''}`);
+  });
+}
+
+async function blockExternalRequests(context: BrowserContext): Promise<void> {
+  await context.route(/^https?:\/\//, async route => {
+    const url = route.request().url();
+    const { hostname } = new URL(url);
+
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === 'test.local'
+    ) {
+      await route.fallback();
+      return;
+    }
+
+    throw new Error(`Unexpected external request in browser test: ${url}`);
   });
 }

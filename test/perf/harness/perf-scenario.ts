@@ -43,7 +43,7 @@ type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef } 
 // Note: byTagNs perf won't really be useful as the comparisons would be apples ≈ apples.
 type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null, local: string }, ref?: ContextRef } & BenchBase;
 
-type BenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean };
+type BenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean, cold?: boolean };
 type Bench =
   MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench | ByTagNsBench;
 
@@ -317,9 +317,13 @@ async function installPerfHelpers(page: Page) {
   await page.evaluate(() => {
     const DEFAULT_MAX_RATIO = 5;
 
-    function bench(label: string, fn: () => unknown, iters = 1000, maxRatio = DEFAULT_MAX_RATIO): BenchResult {
-      for (let i = 0; i < 50; i++) fn();
-      const probe = (globalThis as any).NW?.Dom?.snapshot?.probe;
+    function runBench(b: Bench, fn: () => unknown, iters: number): BenchResult {
+      const label = benchLabel(b);
+      const maxRatio = b.maxRatio ?? DEFAULT_MAX_RATIO;
+
+      for (let i = 0; i < 10; i++) fn();
+      const nwDom = (globalThis as any).NW?.Dom;
+      const probe = nwDom?.snapshot?.probe;
       if (probe) probe.reset?.();
 
       const t0 = performance.now();
@@ -398,6 +402,20 @@ async function installPerfHelpers(page: Page) {
 
       const ops = getBenchOps(engineName);
 
+      let clearCache: (() => void) | undefined;
+      if (engineName === 'nw' && benches.some(b => b.cold)) {
+        const nwDom = (globalThis as any).NW?.Dom;
+        if (!nwDom || typeof nwDom.clearCache !== 'function') {
+          throw new Error('NW.Dom.clearCache is not available');
+        }
+        clearCache = () => nwDom.clearCache();
+      }
+
+      function benchFn<T>(b: Bench, fn: () => T): () => T {
+        if (engineName === 'native' || !b.cold) return fn;
+        return () => { clearCache!(); return fn(); };
+      }
+
       return benches.map((b, i) => {
         const label = labels[i];
         const ctx = resolveContext(b.ref);
@@ -409,36 +427,36 @@ async function installPerfHelpers(page: Page) {
           case 'match':
             if (!isElement(ctx)) throw new Error(`${label}: match needs Element context`);
             if (b.debug) debugBench(label, () => ops.match(b.selector, ctx));
-            return bench(label, () => ops.match(b.selector, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.match(b.selector, ctx)), iters);
 
           case 'select':
             if (b.debug) debugBench(label, () => ops.select(b.selector, ctx));
-            return bench(label, () => ops.select(b.selector, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.select(b.selector, ctx)), iters);
 
           case 'first':
             if (b.debug) debugBench(label, () => ops.first(b.selector, ctx));
-            return bench(label, () => ops.first(b.selector, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.first(b.selector, ctx)), iters);
 
           case 'closest':
             if (!isElement(ctx)) throw new Error(`${label}: closest needs Element context`);
             if (b.debug) debugBench(label, () => ops.closest(b.selector, ctx));
-            return bench(label, () => ops.closest(b.selector, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.closest(b.selector, ctx)), iters);
 
           case 'matchWalk':
             if (b.debug) debugBench(label, () => matchWalk(ops, ctx, b.selectors));
-            return bench(label, () => matchWalk(ops, ctx, b.selectors), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => matchWalk(ops, ctx, b.selectors)), iters);
 
           case 'byId':
-            return bench(label, () => ops.byId(b.id, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.byId(b.id, ctx)), iters);
 
           case 'byClass':
-            return bench(label, () => ops.byClass(b.cls, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.byClass(b.cls, ctx)), iters);
 
           case 'byTag':
-            return bench(label, () => ops.byTag(b.tag, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.byTag(b.tag, ctx)), iters);
 
           case 'byTagNs':
-            return bench(label, () => ops.byTagNs(b.byTagNs, ctx), iters, b.maxRatio);
+            return runBench(b, benchFn(b, () => ops.byTagNs(b.byTagNs, ctx)), iters);
 
           default:
             return assertNever(b);
@@ -477,19 +495,20 @@ async function installPerfHelpers(page: Page) {
 
     function benchLabel(b: Bench): string {
       if (b.label) return b.label;
+      const cold = b.cold ? '-cold:' : '-hot:';
 
       switch (b.op) {
         case 'match':
         case 'select':
         case 'first':
         case 'closest':
-          return `${b.op} ${b.selector}`;
+          return `${b.op}${cold} ${b.selector}`;
         case 'matchWalk':
-          return `${b.op} ${b.selectors.join(', ')}`;
-        case 'byId':    return `${b.op} ${b.id}`;
-        case 'byClass': return `${b.op} ${b.cls}`;
-        case 'byTag':   return `${b.op} ${b.tag}`;
-        case 'byTagNs': return `${b.op} ${b.byTagNs.ns ? `${b.byTagNs.ns}|` : ''}${b.byTagNs.local}`;
+          return `${b.op}${cold} ${b.selectors.join(', ')}`;
+        case 'byId':    return `${b.op}${cold} ${b.id}`;
+        case 'byClass': return `${b.op}${cold} ${b.cls}`;
+        case 'byTag':   return `${b.op}${cold} ${b.tag}`;
+        case 'byTagNs': return `${b.op}${cold} ${b.byTagNs.ns ? `${b.byTagNs.ns}|` : ''}${b.byTagNs.local}`;
         default:
           return assertNever(b);
       }

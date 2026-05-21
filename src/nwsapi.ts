@@ -90,33 +90,21 @@ export function Factory(fGlobal: Glob, fExport: Function): DomApi {
     },
 
     // configure the engine to use special handling
-    configure(opt?: ConfigKey | Partial<Record<string, boolean>> | null, clear = false) {
-      if (opt == null) return _snap.config;
-
-      if (typeof opt === 'string') {
-        return opt in _snap.config ? !!_snap.config[opt as ConfigKey] : false;
-      }
-
-      if (typeof opt !== 'object') {
+    configure(opt: Partial<Record<ConfigKey, boolean>>): void {
+      if (opt == null || typeof opt !== 'object') {
         throw new TypeError('Invalid configuration argument');
       }
 
       for (const k in opt) {
         // only allow known config keys to be set; ignore others
         if (k in _snap.config) {
-          _snap.config[k as ConfigKey] = !!opt[k];
+          _snap.config[k as ConfigKey] = !!opt[k as ConfigKey];
         }
       }
+    },
 
-      if (clear) {
-        for (const k in _snap.matchLambdas) delete _snap.matchLambdas[k];
-        for (const k in _snap.selectLambdas) delete _snap.selectLambdas[k];
-        for (const k in _snap.strictMatchResolvers) delete _snap.strictMatchResolvers[k];
-        for (const k in _snap.forgivingMatchResolvers) delete _snap.forgivingMatchResolvers[k];
-        for (const k in _snap.selectResolvers) delete _snap.selectResolvers[k];
-      }
-
-      return true;
+    clearCache(): void {
+      _snap.clearCache();
     },
 
     // overrides QSA methods (only for browsers)

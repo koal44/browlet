@@ -119,3 +119,13 @@ export function isNamedItemAnElement(item: Element | HTMLCollection): item is El
 export function getNamespace(doc: Document): string | null {
   return doc.documentElement?.namespaceURI ?? null;
 }
+
+export function getIdAttr(e: Element): string {
+  const v = e.id;
+  return typeof v === 'string' ? v : e.getAttribute('id') || '';
+}
+
+export function getClassAttr(e: Element): string {
+  const v = e.className;
+  return typeof v === 'string' ? v : e.getAttribute('class') || '';
+}

@@ -3,10 +3,11 @@ import { queryClosest, queryFirst, matchForgiving, queryMatch, matchStrict, quer
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
-  isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, isType, isValid, matchAttribute,
-  matchDir, matchHasFrom, matchLang, nthElement, nthOfType
+  isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
+  matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass
 } from "./compile/runtime";
 import { buildRex } from "./rex";
+import { escapeRegExp } from "./utils/css";
 import { getNamespace, isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from "./utils/dom";
 
 export const DEFAULT_CONFIG: NwsConfig = {
@@ -66,11 +67,27 @@ export function initSnapshot(doc: Document) {
     focusTarget: null as EventTarget | null,
 
     // cached
-    matchLambdas: {} as Partial<Record<string, MatchLambda>>,
-    selectLambdas: {} as Partial<Record<string, SelectLambda>>,
-    strictMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
-    forgivingMatchResolvers: {} as Partial<Record<string, MatchResolver>>,
-    selectResolvers: {} as Partial<Record<string, SelectResolver>>,
+    matchLambdas: new Map<string, MatchLambda>(),
+    selectLambdas: new Map<string, SelectLambda>(),
+    strictMatchResolvers: new Map<string, MatchResolver>(),
+    forgivingMatchResolvers: new Map<string, MatchResolver>(),
+    selectResolvers: new Map<string, SelectResolver>(),
+    cachedRegex_S: new Map<string, RegExp>(),
+    cachedRegex_I: new Map<string, RegExp>(),
+    classRegex_S: new Map<string, RegExp>(),
+    classRegex_I: new Map<string, RegExp>(),
+
+    clearCache(): void {
+      snap.matchLambdas.clear();
+      snap.selectLambdas.clear();
+      snap.strictMatchResolvers.clear();
+      snap.forgivingMatchResolvers.clear();
+      snap.selectResolvers.clear();
+      snap.cachedRegex_S.clear();
+      snap.cachedRegex_I.clear();
+      snap.classRegex_S.clear();
+      snap.classRegex_I.clear();
+    },
 
     byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
     byTag: (tag: string, context?: QueryContext) => byTag(tag, context ?? snap.doc, snap),
@@ -94,7 +111,9 @@ export function initSnapshot(doc: Document) {
     matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
       matchForgiving(selectors, element, snap, h),
 
-    isType: isType,
+    checkId: checkId,
+    checkClass: (e: Element, cls: string) => checkClass(e, cls, snap),
+    checkTag: checkTag,
     nthOfType: nthOfType,
     nthElement: nthElement,
     isNthElement: isNthElement,
@@ -128,10 +147,26 @@ export function initSnapshot(doc: Document) {
     isFocused: (node: Element) =>
       isFocused(node, snap),
 
-    regexCache: {} as Record<string, RegExp>,
-    getCachedRegex: (source: string, flags: string): RegExp => {
-      const key = flags + '\0' + source;
-      return snap.regexCache[key] || (snap.regexCache[key] = new RegExp(source, flags));
+    getCachedRegex: (source: string, ignoreCase: boolean): RegExp => {
+      const cache = ignoreCase ? snap.cachedRegex_I : snap.cachedRegex_S;
+
+      let regex = cache.get(source);
+      if (regex !== undefined) return regex;
+
+      regex = new RegExp(source, ignoreCase ? "i" : "");
+      cache.set(source, regex);
+      return regex;
+    },
+
+    getClassRegex: (cls: string): RegExp => {
+      const cache = snap.isQuirksMode ? snap.classRegex_I : snap.classRegex_S;
+
+      let regex = cache.get(cls);
+      if (regex !== undefined) return regex;
+
+      regex = new RegExp(`(^|[\\t\\n\\f\\r ])${escapeRegExp(cls)}([\\t\\n\\f\\r ]|$)`, snap.isQuirksMode ? 'i' : '');
+      cache.set(cls, regex);
+      return regex;
     },
 
     update: (ctx: QueryContext, updateScope = false) => {
