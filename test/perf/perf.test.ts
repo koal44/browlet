@@ -2002,19 +2002,15 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     quickIters: 20_000,
     benches: [
-      { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      // { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      // { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      // { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      // { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 100_000 },
+      // { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000 },
       { op: 'match', selector: '#target',          ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
-
-      { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 100_000 },
       { op: 'match', selector: '.foo',             ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
-
-      { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 100_000 },
       { op: 'match', selector: 'div',              ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
-
-      { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 100_000 },
       { op: 'match', selector: '[data-x]',         ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
-
-      { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000 },
       { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
     ],
   },

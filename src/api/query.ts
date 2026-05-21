@@ -6,7 +6,7 @@ import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectRun
 import { parse } from "../parser";
 import { sortUniqueByDocPosition } from "../utils/collections";
 import { cssIdentUnescape } from "../utils/css";
-import { assertNever } from "../utils/type";
+import { assertNever } from "../utils/util";
 
 // equivalent of w3c 'matches' method
 export function queryMatch(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
