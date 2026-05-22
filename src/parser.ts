@@ -1,4 +1,4 @@
-import { isCssSpace } from "./utils/css";
+import { cssIdentUnescape, isCssSpace } from "./utils/css";
 
 // Parse a normal selector list. In forgiving mode, invalid selector-list arms
 // are dropped; this is intended for :is()/:where() argument parsing.
@@ -383,7 +383,7 @@ export type CompoundSelector = {
   // Generated JS source for non-planner simple-selector tests
   // such as attrs and pseudos. ID/class/tag are deferred for the planner.
   // TODO: maybe a list so that planner can reorder for perf?
-  testSource: string;
+  tests: string[];
 };
 
 export type IdSelector = {
@@ -461,11 +461,11 @@ export function parseComplexSelector(c: Cursor): ComplexSelector {
     } else if (sawWs) {
       combinator = ' ';
     } else {
-      c.error('Expected combinator');
+      c.error(`Expected combinator, got ${JSON.stringify(c.peek())}`);
     }
 
     if (c.eof() || c.peek() === ',' || c.peek() === ')') {
-      c.error('Expected compound selector after combinator');
+      c.error(`Expected compound selector after combinator, got ${JSON.stringify(c.peek()) || '<eof>'}`);
     }
 
     parts.push({
@@ -479,7 +479,7 @@ export function parseComplexSelector(c: Cursor): ComplexSelector {
 
 export function parseCompoundSelector(c: Cursor): CompoundSelector {
   const compound: CompoundSelector = {
-    testSource: '',
+    tests: [],
   };
 
   let count = 0;
@@ -487,6 +487,7 @@ export function parseCompoundSelector(c: Cursor): CompoundSelector {
   while (!c.eof() && canStartSimpleSelector(c)) {
     parseSimpleSelectorInto(c, compound, count === 0);
     count++;
+    assertSimpleSelectorBoundary(c);
   }
 
   if (count === 0) {
@@ -511,12 +512,12 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   }
 
   if (ch === '[') {
-    compound.testSource += _emitAttributeTest(_parseAttributeSelector(c));
+    compound.tests.push(emitAttributeTest(parseAttributeSelector(c)));
     return;
   }
 
   if (ch === ':') {
-    compound.testSource += emitPseudoTest(_parsePseudoSelector(c));
+    compound.tests.push(parsePseudoTestSource(c));
     return;
   }
 
@@ -527,6 +528,25 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   }
 
   c.error(`Unexpected simple selector ${JSON.stringify(ch)}`);
+}
+
+function assertSimpleSelectorBoundary(c: Cursor): void {
+  const ch = c.peek();
+
+  if (
+    ch === '' ||
+    ch === ',' ||
+    ch === ')' ||
+    ch === '>' ||
+    ch === '+' ||
+    ch === '~' ||
+    isCssWhitespace(ch) ||
+    canStartSimpleSelector(c)
+  ) {
+    return;
+  }
+
+  c.error(`Expected simple selector or combinator boundary, got ${JSON.stringify(ch)}`);
 }
 
 function parseIdSelector(c: Cursor): IdSelector {
@@ -573,52 +593,498 @@ function parseLocalTagName(c: Cursor): string {
 }
 
 
-export type _AttributeSelector = {
-  raw: string;
+export type AttributeSelector = {
+  prefixRaw?: '' | '*';
+  localRaw: string;
+
+  op?: AttrOperator;
+  valueRaw?: string;
+
+  // normalized ASCII attr selector flag
+  flag?: 'i' | 's';
 };
 
-function _parseAttributeSelector(c: Cursor): _AttributeSelector {
-  const start = c.pos();
+export type AttrOperator = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
-  _consumeBracketBlock(c);
+export function parseAttributeSelector(c: Cursor): AttributeSelector {
+  c.expect('[');
+  consumeWhitespace(c);
+
+  const name = parseAttributeName(c);
+
+  consumeWhitespace(c);
+
+  if (c.match(']') || c.eof()) {
+    return name;
+  }
+
+  const op = parseAttributeOperator(c);
+
+  consumeWhitespace(c);
+
+  const valueRaw = parseAttributeValue(c);
+
+  consumeWhitespace(c);
+
+  let flag: 'i' | 's' | undefined;
+
+  if (!c.match(']') && !c.eof()) {
+    flag = parseAttributeFlag(c);
+
+    consumeWhitespace(c);
+
+    if (!c.match(']') && !c.eof()) {
+      c.error('Expected "]"');
+    }
+  }
 
   return {
-    raw: c.slice(start),
+    ...name,
+    op,
+    valueRaw,
+    flag,
   };
 }
 
-function _emitAttributeTest(attr: _AttributeSelector): string {
-  return `/* attr ${JSON.stringify(attr)} */`;
+function parseAttributeName(c: Cursor): Pick<AttributeSelector, 'prefixRaw' | 'localRaw'> {
+  if (c.match('*')) {
+    if (c.match('|')) {
+      if (c.peek() === '=') c.error('Expected attribute name');
+      return { prefixRaw: '*', localRaw: consumeIdent(c) };
+    }
+
+    c.error('Expected "|" after "*" in attribute namespace prefix');
+  }
+
+  if (c.match('|')) {
+    if (c.peek() === '=') c.error('Expected attribute name');
+    return { prefixRaw: '', localRaw: consumeIdent(c) };
+  }
+
+  const first = consumeIdent(c);
+
+  // This is the key: attr|=value is operator, not namespace.
+  if (c.peek() === '|' && c.peek(1) !== '=') {
+    c.next();
+    c.error(`Unsupported namespace prefix ${JSON.stringify(first)}`);
+  }
+
+  return { localRaw: first };
+}
+
+function parseAttributeOperator(c: Cursor): AttrOperator {
+  if (c.matchString('~=')) return '~=';
+  if (c.matchString('|=')) return '|=';
+  if (c.matchString('^=')) return '^=';
+  if (c.matchString('$=')) return '$=';
+  if (c.matchString('*=')) return '*=';
+  if (c.match('=')) return '=';
+
+  c.error('Expected attribute operator');
+}
+
+function parseAttributeValue(c: Cursor): string {
+  const ch = c.peek();
+
+  if (ch === '' || ch === ']') {
+    c.error('Expected attribute value');
+  }
+
+  if (ch === '"' || ch === "'") {
+    return consumeStringValue(c);
+  }
+
+  if (!canStartIdent(c)) {
+    c.error('Expected attribute value');
+  }
+
+  return consumeIdent(c);
+}
+
+function consumeStringValue(c: Cursor): string {
+  const quote = c.next();
+  const start = c.pos();
+
+  while (!c.eof()) {
+    if (c.match(quote)) {
+      return c.slice(start, c.pos() - 1);
+    }
+
+    if (consumeEscapedChar(c)) continue;
+
+    c.next();
+  }
+
+  c.error('Unclosed string');
+}
+
+function parseAttributeFlag(c: Cursor): 'i' | 's' {
+  const raw = consumeIdent(c);
+  const flag = cssIdentUnescape(raw).toLowerCase();
+
+  if (flag === 'i' || flag === 's') return flag;
+
+  c.error(`Invalid attribute selector flag ${JSON.stringify(raw)}`);
 }
 
 export type PseudoSelector = {
   raw: string;
 };
 
-function _parsePseudoSelector(c: Cursor): PseudoSelector {
-  const start = c.pos();
-
+function parsePseudoTestSource(c: Cursor): string {
   c.expect(':');
 
-  // Allow pseudo-elements for now.
-  if (c.match(':')) {
-    // keep going
+  const isElement = c.match(':');
+  const rawName = consumeIdent(c);
+  const lowerName = rawName.toLowerCase();
+  const name = isElement ? `:${lowerName}` : lowerName;
+
+  switch (name) {
+    // tree-structural pseudo-classes
+    case 'scope': return emitScopePseudoTest();
+    case 'root': return emitRootPseudoTest();
+    case 'empty': return emitEmptyPseudoTest();
+    case 'first-child': return emitFirstChildPseudoTest();
+    case 'last-child': return emitLastChildPseudoTest();
+    case 'only-child': return emitOnlyChildPseudoTest();
+    case 'first-of-type': return emitFirstOfTypePseudoTest();
+    case 'last-of-type': return emitLastOfTypePseudoTest();
+    case 'only-of-type': return emitOnlyOfTypePseudoTest();
+
+    // child-indexed / typed child-indexed pseudo-classes
+    case 'nth-child':        return emitNthPseudoTest(parseNthArgs(c), { ofType: false, last: false });
+    case 'nth-last-child':   return emitNthPseudoTest(parseNthArgs(c), { ofType: false, last: true });
+    case 'nth-of-type':      return emitNthPseudoTest(parseNthArgs(c), { ofType: true,  last: false });
+    case 'nth-last-of-type': return emitNthPseudoTest(parseNthArgs(c), { ofType: true,  last: true });
+
+    // logical / relational pseudo-classes
+    case 'is': return emitIsPseudoTest(parsePseudoBodySelectorList(c));
+    case 'where': return emitWherePseudoTest(parsePseudoBodySelectorList(c));
+    case 'not': return emitNotPseudoTest(parsePseudoBodySelectorList(c));
+    case 'has': return emitHasPseudoTest(parsePseudoBodyRelativeSelectorList(c));
+    case 'matches': c.error('Unsupported pseudo-class :matches(); use :is()');
+
+    // linguistic pseudo-classes
+    case 'dir': return emitDirPseudoTest(parseDirPseudoArg(c));
+    case 'lang': return emitLangPseudoTest(parseLangPseudoArg(c));
+
+    // location pseudo-classes
+    case 'any-link': return emitAnyLinkPseudoTest();
+    case 'link': return emitLinkPseudoTest();
+    case 'visited': return emitVisitedPseudoTest();
+    case 'target': return emitTargetPseudoTest();
+    case 'defined': return emitDefinedPseudoTest();
+
+    // user action pseudo-classes
+    case 'hover': return emitHoverPseudoTest();
+    case 'active': return emitActivePseudoTest();
+    case 'focus': return emitFocusPseudoTest();
+    case 'focus-visible': return emitFocusVisiblePseudoTest();
+    case 'focus-within': return emitFocusWithinPseudoTest();
+
+    // user interface and form pseudo-classes
+    case 'enabled': return emitEnabledPseudoTest();
+    case 'disabled': return emitDisabledPseudoTest();
+    case 'read-only': return emitReadOnlyPseudoTest();
+    case 'read-write': return emitReadWritePseudoTest();
+    case 'placeholder-shown': return emitPlaceholderShownPseudoTest();
+    case 'default': return emitDefaultPseudoTest();
+
+    // input pseudo-classes / form validation
+    case 'checked': return emitCheckedPseudoTest();
+    case 'indeterminate': return emitIndeterminatePseudoTest();
+    case 'required': return emitRequiredPseudoTest();
+    case 'optional': return emitOptionalPseudoTest();
+    case 'invalid': return emitInvalidPseudoTest();
+    case 'valid': return emitValidPseudoTest();
+    case 'in-range': return emitInRangePseudoTest();
+    case 'out-of-range': return emitOutOfRangePseudoTest();
+
+    // resource state pseudo-classes
+    case 'playing': return emitPlayingPseudoTest();
+    case 'paused': return emitPausedPseudoTest();
+    case 'seeking': return emitSeekingPseudoTest();
+    case 'buffering': return emitBufferingPseudoTest();
+    case 'stalled': return emitStalledPseudoTest();
+    case 'muted': return emitMutedPseudoTest();
+    case 'volume-locked': return emitVolumeLockedPseudoTest();
+
+    // parse-valid no-op pseudo-classes
+    case 'autofill': return emitNoMatchPseudoTest('autofill');
+    case '-webkit-autofill': return emitNoMatchPseudoTest('-webkit-autofill');
+
+    // parse-valid legacy single-colon pseudo-elements; match no DOM elements
+    case 'after': return emitNoMatchPseudoElementTest('after');
+    case 'before': return emitNoMatchPseudoElementTest('before');
+    case 'first-letter': return emitNoMatchPseudoElementTest('first-letter');
+    case 'first-line': return emitNoMatchPseudoElementTest('first-line');
+
+    case ':after': return emitNoMatchPseudoElementTest('after');
+    case ':before': return emitNoMatchPseudoElementTest('before');
+    case ':first-letter': return emitNoMatchPseudoElementTest('first-letter');
+    case ':first-line': return emitNoMatchPseudoElementTest('first-line');
+    case ':selection': return emitNoMatchPseudoElementTest('selection');
+    case ':placeholder': return emitNoMatchPseudoElementTest('placeholder');
+
+    default:
+      if (isElement && lowerName.startsWith('-webkit-') && lowerName.length > '-webkit-'.length) {
+        return emitNoMatchPseudoElementTest(lowerName);
+      }
+
+      c.error(`Unsupported ${isElement ? 'pseudo-element' : 'pseudo-class'} ${JSON.stringify(rawName)}`);
   }
-
-  consumeIdent(c);
-
-  if (c.peek() === '(') {
-    _consumeParenBlock(c);
-  }
-
-  return {
-    raw: c.slice(start),
-  };
 }
 
-function emitPseudoTest(pseudo: PseudoSelector): string {
-  return `/* pseudo ${JSON.stringify(pseudo)} */`;
+export function parsePseudoBodySelectorList(c: Cursor): SelectorList {
+  c.expect('(');
+  consumeWhitespace(c);
+
+  if (c.peek() === ')' || c.eof()) {
+    c.error('Expected selector in pseudo-class body');
+  }
+
+  const selectors: ComplexSelector[] = [];
+
+  while (!c.eof() && c.peek() !== ')') {
+    selectors.push(parseComplexSelector(c));
+
+    consumeWhitespace(c);
+
+    if (c.peek() === ')' || c.eof()) break;
+
+    if (!c.match(',')) {
+      c.error(`Expected "," or ")" in pseudo-class body, got ${JSON.stringify(c.peek())}`);
+    }
+
+    consumeWhitespace(c);
+
+    if (c.peek() === ')' || c.eof()) {
+      c.error('Expected selector after comma in pseudo-class body');
+    }
+  }
+
+  // Selectors syntax / old regex behavior has a lot of EOF tolerance.
+  // So allow EOF here as "body ended at EOF" for now.
+  if (!c.eof()) {
+    c.expect(')');
+  }
+
+  return { selectors };
 }
+
+export type RelativeSelectorList2 = {
+  selectors: RelativeSelector2[];
+};
+
+export type RelativeSelector2 = {
+  steps: RelativeStep2[];
+};
+
+export type RelativeStep2 = {
+  combinator: Combinator;
+  compound: CompoundSelector;
+};
+
+export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelectorList2 {
+  c.expect('(');
+  consumeWhitespace(c);
+
+  if (c.peek() === ')' || c.eof()) {
+    c.error('Expected relative selector in pseudo-class body');
+  }
+
+  const selectors: RelativeSelector2[] = [];
+
+  while (!c.eof() && c.peek() !== ')') {
+    selectors.push(parseRelativeSelector2(c));
+
+    consumeWhitespace(c);
+
+    if (c.peek() === ')' || c.eof()) break;
+
+    if (!c.match(',')) {
+      c.error(`Expected "," or ")" in relative selector list, got ${JSON.stringify(c.peek())}`);
+    }
+
+    consumeWhitespace(c);
+
+    if (c.peek() === ')' || c.eof()) {
+      c.error('Expected relative selector after comma in pseudo-class body');
+    }
+  }
+
+  if (!c.eof()) c.expect(')');
+
+  return { selectors };
+}
+
+function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
+  const steps: RelativeStep2[] = [];
+
+  consumeWhitespace(c);
+
+  let combinator = parseOptionalRelativeCombinator(c) ?? ' ';
+  consumeWhitespace(c);
+
+  if (c.eof() || c.peek() === ')' || c.peek() === ',') {
+    c.error('Expected compound selector in relative selector');
+  }
+
+  steps.push({
+    combinator,
+    compound: parseCompoundSelector(c),
+  });
+
+  while (true) {
+    const sawWs = consumeWhitespace(c);
+
+    if (c.eof() || c.peek() === ')' || c.peek() === ',') break;
+
+    const explicit = parseOptionalRelativeCombinator(c);
+
+    if (explicit) {
+      combinator = explicit;
+      consumeWhitespace(c);
+    } else if (sawWs) {
+      combinator = ' ';
+    } else {
+      c.error(`Expected combinator in relative selector, got ${JSON.stringify(c.peek())}`);
+    }
+
+    if (c.eof() || c.peek() === ')' || c.peek() === ',') {
+      c.error('Expected compound selector after combinator in relative selector');
+    }
+
+    steps.push({
+      combinator,
+      compound: parseCompoundSelector(c),
+    });
+  }
+
+  return { steps };
+}
+
+function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
+  const ch = c.peek();
+
+  if (ch === '>' || ch === '+' || ch === '~') {
+    c.next();
+    return ch;
+  }
+
+  return null;
+}
+
+export type NthArgs = {
+  step: number;
+  offset: number;
+};
+
+export function parseNthArgs(c: Cursor): NthArgs {
+  c.expect('(');
+  consumeWhitespace(c);
+
+  const nth = parseNthExpression(c);
+
+  consumeWhitespace(c);
+  c.expect(')');
+
+  return nth;
+}
+
+export function parseNthExpression(c: Cursor): NthArgs {
+  const start = c.pos();
+
+  const word = consumeAsciiWord(c).toLowerCase();
+
+  if (word === 'odd') return { step: 2, offset: 1 };
+  if (word === 'even') return { step: 2, offset: 0 };
+
+  c.restore(start);
+
+  const sign = parseOptionalSign(c);
+  const digits = consumeDigits(c);
+
+  if (c.peek().toLowerCase() !== 'n') {
+    if (digits === '') c.error('Expected nth expression');
+
+    return {
+      step: 0,
+      offset: sign * Number(digits),
+    };
+  }
+
+  c.next(); // n
+
+  const step =
+    digits === ''
+      ? sign
+      : sign * Number(digits);
+
+  consumeWhitespace(c);
+
+  let offset = 0;
+
+  if (c.peek() === '+' || c.peek() === '-') {
+    const offsetSign = parseOptionalSign(c);
+    consumeWhitespace(c);
+
+    const offsetDigits = consumeDigits(c);
+    if (offsetDigits === '') c.error('Expected nth offset');
+
+    offset = offsetSign * Number(offsetDigits);
+  }
+
+  return { step, offset };
+}
+
+function parseOptionalSign(c: Cursor): 1 | -1 {
+  if (c.match('+')) return 1;
+  if (c.match('-')) return -1;
+  return 1;
+}
+
+function parseDirPseudoArg(c: Cursor): 'ltr' | 'rtl' | string {
+  const arg = parsePseudoBodyIdentArg(c).toLowerCase();
+  return arg;
+}
+
+function parseLangPseudoArg(c: Cursor): string {
+  return parsePseudoBodyIdentArg(c).toLowerCase();
+}
+
+function parsePseudoBodyIdentArg(c: Cursor): string {
+  c.expect('(');
+  consumeWhitespace(c);
+
+  if (c.peek() === ')' || c.eof()) {
+    c.error('Expected pseudo-class argument');
+  }
+
+  const arg = consumeIdent(c);
+
+  consumeWhitespace(c);
+
+  if (!c.eof()) {
+    c.expect(')');
+  }
+
+  return arg;
+}
+
+function consumeDigits(c: Cursor): string {
+  const start = c.pos();
+  c.consumeWhile(isDigit);
+  return c.slice(start);
+}
+
+function consumeAsciiWord(c: Cursor): string {
+  const start = c.pos();
+  c.consumeWhile(isAlpha);
+  return c.slice(start);
+}
+
+
 
 
 function isCssWhitespace(ch: string): boolean {
@@ -653,80 +1119,6 @@ function canStartIdent(c: Cursor): boolean {
     ch === '\\' ||
     isIdentHeadChar(ch)
   );
-}
-
-function _consumeBracketBlock(c: Cursor): void {
-  c.expect('[');
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    if (ch === ']') {
-      c.next();
-      return;
-    }
-
-    if (ch === '"' || ch === "'") {
-      consumeString(c);
-      continue;
-    }
-
-    if (consumeEscapedChar(c)) {
-      continue;
-    }
-
-    c.next();
-  }
-
-  c.error('Unclosed attribute selector');
-}
-
-function _consumeParenBlock(c: Cursor): void {
-  c.expect('(');
-
-  let depth = 1;
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    if (ch === '"' || ch === "'") {
-      consumeString(c);
-      continue;
-    }
-
-    if (consumeEscapedChar(c)) {
-      continue;
-    }
-
-    if (ch === '(') {
-      depth++;
-      c.next();
-      continue;
-    }
-
-    if (ch === ')') {
-      depth--;
-      c.next();
-      if (depth === 0) return;
-      continue;
-    }
-
-    c.next();
-  }
-
-  c.error('Unclosed pseudo arguments');
-}
-
-function consumeString(c: Cursor): void {
-  const quote = c.next();
-
-  while (!c.eof()) {
-    if (c.match(quote)) return;
-    if (consumeEscapedChar(c)) continue;
-    c.next();
-  }
-
-  c.error('Unclosed string');
 }
 
 function consumeEscapedChar(c: Cursor): boolean {
@@ -867,4 +1259,206 @@ export function consumeIdent(c: Cursor): string {
   }
 
   return c.slice(start);
+}
+
+
+
+function emitAttributeTest(attr: AttributeSelector): string {
+  return `/* attr ${JSON.stringify(attr)} */`;
+}
+
+function emitScopePseudoTest(): string {
+  return '/* pseudo :scope */';
+}
+
+function emitRootPseudoTest(): string {
+  return '/* pseudo :root */';
+}
+
+function emitEmptyPseudoTest(): string {
+  return '/* pseudo :empty */';
+}
+
+function emitFirstChildPseudoTest(): string {
+  return '/* pseudo :first-child */';
+}
+
+function emitLastChildPseudoTest(): string {
+  return '/* pseudo :last-child */';
+}
+
+function emitOnlyChildPseudoTest(): string {
+  return '/* pseudo :only-child */';
+}
+
+function emitFirstOfTypePseudoTest(): string {
+  return '/* pseudo :first-of-type */';
+}
+
+function emitLastOfTypePseudoTest(): string {
+  return '/* pseudo :last-of-type */';
+}
+
+function emitOnlyOfTypePseudoTest(): string {
+  return '/* pseudo :only-of-type */';
+}
+
+function emitNthPseudoTest(nth: NthArgs, opt: { ofType: boolean; last: boolean }): string {
+  return `/* nth ${JSON.stringify({ ...nth, ...opt })} */`;
+}
+
+function emitIsPseudoTest(list: SelectorList): string {
+  return `/* :is ${list.selectors.length} */`;
+}
+
+function emitWherePseudoTest(list: SelectorList): string {
+  return `/* :where ${list.selectors.length} */`;
+}
+
+function emitNotPseudoTest(list: SelectorList): string {
+  return `/* :not ${list.selectors.length} */`;
+}
+
+function emitHasPseudoTest(list: RelativeSelectorList2): string {
+  return `/* :has ${list.selectors.length} */`;
+}
+
+function emitDirPseudoTest(arg: string): string {
+  return `/* pseudo :dir(${JSON.stringify(arg)}) */`;
+}
+
+function emitLangPseudoTest(arg: string): string {
+  return `/* pseudo :lang(${JSON.stringify(arg)}) */`;
+}
+
+function emitAnyLinkPseudoTest(): string {
+  return '/* pseudo :any-link */';
+}
+
+function emitLinkPseudoTest(): string {
+  return '/* pseudo :link */';
+}
+
+function emitVisitedPseudoTest(): string {
+  return '/* pseudo :visited */';
+}
+
+function emitTargetPseudoTest(): string {
+  return '/* pseudo :target */';
+}
+
+function emitDefinedPseudoTest(): string {
+  return '/* pseudo :defined */';
+}
+
+function emitHoverPseudoTest(): string {
+  return '/* pseudo :hover */';
+}
+
+function emitActivePseudoTest(): string {
+  return '/* pseudo :active */';
+}
+
+function emitFocusPseudoTest(): string {
+  return '/* pseudo :focus */';
+}
+
+function emitFocusVisiblePseudoTest(): string {
+  return '/* pseudo :focus-visible */';
+}
+
+function emitFocusWithinPseudoTest(): string {
+  return '/* pseudo :focus-within */';
+}
+
+function emitEnabledPseudoTest(): string {
+  return '/* pseudo :enabled */';
+}
+
+function emitDisabledPseudoTest(): string {
+  return '/* pseudo :disabled */';
+}
+
+function emitReadOnlyPseudoTest(): string {
+  return '/* pseudo :read-only */';
+}
+
+function emitReadWritePseudoTest(): string {
+  return '/* pseudo :read-write */';
+}
+
+function emitPlaceholderShownPseudoTest(): string {
+  return '/* pseudo :placeholder-shown */';
+}
+
+function emitDefaultPseudoTest(): string {
+  return '/* pseudo :default */';
+}
+
+function emitCheckedPseudoTest(): string {
+  return '/* pseudo :checked */';
+}
+
+function emitIndeterminatePseudoTest(): string {
+  return '/* pseudo :indeterminate */';
+}
+
+function emitRequiredPseudoTest(): string {
+  return '/* pseudo :required */';
+}
+
+function emitOptionalPseudoTest(): string {
+  return '/* pseudo :optional */';
+}
+
+function emitInvalidPseudoTest(): string {
+  return '/* pseudo :invalid */';
+}
+
+function emitValidPseudoTest(): string {
+  return '/* pseudo :valid */';
+}
+
+function emitInRangePseudoTest(): string {
+  return '/* pseudo :in-range */';
+}
+
+function emitOutOfRangePseudoTest(): string {
+  return '/* pseudo :out-of-range */';
+}
+
+function emitPlayingPseudoTest(): string {
+  return '/* pseudo :playing */';
+}
+
+function emitPausedPseudoTest(): string {
+  return '/* pseudo :paused */';
+}
+
+function emitSeekingPseudoTest(): string {
+  return '/* pseudo :seeking */';
+}
+
+function emitBufferingPseudoTest(): string {
+  return '/* pseudo :buffering */';
+}
+
+function emitStalledPseudoTest(): string {
+  return '/* pseudo :stalled */';
+}
+
+function emitMutedPseudoTest(): string {
+  return '/* pseudo :muted */';
+}
+
+function emitVolumeLockedPseudoTest(): string {
+  return '/* pseudo :volume-locked */';
+}
+
+function emitNoMatchPseudoTest(name: string): string {
+  return `/* pseudo :${name} no-match */`;
+}
+
+function emitNoMatchPseudoElementTest(name: string): string {
+  return `/* pseudo ::${name} no-match */`;
 }
