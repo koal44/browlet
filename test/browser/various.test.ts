@@ -6525,4 +6525,117 @@ runScenarios('various', 'normal', [
     ],
   },
 
+  {
+    name: 'parser/html-namespace-selector-oracle',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <item id="html-item"></item>
+        <p id="p"></p>
+        <div id="a" class="a"></div>
+        <div id="b" class="b"></div>
+        <div id="scope" data-nwsapi-scope>
+          <item id="scoped-item"></item>
+          <p id="scoped-p"></p>
+        </div>
+        <a id="link" href="#x" class="enabled selected"></a>
+      </div>
+    `,
+    cases: [
+      { select: '*|p', expect: { ids: ['p', 'scoped-p'] } },
+      { select: '|p', expect: { count: 0 } },
+      { select: 'test|p', expect: { throws: true } },
+
+      { select: ':scope > *|item', ref: { by: 'id', id: 'scope' }, expect: { ids: ['scoped-item'] } },
+      { select: '[data-nwsapi-scope] > *|item', expect: { ids: ['scoped-item'] } },
+      { select: '[data-nwsapi-scope] > |item', expect: { count: 0 } },
+
+      { select: ':is(*|item)', expect: { ids: ['html-item', 'scoped-item'] } },
+      { select: ':is(|item)', expect: { count: 0 } },
+      { select: ':is(test|item)', expect: { count: 0 } },
+      { select: ':is(*|item, |item, test|item)', expect: { ids: ['html-item', 'scoped-item'] } },
+
+      { select: ':where(*|item)', expect: { ids: ['html-item', 'scoped-item'] } },
+      { select: ':where(|item)', expect: { count: 0 } },
+      { select: ':where(test|item)', expect: { count: 0 } },
+      { select: ':where(*|item, |item, test|item)', expect: { ids: ['html-item', 'scoped-item'] } },
+
+      { select: ':has(> *|item)', expect: { ids: ['root', 'scope'] } },
+      { select: ':has(> |item)', expect: { ids: [] } },
+      { select: ':has(> test|item)', expect: { throws: true } },
+      { select: ':has(> *|item, + |item)', expect: { ids: ['root', 'scope'] } },
+      { select: ':has(> *|item, > test|item)', expect: { throws: true } },
+
+      { select: "[foo|='bar' i]", expect: { count: 0 } },
+      { select: "[|foo='bar' i]", expect: { count: 0 } },
+      { select: "[*|foo='bar' i]", expect: { count: 0 } },
+      { select: '[*|href]', expect: { ids: ['link'] } },
+      { select: '[|href]', expect: { ids: ['link'] } },
+      { select: '[xlink|href]', expect: { throws: true } },
+      { select: '[xml|lang]', expect: { throws: true } },
+
+      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+    ],
+  },
+
+  {
+    name: 'parser/xml-namespace-selector-oracle',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root id="root">
+        <item id="plain-item"/>
+        <p id="plain-p"/>
+        <a id="a" class="a"/>
+        <b id="b" class="b"/>
+        <scope id="scope" data-nwsapi-scope="">
+          <item id="scoped-item"/>
+          <p id="scoped-p"/>
+        </scope>
+        <link id="link" href="#x" class="enabled selected"/>
+      </root>
+    `,
+    cases: [
+      { select: '*|p', expect: { ids: ['plain-p', 'scoped-p'] } },
+      { select: '|p', expect: { ids: ['plain-p', 'scoped-p'] } },
+      { select: 'test|p', expect: { throws: true } },
+
+      { select: ':scope > *|item', ref: { by: 'id', id: 'scope' }, expect: { ids: ['scoped-item'] } },
+      { select: '[data-nwsapi-scope] > *|item', expect: { ids: ['scoped-item'] } },
+      { select: '[data-nwsapi-scope] > |item', expect: { ids: ['scoped-item'] } },
+
+      { select: ':is(*|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+      { select: ':is(|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+      { select: ':is(test|item)', expect: { count: 0 } },
+      { select: ':is(*|item, |item, test|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+
+      { select: ':where(*|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+      { select: ':where(|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+      { select: ':where(test|item)', expect: { count: 0 } },
+      { select: ':where(*|item, |item, test|item)', expect: { ids: ['plain-item', 'scoped-item'] } },
+
+      { select: ':has(> *|item)', expect: { ids: ['root', 'scope'] } },
+      { select: ':has(> |item)', expect: { ids: ['root', 'scope'] } },
+      { select: ':has(> test|item)', expect: { throws: true } },
+      { select: ':has(> *|item, + |item)', expect: { ids: ['root', 'scope'] } },
+      { select: ':has(> *|item, > test|item)', expect: { throws: true }, status: 'fixme' },
+
+      { select: "[foo|='bar' i]", expect: { count: 0 } },
+      { select: "[|foo='bar' i]", expect: { count: 0 } },
+      { select: "[*|foo='bar' i]", expect: { count: 0 } },
+      { select: '[*|href]', expect: { ids: ['link'] } },
+      { select: '[|href]', expect: { ids: ['link'] } },
+      { select: '[xlink|href]', expect: { throws: true } },
+      { select: '[xml|lang]', expect: { throws: true } },
+
+      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+    ],
+  },
+
 ]);
