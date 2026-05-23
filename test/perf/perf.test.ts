@@ -1996,7 +1996,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'match hot cold simple selectors',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
     markup: `<div id="target" class="foo bar" data-x="value"></div>`,
     probeKeys: ['match'],
@@ -2014,5 +2014,71 @@ runPerfScenarios('perf', [
       { op: 'match', selector: '[data-x="value"]', ref: { by: 'id', id: 'target' }, iters: 100_000, cold: true },
     ],
   },
+
+
+
+
+
+
+{
+  name: 'match hardcoded general sibling combinator',
+  status: 'only',
+  // browsers: ['chromium'],
+  engines: ['nw-current'],
+  markup: `
+    <section id="near-hit">
+      <div id="near-a" class="a"></div>
+      ${'<p></p>'.repeat(4)}
+      <div id="near-b" class="b"></div>
+    </section>
+
+    <section id="far-hit">
+      <div id="far-a" class="a"></div>
+      ${'<p></p>'.repeat(256)}
+      <div id="far-b" class="b"></div>
+    </section>
+
+    <section id="far-miss">
+      ${'<p></p>'.repeat(256)}
+      <div id="far-miss-b" class="b"></div>
+    </section>
+
+    <section id="rightmost-fail">
+      <div id="rightmost-fail-a" class="a"></div>
+      ${'<p></p>'.repeat(256)}
+      <div id="rightmost-fail-x" class="x"></div>
+    </section>
+  `,
+  benches: [
+    {
+      label: 'match ~ near hit',
+      op: 'match',
+      selector: '.a ~ .b',
+      ref: { by: 'id', id: 'near-b' },
+      iters: 1_000_000,
+    },
+    {
+      label: 'match ~ far hit',
+      op: 'match',
+      selector: '.a ~ .b',
+      ref: { by: 'id', id: 'far-b' },
+      iters: 500_000,
+    },
+    {
+      label: 'match ~ far miss',
+      op: 'match',
+      selector: '.a ~ .b',
+      ref: { by: 'id', id: 'far-miss-b' },
+      iters: 500_000,
+    },
+    {
+      label: 'match ~ rightmost fail',
+      op: 'match',
+      selector: '.a ~ .b',
+      ref: { by: 'id', id: 'rightmost-fail-x' },
+      iters: 1_000_000,
+    },
+  ],
+},
 
 ]);

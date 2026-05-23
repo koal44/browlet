@@ -1,50 +1,11 @@
 import type {
-  AttributeSelector, CandidateTest, ClassSelector, IdSelector, NthArgs,
-  RelativeSelectorList2, SelectorList, TagSelector,
+  AttributeSelector, CandidateTest, ClassSelector, IdSelector, NthArgs, RelativeSelectorList2, SelectorList, TagSelector,
 } from "../parser/parser";
 import { asciiLower, cssIdentUnescape, escapeRegExp } from "../utils/css";
 import { assertNever } from "../utils/util";
-import { buildRelativeSelectorListMatch, buildSelectorListMatch } from "./build";
-
-// id
-export function emitIdTest(id: IdSelector): CandidateTest {
-  const value = cssIdentUnescape(id.raw);
-  return { source: `s.checkId(e,${JSON.stringify(value)})` };
-}
-
-// class
-export function emitClassTest(cls: ClassSelector): CandidateTest {
-  const value = cssIdentUnescape(cls.raw);
-
-  if (/[\t\n\f\r ]/.test(value)) {
-    return { source: 'false' };
-  }
-
-  return { source: `s.checkClass(e,${JSON.stringify(value)})` };
-}
-
-// tag
-export function emitTagTest(tag: TagSelector): CandidateTest {
-  const local = cssIdentUnescape(tag.localRaw);
-  let source: string;
-
-  if (local === '*') {
-    source = 'true';
-  } else {
-    const lower = asciiLower(local);
-    source = local === lower
-      ? `e.localName===${JSON.stringify(local)}`
-      : `s.checkTag(e,${JSON.stringify(lower)},${JSON.stringify(local)})`;
-  }
-
-  if (tag.prefixRaw === '*') return { source };
-
-  if (tag.prefixRaw === '') {
-    return { source: source === 'true' ? '!e.namespaceURI' : `!e.namespaceURI&&${source}` };
-  }
-
-  return { source };
-}
+import {
+  buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch,
+} from "./build";
 
 // [attr], [attr=value], [ns|attr op value flag]
 export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
@@ -124,7 +85,7 @@ const ATTR_INSENSITIVE = new Set([
 
 // :scope
 export function emitScopePseudoTest(): CandidateTest {
-  return { source: 's.isScope(e)', unique: true };
+  return { source: 's.isScope(e)', unique: true, usesScope: true };
 }
 
 // :root
@@ -194,22 +155,22 @@ export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: b
 
 // :is()
 export function emitIsPseudoTest(list: SelectorList): CandidateTest {
-  return { source: buildSelectorListMatch(list) };
+  return { buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx) };
 }
 
 // :where()
 export function emitWherePseudoTest(list: SelectorList): CandidateTest {
-  return { source: buildSelectorListMatch(list) };
+  return { buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx) };
 }
 
 // :not()
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
-  return { source: `!(${buildSelectorListMatch(list)})` };
+  return { buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})` };
 }
 
 // :has()
 export function emitHasPseudoTest(list: RelativeSelectorList2): CandidateTest {
-  return { source: buildRelativeSelectorListMatch(list) };
+  return { buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx), usesScope: list.usesScope };
 }
 
 // :dir()

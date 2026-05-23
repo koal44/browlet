@@ -1,6 +1,32 @@
 import { asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken } from "../utils/css";
 import { FormStateElement, getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup, isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame, isValidityElement } from "../utils/dom";
 
+export type CombinatorTest = (e: Element, h: HashCache | null) => boolean;
+
+export function matchParent(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+  const parent = e.parentElement;
+  return !!parent && test(parent, h);
+}
+
+export function matchAncestor(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+  while ((e = e.parentElement as Element)) {
+    if (test(e, h)) return true;
+  }
+  return false;
+}
+
+export function matchPrev(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+  const prev = e.previousElementSibling;
+  return !!prev && test(prev, h);
+}
+
+export function matchPrevAny(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+  while ((e = e.previousElementSibling as Element)) {
+    if (test(e, h)) return true;
+  }
+  return false;
+}
+
 export function checkId(e: Element, id: string): boolean {
   return getIdAttr(e) === id;
 }

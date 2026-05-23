@@ -6638,25 +6638,114 @@ runScenarios('various', 'normal', [
     ],
   },
 
-{
-  name: 'parser/class-selector-escaped-whitespace-oracle',
-  // status: 'only',
-  markup: `
-    <div id="plain" class="foo bar"></div>
-    <div id="space-token" class="foo&#10;bar"></div>
-    <div id="literal-backslash" class="foo\\ bar"></div>
-    <div id="literal-a" class="foo\\a bar"></div>
-  `,
-  cases: [
-    { select: '.foo', expect: { ids: ['plain', 'space-token'] } },
-    { select: '.bar', expect: { ids: ['plain', 'space-token', 'literal-backslash', 'literal-a'] } },
+  {
+    name: 'parser/class-selector-escaped-whitespace-oracle',
+    // status: 'only',
+    markup: `
+      <div id="plain" class="foo bar"></div>
+      <div id="space-token" class="foo&#10;bar"></div>
+      <div id="literal-backslash" class="foo\\ bar"></div>
+      <div id="literal-a" class="foo\\a bar"></div>
+    `,
+    cases: [
+      { select: '.foo', expect: { ids: ['plain', 'space-token'] } },
+      { select: '.bar', expect: { ids: ['plain', 'space-token', 'literal-backslash', 'literal-a'] } },
 
-    { select: String.raw`.foo\ bar`, expect: { count: 0 } },
-    { select: String.raw`.foo\ `, expect: { count: 0 } },
-    { select: String.raw`.foo\a bar`, expect: { count: 0 } },
+      { select: String.raw`.foo\ bar`, expect: { count: 0 } },
+      { select: String.raw`.foo\ `, expect: { count: 0 } },
+      { select: String.raw`.foo\a bar`, expect: { count: 0 } },
 
-    { select: `[class="foo bar"]`, expect: { ids: ['plain'] } },
-  ],
-},
+      { select: `[class="foo bar"]`, expect: { ids: ['plain'] } },
+    ],
+  },
+
+  {
+    name: 'escaped literal backslash identifier',
+    // status: 'only',
+    markup: `
+      <div>
+        <span id="slash\\" class="slash\\"></span>
+        <span id="slash�" class="slash�"></span>
+      </div>`,
+    // setupPage: setupNw,
+    cases: [
+      // Two CSS backslashes: first escapes second, producing a literal "\".
+      { select: '#slash\\\\', expect: { count: 1, ids: ['slash\\'] } },
+      { select: '.slash\\\\', expect: { count: 1, ids: ['slash\\'] } },
+
+      // One trailing CSS backslash is EOF escape -> U+FFFD, not literal "\".
+      { select: '#slash\\', expect: { count: 1, ids: ['slash�'] } },
+      { select: '.slash\\', expect: { count: 1, ids: ['slash�'] } },
+    ],
+  },
+
+  {
+    name: 'html-namespace-type-selector-oracle',
+    // status: 'only',
+    markup: `
+      <div id="root">
+        <item id="html-item"></item>
+        <p id="p"></p>
+        <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+          <item id="svg-item"></item>
+          <circle id="circle"></circle>
+        </svg>
+      </div>
+    `,
+    cases: [
+      // Plain type selector behavior in HTML document.
+      { select: 'item', expect: { ids: ['html-item', 'svg-item'] } },
+      { select: 'p', expect: { ids: ['p'] } },
+
+      // Any namespace + local name.
+      { select: '*|item', expect: { ids: ['html-item', 'svg-item'] } },
+      { select: '*|circle', expect: { ids: ['circle'] } },
+
+      // Empty namespace only. In an HTML document, HTML/SVG elements are namespaced,
+      { select: '|item', expect: { count: 0 } },
+      { select: '|p', expect: { count: 0 } },
+      { select: '|circle', expect: { count: 0 } },
+
+      // Universal forms.
+      { select: '*', expect: { includesIds: ['root', 'html-item', 'p', 'svg', 'svg-item', 'circle'] } },
+      { select: '*|*', expect: { includesIds: ['root', 'html-item', 'p', 'svg', 'svg-item', 'circle'] } },
+
+      // Empty namespace universal.
+      { select: '|*', expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'xml-namespace-type-selector-oracle',
+    // status: 'only',
+    markup: `<?xml version="1.0"?>
+      <cp:coreProperties
+          xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+          xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:title id="title"></dc:title>
+        <plain id="plain" xmlns=""></plain>
+      </cp:coreProperties>`,
+    markupMode: 'xml-document',
+    cases: [
+      { select: 'coreProperties', expect: { count: 1 } },
+      { select: '*|coreProperties', expect: { count: 1 } },
+      { select: '|coreProperties', expect: { count: 0 } },
+
+      // Child namespaced element.
+      { select: 'title', expect: { ids: ['title'] } },
+      { select: '*|title', expect: { ids: ['title'] } },
+      { select: '|title', expect: { count: 0 } },
+
+      // Explicit empty namespace element.
+      { select: 'plain', expect: { ids: ['plain'] } },
+      { select: '*|plain', expect: { ids: ['plain'] } },
+      { select: '|plain', expect: { ids: ['plain'] } },
+
+      // Universal namespace forms.
+      { select: '*|*', expect: { count: 3 } },
+      { select: '|*', expect: { ids: ['plain'] }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '|*', expect: { ids: [] }, browsers: ['webkit'], engines: ['native'] },
+    ],
+  },
 
 ]);

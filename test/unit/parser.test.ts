@@ -1701,9 +1701,14 @@ describe('consumeIdent source-fragment legacy cases', () => {
   });
 
   it('rejects invalid identifier escape forms', () => {
-    for (const input of ['\\\n', '\\\r', '\\\f', '\\']) {
+    for (const input of ['\\\n', '\\\r', '\\\f']) {
       expect(() => consumeIdent(new Cursor(input))).toThrow();
     }
+  });
+
+  it('accepts trailing EOF escape in identifiers', () => {
+    expect(consumeIdent(new Cursor('\\'))).toBe('\\');
+    expect(consumeIdent(new Cursor('foo\\'))).toBe('foo\\');
   });
 });
 
@@ -1920,8 +1925,18 @@ describe('parseSelectorList normalized whitespace legacy cases', () => {
 });
 
 describe('parseSelectorList dangling and escaped backslash identifiers', () => {
-  it('rejects dangling final escapes', () => {
-    expect(() => parseSelectorList('.foo\\')).toThrow();
+  it('accepts trailing EOF escape in class identifiers', () => {
+    const list = parseSelectorList('.foo\\');
+    const compound = list.selectors[0].parts[0].compound;
+
+    expect(compound.classes?.[0].raw).toBe('foo\\');
+  });
+
+  it('accepts trailing EOF escape in id identifiers', () => {
+    const list = parseSelectorList('#foo\\');
+    const compound = list.selectors[0].parts[0].compound;
+
+    expect(compound.id?.raw).toBe('foo\\');
   });
 
   it('accepts escaped backslash inside identifiers', () => {

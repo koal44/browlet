@@ -86,6 +86,7 @@ runScenarios('xml', 'normal', [
 
   {
     name: 'jsdom/xml-markup-mode',
+    // status: 'only',
     markup: `<?xml version="1.0"?>
       <cp:coreProperties
           xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"

@@ -2,16 +2,35 @@
 // convert escape sequence in a CSS string or identifier
 // to javascript string with characters representations
 export function cssIdentUnescape(str: string): string {
-  return /\\/.test(str) ?
-    str.replace(/\\([0-9a-fA-F]{1,6}\s?|.)/g, (_match, escaped: string) => {
-      if (/^[0-9a-fA-F]/.test(escaped)) {
-        const codePoint = parseInt(escaped, 16);
-        return codePoint === 0 ? '\uFFFD' : stringFromCodePoint(codePoint);
-      }
-      // CSS simple escape: backslash + non-hex char => that char.
-      return escaped;
-    }) :
-    str;
+  if (!/[\\\x00]/.test(str)) return str;
+
+  return str
+    .replace(/\x00/g, '\uFFFD')
+    .replace(
+      /\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|\\([\s\S])|\\$/g,
+      (_match, hex: string | undefined, escaped: string | undefined) => {
+        if (hex !== undefined) {
+          const codePoint = parseInt(hex, 16);
+
+          if (
+            codePoint === 0 ||
+            codePoint > 0x10ffff ||
+            (codePoint >= 0xd800 && codePoint <= 0xdfff)
+          ) {
+            return '\uFFFD';
+          }
+
+          return stringFromCodePoint(codePoint);
+        }
+
+        if (escaped !== undefined) {
+          return escaped;
+        }
+
+        // CSS EOF escape: trailing "\" -> U+FFFD.
+        return '\uFFFD';
+      },
+    );
 }
 
 // convert single codepoint to string

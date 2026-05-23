@@ -1,3 +1,4 @@
+import { type ComplexSelector } from "./parser/parser";
 import { isDocument, isDocumentFragment, isElement } from "./utils/dom";
 
 function previewText(s: string, max = 240): string {
@@ -72,7 +73,7 @@ export function initDebugMatch(snap: Snapshot, selectors: string, element: Eleme
 
 export function updateDebugMatch(snap: Snapshot, resolver: MatchResolver, result: boolean): void {
   if (snap.debugMatch) {
-    snap.debugMatch.lambdaSource = resolver.lambdas.map(f => String(f));
+    snap.debugMatch.lambdaSource = String(resolver.lambda);
     snap.debugMatch.result = result;
   }
 }
@@ -92,13 +93,23 @@ export function initDebugSelect(snap: Snapshot, sel: string, cb: QueryCallback |
   snap.debugStack.push(dbgSelect);
 }
 
-export function updateDebugSelectRun(snap: Snapshot, seed: CandidateSeed, candidates: Element[], results: Element[]): void {
+export function updateDebugSelectRun(snap: Snapshot, arm: SelectArm, candidates: Element[], results: Element[]): void {
   snap.debugSelect?.run.push({
-    seedKey: seed.key,
-    seedQuery: seed.query,
-    compileQuery: seed.compileQuery,
+    strategy: arm.plan.strategy,
+    lookupQuery: arm.plan.lookupQuery,
     candidates: describeElements(candidates),
-    lambdaSource: String(seed.lambda),
+    matcherSrcText: String(arm.matcher),
     results: describeElements(results),
   });
+}
+
+export function updateDebugSelectBuild(snap: Snapshot, complex: ComplexSelector, plan: CandidatePlan, matcher: SelectLambda): void {
+  snap.debugSelect?.build.push({
+    selector: complex.source,
+    hasSeed: complex.hasSeed === true,
+    strategy: plan.strategy,
+    lookupQuery: plan.lookupQuery,
+    matcherSrcText: snap.debugCompile ?? matcher.toString(),
+  });
+  snap.debugCompile = undefined;
 }

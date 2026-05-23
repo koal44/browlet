@@ -358,16 +358,37 @@ function isEscapedAt(input: string, index: number, start = 0): boolean {
 
 
 import { Cursor } from './cursor';
-import { emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest, emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest, emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest, emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest, emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest, emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest, emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest, emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest, emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPausedPseudoTest, emitPlaceholderShownPseudoTest, emitPlayingPseudoTest, emitReadOnlyPseudoTest, emitReadWritePseudoTest, emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest, emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest, emitVolumeLockedPseudoTest, emitWherePseudoTest } from "../compile/emit";
+import {
+  emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
+  emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
+  emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest,
+  emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest,
+  emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
+  emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest,
+  emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest,
+  emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
+  emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPausedPseudoTest,
+  emitPlaceholderShownPseudoTest, emitPlayingPseudoTest, emitReadOnlyPseudoTest, emitReadWritePseudoTest,
+  emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest,
+  emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest,
+  emitVolumeLockedPseudoTest, emitWherePseudoTest
+} from "../compile/emit";
 
 export type SelectorList = {
   selectors: ComplexSelector[];
+  usesScope?: boolean;
 };
 
 export type Combinator = ' ' | '>' | '+' | '~';
 
 export type ComplexSelector = {
   parts: ComplexPart[];
+  source: string;
+  usesScope?: boolean;
+
+  // Whether a contained compound's ID/class/tag was used as a seed
+  // Source-keyed lambda caching is unsafe because the matcher skips seeded tests.
+  hasSeed?: boolean;
 };
 
 export type ComplexPart = {
@@ -385,27 +406,48 @@ export type CompoundSelector = {
   // such as attrs and pseudos. ID/class/tag are deferred for the planner.
   // TODO: maybe a list so that planner can reorder for perf?
   tests: CandidateTest[];
-};
-
-export type CandidateTest = {
-  source: string;
-  unique?: boolean;
+  usesScope?: boolean;
 };
 
 export type IdSelector = {
   // Raw CSS identifier payload, without "#", before CSS unescaping.
   raw: string;
+
+  // Whether this simple selector is used as a seed and thus should be skipped from compiled tests.
+  seed?: boolean; 
 };
 
 export type ClassSelector = {
   // Raw CSS identifier payload, without ".", before CSS unescaping.
   raw: string;
+  seed?: boolean;
 };
 
 export type TagSelector = {
   prefixRaw?: '' | '*';
   localRaw: string;
+  seed?: boolean;
 };
+
+export type BuildContext = {
+  nextPredicate: number;
+  declarations: string[];
+};
+
+type BaseCandidateTest = {
+  unique?: boolean;
+  usesScope?: boolean;
+};
+
+type StaticCandidateTest = BaseCandidateTest & {
+  source: string;
+};
+
+type DeferredCandidateTest = BaseCandidateTest & {
+  buildSource(ctx: BuildContext): string;
+};
+
+export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
 
 export function parseSelectorList(input: string): SelectorList {
   const c = new Cursor(input);
@@ -414,6 +456,7 @@ export function parseSelectorList(input: string): SelectorList {
 
 export function parseSelectorListFrom(c: Cursor): SelectorList {
   const selectors: ComplexSelector[] = [];
+  let usesScope = false;
 
   consumeTrivia(c);
 
@@ -422,7 +465,9 @@ export function parseSelectorListFrom(c: Cursor): SelectorList {
   }
 
   while (!c.eof()) {
-    selectors.push(parseComplexSelector(c));
+    const complex = parseComplexSelector(c);
+    if (complex.usesScope) usesScope = true;
+    selectors.push(complex);
 
     consumeTrivia(c);
 
@@ -441,16 +486,20 @@ export function parseSelectorListFrom(c: Cursor): SelectorList {
     c.error(`Unexpected character ${c.peek()}`);
   }
 
-  return { selectors };
+  return { selectors, usesScope };
 }
 
 export function parseComplexSelector(c: Cursor): ComplexSelector {
+  const start = c.pos();
   const parts: ComplexPart[] = [];
 
   parts.push({
     combinator: null,
     compound: parseCompoundSelector(c),
   });
+
+  let usesScope = parts[0].compound.usesScope;
+  let end = c.pos();
 
   while (true) {
     const sawWs = consumeTrivia(c);
@@ -474,13 +523,14 @@ export function parseComplexSelector(c: Cursor): ComplexSelector {
       c.error(`Expected compound selector after combinator, got ${c.peek() || '<eof>'}`);
     }
 
-    parts.push({
-      combinator,
-      compound: parseCompoundSelector(c),
-    });
+    const compound = parseCompoundSelector(c);
+    if (compound.usesScope) usesScope = true;
+    end = c.pos();
+
+    parts.push({ combinator, compound });
   }
 
-  return { parts };
+  return { parts, usesScope, source: c.slice(start, end) };
 }
 
 export function parseCompoundSelector(c: Cursor): CompoundSelector {
@@ -523,7 +573,9 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   }
 
   if (ch === ':') {
-    compound.tests.push(parsePseudoTestSource(c));
+    const pseudoTest = parsePseudoTestSource(c);
+    if (pseudoTest.usesScope) compound.usesScope = true;
+    compound.tests.push(pseudoTest);
     return;
   }
 
@@ -846,9 +898,12 @@ export function parseStrictPseudoBodySelectorList(c: Cursor): SelectorList {
   }
 
   const selectors: ComplexSelector[] = [];
+  let usesScope = false;
 
   while (!c.eof() && c.peek() !== ')') {
-    selectors.push(parseComplexSelector(c));
+    const complex = parseComplexSelector(c);
+    if (complex.usesScope) usesScope = true;
+    selectors.push(complex);
 
     consumeTrivia(c);
 
@@ -871,7 +926,7 @@ export function parseStrictPseudoBodySelectorList(c: Cursor): SelectorList {
     c.expect(')');
   }
 
-  return { selectors };
+  return { selectors, usesScope };
 }
 
 export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
@@ -883,6 +938,7 @@ export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
   }
 
   const selectors: ComplexSelector[] = [];
+  let usesScope = false;
 
   while (!c.eof() && c.peek() !== ')') {
     consumeTrivia(c);
@@ -894,7 +950,9 @@ export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
     const armStart = c.pos();
 
     try {
-      selectors.push(parseComplexSelector(c));
+      const complex = parseComplexSelector(c);
+      if (complex.usesScope) usesScope = true;
+      selectors.push(complex);
     } catch {
       c.restore(armStart);
       consumeForgivingSelectorArm(c);
@@ -917,7 +975,7 @@ export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
 
   if (!c.eof()) c.expect(')');
 
-  return { selectors };
+  return { selectors, usesScope };
 }
 
 function consumeForgivingSelectorArm(c: Cursor): string {
@@ -1011,10 +1069,12 @@ function consumeForgivingSelectorArm(c: Cursor): string {
 
 export type RelativeSelectorList2 = {
   selectors: RelativeSelector2[];
+  usesScope?: boolean;
 };
 
 export type RelativeSelector2 = {
   steps: RelativeStep2[];
+  usesScope?: boolean;
 };
 
 export type RelativeStep2 = {
@@ -1030,10 +1090,13 @@ export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelector
     c.error(`Expected relative selector in pseudo-class body, got ${c.peek()}`);
   }
 
+  let usesScope = false;
   const selectors: RelativeSelector2[] = [];
 
   while (!c.eof() && c.peek() !== ')') {
-    selectors.push(parseRelativeSelector2(c));
+    const parsed = parseRelativeSelector2(c);
+    if (parsed.usesScope) usesScope = true;
+    selectors.push(parsed);
 
     consumeTrivia(c);
 
@@ -1052,7 +1115,7 @@ export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelector
 
   if (!c.eof()) c.expect(')');
 
-  return { selectors };
+  return { selectors, usesScope };
 }
 
 function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
@@ -1071,6 +1134,8 @@ function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
     combinator,
     compound: parseCompoundSelector(c),
   });
+
+  let usesScope = steps[0].compound.usesScope;
 
   while (true) {
     const sawWs = consumeTrivia(c);
@@ -1092,13 +1157,13 @@ function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
       c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
     }
 
-    steps.push({
-      combinator,
-      compound: parseCompoundSelector(c),
-    });
+    const compound = parseCompoundSelector(c);
+    if (compound.usesScope) usesScope = true;
+
+    steps.push({ combinator, compound });
   }
 
-  return { steps };
+  return { steps, usesScope };
 }
 
 function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
@@ -1355,9 +1420,10 @@ function consumeCssEscape(c: Cursor): boolean {
 
   const ch = c.peek();
 
+  // css backslash eof escape. Keep the raw backslash in the identifier;
+  // cssIdentUnescape later maps it to U+FFFD.
   if (ch === '') {
-    c.restore(start);
-    return false;
+    return true;
   }
 
   if (isHexDigit(ch)) {
@@ -1390,6 +1456,8 @@ function consumeCssEscape(c: Cursor): boolean {
 }
 
 function consumeIdentHead(c: Cursor): boolean {
+  if (consumeIdentReplacementChar(c)) return true;
+
   if (isIdentHeadChar(c.peek())) {
     c.next();
     return true;
@@ -1399,12 +1467,20 @@ function consumeIdentHead(c: Cursor): boolean {
 }
 
 function consumeIdentTail(c: Cursor): boolean {
+  if (consumeIdentReplacementChar(c)) return true;
+
   if (isIdentTailChar(c.peek())) {
     c.next();
     return true;
   }
 
   return consumeCssEscape(c);
+}
+
+function consumeIdentReplacementChar(c: Cursor): boolean {
+  if (c.peek() !== '\x00') return false;
+  c.next();
+  return true;
 }
 
 export function consumeIdent(c: Cursor): string {

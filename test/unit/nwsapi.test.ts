@@ -711,12 +711,6 @@ describe('Rex optimizer', () => {
   });
 });
 
-describe('unescapeIdentifier', () => {
-  it('should unescape valid identifiers', () => {
-    expect(cssIdentUnescape('[data-nwsapi-scope] > *|item')).toBe('[data-nwsapi-scope] > *|item');
-  });
-});
-
 describe('cssIdentEscape', () => {
   it('escapes identifier syntax characters', () => {
     expect(cssIdentEscape('.foo#bar')).toBe('\\.foo\\#bar');
@@ -829,6 +823,30 @@ describe('cssIdentUnescape', () => {
 
   it('round-trips NUL as U+FFFD, matching CSS.escape behavior', () => {
     expect(cssIdentUnescape(cssIdentEscape('\0'))).toBe('\ufffd');
+  });
+
+  it('should unescape valid identifiers', () => {
+    expect(cssIdentUnescape('[data-nwsapi-scope] > *|item')).toBe('[data-nwsapi-scope] > *|item');
+  });
+
+  it('should replace invalid escapes with U+FFFD', () => {
+    expect(cssIdentUnescape('eofA\\')).toBe('eofA\uFFFD');
+    expect(cssIdentUnescape('\\')).toBe('\uFFFD');
+    expect(cssIdentUnescape('eofB\\\\')).toBe('eofB\\');
+  });
+
+  it('consumes CRLF as one optional hex-escape terminator', () => {
+    expect(cssIdentUnescape('spac\\65\r\nsA')).toBe('spacesA');
+    expect(cssIdentUnescape('spac\\65\nsA')).toBe('spacesA');
+    expect(cssIdentUnescape('spac\\65\rsA')).toBe('spacesA');
+  });
+
+  it('replaces invalid code point escapes with U+FFFD', () => {
+    expect(cssIdentUnescape('\\0 ')).toBe('\ufffd');
+    expect(cssIdentUnescape('\\000000 ')).toBe('\ufffd');
+    expect(cssIdentUnescape('\\110000')).toBe('\ufffd');
+    expect(cssIdentUnescape('\\D800')).toBe('\ufffd');
+    expect(cssIdentUnescape('\\DFFF')).toBe('\ufffd');
   });
 });
 

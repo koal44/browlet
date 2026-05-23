@@ -8,7 +8,7 @@ const setupNw = async (page: Page) => {
       // NON_ASCII: true,
       // UNICODE16: true,
       // ESCAPECHR: true,
-      VERBOSITY: false,
+      // VERBOSITY: false,
     });
   });
 }
@@ -159,6 +159,7 @@ runScenarios('css3 escaped identifiers', 'normal',  [
   },
   {
     name: 'escape eof',
+    // status: 'only',
     markup: `
       <div>
         <span id="eofA\u{fffd}" class="eofA\u{fffd}"></span>
@@ -239,6 +240,7 @@ runScenarios('css3 escaped identifiers', 'normal',  [
 
   {
     name: 'chromium ident cases 1',
+    // status: 'only',
     markup: `
       <div>
         <span id="helloA" class="helloA"></span>

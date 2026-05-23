@@ -33,46 +33,43 @@ type Snapshot = SnapshotType;
 type QueryContext = Document | Element | DocumentFragment;
 type QueryCallback = (element: Element) => boolean | void;
 
-type SeedKey = '#' | '*' | '.';
-type GetCandidates = (ctx: QueryContext) => Element[];
-
-type CandidateSeed = {
-  key: SeedKey;
-  query: string;
-  compileQuery: string;
-  getCandidates: GetCandidates;
-  lambda: SelectLambda;
-};
+type CandidateStrategy = 'id' | 'class' | 'tag' | 'walk';
+type CandidateLookup = (ctx: QueryContext) => Element[];
 
 type CandidatePlan = {
-  key: SeedKey;
-  query: string;
-  compileQuery: string;
+  strategy: CandidateStrategy;
+  lookupQuery: string;
+  lookup: CandidateLookup;
+};
+
+type SelectArm = {
+  plan: CandidatePlan;
+  matcher: SelectLambda;
 };
 
 type MatchLambda = (
-  element: Element,
+  candidate: Element,
   h: HashCache | null,
 ) => boolean;
 
 type SelectLambda = (
-  list: Element[],
+  candidates: Element[],
   callback: QueryCallback | null,
   context: QueryContext,
-  nodes: Element[],
+  results: Element[],
   h: HashCache,
 ) => Stopped
 
 type Stopped = boolean;
 
 type MatchResolver = {
-  lambdas: MatchLambda[];
+  lambda: MatchLambda;
   usesScope: boolean;
 };
 
 type SelectResolver = {
+  arms: SelectArm[];
   hasCb: boolean;
-  seeds: CandidateSeed[];
   usesScope: boolean;
 };
 
@@ -156,19 +153,19 @@ type DebugSelect = {
 };
 
 type DebugSelectRunStep = {
-  seedKey: SeedKey;
-  seedQuery: string;
-  compileQuery: string;
+  strategy: CandidateStrategy;
+  lookupQuery: string;
   candidates: string[];
-  lambdaSource: string;
+  matcherSrcText: string;
   results: string[];
 };
 
 type DebugSelectBuildStep = {
   selector: string;
-  seedKey: SeedKey;
-  seedQuery: string;
-  compileQuery: string;
+  hasSeed: boolean;
+  strategy: CandidateStrategy;
+  lookupQuery: string;
+  matcherSrcText: string;
 };
 
 type DebugMatch = {
@@ -177,7 +174,7 @@ type DebugMatch = {
   element?: QueryContextDescription;
   selector?: string;
   parsed?: string[];
-  lambdaSource?: string[];
+  lambdaSource?: string;
   result?: boolean;
   error?: string;
 };
@@ -200,23 +197,23 @@ type CompileSelectorResult = {
   modvar: string[];
 };
 
-type SelectorList = {
-  kind: 'selector-list';
-  source: string;
-  selectors: ComplexSelector[];
-};
+// type SelectorList = {
+//   kind: 'selector-list';
+//   source: string;
+//   selectors: ComplexSelector[];
+// };
 
-type ComplexSelector = {
-  kind: 'complex';
-  source: string;
-  steps: ComplexStep[];
-};
+// type ComplexSelector = {
+//   kind: 'complex';
+//   source: string;
+//   steps: ComplexStep[];
+// };
 
-type ComplexStep = {
-  kind: 'step';
-  combinator: SelectorCombinator | null;
-  compound: CompoundSelector;
-};
+// type ComplexStep = {
+//   kind: 'step';
+//   combinator: SelectorCombinator | null;
+//   compound: CompoundSelector;
+// };
 
 type SelectorCombinator = ' ' | '>' | '+' | '~';
 

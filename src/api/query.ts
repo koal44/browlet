@@ -1,12 +1,11 @@
 import { seedsByClass } from "../candidates/seedsByClass";
 import { seedsById } from "../candidates/seedsById";
 import { seedsByTag } from "../candidates/seedsByTag";
-import { compile } from "../compile/compile";
-import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectRun } from "../debug";
-import { parse } from "../parser/parser";
+import { compileMatchList, compileSelectComplex } from "../compile/compile";
+import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from "../debug";
+import { ComplexSelector, parseSelectorList, SelectorList } from "../parser/parser";
 import { sortUniqueByDocPosition } from "../utils/collections";
 import { cssIdentUnescape } from "../utils/css";
-import { assertNever } from "../utils/util";
 
 // equivalent of w3c 'matches' method
 export function queryMatch(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
@@ -20,7 +19,7 @@ export function queryMatch(selectors: string, element: Element, snap: Snapshot, 
     snap.update(element, true /*updateScope*/);
   }
 
-  const result = resolver.lambdas.some(f => f(element, h));
+  const result = resolver.lambda(element, h);
 
   if (isDebug) updateDebugMatch(snap, resolver, result);
 
@@ -29,79 +28,128 @@ export function queryMatch(selectors: string, element: Element, snap: Snapshot, 
 
 export function matchStrict(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
   const resolver = getStrictMatchResolver(selectors, snap);
-  return resolver.lambdas.some(f => f(element, h));
-}
-
-export function matchForgiving(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
-  const resolver = getForgivingMatchResolver(selectors, snap);
-  return resolver.lambdas.some(f => f(element, h));
+  return resolver.lambda(element, h);
 }
 
 function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
   let resolver = snap.strictMatchResolvers.get(selectors);
 
   if (!resolver) {
-    const parsed = parse(selectors, snap.re);
+    const parsed = parseSelectorList(selectors);
 
     if (snap.isDebug && snap.debugMatch) {
-      snap.debugMatch.parsed = parsed;
+      snap.debugMatch.parsed = [selectors]; // or serialize parsed later
     }
 
-    resolver = buildStrictMatchResolver(parsed, snap);
+    resolver = buildStrictMatchResolver(parsed, selectors, snap);
     snap.strictMatchResolvers.set(selectors, resolver);
   }
 
   return resolver;
 }
 
-function getForgivingMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
-  let resolver = snap.forgivingMatchResolvers.get(selectors);
-
-  if (!resolver) {
-    const parsed = parse(selectors, snap.re, true);
-
-    if (snap.isDebug && snap.debugMatch) {
-      snap.debugMatch.parsed = parsed;
-    }
-
-    resolver = buildForgivingMatchResolver(parsed, snap);
-    snap.forgivingMatchResolvers.set(selectors, resolver);
-  }
-
-  return resolver;
-}
-
-function buildStrictMatchResolver(selectors: string[], snap: Snapshot): MatchResolver {
-  const lambdas: MatchLambda[] = [];
+function buildStrictMatchResolver(list: SelectorList, selectors: string, snap: Snapshot): MatchResolver {
   snap.probe.matBuild++;
 
-  for (let i = 0, l = selectors.length; i < l; ++i) {
-    lambdas[i] = compile(selectors[i], false /*select/match mode*/, false /*cb*/, snap);
+  const lambda = compileMatchList(list, selectors, snap);
+
+  if (snap.isDebug && snap.debugMatch) {
+    snap.debugMatch.lambdaSource = snap.debugCompile ?? lambda.toString();
+    snap.debugCompile = undefined;
   }
 
   return {
-    lambdas,
-    usesScope: hasScopeSelector(selectors),
+    lambda,
+    usesScope: list.usesScope ?? false,
   };
 }
 
-function buildForgivingMatchResolver(selectors: string[], snap: Snapshot): MatchResolver {
-  const lambdas: MatchLambda[] = [];
-  snap.probe.matBuild++;
+// function buildSelectResolver(selectors: string[], hasCb: boolean, snap: Snapshot): SelectResolver {
+//   const seeds: CandidateSeed[] = [];
+//   const usesScope = hasScopeSelector(selectors);
 
-  for (let i = 0, l = selectors.length; i < l; ++i) {
-    try {
-      lambdas.push(compile(selectors[i], false, false, snap));
-    } catch {
-      // Invalid arm in a forgiving selector list.
-    }
-  }
+//   snap.probe.selBuild++;
 
-  return {
-    lambdas,
-    usesScope: false, // forgiving match is only used for :is()/:where() arms, which are not entry points.
-  };
-}
+//   for (const sel of selectors) {
+//     let { key, query, compileQuery } = getOptimizedPlan(sel, snap);
+
+//     // Normalize optimized DOM lookups so candidate seeds remain selector-equivalent.
+//     let getCandidates: GetCandidates;
+//     switch (key) {
+//       case '#': {
+//         query = cssIdentUnescape(query);
+//         getCandidates = (ctx) => seedsById(query, ctx, snap);
+//         break;
+//       }
+//       case '.': {
+//         query = cssIdentUnescape(query);
+//         // classname lookup accepts whitespace queries that QSA class selectors do not.
+//         getCandidates = /[\t\n\f\r ]/.test(query)
+//           ? () => []
+//           : (ctx) => seedsByClass(query, ctx, snap);
+//         break;
+//       }
+//       case '*': {
+//         query = cssIdentUnescape(query);
+//         getCandidates = (ctx) => seedsByTag(query, ctx, snap);
+//         break;
+//       }
+//       default: assertNever(key);
+//     }
+
+//     if (snap.isDebug) {
+//       snap.debugSelect?.build.push({ selector: sel, seedKey: key, seedQuery: query, compileQuery });
+//     }
+
+//     seeds.push({
+//       key, query, compileQuery, getCandidates,
+//       lambda: compile(compileQuery, true, hasCb, snap),
+//     });
+//   }
+
+//   return {
+//     seeds, usesScope, hasCb,
+//   }
+// }
+
+// function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
+//   const token = selector.match(snap.re.optimizer);
+
+//   if (!token || token[1] === ':') {
+//     return {
+//       key: '*',
+//       query: '*',
+//       compileQuery: selector,
+//     };
+//   }
+
+//   const index = token.index;
+//   if (index === undefined) throw new Error('Invalid token: ' + token);
+
+//   const key = token[1] || '*';
+//   if (key !== '.' && key !== '#' && key !== '*') {
+//     throw new SyntaxError(`invalid selector for optimization '${selector}'`);
+//   }
+
+//   const length = token[1].length + token[2].length;
+//   const compileQuery =
+//     selector.slice(0, index) +
+//     (' >+~'.indexOf(selector.charAt(index - 1)) > -1
+//       ? (':['.indexOf(selector.charAt(index + length + 1)) > -1 ? '*' : '')
+//       : '') +
+//     selector.slice(index + length - (token[1] == '*' ? 1 : 0));
+
+//   return {
+//     key,
+//     query: token[2],
+//     compileQuery,
+//   };
+// }
+
+// function hasScopeSelector(selectors: string[]) {
+//   return selectors.some(sel => /:scope\b/i.test(sel));
+// }
+
 
 // equivalent of w3c 'querySelectorAll' method
 export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
@@ -109,10 +157,9 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
   const isDebug = snap.isDebug;
   if (isDebug) initDebugSelect(snap, sel, cb, ctx, isApiEntry);
 
-  // try to reuse cached resolver
   let resolver = snap.selectResolvers.get(sel);
   if (!resolver || resolver.hasCb !== !!cb) {
-    const parsed = parse(sel, snap.re);
+    const parsed = parseSelectorList(sel);
     resolver = buildSelectResolver(parsed, !!cb, snap);
     snap.selectResolvers.set(sel, resolver);
   }
@@ -121,102 +168,105 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
 
   const results: Element[] = [];
   const cache: HashCache = {};
-  const seeds = resolver.seeds;
+  const arms = resolver.arms;
 
-  for (const seed of seeds) {
-    const candidates = seed.getCandidates(ctx);
-    const stopped = seed.lambda(candidates, cb, ctx, results, cache);
+  for (const arm of arms) {
+    const candidates = arm.plan.lookup(ctx);
+    const stopped = arm.matcher(candidates, cb, ctx, results, cache);
 
-    if (isDebug) updateDebugSelectRun(snap, seed, candidates, results);
+    if (isDebug) updateDebugSelectRun(snap, arm, candidates, results);
     if (stopped) break;
   }
 
-  if (seeds.length > 1 && results.length > 1) {
+  if (arms.length > 1 && results.length > 1) {
     sortUniqueByDocPosition(results);
   }
 
   return results;
 }
 
-function buildSelectResolver(selectors: string[], hasCb: boolean, snap: Snapshot): SelectResolver {
-  const seeds: CandidateSeed[] = [];
-  const usesScope = hasScopeSelector(selectors);
-
+function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot): SelectResolver {
+  const arms: SelectArm[] = [];
   snap.probe.selBuild++;
 
-  for (const sel of selectors) {
-    let { key, query, compileQuery } = getOptimizedPlan(sel, snap);
+  for (const complex of list.selectors) {
+    const plan = planCandidateLookup(complex, snap);
 
-    // Normalize optimized DOM lookups so candidate seeds remain selector-equivalent.
-    let getCandidates: GetCandidates;
-    switch (key) {
-      case '#': {
-        query = cssIdentUnescape(query);
-        getCandidates = (ctx) => seedsById(query, ctx, snap);
-        break;
-      }
-      case '.': {
-        query = cssIdentUnescape(query);
-        // classname lookup accepts whitespace queries that QSA class selectors do not.
-        getCandidates = /[\t\n\f\r ]/.test(query)
-          ? () => []
-          : (ctx) => seedsByClass(query, ctx, snap);
-        break;
-      }
-      case '*': {
-        query = cssIdentUnescape(query);
-        getCandidates = (ctx) => seedsByTag(query, ctx, snap);
-        break;
-      }
-      default: assertNever(key);
-    }
+    // Compile the residual matcher; seed-supplied simple selectors are skipped.
+    const matcher = compileSelectComplex(complex, hasCb, snap);
+
+    arms.push({
+      plan,
+      matcher,
+    });
 
     if (snap.isDebug) {
-      snap.debugSelect?.build.push({ selector: sel, seedKey: key, seedQuery: query, compileQuery });
+      updateDebugSelectBuild(snap, complex, plan, matcher);
     }
-
-    seeds.push({
-      key, query, compileQuery, getCandidates,
-      lambda: compile(compileQuery, true, hasCb, snap),
-    });
   }
 
-  return {
-    seeds, usesScope, hasCb,
-  }
+  const usesScope = list.usesScope ?? false;
+  return { arms, usesScope, hasCb };
 }
 
-function getOptimizedPlan(selector: string, snap: Snapshot): CandidatePlan {
-  const token = selector.match(snap.re.optimizer);
+// Marks seed-supplied simple selectors so residual matcher generation can skip them.
+function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): CandidatePlan {
+  const last = complex.parts[complex.parts.length - 1]?.compound;
+  if (!last) {
+    throw new Error('Cannot plan candidates for empty complex selector');
+  }
 
-  if (!token || token[1] === ':') {
+  if (last.id) {
+    const query = cssIdentUnescape(last.id.raw);
+
+    last.id.seed = true;
+    complex.hasSeed = true;
+
     return {
-      key: '*',
-      query: '*',
-      compileQuery: selector,
+      strategy: 'id',
+      lookupQuery: query,
+      lookup: ctx => seedsById(query, ctx, snap),
     };
   }
 
-  const index = token.index;
-  if (index === undefined) throw new Error('Invalid token: ' + token);
+  if (last.classes?.length) {
+    const cls = last.classes[0];
+    const query = cssIdentUnescape(cls.raw);
 
-  const key = token[1] || '*';
-  if (key !== '.' && key !== '#' && key !== '*') {
-    throw new SyntaxError(`invalid selector for optimization '${selector}'`);
+    cls.seed = true;
+    complex.hasSeed = true;
+
+    return {
+      strategy: 'class',
+      lookupQuery: query,
+      // classname lookup accepts whitespace queries that QSA class selectors do not.
+      lookup: /[\t\n\f\r ]/.test(query)
+        ? () => []
+        : ctx => seedsByClass(query, ctx, snap),
+    };
   }
 
-  const length = token[1].length + token[2].length;
-  const compileQuery =
-    selector.slice(0, index) +
-    (' >+~'.indexOf(selector.charAt(index - 1)) > -1
-      ? (':['.indexOf(selector.charAt(index + length + 1)) > -1 ? '*' : '')
-      : '') +
-    selector.slice(index + length - (token[1] == '*' ? 1 : 0));
+  if (last.tag) {
+    const { prefixRaw, localRaw } = last.tag;
+    const query = localRaw === '*' ? '*' : cssIdentUnescape(localRaw);
+
+    // tag lookup is a localName superset; |tag and |* still need namespace filtering.
+    if (prefixRaw !== '') {
+      last.tag.seed = true;
+      complex.hasSeed = true;
+    }
+
+    return {
+      strategy: 'tag',
+      lookupQuery: query,
+      lookup: ctx => seedsByTag(query, ctx, snap),
+    };
+  }
 
   return {
-    key,
-    query: token[2],
-    compileQuery,
+    strategy: 'walk',
+    lookupQuery: '*',
+    lookup: ctx => seedsByTag('*', ctx, snap),
   };
 }
 
@@ -236,8 +286,4 @@ export function queryClosest(selectors: string, element: Element, snap: Snapshot
     el = el.parentElement;
   }
   return el;
-}
-
-function hasScopeSelector(selectors: string[]) {
-  return selectors.some(sel => /:scope\b/i.test(sel));
 }

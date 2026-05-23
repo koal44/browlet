@@ -1,17 +1,13 @@
 import { byClass, byId, byTag, byTagNs } from "./api/lookup";
-import { queryClosest, queryFirst, matchForgiving, queryMatch, matchStrict, querySelect } from "./api/query";
+import { queryClosest, queryFirst, queryMatch, matchStrict, querySelect } from "./api/query";
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
   isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
   matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass,
   isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
-  isLastOfType, isOnlyOfType, matchesNthIndex,
-  isAnyLink,
-  isTarget,
-  isHovered,
-  isActive,
-  isFocusWithin
+  isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
+  matchPrevAny, matchPrev, matchParent, matchAncestor
 } from "./compile/runtime";
 import { buildRex } from "./rex";
 import { escapeRegExp } from "./utils/css";
@@ -51,6 +47,7 @@ export function initSnapshot(doc: Document) {
     debugSelect: undefined as DebugSelect | undefined,
     debugMatch: undefined as DebugMatch | undefined,
     debugStack: [] as (DebugSelect | DebugMatch)[],
+    debugCompile: undefined as string | undefined,
 
     // special handling configuration flags
     config: { ...DEFAULT_CONFIG } as NwsConfig,
@@ -115,9 +112,16 @@ export function initSnapshot(doc: Document) {
 
     matchStrict: (selectors: string, element: Element, h: HashCache | null = null) =>
       matchStrict(selectors, element, snap, h),
-    matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
-      matchForgiving(selectors, element, snap, h),
+    // matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
+    //   matchForgiving(selectors, element, snap, h),
 
+    // combinator tests
+    matchPrevAny: matchPrevAny,
+    matchPrev: matchPrev,
+    matchParent: matchParent,
+    matchAncestor: matchAncestor,
+
+    // simple tests
     checkId: checkId,
     checkClass: (e: Element, cls: string) => checkClass(e, cls, snap),
     checkTag: checkTag,
@@ -219,7 +223,7 @@ export function initSnapshot(doc: Document) {
         snap.probe.match = 0;
         snap.probe.matBuild = 0;
       }
-    }
+    },
   };
 
   snap.re = buildRex(snap.ext);
