@@ -4,8 +4,8 @@ import {
   parsePseudoBodyRelativeSelectorList, parseStrictPseudoBodySelectorList, parseSelectorList,
   parseForgivingPseudoBodySelectorList,
   type CompoundSelector,
-} from '../../src/parser';
-import { Cursor } from '../../src/cursor';
+} from '../../src/parser/parser';
+import { Cursor } from '../../src/parser/cursor';
 
 describe('parseSelectorList', () => {
   it('parses a single selector', () => {

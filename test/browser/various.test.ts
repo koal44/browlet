@@ -6638,4 +6638,25 @@ runScenarios('various', 'normal', [
     ],
   },
 
+{
+  name: 'parser/class-selector-escaped-whitespace-oracle',
+  // status: 'only',
+  markup: `
+    <div id="plain" class="foo bar"></div>
+    <div id="space-token" class="foo&#10;bar"></div>
+    <div id="literal-backslash" class="foo\\ bar"></div>
+    <div id="literal-a" class="foo\\a bar"></div>
+  `,
+  cases: [
+    { select: '.foo', expect: { ids: ['plain', 'space-token'] } },
+    { select: '.bar', expect: { ids: ['plain', 'space-token', 'literal-backslash', 'literal-a'] } },
+
+    { select: String.raw`.foo\ bar`, expect: { count: 0 } },
+    { select: String.raw`.foo\ `, expect: { count: 0 } },
+    { select: String.raw`.foo\a bar`, expect: { count: 0 } },
+
+    { select: `[class="foo bar"]`, expect: { ids: ['plain'] } },
+  ],
+},
+
 ]);

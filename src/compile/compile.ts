@@ -1,4 +1,4 @@
-import { findUnescapedPipe, matchLogicalSelector, parseRelativeSelectorList } from "../parser";
+import { findUnescapedPipe, matchLogicalSelector, parseRelativeSelectorList } from "../parser/parser";
 import { asciiLower, cssIdentUnescape, escapeRegExp } from "../utils/css";
 
 const MACROS = {
@@ -145,9 +145,7 @@ function compileSelector(
         if (nsPrefix === '*') {
           source = `if(true){${source}}`;
         } else if (!nsPrefix) {
-          source = `if((!e.namespaceURI)){${source}}`;
-        } else if (snap.root.prefix === nsPrefix) {
-          throw new Error(`Namespace prefix "${nsPrefix}" is declared in this document but cannot be used in DOM selector APIs: ${expression}`);
+          source = `if(!e.namespaceURI){${source}}`;
         } else {
           throw new Error(`Unresolvable namespace prefix "${nsPrefix}" in selector: ${expression}`);
         }
@@ -334,60 +332,41 @@ function compileSelector(
           switch (pseudo) {
             case 'scope':
               // there can only be one :root element, so exit the loop once found
-              source = `if(e===s.scopeEl){${source}}`;
+              source = `if(s.isScope(e)){${source}}`;
               break;
             case 'root':
               // there can only be one :root element, so exit the loop once found
-              source = `if(e===s.root){${source}${mode ? 'break main;' : ''}}`;
+              source = `if(s.isRoot(e)){${source}${mode ? 'break main;' : ''}}`;
               break;
             case 'empty':
               // matches elements that don't contain elements or text nodes
-              source = `n=e.firstChild;while(n&&n.nodeType!==1&&n.nodeType!==3){n=n.nextSibling}if(!n){${source}}`;
+              source = `if(s.isEmpty(e)){${source}}`;
               break;
 
             // *** child-indexed pseudo-classes
             // :first-child, :last-child, :only-child
             case 'only-child':
-              source = `if(!e.nextElementSibling&&!e.previousElementSibling){${source}}`;
+              source = `if(s.isOnlyChild(e)){${source}}`;
               break;
             case 'last-child':
-              source = `if(!e.nextElementSibling){${source}}`;
+              source = `if(s.isLastChild(e)){${source}}`;
               break;
             case 'first-child':
-              source = `if(!e.previousElementSibling){${source}}`;
+              source = `if(s.isFirstChild(e)){${source}}`;
               break;
 
             // *** typed child-indexed pseudo-classes
             // :only-of-type, :last-of-type, :first-of-type
             case 'only-of-type': {
-              source =
-                `o=e.localName;` +
-                `m=e.namespaceURI;` +
-                `n=e;` +
-                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
-                `if(!n){` +
-                  `n=e;` +
-                  `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
-                `}` +
-                `if(!n){${source}}`;
+              source = `if(s.isOnlyOfType(e)){${source}}`;
               break;
             }
             case 'last-of-type': {
-              source =
-                `n=e;` +
-                `o=e.localName;` +
-                `m=e.namespaceURI;` +
-                `while((n=n.nextElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
-                `if(!n){${source}}`;
+              source = `if(s.isLastOfType(e)){${source}}`;
               break;
             }
             case 'first-of-type': {
-              source =
-                `n=e;` +
-                `o=e.localName;` +
-                `m=e.namespaceURI;` +
-                `while((n=n.previousElementSibling)&&(n.localName!==o||n.namespaceURI!==m));` +
-                `if(!n){${source}}`;
+              source = `if(s.isFirstOfType(e)){${source}}`;
               break;
             }
             default:
@@ -416,39 +395,39 @@ function compileSelector(
           }
 
           if (nthArg === 'n') {
-            // source = `if(true){${source}}`;
             break;
           }
 
           let nthTest: string;
+          const nthIndex = isOfType
+            ? `s.nthOfType(e,${isLast},h)`
+            : `s.nthElement(e,${isLast},h)`;
+
           if (nthArg === 'even' || nthArg === '2n+0' || nthArg === '2n') {
-            nthTest = 'n%2===0';
+            nthTest = `${nthIndex}%2===0`;
           } else if (nthArg === 'odd' || nthArg === '2n+1') {
-            nthTest = 'n%2===1';
+            nthTest = `${nthIndex}%2===1`;
           } else if (!nthArg.includes('n')) {
             const index = parseInt(nthArg, 10);
             nthTest = isOfType
               ? `s.isNthOfType(e,${index},${isLast},h)`
               : `s.isNthElement(e,${index},${isLast},h)`;
-            source = `if(${nthTest}){${source}}`;
-            break;
           } else {
             const [rawStep, rawOffset = ''] = nthArg.split('n');
             const step = /\d/.test(rawStep) ? parseInt(rawStep, 10) : parseInt(`${rawStep}1`, 10);
             const absStep = Math.abs(step);
             const offset = rawOffset ? parseInt(rawOffset, 10) : 0;
-            const shifted = offset ? `(n${offset > 0 ? '-' : '+'}${Math.abs(offset)})` : 'n';
-            const periodic = absStep === 1 ? '' : `${shifted}%${absStep}===0`;
-            nthTest =
-              step > 0 ? `n>${offset - 1}${periodic ? `&&${periodic}` : ''}` :
-              step < 0 ? `n<${offset + 1}${periodic ? `&&${periodic}` : ''}` :
-              'false';
+
+            if (absStep === 1) {
+              nthTest = step > 0
+                ? `${nthIndex}>=${offset}`
+                : `${nthIndex}<=${offset}`;
+            } else {
+              nthTest = `s.matchesNthIndex(${nthIndex},${step},${absStep},${offset})`;
+            }
           }
 
-          const nthCall = isOfType
-            ? `s.nthOfType(e,${isLast},h)`
-            : `s.nthElement(e,${isLast},h)`;
-          source = `n=${nthCall};if(${nthTest}){${source}}`;
+          source = `if(${nthTest}){${source}}`;
           break;
         }
 
@@ -526,7 +505,7 @@ function compileSelector(
           switch (pseudo) {
             case 'any-link':
             case 'link':
-              source = `if(((e.localName==="a"||e.localName==="area"||((m=e.localName.toLowerCase())==="a"||m==="area"))&&e.hasAttribute("href"))){${source}}`;
+              source = `if(s.isAnyLink(e)){${source}}`;
               break;
 
             case 'visited':
@@ -535,7 +514,7 @@ function compileSelector(
               break;
 
             case 'target':
-              source = `if((m=s.doc.location.hash).length>1&&e.id===m.slice(1)&&(s.doc.compareDocumentPosition(e)&16)){${source}}`;
+              source = `if(s.isTarget(e)){${source}}`;
               break;
 
             case 'defined':
@@ -554,17 +533,11 @@ function compileSelector(
 
           switch (pseudo) {
             case 'hover':
-              source =
-                `for(n=s.hoverTarget;n;n=n.parentElement){` +
-                  `if(n===e){${source}break;}` +
-                `}`;
+              source = `if(s.isHovered(e)){${source}}`;
               break;
 
             case 'active':
-              source =
-                `for(n=s.activeTarget;n;n=n.parentElement){` +
-                  `if(n===e){${source}break;}` +
-                `}`;
+              source = `if(s.isActive(e)){${source}}`;
               break;
 
             case 'focus':
@@ -577,8 +550,7 @@ function compileSelector(
               break;
 
             case 'focus-within':
-              source =
-                `if((n=s.doc.activeElement)&&(e===n||e.contains(n))){${source}}`;
+              source = `if(s.isFocusWithin(e)){${source}}`;
               break;
 
             default:

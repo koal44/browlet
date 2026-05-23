@@ -1,8 +1,12 @@
 import { describe, expect, it, test } from 'vitest';
 import { AssertionError } from 'node:assert';
 import { buildRex, buildRexStrings } from '../../src/rex';
-import { matchLogicalSelector, normalizeSelectorInput, parse, parseRelativeSelectorList, splitSelectorGroups, trimSelectorSpaces } from '../../src/parser';
-import { asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, cssIdentUnescape, escapeRegExp, hasCssToken } from '../../src/utils/css';
+import {
+  matchLogicalSelector, normalizeSelectorInput, parse, parseRelativeSelectorList, splitSelectorGroups, trimSelectorSpaces
+} from '../../src/parser/parser';
+import {
+  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, cssIdentUnescape, escapeRegExp, hasCssToken
+} from '../../src/utils/css';
 import { DEFAULT_EXTENSIONS } from '../../src/snapshot';
 
 function testRe(re: RegExp, input: string): boolean {

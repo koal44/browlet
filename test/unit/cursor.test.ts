@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Cursor, CursorError } from '../../src/cursor';
+import { Cursor, CursorError } from '../../src/parser/cursor';
 
 describe('Cursor status and peek', () => {
   it('reports position, length, remaining length, and eof', () => {

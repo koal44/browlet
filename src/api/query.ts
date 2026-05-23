@@ -3,7 +3,7 @@ import { seedsById } from "../candidates/seedsById";
 import { seedsByTag } from "../candidates/seedsByTag";
 import { compile } from "../compile/compile";
 import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectRun } from "../debug";
-import { parse } from "../parser";
+import { parse } from "../parser/parser";
 import { sortUniqueByDocPosition } from "../utils/collections";
 import { cssIdentUnescape } from "../utils/css";
 import { assertNever } from "../utils/util";

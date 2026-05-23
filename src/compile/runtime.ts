@@ -151,6 +151,103 @@ function matchAttrValueOp(
   }
 }
 
+// :scope
+export function isScope(e: Element, snap: Snapshot): boolean {
+  return e === snap.scopeEl;
+}
+
+// :root
+export function isRoot(e: Element, snap: Snapshot): boolean {
+  return e === snap.root;
+}
+
+// :empty
+export function isEmpty(e: Element): boolean {
+  let n = e.firstChild;
+
+  while (n && n.nodeType !== 1 && n.nodeType !== 3) {
+    n = n.nextSibling;
+  }
+
+  return !n;
+}
+
+// :first-child
+export function isFirstChild(e: Element): boolean {
+  return !e.previousElementSibling;
+}
+
+// :last-child
+export function isLastChild(e: Element): boolean {
+  return !e.nextElementSibling;
+}
+
+// :only-child
+export function isOnlyChild(e: Element): boolean {
+  return !e.previousElementSibling && !e.nextElementSibling;
+}
+
+// :first-of-type
+export function isFirstOfType(e: Element): boolean {
+  const localName = e.localName;
+  const namespaceURI = e.namespaceURI;
+
+  let n: Element | null = e;
+
+  while ((n = n.previousElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+    // walk
+  }
+
+  return !n;
+}
+
+// :last-of-type
+export function isLastOfType(e: Element): boolean {
+  const localName = e.localName;
+  const namespaceURI = e.namespaceURI;
+
+  let n: Element | null = e;
+
+  while ((n = n.nextElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+    // walk
+  }
+
+  return !n;
+}
+
+// :only-of-type
+export function isOnlyOfType(e: Element): boolean {
+  const localName = e.localName;
+  const namespaceURI = e.namespaceURI;
+
+  let n: Element | null = e;
+
+  while ((n = n.nextElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+    // walk
+  }
+
+  if (n) return false;
+
+  n = e;
+
+  while ((n = n.previousElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+    // walk
+  }
+
+  return !n;
+}
+
+export function matchesNthIndex(n: number, step: number, absStep: number, offset: number): boolean {
+  if (step === 0) {
+    throw new Error(`Invalid nth-child step value: ${step}; should have been handled earlier`);
+  }
+
+  const congruent = (n - offset) % absStep === 0;
+  return step > 0
+    ? n >= offset && congruent
+    : n <= offset && congruent;
+}
+
 // fast resolver for :nth-child() and :nth-last-child()
 // use cache if available to get the 1-based index of element among its siblings
 export function nthElement(element: Element, fromLast: boolean, h: HashCache | null): number {
@@ -459,6 +556,48 @@ function autoDir(text: string): 'ltr' | 'rtl' | null {
   }
 
   return null;
+}
+
+// :any-link / :link
+export function isAnyLink(e: Element): boolean {
+  const localName = e.localName;
+
+  if (localName !== 'a' && localName !== 'area') {
+    const lower = localName.toLowerCase();
+    if (lower !== 'a' && lower !== 'area') return false;
+  }
+
+  return e.hasAttribute('href');
+}
+
+// :target
+export function isTarget(e: Element, snap: Snapshot): boolean {
+  const hash = snap.doc.location.hash;
+  return hash.length > 1 && e.id === hash.slice(1) && !!(snap.doc.compareDocumentPosition(e) & 16);
+}
+
+// :hover
+export function isHovered(e: Element, snap: Snapshot): boolean {
+  for (let n = snap.hoverTarget; n; n = n.parentElement) {
+    if (n === e) return true;
+  }
+
+  return false;
+}
+
+// :active
+export function isActive(e: Element, snap: Snapshot): boolean {
+  for (let n = snap.activeTarget; n; n = n.parentElement) {
+    if (n === e) return true;
+  }
+
+  return false;
+}
+
+// :focus-within
+export function isFocusWithin(e: Element, snap: Snapshot): boolean {
+  const active = snap.doc.activeElement;
+  return !!active && (e === active || e.contains(active));
 }
 
 const CUSTOM_ELEMENT_NAME_BLACKLIST = new Set([

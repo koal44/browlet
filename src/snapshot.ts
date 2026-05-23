@@ -4,7 +4,14 @@ import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
   isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
-  matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass
+  matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass,
+  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
+  isLastOfType, isOnlyOfType, matchesNthIndex,
+  isAnyLink,
+  isTarget,
+  isHovered,
+  isActive,
+  isFocusWithin
 } from "./compile/runtime";
 import { buildRex } from "./rex";
 import { escapeRegExp } from "./utils/css";
@@ -62,9 +69,9 @@ export function initSnapshot(doc: Document) {
       '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: true },
     } as Record<string, AttrMatcherParts>,
 
-    hoverTarget: null as EventTarget | null,
-    activeTarget: null as EventTarget | null,
-    focusTarget: null as EventTarget | null,
+    hoverTarget: null as Element | null,
+    activeTarget: null as Element | null,
+    focusTarget: null as Element | null,
 
     // cached
     matchLambdas: new Map<string, MatchLambda>(),
@@ -114,6 +121,16 @@ export function initSnapshot(doc: Document) {
     checkId: checkId,
     checkClass: (e: Element, cls: string) => checkClass(e, cls, snap),
     checkTag: checkTag,
+    isScope: (e: Element) => isScope(e, snap),
+    isRoot: (e: Element) => isRoot(e, snap),
+    isEmpty: isEmpty,
+    isFirstChild: isFirstChild,
+    isLastChild: isLastChild,
+    isOnlyChild: isOnlyChild,
+    isFirstOfType: isFirstOfType,
+    isLastOfType: isLastOfType,
+    isOnlyOfType: isOnlyOfType,
+    matchesNthIndex: matchesNthIndex,
     nthOfType: nthOfType,
     nthElement: nthElement,
     isNthElement: isNthElement,
@@ -121,7 +138,12 @@ export function initSnapshot(doc: Document) {
     matchHas: (steps: [SelectorCombinator, string][], anchor: Element, h: HashCache) => matchHasFrom(steps, 0, anchor, snap, h),
     matchDir: matchDir,
     matchLang: matchLang,
+    isAnyLink: isAnyLink,
+    isTarget: (e: Element) => isTarget(e, snap),
     defined: (element: Element) => isDefined(element, snap),
+    isHovered: (e: Element) => isHovered(e, snap),
+    isActive: (e: Element) => isActive(e, snap),
+    isFocusWithin: (e: Element) => isFocusWithin(e, snap),
     isDisabled: isDisabled,
     isEnabled: isEnabled,
     isReadWrite: isReadWrite,

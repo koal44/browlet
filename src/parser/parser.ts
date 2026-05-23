@@ -1,4 +1,4 @@
-import { cssIdentUnescape, isCssSpace } from "./utils/css";
+import { cssIdentUnescape, isCssSpace } from "../utils/css";
 
 // Parse a normal selector list. In forgiving mode, invalid selector-list arms
 // are dropped; this is intended for :is()/:where() argument parsing.
@@ -358,6 +358,7 @@ function isEscapedAt(input: string, index: number, start = 0): boolean {
 
 
 import { Cursor } from './cursor';
+import { emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest, emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest, emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest, emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest, emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest, emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest, emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest, emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest, emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPausedPseudoTest, emitPlaceholderShownPseudoTest, emitPlayingPseudoTest, emitReadOnlyPseudoTest, emitReadWritePseudoTest, emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest, emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest, emitVolumeLockedPseudoTest, emitWherePseudoTest } from "../compile/emit";
 
 export type SelectorList = {
   selectors: ComplexSelector[];
@@ -383,7 +384,12 @@ export type CompoundSelector = {
   // Generated JS source for non-planner simple-selector tests
   // such as attrs and pseudos. ID/class/tag are deferred for the planner.
   // TODO: maybe a list so that planner can reorder for perf?
-  tests: string[];
+  tests: CandidateTest[];
+};
+
+export type CandidateTest = {
+  source: string;
+  unique?: boolean;
 };
 
 export type IdSelector = {
@@ -727,7 +733,7 @@ function parseAttributeFlag(c: Cursor): 'i' | 's' {
   c.error(`Invalid attribute selector flag ${JSON.stringify(raw)}`);
 }
 
-function parsePseudoTestSource(c: Cursor): string {
+function parsePseudoTestSource(c: Cursor): CandidateTest {
   c.expect(':');
 
   const isElement = c.match(':');
@@ -1434,206 +1440,4 @@ export function consumeIdent(c: Cursor): string {
   }
 
   return c.slice(start);
-}
-
-
-
-function emitAttributeTest(attr: AttributeSelector): string {
-  return `/* attr ${attr} */`;
-}
-
-function emitScopePseudoTest(): string {
-  return '/* pseudo :scope */';
-}
-
-function emitRootPseudoTest(): string {
-  return '/* pseudo :root */';
-}
-
-function emitEmptyPseudoTest(): string {
-  return '/* pseudo :empty */';
-}
-
-function emitFirstChildPseudoTest(): string {
-  return '/* pseudo :first-child */';
-}
-
-function emitLastChildPseudoTest(): string {
-  return '/* pseudo :last-child */';
-}
-
-function emitOnlyChildPseudoTest(): string {
-  return '/* pseudo :only-child */';
-}
-
-function emitFirstOfTypePseudoTest(): string {
-  return '/* pseudo :first-of-type */';
-}
-
-function emitLastOfTypePseudoTest(): string {
-  return '/* pseudo :last-of-type */';
-}
-
-function emitOnlyOfTypePseudoTest(): string {
-  return '/* pseudo :only-of-type */';
-}
-
-function emitNthPseudoTest(nth: NthArgs, opt: { ofType: boolean; last: boolean }): string {
-  return `/* nth ${JSON.stringify({ ...nth, ...opt })} */`;
-}
-
-function emitIsPseudoTest(list: SelectorList): string {
-  return `/* :is ${list.selectors.length} */`;
-}
-
-function emitWherePseudoTest(list: SelectorList): string {
-  return `/* :where ${list.selectors.length} */`;
-}
-
-function emitNotPseudoTest(list: SelectorList): string {
-  return `/* :not ${list.selectors.length} */`;
-}
-
-function emitHasPseudoTest(list: RelativeSelectorList2): string {
-  return `/* :has ${list.selectors.length} */`;
-}
-
-function emitDirPseudoTest(arg: string): string {
-  return `/* pseudo :dir(${arg}) */`;
-}
-
-function emitLangPseudoTest(arg: string): string {
-  return `/* pseudo :lang(${arg}) */`;
-}
-
-function emitAnyLinkPseudoTest(): string {
-  return '/* pseudo :any-link */';
-}
-
-function emitLinkPseudoTest(): string {
-  return '/* pseudo :link */';
-}
-
-function emitVisitedPseudoTest(): string {
-  return '/* pseudo :visited */';
-}
-
-function emitTargetPseudoTest(): string {
-  return '/* pseudo :target */';
-}
-
-function emitDefinedPseudoTest(): string {
-  return '/* pseudo :defined */';
-}
-
-function emitHoverPseudoTest(): string {
-  return '/* pseudo :hover */';
-}
-
-function emitActivePseudoTest(): string {
-  return '/* pseudo :active */';
-}
-
-function emitFocusPseudoTest(): string {
-  return '/* pseudo :focus */';
-}
-
-function emitFocusVisiblePseudoTest(): string {
-  return '/* pseudo :focus-visible */';
-}
-
-function emitFocusWithinPseudoTest(): string {
-  return '/* pseudo :focus-within */';
-}
-
-function emitEnabledPseudoTest(): string {
-  return '/* pseudo :enabled */';
-}
-
-function emitDisabledPseudoTest(): string {
-  return '/* pseudo :disabled */';
-}
-
-function emitReadOnlyPseudoTest(): string {
-  return '/* pseudo :read-only */';
-}
-
-function emitReadWritePseudoTest(): string {
-  return '/* pseudo :read-write */';
-}
-
-function emitPlaceholderShownPseudoTest(): string {
-  return '/* pseudo :placeholder-shown */';
-}
-
-function emitDefaultPseudoTest(): string {
-  return '/* pseudo :default */';
-}
-
-function emitCheckedPseudoTest(): string {
-  return '/* pseudo :checked */';
-}
-
-function emitIndeterminatePseudoTest(): string {
-  return '/* pseudo :indeterminate */';
-}
-
-function emitRequiredPseudoTest(): string {
-  return '/* pseudo :required */';
-}
-
-function emitOptionalPseudoTest(): string {
-  return '/* pseudo :optional */';
-}
-
-function emitInvalidPseudoTest(): string {
-  return '/* pseudo :invalid */';
-}
-
-function emitValidPseudoTest(): string {
-  return '/* pseudo :valid */';
-}
-
-function emitInRangePseudoTest(): string {
-  return '/* pseudo :in-range */';
-}
-
-function emitOutOfRangePseudoTest(): string {
-  return '/* pseudo :out-of-range */';
-}
-
-function emitPlayingPseudoTest(): string {
-  return '/* pseudo :playing */';
-}
-
-function emitPausedPseudoTest(): string {
-  return '/* pseudo :paused */';
-}
-
-function emitSeekingPseudoTest(): string {
-  return '/* pseudo :seeking */';
-}
-
-function emitBufferingPseudoTest(): string {
-  return '/* pseudo :buffering */';
-}
-
-function emitStalledPseudoTest(): string {
-  return '/* pseudo :stalled */';
-}
-
-function emitMutedPseudoTest(): string {
-  return '/* pseudo :muted */';
-}
-
-function emitVolumeLockedPseudoTest(): string {
-  return '/* pseudo :volume-locked */';
-}
-
-function emitNoMatchPseudoTest(name: string): string {
-  return `/* pseudo :${name} no-match */`;
-}
-
-function emitNoMatchPseudoElementTest(name: string): string {
-  return `/* pseudo ::${name} no-match */`;
 }
