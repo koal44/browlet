@@ -460,6 +460,7 @@ function runEngineChecks(
           case 'ids':     return sameIds(r.ids, other.ids);
           case 'classes': return sameIds(r.classes, other.classes);
           case 'threw':   return r.threw === other.threw;
+          case 'error':   return true; // errors can differ even if threw is the same, so ignore them for grouping purposes
           default:        return assertNever(key);
         }
       })
@@ -479,7 +480,8 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
     `${result.mismatchMsg ? `\n\n${result.mismatchMsg}` : ''}`;
 
   runEngineChecks(result, msg, 'threw', (r, nglabel) => {
-    const errLabel = `Expected ${expectation.throws ? 'a throw' : 'no throw'}, got ${r.threw ? 'a throw' : 'no throw'}.`;
+    const errLabel = `Expected ${expectation.throws ? 'a throw' : 'no throw'}, got ${r.threw ? 'a throw' : 'no throw'}.` +
+      (r.error ? `\nThrown error: ${r.error}` : '');
     expect(r.threw, `${errLabel}\n\n${header}${nglabel}`).toBe(expectation.throws ?? false);
   });
   if (expectation.throws) return;

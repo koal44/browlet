@@ -27,6 +27,8 @@ type NwsExtensions = {
   operators: string[];
 }
 
+type CustomPseudoPredicate = (element: Element) => boolean;
+
 type Rex = RexType;
 type Snapshot = SnapshotType;
 
@@ -106,9 +108,6 @@ type AncestorFn = (selectors: string, element: Element) => Element | null;
 type ClosestFn = AncestorFn;
 
 type CombinatorCompiler = (source: string) => string;
-type RegisterCombinatorFn = (combinator: string, compiler: CombinatorCompiler) => void;
-type RegisterOperatorFn = (operator: string, resolver: AttrMatcherParts) => void;
-type RegisterSelectorFn = (name: string, rexp: RegExp, func: SelectorExtFn) => void;
 
 type DomApi = {
   version: string;
@@ -127,14 +126,11 @@ type DomApi = {
   closest: ClosestFn;
 
   configure: (option: Partial<Record<ConfigKey, boolean>>) => void;
+  registerPseudo(name: string, predicate: CustomPseudoPredicate): void;
   clearCache: () => void;
 
   install: (all?: boolean) => void;
   uninstall: () => void;
-
-  registerCombinator: RegisterCombinatorFn;
-  registerOperator: RegisterOperatorFn;
-  registerSelector: RegisterSelectorFn;
 
   setDebug: (enabled: boolean) => void;
   clearDebug: () => void;

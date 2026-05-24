@@ -1,6 +1,5 @@
 import { describeContext, describeElement } from "./debug";
-import { buildRex } from "./rex";
-import { DEFAULT_EXTENSIONS, initSnapshot } from "./snapshot";
+import { initSnapshot } from "./snapshot";
 import { toNodeList } from "./utils/collections";
 import { isElement, isIFrame, isNode, isText } from "./utils/dom";
 
@@ -217,43 +216,30 @@ export function Factory(fGlobal: Glob, fExport: Function): DomApi {
       _qsaHooks.length = 0;
     },
 
-    // register a new selector combinator symbol and its related function resolver
-    registerCombinator(combinator: string, compiler: CombinatorCompiler) {
-      if ([...combinator].length !== 1) throw new Error('Invalid combinator: ' + combinator);
-      if (typeof compiler !== 'function') throw new Error('Invalid combinator resolver for: ' + combinator);
-      if (DEFAULT_EXTENSIONS.combinators.includes(combinator)) {
-        throw new Error(`Cannot override default combinator: '${combinator}'`);
+    registerPseudo(name: string, predicate: CustomPseudoPredicate): void {
+      if (typeof predicate !== 'function') {
+        throw new TypeError('registerPseudo() requires a predicate function');
       }
 
-      if (!_snap.ext.combinators.includes(combinator)) {
-        _snap.ext.combinators.push(combinator);
-        _snap.combinators[combinator] = compiler;
-        _snap.re = buildRex(_snap.ext);
-      } else {
-        console.warn(`Warning: the '${combinator}' combinator is already registered.`);
+      if (name.startsWith(':')) {
+        throw new SyntaxError(`registerPseudo() expects a pseudo-class name without ":", got ${JSON.stringify(name)}`);
       }
-    },
 
-    // register a new attribute operator symbol and its related function resolver
-    // NW.Dom.registerOperator( '!=', { p1: '^', p2: '$', p3: 'false' } );
-    registerOperator(operator: string, resolver: AttrMatcherParts) {
-      if (!operator || !operator.includes('=')) throw new Error('Invalid operator: ' + operator);
+      const key = name.toLowerCase();
 
-      if (!_snap.ext.operators.includes(operator) && !_snap.operators[operator]) {
-        _snap.ext.operators.push(operator);
-        _snap.operators[operator] = resolver;
-        _snap.re = buildRex(_snap.ext);
-      } else {
-        console.warn(`Warning: the '${operator}' operator is already registered.`);
+      if (!/^-[\w-]+$|^[a-zA-Z_][\w-]*$/.test(name)) {
+        throw new SyntaxError(`Invalid pseudo-class name ${JSON.stringify(name)}`);
       }
-    },
 
-    // register a new selector symbol and its related function resolver
-    registerSelector(name: string, rexp: RegExp, func: SelectorExtFn) {
-      _snap.selectors[name] = {
-        Expression: rexp,
-        Callback: func,
-      };
+      if (typeof (_snap as any)[key] === 'function') {
+        throw new Error(`Cannot register built-in pseudo-class :${key}`);
+      }
+
+      _snap.pseudos[key] = predicate;
+      _snap.strictMatchResolvers.clear();
+      _snap.selectResolvers.clear();
+      _snap.matchLambdas.clear();
+      _snap.selectLambdas.clear();
     },
 
     // debugging utilities used in testing and development

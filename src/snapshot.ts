@@ -65,6 +65,7 @@ export function initSnapshot(doc: Document) {
       '|=': { p1: '^',       p2: '(-|$)',   p3: true },
       '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: true },
     } as Record<string, AttrMatcherParts>,
+    pseudos: {} as Record<string, CustomPseudoPredicate>,
 
     hoverTarget: null as Element | null,
     activeTarget: null as Element | null,

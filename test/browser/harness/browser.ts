@@ -25,6 +25,7 @@ export type EngineResult = {
   ids: string[];
   classes: string[];
   threw: boolean;
+  error: string;
 };
 
 export type EngineQuery = (query: string, ctx: QueryContext) => () => Element[];
@@ -186,6 +187,7 @@ export function installBrowserHelpers(): void {
       ids: res.elements.map((el) => el.getAttribute('id') ?? ''),
       classes: res.elements.map((el) => el.getAttribute('class') ?? ''),
       threw: !!res.error,
+      error: res.error,
     };
   }
 

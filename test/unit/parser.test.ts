@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
   consumeIdent, parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseNthArgs,
-  parseRelativeSelectorList, parseStrictPseudoBodySelectorList, parseSelectorList,
-  parseForgivingPseudoBodySelectorList,
+  parseRelativeSelectorList, parseStrictSelectorList, parseSelectorList,
+  parseForgivingSelectorList,
   type CompoundSelector,
+  ParseContext,
 } from '../../src/parser/parser';
 import { Cursor } from '../../src/parser/cursor';
 
 describe('parseSelectorList', () => {
   it('parses a single selector', () => {
-    const parsed = parseSelectorList('  #root p  ');
+    const parsed = parseSelectorList('  #root p  ', {});
 
     expect(parsed.selectors).toHaveLength(1);
 
@@ -21,7 +22,7 @@ describe('parseSelectorList', () => {
   });
 
   it('parses comma-separated selectors', () => {
-    const parsed = parseSelectorList(' #a, .b, div ');
+    const parsed = parseSelectorList(' #a, .b, div ', {});
 
     expect(parsed.selectors).toHaveLength(3);
 
@@ -36,18 +37,18 @@ describe('parseSelectorList', () => {
   });
 
   it('throws on empty input', () => {
-    expect(() => parseSelectorList('   ')).toThrow('Expected selector');
+    expect(() => parseSelectorList('   ', {})).toThrow('Expected selector');
   });
 
   it('throws on trailing comma', () => {
-    expect(() => parseSelectorList('#a,   ')).toThrow('Expected selector after comma');
+    expect(() => parseSelectorList('#a,   ', {})).toThrow('Expected selector after comma');
   });
 });
 
 describe('parseComplexSelector', () => {
   it('parses a single compound', () => {
     const c = new Cursor('#root');
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(1);
     expect(complex.parts[0].combinator).toBeNull();
@@ -57,7 +58,7 @@ describe('parseComplexSelector', () => {
 
   it('parses descendant combinators from whitespace', () => {
     const c = new Cursor('#root p');
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
     expect(complex.parts.map(p => p.combinator)).toEqual([null, ' ']);
@@ -67,7 +68,7 @@ describe('parseComplexSelector', () => {
 
   it('parses explicit combinators with surrounding whitespace', () => {
     const c = new Cursor('#root   >   p + a ~ span');
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(4);
     expect(complex.parts.map(p => p.combinator)).toEqual([null, '>', '+', '~']);
@@ -79,7 +80,7 @@ describe('parseComplexSelector', () => {
 
   it('stops before a comma without consuming it', () => {
     const c = new Cursor('#a > p, .b');
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
     expect(complex.parts.map(p => p.combinator)).toEqual([null, '>']);
@@ -90,7 +91,7 @@ describe('parseComplexSelector', () => {
 
   it('stops before a closing paren without consuming it', () => {
     const c = new Cursor('#a > p)');
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
     expect(complex.parts.map(p => p.combinator)).toEqual([null, '>']);
@@ -100,28 +101,28 @@ describe('parseComplexSelector', () => {
   });
 
   it('throws when an explicit combinator has no right compound', () => {
-    expect(() => parseComplexSelector(new Cursor('#a >'))).toThrow(
+    expect(() => parseComplexSelector(new Cursor('#a >'), {})).toThrow(
       'Expected compound selector after combinator'
     );
 
-    expect(() => parseComplexSelector(new Cursor('#a > , .b'))).toThrow(
+    expect(() => parseComplexSelector(new Cursor('#a > , .b'), {})).toThrow(
       'Expected compound selector after combinator'
     );
   });
 
   it('throws on empty input', () => {
-    expect(() => parseComplexSelector(new Cursor(''))).toThrow('Expected compound selector');
+    expect(() => parseComplexSelector(new Cursor(''), {})).toThrow('Expected compound selector');
   });
 
   it('throws when input starts with a combinator for now', () => {
-    expect(() => parseComplexSelector(new Cursor('> p'))).toThrow('Expected compound selector');
+    expect(() => parseComplexSelector(new Cursor('> p'), {})).toThrow('Expected compound selector');
   });
 });
 
 describe('parseCompoundSelector', () => {
   it('parses tag, id, and class pieces', () => {
     const c = new Cursor('div#root.foo.bar');
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('div');
     expect(compound.id?.raw).toBe('root');
@@ -132,7 +133,7 @@ describe('parseCompoundSelector', () => {
 
   it('parses class-only compounds', () => {
     const c = new Cursor('.foo.bar');
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag).toBeUndefined();
     expect(compound.id).toBeUndefined();
@@ -142,7 +143,7 @@ describe('parseCompoundSelector', () => {
 
   it('parses universal tag selector', () => {
     const c = new Cursor('*.foo');
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('*');
     expect(compound.classes?.map(x => x.raw)).toEqual(['foo']);
@@ -151,7 +152,7 @@ describe('parseCompoundSelector', () => {
 
   it('attaches attribute and pseudo selectors to test source', () => {
     const c = new Cursor('p[data-x="a b"]:not(.hidden)');
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('p');
     expect(compound.tests?.length).toBeGreaterThan(0);
@@ -160,7 +161,7 @@ describe('parseCompoundSelector', () => {
 
   it('does not stop on spaces or combinators inside attribute strings and pseudo args', () => {
     const c = new Cursor(`p[data-x="a > b"]:not(.a > .b) + span`);
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('p');
     expect(compound.tests?.length).toBeGreaterThan(0);
@@ -170,7 +171,7 @@ describe('parseCompoundSelector', () => {
 
   it('stops before whitespace or combinator', () => {
     const c = new Cursor('div.foo > p');
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('div');
     expect(compound.classes?.map(x => x.raw)).toEqual(['foo']);
@@ -179,16 +180,16 @@ describe('parseCompoundSelector', () => {
   });
 
   it('throws on missing selector after class/id prefix', () => {
-    expect(() => parseCompoundSelector(new Cursor('.'))).toThrow('Expected identifier');
-    expect(() => parseCompoundSelector(new Cursor('#'))).toThrow('Expected identifier');
+    expect(() => parseCompoundSelector(new Cursor('.'), {})).toThrow('Expected identifier');
+    expect(() => parseCompoundSelector(new Cursor('#'), {})).toThrow('Expected identifier');
   });
 
   it('throws on empty input', () => {
-    expect(() => parseCompoundSelector(new Cursor(''))).toThrow('Expected compound selector');
+    expect(() => parseCompoundSelector(new Cursor(''), {})).toThrow('Expected compound selector');
   });
 
   it('parses escaped characters in identifiers', () => {
-    const compound = parseCompoundSelector(new Cursor(String.raw`div.foo\+bar#id\31 a`));
+    const compound = parseCompoundSelector(new Cursor(String.raw`div.foo\+bar#id\31 a`), {});
 
     expect(compound.tag?.localRaw).toBe('div');
     expect(compound.classes?.[0].raw).toBe(String.raw`foo\+bar`);
@@ -197,7 +198,7 @@ describe('parseCompoundSelector', () => {
 
   it('accepts nth structural pseudo-classes', () => {
     for (const pseudo of ['nth-child', 'nth-last-child', 'nth-of-type', 'nth-last-of-type']) {
-      const compound = parseCompoundSelector(new Cursor(`div:${pseudo}(2n+1)`));
+      const compound = parseCompoundSelector(new Cursor(`div:${pseudo}(2n+1)`), {});
 
       expect(compound.tag?.localRaw).toBe('div');
       expect(compound.tests.length).toBeGreaterThan(0);
@@ -264,36 +265,36 @@ describe('consumeIdent', () => {
 
 describe('parseTagSelector namespace forms', () => {
   it('parses plain tag and universal tag selectors', () => {
-    expect(parseCompoundSelector(new Cursor('div')).tag).toEqual({ localRaw: 'div' });
-    expect(parseCompoundSelector(new Cursor('*')).tag).toEqual({ localRaw: '*' });
+    expect(parseCompoundSelector(new Cursor('div'), {}).tag).toEqual({ localRaw: 'div' });
+    expect(parseCompoundSelector(new Cursor('*'), {}).tag).toEqual({ localRaw: '*' });
   });
 
   it('parses supported namespace tag selectors', () => {
-    expect(parseCompoundSelector(new Cursor('*|circle')).tag).toEqual({
+    expect(parseCompoundSelector(new Cursor('*|circle'), {}).tag).toEqual({
       prefixRaw: '*',
       localRaw: 'circle',
     });
 
-    expect(parseCompoundSelector(new Cursor('|circle')).tag).toEqual({
+    expect(parseCompoundSelector(new Cursor('|circle'), {}).tag).toEqual({
       prefixRaw: '',
       localRaw: 'circle',
     });
   });
 
   it('parses supported namespaced universal local selectors', () => {
-    expect(parseCompoundSelector(new Cursor('*|*')).tag).toEqual({
+    expect(parseCompoundSelector(new Cursor('*|*'), {}).tag).toEqual({
       prefixRaw: '*',
       localRaw: '*',
     });
 
-    expect(parseCompoundSelector(new Cursor('|*')).tag).toEqual({
+    expect(parseCompoundSelector(new Cursor('|*'), {}).tag).toEqual({
       prefixRaw: '',
       localRaw: '*',
     });
   });
 
   it('parses classes after supported namespace tag selectors', () => {
-    const compound = parseCompoundSelector(new Cursor('*|circle.icon'));
+    const compound = parseCompoundSelector(new Cursor('*|circle.icon'), {});
 
     expect(compound.tag).toEqual({
       prefixRaw: '*',
@@ -303,22 +304,22 @@ describe('parseTagSelector namespace forms', () => {
   });
 
   it('rejects named namespace prefixes', () => {
-    expect(() => parseCompoundSelector(new Cursor('svg|circle'))).toThrow(
+    expect(() => parseCompoundSelector(new Cursor('svg|circle'), {})).toThrow(
       'Unsupported namespace prefix'
     );
 
-    expect(() => parseCompoundSelector(new Cursor('svg|*'))).toThrow(
+    expect(() => parseCompoundSelector(new Cursor('svg|*'), {})).toThrow(
       'Unsupported namespace prefix'
     );
   });
 
   it('throws when namespace tag selector has no local part', () => {
-    expect(() => parseCompoundSelector(new Cursor('*|'))).toThrow('Expected identifier');
-    expect(() => parseCompoundSelector(new Cursor('|'))).toThrow('Expected identifier');
+    expect(() => parseCompoundSelector(new Cursor('*|'), {})).toThrow('Expected identifier');
+    expect(() => parseCompoundSelector(new Cursor('|'), {})).toThrow('Expected identifier');
   });
 
   it('does not treat escaped pipe as a namespace separator', () => {
-    const compound = parseCompoundSelector(new Cursor(String.raw`svg\|circle.foo`));
+    const compound = parseCompoundSelector(new Cursor(String.raw`svg\|circle.foo`), {});
 
     expect(compound.tag).toEqual({
       localRaw: String.raw`svg\|circle`,
@@ -546,7 +547,7 @@ describe('parseNthArgs', () => {
 
 describe('parsePseudoBodySelectorList', () => {
   it('parses a single selector arm', () => {
-    const parsed = parseStrictPseudoBodySelectorList(new Cursor('(div.foo)'));
+    const parsed = parseStrictSelectorList(new Cursor('(div.foo)'), {});
 
     expect(parsed.selectors).toHaveLength(1);
 
@@ -558,7 +559,7 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('parses comma-separated selector arms', () => {
-    const parsed = parseStrictPseudoBodySelectorList(new Cursor('(#a, .b, div)'));
+    const parsed = parseStrictSelectorList(new Cursor('(#a, .b, div)'), {});
 
     expect(parsed.selectors).toHaveLength(3);
 
@@ -568,7 +569,7 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('parses complex selector arms', () => {
-    const parsed = parseStrictPseudoBodySelectorList(new Cursor('(#root > p + a ~ span)'));
+    const parsed = parseStrictSelectorList(new Cursor('(#root > p + a ~ span)'), {});
 
     expect(parsed.selectors).toHaveLength(1);
 
@@ -581,7 +582,7 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('ignores padding whitespace around arms and before closing paren', () => {
-    const parsed = parseStrictPseudoBodySelectorList(new Cursor('(  #a  ,   .b   )'));
+    const parsed = parseStrictSelectorList(new Cursor('(  #a  ,   .b   )'), {});
 
     expect(parsed.selectors).toHaveLength(2);
     expect(parsed.selectors[0].parts[0].compound.id?.raw).toBe('a');
@@ -590,7 +591,7 @@ describe('parsePseudoBodySelectorList', () => {
 
   it('stops at the closing paren without consuming following text', () => {
     const c = new Cursor('(div.foo) + span');
-    const parsed = parseStrictPseudoBodySelectorList(c);
+    const parsed = parseStrictSelectorList(c, {});
 
     expect(parsed.selectors).toHaveLength(1);
     expect(parsed.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
@@ -599,7 +600,7 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('allows EOF in place of the closing paren for now', () => {
-    const parsed = parseStrictPseudoBodySelectorList(new Cursor('(div.foo'));
+    const parsed = parseStrictSelectorList(new Cursor('(div.foo'), {});
 
     expect(parsed.selectors).toHaveLength(1);
     expect(parsed.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
@@ -607,9 +608,7 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('does not split on commas inside attribute strings or nested pseudo bodies', () => {
-    const parsed = parseStrictPseudoBodySelectorList(
-      new Cursor(`([data-x="a,b"]:not(.hidden), div)`)
-    );
+    const parsed = parseStrictSelectorList(new Cursor(`([data-x="a,b"]:not(.hidden), div)`), {});
 
     expect(parsed.selectors).toHaveLength(2);
     expect(parsed.selectors[0].parts).toHaveLength(1);
@@ -618,41 +617,41 @@ describe('parsePseudoBodySelectorList', () => {
   });
 
   it('throws on empty body', () => {
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('()'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('()'), {})).toThrow(
       'Expected selector in pseudo-class body'
     );
 
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(   )'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(   )'), {})).toThrow(
       'Expected selector in pseudo-class body'
     );
   });
 
   it('throws on trailing comma', () => {
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(div,)'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(div,)'), {})).toThrow(
       'Expected selector after comma in pseudo-class body'
     );
 
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(div,   )'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(div,   )'), {})).toThrow(
       'Expected selector after comma in pseudo-class body'
     );
   });
 
   it('rejects leading combinators because this is not a relative selector list', () => {
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(> img)'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(> img)'), {})).toThrow(
       'Expected compound selector'
     );
 
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(+ dt)'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(+ dt)'), {})).toThrow(
       'Expected compound selector'
     );
   });
 
   it('throws when a combinator has no right compound', () => {
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(div >)'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(div >)'), {})).toThrow(
       'Expected compound selector after combinator'
     );
 
-    expect(() => parseStrictPseudoBodySelectorList(new Cursor('(div > , .b)'))).toThrow(
+    expect(() => parseStrictSelectorList(new Cursor('(div > , .b)'), {})).toThrow(
       'Expected compound selector after combinator'
     );
   });
@@ -660,7 +659,7 @@ describe('parsePseudoBodySelectorList', () => {
 
 describe('parsePseudoBodyRelativeSelectorList', () => {
   it('parses a descendant relative selector by default', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(img)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(img)'), {});
 
     expect(parsed.arms).toHaveLength(1);
     expect(parsed.arms[0].steps).toHaveLength(1);
@@ -670,7 +669,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
   });
 
   it('parses an explicit leading child combinator', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(> img)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(> img)'), {});
 
     expect(parsed.arms).toHaveLength(1);
     expect(parsed.arms[0].steps).toHaveLength(1);
@@ -680,23 +679,21 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
   });
 
   it('parses explicit leading sibling combinators', () => {
-    expect(parseRelativeSelectorList(new Cursor('(+ dt)'))
+    expect(parseRelativeSelectorList(new Cursor('(+ dt)'), {})
       .arms[0].steps[0]).toMatchObject({
         combinator: '+',
         compound: { source: 'dt' },
       });
 
-    expect(parseRelativeSelectorList(new Cursor('(~ .item)'))
+    expect(parseRelativeSelectorList(new Cursor('(~ .item)'), {})
       .arms[0].steps[0].combinator).toBe('~');
 
-    expect(parseRelativeSelectorList(new Cursor('(~ .item)'))
+    expect(parseRelativeSelectorList(new Cursor('(~ .item)'), {})
       .arms[0].steps[0].compound.source).toBe('.item');
   });
 
 it('parses multiple steps with mixed combinators', () => {
-    const parsed = parseRelativeSelectorList(
-      new Cursor('(> .item + dt ~ dd span)')
-    );
+    const parsed = parseRelativeSelectorList(new Cursor('(> .item + dt ~ dd span)'), {});
 
     const steps = parsed.arms[0].steps;
 
@@ -705,9 +702,7 @@ it('parses multiple steps with mixed combinators', () => {
   });
 
   it('parses comma-separated relative selector arms', () => {
-    const parsed = parseRelativeSelectorList(
-      new Cursor('(> img, + dt, .item .child)')
-    );
+    const parsed = parseRelativeSelectorList(new Cursor('(> img, + dt, .item .child)'), {});
 
     expect(parsed.arms).toHaveLength(3);
 
@@ -722,9 +717,7 @@ it('parses multiple steps with mixed combinators', () => {
   });
 
   it('ignores padding whitespace around arms and before closing paren', () => {
-    const parsed = parseRelativeSelectorList(
-      new Cursor('(  > img  ,   .item   )')
-    );
+    const parsed = parseRelativeSelectorList(new Cursor('(  > img  ,   .item   )'), {});
 
     expect(parsed.arms).toHaveLength(2);
 
@@ -736,7 +729,7 @@ it('parses multiple steps with mixed combinators', () => {
   });
 
   it('allows EOF in place of the closing paren for now', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(> img'));
+    const parsed = parseRelativeSelectorList(new Cursor('(> img'), {});
 
     expect(parsed.arms).toHaveLength(1);
     expect(parsed.arms[0].steps[0].combinator).toBe('>');
@@ -744,39 +737,37 @@ it('parses multiple steps with mixed combinators', () => {
   });
 
   it('throws on empty body', () => {
-    expect(() => parseRelativeSelectorList(new Cursor('()'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('()'), {})).toThrow(
       'Expected relative selector in pseudo-class body'
     );
 
-    expect(() => parseRelativeSelectorList(new Cursor('(   )'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(   )'), {})).toThrow(
       'Expected relative selector in pseudo-class body'
     );
   });
 
   it('throws on trailing comma', () => {
-    expect(() => parseRelativeSelectorList(new Cursor('(> img,)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img,)'), {})).toThrow(
       'Expected relative selector after comma in pseudo-class body'
     );
 
-    expect(() => parseRelativeSelectorList(new Cursor('(> img,   )'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img,   )'), {})).toThrow(
       'Expected relative selector after comma in pseudo-class body'
     );
   });
 
   it('throws when a combinator has no right compound', () => {
-    expect(() => parseRelativeSelectorList(new Cursor('(>)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(>)'), {})).toThrow(
       'Expected compound selector after combinator'
     );
 
-    expect(() => parseRelativeSelectorList(new Cursor('(> img +)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img +)'), {})).toThrow(
       'Expected compound selector after combinator in relative selector'
     );
   });
 
   it('does not split on commas inside attribute strings or pseudo bodies', () => {
-    const parsed = parseRelativeSelectorList(
-      new Cursor(`([data-x="a,b"]:not(.hidden), > img)`)
-    );
+    const parsed = parseRelativeSelectorList(new Cursor(`([data-x="a,b"]:not(.hidden), > img)`), {});
 
     expect(parsed.arms).toHaveLength(2);
 
@@ -788,14 +779,14 @@ it('parses multiple steps with mixed combinators', () => {
 
 describe('parsePseudoTestSource linguistic and location pseudos', () => {
   it('accepts linguistic pseudo-classes', () => {
-    expect(parseCompoundSelector(new Cursor('div:dir(ltr)')).tests.length).toBeGreaterThan(0);
-    expect(parseCompoundSelector(new Cursor('div:dir(rtl)')).tests.length).toBeGreaterThan(0);
-    expect(parseCompoundSelector(new Cursor('div:lang(en)')).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new Cursor('div:dir(ltr)'), {}).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new Cursor('div:dir(rtl)'), {}).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new Cursor('div:lang(en)'), {}).tests.length).toBeGreaterThan(0);
   });
 
   it('accepts location pseudo-classes', () => {
     for (const pseudo of ['any-link', 'link', 'visited', 'target', 'defined']) {
-      const compound = parseCompoundSelector(new Cursor(`a:${pseudo}`));
+      const compound = parseCompoundSelector(new Cursor(`a:${pseudo}`), {});
 
       expect(compound.tag).toEqual({ localRaw: 'a' });
       expect(compound.tests.length).toBeGreaterThan(0);
@@ -803,20 +794,20 @@ describe('parsePseudoTestSource linguistic and location pseudos', () => {
   });
 
   it('rejects empty linguistic pseudo-class arguments', () => {
-    expect(() => parseCompoundSelector(new Cursor('div:dir()'))).toThrow('Expected argument in pseudo-class');
-    expect(() => parseCompoundSelector(new Cursor('div:lang()'))).toThrow('Expected argument in pseudo-class');
+    expect(() => parseCompoundSelector(new Cursor('div:dir()'), {})).toThrow('Expected argument in pseudo-class');
+    expect(() => parseCompoundSelector(new Cursor('div:lang()'), {})).toThrow('Expected argument in pseudo-class');
   });
 });
 
 describe('parsePseudoTestSource oddball pseudo parsing', () => {
   it('accepts no-op autofill pseudo-classes', () => {
-    expect(parseCompoundSelector(new Cursor('input:autofill')).tests.length).toBeGreaterThan(0);
-    expect(parseCompoundSelector(new Cursor('input:-webkit-autofill')).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new Cursor('input:autofill'), {}).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new Cursor('input:-webkit-autofill'), {}).tests.length).toBeGreaterThan(0);
   });
 
   it('accepts legacy single-colon pseudo-elements as no-match pseudos', () => {
     for (const pseudo of ['after', 'before', 'first-letter', 'first-line']) {
-      const compound = parseCompoundSelector(new Cursor(`div:${pseudo}`));
+      const compound = parseCompoundSelector(new Cursor(`div:${pseudo}`), {});
 
       expect(compound.tag).toEqual({ localRaw: 'div' });
       expect(compound.tests.length).toBeGreaterThan(0);
@@ -825,7 +816,7 @@ describe('parsePseudoTestSource oddball pseudo parsing', () => {
 
   it('accepts supported double-colon pseudo-elements as no-match pseudos', () => {
     for (const pseudo of ['after', 'before', 'first-letter', 'first-line', 'selection', 'placeholder']) {
-      const compound = parseCompoundSelector(new Cursor(`div::${pseudo}`));
+      const compound = parseCompoundSelector(new Cursor(`div::${pseudo}`), {});
 
       expect(compound.tag).toEqual({ localRaw: 'div' });
       expect(compound.tests.length).toBeGreaterThan(0);
@@ -833,20 +824,20 @@ describe('parsePseudoTestSource oddball pseudo parsing', () => {
   });
 
   it('accepts arbitrary double-colon -webkit pseudo-elements', () => {
-    const compound = parseCompoundSelector(new Cursor('input::-webkit-search-cancel-button'));
+    const compound = parseCompoundSelector(new Cursor('input::-webkit-search-cancel-button'), {});
 
     expect(compound.tag).toEqual({ localRaw: 'input' });
     expect(compound.tests.length).toBeGreaterThan(0);
   });
 
   it('rejects arbitrary single-colon -webkit pseudos except -webkit-autofill', () => {
-    expect(() => parseCompoundSelector(new Cursor('input:-webkit-search-cancel-button'))).toThrow(
+    expect(() => parseCompoundSelector(new Cursor('input:-webkit-search-cancel-button'), {})).toThrow(
       'Unsupported pseudo-class'
     );
   });
 
   it('rejects unsupported double-colon pseudo-elements', () => {
-    expect(() => parseCompoundSelector(new Cursor('div::marker'))).toThrow(
+    expect(() => parseCompoundSelector(new Cursor('div::marker'), {})).toThrow(
       'Unsupported pseudo-element'
     );
   });
@@ -862,11 +853,11 @@ describe('parseAttributeSelector escaped values', () => {
 
 describe('parse namespace edge cases', () => {
   it('rejects named namespace tag prefixes even when escaped or non-ASCII', () => {
-    expect(() => parseCompoundSelector(new Cursor('föo|item'))).toThrow('Unsupported namespace prefix');
-    expect(() => parseCompoundSelector(new Cursor('名前|item'))).toThrow('Unsupported namespace prefix');
-    expect(() => parseCompoundSelector(new Cursor(String.raw`foo\+bar|item`))).toThrow('Unsupported namespace prefix');
-    expect(() => parseCompoundSelector(new Cursor(String.raw`foo\:bar|item`))).toThrow('Unsupported namespace prefix');
-    expect(() => parseCompoundSelector(new Cursor(String.raw`\31 23|item`))).toThrow('Unsupported namespace prefix');
+    expect(() => parseCompoundSelector(new Cursor('föo|item'), {})).toThrow('Unsupported namespace prefix');
+    expect(() => parseCompoundSelector(new Cursor('名前|item'), {})).toThrow('Unsupported namespace prefix');
+    expect(() => parseCompoundSelector(new Cursor(String.raw`foo\+bar|item`), {})).toThrow('Unsupported namespace prefix');
+    expect(() => parseCompoundSelector(new Cursor(String.raw`foo\:bar|item`), {})).toThrow('Unsupported namespace prefix');
+    expect(() => parseCompoundSelector(new Cursor(String.raw`\31 23|item`), {})).toThrow('Unsupported namespace prefix');
   });
 
   it('rejects named namespace attribute prefixes even when escaped or non-ASCII', () => {
@@ -881,21 +872,21 @@ describe('parse namespace edge cases', () => {
 describe('parsePseudoTestSource continuation boundaries', () => {
   it('continues after no-arg pseudo-classes', () => {
     for (const input of ['div:scope.item', 'div:first-child.foo', 'div:only-of-type + span', 'a:any-link.foo', 'input:enabled.foo', 'input:read-only + input', 'input:checked.foo', 'input:out-of-range + label', 'video:playing.foo', 'video:volume-locked + video']) {
-      const complex = parseComplexSelector(new Cursor(input));
+      const complex = parseComplexSelector(new Cursor(input), {});
       expect(complex.parts[0].compound.tests.length).toBeGreaterThan(0);
     }
   });
 
   it('continues after functional pseudo-classes', () => {
     for (const input of ['div:nth-child(2n+1).item', 'div:nth-last-of-type(odd) > span', 'div:lang(en).item', 'div:dir(rtl) > span']) {
-      const complex = parseComplexSelector(new Cursor(input));
+      const complex = parseComplexSelector(new Cursor(input), {});
       expect(complex.parts[0].compound.tests.length).toBeGreaterThan(0);
     }
   });
 
   it('continues after logical pseudo-classes followed by functional pseudos', () => {
     for (const input of ['div:is(.a):nth-child(2n+1)', 'div:not(.a):nth-of-type(2)', 'div:has(> .a):not(.disabled)', 'div:where(.a):lang(en)', 'div:is(.a):has(+ .b)']) {
-      const compound = parseCompoundSelector(new Cursor(input));
+      const compound = parseCompoundSelector(new Cursor(input), {});
       expect(compound.tag).toEqual({ localRaw: 'div' });
       expect(compound.tests.length).toBe(2);
     }
@@ -903,7 +894,7 @@ describe('parsePseudoTestSource continuation boundaries', () => {
 
   it('handles nested logical pseudo-classes before following functional pseudos', () => {
     for (const input of ['div:is(:not(.a), .b):nth-child(2n+1)', 'div:where(:has(> .a)):lang(en)', 'div:not(:is(.a, .b)):nth-of-type(2)', 'div:has(:not(.disabled)):has(+ .item)']) {
-      const compound = parseCompoundSelector(new Cursor(input));
+      const compound = parseCompoundSelector(new Cursor(input), {});
       expect(compound.tag).toEqual({ localRaw: 'div' });
       expect(compound.tests.length).toBe(2);
     }
@@ -912,22 +903,22 @@ describe('parsePseudoTestSource continuation boundaries', () => {
 
 describe('parseCompoundSelector continuation edge cases', () => {
   it('continues after id, class, tag, attrs, and no-match pseudos', () => {
-    let c = parseCompoundSelector(new Cursor(String.raw`#foo\:bar.item`));
+    let c = parseCompoundSelector(new Cursor(String.raw`#foo\:bar.item`), {});
     expect(c.id?.raw).toBe(String.raw`foo\:bar`); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
 
-    c = parseCompoundSelector(new Cursor(String.raw`.foo\+bar`));
+    c = parseCompoundSelector(new Cursor(String.raw`.foo\+bar`), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\+bar`]);
 
-    c = parseCompoundSelector(new Cursor('foo-bar[attr]'));
+    c = parseCompoundSelector(new Cursor('foo-bar[attr]'), {});
     expect(c.tag).toEqual({ localRaw: 'foo-bar' }); expect(c.tests.length).toBe(1);
 
-    c = parseCompoundSelector(new Cursor('föo.item'));
+    c = parseCompoundSelector(new Cursor('föo.item'), {});
     expect(c.tag).toEqual({ localRaw: 'föo' }); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
 
-    c = parseCompoundSelector(new Cursor(':autofill.foo'));
+    c = parseCompoundSelector(new Cursor(':autofill.foo'), {});
     expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['foo']);
 
-    c = parseCompoundSelector(new Cursor('::before.foo'));
+    c = parseCompoundSelector(new Cursor('::before.foo'), {});
     expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['foo']);
   });
 });
@@ -955,18 +946,18 @@ describe('parse logical pseudo nesting and continuation', () => {
       ':not(:is(.a, .b)):nth-of-type(2)',
       ':has(:not(.disabled)):has(+ .item)',
     ]) {
-      const c = parseCompoundSelector(new Cursor(input));
+      const c = parseCompoundSelector(new Cursor(input), {});
       expect(c.tests.length).toBe(2);
     }
   });
 
   it('parses top-level commas around nested logical pseudos', () => {
-    let list = parseSelectorList(':is(:not(.a), .b):nth-child(2n+1), .fallback');
+    let list = parseSelectorList(':is(:not(.a), .b):nth-child(2n+1), .fallback', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(2);
     expect(list.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['fallback']);
 
-    list = parseSelectorList(':not(:is(.a, .b)):nth-of-type(2), span');
+    list = parseSelectorList(':not(:is(.a, .b)):nth-of-type(2), span', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(2);
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ localRaw: 'span' });
@@ -991,26 +982,26 @@ describe('consumeIdent escaped syntax boundaries', () => {
 
 describe('parseSelectorList common validator cases', () => {
   it('accepts common selector forms', () => {
-    let list = parseSelectorList('div');
+    let list = parseSelectorList('div', {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
 
-    list = parseSelectorList('div.item#id');
+    list = parseSelectorList('div.item#id', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('id');
 
-    list = parseSelectorList('[data-x="a, b"]');
+    list = parseSelectorList('[data-x="a, b"]', {});
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
-    list = parseSelectorList('div > span + a ~ em');
+    list = parseSelectorList('div > span + a ~ em', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>', '+', '~']);
     expect(list.selectors[0].parts.map(p => p.compound.tag?.localRaw)).toEqual(['div', 'span', 'a', 'em']);
   });
 
   it('accepts logical, relative, and structural pseudo selectors', () => {
     for (const input of [':is(.a, .b)', ':not(.disabled)', ':has(+ .item)', ':nth-child(2n + 1)']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
 
@@ -1018,52 +1009,52 @@ describe('parseSelectorList common validator cases', () => {
   });
 
   it('splits only top-level selector groups after validation', () => {
-    let list = parseSelectorList('div, span');
+    let list = parseSelectorList('div, span', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ localRaw: 'span' });
 
-    list = parseSelectorList(':is(:not(.a), .b):nth-child(2n+1), span');
+    list = parseSelectorList(':is(:not(.a), .b):nth-child(2n+1), span', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(2);
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ localRaw: 'span' });
   });
 
   it('rejects empty and trailing-comma selectors', () => {
-    expect(() => parseSelectorList('')).toThrow('Expected selector');
-    expect(() => parseSelectorList('div,')).toThrow('Expected selector after comma');
+    expect(() => parseSelectorList('', {})).toThrow('Expected selector');
+    expect(() => parseSelectorList('div,', {})).toThrow('Expected selector after comma');
   });
 
   it('rejects malformed combinator placement', () => {
-    expect(() => parseSelectorList('> div')).toThrow('Expected compound selector');
-    expect(() => parseSelectorList('div >> span')).toThrow('Expected compound selector after combinator');
-    expect(() => parseSelectorList('div + > span')).toThrow('Expected compound selector after combinator');
+    expect(() => parseSelectorList('> div', {})).toThrow('Expected compound selector');
+    expect(() => parseSelectorList('div >> span', {})).toThrow('Expected compound selector after combinator');
+    expect(() => parseSelectorList('div + > span', {})).toThrow('Expected compound selector after combinator');
   });
 });
 
 describe('parse functional pseudo namespace and combinator cases', () => {
   it('accepts supported namespace type selectors inside functional pseudos', () => {
     for (const input of [':is(*|item)', ':is(|item)', ':has(> *|item)']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
   });
 
   it('forgivingly accepts named namespace type selectors inside :is and :where', () => {
     for (const input of [':is(test|item)', ':where(test|item)']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
   });
 
   it('rejects named namespace type selectors in strict and :has contexts', () => {
-    expect(() => parseSelectorList('test|item')).toThrow('Unsupported namespace prefix');
-    expect(() => parseSelectorList(':has(> test|item)')).toThrow('Unsupported namespace prefix');
+    expect(() => parseSelectorList('test|item', {})).toThrow('Unsupported namespace prefix');
+    expect(() => parseSelectorList(':has(> test|item)', {})).toThrow('Unsupported namespace prefix');
   });
 
   it('accepts explicit combinators inside relative functional pseudos', () => {
     for (const input of [':has(> h1)', ':has(>h1)', ':has(+ .item)', ':has(~ .item)']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
   });
@@ -1072,13 +1063,13 @@ describe('parse functional pseudo namespace and combinator cases', () => {
 describe('parseSelectorList validator edge cases', () => {
   it('validates nested logical selectors inside functional pseudos', () => {
     for (const input of [':is(:where(:not(.a, .b)), .c)', ':has(:is(.a, .b):not(.c))']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
   });
 
   it('rejects raw colon in attribute names and accepts escaped colon', () => {
-    expect(() => parseSelectorList('[foo:bar]')).toThrow();
+    expect(() => parseSelectorList('[foo:bar]', {})).toThrow();
     expect(parseAttributeSelector(new Cursor(String.raw`[foo\:bar]`))).toEqual({ localRaw: String.raw`foo\:bar` });
   });
 
@@ -1100,27 +1091,27 @@ describe('parseSelectorList validator edge cases', () => {
     expect(parseNthArgs(new Cursor('(-n+3)'))).toEqual({ step: -1, offset: 3 });
 
     for (const input of ['ul > li:nth-child(n-128)', '#t > *:nth-child(n+10)', ':nth-child(4n+100)', ':nth-child(-n+3)']) {
-      expect(parseSelectorList(input).selectors[0].parts.at(-1)?.compound.tests.length).toBeGreaterThan(0);
+      expect(parseSelectorList(input, {}).selectors[0].parts.at(-1)?.compound.tests.length).toBeGreaterThan(0);
     }
   });
 
   it('rejects unquoted numeric attribute selector values', () => {
-    expect(() => parseSelectorList('#level1 *[id*=2]')).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('[id=2]')).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('[data-x^=123]')).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('#level1 *[id*=2]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('[id=2]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('[data-x^=123]', {})).toThrow('Expected attribute value');
   });
 
   it('rejects raw digit-start class and id selectors', () => {
     for (const input of ['.5cm', '#x .5cm', '#5cm', 'div .5cm', 'div#5cm']) {
-      expect(() => parseSelectorList(input)).toThrow('Expected identifier');
+      expect(() => parseSelectorList(input, {})).toThrow('Expected identifier');
     }
   });
 
   it('accepts escaped digit-start class and id selectors', () => {
-    let c = parseCompoundSelector(new Cursor(String.raw`.\35 cm`));
+    let c = parseCompoundSelector(new Cursor(String.raw`.\35 cm`), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`\35 cm`]);
 
-    c = parseCompoundSelector(new Cursor(String.raw`#\35 cm`));
+    c = parseCompoundSelector(new Cursor(String.raw`#\35 cm`), {});
     expect(c.id?.raw).toBe(String.raw`\35 cm`);
   });
 });
@@ -1132,69 +1123,69 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
   });
 
   it('validates compound :scope selectors', () => {
-    let list = parseSelectorList('div:scope > *');
+    let list = parseSelectorList('div:scope > *', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
 
-    list = parseSelectorList(':scope > *');
+    list = parseSelectorList(':scope > *', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
   });
 
   it('accepts missing right bracket at EOF for attribute selectors', () => {
-    let list = parseSelectorList('meta[charset="utf-8"');
+    let list = parseSelectorList('meta[charset="utf-8"', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'meta' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
-    list = parseSelectorList('#attr-value [align="center"');
+    list = parseSelectorList('#attr-value [align="center"', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('attr-value');
     expect(list.selectors[0].parts[1].compound.tests.length).toBe(1);
   });
 
   it('rejects invalid unquoted attribute values', () => {
-    expect(() => parseSelectorList('[id*=2]')).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('a[href=#]')).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('[class= space unquoted ]')).toThrow();
-    expect(() => parseSelectorList('.blox23s1[foo="blox" erroneous]')).toThrow();
+    expect(() => parseSelectorList('[id*=2]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('a[href=#]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('[class= space unquoted ]', {})).toThrow();
+    expect(() => parseSelectorList('.blox23s1[foo="blox" erroneous]', {})).toThrow();
   });
 
   it('accepts universal selectors inside functional pseudos', () => {
-    const compound = parseSelectorList(':not(*)').selectors[0].parts[0].compound;
+    const compound = parseSelectorList(':not(*)', {}).selectors[0].parts[0].compound;
     expect(compound.tests.length).toBe(1);
   });
 
   it('rejects type selectors after subclass selectors in a compound', () => {
     for (const input of ["[foo='bar']i", '[foo]div', '[foo]*', '.foo div[attr]span', '#foo span[attr]div', '.foo)', '[foo])', '[foo i]']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 
   it('accepts subclass selectors after type selectors and combinators', () => {
-    let c = parseSelectorList('div[foo]').selectors[0].parts[0].compound;
+    let c = parseSelectorList('div[foo]', {}).selectors[0].parts[0].compound;
     expect(c.tag).toEqual({ localRaw: 'div' }); expect(c.tests.length).toBe(1);
 
-    c = parseSelectorList('[foo].bar').selectors[0].parts[0].compound;
+    c = parseSelectorList('[foo].bar', {}).selectors[0].parts[0].compound;
     expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['bar']);
 
-    c = parseSelectorList('[foo]#bar').selectors[0].parts[0].compound;
+    c = parseSelectorList('[foo]#bar', {}).selectors[0].parts[0].compound;
     expect(c.tests.length).toBe(1); expect(c.id?.raw).toBe('bar');
 
-    c = parseSelectorList('[foo]:empty').selectors[0].parts[0].compound;
+    c = parseSelectorList('[foo]:empty', {}).selectors[0].parts[0].compound;
     expect(c.tests.length).toBe(2);
 
-    let list = parseSelectorList('[foo] [bar]');
+    let list = parseSelectorList('[foo] [bar]', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts.every(p => p.compound.tests.length === 1)).toBe(true);
 
-    list = parseSelectorList('[foo] > i');
+    list = parseSelectorList('[foo] > i', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'i' });
 
-    list = parseSelectorList('[foo], i');
+    list = parseSelectorList('[foo], i', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ localRaw: 'i' });
@@ -1202,11 +1193,11 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
 
   it('handles parentheses in compound selectors', () => {
     for (const input of ["[foo='bar']i", '[foo]div', '.foo)']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
 
     for (const input of [':is(.a)', ':is(.a,.b)', ':is([data-x])', ':is(:not(.a), .b)']) {
-      const compound = parseSelectorList(input).selectors[0].parts[0].compound;
+      const compound = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(compound.tests.length).toBe(1);
     }
   });
@@ -1241,7 +1232,7 @@ describe('parse attribute selector case-sensitivity flag syntax', () => {
       "[*|foo='bar' i]",
       'div[class~=brothers]',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 });
@@ -1288,7 +1279,7 @@ describe('parseAttributeSelector invalid case-sensitivity flag syntax', () => {
       "[foo i]",
       "[foo/**/i]",
     ]) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 });
@@ -1296,7 +1287,7 @@ describe('parseAttributeSelector invalid case-sensitivity flag syntax', () => {
 describe('parseSelectorList whitespace and common selector cases', () => {
   it('treats vertical whitespace as descendant combinators', () => {
     for (const input of ['div\nspan', 'div\r\nspan', 'div\fspan']) {
-      const list = parseSelectorList(input);
+      const list = parseSelectorList(input, {});
       expect(list.selectors).toHaveLength(1);
       expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
       expect(list.selectors[0].parts.map(p => p.compound.tag?.localRaw)).toEqual(['div', 'span']);
@@ -1304,7 +1295,7 @@ describe('parseSelectorList whitespace and common selector cases', () => {
   });
 
   it('splits comma groups with surrounding whitespace', () => {
-    const list = parseSelectorList('div , span');
+    const list = parseSelectorList('div , span', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ localRaw: 'span' });
@@ -1312,7 +1303,7 @@ describe('parseSelectorList whitespace and common selector cases', () => {
 
   it('accepts common selector forms through parseSelectorList', () => {
     for (const input of ['div', 'div p', 'div > p', '[data-nwsapi-scope] > p', '*|p', '|p', ':scope > *|item', '[data-nwsapi-scope] > *|item', '[data-nwsapi-scope] > |item']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 });
@@ -1335,7 +1326,7 @@ describe('parseNthArgs formula grammar', () => {
     }
 
     for (const input of [':nth-last-child(2n+1)', ':nth-of-type(2n+1)', ':nth-last-of-type(2n+1)']) {
-      expect(parseSelectorList(input).selectors[0].parts[0].compound.tests.length).toBe(1);
+      expect(parseSelectorList(input, {}).selectors[0].parts[0].compound.tests.length).toBe(1);
     }
   });
 
@@ -1349,13 +1340,13 @@ describe('parseNthArgs formula grammar', () => {
 describe('parseSelectorList functional pseudo bodies', () => {
   it('validates shallow functional pseudo selector lists', () => {
     for (const input of [':is(.a, .b)', ':where(.a, .b)', ':not(.disabled)', ':has(+ .item)', ':has(> h1)', ':has(> *|item)']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('validates nested functional pseudo selector lists', () => {
     for (const input of [':is(:not(.a), .b)', ':is(:where(.a), .b)', ':is(:where(:not(.a, .b)), .c)', ':has(:is(.a, .b):not(.c))']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
@@ -1367,7 +1358,7 @@ describe('parseSelectorList functional pseudo bodies', () => {
       ':has(> .item):not(.disabled)',
       ':where(.a, .b):is(.c, .d):nth-child(odd)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
@@ -1381,17 +1372,17 @@ describe('parseSelectorList functional pseudo bodies', () => {
       ':has(:is(.a, .b):not(.c))',
       ':is(:where(:not(.a, .b)), .c)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 });
 
 describe('parseSelectorList nth formulas after functional pseudos', () => {
   it('keeps nth functions strict inside chained functional pseudo selectors', () => {
-    expect(() => parseSelectorList(':is(.a, .b):nth-child(2n+1)')).not.toThrow();
+    expect(() => parseSelectorList(':is(.a, .b):nth-child(2n+1)', {})).not.toThrow();
 
     for (const input of [':is(.a, .b):nth-child(2n1)', ':is(.a, .b):nth-child(n1)', ':is(.a, .b):nth-child()', ':is(.a, .b):nth-child(1+n)']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 });
@@ -1405,7 +1396,7 @@ describe('parseSelectorList chained and scoped functional pseudos', () => {
       ':has(+ .item):where(.enabled, .selected)',
       ':not(.a):not(.b):is(.c, .d)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
@@ -1417,17 +1408,17 @@ describe('parseSelectorList chained and scoped functional pseudos', () => {
       ':is(*|item, |item, test|item)',
       ':has(> *|item, + |item)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('accepts EOF-tolerant malformed functional pseudo bodies for now', () => {
-    expect(() => parseSelectorList(':is(.a, .b')).not.toThrow();
+    expect(() => parseSelectorList(':is(.a, .b', {})).not.toThrow();
   });
 
   it('rejects malformed generic functional pseudo bodies', () => {
     for (const input of [':has(> )', ':has(+ )', ':not()', ':is(,)', ':is(.a,, .b)']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 
@@ -1438,13 +1429,13 @@ describe('parseSelectorList chained and scoped functional pseudos', () => {
       ':where(:scope > .item)',
       ':not(:scope > .disabled)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('validates compact scoped relative selectors inside functional pseudos', () => {
     for (const input of [':is(:scope>.item)', ':is(:scope+.item)', ':is(:scope~.item)']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 });
@@ -1452,13 +1443,13 @@ describe('parseSelectorList chained and scoped functional pseudos', () => {
 describe('parseSelectorList namespace selector oracle cases', () => {
   it('accepts supported namespace type selectors', () => {
     for (const input of ['*|p', '|p', ':scope > *|item', '[data-nwsapi-scope] > *|item', '[data-nwsapi-scope] > |item']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('rejects bare unresolvable named namespace type selectors', () => {
     for (const input of ['test|p', ':scope > test|item', '[data-nwsapi-scope] > test|item']) {
-      expect(() => parseSelectorList(input)).toThrow('Unsupported namespace prefix');
+      expect(() => parseSelectorList(input, {})).toThrow('Unsupported namespace prefix');
     }
   });
 
@@ -1473,61 +1464,61 @@ describe('parseSelectorList namespace selector oracle cases', () => {
       ':where(test|item)',
       ':where(*|item, |item, test|item)',
     ]) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('keeps :has relative selector lists strict for named namespace prefixes', () => {
     for (const input of [':has(> test|item)', ':has(> *|item, > test|item)']) {
-      expect(() => parseSelectorList(input)).toThrow('Unsupported namespace prefix');
+      expect(() => parseSelectorList(input, {})).toThrow('Unsupported namespace prefix');
     }
 
     for (const input of [':has(> *|item)', ':has(> |item)', ':has(> *|item, + |item)']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
   it('accepts supported namespace attribute selectors and rejects named prefixes', () => {
     for (const input of ["[foo|='bar' i]", "[|foo='bar' i]", "[*|foo='bar' i]", '[*|href]', '[|href]']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
 
     for (const input of ['[xlink|href]', '[xml|lang]']) {
-      expect(() => parseSelectorList(input)).toThrow('Unsupported namespace prefix');
+      expect(() => parseSelectorList(input, {})).toThrow('Unsupported namespace prefix');
     }
   });
 
   it('rejects universal local names in attribute selectors', () => {
     for (const input of ['[*|*]', '[|*]']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 });
 
 describe('parseForgivingPseudoBodySelectorList', () => {
   it('drops invalid namespace arms but keeps valid arms', () => {
-    const list = parseForgivingPseudoBodySelectorList(new Cursor('(*|item, |item, test|item)'));
+    const list = parseForgivingSelectorList(new Cursor('(*|item, |item, test|item)'), {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ prefixRaw: '*', localRaw: 'item' });
     expect(list.selectors[1].parts[0].compound.tag).toEqual({ prefixRaw: '', localRaw: 'item' });
   });
 
   it('allows all arms to be invalid as a valid no-match forgiving list', () => {
-    const list = parseForgivingPseudoBodySelectorList(new Cursor('(test|item)'));
+    const list = parseForgivingSelectorList(new Cursor('(test|item)'), {});
     expect(list.selectors).toHaveLength(0);
   });
 
   it('still rejects empty or syntactically empty forgiving lists', () => {
-    expect(() => parseForgivingPseudoBodySelectorList(new Cursor('()'))).toThrow();
-    expect(() => parseForgivingPseudoBodySelectorList(new Cursor('(,)'))).toThrow();
-    expect(() => parseForgivingPseudoBodySelectorList(new Cursor('(.a,, .b)'))).toThrow();
+    expect(() => parseForgivingSelectorList(new Cursor('()'), {})).toThrow();
+    expect(() => parseForgivingSelectorList(new Cursor('(,)'), {})).toThrow();
+    expect(() => parseForgivingSelectorList(new Cursor('(.a,, .b)'), {})).toThrow();
   });
 });
 
 describe('parseSelectorList functional pseudo spacing and nested nth cases', () => {
   it('validates spaced combinators inside functional pseudos', () => {
     for (const input of [':is(.a > .b)', ':is(.a + .b)', ':is(.a ~ .b)', ':has(.a > .b)']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
@@ -1538,28 +1529,28 @@ describe('parseSelectorList functional pseudo spacing and nested nth cases', () 
       ':is( [data-x="a, b"])', ':is([data-x="a, b"] )', ':is( [data-x="a, b"] )',
       ':is( *|item)', ':is(*|item )', ':is( *|item )',
     ]) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
 
   it('validates whitespace around commas inside functional pseudos', () => {
     for (const input of [':is(.a,.b)', ':is(.a, .b)', ':is(.a , .b)', ':is(.a , .b )']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
 
   it('keeps quoted commas inside attribute selectors opaque in functional pseudos', () => {
     for (const input of [':is([data-x="a, b"])', ':is([data-x="a, b"], .c)', ':has(> [data-x="a, b"])']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
 
   it('validates simple attributes inside functional pseudos', () => {
     for (const input of [':is([data-x])', ':is([data-x=value])', ':is(.a[data-x=value])']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
@@ -1574,31 +1565,31 @@ describe('parseSelectorList functional pseudo spacing and nested nth cases', () 
       ':not(:nth-last-child(1))',
       ':not(:nth-last-of-type(1))',
     ]) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
 
   it('validates nested nth pseudo-classes inside functional pseudos with selector context', () => {
-    let list = parseSelectorList('p:not(:nth-child(1))');
+    let list = parseSelectorList('p:not(:nth-child(1))', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'p' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
-    list = parseSelectorList('div:not(:nth-child(n))');
+    list = parseSelectorList('div:not(:nth-child(n))', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
-    list = parseSelectorList('div:not(:nth-of-type(n))');
+    list = parseSelectorList('div:not(:nth-of-type(n))', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
-    list = parseSelectorList('#p a:not(:nth-of-type(1))');
+    list = parseSelectorList('#p a:not(:nth-of-type(1))', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('p');
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'a' });
     expect(list.selectors[0].parts[1].compound.tests.length).toBe(1);
 
-    list = parseSelectorList(`#form option:not([id^='opt']:nth-child(-n+3))`);
+    list = parseSelectorList(`#form option:not([id^='opt']:nth-child(-n+3))`, {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('form');
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'option' });
@@ -1607,7 +1598,7 @@ describe('parseSelectorList functional pseudo spacing and nested nth cases', () 
 
   it('does not let nested invalid nth pseudo-classes escape strict validation', () => {
     for (const input of [':not(:nth-child(n1))', ':not(:nth-child(2n1))', 'p:not(:nth-of-type(1n2))']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 });
@@ -1615,20 +1606,20 @@ describe('parseSelectorList functional pseudo spacing and nested nth cases', () 
 describe('parseSelectorList nested pseudo and attribute edge cases', () => {
   it('validates nested supported pseudo-class tokens inside functional pseudo bodies', () => {
     for (const input of [':not(:hover)', ':not(:first-child)', ':not(:nth-child(1))', ':is(:not(.a), .b)', ':not(:-webkit-autofill)']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
 
   it('rejects unknown nested pseudo-class tokens in strict :not bodies', () => {
     for (const input of [':not(:foo)', ':not(:foo-bar)']) {
-      expect(() => parseSelectorList(input)).toThrow('Unsupported pseudo-class');
+      expect(() => parseSelectorList(input, {})).toThrow('Unsupported pseudo-class');
     }
   });
 
   it('validates nth pseudo-class formulas with signed offsets', () => {
     for (const input of ['ul > li:nth-child(n-128)', '#t > *:nth-child(n+10)', ':nth-child(4n+100)', ':nth-child(-n+3)']) {
-      expect(() => parseSelectorList(input)).not.toThrow();
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
 
     expect(parseNthArgs(new Cursor('(n-128)'))).toEqual({ step: 1, offset: -128 });
@@ -1639,7 +1630,7 @@ describe('parseSelectorList nested pseudo and attribute edge cases', () => {
 
   it('rejects invalid top-level selector tokens', () => {
     for (const input of ['#level1 *[id*=2]', '.5cm']) {
-      expect(() => parseSelectorList(input)).toThrow();
+      expect(() => parseSelectorList(input, {})).toThrow();
     }
   });
 
@@ -1650,19 +1641,19 @@ describe('parseSelectorList nested pseudo and attribute edge cases', () => {
   });
 
   it('parses :scope with selector suffixes', () => {
-    let list = parseSelectorList(':scope > *');
+    let list = parseSelectorList(':scope > *', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
 
-    const c = parseCompoundSelector(new Cursor(':scope.item'));
+    const c = parseCompoundSelector(new Cursor(':scope.item'), {});
     expect(c.tests.length).toBe(1);
     expect(c.classes?.map(x => x.raw)).toEqual(['item']);
   });
 
   it('validates universal and namespace type selectors inside functional pseudos', () => {
     for (const input of [':not(*)', ':is(*)', ':is(*|item)', ':is(|item)', ':is(test|item)', ':is(*|*)']) {
-      const c = parseSelectorList(input).selectors[0].parts[0].compound;
+      const c = parseSelectorList(input, {}).selectors[0].parts[0].compound;
       expect(c.tests.length).toBe(1);
     }
   });
@@ -1737,10 +1728,10 @@ describe('parseNthArgs multi-digit signed offsets', () => {
   });
 
   it('continues correctly after nth pseudo selectors', () => {
-    let c = parseCompoundSelector(new Cursor(':nth-child(n-128).item'));
+    let c = parseCompoundSelector(new Cursor(':nth-child(n-128).item'), {});
     expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
 
-    const list = parseSelectorList(':nth-child(n+10) > span');
+    const list = parseSelectorList(':nth-child(n+10) > span', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'span' });
@@ -1763,7 +1754,7 @@ describe('parseAttributeSelector quoted bracket values and EOF bracket tolerance
 
 describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', () => {
   const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`)).arms.map(selector =>
+    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map(selector =>
       selector.steps.map(step => [step.combinator, step.compound.source])
     );
 
@@ -1788,7 +1779,7 @@ describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', (
 
 describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases', () => {
   const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`)).arms.map(arm =>
+    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map(arm =>
       arm.steps.map(step => [step.combinator, step.compound.source])
     );
 
@@ -1829,7 +1820,7 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
   });
 
   it('parses nested :has as part of the compound test set', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'), {});
     const arms = parsed.arms[0].steps;
     expect(arms.map(s => s.combinator)).toEqual([' ', '>']);
     expect(arms[0].compound.source).toBe('.a:has(> .x + .y)')
@@ -1837,7 +1828,7 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
   });
 
   it('parses nested logical pseudos with selector lists as part of the compound test set', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'), {});
     const arms = parsed.arms[0].steps;
     expect(arms.map(s => s.combinator)).toEqual([' ', '~']);
     expect(arms[1].compound.source).toBe('.e')
@@ -1846,20 +1837,20 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
 
 describe('parseSelectorList escaped whitespace in class identifiers', () => {
   it('parses escaped whitespace in class selectors', () => {
-    let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `));
+    let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
 
-    c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`));
+    c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
   });
 
   it('does not treat escaped whitespace as a descendant combinator', () => {
-    let list = parseSelectorList(String.raw`.foo\ .bar`);
+    let list = parseSelectorList(String.raw`.foo\ .bar`, {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
     expect(list.selectors[0].parts[0].compound.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `, 'bar']);
 
-    list = parseSelectorList(String.raw`.foo\a bar.baz`);
+    list = parseSelectorList(String.raw`.foo\a bar.baz`, {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
     expect(list.selectors[0].parts[0].compound.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`, 'baz']);
@@ -1868,70 +1859,70 @@ describe('parseSelectorList escaped whitespace in class identifiers', () => {
 
 describe('parseSelectorList normalized whitespace legacy cases', () => {
   it('parses ordinary selector whitespace without preserving normalizer output', () => {
-    let list = parseSelectorList('  .foo  ');
+    let list = parseSelectorList('  .foo  ', {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
     expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
 
-    list = parseSelectorList('  .foo,\n.bar\t');
+    list = parseSelectorList('  .foo,\n.bar\t', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
     expect(list.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['bar']);
 
-    list = parseSelectorList('div   >   .foo');
+    list = parseSelectorList('div   >   .foo', {});
     expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[1].compound.classes?.map(c => c.raw)).toEqual(['foo']);
 
-    const c = parseCompoundSelector(new Cursor(':not( .foo )'));
+    const c = parseCompoundSelector(new Cursor(':not( .foo )'), {});
     expect(c.tests.length).toBe(1);
   });
 
   it('preserves escaped trailing whitespace inside identifiers', () => {
-    let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `));
+    let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
 
-    c = parseSelectorList(String.raw`  .foo\   `).selectors[0].parts[0].compound;
+    c = parseSelectorList(String.raw`  .foo\   `, {}).selectors[0].parts[0].compound;
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
   });
 
   it('preserves hex-escape terminator whitespace inside identifiers', () => {
-    let c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`));
+    let c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`), {});
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
 
-    c = parseSelectorList(String.raw`  .foo\a bar  `).selectors[0].parts[0].compound;
+    c = parseSelectorList(String.raw`  .foo\a bar  `, {}).selectors[0].parts[0].compound;
     expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
   });
 
   it('accepts escaped backslashes', () => {
-    expect(() => parseSelectorList(String.raw`.foo\\`)).not.toThrow();
+    expect(() => parseSelectorList(String.raw`.foo\\`, {})).not.toThrow();
   });
 });
 
 describe('parseSelectorList dangling and escaped backslash identifiers', () => {
   it('accepts trailing EOF escape in class identifiers', () => {
-    const list = parseSelectorList('.foo\\');
+    const list = parseSelectorList('.foo\\', {});
     const compound = list.selectors[0].parts[0].compound;
 
     expect(compound.classes?.[0].raw).toBe('foo\\');
   });
 
   it('accepts trailing EOF escape in id identifiers', () => {
-    const list = parseSelectorList('#foo\\');
+    const list = parseSelectorList('#foo\\', {});
     const compound = list.selectors[0].parts[0].compound;
 
     expect(compound.id?.raw).toBe('foo\\');
   });
 
   it('accepts escaped backslash inside identifiers', () => {
-    const c = parseCompoundSelector(new Cursor('.foo\\\\'));
+    const c = parseCompoundSelector(new Cursor('.foo\\\\'), {});
     expect(c.classes?.map(x => x.raw)).toEqual(['foo\\\\']);
   });
 });
 
 describe('parse attribute strings with EOF', () => {
   it('accepts EOF as the end of a quoted attribute value', () => {
-    const list = parseSelectorList('meta[charset="utf-8');
+    const list = parseSelectorList('meta[charset="utf-8', {});
     const compound = list.selectors[0].parts[0].compound;
 
     expect(compound.tag?.localRaw).toBe('meta');
@@ -1939,29 +1930,29 @@ describe('parse attribute strings with EOF', () => {
   });
 
   it('accepts missing closing bracket after quoted attribute value at EOF', () => {
-    expect(() => parseSelectorList('meta[charset="utf-8')).not.toThrow();
+    expect(() => parseSelectorList('meta[charset="utf-8', {})).not.toThrow();
   });
 });
 
 describe('scope propagation through nested selector pseudos', () => {
   it('propagates :scope through forgiving logical pseudos', () => {
-    expect(parseSelectorList(':is(:scope > .item)').usesScope).toBe(true);
-    expect(parseSelectorList(':where(:scope > .item)').usesScope).toBe(true);
+    expect(parseSelectorList(':is(:scope > .item)', {}).usesScope).toBe(true);
+    expect(parseSelectorList(':where(:scope > .item)', {}).usesScope).toBe(true);
   });
 
   it('propagates :scope through strict logical pseudos', () => {
-    expect(parseSelectorList(':not(:scope)').usesScope).toBe(true);
-    expect(parseSelectorList(':not(:scope > .item)').usesScope).toBe(true);
+    expect(parseSelectorList(':not(:scope)', {}).usesScope).toBe(true);
+    expect(parseSelectorList(':not(:scope > .item)', {}).usesScope).toBe(true);
   });
 
   it('propagates :scope through relative selector pseudos', () => {
-    expect(parseSelectorList(':has(:scope > .item)').usesScope).toBe(true);
+    expect(parseSelectorList(':has(:scope > .item)', {}).usesScope).toBe(true);
   });
 });
 
 describe('parseRelativeSelectorList', () => {
   const stepsOf = (source: string) => {
-    const parsed = parseRelativeSelectorList(new Cursor(`(${source})`));
+    const parsed = parseRelativeSelectorList(new Cursor(`(${source})`), {});
 
     return parsed.arms.map(arm =>
       arm.steps.map(step => [step.combinator, step.compound.source])
@@ -2109,7 +2100,7 @@ describe('parseRelativeSelectorList', () => {
   });
 
   it('returns arms with compound source strings', () => {
-    const parsed = parseRelativeSelectorList(new Cursor('(> div.foo[attr="x"], .c)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(> div.foo[attr="x"], .c)'), {});
 
     expect(parsed.arms).toHaveLength(2);
 
@@ -2122,5 +2113,33 @@ describe('parseRelativeSelectorList', () => {
       combinator: ' ',
       compound: { source: '.c' },
     });
+  });
+});
+
+describe('registered pseudo parse context', () => {
+  it('rejects unknown pseudos without a registered pseudo context entry', () => {
+    expect(() => parseSelectorList(':x-control', {})).toThrow(
+      `Unsupported pseudo-class ':x-control'`
+    );
+  });
+
+  it('accepts custom pseudos registered in parse context', () => {
+    const ctx: ParseContext = {
+      pseudos: {
+        'x-control': () => true,
+      },
+    };
+
+    expect(() => parseSelectorList(':x-control', ctx)).not.toThrow();
+  });
+
+  it('accepts registered custom pseudos inside compounds', () => {
+    const ctx: ParseContext = {
+      pseudos: {
+        'x-control': () => true,
+      },
+    };
+
+    expect(() => parseSelectorList('button:x-control.enabled', ctx)).not.toThrow();
   });
 });

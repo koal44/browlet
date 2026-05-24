@@ -369,10 +369,15 @@ import {
   emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
   emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPausedPseudoTest,
   emitPlaceholderShownPseudoTest, emitPlayingPseudoTest, emitReadOnlyPseudoTest, emitReadWritePseudoTest,
+  emitRegisteredPseudoTest,
   emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest,
   emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest,
   emitVolumeLockedPseudoTest, emitWherePseudoTest
 } from "../compile/emit";
+
+export type ParseContext = {
+  pseudos?: Record<string, CustomPseudoPredicate>;
+};
 
 export type SelectorList = {
   selectors: ComplexSelector[];
@@ -449,12 +454,12 @@ type DeferredCandidateTest = BaseCandidateTest & {
 
 export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
 
-export function parseSelectorList(input: string): SelectorList {
+export function parseSelectorList(input: string, ctx: ParseContext): SelectorList {
   const c = new Cursor(input);
-  return parseSelectorListFrom(c);
+  return parseSelectorListFrom(c, ctx);
 }
 
-export function parseSelectorListFrom(c: Cursor): SelectorList {
+export function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
 
@@ -465,7 +470,7 @@ export function parseSelectorListFrom(c: Cursor): SelectorList {
   }
 
   while (!c.eof()) {
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, ctx);
     if (complex.usesScope) usesScope = true;
     selectors.push(complex);
 
@@ -489,13 +494,13 @@ export function parseSelectorListFrom(c: Cursor): SelectorList {
   return { selectors, usesScope };
 }
 
-export function parseComplexSelector(c: Cursor): ComplexSelector {
+export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
   const start = c.pos();
   const parts: ComplexPart[] = [];
 
   parts.push({
     combinator: null,
-    compound: parseCompoundSelector(c),
+    compound: parseCompoundSelector(c, ctx),
   });
 
   let usesScope = parts[0].compound.usesScope;
@@ -523,7 +528,7 @@ export function parseComplexSelector(c: Cursor): ComplexSelector {
       c.error(`Expected compound selector after combinator, got ${c.peek() || '<eof>'}`);
     }
 
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, ctx);
     if (compound.usesScope) usesScope = true;
     end = c.pos();
 
@@ -533,7 +538,7 @@ export function parseComplexSelector(c: Cursor): ComplexSelector {
   return { parts, usesScope, source: c.slice(start, end) };
 }
 
-export function parseCompoundSelector(c: Cursor): CompoundSelector {
+export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSelector {
   const compound: CompoundSelector = {
     tests: [],
   };
@@ -541,7 +546,7 @@ export function parseCompoundSelector(c: Cursor): CompoundSelector {
   let count = 0;
 
   while (!c.eof() && canStartSimpleSelector(c)) {
-    parseSimpleSelectorInto(c, compound, count === 0);
+    parseSimpleSelectorInto(c, compound, count === 0, ctx);
     count++;
     assertSimpleSelectorBoundary(c);
   }
@@ -553,7 +558,7 @@ export function parseCompoundSelector(c: Cursor): CompoundSelector {
   return compound;
 }
 
-function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstInCompound: boolean): void {
+function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstInCompound: boolean, ctx: ParseContext): void {
   const ch = c.peek();
 
   if (ch === '#') {
@@ -573,7 +578,7 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   }
 
   if (ch === ':') {
-    const pseudoTest = parsePseudoTestSource(c);
+    const pseudoTest = parsePseudoTestSource(c, ctx);
     if (pseudoTest.usesScope) compound.usesScope = true;
     compound.tests.push(pseudoTest);
     return;
@@ -793,7 +798,7 @@ function parseAttributeFlag(c: Cursor): 'i' | 's' {
   c.error(`Invalid attribute selector flag ${JSON.stringify(raw)}`);
 }
 
-function parsePseudoTestSource(c: Cursor): CandidateTest {
+function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
   c.expect(':');
 
   const isElement = c.match(':');
@@ -820,10 +825,10 @@ function parsePseudoTestSource(c: Cursor): CandidateTest {
     case 'nth-last-of-type': return emitNthPseudoTest(parseNthArgs(c), { ofType: true,  last: true });
 
     // logical / relational pseudo-classes
-    case 'is': return emitIsPseudoTest(parseForgivingPseudoBodySelectorList(c));
-    case 'where': return emitWherePseudoTest(parseForgivingPseudoBodySelectorList(c));
-    case 'not': return emitNotPseudoTest(parseStrictPseudoBodySelectorList(c));
-    case 'has': return emitHasPseudoTest(parseRelativeSelectorList(c));
+    case 'is': return emitIsPseudoTest(parseForgivingSelectorList(c, ctx));
+    case 'where': return emitWherePseudoTest(parseForgivingSelectorList(c, ctx));
+    case 'not': return emitNotPseudoTest(parseStrictSelectorList(c, ctx));
+    case 'has': return emitHasPseudoTest(parseRelativeSelectorList(c, ctx));
     case 'matches': c.error('Unsupported pseudo-class :matches(); use :is()');
 
     // linguistic pseudo-classes
@@ -888,16 +893,23 @@ function parsePseudoTestSource(c: Cursor): CandidateTest {
     case ':selection': return emitNoMatchPseudoElementTest('selection');
     case ':placeholder': return emitNoMatchPseudoElementTest('placeholder');
 
-    default:
+    default: {
       if (isElement && lowerName.startsWith('-webkit-') && lowerName.length > '-webkit-'.length) {
         return emitNoMatchPseudoElementTest(lowerName);
       }
 
-      c.error(`Unsupported ${isElement ? 'pseudo-element' : 'pseudo-class'} ${rawName}`);
+      if (!isElement && ctx?.pseudos?.[lowerName]) {
+        return emitRegisteredPseudoTest(lowerName);
+      }
+
+      const kind = isElement ? 'pseudo-element' : 'pseudo-class';
+      const displayName = isElement ? `::${lowerName}` : `:${lowerName}`;
+      c.error(`Unsupported ${kind} '${displayName}'`);
+    }
   }
 }
 
-export function parseStrictPseudoBodySelectorList(c: Cursor): SelectorList {
+export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -909,7 +921,7 @@ export function parseStrictPseudoBodySelectorList(c: Cursor): SelectorList {
   let usesScope = false;
 
   while (!c.eof() && c.peek() !== ')') {
-    const complex = parseComplexSelector(c);
+    const complex = parseComplexSelector(c, ctx);
     if (complex.usesScope) usesScope = true;
     selectors.push(complex);
 
@@ -937,7 +949,7 @@ export function parseStrictPseudoBodySelectorList(c: Cursor): SelectorList {
   return { selectors, usesScope };
 }
 
-export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
+export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -958,7 +970,7 @@ export function parseForgivingPseudoBodySelectorList(c: Cursor): SelectorList {
     const armStart = c.pos();
 
     try {
-      const complex = parseComplexSelector(c);
+      const complex = parseComplexSelector(c, ctx);
       if (complex.usesScope) usesScope = true;
       selectors.push(complex);
     } catch {
@@ -1178,7 +1190,7 @@ export type RelativeCompoundSelector = {
 //   return { steps, usesScope };
 // }
 
-export function parseRelativeSelectorList(c: Cursor): RelativeSelectorList {
+export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): RelativeSelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1190,7 +1202,7 @@ export function parseRelativeSelectorList(c: Cursor): RelativeSelectorList {
   let usesScope = false;
 
   while (!c.eof() && c.peek() !== ')') {
-    const arm = parseRelativeComplexSelector(c);
+    const arm = parseRelativeComplexSelector(c, ctx);
     if (arm.usesScope) usesScope = true;
     arms.push(arm);
 
@@ -1214,7 +1226,7 @@ export function parseRelativeSelectorList(c: Cursor): RelativeSelectorList {
   return { arms, usesScope };
 }
 
-function parseRelativeComplexSelector(c: Cursor): RelativeComplexSelector {
+function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeComplexSelector {
   const steps: RelativeStep[] = [];
   let usesScope = false;
 
@@ -1229,7 +1241,7 @@ function parseRelativeComplexSelector(c: Cursor): RelativeComplexSelector {
     }
 
     const start = c.pos();
-    const compound = parseCompoundSelector(c);
+    const compound = parseCompoundSelector(c, ctx);
     const source = c.slice(start, c.pos()).trim();
 
     if (compound.usesScope) usesScope = true;

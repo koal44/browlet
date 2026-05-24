@@ -35,7 +35,7 @@ function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolve
   let resolver = snap.strictMatchResolvers.get(selectors);
 
   if (!resolver) {
-    const parsed = parseSelectorList(selectors);
+    const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
 
     if (snap.isDebug && snap.debugMatch) {
       snap.debugMatch.parsed = [selectors]; // or serialize parsed later
@@ -159,7 +159,7 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
 
   let resolver = snap.selectResolvers.get(sel);
   if (!resolver || resolver.hasCb !== !!cb) {
-    const parsed = parseSelectorList(sel);
+    const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
     resolver = buildSelectResolver(parsed, !!cb, snap);
     snap.selectResolvers.set(sel, resolver);
   }

@@ -367,3 +367,10 @@ export function emitNoMatchPseudoTest(_name: string): CandidateTest {
 export function emitNoMatchPseudoElementTest(_name: string): CandidateTest {
   return { source: 'false' };
 }
+
+// registered pseudo-class
+export function emitRegisteredPseudoTest(name: string): CandidateTest {
+  return {
+    source: `s.pseudos[${JSON.stringify(name)}](e)`,
+  };
+}
