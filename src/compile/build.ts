@@ -1,5 +1,5 @@
 import type {
-  CompoundSelector, RelativeSelectorList2, SelectorList, ComplexSelector, Combinator,
+  CompoundSelector, RelativeSelectorList, SelectorList, ComplexSelector, Combinator,
   BuildContext, CandidateTest,
 } from "../parser/parser";
 import { emitClassTest, emitIdTest, emitTagTest } from "./emit-base";
@@ -36,7 +36,7 @@ export function buildStrictSelectorListMatch(list: SelectorList, ctx: BuildConte
   }
 
   const arms = list.selectors.map(complex => buildComplexSelectorMatch(complex, ctx));
-  return arms.length === 1 ? arms[0] : `(${arms.join(')||(')})`;
+  return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
 }
 
 export function buildForgivingSelectorListMatch(list: SelectorList, ctx: BuildContext): string {
@@ -101,8 +101,19 @@ function buildCombinatorCall(combinator: Combinator | null, pred: string): strin
   }
 }
 
-export function buildRelativeSelectorListMatch(list: RelativeSelectorList2, ctx: BuildContext): string {
-  return 'false'; // Placeholder until :has() relative selector matching is implemented
+export function buildRelativeSelectorListMatch(list: RelativeSelectorList, _ctx: BuildContext): string {
+  if (list.arms.length === 0) return 'false';
+
+  const arms = list.arms.map(arm => {
+    const steps = arm.steps.map(step => [
+      step.combinator,
+      step.compound.source,
+    ]);
+
+    return `s.matchHas(${JSON.stringify(steps)},e,h)`;
+  });
+
+  return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
 }
 
 function buildCandidateTest(test: CandidateTest, ctx: BuildContext): string {
@@ -111,6 +122,6 @@ function buildCandidateTest(test: CandidateTest, ctx: BuildContext): string {
 
 function definePredicate(source: string, ctx: BuildContext): string {
   const name = `P${ctx.nextPredicate++}`;
-  ctx.declarations.push(`function ${name}(e,h){return ${source};}\n`);
+  ctx.declarations.push(`function ${name}(e,h){return (${source});}\n`);
   return name;
 }

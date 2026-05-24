@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   consumeIdent, parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseNthArgs,
-  parsePseudoBodyRelativeSelectorList, parseStrictPseudoBodySelectorList, parseSelectorList,
+  parseRelativeSelectorList, parseStrictPseudoBodySelectorList, parseSelectorList,
   parseForgivingPseudoBodySelectorList,
   type CompoundSelector,
 } from '../../src/parser/parser';
@@ -495,10 +495,12 @@ describe('parseAttributeSelector', () => {
     });
   });
 
-  it('throws on unclosed strings', () => {
-    expect(() => parseAttributeSelector(new Cursor('[attr="value]'))).toThrow(
-      'Unterminated string'
-    );
+  it('accepts EOF as the end of a quoted attribute string', () => {
+    const attr = parseAttributeSelector(new Cursor('[attr="value'));
+
+    expect(attr.localRaw).toBe('attr');
+    expect(attr.op).toBe('=');
+    expect(attr.valueRaw).toBe('value');
   });
 
   it('parses escaped attribute selector flags', () => {
@@ -658,138 +660,129 @@ describe('parsePseudoBodySelectorList', () => {
 
 describe('parsePseudoBodyRelativeSelectorList', () => {
   it('parses a descendant relative selector by default', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(new Cursor('(img)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(img)'));
 
-    expect(parsed.selectors).toHaveLength(1);
-    expect(parsed.selectors[0].steps).toHaveLength(1);
+    expect(parsed.arms).toHaveLength(1);
+    expect(parsed.arms[0].steps).toHaveLength(1);
 
-    expect(parsed.selectors[0].steps[0].combinator).toBe(' ');
-    expect(parsed.selectors[0].steps[0].compound.tag).toEqual({
-      localRaw: 'img',
-    });
+    expect(parsed.arms[0].steps[0].combinator).toBe(' ');
+    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
   });
 
   it('parses an explicit leading child combinator', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(new Cursor('(> img)'));
+    const parsed = parseRelativeSelectorList(new Cursor('(> img)'));
 
-    expect(parsed.selectors).toHaveLength(1);
-    expect(parsed.selectors[0].steps).toHaveLength(1);
+    expect(parsed.arms).toHaveLength(1);
+    expect(parsed.arms[0].steps).toHaveLength(1);
 
-    expect(parsed.selectors[0].steps[0].combinator).toBe('>');
-    expect(parsed.selectors[0].steps[0].compound.tag).toEqual({
-      localRaw: 'img',
-    });
+    expect(parsed.arms[0].steps[0].combinator).toBe('>');
+    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
   });
 
   it('parses explicit leading sibling combinators', () => {
-    expect(parsePseudoBodyRelativeSelectorList(new Cursor('(+ dt)'))
-      .selectors[0].steps[0]).toMatchObject({
+    expect(parseRelativeSelectorList(new Cursor('(+ dt)'))
+      .arms[0].steps[0]).toMatchObject({
         combinator: '+',
-        compound: { tag: { localRaw: 'dt' } },
+        compound: { source: 'dt' },
       });
 
-    expect(parsePseudoBodyRelativeSelectorList(new Cursor('(~ .item)'))
-      .selectors[0].steps[0].combinator).toBe('~');
+    expect(parseRelativeSelectorList(new Cursor('(~ .item)'))
+      .arms[0].steps[0].combinator).toBe('~');
 
-    expect(parsePseudoBodyRelativeSelectorList(new Cursor('(~ .item)'))
-      .selectors[0].steps[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
+    expect(parseRelativeSelectorList(new Cursor('(~ .item)'))
+      .arms[0].steps[0].compound.source).toBe('.item');
   });
 
-  it('parses multiple steps with mixed combinators', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(
+it('parses multiple steps with mixed combinators', () => {
+    const parsed = parseRelativeSelectorList(
       new Cursor('(> .item + dt ~ dd span)')
     );
 
-    const steps = parsed.selectors[0].steps;
+    const steps = parsed.arms[0].steps;
 
     expect(steps.map(s => s.combinator)).toEqual(['>', '+', '~', ' ']);
-    expect(steps[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
-    expect(steps[1].compound.tag).toEqual({ localRaw: 'dt' });
-    expect(steps[2].compound.tag).toEqual({ localRaw: 'dd' });
-    expect(steps[3].compound.tag).toEqual({ localRaw: 'span' });
+    expect(steps.map(s => s.compound.source)).toEqual(['.item', 'dt', 'dd', 'span']);
   });
 
   it('parses comma-separated relative selector arms', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(
+    const parsed = parseRelativeSelectorList(
       new Cursor('(> img, + dt, .item .child)')
     );
 
-    expect(parsed.selectors).toHaveLength(3);
+    expect(parsed.arms).toHaveLength(3);
 
-    expect(parsed.selectors[0].steps.map(s => s.combinator)).toEqual(['>']);
-    expect(parsed.selectors[0].steps[0].compound.tag).toEqual({ localRaw: 'img' });
+    expect(parsed.arms[0].steps.map(s => s.combinator)).toEqual(['>']);
+    expect(parsed.arms[0].steps.map(s => s.compound.source)).toEqual(['img']);
 
-    expect(parsed.selectors[1].steps.map(s => s.combinator)).toEqual(['+']);
-    expect(parsed.selectors[1].steps[0].compound.tag).toEqual({ localRaw: 'dt' });
+    expect(parsed.arms[1].steps.map(s => s.combinator)).toEqual(['+']);
+    expect(parsed.arms[1].steps.map(s => s.compound.source)).toEqual(['dt']);
 
-    expect(parsed.selectors[2].steps.map(s => s.combinator)).toEqual([' ', ' ']);
-    expect(parsed.selectors[2].steps[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
-    expect(parsed.selectors[2].steps[1].compound.classes?.map(c => c.raw)).toEqual(['child']);
+    expect(parsed.arms[2].steps.map(s => s.combinator)).toEqual([' ', ' ']);
+    expect(parsed.arms[2].steps.map(s => s.compound.source)).toEqual(['.item', '.child']);
   });
 
   it('ignores padding whitespace around arms and before closing paren', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(
+    const parsed = parseRelativeSelectorList(
       new Cursor('(  > img  ,   .item   )')
     );
 
-    expect(parsed.selectors).toHaveLength(2);
-    expect(parsed.selectors[0].steps[0].combinator).toBe('>');
-    expect(parsed.selectors[0].steps[0].compound.tag).toEqual({ localRaw: 'img' });
+    expect(parsed.arms).toHaveLength(2);
 
-    expect(parsed.selectors[1].steps[0].combinator).toBe(' ');
-    expect(parsed.selectors[1].steps[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
+    expect(parsed.arms[0].steps[0].combinator).toBe('>');
+    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
+
+    expect(parsed.arms[1].steps[0].combinator).toBe(' ');
+    expect(parsed.arms[1].steps[0].compound.source).toBe('.item');
   });
 
   it('allows EOF in place of the closing paren for now', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(new Cursor('(> img'));
+    const parsed = parseRelativeSelectorList(new Cursor('(> img'));
 
-    expect(parsed.selectors).toHaveLength(1);
-    expect(parsed.selectors[0].steps[0].combinator).toBe('>');
-    expect(parsed.selectors[0].steps[0].compound.tag).toEqual({ localRaw: 'img' });
+    expect(parsed.arms).toHaveLength(1);
+    expect(parsed.arms[0].steps[0].combinator).toBe('>');
+    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
   });
 
   it('throws on empty body', () => {
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('()'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('()'))).toThrow(
       'Expected relative selector in pseudo-class body'
     );
 
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('(   )'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(   )'))).toThrow(
       'Expected relative selector in pseudo-class body'
     );
   });
 
   it('throws on trailing comma', () => {
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('(> img,)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img,)'))).toThrow(
       'Expected relative selector after comma in pseudo-class body'
     );
 
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('(> img,   )'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img,   )'))).toThrow(
       'Expected relative selector after comma in pseudo-class body'
     );
   });
 
   it('throws when a combinator has no right compound', () => {
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('(>)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(>)'))).toThrow(
       'Expected compound selector after combinator'
     );
 
-    expect(() => parsePseudoBodyRelativeSelectorList(new Cursor('(> img +)'))).toThrow(
+    expect(() => parseRelativeSelectorList(new Cursor('(> img +)'))).toThrow(
       'Expected compound selector after combinator in relative selector'
     );
   });
 
   it('does not split on commas inside attribute strings or pseudo bodies', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(
+    const parsed = parseRelativeSelectorList(
       new Cursor(`([data-x="a,b"]:not(.hidden), > img)`)
     );
 
-    expect(parsed.selectors).toHaveLength(2);
+    expect(parsed.arms).toHaveLength(2);
 
-    expect(parsed.selectors[0].steps).toHaveLength(1);
-    expect(parsed.selectors[0].steps[0].compound.tests.length).toBeGreaterThan(0);
-
-    expect(parsed.selectors[1].steps[0].combinator).toBe('>');
-    expect(parsed.selectors[1].steps[0].compound.tag).toEqual({ localRaw: 'img' });
+    expect(parsed.arms[0].steps).toHaveLength(1);
+    expect(parsed.arms[1].steps[0].combinator).toBe('>');
+    expect(parsed.arms[1].steps[0].compound.source).toBe('img');
   });
 });
 
@@ -1770,40 +1763,33 @@ describe('parseAttributeSelector quoted bracket values and EOF bracket tolerance
 
 describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', () => {
   const stepsOf = (source: string) =>
-    parsePseudoBodyRelativeSelectorList(new Cursor(`(${source})`)).selectors.map(selector =>
-      selector.steps.map(step => [step.combinator, step.compound.classes?.[0]?.raw ?? step.compound.tag?.localRaw ?? step.compound.id?.raw])
+    parseRelativeSelectorList(new Cursor(`(${source})`)).arms.map(selector =>
+      selector.steps.map(step => [step.combinator, step.compound.source])
     );
 
   it('parses a single implicit descendant step', () => {
-    expect(stepsOf('.a')).toEqual([[[' ', 'a']]]);
+    expect(stepsOf('.a')).toEqual([[[' ', '.a']]]);
   });
 
   it('parses implicit descendant chains', () => {
-    expect(stepsOf('.a .b .c')).toEqual([[[' ', 'a'], [' ', 'b'], [' ', 'c']]]);
+    expect(stepsOf('.a .b .c')).toEqual([[[' ', '.a'], [' ', '.b'], [' ', '.c']]]);
   });
 
   it('parses leading explicit combinators', () => {
-    expect(stepsOf('> .a')).toEqual([[['>', 'a']]]);
-    expect(stepsOf('+ .next')).toEqual([[['+', 'next']]]);
-    expect(stepsOf('~ .after')).toEqual([[['~', 'after']]]);
+    expect(stepsOf('> .a')).toEqual([[['>', '.a']]]);
+    expect(stepsOf('+ .next')).toEqual([[['+', '.next']]]);
+    expect(stepsOf('~ .after')).toEqual([[['~', '.after']]]);
   });
 
   it('parses mixed child, sibling, and descendant steps', () => {
-    expect(stepsOf('> .a + .b .c')).toEqual([[['>', 'a'], ['+', 'b'], [' ', 'c']]]);
+    expect(stepsOf('> .a + .b .c')).toEqual([[['>', '.a'], ['+', '.b'], [' ', '.c']]]);
   });
 });
 
 describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases', () => {
-  const label = (compound: CompoundSelector): string =>
-    compound.id ? `#${compound.id.raw}` :
-    compound.classes?.length ? `.${compound.classes.map(c => c.raw).join('.')}` :
-    compound.tag ? `${compound.tag.prefixRaw !== undefined ? `${compound.tag.prefixRaw}|` : ''}${compound.tag.localRaw}` :
-    compound.tests.length ? '<test>' :
-    '<compound>';
-
   const stepsOf = (source: string) =>
-    parsePseudoBodyRelativeSelectorList(new Cursor(`(${source})`)).selectors.map(selector =>
-      selector.steps.map(step => [step.combinator, label(step.compound)])
+    parseRelativeSelectorList(new Cursor(`(${source})`)).arms.map(arm =>
+      arm.steps.map(step => [step.combinator, step.compound.source])
     );
 
   it('parses general sibling followed by child and descendant steps', () => {
@@ -1819,19 +1805,19 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
   });
 
   it('does not split commas inside functional pseudos', () => {
-    expect(stepsOf('.a:is(.x, .y), > .b:not(.c, .d)')).toEqual([[[' ', '.a']], [['>', '.b']]]);
+    expect(stepsOf('.a:is(.x, .y), > .b:not(.c, .d)')).toEqual([[[' ', '.a:is(.x, .y)']], [['>', '.b:not(.c, .d)']]]);
   });
 
   it('does not split combinators inside functional pseudos', () => {
-    expect(stepsOf('.a:is(.x > .y) > .b:not(.c + .d)')).toEqual([[[' ', '.a'], ['>', '.b']]]);
+    expect(stepsOf('.a:is(.x > .y) > .b:not(.c + .d)')).toEqual([[[' ', '.a:is(.x > .y)'], ['>', '.b:not(.c + .d)']]]);
   });
 
   it('does not split combinators inside attribute selectors', () => {
-    expect(stepsOf('[data-x="a>b"] + [data-y="c+d"] ~ [data-z="e~f"]')).toEqual([[[' ', '<test>'], ['+', '<test>'], ['~', '<test>']]]);
+    expect(stepsOf('[data-x="a>b"] + [data-y="c+d"] ~ [data-z="e~f"]')).toEqual([[[' ', '[data-x="a>b"]'], ['+', '[data-y="c+d"]'], ['~', '[data-z="e~f"]']]]);
   });
 
   it('does not split commas inside quoted attribute values', () => {
-    expect(stepsOf('[data-x=","] , [data-y="a,b"]')).toEqual([[[' ', '<test>']], [[' ', '<test>']]]);
+    expect(stepsOf('[data-x=","] , [data-y="a,b"]')).toEqual([[[' ', '[data-x=","]']], [[' ', '[data-y="a,b"]']]]);
   });
 
   it('preserves escaped combinator-like characters in compounds', () => {
@@ -1843,20 +1829,18 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
   });
 
   it('parses nested :has as part of the compound test set', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'));
-    const steps = parsed.selectors[0].steps;
-    expect(steps.map(s => s.combinator)).toEqual([' ', '>']);
-    expect(steps[0].compound.classes?.map(c => c.raw)).toEqual(['a']);
-    expect(steps[0].compound.tests.length).toBe(1);
-    expect(steps[1].compound.classes?.map(c => c.raw)).toEqual(['b']);
+    const parsed = parseRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'));
+    const arms = parsed.arms[0].steps;
+    expect(arms.map(s => s.combinator)).toEqual([' ', '>']);
+    expect(arms[0].compound.source).toBe('.a:has(> .x + .y)')
+    expect(arms[1].compound.source).toBe('.b')
   });
 
   it('parses nested logical pseudos with selector lists as part of the compound test set', () => {
-    const parsed = parsePseudoBodyRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'));
-    const steps = parsed.selectors[0].steps;
-    expect(steps.map(s => s.combinator)).toEqual([' ', '~']);
-    expect(steps[0].compound.tests.length).toBe(1);
-    expect(steps[1].compound.classes?.map(c => c.raw)).toEqual(['e']);
+    const parsed = parseRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'));
+    const arms = parsed.arms[0].steps;
+    expect(arms.map(s => s.combinator)).toEqual([' ', '~']);
+    expect(arms[1].compound.source).toBe('.e')
   });
 });
 
@@ -1942,5 +1926,201 @@ describe('parseSelectorList dangling and escaped backslash identifiers', () => {
   it('accepts escaped backslash inside identifiers', () => {
     const c = parseCompoundSelector(new Cursor('.foo\\\\'));
     expect(c.classes?.map(x => x.raw)).toEqual(['foo\\\\']);
+  });
+});
+
+describe('parse attribute strings with EOF', () => {
+  it('accepts EOF as the end of a quoted attribute value', () => {
+    const list = parseSelectorList('meta[charset="utf-8');
+    const compound = list.selectors[0].parts[0].compound;
+
+    expect(compound.tag?.localRaw).toBe('meta');
+    expect(compound.tests).toHaveLength(1);
+  });
+
+  it('accepts missing closing bracket after quoted attribute value at EOF', () => {
+    expect(() => parseSelectorList('meta[charset="utf-8')).not.toThrow();
+  });
+});
+
+describe('scope propagation through nested selector pseudos', () => {
+  it('propagates :scope through forgiving logical pseudos', () => {
+    expect(parseSelectorList(':is(:scope > .item)').usesScope).toBe(true);
+    expect(parseSelectorList(':where(:scope > .item)').usesScope).toBe(true);
+  });
+
+  it('propagates :scope through strict logical pseudos', () => {
+    expect(parseSelectorList(':not(:scope)').usesScope).toBe(true);
+    expect(parseSelectorList(':not(:scope > .item)').usesScope).toBe(true);
+  });
+
+  it('propagates :scope through relative selector pseudos', () => {
+    expect(parseSelectorList(':has(:scope > .item)').usesScope).toBe(true);
+  });
+});
+
+describe('parseRelativeSelectorList', () => {
+  const stepsOf = (source: string) => {
+    const parsed = parseRelativeSelectorList(new Cursor(`(${source})`));
+
+    return parsed.arms.map(arm =>
+      arm.steps.map(step => [step.combinator, step.compound.source])
+    );
+  };
+
+  it('parses a single implicit descendant step', () => {
+    expect(stepsOf('.a')).toEqual([
+      [[' ', '.a']],
+    ]);
+  });
+
+  it('parses implicit descendant chains', () => {
+    expect(stepsOf('.a .b .c')).toEqual([
+      [
+        [' ', '.a'],
+        [' ', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('parses a leading child combinator', () => {
+    expect(stepsOf('> .a')).toEqual([
+      [['>', '.a']],
+    ]);
+  });
+
+  it('parses a leading adjacent sibling combinator', () => {
+    expect(stepsOf('+ .next')).toEqual([
+      [['+', '.next']],
+    ]);
+  });
+
+  it('parses a leading following sibling combinator', () => {
+    expect(stepsOf('~ .after')).toEqual([
+      [['~', '.after']],
+    ]);
+  });
+
+  it('parses mixed child, sibling, and descendant steps', () => {
+    expect(stepsOf('> .a + .b .c')).toEqual([
+      [
+        ['>', '.a'],
+        ['+', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('parses general sibling followed by child and descendant steps', () => {
+    expect(stepsOf('~ .a > .b .c')).toEqual([
+      [
+        ['~', '.a'],
+        ['>', '.b'],
+        [' ', '.c'],
+      ],
+    ]);
+  });
+
+  it('ignores whitespace around explicit combinators', () => {
+    expect(stepsOf('  >   .a   +   .b   ~   .c  ')).toEqual([
+      [
+        ['>', '.a'],
+        ['+', '.b'],
+        ['~', '.c'],
+      ],
+    ]);
+  });
+
+  it('splits selector-list branches at top-level commas', () => {
+    expect(stepsOf('.a, > .b, + .c')).toEqual([
+      [[' ', '.a']],
+      [['>', '.b']],
+      [['+', '.c']],
+    ]);
+  });
+
+  it('does not split commas inside functional pseudos', () => {
+    expect(stepsOf('.a:is(.x, .y), > .b:not(.c, .d)')).toEqual([
+      [[' ', '.a:is(.x, .y)']],
+      [['>', '.b:not(.c, .d)']],
+    ]);
+  });
+
+  it('does not split combinators inside functional pseudos', () => {
+    expect(stepsOf('.a:is(.x > .y) > .b:not(.c + .d)')).toEqual([
+      [
+        [' ', '.a:is(.x > .y)'],
+        ['>', '.b:not(.c + .d)'],
+      ],
+    ]);
+  });
+
+  it('does not split combinators inside attribute selectors', () => {
+    expect(stepsOf('[data-x="a>b"] + [data-y="c+d"] ~ [data-z="e~f"]')).toEqual([
+      [
+        [' ', '[data-x="a>b"]'],
+        ['+', '[data-y="c+d"]'],
+        ['~', '[data-z="e~f"]'],
+      ],
+    ]);
+  });
+
+  it('does not split commas inside quoted attribute values', () => {
+    expect(stepsOf('[data-x=","] , [data-y="a,b"]')).toEqual([
+      [[' ', '[data-x=","]']],
+      [[' ', '[data-y="a,b"]']],
+    ]);
+  });
+
+  it('preserves escaped combinator-like characters in compounds', () => {
+    expect(stepsOf('.a\\+b > .c\\~d + .e\\>f')).toEqual([
+      [
+        [' ', '.a\\+b'],
+        ['>', '.c\\~d'],
+        ['+', '.e\\>f'],
+      ],
+    ]);
+  });
+
+  it('preserves escaped commas in compounds', () => {
+    expect(stepsOf('.a\\,b, .c')).toEqual([
+      [[' ', '.a\\,b']],
+      [[' ', '.c']],
+    ]);
+  });
+
+  it('parses nested :has as an opaque compound', () => {
+    expect(stepsOf('.a:has(> .x + .y) > .b')).toEqual([
+      [
+        [' ', '.a:has(> .x + .y)'],
+        ['>', '.b'],
+      ],
+    ]);
+  });
+
+  it('parses nested logical pseudos with selector lists as opaque compounds', () => {
+    expect(stepsOf(':is(.a > .b, .c + .d) ~ .e')).toEqual([
+      [
+        [' ', ':is(.a > .b, .c + .d)'],
+        ['~', '.e'],
+      ],
+    ]);
+  });
+
+  it('returns arms with compound source strings', () => {
+    const parsed = parseRelativeSelectorList(new Cursor('(> div.foo[attr="x"], .c)'));
+
+    expect(parsed.arms).toHaveLength(2);
+
+    expect(parsed.arms[0].steps[0]).toEqual({
+      combinator: '>',
+      compound: { source: 'div.foo[attr="x"]' },
+    });
+
+    expect(parsed.arms[1].steps[0]).toEqual({
+      combinator: ' ',
+      compound: { source: '.c' },
+    });
   });
 });

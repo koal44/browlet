@@ -409,7 +409,8 @@ runScenarios('w3c iframes 3', 'normal', [
   },
 
   {
-    name: 'dome/nodes/missing-right-token',
+    name: 'dom/nodes/missing-right-token',
+    // status: 'only',
     markupMode: 'html-document',
     markup: `
       <!DOCTYPE html>

@@ -163,6 +163,7 @@ type DebugSelectRunStep = {
 type DebugSelectBuildStep = {
   selector: string;
   hasSeed: boolean;
+  usesScope: boolean;
   strategy: CandidateStrategy;
   lookupQuery: string;
   matcherSrcText: string;
@@ -217,28 +218,28 @@ type CompileSelectorResult = {
 
 type SelectorCombinator = ' ' | '>' | '+' | '~';
 
-type CompoundSelector = {
-  kind: 'compound';
-  source: string;
-};
+// type CompoundSelector = {
+//   kind: 'compound';
+//   source: string;
+// };
 
-type RelativeSelectorList = {
-  kind: 'relative-selector-list';
-  source: string;
-  selectors: RelativeSelector[];
-};
+// type RelativeSelectorList = {
+//   kind: 'relative-selector-list';
+//   source: string;
+//   selectors: RelativeSelector[];
+// };
 
-type RelativeSelector = {
-  kind: 'relative';
-  source: string;
-  steps: RelativeStep[];
-};
+// type RelativeSelector = {
+//   kind: 'relative';
+//   source: string;
+//   steps: RelativeStep[];
+// };
 
-type RelativeStep = {
-  kind: 'relative-step';
-  combinator: SelectorCombinator;
-  compound: CompoundSelector;
-};
+// type RelativeStep = {
+//   kind: 'relative-step';
+//   combinator: SelectorCombinator;
+//   compound: CompoundSelector;
+// };
 
 type HashCache = {
   nthElement?: WeakMap<ParentNode, NthElementIndexMap>;

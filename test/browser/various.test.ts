@@ -179,7 +179,7 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: 'f',
+    name: 'scope/context-vs-scope-anchoring',
     // status: 'only',
     markupMode: 'html-document',
     markup: `
@@ -4281,8 +4281,7 @@ runScenarios('various', 'normal', [
 
   {
     name: 'forgiving is treats unterminated attribute arm as invalid through list end',
-    status: 'fixme',
-    // engines: ['native'],
+    // status: 'only',
     markup: `<div id="a" class="a"></div><div id="b" class="b"></div><div id="c" class="c"></div>`,
     cases: [
       { select: ':is(.a, [broken, .b)', expect: { ids: ['a'] } },
@@ -6621,7 +6620,7 @@ runScenarios('various', 'normal', [
       { select: ':has(> |item)', expect: { ids: ['root', 'scope'] } },
       { select: ':has(> test|item)', expect: { throws: true } },
       { select: ':has(> *|item, + |item)', expect: { ids: ['root', 'scope'] } },
-      { select: ':has(> *|item, > test|item)', expect: { throws: true }, status: 'fixme' },
+      { select: ':has(> *|item, > test|item)', expect: { throws: true } },
 
       { select: "[foo|='bar' i]", expect: { count: 0 } },
       { select: "[|foo='bar' i]", expect: { count: 0 } },
@@ -6745,6 +6744,25 @@ runScenarios('various', 'normal', [
       { select: '*|*', expect: { count: 3 } },
       { select: '|*', expect: { ids: ['plain'] }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
       { select: '|*', expect: { ids: [] }, browsers: ['webkit'], engines: ['native'] },
+    ],
+  },
+
+  {
+    name: 'parser/attribute-string-eof',
+    // status: 'only',
+    markupMode: 'html-document',
+    markup: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta id="expected" charset="utf-8">
+        </head>
+        <body></body>
+      </html>
+    `,
+    cases: [
+      { select: 'meta[charset="utf-8"', expect: { ids: ['expected'] } },
+      { select: 'meta[charset="utf-8', expect: { ids: ['expected'] } },
     ],
   },
 

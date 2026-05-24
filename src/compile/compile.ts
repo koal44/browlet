@@ -1,4 +1,4 @@
-import { ComplexSelector, findUnescapedPipe, matchLogicalSelector, parseRelativeSelectorList, parseSelectorList, SelectorList } from "../parser/parser";
+import { ComplexSelector, findUnescapedPipe, matchLogicalSelector, SelectorList } from "../parser/parser";
 import { asciiLower, cssIdentUnescape, escapeRegExp } from "../utils/css";
 import { buildStrictComplexMatcher, buildStrictMatcher } from "./build";
 
@@ -519,22 +519,22 @@ function compileSelector(
             case 'not':
               source = `if(!s.matchStrict(${exprLit},e,h)){${source}}`;
               break;
-            case 'has': {
-              const list = parseRelativeSelectorList(expr);
-              let hasSource = 'o=false;';
+            // case 'has': {
+            //   const list = parseRelativeSelectorList(expr);
+            //   let hasSource = 'o=false;';
 
-              for (const selector of list.selectors) {
-                const steps = selector.steps.map(step => [
-                  step.combinator,
-                  step.compound.source,
-                ]);
+            //   for (const selector of list.selectors) {
+            //     const steps = selector.steps.map(step => [
+            //       step.combinator,
+            //       step.compound.source,
+            //     ]);
 
-                hasSource += `if(!o){o=s.matchHas(${JSON.stringify(steps)},e,h);}`;
-              }
+            //     hasSource += `if(!o){o=s.matchHas(${JSON.stringify(steps)},e,h);}`;
+            //   }
 
-              source = `${hasSource}if(o){${source}}`;
-              break;
-            }
+            //   source = `${hasSource}if(o){${source}}`;
+            //   break;
+            // }
             default:
               throw new Error(`Unsupported logical/relational pseudo-class: ${pseudo}, in selector: ${expression}`);
           }

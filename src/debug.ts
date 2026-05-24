@@ -107,6 +107,7 @@ export function updateDebugSelectBuild(snap: Snapshot, complex: ComplexSelector,
   snap.debugSelect?.build.push({
     selector: complex.source,
     hasSeed: complex.hasSeed === true,
+    usesScope: complex.usesScope === true,
     strategy: plan.strategy,
     lookupQuery: plan.lookupQuery,
     matcherSrcText: snap.debugCompile ?? matcher.toString(),

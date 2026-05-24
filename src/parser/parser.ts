@@ -153,109 +153,109 @@ export function findUnescapedPipe(str: string): number {
   return -1;
 }
 
-export function parseRelativeSelectorList(source: string): RelativeSelectorList {
-  const selectors = splitSelectorGroups(source).map(raw => {
-    const branch = raw.trim();
-    return parseRelativeSelector(branch);
-  });
+// export function parseRelativeSelectorList(source: string): RelativeSelectorList {
+//   const selectors = splitSelectorGroups(source).map(raw => {
+//     const branch = raw.trim();
+//     return parseRelativeSelector(branch);
+//   });
 
-  return {
-    kind: 'relative-selector-list', source, selectors,
-  };
-}
+//   return {
+//     kind: 'relative-selector-list', source, selectors,
+//   };
+// }
 
-function parseRelativeSelector(source: string): RelativeSelector {
-  return {
-    kind: 'relative', source, steps: parseRelativeSteps(source),
-  };
-}
+// function parseRelativeSelector(source: string): RelativeSelector {
+//   return {
+//     kind: 'relative', source, steps: parseRelativeSteps(source),
+//   };
+// }
 
-function parseRelativeSteps(source: string): RelativeStep[] {
-  const steps: RelativeStep[] = [];
+// function parseRelativeSteps(source: string): RelativeStep[] {
+//   const steps: RelativeStep[] = [];
 
-  let combinator: SelectorCombinator = ' ';
-  let start = skipSelectorSpaces(source, 0);
+//   let combinator: SelectorCombinator = ' ';
+//   let start = skipSelectorSpaces(source, 0);
 
-  const push = (end: number) => {
-    const compound = source.slice(start, end).trim();
+//   const push = (end: number) => {
+//     const compound = source.slice(start, end).trim();
 
-    if (!compound) {
-      return false;
-    }
+//     if (!compound) {
+//       return false;
+//     }
 
-    steps.push({
-      kind: 'relative-step',
-      combinator,
-      compound: {
-        kind: 'compound',
-        source: compound,
-      },
-    });
+//     steps.push({
+//       kind: 'relative-step',
+//       combinator,
+//       compound: {
+//         kind: 'compound',
+//         source: compound,
+//       },
+//     });
 
-    combinator = ' ';
-    return true;
-  };
+//     combinator = ' ';
+//     return true;
+//   };
 
-  scanTopLevel(source, (index, ch) => {
-    if (index < start) {
-      return 1;
-    }
+//   scanTopLevel(source, (index, ch) => {
+//     if (index < start) {
+//       return 1;
+//     }
 
-    if (isExplicitCombinator(ch)) {
-      push(index);
-      combinator = ch;
+//     if (isExplicitCombinator(ch)) {
+//       push(index);
+//       combinator = ch;
 
-      const next = skipSelectorSpaces(source, index + 1);
-      start = next;
+//       const next = skipSelectorSpaces(source, index + 1);
+//       start = next;
 
-      return next - index;
-    }
+//       return next - index;
+//     }
 
-    if (isSelectorSpace(ch)) {
-      const next = skipSelectorSpaces(source, index + 1);
-      const nextChar = source[next];
+//     if (isSelectorSpace(ch)) {
+//       const next = skipSelectorSpaces(source, index + 1);
+//       const nextChar = source[next];
 
-      // Whitespace before explicit combinator is padding:
-      // `.a   > .b`
-      if (isExplicitCombinator(nextChar)) {
-        return next - index;
-      }
+//       // Whitespace before explicit combinator is padding:
+//       // `.a   > .b`
+//       if (isExplicitCombinator(nextChar)) {
+//         return next - index;
+//       }
 
-      // Trailing whitespace.
-      if (next >= source.length) {
-        return source.length - index;
-      }
+//       // Trailing whitespace.
+//       if (next >= source.length) {
+//         return source.length - index;
+//       }
 
-      // Otherwise whitespace is a descendant combinator.
-      push(index);
-      combinator = ' ';
-      start = next;
+//       // Otherwise whitespace is a descendant combinator.
+//       push(index);
+//       combinator = ' ';
+//       start = next;
 
-      return next - index;
-    }
+//       return next - index;
+//     }
 
-    return 1;
-  });
+//     return 1;
+//   });
 
-  push(source.length);
+//   push(source.length);
 
-  return steps;
-}
+//   return steps;
+// }
 
-function isExplicitCombinator(ch: string): ch is '>' | '+' | '~' {
-  return ch === '>' || ch === '+' || ch === '~';
-}
+// function isExplicitCombinator(ch: string): ch is '>' | '+' | '~' {
+//   return ch === '>' || ch === '+' || ch === '~';
+// }
 
-function skipSelectorSpaces(source: string, index: number): number {
-  while (index < source.length && isSelectorSpace(source[index])) {
-    index++;
-  }
-  return index;
-}
+// function skipSelectorSpaces(source: string, index: number): number {
+//   while (index < source.length && isSelectorSpace(source[index])) {
+//     index++;
+//   }
+//   return index;
+// }
 
-function isSelectorSpace(ch: string): boolean {
-  return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
-}
+// function isSelectorSpace(ch: string): boolean {
+//   return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
+// }
 
 function stripCssComments(s: string): string {
   let out = '';
@@ -585,6 +585,13 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
     return;
   }
 
+  if (ch === '&') {
+    c.next();
+    compound.usesScope = true;
+    compound.tests.push(emitScopePseudoTest());
+    return;
+  }
+
   c.error(`Unexpected simple selector ${ch}`);
 }
 
@@ -773,7 +780,8 @@ function consumeStringValue(c: Cursor): string {
     c.next();
   }
 
-  c.error(`Unterminated string, expected closing quote`);
+  // Browser selector parsing accepts EOF as the end of a quoted string.
+  return c.slice(start);
 }
 
 function parseAttributeFlag(c: Cursor): 'i' | 's' {
@@ -815,7 +823,7 @@ function parsePseudoTestSource(c: Cursor): CandidateTest {
     case 'is': return emitIsPseudoTest(parseForgivingPseudoBodySelectorList(c));
     case 'where': return emitWherePseudoTest(parseForgivingPseudoBodySelectorList(c));
     case 'not': return emitNotPseudoTest(parseStrictPseudoBodySelectorList(c));
-    case 'has': return emitHasPseudoTest(parsePseudoBodyRelativeSelectorList(c));
+    case 'has': return emitHasPseudoTest(parseRelativeSelectorList(c));
     case 'matches': c.error('Unsupported pseudo-class :matches(); use :is()');
 
     // linguistic pseudo-classes
@@ -1067,22 +1075,110 @@ function consumeForgivingSelectorArm(c: Cursor): string {
   return c.slice(start, c.pos());
 }
 
-export type RelativeSelectorList2 = {
-  selectors: RelativeSelector2[];
+export type RelativeSelectorList = {
+  arms: RelativeComplexSelector[];
   usesScope?: boolean;
 };
 
-export type RelativeSelector2 = {
-  steps: RelativeStep2[];
+export type RelativeComplexSelector = {
+  steps: RelativeStep[];
   usesScope?: boolean;
 };
 
-export type RelativeStep2 = {
+export type RelativeStep = {
   combinator: Combinator;
-  compound: CompoundSelector;
+  compound: RelativeCompoundSelector;
 };
 
-export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelectorList2 {
+export type RelativeCompoundSelector = {
+  source: string;
+};
+
+// export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelectorList2 {
+//   c.expect('(');
+//   consumeTrivia(c);
+
+//   if (c.peek() === ')' || c.eof()) {
+//     c.error(`Expected relative selector in pseudo-class body, got ${c.peek()}`);
+//   }
+
+//   let usesScope = false;
+//   const selectors: RelativeSelector2[] = [];
+
+//   while (!c.eof() && c.peek() !== ')') {
+//     const parsed = parseRelativeSelector2(c);
+//     if (parsed.usesScope) usesScope = true;
+//     selectors.push(parsed);
+
+//     consumeTrivia(c);
+
+//     if (c.peek() === ')' || c.eof()) break;
+
+//     if (!c.match(',')) {
+//       c.error(`Expected "," or ")" in relative selector list, got ${c.peek()}`);
+//     }
+
+//     consumeTrivia(c);
+
+//     if (c.peek() === ')' || c.eof()) {
+//       c.error(`Expected relative selector after comma in pseudo-class body, got ${c.peek()}`);
+//     }
+//   }
+
+//   if (!c.eof()) c.expect(')');
+
+//   return { selectors, usesScope };
+// }
+
+// function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
+//   const steps: RelativeStep2[] = [];
+
+//   consumeTrivia(c);
+
+//   let combinator = parseOptionalRelativeCombinator(c) ?? ' ';
+//   consumeTrivia(c);
+
+//   if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
+//     c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
+//   }
+
+//   steps.push({
+//     combinator,
+//     compound: parseCompoundSelector(c),
+//   });
+
+//   let usesScope = steps[0].compound.usesScope;
+
+//   while (true) {
+//     const sawWs = consumeTrivia(c);
+
+//     if (c.eof() || c.peek() === ')' || c.peek() === ',') break;
+
+//     const explicit = parseOptionalRelativeCombinator(c);
+
+//     if (explicit) {
+//       combinator = explicit;
+//       consumeTrivia(c);
+//     } else if (sawWs) {
+//       combinator = ' ';
+//     } else {
+//       c.error(`Expected combinator in relative selector, got ${c.peek()}`);
+//     }
+
+//     if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
+//       c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
+//     }
+
+//     const compound = parseCompoundSelector(c);
+//     if (compound.usesScope) usesScope = true;
+
+//     steps.push({ combinator, compound });
+//   }
+
+//   return { steps, usesScope };
+// }
+
+export function parseRelativeSelectorList(c: Cursor): RelativeSelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1090,13 +1186,13 @@ export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelector
     c.error(`Expected relative selector in pseudo-class body, got ${c.peek()}`);
   }
 
+  const arms: RelativeComplexSelector[] = [];
   let usesScope = false;
-  const selectors: RelativeSelector2[] = [];
 
   while (!c.eof() && c.peek() !== ')') {
-    const parsed = parseRelativeSelector2(c);
-    if (parsed.usesScope) usesScope = true;
-    selectors.push(parsed);
+    const arm = parseRelativeComplexSelector(c);
+    if (arm.usesScope) usesScope = true;
+    arms.push(arm);
 
     consumeTrivia(c);
 
@@ -1115,29 +1211,34 @@ export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelector
 
   if (!c.eof()) c.expect(')');
 
-  return { selectors, usesScope };
+  return { arms, usesScope };
 }
 
-function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
-  const steps: RelativeStep2[] = [];
+function parseRelativeComplexSelector(c: Cursor): RelativeComplexSelector {
+  const steps: RelativeStep[] = [];
+  let usesScope = false;
 
   consumeTrivia(c);
 
   let combinator = parseOptionalRelativeCombinator(c) ?? ' ';
   consumeTrivia(c);
 
-  if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
-    c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
-  }
-
-  steps.push({
-    combinator,
-    compound: parseCompoundSelector(c),
-  });
-
-  let usesScope = steps[0].compound.usesScope;
-
   while (true) {
+    if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
+      c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
+    }
+
+    const start = c.pos();
+    const compound = parseCompoundSelector(c);
+    const source = c.slice(start, c.pos()).trim();
+
+    if (compound.usesScope) usesScope = true;
+
+    steps.push({
+      combinator,
+      compound: { source },
+    });
+
     const sawWs = consumeTrivia(c);
 
     if (c.eof() || c.peek() === ')' || c.peek() === ',') break;
@@ -1152,15 +1253,6 @@ function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
     } else {
       c.error(`Expected combinator in relative selector, got ${c.peek()}`);
     }
-
-    if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
-      c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
-    }
-
-    const compound = parseCompoundSelector(c);
-    if (compound.usesScope) usesScope = true;
-
-    steps.push({ combinator, compound });
   }
 
   return { steps, usesScope };
@@ -1352,6 +1444,7 @@ function canStartSimpleSelector(c: Cursor): boolean {
     ch === ':' ||
     ch === '*' ||
     ch === '|' ||
+    ch === '&' ||
     canStartIdent(c)
   );
 }

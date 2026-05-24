@@ -1,5 +1,5 @@
 import type {
-  AttributeSelector, CandidateTest, ClassSelector, IdSelector, NthArgs, RelativeSelectorList2, SelectorList, TagSelector,
+  AttributeSelector, CandidateTest, ClassSelector, IdSelector, NthArgs, RelativeSelectorList, SelectorList, TagSelector,
 } from "../parser/parser";
 import { asciiLower, cssIdentUnescape, escapeRegExp } from "../utils/css";
 import { assertNever } from "../utils/util";
@@ -155,22 +155,34 @@ export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: b
 
 // :is()
 export function emitIsPseudoTest(list: SelectorList): CandidateTest {
-  return { buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx) };
+  return {
+    usesScope: list.usesScope,
+    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx)
+  };
 }
 
 // :where()
 export function emitWherePseudoTest(list: SelectorList): CandidateTest {
-  return { buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx) };
+  return {
+    usesScope: list.usesScope,
+    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx)
+  };
 }
 
 // :not()
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
-  return { buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})` };
+  return {
+    usesScope: list.usesScope,
+    buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`
+  };
 }
 
 // :has()
-export function emitHasPseudoTest(list: RelativeSelectorList2): CandidateTest {
-  return { buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx), usesScope: list.usesScope };
+export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
+  return {
+    usesScope: list.usesScope,
+    buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx)
+  };
 }
 
 // :dir()
