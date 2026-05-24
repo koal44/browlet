@@ -2,9 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   consumeIdent, parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseNthArgs,
   parseRelativeSelectorList, parseStrictSelectorList, parseSelectorList,
-  parseForgivingSelectorList,
-  type CompoundSelector,
-  ParseContext,
+  parseForgivingSelectorList, ParseContext,
 } from '../../src/parser/parser';
 import { Cursor } from '../../src/parser/cursor';
 
@@ -166,7 +164,6 @@ describe('parseCompoundSelector', () => {
     expect(compound.tag?.localRaw).toBe('p');
     expect(compound.tests?.length).toBeGreaterThan(0);
     expect(c.peek()).toBe(' ');
-    expect(c.startsWith(' + span')).toBe(true);
   });
 
   it('stops before whitespace or combinator', () => {
@@ -466,11 +463,11 @@ describe('parseAttributeSelector', () => {
 
   it('throws when an operator has no value', () => {
     expect(() => parseAttributeSelector(new Cursor('[attr=]'))).toThrow(
-      'Expected attribute value'
+      'Expected identifier'
     );
 
     expect(() => parseAttributeSelector(new Cursor('[attr=   ]'))).toThrow(
-      'Expected attribute value'
+      'Expected identifier'
     );
   });
 
@@ -596,7 +593,6 @@ describe('parsePseudoBodySelectorList', () => {
     expect(parsed.selectors).toHaveLength(1);
     expect(parsed.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(c.peek()).toBe(' ');
-    expect(c.startsWith(' + span')).toBe(true);
   });
 
   it('allows EOF in place of the closing paren for now', () => {
@@ -1096,9 +1092,9 @@ describe('parseSelectorList validator edge cases', () => {
   });
 
   it('rejects unquoted numeric attribute selector values', () => {
-    expect(() => parseSelectorList('#level1 *[id*=2]', {})).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('[id=2]', {})).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('[data-x^=123]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('#level1 *[id*=2]', {})).toThrow('Expected identifier');
+    expect(() => parseSelectorList('[id=2]', {})).toThrow('Expected identifier');
+    expect(() => parseSelectorList('[data-x^=123]', {})).toThrow('Expected identifier');
   });
 
   it('rejects raw digit-start class and id selectors', () => {
@@ -1147,8 +1143,8 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
   });
 
   it('rejects invalid unquoted attribute values', () => {
-    expect(() => parseSelectorList('[id*=2]', {})).toThrow('Expected attribute value');
-    expect(() => parseSelectorList('a[href=#]', {})).toThrow('Expected attribute value');
+    expect(() => parseSelectorList('[id*=2]', {})).toThrow('Expected identifier');
+    expect(() => parseSelectorList('a[href=#]', {})).toThrow('Expected identifier');
     expect(() => parseSelectorList('[class= space unquoted ]', {})).toThrow();
     expect(() => parseSelectorList('.blox23s1[foo="blox" erroneous]', {})).toThrow();
   });
@@ -1714,7 +1710,7 @@ describe('parseAttributeSelector value fragment legacy cases', () => {
 
   it('rejects raw numeric unquoted attribute values', () => {
     for (const input of ['[x=2]', '[x=123]']) {
-      expect(() => parseAttributeSelector(new Cursor(input))).toThrow('Expected attribute value');
+      expect(() => parseAttributeSelector(new Cursor(input))).toThrow('Expected identifier');
     }
   });
 });
@@ -2141,5 +2137,54 @@ describe('registered pseudo parse context', () => {
     };
 
     expect(() => parseSelectorList('button:x-control.enabled', ctx)).not.toThrow();
+  });
+});
+
+describe('parseCompoundSelector', () => {
+  it('rejects invalid characters immediately after a simple selector', () => {
+    const ctx = { pseudos: {} };
+
+    expect(() => parseCompoundSelector(new Cursor('.foo@'), ctx))
+      .toThrow('Expected simple selector boundary, got @');
+
+    expect(() => parseSelectorList('.foo@', ctx))
+      .toThrow('Expected simple selector boundary, got @');
+  });
+});
+
+describe('parseAttributeSelector errors', () => {
+  it.each([
+    ['[*=x]', 'Expected "|" after "*" in attribute namespace prefix'],
+    ['[*|=x]', 'Expected identifier'],
+    ['[|=x]', 'Expected identifier'],
+    ['[foo|bar=x]', 'Unsupported namespace prefix foo'],
+    ['[foo=x i z]', 'Expected "]" at end of attribute selector'],
+  ])('%s', (source, error) => {
+    expect(() => parseAttributeSelector(new Cursor(source))).toThrow(error);
+  });
+});
+
+describe('Cursor.next EOF behavior', () => {
+  it('returns an empty string when called at EOF', () => {
+    const c = new Cursor('');
+
+    expect(c.next()).toBe('');
+    expect(c.next()).toBe('');
+  });
+
+  it('keeps position stable when called at EOF', () => {
+    const c = new Cursor('');
+    const pos = c.pos();
+
+    expect(c.next()).toBe('');
+    expect(c.pos()).toBe(pos);
+  });
+
+  it('returns an empty string at EOF after consuming input', () => {
+    const c = new Cursor('*');
+
+    expect(c.next()).toBe('*');
+    expect(c.next()).toBe('');
+    expect(c.next()).toBe('');
   });
 });

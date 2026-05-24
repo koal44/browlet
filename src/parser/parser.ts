@@ -498,34 +498,33 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   const start = c.pos();
   const parts: ComplexPart[] = [];
 
-  parts.push({
-    combinator: null,
-    compound: parseCompoundSelector(c, ctx),
-  });
+  const first = parseCompoundSelector(c, ctx);
+  parts.push({ combinator: null, compound: first });
 
-  let usesScope = parts[0].compound.usesScope;
+  let usesScope = !!first.usesScope;
   let end = c.pos();
 
   while (true) {
     const sawWs = consumeTrivia(c);
+    let ch = c.peek();
 
-    if (c.eof() || c.peek() === ',' || c.peek() === ')') break;
+    if (!ch || ch === ',' || ch === ')') break;
 
-    let combinator: Combinator | null = null;
-    const ch = c.peek();
+    let combinator: Combinator;
 
     if (ch === '>' || ch === '+' || ch === '~') {
       combinator = ch;
-      c.next();
+      c.advance();
       consumeTrivia(c);
+      ch = c.peek();
     } else if (sawWs) {
       combinator = ' ';
     } else {
-      c.error(`Expected combinator, got ${c.peek()}`);
+      c.error(`Expected combinator, got ${ch}`);
     }
 
-    if (c.eof() || c.peek() === ',' || c.peek() === ')' || isCombinator(c.peek())) {
-      c.error(`Expected compound selector after combinator, got ${c.peek() || '<eof>'}`);
+    if (!ch || ch === ',' || ch === ')' || isCombinator(ch)) {
+      c.error(`Expected compound selector after combinator, got ${ch || '<eof>'}`);
     }
 
     const compound = parseCompoundSelector(c, ctx);
@@ -545,14 +544,17 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
 
   let count = 0;
 
-  while (!c.eof() && canStartSimpleSelector(c)) {
+  while (true) {
+    const ch = c.peek();
+    if (!ch || !canStartSimpleSelector(ch)) break;
+
     parseSimpleSelectorInto(c, compound, count === 0, ctx);
     count++;
-    assertSimpleSelectorBoundary(c);
+    assertSimpleSelectorBoundary(c.peek());
   }
 
   if (count === 0) {
-    c.error(`Expected compound selectors but did not find any simple selector, got ${c.peek()}`);
+    c.error(`Expected compound selectors but did not find any simple selector, got ${c.peek() || '<eof>'}`);
   }
 
   return compound;
@@ -584,25 +586,23 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
     return;
   }
 
-  if ((ch === '*' || ch === '|' || canStartIdent(c)) && isFirstInCompound) {
-    if (compound.tag) c.error(`Duplicate tag selector in compound, already have ${compound.tag.prefixRaw ? compound.tag.prefixRaw + '|' : ''}${compound.tag.localRaw}`);
-    compound.tag = parseTagSelector(c);
+  if (ch === '&') {
+    c.advance();
+    compound.usesScope = true;
+    compound.tests.push(emitScopePseudoTest());
     return;
   }
 
-  if (ch === '&') {
-    c.next();
-    compound.usesScope = true;
-    compound.tests.push(emitScopePseudoTest());
+  if ((ch === '*' || ch === '|' || canStartIdent(ch)) && isFirstInCompound) {
+    if (compound.tag) c.error(`Duplicate tag selector in compound, already have ${compound.tag.prefixRaw ? compound.tag.prefixRaw + '|' : ''}${compound.tag.localRaw}`);
+    compound.tag = parseTagSelector(c);
     return;
   }
 
   c.error(`Unexpected simple selector ${ch}`);
 }
 
-function assertSimpleSelectorBoundary(c: Cursor): void {
-  const ch = c.peek();
-
+function assertSimpleSelectorBoundary(ch: string): void {
   if (
     ch === '' ||
     ch === ',' ||
@@ -611,12 +611,12 @@ function assertSimpleSelectorBoundary(c: Cursor): void {
     ch === '+' ||
     ch === '~' ||
     isCssWhitespace(ch) ||
-    canStartSimpleSelector(c)
+    canStartSimpleSelector(ch)
   ) {
     return;
   }
 
-  c.error(`Expected simple selector or combinator boundary, got ${ch}`);
+  throw new Error(`Expected simple selector boundary, got ${ch || '<eof>'}`);
 }
 
 function parseIdSelector(c: Cursor): IdSelector {
@@ -636,7 +636,11 @@ function parseClassSelector(c: Cursor): ClassSelector {
 }
 
 function parseTagSelector(c: Cursor): TagSelector {
-  if (c.match('*')) {
+  const ch = c.peek();
+
+  if (ch === '*') {
+    c.advance();
+
     if (c.match('|')) {
       return { prefixRaw: '*', localRaw: parseLocalTagName(c) };
     }
@@ -644,7 +648,8 @@ function parseTagSelector(c: Cursor): TagSelector {
     return { localRaw: '*' };
   }
 
-  if (c.match('|')) {
+  if (ch === '|') {
+    c.advance();
     return { prefixRaw: '', localRaw: parseLocalTagName(c) };
   }
 
@@ -680,26 +685,24 @@ export function parseAttributeSelector(c: Cursor): AttributeSelector {
   c.expect('[');
   consumeTrivia(c);
 
-  const name = parseAttributeName(c);
+  const attr = parseAttributeName(c);
 
   consumeTrivia(c);
 
   if (c.match(']') || c.eof()) {
-    return name;
+    return attr;
   }
 
-  const op = parseAttributeOperator(c);
+  attr.op = parseAttributeOperator(c);
 
   consumeTrivia(c);
 
-  const valueRaw = parseAttributeValue(c);
+  attr.valueRaw = parseAttributeValue(c);
 
   consumeTrivia(c);
-
-  let flag: 'i' | 's' | undefined;
 
   if (!c.match(']') && !c.eof()) {
-    flag = parseAttributeFlag(c);
+    attr.flag = parseAttributeFlag(c);
 
     consumeTrivia(c);
 
@@ -708,64 +711,59 @@ export function parseAttributeSelector(c: Cursor): AttributeSelector {
     }
   }
 
-  return {
-    ...name,
-    op,
-    valueRaw,
-    flag,
-  };
+  return attr;
 }
 
-function parseAttributeName(c: Cursor): Pick<AttributeSelector, 'prefixRaw' | 'localRaw'> {
-  if (c.match('*')) {
-    if (c.match('|')) {
-      if (c.peek() === '=') c.error(`Expected attribute name after "*|", got ${c.peek()}`);
-      return { prefixRaw: '*', localRaw: consumeIdent(c) };
+function parseAttributeName(c: Cursor): AttributeSelector {
+  const ch = c.peek();
+
+  if (ch === '*') {
+    c.advance();
+
+    if (!c.match('|')) {
+      c.error(`Expected "|" after "*" in attribute namespace prefix, got ${c.peek() || '<eof>'}`);
     }
 
-    c.error( `Expected "|" after "*" in attribute namespace prefix, got ${c.peek()}`);
+    return { prefixRaw: '*', localRaw: consumeIdent(c) };
   }
 
-  if (c.match('|')) {
-    if (c.peek() === '=') c.error(`Expected attribute name after "|", got ${c.peek()}`);
+  if (ch === '|') {
+    c.advance();
     return { prefixRaw: '', localRaw: consumeIdent(c) };
   }
 
-  const first = consumeIdent(c);
+  const localRaw = consumeIdent(c);
 
-  // This is the key: attr|=value is operator, not namespace.
+  // attr|=value is operator, not namespace.
   if (c.peek() === '|' && c.peek(1) !== '=') {
-    c.next();
-    c.error(`Unsupported namespace prefix ${first}`);
+    c.advance();
+    c.error(`Unsupported namespace prefix ${localRaw}`);
   }
 
-  return { localRaw: first };
+  return { localRaw };
 }
 
 function parseAttributeOperator(c: Cursor): AttrOperator {
-  if (c.matchString('~=')) return '~=';
-  if (c.matchString('|=')) return '|=';
-  if (c.matchString('^=')) return '^=';
-  if (c.matchString('$=')) return '$=';
-  if (c.matchString('*=')) return '*=';
-  if (c.match('=')) return '=';
+  const ch = c.next();
 
-  c.error(`Expected attribute operator, got ${c.peek()}`);
+  if (ch === '=') {
+    return '=';
+  }
+
+  if (ch === '~' || ch === '|' || ch === '^' || ch === '$' || ch === '*') {
+    const ch2 = c.next();
+    if (ch2 !== '=') c.error(`Expected "=" after "${ch}" in attribute operator, got ${ch2 || '<eof>'}`);
+    return `${ch}=`;
+  }
+
+  c.error(`Expected attribute operator, got ${ch || '<eof>'}`);
 }
 
 function parseAttributeValue(c: Cursor): string {
   const ch = c.peek();
 
-  if (ch === '' || ch === ']') {
-    c.error(`Expected attribute value, got '${ch}'`);
-  }
-
   if (ch === '"' || ch === "'") {
     return consumeStringValue(c);
-  }
-
-  if (!canStartIdent(c)) {
-    c.error(`Expected attribute value, got '${ch}'`);
   }
 
   return consumeIdent(c);
@@ -782,7 +780,7 @@ function consumeStringValue(c: Cursor): string {
 
     if (consumeEscapedChar(c)) continue;
 
-    c.next();
+    c.advance();
   }
 
   // Browser selector parsing accepts EOF as the end of a quoted string.
@@ -898,7 +896,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
         return emitNoMatchPseudoElementTest(lowerName);
       }
 
-      if (!isElement && ctx?.pseudos?.[lowerName]) {
+      if (!isElement && ctx.pseudos?.[lowerName]) {
         return emitRegisteredPseudoTest(lowerName);
       }
 
@@ -913,37 +911,40 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
   c.expect('(');
   consumeTrivia(c);
 
-  if (c.peek() === ')' || c.eof()) {
-    c.error(`Expected selector in pseudo-class body, got ${c.peek()}`);
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected selector in pseudo-class body, got ${ch || '<eof>'}`);
   }
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
 
-  while (!c.eof() && c.peek() !== ')') {
+  while (ch !== ')' && ch !== '') {
     const complex = parseComplexSelector(c, ctx);
     if (complex.usesScope) usesScope = true;
     selectors.push(complex);
 
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ')' || c.eof()) break;
+    if (ch === ')' || ch === '') break;
 
-    if (!c.match(',')) {
-      c.error(`Expected "," or ")" in pseudo-class body, got ${c.peek()}`);
+    if (ch !== ',') {
+      c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
     }
 
+    c.advance();
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ')' || c.eof()) {
-      c.error(`Expected selector after comma in pseudo-class body, got ${c.peek()}`);
+    if (ch === ')' || ch === '') {
+      c.error(`Expected selector after comma in pseudo-class body, got ${ch || '<eof>'}`);
     }
   }
 
-  // Selectors syntax / old regex behavior has a lot of EOF tolerance.
-  // So allow EOF here as "body ended at EOF" for now.
-  if (!c.eof()) {
-    c.expect(')');
+  if (ch === ')') {
+    c.advance();
   }
 
   return { selectors, usesScope };
@@ -953,18 +954,21 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
   c.expect('(');
   consumeTrivia(c);
 
-  if (c.peek() === ')' || c.eof()) {
-    c.error(`Expected selector in pseudo-class body, got ${c.peek()}`);
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected selector in pseudo-class body, got ${ch || '<eof>'}`);
   }
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
 
-  while (!c.eof() && c.peek() !== ')') {
+  while (ch !== ')' && ch !== '') {
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ',' || c.peek() === ')' || c.eof()) {
-      c.error(`Expected selector in pseudo-class body, got ${c.peek()}`);
+    if (ch === ',' || ch === ')' || ch === '') {
+      c.error(`Expected selector in pseudo-class body, got ${ch || '<eof>'}`);
     }
 
     const armStart = c.pos();
@@ -979,28 +983,29 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
     }
 
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ')' || c.eof()) break;
+    if (ch === ')' || ch === '') break;
 
-    if (!c.match(',')) {
-      c.error(`Expected "," or ")" in pseudo-class body, got ${c.peek()}`);
+    if (ch !== ',') {
+      c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
     }
 
+    c.advance();
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ',' || c.peek() === ')' || c.eof()) {
-      c.error(`Expected selector after comma in pseudo-class body, got ${c.peek()}`);
+    if (ch === ',' || ch === ')' || ch === '') {
+      c.error(`Expected selector after comma in pseudo-class body, got ${ch || '<eof>'}`);
     }
   }
 
-  if (!c.eof()) c.expect(')');
+  if (ch === ')') c.advance();
 
   return { selectors, usesScope };
 }
 
-function consumeForgivingSelectorArm(c: Cursor): string {
-  const start = c.pos();
-
+function consumeForgivingSelectorArm(c: Cursor): void {
   let parenDepth = 0;
   let bracketDepth = 0;
   let quote: string | null = null;
@@ -1010,81 +1015,79 @@ function consumeForgivingSelectorArm(c: Cursor): string {
 
     if (quote) {
       if (ch === '\\') {
-        c.next();
-        if (!c.eof()) c.next();
+        c.advance();
+        if (!c.eof()) c.advance();
         continue;
       }
 
       if (ch === quote) {
         quote = null;
-        c.next();
+        c.advance();
         continue;
       }
 
-      c.next();
+      c.advance();
       continue;
     }
 
     if (ch === '"' || ch === "'") {
       quote = ch;
-      c.next();
+      c.advance();
       continue;
     }
 
     if (ch === '/' && c.peek(1) === '*') {
-      c.consume(2);
+      c.advance(2);
 
       while (!c.eof()) {
         if (c.peek() === '*' && c.peek(1) === '/') {
-          c.consume(2);
+          c.advance(2);
           break;
         }
 
-        c.next();
+        c.advance();
       }
 
       continue;
     }
 
     if (ch === '\\') {
-      c.next();
-      if (!c.eof()) c.next();
+      c.advance();
+      if (!c.eof()) c.advance();
       continue;
     }
 
     if (ch === '[') {
       bracketDepth++;
-      c.next();
+      c.advance();
       continue;
     }
 
     if (ch === ']') {
       if (bracketDepth > 0) bracketDepth--;
-      c.next();
+      c.advance();
       continue;
     }
 
     if (bracketDepth === 0) {
       if (ch === '(') {
         parenDepth++;
-        c.next();
+        c.advance();
         continue;
       }
 
       if (ch === ')') {
         if (parenDepth === 0) break;
         parenDepth--;
-        c.next();
+        c.advance();
         continue;
       }
 
       if (ch === ',' && parenDepth === 0) break;
     }
 
-    c.next();
+    c.advance();
   }
-
-  return c.slice(start, c.pos());
 }
 
 export type RelativeSelectorList = {
@@ -1106,122 +1109,43 @@ export type RelativeCompoundSelector = {
   source: string;
 };
 
-// export function parsePseudoBodyRelativeSelectorList(c: Cursor): RelativeSelectorList2 {
-//   c.expect('(');
-//   consumeTrivia(c);
-
-//   if (c.peek() === ')' || c.eof()) {
-//     c.error(`Expected relative selector in pseudo-class body, got ${c.peek()}`);
-//   }
-
-//   let usesScope = false;
-//   const selectors: RelativeSelector2[] = [];
-
-//   while (!c.eof() && c.peek() !== ')') {
-//     const parsed = parseRelativeSelector2(c);
-//     if (parsed.usesScope) usesScope = true;
-//     selectors.push(parsed);
-
-//     consumeTrivia(c);
-
-//     if (c.peek() === ')' || c.eof()) break;
-
-//     if (!c.match(',')) {
-//       c.error(`Expected "," or ")" in relative selector list, got ${c.peek()}`);
-//     }
-
-//     consumeTrivia(c);
-
-//     if (c.peek() === ')' || c.eof()) {
-//       c.error(`Expected relative selector after comma in pseudo-class body, got ${c.peek()}`);
-//     }
-//   }
-
-//   if (!c.eof()) c.expect(')');
-
-//   return { selectors, usesScope };
-// }
-
-// function parseRelativeSelector2(c: Cursor): RelativeSelector2 {
-//   const steps: RelativeStep2[] = [];
-
-//   consumeTrivia(c);
-
-//   let combinator = parseOptionalRelativeCombinator(c) ?? ' ';
-//   consumeTrivia(c);
-
-//   if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
-//     c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
-//   }
-
-//   steps.push({
-//     combinator,
-//     compound: parseCompoundSelector(c),
-//   });
-
-//   let usesScope = steps[0].compound.usesScope;
-
-//   while (true) {
-//     const sawWs = consumeTrivia(c);
-
-//     if (c.eof() || c.peek() === ')' || c.peek() === ',') break;
-
-//     const explicit = parseOptionalRelativeCombinator(c);
-
-//     if (explicit) {
-//       combinator = explicit;
-//       consumeTrivia(c);
-//     } else if (sawWs) {
-//       combinator = ' ';
-//     } else {
-//       c.error(`Expected combinator in relative selector, got ${c.peek()}`);
-//     }
-
-//     if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
-//       c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
-//     }
-
-//     const compound = parseCompoundSelector(c);
-//     if (compound.usesScope) usesScope = true;
-
-//     steps.push({ combinator, compound });
-//   }
-
-//   return { steps, usesScope };
-// }
-
 export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): RelativeSelectorList {
   c.expect('(');
   consumeTrivia(c);
 
-  if (c.peek() === ')' || c.eof()) {
-    c.error(`Expected relative selector in pseudo-class body, got ${c.peek()}`);
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected relative selector in pseudo-class body, got ${ch || '<eof>'}`);
   }
 
   const arms: RelativeComplexSelector[] = [];
   let usesScope = false;
 
-  while (!c.eof() && c.peek() !== ')') {
+  while (ch !== ')' && ch !== '') {
     const arm = parseRelativeComplexSelector(c, ctx);
     if (arm.usesScope) usesScope = true;
     arms.push(arm);
 
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ')' || c.eof()) break;
+    if (ch === ')' || ch === '') break;
 
-    if (!c.match(',')) {
-      c.error(`Expected "," or ")" in relative selector list, got ${c.peek()}`);
+    if (ch !== ',') {
+      c.error(`Expected "," or ")" in relative selector list, got ${ch}`);
     }
 
+    c.advance();
     consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.peek() === ')' || c.eof()) {
-      c.error(`Expected relative selector after comma in pseudo-class body, got ${c.peek()}`);
+    if (ch === ')' || ch === '') {
+      c.error(`Expected relative selector after comma in pseudo-class body, got ${ch || '<eof>'}`);
     }
   }
 
-  if (!c.eof()) c.expect(')');
+  if (ch === ')') c.advance();
 
   return { arms, usesScope };
 }
@@ -1236,13 +1160,15 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
   consumeTrivia(c);
 
   while (true) {
-    if (c.eof() || c.peek() === ')' || c.peek() === ',' || isCombinator(c.peek())) {
-      c.error(`Expected compound selector after combinator in relative selector, got ${c.peek() || '<eof>'}`);
+    let ch = c.peek();
+
+    if (ch === '' || ch === ')' || ch === ',' || isCombinator(ch)) {
+      c.error(`Expected compound selector after combinator in relative selector, got ${ch || '<eof>'}`);
     }
 
     const start = c.pos();
     const compound = parseCompoundSelector(c, ctx);
-    const source = c.slice(start, c.pos()).trim();
+    const source = c.slice(start, c.pos());
 
     if (compound.usesScope) usesScope = true;
 
@@ -1252,8 +1178,9 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     });
 
     const sawWs = consumeTrivia(c);
+    ch = c.peek();
 
-    if (c.eof() || c.peek() === ')' || c.peek() === ',') break;
+    if (ch === '' || ch === ')' || ch === ',') break;
 
     const explicit = parseOptionalRelativeCombinator(c);
 
@@ -1263,7 +1190,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     } else if (sawWs) {
       combinator = ' ';
     } else {
-      c.error(`Expected combinator in relative selector, got ${c.peek()}`);
+      c.error(`Expected combinator in relative selector, got ${ch}`);
     }
   }
 
@@ -1274,7 +1201,7 @@ function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
   const ch = c.peek();
 
   if (ch === '>' || ch === '+' || ch === '~') {
-    c.next();
+    c.advance();
     return ch;
   }
 
@@ -1299,20 +1226,24 @@ export function parseNthArgs(c: Cursor): NthArgs {
 }
 
 export function parseNthExpression(c: Cursor): NthArgs {
-  const start = c.pos();
+  const ch = c.peek();
 
-  const word = consumeAsciiWord(c).toLowerCase();
+  if (ch === 'o' || ch === 'O' || ch === 'e' || ch === 'E') {
+    const start = c.pos();
+    const word = consumeAsciiWord(c).toLowerCase();
 
-  if (word === 'odd') return { step: 2, offset: 1 };
-  if (word === 'even') return { step: 2, offset: 0 };
+    if (word === 'odd') return { step: 2, offset: 1 };
+    if (word === 'even') return { step: 2, offset: 0 };
 
-  c.restore(start);
+    c.restore(start);
+  }
 
   const sign = parseOptionalSign(c);
   const digits = consumeDigits(c);
+  const n = c.peek();
 
-  if (c.peek().toLowerCase() !== 'n') {
-    if (digits === '') c.error(`Expected nth expression, got ${c.peek()}`);
+  if (n !== 'n' && n !== 'N') {
+    if (digits === '') c.error(`Expected nth expression, got ${n || '<eof>'}`);
 
     return {
       step: 0,
@@ -1320,20 +1251,21 @@ export function parseNthExpression(c: Cursor): NthArgs {
     };
   }
 
-  c.next(); // n
+  c.advance();
 
   const step = digits === '' ? sign : sign * Number(digits);
 
   consumeTrivia(c);
 
   let offset = 0;
+  const offsetCh = c.peek();
 
-  if (c.peek() === '+' || c.peek() === '-') {
+  if (offsetCh === '+' || offsetCh === '-') {
     const offsetSign = parseOptionalSign(c);
     consumeTrivia(c);
 
     const offsetDigits = consumeDigits(c);
-    if (offsetDigits === '') c.error(`Expected offset in nth expression, got ${c.peek()}`);
+    if (offsetDigits === '') c.error(`Expected offset in nth expression, got ${c.peek() || '<eof>'}`);
 
     offset = offsetSign * Number(offsetDigits);
   }
@@ -1345,9 +1277,12 @@ export function parseNthExpression(c: Cursor): NthArgs {
 }
 
 function parseOptionalSign(c: Cursor): 1 | -1 {
-  if (c.match('+')) return 1;
-  if (c.match('-')) return -1;
-  return 1;
+  const ch = c.peek();
+
+  if (ch !== '+' && ch !== '-') return 1;
+
+  c.advance();
+  return ch === '-' ? -1 : 1;
 }
 
 function normalizeZero(n: number): number {
@@ -1367,16 +1302,20 @@ function parsePseudoBodyIdentArg(c: Cursor): string {
   c.expect('(');
   consumeTrivia(c);
 
-  if (c.peek() === ')' || c.eof()) {
-    c.error(`Expected argument in pseudo-class, got ${c.peek()}`);
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected argument in pseudo-class, got ${ch || '<eof>'}`);
   }
 
   const arg = consumeIdent(c);
 
   consumeTrivia(c);
+  ch = c.peek();
 
-  if (!c.eof()) {
-    c.expect(')');
+  if (ch !== '') {
+    if (ch !== ')') c.error(`Expected ")" after pseudo-class argument, got ${ch}`);
+    c.advance();
   }
 
   return arg;
@@ -1405,50 +1344,30 @@ function isCssWhitespace(ch: string): boolean {
   return ch === ' ' || ch === '\n' || ch === '\t' || ch === '\r' || ch === '\f';
 }
 
-function consumeComment(c: Cursor): boolean {
-  if (!startsComment(c)) return false;
-
-  c.consume(2);
-
-  while (!c.eof()) {
-    if (c.peek() === '*' && c.peek(1) === '/') {
-      c.consume(2);
-      return true;
-    }
-
-    c.next();
-  }
-
-  c.error('Unterminated comment');
-}
-
-function startsComment(c: Cursor): boolean {
-  return c.peek() === '/' && c.peek(1) === '*';
-}
-
 function consumeTrivia(c: Cursor): boolean {
   let consumed = false;
 
   while (true) {
-    // Consume whitespace.
-    const n = c.consumeWhile(isCssWhitespace);
-    if (n !== 0) {
-      consumed = true;
-      continue;
-    }
+    // Whitespace run.
+    if (c.consumeWhile(isCssWhitespace) !== 0) consumed = true;
 
-    if (consumeComment(c)) {
-      consumed = true;
-      continue;
-    }
+    // Block comment.
+    if (c.peek() !== '/' || c.peek(1) !== '*') return consumed;
 
-    return consumed;
+    consumed = true;
+    c.advance(2);
+
+    while (true) {
+      const ch = c.next();
+      if (ch === '') c.error('Unterminated comment');
+      if (ch !== '*' || c.peek() !== '/') continue;
+      c.advance();
+      break;
+    }
   }
 }
 
-function canStartSimpleSelector(c: Cursor): boolean {
-  const ch = c.peek();
-
+function canStartSimpleSelector(ch: string): boolean {
   return (
     ch === '#' ||
     ch === '.' ||
@@ -1457,24 +1376,18 @@ function canStartSimpleSelector(c: Cursor): boolean {
     ch === '*' ||
     ch === '|' ||
     ch === '&' ||
-    canStartIdent(c)
+    canStartIdent(ch)
   );
 }
 
 
-function canStartIdent(c: Cursor): boolean {
-  const ch = c.peek();
-
-  return (
-    ch === '-' ||
-    ch === '\\' ||
-    isIdentHeadChar(ch)
-  );
+function canStartIdent(ch: string): boolean {
+  return ch === '-' || ch === '\\' || isIdentHeadChar(ch);
 }
 
 function consumeEscapedChar(c: Cursor): boolean {
   if (!c.match('\\')) return false;
-  if (!c.eof()) c.next();
+  if (!c.eof()) c.advance();
   return true;
 }
 
@@ -1505,45 +1418,41 @@ function isDigit(ch: string): boolean {
   return code >= 48 && code <= 57;
 }
 
-function isNonAsciiIdentChar(ch: string): boolean {
-  return ch !== '' && ch.charCodeAt(0) > 0x9f;
-}
 
 function isIdentHeadChar(ch: string): boolean {
-  return isAlpha(ch) || ch === '_' || isNonAsciiIdentChar(ch);
+  const code = ch.charCodeAt(0);
+  return ch === '_' || code > 0x9f || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function isIdentTailChar(ch: string): boolean {
-  return isIdentHeadChar(ch) || isDigit(ch) || ch === '-';
+  const code = ch.charCodeAt(0);
+  return ch === '-' || ch === '_' || code > 0x9f || (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 
 function consumeCssEscape(c: Cursor): boolean {
   const start = c.pos();
 
-  if (!c.match('\\')) return false;
+  if (c.peek() !== '\\') return false;
+  c.advance();
 
   const ch = c.peek();
 
-  // css backslash eof escape. Keep the raw backslash in the identifier;
+  // CSS backslash EOF escape. Keep the raw backslash in the identifier;
   // cssIdentUnescape later maps it to U+FFFD.
-  if (ch === '') {
-    return true;
-  }
+  if (ch === '') return true;
 
   if (isHexDigit(ch)) {
-    let n = 0;
+    let n = 1;
 
-    while (n < 6 && isHexDigit(c.peek())) {
-      c.next();
-      n++;
-    }
+    while (n < 6 && isHexDigit(c.peek(n))) n++;
 
-    // Old regex allows either CRLF or one CSS whitespace after hex escape.
+    c.advance(n);
+
     if (c.peek() === '\r' && c.peek(1) === '\n') {
-      c.consume(2);
+      c.advance(2);
     } else if (isCssWhitespace(c.peek())) {
-      c.next();
+      c.advance();
     }
 
     return true;
@@ -1551,8 +1460,8 @@ function consumeCssEscape(c: Cursor): boolean {
 
   // Old regex: backslash followed by a char that is not vertical whitespace
   // and not hex.
-  if (!isVerticalWhitespace(ch) && !isHexDigit(ch)) {
-    c.next();
+  if (!isVerticalWhitespace(ch)) {
+    c.advance();
     return true;
   }
 
@@ -1561,10 +1470,10 @@ function consumeCssEscape(c: Cursor): boolean {
 }
 
 function consumeIdentHead(c: Cursor): boolean {
-  if (consumeIdentReplacementChar(c)) return true;
+  const ch = c.peek();
 
-  if (isIdentHeadChar(c.peek())) {
-    c.next();
+  if (ch === '\x00' || isIdentHeadChar(ch)) {
+    c.advance();
     return true;
   }
 
@@ -1572,53 +1481,38 @@ function consumeIdentHead(c: Cursor): boolean {
 }
 
 function consumeIdentTail(c: Cursor): boolean {
-  if (consumeIdentReplacementChar(c)) return true;
+  const ch = c.peek();
 
-  if (isIdentTailChar(c.peek())) {
-    c.next();
+  if (ch === '\x00' || isIdentTailChar(ch)) {
+    c.advance();
     return true;
   }
 
   return consumeCssEscape(c);
 }
 
-function consumeIdentReplacementChar(c: Cursor): boolean {
-  if (c.peek() !== '\x00') return false;
-  c.next();
-  return true;
-}
-
 export function consumeIdent(c: Cursor): string {
   const start = c.pos();
+  const ch = c.peek();
 
-  if (c.matchString('--')) {
-    while (consumeIdentTail(c)) {
-      // consume
-    }
+  if (ch === '-') {
+    c.advance();
 
-    return c.slice(start);
-  }
-
-  if (c.match('-')) {
-    if (!consumeIdentHead(c)) {
+    if (c.peek() === '-') {
+      c.advance();
+    } else if (!consumeIdentHead(c)) {
       c.restore(start);
-      c.error(`Expected identifier after "-", got ${c.peek()}`);
+      c.error(`Expected identifier after "-", got ${c.peek() || '<eof>'}`);
     }
 
-    while (consumeIdentTail(c)) {
-      // consume
-    }
-
+    while (consumeIdentTail(c)) {}
     return c.slice(start);
   }
 
   if (!consumeIdentHead(c)) {
-    c.error(`Expected identifier, got ${c.peek()}`);
+    c.error(`Expected identifier, got ${ch || '<eof>'}`);
   }
 
-  while (consumeIdentTail(c)) {
-    // consume
-  }
-
+  while (consumeIdentTail(c)) {}
   return c.slice(start);
 }
