@@ -12,12 +12,9 @@ interface AmdDefine {
 
 var define: AmdDefine | undefined;
 
-var NW: {
-  Dom?: DomApi;
-  [key: string]: unknown;
-} | undefined;
+var selectlet: SxltApi | undefined;
 
-type NwsConfig = Record<ConfigKey, boolean>;
+type SxltConfig = Record<ConfigKey, boolean>;
 type ConfigKey = 'NODE_LIST' | 'MUTATE_IDS';
 
 type CustomPseudoPredicate = (element: Element) => boolean;
@@ -70,9 +67,9 @@ type SelectResolver = {
 type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };
 type ElementList = Element[] | IndexedNodeList;
 
-type DomApi = {
+type SxltApi = {
   version: string;
-  config: NwsConfig;
+  config: SxltConfig;
   snapshot: Snapshot;
 
   byId: (id: string, context?: QueryContext) => Element | null;

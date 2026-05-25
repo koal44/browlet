@@ -13,7 +13,7 @@ import type { DebugMatch, DebugSelect } from "./debug";
 import { escapeRegExp } from "./utils/css";
 import { getNamespace, isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from "./utils/dom";
 
-export const DEFAULT_CONFIG: NwsConfig = {
+export const DEFAULT_CONFIG: SxltConfig = {
   // When enabled, methods that return multiple elements will return a
   // NodeList-like object instead of an array.
   NODE_LIST: false,
@@ -45,7 +45,7 @@ export function initSnapshot(doc: Document) {
     debugCompile: undefined as string | undefined,
 
     // special handling configuration flags
-    config: { ...DEFAULT_CONFIG } as NwsConfig,
+    config: { ...DEFAULT_CONFIG } as SxltConfig,
     pseudos: {} as Record<string, CustomPseudoPredicate>,
 
     // state for dynamic pseudo-classes

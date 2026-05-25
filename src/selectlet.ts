@@ -3,7 +3,7 @@ import { initSnapshot } from "./snapshot";
 import { toNodeList } from "./utils/collections";
 import { isElement, isIFrame, isNode, isText } from "./utils/dom";
 
-export function Factory(fGlobal: typeof globalThis, fExport: Function): DomApi {
+export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi {
   const _doc = fGlobal.document;
   const _snap = initSnapshot(_doc);
 
@@ -44,9 +44,9 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): DomApi {
   const _qsaHooks: { type: string, listener: EventListenerOrEventListenerObject }[] = [];
 
   // public exported methods/objects
-  const Dom: DomApi = {
+  const Dom: SxltApi = {
     // Version, Config, CFG, Snapshot -- previous names
-    version: 'nwsapi-__VERSION__',
+    version: 'selectlet-__VERSION__',
     config: _snap.config,
     snapshot: _snap,
 
@@ -172,7 +172,7 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): DomApi {
           const iife = '(' + fExport + ')(this, ' + Factory + ');';
           const doc = evTarget.ownerDocument;
           const script = doc.createElement('script');
-          script.textContent = iife + 'NW.Dom.install(true)';
+          script.textContent = iife + 'selectlet.install(true)';
           const root = doc.documentElement;
           root.removeChild(root.insertBefore(script, root.firstChild));
         }

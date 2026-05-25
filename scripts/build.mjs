@@ -3,9 +3,9 @@ import { execSync } from 'node:child_process';
 import { rollup } from 'rollup';
 
 const tmpDir = 'dist/.tmp';
-const tscOutFile = 'dist/.tmp/nwsapi.js';
-const bundleFile = 'dist/.tmp/nwsapi.bundle.js';
-const outFile = 'dist/nwsapi.js';
+const tscOutFile = 'dist/.tmp/selectlet.js';
+const bundleFile = 'dist/.tmp/selectlet.bundle.js';
+const outFile = 'dist/selectlet.js';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const version = pkg.version;
@@ -29,18 +29,13 @@ await bundle.close();
 let source = fs.readFileSync(bundleFile, 'utf8');
 source = source.replaceAll('__VERSION__', version);
 
-// source = source.replace(
-//   /(^|\n)export\s+(function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g,
-//   '$1$2 $3'
-// );
-
 source = source.replace(
   /(^|\n)export\s*\{[\s\S]*?\};?\s*(?=\n|$)/g,
   '$1'
 );
 
 const banner = `/*
- * nwsapi v${version} | MIT
+ * selectlet v${version} | MIT
  * Copyright (c) 2007-2025 Diego Perini
  * Copyright (c) 2026 Eric Knowlton
  */
@@ -56,8 +51,7 @@ function Export(glob, factory) {
   } else if (typeof define == 'function' && define.amd) {
     define(factory);
   } else {
-    glob.NW || (glob.NW = {});
-    glob.NW.Dom = factory(glob, Export);
+    glob.selectlet = factory(glob, Export);
   }
 }
 

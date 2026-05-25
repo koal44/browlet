@@ -1,7 +1,7 @@
 export default {
-  input: '.build/nwsapi.js',
+  input: '.build/selectlet.js',
   output: {
-    file: '.build/nwsapi.bundle.js',
+    file: '.build/selectlet.bundle.js',
     format: 'es',
   },
 };

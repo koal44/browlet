@@ -1,8 +1,8 @@
 # Browser harness (Playwright)
 
-Browser-based tests for `nwsapi`, migrated from older selector suites and run under Playwright.
+Browser-based tests for `selectlet`, migrated from older selector suites and run under Playwright.
 
-The harness compares `NW.Dom` against native DOM behavior in Chromium, Firefox, and WebKit. Tests run inside the page via `page.evaluate()`, which makes it possible to measure native browser results directly and compare them against `nwsapi` under the same fixture and context.
+The harness compares `selectlet` against native DOM behavior in Chromium, Firefox, and WebKit. Tests run inside the page via `page.evaluate()`, which makes it possible to measure native browser results directly and compare them against `selectlet` under the same fixture and context.
 
 ## Install
 
@@ -65,7 +65,7 @@ runScenarios('jquery', 'normal', [
 
 Scenarios can:
 
-- choose engines (`nw`, `native`) and browsers
+- choose engines (`selectlet`, `native`) and browsers
 - provide inline HTML fixtures
 - use `setupPage` to run page-side JavaScript before assertions
 - use steps to change page state between groups of cases
@@ -78,7 +78,7 @@ Scenarios can:
 
 The harness reduces selector tests to two things: a query and a context.
 
-Cases always compare `NW.Dom` against native browser behavior. Explicit expectations are extra assertions on top of that comparison.
+Cases always compare `selectlet` against native browser behavior. Explicit expectations are extra assertions on top of that comparison.
 
 Contexts can also be rehomed, so the same ref can be tested in its original document, detached, or inside a `DocumentFragment`.
 

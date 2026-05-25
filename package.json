@@ -1,9 +1,9 @@
 {
-  "name": "nwsapi",
-  "version": "2.2.23-fork.0",
-  "description": "Fast CSS Selectors API Engine",
-  "homepage": "https://github.com/koal44/nwsapi-lab",
-  "main": "./dist/nwsapi.js",
+  "name": "selectlet",
+  "version": "0.1.0-alpha.0",
+  "description": "A JavaScript CSS selector engine",
+  "homepage": "https://github.com/koal44/selectlet",
+  "main": "./dist/selectlet.js",
   "files": [
     "dist/",
     "README.md",
@@ -11,26 +11,27 @@
   ],
   "keywords": [
     "css",
-    "css3",
-    "css4",
-    "matcher",
-    "selector"
+    "selector",
+    "selectors",
+    "dom",
+    "queryselector",
+    "matcher"
   ],
   "license": "MIT",
   "author": {
-    "name": "Diego Perini"
+    "name": "Eric Knowlton"
   },
-  "maintainers": [
+  "contributors": [
     {
-      "name": "Eric Knowlton"
+      "name": "Diego Perini"
     }
   ],
   "bugs": {
-    "url": "https://github.com/koal44/nwsapi-lab/issues"
+    "url": "https://github.com/koal44/selectlet/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/koal44/nwsapi-lab.git"
+    "url": "git+https://github.com/koal44/selectlet.git"
   },
   "scripts": {
     "build": "node scripts/build.mjs",

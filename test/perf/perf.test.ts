@@ -1183,7 +1183,7 @@ runPerfScenarios('perf', [
     name: 'match resource state pseudo classes',
     // status: 'only',
     browsers: ['webkit'],
-    engines: ['native', 'nw-current'],
+    engines: ['native', 'selectlet'],
     quickIters: 200_000,
     markup: `
       <video id="video"></video>
@@ -1223,11 +1223,11 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
-        nwdom.snapshot.hasDocumentAll = true;
-        nwdom.snapshot.hasTreeWalker = true;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.hasDocumentAll = true;
+        sxlt.snapshot.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1264,11 +1264,11 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: true });
-        nwdom.snapshot.hasDocumentAll = false;
-        nwdom.snapshot.hasTreeWalker = true;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: true });
+        sxlt.snapshot.hasDocumentAll = false;
+        sxlt.snapshot.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1305,11 +1305,11 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
-        nwdom.snapshot.hasDocumentAll = false;
-        nwdom.snapshot.hasTreeWalker = true;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.hasDocumentAll = false;
+        sxlt.snapshot.hasTreeWalker = true;
       });
     },
     probeKeys: ['select'],
@@ -1346,11 +1346,11 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
-        nwdom.snapshot.hasDocumentAll = false;
-        nwdom.snapshot.hasTreeWalker = false;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.hasDocumentAll = false;
+        sxlt.snapshot.hasTreeWalker = false;
       });
     },
     probeKeys: ['select'],
@@ -1386,13 +1386,13 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: true });
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: true });
 
-        // nwdom.configure({ MUTATE_IDS: false });
-        // nwdom.snapshot.hasDocumentAll = false;
-        // nwdom.snapshot.hasTreeWalker = false;
+        // sxlt.configure({ MUTATE_IDS: false });
+        // sxlt.snapshot.hasDocumentAll = false;
+        // sxlt.snapshot.hasTreeWalker = false;
       });
     },
     probeKeys: ['select'],
@@ -1438,10 +1438,10 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
-        nwdom.snapshot.hasDocumentAll = true;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.hasDocumentAll = true;
       });
     },
     probeKeys: [''],
@@ -1476,10 +1476,10 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: true });
-        nwdom.snapshot.hasDocumentAll = false;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: true });
+        sxlt.snapshot.hasDocumentAll = false;
       });
     },
     probeKeys: [''],
@@ -1514,10 +1514,10 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
-        nwdom.snapshot.hasDocumentAll = false;
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.hasDocumentAll = false;
       });
     },
     probeKeys: [''],
@@ -1552,18 +1552,18 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = (globalThis as any).NW?.Dom;
-        if (!nwdom?.snapshot) return;
-        nwdom.configure({ MUTATE_IDS: false });
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt?.snapshot) return;
+        sxlt.configure({ MUTATE_IDS: false });
       });
     },
     probeKeys: [''],
     benches: [
-      // document context: native getElementById / NW document path
+      // document context: native getElementById / selectlet document path
       { label: 'byId hit document', op: 'byId', id: 'item-100', iters: 100_000 },
       { label: 'byId miss document', op: 'byId', id: 'absent', iters: 100_000 },
 
-      // connected element context: native selector approximation / NW scoped byId
+      // connected element context: native selector approximation / selectlet scoped byId
       { label: 'byId hit element', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root' }, iters: 100_000 },
       { label: 'byId miss element', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root' }, iters: 100_000 },
       { label: 'byId context id element', op: 'byId', id: 'root', ref: { by: 'id', id: 'root' }, iters: 100_000 },
@@ -1572,7 +1572,7 @@ runPerfScenarios('perf', [
       { label: 'byId hit detached', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
       { label: 'byId miss detached', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'detached' }, iters: 20_000 },
 
-      // fragment context: getElementById/native fallback vs NW fragment path
+      // fragment context: getElementById/native fallback vs selectlet fragment path
       { label: 'byId hit fragment', op: 'byId', id: 'item-100', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
       { label: 'byId miss fragment', op: 'byId', id: 'absent', ref: { by: 'id', id: 'root', home: 'fragment' }, iters: 20_000 },
     ],
@@ -1920,7 +1920,7 @@ runPerfScenarios('perf', [
     name: 'byTagNs candidate paths',
     // status: 'only',
     browsers: ['chromium'],
-    engines: ['native', 'nw-current'],
+    engines: ['native', 'selectlet'],
     markup: `
       <section id="root">
         <div id="a"><span id="aa"></span></div>

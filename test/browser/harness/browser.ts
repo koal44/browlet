@@ -1,4 +1,4 @@
-import { type Engine, type EquivalentCase, type ContextRef, type ContextHome, NwsapiId } from "./scenarios";
+import { type Engine, type EquivalentCase, type ContextRef, type ContextHome, SelectletId } from "./scenarios";
 
 export interface PwHelpers {
   resolveContext(doc:Document, ref?: ContextRef): QueryContext | null;
@@ -70,7 +70,7 @@ export function installBrowserHelpers(): void {
 
   function runQuery(query: () => Element[] | NodeListOf<Element>) {
     try {
-      const id: NwsapiId = 'nwsapi-bootstrap';
+      const id: SelectletId = 'selectlet-bootstrap';
       const els = [...query()].filter((el) => el.getAttribute('id') !== id);
       return { elements: els, error: '' };
     } catch (e) {
@@ -205,13 +205,13 @@ export function installBrowserHelpers(): void {
   }
 
   function getEngineQuery(c: EquivalentCase, ng: Engine): EngineQuery {
-    const nwdom = NW && NW.Dom;
-    if (!nwdom) throw new Error('NW.Dom is not available');
+    const sxlt = selectlet;
+    if (!sxlt) throw new Error('selectlet is not available');
 
     switch (true) {
       case 'select' in c:
         if (ng === 'native') return (query, ctx) => () => [...ctx.querySelectorAll(query)];
-        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.select(query, ctx));
+        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.select(query, ctx));
         break;
 
       case 'first' in c:
@@ -221,9 +221,9 @@ export function installBrowserHelpers(): void {
             return el ? [el] : [];
           };
         }
-        if (ng === 'nw') {
+        if (ng === 'selectlet') {
           return (query, ctx) => () => {
-            const el = nwdom.first(query, ctx);
+            const el = sxlt.first(query, ctx);
             return el ? [el] : [];
           };
         }
@@ -236,7 +236,7 @@ export function installBrowserHelpers(): void {
             return [...base.getElementsByTagName(query)];
           };
         }
-        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byTag(query, ctx));
+        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byTag(query, ctx));
         break;
 
       case 'byTagNs' in c:
@@ -247,10 +247,10 @@ export function installBrowserHelpers(): void {
             return [...base.getElementsByTagNameNS(ns, local)];
           };
         }
-        if (ng === 'nw') {
+        if (ng === 'selectlet') {
           return (_query, ctx) => () => {
             const { ns, local } = c.byTagNs;
-            return toArr(nwdom.byTagNs(ns, local, ctx));
+            return toArr(sxlt.byTagNs(ns, local, ctx));
           };
         }
         break;
@@ -262,7 +262,7 @@ export function installBrowserHelpers(): void {
             return [...base.getElementsByClassName(query)];
           };
         }
-        if (ng === 'nw') return (query, ctx) => () => toArr(nwdom.byClass(query, ctx));
+        if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byClass(query, ctx));
         break;
 
       case 'byId' in c:
@@ -272,9 +272,9 @@ export function installBrowserHelpers(): void {
             return found ? [found] : [];
           };
         }
-        if (ng === 'nw') {
+        if (ng === 'selectlet') {
           return (query, ctx) => () => {
-            const found = nwdom.byId(query, ctx);
+            const found = sxlt.byId(query, ctx);
             return found ? [found] : [];
           };
         }
@@ -288,11 +288,11 @@ export function installBrowserHelpers(): void {
             return el.matches(query) ? [el] : [];
           };
         }
-        if (ng === 'nw') {
+        if (ng === 'selectlet') {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
             const el = ctx;
-            return nwdom.match(query, el) ? [el] : [];
+            return sxlt.match(query, el) ? [el] : [];
           };
         }
         break;
@@ -306,11 +306,11 @@ export function installBrowserHelpers(): void {
             return hit ? [hit] : [];
           };
         }
-        if (ng === 'nw') {
+        if (ng === 'selectlet') {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'closest' case must be an Element`);
             const el = ctx;
-            const hit = nwdom.closest(query, el);
+            const hit = sxlt.closest(query, el);
             return hit ? [hit] : [];
           };
         }
@@ -364,42 +364,42 @@ export function installBrowserHelpers(): void {
       case 'select' in c:
         return engine === 'native'
           ? `querySelectorAll(${c.select})`
-          : `NW.Dom.select(${c.select})`;
+          : `sxlt.select(${c.select})`;
 
       case 'first' in c:
         return engine === 'native'
           ? `querySelector(${c.first})`
-          : `NW.Dom.first(${c.first})`;
+          : `sxlt.first(${c.first})`;
 
       case 'byTag' in c:
         return engine === 'native'
           ? `byTag(${c.byTag})`
-          : `NW.Dom.byTag(${c.byTag})`;
+          : `sxlt.byTag(${c.byTag})`;
 
       case 'byTagNs' in c:
         return engine === 'native'
           ? `byTag(${c.byTagNs.ns}:${c.byTagNs.local})`
-          : `NW.Dom.byTagNs(${c.byTagNs.ns}:${c.byTagNs.local})`;
+          : `sxlt.byTagNs(${c.byTagNs.ns}:${c.byTagNs.local})`;
 
       case 'byClass' in c:
         return engine === 'native'
           ? `byClass(${c.byClass})`
-          : `NW.Dom.byClass(${c.byClass})`;
+          : `sxlt.byClass(${c.byClass})`;
 
       case 'byId' in c:
         return engine === 'native'
           ? `byId(${c.byId})`
-          : `NW.Dom.byId(${c.byId})`;
+          : `sxlt.byId(${c.byId})`;
 
       case 'match' in c:
         return engine === 'native'
           ? `matches(${c.match})`
-          : `NW.Dom.match(${c.match})`;
+          : `sxlt.match(${c.match})`;
 
       case 'closest' in c:
         return engine === 'native'
           ? `closest(${c.closest})`
-          : `NW.Dom.closest(${c.closest})`;
+          : `sxlt.closest(${c.closest})`;
 
       default:
         throw assertNever(c);

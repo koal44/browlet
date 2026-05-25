@@ -72,7 +72,7 @@ type ScenariosStatus = 'normal' | 'skip' | 'only'; // | 'fixme';
 type ScenarioStatus = 'normal' | 'skip' | 'only' | 'fixme' | 'fail';
 type CaseStatus = 'normal' | 'skip' | 'fixme' | 'fail' | 'only';
 
-export const ENGINES = ['native', 'nw'] as const;
+export const ENGINES = ['native', 'selectlet'] as const;
 export type Engine = typeof ENGINES[number];
 
 export type ContextRef =
@@ -85,7 +85,7 @@ export type ContextRef =
   | { by: 'shadowRoot'; id: string; within?: ContextRef };
 
 export type ContextHome = 'document' | 'detached' | 'fragment';
-export type NwsapiId = 'nwsapi-bootstrap';
+export type SelectletId = 'selectlet-bootstrap';
 
 type PassTracker = { passedEverywhere: boolean; resultInfo: string; stepIndex: number; caseIndex: number; };
 
@@ -288,11 +288,11 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
   return await page.evaluate(({c, isXml} ) => {
     const pw = window.__pwHelpers;
     const doc = isXml ? window.__pwXml : window.document;
-    const nwdom = NW?.Dom;
-    if (!nwdom) throw new Error('NW.Dom is not available');
+    const sxlt = selectlet;
+    if (!sxlt) throw new Error('selectlet is not available');
     if (c.debug) {
-      nwdom.setDebug?.(true);
-      nwdom.clearDebug?.();
+      sxlt.setDebug?.(true);
+      sxlt.clearDebug?.();
     }
 
     const query = pw.getCaseQuery(c);
@@ -312,7 +312,7 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
         `  equivalent case context: ${pw.stringify(equivCase.ref)}${pw.isRehomed(equivCase.ref) ? ' (rehomed)' : ''}`
       : undefined;
 
-    const allEngines: Permutations<Engine> = ['native', 'nw'];
+    const allEngines: Permutations<Engine> = ['native', 'selectlet'];
     const engines = c.engines ?? allEngines;
     const engineResults: Partial<Record<Engine, EngineAndQueryResult>> = {};
     const makeNamedQr = (tc: TestCase, ng: Engine, res: EngineAndQueryResult, suffix = ''): NamedQueryResult =>
@@ -343,8 +343,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     }
 
     if (c.debug) {
-      const debugText = nwdom.printDebug?.() ?? 'NW.Dom debug unavailable';
-      nwdom.setDebug?.(false);
+      const debugText = sxlt.printDebug?.() ?? 'selectlet debug unavailable';
+      sxlt.setDebug?.(false);
       throw new Error(debugText);
     }
 
@@ -425,18 +425,17 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
 async function ensureHarnessInstalled(page: Page): Promise<void> {
   const state = await page.evaluate(() => ({
     hasHelpers: !!window.__pwHelpers,
-    hasNwsapi: !!NW?.Dom,
-  })).catch(() => ({ hasHelpers: false, hasNwsapi: false }));
+    hasSxlt: !!selectlet,
+  })).catch(() => ({ hasHelpers: false, hasSxlt: false }));
 
   if (!state.hasHelpers) {
     await page.evaluate(installBrowserHelpers);
   }
 
-  if (!state.hasNwsapi) {
-    const script = await page.addScriptTag({ path: 'dist/nwsapi.js' });
-    // const script = await page.addScriptTag({ path: 'scratch/nwsapi-2.2.23.0.js' });
+  if (!state.hasSxlt) {
+    const script = await page.addScriptTag({ path: 'dist/selectlet.js' });
     await script.evaluate((el) => {
-      (el as HTMLScriptElement).id = 'nwsapi-bootstrap' satisfies NwsapiId;
+      (el as HTMLScriptElement).id = 'selectlet-bootstrap' satisfies SelectletId;
     });
   }
 }

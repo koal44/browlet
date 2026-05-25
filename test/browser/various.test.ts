@@ -719,7 +719,7 @@ runScenarios('various', 'normal', [
 
   {
     name: ':scope select callback preserves unmodified context element',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `
       <div id="ctx">
         <span id="child-1"></span>
@@ -737,7 +737,7 @@ runScenarios('various', 'normal', [
           return true;
         };
 
-        const results = [...NW?.Dom?.select(':scope > *', ctx, cb) ?? []];
+        const results = [...selectlet?.select(':scope > *', ctx, cb) ?? []];
 
         const ids = results.map((e) => e.id);
         if (ids.join(',') !== 'child-1,child-2') {
@@ -967,14 +967,14 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const calls: string[] = [];
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
         // First compile/cache without callback.
-        const plain = nwdom.select('#d .x', document);
+        const plain = api.select('#d .x', document);
 
         // Then same selector with callback.
-        const withCb = nwdom.select('#d .x', document, (el: Element) => {
+        const withCb = api.select('#d .x', document, (el: Element) => {
           calls.push(el.id);
           return false;
         });
@@ -998,15 +998,15 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const calls: string[] = [];
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
-        const withCb = nwdom.select('#d .x', document, (el: Element) => {
+        const withCb = api.select('#d .x', document, (el: Element) => {
           calls.push(el.id);
           return false;
         });
 
-        const plain = nwdom.select('#d .x', document);
+        const plain = api.select('#d .x', document);
 
         if (withCb.length !== 1) throw new Error(`withCb length ${withCb.length}`);
         if (plain.length !== 2) throw new Error(`plain length ${plain.length}`);
@@ -1028,10 +1028,10 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const calls: string[] = [];
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
-        const results = nwdom.select('#root > .x', document, (el: Element) => {
+        const results = api.select('#root > .x', document, (el: Element) => {
           calls.push(el.id);
           return el.id !== 'b';
         });
@@ -1061,17 +1061,17 @@ runScenarios('various', 'normal', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
         const firstCalls: string[] = [];
-        const first = nwdom.select('#a, #b, #c', document, (el: Element) => {
+        const first = api.select('#a, #b, #c', document, (el: Element) => {
           firstCalls.push(el.id);
           return false;
         });
 
         const secondCalls: string[] = [];
-        const second = nwdom.select('#a, #b, #c', document, (el: Element) => {
+        const second = api.select('#a, #b, #c', document, (el: Element) => {
           secondCalls.push(el.id);
           return true;
         });
@@ -1111,10 +1111,10 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const calls: string[] = [];
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
-        const results = nwdom.select('#a, #b, #c', document, (el: Element) => {
+        const results = api.select('#a, #b, #c', document, (el: Element) => {
           calls.push(el.id);
           return false;
         });
@@ -3985,7 +3985,7 @@ runScenarios('various', 'normal', [
   {
     name: 'resource state muted matches audio and video muted property',
     // status: 'only',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `
       <audio id="audio"></audio>
       <video id="video"></video>
@@ -4007,7 +4007,7 @@ runScenarios('various', 'normal', [
   {
     name: 'resource state paused and seeking exclude non-media elements',
     // status: 'only',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `<div id="x"></div><audio id="audio"></audio>`,
     cases: [
       { select: '#x:paused', expect: { ids: [] } },
@@ -4248,13 +4248,13 @@ runScenarios('various', 'normal', [
       </div>
     `,
     cases: [
-      // Native engines disagree on inherited SVG editability; NW follows the spec-shaped rule:
+      // Native engines disagree on inherited SVG editability; selectlet follows the spec-shaped rule:
       // SVG can inherit editability, but contenteditable=false blocks inheritance.
-      { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['nw'] },
+      { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['selectlet'] },
       { select: '#host :read-write', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium', 'webkit'] },
       { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox'] },
 
-      { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['nw'] },
+      { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['selectlet'] },
       { select: '#host :read-only', expect: { ids: [] }, engines: ['native'], browsers: ['chromium', 'firefox'] },
       { select: '#host :read-only', expect: { ids: ['svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['webkit'] },
     ],
@@ -4274,12 +4274,12 @@ runScenarios('various', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => { document.designMode = 'on'; }); },
         cases: [
-          // Native engines disagree on inherited SVG editability under designMode; NW follows the spec-shaped rule.
-          { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['nw'] },
+          // Native engines disagree on inherited SVG editability under designMode; selectlet follows the spec-shaped rule.
+          { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1'] }, engines: ['selectlet'] },
           { select: '#host :read-write', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium', 'webkit'] },
           { select: '#host :read-write', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox'] },
 
-          { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['nw'] },
+          { select: '#host :read-only', expect: { ids: ['svg2', 'circle2'] }, engines: ['selectlet'] },
           { select: '#host :read-only', expect: { ids: [] }, engines: ['native'], browsers: ['chromium', 'firefox'] },
           { select: '#host :read-only', expect: { ids: ['svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['webkit'] },
         ],
@@ -4287,7 +4287,7 @@ runScenarios('various', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => { document.designMode = 'off'; }); },
         cases: [
-          { select: '#host :read-only', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['nw'] },
+          { select: '#host :read-only', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['selectlet'] },
           { select: '#host :read-only', expect: { ids: ['p1'] }, engines: ['native'], browsers: ['chromium'] },
           { select: '#host :read-only', expect: { ids: ['p1', 'svg1', 'circle1', 'svg2', 'circle2'] }, engines: ['native'], browsers: ['firefox', 'webkit'] },
         ],
@@ -4436,22 +4436,22 @@ runScenarios('various', 'normal', [
       { select: '*', expect: { ids: ['html', 'head', 'body', 'myroot', 'upper-html', 'lower-html', 'import-host', 'xml-root', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] } },
 
       { select: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: 'foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: '|Foo', expect: { ids: ['upper-null', 'lower-null'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '|Foo', expect: { ids: ['upper-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '|Foo', expect: { ids: ['upper-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: '|foo', expect: { ids: ['upper-null', 'lower-null'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '|foo', expect: { ids: ['lower-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '|foo', expect: { ids: ['lower-null'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: '*|Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '*|Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '*|Foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: '*|foo', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '*|foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '*|foo', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
       { select: 'dc|Foo', expect: { throws: true } },
       { select: 'dc|foo', expect: { throws: true } },
@@ -4540,8 +4540,8 @@ runScenarios('various', 'normal', [
     },
     cases: [
       // Class seed should collect all .hit nodes; type predicate must filter.
-      { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, engines: ['nw'] },
-      { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, engines: ['nw'] },
+      { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'upper-ns'] }, engines: ['selectlet'] },
+      { select: 'foo.hit', expect: { ids: ['upper-html', 'lower-html', 'lower-null', 'lower-ns'] }, engines: ['selectlet'] },
 
       // Native split documented separately.
       { select: 'Foo.hit', expect: { ids: ['upper-html', 'lower-html', 'upper-null', 'lower-null', 'upper-ns', 'lower-ns'] }, browsers: ['chromium'], engines: ['native'] },
@@ -4583,9 +4583,9 @@ runScenarios('various', 'normal', [
     },
     cases: [
       { select: '[data-x]', expect: { ids: ['html-el', 'xml-upper', 'xml-lower', 'xml-both'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '[data-x]', expect: { ids: ['html-el', 'xml-lower', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '[data-x]', expect: { ids: ['html-el', 'xml-lower', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
       { select: '[DATA-X]', expect: { ids: ['html-el', 'xml-upper', 'xml-lower', 'xml-both'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: '[DATA-X]', expect: { ids: ['html-el', 'xml-upper', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: '[DATA-X]', expect: { ids: ['html-el', 'xml-upper', 'xml-both'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
 
     ],
   },
@@ -4618,9 +4618,9 @@ runScenarios('various', 'normal', [
     },
     cases: [
       { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
       { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'], },
+      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'], },
     ],
   },
 
@@ -4802,7 +4802,7 @@ runScenarios('various', 'normal', [
   {
     name: ':scope without marker mutation',
     // status: 'only',
-    // engines: ['nw'],
+    // engines: ['selectlet'],
     markup: `
       <section id="outer">
         <div id="ctx">
@@ -5751,11 +5751,11 @@ runScenarios('various', 'normal', [
         // document.all path where available; fragments still use non-mutation fallback.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = true;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = true;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -5777,11 +5777,11 @@ runScenarios('various', 'normal', [
         // no document.all; mutation enabled; document/fragment can use getElementById mutation.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: true });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: true });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -5803,11 +5803,11 @@ runScenarios('various', 'normal', [
         // no document.all; no mutation; TreeWalker fallback.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -5829,11 +5829,11 @@ runScenarios('various', 'normal', [
         // final fallback: tag scan.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = false;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = false;
           });
         },
         cases: [
@@ -5872,11 +5872,11 @@ runScenarios('various', 'normal', [
         // Force TreeWalker fallback.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -5892,11 +5892,11 @@ runScenarios('various', 'normal', [
         // Force tag-scan fallback.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = false;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = false;
           });
         },
         cases: [
@@ -5959,11 +5959,11 @@ runScenarios('various', 'normal', [
         // document.all path for connected element contexts; document/fragment use getElementById.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = true;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = true;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -5985,11 +5985,11 @@ runScenarios('various', 'normal', [
         // no document.all; mutation enabled for connected element contexts.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: true });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: true });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -6011,11 +6011,11 @@ runScenarios('various', 'normal', [
         // no document.all; no mutation; TreeWalker fallback.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = true;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = true;
           });
         },
         cases: [
@@ -6037,11 +6037,11 @@ runScenarios('various', 'normal', [
         // final fallback: tag scan.
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = false;
-            nwdom.snapshot.hasTreeWalker = false;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = false;
+            api.snapshot.hasTreeWalker = false;
           });
         },
         cases: [
@@ -6089,11 +6089,11 @@ runScenarios('various', 'normal', [
       {
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const nwdom = NW?.Dom;
-            if (!nwdom) throw new Error('NW.Dom not found');
-            nwdom.configure({ MUTATE_IDS: false });
-            nwdom.snapshot.hasDocumentAll = true;
-            nwdom.snapshot.hasTreeWalker = false;
+            const api = selectlet;
+            if (!api) throw new Error('selectlet not found');
+            api.configure({ MUTATE_IDS: false });
+            api.snapshot.hasDocumentAll = true;
+            api.snapshot.hasTreeWalker = false;
           });
         },
         cases: [
@@ -6388,7 +6388,7 @@ runScenarios('various', 'normal', [
     cases: [
       { select: 'Foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] } },
       { select: '*|Foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] } },
-      { select: 'foo', expect: { ids: ['h2', 'h4', 'h7'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw'] },
+      { select: 'foo', expect: { ids: ['h2', 'h4', 'h7'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
       { select: 'foo', expect: { ids: ['x1', 'h2', 'x3', 'h4', 'x6', 'h7', 'x8'] }, browsers: ['chromium'], engines: ['native'] },
     ],
   },
@@ -6480,9 +6480,9 @@ runScenarios('various', 'normal', [
       { select: '[xlink|href]', expect: { throws: true } },
       { select: '[xml|lang]', expect: { throws: true } },
 
-      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
       { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
-      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
       { select: '[|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
     ],
   },
@@ -6537,9 +6537,9 @@ runScenarios('various', 'normal', [
       { select: '[xlink|href]', expect: { throws: true } },
       { select: '[xml|lang]', expect: { throws: true } },
 
-      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[*|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
       { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
-      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '[|*]', expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
       { select: '[|*]', expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
     ],
   },
@@ -6573,7 +6573,6 @@ runScenarios('various', 'normal', [
         <span id="slash\\" class="slash\\"></span>
         <span id="slash�" class="slash�"></span>
       </div>`,
-    // setupPage: setupNw,
     cases: [
       // Two CSS backslashes: first escapes second, producing a literal "\".
       { select: '#slash\\\\', expect: { count: 1, ids: ['slash\\'] } },
@@ -6649,7 +6648,7 @@ runScenarios('various', 'normal', [
 
       // Universal namespace forms.
       { select: '*|*', expect: { count: 3 } },
-      { select: '|*', expect: { ids: ['plain'] }, browsers: ['chromium', 'firefox'], engines: ['native', 'nw'] },
+      { select: '|*', expect: { ids: ['plain'] }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
       { select: '|*', expect: { ids: [] }, browsers: ['webkit'], engines: ['native'] },
     ],
   },
@@ -6676,7 +6675,7 @@ runScenarios('various', 'normal', [
   {
     name: 'registered pseudo matches form controls',
     // status: 'only',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `
       <div id="root">
         <button id="button1"></button>
@@ -6687,10 +6686,10 @@ runScenarios('various', 'normal', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
 
-        nwdom.registerPseudo('x-control', (e) =>
+        api.registerPseudo('x-control', (e) =>
           /^(BUTTON|INPUT|SELECT|TEXTAREA)$/i.test(e.nodeName)
         );
       });
@@ -6706,14 +6705,14 @@ runScenarios('various', 'normal', [
   {
     name: 'registered pseudo filters compound candidates',
     // status: 'only',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `<div id="x"></div><span id="y"></span>`,
     setupPage: async page => {
       await page.evaluate(() => {
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const sxlt = selectlet;
+        if (!sxlt) throw new Error('selectlet not found');
 
-        nwdom.registerPseudo('test-ext', (e) => e.localName === 'div');
+        sxlt.registerPseudo('test-ext', (e) => e.localName === 'div');
       });
     },
     cases: [
@@ -6726,7 +6725,7 @@ runScenarios('various', 'normal', [
   {
     name: 'registered pseudos can emulate jquery element filters',
     // status: 'only',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markupMode: 'html-document',
     markup: `
       <!DOCTYPE html>
@@ -6768,28 +6767,28 @@ runScenarios('various', 'normal', [
     `,
     setupPage: async page => {
       await page.evaluate(() => {
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const sxlt = selectlet;
+        if (!sxlt) throw new Error('selectlet not found');
 
         const isHtmlElement = (e: Element): e is HTMLElement => e.namespaceURI === 'http://www.w3.org/1999/xhtml';
         const localNameIs = (name: string) => (e: Element) => isHtmlElement(e) && e.localName === name;
         const isInput = (e: Element): e is HTMLInputElement => isHtmlElement(e) && e.localName === 'input';
         const inputTypeIs = (type: string) => (e: Element) => isInput(e) && e.type.toLowerCase() === type;
 
-        nwdom.registerPseudo('checkbox', inputTypeIs('checkbox'));
-        nwdom.registerPseudo('file', inputTypeIs('file'));
-        nwdom.registerPseudo('image', inputTypeIs('image'));
-        nwdom.registerPseudo('password', inputTypeIs('password'));
-        nwdom.registerPseudo('radio', inputTypeIs('radio'));
-        nwdom.registerPseudo('reset', inputTypeIs('reset'));
-        nwdom.registerPseudo('submit', inputTypeIs('submit'));
-        nwdom.registerPseudo('text', inputTypeIs('text'));
-        nwdom.registerPseudo('button', localNameIs('button'));
-        nwdom.registerPseudo('input', e => /^(button|input|select|textarea)$/.test(e.localName));
-        nwdom.registerPseudo('header', e => /^h[1-6]$/.test(e.localName));
-        nwdom.registerPseudo('parent', e => e.firstChild !== null);
-        nwdom.registerPseudo('hidden', e => isHtmlElement(e) && getComputedStyle(e).display === 'none');
-        nwdom.registerPseudo('visible', e => isHtmlElement(e) && getComputedStyle(e).display !== 'none');
+        sxlt.registerPseudo('checkbox', inputTypeIs('checkbox'));
+        sxlt.registerPseudo('file', inputTypeIs('file'));
+        sxlt.registerPseudo('image', inputTypeIs('image'));
+        sxlt.registerPseudo('password', inputTypeIs('password'));
+        sxlt.registerPseudo('radio', inputTypeIs('radio'));
+        sxlt.registerPseudo('reset', inputTypeIs('reset'));
+        sxlt.registerPseudo('submit', inputTypeIs('submit'));
+        sxlt.registerPseudo('text', inputTypeIs('text'));
+        sxlt.registerPseudo('button', localNameIs('button'));
+        sxlt.registerPseudo('input', e => /^(button|input|select|textarea)$/.test(e.localName));
+        sxlt.registerPseudo('header', e => /^h[1-6]$/.test(e.localName));
+        sxlt.registerPseudo('parent', e => e.firstChild !== null);
+        sxlt.registerPseudo('hidden', e => isHtmlElement(e) && getComputedStyle(e).display === 'none');
+        sxlt.registerPseudo('visible', e => isHtmlElement(e) && getComputedStyle(e).display !== 'none');
       });
     },
     cases: [
@@ -6829,7 +6828,7 @@ runScenarios('various', 'normal', [
   {
     name: 'registered pseudos emulate jquery positional filters',
     status: 'fixme',
-    engines: ['nw'],
+    engines: ['selectlet'],
     markup: `
       <div id="root">
         <span id="s0" class="item"></span>
@@ -6841,8 +6840,8 @@ runScenarios('various', 'normal', [
     `,
     setupPage: async page => {
       await page.evaluate(() => {
-        const nwdom = NW?.Dom;
-        if (!nwdom) throw new Error('NW.Dom not found');
+        const sxlt = selectlet;
+        if (!sxlt) throw new Error('selectlet not found');
 
         // TODO: These require candidate-order / iteration-state support, not just (e) => boolean.
         // :first, :last, :eq(n), :lt(n), :gt(n), :even, :odd, :nth(n)

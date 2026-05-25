@@ -35,8 +35,8 @@ const nwsapiProtoTestHtml = `
     <script src="assets/prototype.js?1267715612" type="text/javascript" charset="utf-8"></script>
     <script src="lib_assets/unittest.js?1267715612" type="text/javascript" charset="utf-8"></script>
     <link rel="stylesheet" href="lib_assets/unittest.css?1267715612" type="text/css" />
-    <script src="../../src/nwsapi.js" type="text/javascript" charset="utf-8"></script>
-    <script src="tests/nwsapi-test.js" type="text/javascript" charset="utf-8"></script>
+    <script src="../../src/selectlet.js" type="text/javascript" charset="utf-8"></script>
+    <script src="tests/selectlet-test.js" type="text/javascript" charset="utf-8"></script>
     <script src="tests/selector_test.js?1267715612" type="text/javascript" charset="utf-8"></script>
   </head>
   <body>
@@ -474,9 +474,9 @@ runScenarios('prototype 2', 'normal', [
         wrapper.innerHTML = "<table><tr><td id='myTD'></td></tr></table>";
 
         return {
-          byAttr: [...NW?.Dom?.select('[id=myTD]', wrapper) ?? []].map(el => el.getAttribute('id')),
-          byTag: [...NW?.Dom?.select('td', wrapper) ?? []].map(el => el.getAttribute('id')),
-          byId: [...NW?.Dom?.select('#myTD', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byAttr: [...selectlet?.select('[id=myTD]', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byTag: [...selectlet?.select('td', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byId: [...selectlet?.select('#myTD', wrapper) ?? []].map(el => el.getAttribute('id')),
         };
       });
 
@@ -497,14 +497,14 @@ runScenarios('prototype 2', 'normal', [
         document.body.appendChild(el);
 
         const nativeCount = el.querySelectorAll('ul li').length;
-        const nwCount = NW?.Dom?.select('ul li', el).length;
+        const sxltCount = selectlet?.select('ul li', el).length;
 
         document.body.removeChild(el);
-        return { nativeCount, nwCount };
+        return { nativeCount, sxltCount };
       });
 
       expect(result.nativeCount).toBe(2);
-      expect(result.nwCount).toBe(2);
+      expect(result.sxltCount).toBe(2);
     },
   },
 ]);

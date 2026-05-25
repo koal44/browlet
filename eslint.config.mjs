@@ -33,7 +33,7 @@ export default defineConfig([
         ...globals.browser,
         ...globals.commonjs,
         ...globals.amd,
-        NW: 'readonly',
+        selectlet: 'readonly',
       },
     },
     rules: relaxedRules,
@@ -60,7 +60,7 @@ export default defineConfig([
         ...globals.browser,
         ...globals.commonjs,
         ...globals.amd,
-        NW: 'readonly',
+        selectlet: 'readonly',
       },
     },
     rules: {

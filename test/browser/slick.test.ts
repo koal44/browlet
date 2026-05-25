@@ -135,7 +135,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -149,7 +149,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -165,7 +165,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -179,7 +179,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -196,7 +196,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -211,7 +211,7 @@ runScenarios('slick', 'normal', [
           });
         },
         cases: [
-          // Not migrated as a real case because byName is not supported by NW and
+          // Not migrated as a real case because byName is not supported by selectlet and
           // { byName: 'getelementsbyname', expect: { count: 1, classes: ['tmpNode1'] }, engines: ['native'] },
         ],
       },
@@ -830,10 +830,10 @@ runScenarios('slick', 'normal', [
             host.remove();
 
             const native = [...host.querySelectorAll('#someuniqueid')];
-            const nw = NW?.Dom?.select('#someuniqueid', host);
+            const els = selectlet?.select('#someuniqueid', host);
 
-            const same = native.length === nw?.length && native.every((el, i) => el === nw[i]);
-            if (!same) return `Detached query mismatch: native=${native.length}, nw=${nw?.length}`;
+            const same = native.length === els?.length && native.every((el, i) => el === els[i]);
+            if (!same) return `Detached query mismatch: native=${native.length}, sxlt=${els?.length}`;
             return undefined;
           });
 

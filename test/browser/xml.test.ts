@@ -119,12 +119,12 @@ runScenarios('xml', 'normal', [
       { select: 'Foo', ref: { by: 'id', id: 'host' }, expect: { count: 1 } },
 
       { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw']  },
+      { select: 'foo', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet']  },
 
       { select: 'bar', ref: { by: 'id', id: 'host' }, expect: { count: 1 } },
 
       { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 1 }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'nw']  },
+      { select: 'Bar', ref: { by: 'id', id: 'host' }, expect: { count: 0 }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet']  },
     ],
   },
 

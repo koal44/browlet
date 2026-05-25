@@ -1,23 +1,9 @@
-import { type Page } from "@playwright/test";
 import { runScenarios } from "./harness/scenarios";
-
-const setupNw = async (page: Page) => {
-  await page.evaluate(() => {
-    NW?.Dom?.configure({
-      // SELECTOR3: true,
-      // NON_ASCII: true,
-      // UNICODE16: true,
-      // ESCAPECHR: true,
-      // VERBOSITY: false,
-    });
-  });
-}
 
 runScenarios('css3 escaped identifiers', 'normal',  [
   {
     name: 'non-escaped identifier',
     markup: `<div><span id="nonescaped" class="nonescaped"></span></div>`,
-    setupPage: setupNw,
     cases: [
       // 4.3.7 from https://www.w3.org/TR/css-syntax-3/#consume-an-escaped-code-point
       { select: '#nonescaped', expect: { count: 1 } },
@@ -33,7 +19,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="0connectHexMoreThan6Hex" class="0connectHexMoreThan6Hex"></span>
         <span id="0spaceMoreThan6Hex" class="0spaceMoreThan6Hex"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // - escape hex digit
       { select: '#\\30 nextIsWhiteSpace', expect: { count: 1 } },
@@ -63,7 +48,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
     //     <span id="four\u{0}" class="four\u{0}"></span>
     //   </div>`,
     setupPage: async (page) => {
-      setupNw(page);
       await page.evaluate(() => {
         document.body.innerHTML = '';
         const root = document.createElement('div');
@@ -112,7 +96,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="surrogatePairE\u{fffd}\u{fffd}" class="surrogatePairE\u{fffd}\u{fffd}"></span>
         <span id="surrogatePairF\u{1f511}" class="surrogatePairF\u{1f511}"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // 2. surrogate points
       { select: '#\\d83d surrogateFirstA', expect: { count: 1, ids: ['\u{fffd}surrogateFirstA'] } },
@@ -138,7 +121,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="outOfRangeA\u{fffd}" class="outOfRangeA\u{fffd}"></span>
         <span id="outOfRangeB\u{30}" class="outOfRangeB\u{30}"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // 3. out of range points
       { select: '#outOfRangeA\\110000', expect: { count: 1, ids: ['outOfRangeA\u{fffd}'] } },
@@ -165,7 +147,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="eofA\u{fffd}" class="eofA\u{fffd}"></span>
         <span id="eofB\\" class="eofB\\"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // trailing backslash escapes EOF -> U+FFFD
       { select: '#eofA\\', expect: { count: 1, ids: ['eofA\u{fffd}'] } },
@@ -183,7 +164,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="-minus" class="-minus"></span>
         <span id="g" class="g"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       { select: '#\\.comma', expect: { count: 1, ids: ['.comma'] } },
       { select: '.\\.comma', expect: { count: 1, ids: ['.comma'] } },
@@ -210,7 +190,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="continueEscapesE00" class="continueEscapesE00"></span>
         <span id="continueEscapesF00" class="continueEscapesF00"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       { select: '#\\61 BMPRegular', expect: { count: 1, ids: ['aBMPRegular'] } },
       { select: '.\\61 BMPRegular', expect: { count: 1, ids: ['aBMPRegular'] } },
@@ -264,7 +243,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="\u{10ffff}0" class="\u{10ffff}0"></span>
         <span id="\u{100000}00" class="\u{100000}00"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // ident tests case from CSS tests of chromium source: https://goo.gl/3Cxdov
       { select: '#hel\\6CoA', expect: { count: 1, ids: ['helloA'] } },
@@ -346,7 +324,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         <span id="\u{fffd}" class="\u{fffd}"></span>
         <span id="ab\u{fffd}c" class="ab\u{fffd}c"></span>
       </div>`,
-    setupPage: setupNw,
     cases: [
       // ident tests case from CSS tests of chromium source: https://goo.gl/3Cxdov
       { select: '#simple-ident', expect: { count: 1, ids: ['simple-ident'] } },
@@ -401,7 +378,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
   {
     name: 'spaces in ident id selector',
     markup: `<div><span id="spaces in\tident" class="spaces in\tident"></span></div>`,
-    setupPage: setupNw,
     cases: [
       { select: '#spaces\\ in\\\tident', expect: { count: 1, ids: ['spaces in\tident'] } },
     ],
@@ -410,7 +386,6 @@ runScenarios('css3 escaped identifiers', 'normal',  [
     name: 'spaces in ident class selector mismatch',
     status: 'fail',
     markup: `<div><span id="spaces in\tident" class="spaces in\tident"></span></div>`,
-    setupPage: setupNw,
     cases: [
       { select: '.spaces\\ in\\\tident', expect: { count: 1, ids: ['spaces in\tident'] } },
     ],

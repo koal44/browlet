@@ -1,9 +1,18 @@
 import { chromium, firefox, webkit, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
+type EngineName = 'native' | 'nw-2.2.23' | 'selectlet';
+type EngineTarget = { name: EngineName; script?: string; };
+
+const DEFAULT_ENGINES: EngineTarget[] = [
+  { name: 'native' },
+  { name: 'nw-2.2.23', script: 'test/perf/engines/nwsapi-2.2.23.js' },
+  { name: 'selectlet', script: 'dist/selectlet.js' },
+];
+
 export interface PerfHelpers {
   runBenches(
-    engineName: 'native' | 'nw',
+    engineName: EngineName,
     benches: Bench[],
     options?: { quickIters?: number, focused?: boolean },
   ): BenchResult[];
@@ -23,13 +32,6 @@ type BenchOps = {
   byClass(cls: string, ctx: QueryContext): Element[];
   byTag(tag: string, ctx: QueryContext): Element[];
   byTagNs(byTagNs: { ns: string | null, local: string }, ctx: QueryContext): Element[];
-};
-
-type EngineName = 'native' | 'nw-current' | 'nw-2.2.23';
-
-type EngineTarget = {
-  name: EngineName;
-  script?: string;
 };
 
 type MatchBench =   { op: 'match';     selector:  string;    ref:  ContextRef } & BenchBase;
@@ -81,12 +83,6 @@ type BenchResult = {
   maxRatio: number;
 };
 
-const DEFAULT_ENGINES: EngineTarget[] = [
-  { name: 'native' },
-  { name: 'nw-2.2.23', script: 'test/perf/engines/nwsapi-2.2.23.js' },
-  { name: 'nw-current', script: 'dist/nwsapi.js' },
-];
-
 export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void {
   const hasOnly = scenarios.some(s => s.status === 'only');
   const active = hasOnly ? scenarios.filter(s => s.status === 'only') : scenarios;
@@ -128,7 +124,7 @@ async function runPerfScenario(
 ): Promise<void> {
   const scenarioBrowsers = scenario.browsers ?? BROWSER_NAMES;
   const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map(e => e.name))];
-  if (!engineNames.includes('nw-current')) engineNames.push('nw-current');
+  if (!engineNames.includes('selectlet')) engineNames.push('selectlet');
   const scenarioEngines = resolveEngines(engineNames);
 
   for (const browserName of scenarioBrowsers) {
@@ -137,7 +133,7 @@ async function runPerfScenario(
 
     const all: Record<EngineName, BenchResult[]> = {} as any;
 
-    for (const engine of scenarioEngines) {
+    for (const { name, script } of scenarioEngines) {
       const context = await browser.newContext();
       const page = await context.newPage();
 
@@ -145,17 +141,15 @@ async function runPerfScenario(
         attachPageDiagnostics(page);
         await initPage(page, scenario);
 
-        if (engine.script) await installNwsapi(page, engine.script);
+        if (script) await installEngine(page, script);
         if (scenario.setupPage) await scenario.setupPage(page);
         await installPerfHelpers(page);
 
-        const mode: 'native' | 'nw' = engine.name === 'native' ? 'native' : 'nw';
-
-        all[engine.name] = await page.evaluate(
-          ({ mode, benches, quickIters, focused }) =>
-            window.__perfHelpers.runBenches(mode, benches, { quickIters, focused }),
+        all[name] = await page.evaluate(
+          ({ name, benches, quickIters, focused }) =>
+            window.__perfHelpers.runBenches(name, benches, { quickIters, focused }),
           {
-            mode,
+            name,
             benches: scenario.benches,
             quickIters: scenario.quickIters,
             focused: scenario.status === 'only',
@@ -166,7 +160,7 @@ async function runPerfScenario(
       }
     }
 
-    const { rows, failedMaxRatio } = buildTable(all, 'nw-current', scenario.probeKeys ?? []);
+    const { rows, failedMaxRatio } = buildTable(all, 'selectlet', scenario.probeKeys ?? []);
 
     if (scenario.status === 'only' || failedMaxRatio) {
       console.log(`\n[perf:${browserName}] ${scenario.name}`);
@@ -309,7 +303,7 @@ function attachPageDiagnostics(page: Page): void {
   });
 }
 
-async function installNwsapi(page: Page, scriptPath: string) {
+async function installEngine(page: Page, scriptPath: string) {
   await page.addScriptTag({ path: scriptPath });
 }
 
@@ -317,13 +311,21 @@ async function installPerfHelpers(page: Page) {
   await page.evaluate(() => {
     const DEFAULT_MAX_RATIO = 5;
 
-    function runBench(b: Bench, fn: () => unknown, iters: number): BenchResult {
+    function getEngineApi(engineName: EngineName): any {
+      if (engineName === 'native') return null;
+      if (engineName === 'nw-2.2.23') return (globalThis as any).NW?.Dom;
+      if (engineName === 'selectlet') return (globalThis as any).selectlet;
+      return assertNever(engineName);
+    }
+
+    function runBench(engineName: EngineName, b: Bench, fn: () => unknown, iters: number): BenchResult {
       const label = benchLabel(b);
       const maxRatio = b.maxRatio ?? DEFAULT_MAX_RATIO;
 
       for (let i = 0; i < 10; i++) fn();
-      const nwDom = (globalThis as any).NW?.Dom;
-      const probe = nwDom?.snapshot?.probe;
+
+      const api = getEngineApi(engineName);
+      const probe = api?.snapshot?.probe;
       if (probe) probe.reset?.();
 
       const t0 = performance.now();
@@ -387,7 +389,7 @@ async function installPerfHelpers(page: Page) {
     }
 
     function runBenches(
-      engineName: 'native' | 'nw',
+      engineName: EngineName,
       benches: Bench[],
       options: { quickIters?: number, focused?: boolean } = {},
     ): BenchResult[] {
@@ -396,19 +398,21 @@ async function installPerfHelpers(page: Page) {
 
       const hasDebugBench = benches.some(b => b.debug);
       if (hasDebugBench) {
-        if (engineName === 'native') return [];
-        if (!supportsNwDebug()) return [];
+        if (engineName !== 'selectlet') return [];
+        if (!supportsDebug(engineName)) return [];
       }
 
       const ops = getBenchOps(engineName);
 
       let clearCache: (() => void) | undefined;
-      if (engineName === 'nw' && benches.some(b => b.cold)) {
-        const nwDom = (globalThis as any).NW?.Dom;
-        if (!nwDom || typeof nwDom.clearCache !== 'function') {
-          throw new Error('NW.Dom.clearCache is not available');
+      if (engineName !== 'native' && benches.some(b => b.cold)) {
+        const api = getEngineApi(engineName);
+
+        if (!api || typeof api.clearCache !== 'function') {
+          throw new Error(`${engineName}.clearCache is not available`);
         }
-        clearCache = () => nwDom.clearCache();
+
+        clearCache = () => api.clearCache();
       }
 
       function benchFn<T>(b: Bench, fn: () => T): () => T {
@@ -426,37 +430,37 @@ async function installPerfHelpers(page: Page) {
         switch (b.op) {
           case 'match':
             if (!isElement(ctx)) throw new Error(`${label}: match needs Element context`);
-            if (b.debug) debugBench(label, () => ops.match(b.selector, ctx));
-            return runBench(b, benchFn(b, () => ops.match(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.match(b.selector, ctx));
+            return runBench(engineName, b, benchFn(b, () => ops.match(b.selector, ctx)), iters);
 
           case 'select':
-            if (b.debug) debugBench(label, () => ops.select(b.selector, ctx));
-            return runBench(b, benchFn(b, () => ops.select(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.select(b.selector, ctx));
+            return runBench(engineName, b, benchFn(b, () => ops.select(b.selector, ctx)), iters);
 
           case 'first':
-            if (b.debug) debugBench(label, () => ops.first(b.selector, ctx));
-            return runBench(b, benchFn(b, () => ops.first(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.first(b.selector, ctx));
+            return runBench(engineName, b, benchFn(b, () => ops.first(b.selector, ctx)), iters);
 
           case 'closest':
             if (!isElement(ctx)) throw new Error(`${label}: closest needs Element context`);
-            if (b.debug) debugBench(label, () => ops.closest(b.selector, ctx));
-            return runBench(b, benchFn(b, () => ops.closest(b.selector, ctx)), iters);
+            if (b.debug) debugBench(engineName, label, () => ops.closest(b.selector, ctx));
+            return runBench(engineName, b, benchFn(b, () => ops.closest(b.selector, ctx)), iters);
 
           case 'matchWalk':
-            if (b.debug) debugBench(label, () => matchWalk(ops, ctx, b.selectors));
-            return runBench(b, benchFn(b, () => matchWalk(ops, ctx, b.selectors)), iters);
+            if (b.debug) debugBench(engineName, label, () => matchWalk(ops, ctx, b.selectors));
+            return runBench(engineName, b, benchFn(b, () => matchWalk(ops, ctx, b.selectors)), iters);
 
           case 'byId':
-            return runBench(b, benchFn(b, () => ops.byId(b.id, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byId(b.id, ctx)), iters);
 
           case 'byClass':
-            return runBench(b, benchFn(b, () => ops.byClass(b.cls, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byClass(b.cls, ctx)), iters);
 
           case 'byTag':
-            return runBench(b, benchFn(b, () => ops.byTag(b.tag, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byTag(b.tag, ctx)), iters);
 
           case 'byTagNs':
-            return runBench(b, benchFn(b, () => ops.byTagNs(b.byTagNs, ctx)), iters);
+            return runBench(engineName, b, benchFn(b, () => ops.byTagNs(b.byTagNs, ctx)), iters);
 
           default:
             return assertNever(b);
@@ -464,7 +468,7 @@ async function installPerfHelpers(page: Page) {
       });
     }
 
-    function getBenchOps(engineName: 'native' | 'nw'): BenchOps {
+    function getBenchOps(engineName: EngineName): BenchOps {
       if (engineName === 'native') {
         return {
           match: (s, e) => e.matches(s),
@@ -478,19 +482,39 @@ async function installPerfHelpers(page: Page) {
         };
       }
 
-      const nwDom = (globalThis as any).NW?.Dom;
-      if (!nwDom) throw new Error('NW.Dom is not available');
+      if (engineName === 'nw-2.2.23') {
+        const nwdom = (globalThis as any).NW?.Dom;
+        if (!nwdom) throw new Error('NW.Dom is not available');
+        
+        return {
+          match: (s, e) => nwdom.match(s, e),
+          select: (s, c) => [...nwdom.select(s, c)],
+          first: (s, c) => nwdom.first(s, c),
+          closest: (s, e) => nwdom.closest(s, e),
+          byId: (id, ctx) => nwdom.byId(id, ctx),
+          byClass: (cls, ctx) => nwdom.byClass(cls, ctx),
+          byTag: (tag, ctx) => nwdom.byTag(tag, ctx),
+          byTagNs: (byTagNs, ctx) => nwdom.byTagNs(byTagNs.ns, byTagNs.local, ctx),
+        };
+      }
 
-      return {
-        match: (s, e) => nwDom.match(s, e),
-        select: (s, c) => [...nwDom.select(s, c)],
-        first: (s, c) => nwDom.first(s, c),
-        closest: (s, e) => nwDom.closest(s, e),
-        byId: (id, ctx) => nwDom.byId(id, ctx),
-        byClass: (cls, ctx) => nwDom.byClass(cls, ctx),
-        byTag: (tag, ctx) => nwDom.byTag(tag, ctx),
-        byTagNs: (byTagNs, ctx) => nwDom.byTagNs(byTagNs.ns, byTagNs.local, ctx),
-      };
+      if (engineName === 'selectlet') {
+        const sxlt = (globalThis as any).selectlet;
+        if (!sxlt) throw new Error('selectlet is not available');
+
+        return {
+          match: (s, e) => sxlt.match(s, e),
+          select: (s, c) => [...sxlt.select(s, c)],
+          first: (s, c) => sxlt.first(s, c),
+          closest: (s, e) => sxlt.closest(s, e),
+          byId: (id, ctx) => sxlt.byId(id, ctx),
+          byClass: (cls, ctx) => sxlt.byClass(cls, ctx),
+          byTag: (tag, ctx) => sxlt.byTag(tag, ctx),
+          byTagNs: (byTagNs, ctx) => sxlt.byTagNs(byTagNs.ns, byTagNs.local, ctx),
+        };
+      }
+
+      return assertNever(engineName);
     }
 
     function benchLabel(b: Bench): string {
@@ -644,7 +668,7 @@ async function installPerfHelpers(page: Page) {
         if ((ns === '*' || root.namespaceURI === ns) && (local === '*' || root.localName === local)) {
           nodes.push(root);
         }
-        nodes.concat([...root.getElementsByTagNameNS(ns, local)]);
+        nodes.push(...root.getElementsByTagNameNS(ns, local));
       }
       return nodes;
     }
@@ -653,35 +677,36 @@ async function installPerfHelpers(page: Page) {
       throw new Error(message ?? `Unexpected value: ${value}`);
     }
 
-    function debugBench(label: string, fn: () => unknown): never {
-      const nwdom = (globalThis as any).NW?.Dom;
+    function debugBench(engineName: EngineName, label: string, fn: () => unknown): never {
+      const api = getEngineApi(engineName);
+
       if (
-        !nwdom ||
-        typeof nwdom.setDebug !== 'function' ||
-        typeof nwdom.clearDebug !== 'function' ||
-        typeof nwdom.printDebug !== 'function'
+        !api ||
+        typeof api.setDebug !== 'function' ||
+        typeof api.clearDebug !== 'function' ||
+        typeof api.printDebug !== 'function'
       ) {
-        throw new Error('NW.Dom debug is not available');
+        throw new Error(`${engineName} debug is not available`);
       }
 
-      nwdom.setDebug(true);
-      nwdom.clearDebug();
+      api.setDebug(true);
+      api.clearDebug();
 
       try {
         fn();
-        throw new Error(`[perf debug] ${label}\n${nwdom.printDebug()}`);
+        throw new Error(`[perf debug] ${label}\n${api.printDebug()}`);
       } finally {
-        nwdom.setDebug(false);
+        api.setDebug(false);
       }
     }
 
-    function supportsNwDebug(): boolean {
-      const nwdom = (globalThis as any).NW?.Dom;
+    function supportsDebug(engineName: EngineName): boolean {
+      const api = getEngineApi(engineName);
       return !!(
-        nwdom &&
-        typeof nwdom.setDebug === 'function' &&
-        typeof nwdom.clearDebug === 'function' &&
-        typeof nwdom.printDebug === 'function'
+        api &&
+        typeof api.setDebug === 'function' &&
+        typeof api.clearDebug === 'function' &&
+        typeof api.printDebug === 'function'
       );
     }
 

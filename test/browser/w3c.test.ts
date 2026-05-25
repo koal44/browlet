@@ -1554,42 +1554,42 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':checked')].map(el => el.id);
-        const nwIds = () => [...NW?.Dom?.select(':checked', document) ?? []].map(el => el.id);
+        const sxltIds = () => [...selectlet?.select(':checked', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
-        const nw_initial = nwIds();
+        const sxlt_initial = sxltIds();
 
         (document.getElementById('checkbox1') as HTMLInputElement).removeAttribute('type');
         (document.getElementById('radio1') as HTMLInputElement).removeAttribute('type');
 
         const native_afterRemoveType = nativeIds();
-        const nw_afterRemoveType = nwIds();
+        const sxlt_afterRemoveType = sxltIds();
 
         (document.getElementById('option2') as HTMLOptionElement).selected = true;
         (document.getElementById('checkbox2') as HTMLInputElement).click();
         (document.getElementById('radio2') as HTMLInputElement).click();
 
         const native_afterClick = nativeIds();
-        const nw_afterClick = nwIds();
+        const sxlt_afterClick = sxltIds();
 
         return {
           native_initial,
-          nw_initial,
+          sxlt_initial,
           native_afterRemoveType,
-          nw_afterRemoveType,
+          sxlt_afterRemoveType,
           native_afterClick,
-          nw_afterClick,
+          sxlt_afterClick,
         };
       });
 
       expect(result.native_initial).toEqual(['option1', 'checkbox1', 'radio1']);
-      expect(result.nw_initial).toEqual(['option1', 'checkbox1', 'radio1']);
+      expect(result.sxlt_initial).toEqual(['option1', 'checkbox1', 'radio1']);
 
       expect(result.native_afterRemoveType).toEqual(['option1']);
-      expect(result.nw_afterRemoveType).toEqual(['option1']);
+      expect(result.sxlt_afterRemoveType).toEqual(['option1']);
 
       expect(result.native_afterClick).toEqual(['option2', 'checkbox2', 'radio2']);
-      expect(result.nw_afterClick).toEqual(['option2', 'checkbox2', 'radio2']);
+      expect(result.sxlt_afterClick).toEqual(['option2', 'checkbox2', 'radio2']);
     },
     cases: [
       { select: ':checked', expect: { ids: ['option2', 'checkbox2', 'radio2'] } },
@@ -1649,21 +1649,21 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':default')].map(el => el.id);
-        const nwIds = () => [...NW?.Dom?.select(':default', document) ?? []].map(el => el.id);
+        const sxltIds = () => [...selectlet?.select(':default', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
-        const nw_initial = nwIds();
+        const sxlt_initial = sxltIds();
 
         (document.getElementById('button1') as HTMLButtonElement).type = 'submit';
 
         return {
           native_initial,
-          nw_initial,
+          sxlt_initial,
         };
       });
 
       expect(result.native_initial).toEqual(['button2', 'button4', 'input3', 'input5', 'input7', 'checkbox1', 'radio1', 'option2', 'button6', 'button8']);
-      expect(result.nw_initial).toEqual(['button2', 'button4', 'input3', 'input5', 'input7', 'checkbox1', 'radio1', 'option2', 'button6', 'button8']);
+      expect(result.sxlt_initial).toEqual(['button2', 'button4', 'input3', 'input5', 'input7', 'checkbox1', 'radio1', 'option2', 'button6', 'button8']);
     },
     cases: [
       { select: ':default', expect: { ids: ['button1', 'button4', 'input3', 'input5', 'input7', 'checkbox1', 'radio1', 'option2', 'button6', 'button8'] } },
@@ -1715,24 +1715,24 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_ltr = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const nw_ltr = [...NW?.Dom?.select(':dir(ltr)', document) ?? []].map(el => el.id);
+        const sxlt_ltr = [...selectlet?.select(':dir(ltr)', document) ?? []].map(el => el.id);
 
         const bdo = document.createElement('bdo');
         bdo.setAttribute('dir', 'ltr');
 
         const native_ltr_afterDetached = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const nw_ltr_afterDetached = [...NW?.Dom?.select(':dir(ltr)', document) ?? []].map(el => el.id);
+        const sxlt_ltr_afterDetached = [...selectlet?.select(':dir(ltr)', document) ?? []].map(el => el.id);
 
         return {
           native_ltr,
-          nw_ltr,
+          sxlt_ltr,
           native_ltr_afterDetached,
-          nw_ltr_afterDetached,
+          sxlt_ltr_afterDetached,
         };
       });
 
       expect(result.native_ltr).toEqual(result.native_ltr_afterDetached);
-      expect(result.nw_ltr).toEqual(result.nw_ltr_afterDetached);
+      expect(result.sxlt_ltr).toEqual(result.sxlt_ltr_afterDetached);
     },
     cases: [
       { select: ':dir(rtl)', expect: { ids: ['bdo1', 'bdi2', 'bdi4', 'span2', 'span5', 'bdo4'] } },
@@ -1793,31 +1793,31 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = (sel: string) => [...document.querySelectorAll(sel)].map(el => el.id);
-        const nwIds = (sel: string) => [...NW?.Dom?.select(sel, document) ?? []].map(el => el.id);
+        const sxltIds = (sel: string) => [...selectlet?.select(sel, document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds(':disabled');
-        const nw_initial = nwIds(':disabled');
+        const sxlt_initial = sxltIds(':disabled');
 
         document.getElementById('button2')!.removeAttribute('disabled');
         const native_afterRemove = nativeIds(':disabled');
-        const nw_afterRemove = nwIds(':disabled');
+        const sxlt_afterRemove = sxltIds(':disabled');
 
         document.getElementById('button1')!.setAttribute('disabled', 'disabled');
         const native_afterSet = nativeIds(':disabled');
-        const nw_afterSet = nwIds(':disabled');
+        const sxlt_afterSet = sxltIds(':disabled');
 
         document.getElementById('button1')!.setAttribute('disabled', 'disabled');
         const native_afterSetTwice = nativeIds(':disabled');
-        const nw_afterSetTwice = nwIds(':disabled');
+        const sxlt_afterSetTwice = sxltIds(':disabled');
 
         (document.getElementById('input2') as HTMLInputElement).setAttribute('type', 'submit');
         const native_afterTypeChange = nativeIds(':disabled');
-        const nw_afterTypeChange = nwIds(':disabled');
+        const sxlt_afterTypeChange = sxltIds(':disabled');
 
         const input = document.createElement('input');
         input.setAttribute('disabled', 'disabled');
         const native_afterDetached = nativeIds(':disabled');
-        const nw_afterDetached = nwIds(':disabled');
+        const sxlt_afterDetached = sxltIds(':disabled');
 
         const fieldset = document.createElement('fieldset');
         fieldset.id = 'fieldset_nested';
@@ -1840,37 +1840,37 @@ runScenarios('w3c iframes 3', 'normal', [
 
         return {
           native_initial,
-          nw_initial,
+          sxlt_initial,
           native_afterRemove,
-          nw_afterRemove,
+          sxlt_afterRemove,
           native_afterSet,
-          nw_afterSet,
+          sxlt_afterSet,
           native_afterSetTwice,
-          nw_afterSetTwice,
+          sxlt_afterSetTwice,
           native_afterTypeChange,
-          nw_afterTypeChange,
+          sxlt_afterTypeChange,
           native_afterDetached,
-          nw_afterDetached,
+          sxlt_afterDetached,
         };
       });
 
       expect(result.native_initial).toEqual(['button2', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_initial).toEqual(['button2', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_initial).toEqual(['button2', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
 
       expect(result.native_afterRemove).toEqual(['input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_afterRemove).toEqual(['input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_afterRemove).toEqual(['input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
 
       expect(result.native_afterSet).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_afterSet).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_afterSet).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
 
       expect(result.native_afterSetTwice).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_afterSetTwice).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_afterSetTwice).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
 
       expect(result.native_afterTypeChange).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_afterTypeChange).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_afterTypeChange).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
 
       expect(result.native_afterDetached).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
-      expect(result.nw_afterDetached).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
+      expect(result.sxlt_afterDetached).toEqual(['button1', 'input2', 'select2', 'optgroup2', 'option2', 'textarea2', 'fieldset2', 'clubname', 'clubnum']);
     },
     cases: [
       // { select: '#fieldset2 :disabled', expect: { ids: ['clubname', 'clubnum', 'fieldset_nested', 'input_nested', 'button_nested', 'select_nested', 'textarea_nested', 'fieldset_nested2', 'input_nested2'] } },
@@ -2047,18 +2047,18 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_before = [...document.querySelectorAll(':indeterminate + span')].map(el => el.id);
-        const nw_before = [...NW?.Dom?.select(':indeterminate + span', document) ?? []].map(el => el.id);
+        const sxlt_before = [...selectlet?.select(':indeterminate + span', document) ?? []].map(el => el.id);
 
         (document.getElementById('indeterminate') as HTMLInputElement).type = 'radio';
 
         return {
           native_before,
-          nw_before,
+          sxlt_before,
         };
       });
 
       expect(result.native_before).toEqual([]);
-      expect(result.nw_before).toEqual([]);
+      expect(result.sxlt_before).toEqual([]);
     },
     cases: [
       { select: ':indeterminate + span', expect: { ids: ['sibling'] } },
@@ -2081,57 +2081,57 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const nativeIds = () => [...document.querySelectorAll(':indeterminate')].map(el => el.id);
-        const nwIds = () => [...NW?.Dom?.select(':indeterminate', document) ?? []].map(el => el.id);
+        const sxltIds = () => [...selectlet?.select(':indeterminate', document) ?? []].map(el => el.id);
 
         const native_initial = nativeIds();
-        const nw_initial = nwIds();
+        const sxlt_initial = sxltIds();
 
         document.getElementById('radio2')?.setAttribute('checked', 'checked');
         const native_afterCheckedAttr = nativeIds();
-        const nw_afterCheckedAttr = nwIds();
+        const sxlt_afterCheckedAttr = sxltIds();
 
         (document.getElementById('radio4') as HTMLInputElement)?.click();
         const native_afterRadio4Click = nativeIds();
-        const nw_afterRadio4Click = nwIds();
+        const sxlt_afterRadio4Click = sxltIds();
 
         document.getElementById('progress1')?.setAttribute('value', '20');
         const native_afterProgress1Value = nativeIds();
-        const nw_afterProgress1Value = nwIds();
+        const sxlt_afterProgress1Value = sxltIds();
 
         document.getElementById('progress2')?.removeAttribute('value');
         const native_afterProgress2Remove = nativeIds();
-        const nw_afterProgress2Remove = nwIds();
+        const sxlt_afterProgress2Remove = sxltIds();
 
         (document.getElementById('checkbox1') as HTMLInputElement).indeterminate = true;
 
         return {
           native_initial,
-          nw_initial,
+          sxlt_initial,
           native_afterCheckedAttr,
-          nw_afterCheckedAttr,
+          sxlt_afterCheckedAttr,
           native_afterRadio4Click,
-          nw_afterRadio4Click,
+          sxlt_afterRadio4Click,
           native_afterProgress1Value,
-          nw_afterProgress1Value,
+          sxlt_afterProgress1Value,
           native_afterProgress2Remove,
-          nw_afterProgress2Remove,
+          sxlt_afterProgress2Remove,
         };
       });
 
       expect(result.native_initial).toEqual(['radio2', 'radio3', 'radio4', 'radio5', 'progress1']);
-      expect(result.nw_initial).toEqual(['radio2', 'radio3', 'radio4', 'radio5', 'progress1']);
+      expect(result.sxlt_initial).toEqual(['radio2', 'radio3', 'radio4', 'radio5', 'progress1']);
 
       expect(result.native_afterCheckedAttr).toEqual(['radio4', 'radio5', 'progress1']);
-      expect(result.nw_afterCheckedAttr).toEqual(['radio4', 'radio5', 'progress1']);
+      expect(result.sxlt_afterCheckedAttr).toEqual(['radio4', 'radio5', 'progress1']);
 
       expect(result.native_afterRadio4Click).toEqual(['progress1']);
-      expect(result.nw_afterRadio4Click).toEqual(['progress1']);
+      expect(result.sxlt_afterRadio4Click).toEqual(['progress1']);
 
       expect(result.native_afterProgress1Value).toEqual([]);
-      expect(result.nw_afterProgress1Value).toEqual([]);
+      expect(result.sxlt_afterProgress1Value).toEqual([]);
 
       expect(result.native_afterProgress2Remove).toEqual(['progress2']);
-      expect(result.nw_afterProgress2Remove).toEqual(['progress2']);
+      expect(result.sxlt_afterProgress2Remove).toEqual(['progress2']);
     },
     cases: [
       { select: ':indeterminate', expect: { ids: ['checkbox1', 'progress2'] } },
@@ -2149,27 +2149,27 @@ runScenarios('w3c iframes 3', 'normal', [
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
         const native_inRange_before = [...document.querySelectorAll('#t1:in-range + span')].map(el => el.id);
-        const nw_inRange_before = [...NW?.Dom?.select('#t1:in-range + span', document) ?? []].map(el => el.id);
+        const sxlt_inRange_before = [...selectlet?.select('#t1:in-range + span', document) ?? []].map(el => el.id);
 
         const native_outOfRange_before = [...document.querySelectorAll('#t2:out-of-range + span')].map(el => el.id);
-        const nw_outOfRange_before = [...NW?.Dom?.select('#t2:out-of-range + span', document) ?? []].map(el => el.id);
+        const sxlt_outOfRange_before = [...selectlet?.select('#t2:out-of-range + span', document) ?? []].map(el => el.id);
 
         (document.getElementById('t1') as HTMLInputElement).type = 'number';
         (document.getElementById('t2') as HTMLInputElement).type = 'number';
 
         return {
           native_inRange_before,
-          nw_inRange_before,
+          sxlt_inRange_before: sxlt_inRange_before,
           native_outOfRange_before,
-          nw_outOfRange_before,
+          sxlt_outOfRange_before,
         };
       });
 
       expect(result.native_inRange_before).toEqual([]);
-      expect(result.nw_inRange_before).toEqual([]);
+      expect(result.sxlt_inRange_before).toEqual([]);
 
       expect(result.native_outOfRange_before).toEqual([]);
-      expect(result.nw_outOfRange_before).toEqual([]);
+      expect(result.sxlt_outOfRange_before).toEqual([]);
     },
     cases: [
       { select: '#t1:in-range + span', expect: { ids: ['sibling1'] } },

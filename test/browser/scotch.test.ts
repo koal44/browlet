@@ -9,7 +9,7 @@ const html = `
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <title>NWSAPI Tests</title>
     <link rel="stylesheet" type="text/css" href="assets/style.css" media="screen" />
-    <script type="text/javascript" src="../../src/nwsapi.js"></script>
+    <script type="text/javascript" src="../../src/selectlet.js"></script>
     <script type="text/javascript" src="scotch.js"></script>
     <script type="text/javascript" src="test.js"></script>
   </head>
@@ -95,21 +95,11 @@ const html = `
   </body>
   </html>`;
 
-const setupNw = async (page: Page) => {
-  await page.evaluate(() => {
-    NW?.Dom?.configure({
-      // 'SIMPLENOT': true,
-      'VERBOSITY': true
-    });
-  });
-}
-
 runScenarios('scotch', 'normal', [
   {
     name: 'Basic Selectors',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       // * — Universal selector
       { select: '*' },
@@ -157,7 +147,6 @@ runScenarios('scotch', 'normal', [
     // status: 'only',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       // [foo]
       { select: '[href]', ref: { by: 'first', selector: 'body' }, expect: { equivalentCase: { select: 'a[href]', ref: { by: 'first', selector: 'body' } } } },
@@ -230,10 +219,9 @@ runScenarios('scotch', 'normal', [
 
   {
     name: 'Attribute Selectors — invalid unquoted values',
+    // status: 'only',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
-    // status: 'only',
     cases: [
       // should throw SYNTAX_ERR
       { select: '#level1 *[id=-1]', expect: { throws: true } },
@@ -246,7 +234,6 @@ runScenarios('scotch', 'normal', [
   {
     name: 'Structural pseudo-classes',
     markup: html,
-    setupPage: setupNw,
     cases: [
       // E:first-child
       { select: '#level1>*:first-child', expect: { ids: ['level2_1'] } },
@@ -304,7 +291,6 @@ runScenarios('scotch', 'normal', [
     markup: html,
     markupMode: 'html-document',
     setupPage: async (page) => {
-      await setupNw(page);
       await page.evaluate(() => {
         const el = document.getElementById('level3_1');
         if (el) el.innerHTML = '';
@@ -322,7 +308,6 @@ runScenarios('scotch', 'normal', [
     name: 'E:not(s)',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       { select: 'a:not([href="#"])', expect: { count: 0 } },
       { select: 'div.brothers:not(.brothers)', expect: { count: 0 } },
@@ -346,7 +331,6 @@ runScenarios('scotch', 'normal', [
     name: 'UI element states pseudo-classes',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       // E:disabled
       { select: '#troubleForm > p > *:disabled', expect: { ids: ['disabled_text_field'] } },
@@ -360,7 +344,6 @@ runScenarios('scotch', 'normal', [
     name: 'Combinators',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       // E F — Descendant
       { select: '#fixtures a *', expect: { ids: ['em2', 'em', 'span'] } },
@@ -410,10 +393,9 @@ runScenarios('scotch', 'normal', [
   },
 
   {
-    name: 'NW.Dom.match',
+    name: 'selectlet.match',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       { select: 'span', expect: { includesIds: ['dupL1'] } },
       { select: 'span#dupL1', expect: { includesIds: ['dupL1'] } },
@@ -441,7 +423,6 @@ runScenarios('scotch', 'normal', [
     name: 'Equivalent Selectors',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       { select: 'div.brothers', expect: { equivalentCase: { select: 'div[class~=brothers]' } } },
       { select: 'div.brothers', expect: { equivalentCase: { select: 'div[class~=brothers].brothers' } } },
@@ -463,7 +444,6 @@ runScenarios('scotch', 'normal', [
     // status: 'only',
     markup: html,
     markupMode: 'html-document',
-    setupPage: setupNw,
     cases: [
       { select: '#list, .first,*[xml\\:lang="es-us"] , #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] } },
       { select: '#list, .first, *[xml\\:lang="es-us"], #troubleForm', expect: { ids: ['p', 'link_1', 'list', 'item_1', 'item_3', 'troubleForm'] } },

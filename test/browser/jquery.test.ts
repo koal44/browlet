@@ -436,9 +436,9 @@ runScenarios('jquery', 'normal', [
         const div = document.createElement('div');
         div.innerHTML = "<div class='test e' id='first'></div><div class='test' id='second'></div>";
 
-        const first = [...NW?.Dom?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
+        const first = [...selectlet?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
         div.lastChild && ((div.lastChild as Element).className = 'e');
-        const second = [...NW?.Dom?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
+        const second = [...selectlet?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
 
         return { first, second };
       });
@@ -557,15 +557,15 @@ runScenarios('jquery', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const div = document.createElement('div');
-        const dom = NW?.Dom;
-        if (!dom) throw new Error('NW.Dom not found');
-        let divs = dom.select('p:first-child', undefined, null);
+        const api = selectlet;
+        if (!api) throw new Error('selectlet not found');
+        let divs = api.select('p:first-child', undefined, null);
 
         for (let i = 0; i < divs.length; i++) {
           divs[i].parentNode?.insertBefore(div.cloneNode(false), divs[i].nextSibling);
         }
 
-        divs = dom.select('p:first-child', undefined, null);
+        divs = api.select('p:first-child', undefined, null);
 
         for (let i = 0; i < divs.length; i++) {
           const inserted = divs[i].parentNode?.insertBefore(div.cloneNode(false), divs[i]);
@@ -631,7 +631,7 @@ runScenarios('jquery', 'normal', [
         const anchor2 = document.getElementById('anchor2') as HTMLAnchorElement | null;
         if (anchor2) anchor2.href = '#2';
 
-        const inputs = NW?.Dom?.select('form input') ?? [];
+        const inputs = selectlet?.select('form input') ?? [];
         if (inputs[0]) (inputs[0] as HTMLInputElement & { test?: number }).test = 0;
         if (inputs[1]) (inputs[1] as HTMLInputElement & { test?: number }).test = 1;
       });
@@ -912,7 +912,7 @@ const setElementProps = async (
   props: Partial<Pick<CSSStyleDeclaration, 'width' | 'height' | 'fontSize' | 'lineHeight'>>
 ) => {
   await page.evaluate(({ selector, props }) => {
-    const el = NW?.Dom?.first(selector) as HTMLElement | null | undefined;
+    const el = selectlet?.first(selector) as HTMLElement | null | undefined;
     if (!el) throw new Error(`${selector} not found`);
     if (props.width !== undefined) el.style.width = props.width;
     if (props.height !== undefined) el.style.height = props.height;
