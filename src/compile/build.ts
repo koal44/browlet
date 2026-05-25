@@ -2,7 +2,7 @@ import type {
   CompoundSelector, RelativeSelectorList, SelectorList, ComplexSelector, Combinator,
   BuildContext, CandidateTest,
 } from "../parser/parser";
-import { emitClassTest, emitIdTest, emitTagTest } from "./emit-base";
+import { emitClassTest, emitIdTest, emitTagTest } from "./emitBase";
 
 export type BuiltMatcher = {
   source: string;

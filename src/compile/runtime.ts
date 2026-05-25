@@ -1,5 +1,18 @@
-import { asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken } from "../utils/css";
-import { FormStateElement, getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup, isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame, isValidityElement } from "../utils/dom";
+import {
+  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken
+} from "../utils/css";
+import {
+  getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isValidityElement,
+  isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup,
+  isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
+  type FormStateElement,
+} from "../utils/dom";
+
+// cache for runtime matchers
+export type HashCache = {
+  nthElement?: WeakMap<ParentNode, NthElementIndexMap>;
+  nthOfType?: WeakMap<ParentNode, NthOfTypeParentMap>;
+};
 
 export type CombinatorTest = (e: Element, h: HashCache | null) => boolean;
 
@@ -155,16 +168,18 @@ function matchAttrValueOp(
       case '|': return asciiDashMatch(attrValue, htmlExpected);
       case '*': return asciiIncludes(attrValue, htmlExpected);
       case '~': return asciiHasCssToken(attrValue, htmlExpected);
+      case '~R': return snap.getCssTokenRegex(expected, true).test(attrValue);
       default: return snap.getCachedRegex(pattern, true /* ignoreCase */).test(attrValue);
     }
   }
 
   switch (pattern) {
     case '=': return attrValue === expected;
-    case '~': return hasCssToken(attrValue, expected);
     case '^': return attrValue.startsWith(expected);
     case '$': return attrValue.endsWith(expected);
     case '*': return attrValue.includes(expected);
+    case '~': return hasCssToken(attrValue, expected);
+    case '~R': return snap.getCssTokenRegex(expected, false).test(attrValue);
     case '|':
       return attrValue === expected ||
         (
@@ -274,6 +289,8 @@ export function matchesNthIndex(n: number, step: number, absStep: number, offset
     : n <= offset && congruent;
 }
 
+type NthElementIndexMap = WeakMap<Element, number>;
+
 // fast resolver for :nth-child() and :nth-last-child()
 // use cache if available to get the 1-based index of element among its siblings
 export function nthElement(element: Element, fromLast: boolean, h: HashCache | null): number {
@@ -313,6 +330,12 @@ function nthElementLocal(element: Element, fromLast: boolean): number {
 
   return n;
 }
+
+type NthOfTypeParentMap = Map<string, NthOfTypeIndexEntry>;
+type NthOfTypeIndexEntry = {
+  length: number;
+  indexMap: WeakMap<Element, number>;
+};
 
 // fast resolver for :nth-of-type() and :nth-last-of-type()
 // use cache if available to get the 1-based index of element among same-type siblings
@@ -457,6 +480,7 @@ export function isFocused(node: Element, snap: Snapshot): boolean {
   return node === doc.activeElement && doc.hasFocus();
 }
 
+export type SelectorCombinator = ' ' | '>' | '+' | '~';
 export function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, h: HashCache): boolean {
   // steps: RelativeStep[]
   if (index >= steps.length) {

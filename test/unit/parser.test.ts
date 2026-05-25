@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import {
-  consumeIdent, parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseNthArgs,
-  parseRelativeSelectorList, parseStrictSelectorList, parseSelectorList,
-  parseForgivingSelectorList, ParseContext,
-} from '../../src/parser/parser';
+import { parseAttributeSelector, parseComplexSelector, parseCompoundSelector, ParseContext, parseForgivingSelectorList, parseRelativeSelectorList, parseSelectorList, parseStrictSelectorList } from '../../src/parser/parser';
 import { Cursor } from '../../src/parser/cursor';
+import { consumeIdent } from '../../src/parser/lex';
+import { parseNthArgs } from '../../src/parser/nth';
 
 describe('parseSelectorList', () => {
   it('parses a single selector', () => {

@@ -1,4 +1,6 @@
-import { type ComplexSelector } from "./parser/parser";
+import type { CandidatePlan, MatchResolver, SelectArm } from "./api/query";
+import type { SelectLambda } from "./compile/compile";
+import type { ComplexSelector } from "./parser/parser";
 import { isDocument, isDocumentFragment, isElement } from "./utils/dom";
 
 export type DebugSelect = {
@@ -11,12 +13,12 @@ export type DebugSelect = {
     selector: string;
     hasSeed: boolean;
     usesScope: boolean;
-    strategy: CandidateStrategy;
+    strategy: string;
     lookupQuery: string;
     matcherSrcText: string;
   }[];
   run: {
-    strategy: CandidateStrategy;
+    strategy: string;
     lookupQuery: string;
     candidates: string[];
     matcherSrcText: string;

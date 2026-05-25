@@ -1,7 +1,8 @@
 import type {
-  AttributeSelector, CandidateTest, ClassSelector, IdSelector, NthArgs, RelativeSelectorList, SelectorList, TagSelector,
+  AttributeSelector, CandidateTest, RelativeSelectorList, SelectorList,
 } from "../parser/parser";
-import { asciiLower, cssIdentUnescape, escapeRegExp } from "../utils/css";
+import type { NthArgs } from "../parser/nth";
+import { asciiLower, cssIdentUnescape } from "../utils/css";
 import { assertNever } from "../utils/util";
 import {
   buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch,
@@ -57,7 +58,8 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
         // Keep ~= on the manual token path. A CSS-space regex is faster for one
         // hot repeated token selector, but token-selector churn favors avoiding
         // distinct regex patterns and cache/JIT overhead.
-        pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
+        pattern = '~R';
+        // pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
         break;
 
       default:

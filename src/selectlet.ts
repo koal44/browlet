@@ -1,11 +1,29 @@
 import { describeContext, describeElement } from "./debug";
-import { initSnapshot } from "./snapshot";
+import { Snapshot } from "./snapshot";
 import { toNodeList } from "./utils/collections";
 import { isElement, isIFrame, isNode, isText } from "./utils/dom";
 
-export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi {
+export const DEFAULT_CONFIG = {
+  // When enabled, methods that return multiple elements will return a
+  // NodeList-like object instead of an array.
+  NODE_LIST: false,
+
+  // Allows duplicate-ID candidate lookup to temporarily remove and restore id
+  // attributes in contexts where no fast id collection is available.
+  // Faster for DocumentFragment/template contexts, but observable by mutation
+  // observers and other DOM-inspection code. Disabled by default.
+  MUTATE_IDS: false,
+};
+
+export type SelectletConfig = typeof DEFAULT_CONFIG;
+export type ConfigKey = keyof SelectletConfig;
+export type CustomPseudoPredicate = (element: Element) => boolean;
+export type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };
+export type ElementList = Element[] | IndexedNodeList;
+
+export function Factory(fGlobal: typeof globalThis, fExport: Function) {
   const _doc = fGlobal.document;
-  const _snap = initSnapshot(_doc);
+  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG });
 
   // handlers needed for the :hover pseudo-class; track state change in browsers and headless
   _doc.addEventListener('mouseover', (e) => {
@@ -40,50 +58,49 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
   }, true);
 
   // QSA placeholders to native references
+  type QsaKey = 'closest' | 'matches' | 'querySelector' | 'querySelectorAll' | 'querySelectorDoc' | 'querySelectorAllDoc';
   const _qsaStore: Partial<Record<QsaKey, any>> = {};
   const _qsaHooks: { type: string, listener: EventListenerOrEventListenerObject }[] = [];
 
   // public exported methods/objects
-  const Dom: SxltApi = {
-    // Version, Config, CFG, Snapshot -- previous names
+  const api = {
     version: 'selectlet-__VERSION__',
-    config: _snap.config,
     snapshot: _snap,
 
     // exported engine methods
-    byId(id, ctx) {
+    byId(id: string, ctx?: QueryContext): Element | null {
       return _snap.byId(id, ctx);
     },
 
-    byTag(tag, ctx) {
+    byTag(tag: string, ctx?: QueryContext): ElementList {
       const result = _snap.byTag(tag, ctx);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    byTagNs(ns, local, ctx) {
+    byTagNs(ns: string | null, local: string, ctx?: QueryContext): ElementList {
       const result = _snap.byTagNs(ns, local, ctx);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    byClass(cls, ctx) {
+    byClass(cls: string, ctx?: QueryContext): ElementList {
       const result = _snap.byClass(cls, ctx);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    first(sel, ctx) {
+    first(sel: string, ctx?: QueryContext): Element | null {
       return _snap.first(sel, ctx, true /* isApiEntry */);
     },
 
-    match(sel, ctx) {
-      return _snap.match(sel, ctx);
+    match(sel: string, el: Element): boolean {
+      return _snap.match(sel, el);
     },
 
-    select(sel, ctx, cb) {
+    select(sel: string, ctx?: QueryContext, cb?: QueryCallback | null): ElementList {
       const result = _snap.select(sel, ctx, cb ?? null, true /* isApiEntry */);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 
-    closest(sel, el) {
+    closest(sel: string, el: Element): Element | null {
       return _snap.ancestor(sel, el);
     },
 
@@ -106,9 +123,9 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
     },
 
     // overrides QSA methods (only for browsers)
-    install(all?: boolean) {
+    install(all?: boolean): void {
       // ensure any previous overrides are removed before installing new ones
-      Dom.uninstall();
+      api.uninstall();
 
       // save references
       _qsaStore.closest = Element.prototype.closest;
@@ -131,37 +148,37 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
       Element.prototype.closest =
       HTMLElement.prototype.closest =
         function closest(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.closest]);
+          return parseQSArgs.apply(this, [...args, api.closest]);
         };
 
       Element.prototype.matches =
       HTMLElement.prototype.matches =
         function matches(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.match]);
+          return parseQSArgs.apply(this, [...args, api.match]);
         } as Element['matches'];
 
       Element.prototype.querySelector =
       HTMLElement.prototype.querySelector =
         function querySelector(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.first]);
+          return parseQSArgs.apply(this, [...args, api.first]);
         };
 
       Element.prototype.querySelectorAll =
       HTMLElement.prototype.querySelectorAll =
         function querySelectorAll(this: Element, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.select]);
+          return parseQSArgs.apply(this, [...args, api.select]);
         };
 
       Document.prototype.querySelector =
       DocumentFragment.prototype.querySelector =
         function querySelector(this: QueryContext, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.first]);
+          return parseQSArgs.apply(this, [...args, api.first]);
         };
 
       Document.prototype.querySelectorAll =
       DocumentFragment.prototype.querySelectorAll =
         function querySelectorAll(this: QueryContext, ...args: any[]) {
-          return parseQSArgs.apply(this, [...args, Dom.select]);
+          return parseQSArgs.apply(this, [...args, api.select]);
       };
 
       if (all) {
@@ -182,7 +199,7 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
     },
 
     // restore QSA methods (only for browsers)
-    uninstall() {
+    uninstall(): void {
       // restore references
       if (_qsaStore.closest) {
         Element.prototype.closest = _qsaStore.closest;
@@ -243,17 +260,17 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
     },
 
     // debugging utilities used in testing and development
-    setDebug(enabled: boolean) {
+    setDebug(enabled: boolean): void {
       _snap.isDebug = enabled;
-      if (enabled) Dom.clearDebug();
+      if (enabled) api.clearDebug();
     },
 
-    clearDebug() {
+    clearDebug(): void {
       _snap.debugSelect = undefined;
       _snap.debugMatch = undefined;
     },
 
-    printDebug() {
+    printDebug(): string {
       const docDesc = describeContext(_snap.doc);
       const fromDesc = describeContext(_snap.from);
       return JSON.stringify({
@@ -274,5 +291,7 @@ export function Factory(fGlobal: typeof globalThis, fExport: Function): SxltApi 
 
   _snap.update(_doc);
 
-  return Dom;
+  return api;
 }
+
+export type Selectlet = ReturnType<typeof Factory>;

@@ -1,3 +1,8 @@
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+const COMMENT_NODE = 8;
+const DOCUMENT_NODE = 9;
+const DOCUMENT_FRAGMENT_NODE = 11;
 
 export function isNode(x: unknown): x is Node {
   return !!x &&
@@ -7,23 +12,23 @@ export function isNode(x: unknown): x is Node {
 }
 
 export function isElement(n: Node): n is Element {
-  return n.nodeType === 1;
+  return n.nodeType === ELEMENT_NODE;
 }
 
 export function isDocument(n: Node): n is Document {
-  return n.nodeType === 9;
+  return n.nodeType === DOCUMENT_NODE;
 }
 
 export function isDocumentFragment(n: Node): n is DocumentFragment {
-  return n.nodeType === 11;
+  return n.nodeType === DOCUMENT_FRAGMENT_NODE;
 }
 
 export function isComment(n: Node): n is Comment {
-  return n.nodeType === 8;
+  return n.nodeType === COMMENT_NODE;
 }
 
 export function isText(n: Node): n is Text {
-  return n.nodeType === 3;
+  return n.nodeType === TEXT_NODE;
 }
 
 export function isHtmlDoc(doc: Document): doc is HTMLDocument {

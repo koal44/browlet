@@ -1,7 +1,8 @@
 import { seedsByClass } from "../candidates/seedsByClass";
 import { seedsById } from "../candidates/seedsById";
 import { seedsByTag } from "../candidates/seedsByTag";
-import { compileMatchList, compileSelectComplex } from "../compile/compile";
+import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda } from "../compile/compile";
+import type { HashCache } from "../compile/runtime";
 import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from "../debug";
 import { ComplexSelector, parseSelectorList, SelectorList } from "../parser/parser";
 import { sortUniqueByDocPosition } from "../utils/collections";
@@ -30,6 +31,8 @@ export function matchStrict(selectors: string, element: Element, snap: Snapshot,
   const resolver = getStrictMatchResolver(selectors, snap);
   return resolver.lambda(element, h);
 }
+
+export type MatchResolver = { lambda: MatchLambda; usesScope: boolean; };
 
 function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
   let resolver = snap.strictMatchResolvers.get(selectors);
@@ -98,6 +101,9 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
   return results;
 }
 
+export type SelectResolver = { arms: SelectArm[]; hasCb: boolean; usesScope: boolean; };
+export type SelectArm = { plan: CandidatePlan; matcher: SelectLambda; };
+
 function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot): SelectResolver {
   const arms: SelectArm[] = [];
   snap.probe.selBuild++;
@@ -121,6 +127,12 @@ function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot)
   const usesScope = list.usesScope ?? false;
   return { arms, usesScope, hasCb };
 }
+
+export type CandidatePlan = {
+  strategy: 'id' | 'class' | 'tag' | 'walk';
+  lookupQuery: string;
+  lookup: (ctx: QueryContext) => Element[];
+};
 
 // Marks seed-supplied simple selectors so residual matcher generation can skip them.
 function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): CandidatePlan {

@@ -6599,7 +6599,7 @@ runScenarios('various', 'normal', [
     `,
     cases: [
       // Plain type selector behavior in HTML document.
-      { select: 'item', expect: { ids: ['html-item', 'svg-item'] } },
+      { select: 'item', expect: { ids: ['html-item', 'svg-item'] }, debug: false },
       { select: 'p', expect: { ids: ['p'] } },
 
       // Any namespace + local name.

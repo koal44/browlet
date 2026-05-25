@@ -1,5 +1,8 @@
-import { ComplexSelector, SelectorList } from "../parser/parser";
+import type { ComplexSelector, SelectorList } from "../parser/parser";
 import { buildStrictComplexMatcher, buildStrictMatcher } from "./build";
+import type { HashCache } from "./runtime";
+
+export type MatchLambda = (candidate: Element, h: HashCache | null) => boolean;
 
 export function compileMatchList(list: SelectorList, selectorKey: string, snap: Snapshot): MatchLambda {
   const cached = snap.matchLambdas.get(selectorKey);
@@ -22,6 +25,16 @@ export function compileMatchList(list: SelectorList, selectorKey: string, snap: 
   return lambda;
 }
 
+export type SelectLambda = (
+  candidates: Element[],
+  callback: QueryCallback | null,
+  context: QueryContext,
+  results: Element[],
+  h: HashCache,
+) => Stopped;
+
+type Stopped = boolean;
+
 export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, snap: Snapshot): SelectLambda {
   const cache = hasCb ? snap.selectLambdasWithCb : snap.selectLambdasNoCb;
   const cacheKey = complex.source;
@@ -33,10 +46,6 @@ export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, s
 
   const built = buildStrictComplexMatcher(complex);
 
-  const callback = hasCb
-    ? `if(f(e)===false){p=true;break main;}`
-    : '';
-
   const f =
     `"use strict";` +
     built.declarations.join('') +
@@ -45,7 +54,7 @@ export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, s
       `main:while((e=c[++k])){` +
         `if(${built.source}){` +
           `r[++j]=e;` +
-          callback +
+          (hasCb ? `if(f(e)===false){p=true;break main;}` : '') +
         `}` +
       `}` +
       `return p;` +
