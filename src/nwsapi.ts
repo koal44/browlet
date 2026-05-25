@@ -3,7 +3,7 @@ import { initSnapshot } from "./snapshot";
 import { toNodeList } from "./utils/collections";
 import { isElement, isIFrame, isNode, isText } from "./utils/dom";
 
-export function Factory(fGlobal: Glob, fExport: Function): DomApi {
+export function Factory(fGlobal: typeof globalThis, fExport: Function): DomApi {
   const _doc = fGlobal.document;
   const _snap = initSnapshot(_doc);
 
@@ -48,7 +48,6 @@ export function Factory(fGlobal: Glob, fExport: Function): DomApi {
     // Version, Config, CFG, Snapshot -- previous names
     version: 'nwsapi-__VERSION__',
     config: _snap.config,
-    extensions: _snap.ext,
     snapshot: _snap,
 
     // exported engine methods
@@ -239,7 +238,8 @@ export function Factory(fGlobal: Glob, fExport: Function): DomApi {
       _snap.strictMatchResolvers.clear();
       _snap.selectResolvers.clear();
       _snap.matchLambdas.clear();
-      _snap.selectLambdas.clear();
+      _snap.selectLambdasNoCb.clear();
+      _snap.selectLambdasWithCb.clear();
     },
 
     // debugging utilities used in testing and development

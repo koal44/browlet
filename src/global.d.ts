@@ -1,11 +1,8 @@
-import type { Rex as RexType } from './rex';
 import type { Snapshot as SnapshotType } from './snapshot';
 
 export {};
 
 declare global {
-
-type Glob = typeof globalThis
 
 interface AmdDefine {
   (factory: unknown): void;
@@ -22,14 +19,9 @@ var NW: {
 
 type NwsConfig = Record<ConfigKey, boolean>;
 type ConfigKey = 'NODE_LIST' | 'MUTATE_IDS';
-type NwsExtensions = {
-  combinators: string[];
-  operators: string[];
-}
 
 type CustomPseudoPredicate = (element: Element) => boolean;
 
-type Rex = RexType;
 type Snapshot = SnapshotType;
 
 type QueryContext = Document | Element | DocumentFragment;
@@ -78,52 +70,20 @@ type SelectResolver = {
 type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element };
 type ElementList = Element[] | IndexedNodeList;
 
-type AttrMatcherParts = { p1: string; p2: string; p3: boolean; };
-
-type SelectorExtension = {
-  Expression: RegExp;
-  Callback: SelectorExtFn;
-};
-
-type SelectorExtFn = (
-    match: RegExpMatchArray | null,
-    source: string,
-    mode: boolean | null,
-  ) => {
-    match?: RegExpMatchArray | null,
-    modvar?: string,
-    source: string,
-    status: boolean,
-  };
-
-type ByTagFn = (tag: string, context?: QueryContext) => ElementList;
-type ByTagNsFn = (ns: string | null, local: string, context?: QueryContext) => ElementList;
-type ByClassFn = (cls: string, context?: QueryContext) => ElementList;
-type ByIdFn = (id: string, context?: QueryContext) => Element | null;
-type SelectFn = (selectors: string, context?: QueryContext, callback?: QueryCallback | null) => ElementList;
-
-type FirstFn = (selectors: string, context?: QueryContext) => Element | null;
-type MatchFn = (selectors: string, element: Element) => boolean;
-type AncestorFn = (selectors: string, element: Element) => Element | null;
-type ClosestFn = AncestorFn;
-
-type CombinatorCompiler = (source: string) => string;
-
 type DomApi = {
   version: string;
-  extensions: NwsExtensions;
   config: NwsConfig;
   snapshot: Snapshot;
 
-  byId: ByIdFn;
-  byTag: ByTagFn;
-  byTagNs: ByTagNsFn;
-  byClass: ByClassFn;
+  byId: (id: string, context?: QueryContext) => Element | null;
+  byTag: (tag: string, context?: QueryContext) => ElementList;
+  byTagNs: (ns: string | null, local: string, context?: QueryContext) => ElementList
+  byClass: (cls: string, context?: QueryContext) => ElementList;
 
-  first: FirstFn;
-  match: MatchFn;
-  select: SelectFn;
-  closest: ClosestFn;
+  first: (selectors: string, context?: QueryContext) => Element | null;
+  match: (selectors: string, element: Element) => boolean;
+  select: (selectors: string, context?: QueryContext, cb?: QueryCallback | null) => ElementList;
+  closest: (selectors: string, element: Element) => Element | null;
 
   configure: (option: Partial<Record<ConfigKey, boolean>>) => void;
   registerPseudo(name: string, predicate: CustomPseudoPredicate): void;
@@ -137,105 +97,13 @@ type DomApi = {
   printDebug: () => string;
 };
 
-type DebugSelect = {
-  kind: 'select';
-  isApiEntry: boolean;
-  selector: string;
-  callback?: QueryCallback | null;
-  context?: QueryContextDescription;
-  build: DebugSelectBuildStep[];
-  run: DebugSelectRunStep[];
-  error?: string;
-};
-
-type DebugSelectRunStep = {
-  strategy: CandidateStrategy;
-  lookupQuery: string;
-  candidates: string[];
-  matcherSrcText: string;
-  results: string[];
-};
-
-type DebugSelectBuildStep = {
-  selector: string;
-  hasSeed: boolean;
-  usesScope: boolean;
-  strategy: CandidateStrategy;
-  lookupQuery: string;
-  matcherSrcText: string;
-};
-
-type DebugMatch = {
-  kind: 'match';
-  isApiEntry: boolean;
-  element?: QueryContextDescription;
-  selector?: string;
-  parsed?: string[];
-  lambdaSource?: string;
-  result?: boolean;
-  error?: string;
-};
-
-type QueryContextDescription = {
-  kind: 'document' | 'fragment' | 'element' | 'unknown';
-  summary: string;
-  preview?: string;
-}
-
 type QsaKey =
   'closest' | 'matches' | 'querySelector' | 'querySelectorAll' |
   'querySelectorDoc' | 'querySelectorAllDoc';
 
 // --- parsing ---
 
-type CompileSelectorResult = {
-  source: string;
-  post: string;
-  modvar: string[];
-};
-
-// type SelectorList = {
-//   kind: 'selector-list';
-//   source: string;
-//   selectors: ComplexSelector[];
-// };
-
-// type ComplexSelector = {
-//   kind: 'complex';
-//   source: string;
-//   steps: ComplexStep[];
-// };
-
-// type ComplexStep = {
-//   kind: 'step';
-//   combinator: SelectorCombinator | null;
-//   compound: CompoundSelector;
-// };
-
 type SelectorCombinator = ' ' | '>' | '+' | '~';
-
-// type CompoundSelector = {
-//   kind: 'compound';
-//   source: string;
-// };
-
-// type RelativeSelectorList = {
-//   kind: 'relative-selector-list';
-//   source: string;
-//   selectors: RelativeSelector[];
-// };
-
-// type RelativeSelector = {
-//   kind: 'relative';
-//   source: string;
-//   steps: RelativeStep[];
-// };
-
-// type RelativeStep = {
-//   kind: 'relative-step';
-//   combinator: SelectorCombinator;
-//   compound: CompoundSelector;
-// };
 
 type HashCache = {
   nthElement?: WeakMap<ParentNode, NthElementIndexMap>;

@@ -6,8 +6,8 @@ const htmlStandard = readFileSync('test/browser/fixtures/slick/template-standard
 
 runScenarios('various', 'normal', [
   {
-    name: 'slick/template-standard selector perf candidates',
-    status: 'only',
+    name: 'template-standard selector perf candidates',
+    // status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     cases: [

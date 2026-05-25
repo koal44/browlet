@@ -1,7 +1,7 @@
 import { sameId } from "../candidates/seedsById";
 import { sameSelectorTag } from "../candidates/seedsByTag";
 import { collectionToArray, concatCollection } from "../utils/collections";
-import { asciiLower, escapeRegExp } from "../utils/css";
+import { asciiLower } from "../utils/css";
 import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from "../utils/dom";
 
 // scoped getElementById for Document, DocumentFragment, and Element contexts

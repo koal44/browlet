@@ -1,6 +1,47 @@
 import { type ComplexSelector } from "./parser/parser";
 import { isDocument, isDocumentFragment, isElement } from "./utils/dom";
 
+export type DebugSelect = {
+  kind: 'select';
+  isApiEntry: boolean;
+  selector: string;
+  callback?: QueryCallback | null;
+  context?: QueryContextDescription;
+  build: {
+    selector: string;
+    hasSeed: boolean;
+    usesScope: boolean;
+    strategy: CandidateStrategy;
+    lookupQuery: string;
+    matcherSrcText: string;
+  }[];
+  run: {
+    strategy: CandidateStrategy;
+    lookupQuery: string;
+    candidates: string[];
+    matcherSrcText: string;
+    results: string[];
+  }[];
+  error?: string;
+};
+
+export type DebugMatch = {
+  kind: 'match';
+  isApiEntry: boolean;
+  element?: QueryContextDescription;
+  selector?: string;
+  parsed?: string[];
+  lambdaSource?: string;
+  result?: boolean;
+  error?: string;
+};
+
+type QueryContextDescription = {
+  kind: 'document' | 'fragment' | 'element' | 'unknown';
+  summary: string;
+  preview?: string;
+};
+
 function previewText(s: string, max = 240): string {
   s = s.replace(/\s+/g, ' ').trim();
   return s.length <= max ? s : s.slice(0, max) + '…';

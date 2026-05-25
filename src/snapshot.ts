@@ -9,7 +9,7 @@ import {
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor
 } from "./compile/runtime";
-import { buildRex } from "./rex";
+import type { DebugMatch, DebugSelect } from "./debug";
 import { escapeRegExp } from "./utils/css";
 import { getNamespace, isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from "./utils/dom";
 
@@ -25,11 +25,6 @@ export const DEFAULT_CONFIG: NwsConfig = {
   MUTATE_IDS: false,
 };
 
-export const DEFAULT_EXTENSIONS: NwsExtensions = {
-  operators: ['~=', '*=', '^=', '$=', '|=', '='],
-  combinators: ['>', '+', '~', ' ', '\t'],
-};
-
 export function initSnapshot(doc: Document) {
   const snap = {
     doc: doc,
@@ -41,8 +36,8 @@ export function initSnapshot(doc: Document) {
     namespace: getNamespace(doc) as string | null,
     hasDocumentAll: 'all' in doc,
     hasTreeWalker: 'createTreeWalker' in doc,
-    re: {} as Rex,
 
+    // debugging
     isDebug: false,
     debugSelect: undefined as DebugSelect | undefined,
     debugMatch: undefined as DebugMatch | undefined,
@@ -51,29 +46,17 @@ export function initSnapshot(doc: Document) {
 
     // special handling configuration flags
     config: { ...DEFAULT_CONFIG } as NwsConfig,
-    ext: {
-      operators: [...DEFAULT_EXTENSIONS.operators],
-      combinators: [...DEFAULT_EXTENSIONS.combinators],
-    } as NwsExtensions,
-    selectors: {} as Record<string, SelectorExtension>,
-    combinators: {} as Record<string, CombinatorCompiler>,
-    operators: {
-      '=':  { p1: '^',       p2: '$',       p3: true },
-      '^=': { p1: '^',       p2: '',        p3: true },
-      '$=': { p1: '',        p2: '$',       p3: true },
-      '*=': { p1: '',        p2: '',        p3: true },
-      '|=': { p1: '^',       p2: '(-|$)',   p3: true },
-      '~=': { p1: '(^|\\s)', p2: '(\\s|$)', p3: true },
-    } as Record<string, AttrMatcherParts>,
     pseudos: {} as Record<string, CustomPseudoPredicate>,
 
+    // state for dynamic pseudo-classes
     hoverTarget: null as Element | null,
     activeTarget: null as Element | null,
     focusTarget: null as Element | null,
 
     // cached
     matchLambdas: new Map<string, MatchLambda>(),
-    selectLambdas: new Map<string, SelectLambda>(),
+    selectLambdasNoCb: new Map<string, SelectLambda>(),
+    selectLambdasWithCb: new Map<string, SelectLambda>(),
     strictMatchResolvers: new Map<string, MatchResolver>(),
     forgivingMatchResolvers: new Map<string, MatchResolver>(),
     selectResolvers: new Map<string, SelectResolver>(),
@@ -84,7 +67,8 @@ export function initSnapshot(doc: Document) {
 
     clearCache(): void {
       snap.matchLambdas.clear();
-      snap.selectLambdas.clear();
+      snap.selectLambdasNoCb.clear();
+      snap.selectLambdasWithCb.clear();
       snap.strictMatchResolvers.clear();
       snap.forgivingMatchResolvers.clear();
       snap.selectResolvers.clear();
@@ -94,6 +78,7 @@ export function initSnapshot(doc: Document) {
       snap.classRegex_I.clear();
     },
 
+    // public API methods
     byId: (id: string, context?: QueryContext) => byId(id, context ?? snap.doc, snap),
     byTag: (tag: string, context?: QueryContext) => byTag(tag, context ?? snap.doc, snap),
     byTagNs: (ns: string | null, local: string, context?: QueryContext) => byTagNs(ns, local, context ?? snap.doc, snap),
@@ -111,10 +96,10 @@ export function initSnapshot(doc: Document) {
       return queryClosest(sel, context, snap);
     },
 
+    // -------- Runtime API for compiled selector functions --------
+
     matchStrict: (selectors: string, element: Element, h: HashCache | null = null) =>
       matchStrict(selectors, element, snap, h),
-    // matchForgiving: (selectors: string, element: Element, h: HashCache | null = null) =>
-    //   matchForgiving(selectors, element, snap, h),
 
     // combinator tests
     matchPrevAny: matchPrevAny,
@@ -213,6 +198,7 @@ export function initSnapshot(doc: Document) {
       }
     },
 
+    // perf testing hooks
     probe: {
       select: 0,
       selBuild: 0,
@@ -226,8 +212,6 @@ export function initSnapshot(doc: Document) {
       }
     },
   };
-
-  snap.re = buildRex(snap.ext);
 
   return snap;
 }
