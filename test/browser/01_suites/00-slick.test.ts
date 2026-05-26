@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { runScenarios, type Scenario, type TestCase } from './harness/scenarios';
+import { runScenarios, type Scenario, type TestCase } from '../harness/scenarios';
 
 const fixtures = {
   htmlTransitional: readFileSync('test/browser/fixtures/slick/template-transitional.html', 'utf8'),

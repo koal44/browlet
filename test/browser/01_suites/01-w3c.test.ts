@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { runScenarios, type ScenarioStep } from './harness/scenarios';
+import { runScenarios, type ScenarioStep } from '../harness/scenarios';
 
 runScenarios('w3c iframes', 'normal', [
   {

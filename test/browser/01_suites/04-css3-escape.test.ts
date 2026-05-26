@@ -1,4 +1,4 @@
-import { runScenarios } from './harness/scenarios';
+import { runScenarios } from '../harness/scenarios';
 
 runScenarios('css3 escaped identifiers', 'normal',  [
   {
