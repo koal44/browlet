@@ -1,5 +1,5 @@
-import { runScenarios } from "./harness/scenarios";
-import { expect } from "@playwright/test";
+import { runScenarios } from './harness/scenarios';
+import { expect } from '@playwright/test';
 
 runScenarios('prototype 1', 'normal', [
   {
@@ -11,10 +11,10 @@ runScenarios('prototype 1', 'normal', [
       </div>`,
     cases: [
       { select: '.test_class', expect: { count: 2, ids: ['test_div_parent', 'test_div_child'] } },
-      { 
+      {
         select: '.test_class',
         ref: { by: 'id', id: 'test_div_parent' },
-        expect: { count: 1, ids: ['test_div_child'] }
+        expect: { count: 1, ids: ['test_div_child'] },
       },
       { select: '.non_existent', expect: { count: 0, ids: [] } },
     ],
@@ -297,13 +297,13 @@ runScenarios('prototype 2', 'normal', [
       { select: 'cite[title="hello world!"]', expect: { ids: ['with_title'] } },
 
       // testSelectorWithNamespacedAttributes
-      { 
+      {
         select: '[xml\\:lang]',
         expect: {
           count: 2,
           includesIds: ['item_3'],
-          equivalentCase: { select: '*[xml\\:lang]' }
-        }
+          equivalentCase: { select: '*[xml\\:lang]' },
+        },
       },
 
       // testSelectorWithChild
@@ -443,7 +443,7 @@ runScenarios('prototype 2', 'normal', [
       { select: 'form[title*="commas,"], input[value="#commaOne,#commaTwo"]', expect: { ids: ['commaParent', 'commaChild'] } },
 
       // testElementDownWithDotAndColon
-      { select: '#dupContainer\\.withdot\\:active #dupL4_dotcolon', expect: { ids: ['dupL4_dotcolon'] } }
+      { select: '#dupContainer\\.withdot\\:active #dupL4_dotcolon', expect: { ids: ['dupL4_dotcolon'] } },
     ],
   },
 
@@ -474,9 +474,9 @@ runScenarios('prototype 2', 'normal', [
         wrapper.innerHTML = "<table><tr><td id='myTD'></td></tr></table>";
 
         return {
-          byAttr: [...selectlet?.select('[id=myTD]', wrapper) ?? []].map(el => el.getAttribute('id')),
-          byTag: [...selectlet?.select('td', wrapper) ?? []].map(el => el.getAttribute('id')),
-          byId: [...selectlet?.select('#myTD', wrapper) ?? []].map(el => el.getAttribute('id')),
+          byAttr: [...selectlet?.select('[id=myTD]', wrapper) ?? []].map((el) => el.getAttribute('id')),
+          byTag: [...selectlet?.select('td', wrapper) ?? []].map((el) => el.getAttribute('id')),
+          byId: [...selectlet?.select('#myTD', wrapper) ?? []].map((el) => el.getAttribute('id')),
         };
       });
 

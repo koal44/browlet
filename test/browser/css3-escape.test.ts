@@ -1,4 +1,4 @@
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('css3 escaped identifiers', 'normal',  [
   {
@@ -59,7 +59,7 @@ runScenarios('css3 escaped identifiers', 'normal',  [
         two.id = two.className = 'two\u0000';
 
         const three = document.createElement('span');
-        three.id =three.className = 'three\uFFFD';
+        three.id = three.className = 'three\uFFFD';
 
         const four = document.createElement('span');
         four.id = four.className = 'four\u0000';

@@ -1,4 +1,4 @@
-import type { IndexedNodeList } from "../selectlet";
+import type { IndexedNodeList } from '../selectlet';
 
 export function concatCollection(list: Element[], nodes: HTMLCollectionOf<Element>): void {
   for (let i = 0, j = list.length, l = nodes.length; i < l; ++i) {
@@ -24,15 +24,15 @@ export function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList
   const fakeNL = Object.create(emptyNL, {
     length: {
       value: nodeArray.length,
-      enumerable: false
+      enumerable: false,
     },
     item: {
-      value: function(i: string | number) {
-        return this[+i || 0];
+      value: function(this: IndexedNodeList, i: number) {
+        return this[i] ?? null;
       },
-      enumerable: false
-    }
-  });
+      enumerable: false,
+    },
+  }) as IndexedNodeList;
 
   // copy the array elements
   nodeArray.forEach(function(v, i) { fakeNL[i] = v; });

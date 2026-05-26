@@ -4,6 +4,7 @@ import type { PerfHelpers } from './perf/harness/perf-scenario';
 export {};
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Window {
     __pwHelpers: PwHelpers;
     __pwXml: XMLDocument;

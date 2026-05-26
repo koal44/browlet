@@ -1,5 +1,4 @@
-import { Page } from "playwright/test";
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 const html = `
   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"

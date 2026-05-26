@@ -22,12 +22,12 @@ const shuffled = (n: number) => {
 };
 
 const groupedIds = (n: number) =>
-  shuffled(n).map(i => `#n${i}`).join(', ');
+  shuffled(n).map((i) => `#n${i}`).join(', ');
 
 const groupedDupedIds = (n: number) => {
   const xs = shuffled(n);
   const dupes = xs.filter((_, i) => i % 3 === 0);
-  return xs.concat(dupes).map(i => `#n${i}`).join(', ');
+  return xs.concat(dupes).map((i) => `#n${i}`).join(', ');
 };
 
 runPerfScenarios('perf', [
@@ -126,7 +126,7 @@ runPerfScenarios('perf', [
       { label: 'match tag div hit',     op: 'match', selector: 'div',      ref: { by: 'id', id: 'div' },      iters: 5_000_000 },
       { label: 'match tag div miss',    op: 'match', selector: 'div',      ref: { by: 'id', id: 'button' },   iters: 5_000_000 },
       { label: 'match tag button hit',  op: 'match', selector: 'button',   ref: { by: 'id', id: 'button' },   iters: 5_000_000 },
-      { label: 'match tag textarea hit',op: 'match', selector: 'textarea', ref: { by: 'id', id: 'textarea' }, iters: 5_000_000 },
+      { label: 'match tag textarea hit', op: 'match', selector: 'textarea', ref: { by: 'id', id: 'textarea' }, iters: 5_000_000 },
     ],
   },
 
@@ -492,7 +492,7 @@ runPerfScenarios('perf', [
       { label: 'miss short',      op: 'match', selector: '.s',          ref: { by: 'id', id: 'miss' },   iters: 5_000_000 },
 
       { label: 'case exact hit',  op: 'match', selector: '.Alpha',      ref: { by: 'id', id: 'upper' },  iters: 5_000_000 },
-      { label: 'case folded miss',op: 'match', selector: '.alpha',      ref: { by: 'id', id: 'upper' },  iters: 5_000_000 },
+      { label: 'case folded miss', op: 'match', selector: '.alpha',      ref: { by: 'id', id: 'upper' },  iters: 5_000_000 },
     ],
   },
 
@@ -680,7 +680,7 @@ runPerfScenarios('perf', [
     probeKeys: ['match'],
     benches: [
       { label: 'first-of-type hit first',  op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'i-first' },  iters: 5_000_000 },
-      { label: 'first-of-type miss middle',op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'i-middle' }, iters: 5_000_000 },
+      { label: 'first-of-type miss middle', op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'i-middle' }, iters: 5_000_000 },
       { label: 'first-of-type far miss',   op: 'match', selector: ':first-of-type', ref: { by: 'id', id: 'u-last' },   iters: 5_000_000 },
 
       { label: 'last-of-type hit last',    op: 'match', selector: ':last-of-type',  ref: { by: 'id', id: 'i-last' },   iters: 5_000_000 },
@@ -972,7 +972,7 @@ runPerfScenarios('perf', [
       </div>
       <div id="other" style="width:20px;height:20px;"></div>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#inner').hover();
     },
     probeKeys: ['match'],
@@ -1000,7 +1000,7 @@ runPerfScenarios('perf', [
       </div>
       <input id="focus-other">
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#focus-inner').focus();
       await page.locator('#active-inner').hover();
       await page.mouse.down();
@@ -1140,7 +1140,7 @@ runPerfScenarios('perf', [
       { label: 'match :checked checkbox miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unchecked-box' }, iters: 1_000_000 },
       { label: 'match :checked radio hit', op: 'match', selector: ':checked', ref: { by: 'id', id: 'checked-radio' }, iters: 1_000_000 },
       { label: 'match :checked radio miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unchecked-radio' }, iters: 1_000_000 },
-      { label: 'match :checked option hit', op: 'match', selector: ':checked', ref: { by: 'id', id:  'selected-option'}, iters: 1_000_000 },
+      { label: 'match :checked option hit', op: 'match', selector: ':checked', ref: { by: 'id', id:  'selected-option' }, iters: 1_000_000 },
       { label: 'match :checked option miss', op: 'match', selector: ':checked', ref: { by: 'id', id: 'unselected-option' }, iters: 1_000_000 },
 
       // :indeterminate
@@ -1161,7 +1161,7 @@ runPerfScenarios('perf', [
       { label: 'match :valid required filled hit', op: 'match', selector: ':valid', ref: { by: 'id', id: 'required-filled' }, iters: 1_000_000 },
       { label: 'match :valid email hit', op: 'match', selector: ':valid', ref: { by: 'id', id: 'email-valid' }, iters: 1_000_000 },
       { label: 'match :valid email miss', op: 'match', selector: ':valid', ref: { by: 'id', id: 'email-invalid' }, iters: 1_000_000, maxRatio: 10 },
-      { label: 'match :valid plain miss', op: 'match', selector: ':valid', ref: { by: 'id', id:  'plain'}, iters: 1_000_000 },
+      { label: 'match :valid plain miss', op: 'match', selector: ':valid', ref: { by: 'id', id:  'plain' }, iters: 1_000_000 },
       { label: 'match :invalid required empty hit', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'required-empty' }, iters: 1_000_000, maxRatio: 12 },
       { label: 'match :invalid email hit', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'email-invalid' }, iters: 1_000_000, maxRatio: 13 },
       { label: 'match :invalid email miss', op: 'match', selector: ':invalid', ref: { by: 'id', id: 'email-valid' }, iters: 1_000_000 },
@@ -1223,7 +1223,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
         sxlt.snapshot.hasDocumentAll = true;
@@ -1264,7 +1264,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: true });
         sxlt.snapshot.hasDocumentAll = false;
@@ -1305,7 +1305,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
         sxlt.snapshot.hasDocumentAll = false;
@@ -1346,7 +1346,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
         sxlt.snapshot.hasDocumentAll = false;
@@ -1386,7 +1386,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: true });
 
@@ -1438,7 +1438,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
         sxlt.snapshot.hasDocumentAll = true;
@@ -1476,7 +1476,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: true });
         sxlt.snapshot.hasDocumentAll = false;
@@ -1514,7 +1514,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
         sxlt.snapshot.hasDocumentAll = false;
@@ -1552,7 +1552,7 @@ runPerfScenarios('perf', [
     `,
     setupPage: async (page) => {
       await page.evaluate(() => {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
         sxlt.configure({ MUTATE_IDS: false });
       });
@@ -1821,7 +1821,7 @@ runPerfScenarios('perf', [
       { label: 'select htmlstandard h2',       op: 'select', selector: 'h2',       iters: 20_000 },
       { label: 'select htmlstandard article',  op: 'select', selector: 'article',  iters: 20_000 },
       { label: 'select htmlstandard madeup',   op: 'select', selector: 'madeup',   iters: 20_000 },
-      { label: 'select htmlstandard universal',op: 'select', selector: '*',       iters: 5_000 },
+      { label: 'select htmlstandard universal', op: 'select', selector: '*',       iters: 5_000 },
     ],
   },
 
@@ -1869,7 +1869,7 @@ runPerfScenarios('perf', [
       { label: 'select fragment madeup',    op: 'select', selector: 'madeup',  ref: { by: 'template', id: 'tmpl' }, iters: 1_000_000, maxRatio: 6 },
       { label: 'select fragment upper DIV', op: 'select', selector: 'DIV',     ref: { by: 'template', id: 'tmpl' }, iters: 1_000_000, maxRatio: 6 },
       { label: 'select fragment upper P',   op: 'select', selector: 'P',       ref: { by: 'template', id: 'tmpl' }, iters: 1_000_000 },
-      { label: 'select fragment food ASCII',op: 'select', selector: 'FÖÖD',    ref: { by: 'template', id: 'tmpl' }, iters: 1_000_000, maxRatio: 8 },
+      { label: 'select fragment food ASCII', op: 'select', selector: 'FÖÖD',    ref: { by: 'template', id: 'tmpl' }, iters: 1_000_000, maxRatio: 8 },
       { label: 'select fragment universal', op: 'select', selector: '*',       ref: { by: 'template', id: 'tmpl' }, iters: 500_000 },
     ],
   },

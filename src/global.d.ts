@@ -4,7 +4,7 @@ import type { Selectlet } from './selectlet';
 export {};
 
 declare global {
-  interface AmdDefine {
+  type AmdDefine = {
     (factory: unknown): void;
     (deps: string[], factory: unknown): void;
     amd?: unknown;

@@ -7,8 +7,8 @@ const DOCUMENT_FRAGMENT_NODE = 11;
 export function isNode(x: unknown): x is Node {
   return !!x &&
     typeof x === 'object' &&
-    typeof (x as any).nodeType === 'number' &&
-    typeof (x as any).nodeName === 'string';
+    typeof (x as Node).nodeType === 'number' &&
+    typeof (x as Node).nodeName === 'string';
 }
 
 export function isElement(n: Node): n is Element {
@@ -32,7 +32,7 @@ export function isText(n: Node): n is Text {
 }
 
 export function isHtmlDoc(doc: Document): doc is HTMLDocument {
-  return doc.contentType.includes('/html') || doc.createElement('DiV').localName == 'div';
+  return doc.contentType.includes('/html') || doc.createElement('DiV').localName === 'div';
 }
 
 export function isQuirksMode(doc: Document): boolean {
@@ -118,11 +118,7 @@ export function isValidityElement(e: Element): e is ValidityElement {
 }
 
 export function isNamedItemAnElement(item: Element | HTMLCollection): item is Element {
-  return (item as { nodeType?: unknown }).nodeType === 1;
-}
-
-export function getNamespace(doc: Document): string | null {
-  return doc.documentElement?.namespaceURI ?? null;
+  return (item as { nodeType?: unknown; }).nodeType === 1;
 }
 
 export function getIdAttr(e: Element): string {

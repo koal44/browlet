@@ -18,7 +18,7 @@ export type ByClassCase = { byClass: string; ref?: ContextRef; } & CaseBase;
 export type FirstCase =   { first: string;   ref?: ContextRef; } & CaseBase;
 export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
 export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
-export type ByTagNsCase = { byTagNs: { ns: string | null; local: string }; ref?: ContextRef; } & CaseBase;
+export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -76,18 +76,19 @@ export const ENGINES = ['native', 'selectlet'] as const;
 export type Engine = typeof ENGINES[number];
 
 export type ContextRef =
-  | { by: 'document' }
-  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef }
-  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef }
+  | { by: 'document'; }
+  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef; }
+  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef; }
   | { by: 'documentElement'; home?: ContextHome; }
-  | { by: 'iframe'; id: string; within?: ContextRef }
-  | { by: 'template'; id: string; within?: ContextRef }
-  | { by: 'shadowRoot'; id: string; within?: ContextRef };
+  | { by: 'iframe'; id: string; within?: ContextRef; }
+  | { by: 'template'; id: string; within?: ContextRef; }
+  | { by: 'shadowRoot'; id: string; within?: ContextRef; };
 
 export type ContextHome = 'document' | 'detached' | 'fragment';
 export type SelectletId = 'selectlet-bootstrap';
 
 type PassTracker = { passedEverywhere: boolean; resultInfo: string; stepIndex: number; caseIndex: number; };
+type PassTrackers = Partial<Record<number, PassTracker>>;
 
 type CaseInfo = {
   browser: BrowserName;
@@ -96,8 +97,8 @@ type CaseInfo = {
   stepIndex: number;
   caseIndex: number;
   stepCaseIndex: number;
-  misfails: Record<number, PassTracker>;
-  misfixes: Record<number, PassTracker>;
+  misfails: PassTrackers;
+  misfixes: PassTrackers;
 };
 
 type RunScenariosOptions = {
@@ -150,10 +151,10 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
 
     const scenarioHas = (s: Scenario, status: 'only' | 'fixme'): boolean =>
       s.status === status ||
-        !!s.cases?.some(c => c.status === status) ||
-        !!s.steps?.some(step => step.cases.some(c => c.status === status));
+        !!s.cases?.some((c) => c.status === status) ||
+        !!s.steps?.some((step) => step.cases.some((c) => c.status === status));
 
-    const hasScenariosOnly = scenarios.some(s => scenarioHas(s, 'only'));
+    const hasScenariosOnly = scenarios.some((s) => scenarioHas(s, 'only'));
 
     for (const s of scenarios) {
       const hasFixme = scenarioHas(s, 'fixme');
@@ -174,8 +175,8 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
   const scenarioBrowsers = s.browsers ?? BROWSER_NAMES;
 
   // cases marked fail/fixme and whether they passed in every applicable browser so far
-  const misfails: Record<number, PassTracker> = {};
-  const misfixes: Record<number, PassTracker> = {};
+  const misfails: PassTrackers = {};
+  const misfixes: PassTrackers = {};
 
   if (s.steps?.length && s.cases?.length) {
     throw new Error(`${s.name}: use either steps or top-level cases, not both`);
@@ -186,7 +187,7 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
     ...(s.cases?.length ? [{ cases: s.cases }] : []),
   ];
 
-  const hasOnlyCases = steps.some(step => step.cases.some(c => c.status === 'only'));
+  const hasOnlyCases = steps.some((step) => step.cases.some((c) => c.status === 'only'));
 
   for (const browserName of scenarioBrowsers) {
     const page = pages[browserName];
@@ -217,9 +218,9 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
   }
 
   // At the end of the scenario, check if any 'fail' or 'fixme' cases passed unexpectedly
-  const throwOnUnexpectedPass = (kind: 'fail' | 'fixme', trackers: Record<number, PassTracker>) => {
+  const throwOnUnexpectedPass = (kind: 'fail' | 'fixme', trackers: PassTrackers) => {
     for (const tracker of Object.values(trackers)) {
-      if (!tracker.passedEverywhere) continue;
+      if (!tracker?.passedEverywhere) continue;
       throw new Error(
         `${s.name}\n` +
         `Step #${tracker.stepIndex + 1}, Case #${tracker.caseIndex + 1} · Marked '${kind}' but passed unexpectedly.\n` +
@@ -245,11 +246,12 @@ async function runCase(page: Page, caseInfo: CaseInfo): Promise<void> {
   const result = await evalCase(page, caseInfo);
   const expectation = c.expect ?? {};
 
-  let thrown: unknown = undefined;
+  let thrown: Error | undefined;
+
   try {
     checkResult(result, expectation, caseInfo);
   } catch (err) {
-    thrown = err;
+    thrown = err instanceof Error ? err : new Error(String(err));
   }
 
   const status = c.status ?? 'normal';
@@ -259,7 +261,7 @@ async function runCase(page: Page, caseInfo: CaseInfo): Promise<void> {
     return;
   }
 
-  const updatePassTracker = (trackers: Record<number, PassTracker>) => {
+  const updatePassTracker = (trackers: PassTrackers) => {
     const prevPassed = trackers[stepCaseIndex]?.passedEverywhere ?? true;
     trackers[stepCaseIndex] = {
       passedEverywhere: !thrown && prevPassed,
@@ -274,25 +276,22 @@ async function runCase(page: Page, caseInfo: CaseInfo): Promise<void> {
     return;
   }
 
-  if (status === 'fixme') {
+  { // status is 'fixme'
     updatePassTracker(caseInfo.misfixes);
     if (thrown && HARNESS_MODE === 'fixme') throw thrown;
     return;
   }
-
-  assertNever(status);
 }
 
 async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
-  const { scenario: s, case: c } = caseInfo;
-  return await page.evaluate(({c, isXml} ) => {
+  return await page.evaluate(({ c, isXml } ) => {
     const pw = window.__pwHelpers;
     const doc = isXml ? window.__pwXml : window.document;
     const sxlt = selectlet;
     if (!sxlt) throw new Error('selectlet is not available');
     if (c.debug) {
-      sxlt.setDebug?.(true);
-      sxlt.clearDebug?.();
+      sxlt.setDebug(true);
+      sxlt.clearDebug();
     }
 
     const query = pw.getCaseQuery(c);
@@ -301,7 +300,7 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
 
     const equivCase = c.expect?.equivalentCase;
     const equivQuery = equivCase ? pw.getCaseQuery(equivCase) : undefined;
-    const equivCtx = equivCase ? pw.resolveContext(doc, equivCase?.ref) : null;
+    const equivCtx = equivCase ? pw.resolveContext(doc, equivCase.ref) : null;
     const equivCtxErrorMsg = equivCase && !equivCtx
       ? `Could not resolve equivalent context from ref: ${pw.stringify(equivCase.ref)}`
       : undefined;
@@ -343,8 +342,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     }
 
     if (c.debug) {
-      const debugText = sxlt.printDebug?.() ?? 'selectlet debug unavailable';
-      sxlt.setDebug?.(false);
+      const debugText = sxlt.printDebug();
+      sxlt.setDebug(false);
       throw new Error(debugText);
     }
 
@@ -354,22 +353,24 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
         engines.map((engine) => [engine, engineResults[engine]!.engineResult])
       ),
     };
-  }, {c: caseInfo.case, isXml: s.markupMode === 'xml-document' });
+  }, { c: caseInfo.case, isXml: caseInfo.scenario.markupMode === 'xml-document' });
 }
 
-function getDescribeFn(mode?: ScenariosStatus) {
-  if (mode === 'skip') return test.describe.skip;
-  if (mode === 'only') return test.describe.only;
-  // if (mode === 'fixme') return test.describe.fixme;
-  return test.describe;
+type DescribeFn = (title: string, callback: () => void) => void;
+function getDescribeFn(mode?: ScenariosStatus): DescribeFn {
+  if (mode === 'skip') return (title, callback) => test.describe.skip(title, callback);
+  if (mode === 'only') return (title, callback) => test.describe.only(title, callback);
+  // if (mode === 'fixme') return (title, callback) => test.describe.fixme(title, callback);
+  return (title, callback) => test.describe(title, callback);
 }
 
-function getTestFn(mode?: ScenarioStatus) {
-  if (mode === 'skip') return test.skip;
-  if (mode === 'only') return test.only;
+type TestFn = (title: string, callback: () => Promise<void>) => void;
+function getTestFn(mode?: ScenarioStatus): TestFn {
+  if (mode === 'skip') return (title, callback) => test.skip(title, callback);
+  if (mode === 'only') return (title, callback) => test.only(title, callback);
   if (mode === 'fixme') {
     if (HARNESS_MODE === 'fixme') return test;
-    return test.fixme;
+    return (title, callback) => test.fixme(title, callback);
   }
   if (mode === 'fail') return test.fail;
   return test;
@@ -379,7 +380,7 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
   const targetUrl = scenario.url ?? 'about:blank';
 
   if (scenario.url) {
-    await page.route(scenario.url, async route => {
+    await page.route(scenario.url, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'text/html',
@@ -396,7 +397,7 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
     await page.evaluate((xmlString) => {
       const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
       if (xml.getElementsByTagName('parsererror').length) {
-        throw new Error(`invalid xml-document markup: ${xml.documentElement?.textContent ?? 'parsererror'}`);
+        throw new Error(`invalid xml-document markup: ${xml.documentElement.textContent}`);
       }
       window.__pwXml = xml;
     }, scenario.markup);
@@ -407,11 +408,9 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
     }
     await page.goto(targetUrl);
     await page.setContent(scenario.markup);
-  } else if (scenario.markupMode === 'html-body' || !scenario.markupMode) {
+  } else { // scenario.markupMode === 'html-body' || !scenario.markupMode
     await page.goto(targetUrl);
     await page.setContent(`<!doctype html><html><body>${scenario.markup}</body></html>`);
-  } else {
-    assertNever(scenario.markupMode);
   }
 
   await ensureHarnessInstalled(page);
@@ -528,7 +527,7 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
     for (const cls of expectation.includesClasses) {
       runEngineChecks(result, msg, 'classes', (r, ngLabel) => {
         const errLabel = `Expected classes to include ${JSON.stringify(cls)}, got ${JSON.stringify(r.classes)}.`;
-        const classTokens = r.classes.flatMap(s => s.trim() ? s.trim().split(/\s+/) : []);
+        const classTokens = r.classes.flatMap((s) => s.trim() ? s.trim().split(/\s+/) : []);
         expect(classTokens, `${errLabel}\n\n${header}${ngLabel}`).toContain(cls);
       });
     }
@@ -538,7 +537,7 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
     for (const cls of expectation.excludesClasses) {
       runEngineChecks(result, msg, 'classes', (r, ngLabel) => {
         const errLabel = `Expected classes not to include ${JSON.stringify(cls)}, got ${JSON.stringify(r.classes)}.`;
-        const classTokens = r.classes.flatMap(s => s.trim() ? s.trim().split(/\s+/) : []);
+        const classTokens = r.classes.flatMap((s) => s.trim() ? s.trim().split(/\s+/) : []);
         expect(classTokens, `${errLabel}\n\n${header}${ngLabel}`).not.toContain(cls);
       });
     }
@@ -574,7 +573,7 @@ function formatContextRef(ref?: ContextRef): string {
 function wrapPageForXml(page: Page): Page {
   return new Proxy(page, {
     get(target, prop, receiver) {
-      if (prop !== 'evaluate') return Reflect.get(target, prop, receiver);
+      if (prop !== 'evaluate') return Reflect.get(target, prop, receiver) as unknown;
 
       return async (fn: unknown, arg?: unknown) => {
         if (typeof fn !== 'function') {
@@ -592,14 +591,14 @@ function wrapPageForXml(page: Page): Page {
                 const fn = (${fnSource});
                 return fn(window.__pwArg);
               })()
-            `);
+            `) as unknown;
           } finally {
             delete window.__pwArg;
           }
         }, { fnSource, arg });
       };
     },
-  }) as Page;
+  });
 }
 
 function attachPageDiagnostics(page: Page): void {
@@ -617,7 +616,7 @@ function attachPageDiagnostics(page: Page): void {
 }
 
 async function blockExternalRequests(context: BrowserContext): Promise<void> {
-  await context.route(/^https?:\/\//, async route => {
+  await context.route(/^https?:\/\//, async (route) => {
     const url = route.request().url();
     const { hostname } = new URL(url);
 

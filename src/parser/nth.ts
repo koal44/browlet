@@ -1,5 +1,5 @@
-import { Cursor } from "./cursor";
-import { consumeAsciiWord, consumeDigits, consumeTrivia } from "./lex";
+import type { Cursor } from './cursor';
+import { consumeAsciiWord, consumeDigits, consumeTrivia } from './lex';
 
 export type NthArgs = { step: number; offset: number; };
 

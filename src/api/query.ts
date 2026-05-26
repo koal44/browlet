@@ -1,12 +1,12 @@
-import { seedsByClass } from "../candidates/seedsByClass";
-import { seedsById } from "../candidates/seedsById";
-import { seedsByTag } from "../candidates/seedsByTag";
-import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda } from "../compile/compile";
-import type { HashCache } from "../compile/runtime";
-import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from "../debug";
-import { ComplexSelector, parseSelectorList, SelectorList } from "../parser/parser";
-import { sortUniqueByDocPosition } from "../utils/collections";
-import { cssIdentUnescape } from "../utils/css";
+import { seedsByClass } from '../candidates/seedsByClass';
+import { seedsById } from '../candidates/seedsById';
+import { seedsByTag } from '../candidates/seedsByTag';
+import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda } from '../compile/compile';
+import type { HashCache } from '../compile/runtime';
+import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from '../debug';
+import { parseSelectorList, type ComplexSelector, type SelectorList } from '../parser/parser';
+import { sortUniqueByDocPosition } from '../utils/collections';
+import { cssIdentUnescape } from '../utils/css';
 
 // equivalent of w3c 'matches' method
 export function queryMatch(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
@@ -136,10 +136,10 @@ export type CandidatePlan = {
 
 // Marks seed-supplied simple selectors so residual matcher generation can skip them.
 function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): CandidatePlan {
-  const last = complex.parts[complex.parts.length - 1]?.compound;
-  if (!last) {
+  if (complex.parts.length === 0) {
     throw new Error('Cannot plan candidates for empty complex selector');
   }
+  const last = complex.parts[complex.parts.length - 1].compound;
 
   if (last.id) {
     const query = cssIdentUnescape(last.id.raw);
@@ -150,7 +150,7 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
     return {
       strategy: 'id',
       lookupQuery: query,
-      lookup: ctx => seedsById(query, ctx, snap),
+      lookup: (ctx) => seedsById(query, ctx, snap),
     };
   }
 
@@ -167,7 +167,7 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
       // classname lookup accepts whitespace queries that QSA class selectors do not.
       lookup: /[\t\n\f\r ]/.test(query)
         ? () => []
-        : ctx => seedsByClass(query, ctx, snap),
+        : (ctx) => seedsByClass(query, ctx, snap),
     };
   }
 
@@ -184,14 +184,14 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
     return {
       strategy: 'tag',
       lookupQuery: query,
-      lookup: ctx => seedsByTag(query, ctx, snap),
+      lookup: (ctx) => seedsByTag(query, ctx, snap),
     };
   }
 
   return {
     strategy: 'walk',
     lookupQuery: '*',
-    lookup: ctx => seedsByTag('*', ctx, snap),
+    lookup: (ctx) => seedsByTag('*', ctx, snap),
   };
 }
 

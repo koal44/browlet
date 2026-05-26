@@ -1,5 +1,5 @@
-import type { CandidateTest, IdSelector, ClassSelector, TagSelector } from "../parser/parser";
-import { asciiLower, cssIdentUnescape } from "../utils/css";
+import type { CandidateTest, IdSelector, ClassSelector, TagSelector } from '../parser/parser';
+import { asciiLower, cssIdentUnescape } from '../utils/css';
 
 // id
 export function emitIdTest(id: IdSelector): CandidateTest {

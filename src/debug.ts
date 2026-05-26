@@ -1,7 +1,7 @@
-import type { CandidatePlan, MatchResolver, SelectArm } from "./api/query";
-import type { SelectLambda } from "./compile/compile";
-import type { ComplexSelector } from "./parser/parser";
-import { isDocument, isDocumentFragment, isElement } from "./utils/dom";
+import type { CandidatePlan, MatchResolver, SelectArm } from './api/query';
+import type { SelectLambda } from './compile/compile';
+import type { ComplexSelector } from './parser/parser';
+import { isDocument, isDocumentFragment, isElement } from './utils/dom';
 
 export type DebugSelect = {
   kind: 'select';
@@ -69,7 +69,7 @@ export function describeContext(ctx: QueryContext): QueryContextDescription {
     return {
       kind: 'document',
       summary: '#document',
-      preview: previewText(body?.outerHTML || root?.outerHTML || ''),
+      preview: previewText(body.outerHTML || root.outerHTML || ''),
     };
   }
 

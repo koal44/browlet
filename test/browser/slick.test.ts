@@ -1,6 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { runScenarios, type Scenario, type TestCase } from "./harness/scenarios";
+import { runScenarios, type Scenario, type TestCase } from './harness/scenarios';
 
 const fixtures = {
   htmlTransitional: readFileSync('test/browser/fixtures/slick/template-transitional.html', 'utf8'),
@@ -47,10 +47,10 @@ const browserBugTemplates: TemplateTuple[] = [
 
 type BugWin = Window & typeof globalThis & {
   __slick: {
-    getHost(): HTMLElement;
-    resetHost(): HTMLElement;
-    setHostHTML(html: string): HTMLElement;
-    add(tag: string, attrs?: Record<string, string>, parent?: Element): HTMLElement;
+    getHost(): Element;
+    resetHost(): Element;
+    setHostHTML(html: string): Element;
+    add(tag: string, attrs?: Record<string, string>, parent?: Element): Element;
   };
 };
 
@@ -293,7 +293,7 @@ runScenarios('slick', 'normal', [
             const win = window as BugWin;
             const host = win.__slick.resetHost();
             host.innerHTML = '<a class="f"></a><a class="b"></a>';
-            host.getElementsByClassName('b').length; // force initial access, matching original intent
+            const _length = host.getElementsByClassName('b').length; // force initial access, matching original intent
             (host.firstChild as Element).className = 'b';
           });
         },
@@ -504,13 +504,13 @@ runScenarios('slick', 'normal', [
       { select: '#baz,#foo,#t', expect: { count: 2 } },
 
       // classnames aren't case sensitive, only attribute selectors and xml tagnames, this spec is invalid
-			// modified from `1` to `2` because the element classname property is case insensitive (dperini)
+      // modified from `1` to `2` because the element classname property is case insensitive (dperini)
       { select: '.fooBar', expect: { count: 2 } },
 
       // modified from `1` to `2` because classes from the class attribute of HTML elements in documents
-			// that are in quirks mode must be treated as ASCII case-insensitive. (jddalton)
-			// document is not in quirks mode, tested compatMode to be CSS1Compat (dperini)
-			// http://www.whatwg.org/specs/web-apps/current-work/#selectors
+      // that are in quirks mode must be treated as ASCII case-insensitive. (jddalton)
+      // document is not in quirks mode, tested compatMode to be CSS1Compat (dperini)
+      // http://www.whatwg.org/specs/web-apps/current-work/#selectors
       { select: '[class~=foobar]', expect: { count: 1 } },
       { select: '[class~=fooBar]', expect: { count: 1 } },
 
@@ -1096,126 +1096,126 @@ runScenarios('slick', 'normal', [
       </html>
     `,
     steps: [
-  {
-    cases: [
-      // testBasicSelectors
-      { select: 'h3', expect: { count: 4 } },
-      { select: 'h1:first-child', expect: { count: 1 } },
-      { select: 'h3:first-child', expect: { count: 2 } },
-      { select: '#t', expect: { count: 1 } },
-      { select: '#bug', expect: { count: 1 } },
-      { select: '#t h3', expect: { count: 4 } },
-      { select: 'div#t', expect: { count: 1 } },
-      { select: 'div#t h3', expect: { count: 4 } },
-      { select: 'span#t', expect: { count: 0 } },
-      { select: '#t div > h3', expect: { count: 1 } },
-      { select: '.foo', expect: { count: 2 } },
-      { select: '.foo.bar', expect: { count: 1 } },
-      { select: '.baz', expect: { count: 2 } },
-      { select: '#t > h3', expect: { count: 3 } },
+      {
+        cases: [
+          // testBasicSelectors
+          { select: 'h3', expect: { count: 4 } },
+          { select: 'h1:first-child', expect: { count: 1 } },
+          { select: 'h3:first-child', expect: { count: 2 } },
+          { select: '#t', expect: { count: 1 } },
+          { select: '#bug', expect: { count: 1 } },
+          { select: '#t h3', expect: { count: 4 } },
+          { select: 'div#t', expect: { count: 1 } },
+          { select: 'div#t h3', expect: { count: 4 } },
+          { select: 'span#t', expect: { count: 0 } },
+          { select: '#t div > h3', expect: { count: 1 } },
+          { select: '.foo', expect: { count: 2 } },
+          { select: '.foo.bar', expect: { count: 1 } },
+          { select: '.baz', expect: { count: 2 } },
+          { select: '#t > h3', expect: { count: 3 } },
 
-      // testSyntacticEquivalents
-      { select: '#t > *', expect: { count: 12 } },
-      { select: '#t >', expect: { throws: true } },
-      { select: '.foo > *', expect: { count: 3 } },
-      { select: '.foo >', expect: { throws: true } },
+          // testSyntacticEquivalents
+          { select: '#t > *', expect: { count: 12 } },
+          { select: '#t >', expect: { throws: true } },
+          { select: '.foo > *', expect: { count: 3 } },
+          { select: '.foo >', expect: { throws: true } },
 
-      // testWithARootById
-      { select: ':scope > *', ref: { by: 'id', id: 'container' }, expect: { count: 3 } },
-      { select: ':scope > h3', ref: { by: 'id', id: 't' }, expect: { count: 3 } },
+          // testWithARootById
+          { select: ':scope > *', ref: { by: 'id', id: 'container' }, expect: { count: 3 } },
+          { select: ':scope > h3', ref: { by: 'id', id: 't' }, expect: { count: 3 } },
 
-      // testCompoundQueries
-      { select: '.foo, .bar', expect: { count: 2 } },
-      { select: '.foo,.bar', expect: { count: 2 } },
+          // testCompoundQueries
+          { select: '.foo, .bar', expect: { count: 2 } },
+          { select: '.foo,.bar', expect: { count: 2 } },
 
-      // testMultipleClassAttributes
-      { select: '.foo.bar', expect: { count: 1 } },
-      { select: '.foo', expect: { count: 2 } },
-      { select: '.baz', expect: { count: 2 } },
+          // testMultipleClassAttributes
+          { select: '.foo.bar', expect: { count: 1 } },
+          { select: '.foo', expect: { count: 2 } },
+          { select: '.baz', expect: { count: 2 } },
 
-      // testCaseSensitivity
-      { select: 'span.baz', expect: { count: 1 } },
-      { select: 'sPaN.baz', expect: { count: 1 } },
-      { select: 'SPAN.baz', expect: { count: 1 } },
-      { select: '[class = "foo bar"]', expect: { count: 1 } },
-      { select: '[foo~="bar"]', expect: { count: 2 } },
-      { select: '[ foo ~= "bar" ]', expect: { count: 2 } },
+          // testCaseSensitivity
+          { select: 'span.baz', expect: { count: 1 } },
+          { select: 'sPaN.baz', expect: { count: 1 } },
+          { select: 'SPAN.baz', expect: { count: 1 } },
+          { select: '[class = "foo bar"]', expect: { count: 1 } },
+          { select: '[foo~="bar"]', expect: { count: 2 } },
+          { select: '[ foo ~= "bar" ]', expect: { count: 2 } },
 
-      // testAttributes
-      { select: '[foo]', expect: { count: 3 } },
-      { select: '[foo$="thud"]', expect: { count: 1 } },
-      { select: '[foo$=thud]', expect: { count: 1 } },
-      { select: '[foo$="thudish"]', expect: { count: 1 } },
-      { select: '#t [foo$=thud]', expect: { count: 1 } },
-      { select: '#t [ title $= thud ]', expect: { count: 1 } },
-      { select: '#t span[ title $= thud ]', expect: { count: 0 } },
-      { select: '[foo|="bar"]', expect: { count: 2 } },
-      { select: '[foo|="bar-baz"]', expect: { count: 1 } },
-      { select: '[foo|="baz"]', expect: { count: 0 } },
+          // testAttributes
+          { select: '[foo]', expect: { count: 3 } },
+          { select: '[foo$="thud"]', expect: { count: 1 } },
+          { select: '[foo$=thud]', expect: { count: 1 } },
+          { select: '[foo$="thudish"]', expect: { count: 1 } },
+          { select: '#t [foo$=thud]', expect: { count: 1 } },
+          { select: '#t [ title $= thud ]', expect: { count: 1 } },
+          { select: '#t span[ title $= thud ]', expect: { count: 0 } },
+          { select: '[foo|="bar"]', expect: { count: 2 } },
+          { select: '[foo|="bar-baz"]', expect: { count: 1 } },
+          { select: '[foo|="baz"]', expect: { count: 0 } },
 
-      // testDescendantSelectors
-      { select: '>', ref: { by: 'id', id: 'container' }, expect: { throws: true } },
-      { select: ':scope > *', ref: { by: 'id', id: 'container' }, expect: { count: 3 } },
-      { select: ':scope > [qux]', ref: { by: 'id', id: 'container' }, expect: { count: 2, ids: ['child1', 'child3'] } },
+          // testDescendantSelectors
+          { select: '>', ref: { by: 'id', id: 'container' }, expect: { throws: true } },
+          { select: ':scope > *', ref: { by: 'id', id: 'container' }, expect: { count: 3 } },
+          { select: ':scope > [qux]', ref: { by: 'id', id: 'container' }, expect: { count: 2, ids: ['child1', 'child3'] } },
 
-      // testSiblingSelectors
-      { select: '+', expect: { throws: true } },
-      { select: '~', expect: { throws: true } },
-      { select: '.foo + span', expect: { count: 1 } },
-      { select: '.foo ~ span', expect: { count: 4 } },
-      { select: '#foo ~ *', expect: { count: 1 } },
-      { select: '#foo ~', expect: { throws: true } },
+          // testSiblingSelectors
+          { select: '+', expect: { throws: true } },
+          { select: '~', expect: { throws: true } },
+          { select: '.foo + span', expect: { count: 1 } },
+          { select: '.foo ~ span', expect: { count: 4 } },
+          { select: '#foo ~ *', expect: { count: 1 } },
+          { select: '#foo ~', expect: { throws: true } },
 
-      // testSubSelectors
-      { select: '#t span.foo:not(span:first-child)', expect: { count: 1 } },
-      { select: '#t span.foo:not(:first-child)', expect: { count: 1 } },
+          // testSubSelectors
+          { select: '#t span.foo:not(span:first-child)', expect: { count: 1 } },
+          { select: '#t span.foo:not(:first-child)', expect: { count: 1 } },
 
-      // testNthChild
-      { select: '.foo:nth-child(2)', expect: { ids: ['_foo'] } },
-      { select: '#t > h3:nth-child(odd)', expect: { count: 2 } },
-      { select: '#t h3:nth-child(odd)', expect: { count: 3 } },
-      { select: '#t h3:nth-child(2n+1)', expect: { count: 3 } },
-      { select: '#t h3:nth-child(even)', expect: { count: 1 } },
-      { select: '#t h3:nth-child(2n)', expect: { count: 1 } },
-      { select: '#t h3:nth-child(2n+3)', expect: { count: 1 } },
-      { select: '#t h3:nth-child(1)', expect: { count: 2 } },
-      { select: '#t > h3:nth-child(1)', expect: { count: 1 } },
-      { select: '#t :nth-child(3)', expect: { count: 3 } },
-      { select: '#t > div:nth-child(1)', expect: { count: 0 } },
-      { select: '#t span', expect: { count: 7 } },
-      { select: '#t > *:nth-child(n+10)', expect: { count: 3 } },
-      { select: '#t > *:nth-child(n+12)', expect: { count: 1 } },
-      { select: '#t > *:nth-child(-n+10)', expect: { count: 10 } },
-      { select: '#t > *:nth-child(-2n+10)', expect: { count: 5 } },
-      { select: '#t > *:nth-child(2n+2)', expect: { count: 6 } },
-      { select: '#t > *:nth-child(2n+4)', expect: { count: 5 } },
-      { select: '#t > *:nth-child(2n+4)', expect: { count: 5 } },
-      { select: '#t > *:nth-child(n-5)', expect: { count: 12 } },
-      { select: '#t > *:nth-child(2n-5)', expect: { count: 6 } },
+          // testNthChild
+          { select: '.foo:nth-child(2)', expect: { ids: ['_foo'] } },
+          { select: '#t > h3:nth-child(odd)', expect: { count: 2 } },
+          { select: '#t h3:nth-child(odd)', expect: { count: 3 } },
+          { select: '#t h3:nth-child(2n+1)', expect: { count: 3 } },
+          { select: '#t h3:nth-child(even)', expect: { count: 1 } },
+          { select: '#t h3:nth-child(2n)', expect: { count: 1 } },
+          { select: '#t h3:nth-child(2n+3)', expect: { count: 1 } },
+          { select: '#t h3:nth-child(1)', expect: { count: 2 } },
+          { select: '#t > h3:nth-child(1)', expect: { count: 1 } },
+          { select: '#t :nth-child(3)', expect: { count: 3 } },
+          { select: '#t > div:nth-child(1)', expect: { count: 0 } },
+          { select: '#t span', expect: { count: 7 } },
+          { select: '#t > *:nth-child(n+10)', expect: { count: 3 } },
+          { select: '#t > *:nth-child(n+12)', expect: { count: 1 } },
+          { select: '#t > *:nth-child(-n+10)', expect: { count: 10 } },
+          { select: '#t > *:nth-child(-2n+10)', expect: { count: 5 } },
+          { select: '#t > *:nth-child(2n+2)', expect: { count: 6 } },
+          { select: '#t > *:nth-child(2n+4)', expect: { count: 5 } },
+          { select: '#t > *:nth-child(2n+4)', expect: { count: 5 } },
+          { select: '#t > *:nth-child(n-5)', expect: { count: 12 } },
+          { select: '#t > *:nth-child(2n-5)', expect: { count: 6 } },
 
-      // testEmptyPseudoSelector
-      { select: '#t > span:empty', expect: { count: 4 } },
-      { select: '#t span:empty', expect: { count: 6 } },
-      { select: 'h3 span:empty', expect: { count: 0 } },
-      { select: 'h3 :not(:empty)', expect: { count: 1 } },
+          // testEmptyPseudoSelector
+          { select: '#t > span:empty', expect: { count: 4 } },
+          { select: '#t span:empty', expect: { count: 6 } },
+          { select: 'h3 span:empty', expect: { count: 0 } },
+          { select: 'h3 :not(:empty)', expect: { count: 1 } },
 
-      // testIdsWithColons
-      { select: "[id = 'silly:id::with:colons']", expect: { count: 1 } },
-      { select: '#silly\\:id\\:\\:with\\:colons', expect: { count: 1 } },
+          // testIdsWithColons
+          { select: "[id = 'silly:id::with:colons']", expect: { count: 1 } },
+          { select: '#silly\\:id\\:\\:with\\:colons', expect: { count: 1 } },
 
-      // testOrder
-      { select: '.myupperclass .myclass input', expect: { ids: ['myid1', 'myid2'], count: 2 } },
-    ],
-  },
+          // testOrder
+          { select: '.myupperclass .myclass input', expect: { ids: ['myid1', 'myid2'], count: 2 } },
+        ],
+      },
       // testCorrectDocumentInFrame
       {
         setupPage: async (page) => {
           await page.evaluate(() => {
-            const frameDocument = (window.frames as any)['ifr'].document;
-            if (!frameDocument) throw new Error('frame document not found');
+            const frame = document.querySelector<HTMLIFrameElement>('iframe[name="ifr"]');
+            if (!frame?.contentDocument) throw new Error('frame document not found');
             const src = document.getElementById('iframe-test');
             if (!src) throw new Error('#iframe-test not found');
-            frameDocument.body.innerHTML = src.innerHTML;
+            frame.contentDocument.body.innerHTML = src.innerHTML;
           });
         },
         cases: [
@@ -1653,7 +1653,7 @@ runScenarios('slick', 'normal', [
     markupMode: name === 'xhtml' || name === 'xml' || name === 'svg' ? 'xml-document' : 'html-document',
     setupPage: async (page) => {
       await initPage(page, name);
-      await page.evaluate((n) => {
+      await page.evaluate(() => {
         const win = window as BugWin;
 
         const CLASSES = [
@@ -1677,7 +1677,7 @@ runScenarios('slick', 'normal', [
     },
     cases: [
       ...triScope(1, '.normal.escaped\\,character.ǝpoɔıun.瀡.with-dash.with_underscore.number123.MiXeDcAsE'),
-      
+
       ...triScope(3, '.normal'),
       ...triScope(1, '.dummy.normal'),
 
@@ -1710,7 +1710,7 @@ runScenarios('slick', 'normal', [
     markupMode: getMarkupMode(name),
     setupPage: async (page) => {
       await initPage(page, name);
-      await page.evaluate((n) => {
+      await page.evaluate(() => {
         const win = window as BugWin;
         const host = win.__slick.resetHost();
         for (let i = 1; i <= 10; i++) {
@@ -2135,7 +2135,7 @@ runScenarios('slick', 'normal', [
     `,
     setupPage: async (page) => {
       const mode = await page.locator('#ifr').evaluate((iframe) => {
-        return (iframe as any).contentDocument?.compatMode;
+        return (iframe as HTMLIFrameElement).contentDocument?.compatMode;
       });
       if (mode !== 'BackCompat') throw new Error(`expected quirks iframe, got ${mode}`);
     },
@@ -2162,7 +2162,7 @@ runScenarios('slick', 'normal', [
       const rootUrl = 'https://test.local';
       const frameUrl = `${rootUrl}/frame.html`;
 
-      await page.route(`${rootUrl}/**`, async route => {
+      await page.route(`${rootUrl}/**`, async (route) => {
         if (route.request().url() === frameUrl) {
           await route.fulfill({
             status: 200,
@@ -2224,7 +2224,7 @@ function triFind(count: number, selector: string, status?: TestCase['status']): 
 
   if (count) {
     cases.push({ match: selector, ref: { by: 'first', selector }, expect: { count: 1 } });
-  } 
+  }
 
   if (status) {
     for (const c of cases) c.status = status;
@@ -2253,20 +2253,20 @@ async function initPage(page: Page, template: TemplateKey): Promise<void> {
       return name === 'xhtml' || name === 'xml' || name === 'svg';
     }
 
-    function createNode(doc: Document) {
+    function createNode(doc: Document): Element {
       if (n === 'svg') return doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
       if (isXmlLike(n)) return doc.createElementNS('http://www.w3.org/1999/xhtml', 'div');
       return doc.createElement('div');
     }
 
     function getRoot(): Element {
-      return document.body ?? document.documentElement;
+      return document.documentElement;
     }
 
-    function getHost(): HTMLElement {
-      let host = document.getElementById('host') as HTMLElement | null;
+    function getHost(): Element {
+      let host = document.getElementById('host') as Element | null;
       if (!host) {
-        host = createNode(document) as HTMLElement;
+        host = createNode(document);
         host.id = 'host';
         getRoot().appendChild(host);
       }

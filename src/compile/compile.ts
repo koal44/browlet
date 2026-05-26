@@ -1,6 +1,8 @@
-import type { ComplexSelector, SelectorList } from "../parser/parser";
-import { buildStrictComplexMatcher, buildStrictMatcher } from "./build";
-import type { HashCache } from "./runtime";
+/* eslint-disable @typescript-eslint/no-implied-eval */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import type { ComplexSelector, SelectorList } from '../parser/parser';
+import { buildStrictComplexMatcher, buildStrictMatcher } from './build';
+import type { HashCache } from './runtime';
 
 export type MatchLambda = (candidate: Element, h: HashCache | null) => boolean;
 

@@ -1,6 +1,6 @@
-import { collectionToArray, concatCollection, mergeDocumentOrder } from "../utils/collections";
-import { asciiLower } from "../utils/css";
-import { isDocumentFragment, isHtmlElement } from "../utils/dom";
+import { collectionToArray, concatCollection, mergeDocumentOrder } from '../utils/collections';
+import { asciiLower } from '../utils/css';
+import { isDocumentFragment, isHtmlElement } from '../utils/dom';
 
 export function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!tag) return [];

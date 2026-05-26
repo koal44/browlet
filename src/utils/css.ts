@@ -1,5 +1,6 @@
 const REPLACEMENT_CHARACTER = '\ufffd';
 
+// eslint-disable-next-line no-control-regex
 const NULL_RE = /\x00/g;
 const CSS_ESCAPE_RE = /\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|\\([\s\S])|\\$/g;
 

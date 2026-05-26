@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import { chromium, firefox, webkit, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 
@@ -10,11 +11,11 @@ const DEFAULT_ENGINES: EngineTarget[] = [
   { name: 'selectlet', script: 'dist/selectlet.js' },
 ];
 
-export interface PerfHelpers {
+export type PerfHelpers = {
   runBenches(
     engineName: EngineName,
     benches: Bench[],
-    options?: { quickIters?: number, focused?: boolean },
+    options?: { quickIters?: number; focused?: boolean; },
   ): BenchResult[];
 }
 
@@ -31,32 +32,32 @@ type BenchOps = {
   byId(id: string, ctx: QueryContext): Element | null;
   byClass(cls: string, ctx: QueryContext): Element[];
   byTag(tag: string, ctx: QueryContext): Element[];
-  byTagNs(byTagNs: { ns: string | null, local: string }, ctx: QueryContext): Element[];
+  byTagNs(byTagNs: { ns: string | null; local: string; }, ctx: QueryContext): Element[];
 };
 
-type MatchBench =   { op: 'match';     selector:  string;    ref:  ContextRef } & BenchBase;
-type SelectBench =  { op: 'select';    selector:  string;    ref?: ContextRef } & BenchBase;
-type FirstBench =   { op: 'first';     selector:  string;    ref?: ContextRef } & BenchBase;
-type ClosestBench = { op: 'closest';   selector:  string;    ref:  ContextRef } & BenchBase;
-type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: ContextRef } & BenchBase;
-type ByIdBench =    { op: 'byId';      id:        string;    ref?: ContextRef } & BenchBase;
-type ByClassBench = { op: 'byClass';   cls:       string;    ref?: ContextRef } & BenchBase;
-type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef } & BenchBase;
+type MatchBench =   { op: 'match';     selector:  string;    ref:  ContextRef; } & BenchBase;
+type SelectBench =  { op: 'select';    selector:  string;    ref?: ContextRef; } & BenchBase;
+type FirstBench =   { op: 'first';     selector:  string;    ref?: ContextRef; } & BenchBase;
+type ClosestBench = { op: 'closest';   selector:  string;    ref:  ContextRef; } & BenchBase;
+type WalkBench =    { op: 'matchWalk'; selectors: string[];  ref?: ContextRef; } & BenchBase;
+type ByIdBench =    { op: 'byId';      id:        string;    ref?: ContextRef; } & BenchBase;
+type ByClassBench = { op: 'byClass';   cls:       string;    ref?: ContextRef; } & BenchBase;
+type ByTagBench =   { op: 'byTag';     tag:       string;    ref?: ContextRef; } & BenchBase;
 // Note: byTagNs perf won't really be useful as the comparisons would be apples ≈ apples.
-type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null, local: string }, ref?: ContextRef } & BenchBase;
+type ByTagNsBench = { op: 'byTagNs';   byTagNs:   { ns: string | null; local: string; }; ref?: ContextRef; } & BenchBase;
 
-type BenchBase = { label?: string; iters: number; maxRatio?: number, quickIters?: number, debug?: boolean, cold?: boolean };
+type BenchBase = { label?: string; iters: number; maxRatio?: number; quickIters?: number; debug?: boolean; cold?: boolean; };
 type Bench =
   MatchBench | SelectBench | FirstBench | ClosestBench | WalkBench | ByIdBench | ByClassBench | ByTagBench | ByTagNsBench;
 
 export type ContextRef =
-  | { by: 'document' }
-  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef }
-  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef }
+  | { by: 'document'; }
+  | { by: 'id'; id: string; home?: ContextHome; within?: ContextRef; }
+  | { by: 'first'; selector: string; home?: ContextHome; within?: ContextRef; }
   | { by: 'documentElement'; home?: ContextHome; }
-  | { by: 'iframe'; id: string; within?: ContextRef }
-  | { by: 'template'; id: string; within?: ContextRef }
-  | { by: 'shadowRoot'; id: string; within?: ContextRef };
+  | { by: 'iframe'; id: string; within?: ContextRef; }
+  | { by: 'template'; id: string; within?: ContextRef; }
+  | { by: 'shadowRoot'; id: string; within?: ContextRef; };
 
 export type ContextHome = 'document' | 'detached' | 'fragment';
 
@@ -79,13 +80,33 @@ type BenchResult = {
   ms: number;
   perIter: number;
   result: unknown;
-  probe?: unknown;
+  probe?: Record<string, unknown>;
   maxRatio: number;
 };
 
+type GlobalWithNW = typeof globalThis & { NW?: { Dom: NWDom; }; };
+type NWDom = {
+  match(sel: string, el: Element): boolean;
+  select(sel: string, ctx: QueryContext): Element[];
+  first(sel: string, ctx: QueryContext): Element | null;
+  closest(sel: string, el: Element): Element | null;
+  byId(id: string, ctx: QueryContext): Element | null;
+  byClass(cls: string, ctx: QueryContext): Element[];
+  byTag(tag: string, ctx: QueryContext): Element[];
+
+  clearCache?: () => void;
+  setDebug?: (enabled: boolean) => void;
+  clearDebug?: () => void;
+  printDebug?: () => string;
+
+  snapshot?: {
+    probe?: { reset?: () => void; } & Record<string, unknown>;
+  };
+}
+
 export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void {
-  const hasOnly = scenarios.some(s => s.status === 'only');
-  const active = hasOnly ? scenarios.filter(s => s.status === 'only') : scenarios;
+  const hasOnly = scenarios.some((s) => s.status === 'only');
+  const active = hasOnly ? scenarios.filter((s) => s.status === 'only') : scenarios;
 
   const browserSet = new Set<BrowserName>();
   for (const s of active) {
@@ -104,7 +125,7 @@ export function runPerfScenarios(label: string, scenarios: PerfScenario[]): void
     });
 
     test.afterAll(async () => {
-      await Promise.all(BROWSER_NAMES.map((name) => browsers[name]?.close()));
+      for (const name of BROWSER_NAMES) await browsers[name]?.close();
     });
 
     for (const scenario of scenarios) {
@@ -123,7 +144,7 @@ async function runPerfScenario(
   browsers: Record<BrowserName, Browser | null>,
 ): Promise<void> {
   const scenarioBrowsers = scenario.browsers ?? BROWSER_NAMES;
-  const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map(e => e.name))];
+  const engineNames: EngineName[] = [...(scenario.engines ?? DEFAULT_ENGINES.map((e) => e.name))];
   if (!engineNames.includes('selectlet')) engineNames.push('selectlet');
   const scenarioEngines = resolveEngines(engineNames);
 
@@ -131,7 +152,7 @@ async function runPerfScenario(
     const browser = browsers[browserName];
     if (!browser) throw new Error(`Browser not available: ${browserName}`);
 
-    const all: Record<EngineName, BenchResult[]> = {} as any;
+    const all: Partial<Record<EngineName, BenchResult[]>> = {};
 
     for (const { name, script } of scenarioEngines) {
       const context = await browser.newContext();
@@ -169,11 +190,11 @@ async function runPerfScenario(
   }
 }
 
-function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineName, probeKeys: string[]) {
+function buildTable(all: Partial<Record<EngineName, BenchResult[]>>, currentName: EngineName, probeKeys: string[]) {
   const current = all[currentName];
   if (!current) throw new Error(`Missing current perf engine: ${currentName}`);
 
-  const displayLabels = uniqueDisplayLabels(current.map(r => r.label), 56);
+  const displayLabels = uniqueDisplayLabels(current.map((r) => r.label), 56);
 
   let failedMaxRatio = false;
   const rows = Object.fromEntries(current.map((cur, i) => {
@@ -182,7 +203,7 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
     };
 
     for (const [name, results] of Object.entries(all)) {
-      if (name === currentName || !results) continue;
+      if (name === currentName) continue;
       const base = results.find((r) => r.label === cur.label);
       if (!base) { row[name] = 'missing'; continue; }
       const r = base.ms > 0 ? cur.ms / base.ms : Infinity;
@@ -207,10 +228,10 @@ function buildTable(all: Record<EngineName, BenchResult[]>, currentName: EngineN
     return warn && Number.isFinite(r) ? `${out}⚠` : out;
   }
 
-  function pickProbe(probe: unknown, keys?: string[]) {
+  function pickProbe(probe?: Record<string, unknown>, keys?: string[]) {
     if (!probe || !keys?.length) return probe;
     const out: Record<string, unknown> = {};
-    for (const key of keys) out[key] = (probe as any)[key];
+    for (const key of keys) out[key] = probe[key];
     return out;
   }
 
@@ -255,7 +276,8 @@ async function initPage(page: Page, scenario: PerfScenario): Promise<void> {
     await page.evaluate((xmlString) => {
       const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
       if (xml.getElementsByTagName('parsererror').length) {
-        throw new Error(`invalid xml-document markup: ${xml.documentElement?.textContent ?? 'parsererror'}`);
+        const root = xml.documentElement as Element | null;
+        throw new Error(`invalid xml-document markup: ${root?.textContent ?? 'unknown error'}`);
       }
       window.__perfXml = xml;
     }, scenario.markup);
@@ -275,15 +297,17 @@ async function initPage(page: Page, scenario: PerfScenario): Promise<void> {
   });
 }
 
-function getTestFn(status?: PerfScenarioStatus) {
-  if (status === 'skip') return test.skip;
-  if (status === 'only') return test.only;
-  return test;
+type TestFn = (title: string, callback: () => Promise<void>) => void;
+
+function getTestFn(status?: PerfScenarioStatus): TestFn {
+  if (status === 'skip') return (title, callback) => test.skip(title, callback);
+  if (status === 'only') return (title, callback) => test.only(title, callback);
+  return (title, callback) => test(title, callback);
 }
 
 function resolveEngines(names: EngineName[]): EngineTarget[] {
   return names.map((name) => {
-    const engine = DEFAULT_ENGINES.find(e => e.name === name);
+    const engine = DEFAULT_ENGINES.find((e) => e.name === name);
     if (!engine) throw new Error(`Unknown perf engine: ${name}`);
     return engine;
   });
@@ -311,10 +335,10 @@ async function installPerfHelpers(page: Page) {
   await page.evaluate(() => {
     const DEFAULT_MAX_RATIO = 5;
 
-    function getEngineApi(engineName: EngineName): any {
+    function getEngineApi(engineName: EngineName): null | typeof selectlet | NWDom {
       if (engineName === 'native') return null;
-      if (engineName === 'nw-2.2.23') return (globalThis as any).NW?.Dom;
-      if (engineName === 'selectlet') return (globalThis as any).selectlet;
+      if (engineName === 'nw-2.2.23') return (globalThis as GlobalWithNW).NW?.Dom;
+      if (engineName === 'selectlet') return globalThis.selectlet;
       return assertNever(engineName);
     }
 
@@ -355,7 +379,7 @@ async function installPerfHelpers(page: Page) {
       }
 
       if (isDocument(root)) {
-        const el = root.documentElement;
+        const el = root.documentElement as Element | null;
         if (el) {
           fn(el);
           walkChildren(el, fn);
@@ -391,12 +415,12 @@ async function installPerfHelpers(page: Page) {
     function runBenches(
       engineName: EngineName,
       benches: Bench[],
-      options: { quickIters?: number, focused?: boolean } = {},
+      options: { quickIters?: number; focused?: boolean; } = {},
     ): BenchResult[] {
       const labels = benches.map(benchLabel);
       assertUniqueBenchLabels(labels);
 
-      const hasDebugBench = benches.some(b => b.debug);
+      const hasDebugBench = benches.some((b) => b.debug);
       if (hasDebugBench) {
         if (engineName !== 'selectlet') return [];
         if (!supportsDebug(engineName)) return [];
@@ -405,14 +429,15 @@ async function installPerfHelpers(page: Page) {
       const ops = getBenchOps(engineName);
 
       let clearCache: (() => void) | undefined;
-      if (engineName !== 'native' && benches.some(b => b.cold)) {
+      if (engineName !== 'native' && benches.some((b) => b.cold)) {
         const api = getEngineApi(engineName);
 
-        if (!api || typeof api.clearCache !== 'function') {
+        const clearCacheFn = api?.clearCache;
+        if (typeof clearCacheFn !== 'function') {
           throw new Error(`${engineName}.clearCache is not available`);
         }
 
-        clearCache = () => api.clearCache();
+        clearCache = () => clearCacheFn();
       }
 
       function benchFn<T>(b: Bench, fn: () => T): () => T {
@@ -483,9 +508,9 @@ async function installPerfHelpers(page: Page) {
       }
 
       if (engineName === 'nw-2.2.23') {
-        const nwdom = (globalThis as any).NW?.Dom;
+        const nwdom = (globalThis as GlobalWithNW).NW?.Dom;
         if (!nwdom) throw new Error('NW.Dom is not available');
-        
+
         return {
           match: (s, e) => nwdom.match(s, e),
           select: (s, c) => [...nwdom.select(s, c)],
@@ -494,12 +519,12 @@ async function installPerfHelpers(page: Page) {
           byId: (id, ctx) => nwdom.byId(id, ctx),
           byClass: (cls, ctx) => nwdom.byClass(cls, ctx),
           byTag: (tag, ctx) => nwdom.byTag(tag, ctx),
-          byTagNs: (byTagNs, ctx) => nwdom.byTagNs(byTagNs.ns, byTagNs.local, ctx),
+          byTagNs: () => { throw new Error('NW.Dom does not support byTagNs'); },
         };
       }
 
       if (engineName === 'selectlet') {
-        const sxlt = (globalThis as any).selectlet;
+        const sxlt = globalThis.selectlet;
         if (!sxlt) throw new Error('selectlet is not available');
 
         return {
@@ -508,9 +533,9 @@ async function installPerfHelpers(page: Page) {
           first: (s, c) => sxlt.first(s, c),
           closest: (s, e) => sxlt.closest(s, e),
           byId: (id, ctx) => sxlt.byId(id, ctx),
-          byClass: (cls, ctx) => sxlt.byClass(cls, ctx),
-          byTag: (tag, ctx) => sxlt.byTag(tag, ctx),
-          byTagNs: (byTagNs, ctx) => sxlt.byTagNs(byTagNs.ns, byTagNs.local, ctx),
+          byClass: (cls, ctx) => sxlt.byClass(cls, ctx) as Element[],
+          byTag: (tag, ctx) => sxlt.byTag(tag, ctx) as Element[],
+          byTagNs: (byTagNs, ctx) => sxlt.byTagNs(byTagNs.ns, byTagNs.local, ctx) as Element[],
         };
       }
 
@@ -658,7 +683,7 @@ async function installPerfHelpers(page: Page) {
       return [...base.querySelectorAll(tag)];
     }
 
-    function queryTagNs(base: QueryContext, q: { ns: string | null; local: string }): Element[] {
+    function queryTagNs(base: QueryContext, q: { ns: string | null; local: string; }): Element[] {
       const { ns, local } = q;
       if (!isDocumentFragment(base)) {
         return [...base.getElementsByTagNameNS(ns, local)];
@@ -674,29 +699,27 @@ async function installPerfHelpers(page: Page) {
     }
 
     function assertNever(value: never, message?: string): never {
-      throw new Error(message ?? `Unexpected value: ${value}`);
+      throw new Error(message ?? `Unexpected value: ${String(value)}`);
     }
 
     function debugBench(engineName: EngineName, label: string, fn: () => unknown): never {
       const api = getEngineApi(engineName);
 
-      if (
-        !api ||
-        typeof api.setDebug !== 'function' ||
-        typeof api.clearDebug !== 'function' ||
-        typeof api.printDebug !== 'function'
-      ) {
+      const setDebug = api?.setDebug;
+      const clearDebug = api?.clearDebug;
+      const printDebug = api?.printDebug;
+      if (!setDebug || !clearDebug || !printDebug) {
         throw new Error(`${engineName} debug is not available`);
       }
 
-      api.setDebug(true);
-      api.clearDebug();
+      setDebug(true);
+      clearDebug();
 
       try {
         fn();
-        throw new Error(`[perf debug] ${label}\n${api.printDebug()}`);
+        throw new Error(`[perf debug] ${label}\n${printDebug()}`);
       } finally {
-        api.setDebug(false);
+        setDebug(false);
       }
     }
 

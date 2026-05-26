@@ -1,5 +1,5 @@
 export function assertNever(value: never, message?: string): never {
-  throw new Error(message ?? `Unexpected value: ${value}`);
+  throw new Error(message ?? `Unexpected value: ${String(value)}`);
 }
 
 export function clamp(n: number, min: number, max: number): number {

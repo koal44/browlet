@@ -1,5 +1,5 @@
-import type { CustomPseudoPredicate } from "../selectlet";
-import { cssIdentUnescape } from "../utils/css";
+import type { CustomPseudoPredicate } from '../selectlet';
+import { cssIdentUnescape } from '../utils/css';
 import { Cursor } from './cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
@@ -15,10 +15,13 @@ import {
   emitRegisteredPseudoTest,
   emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest,
   emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest,
-  emitVolumeLockedPseudoTest, emitWherePseudoTest
-} from "../compile/emit";
-import { canStartIdent, canStartSimpleSelector, consumeIdent, consumeStringValue, consumeTrivia, isCombinator, isCssWhitespace } from "./lex";
-import { parseNthArgs } from "./nth";
+  emitVolumeLockedPseudoTest, emitWherePseudoTest,
+} from '../compile/emit';
+import {
+  canStartIdent, canStartSimpleSelector, consumeIdent, consumeStringValue, consumeTrivia,
+  isCombinator, isCssWhitespace,
+} from './lex';
+import { parseNthArgs } from './nth';
 
 export type SelectorList = {
   selectors: ComplexSelector[];
@@ -56,7 +59,7 @@ export type IdSelector = {
   raw: string;
 
   // Whether this simple selector is used as a seed and thus should be skipped from compiled tests.
-  seed?: boolean; 
+  seed?: boolean;
 };
 
 export type ClassSelector = {
@@ -448,7 +451,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'where': return emitWherePseudoTest(parseForgivingSelectorList(c, ctx));
     case 'not': return emitNotPseudoTest(parseStrictSelectorList(c, ctx));
     case 'has': return emitHasPseudoTest(parseRelativeSelectorList(c, ctx));
-    case 'matches': c.error('Unsupported pseudo-class :matches(); use :is()');
+    case 'matches': return c.error('Unsupported pseudo-class :matches(); use :is()');
 
     // linguistic pseudo-classes
     case 'dir': return emitDirPseudoTest(parseDirPseudoArg(c));
@@ -829,7 +832,7 @@ function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
   return null;
 }
 
-function parseDirPseudoArg(c: Cursor): 'ltr' | 'rtl' | string {
+function parseDirPseudoArg(c: Cursor): string { // 'ltr' | 'rtl'
   const arg = parsePseudoBodyIdentArg(c).toLowerCase();
   return arg;
 }

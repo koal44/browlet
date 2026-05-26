@@ -1,12 +1,12 @@
 import {
-  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken
-} from "../utils/css";
+  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken,
+} from '../utils/css';
 import {
   getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isValidityElement,
   isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup,
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
-} from "../utils/dom";
+} from '../utils/dom';
 
 // cache for runtime matchers
 export type HashCache = {
@@ -22,8 +22,9 @@ export function matchParent(e: Element, test: CombinatorTest, h: HashCache | nul
 }
 
 export function matchAncestor(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
-  while ((e = e.parentElement as Element)) {
-    if (test(e, h)) return true;
+  let node: Element | null = e;
+  while ((node = node.parentElement)) {
+    if (test(node, h)) return true;
   }
   return false;
 }
@@ -34,8 +35,9 @@ export function matchPrev(e: Element, test: CombinatorTest, h: HashCache | null)
 }
 
 export function matchPrevAny(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
-  while ((e = e.previousElementSibling as Element)) {
-    if (test(e, h)) return true;
+  let node: Element | null = e;
+  while ((node = node.previousElementSibling)) {
+    if (test(node, h)) return true;
   }
   return false;
 }
@@ -469,15 +471,15 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): 
   return false;
 }
 
-export function isFocused(node: Element, snap: Snapshot): boolean {
-  const doc = node.ownerDocument;
-  if (!doc || isIFrame(node)) return false;
+export function isFocused(el: Element, snap: Snapshot): boolean {
+  const doc = el.ownerDocument;
+  if (isIFrame(el)) return false;
 
-  if (node === doc.body || node === doc.documentElement) {
-    return node === snap.focusTarget && doc.hasFocus();
+  if (el === doc.body || el === doc.documentElement) {
+    return el === snap.focusTarget && doc.hasFocus();
   }
 
-  return node === doc.activeElement && doc.hasFocus();
+  return el === doc.activeElement && doc.hasFocus();
 }
 
 export type SelectorCombinator = ' ' | '>' | '+' | '~';
@@ -655,6 +657,7 @@ const CUSTOM_ELEMENT_NAME_BLACKLIST = new Set([
   'font-face-format', 'font-face-name', 'missing-glyph',
 ]);
 const PCEN = String.raw`[-.0-9_a-z\u00B7\u0300-\u036F\u203F-\u2040]`;
+// eslint-disable-next-line no-misleading-character-class
 const CUSTOM_ELEMENT_NAME = new RegExp(String.raw`^[a-z]${PCEN}*-${PCEN}*$`);
 
 function isPotentialCustomElementName(name: string): boolean {
@@ -668,7 +671,7 @@ export function isDefined(element: Element, snap: Snapshot): boolean {
   const name = element.localName;
   if (!isPotentialCustomElementName(name)) return true;
 
-  return !!snap.doc.defaultView?.customElements?.get(name);
+  return !!snap.doc.defaultView?.customElements.get(name);
 }
 
 export function isDisabled(e: Element): boolean {
@@ -792,7 +795,7 @@ export function isDefault(e: Element): boolean {
   if (!form) return false;
 
   let firstInput = null;
-  const inputs = form.ownerDocument.getElementsByTagName('input')
+  const inputs = form.ownerDocument.getElementsByTagName('input');
   for (let i = 0; i < inputs.length; i++) {
     const input = inputs[i];
     if (input.form === form && (input.type === 'submit' || input.type === 'image')) {

@@ -1,12 +1,8 @@
-import type {
-  AttributeSelector, CandidateTest, RelativeSelectorList, SelectorList,
-} from "../parser/parser";
-import type { NthArgs } from "../parser/nth";
-import { asciiLower, cssIdentUnescape } from "../utils/css";
-import { assertNever } from "../utils/util";
-import {
-  buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch,
-} from "./build";
+import type { AttributeSelector, CandidateTest, RelativeSelectorList, SelectorList } from '../parser/parser';
+import type { NthArgs } from '../parser/nth';
+import { asciiLower, cssIdentUnescape } from '../utils/css';
+import { assertNever } from '../utils/util';
+import { buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from './build';
 
 // [attr], [attr=value], [ns|attr op value flag]
 export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
@@ -31,7 +27,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
   const attrVal = cssIdentUnescape(attr.valueRaw);
 
   const sensitivity =
-      attr.flag === 'i' ? 1
+    attr.flag === 'i' ? 1
     : attr.flag === 's' ? 0
     : ATTR_INSENSITIVE.has(htmlName) ? 2
     : 0;
@@ -131,7 +127,7 @@ export function emitOnlyOfTypePseudoTest(): CandidateTest {
 }
 
 // :nth-child(), :nth-of-type(), :nth-last-child(), :nth-last-of-type()
-export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: boolean }): CandidateTest {
+export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: boolean; }): CandidateTest {
   const { step, offset } = nth;
   const { ofType, last } = meta;
 
@@ -159,7 +155,7 @@ export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: b
 export function emitIsPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
-    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx)
+    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
   };
 }
 
@@ -167,7 +163,7 @@ export function emitIsPseudoTest(list: SelectorList): CandidateTest {
 export function emitWherePseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
-    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx)
+    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
   };
 }
 
@@ -175,7 +171,7 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
-    buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`
+    buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`,
   };
 }
 
@@ -183,7 +179,7 @@ export function emitNotPseudoTest(list: SelectorList): CandidateTest {
 export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
-    buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx)
+    buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx),
   };
 }
 

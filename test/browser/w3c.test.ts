@@ -24,7 +24,7 @@ runScenarios('w3c iframes', 'normal', [
           "[foo='BAR'] /* sanity check (valid) */",
           "[foo='bar' i]",
           "[foo='bar' I]",
-          "[foo=bar i]",
+          '[foo=bar i]',
           '[foo="bar" i]',
           "[foo='bar'i]",
           "[foo='bar'i ]",
@@ -32,7 +32,7 @@ runScenarios('w3c iframes', 'normal', [
           "[foo='bar' /**/ i]",
           "[foo='bar' i /**/ ]",
           "[foo='bar'/**/i/**/]",
-          "[foo=bar/**/i]",
+          '[foo=bar/**/i]',
           "[foo='bar'\ti\t] /* \\t */",
           "[foo='bar'\ni\n] /* \\n */",
           "[foo='bar'\ri\r] /* \\r */",
@@ -48,7 +48,7 @@ runScenarios('w3c iframes', 'normal', [
         ];
 
         const invalid = [
-          "[foo[ /* sanity check (invalid) */",
+          '[foo[ /* sanity check (invalid) */',
           "[foo='bar' i i]",
           "[foo i ='bar']",
           "[foo= i 'bar']",
@@ -84,8 +84,8 @@ runScenarios('w3c iframes', 'normal', [
           "[foo='bar' \\*|i]",
           "[foo='bar' *]",
           "[foo='bar' \\*]",
-          "[foo i]",
-          "[foo/**/i]",
+          '[foo i]',
+          '[foo/**/i]',
         ];
 
         const quirksFrame = document.querySelector<HTMLIFrameElement>('#quirks')!;
@@ -103,8 +103,8 @@ runScenarios('w3c iframes', 'normal', [
           '<style></style>',
           '<div id="test" foo="BAR"></div>',
           '<script>',
-            `var mode = "quirks mode";`,
-            // `console.log("quirks mode frame loaded");`,
+          `var mode = "quirks mode";`,
+          // `console.log("quirks mode frame loaded");`,
           '</script>',
         ].join('\n');
 
@@ -126,7 +126,7 @@ runScenarios('w3c iframes', 'normal', [
         await quirksLoaded;
         await xmlLoaded;
 
-        type Win = Window & typeof globalThis & { mode: string };
+        type Win = Window & typeof globalThis & { mode: string; };
         const win = window as Win;
         const quirks = quirksFrame.contentWindow as Win;
         const xml = xmlFrame.contentWindow as Win;
@@ -152,7 +152,7 @@ runScenarios('w3c iframes', 'normal', [
         };
 
         [win, quirks, xml].forEach(function(global) {
-          const style = global.document.getElementsByTagName('style')[0]!;
+          const style = global.document.getElementsByTagName('style')[0];
           const elm = global.document.getElementById('test')!;
           function clean_slate(testName: string) {
             style.textContent = '';
@@ -182,7 +182,7 @@ runScenarios('w3c iframes', 'normal', [
             };
             {
               const testName = s + ' with querySelector in ' + global.mode;
-              assert_throws("SyntaxError", function() {
+              assert_throws('SyntaxError', function() {
                 global.document.querySelector(s);
               }, testName, 'invalid selector');
             };
@@ -220,7 +220,7 @@ runScenarios('w3c', 'normal', [
       { select: "[foo='BAR'] /* sanity check (valid) */", expect: { throws: false } },
       { select: "[foo='bar' i]", expect: { throws: false } },
       { select: "[foo='bar' I]", expect: { throws: false } },
-      { select: "[foo=bar i]", expect: { throws: false } },
+      { select: '[foo=bar i]', expect: { throws: false } },
       { select: '[foo="bar" i]', expect: { throws: false } },
       { select: "[foo='bar'i]", expect: { throws: false } },
       { select: "[foo='bar'i ]", expect: { throws: false } },
@@ -228,7 +228,7 @@ runScenarios('w3c', 'normal', [
       { select: "[foo='bar' /**/ i]", expect: { throws: false } },
       { select: "[foo='bar' i /**/ ]", expect: { throws: false } },
       { select: "[foo='bar'/**/i/**/]", expect: { throws: false } },
-      { select: "[foo=bar/**/i]", expect: { throws: false } },
+      { select: '[foo=bar/**/i]', expect: { throws: false } },
       { select: "[foo='bar'\ti\t] /* \\t */", expect: { throws: false } },
       { select: "[foo='bar'\ni\n] /* \\n */", expect: { throws: false } },
       { select: "[foo='bar'\ri\r] /* \\r */", expect: { throws: false } },
@@ -242,7 +242,7 @@ runScenarios('w3c', 'normal', [
       { select: "[|foo='bar' i]", expect: { throws: false } },
       { select: "[*|foo='bar' i]", expect: { throws: false } },
 
-      { select: "[foo[ /* sanity check (invalid) */", expect: { throws: true } },
+      { select: '[foo[ /* sanity check (invalid) */', expect: { throws: true } },
       { select: "[foo='bar' i i]", expect: { throws: true } },
       { select: "[foo i ='bar']", expect: { throws: true } },
       { select: "[foo= i 'bar']", expect: { throws: true } },
@@ -278,15 +278,15 @@ runScenarios('w3c', 'normal', [
       { select: "[foo='bar' \\*|i]", expect: { throws: true } },
       { select: "[foo='bar' *]", expect: { throws: true } },
       { select: "[foo='bar' \\*]", expect: { throws: true } },
-      { select: "[foo i]", expect: { throws: true } },
-      { select: "[foo/**/i]", expect: { throws: true } },
+      { select: '[foo i]', expect: { throws: true } },
+      { select: '[foo/**/i]', expect: { throws: true } },
     ],
   },
 ]);
 
 type Attr = [ns: string, name: string, value: string];
 const attrStep = (select: string, attrs: Attr[], ids: string[] = ['target']): ScenarioStep => ({
-  setupPage: async page => page.evaluate((attrs) => {
+  setupPage: async (page) => page.evaluate((attrs) => {
     const root = document.getElementById('root')!;
     root.textContent = '';
 
@@ -294,7 +294,8 @@ const attrStep = (select: string, attrs: Attr[], ids: string[] = ['target']): Sc
     span.id = 'target';
 
     for (const [ns, name, value] of attrs) {
-      ns ? span.setAttributeNS(ns, name, value) : span.setAttribute(name, value);
+      if (ns) span.setAttributeNS(ns, name, value);
+      else span.setAttribute(name, value);
     }
 
     root.appendChild(span);
@@ -338,7 +339,7 @@ runScenarios('w3c iframes 2', 'normal', [
     // status: 'only',
     markup: `<div id="root"></div>`,
     steps: [
-      attrStep("[missingattr] /* sanity check (no match) */", [['', 'foo', 'BAR']], []),
+      attrStep('[missingattr] /* sanity check (no match) */', [['', 'foo', 'BAR']], []),
       attrStep("[foo='' i]", [['', 'foo', 'BAR']], []),
       attrStep("[foo='\u0000' i] /* \\0 in selector */", [['', 'foo', '']], []),
       attrStep("[foo='' i] /* \\0 in attribute */", [['', 'foo', '\u0000']], []),
@@ -894,55 +895,55 @@ runScenarios('w3c iframes 3', 'normal', [
       await page.evaluate(() => {
         function setupSpecialElements(doc: Document, parent: Element) {
           // Setup null and undefined tests
-          parent.appendChild(doc.createElement("null"));
-          parent.appendChild(doc.createElement("undefined"));
+          parent.appendChild(doc.createElement('null'));
+          parent.appendChild(doc.createElement('undefined'));
 
           // Setup namespace tests
-          const anyNS = doc.createElement("div");
-          const noNS = doc.createElement("div");
-          anyNS.id = "any-namespace";
-          noNS.id = "no-namespace";
+          const anyNS = doc.createElement('div');
+          const noNS = doc.createElement('div');
+          anyNS.id = 'any-namespace';
+          noNS.id = 'no-namespace';
 
           let div = [
-            doc.createElement("div"),
-            doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
-            doc.createElementNS("", "div"),
-            doc.createElementNS("http://www.example.org/ns", "div")
+            doc.createElement('div'),
+            doc.createElementNS('http://www.w3.org/1999/xhtml', 'div'),
+            doc.createElementNS('', 'div'),
+            doc.createElementNS('http://www.example.org/ns', 'div'),
           ];
 
-          div[0].id = "any-namespace-div1";
-          div[1].id = "any-namespace-div2";
-          div[2].setAttribute("id", "any-namespace-div3"); // Non-HTML elements can't use .id property
-          div[3].setAttribute("id", "any-namespace-div4");
+          div[0].id = 'any-namespace-div1';
+          div[1].id = 'any-namespace-div2';
+          div[2].setAttribute('id', 'any-namespace-div3'); // Non-HTML elements can't use .id property
+          div[3].setAttribute('id', 'any-namespace-div4');
 
-          for (var i = 0; i < div.length; i++) {
-            anyNS.appendChild(div[i])
+          for (let i = 0; i < div.length; i++) {
+            anyNS.appendChild(div[i]);
           }
 
           div = [
-            doc.createElement("div"),
-            doc.createElementNS("http://www.w3.org/1999/xhtml", "div"),
-            doc.createElementNS("", "div"),
-            doc.createElementNS("http://www.example.org/ns", "div")
+            doc.createElement('div'),
+            doc.createElementNS('http://www.w3.org/1999/xhtml', 'div'),
+            doc.createElementNS('', 'div'),
+            doc.createElementNS('http://www.example.org/ns', 'div'),
           ];
 
-          div[0].id = "no-namespace-div1";
-          div[1].id = "no-namespace-div2";
-          div[2].setAttribute("id", "no-namespace-div3"); // Non-HTML elements can't use .id property
-          div[3].setAttribute("id", "no-namespace-div4");
+          div[0].id = 'no-namespace-div1';
+          div[1].id = 'no-namespace-div2';
+          div[2].setAttribute('id', 'no-namespace-div3'); // Non-HTML elements can't use .id property
+          div[3].setAttribute('id', 'no-namespace-div4');
 
-          for (i = 0; i < div.length; i++) {
-            noNS.appendChild(div[i])
+          for (let i = 0; i < div.length; i++) {
+            noNS.appendChild(div[i]);
           }
 
           parent.appendChild(anyNS);
           parent.appendChild(noNS);
 
-          const i1 = doc.getElementById("attr-presence-i1")!;
-          i1.setAttributeNS("http://www.example.org/ns", "title", "");
+          const i1 = doc.getElementById('attr-presence-i1')!;
+          i1.setAttributeNS('http://www.example.org/ns', 'title', '');
         }
 
-        setupSpecialElements(document, document.getElementById("root")!);
+        setupSpecialElements(document, document.getElementById('root')!);
 
         location.hash = '#target';
       });
@@ -1269,7 +1270,7 @@ runScenarios('w3c iframes 3', 'normal', [
       * https://github.com/w3c/csswg-drafts/issues/641
       * These tests are commented out until a final decision is made on whether to
       * keep the feature in the spec.
-      * 
+      *
       * Removed from Selectors 4; 4/11/2026
       */
 
@@ -1358,7 +1359,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { ids: [] } },
       { select: 'div', expect: { count: 1 } },
-    ]
+    ],
   },
 
   {
@@ -1371,7 +1372,7 @@ runScenarios('w3c iframes 3', 'normal', [
       { select: 'html', expect: { count: 1 } },
       { select: '.htmlClass', expect: { ids: [] } },
       { select: 'template > *', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -1383,7 +1384,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { count: 1 } },
       { select: 'template > *', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -1411,7 +1412,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { count: 1 } },
       { select: 'template > div', expect: { count: 1 }, status: 'fail' }, // outside template.content
-    ]
+    ],
   },
 
   {
@@ -1423,7 +1424,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { count: 1 } },
       { select: 'template > *', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -1435,7 +1436,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { count: 1 } },
       { select: 'template > *', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -1447,7 +1448,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: 'template', expect: { count: 1 } },
       { select: 'template > *', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -1483,7 +1484,7 @@ runScenarios('w3c iframes 3', 'normal', [
       { select: 'table', expect: { count: 1 }, status: 'fail' }, // outside template.content
       { select: 'tr', expect: { count: 1 }, status: 'fail' }, // outside template.content
       { select: 'td', expect: { count: 1 }, status: 'fail' }, // outside template.content
-    ]
+    ],
   },
 
   {
@@ -1498,7 +1499,7 @@ runScenarios('w3c iframes 3', 'normal', [
       { select: ':checked', expect: { count: 4 } },
       { select: ':checked + span', expect: { count: 2 } },
       { select: ':checked, :checked + span', expect: { count: 6 } },
-    ]
+    ],
   },
 
   {
@@ -1523,7 +1524,7 @@ runScenarios('w3c iframes 3', 'normal', [
       expect(result.beforeSibling).toEqual(0);
       expect(result.afterSibling).toEqual(1);
     },
-    cases: []
+    cases: [],
   },
 
   {
@@ -1553,8 +1554,8 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const nativeIds = () => [...document.querySelectorAll(':checked')].map(el => el.id);
-        const sxltIds = () => [...selectlet?.select(':checked', document) ?? []].map(el => el.id);
+        const nativeIds = () => [...document.querySelectorAll(':checked')].map((el) => el.id);
+        const sxltIds = () => [...selectlet?.select(':checked', document) ?? []].map((el) => el.id);
 
         const native_initial = nativeIds();
         const sxlt_initial = sxltIds();
@@ -1593,7 +1594,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: ':checked', expect: { ids: ['option2', 'checkbox2', 'radio2'] } },
-    ]
+    ],
   },
 
   {
@@ -1648,8 +1649,8 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const nativeIds = () => [...document.querySelectorAll(':default')].map(el => el.id);
-        const sxltIds = () => [...selectlet?.select(':default', document) ?? []].map(el => el.id);
+        const nativeIds = () => [...document.querySelectorAll(':default')].map((el) => el.id);
+        const sxltIds = () => [...selectlet?.select(':default', document) ?? []].map((el) => el.id);
 
         const native_initial = nativeIds();
         const sxlt_initial = sxltIds();
@@ -1667,7 +1668,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: ':default', expect: { ids: ['button1', 'button4', 'input3', 'input5', 'input7', 'checkbox1', 'radio1', 'option2', 'button6', 'button8'] } },
-    ]
+    ],
   },
 
   {
@@ -1714,14 +1715,14 @@ runScenarios('w3c iframes 3', 'normal', [
     markupMode: 'html-document',
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const native_ltr = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const sxlt_ltr = [...selectlet?.select(':dir(ltr)', document) ?? []].map(el => el.id);
+        const native_ltr = [...document.querySelectorAll(':dir(ltr)')].map((el) => el.id);
+        const sxlt_ltr = [...selectlet?.select(':dir(ltr)', document) ?? []].map((el) => el.id);
 
         const bdo = document.createElement('bdo');
         bdo.setAttribute('dir', 'ltr');
 
-        const native_ltr_afterDetached = [...document.querySelectorAll(':dir(ltr)')].map(el => el.id);
-        const sxlt_ltr_afterDetached = [...selectlet?.select(':dir(ltr)', document) ?? []].map(el => el.id);
+        const native_ltr_afterDetached = [...document.querySelectorAll(':dir(ltr)')].map((el) => el.id);
+        const sxlt_ltr_afterDetached = [...selectlet?.select(':dir(ltr)', document) ?? []].map((el) => el.id);
 
         return {
           native_ltr,
@@ -1736,11 +1737,15 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: ':dir(rtl)', expect: { ids: ['bdo1', 'bdi2', 'bdi4', 'span2', 'span5', 'bdo4'] } },
-      { select: ':dir(ltr)', expect: { ids: [
-        "html", "head", "meta", "title", "link1", "link2", "script1", "script2", "script3", "style", "body",
-        "log", "bdo2", "bdi1", "bdi3", "span1", "span3", "span4", "span6", "bdo3", "bdo5", "script4"
-      ] } },
-    ]
+      {
+        select: ':dir(ltr)', expect: {
+          ids: [
+            'html', 'head', 'meta', 'title', 'link1', 'link2', 'script1', 'script2', 'script3', 'style', 'body',
+            'log', 'bdo2', 'bdi1', 'bdi3', 'span1', 'span3', 'span4', 'span6', 'bdo3', 'bdo5', 'script4',
+          ],
+        },
+      },
+    ],
   },
 
   {
@@ -1751,7 +1756,7 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     cases: [
       { select: ':dir(ltr)', expect: { equivalentCase: { select: '*' } } },
-    ]
+    ],
   },
 
   {
@@ -1792,8 +1797,8 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const nativeIds = (sel: string) => [...document.querySelectorAll(sel)].map(el => el.id);
-        const sxltIds = (sel: string) => [...selectlet?.select(sel, document) ?? []].map(el => el.id);
+        const nativeIds = (sel: string) => [...document.querySelectorAll(sel)].map((el) => el.id);
+        const sxltIds = (sel: string) => [...selectlet?.select(sel, document) ?? []].map((el) => el.id);
 
         const native_initial = nativeIds(':disabled');
         const sxlt_initial = sxltIds(':disabled');
@@ -1874,7 +1879,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       // { select: '#fieldset2 :disabled', expect: { ids: ['clubname', 'clubnum', 'fieldset_nested', 'input_nested', 'button_nested', 'select_nested', 'textarea_nested', 'fieldset_nested2', 'input_nested2'] } },
-    ]
+    ],
   },
 
   {
@@ -1913,7 +1918,7 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     cases: [
       { select: ':enabled', expect: { ids: ['button1', 'input1', 'select1', 'optgroup1', 'option1', 'textarea1', 'submitbutton', 'fieldset1'] } },
-    ]
+    ],
   },
 
   {
@@ -1921,12 +1926,12 @@ runScenarios('w3c iframes 3', 'normal', [
     markup: `
       <input id="input1" autofocus>
     `,
-    setupPage: async (page) => {
+    setupPage: async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     },
     cases: [
       { select: ':focus', expect: { ids: ['input1'] } },
-    ]
+    ],
   },
 
   {
@@ -1942,7 +1947,7 @@ runScenarios('w3c iframes 3', 'normal', [
     markupMode: 'html-document',
     cases: [
       { select: ':focus', expect: { ids: [] } },
-    ]
+    ],
   },
 
   {
@@ -2034,7 +2039,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: 'input:indeterminate + #test', expect: { count: 0 } },
-    ]
+    ],
   },
 
   {
@@ -2046,8 +2051,8 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const native_before = [...document.querySelectorAll(':indeterminate + span')].map(el => el.id);
-        const sxlt_before = [...selectlet?.select(':indeterminate + span', document) ?? []].map(el => el.id);
+        const native_before = [...document.querySelectorAll(':indeterminate + span')].map((el) => el.id);
+        const sxlt_before = [...selectlet?.select(':indeterminate + span', document) ?? []].map((el) => el.id);
 
         (document.getElementById('indeterminate') as HTMLInputElement).type = 'radio';
 
@@ -2062,7 +2067,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: ':indeterminate + span', expect: { ids: ['sibling'] } },
-    ]
+    ],
   },
 
   {
@@ -2080,8 +2085,8 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const nativeIds = () => [...document.querySelectorAll(':indeterminate')].map(el => el.id);
-        const sxltIds = () => [...selectlet?.select(':indeterminate', document) ?? []].map(el => el.id);
+        const nativeIds = () => [...document.querySelectorAll(':indeterminate')].map((el) => el.id);
+        const sxltIds = () => [...selectlet?.select(':indeterminate', document) ?? []].map((el) => el.id);
 
         const native_initial = nativeIds();
         const sxlt_initial = sxltIds();
@@ -2090,7 +2095,7 @@ runScenarios('w3c iframes 3', 'normal', [
         const native_afterCheckedAttr = nativeIds();
         const sxlt_afterCheckedAttr = sxltIds();
 
-        (document.getElementById('radio4') as HTMLInputElement)?.click();
+        (document.getElementById('radio4') as HTMLInputElement | null)?.click();
         const native_afterRadio4Click = nativeIds();
         const sxlt_afterRadio4Click = sxltIds();
 
@@ -2135,7 +2140,7 @@ runScenarios('w3c iframes 3', 'normal', [
     },
     cases: [
       { select: ':indeterminate', expect: { ids: ['checkbox1', 'progress2'] } },
-    ]
+    ],
   },
 
   {
@@ -2148,11 +2153,11 @@ runScenarios('w3c iframes 3', 'normal', [
     `,
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
-        const native_inRange_before = [...document.querySelectorAll('#t1:in-range + span')].map(el => el.id);
-        const sxlt_inRange_before = [...selectlet?.select('#t1:in-range + span', document) ?? []].map(el => el.id);
+        const native_inRange_before = [...document.querySelectorAll('#t1:in-range + span')].map((el) => el.id);
+        const sxlt_inRange_before = [...selectlet?.select('#t1:in-range + span', document) ?? []].map((el) => el.id);
 
-        const native_outOfRange_before = [...document.querySelectorAll('#t2:out-of-range + span')].map(el => el.id);
-        const sxlt_outOfRange_before = [...selectlet?.select('#t2:out-of-range + span', document) ?? []].map(el => el.id);
+        const native_outOfRange_before = [...document.querySelectorAll('#t2:out-of-range + span')].map((el) => el.id);
+        const sxlt_outOfRange_before = [...selectlet?.select('#t2:out-of-range + span', document) ?? []].map((el) => el.id);
 
         (document.getElementById('t1') as HTMLInputElement).type = 'number';
         (document.getElementById('t2') as HTMLInputElement).type = 'number';
@@ -2174,7 +2179,7 @@ runScenarios('w3c iframes 3', 'normal', [
     cases: [
       { select: '#t1:in-range + span', expect: { ids: ['sibling1'] } },
       { select: '#t2:out-of-range + span', expect: { ids: ['sibling2'] } },
-    ]
+    ],
   },
 
   {
@@ -2648,8 +2653,8 @@ runScenarios('w3c iframes 3', 'normal', [
           empty.appendChild(validInput.cloneNode());
           empty.appendChild(invalidInput.cloneNode());
 
-          (validInput as HTMLInputElement).type = 'number';
-          (invalidInput as HTMLInputElement).type = 'text';
+          (validInput).type = 'number';
+          (invalidInput).type = 'text';
         }); },
         cases: [
           { select: '#styleTests form:valid', expect: { count: 1 } },
@@ -2675,8 +2680,8 @@ runScenarios('w3c iframes 3', 'normal', [
           empty.appendChild(validInput.cloneNode());
           empty.appendChild(invalidInput.cloneNode());
 
-          (validInput as HTMLInputElement).type = 'number';
-          (invalidInput as HTMLInputElement).type = 'text';
+          (validInput).type = 'number';
+          (invalidInput).type = 'text';
         }); },
         cases: [
           { select: '#styleTests fieldset:valid', expect: { count: 1 } },
@@ -3405,7 +3410,7 @@ runScenarios('w3c iframes 3', 'normal', [
           { select: '#group', ref: { by: 'first', selector: 'svg' }, expect: { count: 1 } },
           { select: ':scope > *', ref: { by: 'first', selector: 'svg' }, expect: { count: 1 } },
           { select: '#group', ref: { by: 'first', selector: 'svg' }, expect: { equivalentCase: { first: ':scope > *', ref: { by: 'first', selector: 'svg' } } } },
-          { select: '#group', expect: { equivalentCase: { first: '#first > *'} } },
+          { select: '#group', expect: { equivalentCase: { first: '#first > *' } } },
         ],
       },
     ],

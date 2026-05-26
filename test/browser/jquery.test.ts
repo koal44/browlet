@@ -1,5 +1,5 @@
-import { expect, type Page } from "@playwright/test";
-import { runScenarios } from "./harness/scenarios";
+import { expect, type Page } from '@playwright/test';
+import { runScenarios } from './harness/scenarios';
 
 const html = `
   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -436,9 +436,9 @@ runScenarios('jquery', 'normal', [
         const div = document.createElement('div');
         div.innerHTML = "<div class='test e' id='first'></div><div class='test' id='second'></div>";
 
-        const first = [...selectlet?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
-        div.lastChild && ((div.lastChild as Element).className = 'e');
-        const second = [...selectlet?.select('.e', div) ?? []].map(el => el.getAttribute('id'));
+        const first = [...selectlet?.select('.e', div) ?? []].map((el) => el.getAttribute('id'));
+        if (div.lastElementChild) div.lastElementChild.className = 'e';
+        const second = [...selectlet?.select('.e', div) ?? []].map((el) => el.getAttribute('id'));
 
         return { first, second };
       });
@@ -590,7 +590,7 @@ runScenarios('jquery', 'normal', [
       { select: '#main form#form > *:nth-child(2)', expect: { ids: ['text1'] } },
       { select: '#main form#form > :nth-child(2)', expect: { ids: ['text1'] } },
 
-      // changed `select:first` to `select:first-of-type`; `:first` is jQuery-only 
+      // changed `select:first` to `select:first-of-type`; `:first` is jQuery-only
       { select: '#form select:first-of-type option:nth-child(3)', expect: { ids: ['option1c'] } },
       { select: '#form select:first-of-type option:nth-child(0n+3)', expect: { ids: ['option1c'] } },
       { select: '#form select:first-of-type option:nth-child(1n+0)', expect: { ids: ['option1a', 'option1b', 'option1c', 'option1d'] } },
@@ -632,8 +632,8 @@ runScenarios('jquery', 'normal', [
         if (anchor2) anchor2.href = '#2';
 
         const inputs = selectlet?.select('form input') ?? [];
-        if (inputs[0]) (inputs[0] as HTMLInputElement & { test?: number }).test = 0;
-        if (inputs[1]) (inputs[1] as HTMLInputElement & { test?: number }).test = 1;
+        if (inputs[0]) (inputs[0] as HTMLInputElement & { test?: number; }).test = 0;
+        if (inputs[1]) (inputs[1] as HTMLInputElement & { test?: number; }).test = 1;
       });
     },
     cases: [
@@ -784,7 +784,7 @@ runScenarios('jquery', 'normal', [
     steps: [
       {
         // 0x0 with zero font metrics
-        setupPage: async page => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '0', height: '0' }); },
+        setupPage: async (page) => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '0', height: '0' }); },
         cases: [
           { select: '#nothiddendivchild:hidden', expect: { ids: ['nothiddendivchild'] } },
           { select: '#nothiddendivchild:visible', expect: { ids: [] } },
@@ -792,7 +792,7 @@ runScenarios('jquery', 'normal', [
       },
       {
         // 1x0 with zero font metrics
-        setupPage: async page => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '1px', height: '0' }); },
+        setupPage: async (page) => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '1px', height: '0' }); },
         cases: [
           { select: '#nothiddendivchild:visible', expect: { ids: ['nothiddendivchild'] } },
           { select: '#nothiddendivchild:hidden', expect: { ids: [] } },
@@ -800,7 +800,7 @@ runScenarios('jquery', 'normal', [
       },
       {
         // 0x1 with zero font metrics
-        setupPage: async page => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '0', height: '1px' }); },
+        setupPage: async (page) => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '0', height: '1px' }); },
         cases: [
           { select: '#nothiddendivchild:visible', expect: { ids: ['nothiddendivchild'] } },
           { select: '#nothiddendivchild:hidden', expect: { ids: [] } },
@@ -808,14 +808,14 @@ runScenarios('jquery', 'normal', [
       },
       {
         // 1x1 with zero font metrics
-        setupPage: async page => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '1px', height: '1px' }); },
+        setupPage: async (page) => { await setElementProps(page, '#nothiddendivchild', { fontSize: '0', lineHeight: '0', width: '1px', height: '1px' }); },
         cases: [
           { select: '#nothiddendivchild:visible', expect: { ids: ['nothiddendivchild'] } },
           { select: '#nothiddendivchild:hidden', expect: { ids: [] } },
         ],
       },
       {
-        setupPage: async page => { await setElementProps(page, '#nothiddendivchild', { width: '', height: '', fontSize: '', lineHeight: '' }); },
+        setupPage: async (page) => { await setElementProps(page, '#nothiddendivchild', { width: '', height: '', fontSize: '', lineHeight: '' }); },
         cases: [
           { select: 'div#nothiddendiv:eq(0)', expect: { ids: ['nothiddendiv'] } },
           { select: 'div#nothiddendiv:last', expect: { ids: ['nothiddendiv'] } },
@@ -836,7 +836,7 @@ runScenarios('jquery', 'normal', [
           { select: '#dl div:first > div:first', expect: { ids: ['foo'] } },
           { select: 'div#nothiddendiv:first > div:first', expect: { ids: ['nothiddendivchild'] } },
         ],
-      }
+      },
     ],
   },
 
@@ -902,7 +902,7 @@ runScenarios('jquery', 'normal', [
       { select: `[data-test=foo\\24B62 bar]`, expect: { ids: ['escapedSupplementary'] } },
       { select: `[data-test=foo\\\\\\"\\'\\62 ar]`, expect: { ids: ['escapedCombined'] } },
     ],
-  }
+  },
 
 ]);
 

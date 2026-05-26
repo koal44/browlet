@@ -1,5 +1,5 @@
-import { Cursor } from "./cursor";
-import type { Combinator } from "./parser";
+import type { Cursor } from './cursor';
+import type { Combinator } from './parser';
 
 export function consumeTrivia(c: Cursor): boolean {
   let consumed = false;
@@ -38,7 +38,7 @@ export function consumeIdent(c: Cursor): string {
       c.error(`Expected identifier after "-", got ${c.peek() || '<eof>'}`);
     }
 
-    while (consumeIdentTail(c)) {}
+    while (consumeIdentTail(c)) { /* eat */ }
     return c.slice(start);
   }
 
@@ -46,7 +46,7 @@ export function consumeIdent(c: Cursor): string {
     c.error(`Expected identifier, got ${ch || '<eof>'}`);
   }
 
-  while (consumeIdentTail(c)) {}
+  while (consumeIdentTail(c)) { /* eat */ }
   return c.slice(start);
 }
 

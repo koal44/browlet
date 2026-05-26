@@ -36,7 +36,7 @@ function cssIdentEscape(ident: string): string {
       c === 0x2D || c === 0x5F ?           ident.charAt(i) :        // - or _
       c >= 0x41 && c <= 0x5A ?             ident.charAt(i) :        // A-Z
       c >= 0x61 && c <= 0x7A ?             ident.charAt(i) :        // a-z
-                                           `\\${ident.charAt(i)}`;  // ASCII punctuation / syntax
+      `\\${ident.charAt(i)}`;  // ASCII punctuation / syntax
   }
   return out;
 }
@@ -52,7 +52,9 @@ describe('attribute value regex preparation', () => {
 
     // Mirror generated selector code:
     // new RegExp(JSON.stringify(source), JSON.stringify(flags))
-    return new RegExp(JSON.parse(JSON.stringify(source)), JSON.parse(JSON.stringify(flags)));
+    const parsedSource = JSON.parse(JSON.stringify(source)) as string;
+    const parsedFlags = JSON.parse(JSON.stringify(flags)) as string;
+    return new RegExp(parsedSource, parsedFlags);
   }
 
   function matches(rawAttrVal: string, actual: string, p1 = '^', p2 = '$', flags = ''): boolean {
@@ -90,6 +92,7 @@ describe('attribute value regex preparation', () => {
   it('can be embedded through JSON.stringify for generated RegExp construction', () => {
     const source = `^${attrValuePatternSource('foo\\a bar')}$`;
     const expr = `new RegExp(${JSON.stringify(source)})`;
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call
     const re = Function(`return ${expr}`)() as RegExp;
 
     expect(re.test('foo\nbar')).toBe(true);

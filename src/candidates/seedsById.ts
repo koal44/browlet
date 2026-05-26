@@ -1,4 +1,4 @@
-import { isDocument, isElement, isNamedItemAnElement } from "../utils/dom";
+import { isDocument, isElement, isNamedItemAnElement } from '../utils/dom';
 
 export function seedsById(id: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!id) return [];

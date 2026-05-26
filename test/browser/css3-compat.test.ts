@@ -1,4 +1,4 @@
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('css3 compat', 'normal',  [
   {
@@ -27,7 +27,7 @@ runScenarios('css3 compat', 'normal',  [
           <li>- frameworks bugs fixing abilities can be evaluated by running this test in FF 3, Safari 3, Opera 9 or IE6/7/8</li>
         </ul>
       </div>`,
-    setupPage: async (page) => { await page.evaluate(() => { location.hash = 'target'; });},
+    setupPage: async (page) => { await page.evaluate(() => { location.hash = 'target'; }); },
     cases: [
       /* element type selector */
       { select: 'body', expect: { count: 1 } },

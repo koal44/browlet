@@ -1,8 +1,8 @@
-import { sameId } from "../candidates/seedsById";
-import { sameSelectorTag } from "../candidates/seedsByTag";
-import { collectionToArray, concatCollection } from "../utils/collections";
-import { asciiLower } from "../utils/css";
-import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from "../utils/dom";
+import { sameId } from '../candidates/seedsById';
+import { sameSelectorTag } from '../candidates/seedsByTag';
+import { collectionToArray, concatCollection } from '../utils/collections';
+import { asciiLower } from '../utils/css';
+import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from '../utils/dom';
 
 // scoped getElementById for Document, DocumentFragment, and Element contexts
 export function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
@@ -62,16 +62,16 @@ function byId_MutateFirst(id: string, context: Element): Element | null {
 }
 
 function byId_WalkFirst(id: string, context: Element): Element | null {
-  let node: Element = context;
+  let node: Element | null = context;
   let next: Element | null = node.firstElementChild;
 
-  while ((node = next as Element)) {
+  while ((node = next)) {
     if (sameId(node, id)) return node;
 
     next = node.firstElementChild || node.nextElementSibling;
     if (next) continue;
 
-    while (!next && (node = node.parentElement as Element) && node !== context) {
+    while (!next && (node = node.parentElement) && node !== context) {
       next = node.nextElementSibling;
     }
   }

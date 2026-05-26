@@ -1,6 +1,8 @@
-import { byClass, byId, byTag, byTagNs } from "./api/lookup";
-import { queryClosest, queryFirst, queryMatch, matchStrict, querySelect, type MatchResolver, type SelectResolver } from "./api/query";
-import type { MatchLambda, SelectLambda } from "./compile/compile";
+import { byClass, byId, byTag, byTagNs } from './api/lookup';
+import {
+  queryClosest, queryFirst, queryMatch, matchStrict, querySelect, type MatchResolver, type SelectResolver,
+} from './api/query';
+import type { MatchLambda, SelectLambda } from './compile/compile';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -10,16 +12,16 @@ import {
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
-} from "./compile/runtime";
-import type { DebugMatch, DebugSelect } from "./debug";
-import type { CustomPseudoPredicate, SelectletConfig } from "./selectlet";
-import { escapeRegExp } from "./utils/css";
-import { getNamespace, isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from "./utils/dom";
+} from './compile/runtime';
+import type { DebugMatch, DebugSelect } from './debug';
+import type { CustomPseudoPredicate, SelectletConfig } from './selectlet';
+import { escapeRegExp } from './utils/css';
+import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 
 export class Snapshot {
   doc: Document;
   from: QueryContext;
-  root: Element;
+  root: Element | null;
   scopeEl: Element | null;
 
   isHtml: boolean;
@@ -72,16 +74,18 @@ export class Snapshot {
   };
 
   constructor(doc: Document, config: SelectletConfig) {
+    const root = doc.documentElement;
+
     this.config = config;
 
     this.doc = doc;
     this.from = doc;
-    this.root = doc.documentElement;
+    this.root = root;
     this.scopeEl = null;
 
     this.isHtml = isHtmlDoc(doc);
     this.isQuirksMode = isQuirksMode(doc);
-    this.namespace = getNamespace(doc);
+    this.namespace = root.namespaceURI ?? null;
     this.hasDocumentAll = 'all' in doc;
     this.hasTreeWalker = 'createTreeWalker' in doc;
   }
@@ -103,11 +107,15 @@ export class Snapshot {
     const doc = ctx.ownerDocument ?? ctx;
 
     if (this.doc !== doc) {
+      // Template-content owner documents can have null documentElement
+      // despite lib.dom typing Document#documentElement as non-null.
+      const root = doc.documentElement as Element | null;
+
       this.doc = doc;
-      this.root = doc.documentElement;
+      this.root = root;
       this.isHtml = isHtmlDoc(doc);
       this.isQuirksMode = isQuirksMode(doc);
-      this.namespace = getNamespace(doc);
+      this.namespace = root?.namespaceURI ?? null;
       this.hasDocumentAll = 'all' in doc;
       this.hasTreeWalker = 'createTreeWalker' in doc;
     }
@@ -115,7 +123,7 @@ export class Snapshot {
     this.from = ctx;
 
     if (updateScope) {
-      this.scopeEl = isDocument(ctx) ? ctx.documentElement : isElement(ctx) ? ctx : null;
+      this.scopeEl = isDocument(ctx) ? this.root : isElement(ctx) ? ctx : null;
     }
   }
 
@@ -125,7 +133,7 @@ export class Snapshot {
     let regex = cache.get(source);
     if (regex !== undefined) return regex;
 
-    regex = new RegExp(source, ignoreCase ? "i" : "");
+    regex = new RegExp(source, ignoreCase ? 'i' : '');
     cache.set(source, regex);
     return regex;
   }

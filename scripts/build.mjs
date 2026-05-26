@@ -45,17 +45,17 @@ const banner = `/*
 `;
 
 const footer = `
-function Export(glob, factory) {
+function installGlobal(glob, createSelectlet) {
   if (typeof module == 'object' && typeof exports == 'object') {
-    module.exports = factory;
+    module.exports = createSelectlet;
   } else if (typeof define == 'function' && define.amd) {
-    define(factory);
+    define(createSelectlet);
   } else {
-    glob.selectlet = factory(glob, Export);
+    glob.selectlet = createSelectlet(glob, installGlobal);
   }
 }
 
-Export(global, Factory);
+installGlobal(global, createSelectlet);
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;

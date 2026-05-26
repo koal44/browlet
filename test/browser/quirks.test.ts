@@ -1,4 +1,4 @@
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('quirks', 'normal', [
   {
@@ -57,5 +57,5 @@ runScenarios('quirks', 'normal', [
       { select: '#dom [class~=foobar i]', expect: { ids: ['d1', 'd2', 'd3'] } },
       { select: '#qsa [class~=foobar i]', expect: { ids: ['q1', 'q2', 'q3'] } },
     ],
-  }
+  },
 ]);

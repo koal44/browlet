@@ -89,15 +89,15 @@ describe('Cursor consumeWhile', () => {
   it('consumes matching characters, returns count, and leaves the first non-match', () => {
     const c = new Cursor('  xy z');
 
-    expect(c.consumeWhile(ch => ch === ' ')).toBe(2);
+    expect(c.consumeWhile((ch) => ch === ' ')).toBe(2);
     expect(c.pos()).toBe(2);
     expect(c.peek()).toBe('x');
 
-    expect(c.consumeWhile(ch => ch !== ' ')).toBe(2);
+    expect(c.consumeWhile((ch) => ch !== ' ')).toBe(2);
     expect(c.pos()).toBe(4);
     expect(c.peek()).toBe(' ');
 
-    expect(c.consumeWhile(ch => ch === ' ')).toBe(1);
+    expect(c.consumeWhile((ch) => ch === ' ')).toBe(1);
     expect(c.pos()).toBe(5);
     expect(c.peek()).toBe('z');
   });
@@ -105,7 +105,7 @@ describe('Cursor consumeWhile', () => {
   it('respects limit', () => {
     const c = new Cursor('abcdef');
 
-    expect(c.consumeWhile(ch => /[a-c]/.test(ch))).toBe(3);
+    expect(c.consumeWhile((ch) => /[a-c]/.test(ch))).toBe(3);
     expect(c.pos()).toBe(3);
     expect(c.peek()).toBe('d');
   });
@@ -113,7 +113,7 @@ describe('Cursor consumeWhile', () => {
   it('returns zero and does not advance when the first character does not match', () => {
     const c = new Cursor('abc');
 
-    expect(c.consumeWhile(ch => ch === ' ')).toBe(0);
+    expect(c.consumeWhile((ch) => ch === ' ')).toBe(0);
     expect(c.pos()).toBe(0);
     expect(c.peek()).toBe('a');
   });

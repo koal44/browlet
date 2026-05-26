@@ -1,5 +1,5 @@
-import { collectionToArray, concatCollection } from "../utils/collections";
-import { getClassAttr, isDocumentFragment } from "../utils/dom";
+import { collectionToArray, concatCollection } from '../utils/collections';
+import { getClassAttr, isDocumentFragment } from '../utils/dom';
 
 export function seedsByClass(cls: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!isDocumentFragment(context)) {

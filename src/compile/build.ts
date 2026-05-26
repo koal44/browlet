@@ -1,8 +1,8 @@
 import type {
   CompoundSelector, RelativeSelectorList, SelectorList, ComplexSelector, Combinator,
   BuildContext, CandidateTest,
-} from "../parser/parser";
-import { emitClassTest, emitIdTest, emitTagTest } from "./emitBase";
+} from '../parser/parser';
+import { emitClassTest, emitIdTest, emitTagTest } from './emitBase';
 
 export type BuiltMatcher = {
   source: string;
@@ -35,7 +35,7 @@ export function buildStrictSelectorListMatch(list: SelectorList, ctx: BuildConte
     throw new Error('Cannot build matcher for empty selector list');
   }
 
-  const arms = list.selectors.map(complex => buildComplexSelectorMatch(complex, ctx));
+  const arms = list.selectors.map((complex) => buildComplexSelectorMatch(complex, ctx));
   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
 }
 
@@ -104,8 +104,8 @@ function buildCombinatorCall(combinator: Combinator | null, pred: string): strin
 export function buildRelativeSelectorListMatch(list: RelativeSelectorList, _ctx: BuildContext): string {
   if (list.arms.length === 0) return 'false';
 
-  const arms = list.arms.map(arm => {
-    const steps = arm.steps.map(step => [
+  const arms = list.arms.map((arm) => {
+    const steps = arm.steps.map((step) => [
       step.combinator,
       step.compound.source,
     ]);

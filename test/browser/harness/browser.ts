@@ -1,7 +1,9 @@
-import { type Engine, type EquivalentCase, type ContextRef, type ContextHome, SelectletId } from "./scenarios";
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+import type { ElementList } from '../../../src/selectlet';
+import type { Engine, EquivalentCase, ContextRef, ContextHome, SelectletId } from './scenarios';
 
-export interface PwHelpers {
-  resolveContext(doc:Document, ref?: ContextRef): QueryContext | null;
+export type PwHelpers = {
+  resolveContext(doc: Document, ref?: ContextRef): QueryContext | null;
   runQuery(query: () => Element[]): QueryResult;
   compareQueryResults(a: NamedQueryResult, b: NamedQueryResult): string | undefined;
   toEngineResult(res: QueryResult): EngineResult;
@@ -31,13 +33,13 @@ export type EngineResult = {
 export type EngineQuery = (query: string, ctx: QueryContext) => () => Element[];
 export type EngineAndQueryResult = { queryResult: QueryResult; engineResult: EngineResult; };
 export type NamedQueryResult = { name: string; result: QueryResult; };
-export type QueryResult = { elements: Element[]; error: string };
+export type QueryResult = { elements: Element[]; error: string; };
 
 export function installBrowserHelpers(): void {
   const HARNESS_NODE_ID = 'data-harness-node-id';
 
   function assertNever(x: never): never {
-    throw new Error(`Unexpected key: ${x}`);
+    throw new Error(`Unexpected key: ${String(x)}`);
   }
 
   function isElement(x: unknown): x is Element {
@@ -62,8 +64,8 @@ export function installBrowserHelpers(): void {
   function stringify(obj: unknown): string {
     let json = JSON.stringify(obj, null, 2) as string | undefined;
     if (json === undefined) return String(obj);
-    json = json.replace(/^[\t ]*"[^:\n\r]+(?<!\\)":/gm, function (match) {
-        return match.replace(/"/g, "");
+    json = json.replace(/^[\t ]*"[^:\n\r]+(?<!\\)":/gm, function(match) {
+      return match.replace(/"/g, '');
     });
     return json.replace(/"/g, "'").replace(/\s+/g, ' ');
   }
@@ -317,10 +319,10 @@ export function installBrowserHelpers(): void {
         break;
 
       default:
-        throw assertNever(c);
+        assertNever(c);
     }
 
-    throw assertNever(ng);
+    assertNever(ng);
   }
 
   function fragmentAsElementContext(ctx: DocumentFragment): Element {
@@ -335,7 +337,7 @@ export function installBrowserHelpers(): void {
   }
 
   function isHtmlDoc(doc: Document): doc is HTMLDocument {
-    return doc.contentType?.includes('/html') === true;
+    return doc.contentType.includes('/html') === true;
   }
 
   let nextHarnessNodeId = 1;
@@ -355,7 +357,7 @@ export function installBrowserHelpers(): void {
       case 'byId' in c: return c.byId;
       case 'match' in c: return c.match;
       case 'closest' in c: return c.closest;
-      default: throw assertNever(c);
+      default: assertNever(c);
     }
   }
 
@@ -402,7 +404,7 @@ export function installBrowserHelpers(): void {
           : `sxlt.closest(${c.closest})`;
 
       default:
-        throw assertNever(c);
+        assertNever(c);
     }
   }
 

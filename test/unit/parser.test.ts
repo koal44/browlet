@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { parseAttributeSelector, parseComplexSelector, parseCompoundSelector, ParseContext, parseForgivingSelectorList, parseRelativeSelectorList, parseSelectorList, parseStrictSelectorList } from '../../src/parser/parser';
+import type { ParseContext } from '../../src/parser/parser';
+import {
+  parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseForgivingSelectorList, parseRelativeSelectorList, parseSelectorList, parseStrictSelectorList,
+} from '../../src/parser/parser';
 import { Cursor } from '../../src/parser/cursor';
 import { consumeIdent } from '../../src/parser/lex';
 import { parseNthArgs } from '../../src/parser/nth';
@@ -12,7 +15,7 @@ describe('parseSelectorList', () => {
 
     const [complex] = parsed.selectors;
     expect(complex.parts).toHaveLength(2);
-    expect(complex.parts.map(p => p.combinator)).toEqual([null, ' ']);
+    expect(complex.parts.map((p) => p.combinator)).toEqual([null, ' ']);
     expect(complex.parts[0].compound.id?.raw).toBe('root');
     expect(complex.parts[1].compound.tag?.localRaw).toBe('p');
   });
@@ -26,7 +29,7 @@ describe('parseSelectorList', () => {
     expect(parsed.selectors[0].parts[0].compound.id?.raw).toBe('a');
 
     expect(parsed.selectors[1].parts).toHaveLength(1);
-    expect(parsed.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['b']);
+    expect(parsed.selectors[1].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['b']);
 
     expect(parsed.selectors[2].parts).toHaveLength(1);
     expect(parsed.selectors[2].parts[0].compound.tag?.localRaw).toBe('div');
@@ -57,7 +60,7 @@ describe('parseComplexSelector', () => {
     const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
-    expect(complex.parts.map(p => p.combinator)).toEqual([null, ' ']);
+    expect(complex.parts.map((p) => p.combinator)).toEqual([null, ' ']);
     expect(complex.parts[0].compound.id?.raw).toBe('root');
     expect(complex.parts[1].compound.tag?.localRaw).toBe('p');
   });
@@ -67,7 +70,7 @@ describe('parseComplexSelector', () => {
     const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(4);
-    expect(complex.parts.map(p => p.combinator)).toEqual([null, '>', '+', '~']);
+    expect(complex.parts.map((p) => p.combinator)).toEqual([null, '>', '+', '~']);
     expect(complex.parts[0].compound.id?.raw).toBe('root');
     expect(complex.parts[1].compound.tag?.localRaw).toBe('p');
     expect(complex.parts[2].compound.tag?.localRaw).toBe('a');
@@ -79,7 +82,7 @@ describe('parseComplexSelector', () => {
     const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
-    expect(complex.parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(complex.parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(complex.parts[0].compound.id?.raw).toBe('a');
     expect(complex.parts[1].compound.tag?.localRaw).toBe('p');
     expect(c.peek()).toBe(',');
@@ -90,7 +93,7 @@ describe('parseComplexSelector', () => {
     const complex = parseComplexSelector(c, {});
 
     expect(complex.parts).toHaveLength(2);
-    expect(complex.parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(complex.parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(complex.parts[0].compound.id?.raw).toBe('a');
     expect(complex.parts[1].compound.tag?.localRaw).toBe('p');
     expect(c.peek()).toBe(')');
@@ -122,7 +125,7 @@ describe('parseCompoundSelector', () => {
 
     expect(compound.tag?.localRaw).toBe('div');
     expect(compound.id?.raw).toBe('root');
-    expect(compound.classes?.map(x => x.raw)).toEqual(['foo', 'bar']);
+    expect(compound.classes?.map((x) => x.raw)).toEqual(['foo', 'bar']);
     expect(compound.tests).toEqual([]);
     expect(c.eof()).toBe(true);
   });
@@ -133,7 +136,7 @@ describe('parseCompoundSelector', () => {
 
     expect(compound.tag).toBeUndefined();
     expect(compound.id).toBeUndefined();
-    expect(compound.classes?.map(x => x.raw)).toEqual(['foo', 'bar']);
+    expect(compound.classes?.map((x) => x.raw)).toEqual(['foo', 'bar']);
     expect(compound.tests).toEqual([]);
   });
 
@@ -142,7 +145,7 @@ describe('parseCompoundSelector', () => {
     const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('*');
-    expect(compound.classes?.map(x => x.raw)).toEqual(['foo']);
+    expect(compound.classes?.map((x) => x.raw)).toEqual(['foo']);
     expect(compound.tests).toEqual([]);
   });
 
@@ -151,7 +154,7 @@ describe('parseCompoundSelector', () => {
     const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('p');
-    expect(compound.tests?.length).toBeGreaterThan(0);
+    expect(compound.tests.length).toBeGreaterThan(0);
     expect(c.eof()).toBe(true);
   });
 
@@ -160,7 +163,7 @@ describe('parseCompoundSelector', () => {
     const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('p');
-    expect(compound.tests?.length).toBeGreaterThan(0);
+    expect(compound.tests.length).toBeGreaterThan(0);
     expect(c.peek()).toBe(' ');
   });
 
@@ -169,7 +172,7 @@ describe('parseCompoundSelector', () => {
     const compound = parseCompoundSelector(c, {});
 
     expect(compound.tag?.localRaw).toBe('div');
-    expect(compound.classes?.map(x => x.raw)).toEqual(['foo']);
+    expect(compound.classes?.map((x) => x.raw)).toEqual(['foo']);
     expect(compound.tests).toEqual([]);
     expect(c.peek()).toBe(' ');
   });
@@ -295,7 +298,7 @@ describe('parseTagSelector namespace forms', () => {
       prefixRaw: '*',
       localRaw: 'circle',
     });
-    expect(compound.classes?.map(c => c.raw)).toEqual(['icon']);
+    expect(compound.classes?.map((c) => c.raw)).toEqual(['icon']);
   });
 
   it('rejects named namespace prefixes', () => {
@@ -319,7 +322,7 @@ describe('parseTagSelector namespace forms', () => {
     expect(compound.tag).toEqual({
       localRaw: String.raw`svg\|circle`,
     });
-    expect(compound.classes?.map(c => c.raw)).toEqual(['foo']);
+    expect(compound.classes?.map((c) => c.raw)).toEqual(['foo']);
   });
 });
 
@@ -550,7 +553,7 @@ describe('parsePseudoBodySelectorList', () => {
     expect(parts).toHaveLength(1);
     expect(parts[0].combinator).toBeNull();
     expect(parts[0].compound.tag).toEqual({ localRaw: 'div' });
-    expect(parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
+    expect(parts[0].compound.classes?.map((c) => c.raw)).toEqual(['foo']);
   });
 
   it('parses comma-separated selector arms', () => {
@@ -559,7 +562,7 @@ describe('parsePseudoBodySelectorList', () => {
     expect(parsed.selectors).toHaveLength(3);
 
     expect(parsed.selectors[0].parts[0].compound.id?.raw).toBe('a');
-    expect(parsed.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['b']);
+    expect(parsed.selectors[1].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['b']);
     expect(parsed.selectors[2].parts[0].compound.tag).toEqual({ localRaw: 'div' });
   });
 
@@ -569,7 +572,7 @@ describe('parsePseudoBodySelectorList', () => {
     expect(parsed.selectors).toHaveLength(1);
 
     const parts = parsed.selectors[0].parts;
-    expect(parts.map(p => p.combinator)).toEqual([null, '>', '+', '~']);
+    expect(parts.map((p) => p.combinator)).toEqual([null, '>', '+', '~']);
     expect(parts[0].compound.id?.raw).toBe('root');
     expect(parts[1].compound.tag).toEqual({ localRaw: 'p' });
     expect(parts[2].compound.tag).toEqual({ localRaw: 'a' });
@@ -581,7 +584,7 @@ describe('parsePseudoBodySelectorList', () => {
 
     expect(parsed.selectors).toHaveLength(2);
     expect(parsed.selectors[0].parts[0].compound.id?.raw).toBe('a');
-    expect(parsed.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['b']);
+    expect(parsed.selectors[1].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['b']);
   });
 
   it('stops at the closing paren without consuming following text', () => {
@@ -598,7 +601,7 @@ describe('parsePseudoBodySelectorList', () => {
 
     expect(parsed.selectors).toHaveLength(1);
     expect(parsed.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
-    expect(parsed.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
+    expect(parsed.selectors[0].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['foo']);
   });
 
   it('does not split on commas inside attribute strings or nested pseudo bodies', () => {
@@ -675,9 +678,9 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
   it('parses explicit leading sibling combinators', () => {
     expect(parseRelativeSelectorList(new Cursor('(+ dt)'), {})
       .arms[0].steps[0]).toMatchObject({
-        combinator: '+',
-        compound: { source: 'dt' },
-      });
+      combinator: '+',
+      compound: { source: 'dt' },
+    });
 
     expect(parseRelativeSelectorList(new Cursor('(~ .item)'), {})
       .arms[0].steps[0].combinator).toBe('~');
@@ -686,13 +689,13 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
       .arms[0].steps[0].compound.source).toBe('.item');
   });
 
-it('parses multiple steps with mixed combinators', () => {
+  it('parses multiple steps with mixed combinators', () => {
     const parsed = parseRelativeSelectorList(new Cursor('(> .item + dt ~ dd span)'), {});
 
     const steps = parsed.arms[0].steps;
 
-    expect(steps.map(s => s.combinator)).toEqual(['>', '+', '~', ' ']);
-    expect(steps.map(s => s.compound.source)).toEqual(['.item', 'dt', 'dd', 'span']);
+    expect(steps.map((s) => s.combinator)).toEqual(['>', '+', '~', ' ']);
+    expect(steps.map((s) => s.compound.source)).toEqual(['.item', 'dt', 'dd', 'span']);
   });
 
   it('parses comma-separated relative selector arms', () => {
@@ -700,14 +703,14 @@ it('parses multiple steps with mixed combinators', () => {
 
     expect(parsed.arms).toHaveLength(3);
 
-    expect(parsed.arms[0].steps.map(s => s.combinator)).toEqual(['>']);
-    expect(parsed.arms[0].steps.map(s => s.compound.source)).toEqual(['img']);
+    expect(parsed.arms[0].steps.map((s) => s.combinator)).toEqual(['>']);
+    expect(parsed.arms[0].steps.map((s) => s.compound.source)).toEqual(['img']);
 
-    expect(parsed.arms[1].steps.map(s => s.combinator)).toEqual(['+']);
-    expect(parsed.arms[1].steps.map(s => s.compound.source)).toEqual(['dt']);
+    expect(parsed.arms[1].steps.map((s) => s.combinator)).toEqual(['+']);
+    expect(parsed.arms[1].steps.map((s) => s.compound.source)).toEqual(['dt']);
 
-    expect(parsed.arms[2].steps.map(s => s.combinator)).toEqual([' ', ' ']);
-    expect(parsed.arms[2].steps.map(s => s.compound.source)).toEqual(['.item', '.child']);
+    expect(parsed.arms[2].steps.map((s) => s.combinator)).toEqual([' ', ' ']);
+    expect(parsed.arms[2].steps.map((s) => s.compound.source)).toEqual(['.item', '.child']);
   });
 
   it('ignores padding whitespace around arms and before closing paren', () => {
@@ -898,22 +901,22 @@ describe('parsePseudoTestSource continuation boundaries', () => {
 describe('parseCompoundSelector continuation edge cases', () => {
   it('continues after id, class, tag, attrs, and no-match pseudos', () => {
     let c = parseCompoundSelector(new Cursor(String.raw`#foo\:bar.item`), {});
-    expect(c.id?.raw).toBe(String.raw`foo\:bar`); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
+    expect(c.id?.raw).toBe(String.raw`foo\:bar`); expect(c.classes?.map((x) => x.raw)).toEqual(['item']);
 
     c = parseCompoundSelector(new Cursor(String.raw`.foo\+bar`), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\+bar`]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\+bar`]);
 
     c = parseCompoundSelector(new Cursor('foo-bar[attr]'), {});
     expect(c.tag).toEqual({ localRaw: 'foo-bar' }); expect(c.tests.length).toBe(1);
 
     c = parseCompoundSelector(new Cursor('föo.item'), {});
-    expect(c.tag).toEqual({ localRaw: 'föo' }); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
+    expect(c.tag).toEqual({ localRaw: 'föo' }); expect(c.classes?.map((x) => x.raw)).toEqual(['item']);
 
     c = parseCompoundSelector(new Cursor(':autofill.foo'), {});
-    expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['foo']);
+    expect(c.tests.length).toBe(1); expect(c.classes?.map((x) => x.raw)).toEqual(['foo']);
 
     c = parseCompoundSelector(new Cursor('::before.foo'), {});
-    expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['foo']);
+    expect(c.tests.length).toBe(1); expect(c.classes?.map((x) => x.raw)).toEqual(['foo']);
   });
 });
 
@@ -949,7 +952,7 @@ describe('parse logical pseudo nesting and continuation', () => {
     let list = parseSelectorList(':is(:not(.a), .b):nth-child(2n+1), .fallback', {});
     expect(list.selectors).toHaveLength(2);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(2);
-    expect(list.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['fallback']);
+    expect(list.selectors[1].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['fallback']);
 
     list = parseSelectorList(':not(:is(.a, .b)):nth-of-type(2), span', {});
     expect(list.selectors).toHaveLength(2);
@@ -982,15 +985,15 @@ describe('parseSelectorList common validator cases', () => {
 
     list = parseSelectorList('div.item#id', {});
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
-    expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['item']);
+    expect(list.selectors[0].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['item']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('id');
 
     list = parseSelectorList('[data-x="a, b"]', {});
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
     list = parseSelectorList('div > span + a ~ em', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>', '+', '~']);
-    expect(list.selectors[0].parts.map(p => p.compound.tag?.localRaw)).toEqual(['div', 'span', 'a', 'em']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>', '+', '~']);
+    expect(list.selectors[0].parts.map((p) => p.compound.tag?.localRaw)).toEqual(['div', 'span', 'a', 'em']);
   });
 
   it('accepts logical, relative, and structural pseudo selectors', () => {
@@ -1103,7 +1106,7 @@ describe('parseSelectorList validator edge cases', () => {
 
   it('accepts escaped digit-start class and id selectors', () => {
     let c = parseCompoundSelector(new Cursor(String.raw`.\35 cm`), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`\35 cm`]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`\35 cm`]);
 
     c = parseCompoundSelector(new Cursor(String.raw`#\35 cm`), {});
     expect(c.id?.raw).toBe(String.raw`\35 cm`);
@@ -1118,13 +1121,13 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
 
   it('validates compound :scope selectors', () => {
     let list = parseSelectorList('div:scope > *', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
 
     list = parseSelectorList(':scope > *', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
   });
@@ -1135,7 +1138,7 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
     list = parseSelectorList('#attr-value [align="center"', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('attr-value');
     expect(list.selectors[0].parts[1].compound.tests.length).toBe(1);
   });
@@ -1163,7 +1166,7 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
     expect(c.tag).toEqual({ localRaw: 'div' }); expect(c.tests.length).toBe(1);
 
     c = parseSelectorList('[foo].bar', {}).selectors[0].parts[0].compound;
-    expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['bar']);
+    expect(c.tests.length).toBe(1); expect(c.classes?.map((x) => x.raw)).toEqual(['bar']);
 
     c = parseSelectorList('[foo]#bar', {}).selectors[0].parts[0].compound;
     expect(c.tests.length).toBe(1); expect(c.id?.raw).toBe('bar');
@@ -1172,11 +1175,11 @@ describe('parseSelectorList validator compound and attribute edge cases', () => 
     expect(c.tests.length).toBe(2);
 
     let list = parseSelectorList('[foo] [bar]', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
-    expect(list.selectors[0].parts.every(p => p.compound.tests.length === 1)).toBe(true);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, ' ']);
+    expect(list.selectors[0].parts.every((p) => p.compound.tests.length === 1)).toBe(true);
 
     list = parseSelectorList('[foo] > i', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'i' });
 
     list = parseSelectorList('[foo], i', {});
@@ -1203,7 +1206,7 @@ describe('parse attribute selector case-sensitivity flag syntax', () => {
       "[foo='BAR'] /* sanity check (valid) */",
       "[foo='bar' i]",
       "[foo='bar' I]",
-      "[foo=bar i]",
+      '[foo=bar i]',
       '[foo="bar" i]',
       "[foo='bar'i]",
       "[foo='bar'i ]",
@@ -1211,7 +1214,7 @@ describe('parse attribute selector case-sensitivity flag syntax', () => {
       "[foo='bar' /**/ i]",
       "[foo='bar' i /**/ ]",
       "[foo='bar'/**/i/**/]",
-      "[foo=bar/**/i]",
+      '[foo=bar/**/i]',
       "[foo='bar'\ti\t] /* \\t */",
       "[foo='bar'\ni\n] /* \\n */",
       "[foo='bar'\ri\r] /* \\r */",
@@ -1234,7 +1237,7 @@ describe('parse attribute selector case-sensitivity flag syntax', () => {
 describe('parseAttributeSelector invalid case-sensitivity flag syntax', () => {
   it('rejects invalid attribute selector case flag syntax', () => {
     for (const input of [
-      "[foo[ /* sanity check (invalid) */",
+      '[foo[ /* sanity check (invalid) */',
       "[foo='bar' i i]",
       "[foo i ='bar']",
       "[foo= i 'bar']",
@@ -1270,8 +1273,8 @@ describe('parseAttributeSelector invalid case-sensitivity flag syntax', () => {
       "[foo='bar' \\*|i]",
       "[foo='bar' *]",
       "[foo='bar' \\*]",
-      "[foo i]",
-      "[foo/**/i]",
+      '[foo i]',
+      '[foo/**/i]',
     ]) {
       expect(() => parseSelectorList(input, {})).toThrow();
     }
@@ -1283,8 +1286,8 @@ describe('parseSelectorList whitespace and common selector cases', () => {
     for (const input of ['div\nspan', 'div\r\nspan', 'div\fspan']) {
       const list = parseSelectorList(input, {});
       expect(list.selectors).toHaveLength(1);
-      expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
-      expect(list.selectors[0].parts.map(p => p.compound.tag?.localRaw)).toEqual(['div', 'span']);
+      expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, ' ']);
+      expect(list.selectors[0].parts.map((p) => p.compound.tag?.localRaw)).toEqual(['div', 'span']);
     }
   });
 
@@ -1304,7 +1307,7 @@ describe('parseSelectorList whitespace and common selector cases', () => {
 
 describe('parseNthArgs formula grammar', () => {
   it('parses valid nth pseudo-class formulas', () => {
-    const valid: Array<[string, { step: number; offset: number }]> = [
+    const valid: Array<[string, { step: number; offset: number; }]> = [
       ['(1)', { step: 0, offset: 1 }], ['(+1)', { step: 0, offset: 1 }], ['(-1)', { step: 0, offset: -1 }],
       ['(n)', { step: 1, offset: 0 }], ['(+n)', { step: 1, offset: 0 }], ['(-n)', { step: -1, offset: 0 }],
       ['(2n)', { step: 2, offset: 0 }], ['(+2n)', { step: 2, offset: 0 }], ['(-2n)', { step: -2, offset: 0 }],
@@ -1578,13 +1581,13 @@ describe('parseSelectorList functional pseudo spacing and nested nth cases', () 
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
 
     list = parseSelectorList('#p a:not(:nth-of-type(1))', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('p');
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'a' });
     expect(list.selectors[0].parts[1].compound.tests.length).toBe(1);
 
     list = parseSelectorList(`#form option:not([id^='opt']:nth-child(-n+3))`, {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, ' ']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, ' ']);
     expect(list.selectors[0].parts[0].compound.id?.raw).toBe('form');
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'option' });
     expect(list.selectors[0].parts[1].compound.tests.length).toBe(1);
@@ -1635,14 +1638,14 @@ describe('parseSelectorList nested pseudo and attribute edge cases', () => {
   });
 
   it('parses :scope with selector suffixes', () => {
-    let list = parseSelectorList(':scope > *', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    const list = parseSelectorList(':scope > *', {});
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: '*' });
 
     const c = parseCompoundSelector(new Cursor(':scope.item'), {});
     expect(c.tests.length).toBe(1);
-    expect(c.classes?.map(x => x.raw)).toEqual(['item']);
+    expect(c.classes?.map((x) => x.raw)).toEqual(['item']);
   });
 
   it('validates universal and namespace type selectors inside functional pseudos', () => {
@@ -1722,11 +1725,11 @@ describe('parseNthArgs multi-digit signed offsets', () => {
   });
 
   it('continues correctly after nth pseudo selectors', () => {
-    let c = parseCompoundSelector(new Cursor(':nth-child(n-128).item'), {});
-    expect(c.tests.length).toBe(1); expect(c.classes?.map(x => x.raw)).toEqual(['item']);
+    const c = parseCompoundSelector(new Cursor(':nth-child(n-128).item'), {});
+    expect(c.tests.length).toBe(1); expect(c.classes?.map((x) => x.raw)).toEqual(['item']);
 
     const list = parseSelectorList(':nth-child(n+10) > span', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
     expect(list.selectors[0].parts[1].compound.tag).toEqual({ localRaw: 'span' });
   });
@@ -1748,8 +1751,8 @@ describe('parseAttributeSelector quoted bracket values and EOF bracket tolerance
 
 describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', () => {
   const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map(selector =>
-      selector.steps.map(step => [step.combinator, step.compound.source])
+    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map((selector) =>
+      selector.steps.map((step) => [step.combinator, step.compound.source])
     );
 
   it('parses a single implicit descendant step', () => {
@@ -1773,8 +1776,8 @@ describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', (
 
 describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases', () => {
   const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map(arm =>
-      arm.steps.map(step => [step.combinator, step.compound.source])
+    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map((arm) =>
+      arm.steps.map((step) => [step.combinator, step.compound.source])
     );
 
   it('parses general sibling followed by child and descendant steps', () => {
@@ -1806,48 +1809,48 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
   });
 
   it('preserves escaped combinator-like characters in compounds', () => {
-    expect(stepsOf(String.raw`.a\+b > .c\~d + .e\>f`)).toEqual([[[ ' ', String.raw`.a\+b` ], [ '>', String.raw`.c\~d` ], [ '+', String.raw`.e\>f` ]]]);
+    expect(stepsOf(String.raw`.a\+b > .c\~d + .e\>f`)).toEqual([[[' ', String.raw`.a\+b`], ['>', String.raw`.c\~d`], ['+', String.raw`.e\>f`]]]);
   });
 
   it('preserves escaped commas in compounds', () => {
-    expect(stepsOf(String.raw`.a\,b, .c`)).toEqual([[[ ' ', String.raw`.a\,b` ]], [[' ', '.c']]]);
+    expect(stepsOf(String.raw`.a\,b, .c`)).toEqual([[[' ', String.raw`.a\,b`]], [[' ', '.c']]]);
   });
 
   it('parses nested :has as part of the compound test set', () => {
     const parsed = parseRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'), {});
     const arms = parsed.arms[0].steps;
-    expect(arms.map(s => s.combinator)).toEqual([' ', '>']);
-    expect(arms[0].compound.source).toBe('.a:has(> .x + .y)')
-    expect(arms[1].compound.source).toBe('.b')
+    expect(arms.map((s) => s.combinator)).toEqual([' ', '>']);
+    expect(arms[0].compound.source).toBe('.a:has(> .x + .y)');
+    expect(arms[1].compound.source).toBe('.b');
   });
 
   it('parses nested logical pseudos with selector lists as part of the compound test set', () => {
     const parsed = parseRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'), {});
     const arms = parsed.arms[0].steps;
-    expect(arms.map(s => s.combinator)).toEqual([' ', '~']);
-    expect(arms[1].compound.source).toBe('.e')
+    expect(arms.map((s) => s.combinator)).toEqual([' ', '~']);
+    expect(arms[1].compound.source).toBe('.e');
   });
 });
 
 describe('parseSelectorList escaped whitespace in class identifiers', () => {
   it('parses escaped whitespace in class selectors', () => {
     let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\ `]);
 
     c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\a bar`]);
   });
 
   it('does not treat escaped whitespace as a descendant combinator', () => {
     let list = parseSelectorList(String.raw`.foo\ .bar`, {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
-    expect(list.selectors[0].parts[0].compound.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `, 'bar']);
+    expect(list.selectors[0].parts[0].compound.classes?.map((x) => x.raw)).toEqual([String.raw`foo\ `, 'bar']);
 
     list = parseSelectorList(String.raw`.foo\a bar.baz`, {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
-    expect(list.selectors[0].parts[0].compound.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`, 'baz']);
+    expect(list.selectors[0].parts[0].compound.classes?.map((x) => x.raw)).toEqual([String.raw`foo\a bar`, 'baz']);
   });
 });
 
@@ -1856,17 +1859,17 @@ describe('parseSelectorList normalized whitespace legacy cases', () => {
     let list = parseSelectorList('  .foo  ', {});
     expect(list.selectors).toHaveLength(1);
     expect(list.selectors[0].parts).toHaveLength(1);
-    expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
+    expect(list.selectors[0].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['foo']);
 
     list = parseSelectorList('  .foo,\n.bar\t', {});
     expect(list.selectors).toHaveLength(2);
-    expect(list.selectors[0].parts[0].compound.classes?.map(c => c.raw)).toEqual(['foo']);
-    expect(list.selectors[1].parts[0].compound.classes?.map(c => c.raw)).toEqual(['bar']);
+    expect(list.selectors[0].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['foo']);
+    expect(list.selectors[1].parts[0].compound.classes?.map((c) => c.raw)).toEqual(['bar']);
 
     list = parseSelectorList('div   >   .foo', {});
-    expect(list.selectors[0].parts.map(p => p.combinator)).toEqual([null, '>']);
+    expect(list.selectors[0].parts.map((p) => p.combinator)).toEqual([null, '>']);
     expect(list.selectors[0].parts[0].compound.tag).toEqual({ localRaw: 'div' });
-    expect(list.selectors[0].parts[1].compound.classes?.map(c => c.raw)).toEqual(['foo']);
+    expect(list.selectors[0].parts[1].compound.classes?.map((c) => c.raw)).toEqual(['foo']);
 
     const c = parseCompoundSelector(new Cursor(':not( .foo )'), {});
     expect(c.tests.length).toBe(1);
@@ -1874,18 +1877,18 @@ describe('parseSelectorList normalized whitespace legacy cases', () => {
 
   it('preserves escaped trailing whitespace inside identifiers', () => {
     let c = parseCompoundSelector(new Cursor(String.raw`.foo\ `), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\ `]);
 
     c = parseSelectorList(String.raw`  .foo\   `, {}).selectors[0].parts[0].compound;
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\ `]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\ `]);
   });
 
   it('preserves hex-escape terminator whitespace inside identifiers', () => {
     let c = parseCompoundSelector(new Cursor(String.raw`.foo\a bar`), {});
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\a bar`]);
 
     c = parseSelectorList(String.raw`  .foo\a bar  `, {}).selectors[0].parts[0].compound;
-    expect(c.classes?.map(x => x.raw)).toEqual([String.raw`foo\a bar`]);
+    expect(c.classes?.map((x) => x.raw)).toEqual([String.raw`foo\a bar`]);
   });
 
   it('accepts escaped backslashes', () => {
@@ -1910,7 +1913,7 @@ describe('parseSelectorList dangling and escaped backslash identifiers', () => {
 
   it('accepts escaped backslash inside identifiers', () => {
     const c = parseCompoundSelector(new Cursor('.foo\\\\'), {});
-    expect(c.classes?.map(x => x.raw)).toEqual(['foo\\\\']);
+    expect(c.classes?.map((x) => x.raw)).toEqual(['foo\\\\']);
   });
 });
 
@@ -1948,8 +1951,8 @@ describe('parseRelativeSelectorList', () => {
   const stepsOf = (source: string) => {
     const parsed = parseRelativeSelectorList(new Cursor(`(${source})`), {});
 
-    return parsed.arms.map(arm =>
-      arm.steps.map(step => [step.combinator, step.compound.source])
+    return parsed.arms.map((arm) =>
+      arm.steps.map((step) => [step.combinator, step.compound.source])
     );
   };
 

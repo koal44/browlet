@@ -1,8 +1,9 @@
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('issues', 'normal',  [
   {
     name: 'issue 160 adjacent-descendant regression',
+    // status: 'only',
     markup: `
       <div>
         <div class="neighbor"></div>

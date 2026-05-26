@@ -1,5 +1,5 @@
-import { expect } from "@playwright/test";
-import { runScenarios } from "./harness/scenarios";
+import { expect } from '@playwright/test';
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('scope', 'normal', [
   {
@@ -40,7 +40,7 @@ runScenarios('scope', 'normal', [
       // Inherited state should differ by home
       { match: ':lang(en)', ref: { by: 'id', id: 'lang-child' }, expect: { ids: ['lang-child'] } },
       { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', home: 'detached' }, expect: { ids: [] } },
-      { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', within: { by: 'id', id: 'lang-child', home: 'fragment'} }, expect: { ids: [] } },
+      { match: ':lang(en)', ref: { by: 'id', id: 'lang-child', within: { by: 'id', id: 'lang-child', home: 'fragment' } }, expect: { ids: [] } },
 
       // Element-local matching should survive rehoming
       { match: '.foo', ref: { by: 'id', id: 'class-child' }, expect: { ids: ['class-child'] } },
@@ -110,7 +110,7 @@ runScenarios('scope', 'normal', [
     cases: [
       { select: 'div.x', expect: { count: 2 } },
       { select: 'span', expect: { count: 1 } },
-    ]
+    ],
   },
 
   {
@@ -157,6 +157,6 @@ runScenarios('scope', 'normal', [
       { select: 'foo bar', expect: { count: 0 } },
       { select: 'bar', ref: { by: 'id', id: 'upper' }, expect: { count: 1 } },
     ],
-  }
+  },
 
 ]);

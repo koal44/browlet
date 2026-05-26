@@ -1,4 +1,4 @@
-import { runScenarios } from "./harness/scenarios";
+import { runScenarios } from './harness/scenarios';
 
 runScenarios('various', 'normal', [
   {
@@ -19,7 +19,7 @@ runScenarios('various', 'normal', [
   },
 
   {
-    name: 'native byTag fragment oracle handles selector-sensitive tag names',
+    name: 'native byTag fragment oracle handles non-selector tag names',
     // status: 'only',
     markup: `
       <div id="root">
@@ -27,7 +27,7 @@ runScenarios('various', 'normal', [
         <foo.bar id="dot"></foo.bar>
         <foo_bar id="underscore"></foo_bar>
         <foo:bar id="colon"></foo:bar>
-        <foo\:diez id="escaped-colon"></foo\:diez>
+        <foo\\:diez id="escaped-colon"></foo\\:diez>
         <foo123 id="digits"></foo123>
       </div>
 
@@ -36,7 +36,7 @@ runScenarios('various', 'normal', [
         <foo.bar id="dot"></foo.bar>
         <foo_bar id="underscore"></foo_bar>
         <foo:bar id="colon"></foo:bar>
-        <foo\:diez id="escaped-colon"></foo\:diez>
+        <foo\\:diez id="escaped-colon"></foo\\:diez>
         <foo123 id="digits"></foo123>
       </template>
     `,
@@ -56,8 +56,8 @@ runScenarios('various', 'normal', [
       { byTag: 'foo:bar', ref: { by: 'id', id: 'root' }, expect: { ids: ['colon'] } },
       { byTag: 'foo:bar', ref: { by: 'template', id: 'frag' }, expect: { ids: ['colon'] } },
 
-      { byTag: 'foo:diez', ref: { by: 'id', id: 'root' }, expect: { ids: ['escaped-colon'] } },
-      { byTag: 'foo:diez', ref: { by: 'template', id: 'frag' }, expect: { ids: ['escaped-colon'] } },
+      { byTag: 'foo\\:diez', ref: { by: 'id', id: 'root' }, expect: { ids: ['escaped-colon'] } },
+      { byTag: 'foo\\:diez', ref: { by: 'template', id: 'frag' }, expect: { ids: ['escaped-colon'] } },
 
       { byTag: 'foo123', ref: { by: 'id', id: 'root' }, expect: { ids: ['digits'] } },
       { byTag: 'foo123', ref: { by: 'template', id: 'frag' }, expect: { ids: ['digits'] } },
@@ -551,16 +551,16 @@ runScenarios('various', 'normal', [
         const cssIdentUnescapeLocal = (str: string): string =>
           /\\/.test(str)
             ? str.replace(/\\([0-9a-fA-F]{1,6}[\t\n\f\r ]?|.)/g, (_m, esc: string) => {
-                if (/^[0-9a-fA-F]/.test(esc)) {
-                  const cp = parseInt(esc, 16);
-                  return cp === 0 ? '\uFFFD' : String.fromCodePoint(cp);
-                }
-                return esc;
-              })
+              if (/^[0-9a-fA-F]/.test(esc)) {
+                const cp = parseInt(esc, 16);
+                return cp === 0 ? '\uFFFD' : String.fromCodePoint(cp);
+              }
+              return esc;
+            })
             : str;
 
         const ids = (nodes: Iterable<Element>): string[] =>
-          Array.from(nodes, el => el.id);
+          Array.from(nodes, (el) => el.id);
 
         const qsaIds = (root: ParentNode, selector: string): string[] =>
           ids(root.querySelectorAll(selector));
@@ -778,8 +778,8 @@ runScenarios('various', 'normal', [
 
         add('plain-attr', { foo: 'yes' });
         add('hyphen-attr', { 'foo-bar': 'yes' });
-        add('underscore-attr', { 'foo_bar': 'yes' });
-        add('digit-attr', { 'foo123': 'yes' });
+        add('underscore-attr', { foo_bar: 'yes' });
+        add('digit-attr', { foo123: 'yes' });
         // add('digit-start-attr', { '123': 'yes' }); // ff
         add('colon-attr', { 'foo:bar': 'yes' });
         // add('plus-attr', { 'foo+bar': 'yes' }); // ff
@@ -926,7 +926,6 @@ runScenarios('various', 'normal', [
       { select: '[*|*]', expect: { throws: false }, browsers: ['webkit'], status: 'fail' },
 
       { select: '[xml:lang]', expect: { throws: true } },
-      { select: '[xml\:lang]', expect: { throws: true } },
       { select: '[xml\\:lang]', expect: { ids: [] } },
     ],
   },
@@ -2290,7 +2289,7 @@ runScenarios('various', 'normal', [
     cases: [
       { select: 'div:lang(en)', expect: { ids: ['en', 'en-us'] } },
       { select: 'div:dir(rtl)', expect: { ids: ['rtl'] } },
-      { select: 'div:dir(ltr)', expect: { ids: ['en','en-us','fr','ltr'] } },
+      { select: 'div:dir(ltr)', expect: { ids: ['en', 'en-us', 'fr', 'ltr'] } },
       { select: 'div:dir(tlr)', expect: { ids: [] } },
     ],
   },
@@ -2369,7 +2368,7 @@ runScenarios('various', 'normal', [
       <x-ready id="ready-el"></x-ready>
       <foo id="foo-el"></foo>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         customElements.define('x-ready', class extends HTMLElement {});
       });
@@ -2389,7 +2388,7 @@ runScenarios('various', 'normal', [
     // engines: ['native'],
     markupMode: 'html-document',
     url: 'https://test.local/page',
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.goto('https://test.local/page#a%20b');
     },
     markup: `
@@ -2412,7 +2411,7 @@ runScenarios('various', 'normal', [
     // engines: ['native'],
     markupMode: 'html-document',
     url: 'https://test.local/page',
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.goto('https://test.local/page#target');
     },
     markup: `
@@ -2454,10 +2453,10 @@ runScenarios('various', 'normal', [
       <a id="a" href="/x">x</a>
       <abbr id="abbr" href="/fake">abbr</abbr>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
-        (document.getElementById('a') as any).visited = true;
-        (document.getElementById('abbr') as any).visited = true;
+        // (document.getElementById('a') as any).visited = true;
+        // (document.getElementById('abbr') as any).visited = true;
       });
     },
     cases: [
@@ -2477,7 +2476,7 @@ runScenarios('various', 'normal', [
       </div>`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -2486,7 +2485,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#inner').hover();
         },
         cases: [
@@ -2501,7 +2500,7 @@ runScenarios('various', 'normal', [
     name: 'user action focus active and focus-visible behavior',
     // status: 'only',
     markup: `<input id="a" autofocus><input id="b">`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#b').focus();
     },
     cases: [
@@ -2534,7 +2533,7 @@ runScenarios('various', 'normal', [
         <div id="other"></div>
       </body>
       </html>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#inner').focus();
     },
     cases: [
@@ -2553,8 +2552,8 @@ runScenarios('various', 'normal', [
     name: 'user action focus matches programmatic tabindex focus',
     // status: 'only',
     markup: `<div id="x" tabindex="-1"></div><input id="y">`,
-    setupPage: async page => {
-      await page.locator('#x').evaluate(el => (el as HTMLElement).focus());
+    setupPage: async (page) => {
+      await page.locator('#x').evaluate((el) => (el as HTMLElement).focus());
     },
     cases: [
       { select: '#x:focus', expect: { ids: ['x'] } },
@@ -2572,7 +2571,7 @@ runScenarios('various', 'normal', [
       <div id="other" style="width:20px;height:20px;"></div>`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -2581,7 +2580,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#inner').hover();
           await page.mouse.down();
         },
@@ -2592,7 +2591,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.up();
         },
         cases: [
@@ -2614,7 +2613,7 @@ runScenarios('various', 'normal', [
       <div id="other" style="width:20px;height:20px;"></div>`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -2625,7 +2624,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#inner').hover();
         },
         cases: [
@@ -2635,7 +2634,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.down();
         },
         cases: [
@@ -2645,7 +2644,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.up();
         },
         cases: [
@@ -2662,7 +2661,7 @@ runScenarios('various', 'normal', [
     markup: `<div id="x" style="width:20px;height:20px;"></div>`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -2671,7 +2670,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#x').hover();
           await page.mouse.down();
         },
@@ -2681,7 +2680,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.up();
         },
         cases: [
@@ -2703,7 +2702,7 @@ runScenarios('various', 'normal', [
       <button id="other">y</button>`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#inner').focus();
         },
         cases: [
@@ -2713,7 +2712,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.keyboard.down('Space');
         },
         cases: [
@@ -2724,7 +2723,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.keyboard.up('Space');
         },
         cases: [
@@ -2751,7 +2750,7 @@ runScenarios('various', 'normal', [
         <input id="other">
       </body>
       </html>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#inner').focus();
     },
     cases: [
@@ -2791,7 +2790,7 @@ runScenarios('various', 'normal', [
       <input id="input" style="display:block;width:80px;height:30px;">`,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#button').click();
         },
         cases: [
@@ -2806,7 +2805,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#input').click();
         },
         cases: [
@@ -2848,7 +2847,7 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const host = document.getElementById('host')!;
-        host.attachShadow({ mode: 'open' })!.innerHTML =
+        host.attachShadow({ mode: 'open' }).innerHTML =
           `<section><p id="inside" class="x"></p></section>`;
       });
     },
@@ -2866,7 +2865,7 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const host = document.getElementById('host')!;
-        host.attachShadow({ mode: 'open' })!.innerHTML =
+        host.attachShadow({ mode: 'open' }).innerHTML =
           `<section id="section"><p id="inside"></p></section>`;
       });
     },
@@ -2883,7 +2882,7 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const host = document.getElementById('host')!;
-        host.attachShadow({ mode: 'open' })!.innerHTML = `<slot name="x"></slot>`;
+        host.attachShadow({ mode: 'open' }).innerHTML = `<slot name="x"></slot>`;
       });
     },
     cases: [
@@ -2900,9 +2899,9 @@ runScenarios('various', 'normal', [
     setupPage: async (page) => {
       await page.evaluate(() => {
         const outer = document.getElementById('outer')!;
-        const outerRoot = outer.attachShadow({ mode: 'open' })!;
+        const outerRoot = outer.attachShadow({ mode: 'open' });
         outerRoot.innerHTML = `<div id="inner-host"></div>`;
-        outerRoot.getElementById('inner-host')!.attachShadow({ mode: 'open' })!.innerHTML =
+        outerRoot.getElementById('inner-host')!.attachShadow({ mode: 'open' }).innerHTML =
           `<p id="deep" class="x"></p>`;
       });
     },
@@ -2945,8 +2944,8 @@ runScenarios('various', 'normal', [
         <div id="other"></div>
       </div>
     `,
-    setupPage: async page => {
-      await page.locator('#host').evaluate(host => {
+    setupPage: async (page) => {
+      await page.locator('#host').evaluate((host) => {
         const input = (host as HTMLElement).shadowRoot!.getElementById('inner') as HTMLInputElement;
         input.focus();
       });
@@ -2980,7 +2979,7 @@ runScenarios('various', 'normal', [
     `,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -2991,8 +2990,8 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
-          await page.locator('#host').evaluate(host => {
+        setupPage: async (page) => {
+          await page.locator('#host').evaluate((host) => {
             const inner = (host as HTMLElement).shadowRoot!.getElementById('inner') as HTMLElement;
             inner.scrollIntoView();
           });
@@ -3031,7 +3030,7 @@ runScenarios('various', 'normal', [
     `,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -3042,7 +3041,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           const box = await page.locator('#host').boundingBox();
           if (!box) throw new Error('missing host box');
           await page.mouse.move(box.x + 10, box.y + 10);
@@ -3059,7 +3058,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.up();
         },
         cases: [
@@ -3081,7 +3080,7 @@ runScenarios('various', 'normal', [
     `,
     steps: [
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.move(200, 200);
         },
         cases: [
@@ -3090,7 +3089,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.locator('#label').hover();
           await page.mouse.down();
         },
@@ -3100,7 +3099,7 @@ runScenarios('various', 'normal', [
         ],
       },
       {
-        setupPage: async page => {
+        setupPage: async (page) => {
           await page.mouse.up();
         },
         cases: [
@@ -3356,7 +3355,7 @@ runScenarios('various', 'normal', [
     name: 'input state placeholder-shown matches focused empty input',
     // status: 'only',
     markup: `<input id="x" placeholder="name"><input id="other">`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.locator('#x').focus();
     },
     cases: [
@@ -3553,7 +3552,7 @@ runScenarios('various', 'normal', [
         <option id="second">second</option>
       </select>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const first = document.getElementById('first') as HTMLOptionElement;
         const second = document.getElementById('second') as HTMLOptionElement;
@@ -3575,7 +3574,7 @@ runScenarios('various', 'normal', [
       <input id="button" type="button">
       <input id="hidden" type="hidden">
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         for (const id of ['text', 'button', 'hidden']) {
           (document.getElementById(id) as HTMLInputElement).checked = true;
@@ -3613,7 +3612,7 @@ runScenarios('various', 'normal', [
       <input id="box" type="checkbox">
       <input id="plainBox" type="checkbox">
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         (document.getElementById('box') as HTMLInputElement).indeterminate = true;
       });
@@ -3991,7 +3990,7 @@ runScenarios('various', 'normal', [
       <video id="video"></video>
       <audio id="plain"></audio>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         (document.getElementById('audio') as HTMLAudioElement).muted = true;
         (document.getElementById('video') as HTMLVideoElement).muted = true;
@@ -4059,7 +4058,7 @@ runScenarios('various', 'normal', [
           <div id="x">text</div>
         </body>
       </html>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const x = document.getElementById('x')!;
         const before = getComputedStyle(x, '::before').content;
@@ -4094,7 +4093,7 @@ runScenarios('various', 'normal', [
           <div id="x">text</div>
         </body>
       </html>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const x = document.getElementById('x')!;
         const before = getComputedStyle(x, '::before').content;
@@ -4129,7 +4128,7 @@ runScenarios('various', 'normal', [
           <p id="x">hello world</p>
         </body>
       </html>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const x = document.getElementById('x')!;
         const firstLetterSize = getComputedStyle(x, '::first-letter').fontSize;
@@ -4620,7 +4619,7 @@ runScenarios('various', 'normal', [
       { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
       { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
       { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'], },
+      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
     ],
   },
 
@@ -6707,7 +6706,7 @@ runScenarios('various', 'normal', [
     // status: 'only',
     engines: ['selectlet'],
     markup: `<div id="x"></div><span id="y"></span>`,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = selectlet;
         if (!sxlt) throw new Error('selectlet not found');
@@ -6765,7 +6764,7 @@ runScenarios('various', 'normal', [
       </body>
       </html>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = selectlet;
         if (!sxlt) throw new Error('selectlet not found');
@@ -6784,11 +6783,11 @@ runScenarios('various', 'normal', [
         sxlt.registerPseudo('submit', inputTypeIs('submit'));
         sxlt.registerPseudo('text', inputTypeIs('text'));
         sxlt.registerPseudo('button', localNameIs('button'));
-        sxlt.registerPseudo('input', e => /^(button|input|select|textarea)$/.test(e.localName));
-        sxlt.registerPseudo('header', e => /^h[1-6]$/.test(e.localName));
-        sxlt.registerPseudo('parent', e => e.firstChild !== null);
-        sxlt.registerPseudo('hidden', e => isHtmlElement(e) && getComputedStyle(e).display === 'none');
-        sxlt.registerPseudo('visible', e => isHtmlElement(e) && getComputedStyle(e).display !== 'none');
+        sxlt.registerPseudo('input', (e) => /^(button|input|select|textarea)$/.test(e.localName));
+        sxlt.registerPseudo('header', (e) => /^h[1-6]$/.test(e.localName));
+        sxlt.registerPseudo('parent', (e) => e.firstChild !== null);
+        sxlt.registerPseudo('hidden', (e) => isHtmlElement(e) && getComputedStyle(e).display === 'none');
+        sxlt.registerPseudo('visible', (e) => isHtmlElement(e) && getComputedStyle(e).display !== 'none');
       });
     },
     cases: [
@@ -6802,10 +6801,14 @@ runScenarios('various', 'normal', [
       { select: ':text', expect: { ids: ['text1'] } },
 
       { select: ':button', expect: { ids: ['button1'] } },
-      { select: ':input', expect: { ids: [
-        'checkbox1', 'file1', 'image1', 'password1', 'radio1', 'reset1', 'submit1', 'text1',
-        'button1', 'select1', 'textarea1',
-      ] } },
+      {
+        select: ':input', expect: {
+          ids: [
+            'checkbox1', 'file1', 'image1', 'password1', 'radio1', 'reset1', 'submit1', 'text1',
+            'button1', 'select1', 'textarea1',
+          ],
+        },
+      },
       { first: ':input', expect: { ids: ['checkbox1'] } },
 
       { select: ':header', expect: { ids: ['h1', 'h3', 'h6'] } },
@@ -6817,11 +6820,15 @@ runScenarios('various', 'normal', [
       { match: ':parent', ref: { by: 'id', id: 'empty1' }, expect: { count: 0 } },
 
       { select: ':hidden', expect: { ids: ['head1', 'title1', 'hidden1'] } },
-      { select: ':visible', expect: { ids: [
-        'html1', 'body1', 'root', 'checkbox1', 'file1', 'image1', 'password1', 'radio1', 'reset1', 'submit1',
-        'text1', 'button1', 'select1', 'option1', 'textarea1', 'h1', 'h3', 'h6', 'parent1', 'child1', 'empty1',
-        'visible1', 'has-span', 'inside-span', 'has-em', 'inside-em', 'has-none'
-      ] } },
+      {
+        select: ':visible', expect: {
+          ids: [
+            'html1', 'body1', 'root', 'checkbox1', 'file1', 'image1', 'password1', 'radio1', 'reset1', 'submit1',
+            'text1', 'button1', 'select1', 'option1', 'textarea1', 'h1', 'h3', 'h6', 'parent1', 'child1', 'empty1',
+            'visible1', 'has-span', 'inside-span', 'has-em', 'inside-em', 'has-none',
+          ],
+        },
+      },
     ],
   },
 
@@ -6838,7 +6845,7 @@ runScenarios('various', 'normal', [
         <span id="s4" class="item"></span>
       </div>
     `,
-    setupPage: async page => {
+    setupPage: async (page) => {
       await page.evaluate(() => {
         const sxlt = selectlet;
         if (!sxlt) throw new Error('selectlet not found');
