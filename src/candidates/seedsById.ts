@@ -134,6 +134,8 @@ function seedsById_Walk(id: string, context: QueryContext): Element[] {
   }
 }
 
+const SHOW_ELEMENT = 1;
+
 function seedsById_TreeWalk(id: string, context: QueryContext): Element[] {
   const nodes: Element[] = [];
 
@@ -148,7 +150,7 @@ function seedsById_TreeWalk(id: string, context: QueryContext): Element[] {
     doc = context.ownerDocument;
   }
 
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  const walker = doc.createTreeWalker(root, SHOW_ELEMENT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const e = node as Element; // TypeScript doesn't know the filter is effectively applied.
     if (sameId(e, id)) nodes.push(e);

@@ -54,6 +54,14 @@ export function installBrowserHelpers(): void {
     return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 11;
   }
 
+  function isIFrame(el: Element | null): el is HTMLIFrameElement {
+    return !!el && el.localName === 'iframe';
+  }
+
+  function isTemplate(el: Element | null): el is HTMLTemplateElement {
+    return !!el && el.localName === 'template';
+  }
+
   function isRehomed(ref?: ContextRef): boolean {
     if (!ref) return false;
     if ('within' in ref && isRehomed(ref.within)) return true;
@@ -143,13 +151,13 @@ export function installBrowserHelpers(): void {
 
     if (ref.by === 'iframe') {
       const iframe = queryId(base, ref.id);
-      if (!(iframe instanceof HTMLIFrameElement)) return null;
+      if (!isIFrame(iframe)) return null;
       return iframe.contentDocument ?? null;
     }
 
     if (ref.by === 'template') {
       const tmpl = queryId(base, ref.id);
-      if (!(tmpl instanceof HTMLTemplateElement)) return null;
+      if (!isTemplate(tmpl)) return null;
       return tmpl.content;
     }
 

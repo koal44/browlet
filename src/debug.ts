@@ -62,6 +62,8 @@ function describeElements(els: Element[], max = 10): string[] {
   return out;
 }
 
+const TEXT_NODE = 3;
+
 export function describeContext(ctx: QueryContext): QueryContextDescription {
   if (isDocument(ctx)) {
     const root = ctx.documentElement;
@@ -77,7 +79,7 @@ export function describeContext(ctx: QueryContext): QueryContextDescription {
     const children = Array.from(ctx.childNodes)
       .map((n) => {
         if (isElement(n)) return n.outerHTML;
-        if (n.nodeType === Node.TEXT_NODE) return n.textContent ?? '';
+        if (n.nodeType === TEXT_NODE) return n.textContent ?? '';
         return '';
       }).join('');
     return {

@@ -1,5 +1,5 @@
 
-import { runScenarios } from './harness/scenarios';
+import { runScenarios } from '../dispatch';
 import { readFileSync } from 'node:fs';
 
 const htmlStandard = readFileSync('test/browser/fixtures/slick/template-standard.html', 'utf8');

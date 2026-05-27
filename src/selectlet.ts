@@ -27,23 +27,6 @@ export function createSelectlet(global: typeof globalThis, installGlobal: Instal
   const _doc = global.document;
   const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG });
 
-  // handlers needed for the :hover pseudo-class; track state change in browsers and headless
-  _doc.addEventListener('mouseover', (e) => {
-    if (!isNode(e.target)) return;
-    _snap.hoverTarget = isElement(e.target) ? e.target : null;
-  }, true);
-  _doc.addEventListener('mouseout', () => { _snap.hoverTarget = null; }, true);
-
-  // Track pointer-down state for :active. This approximates native activation for common HTML activatable/focusable elements;
-  // full formal activation state is browser-internal and not modeled here.
-  _doc.addEventListener('pointerdown', (e) => {
-    const target = e.target;
-    if (!isNode(target)) return;
-    _snap.activeTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
-  }, true);
-  _doc.addEventListener('pointerup', () => { _snap.activeTarget = null; }, true);
-  _doc.addEventListener('pointercancel', () => { _snap.activeTarget = null; }, true);
-
   // handlers needed for the :focus pseudo-class; activeElement can fall back to body/html
   // even when no element actually matches :focus.
   _doc.addEventListener('focusin', (e) => {
@@ -59,8 +42,39 @@ export function createSelectlet(global: typeof globalThis, installGlobal: Instal
     if (_snap.focusTarget === el) _snap.focusTarget = null;
   }, true);
 
+  const setHoverTarget = (e: Event) => {
+    const target = e.target;
+    if (!isNode(target)) return;
+    _snap.hoverTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
+  };
+
+  const clearHoverTarget = () => {
+    _snap.hoverTarget = null;
+  };
+
+  const setActiveTarget = (e: Event) => {
+    const target = e.target;
+    if (!isNode(target)) return;
+    _snap.activeTarget = isElement(target) ? target : isText(target) ? target.parentElement : null;
+  };
+
+  const clearActiveTarget = () => {
+    _snap.activeTarget = null;
+  };
+
+  // :hover and :active state tracking
+  _doc.addEventListener('mouseover', setHoverTarget, true);
+  _doc.addEventListener('pointerover', setHoverTarget, true);
+  _doc.addEventListener('mouseout', clearHoverTarget, true);
+  _doc.addEventListener('pointerout', clearHoverTarget, true);
+
+  _doc.addEventListener('mousedown', setActiveTarget, true);
+  _doc.addEventListener('pointerdown', setActiveTarget, true);
+  _doc.addEventListener('mouseup', clearActiveTarget, true);
+  _doc.addEventListener('pointerup', clearActiveTarget, true);
+  _doc.addEventListener('pointercancel', clearActiveTarget, true);
+
   // QSA placeholders to native references
-  // type QsaKey = 'closest' | 'matches' | 'querySelector' | 'querySelectorAll' | 'querySelectorDoc' | 'querySelectorAllDoc';
   type QsaStore = {
     closest: Element['closest'];
     matches: Element['matches'];
@@ -190,8 +204,8 @@ export function createSelectlet(global: typeof globalThis, installGlobal: Instal
           const doc = evTarget.ownerDocument;
           const script = doc.createElement('script');
           script.textContent = iife + 'selectlet.install(true)';
-          const root = doc.documentElement;
-          root.removeChild(root.insertBefore(script, root.firstChild));
+          const root = doc.documentElement as Element | null;
+          root?.removeChild(root.insertBefore(script, root.firstChild));
         };
         _doc.addEventListener('load', fn, true);
         _qsaHooks.push({ type: 'load', listener: fn });

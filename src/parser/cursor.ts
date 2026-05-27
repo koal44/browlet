@@ -1,15 +1,5 @@
 export type CharPred = (ch: string) => boolean;
 
-export class CursorError extends SyntaxError {
-  constructor(
-    message: string,
-    public position: number,
-  ) {
-    super(`${message} at ${position}`);
-    this.name = 'CursorError';
-  }
-}
-
 export class Cursor {
   constructor(
     public readonly input: string,
@@ -77,6 +67,31 @@ export class Cursor {
   }
 
   error(message: string): never {
-    throw new CursorError(message, this.i);
+    throw new CursorError(message, this.i, this.input);
   }
+}
+
+export class CursorError extends SyntaxError {
+  constructor(message: string, public position: number, input?: string) {
+    const at = `${message} at ${position}`;
+    const fmt = input ? formatInput(input, position) : '';
+
+    super(`${at}\n${fmt}`);
+    this.name = 'CursorError';
+  }
+}
+
+function formatInput(input: string, position: number, radius = 80): string {
+  const label = 'Input: ';
+  const start = Math.max(0, position - radius);
+  const end = Math.min(input.length, position + radius);
+
+  const head = start ? '…' : '';
+  const tail = end < input.length ? '…' : '';
+  const excerpt = head + input.slice(start, end) + tail;
+  const before = head + input.slice(start, position);
+
+  const caretAt = label.length + JSON.stringify(before).length - 1;
+
+  return `${label}${JSON.stringify(excerpt)}\n${' '.repeat(caretAt)}^`;
 }

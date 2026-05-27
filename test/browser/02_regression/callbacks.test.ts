@@ -1,9 +1,10 @@
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 runScenarios('callbacks', 'normal', [
   {
     name: 'callback compile cache does not leak across select calls',
     // status: 'only',
+    engines: ['selectlet'],
     markup: `
       <div id="d">
         <span id="a" class="x"></span>
@@ -35,6 +36,7 @@ runScenarios('callbacks', 'normal', [
   {
     name: 'callback compile cache does not leak into later non-callback select',
     // status: 'only',
+    engines: ['selectlet'],
     markup: `
       <div id="d">
         <span id="a" class="x"></span>
@@ -64,6 +66,7 @@ runScenarios('callbacks', 'normal', [
   {
     name: 'select callback order and early stop',
     // status: 'only',
+    engines: ['selectlet'],
     markup: `
       <div id="root">
         <span id="a" class="x"></span>
@@ -98,6 +101,7 @@ runScenarios('callbacks', 'normal', [
   {
     name: 'select callback false does not cache partial results for later callbacks',
     // status: 'only',
+    engines: ['selectlet'],
     markup: `
       <div id="root">
         <span id="a"></span>
@@ -147,6 +151,7 @@ runScenarios('callbacks', 'normal', [
   {
     name: 'select callback false stops across selector groups',
     // status: 'only',
+    engines: ['selectlet'],
     markup: `
       <div id="root">
         <span id="a" class="x"></span>

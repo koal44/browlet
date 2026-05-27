@@ -39,12 +39,20 @@
     "test:browser": "npm run build && cross-env HARNESS_MODE=normal playwright test --project=browser",
     "test:browser:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=browser",
     "test:perf": "npm run build && playwright test --project=perf --workers=1",
-    "test:unit": "npm run build && vitest run",
-    "test:artifact": "npm run build && node test/artifact/cjs.test.cjs && node test/artifact/global.test.cjs"
+    "test:unit": "npm run build && vitest run --project=unit",
+    "test:artifact": "npm run build && node test/artifact/cjs.test.cjs && node test/artifact/global.test.cjs",
+    "install:jsdom": "npm run build && tsx scripts/install-jsdom.ts",
+    "test:jsdom:sx": "cross-env HARNESS=jsdom ENGINE=selectlet vitest run --project=jsdom",
+    "test:jsdom:nw": "cross-env HARNESS=jsdom ENGINE=nwsapi vitest run --project=jsdom",
+    "test:jsdom:ds": "cross-env HARNESS=jsdom ENGINE=dom-selector vitest run --project=jsdom",
+    "test:jsdom:sxonly": "cross-env HARNESS=jsdom ENGINE=selectlet ONLY=only vitest run --project=jsdom",
+    "test:jsdom:nwonly": "cross-env HARNESS=jsdom ENGINE=nwsapi ONLY=only vitest run --project=jsdom",
+    "test:jsdom:dsonly": "cross-env HARNESS=jsdom ENGINE=dom-selector ONLY=only vitest run --project=jsdom"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^25.5.2",
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
@@ -53,6 +61,6 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.7"
   }
 }

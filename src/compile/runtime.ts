@@ -738,7 +738,8 @@ function isEditingHostOrEditable(e: Element): boolean {
 
   // Editing host: child HTML element of a Document whose designMode is enabled.
   // DesignMode: eligible descendants of a designMode document are editable unless blocked.
-  if (e.ownerDocument.designMode.toLowerCase() === 'on') {
+  const designMode = e.ownerDocument.designMode as string | undefined;
+  if (designMode?.toLowerCase() === 'on') {
     for (let n: Element | null = e; n; n = n.parentElement) {
       if (n.getAttribute('contenteditable')?.toLowerCase() === 'false') {
         return false;
@@ -781,6 +782,8 @@ export function isPlaceholderShown(e: Element): boolean {
   return false;
 }
 
+const DOCUMENT_POSITION_FOLLOWING = 4;
+
 export function isDefault(e: Element): boolean {
   if (isHtmlOption(e)) return e.defaultSelected;
   const isInput = isHtmlInput(e);
@@ -817,7 +820,7 @@ export function isDefault(e: Element): boolean {
   const firstSubmit =
     !firstInput ? firstButton :
     !firstButton ? firstInput :
-    (firstInput.compareDocumentPosition(firstButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+    (firstInput.compareDocumentPosition(firstButton) & DOCUMENT_POSITION_FOLLOWING)
       ? firstInput
       : firstButton;
 

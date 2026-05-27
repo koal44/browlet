@@ -1,9 +1,10 @@
 import { expect } from '@playwright/test';
-import { runScenarios } from './harness/scenarios';
+import { runScenarios } from '../dispatch';
 
 runScenarios('scope', 'normal', [
   {
     name: 'classes',
+    // status: 'only',
     markup: `
       <div id="one" class="outer primary"></div>
       <div id="two" class="other-outer"></div>
@@ -19,6 +20,7 @@ runScenarios('scope', 'normal', [
 
   {
     name: 'context-home',
+    // status: 'only',
     markupMode: 'html-document',
     markup: `
       <!DOCTYPE html>
@@ -93,6 +95,7 @@ runScenarios('scope', 'normal', [
 
   {
     name: 'setup page can be used to verify test assumptions',
+    // status: 'only',
     markup: `
       <div class="x"></div>
       <div class="x"></div>

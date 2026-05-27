@@ -66,11 +66,11 @@ export type EquivalentCase = DistributiveOmit<TestCase, 'expect' | 'status' | 'b
 // const foo: EquivalentCase = { select: 'div' }; // just to verify the type
 
 const BROWSER_NAMES = ['chromium', 'firefox', 'webkit'] as const;
-type BrowserName = typeof BROWSER_NAMES[number];
+export type BrowserName = typeof BROWSER_NAMES[number];
 
-type ScenariosStatus = 'normal' | 'skip' | 'only'; // | 'fixme';
-type ScenarioStatus = 'normal' | 'skip' | 'only' | 'fixme' | 'fail';
-type CaseStatus = 'normal' | 'skip' | 'fixme' | 'fail' | 'only';
+export type ScenariosStatus = 'normal' | 'skip' | 'only'; // | 'fixme';
+export type ScenarioStatus = 'normal' | 'skip' | 'only' | 'fixme' | 'fail';
+export type CaseStatus = 'normal' | 'skip' | 'fixme' | 'fail' | 'only';
 
 export const ENGINES = ['native', 'selectlet'] as const;
 export type Engine = typeof ENGINES[number];
@@ -101,7 +101,7 @@ type CaseInfo = {
   misfixes: PassTrackers;
 };
 
-type RunScenariosOptions = {
+export type RunScenariosOptions = {
   parallel?: boolean;
 };
 

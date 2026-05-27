@@ -74,7 +74,7 @@ export class Snapshot {
   };
 
   constructor(doc: Document, config: SelectletConfig) {
-    const root = doc.documentElement;
+    const root = doc.documentElement as Element | null;
 
     this.config = config;
 
@@ -85,7 +85,7 @@ export class Snapshot {
 
     this.isHtml = isHtmlDoc(doc);
     this.isQuirksMode = isQuirksMode(doc);
-    this.namespace = root.namespaceURI ?? null;
+    this.namespace = root?.namespaceURI ?? null;
     this.hasDocumentAll = 'all' in doc;
     this.hasTreeWalker = 'createTreeWalker' in doc;
   }
@@ -115,7 +115,7 @@ export class Snapshot {
       this.root = root;
       this.isHtml = isHtmlDoc(doc);
       this.isQuirksMode = isQuirksMode(doc);
-      this.namespace = root?.namespaceURI ?? null;
+      this.namespace = root ? root.namespaceURI : null;
       this.hasDocumentAll = 'all' in doc;
       this.hasTreeWalker = 'createTreeWalker' in doc;
     }
