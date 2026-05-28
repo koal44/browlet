@@ -1,0 +1,10 @@
+{
+  "jsdom": {
+    "type": "git",
+    "repo": "https://github.com/jsdom/jsdom.git",
+    "rev": "d312832b344c8055c0d61e55bacd1a675ad5826e",
+    "dir": "vendor/jsdom",
+    "patch": "vendor/_patches/jsdom.patch",
+    "active": true
+  }
+}

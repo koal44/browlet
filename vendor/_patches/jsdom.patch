@@ -1,0 +1,289 @@
+diff --git a/lib/jsdom/living/css/helpers/computed-style.js b/lib/jsdom/living/css/helpers/computed-style.js
+index 6ee5cd43..1c47bdee 100644
+--- a/lib/jsdom/living/css/helpers/computed-style.js
++++ b/lib/jsdom/living/css/helpers/computed-style.js
+@@ -14,6 +14,8 @@ const { isGlobalKeyword } = require("./css-values.js");
+ const { absoluteFontSize } = require("./font-sizes.js");
+ const { systemColors } = require("./system-colors.js");
+ 
++const idlUtils = require("../../../../generated/idl/utils");
++
+ const defaultStyleSheet = fs.readFileSync(
+   path.resolve(__dirname, "../../../browser/default-stylesheet.css"),
+   { encoding: "utf-8" }
+@@ -101,28 +103,25 @@ function handleSheet(sheetImpl, elementImpl, declaration, specificities) {
+ }
+ 
+ function handleRule(ruleImpl, elementImpl, declaration, specificities) {
+-  if (ruleMightMatchElement(ruleImpl, elementImpl)) {
+-    const { ast, match } = matches(ruleImpl.selectorText, elementImpl);
+-    if (match) {
+-      handleStyle(ruleImpl.style, declaration, specificities, ast);
+-    }
++  if (ruleMightMatchElement(ruleImpl, elementImpl) && matches(ruleImpl.selectorText, elementImpl)) {
++    handleStyle(ruleImpl.style, declaration, specificities, ruleImpl.selectorText);
+   }
+ }
+ 
+-function handleStyle(style, declaration, specificities, ast) {
++function handleStyle(style, declaration, specificities, selectorText) {
+   for (let i = 0; i < style.length; i++) {
+     const property = style.item(i);
+-    handleProperty(property, declaration, style, specificities, ast);
++    handleProperty(property, declaration, style, specificities, selectorText);
+   }
+ }
+ 
+-function handleProperty(property, declaration, style, specificities, ast) {
++function handleProperty(property, declaration, style, specificities, selectorText) {
+   const value = style.getPropertyValue(property);
+   const priority = style.getPropertyPriority(property);
+   if (priority) {
+     declaration.setProperty(property, value, priority);
+   } else if (!declaration.getPropertyPriority(property)) {
+-    const { value: specificity } = Specificity.max(...Specificity.calculate(ast));
++    const { value: specificity } = Specificity.max(...Specificity.calculate(selectorText));
+     if (specificities.has(property)) {
+       if (Specificity.compare(specificity, specificities.get(property)) >= 0) {
+         specificities.set(property, specificity);
+@@ -143,55 +142,23 @@ function handlePropertyForInlineStyle(property, declaration, style) {
+   }
+ }
+ 
+-function ruleMightMatchElement(ruleImpl, elementImpl) {
+-  if (!ruleImpl._selectorSubjects) {
+-    const domSelector = elementImpl._ownerDocument._getDOMSelector();
+-    ruleImpl._selectorSubjects =
+-      domSelector.extractSubjects(
+-        ruleImpl.selectorText,
+-        elementImpl._ownerDocument.contentType !== "text/html"
+-      );
+-  }
+-
+-  const subjects = ruleImpl._selectorSubjects;
+-  if (subjects.length === 0) {
+-    return true;
+-  }
+-
+-  const id = elementImpl.getAttributeNS(null, "id");
+-  const { classList } = elementImpl;
+-  // TODO: Remove toLowerCase() after updating the dom-selector.
+-  const tag = elementImpl._localName.toLowerCase();
+-  for (const keys of subjects) {
+-    let mightMatch = true;
+-    if (keys.id && keys.id !== id) {
+-      mightMatch = false;
+-    } else if (keys.className && !classList.contains(keys.className)) {
+-      mightMatch = false;
+-      // TODO: Remove toLowerCase() after updating the dom-selector.
+-    } else if (keys.tag && keys.tag.toLowerCase() !== tag) {
+-      mightMatch = false;
+-    }
+-
+-    if (mightMatch) {
+-      return true;
+-    }
+-  }
+-
+-  return false;
++function ruleMightMatchElement() {
++  return true;
+ }
+ 
++// function matches(selectorText, elementImpl) {
++//   const engine = elementImpl._ownerDocument._getSelectorEngine();
++//   return engine.match(selectorText, idlUtils.wrapperForImpl(elementImpl));
++// }
++
+ function matches(selectorText, elementImpl) {
+-  const domSelector = elementImpl._ownerDocument._getDOMSelector();
+-  const { ast, match, pseudoElement } = domSelector.check(selectorText, elementImpl);
+-  // `pseudoElement` is a pseudo-element selector (e.g. `::before`).
+-  // However, we do not support getComputedStyle(element, pseudoElement), so `match` is set to `false`.
+-  if (pseudoElement) {
+-    return {
+-      match: false
+-    };
++  const engine = elementImpl._ownerDocument._getSelectorEngine();
++
++  try {
++    return engine.match(selectorText, idlUtils.wrapperForImpl(elementImpl));
++  } catch {
++    return false;
+   }
+-  return { ast, match, pseudoElement };
+ }
+ 
+ function replaceEmptyValueAndKeywords(
+diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
+index b85d6b0e..54faac9f 100644
+--- a/lib/jsdom/living/nodes/Document-impl.js
++++ b/lib/jsdom/living/nodes/Document-impl.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ 
+ const { CookieJar } = require("tough-cookie");
+-const { DOMSelector } = require("@asamuzakjp/dom-selector");
++const createSelectlet = require("selectlet");
+ 
+ const NodeImpl = require("./Node-impl").implementation;
+ const idlUtils = require("../../../generated/idl/utils");
+@@ -116,7 +116,7 @@ const eventInterfaceTable = {
+ };
+ 
+ class DocumentImpl extends NodeImpl {
+-  #domSelector = null;
++  #selectorEngine = null;
+ 
+   constructor(globalObject, args, privateData) {
+     super(globalObject, args, privateData);
+@@ -216,19 +216,11 @@ class DocumentImpl extends NodeImpl {
+     this._styleCache = new WeakMap();
+   }
+ 
+-  // The `DOMSelector` instance is lazily created, as it is somewhat expensive to create and not always needed.
+-  _getDOMSelector() {
+-    if (!this.#domSelector) {
+-      this.#domSelector = new DOMSelector(this._globalObject, this._ownerDocument, {
+-        domSymbolTree,
+-        idlUtils
+-      });
++  _getSelectorEngine() {
++    if (!this.#selectorEngine) {
++      this.#selectorEngine = createSelectlet(this._globalObject, this._ownerDocument);
+     }
+-    return this.#domSelector;
+-  }
+-
+-  _clearDOMSelector() {
+-    this.#domSelector?.clear();
++    return this.#selectorEngine;
+   }
+ 
+   _clearBaseURLCache() {
+diff --git a/lib/jsdom/living/nodes/Element-impl.js b/lib/jsdom/living/nodes/Element-impl.js
+index 0ef1ce89..af04be68 100644
+--- a/lib/jsdom/living/nodes/Element-impl.js
++++ b/lib/jsdom/living/nodes/Element-impl.js
+@@ -25,6 +25,8 @@ const Text = require("../../../generated/idl/Text");
+ const { isValidHostElementName } = require("../helpers/shadow-dom");
+ const { isValidCustomElementName, lookupCEDefinition } = require("../helpers/custom-elements");
+ 
++const idlUtils = require("../../../generated/idl/utils");
++
+ class ElementImpl extends NodeImpl {
+   constructor(globalObject, args, privateData) {
+     super(globalObject, args, privateData);
+@@ -99,9 +101,6 @@ class ElementImpl extends NodeImpl {
+       this._classList.attrModified();
+     }
+ 
+-    // Clear domSelector cached results on attribute change.
+-    this._ownerDocument._clearDOMSelector();
+-
+     this._attrModifiedSlotableMixin(name, value, oldValue);
+   }
+ 
+@@ -530,13 +529,15 @@ class ElementImpl extends NodeImpl {
+   }
+ 
+   closest(selectors) {
+-    const domSelector = this._ownerDocument._getDOMSelector();
+-    return domSelector.closest(selectors, this);
++    const engine = this._ownerDocument._getSelectorEngine();
++    const node = engine.closest(selectors, idlUtils.wrapperForImpl(this));
++
++    return node ? idlUtils.implForWrapper(node) : null;
+   }
+ 
+   matches(selectors) {
+-    const domSelector = this._ownerDocument._getDOMSelector();
+-    return domSelector.matches(selectors, this);
++    const engine = this._ownerDocument._getSelectorEngine();
++    return engine.match(selectors, idlUtils.wrapperForImpl(this));
+   }
+ 
+   webkitMatchesSelector(selectors) {
+diff --git a/lib/jsdom/living/nodes/ParentNode-impl.js b/lib/jsdom/living/nodes/ParentNode-impl.js
+index adfc851d..cc386a00 100644
+--- a/lib/jsdom/living/nodes/ParentNode-impl.js
++++ b/lib/jsdom/living/nodes/ParentNode-impl.js
+@@ -6,6 +6,8 @@ const { domSymbolTree } = require("../helpers/internal-constants");
+ const NODE_TYPE = require("../node-type");
+ const { convertNodesIntoNode } = require("../node");
+ 
++const idlUtils = require("../../../generated/idl/utils");
++
+ class ParentNodeImpl {
+   get children() {
+     if (!this._childrenList) {
+@@ -63,19 +65,25 @@ class ParentNodeImpl {
+     if (shouldAlwaysSelectNothing(this)) {
+       return null;
+     }
+-    const domSelector = this._ownerDocument._getDOMSelector();
+-    return domSelector.querySelector(selectors, this);
++
++    const engine = this._ownerDocument._getSelectorEngine();
++    const node = engine.first(selectors, idlUtils.wrapperForImpl(this));
++
++    return node ? idlUtils.implForWrapper(node) : null;
+   }
+ 
+   // WARNING FOR INTERNAL USERS:
+-  // This returns a NodeList impl, not a NodeList wrapper. NodeList impls are not iterable and do not have indexed
+-  // properties. To iterate over them, use `for (let i = 0; i < nodeListImpl.length; ++i) { nodeListImpl.item(i) }`.
++  // This returns a NodeList, not an array.
+   querySelectorAll(selectors) {
+     if (shouldAlwaysSelectNothing(this)) {
+       return NodeList.createImpl(this._globalObject, [], { nodes: [] });
+     }
+-    const domSelector = this._ownerDocument._getDOMSelector();
+-    const nodes = domSelector.querySelectorAll(selectors, this);
++
++    const engine = this._ownerDocument._getSelectorEngine();
++    const nodes = engine
++      .select(selectors, idlUtils.wrapperForImpl(this))
++      .map(idlUtils.implForWrapper);
++
+     return NodeList.createImpl(this._globalObject, [], { nodes });
+   }
+ }
+diff --git a/package-lock.json b/package-lock.json
+index 5383c4ba..226911a6 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -46,6 +46,7 @@
+         "npm-run-all2": "^8.0.4",
+         "opener": "^1.5.2",
+         "pngjs": "^7.0.0",
++        "selectlet": "^0.1.0-alpha.0",
+         "semver": "^7.7.4",
+         "server-destroy": "^1.0.1",
+         "tinybench": "^6.0.0",
+@@ -2675,6 +2676,13 @@
+         "node": ">=v12.22.7"
+       }
+     },
++    "node_modules/selectlet": {
++      "version": "0.1.0-alpha.0",
++      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.0-alpha.0.tgz",
++      "integrity": "sha512-DyjuQh29DlsIHAQf6KY3l3s5MBrazS7eb6opOUUUCupwjrXUtfu71hXOcNzzllvf/j1zZ9SKuibSKSIfBQnN0w==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/semver": {
+       "version": "7.7.4",
+       "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz",
+diff --git a/package.json b/package.json
+index 2c0b1770..4f43f4b4 100644
+--- a/package.json
++++ b/package.json
+@@ -68,6 +68,7 @@
+     "npm-run-all2": "^8.0.4",
+     "opener": "^1.5.2",
+     "pngjs": "^7.0.0",
++    "selectlet": "^0.1.0-alpha.0",
+     "semver": "^7.7.4",
+     "server-destroy": "^1.0.1",
+     "tinybench": "^6.0.0",
