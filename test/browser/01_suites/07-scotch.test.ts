@@ -1,4 +1,4 @@
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 const html = `
   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"

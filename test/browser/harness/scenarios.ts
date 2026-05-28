@@ -1,6 +1,6 @@
 import { test, chromium, expect, firefox, webkit } from '@playwright/test';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { assertNever, type Permutations, type DistributiveOmit } from '../../utils/type';
+import { assertNever, type Permutations, type DistributiveOmit } from '../../utils/util';
 import { installBrowserHelpers } from './browser';
 import type { EngineResult, EvalResult, EngineAndQueryResult, NamedQueryResult } from './browser';
 

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 const html = readFileSync('test/browser/fixtures/speed/selectors.html', 'utf8');
 

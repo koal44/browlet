@@ -1,4 +1,4 @@
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 import { expect } from '@playwright/test';
 
 runScenarios('prototype 1', 'normal', [

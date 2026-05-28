@@ -1,5 +1,4 @@
-// import { expect } from "@playwright/test";
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 runScenarios('xml', 'normal', [
   {

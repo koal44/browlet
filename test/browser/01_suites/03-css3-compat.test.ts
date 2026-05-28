@@ -1,4 +1,4 @@
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 runScenarios('css3 compat', 'normal',  [
   {

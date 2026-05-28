@@ -15,7 +15,7 @@ export default defineConfig({
         test: {
           name: 'jsdom',
           environment: 'node',
-          include: ['test/jsdom/**/*.test.ts', 'test/browser/02_regression/**/*.test.ts'],
+          include: ['test/jsdom/**/*.test.ts', 'test/browser/**/*.test.ts'],
           setupFiles: ['./test/jsdom/harness/setup.ts'],
         },
       },

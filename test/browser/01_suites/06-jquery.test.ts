@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import { runScenarios } from '../harness/scenarios';
+import { runScenarios } from '../../dispatch';
 
 const html = `
   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -559,17 +559,17 @@ runScenarios('jquery', 'normal', [
         const div = document.createElement('div');
         const api = selectlet;
         if (!api) throw new Error('selectlet not found');
-        let divs = api.select('p:first-child', undefined, null);
+        let ps = api.select('p:first-child', undefined, null);
 
-        for (let i = 0; i < divs.length; i++) {
-          divs[i].parentNode?.insertBefore(div.cloneNode(false), divs[i].nextSibling);
+        for (let i = 0; i < ps.length; i++) {
+          ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i].nextSibling);
         }
 
-        divs = api.select('p:first-child', undefined, null);
+        ps = api.select('p:first-child', undefined, null);
 
-        for (let i = 0; i < divs.length; i++) {
-          const inserted = divs[i].parentNode?.insertBefore(div.cloneNode(false), divs[i]);
-          const p = inserted?.nextSibling;
+        for (let i = 0; i < ps.length; i++) {
+          const insertedDiv = ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i]);
+          const p = insertedDiv?.nextSibling;
           p?.parentNode?.removeChild(p);
         }
       });
@@ -631,7 +631,7 @@ runScenarios('jquery', 'normal', [
         const anchor2 = document.getElementById('anchor2') as HTMLAnchorElement | null;
         if (anchor2) anchor2.href = '#2';
 
-        const inputs = selectlet?.select('form input') ?? [];
+        const inputs = [...document.querySelectorAll('form input')] as (HTMLInputElement | undefined)[];
         if (inputs[0]) (inputs[0] as HTMLInputElement & { test?: number; }).test = 0;
         if (inputs[1]) (inputs[1] as HTMLInputElement & { test?: number; }).test = 1;
       });
