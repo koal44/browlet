@@ -5,7 +5,7 @@ import {
 } from './patches';
 import type { JsdomInst } from './scenarios';
 
-type JsdomPage = {
+export type JsdomPage = {
   evaluate<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
   evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<Awaited<T>>;
   locator(selector: string): JsdomLocator;

@@ -3,7 +3,7 @@ import { expect } from 'vitest';
 import { assertNever } from '../../utils/util';
 import type { ContextHome, ContextRef, Expectation, Scenario, TestCase } from './scenarios';
 import {
-  cssEscape, isDocFrag, isDocument, isElement, isHtmlDoc, isIFrame, isTemplate,
+  cssEscape, isDocumentFragment, isDocument, isElement, isHtmlDoc, isIFrame, isTemplate,
 } from '../../utils/util';
 
 export type CaseInfo = {
@@ -33,13 +33,13 @@ export function runCase(document: Document, info: CaseInfo, stackTrace: boolean)
       const el = ctx.querySelector(c.first);
       nodes = el ? [el] : [];
     } else if ('byTag' in c) {
-      const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+      const base = isDocumentFragment(ctx) ? fragmentAsElementContext(ctx) : ctx;
       nodes = [...base.getElementsByTagName(c.byTag)];
     } else if ('byTagNs' in c) {
-      const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+      const base = isDocumentFragment(ctx) ? fragmentAsElementContext(ctx) : ctx;
       nodes = [...base.getElementsByTagNameNS(c.byTagNs.ns, c.byTagNs.local)];
     } else if ('byClass' in c) {
-      const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
+      const base = isDocumentFragment(ctx) ? fragmentAsElementContext(ctx) : ctx;
       nodes = [...base.getElementsByClassName(c.byClass)];
     } else if ('byId' in c) {
       const found = queryId(ctx, c.byId);
@@ -103,11 +103,11 @@ export function formatCaseHeader(info: CaseInfo): string {
 }
 
 function queryId(base: QueryContext, id: string): Element | null {
-  if (isDocument(base) || isDocFrag(base)) return base.getElementById(id);
+  if (isDocument(base) || isDocumentFragment(base)) return base.getElementById(id);
   return base.querySelector(`#${cssEscape(id)}`);
 }
 
-function resolveContext(doc: Document, ref?: ContextRef): QueryContext | null {
+export function resolveContext(doc: Document, ref?: ContextRef): QueryContext | null {
   if (!ref || ref.by === 'document') return doc;
 
   const base = 'within' in ref && ref.within ? resolveContext(doc, ref.within) : doc;
@@ -150,7 +150,7 @@ function resolveContext(doc: Document, ref?: ContextRef): QueryContext | null {
     return frag;
   }
 
-  return null;
+  assertNever(home);
 }
 
 function fragmentAsElementContext(ctx: DocumentFragment): Element {

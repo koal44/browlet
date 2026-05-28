@@ -34,7 +34,7 @@ export type Scenario = {
   name: string;
   status?: ScenarioStatus;
   markup: string;
-  markupMode?: 'html-body' | 'html-document' | 'xml-document';
+  markupMode?: MarkupMode;
   url?: string;
   browsers?: BrowserName[];
   engines?: Engine[];
@@ -44,6 +44,8 @@ export type Scenario = {
   setupPage?: (page: Page) => void | Promise<void>;
   cases?: TestCase[];
 };
+
+export type MarkupMode = 'html-body' | 'html-document' | 'xml-document';
 
 export type ScenarioStep = {
   setupPage?: (page: Page) => void | Promise<void>;

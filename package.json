@@ -50,6 +50,7 @@
     "test:jsdom:svonly": "cross-env HARNESS=jsdom ENGINE=sx-vendor ONLY=only vitest run --project=jsdom",
     "test:jsdom:nwonly": "cross-env HARNESS=jsdom ENGINE=nwsapi ONLY=only vitest run --project=jsdom",
     "test:jsdom:dsonly": "cross-env HARNESS=jsdom ENGINE=dom-selector ONLY=only vitest run --project=jsdom",
+    "test:jsdom:perf": "vitest run --project=jsdom-perf",
     "vendor": "tsx scripts/vendor.ts"
   },
   "devDependencies": {

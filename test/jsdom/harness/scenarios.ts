@@ -1,7 +1,7 @@
 import { describe, test } from 'vitest';
 import type {
   Scenario, ScenariosStatus, TestCase, RunScenariosOptions, ContextRef, ScenarioStep,
-  ContextHome, Expectation,
+  ContextHome, Expectation, MarkupMode,
 } from '../../browser/harness/scenarios';
 export type {
   Scenario, ScenariosStatus, TestCase, RunScenariosOptions, ContextRef, ScenarioStep,
@@ -125,7 +125,8 @@ function getScenarioSkipReason(s: Scenario): string | null {
   return null;
 }
 
-function initDom(jsdom: JsdomCtor, scenario: Scenario): JsdomInst {
+type ScenarioLike = { url?: string; markup: string; markupMode?: MarkupMode; };
+export function initDom(jsdom: JsdomCtor, scenario: ScenarioLike): JsdomInst {
   const opts = {
     runScripts: 'outside-only' as const,
     url: scenario.url ?? 'https://test.local/',

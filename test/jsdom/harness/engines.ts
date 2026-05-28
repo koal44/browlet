@@ -2,12 +2,12 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { JsdomMod } from './scenarios';
 
-export type JsdomEngineName = 'nwsapi' | 'dom-selector' | 'selectlet' | 'sx-vendor';
-
 const ENGINES_DIR = 'test/jsdom/engines';
 
-export function getJsdomVariant() {
-  const engine = getJsdomEngineName();
+export type JsdomEngineName = 'nwsapi' | 'dom-selector' | 'selectlet' | 'sx-vendor';
+
+export function getJsdomVariant(name?: JsdomEngineName) {
+  const engine = name ?? getJsdomEngineName();
   const requireFromEngine = requireForJsdomEngine(engine);
 
   const { JSDOM } = (
@@ -23,7 +23,7 @@ function getJsdomEngineName(): JsdomEngineName {
   const raw = process.env.ENGINE;
   if (!raw) {
     throw new Error(
-      `No jsdom engine specified. Set ENGINE to one of: 'nwsapi', 'dom-selector', 'selectlet', 'jsdom-selectlet'`,
+      `No jsdom engine specified. Set ENGINE to one of: 'nwsapi', 'dom-selector', 'selectlet', 'sx-vendor'`,
     );
   }
 

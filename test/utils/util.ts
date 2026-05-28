@@ -16,7 +16,7 @@ export function isDocument(x: unknown): x is Document {
   return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 9;
 }
 
-export function isDocFrag(x: unknown): x is DocumentFragment {
+export function isDocumentFragment(x: unknown): x is DocumentFragment {
   return typeof x === 'object' && x !== null && 'nodeType' in x && x.nodeType === 11;
 }
 

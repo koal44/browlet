@@ -16,7 +16,16 @@ export default defineConfig({
           name: 'jsdom',
           environment: 'node',
           include: ['test/jsdom/**/*.test.ts', 'test/browser/**/*.test.ts'],
+          exclude: ['test/jsdom/perf/**/*.test.ts'],
           setupFiles: ['./test/jsdom/harness/setup.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'jsdom-perf',
+          environment: 'node',
+          include: ['test/jsdom/perf/**/*.test.ts'],
+          testTimeout: 120_000,
         },
       },
     ],

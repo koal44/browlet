@@ -3,3 +3,8 @@ package-lock.json
 test-results/
 .last-run.json
 dist/
+
+/vendor/jsdom/
+/vendor/*/
+!/vendor/_patches/
+!/vendor/_patches/**
