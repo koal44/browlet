@@ -6,7 +6,7 @@ const htmlStandard = readFileSync('test/browser/fixtures/slick/template-standard
 runPerfScenarios('jsdom-perf', [
   {
     name: 'select template-standard selector corpus',
-    // status: 'only',
+    status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     quickIters: 100,
@@ -55,7 +55,7 @@ runPerfScenarios('jsdom-perf', [
 
   {
     name: 'lookup path comparison on template-standard',
-    status: 'only',
+    // status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     quickIters: 500,

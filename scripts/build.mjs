@@ -63,3 +63,23 @@ installGlobal(global, createSelectlet);
 fs.writeFileSync(outFile, banner + source + footer, 'utf8');
 fs.rmSync(tmpDir, { recursive: true, force: true });
 console.log(`built '${outFile}' v${version}!`);
+
+// Sync the built file to other locations that need it, such as test fixtures and the vendor directory.
+const syncTargets = [
+  {
+    path: 'test/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
+  },
+  {
+    path: 'vendor/jsdom/node_modules/selectlet/dist/selectlet.js',
+  },
+];
+
+for (const target of syncTargets) {
+  if (!fs.existsSync(target.path)) {
+    console.warn(`skipped '${target.path}'; file does not exist`);
+    continue;
+  }
+
+  fs.copyFileSync(outFile, target.path);
+  console.log(`updated '${target.path}'`);
+}

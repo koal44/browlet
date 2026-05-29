@@ -2,6 +2,8 @@ import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import {
   queryClosest, queryFirst, queryMatch, matchStrict, querySelect, type MatchResolver, type SelectResolver,
 } from './api/query';
+import { buildSeedsByClass, type SeedClassFn } from './candidates/seedsByClass';
+import { buildSeedsById, type SeedIdFn } from './candidates/seedsById';
 import type { MatchLambda, SelectLambda } from './compile/compile';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
@@ -40,6 +42,11 @@ export class Snapshot {
   config: SelectletConfig;
   pseudos: Record<string, CustomPseudoPredicate> = {};
 
+  // caps
+  seedsById: SeedIdFn;
+  seedsByClass: SeedClassFn;
+  readonly docDesignMode: (doc: Document) => string | undefined;
+
   // state for dynamic pseudo-classes
   hoverTarget: Element | null = null;
   activeTarget: Element | null = null;
@@ -73,10 +80,14 @@ export class Snapshot {
     },
   };
 
-  constructor(doc: Document, config: SelectletConfig) {
+  constructor(doc: Document, config: SelectletConfig, caps?: Partial<SelectletCaps>) {
     const root = doc.documentElement as Element | null;
 
     this.config = config;
+
+    this.seedsById = buildSeedsById(caps, this);
+    this.seedsByClass = buildSeedsByClass(caps, this);
+    this.docDesignMode = caps?.doc?.designMode ?? ((doc) => doc.designMode);
 
     this.doc = doc;
     this.from = doc;
@@ -259,7 +270,7 @@ export class Snapshot {
   // form / validity / media state
   isDisabled = isDisabled;
   isEnabled = isEnabled;
-  isReadWrite = isReadWrite;
+  isReadWrite = (e: Element) => isReadWrite(e, this);
   isFormStateElement = isFormStateElement;
   isPlaceholderShown = isPlaceholderShown;
   isDefault = isDefault;

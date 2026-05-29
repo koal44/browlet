@@ -1,7 +1,7 @@
 import { describeContext, describeElement } from './debug';
 import { Snapshot } from './snapshot';
 import { toNodeList } from './utils/collections';
-import { isElement, isIFrame, isNode, isText } from './utils/dom';
+import { isDocument, isElement, isNode, isText } from './utils/dom';
 
 export const DEFAULT_CONFIG = {
   // When enabled, methods that return multiple elements will return a
@@ -23,9 +23,14 @@ export type ElementList = Element[] | IndexedNodeList;
 
 export type InstallGlobal = (global: typeof globalThis, createSelectlet: unknown) => unknown;
 
-export function createSelectlet(global: typeof globalThis, installGlobal: InstallGlobal) {
-  const _doc = global.document;
-  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG });
+export function createSelectlet(
+  global: typeof globalThis,
+  // installGlobal: InstallGlobal,
+  doc: Document = global.document,
+  opts: SelectletOptions = {},
+) {
+  const _doc = isDocument(doc) ? doc : global.document;
+  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.caps);
 
   // handlers needed for the :focus pseudo-class; activeElement can fall back to body/html
   // even when no element actually matches :focus.
@@ -143,7 +148,7 @@ export function createSelectlet(global: typeof globalThis, installGlobal: Instal
     },
 
     // overrides QSA methods (only for browsers)
-    install(all?: boolean): void {
+    install(_all?: boolean): void {
       // ensure any previous overrides are removed before installing new ones
       api.uninstall();
 
@@ -195,21 +200,21 @@ export function createSelectlet(global: typeof globalThis, installGlobal: Instal
             return toNodeList(_snap.select(selector, this, null, true), _snap.doc);
           };
 
-      if (all) {
-        const fn = function(this: Document, e: Event) {
-          const evTarget = e.target;
-          if (!isNode(evTarget) || !isElement(evTarget) || !isIFrame(evTarget)) return;
+      // if (all) {
+      //   const fn = function(this: Document, e: Event) {
+      //     const evTarget = e.target;
+      //     if (!isNode(evTarget) || !isElement(evTarget) || !isIFrame(evTarget)) return;
 
-          const iife = `(${String(installGlobal)})(this, ${String(createSelectlet)});`;
-          const doc = evTarget.ownerDocument;
-          const script = doc.createElement('script');
-          script.textContent = iife + 'selectlet.install(true)';
-          const root = doc.documentElement as Element | null;
-          root?.removeChild(root.insertBefore(script, root.firstChild));
-        };
-        _doc.addEventListener('load', fn, true);
-        _qsaHooks.push({ type: 'load', listener: fn });
-      }
+      //     const iife = `(${String(installGlobal)})(this, ${String(createSelectlet)});`;
+      //     const doc = evTarget.ownerDocument;
+      //     const script = doc.createElement('script');
+      //     script.textContent = iife + 'selectlet.install(true)';
+      //     const root = doc.documentElement as Element | null;
+      //     root?.removeChild(root.insertBefore(script, root.firstChild));
+      //   };
+      //   _doc.addEventListener('load', fn, true);
+      //   _qsaHooks.push({ type: 'load', listener: fn });
+      // }
     },
 
     // restore QSA methods (only for browsers)

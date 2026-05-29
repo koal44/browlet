@@ -74,14 +74,13 @@ export function hasAttr(
   const expected = htmlName !== null && snap.isHtml && isHtmlElement(e) ? htmlName : name;
 
   if (anyNs) {
-    for (let i = 0; i < attrs.length; i++) {
-      if (attrs[i].localName === expected) return true;
+    for (const attr of attrs) {
+      if (attr.localName === expected) return true;
     }
     return false;
   }
 
-  for (let i = 0; i < attrs.length; i++) {
-    const attr = attrs[i];
+  for (const attr of attrs) {
     if (attr.localName === expected && attr.namespaceURI === null) return true;
   }
 
@@ -124,9 +123,7 @@ export function matchAttribute(
   const attrs = e.attributes;
 
   if (anyNs) {
-    for (let i = 0; i < attrs.length; i++) {
-      const attr = attrs[i];
-
+    for (const attr of attrs) {
       if (
         attr.localName === expectedName &&
         matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
@@ -138,9 +135,7 @@ export function matchAttribute(
     return false;
   }
 
-  for (let i = 0; i < attrs.length; i++) {
-    const attr = attrs[i];
-
+  for (const attr of attrs) {
     if (
       attr.localName === expectedName &&
       attr.namespaceURI === null &&
@@ -625,7 +620,7 @@ export function isAnyLink(e: Element): boolean {
 // :target
 export function isTarget(e: Element, snap: Snapshot): boolean {
   const hash = snap.doc.location.hash;
-  return hash.length > 1 && e.id === hash.slice(1) && !!(snap.doc.compareDocumentPosition(e) & 16);
+  return hash.length > 1 && getIdAttr(e) === hash.slice(1) && !!(snap.doc.compareDocumentPosition(e) & 16);
 }
 
 // :hover
@@ -683,11 +678,11 @@ export function isEnabled(e: Element): boolean {
 }
 
 function isDisabledFormStateElement(e: FormStateElement): boolean {
-  if (e.disabled) return true;
+  if (e.hasAttribute('disabled')) return true;
 
   if (isHtmlOption(e)) {
     const parent = e.parentElement;
-    return !!parent && isHtmlOptGroup(parent) && parent.disabled;
+    return !!parent && isHtmlOptGroup(parent) && parent.hasAttribute('disabled');
   }
 
   if (isHtmlOptGroup(e)) return false;
@@ -695,7 +690,7 @@ function isDisabledFormStateElement(e: FormStateElement): boolean {
   // Ancestor disabled fieldsets may disable form controls, unless the control is
   // inside that fieldset's first legend child.
   for (let n = e.parentElement; n; n = n.parentElement) {
-    if (!(n as HTMLFieldSetElement).disabled || !isHtmlFieldSet(n)) continue; // re-ordered for perf
+    if (!isHtmlFieldSet(n) || !n.hasAttribute('disabled')) continue;
 
     let exempt = false;
 
@@ -714,15 +709,15 @@ function isDisabledFormStateElement(e: FormStateElement): boolean {
 
 // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-read-only
 const READONLY_APPLIES_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
-export function isReadWrite(e: Element): boolean {
+export function isReadWrite(e: Element, snap: Snapshot): boolean {
   if (isHtmlInput(e)) {
-    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !e.readOnly && !isDisabled(e);
+    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !e.hasAttribute('readonly') && !isDisabled(e);
   }
-  if (isHtmlTextArea(e)) return !e.readOnly && !isDisabled(e);
-  return isEditingHostOrEditable(e);
+  if (isHtmlTextArea(e)) return !e.hasAttribute('readonly') && !isDisabled(e);
+  return isEditingHostOrEditable(e, snap);
 }
 
-function isEditingHostOrEditable(e: Element): boolean {
+function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
   if (!isHtmlSvgOrMathElement(e)) return false;
 
   // Editing host: HTML element with contenteditable in the true or plaintext-only state.
@@ -738,7 +733,7 @@ function isEditingHostOrEditable(e: Element): boolean {
 
   // Editing host: child HTML element of a Document whose designMode is enabled.
   // DesignMode: eligible descendants of a designMode document are editable unless blocked.
-  const designMode = e.ownerDocument.designMode as string | undefined;
+  const designMode = snap.docDesignMode(e.ownerDocument);
   if (designMode?.toLowerCase() === 'on') {
     for (let n: Element | null = e; n; n = n.parentElement) {
       if (n.getAttribute('contenteditable')?.toLowerCase() === 'false') {
@@ -785,32 +780,38 @@ export function isPlaceholderShown(e: Element): boolean {
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
 export function isDefault(e: Element): boolean {
-  if (isHtmlOption(e)) return e.defaultSelected;
+  if (isHtmlOption(e)) return e.hasAttribute('selected');
+
   const isInput = isHtmlInput(e);
-  if (isInput && (e.type === 'checkbox' || e.type === 'radio')) return e.defaultChecked;
+  if (isInput && (e.type === 'checkbox' || e.type === 'radio')) {
+    return e.hasAttribute('checked');
+  }
+
   const isButton = isHtmlButton(e);
   if (!isInput && !isButton) return false;
-  const isSubmit = (isInput && (e.type === 'submit' || e.type === 'image')) || (isButton && e.type === 'submit');
+
+  const isSubmit =
+    (isInput && (e.type === 'submit' || e.type === 'image')) ||
+    (isButton && e.type === 'submit');
+
   if (!isSubmit) return false;
 
   // find the first submit button, which may be in or outside the form
   const form = e.form;
   if (!form) return false;
 
-  let firstInput = null;
+  let firstInput: Element | null = null;
   const inputs = form.ownerDocument.getElementsByTagName('input');
-  for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i];
+  for (const input of inputs) {
     if (input.form === form && (input.type === 'submit' || input.type === 'image')) {
       firstInput = input;
       break;
     }
   }
 
-  let firstButton = null;
+  let firstButton: Element | null = null;
   const buttons = form.ownerDocument.getElementsByTagName('button');
-  for (let i = 0; i < buttons.length; i++) {
-    const button = buttons[i];
+  for (const button of buttons) {
     if (button.form === form && button.type === 'submit') {
       firstButton = button;
       break;
@@ -857,9 +858,7 @@ export function isIndeterminate(e: Element): boolean {
   const root = e.getRootNode();
   const inputs = e.ownerDocument.getElementsByTagName('input');
 
-  for (let i = 0; i < inputs.length; i++) {
-    const input = inputs[i];
-
+  for (const input of inputs) {
     // Same radio group: radio state, same form owner, same tree,
     // non-empty equal name attribute, and checkedness state is true.
     if (
@@ -884,15 +883,19 @@ const REQUIRED_INPUT_TYPES = new Set([
 ]);
 
 export function isRequired(e: Element): boolean {
-  if (isHtmlSelect(e) || isHtmlTextArea(e)) return e.required;
-  if (isHtmlInput(e)) return REQUIRED_INPUT_TYPES.has(e.type) && e.required;
+  if (isHtmlSelect(e) || isHtmlTextArea(e)) {
+    return e.hasAttribute('required');
+  }
+
+  if (isHtmlInput(e)) {
+    return REQUIRED_INPUT_TYPES.has(e.type) && e.hasAttribute('required');
+  }
+
   return false;
 }
 
 export function isOptional(e: Element): boolean {
-  if (isHtmlInput(e)) return !isRequired(e);
-  if (isHtmlSelect(e) || isHtmlTextArea(e)) return !e.required;
-  return false;
+  return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e);
 }
 
 export function isInvalid(e: Element): boolean {

@@ -35,7 +35,7 @@ function seedsByTagFragment(tag: string, context: DocumentFragment, snap: Snapsh
       ? root.getElementsByTagNameNS('*', tag)
       : seedsByTagNsUnion(tag, lowerTag, root);
 
-    for (let i = 0, l = found.length; i < l; ++i) nodes.push(found[i]);
+    for (const e of found) nodes[nodes.length] = e;
   }
 
   return nodes;
@@ -48,20 +48,16 @@ function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | El
   const exactNodes: Element[] = [];
   const lowerNodes: Element[] = [];
 
-  for (let i = 0, l = exact.length; i < l; ++i) {
-    const e = exact[i];
-
+  for (const e of exact) {
     // Exact-cased selector tag should keep XML/foreign localName matches,
     // but not weird XHTML-namespace mixed-case elements created via createElementNS.
-    if (!isHtmlElement(e)) exactNodes.push(e);
+    if (!isHtmlElement(e)) exactNodes[exactNodes.length] = e;
   }
 
-  for (let i = 0, l = lower.length; i < l; ++i) {
-    const e = lower[i];
-
+  for (const e of lower) {
     // Folded lowerTag side is only for HTML elements in an HTML document.
     // XML/imported XML lowercase localName matches are false positives for e.g. selector "Foo".
-    if (isHtmlElement(e)) lowerNodes.push(e);
+    if (isHtmlElement(e)) lowerNodes[lowerNodes.length] = e;
   }
 
   if (!exactNodes.length) return lowerNodes;

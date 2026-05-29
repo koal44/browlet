@@ -1,3 +1,20 @@
+diff --git a/lib/jsdom/living/attributes/NamedNodeMap-impl.js b/lib/jsdom/living/attributes/NamedNodeMap-impl.js
+index c049973a..795587b7 100644
+--- a/lib/jsdom/living/attributes/NamedNodeMap-impl.js
++++ b/lib/jsdom/living/attributes/NamedNodeMap-impl.js
+@@ -14,7 +14,11 @@ exports.implementation = class NamedNodeMapImpl {
+   get _attributeList() {
+     return this._element._attributeList;
+   }
+-
++  * [Symbol.iterator]() {
++    for (let i = 0; i < this._attributeList.length; ++i) {
++      yield this._attributeList[i];
++    }
++  }
+   get [idlUtils.supportedPropertyIndices]() {
+     return this._attributeList.keys();
+   }
 diff --git a/lib/jsdom/living/css/helpers/computed-style.js b/lib/jsdom/living/css/helpers/computed-style.js
 index 6ee5cd43..48ab1e9e 100644
 --- a/lib/jsdom/living/css/helpers/computed-style.js
@@ -101,8 +118,48 @@ index 6ee5cd43..48ab1e9e 100644
  }
  
  function replaceEmptyValueAndKeywords(
+diff --git a/lib/jsdom/living/helpers/by-id-cache.js b/lib/jsdom/living/helpers/by-id-cache.js
+index 24b397b5..763ab983 100644
+--- a/lib/jsdom/living/helpers/by-id-cache.js
++++ b/lib/jsdom/living/helpers/by-id-cache.js
+@@ -64,4 +64,35 @@ module.exports = class ByIdCache {
+     this._map.delete(id);
+     return null;
+   }
++
++  getAll(id) {
++    // Duplicate IDs still rescan the tree. A better cache would keep duplicate
++    // elements directly, but this avoids changing the normal getElementById() path.
++    const value = this._map.get(id);
++    if (!value) {
++      return [];
++    }
++
++    if (value.count === 1 && value.element) {
++      return [value.element];
++    }
++
++    const elements = [];
++    let i = 0;
++
++    for (const descendant of domSymbolTree.treeIterator(this._root)) {
++      if (descendant.nodeType === NODE_TYPE.ELEMENT_NODE && descendant.getAttributeNS(null, "id") === id) {
++        elements[i++] = descendant;
++      }
++    }
++
++    if (i === 0) {
++      this._map.delete(id);
++    } else {
++      value.element = elements[0];
++      value.count = i;
++    }
++
++    return elements;
++  }
+ };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..54faac9f 100644
+index b85d6b0e..07598cad 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -1,7 +1,7 @@
@@ -123,7 +180,7 @@ index b85d6b0e..54faac9f 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -216,19 +216,11 @@ class DocumentImpl extends NodeImpl {
+@@ -216,19 +216,21 @@ class DocumentImpl extends NodeImpl {
      this._styleCache = new WeakMap();
    }
  
@@ -133,10 +190,19 @@ index b85d6b0e..54faac9f 100644
 -      this.#domSelector = new DOMSelector(this._globalObject, this._ownerDocument, {
 -        domSymbolTree,
 -        idlUtils
--      });
 +  _getSelectorEngine() {
 +    if (!this.#selectorEngine) {
-+      this.#selectorEngine = createSelectlet(this._globalObject, this._ownerDocument);
++      this.#selectorEngine = createSelectlet(this._globalObject, this, {
++        caps: {
++          doc: {
++            cachedIds: (doc, id) => doc._byIdCache.getAll(id),
++            designMode: doc => {
++              const wrapper = idlUtils.wrapperForImpl(doc);
++              return wrapper && typeof wrapper.designMode === "string" ? wrapper.designMode : undefined;
++            }
++          }
++        }
+       });
      }
 -    return this.#domSelector;
 -  }
@@ -180,10 +246,19 @@ index 0ef1ce89..890243ca 100644
  
    webkitMatchesSelector(selectors) {
 diff --git a/lib/jsdom/living/nodes/ParentNode-impl.js b/lib/jsdom/living/nodes/ParentNode-impl.js
-index adfc851d..c0b67324 100644
+index adfc851d..3bbfe90d 100644
 --- a/lib/jsdom/living/nodes/ParentNode-impl.js
 +++ b/lib/jsdom/living/nodes/ParentNode-impl.js
-@@ -63,19 +63,19 @@ class ParentNodeImpl {
+@@ -6,6 +6,8 @@ const { domSymbolTree } = require("../helpers/internal-constants");
+ const NODE_TYPE = require("../node-type");
+ const { convertNodesIntoNode } = require("../node");
+ 
++// const idlUtils = require("../../../generated/idl/utils");
++
+ class ParentNodeImpl {
+   get children() {
+     if (!this._childrenList) {
+@@ -63,20 +65,28 @@ class ParentNodeImpl {
      if (shouldAlwaysSelectNothing(this)) {
        return null;
      }
@@ -191,6 +266,7 @@ index adfc851d..c0b67324 100644
 -    return domSelector.querySelector(selectors, this);
 +
 +    const engine = this._ownerDocument._getSelectorEngine();
++    // return engine.first(selectors, idlUtils.wrapperForImpl(this));
 +    return engine.first(selectors, this);
    }
  
@@ -207,8 +283,16 @@ index adfc851d..c0b67324 100644
 +    const engine = this._ownerDocument._getSelectorEngine();
 +    const nodes = engine.select(selectors, this);
      return NodeList.createImpl(this._globalObject, [], { nodes });
++
++
++    // const engine = this._ownerDocument._getSelectorEngine();
++    // const nodes = engine
++    //   .select(selectors, idlUtils.wrapperForImpl(this))
++    //   .map(idlUtils.implForWrapper);
++    // return NodeList.createImpl(this._globalObject, [], { nodes });
    }
  }
+ 
 diff --git a/package-lock.json b/package-lock.json
 index 5383c4ba..226911a6 100644
 --- a/package-lock.json

@@ -1,5 +1,3 @@
-import { seedsByClass } from '../candidates/seedsByClass';
-import { seedsById } from '../candidates/seedsById';
 import { seedsByTag } from '../candidates/seedsByTag';
 import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda } from '../compile/compile';
 import type { HashCache } from '../compile/runtime';
@@ -150,24 +148,43 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
     return {
       strategy: 'id',
       lookupQuery: query,
-      lookup: (ctx) => seedsById(query, ctx, snap),
+      lookup: (ctx) => snap.seedsById(query, ctx),
     };
   }
 
   if (last.classes?.length) {
-    const cls = last.classes[0];
-    const query = cssIdentUnescape(cls.raw);
+    // const cls = last.classes[0];
+    // const query = cssIdentUnescape(cls.raw);
 
-    cls.seed = true;
+    // cls.seed = true;
+    // complex.hasSeed = true;
+
+    // return {
+    //   strategy: 'class',
+    //   lookupQuery: query,
+    //   // classname lookup accepts whitespace queries that QSA class selectors do not.
+    //   lookup: /[\t\n\f\r ]/.test(query)
+    //     ? () => []
+    //     : (ctx) => snap.seedsByClass(query, ctx),
+    // };
+
+    const classes = last.classes.map((c) => cssIdentUnescape(c.raw));
+
+    if (classes.some((c) => /[\t\n\f\r ]/.test(c))) {
+      return {
+        strategy: 'class',
+        lookupQuery: classes[0] ?? '',
+        lookup: () => [],
+      };
+    }
+
+    for (const cls of last.classes) cls.seed = true;
     complex.hasSeed = true;
 
     return {
       strategy: 'class',
-      lookupQuery: query,
-      // classname lookup accepts whitespace queries that QSA class selectors do not.
-      lookup: /[\t\n\f\r ]/.test(query)
-        ? () => []
-        : (ctx) => seedsByClass(query, ctx, snap),
+      lookupQuery: classes.join('.'),
+      lookup: (ctx) => snap.seedsByClass(classes, ctx),
     };
   }
 

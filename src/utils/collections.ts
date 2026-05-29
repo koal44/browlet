@@ -73,6 +73,19 @@ export function collectionToArray(nodes: ElementCollection): Element[] {
   return list;
 }
 
+export function iterableToArray<T>(items: Iterable<T>): T[] {
+  if (Array.isArray(items)) return items as T[];
+
+  const list: T[] = [];
+  let i = 0;
+
+  for (const item of items) {
+    list[i++] = item;
+  }
+
+  return list;
+}
+
 // create a NodeList-like object from an element array
 let emptyNL: NodeListOf<ChildNode> | undefined;
 export function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList {

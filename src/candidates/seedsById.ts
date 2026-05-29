@@ -1,19 +1,55 @@
+import { iterableToArray } from '../utils/collections';
 import { isDocument, isElement, isNamedItemAnElement } from '../utils/dom';
 
-export function seedsById(id: string, context: QueryContext, snap: Snapshot): Element[] {
-  if (!id) return [];
+export type SeedIdFn = (id: string, context: QueryContext) => Element[];
 
-  if (isDocument(context)) {  // Document
-    if (snap.hasDocumentAll) return seedsById_All(id, context);
-    if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
-  } else if (isElement(context)) {  // Element
-    if (context.isConnected) {
-      if (snap.hasDocumentAll) return seedsById_All(id, context);
-      if (snap.config.MUTATE_IDS) return seedsById_MutateInEl(id, context);
+type IdsCap<R> = ((root: R, id: string) => Iterable<Element>) | null | undefined;
+
+export function buildSeedsById(caps: SelectletCaps | undefined, snap: Snapshot): SeedIdFn {
+  const docCap = caps?.doc?.cachedIds;
+  const fragCap = caps?.frag?.cachedIds;
+
+  return (id, context) => {
+    return isDocument(context) ? seedsByIdInDocument(id, context, snap, docCap)
+      : isElement(context) ? seedsByIdInElement(id, context, snap, docCap)
+      : seedsByIdInFragment(id, context, snap, fragCap);
+  };
+}
+
+function seedsByIdInDocument(id: string, context: Document, snap: Snapshot, cap: IdsCap<Document>): Element[] {
+  if (cap) return iterableToArray(cap(context, id));
+
+  if (snap.hasDocumentAll) return seedsById_All(id, context);
+  if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
+
+  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+}
+
+function seedsByIdInElement(id: string, context: Element, snap: Snapshot, docCap: IdsCap<Document>): Element[] {
+  if (context.isConnected) {
+    if (docCap) {
+      const nodes: Element[] = [];
+      let j = 0;
+
+      for (const e of docCap(context.ownerDocument, id)) {
+        if (e !== context && context.contains(e)) {
+          nodes[j++] = e;
+        }
+      }
+
+      return nodes;
     }
-  } else {  // DocumentFragment
-    if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
+
+    if (snap.hasDocumentAll) return seedsById_All(id, context);
+    if (snap.config.MUTATE_IDS) return seedsById_MutateInEl(id, context);
   }
+
+  return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+}
+
+function seedsByIdInFragment(id: string, context: DocumentFragment, snap: Snapshot, cap: IdsCap<DocumentFragment> ): Element[] {
+  if (cap) return iterableToArray(cap(context, id));
+  if (snap.config.MUTATE_IDS) return seedsById_MutateInDoc(id, context);
 
   return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
 }
