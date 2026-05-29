@@ -1,17 +1,8 @@
 diff --git a/lib/jsdom/living/css/helpers/computed-style.js b/lib/jsdom/living/css/helpers/computed-style.js
-index 6ee5cd43..1c47bdee 100644
+index 6ee5cd43..48ab1e9e 100644
 --- a/lib/jsdom/living/css/helpers/computed-style.js
 +++ b/lib/jsdom/living/css/helpers/computed-style.js
-@@ -14,6 +14,8 @@ const { isGlobalKeyword } = require("./css-values.js");
- const { absoluteFontSize } = require("./font-sizes.js");
- const { systemColors } = require("./system-colors.js");
- 
-+const idlUtils = require("../../../../generated/idl/utils");
-+
- const defaultStyleSheet = fs.readFileSync(
-   path.resolve(__dirname, "../../../browser/default-stylesheet.css"),
-   { encoding: "utf-8" }
-@@ -101,28 +103,25 @@ function handleSheet(sheetImpl, elementImpl, declaration, specificities) {
+@@ -101,28 +101,25 @@ function handleSheet(sheetImpl, elementImpl, declaration, specificities) {
  }
  
  function handleRule(ruleImpl, elementImpl, declaration, specificities) {
@@ -46,7 +37,7 @@ index 6ee5cd43..1c47bdee 100644
      if (specificities.has(property)) {
        if (Specificity.compare(specificity, specificities.get(property)) >= 0) {
          specificities.set(property, specificity);
-@@ -143,55 +142,23 @@ function handlePropertyForInlineStyle(property, declaration, style) {
+@@ -143,55 +140,18 @@ function handlePropertyForInlineStyle(property, declaration, style) {
    }
  }
  
@@ -90,11 +81,6 @@ index 6ee5cd43..1c47bdee 100644
 +  return true;
  }
  
-+// function matches(selectorText, elementImpl) {
-+//   const engine = elementImpl._ownerDocument._getSelectorEngine();
-+//   return engine.match(selectorText, idlUtils.wrapperForImpl(elementImpl));
-+// }
-+
  function matches(selectorText, elementImpl) {
 -  const domSelector = elementImpl._ownerDocument._getDOMSelector();
 -  const { ast, match, pseudoElement } = domSelector.check(selectorText, elementImpl);
@@ -107,7 +93,7 @@ index 6ee5cd43..1c47bdee 100644
 +  const engine = elementImpl._ownerDocument._getSelectorEngine();
 +
 +  try {
-+    return engine.match(selectorText, idlUtils.wrapperForImpl(elementImpl));
++    return engine.match(selectorText, elementImpl);
 +  } catch {
 +    return false;
    }
@@ -162,19 +148,10 @@ index b85d6b0e..54faac9f 100644
  
    _clearBaseURLCache() {
 diff --git a/lib/jsdom/living/nodes/Element-impl.js b/lib/jsdom/living/nodes/Element-impl.js
-index 0ef1ce89..af04be68 100644
+index 0ef1ce89..890243ca 100644
 --- a/lib/jsdom/living/nodes/Element-impl.js
 +++ b/lib/jsdom/living/nodes/Element-impl.js
-@@ -25,6 +25,8 @@ const Text = require("../../../generated/idl/Text");
- const { isValidHostElementName } = require("../helpers/shadow-dom");
- const { isValidCustomElementName, lookupCEDefinition } = require("../helpers/custom-elements");
- 
-+const idlUtils = require("../../../generated/idl/utils");
-+
- class ElementImpl extends NodeImpl {
-   constructor(globalObject, args, privateData) {
-     super(globalObject, args, privateData);
-@@ -99,9 +101,6 @@ class ElementImpl extends NodeImpl {
+@@ -99,9 +99,6 @@ class ElementImpl extends NodeImpl {
        this._classList.attrModified();
      }
  
@@ -184,40 +161,29 @@ index 0ef1ce89..af04be68 100644
      this._attrModifiedSlotableMixin(name, value, oldValue);
    }
  
-@@ -530,13 +529,15 @@ class ElementImpl extends NodeImpl {
+@@ -530,13 +527,13 @@ class ElementImpl extends NodeImpl {
    }
  
    closest(selectors) {
 -    const domSelector = this._ownerDocument._getDOMSelector();
 -    return domSelector.closest(selectors, this);
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    const node = engine.closest(selectors, idlUtils.wrapperForImpl(this));
-+
-+    return node ? idlUtils.implForWrapper(node) : null;
++    return engine.closest(selectors, this);
    }
  
    matches(selectors) {
 -    const domSelector = this._ownerDocument._getDOMSelector();
 -    return domSelector.matches(selectors, this);
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    return engine.match(selectors, idlUtils.wrapperForImpl(this));
++    return engine.match(selectors, this);
    }
  
    webkitMatchesSelector(selectors) {
 diff --git a/lib/jsdom/living/nodes/ParentNode-impl.js b/lib/jsdom/living/nodes/ParentNode-impl.js
-index adfc851d..cc386a00 100644
+index adfc851d..c0b67324 100644
 --- a/lib/jsdom/living/nodes/ParentNode-impl.js
 +++ b/lib/jsdom/living/nodes/ParentNode-impl.js
-@@ -6,6 +6,8 @@ const { domSymbolTree } = require("../helpers/internal-constants");
- const NODE_TYPE = require("../node-type");
- const { convertNodesIntoNode } = require("../node");
- 
-+const idlUtils = require("../../../generated/idl/utils");
-+
- class ParentNodeImpl {
-   get children() {
-     if (!this._childrenList) {
-@@ -63,19 +65,25 @@ class ParentNodeImpl {
+@@ -63,19 +63,19 @@ class ParentNodeImpl {
      if (shouldAlwaysSelectNothing(this)) {
        return null;
      }
@@ -225,27 +191,21 @@ index adfc851d..cc386a00 100644
 -    return domSelector.querySelector(selectors, this);
 +
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    const node = engine.first(selectors, idlUtils.wrapperForImpl(this));
-+
-+    return node ? idlUtils.implForWrapper(node) : null;
++    return engine.first(selectors, this);
    }
  
    // WARNING FOR INTERNAL USERS:
 -  // This returns a NodeList impl, not a NodeList wrapper. NodeList impls are not iterable and do not have indexed
 -  // properties. To iterate over them, use `for (let i = 0; i < nodeListImpl.length; ++i) { nodeListImpl.item(i) }`.
-+  // This returns a NodeList, not an array.
++  // This returns a NodeList impl, not an array or wrapper.
    querySelectorAll(selectors) {
      if (shouldAlwaysSelectNothing(this)) {
        return NodeList.createImpl(this._globalObject, [], { nodes: [] });
      }
 -    const domSelector = this._ownerDocument._getDOMSelector();
 -    const nodes = domSelector.querySelectorAll(selectors, this);
-+
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    const nodes = engine
-+      .select(selectors, idlUtils.wrapperForImpl(this))
-+      .map(idlUtils.implForWrapper);
-+
++    const nodes = engine.select(selectors, this);
      return NodeList.createImpl(this._globalObject, [], { nodes });
    }
  }

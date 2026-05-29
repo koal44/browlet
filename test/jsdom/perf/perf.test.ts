@@ -6,7 +6,7 @@ const htmlStandard = readFileSync('test/browser/fixtures/slick/template-standard
 runPerfScenarios('jsdom-perf', [
   {
     name: 'select template-standard selector corpus',
-    status: 'only',
+    // status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     quickIters: 100,
@@ -50,6 +50,48 @@ runPerfScenarios('jsdom-perf', [
       { op: 'select', selector: 'h1#title, div.subtoc > h2, p.copyright', ref: { by: 'document' }, iters: 1_000 },
       { op: 'select', selector: 'td.pattern, td.meaning, td.origin', ref: { by: 'document' }, iters: 1_000 },
       { op: 'select', selector: 'div > b.flatOut.a1, div > i.flatOut.a2, div > b.flatOut.a3', ref: { by: 'document' }, iters: 1_000 },
+    ],
+  },
+
+  {
+    name: 'lookup path comparison on template-standard',
+    status: 'only',
+    markup: htmlStandard,
+    markupMode: 'html-document',
+    quickIters: 500,
+    benches: [
+      // ID: separates cached single lookup from querySelector/querySelectorAll semantics.
+      { op: 'byId', id: 'title', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '#title', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: '#title', ref: { by: 'document' }, iters: 2_000 },
+
+      { op: 'first', selector: 'h1#title', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: 'h1#title', ref: { by: 'document' }, iters: 2_000 },
+
+      // Tag: likely memoized collection path.
+      { op: 'byTag', tag: 'h1', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: 'h1', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: 'h1', ref: { by: 'document' }, iters: 2_000 },
+
+      { op: 'byTag', tag: 'a', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: 'a', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: 'a', ref: { by: 'document' }, iters: 2_000 },
+
+      // Class: likely memoized collection path.
+      { op: 'byClass', cls: 'vcard', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '.vcard', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: '.vcard', ref: { by: 'document' }, iters: 2_000 },
+
+      { op: 'byClass', cls: 'tocline2', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '.tocline2', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: '.tocline2', ref: { by: 'document' }, iters: 2_000 },
+
+      // Attribute-only: no obvious native cached seed; useful contrast against ID/class/tag.
+      { op: 'first', selector: '[name="attribute-substrings"]', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: '[name="attribute-substrings"]', ref: { by: 'document' }, iters: 2_000 },
+
+      { op: 'first', selector: '[href$=".html"]', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'select', selector: '[href$=".html"]', ref: { by: 'document' }, iters: 2_000 },
     ],
   },
 

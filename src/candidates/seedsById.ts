@@ -150,7 +150,7 @@ function seedsById_TreeWalk(id: string, context: QueryContext): Element[] {
     doc = context.ownerDocument;
   }
 
-  const walker = doc.createTreeWalker(root, SHOW_ELEMENT);
+  const walker = doc.createTreeWalker(root, SHOW_ELEMENT, null);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const e = node as Element; // TypeScript doesn't know the filter is effectively applied.
     if (sameId(e, id)) nodes.push(e);
