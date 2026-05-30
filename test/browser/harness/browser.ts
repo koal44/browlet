@@ -302,7 +302,7 @@ export function installBrowserHelpers(): void {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
             const el = ctx;
-            return sxlt.match(query, el) ? [el] : [];
+            return sxlt.matches(query, el) ? [el] : [];
           };
         }
         break;

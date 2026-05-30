@@ -292,8 +292,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     const sxlt = selectlet;
     if (!sxlt) throw new Error('selectlet is not available');
     if (c.debug) {
-      sxlt.setDebug(true);
-      sxlt.clearDebug();
+      sxlt.snapshot.setDebug(true);
+      sxlt.snapshot.clearDebug();
     }
 
     const query = pw.getCaseQuery(c);
@@ -344,8 +344,8 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
     }
 
     if (c.debug) {
-      const debugText = sxlt.printDebug();
-      sxlt.setDebug(false);
+      const debugText = sxlt.snapshot.printDebug();
+      sxlt.snapshot.setDebug(false);
       throw new Error(debugText);
     }
 

@@ -15,8 +15,8 @@ import {
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
 } from './compile/runtime';
-import type { DebugMatch, DebugSelect } from './debug';
-import type { CustomPseudoPredicate, SelectletConfig } from './selectlet';
+import { describeContext, describeElement, type DebugMatch, type DebugSelect } from './debug';
+import type { CustomPseudoPredicate, QueryContext, SelectCallback, SelectletCaps, SelectletConfig } from './selectlet';
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 
@@ -46,6 +46,7 @@ export class Snapshot {
   seedsById: SeedIdFn;
   seedsByClass: SeedClassFn;
   readonly docDesignMode: (doc: Document) => string | undefined;
+  checkCacheWatermark: () => void;
 
   // state for dynamic pseudo-classes
   hoverTarget: Element | null = null;
@@ -57,7 +58,6 @@ export class Snapshot {
   selectLambdasNoCb = new Map<string, SelectLambda>();
   selectLambdasWithCb = new Map<string, SelectLambda>();
   strictMatchResolvers = new Map<string, MatchResolver>();
-  forgivingMatchResolvers = new Map<string, MatchResolver>();
   selectResolvers = new Map<string, SelectResolver>();
   cachedRegex_S = new Map<string, RegExp>();
   cachedRegex_I = new Map<string, RegExp>();
@@ -65,6 +65,24 @@ export class Snapshot {
   classRegex_I = new Map<string, RegExp>();
   tokenRegex_S = new Map<string, RegExp>();
   tokenRegex_I = new Map<string, RegExp>();
+
+  cacheSize = 0;
+
+  clearCache(): void {
+    this.cacheSize = 0;
+
+    this.matchLambdas.clear();
+    this.selectLambdasNoCb.clear();
+    this.selectLambdasWithCb.clear();
+    this.strictMatchResolvers.clear();
+    this.selectResolvers.clear();
+    this.cachedRegex_S.clear();
+    this.cachedRegex_I.clear();
+    this.classRegex_S.clear();
+    this.classRegex_I.clear();
+    this.tokenRegex_S.clear();
+    this.tokenRegex_I.clear();
+  }
 
   // perf testing hooks
   probe = {
@@ -99,19 +117,11 @@ export class Snapshot {
     this.namespace = root?.namespaceURI ?? null;
     this.hasDocumentAll = 'all' in doc;
     this.hasTreeWalker = 'createTreeWalker' in doc;
-  }
 
-  clearCache(): void {
-    this.matchLambdas.clear();
-    this.selectLambdasNoCb.clear();
-    this.selectLambdasWithCb.clear();
-    this.strictMatchResolvers.clear();
-    this.forgivingMatchResolvers.clear();
-    this.selectResolvers.clear();
-    this.cachedRegex_S.clear();
-    this.cachedRegex_I.clear();
-    this.classRegex_S.clear();
-    this.classRegex_I.clear();
+    const watermark = config.CACHE_WATERMARK;
+    this.checkCacheWatermark = watermark <= 0 || !Number.isFinite(watermark)
+      ? () => {}
+      : () => { if (this.cacheSize > watermark) this.clearCache(); };
   }
 
   update(ctx: QueryContext, updateScope = false): void {
@@ -146,6 +156,7 @@ export class Snapshot {
 
     regex = new RegExp(source, ignoreCase ? 'i' : '');
     cache.set(source, regex);
+    this.cacheSize++;
     return regex;
   }
 
@@ -157,6 +168,7 @@ export class Snapshot {
 
     regex = new RegExp(`(^|[\\t\\n\\f\\r ])${escapeRegExp(cls)}([\\t\\n\\f\\r ]|$)`, this.isQuirksMode ? 'i' : '');
     cache.set(cls, regex);
+    this.cacheSize++;
     return regex;
   }
 
@@ -172,6 +184,7 @@ export class Snapshot {
     );
 
     cache.set(token, regex);
+    this.cacheSize++;
     return regex;
   }
 
@@ -196,15 +209,15 @@ export class Snapshot {
     return queryFirst(sel, context ?? this.doc, this, isApiEntry);
   }
 
-  match(sel: string, context: Element, h: HashCache | null = null) {
+  matches(sel: string, context: Element, h: HashCache | null = null) {
     return queryMatch(sel, context, this, h);
   }
 
-  select(sel: string, context?: QueryContext, cb?: QueryCallback | null, isApiEntry?: boolean) {
+  select(sel: string, context?: QueryContext, cb?: SelectCallback | null, isApiEntry?: boolean) {
     return querySelect(sel, context ?? this.doc, cb ?? null, this, isApiEntry);
   }
 
-  ancestor(sel: string, context: Element) {
+  closest(sel: string, context: Element) {
     return queryClosest(sel, context, this);
   }
 
@@ -286,4 +299,33 @@ export class Snapshot {
   isPaused = isPaused;
   isSeeking = isSeeking;
   isMuted = isMuted;
+
+  // debugging utilities used in testing and development
+  setDebug(enabled: boolean): void {
+    this.isDebug = enabled;
+    if (enabled) this.clearDebug();
+  }
+
+  clearDebug(): void {
+    this.debugSelect = undefined;
+    this.debugMatch = undefined;
+  }
+
+  printDebug(): string {
+    const docDesc = describeContext(this.doc);
+    const fromDesc = describeContext(this.from);
+    return JSON.stringify({
+      snapshot: {
+        isHtml: this.isHtml,
+        isQuirksMode: this.isQuirksMode,
+        namespace: this.namespace,
+        doc: docDesc,
+        from: this.from === this.doc ? '(same as doc)' : fromDesc,
+        scopeEl: this.scopeEl ? describeElement(this.scopeEl) : null,
+        root: { summary: describeElement(this.root) },
+      },
+      debugStack: this.debugStack,
+    }, null, 2);
+  }
+
 }

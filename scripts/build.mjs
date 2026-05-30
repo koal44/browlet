@@ -64,8 +64,6 @@ await moduleBundle.write({
 await moduleBundle.close();
 
 // Browser IIFE from default-export entry.
-// Expected global shape:
-//   window.createSelectlet(document)
 const browserBundle = await rollup({
   input: browserInputFile,
   plugins,

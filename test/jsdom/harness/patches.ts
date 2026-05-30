@@ -12,7 +12,7 @@ type SelectletShimApi = {
     callback?: ((el: Element) => unknown) | null
   ) => Element[];
   first?: (selector: string, context?: QueryContext | null) => Element | null;
-  match?: (selector: string, element: Element) => boolean;
+  matches?: (selector: string, element: Element) => boolean;
   snapshot?: SelectletShimSnapshot;
 };
 
@@ -68,7 +68,7 @@ export function installSelectletShim(win: SelectletShimWindow): void {
     return (context ?? win.document).querySelector(selector);
   };
 
-  api.match ??= (selector, element) => {
+  api.matches ??= (selector, element) => {
     return element.matches(selector);
   };
 }

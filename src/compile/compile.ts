@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-implied-eval */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import type { ComplexSelector, SelectorList } from '../parser/parser';
+import type { SelectCallback } from '../selectlet';
 import { buildStrictComplexMatcher, buildStrictMatcher } from './build';
 import type { HashCache } from './runtime';
 
@@ -24,12 +25,13 @@ export function compileMatchList(list: SelectorList, selectorKey: string, snap: 
 
   const lambda = Function('s', f)(snap) as MatchLambda;
   snap.matchLambdas.set(selectorKey, lambda);
+  snap.cacheSize++;
   return lambda;
 }
 
 export type SelectLambda = (
   candidates: Element[],
-  callback: QueryCallback | null,
+  callback: SelectCallback | null,
   context: QueryContext,
   results: Element[],
   h: HashCache,
@@ -68,6 +70,7 @@ export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, s
 
   if (!complex.hasSeed) {
     cache.set(cacheKey, lambda);
+    snap.cacheSize++;
   }
 
   return lambda;

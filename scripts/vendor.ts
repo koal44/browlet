@@ -113,17 +113,30 @@ function prepareJsdomVendor(dir: string): void {
 }
 
 function syncSelectletIntoJsdom(jsdomDir: string): void {
-  const src = resolve('dist/selectlet.js');
-  const dest = resolve(jsdomDir, 'node_modules/selectlet/dist/selectlet.js');
+  const destDir = resolve(jsdomDir, 'node_modules/selectlet/dist');
 
-  if (!existsSync(src)) {
-    throw new Error(`[vendor] missing ${src}; run selectlet build first`);
+  if (!existsSync(destDir)) {
+    throw new Error(`[vendor] missing ${destDir}; npm ci probably did not install selectlet`);
   }
 
-  if (!existsSync(dest)) {
-    throw new Error(`[vendor] missing ${dest}; npm ci probably did not install selectlet`);
-  }
+  for (const file of [
+    'index.mjs',
+    'index.cjs',
+    'index.d.ts',
+    'selectlet.js',
+  ]) {
+    const src = resolve('dist', file);
+    const dest = resolve(destDir, file);
 
-  copyFileSync(src, dest);
-  console.log(`[vendor] copied ${src} -> ${dest}`);
+    if (!existsSync(src)) {
+      throw new Error(`[vendor] missing ${src}; run selectlet build first`);
+    }
+
+    if (!existsSync(dest)) {
+      throw new Error(`[vendor] missing ${dest}; selectlet package layout changed`);
+    }
+
+    copyFileSync(src, dest);
+    console.log(`[vendor] copied ${src} -> ${dest}`);
+  }
 }

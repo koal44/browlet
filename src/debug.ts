@@ -1,13 +1,14 @@
 import type { CandidatePlan, MatchResolver, SelectArm } from './api/query';
 import type { SelectLambda } from './compile/compile';
 import type { ComplexSelector } from './parser/parser';
+import type { QueryContext, SelectCallback } from './selectlet';
 import { isDocument, isDocumentFragment, isElement } from './utils/dom';
 
 export type DebugSelect = {
   kind: 'select';
   isApiEntry: boolean;
   selector: string;
-  callback?: QueryCallback | null;
+  callback?: SelectCallback | null;
   context?: QueryContextDescription;
   build: {
     selector: string;
@@ -123,7 +124,7 @@ export function updateDebugMatch(snap: Snapshot, resolver: MatchResolver, result
   }
 }
 
-export function initDebugSelect(snap: Snapshot, sel: string, cb: QueryCallback | null, ctx: QueryContext, isApiEntry: boolean): void {
+export function initDebugSelect(snap: Snapshot, sel: string, cb: SelectCallback | null, ctx: QueryContext, isApiEntry: boolean): void {
   if (isApiEntry) snap.debugStack.length = 0;
   const dbgSelect: DebugSelect = {
     kind: 'select',

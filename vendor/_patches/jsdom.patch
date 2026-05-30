@@ -16,7 +16,7 @@ index c049973a..795587b7 100644
      return this._attributeList.keys();
    }
 diff --git a/lib/jsdom/living/css/helpers/computed-style.js b/lib/jsdom/living/css/helpers/computed-style.js
-index 6ee5cd43..48ab1e9e 100644
+index 6ee5cd43..4c9fd3b3 100644
 --- a/lib/jsdom/living/css/helpers/computed-style.js
 +++ b/lib/jsdom/living/css/helpers/computed-style.js
 @@ -101,28 +101,25 @@ function handleSheet(sheetImpl, elementImpl, declaration, specificities) {
@@ -110,7 +110,7 @@ index 6ee5cd43..48ab1e9e 100644
 +  const engine = elementImpl._ownerDocument._getSelectorEngine();
 +
 +  try {
-+    return engine.match(selectorText, elementImpl);
++    return engine.matches(selectorText, elementImpl);
 +  } catch {
 +    return false;
    }
@@ -215,7 +215,7 @@ index b85d6b0e..9d478abf 100644
  
    _clearBaseURLCache() {
 diff --git a/lib/jsdom/living/nodes/Element-impl.js b/lib/jsdom/living/nodes/Element-impl.js
-index 0ef1ce89..890243ca 100644
+index 0ef1ce89..76e7d644 100644
 --- a/lib/jsdom/living/nodes/Element-impl.js
 +++ b/lib/jsdom/living/nodes/Element-impl.js
 @@ -99,9 +99,6 @@ class ElementImpl extends NodeImpl {
@@ -242,7 +242,7 @@ index 0ef1ce89..890243ca 100644
 -    const domSelector = this._ownerDocument._getDOMSelector();
 -    return domSelector.matches(selectors, this);
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    return engine.match(selectors, this);
++    return engine.matches(selectors, this);
    }
  
    webkitMatchesSelector(selectors) {

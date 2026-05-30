@@ -1,3 +1,4 @@
+import type { SelectletCaps } from '../selectlet';
 import { iterableToArray } from '../utils/collections';
 import { isDocument, isElement, isNamedItemAnElement } from '../utils/dom';
 

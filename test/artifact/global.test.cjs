@@ -30,6 +30,6 @@ if (typeof context.createSelectlet !== "function") {
 const sxlt = context.createSelectlet(document);
 
 if (typeof sxlt.select !== "function") throw new Error("Expected sxlt.select");
-if (typeof sxlt.match !== "function") throw new Error("Expected sxlt.match");
+if (typeof sxlt.matches !== "function") throw new Error("Expected sxlt.matches");
 
 console.log("global artifact passed");

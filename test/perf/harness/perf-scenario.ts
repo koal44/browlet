@@ -94,13 +94,12 @@ type NWDom = {
   byClass(cls: string, ctx: QueryContext): Element[];
   byTag(tag: string, ctx: QueryContext): Element[];
 
-  clearCache?: () => void;
-  setDebug?: (enabled: boolean) => void;
-  clearDebug?: () => void;
-  printDebug?: () => string;
-
   snapshot?: {
     probe?: { reset?: () => void; } & Record<string, unknown>;
+    clearCache?: () => void;
+    setDebug?: (enabled: boolean) => void;
+    clearDebug?: () => void;
+    printDebug?: () => string;
   };
 }
 
@@ -432,7 +431,7 @@ async function installPerfHelpers(page: Page) {
       if (engineName !== 'native' && benches.some((b) => b.cold)) {
         const api = getEngineApi(engineName);
 
-        const clearCacheFn = api?.clearCache;
+        const clearCacheFn = api?.snapshot?.clearCache;
         if (typeof clearCacheFn !== 'function') {
           throw new Error(`${engineName}.clearCache is not available`);
         }
@@ -528,7 +527,7 @@ async function installPerfHelpers(page: Page) {
         if (!sxlt) throw new Error('selectlet is not available');
 
         return {
-          match: (s, e) => sxlt.match(s, e),
+          match: (s, e) => sxlt.matches(s, e),
           select: (s, c) => [...sxlt.select(s, c)],
           first: (s, c) => sxlt.first(s, c),
           closest: (s, e) => sxlt.closest(s, e),
@@ -705,9 +704,9 @@ async function installPerfHelpers(page: Page) {
     function debugBench(engineName: EngineName, label: string, fn: () => unknown): never {
       const api = getEngineApi(engineName);
 
-      const setDebug = api?.setDebug;
-      const clearDebug = api?.clearDebug;
-      const printDebug = api?.printDebug;
+      const setDebug = api?.snapshot?.setDebug;
+      const clearDebug = api?.snapshot?.clearDebug;
+      const printDebug = api?.snapshot?.printDebug;
       if (!setDebug || !clearDebug || !printDebug) {
         throw new Error(`${engineName} debug is not available`);
       }
@@ -726,10 +725,10 @@ async function installPerfHelpers(page: Page) {
     function supportsDebug(engineName: EngineName): boolean {
       const api = getEngineApi(engineName);
       return !!(
-        api &&
-        typeof api.setDebug === 'function' &&
-        typeof api.clearDebug === 'function' &&
-        typeof api.printDebug === 'function'
+        api && api.snapshot &&
+        typeof api.snapshot.setDebug === 'function' &&
+        typeof api.snapshot.clearDebug === 'function' &&
+        typeof api.snapshot.printDebug === 'function'
       );
     }
 

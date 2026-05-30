@@ -3,6 +3,7 @@ import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLa
 import type { HashCache } from '../compile/runtime';
 import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from '../debug';
 import { parseSelectorList, type ComplexSelector, type SelectorList } from '../parser/parser';
+import type { SelectCallback } from '../selectlet';
 import { sortUniqueByDocPosition } from '../utils/collections';
 import { cssIdentUnescape } from '../utils/css';
 
@@ -44,6 +45,7 @@ function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolve
 
     resolver = buildStrictMatchResolver(parsed, selectors, snap);
     snap.strictMatchResolvers.set(selectors, resolver);
+    snap.cacheSize++;
   }
 
   return resolver;
@@ -51,6 +53,7 @@ function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolve
 
 function buildStrictMatchResolver(list: SelectorList, selectors: string, snap: Snapshot): MatchResolver {
   snap.probe.matBuild++;
+  snap.checkCacheWatermark();
 
   const lambda = compileMatchList(list, selectors, snap);
 
@@ -66,7 +69,7 @@ function buildStrictMatchResolver(list: SelectorList, selectors: string, snap: S
 }
 
 // equivalent of w3c 'querySelectorAll' method
-export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
+export function querySelect(sel: string, ctx: QueryContext, cb: SelectCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
   snap.probe.select++;
   const isDebug = snap.isDebug;
   if (isDebug) initDebugSelect(snap, sel, cb, ctx, isApiEntry);
@@ -76,6 +79,7 @@ export function querySelect(sel: string, ctx: QueryContext, cb: QueryCallback | 
     const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
     resolver = buildSelectResolver(parsed, !!cb, snap);
     snap.selectResolvers.set(sel, resolver);
+    snap.cacheSize++;
   }
 
   snap.update(ctx, isApiEntry && resolver.usesScope);
@@ -103,6 +107,7 @@ export type SelectResolver = { arms: SelectArm[]; hasCb: boolean; usesScope: boo
 export type SelectArm = { plan: CandidatePlan; matcher: SelectLambda; };
 
 function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot): SelectResolver {
+  snap.checkCacheWatermark();
   const arms: SelectArm[] = [];
   snap.probe.selBuild++;
 
@@ -153,21 +158,6 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
   }
 
   if (last.classes?.length) {
-    // const cls = last.classes[0];
-    // const query = cssIdentUnescape(cls.raw);
-
-    // cls.seed = true;
-    // complex.hasSeed = true;
-
-    // return {
-    //   strategy: 'class',
-    //   lookupQuery: query,
-    //   // classname lookup accepts whitespace queries that QSA class selectors do not.
-    //   lookup: /[\t\n\f\r ]/.test(query)
-    //     ? () => []
-    //     : (ctx) => snap.seedsByClass(query, ctx),
-    // };
-
     const classes = last.classes.map((c) => cssIdentUnescape(c.raw));
 
     if (classes.some((c) => /[\t\n\f\r ]/.test(c))) {
@@ -212,7 +202,7 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
   };
 }
 
-const stopAfterFirst: QueryCallback = () => false;
+const stopAfterFirst: SelectCallback = () => false;
 
 // equivalent of w3c 'querySelector' method
 export function queryFirst(selectors: string, context: QueryContext, snap: Snapshot, isApiEntry = true): Element | null {
