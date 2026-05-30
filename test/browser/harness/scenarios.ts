@@ -426,7 +426,7 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
 async function ensureHarnessInstalled(page: Page): Promise<void> {
   const state = await page.evaluate(() => ({
     hasHelpers: !!window.__pwHelpers,
-    hasSxlt: !!selectlet,
+    hasSxlt: !!window.selectlet && typeof window.selectlet.select === 'function',
   })).catch(() => ({ hasHelpers: false, hasSxlt: false }));
 
   if (!state.hasHelpers) {
@@ -437,6 +437,10 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
     const script = await page.addScriptTag({ path: 'dist/selectlet.js' });
     await script.evaluate((el) => {
       (el as HTMLScriptElement).id = 'selectlet-bootstrap' satisfies SelectletId;
+    });
+
+    await page.evaluate(() => {
+      window.selectlet = window.createSelectlet(document);
     });
   }
 }

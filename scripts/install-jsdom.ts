@@ -23,11 +23,52 @@ const engines: EngineConfig[] = [
     expectedEngineVersion: '2.2.23',
     postInstall(dir) {
       copyFileSync(
-        'dist/selectlet.js',
+        'dist/index.cjs',
         `${dir}/node_modules/nwsapi/src/nwsapi.js`,
       );
-
-      console.log('[selectlet] copied dist/nwsapi.js into jsdom nwsapi backend');
+      writeFileSync(
+        `${dir}/node_modules/jsdom/lib/jsdom/living/helpers/selectors.js`,
+        [
+          '"use strict";',
+          '',
+          'const { createSelectlet } = require("nwsapi");',
+          '',
+          'const idlUtils = require("../generated/utils");',
+          '',
+          'function initSelectlet(node) {',
+          '  const { _ownerDocument } = node;',
+          '',
+          '  return createSelectlet(idlUtils.wrapperForImpl(_ownerDocument));',
+          '}',
+          '',
+          'exports.matchesDontThrow = (elImpl, selector) => {',
+          '  const document = elImpl._ownerDocument;',
+          '',
+          '  if (!document._selectletDontThrow) {',
+          '    document._selectletDontThrow = initSelectlet(elImpl);',
+          '  }',
+          '',
+          '  try {',
+          '    return document._selectletDontThrow.match(selector, idlUtils.wrapperForImpl(elImpl));',
+          '  } catch {',
+          '    return false;',
+          '  }',
+          '};',
+          '',
+          'exports.addNwsapi = parentNode => {',
+          '  const document = parentNode._ownerDocument;',
+          '',
+          '  if (!document._selectlet) {',
+          '    document._selectlet = initSelectlet(parentNode);',
+          '  }',
+          '',
+          '  return document._selectlet;',
+          '};',
+          '',
+        ].join('\n'),
+      );
+      console.log('[selectlet] copied dist/index.cjs into jsdom nwsapi backend');
+      console.log('[selectlet] patched jsdom selectors helper for selectlet');
     },
   },
 ];

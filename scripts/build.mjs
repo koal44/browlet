@@ -1,85 +1,153 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { rollup } from 'rollup';
 
+const distDir = 'dist';
 const tmpDir = 'dist/.tmp';
-const tscOutFile = 'dist/.tmp/selectlet.js';
-const bundleFile = 'dist/.tmp/selectlet.bundle.js';
-const outFile = 'dist/selectlet.js';
+
+const moduleInputFile = 'dist/.tmp/selectlet.js';
+const browserInputFile = 'dist/.tmp/browser.js';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const version = pkg.version;
-
-fs.rmSync('dist', { recursive: true, force: true });
-fs.mkdirSync(tmpDir, { recursive: true });
-
-execSync('npx tsc -p tsconfig.build.json', { stdio: 'inherit' });
-
-const bundle = await rollup({
-  input: tscOutFile,
-});
-
-await bundle.write({
-  file: bundleFile,
-  format: 'es',
-});
-
-await bundle.close();
-
-let source = fs.readFileSync(bundleFile, 'utf8');
-source = source.replaceAll('__VERSION__', version);
-
-source = source.replace(
-  /(^|\n)export\s*\{[\s\S]*?\};?\s*(?=\n|$)/g,
-  '$1'
-);
 
 const banner = `/*
  * selectlet v${version} | MIT
  * Copyright (c) 2007-2025 Diego Perini
  * Copyright (c) 2026 Eric Knowlton
  */
-
-(function (global) {
-
 `;
 
-const footer = `
-function installGlobal(glob, createSelectlet) {
-  if (typeof module == 'object' && typeof exports == 'object') {
-    module.exports = createSelectlet;
-  } else if (typeof define == 'function' && define.amd) {
-    define(createSelectlet);
-  } else {
-    glob.selectlet = createSelectlet(glob, installGlobal);
-  }
+function replaceVersionPlugin(version) {
+  return {
+    name: 'replace-version',
+    renderChunk(code) {
+      return {
+        code: code.replaceAll('__VERSION__', version),
+        map: null,
+      };
+    },
+  };
 }
 
-installGlobal(global, createSelectlet);
+fs.rmSync(distDir, { recursive: true, force: true });
+fs.mkdirSync(tmpDir, { recursive: true });
 
-})(typeof globalThis !== 'undefined' ? globalThis : this);
-`;
+execSync('npx tsc -p tsconfig.build.json', { stdio: 'inherit' });
 
-fs.writeFileSync(outFile, banner + source + footer, 'utf8');
-fs.rmSync(tmpDir, { recursive: true, force: true });
-console.log(`built '${outFile}' v${version}!`);
-
-// Sync the built file to other locations that need it, such as test fixtures and the vendor directory.
-const syncTargets = [
-  {
-    path: 'test/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
-  },
-  {
-    path: 'vendor/jsdom/node_modules/selectlet/dist/selectlet.js',
-  },
+const plugins = [
+  replaceVersionPlugin(version),
 ];
 
-for (const target of syncTargets) {
-  if (!fs.existsSync(target.path)) {
-    console.warn(`skipped '${target.path}'; file does not exist`);
-    continue;
+// ESM + CJS from normal named-export library entry.
+const moduleBundle = await rollup({
+  input: moduleInputFile,
+  plugins,
+});
+
+await moduleBundle.write({
+  file: 'dist/index.mjs',
+  format: 'es',
+  banner,
+  sourcemap: false,
+});
+
+await moduleBundle.write({
+  file: 'dist/index.cjs',
+  format: 'cjs',
+  exports: 'named',
+  banner,
+  sourcemap: false,
+});
+
+await moduleBundle.close();
+
+// Browser IIFE from default-export entry.
+// Expected global shape:
+//   window.createSelectlet(document)
+const browserBundle = await rollup({
+  input: browserInputFile,
+  plugins,
+});
+
+await browserBundle.write({
+  file: 'dist/selectlet.js',
+  format: 'iife',
+  name: 'createSelectlet',
+  exports: 'default',
+  banner,
+  sourcemap: false,
+});
+
+await browserBundle.close();
+
+copyFileIfExists('dist/.tmp/selectlet.d.ts', 'dist/index.d.ts');
+
+fs.rmSync(tmpDir, { recursive: true, force: true });
+
+console.log(`built selectlet v${version}`);
+
+syncBuiltArtifacts();
+
+console.log('synced built artifacts\n');
+
+function copyFileIfExists(from, to) {
+  if (!fs.existsSync(from)) {
+    console.warn(`missing '${from}'`);
+    return;
   }
 
-  fs.copyFileSync(outFile, target.path);
-  console.log(`updated '${target.path}'`);
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.copyFileSync(from, to);
+  // console.log(`wrote '${to}'`);
+}
+
+function syncBuiltArtifacts() {
+  syncFile(
+    'dist/index.cjs',
+    'test/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
+  );
+
+  syncSelectletPackageDist('vendor/jsdom/node_modules/selectlet/dist');
+}
+
+function syncFile(from, to) {
+  if (!fs.existsSync(from)) {
+    console.warn(`skipped '${to}'; missing source '${from}'`);
+    return;
+  }
+
+  if (!fs.existsSync(to)) {
+    console.warn(`skipped '${to}'; file does not exist`);
+    return;
+  }
+
+  fs.copyFileSync(from, to);
+  // console.log(`updated '${to}'`);
+}
+
+function syncSelectletPackageDist(destDir) {
+  if (!fs.existsSync(destDir)) {
+    console.warn(`skipped '${destDir}'; directory does not exist`);
+    return;
+  }
+
+  for (const file of [
+    'index.mjs',
+    'index.cjs',
+    'index.d.ts',
+    'selectlet.js',
+  ]) {
+    const from = `dist/${file}`;
+    const to = `${destDir}/${file}`;
+
+    if (!fs.existsSync(from)) {
+      console.warn(`skipped '${to}'; missing source '${from}'`);
+      continue;
+    }
+
+    fs.copyFileSync(from, to);
+    // console.log(`updated '${to}'`);
+  }
 }

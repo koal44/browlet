@@ -1225,7 +1225,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
         sxlt.snapshot.hasDocumentAll = true;
         sxlt.snapshot.hasTreeWalker = true;
       });
@@ -1266,7 +1266,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: true });
+        sxlt.snapshot.config.MUTATE_IDS = true;
         sxlt.snapshot.hasDocumentAll = false;
         sxlt.snapshot.hasTreeWalker = true;
       });
@@ -1307,7 +1307,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
         sxlt.snapshot.hasDocumentAll = false;
         sxlt.snapshot.hasTreeWalker = true;
       });
@@ -1348,7 +1348,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
         sxlt.snapshot.hasDocumentAll = false;
         sxlt.snapshot.hasTreeWalker = false;
       });
@@ -1388,9 +1388,9 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: true });
+        sxlt.snapshot.config.MUTATE_IDS = true;
 
-        // sxlt.configure({ MUTATE_IDS: false });
+        // sxlt.snapshot.config.MUTATE_IDS = false;
         // sxlt.snapshot.hasDocumentAll = false;
         // sxlt.snapshot.hasTreeWalker = false;
       });
@@ -1440,7 +1440,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
         sxlt.snapshot.hasDocumentAll = true;
       });
     },
@@ -1478,7 +1478,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: true });
+        sxlt.snapshot.config.MUTATE_IDS = true;
         sxlt.snapshot.hasDocumentAll = false;
       });
     },
@@ -1516,7 +1516,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
         sxlt.snapshot.hasDocumentAll = false;
       });
     },
@@ -1554,7 +1554,7 @@ runPerfScenarios('perf', [
       await page.evaluate(() => {
         const sxlt = globalThis.selectlet;
         if (!sxlt?.snapshot) return;
-        sxlt.configure({ MUTATE_IDS: false });
+        sxlt.snapshot.config.MUTATE_IDS = false;
       });
     },
     probeKeys: [''],

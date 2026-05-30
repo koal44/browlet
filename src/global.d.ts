@@ -1,5 +1,5 @@
 import type { Snapshot as SnapshotType } from './snapshot';
-import type { Selectlet, SelectletConfig } from './selectlet';
+import type { createSelectlet as selectFn, SelectletConfig as Cfg } from './selectlet';
 
 export {};
 
@@ -10,8 +10,12 @@ declare global {
     amd?: unknown;
   }
 
+  type Selectlet = ReturnType<typeof selectFn>;
+  type SelectletConfig = Cfg;
+
   var define: AmdDefine | undefined;
   var selectlet: Selectlet | undefined;
+  var createSelectlet: (doc: Document, opts?: SelectletOptions) => Selectlet;
 
   type Snapshot = SnapshotType;
   type QueryContext = Document | Element | DocumentFragment;

@@ -4,8 +4,13 @@
     "noEmit": false,
     "outDir": "./dist/.tmp",
     "rootDir": "./src",
-    "declaration": false,
-    "sourceMap": false
+
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "include": ["src/**/*.ts"]
 }

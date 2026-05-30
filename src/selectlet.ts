@@ -1,7 +1,7 @@
 import { describeContext, describeElement } from './debug';
 import { Snapshot } from './snapshot';
 import { toNodeList } from './utils/collections';
-import { isDocument, isElement, isNode, isText } from './utils/dom';
+import { isElement, isNode, isText } from './utils/dom';
 
 export const DEFAULT_CONFIG = {
   // When enabled, methods that return multiple elements will return a
@@ -21,15 +21,8 @@ export type CustomPseudoPredicate = (element: Element) => boolean;
 export type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element; };
 export type ElementList = Element[] | IndexedNodeList;
 
-export type InstallGlobal = (global: typeof globalThis, createSelectlet: unknown) => unknown;
-
-export function createSelectlet(
-  global: typeof globalThis,
-  // installGlobal: InstallGlobal,
-  doc: Document = global.document,
-  opts: SelectletOptions = {},
-) {
-  const _doc = isDocument(doc) ? doc : global.document;
+export function createSelectlet(doc: Document, opts: SelectletOptions = {}) {
+  const _doc = doc;
   const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.caps);
 
   // handlers needed for the :focus pseudo-class; activeElement can fall back to body/html
@@ -79,19 +72,6 @@ export function createSelectlet(
   _doc.addEventListener('pointerup', clearActiveTarget, true);
   _doc.addEventListener('pointercancel', clearActiveTarget, true);
 
-  // QSA placeholders to native references
-  type QsaStore = {
-    closest: Element['closest'];
-    matches: Element['matches'];
-    querySelector: Element['querySelector'];
-    querySelectorAll: Element['querySelectorAll'];
-    querySelectorDoc: Document['querySelector'];
-    querySelectorAllDoc: Document['querySelectorAll'];
-  };
-  const _qsaStore: Partial<QsaStore> = {};
-  // const _qsaStore: Partial<Record<QsaKey, any>> = {};
-  const _qsaHooks: { type: string; listener: EventListenerOrEventListenerObject; }[] = [];
-
   // public exported methods/objects
   const api = {
     version: 'selectlet-__VERSION__',
@@ -134,121 +114,8 @@ export function createSelectlet(
       return _snap.ancestor(sel, el);
     },
 
-    configure(opt: Partial<Record<ConfigKey, boolean>>): void {
-      for (const k in opt) {
-        // only allow known config keys to be set; ignore others
-        if (k in _snap.config) {
-          _snap.config[k as ConfigKey] = !!opt[k as ConfigKey];
-        }
-      }
-    },
-
     clearCache(): void {
       _snap.clearCache();
-    },
-
-    // overrides QSA methods (only for browsers)
-    install(_all?: boolean): void {
-      // ensure any previous overrides are removed before installing new ones
-      api.uninstall();
-
-      // save references
-      /* eslint-disable @typescript-eslint/unbound-method */
-      _qsaStore.closest = Element.prototype.closest;
-      _qsaStore.matches = Element.prototype.matches;
-
-      _qsaStore.querySelector = Element.prototype.querySelector;
-      _qsaStore.querySelectorAll = Element.prototype.querySelectorAll;
-
-      _qsaStore.querySelectorDoc = Document.prototype.querySelector;
-      _qsaStore.querySelectorAllDoc = Document.prototype.querySelectorAll;
-      /* eslint-enable @typescript-eslint/unbound-method */
-
-      Element.prototype.closest =
-        HTMLElement.prototype.closest =
-          function closest(this: Element, selector: string): Element | null {
-            return _snap.ancestor(selector, this);
-          };
-
-      Element.prototype.matches =
-        HTMLElement.prototype.matches =
-          function matches(this: Element, selector: string): boolean {
-            return _snap.match(selector, this);
-          } as Element['matches'];
-
-      Element.prototype.querySelector =
-        HTMLElement.prototype.querySelector =
-          function querySelector(this: Element, selector: string): Element | null {
-            return _snap.first(selector, this, true);
-          };
-
-      Element.prototype.querySelectorAll =
-        HTMLElement.prototype.querySelectorAll =
-          function querySelectorAll(this: Element, selector: string): NodeListOf<Element> {
-            return toNodeList(_snap.select(selector, this, null, true), _snap.doc);
-          };
-
-      Document.prototype.querySelector =
-        DocumentFragment.prototype.querySelector =
-          function querySelector(this: QueryContext, selector: string): Element | null {
-            return _snap.first(selector, this, true);
-          };
-
-      Document.prototype.querySelectorAll =
-        DocumentFragment.prototype.querySelectorAll =
-          function querySelectorAll(this: QueryContext, selector: string): NodeListOf<Element> {
-            return toNodeList(_snap.select(selector, this, null, true), _snap.doc);
-          };
-
-      // if (all) {
-      //   const fn = function(this: Document, e: Event) {
-      //     const evTarget = e.target;
-      //     if (!isNode(evTarget) || !isElement(evTarget) || !isIFrame(evTarget)) return;
-
-      //     const iife = `(${String(installGlobal)})(this, ${String(createSelectlet)});`;
-      //     const doc = evTarget.ownerDocument;
-      //     const script = doc.createElement('script');
-      //     script.textContent = iife + 'selectlet.install(true)';
-      //     const root = doc.documentElement as Element | null;
-      //     root?.removeChild(root.insertBefore(script, root.firstChild));
-      //   };
-      //   _doc.addEventListener('load', fn, true);
-      //   _qsaHooks.push({ type: 'load', listener: fn });
-      // }
-    },
-
-    // restore QSA methods (only for browsers)
-    uninstall(): void {
-      // restore references
-      if (_qsaStore.closest) {
-        Element.prototype.closest = _qsaStore.closest;
-        HTMLElement.prototype.closest = _qsaStore.closest;
-      }
-      if (_qsaStore.matches) {
-        Element.prototype.matches = _qsaStore.matches;
-        HTMLElement.prototype.matches = _qsaStore.matches;
-      }
-      if (_qsaStore.querySelector) {
-        Element.prototype.querySelector =
-          HTMLElement.prototype.querySelector = _qsaStore.querySelector;
-      }
-      if (_qsaStore.querySelectorAll) {
-        Element.prototype.querySelectorAll =
-          HTMLElement.prototype.querySelectorAll = _qsaStore.querySelectorAll;
-      }
-      if (_qsaStore.querySelectorDoc) {
-        Document.prototype.querySelector =
-          DocumentFragment.prototype.querySelector = _qsaStore.querySelectorDoc;
-      }
-      if (_qsaStore.querySelectorAllDoc) {
-        Document.prototype.querySelectorAll =
-          DocumentFragment.prototype.querySelectorAll = _qsaStore.querySelectorAllDoc;
-      }
-      for (const k in _qsaStore) delete _qsaStore[k as keyof QsaStore];
-      for (const o of _qsaHooks) {
-        _doc.removeEventListener(o.type, o.listener, true);
-      }
-      _qsaHooks.length = 0;
     },
 
     registerPseudo(name: string, predicate: CustomPseudoPredicate): void {
@@ -312,5 +179,3 @@ export function createSelectlet(
 
   return api;
 }
-
-export type Selectlet = ReturnType<typeof createSelectlet>;

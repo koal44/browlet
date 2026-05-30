@@ -13,7 +13,18 @@ type SelectletShimApi = {
   ) => Element[];
   first?: (selector: string, context?: QueryContext | null) => Element | null;
   match?: (selector: string, element: Element) => boolean;
-  snapshot?: unknown;
+  snapshot?: SelectletShimSnapshot;
+};
+
+type SelectletShimConfig = {
+  NODE_LIST: boolean;
+  MUTATE_IDS: boolean;
+};
+
+type SelectletShimSnapshot = {
+  config?: SelectletShimConfig;
+  hasDocumentAll: boolean;
+  hasTreeWalker: boolean;
 };
 
 type ComputedStyleWindow = {
@@ -24,13 +35,22 @@ type ComputedStyleWindow = {
 export function installSelectletShim(win: SelectletShimWindow): void {
   const api = win.selectlet ??= {};
 
-  api.configure ??= () => {
-    // no-op: jsdom backend is already fixed for this harness run
-  };
-
   api.snapshot ??= {
+    config: {
+      NODE_LIST: false,
+      MUTATE_IDS: false,
+    },
     hasDocumentAll: true,
     hasTreeWalker: true,
+  };
+
+  api.snapshot.config ??= {
+    NODE_LIST: false,
+    MUTATE_IDS: false,
+  };
+
+  api.configure ??= (opt) => {
+    Object.assign(api.snapshot?.config ?? {}, opt);
   };
 
   api.select ??= (selector, context, callback) => {

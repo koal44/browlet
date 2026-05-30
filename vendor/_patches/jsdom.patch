@@ -159,7 +159,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..07598cad 100644
+index b85d6b0e..9d478abf 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -1,7 +1,7 @@
@@ -167,7 +167,7 @@ index b85d6b0e..07598cad 100644
  
  const { CookieJar } = require("tough-cookie");
 -const { DOMSelector } = require("@asamuzakjp/dom-selector");
-+const createSelectlet = require("selectlet");
++const { createSelectlet } = require("selectlet");
  
  const NodeImpl = require("./Node-impl").implementation;
  const idlUtils = require("../../../generated/idl/utils");
@@ -180,7 +180,7 @@ index b85d6b0e..07598cad 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -216,19 +216,21 @@ class DocumentImpl extends NodeImpl {
+@@ -216,19 +216,23 @@ class DocumentImpl extends NodeImpl {
      this._styleCache = new WeakMap();
    }
  
@@ -192,13 +192,14 @@ index b85d6b0e..07598cad 100644
 -        idlUtils
 +  _getSelectorEngine() {
 +    if (!this.#selectorEngine) {
-+      this.#selectorEngine = createSelectlet(this._globalObject, this, {
++      this.#selectorEngine = createSelectlet(this, {
 +        caps: {
 +          doc: {
 +            cachedIds: (doc, id) => doc._byIdCache.getAll(id),
++
 +            designMode: doc => {
 +              const wrapper = idlUtils.wrapperForImpl(doc);
-+              return wrapper && typeof wrapper.designMode === "string" ? wrapper.designMode : undefined;
++              return typeof wrapper?.designMode === "string" ? wrapper.designMode : undefined;
 +            }
 +          }
 +        }
@@ -206,7 +207,7 @@ index b85d6b0e..07598cad 100644
      }
 -    return this.#domSelector;
 -  }
--
+ 
 -  _clearDOMSelector() {
 -    this.#domSelector?.clear();
 +    return this.#selectorEngine;
@@ -246,7 +247,7 @@ index 0ef1ce89..890243ca 100644
  
    webkitMatchesSelector(selectors) {
 diff --git a/lib/jsdom/living/nodes/ParentNode-impl.js b/lib/jsdom/living/nodes/ParentNode-impl.js
-index adfc851d..3bbfe90d 100644
+index adfc851d..c0623e89 100644
 --- a/lib/jsdom/living/nodes/ParentNode-impl.js
 +++ b/lib/jsdom/living/nodes/ParentNode-impl.js
 @@ -6,6 +6,8 @@ const { domSymbolTree } = require("../helpers/internal-constants");
@@ -258,7 +259,7 @@ index adfc851d..3bbfe90d 100644
  class ParentNodeImpl {
    get children() {
      if (!this._childrenList) {
-@@ -63,20 +65,28 @@ class ParentNodeImpl {
+@@ -63,19 +65,19 @@ class ParentNodeImpl {
      if (shouldAlwaysSelectNothing(this)) {
        return null;
      }
@@ -266,7 +267,6 @@ index adfc851d..3bbfe90d 100644
 -    return domSelector.querySelector(selectors, this);
 +
 +    const engine = this._ownerDocument._getSelectorEngine();
-+    // return engine.first(selectors, idlUtils.wrapperForImpl(this));
 +    return engine.first(selectors, this);
    }
  
@@ -283,51 +283,42 @@ index adfc851d..3bbfe90d 100644
 +    const engine = this._ownerDocument._getSelectorEngine();
 +    const nodes = engine.select(selectors, this);
      return NodeList.createImpl(this._globalObject, [], { nodes });
-+
-+
-+    // const engine = this._ownerDocument._getSelectorEngine();
-+    // const nodes = engine
-+    //   .select(selectors, idlUtils.wrapperForImpl(this))
-+    //   .map(idlUtils.implForWrapper);
-+    // return NodeList.createImpl(this._globalObject, [], { nodes });
    }
  }
- 
 diff --git a/package-lock.json b/package-lock.json
-index 5383c4ba..226911a6 100644
+index 5383c4ba..ce28de74 100644
 --- a/package-lock.json
 +++ b/package-lock.json
-@@ -46,6 +46,7 @@
-         "npm-run-all2": "^8.0.4",
-         "opener": "^1.5.2",
-         "pngjs": "^7.0.0",
-+        "selectlet": "^0.1.0-alpha.0",
-         "semver": "^7.7.4",
-         "server-destroy": "^1.0.1",
-         "tinybench": "^6.0.0",
-@@ -2675,6 +2676,13 @@
+@@ -22,6 +22,7 @@
+         "lru-cache": "^11.3.5",
+         "parse5": "^8.0.1",
+         "saxes": "^6.0.0",
++        "selectlet": "^0.1.0-alpha.1",
+         "symbol-tree": "^3.2.4",
+         "tough-cookie": "^6.0.1",
+         "undici": "^7.25.0",
+@@ -2675,6 +2676,12 @@
          "node": ">=v12.22.7"
        }
      },
 +    "node_modules/selectlet": {
-+      "version": "0.1.0-alpha.0",
-+      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.0-alpha.0.tgz",
-+      "integrity": "sha512-DyjuQh29DlsIHAQf6KY3l3s5MBrazS7eb6opOUUUCupwjrXUtfu71hXOcNzzllvf/j1zZ9SKuibSKSIfBQnN0w==",
-+      "dev": true,
++      "version": "0.1.0-alpha.1",
++      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.0-alpha.1.tgz",
++      "integrity": "sha512-DdEj73l+gJeDxdHATB46wpHOb9Lqe7xKnIC4NedMY4YIxpDNkqlH5h+mueWH2raNdVOHUSlkB/yHxN9lBfB/IA==",
 +      "license": "MIT"
 +    },
      "node_modules/semver": {
        "version": "7.7.4",
        "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz",
 diff --git a/package.json b/package.json
-index 2c0b1770..4f43f4b4 100644
+index 2c0b1770..4ada0090 100644
 --- a/package.json
 +++ b/package.json
-@@ -68,6 +68,7 @@
-     "npm-run-all2": "^8.0.4",
-     "opener": "^1.5.2",
-     "pngjs": "^7.0.0",
-+    "selectlet": "^0.1.0-alpha.0",
-     "semver": "^7.7.4",
-     "server-destroy": "^1.0.1",
-     "tinybench": "^6.0.0",
+@@ -36,6 +36,7 @@
+     "lru-cache": "^11.3.5",
+     "parse5": "^8.0.1",
+     "saxes": "^6.0.0",
++    "selectlet": "^0.1.0-alpha.1",
+     "symbol-tree": "^3.2.4",
+     "tough-cookie": "^6.0.1",
+     "undici": "^7.25.0",
