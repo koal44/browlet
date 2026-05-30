@@ -440,7 +440,7 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
     });
 
     await page.evaluate(() => {
-      window.selectlet = window.createSelectlet(document);
+      window.selectlet = window.createSelectlet(document) as typeof selectlet;
     });
   }
 }

@@ -38,7 +38,7 @@ export type Selectlet = {
   byClass(cls: string, ctx?: QueryContext): ElementList;
 
   matches(sel: string, el: Element): boolean;
-  select(sel: string, ctx?: QueryContext, cb?: SelectCallback | null): ElementList;
+  select(sel: string, ctx?: QueryContext): ElementList;
   first(sel: string, ctx?: QueryContext): Element | null;
   closest(sel: string, el: Element): Element | null;
 
@@ -46,7 +46,6 @@ export type Selectlet = {
 };
 
 export type QueryContext = Document | Element | DocumentFragment;
-export type SelectCallback = (element: Element) => boolean | void;
 export type ElementList = Element[] | IndexedNodeList;
 export type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element; };
 
@@ -121,8 +120,8 @@ export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Sel
       return _snap.matches(sel, el);
     },
 
-    select(sel: string, ctx?: QueryContext, cb?: SelectCallback | null): ElementList {
-      const result = _snap.select(sel, ctx, cb ?? null, true /* isApiEntry */);
+    select(sel: string, ctx?: QueryContext): ElementList {
+      const result = _snap.select(sel, ctx, true /* isApiEntry */);
       return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
     },
 

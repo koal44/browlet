@@ -1,10 +1,11 @@
 import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import {
-  queryClosest, queryFirst, queryMatch, matchStrict, querySelect, type MatchResolver, type SelectResolver,
+  queryClosest, queryFirst, queryMatch, matchStrict, querySelect,
+  type MatchResolver, type SelectResolver, type FirstResolver,
 } from './api/query';
 import { buildSeedsByClass, type SeedClassFn } from './candidates/seedsByClass';
 import { buildSeedsById, type SeedIdFn } from './candidates/seedsById';
-import type { MatchLambda, SelectLambda } from './compile/compile';
+import type { FirstLambda, MatchLambda, SelectLambda } from './compile/compile';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -15,8 +16,8 @@ import {
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
 } from './compile/runtime';
-import { describeContext, describeElement, type DebugMatch, type DebugSelect } from './debug';
-import type { CustomPseudoPredicate, QueryContext, SelectCallback, SelectletCaps, SelectletConfig } from './selectlet';
+import { describeContext, describeElement, type DebugMatch, type DebugSelect, type DebugFirst } from './debug';
+import type { CustomPseudoPredicate, QueryContext, SelectletCaps, SelectletConfig } from './selectlet';
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 
@@ -31,13 +32,6 @@ export class Snapshot {
   namespace: string | null;
   hasDocumentAll: boolean;
   hasTreeWalker: boolean;
-
-  // debugging
-  isDebug = false;
-  debugSelect: DebugSelect | undefined;
-  debugMatch: DebugMatch | undefined;
-  debugStack: (DebugSelect | DebugMatch)[] = [];
-  debugCompile: string | undefined;
 
   config: SelectletConfig;
   pseudos: Record<string, CustomPseudoPredicate> = {};
@@ -55,10 +49,11 @@ export class Snapshot {
 
   // cache
   matchLambdas = new Map<string, MatchLambda>();
-  selectLambdasNoCb = new Map<string, SelectLambda>();
-  selectLambdasWithCb = new Map<string, SelectLambda>();
+  selectLambdas = new Map<string, SelectLambda>();
+  firstLambdas = new Map<string, FirstLambda>();
   strictMatchResolvers = new Map<string, MatchResolver>();
   selectResolvers = new Map<string, SelectResolver>();
+  firstResolvers = new Map<string, FirstResolver>();
   cachedRegex_S = new Map<string, RegExp>();
   cachedRegex_I = new Map<string, RegExp>();
   classRegex_S = new Map<string, RegExp>();
@@ -72,8 +67,7 @@ export class Snapshot {
     this.cacheSize = 0;
 
     this.matchLambdas.clear();
-    this.selectLambdasNoCb.clear();
-    this.selectLambdasWithCb.clear();
+    this.selectLambdas.clear();
     this.strictMatchResolvers.clear();
     this.selectResolvers.clear();
     this.cachedRegex_S.clear();
@@ -90,6 +84,8 @@ export class Snapshot {
     selBuild: 0,
     match: 0,
     matBuild: 0,
+    first: 0,
+    firstBuild: 0,
     reset: () => {
       this.probe.select = 0;
       this.probe.selBuild = 0;
@@ -213,8 +209,8 @@ export class Snapshot {
     return queryMatch(sel, context, this, h);
   }
 
-  select(sel: string, context?: QueryContext, cb?: SelectCallback | null, isApiEntry?: boolean) {
-    return querySelect(sel, context ?? this.doc, cb ?? null, this, isApiEntry);
+  select(sel: string, context?: QueryContext, isApiEntry?: boolean) {
+    return querySelect(sel, context ?? this.doc, this, isApiEntry);
   }
 
   closest(sel: string, context: Element) {
@@ -300,7 +296,14 @@ export class Snapshot {
   isSeeking = isSeeking;
   isMuted = isMuted;
 
-  // debugging utilities used in testing and development
+  // debugging
+  isDebug = false;
+  debugSelect: DebugSelect | undefined;
+  debugMatch: DebugMatch | undefined;
+  debugFirst: DebugFirst | undefined;
+  debugStack: (DebugSelect | DebugFirst | DebugMatch)[] = [];
+  debugCompile: string | undefined;
+
   setDebug(enabled: boolean): void {
     this.isDebug = enabled;
     if (enabled) this.clearDebug();
@@ -309,6 +312,9 @@ export class Snapshot {
   clearDebug(): void {
     this.debugSelect = undefined;
     this.debugMatch = undefined;
+    this.debugFirst = undefined;
+    this.debugStack.length = 0;
+    this.debugCompile = undefined;
   }
 
   printDebug(): string {

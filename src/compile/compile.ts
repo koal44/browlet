@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-implied-eval */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import type { ComplexSelector, SelectorList } from '../parser/parser';
-import type { SelectCallback } from '../selectlet';
 import { buildStrictComplexMatcher, buildStrictMatcher } from './build';
 import type { HashCache } from './runtime';
 
@@ -31,20 +30,14 @@ export function compileMatchList(list: SelectorList, selectorKey: string, snap: 
 
 export type SelectLambda = (
   candidates: Element[],
-  callback: SelectCallback | null,
-  context: QueryContext,
-  results: Element[],
   h: HashCache,
-) => Stopped;
+) => Element[];
 
-type Stopped = boolean;
-
-export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, snap: Snapshot): SelectLambda {
-  const cache = hasCb ? snap.selectLambdasWithCb : snap.selectLambdasNoCb;
+export function compileSelectComplex(complex: ComplexSelector, snap: Snapshot): SelectLambda {
   const cacheKey = complex.source;
 
   if (!complex.hasSeed) {
-    const cached = cache.get(cacheKey);
+    const cached = snap.selectLambdas.get(cacheKey);
     if (cached) return cached;
   }
 
@@ -53,15 +46,14 @@ export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, s
   const f =
     `"use strict";` +
     built.declarations.join('') +
-    `return function Resolver(c,f,x,r,h){` +
-      `var e,j=r.length-1,k=-1,p=false;` +
-      `main:while((e=c[++k])){` +
+    `return function Resolver(c,h){` +
+      `var e,k=-1,j=-1,r=[];` +
+      `while((e=c[++k])){` +
         `if(${built.source}){` +
           `r[++j]=e;` +
-          (hasCb ? `if(f(e)===false){p=true;break main;}` : '') +
         `}` +
       `}` +
-      `return p;` +
+      `return r;` +
     `}`;
 
   if (snap.isDebug) snap.debugCompile = f;
@@ -69,7 +61,47 @@ export function compileSelectComplex(complex: ComplexSelector, hasCb: boolean, s
   const lambda = Function('s', f)(snap) as SelectLambda;
 
   if (!complex.hasSeed) {
-    cache.set(cacheKey, lambda);
+    snap.selectLambdas.set(cacheKey, lambda);
+    snap.cacheSize++;
+  }
+
+  return lambda;
+}
+
+export type FirstLambda = (
+  candidates: Element[],
+  h: HashCache,
+) => Element | null;
+
+export function compileFirstComplex(complex: ComplexSelector, snap: Snapshot): FirstLambda {
+  const cacheKey = complex.source;
+
+  if (!complex.hasSeed) {
+    const cached = snap.firstLambdas.get(cacheKey);
+    if (cached) return cached;
+  }
+
+  const built = buildStrictComplexMatcher(complex);
+
+  const f =
+    `"use strict";` +
+    built.declarations.join('') +
+    `return function Resolver(c,h){` +
+      `var e,k=-1;` +
+      `while((e=c[++k])){` +
+        `if(${built.source}){` +
+          `return e;` +
+        `}` +
+      `}` +
+      `return null;` +
+    `}`;
+
+  if (snap.isDebug) snap.debugCompile = f;
+
+  const lambda = Function('s', f)(snap) as FirstLambda;
+
+  if (!complex.hasSeed) {
+    snap.firstLambdas.set(cacheKey, lambda);
     snap.cacheSize++;
   }
 

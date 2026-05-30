@@ -161,7 +161,7 @@ async function runPerfScenario(
         attachPageDiagnostics(page);
         await initPage(page, scenario);
 
-        if (script) await installEngine(page, script);
+        if (script) await installEngine(page, name, script);
         if (scenario.setupPage) await scenario.setupPage(page);
         await installPerfHelpers(page);
 
@@ -326,8 +326,14 @@ function attachPageDiagnostics(page: Page): void {
   });
 }
 
-async function installEngine(page: Page, scriptPath: string) {
+async function installEngine(page: Page, engineName: EngineName, scriptPath: string) {
   await page.addScriptTag({ path: scriptPath });
+
+  if (engineName === 'selectlet') {
+    await page.evaluate(() => {
+      window.selectlet = window.createSelectlet(document) as typeof selectlet;
+    });
+  }
 }
 
 async function installPerfHelpers(page: Page) {

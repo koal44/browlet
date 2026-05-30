@@ -1,10 +1,13 @@
 import { seedsByTag } from '../candidates/seedsByTag';
-import { compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda } from '../compile/compile';
+import {
+  compileMatchList, compileSelectComplex, type SelectLambda, type MatchLambda, type FirstLambda, compileFirstComplex,
+} from '../compile/compile';
 import type { HashCache } from '../compile/runtime';
-import { initDebugMatch, initDebugSelect, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun } from '../debug';
+import {
+  initDebugFirst, initDebugMatch, initDebugSelect, updateDebugFirstBuild, updateDebugFirstResult, updateDebugFirstRun, updateDebugMatch, updateDebugSelectBuild, updateDebugSelectRun,
+} from '../debug';
 import { parseSelectorList, type ComplexSelector, type SelectorList } from '../parser/parser';
-import type { SelectCallback } from '../selectlet';
-import { sortUniqueByDocPosition } from '../utils/collections';
+import { mergeDocumentOrderLists, precedesByDocPosition } from '../utils/collections';
 import { cssIdentUnescape } from '../utils/css';
 
 // equivalent of w3c 'matches' method
@@ -69,44 +72,52 @@ function buildStrictMatchResolver(list: SelectorList, selectors: string, snap: S
 }
 
 // equivalent of w3c 'querySelectorAll' method
-export function querySelect(sel: string, ctx: QueryContext, cb: SelectCallback | null, snap: Snapshot, isApiEntry = false): Element[] {
+export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot, isApiEntry = false): Element[] {
   snap.probe.select++;
   const isDebug = snap.isDebug;
-  if (isDebug) initDebugSelect(snap, sel, cb, ctx, isApiEntry);
+  if (isDebug) initDebugSelect(snap, sel, ctx, isApiEntry);
 
   let resolver = snap.selectResolvers.get(sel);
-  if (!resolver || resolver.hasCb !== !!cb) {
+  if (!resolver) {
     const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    resolver = buildSelectResolver(parsed, !!cb, snap);
+    resolver = buildSelectResolver(parsed, snap);
     snap.selectResolvers.set(sel, resolver);
     snap.cacheSize++;
   }
 
   snap.update(ctx, isApiEntry && resolver.usesScope);
 
-  const results: Element[] = [];
   const cache: HashCache = {};
   const arms = resolver.arms;
 
-  for (const arm of arms) {
+  if (arms.length === 1) {
+    const arm = arms[0];
     const candidates = arm.plan.lookup(ctx);
-    const stopped = arm.matcher(candidates, cb, ctx, results, cache);
+    const results = arm.matcher(candidates, cache);
 
     if (isDebug) updateDebugSelectRun(snap, arm, candidates, results);
-    if (stopped) break;
+
+    return results;
   }
 
-  if (arms.length > 1 && results.length > 1) {
-    sortUniqueByDocPosition(results);
+  const lists: Element[][] = [];
+  let i = 0;
+
+  for (const arm of arms) {
+    const candidates = arm.plan.lookup(ctx);
+    const results = arm.matcher(candidates, cache);
+
+    if (results.length) lists[i++] = results;
+    if (isDebug) updateDebugSelectRun(snap, arm, candidates, results);
   }
 
-  return results;
+  return mergeDocumentOrderLists(lists);
 }
 
-export type SelectResolver = { arms: SelectArm[]; hasCb: boolean; usesScope: boolean; };
+export type SelectResolver = { arms: SelectArm[]; usesScope: boolean; };
 export type SelectArm = { plan: CandidatePlan; matcher: SelectLambda; };
 
-function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot): SelectResolver {
+function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver {
   snap.checkCacheWatermark();
   const arms: SelectArm[] = [];
   snap.probe.selBuild++;
@@ -115,12 +126,9 @@ function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot)
     const plan = planCandidateLookup(complex, snap);
 
     // Compile the residual matcher; seed-supplied simple selectors are skipped.
-    const matcher = compileSelectComplex(complex, hasCb, snap);
+    const matcher = compileSelectComplex(complex, snap);
 
-    arms.push({
-      plan,
-      matcher,
-    });
+    arms.push({ plan,  matcher });
 
     if (snap.isDebug) {
       updateDebugSelectBuild(snap, complex, plan, matcher);
@@ -128,7 +136,7 @@ function buildSelectResolver(list: SelectorList, hasCb: boolean, snap: Snapshot)
   }
 
   const usesScope = list.usesScope ?? false;
-  return { arms, usesScope, hasCb };
+  return { arms, usesScope };
 }
 
 export type CandidatePlan = {
@@ -202,11 +210,79 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
   };
 }
 
-const stopAfterFirst: SelectCallback = () => false;
-
 // equivalent of w3c 'querySelector' method
-export function queryFirst(selectors: string, context: QueryContext, snap: Snapshot, isApiEntry = true): Element | null {
-  return querySelect(selectors, context, stopAfterFirst, snap, isApiEntry)[0] || null;
+export function queryFirst(selectors: string, ctx: QueryContext, snap: Snapshot, isApiEntry = true): Element | null {
+  snap.probe.first++;
+
+  const isDebug = snap.isDebug;
+  if (isDebug) initDebugFirst(snap, selectors, ctx, isApiEntry);
+
+  let resolver = snap.firstResolvers.get(selectors);
+  if (!resolver) {
+    const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
+    resolver = buildFirstResolver(parsed, snap);
+    snap.firstResolvers.set(selectors, resolver);
+    snap.cacheSize++;
+  }
+
+  snap.update(ctx, isApiEntry && resolver.usesScope);
+
+  const cache: HashCache = {};
+  const arms = resolver.arms;
+
+  if (arms.length === 1) {
+    const arm = arms[0];
+    const candidates = arm.plan.lookup(ctx);
+    const found = arm.matcher(candidates, cache);
+
+    if (isDebug) {
+      updateDebugFirstRun(snap, arm, candidates, found);
+      updateDebugFirstResult(snap, found);
+    }
+
+    return found;
+  }
+
+  let best: Element | null = null;
+
+  for (const arm of arms) {
+    const candidates = arm.plan.lookup(ctx);
+    const found = arm.matcher(candidates, cache);
+
+    if (isDebug) updateDebugFirstRun(snap, arm, candidates, found);
+
+    if (!found) continue;
+    if (!best || precedesByDocPosition(found, best)) best = found;
+  }
+
+  if (isDebug) updateDebugFirstResult(snap, best);
+
+  return best;
+}
+
+export type FirstResolver = { arms: FirstArm[]; usesScope: boolean; };
+export type FirstArm = { plan: CandidatePlan; matcher: FirstLambda; };
+
+function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
+  snap.checkCacheWatermark();
+  const arms: FirstArm[] = [];
+  snap.probe.firstBuild++;
+
+  for (const complex of list.selectors) {
+    const plan = planCandidateLookup(complex, snap);
+
+    // Compile the residual matcher; seed-supplied simple selectors are skipped.
+    const matcher = compileFirstComplex(complex, snap);
+
+    arms.push({ plan,  matcher });
+
+    if (snap.isDebug) {
+      updateDebugFirstBuild(snap, complex, plan, matcher);
+    }
+  }
+
+  const usesScope = list.usesScope ?? false;
+  return { arms, usesScope };
 }
 
 // equivalent of w3c 'closest' method

@@ -1,14 +1,13 @@
-import type { CandidatePlan, MatchResolver, SelectArm } from './api/query';
-import type { SelectLambda } from './compile/compile';
+import type { CandidatePlan, FirstArm, MatchResolver, SelectArm } from './api/query';
+import type { FirstLambda, SelectLambda } from './compile/compile';
 import type { ComplexSelector } from './parser/parser';
-import type { QueryContext, SelectCallback } from './selectlet';
+import type { QueryContext } from './selectlet';
 import { isDocument, isDocumentFragment, isElement } from './utils/dom';
 
 export type DebugSelect = {
   kind: 'select';
   isApiEntry: boolean;
   selector: string;
-  callback?: SelectCallback | null;
   context?: QueryContextDescription;
   build: {
     selector: string;
@@ -124,13 +123,12 @@ export function updateDebugMatch(snap: Snapshot, resolver: MatchResolver, result
   }
 }
 
-export function initDebugSelect(snap: Snapshot, sel: string, cb: SelectCallback | null, ctx: QueryContext, isApiEntry: boolean): void {
+export function initDebugSelect(snap: Snapshot, sel: string, ctx: QueryContext, isApiEntry: boolean): void {
   if (isApiEntry) snap.debugStack.length = 0;
   const dbgSelect: DebugSelect = {
     kind: 'select',
     isApiEntry,
     selector: sel,
-    callback: cb,
     context: describeContext(ctx),
     build: [],
     run: [],
@@ -159,4 +157,83 @@ export function updateDebugSelectBuild(snap: Snapshot, complex: ComplexSelector,
     matcherSrcText: snap.debugCompile ?? matcher.toString(),
   });
   snap.debugCompile = undefined;
+}
+
+export type DebugFirst = {
+  kind: 'first';
+  isApiEntry: boolean;
+  selector: string;
+  context?: QueryContextDescription;
+  build: {
+    selector: string;
+    hasSeed: boolean;
+    usesScope: boolean;
+    strategy: string;
+    lookupQuery: string;
+    matcherSrcText: string;
+  }[];
+  run: {
+    strategy: string;
+    lookupQuery: string;
+    candidates: string[];
+    matcherSrcText: string;
+    result: string | null;
+  }[];
+  result?: string | null;
+  error?: string;
+};
+
+export function initDebugFirst(snap: Snapshot, sel: string, ctx: QueryContext, isApiEntry: boolean): void {
+  if (isApiEntry) snap.debugStack.length = 0;
+
+  const dbgFirst: DebugFirst = {
+    kind: 'first',
+    isApiEntry,
+    selector: sel,
+    context: describeContext(ctx),
+    build: [],
+    run: [],
+  };
+
+  snap.debugFirst = dbgFirst;
+  snap.debugStack.push(dbgFirst);
+}
+
+export function updateDebugFirstBuild(
+  snap: Snapshot,
+  complex: ComplexSelector,
+  plan: CandidatePlan,
+  matcher: FirstLambda,
+): void {
+  snap.debugFirst?.build.push({
+    selector: complex.source,
+    hasSeed: complex.hasSeed === true,
+    usesScope: complex.usesScope === true,
+    strategy: plan.strategy,
+    lookupQuery: plan.lookupQuery,
+    matcherSrcText: snap.debugCompile ?? matcher.toString(),
+  });
+
+  snap.debugCompile = undefined;
+}
+
+export function updateDebugFirstRun(
+  snap: Snapshot,
+  arm: FirstArm,
+  candidates: Element[],
+  result: Element | null,
+): void {
+  snap.debugFirst?.run.push({
+    strategy: arm.plan.strategy,
+    lookupQuery: arm.plan.lookupQuery,
+    candidates: describeElements(candidates),
+    matcherSrcText: String(arm.matcher),
+    result: result ? describeElement(result) : null,
+  });
+}
+
+export function updateDebugFirstResult(snap: Snapshot, result: Element | null): void {
+  if (snap.debugFirst) {
+    snap.debugFirst.result = result ? describeElement(result) : null;
+  }
 }
