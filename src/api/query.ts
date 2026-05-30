@@ -67,7 +67,7 @@ function buildStrictMatchResolver(list: SelectorList, selectors: string, snap: S
 
   return {
     lambda,
-    usesScope: list.usesScope ?? false,
+    usesScope: list.usesScope,
   };
 }
 
@@ -135,7 +135,7 @@ function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver
     }
   }
 
-  const usesScope = list.usesScope ?? false;
+  const usesScope = list.usesScope;
   return { arms, usesScope };
 }
 
@@ -281,7 +281,7 @@ function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
     }
   }
 
-  const usesScope = list.usesScope ?? false;
+  const usesScope = list.usesScope;
   return { arms, usesScope };
 }
 

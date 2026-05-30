@@ -4,7 +4,7 @@ import { asciiLower, cssIdentUnescape } from '../utils/css';
 // id
 export function emitIdTest(id: IdSelector): CandidateTest {
   const value = cssIdentUnescape(id.raw);
-  return { source: `s.checkId(e,${JSON.stringify(value)})` };
+  return { source: `s.checkId(e,${JSON.stringify(value)})`, cost: id.cost };
 }
 
 // class
@@ -12,10 +12,10 @@ export function emitClassTest(cls: ClassSelector): CandidateTest {
   const value = cssIdentUnescape(cls.raw);
 
   if (/[\t\n\f\r ]/.test(value)) {
-    return { source: 'false' };
+    return { source: 'false', cost: 0 };
   }
 
-  return { source: `s.checkClass(e,${JSON.stringify(value)})` };
+  return { source: `s.checkClass(e,${JSON.stringify(value)})`, cost: cls.cost };
 }
 
 // tag
@@ -32,11 +32,14 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
       : `s.checkTag(e,${JSON.stringify(lower)},${JSON.stringify(local)})`;
   }
 
-  if (tag.prefixRaw === '*') return { source };
+  if (tag.prefixRaw === '*') return { source, cost: tag.cost };
 
   if (tag.prefixRaw === '') {
-    return { source: source === 'true' ? '!e.namespaceURI' : `!e.namespaceURI&&${source}` };
+    return {
+      source: source === 'true' ? '!e.namespaceURI' : `!e.namespaceURI&&${source}`,
+      cost: tag.cost,
+    };
   }
 
-  return { source };
+  return { source, cost: tag.cost };
 }

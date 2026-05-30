@@ -17,7 +17,10 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
 
   // Existence: [attr], [|attr], [*|attr]
   if (!attr.op) {
-    return { source: `s.hasAttr(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg})` };
+    return {
+      source: `s.hasAttr(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg})`,
+      cost: 4,
+    };
   }
 
   if (attr.valueRaw === undefined) {
@@ -33,22 +36,23 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
     : 0;
 
   let pattern: string;
+  let cost = 5;
 
   if (attrVal === '') {
     if (attr.op === '=') pattern = '=';       // [attr=""] matches only empty values.
     else if (attr.op === '|=') pattern = '|'; // [attr|=""] matches only empty or hyphen-only values.
-    else return { source: 'false' };          // ^=, $=, *=, ~= with empty expected value match nothing.
+    else return { source: 'false', cost: 0 }; // ^=, $=, *=, ~= with empty expected value match nothing.
   } else {
     switch (attr.op) {
-      case '=': pattern = '='; break;
-      case '^=': pattern = '^'; break;
-      case '$=': pattern = '$'; break;
-      case '*=': pattern = '*'; break;
-      case '|=': pattern = '|'; break;
+      case '=': pattern = '='; cost = 5; break;
+      case '^=': pattern = '^'; cost = 8; break;
+      case '$=': pattern = '$'; cost = 8; break;
+      case '|=': pattern = '|'; cost = 8; break;
+      case '*=': pattern = '*'; cost = 10; break;
       case '~=':
         if (/[\t\n\f\r ]/.test(attrVal)) {
           // [attr~="a b"] is syntactically valid but can never match one whitespace-separated token.
-          return { source: 'false' };
+          return { source: 'false', cost: 0 };
         }
 
         // Keep ~= on the manual token path. A CSS-space regex is faster for one
@@ -56,6 +60,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
         // distinct regex patterns and cache/JIT overhead.
         pattern = '~R';
         // pattern = `(^|[\\t\\n\\f\\r ])${escapeRegExp(attrVal)}([\\t\\n\\f\\r ]|$)`;
+        cost = 12;
         break;
 
       default:
@@ -71,6 +76,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
     source:
       `s.matchAttribute(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg},` +
       `${patternArg},${valueArg},${htmlValueArg},${sensitivity})`,
+    cost,
   };
 }
 
@@ -83,78 +89,79 @@ const ATTR_INSENSITIVE = new Set([
 
 // :scope
 export function emitScopePseudoTest(): CandidateTest {
-  return { source: 's.isScope(e)', unique: true, usesScope: true };
+  return { source: 's.isScope(e)', unique: true, usesScope: true, cost: 1 };
 }
 
 // :root
 export function emitRootPseudoTest(): CandidateTest {
-  return { source: 's.isRoot(e)', unique: true };
+  return { source: 's.isRoot(e)', unique: true, cost: 1 };
 }
 
 // :empty
 export function emitEmptyPseudoTest(): CandidateTest {
-  return { source: 's.isEmpty(e)' };
+  return { source: 's.isEmpty(e)', cost: 4 };
 }
 
 // :first-child
 export function emitFirstChildPseudoTest(): CandidateTest {
-  return { source: 's.isFirstChild(e)' };
+  return { source: 's.isFirstChild(e)', cost: 1 };
 }
 
 // :last-child
 export function emitLastChildPseudoTest(): CandidateTest {
-  return { source: 's.isLastChild(e)' };
+  return { source: 's.isLastChild(e)', cost: 1 };
 }
 
 // :only-child
 export function emitOnlyChildPseudoTest(): CandidateTest {
-  return { source: 's.isOnlyChild(e)' };
+  return { source: 's.isOnlyChild(e)', cost: 2 };
 }
 
 // :first-of-type
 export function emitFirstOfTypePseudoTest(): CandidateTest {
-  return { source: 's.isFirstOfType(e)' };
+  return { source: 's.isFirstOfType(e)', cost: 5 };
 }
 
 // :last-of-type
 export function emitLastOfTypePseudoTest(): CandidateTest {
-  return { source: 's.isLastOfType(e)' };
+  return { source: 's.isLastOfType(e)', cost: 5 };
 }
 
 // :only-of-type
 export function emitOnlyOfTypePseudoTest(): CandidateTest {
-  return { source: 's.isOnlyOfType(e)' };
+  return { source: 's.isOnlyOfType(e)', cost: 8 };
 }
-
 // :nth-child(), :nth-of-type(), :nth-last-child(), :nth-last-of-type()
 export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: boolean; }): CandidateTest {
   const { step, offset } = nth;
   const { ofType, last } = meta;
 
-  if (step === 1 && offset === 0) return { source: 'true' };
+  if (step === 1 && offset === 0) return { source: 'true', cost: 0 };
 
   if (step === 0) {
     return {
       source: ofType
         ? `s.isNthOfType(e,${offset},${last},h)`
         : `s.isNthElement(e,${offset},${last},h)`,
+      cost: ofType ? 18 : 15,
     };
   }
 
   const index = ofType ? `s.nthOfType(e,${last},h)` : `s.nthElement(e,${last},h)`;
   const absStep = Math.abs(step);
 
-  if (absStep === 1) return { source: step > 0 ? `${index}>=${offset}` : `${index}<=${offset}` };
-  if (step === 2 && offset === 0) return { source: `${index}%2===0` };
-  if (step === 2 && offset === 1) return { source: `${index}%2===1` };
+  if (absStep === 1) return { source: step > 0 ? `${index}>=${offset}` : `${index}<=${offset}`, cost: ofType ? 18 : 15 };
+  if (step === 2 && offset === 0) return { source: `${index}%2===0`, cost: ofType ? 18 : 15 };
+  if (step === 2 && offset === 1) return { source: `${index}%2===1`, cost: ofType ? 18 : 15 };
 
-  return { source: `s.matchesNthIndex(${index},${step},${absStep},${offset})` };
+  return { source: `s.matchesNthIndex(${index},${step},${absStep},${offset})`, cost: ofType ? 24 : 20 };
 }
 
 // :is()
 export function emitIsPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
   };
 }
@@ -163,6 +170,7 @@ export function emitIsPseudoTest(list: SelectorList): CandidateTest {
 export function emitWherePseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
   };
 }
@@ -171,6 +179,7 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    cost: list.cost,
     buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`,
   };
 }
@@ -179,6 +188,7 @@ export function emitNotPseudoTest(list: SelectorList): CandidateTest {
 export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    cost: list.cost + 1,
     buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx),
   };
 }
@@ -188,187 +198,187 @@ export function emitDirPseudoTest(arg: string): CandidateTest {
   const dir = arg.toLowerCase();
 
   if (dir !== 'ltr' && dir !== 'rtl') {
-    return { source: 'false' };
+    return { source: 'false', cost: 0 };
   }
 
-  return { source: `s.matchDir(${JSON.stringify(dir)},e)` };
+  return { source: `s.matchDir(${JSON.stringify(dir)},e)`, cost: 14 };
 }
 
 // :lang()
 export function emitLangPseudoTest(arg: string): CandidateTest {
   const lang = arg.toLowerCase();
-  return { source: `s.matchLang(${JSON.stringify(lang)},e)` };
+  return { source: `s.matchLang(${JSON.stringify(lang)},e)`, cost: 8 };
 }
 
 // :any-link
 export function emitAnyLinkPseudoTest(): CandidateTest {
-  return { source: 's.isAnyLink(e)' };
+  return { source: 's.isAnyLink(e)', cost: 4 };
 }
 
 // :link
 export function emitLinkPseudoTest(): CandidateTest {
-  return { source: 's.isAnyLink(e)' };
+  return { source: 's.isAnyLink(e)', cost: 4 };
 }
 
 // :visited
 export function emitVisitedPseudoTest(): CandidateTest {
   // Browser selector APIs do not expose history state to script.
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // :target
 export function emitTargetPseudoTest(): CandidateTest {
-  return { source: 's.isTarget(e)' };
+  return { source: 's.isTarget(e)', cost: 8 };
 }
 
 // :defined
 export function emitDefinedPseudoTest(): CandidateTest {
-  return { source: 's.defined(e)' };
+  return { source: 's.defined(e)', cost: 8 };
 }
 
 // :hover
 export function emitHoverPseudoTest(): CandidateTest {
-  return { source: 's.isHovered(e)' };
+  return { source: 's.isHovered(e)', cost: 6 };
 }
 
 // :active
 export function emitActivePseudoTest(): CandidateTest {
-  return { source: 's.isActive(e)' };
+  return { source: 's.isActive(e)', cost: 6 };
 }
 
 // :focus
 export function emitFocusPseudoTest(): CandidateTest {
-  return { source: 's.isFocused(e)' };
+  return { source: 's.isFocused(e)', cost: 4 };
 }
 
 // :focus-visible
 export function emitFocusVisiblePseudoTest(): CandidateTest {
   // TODO: distinguish :focus-visible from :focus
-  return { source: 's.isFocused(e)' };
+  return { source: 's.isFocused(e)', cost: 4 };
 }
 
 // :focus-within
 export function emitFocusWithinPseudoTest(): CandidateTest {
-  return { source: 's.isFocusWithin(e)' };
+  return { source: 's.isFocusWithin(e)', cost: 8 };
 }
 
 // :enabled
 export function emitEnabledPseudoTest(): CandidateTest {
-  return { source: 's.isEnabled(e)' };
+  return { source: 's.isEnabled(e)', cost: 12 };
 }
-
 // :disabled
 export function emitDisabledPseudoTest(): CandidateTest {
-  return { source: 's.isDisabled(e)' };
+  return { source: 's.isDisabled(e)', cost: 12 };
 }
 
 // :read-only
 export function emitReadOnlyPseudoTest(): CandidateTest {
-  return { source: '!s.isReadWrite(e)' };
+  return { source: '!s.isReadWrite(e)', cost: 14 };
 }
 
 // :read-write
 export function emitReadWritePseudoTest(): CandidateTest {
-  return { source: 's.isReadWrite(e)' };
+  return { source: 's.isReadWrite(e)', cost: 14 };
 }
 
 // :placeholder-shown
 export function emitPlaceholderShownPseudoTest(): CandidateTest {
-  return { source: 's.isPlaceholderShown(e)' };
+  return { source: 's.isPlaceholderShown(e)', cost: 5 };
 }
 
 // :default
 export function emitDefaultPseudoTest(): CandidateTest {
-  return { source: 's.isDefault(e)' };
+  return { source: 's.isDefault(e)', cost: 30 };
 }
 // :checked
 export function emitCheckedPseudoTest(): CandidateTest {
-  return { source: 's.isChecked(e)' };
+  return { source: 's.isChecked(e)', cost: 4 };
 }
 
 // :indeterminate
 export function emitIndeterminatePseudoTest(): CandidateTest {
-  return { source: 's.isIndeterminate(e)' };
+  return { source: 's.isIndeterminate(e)', cost: 28 };
 }
 
 // :required
 export function emitRequiredPseudoTest(): CandidateTest {
-  return { source: 's.isRequired(e)' };
+  return { source: 's.isRequired(e)', cost: 5 };
 }
 
 // :optional
 export function emitOptionalPseudoTest(): CandidateTest {
-  return { source: 's.isOptional(e)' };
+  return { source: 's.isOptional(e)', cost: 6 };
 }
 
 // :invalid
 export function emitInvalidPseudoTest(): CandidateTest {
-  return { source: 's.isInvalid(e)' };
+  return { source: 's.isInvalid(e)', cost: 25 };
 }
 
 // :valid
 export function emitValidPseudoTest(): CandidateTest {
-  return { source: 's.isValid(e)' };
+  return { source: 's.isValid(e)', cost: 25 };
 }
 
 // :in-range
 export function emitInRangePseudoTest(): CandidateTest {
-  return { source: 's.isInRange(e)' };
+  return { source: 's.isInRange(e)', cost: 6 };
 }
 
 // :out-of-range
 export function emitOutOfRangePseudoTest(): CandidateTest {
-  return { source: 's.isOutOfRange(e)' };
+  return { source: 's.isOutOfRange(e)', cost: 6 };
 }
 
 // :playing
 export function emitPlayingPseudoTest(): CandidateTest {
-  return { source: 's.isPlaying(e)' };
+  return { source: 's.isPlaying(e)', cost: 4 };
 }
 
 // :paused
 export function emitPausedPseudoTest(): CandidateTest {
-  return { source: 's.isPaused(e)' };
+  return { source: 's.isPaused(e)', cost: 4 };
 }
 
 // :seeking
 export function emitSeekingPseudoTest(): CandidateTest {
-  return { source: 's.isSeeking(e)' };
+  return { source: 's.isSeeking(e)', cost: 4 };
 }
 
 // :buffering
 export function emitBufferingPseudoTest(): CandidateTest {
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // :stalled
 export function emitStalledPseudoTest(): CandidateTest {
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // :muted
 export function emitMutedPseudoTest(): CandidateTest {
-  return { source: 's.isMuted(e)' };
+  return { source: 's.isMuted(e)', cost: 4 };
 }
 
 // :volume-locked
 export function emitVolumeLockedPseudoTest(): CandidateTest {
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // parse-valid no-match pseudo-class
 export function emitNoMatchPseudoTest(_name: string): CandidateTest {
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // parse-valid no-match pseudo-element
 export function emitNoMatchPseudoElementTest(_name: string): CandidateTest {
-  return { source: 'false' };
+  return { source: 'false', cost: 0 };
 }
 
 // registered pseudo-class
 export function emitRegisteredPseudoTest(name: string): CandidateTest {
   return {
     source: `s.pseudos[${JSON.stringify(name)}](e)`,
+    cost: 20,
   };
 }

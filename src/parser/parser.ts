@@ -22,10 +22,12 @@ import {
   isCombinator, isCssWhitespace,
 } from './lex';
 import { parseNthArgs } from './nth';
+import { assertNever } from '../utils/util';
 
 export type SelectorList = {
   selectors: ComplexSelector[];
-  usesScope?: boolean;
+  usesScope: boolean;
+  cost: number;
 };
 
 export type Combinator = ' ' | '>' | '+' | '~';
@@ -33,7 +35,8 @@ export type Combinator = ' ' | '>' | '+' | '~';
 export type ComplexSelector = {
   parts: ComplexPart[];
   source: string;
-  usesScope?: boolean;
+  usesScope: boolean;
+  cost: number;
 
   // Whether a contained compound's ID/class/tag was used as a seed
   // Source-keyed lambda caching is unsafe because the matcher skips seeded tests.
@@ -44,19 +47,22 @@ type ComplexPart = {
   // null for the first compound in the complex selector
   combinator: Combinator | null;
   compound: CompoundSelector;
+  cost: number;
 };
 
 export type CompoundSelector = {
   id?: IdSelector;
   classes?: ClassSelector[];
   tag?: TagSelector;
-  usesScope?: boolean;
+  usesScope: boolean;
+  cost: number;
   tests: CandidateTest[];
 };
 
 export type IdSelector = {
   // Raw CSS identifier payload, without "#", before CSS unescaping.
   raw: string;
+  cost: number;
 
   // Whether this simple selector is used as a seed and thus should be skipped from compiled tests.
   seed?: boolean;
@@ -65,12 +71,14 @@ export type IdSelector = {
 export type ClassSelector = {
   // Raw CSS identifier payload, without ".", before CSS unescaping.
   raw: string;
+  cost: number;
   seed?: boolean;
 };
 
 export type TagSelector = {
   prefixRaw?: '' | '*';
   localRaw: string;
+  cost: number;
   seed?: boolean;
 };
 
@@ -82,6 +90,7 @@ export type BuildContext = {
 type BaseCandidateTest = {
   unique?: boolean;
   usesScope?: boolean;
+  cost: number;
 };
 
 type StaticCandidateTest = BaseCandidateTest & {
@@ -105,6 +114,7 @@ export function parseSelectorList(input: string, ctx: ParseContext): SelectorLis
 function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let cost = 0;
 
   consumeTrivia(c);
 
@@ -114,7 +124,9 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
 
   while (!c.eof()) {
     const complex = parseComplexSelector(c, ctx);
+
     if (complex.usesScope) usesScope = true;
+    cost += complex.cost;
     selectors.push(complex);
 
     consumeTrivia(c);
@@ -134,7 +146,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     c.error(`Unexpected character ${c.peek()}`);
   }
 
-  return { selectors, usesScope };
+  return { selectors, usesScope, cost };
 }
 
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
@@ -142,9 +154,16 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   const parts: ComplexPart[] = [];
 
   const first = parseCompoundSelector(c, ctx);
-  parts.push({ combinator: null, compound: first });
+  const firstPart: ComplexPart = {
+    combinator: null,
+    compound: first,
+    cost: first.cost,
+  };
 
-  let usesScope = !!first.usesScope;
+  parts.push(firstPart);
+
+  let usesScope = first.usesScope;
+  let cost = firstPart.cost;
   let end = c.pos();
 
   while (true) {
@@ -171,17 +190,27 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     }
 
     const compound = parseCompoundSelector(c, ctx);
+    const partCost = combinatorCost(combinator) + compound.cost;
     if (compound.usesScope) usesScope = true;
+    cost += partCost;
     end = c.pos();
 
-    parts.push({ combinator, compound });
+    parts.push({
+      combinator, compound,
+      cost: partCost,
+    });
   }
 
-  return { parts, usesScope, source: c.slice(start, end) };
+  return {
+    parts, usesScope, cost,
+    source: c.slice(start, end),
+  };
 }
 
 export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSelector {
   const compound: CompoundSelector = {
+    usesScope: false,
+    cost: 0,
     tests: [],
   };
 
@@ -209,16 +238,21 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   if (ch === '#') {
     if (compound.id) c.error(`Duplicate ID selector in compound, already have ${compound.id.raw}`);
     compound.id = parseIdSelector(c);
+    compound.cost += compound.id.cost;
     return;
   }
 
   if (ch === '.') {
-    (compound.classes ??= []).push(parseClassSelector(c));
+    const cls = parseClassSelector(c);
+    (compound.classes ??= []).push(cls);
+    compound.cost += cls.cost;
     return;
   }
 
   if (ch === '[') {
-    compound.tests.push(emitAttributeTest(parseAttributeSelector(c)));
+    const test = emitAttributeTest(parseAttributeSelector(c));
+    compound.tests.push(test);
+    compound.cost += test.cost;
     return;
   }
 
@@ -226,19 +260,24 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
     const pseudoTest = parsePseudoTestSource(c, ctx);
     if (pseudoTest.usesScope) compound.usesScope = true;
     compound.tests.push(pseudoTest);
+    compound.cost += pseudoTest.cost;
     return;
   }
 
   if (ch === '&') {
     c.advance();
     compound.usesScope = true;
-    compound.tests.push(emitScopePseudoTest());
+
+    const scopeTest = emitScopePseudoTest();
+    compound.tests.push(scopeTest);
+    compound.cost += scopeTest.cost;
     return;
   }
 
   if ((ch === '*' || ch === '|' || canStartIdent(ch)) && isFirstInCompound) {
     if (compound.tag) c.error(`Duplicate tag selector in compound, already have ${compound.tag.prefixRaw ? compound.tag.prefixRaw + '|' : ''}${compound.tag.localRaw}`);
     compound.tag = parseTagSelector(c);
+    compound.cost += compound.tag.cost;
     return;
   }
 
@@ -267,6 +306,7 @@ function parseIdSelector(c: Cursor): IdSelector {
 
   return {
     raw: consumeIdent(c),
+    cost: 1,
   };
 }
 
@@ -275,6 +315,7 @@ function parseClassSelector(c: Cursor): ClassSelector {
 
   return {
     raw: consumeIdent(c),
+    cost: 2,
   };
 }
 
@@ -285,15 +326,20 @@ function parseTagSelector(c: Cursor): TagSelector {
     c.advance();
 
     if (c.match('|')) {
-      return { prefixRaw: '*', localRaw: parseLocalTagName(c) };
+      const localRaw = parseLocalTagName(c);
+      return {
+        prefixRaw: '*',
+        localRaw,
+        cost: localRaw === '*' ? 0 : 3,
+      };
     }
 
-    return { localRaw: '*' };
+    return { localRaw: '*', cost: 0 };
   }
 
   if (ch === '|') {
     c.advance();
-    return { prefixRaw: '', localRaw: parseLocalTagName(c) };
+    return { prefixRaw: '', localRaw: parseLocalTagName(c), cost: 3 };
   }
 
   const first = consumeIdent(c);
@@ -302,7 +348,7 @@ function parseTagSelector(c: Cursor): TagSelector {
     c.error(`Unsupported namespace prefix ${first}`);
   }
 
-  return { localRaw: first };
+  return { localRaw: first, cost: 3 };
 }
 
 function parseLocalTagName(c: Cursor): string {
@@ -543,10 +589,13 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     const complex = parseComplexSelector(c, ctx);
+
     if (complex.usesScope) usesScope = true;
+    cost += complex.cost;
     selectors.push(complex);
 
     consumeTrivia(c);
@@ -571,7 +620,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
     c.advance();
   }
 
-  return { selectors, usesScope };
+  return { selectors, usesScope, cost };
 }
 
 export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
@@ -586,6 +635,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     consumeTrivia(c);
@@ -599,7 +649,9 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
 
     try {
       const complex = parseComplexSelector(c, ctx);
+
       if (complex.usesScope) usesScope = true;
+      cost += complex.cost;
       selectors.push(complex);
     } catch {
       c.restore(armStart);
@@ -626,7 +678,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
 
   if (ch === ')') c.advance();
 
-  return { selectors, usesScope };
+  return { selectors, usesScope, cost };
 }
 
 function consumeForgivingSelectorArm(c: Cursor): void {
@@ -716,21 +768,26 @@ function consumeForgivingSelectorArm(c: Cursor): void {
 
 export type RelativeSelectorList = {
   arms: RelativeComplexSelector[];
-  usesScope?: boolean;
+  usesScope: boolean;
+  cost: number;
 };
 
 type RelativeComplexSelector = {
   steps: RelativeStep[];
-  usesScope?: boolean;
+  usesScope: boolean;
+  cost: number;
 };
 
 type RelativeStep = {
   combinator: Combinator;
   compound: RelativeCompoundSelector;
+  cost: number;
 };
 
 type RelativeCompoundSelector = {
   source: string;
+  usesScope: boolean;
+  cost: number;
 };
 
 export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): RelativeSelectorList {
@@ -745,10 +802,12 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
 
   const arms: RelativeComplexSelector[] = [];
   let usesScope = false;
+  let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     const arm = parseRelativeComplexSelector(c, ctx);
     if (arm.usesScope) usesScope = true;
+    cost += arm.cost;
     arms.push(arm);
 
     consumeTrivia(c);
@@ -771,12 +830,13 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
 
   if (ch === ')') c.advance();
 
-  return { arms, usesScope };
+  return { arms, usesScope, cost };
 }
 
 function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeComplexSelector {
   const steps: RelativeStep[] = [];
   let usesScope = false;
+  let cost = 0;
 
   consumeTrivia(c);
 
@@ -796,9 +856,17 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
 
     if (compound.usesScope) usesScope = true;
 
+    const stepCost = combinatorCost(combinator) + compound.cost;
+    cost += stepCost;
+
     steps.push({
       combinator,
-      compound: { source },
+      cost: stepCost,
+      compound: {
+        source,
+        usesScope: compound.usesScope === true,
+        cost: compound.cost,
+      },
     });
 
     const sawWs = consumeTrivia(c);
@@ -818,7 +886,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     }
   }
 
-  return { steps, usesScope };
+  return { steps, usesScope, cost };
 }
 
 function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
@@ -862,4 +930,15 @@ function parsePseudoBodyIdentArg(c: Cursor): string {
   }
 
   return arg;
+}
+
+function combinatorCost(c: Combinator | null): number {
+  switch (c) {
+    case null: return 0;
+    case '>': return 1;
+    case '+': return 2;
+    case ' ': return 8;
+    case '~': return 12;
+    default: return assertNever(c);
+  }
 }
