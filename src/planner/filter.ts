@@ -2,31 +2,34 @@ import type {
   CompoundSelector, RelativeSelectorList, SelectorList, ComplexSelector, Combinator,
   BuildContext, CandidateTest,
 } from '../parser/parser';
-import { emitClassTest, emitIdTest, emitTagTest } from './emit-seeders';
+import { emitClassTest, emitIdTest, emitTagTest } from '../compile/emit-seedable';
 
-export type BuiltMatcher = {
+export type Filter = {
   source: string;
   declarations: string[];
+  cost: number;
+  usesScope: boolean;
 };
 
-export function buildStrictMatcher(list: SelectorList): BuiltMatcher {
-  const ctx = createBuildContext();
+export function buildStrictMatcher(list: SelectorList, ctx: BuildContext): Filter {
   return {
     source: buildStrictSelectorListMatch(list, ctx),
     declarations: ctx.declarations,
+    cost: list.cost,
+    usesScope: list.usesScope,
   };
 }
 
-export function buildStrictComplexMatcher(complex: ComplexSelector): BuiltMatcher {
-  const ctx = createBuildContext();
-
+export function buildStrictComplexMatcher(complex: ComplexSelector, ctx: BuildContext): Filter {
   return {
     source: buildComplexSelectorMatch(complex, ctx),
     declarations: ctx.declarations,
+    cost: complex.cost,
+    usesScope: complex.usesScope,
   };
 }
 
-function createBuildContext(): BuildContext {
+export function createBuildContext(): BuildContext {
   return { nextPredicate: 0, declarations: [] };
 }
 
@@ -67,27 +70,39 @@ export function buildComplexSelectorMatch(complex: ComplexSelector, ctx: BuildCo
 }
 
 export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext): string {
-  const tests: string[] = [];
+  const tests: CandidateTest[] = [];
 
   if (compound.id && !compound.id.seed) {
-    tests.push(buildCandidateTest(emitIdTest(compound.id), ctx));
+    tests.push(emitIdTest(compound.id));
   }
 
   if (compound.classes) {
-    for (const cls of compound.classes) {
-      if (!cls.seed) tests.push(buildCandidateTest(emitClassTest(cls), ctx));
+    for (let i = 0; i < compound.classes.length; i++) {
+      const cls = compound.classes[i];
+      if (!cls.seed) tests.push(emitClassTest(cls));
     }
   }
 
   if (compound.tag && !compound.tag.seed) {
-    tests.push(buildCandidateTest(emitTagTest(compound.tag), ctx));
+    tests.push(emitTagTest(compound.tag));
   }
 
-  for (const test of compound.tests) {
-    tests.push(buildCandidateTest(test, ctx));
+  for (let i = 0; i < compound.tests.length; i++) {
+    tests.push(compound.tests[i]);
   }
 
-  return tests.length ? tests.join('&&') : 'true';
+  const n = tests.length;
+  if (n === 0) return 'true';
+  if (n === 1) return buildCandidateTest(tests[0], ctx);
+
+  tests.sort((a, b) => a.cost - b.cost);
+
+  const sources: string[] = [];
+  for (let i = 0; i < n; i++) {
+    sources[i] = buildCandidateTest(tests[i], ctx);
+  }
+
+  return sources.join('&&');
 }
 
 function buildCombinatorCall(combinator: Combinator | null, pred: string): string {

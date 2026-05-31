@@ -50,6 +50,14 @@ runPerfScenarios('jsdom-perf', [
       { op: 'select', selector: 'h1#title, div.subtoc > h2, p.copyright', ref: { by: 'document' }, iters: 1_000 },
       { op: 'select', selector: 'td.pattern, td.meaning, td.origin', ref: { by: 'document' }, iters: 1_000 },
       { op: 'select', selector: 'div > b.flatOut.a1, div > i.flatOut.a2, div > b.flatOut.a3', ref: { by: 'document' }, iters: 1_000 },
+
+      // Attribute selector ordering
+      { op: 'select', selector: 'a[href$=".html"], a[href*="Consortium/Legal"], a[name="attribute-substrings"]', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: 'a[href^="http://www.w3.org/TR/"], a[href$=".html"], a[href*="Consortium/Legal"]', ref: { by: 'document' }, iters: 1_000 },
+
+      // Compound test ordering
+      { op: 'select', selector: '[lang="tr"]:indeterminate', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: ':indeterminate[lang="tr"]', ref: { by: 'document' }, iters: 1_000 },
     ],
   },
 
@@ -99,6 +107,14 @@ runPerfScenarios('jsdom-perf', [
       { op: 'first', selector: 'h1#title, div.subtoc > h2, p.copyright', ref: { by: 'document' }, iters: 1_000 },
       { op: 'first', selector: 'td.pattern, td.meaning, td.origin', ref: { by: 'document' }, iters: 1_000 },
       { op: 'first', selector: 'div > b.flatOut.a1, div > i.flatOut.a2, div > b.flatOut.a3', ref: { by: 'document' }, iters: 1_000 },
+
+      // Attribute selector ordering
+      { op: 'first', selector: 'a[href$=".html"], a[href*="Consortium/Legal"], a[name="attribute-substrings"]', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'first', selector: 'a[href^="http://www.w3.org/TR/"], a[href$=".html"], a[href*="Consortium/Legal"]', ref: { by: 'document' }, iters: 1_000 },
+
+      // Compound test ordering
+      { op: 'first', selector: '[lang="tr"]:indeterminate', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'first', selector: ':indeterminate[lang="tr"]', ref: { by: 'document' }, iters: 1_000 },
     ],
   },
 

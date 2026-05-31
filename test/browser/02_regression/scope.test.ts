@@ -497,45 +497,6 @@ runScenarios('scope', 'normal', [
   },
 
   {
-    name: ':scope select callback preserves unmodified context element',
-    engines: ['selectlet'],
-    markup: `
-      <div id="ctx">
-        <span id="child-1"></span>
-        <span id="child-2"></span>
-      </div>
-    `,
-    setupPage: async (page) => {
-      await page.evaluate(() => {
-        const ctx = document.getElementById('ctx')!;
-        const before = ctx.outerHTML;
-        const observed: string[] = [];
-
-        const cb = () => {
-          observed.push(ctx.outerHTML);
-          return true;
-        };
-
-        const results = [...selectlet?.select(':scope > *', ctx, cb) ?? []];
-
-        const ids = results.map((e) => e.id);
-        if (ids.join(',') !== 'child-1,child-2') {
-          throw new Error(`Expected child-1,child-2; got ${ids.join(',')}`);
-        }
-
-        if (ctx.outerHTML !== before) {
-          throw new Error(`context mutated after select:\nbefore: ${before}\nafter: ${ctx.outerHTML}`);
-        }
-
-        const changed = observed.filter((html) => html !== before);
-        if (changed.length) {
-          throw new Error(`callback observed mutated context:\n${changed.join('\n')}`);
-        }
-      });
-    },
-  },
-
-  {
     name: 'ampersand nesting selector behavior',
     // status: 'only',
     // engines: ['native'],

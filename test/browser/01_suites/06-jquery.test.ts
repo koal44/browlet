@@ -510,6 +510,7 @@ runScenarios('jquery', 'normal', [
 
   {
     name: 'child and adjacent selectors',
+    // status: 'only',
     markup: html,
     markupMode: 'html-document',
     cases: [
@@ -559,13 +560,13 @@ runScenarios('jquery', 'normal', [
         const div = document.createElement('div');
         const api = selectlet;
         if (!api) throw new Error('selectlet not found');
-        let ps = api.select('p:first-child', undefined, null);
+        let ps = api.select('p:first-child');
 
         for (let i = 0; i < ps.length; i++) {
           ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i].nextSibling);
         }
 
-        ps = api.select('p:first-child', undefined, null);
+        ps = api.select('p:first-child');
 
         for (let i = 0; i < ps.length; i++) {
           const insertedDiv = ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i]);

@@ -1,11 +1,7 @@
 import { byClass, byId, byTag, byTagNs } from './api/lookup';
-import {
-  queryClosest, queryFirst, queryMatch, matchStrict, querySelect,
-  type MatchResolver, type SelectResolver, type FirstResolver,
-} from './api/query';
-import { buildSeedsByClass, type SeedClassFn } from './candidates/seedsByClass';
-import { buildSeedsById, type SeedIdFn } from './candidates/seedsById';
-import type { FirstLambda, MatchLambda, SelectLambda } from './compile/compile';
+import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
+import { buildSeedsByClass, type SeedClassFn } from './seeds/seedsByClass';
+import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -16,10 +12,13 @@ import {
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
 } from './compile/runtime';
-import { describeContext, describeElement, type DebugMatch, type DebugSelect, type DebugFirst } from './debug';
 import type { CustomPseudoPredicate, QueryContext, SelectletCaps, SelectletConfig } from './selectlet';
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
+import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from './api/match';
+import { querySelect, type DebugSelect, type SelectResolver } from './api/select';
+import { queryClosest } from './api/closest';
+import { describeContext, describeElement } from './utils/util';
 
 export class Snapshot {
   doc: Document;
@@ -48,9 +47,6 @@ export class Snapshot {
   focusTarget: Element | null = null;
 
   // cache
-  matchLambdas = new Map<string, MatchLambda>();
-  selectLambdas = new Map<string, SelectLambda>();
-  firstLambdas = new Map<string, FirstLambda>();
   strictMatchResolvers = new Map<string, MatchResolver>();
   selectResolvers = new Map<string, SelectResolver>();
   firstResolvers = new Map<string, FirstResolver>();
@@ -66,10 +62,9 @@ export class Snapshot {
   clearCache(): void {
     this.cacheSize = 0;
 
-    this.matchLambdas.clear();
-    this.selectLambdas.clear();
     this.strictMatchResolvers.clear();
     this.selectResolvers.clear();
+    this.firstResolvers.clear();
     this.cachedRegex_S.clear();
     this.cachedRegex_I.clear();
     this.classRegex_S.clear();
@@ -206,7 +201,7 @@ export class Snapshot {
   }
 
   matches(sel: string, context: Element, h: HashCache | null = null) {
-    return queryMatch(sel, context, this, h);
+    return queryMatches(sel, context, this, h);
   }
 
   select(sel: string, context?: QueryContext, isApiEntry?: boolean) {
@@ -220,8 +215,8 @@ export class Snapshot {
   // -------- Runtime matchers used by emitted selector functions --------
 
   // full selector match
-  matchStrict(selectors: string, element: Element, h: HashCache | null = null) {
-    return matchStrict(selectors, element, this, h);
+  matchStrict(selector: string, element: Element, h: HashCache | null = null) {
+    return matchStrict(selector, element, this, h);
   }
 
   // combinators

@@ -2,7 +2,7 @@ import type { AttributeSelector, CandidateTest, RelativeSelectorList, SelectorLi
 import type { NthArgs } from '../parser/nth';
 import { asciiLower, cssIdentUnescape } from '../utils/css';
 import { assertNever } from '../utils/util';
-import { buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from './build';
+import { buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from '../planner/filter';
 
 // [attr], [attr=value], [ns|attr op value flag]
 export function emitAttributeTest(attr: AttributeSelector): CandidateTest {

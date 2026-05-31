@@ -1,5 +1,5 @@
-import { sameId } from '../candidates/seedsById';
-import { sameSelectorTag } from '../candidates/seedsByTag';
+import { sameId } from '../seeds/seedsById';
+import { sameSelectorTag } from '../seeds/seedsByTag';
 import { collectionToArray, concatCollection } from '../utils/collections';
 import { asciiLower } from '../utils/css';
 import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from '../utils/dom';
