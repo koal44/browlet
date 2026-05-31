@@ -306,7 +306,7 @@ function parseIdSelector(c: Cursor): IdSelector {
 
   return {
     raw: consumeIdent(c),
-    cost: 1,
+    cost: 3,
   };
 }
 
@@ -315,7 +315,7 @@ function parseClassSelector(c: Cursor): ClassSelector {
 
   return {
     raw: consumeIdent(c),
-    cost: 2,
+    cost: 4,
   };
 }
 
@@ -330,7 +330,7 @@ function parseTagSelector(c: Cursor): TagSelector {
       return {
         prefixRaw: '*',
         localRaw,
-        cost: localRaw === '*' ? 0 : 3,
+        cost: localRaw === '*' ? 0 : 4,
       };
     }
 
@@ -339,7 +339,7 @@ function parseTagSelector(c: Cursor): TagSelector {
 
   if (ch === '|') {
     c.advance();
-    return { prefixRaw: '', localRaw: parseLocalTagName(c), cost: 3 };
+    return { prefixRaw: '', localRaw: parseLocalTagName(c), cost: 4 };
   }
 
   const first = consumeIdent(c);
@@ -348,7 +348,7 @@ function parseTagSelector(c: Cursor): TagSelector {
     c.error(`Unsupported namespace prefix ${first}`);
   }
 
-  return { localRaw: first, cost: 3 };
+  return { localRaw: first, cost: 4 };
 }
 
 function parseLocalTagName(c: Cursor): string {

@@ -434,15 +434,16 @@ async function installPerfHelpers(page: Page) {
       const ops = getBenchOps(engineName);
 
       let clearCache: (() => void) | undefined;
+
       if (engineName !== 'native' && benches.some((b) => b.cold)) {
         const api = getEngineApi(engineName);
+        const snapshot = api?.snapshot;
 
-        const clearCacheFn = api?.snapshot?.clearCache;
-        if (typeof clearCacheFn !== 'function') {
+        if (!snapshot || typeof snapshot.clearCache !== 'function') {
           throw new Error(`${engineName}.clearCache is not available`);
         }
 
-        clearCache = () => clearCacheFn();
+        clearCache = () => snapshot.clearCache!();
       }
 
       function benchFn<T>(b: Bench, fn: () => T): () => T {
@@ -709,22 +710,25 @@ async function installPerfHelpers(page: Page) {
 
     function debugBench(engineName: EngineName, label: string, fn: () => unknown): never {
       const api = getEngineApi(engineName);
+      const snapshot = api?.snapshot;
 
-      const setDebug = api?.snapshot?.setDebug;
-      const clearDebug = api?.snapshot?.clearDebug;
-      const printDebug = api?.snapshot?.printDebug;
-      if (!setDebug || !clearDebug || !printDebug) {
+      if (
+        !snapshot ||
+        typeof snapshot.setDebug !== 'function' ||
+        typeof snapshot.clearDebug !== 'function' ||
+        typeof snapshot.printDebug !== 'function'
+      ) {
         throw new Error(`${engineName} debug is not available`);
       }
 
-      setDebug(true);
-      clearDebug();
+      snapshot.setDebug(true);
+      snapshot.clearDebug();
 
       try {
         fn();
-        throw new Error(`[perf debug] ${label}\n${printDebug()}`);
+        throw new Error(`[perf debug] ${label}\n${snapshot.printDebug()}`);
       } finally {
-        setDebug(false);
+        snapshot.setDebug(false);
       }
     }
 

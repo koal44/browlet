@@ -2068,7 +2068,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'select hot slick template-standard selector corpus',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',
@@ -2105,7 +2105,7 @@ runPerfScenarios('perf', [
       { op: 'select', selector: 'div:has(> b.flatOut.a1) > i.flatOut.a2 + b.flatOut.a3', ref: { by: 'document' }, iters: 20_000 },
 
       // :is()
-      { op: 'select', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: true },
       { op: 'select', selector: 'div:is(.head, .subtoc, .example)', ref: { by: 'document' }, iters: 20_000 },
       { op: 'select', selector: 'li:is(.tocline2, .tocline3) > a[href^="#"]', ref: { by: 'document' }, iters: 20_000 },
       { op: 'select', selector: 'a:is(.url.fn, [href^="mailto:"], [href$="css3-selectors"])', ref: { by: 'document' }, iters: 20_000 },
@@ -2158,7 +2158,7 @@ runPerfScenarios('perf', [
       { op: 'first', selector: 'h4:has(a[name="attribute-substrings"]) + p + dl dt code', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'div:has(> b.flatOut.a1) > i.flatOut.a2 + b.flatOut.a3', ref: { by: 'document' }, iters: 20_000 },
 
-      { op: 'first', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: true },
       { op: 'first', selector: 'div:is(.head, .subtoc, .example)', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'li:is(.tocline2, .tocline3) > a[href^="#"]', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'a:is(.url.fn, [href^="mailto:"], [href$="css3-selectors"])', ref: { by: 'document' }, iters: 20_000 },
