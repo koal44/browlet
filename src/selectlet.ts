@@ -1,3 +1,4 @@
+import type { SelectorSyntaxError } from './parser/cursor';
 import { Snapshot } from './snapshot';
 import { toNodeList } from './utils/collections';
 import { isElement, isNode, isText } from './utils/dom';
@@ -55,6 +56,11 @@ export type ConfigKey = keyof SelectletConfig;
 export type SelectletOptions = {
   config?: Partial<SelectletConfig>;
   caps?: SelectletCaps;
+  errors?: SelectletErrorOptions;
+};
+
+export type SelectletErrorOptions = {
+  syntax?: (err: SelectorSyntaxError) => Error;
 };
 
 export type SelectletCaps<
@@ -94,7 +100,7 @@ export type CustomPseudoPredicate = (element: Element) => boolean;
 
 export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Selectlet {
   const _doc = doc;
-  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.caps);
+  const _snap = new Snapshot(_doc, { ...DEFAULT_CONFIG, ...opts.config }, opts.caps, opts.errors);
 
   installDynamicPseudoState(_doc, _snap);
 
@@ -134,8 +140,7 @@ export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Sel
     },
 
     select(sel: string, ctx?: QueryContext): ElementList {
-      const result = _snap.select(sel, ctx, true /* isApiEntry */);
-      return _snap.config.NODE_LIST ? toNodeList(result, _snap.doc) : result;
+      return _snap.select(sel, ctx, true /* isApiEntry */);
     },
 
     first(sel: string, ctx?: QueryContext): Element | null {

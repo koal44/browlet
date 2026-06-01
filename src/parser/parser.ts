@@ -1,6 +1,6 @@
 import type { CustomPseudoPredicate } from '../selectlet';
 import { cssIdentUnescape } from '../utils/css';
-import { Cursor } from './cursor';
+import { Cursor, SelectorSyntaxError } from './cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
@@ -312,7 +312,7 @@ function assertCompoundBoundary(ch: string): void {
     return;
   }
 
-  throw new Error(`Expected simple selector boundary, got ${ch || '<eof>'}`);
+  throw new SelectorSyntaxError(`Expected simple selector boundary, got ${ch || '<eof>'}`);
 }
 
 function parseIdSelector(c: Cursor): IdSelector {

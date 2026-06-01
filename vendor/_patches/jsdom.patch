@@ -159,7 +159,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..a5532bee 100644
+index b85d6b0e..116bcb51 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -1,7 +1,7 @@
@@ -180,7 +180,7 @@ index b85d6b0e..a5532bee 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -216,19 +216,221 @@ class DocumentImpl extends NodeImpl {
+@@ -216,19 +216,79 @@ class DocumentImpl extends NodeImpl {
      this._styleCache = new WeakMap();
    }
  
@@ -190,151 +190,6 @@ index b85d6b0e..a5532bee 100644
 -      this.#domSelector = new DOMSelector(this._globalObject, this._ownerDocument, {
 -        domSymbolTree,
 -        idlUtils
-+  // _getSelectorEngine() {
-+  //   if (!this.#selectorEngine) {
-+  //     function htmlAttrName(el, name) {
-+  //       return (el._namespaceURI === HTML_NS) &&
-+  //         (el._ownerDocument._parsingMode === "html") ?
-+  //         asciiLowercase(name) :
-+  //         name;
-+  //     }
-+  //     function attrByName(el, name) {
-+  //       name = htmlAttrName(el, name);
-+  //       const entry = el._attributesByNameMap.get(name);
-+  //       return entry ? entry[0] : null;
-+  //     }
-+  //     this.#selectorEngine = createSelectlet(this, {
-+  //       caps: {
-+  //         doc: {
-+  //           cachedIds: (doc, id) => doc._byIdCache.getAll(id),
-+  //           designMode: doc => {
-+  //             const wrapper = idlUtils.wrapperForImpl(doc);
-+  //             return typeof wrapper?.designMode === "string" ? wrapper.designMode : undefined;
-+  //           }
-+  //         },
-+  //         el: {
-+  //           getId: el => {
-+  //             const entry = el._attributesByNameMap.get("id");
-+  //             return entry ? entry[0]._value : "";
-+  //           },
-+
-+  //           getClass: el => {
-+  //             const entry = el._attributesByNameMap.get("class");
-+  //             return entry ? entry[0]._value : "";
-+  //           },
-+
-+  //           getLocalName: el => el._localName,
-+  //           getNamespaceURI: el => el._namespaceURI,
-+
-+  //           getAttribute: (el, name) => {
-+  //             const attr = attrByName(el, name);
-+  //             return attr ? attr._value : null;
-+  //           },
-+
-+  //           hasAttribute: (el, name) => attrByName(el, name) !== null,
-+
-+  //           getAttributeNS: (el, namespace, localName) => {
-+  //             if (namespace === "") {
-+  //               namespace = null;
-+  //             }
-+  //             const list = el._attributeList;
-+  //             for (let i = 0; i < list.length; i++) {
-+  //               const attr = list[i];
-+  //               if (attr._namespace === namespace && attr._localName === localName) {
-+  //                 return attr._value;
-+  //               }
-+  //             }
-+
-+  //             return null;
-+  //           },
-+
-+  //           hasAttributeNS: (el, namespace, localName) => {
-+  //             if (namespace === "") {
-+  //               namespace = null;
-+  //             }
-+
-+  //             const list = el._attributeList;
-+  //             for (let i = 0; i < list.length; i++) {
-+  //               const attr = list[i];
-+  //               if (attr._namespace === namespace && attr._localName === localName) {
-+  //                 return true;
-+  //               }
-+  //             }
-+
-+  //             return false;
-+  //           }
-+  //         }
-+  //       }
-+  //     });
-+  //   }
-+
-+  //   return this.#selectorEngine;
-+  // }
-+
-+  // _getSelectorEngine() {
-+  //   if (!this.#selectorEngine) {
-+  //     function wrapper(el) {
-+  //       return idlUtils.wrapperForImpl(el);
-+  //     }
-+
-+  //     this.#selectorEngine = createSelectlet(this, {
-+  //       caps: {
-+  //         doc: {
-+  //           cachedIds: (doc, id) => doc._byIdCache.getAll(id),
-+  //           designMode: doc => {
-+  //             // const wrapper = idlUtils.wrapperForImpl(doc);
-+  //             return typeof wrapper(doc)?.designMode === "string" ? wrapper.designMode : undefined;
-+  //           }
-+  //         },
-+  //         el: {
-+  //           getId: el => {
-+  //             const w = wrapper(el);
-+  //             return w.id || "";
-+  //           },
-+
-+  //           getClass: el => {
-+  //             const w = wrapper(el);
-+  //             const value = w.className;
-+  //             return typeof value === "string" ? value : w.getAttributeNS(null, "class") || "";
-+  //           },
-+
-+  //           getLocalName: el => {
-+  //             const w = wrapper(el);
-+  //             return w.localName;
-+  //           },
-+
-+  //           getNamespaceURI: el => {
-+  //             const w = wrapper(el);
-+  //             return w.namespaceURI;
-+  //           },
-+
-+  //           getAttribute: (el, name) => {
-+  //             const w = wrapper(el);
-+  //             return w.getAttributeNS(null, name);
-+  //           },
-+
-+  //           getAttributeNS: (el, namespace, localName) => {
-+  //             const w = wrapper(el);
-+  //             return w.getAttributeNS(namespace, localName);
-+  //           },
-+
-+  //           hasAttribute: (el, name) => {
-+  //             const w = wrapper(el);
-+  //             return w.hasAttributeNS(null, name);
-+  //           },
-+
-+  //           hasAttributeNS: (el, namespace, localName) => {
-+  //             const w = wrapper(el);
-+  //             return w.hasAttributeNS(namespace, localName);
-+  //           }
-+  //         }
-+  //       }
-+  //     });
-+  //   }
-+
-+  //   return this.#selectorEngine;
-+  // }
-+
 +  _getSelectorEngine() {
 +    if (!this.#selectorEngine) {
 +      function htmlAttrName(el, name) {
@@ -366,6 +221,9 @@ index b85d6b0e..a5532bee 100644
 +      }
 +
 +      this.#selectorEngine = createSelectlet(this, {
++        errors: {
++          syntax: err => DOMException.create(this._globalObject, [err.message, "SyntaxError"])
++        },
 +        caps: {
 +          doc: {
 +            cachedIds: (doc, id) => doc._byIdCache.getAll(id),

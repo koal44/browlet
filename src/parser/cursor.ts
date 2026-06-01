@@ -71,7 +71,14 @@ export class Cursor {
   }
 }
 
-export class CursorError extends SyntaxError {
+export class SelectorSyntaxError extends SyntaxError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SelectorSyntaxError';
+  }
+}
+
+export class CursorError extends SelectorSyntaxError {
   constructor(message: string, public position: number, input?: string) {
     const at = `${message} at ${position}`;
     const fmt = input ? formatInput(input, position) : '';

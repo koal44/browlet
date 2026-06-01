@@ -12,13 +12,17 @@ import {
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
 } from './compile/runtime';
-import type { CustomPseudoPredicate, QueryContext, SelectletCaps, SelectletConfig } from './selectlet';
+import type {
+  CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
+} from './selectlet';
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { querySelect, type DebugSelect, type SelectResolver } from './api/select';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './utils/util';
+import { SelectorSyntaxError } from './parser/cursor';
+import { toNodeList } from './utils/collections';
 
 export class Snapshot {
   doc: Document;
@@ -40,6 +44,11 @@ export class Snapshot {
   seedsByClass: SeedClassFn;
   readonly docDesignMode: (doc: Document) => string | undefined;
   checkCacheWatermark: () => void;
+
+  matches: (sel: string, context: Element, h?: HashCache | null) => boolean;
+  select: (sel: string, context?: QueryContext, isApiEntry?: boolean) => ElementList;
+  first: (sel: string, context?: QueryContext, isApiEntry?: boolean) => Element | null;
+  closest: (sel: string, context: Element) => Element | null;
 
   getId: (e: Element) => string;
   getClass: (e: Element) => string;
@@ -100,7 +109,7 @@ export class Snapshot {
     },
   };
 
-  constructor(doc: Document, config: SelectletConfig, caps?: Partial<SelectletCaps>) {
+  constructor(doc: Document, config: SelectletConfig, caps?: Partial<SelectletCaps>, errors?: SelectletErrorOptions) {
     const root = doc.documentElement as Element | null;
 
     this.config = config;
@@ -135,6 +144,43 @@ export class Snapshot {
     this.getAttributeNS = elCaps?.getAttributeNS ?? defaultGetAttributeNS;
     this.hasAttribute = elCaps?.hasAttribute ?? defaultHasAttribute;
     this.hasAttributeNS = elCaps?.hasAttributeNS ?? defaultHasAttributeNS;
+
+    const syntax = errors?.syntax;
+    if (syntax) {
+      const wrapErr = (err: unknown): never => rethrowSelectorError(err, syntax);
+
+      this.matches = (sel, context, h: HashCache | null = null) => {
+        try { return queryMatches(sel, context, this, h); }
+        catch (err) { return wrapErr(err); }
+      };
+
+      this.first = (sel, context, isApiEntry) => {
+        try { return queryFirst(sel, context ?? this.doc, this, isApiEntry); }
+        catch (err) { return wrapErr(err); }
+      };
+
+      this.closest = (sel, context) => {
+        try { return queryClosest(sel, context, this); }
+        catch (err) { return wrapErr(err); }
+      };
+
+      this.select = config.NODE_LIST ?
+        (sel, context, isApiEntry) => {
+          try { return toNodeList(querySelect(sel, context ?? this.doc, this, isApiEntry), this.doc); }
+          catch (err) { return wrapErr(err); }
+        } :
+        (sel, context, isApiEntry) => {
+          try { return querySelect(sel, context ?? this.doc, this, isApiEntry); }
+          catch (err) { return wrapErr(err); }
+        };
+    } else {
+      this.matches = (sel, context, h = null) => queryMatches(sel, context, this, h);
+      this.first = (sel, context, isApiEntry) => queryFirst(sel, context ?? this.doc, this, isApiEntry);
+      this.closest = (sel, context) => queryClosest(sel, context, this);
+      this.select = config.NODE_LIST ?
+        (sel, context, isApiEntry) => toNodeList(querySelect(sel, context ?? this.doc, this, isApiEntry), this.doc) :
+        (sel, context, isApiEntry) => querySelect(sel, context ?? this.doc, this, isApiEntry);
+    }
   }
 
   update(ctx: QueryContext, updateScope = false): void {
@@ -218,21 +264,21 @@ export class Snapshot {
     return byClass(cls, context ?? this.doc, this);
   }
 
-  first(sel: string, context?: QueryContext, isApiEntry?: boolean) {
-    return queryFirst(sel, context ?? this.doc, this, isApiEntry);
-  }
+  // first(sel: string, context?: QueryContext, isApiEntry?: boolean) {
+  //   return queryFirst(sel, context ?? this.doc, this, isApiEntry);
+  // }
 
-  matches(sel: string, context: Element, h: HashCache | null = null) {
-    return queryMatches(sel, context, this, h);
-  }
+  // matches(sel: string, context: Element, h: HashCache | null = null) {
+  //   return queryMatches(sel, context, this, h);
+  // }
 
-  select(sel: string, context?: QueryContext, isApiEntry?: boolean) {
-    return querySelect(sel, context ?? this.doc, this, isApiEntry);
-  }
+  // select(sel: string, context?: QueryContext, isApiEntry?: boolean) {
+  //   return querySelect(sel, context ?? this.doc, this, isApiEntry);
+  // }
 
-  closest(sel: string, context: Element) {
-    return queryClosest(sel, context, this);
-  }
+  // closest(sel: string, context: Element) {
+  //   return queryClosest(sel, context, this);
+  // }
 
   // -------- Runtime matchers used by emitted selector functions --------
 
@@ -389,4 +435,15 @@ function defaultHasAttribute(e: Element, name: string): boolean {
 
 function defaultHasAttributeNS(e: Element, namespace: string | null, localName: string): boolean {
   return e.hasAttributeNS(namespace, localName);
+}
+
+function rethrowSelectorError(
+  err: unknown,
+  syntax: (err: SelectorSyntaxError) => Error
+): never {
+  if (err instanceof SelectorSyntaxError) {
+    throw syntax(err);
+  }
+
+  throw err;
 }
