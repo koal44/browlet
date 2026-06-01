@@ -86,6 +86,8 @@ export class Snapshot {
       this.probe.selBuild = 0;
       this.probe.match = 0;
       this.probe.matBuild = 0;
+      this.probe.first = 0;
+      this.probe.firstBuild = 0;
     },
   };
 

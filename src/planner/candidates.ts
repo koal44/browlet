@@ -1,8 +1,9 @@
 import { seedsByTag } from '../seeds/seedsByTag';
 import type { Filter } from './filter';
 import { buildStrictComplexMatcher, createBuildContext } from './filter';
-import { type ComplexSelector, type SelectorList } from '../parser/parser';
+import type { ComplexSelector, SelectorList } from '../parser/parser';
 import { cssIdentUnescape } from '../utils/css';
+import { expandSelectorListForSeeding } from './pseudo-lift';
 
 type CandidateGroupDraft = {
   arms: ComplexSelector[];
@@ -15,22 +16,22 @@ export type CandidateGroupPlan = {
 };
 
 export function planCandidateGroups(list: SelectorList, snap: Snapshot): CandidateGroupPlan[] {
-  const drafts = buildCandidateGroupDrafts(list, snap);
+  const arms = expandSelectorListForSeeding(list);
+  const drafts = buildCandidateGroupDrafts(arms, snap);
+  drafts.sort(compareCandidateGroupDrafts);
   return finalizeCandidateGroupDrafts(drafts);
 }
 
-function buildCandidateGroupDrafts(list: SelectorList, snap: Snapshot): CandidateGroupDraft[] {
-  const arms = list.selectors;
+function buildCandidateGroupDrafts(arms: ComplexSelector[], snap: Snapshot): CandidateGroupDraft[] {
   arms.sort((a, b) => a.cost - b.cost);
+  // arms.sort((a, b) => b.cost - a.cost);
 
   const drafts: CandidateGroupDraft[] = [];
 
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i];
-
     const candidates = planCandidateLookup(arm, snap);
 
-    // find existing draft
     let draft: CandidateGroupDraft | undefined;
     for (let j = 0; j < drafts.length; j++) {
       const d = drafts[j];
@@ -45,10 +46,7 @@ function buildCandidateGroupDrafts(list: SelectorList, snap: Snapshot): Candidat
       continue;
     }
 
-    drafts.push({
-      candidates,
-      arms: [arm],
-    });
+    drafts.push({ candidates, arms: [arm] });
   }
 
   return drafts;
@@ -165,3 +163,26 @@ function planCandidateLookup(complex: ComplexSelector, snap: Snapshot): Candidat
     lookup: (ctx) => seedsByTag('*', ctx, snap),
   };
 }
+
+function compareCandidateGroupDrafts(a: CandidateGroupDraft, b: CandidateGroupDraft): number {
+  return candidateStrategyRank(a.candidates.strategy) - candidateStrategyRank(b.candidates.strategy)
+    || draftCost(a) - draftCost(b);
+}
+
+function candidateStrategyRank(strategy: CandidatePlan['strategy']): number {
+  switch (strategy) {
+    case 'id': return 0;
+    case 'class': return 1;
+    case 'tag': return 2;
+    case 'walk': return 3;
+  }
+}
+
+function draftCost(draft: CandidateGroupDraft): number {
+  let cost = 0;
+  for (let i = 0; i < draft.arms.length; i++) {
+    cost += draft.arms[i].cost;
+  }
+  return cost;
+}
+

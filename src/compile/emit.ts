@@ -20,6 +20,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
     return {
       source: `s.hasAttr(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg})`,
       cost: 3,
+      debug: { kind: 'attr', attr },
     };
   }
 
@@ -39,9 +40,15 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
   let cost = 4;
 
   if (attrVal === '') {
-    if (attr.op === '=') pattern = '=';       // [attr=""] matches only empty values.
-    else if (attr.op === '|=') pattern = '|'; // [attr|=""] matches only empty or hyphen-only values.
-    else return { source: 'false', cost: 0 }; // ^=, $=, *=, ~= with empty expected value match nothing.
+    if (attr.op === '=') {       // [attr=""] matches only empty values.
+      pattern = '=';
+    }
+    else if (attr.op === '|=') { // [attr|=""] matches only empty or hyphen-only values.
+      pattern = '|';
+    }
+    else {                       // ^=, $=, *=, ~= with empty expected value match nothing.
+      return { source: 'false', cost: 0, debug: { kind: 'attr', attr } };
+    }
   } else {
     switch (attr.op) {
       case '=': pattern = '='; cost = 3; break;
@@ -52,7 +59,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
       case '~=':
         if (/[\t\n\f\r ]/.test(attrVal)) {
           // [attr~="a b"] is syntactically valid but can never match one whitespace-separated token.
-          return { source: 'false', cost: 0 };
+          return { source: 'false', cost: 0, debug: { kind: 'attr', attr } };
         }
 
         // Keep ~= on the manual token path. A CSS-space regex is faster for one
@@ -77,6 +84,7 @@ export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
       `s.matchAttribute(e,${anyNsArg},${nameArg},${htmlNameArg},${hasColonNameArg},` +
       `${patternArg},${valueArg},${htmlValueArg},${sensitivity})`,
     cost,
+    debug: { kind: 'attr', attr },
   };
 }
 
@@ -165,6 +173,8 @@ export function emitIsPseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
+    pseudoWhere: list,
+    debug: { kind: 'is', list },
   };
 }
 
@@ -174,6 +184,8 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
+    pseudoIs: list,
+    debug: { kind: 'where', list },
   };
 }
 
@@ -183,6 +195,7 @@ export function emitNotPseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     cost: list.cost,
     buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`,
+    debug: { kind: 'not', list },
   };
 }
 
@@ -192,6 +205,7 @@ export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
     usesScope: list.usesScope,
     cost: list.cost + 1,
     buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx),
+    debug: { kind: 'has', list },
   };
 }
 
@@ -225,7 +239,7 @@ export function emitLinkPseudoTest(): CandidateTest {
 // :visited
 export function emitVisitedPseudoTest(): CandidateTest {
   // Browser selector APIs do not expose history state to script.
-  return { source: 'false', cost: 0 };
+  return { source: 'false', cost: 0, debug: { kind: 'pseudo', name: 'visited' } };
 }
 
 // :target
@@ -368,13 +382,13 @@ export function emitVolumeLockedPseudoTest(): CandidateTest {
 }
 
 // parse-valid no-match pseudo-class
-export function emitNoMatchPseudoTest(_name: string): CandidateTest {
-  return { source: 'false', cost: 0 };
+export function emitNoMatchPseudoTest(name: string): CandidateTest {
+  return { source: 'false', cost: 0, debug: { kind: 'pseudo', name } };
 }
 
 // parse-valid no-match pseudo-element
-export function emitNoMatchPseudoElementTest(_name: string): CandidateTest {
-  return { source: 'false', cost: 0 };
+export function emitNoMatchPseudoElementTest(name: string): CandidateTest {
+  return { source: 'false', cost: 0, debug: { kind: 'pseudo-element', name } };
 }
 
 // registered pseudo-class
@@ -382,5 +396,6 @@ export function emitRegisteredPseudoTest(name: string): CandidateTest {
   return {
     source: `s.pseudos[${JSON.stringify(name)}](e)`,
     cost: 20,
+    debug: { kind: 'registered-pseudo', name },
   };
 }

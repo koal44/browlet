@@ -6,7 +6,7 @@ const htmlStandard = readFileSync('test/browser/fixtures/slick/template-standard
 runPerfScenarios('jsdom-perf', [
   {
     name: 'select template-standard selector corpus',
-    status: 'only',
+    // status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     quickIters: 100,
@@ -63,7 +63,7 @@ runPerfScenarios('jsdom-perf', [
 
   {
     name: 'first template-standard selector corpus',
-    status: 'only',
+    // status: 'only',
     markup: htmlStandard,
     markupMode: 'html-document',
     quickIters: 100,
@@ -518,6 +518,75 @@ runPerfScenarios('jsdom-perf', [
       { label: ':muted (miss)',               op: 'match', selector: ':muted',               ref: { by: 'id', id: 'video' },            iters: 2_000_000 },
       { label: ':muted (hit)',                op: 'match', selector: ':muted',               ref: { by: 'id', id: 'audio' },            iters: 2_000_000 },
       { label: ':volume-locked (miss)',       op: 'match', selector: ':volume-locked',       ref: { by: 'id', id: 'video' },            iters: 2_000_000 },
+    ],
+  },
+
+  {
+    name: 'pseudo-lift and selector-list ordering',
+    status: 'only',
+    markupMode: 'html-document',
+    markup: htmlStandard,
+    quickIters: 1_000,
+    benches: [
+      // // :is() / :where() seed lifting
+      // { op: 'select', selector: 'div:is(h1.a, h2.a, h3.a)', ref: { by: 'document' }, iters: 1_000 },
+      // { op: 'select', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
+      // { op: 'select', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 1_000 },
+      // { op: 'select', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 1_000 },
+      // { op: 'select', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
+
+      // { op: 'first', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
+      // { op: 'first', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 2_000 },
+      // { op: 'first', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 2_000 },
+      // { op: 'first', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
+
+      // // Selector-list ordering: cheap/selective first vs expensive late/early.
+      // { op: 'select', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 1_000 },
+      // { op: 'select', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 1_000 },
+
+      // { op: 'first', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 2_000 },
+      // { op: 'first', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 2_000 },
+
+      // { op: 'match', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'id', id: 'title' }, iters: 200_000 },
+      // { op: 'match', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'id', id: 'title' }, iters: 200_000 },
+
+      { op: 'match', selector: '#title', ref: { by: 'id', id: 'title' }, iters: 2_000_000 },
+      { op: 'match', selector: '[id="title"]', ref: { by: 'id', id: 'title' }, iters: 2_000_000 },
+      { op: 'match', selector: ':nth-of-type(1)', ref: { by: 'id', id: 'title' }, iters: 2_000_000 },
+    ],
+  },
+
+  {
+    name: 'match selector-list arm ordering with expensive nth arm',
+    // status: 'only',
+    markup: `
+      <div id="short">
+        <i id="si1"></i><span id="ss1"></span><i id="si2"></i><span id="ss2"></span><i id="si3"></i><span id="ss3"></span>
+      </div>
+
+      <div id="long">
+        <b id="b1"></b><i id="i1"></i><span id="sp1"></span>
+        <b id="b2"></b><i id="i2"></i><span id="sp2"></span>
+        <b id="b3"></b><i id="i3"></i><span id="sp3"></span>
+        <b id="b4"></b><i id="i4"></i><span id="sp4"></span>
+        <b id="b5"></b><i id="i5"></i><span id="sp5"></span>
+        <b id="b6"></b><i id="i6"></i><span id="sp6"></span>
+        <b id="b7"></b><i id="i7"></i><span id="sp7"></span>
+        <b id="b8"></b><i id="i8"></i><span id="sp8"></span>
+        <b id="b9"></b><i id="i9" data-hot="yes"></i><span id="sp9"></span>
+        <b id="b10"></b><i id="i10"></i><span id="sp10"></span>
+      </div>
+    `,
+    quickIters: 200_000,
+    benches: [
+      {
+        op: 'match', selector: '#i9, [data-hot="yes"], :nth-of-type(9)',
+        ref: { by: 'id', id: 'i9' }, iters: 200_000,
+      },
+      {
+        op: 'match', selector: ':nth-of-type(9), [data-hot="yes"], #i9',
+        ref: { by: 'id', id: 'i9' }, iters: 200_000,
+      },
     ],
   },
 

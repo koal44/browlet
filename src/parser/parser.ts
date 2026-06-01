@@ -22,7 +22,7 @@ import {
   isCombinator, isCssWhitespace,
 } from './lex';
 import { parseNthArgs } from './nth';
-import { assertNever } from '../utils/util';
+import { combinatorCost } from '../planner/cost';
 
 export type SelectorList = {
   selectors: ComplexSelector[];
@@ -34,7 +34,7 @@ export type Combinator = ' ' | '>' | '+' | '~';
 
 export type ComplexSelector = {
   parts: ComplexPart[];
-  source: string;
+  // source: string;
   usesScope: boolean;
   cost: number;
 
@@ -43,7 +43,7 @@ export type ComplexSelector = {
   hasSeed?: boolean;
 };
 
-type ComplexPart = {
+export type ComplexPart = {
   // null for the first compound in the complex selector
   combinator: Combinator | null;
   compound: CompoundSelector;
@@ -91,7 +91,20 @@ type BaseCandidateTest = {
   unique?: boolean;
   usesScope?: boolean;
   cost: number;
+  pseudoIs?: SelectorList;
+  pseudoWhere?: SelectorList;
+  debug?: CandidateTestDebug;
 };
+
+type CandidateTestDebug =
+  | { kind: 'attr'; attr: AttributeSelector; }
+  | { kind: 'pseudo'; name: string; }
+  | { kind: 'pseudo-element'; name: string; }
+  | { kind: 'registered-pseudo'; name: string; }
+  | { kind: 'is' | 'where'; list: SelectorList; }
+  | { kind: 'expanded'; list: SelectorList; }
+  | { kind: 'not'; list: SelectorList; }
+  | { kind: 'has'; list: RelativeSelectorList; };
 
 type StaticCandidateTest = BaseCandidateTest & {
   source: string;
@@ -102,6 +115,7 @@ type DeferredCandidateTest = BaseCandidateTest & {
 };
 
 export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
+
 export type ParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
 };
@@ -150,7 +164,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
 }
 
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
-  const start = c.pos();
+  // const start = c.pos();
   const parts: ComplexPart[] = [];
 
   const first = parseCompoundSelector(c, ctx);
@@ -164,7 +178,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
 
   let usesScope = first.usesScope;
   let cost = firstPart.cost;
-  let end = c.pos();
+  // let end = c.pos();
 
   while (true) {
     const sawWs = consumeTrivia(c);
@@ -193,7 +207,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     const partCost = combinatorCost(combinator) + compound.cost;
     if (compound.usesScope) usesScope = true;
     cost += partCost;
-    end = c.pos();
+    // end = c.pos();
 
     parts.push({
       combinator, compound,
@@ -203,7 +217,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
 
   return {
     parts, usesScope, cost,
-    source: c.slice(start, end),
+    // source: c.slice(start, end),
   };
 }
 
@@ -772,7 +786,7 @@ export type RelativeSelectorList = {
   cost: number;
 };
 
-type RelativeComplexSelector = {
+export type RelativeComplexSelector = {
   steps: RelativeStep[];
   usesScope: boolean;
   cost: number;
@@ -784,7 +798,7 @@ type RelativeStep = {
   cost: number;
 };
 
-type RelativeCompoundSelector = {
+export type RelativeCompoundSelector = {
   source: string;
   usesScope: boolean;
   cost: number;
@@ -930,15 +944,4 @@ function parsePseudoBodyIdentArg(c: Cursor): string {
   }
 
   return arg;
-}
-
-function combinatorCost(c: Combinator | null): number {
-  switch (c) {
-    case null: return 0;
-    case '>': return 1;
-    case '+': return 2;
-    case ' ': return 8;
-    case '~': return 12;
-    default: return assertNever(c);
-  }
 }

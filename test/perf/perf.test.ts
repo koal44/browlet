@@ -2105,7 +2105,7 @@ runPerfScenarios('perf', [
       { op: 'select', selector: 'div:has(> b.flatOut.a1) > i.flatOut.a2 + b.flatOut.a3', ref: { by: 'document' }, iters: 20_000 },
 
       // :is()
-      { op: 'select', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: true },
+      { op: 'select', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: false },
       { op: 'select', selector: 'div:is(.head, .subtoc, .example)', ref: { by: 'document' }, iters: 20_000 },
       { op: 'select', selector: 'li:is(.tocline2, .tocline3) > a[href^="#"]', ref: { by: 'document' }, iters: 20_000 },
       { op: 'select', selector: 'a:is(.url.fn, [href^="mailto:"], [href$="css3-selectors"])', ref: { by: 'document' }, iters: 20_000 },
@@ -2127,7 +2127,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'first hot slick template-standard selector corpus',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',
@@ -2158,7 +2158,7 @@ runPerfScenarios('perf', [
       { op: 'first', selector: 'h4:has(a[name="attribute-substrings"]) + p + dl dt code', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'div:has(> b.flatOut.a1) > i.flatOut.a2 + b.flatOut.a3', ref: { by: 'document' }, iters: 20_000 },
 
-      { op: 'first', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: true },
+      { op: 'first', selector: ':is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000, debug: false },
       { op: 'first', selector: 'div:is(.head, .subtoc, .example)', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'li:is(.tocline2, .tocline3) > a[href^="#"]', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'a:is(.url.fn, [href^="mailto:"], [href$="css3-selectors"])', ref: { by: 'document' }, iters: 20_000 },
@@ -2174,6 +2174,38 @@ runPerfScenarios('perf', [
       // Compound test ordering
       { op: 'first', selector: '[lang="tr"]:indeterminate', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: ':indeterminate[lang="tr"]', ref: { by: 'document' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'pseudo-lift and selector-list ordering',
+    status: 'only',
+    browsers: ['chromium'],
+    markup: htmlStandard,
+    markupMode: 'html-document',
+    probeKeys: ['select', 'first', 'match'],
+    quickIters: 5_000,
+    benches: [
+      // :is() / :where() seed lifting
+      { op: 'select', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+
+      { op: 'first', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
+
+      // Selector-list ordering: cheap/selective first vs expensive late/early.
+      { op: 'select', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 20_000 },
+
+      { op: 'first', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 20_000 },
+
+      { op: 'match', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'id', id: 'title' }, iters: 20_000 },
+      { op: 'match', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'id', id: 'title' }, iters: 20_000 },
     ],
   },
 

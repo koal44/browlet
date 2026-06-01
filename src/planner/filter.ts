@@ -33,12 +33,24 @@ export function createBuildContext(): BuildContext {
   return { nextPredicate: 0, declarations: [] };
 }
 
+// export function buildStrictSelectorListMatch(list: SelectorList, ctx: BuildContext): string {
+//   if (list.selectors.length === 0) {
+//     throw new Error('Cannot build matcher for empty selector list');
+//   }
+
+//   const arms = list.selectors.map((complex) => buildComplexSelectorMatch(complex, ctx));
+//   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
+// }
+
 export function buildStrictSelectorListMatch(list: SelectorList, ctx: BuildContext): string {
   if (list.selectors.length === 0) {
     throw new Error('Cannot build matcher for empty selector list');
   }
 
-  const arms = list.selectors.map((complex) => buildComplexSelectorMatch(complex, ctx));
+  const selectors = list.selectors.slice();
+  selectors.sort((a, b) => a.cost - b.cost);
+
+  const arms = selectors.map((complex) => buildComplexSelectorMatch(complex, ctx));
   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
 }
 

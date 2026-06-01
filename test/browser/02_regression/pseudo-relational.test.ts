@@ -384,4 +384,154 @@ runScenarios('pseudo-relational', 'normal', [
     ],
   },
 
+  {
+    name: 'is/complex-inner-arm-preserves-subject-constraints',
+    // status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="is-root">
+        <section id="is-same-parent" class="a">
+          <h1 id="is-target" lang="tr"></h1>
+        </section>
+
+        <section id="is-extra-generation">
+          <div id="is-child-a" class="a">
+            <h1 id="is-wrong-depth" lang="tr"></h1>
+          </div>
+        </section>
+
+        <article id="is-article" class="a">
+          <h1 id="is-wrong-parent-tag" lang="tr"></h1>
+        </article>
+      </div>
+    `,
+    cases: [
+      { select: 'section > [lang="tr"]:is(.a > h1)', expect: { ids: ['is-target'] } },
+      { first: 'section > [lang="tr"]:is(.a > h1)', expect: { ids: ['is-target'] } },
+      { match: 'section > [lang="tr"]:is(.a > h1)', ref: { by: 'id', id: 'is-target' }, expect: { count: 1 } },
+      { match: 'section > [lang="tr"]:is(.a > h1)', ref: { by: 'id', id: 'is-wrong-depth' }, expect: { count: 0 } },
+      { match: 'section > [lang="tr"]:is(.a > h1)', ref: { by: 'id', id: 'is-wrong-parent-tag' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'is/where-rightmost-subject-expansion-semantics',
+    // status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="iw-root">
+        <h1 id="iw-h1" lang="tr"></h1>
+        <h2 id="iw-h2" lang="tr"></h2>
+        <h3 id="iw-h3"></h3>
+        <p id="iw-p" lang="tr"></p>
+
+        <section id="iw-section-a" class="a">
+          <h1 id="iw-sec-h1" lang="tr"></h1>
+          <h2 id="iw-sec-h2" lang="tr"></h2>
+        </section>
+
+        <section id="iw-section-b" class="b">
+          <h1 id="iw-sec-b-h1" lang="tr"></h1>
+        </section>
+
+        <div id="iw-wrapper">
+          <section id="iw-nested-section" class="a">
+            <div id="iw-nested-a" class="a">
+              <h1 id="iw-too-deep" lang="tr"></h1>
+            </div>
+          </section>
+        </div>
+
+        <div id="iw-data" data-x>
+          <h1 id="iw-data-h1"></h1>
+        </div>
+      </div>
+    `,
+    cases: [
+      { select: ':is(h1, h2)', expect: { ids: ['iw-h1', 'iw-h2', 'iw-sec-h1', 'iw-sec-h2', 'iw-sec-b-h1', 'iw-too-deep', 'iw-data-h1'] } },
+      { select: ':where(h1, h2)', expect: { ids: ['iw-h1', 'iw-h2', 'iw-sec-h1', 'iw-sec-h2', 'iw-sec-b-h1', 'iw-too-deep', 'iw-data-h1'] } },
+      { select: '[lang="tr"]:is(h1, h2)', expect: { ids: ['iw-h1', 'iw-h2', 'iw-sec-h1', 'iw-sec-h2', 'iw-sec-b-h1', 'iw-too-deep'] } },
+      { select: 'section > [lang="tr"]:is(h1, h2)', expect: { ids: ['iw-sec-h1', 'iw-sec-h2', 'iw-sec-b-h1'] } },
+      { select: '[lang="tr"]:is(.a > h1, .a > h2)', expect: { ids: ['iw-sec-h1', 'iw-sec-h2', 'iw-too-deep'] } },
+      { select: 'section > [lang="tr"]:is(.a > h1, .a > h2)', expect: { ids: ['iw-sec-h1', 'iw-sec-h2'] } },
+      { select: 'section > [lang="tr"]:is(.a > h1)', expect: { ids: ['iw-sec-h1'] } },
+    ],
+  },
+
+  {
+    name: 'is/where-lifted-seed-preserves-residual-inner-tests',
+    // status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="lr-root">
+        <section id="lr-section" class="a">
+          <h1 id="lr-hit-role" lang="tr" role="x"></h1>
+          <h1 id="lr-miss-role" lang="tr" role="y"></h1>
+          <h2 id="lr-hit-class" lang="tr" class="ok"></h2>
+          <h2 id="lr-miss-class" lang="tr"></h2>
+        </section>
+        <section id="lr-section-b" class="b">
+          <h1 id="lr-hit-b" lang="tr" role="y"></h1>
+        </section>
+        <div id="lr-too-deep-wrap" class="a">
+          <div id="lr-too-deep-parent">
+            <h1 id="lr-too-deep" lang="tr" role="x"></h1>
+          </div>
+        </div>
+      </div>
+    `,
+    cases: [
+      { select: 'section > [lang="tr"]:is(.a > h1[role="x"], .b > h1[role="y"])', expect: { ids: ['lr-hit-role', 'lr-hit-b'] } },
+      { select: 'section > [lang="tr"]:is(.a > h2.ok)', expect: { ids: ['lr-hit-class'] } },
+      { match: 'section > [lang="tr"]:is(.a > h1[role="x"])', ref: { by: 'id', id: 'lr-hit-role' }, expect: { count: 1 } },
+      { match: 'section > [lang="tr"]:is(.a > h1[role="x"])', ref: { by: 'id', id: 'lr-miss-role' }, expect: { count: 0 } },
+      { match: 'section > [lang="tr"]:is(.a > h1[role="x"])', ref: { by: 'id', id: 'lr-too-deep' }, expect: { count: 0 } },
+    ],
+  },
+
+  {
+    name: 'is/where-lifted-seed-incompatible-tag-arms',
+    // status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="tag-conflict-root">
+        <div id="tag-div" class="foo" lang="tr"></div>
+        <span id="tag-span" class="foo" lang="tr"></span>
+        <div id="tag-div-bar" class="bar" lang="tr"></div>
+        <span id="tag-span-bar" class="bar" lang="tr"></span>
+      </div>
+    `,
+    cases: [
+      { select: 'div:is(span.foo)', expect: { ids: [] } },
+      { select: 'span:is(div.foo)', expect: { ids: [] } },
+
+      { select: 'div:is(div.foo, span.foo)', expect: { ids: ['tag-div'] } },
+      { select: 'span:is(div.foo, span.foo)', expect: { ids: ['tag-span'] } },
+
+      { select: 'div:where(span.foo)', expect: { ids: [] } },
+      { select: 'div:where(div.foo, span.foo)', expect: { ids: ['tag-div'] } },
+    ],
+  },
+
+  {
+    name: 'is/where-lifted-seed-incompatible-tag-arms-with-host-filters',
+    // status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="host-filter-root">
+        <div id="hf-div-hit" class="foo" lang="tr"></div>
+        <div id="hf-div-miss-lang" class="foo" lang="en"></div>
+        <span id="hf-span-foo" class="foo" lang="tr"></span>
+        <div id="hf-div-bar" class="bar" lang="tr"></div>
+      </div>
+    `,
+    cases: [
+      { select: 'div[lang="tr"]:is(span.foo, div.foo)', expect: { ids: ['hf-div-hit'] } },
+      { select: 'div[lang="tr"]:is(span.foo)', expect: { ids: [] } },
+      { select: '[lang="tr"]:is(span.foo, div.foo)', expect: { ids: ['hf-div-hit', 'hf-span-foo'] } },
+      { select: 'DIV:is(div.foo)', expect: { ids: ['hf-div-hit', 'hf-div-miss-lang'] } },
+      { select: 'div[lang="tr"]:where(span.foo, div.foo)', expect: { ids: ['hf-div-hit'] } },
+    ],
+  },
+
 ]);

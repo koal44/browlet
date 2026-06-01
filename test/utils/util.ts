@@ -1,3 +1,8 @@
+import type {
+  AttributeSelector, CandidateTest, Combinator, ComplexSelector, CompoundSelector,
+  RelativeComplexSelector, RelativeCompoundSelector, RelativeSelectorList, TagSelector,
+} from '../../src/parser/parser';
+
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 export function assertNever(x: never): never {
@@ -63,4 +68,172 @@ export function cssEscape(ident: string): string {
       `\\${ident.charAt(i)}`;  // ASCII punctuation / syntax
   }
   return out;
+}
+
+export function describeList(list: { selectors: ComplexSelector[]; }): string {
+  return list.selectors.map(describeComplex).join(', ');
+}
+
+export function describeComplex(complex: ComplexSelector): string {
+  let out = '';
+
+  for (let i = 0; i < complex.parts.length; i++) {
+    const part = complex.parts[i];
+
+    if (i > 0) {
+      out += part.combinator === ' ' ? ' ' : ` ${part.combinator} `;
+    }
+
+    out += describeCompound(part.compound);
+  }
+
+  return out;
+}
+
+export function describeCompound(c: CompoundSelector): string {
+  let out = '';
+
+  if (c.tag) {
+    out += describeTag(c.tag);
+  }
+
+  if (c.id) {
+    out += `#${c.id.raw}${c.id.seed ? '{seed}' : ''}`;
+  }
+
+  if (c.classes) {
+    for (let i = 0; i < c.classes.length; i++) {
+      const cls = c.classes[i];
+      out += `.${cls.raw}${cls.seed ? '{seed}' : ''}`;
+    }
+  }
+
+  for (let i = 0; i < c.tests.length; i++) {
+    out += describeCandidateTest(c.tests[i]);
+  }
+
+  return out || '*';
+}
+
+function describeRelativeList(list: RelativeSelectorList): string {
+  return list.arms.map(describeRelativeArm).join(', ');
+}
+
+function describeRelativeArm(arm: RelativeComplexSelector): string {
+  let out = '';
+
+  for (let i = 0; i < arm.steps.length; i++) {
+    const step = arm.steps[i];
+
+    out += describeRelativeCombinator(step.combinator);
+    out += describeRelativeCompound(step.compound);
+  }
+
+  return out;
+}
+
+function describeRelativeCombinator(combinator: Combinator): string {
+  return combinator === ' ' ? ' ' : `${combinator} `;
+}
+
+function describeRelativeCompound(compound: RelativeCompoundSelector): string {
+  return compound.source;
+}
+
+function describeTag(tag: TagSelector): string {
+  if (tag.prefixRaw !== undefined) return `${tag.prefixRaw}|${tag.localRaw}`;
+  return tag.localRaw;
+}
+
+function describeCandidateTest(test: CandidateTest): string {
+  if (test.debug?.kind === 'attr') {
+    return describeAttribute(test.debug.attr);
+  }
+
+  if (test.debug?.kind === 'pseudo') {
+    return `:${test.debug.name}`;
+  }
+
+  if (test.debug?.kind === 'is') return `:is(${describeList(test.debug.list)})`;
+  if (test.debug?.kind === 'where') return `:where(${describeList(test.debug.list)})`;
+  if (test.debug?.kind === 'not') return `:not(${describeList(test.debug.list)})`;
+  if (test.debug?.kind === 'has') return `:has(${describeRelativeList(test.debug.list)})`;
+  if (test.debug?.kind === 'expanded') {
+    return test.pseudoIs
+      ? `:xis(${describeList(test.pseudoIs)})`
+      : test.pseudoWhere ? `:xwhere(${describeList(test.pseudoWhere)})` : '??';
+  }
+
+  if ('source' in test) return describeStaticSource(test.source);
+  return '<deferred>';
+}
+
+function describeAttribute(attr: AttributeSelector): string {
+  const ns =
+    attr.prefixRaw === undefined ? ''
+    : attr.prefixRaw === '' ? '|'
+    : `${attr.prefixRaw}|`;
+
+  const name = `${ns}${attr.localRaw}`;
+
+  if (!attr.op) return `[${name}]`;
+
+  const flag = attr.flag ? ` ${attr.flag}` : '';
+  return `[${name}${attr.op}"${attr.valueRaw ?? ''}"${flag}]`;
+}
+
+function describeStaticSource(source: string): string {
+  if (source === 'true') return 'true';
+  if (source === 'false') return 'false';
+
+  if (source === 's.isScope(e)') return ':scope';
+  if (source === 's.isRoot(e)') return ':root';
+  if (source === 's.isEmpty(e)') return ':empty';
+  if (source === 's.isFirstChild(e)') return ':first-child';
+  if (source === 's.isLastChild(e)') return ':last-child';
+  if (source === 's.isOnlyChild(e)') return ':only-child';
+  if (source === 's.isFirstOfType(e)') return ':first-of-type';
+  if (source === 's.isLastOfType(e)') return ':last-of-type';
+  if (source === 's.isOnlyOfType(e)') return ':only-of-type';
+
+  if (source === 's.isAnyLink(e)') return ':any-link';
+  if (source === 's.isTarget(e)') return ':target';
+  if (source === 's.defined(e)') return ':defined';
+
+  if (source === 's.isHovered(e)') return ':hover';
+  if (source === 's.isActive(e)') return ':active';
+  if (source === 's.isFocused(e)') return ':focus';
+  if (source === 's.isFocusWithin(e)') return ':focus-within';
+
+  if (source === 's.isEnabled(e)') return ':enabled';
+  if (source === 's.isDisabled(e)') return ':disabled';
+  if (source === '!s.isReadWrite(e)') return ':read-only';
+  if (source === 's.isReadWrite(e)') return ':read-write';
+  if (source === 's.isPlaceholderShown(e)') return ':placeholder-shown';
+  if (source === 's.isDefault(e)') return ':default';
+
+  if (source === 's.isChecked(e)') return ':checked';
+  if (source === 's.isIndeterminate(e)') return ':indeterminate';
+  if (source === 's.isRequired(e)') return ':required';
+  if (source === 's.isOptional(e)') return ':optional';
+  if (source === 's.isInvalid(e)') return ':invalid';
+  if (source === 's.isValid(e)') return ':valid';
+  if (source === 's.isInRange(e)') return ':in-range';
+  if (source === 's.isOutOfRange(e)') return ':out-of-range';
+
+  if (source === 's.isPlaying(e)') return ':playing';
+  if (source === 's.isPaused(e)') return ':paused';
+  if (source === 's.isSeeking(e)') return ':seeking';
+  if (source === 's.isMuted(e)') return ':muted';
+
+  if (source.startsWith('s.hasAttr(')) return '[attr]';
+  if (source.startsWith('s.matchAttribute(')) return '[attr op value]';
+  if (source.startsWith('s.matchLang(')) return ':lang(...)';
+  if (source.startsWith('s.matchDir(')) return ':dir(...)';
+  if (source.startsWith('s.isNthElement(')) return ':nth-child(...)';
+  if (source.startsWith('s.isNthOfType(')) return ':nth-of-type(...)';
+  if (source.includes('s.nthElement(')) return ':nth-child(...)';
+  if (source.includes('s.nthOfType(')) return ':nth-of-type(...)';
+
+  return `<source:${source}>`;
 }

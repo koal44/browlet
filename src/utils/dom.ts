@@ -122,6 +122,7 @@ export function isNamedItemAnElement(item: Element | HTMLCollection): item is El
 }
 
 export function getIdAttr(e: Element): string {
+  return e.getAttribute('id') || '';
   const v = e.id;
   return typeof v === 'string' ? v : e.getAttribute('id') || '';
 }
