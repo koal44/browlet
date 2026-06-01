@@ -2,7 +2,7 @@ import {
   asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken,
 } from '../utils/css';
 import {
-  getClassAttr, getIdAttr, isFormStateElement, isHtmlButton, isHtmlElement, isValidityElement,
+  isFormStateElement, isHtmlButton, isValidityElement,
   isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup,
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
@@ -42,19 +42,18 @@ export function matchPrevAny(e: Element, test: CombinatorTest, h: HashCache | nu
   return false;
 }
 
-export function checkId(e: Element, id: string): boolean {
-  return getIdAttr(e) === id;
+export function checkId(e: Element, id: string, snap: Snapshot): boolean {
+  return snap.getId(e) === id;
 }
 
 export function checkClass(e: Element, cls: string, snap: Snapshot): boolean {
-  return snap.getClassRegex(cls).test(getClassAttr(e));
+  return snap.getClassRegex(cls).test(snap.getClass(e));
 }
 
-export function checkTag(e: Element, lowerTag: string, tag: string): boolean {
+export function checkTag(e: Element, lowerTag: string, tag: string, snap: Snapshot): boolean {
   // perf if lowerTag==tag, but only caller already checks, so no null lowerTag case here
-  return isHtmlElement(e)
-    ? e.localName === lowerTag
-    : e.localName === tag;
+  const localName = snap.getLocalName(e);
+  return snap.isHtmlElement(e) ? localName === lowerTag : localName === tag;
 }
 
 export function hasAttr(
@@ -67,11 +66,11 @@ export function hasAttr(
 ): boolean {
   // Fast path for non-namespaced attributes without colons, which are common in HTML and SVG
   if (!anyNs && !hasColonName) {
-    return e.hasAttribute(name);
+    return snap.hasAttribute(e, name);
   }
 
   const attrs = e.attributes;
-  const expected = htmlName !== null && snap.isHtml && isHtmlElement(e) ? htmlName : name;
+  const expected = htmlName !== null && snap.isHtml && snap.isHtmlElement(e) ? htmlName : name;
 
   if (anyNs) {
     for (const attr of attrs) {
@@ -100,9 +99,9 @@ export function matchAttribute(
   snap: Snapshot
 ): boolean {
   if (!anyNs && !hasColonName) {
-    const attrValue = e.getAttribute(name);
+    const attrValue = snap.getAttribute(e, name);
 
-    const insensitive = sensitivity === 1 || (sensitivity === 2 && snap.isHtml && isHtmlElement(e));
+    const insensitive = sensitivity === 1 || (sensitivity === 2 && snap.isHtml && snap.isHtmlElement(e));
     return attrValue !== null &&
       matchAttrValueOp(attrValue, pattern, expected, htmlExpected, insensitive, snap);
   }
@@ -112,7 +111,7 @@ export function matchAttribute(
 
   const needsHtmlInfo = htmlName !== null || sensitivity === 2;
   if (needsHtmlInfo && snap.isHtml) {
-    const isHtml = isHtmlElement(e);
+    const isHtml = snap.isHtmlElement(e);
 
     if (isHtml) {
       if (htmlName !== null) expectedName = htmlName;
@@ -226,13 +225,13 @@ export function isOnlyChild(e: Element): boolean {
 }
 
 // :first-of-type
-export function isFirstOfType(e: Element): boolean {
-  const localName = e.localName;
-  const namespaceURI = e.namespaceURI;
+export function isFirstOfType(e: Element, snap: Snapshot): boolean {
+  const localName = snap.getLocalName(e);
+  const namespaceURI = snap.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.previousElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+  while ((n = n.previousElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -240,13 +239,13 @@ export function isFirstOfType(e: Element): boolean {
 }
 
 // :last-of-type
-export function isLastOfType(e: Element): boolean {
-  const localName = e.localName;
-  const namespaceURI = e.namespaceURI;
+export function isLastOfType(e: Element, snap: Snapshot): boolean {
+  const localName = snap.getLocalName(e);
+  const namespaceURI = snap.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.nextElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+  while ((n = n.nextElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -254,13 +253,13 @@ export function isLastOfType(e: Element): boolean {
 }
 
 // :only-of-type
-export function isOnlyOfType(e: Element): boolean {
-  const localName = e.localName;
-  const namespaceURI = e.namespaceURI;
+export function isOnlyOfType(e: Element, snap: Snapshot): boolean {
+  const localName = snap.getLocalName(e);
+  const namespaceURI = snap.getNamespaceURI(e);
 
   let n: Element | null = e;
 
-  while ((n = n.nextElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+  while ((n = n.nextElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -268,7 +267,7 @@ export function isOnlyOfType(e: Element): boolean {
 
   n = e;
 
-  while ((n = n.previousElementSibling) && (n.localName !== localName || n.namespaceURI !== namespaceURI)) {
+  while ((n = n.previousElementSibling) && (snap.getLocalName(n) !== localName || snap.getNamespaceURI(n) !== namespaceURI)) {
     // walk
   }
 
@@ -336,14 +335,14 @@ type NthOfTypeIndexEntry = {
 
 // fast resolver for :nth-of-type() and :nth-last-of-type()
 // use cache if available to get the 1-based index of element among same-type siblings
-export function nthOfType(element: Element, fromLast: boolean, h: HashCache | null): number {
-  if (!h) return nthOfTypeLocal(element, fromLast);
+export function nthOfType(element: Element, fromLast: boolean, h: HashCache | null, snap: Snapshot): number {
+  if (!h) return nthOfTypeLocal(element, fromLast, snap);
 
   const parent = element.parentNode;
   if (!parent) return 1;
 
-  const namespaceURI = element.namespaceURI;
-  const localName = element.localName;
+  const namespaceURI = snap.getNamespaceURI(element);
+  const localName = snap.getLocalName(element);
   const typeKey = `${namespaceURI ?? ''}\x00${localName}`;
 
   const cache = h.nthOfType ??= new WeakMap<ParentNode, NthOfTypeParentMap>();
@@ -359,9 +358,9 @@ export function nthOfType(element: Element, fromLast: boolean, h: HashCache | nu
     const indexMap = new WeakMap<Element, number>();
 
     let index = 0;
-    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
-      if (node.localName === localName && node.namespaceURI === namespaceURI) {
-        indexMap.set(node, index++);
+    for (let n = parent.firstElementChild; n; n = n.nextElementSibling) {
+      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
+        indexMap.set(n, index++);
       }
     }
 
@@ -377,14 +376,14 @@ export function nthOfType(element: Element, fromLast: boolean, h: HashCache | nu
   return fromLast ? entry.length - index : index + 1;
 }
 
-function nthOfTypeLocal(element: Element, fromLast: boolean): number {
-  const namespaceURI = element.namespaceURI;
-  const localName = element.localName;
+function nthOfTypeLocal(element: Element, fromLast: boolean, snap: Snapshot): number {
+  const namespaceURI = snap.getNamespaceURI(element);
+  const localName = snap.getLocalName(element);
   let n = 1;
   let e: Element | null = element;
 
   while ((e = fromLast ? e.nextElementSibling : e.previousElementSibling)) {
-    if (e.localName === localName && e.namespaceURI === namespaceURI) {
+    if (snap.getLocalName(e) === localName && snap.getNamespaceURI(e) === namespaceURI) {
       n++;
     }
   }
@@ -397,9 +396,9 @@ export function isNthElement(element: Element, index: number, fromLast: boolean,
   return nthElement(element, fromLast, h) === index;
 }
 
-export function isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null): boolean {
-  if (!h) return isNthOfTypeLocal(element, index, fromLast);
-  return nthOfType(element, fromLast, h) === index;
+export function isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null, snap: Snapshot): boolean {
+  if (!h) return isNthOfTypeLocal(element, index, fromLast, snap);
+  return nthOfType(element, fromLast, h, snap) === index;
 }
 
 function isNthElementLocal(element: Element, target: number, fromLast: boolean): boolean {
@@ -432,7 +431,7 @@ function isNthElementLocal(element: Element, target: number, fromLast: boolean):
   return node === element;
 }
 
-function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): boolean {
+function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean, snap: Snapshot): boolean {
   if (target < 1) {
     throw new Error(`Invalid nth-of-type index: ${target}`);
   }
@@ -440,24 +439,24 @@ function isNthOfTypeLocal(element: Element, target: number, fromLast: boolean): 
   const parent = element.parentNode;
   if (!parent) return target === 1;
 
-  const namespaceURI = element.namespaceURI;
-  const localName = element.localName;
+  const namespaceURI = snap.getNamespaceURI(element);
+  const localName = snap.getLocalName(element);
 
   let index = 0;
 
   if (!fromLast) {
-    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
-      if (node.localName === localName && node.namespaceURI === namespaceURI) {
+    for (let n = parent.firstElementChild; n; n = n.nextElementSibling) {
+      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
         ++index;
-        if (node === element) return index === target;
+        if (n === element) return index === target;
         if (index >= target) return false;
       }
     }
   } else {
-    for (let node = parent.lastElementChild; node; node = node.previousElementSibling) {
-      if (node.localName === localName && node.namespaceURI === namespaceURI) {
+    for (let n = parent.lastElementChild; n; n = n.previousElementSibling) {
+      if (snap.getLocalName(n) === localName && snap.getNamespaceURI(n) === namespaceURI) {
         ++index;
-        if (node === element) return index === target;
+        if (n === element) return index === target;
         if (index >= target) return false;
       }
     }
@@ -536,11 +535,11 @@ function nextDescendant(root: Element, node: Element): Element | null {
   return null;
 }
 
-export function matchLang(wanted: string, element: Element): boolean {
+export function matchLang(wanted: string, element: Element, snap: Snapshot): boolean {
   const n = wanted.length;
 
   for (let node: Element | null = element; node; node = node.parentElement) {
-    const actual = node.getAttribute('lang');
+    const actual = snap.getAttribute(node, 'lang');
 
     if (actual) {
       const lang = actual.toLowerCase();
@@ -551,9 +550,9 @@ export function matchLang(wanted: string, element: Element): boolean {
   return false;
 }
 
-export function matchDir(wanted: string, element: Element): boolean {
+export function matchDir(wanted: string, element: Element, snap: Snapshot): boolean {
   for (let node: Element | null = element; node; node = node.parentElement) {
-    const actual = node.getAttribute('dir');
+    const actual = snap.getAttribute(node, 'dir');
 
     if (actual) {
       const dir = actual.toLowerCase();
@@ -569,7 +568,7 @@ export function matchDir(wanted: string, element: Element): boolean {
     }
 
     // <bdi> defaults to auto directionality even without a dir attribute.
-    if (node === element && node.localName === 'bdi') {
+    if (node === element && snap.getLocalName(node) === 'bdi') {
       const auto = autoDir(node.textContent || '');
       return auto ? auto === wanted : wanted === 'ltr';
     }
@@ -606,21 +605,21 @@ function autoDir(text: string): 'ltr' | 'rtl' | null {
 }
 
 // :any-link / :link
-export function isAnyLink(e: Element): boolean {
-  const localName = e.localName;
+export function isAnyLink(e: Element, snap: Snapshot): boolean {
+  const localName = snap.getLocalName(e);
 
   if (localName !== 'a' && localName !== 'area') {
     const lower = localName.toLowerCase();
     if (lower !== 'a' && lower !== 'area') return false;
   }
 
-  return e.hasAttribute('href');
+  return snap.hasAttribute(e, 'href');
 }
 
 // :target
 export function isTarget(e: Element, snap: Snapshot): boolean {
   const hash = snap.doc.location.hash;
-  return hash.length > 1 && getIdAttr(e) === hash.slice(1) && !!(snap.doc.compareDocumentPosition(e) & 16);
+  return hash.length > 1 && snap.getId(e) === hash.slice(1) && !!(snap.doc.compareDocumentPosition(e) & 16);
 }
 
 // :hover
@@ -661,28 +660,28 @@ function isPotentialCustomElementName(name: string): boolean {
 }
 
 export function isDefined(element: Element, snap: Snapshot): boolean {
-  if (!isHtmlElement(element)) return true;
+  if (!snap.isHtmlElement(element)) return true;
 
-  const name = element.localName;
+  const name = snap.getLocalName(element);
   if (!isPotentialCustomElementName(name)) return true;
 
   return !!snap.doc.defaultView?.customElements.get(name);
 }
 
-export function isDisabled(e: Element): boolean {
-  return isFormStateElement(e) && isDisabledFormStateElement(e);
+export function isDisabled(e: Element, snap: Snapshot): boolean {
+  return isFormStateElement(e) && isDisabledFormStateElement(e, snap);
 }
 
-export function isEnabled(e: Element): boolean {
-  return isFormStateElement(e) && !isDisabledFormStateElement(e);
+export function isEnabled(e: Element, snap: Snapshot): boolean {
+  return isFormStateElement(e) && !isDisabledFormStateElement(e, snap);
 }
 
-function isDisabledFormStateElement(e: FormStateElement): boolean {
-  if (e.hasAttribute('disabled')) return true;
+function isDisabledFormStateElement(e: FormStateElement, snap: Snapshot): boolean {
+  if (snap.hasAttribute(e, 'disabled')) return true;
 
   if (isHtmlOption(e)) {
     const parent = e.parentElement;
-    return !!parent && isHtmlOptGroup(parent) && parent.hasAttribute('disabled');
+    return !!parent && isHtmlOptGroup(parent) && snap.hasAttribute(parent, 'disabled');
   }
 
   if (isHtmlOptGroup(e)) return false;
@@ -690,7 +689,7 @@ function isDisabledFormStateElement(e: FormStateElement): boolean {
   // Ancestor disabled fieldsets may disable form controls, unless the control is
   // inside that fieldset's first legend child.
   for (let n = e.parentElement; n; n = n.parentElement) {
-    if (!isHtmlFieldSet(n) || !n.hasAttribute('disabled')) continue;
+    if (!isHtmlFieldSet(n) || !snap.hasAttribute(n, 'disabled')) continue;
 
     let exempt = false;
 
@@ -711,9 +710,9 @@ function isDisabledFormStateElement(e: FormStateElement): boolean {
 const READONLY_APPLIES_INPUT_TYPES = new Set(['date', 'datetime-local', 'email', 'month', 'number', 'password', 'search', 'tel', 'text', 'time', 'url', 'week']);
 export function isReadWrite(e: Element, snap: Snapshot): boolean {
   if (isHtmlInput(e)) {
-    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !e.hasAttribute('readonly') && !isDisabled(e);
+    return READONLY_APPLIES_INPUT_TYPES.has(e.type) && !snap.hasAttribute(e, 'readonly') && !isDisabled(e, snap);
   }
-  if (isHtmlTextArea(e)) return !e.hasAttribute('readonly') && !isDisabled(e);
+  if (isHtmlTextArea(e)) return !snap.hasAttribute(e, 'readonly') && !isDisabled(e, snap);
   return isEditingHostOrEditable(e, snap);
 }
 
@@ -721,8 +720,8 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
   if (!isHtmlSvgOrMathElement(e)) return false;
 
   // Editing host: HTML element with contenteditable in the true or plaintext-only state.
-  const attr = e.getAttribute('contenteditable')?.toLowerCase();
-  if (isHtmlElement(e) && (attr === '' || attr === 'true' || attr === 'plaintext-only')) {
+  const attr = snap.getAttribute(e, 'contenteditable')?.toLowerCase();
+  if (snap.isHtmlElement(e) && (attr === '' || attr === 'true' || attr === 'plaintext-only')) {
     return true;
   }
 
@@ -736,7 +735,7 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
   const designMode = snap.docDesignMode(e.ownerDocument);
   if (designMode?.toLowerCase() === 'on') {
     for (let n: Element | null = e; n; n = n.parentElement) {
-      if (n.getAttribute('contenteditable')?.toLowerCase() === 'false') {
+      if (snap.getAttribute(n, 'contenteditable')?.toLowerCase() === 'false') {
         return false;
       }
     }
@@ -747,13 +746,13 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
   // Editable: not an editing host, does not have contenteditable=false,
   // parent is an editing host or editable, and the element is HTML/SVG/Math.
   for (let n: Element | null = e.parentElement; n; n = n.parentElement) {
-    const parentAttr = n.getAttribute('contenteditable')?.toLowerCase();
+    const parentAttr = snap.getAttribute(n, 'contenteditable')?.toLowerCase();
 
     if (parentAttr === 'false') {
       return false;
     }
 
-    if (isHtmlElement(n) && (parentAttr === '' || parentAttr === 'true' || parentAttr === 'plaintext-only')) {
+    if (snap.isHtmlElement(n) && (parentAttr === '' || parentAttr === 'true' || parentAttr === 'plaintext-only')) {
       return true;
     }
   }
@@ -763,8 +762,8 @@ function isEditingHostOrEditable(e: Element, snap: Snapshot): boolean {
 
 const PLACEHOLDER_INPUT_TYPES = new Set(['email', 'number', 'password', 'search', 'tel', 'text', 'url']);
 
-export function isPlaceholderShown(e: Element): boolean {
-  if (!e.hasAttribute('placeholder')) return false;
+export function isPlaceholderShown(e: Element, snap: Snapshot): boolean {
+  if (!snap.hasAttribute(e, 'placeholder')) return false;
 
   if (isHtmlTextArea(e)) {
     return e.value === '';
@@ -779,12 +778,12 @@ export function isPlaceholderShown(e: Element): boolean {
 
 const DOCUMENT_POSITION_FOLLOWING = 4;
 
-export function isDefault(e: Element): boolean {
-  if (isHtmlOption(e)) return e.hasAttribute('selected');
+export function isDefault(e: Element, snap: Snapshot): boolean {
+  if (isHtmlOption(e)) return snap.hasAttribute(e, 'selected');
 
   const isInput = isHtmlInput(e);
   if (isInput && (e.type === 'checkbox' || e.type === 'radio')) {
-    return e.hasAttribute('checked');
+    return snap.hasAttribute(e, 'checked');
   }
 
   const isButton = isHtmlButton(e);
@@ -834,9 +833,9 @@ export function isChecked(e: Element): boolean {
   return false;
 }
 
-export function isIndeterminate(e: Element): boolean {
+export function isIndeterminate(e: Element, snap: Snapshot): boolean {
   // progress elements with no value content attribute
-  if (isHtmlProgress(e)) return !e.hasAttribute('value');
+  if (isHtmlProgress(e)) return !snap.hasAttribute(e, 'value');
 
   if (!isHtmlInput(e)) return false;
 
@@ -852,7 +851,7 @@ export function isIndeterminate(e: Element): boolean {
 
   // Radio groups require a non-empty name attribute; an unnamed unchecked radio is alone,
   // so its group contains no checked input.
-  const name = e.getAttribute('name');
+  const name = snap.getAttribute(e, 'name');
   if (!name) return true;
 
   const root = e.getRootNode();
@@ -866,7 +865,7 @@ export function isIndeterminate(e: Element): boolean {
       input.type === 'radio' &&
       input.form === e.form &&
       input.getRootNode() === root &&
-      input.getAttribute('name') === name &&
+      snap.getAttribute(input, 'name') === name &&
       input.checked
     ) {
       return false;
@@ -882,20 +881,20 @@ const REQUIRED_INPUT_TYPES = new Set([
   // 'color' for webkit?
 ]);
 
-export function isRequired(e: Element): boolean {
+export function isRequired(e: Element, snap: Snapshot): boolean {
   if (isHtmlSelect(e) || isHtmlTextArea(e)) {
-    return e.hasAttribute('required');
+    return snap.hasAttribute(e, 'required');
   }
 
   if (isHtmlInput(e)) {
-    return REQUIRED_INPUT_TYPES.has(e.type) && e.hasAttribute('required');
+    return REQUIRED_INPUT_TYPES.has(e.type) && snap.hasAttribute(e, 'required');
   }
 
   return false;
 }
 
-export function isOptional(e: Element): boolean {
-  return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e);
+export function isOptional(e: Element, snap: Snapshot): boolean {
+  return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e, snap);
 }
 
 export function isInvalid(e: Element): boolean {
@@ -933,7 +932,7 @@ function hasInvalidDescendant(root: Element): boolean {
   return false;
 }
 
-function isRangeInput(e: Element): e is HTMLInputElement {
+function isRangeInput(e: Element, snap: Snapshot): e is HTMLInputElement {
   if (!isHtmlInput(e)) return false;
 
   switch (e.type) {
@@ -941,22 +940,22 @@ function isRangeInput(e: Element): e is HTMLInputElement {
       return true;
 
     case 'date': case 'datetime-local': case 'month': case 'number': case 'time': case 'week':
-      return e.hasAttribute('min') || e.hasAttribute('max');
+      return snap.hasAttribute(e, 'min') || snap.hasAttribute(e, 'max');
 
     default:
       return false;
   }
 }
 
-export function isInRange(e: Element): boolean {
-  if (!isRangeInput(e) || !e.willValidate) return false;
+export function isInRange(e: Element, snap: Snapshot): boolean {
+  if (!isRangeInput(e, snap) || !e.willValidate) return false;
 
   const validity = e.validity;
   return !validity.rangeUnderflow && !validity.rangeOverflow;
 }
 
-export function isOutOfRange(e: Element): boolean {
-  if (!isRangeInput(e) || !e.willValidate) return false;
+export function isOutOfRange(e: Element, snap: Snapshot): boolean {
+  if (!isRangeInput(e, snap) || !e.willValidate) return false;
 
   const validity = e.validity;
   return validity.rangeUnderflow || validity.rangeOverflow;

@@ -64,6 +64,7 @@ export type SelectletCaps<
 > = {
   doc?: DocumentCaps<E, D>;
   frag?: FragmentCaps<E, F>;
+  el?: ElementCaps<E>;
 };
 
 export type DocumentCaps<E extends Element, D extends Document> = {
@@ -75,6 +76,18 @@ export type DocumentCaps<E extends Element, D extends Document> = {
 export type FragmentCaps<E extends Element, F extends DocumentFragment> = {
   cachedIds?: (frag: F, id: string) => Iterable<E>;
   cachedClasses?: (frag: F, classes: readonly string[]) => Iterable<E>;
+};
+
+export type ElementCaps<E extends Element> = {
+  getId?: (el: E) => string;
+  getClass?: (el: E) => string;
+  getLocalName?: (el: E) => string;
+  getNamespaceURI?: (el: E) => string | null;
+
+  getAttribute?: (el: E, name: string) => string | null;
+  getAttributeNS?: (el: E, namespace: string | null, localName: string) => string | null;
+  hasAttribute?: (el: E, name: string) => boolean;
+  hasAttributeNS?: (el: E, namespace: string | null, localName: string) => boolean;
 };
 
 export type CustomPseudoPredicate = (element: Element) => boolean;

@@ -28,7 +28,7 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
   } else {
     const lower = asciiLower(local);
     source = local === lower
-      ? `e.localName===${JSON.stringify(local)}`
+      ? `s.getLocalName(e)===${JSON.stringify(local)}`
       : `s.checkTag(e,${JSON.stringify(lower)},${JSON.stringify(local)})`;
   }
 
@@ -36,7 +36,7 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
 
   if (tag.prefixRaw === '') {
     return {
-      source: source === 'true' ? '!e.namespaceURI' : `!e.namespaceURI&&${source}`,
+      source: source === 'true' ? '!s.getNamespaceURI(e)' : `!s.getNamespaceURI(e)&&${source}`,
       cost: tag.cost,
     };
   }

@@ -523,32 +523,32 @@ runPerfScenarios('jsdom-perf', [
 
   {
     name: 'pseudo-lift and selector-list ordering',
-    status: 'only',
+    // status: 'only',
     markupMode: 'html-document',
     markup: htmlStandard,
     quickIters: 1_000,
     benches: [
-      // // :is() / :where() seed lifting
-      // { op: 'select', selector: 'div:is(h1.a, h2.a, h3.a)', ref: { by: 'document' }, iters: 1_000 },
-      // { op: 'select', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
-      // { op: 'select', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 1_000 },
-      // { op: 'select', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 1_000 },
-      // { op: 'select', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
+      // :is() / :where() seed lifting
+      { op: 'select', selector: 'div:is(h1.a, h2.a, h3.a)', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 1_000 },
 
-      // { op: 'first', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
-      // { op: 'first', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 2_000 },
-      // { op: 'first', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 2_000 },
-      // { op: 'first', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '[lang="tr"]:is(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: 'section > [lang="tr"]:is(.a > h1, .a > h2)', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: 'div:is(span.foo, div.example, p.copyright)', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 2_000 },
 
-      // // Selector-list ordering: cheap/selective first vs expensive late/early.
-      // { op: 'select', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 1_000 },
-      // { op: 'select', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 1_000 },
+      // Selector-list ordering: cheap/selective first vs expensive late/early.
+      { op: 'select', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 1_000 },
+      { op: 'select', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 1_000 },
 
-      // { op: 'first', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 2_000 },
-      // { op: 'first', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 2_000 },
+      { op: 'first', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 2_000 },
 
-      // { op: 'match', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'id', id: 'title' }, iters: 200_000 },
-      // { op: 'match', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'id', id: 'title' }, iters: 200_000 },
+      { op: 'match', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'id', id: 'title' }, iters: 200_000 },
+      { op: 'match', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'id', id: 'title' }, iters: 200_000 },
 
       { op: 'match', selector: '#title', ref: { by: 'id', id: 'title' }, iters: 2_000_000 },
       { op: 'match', selector: '[id="title"]', ref: { by: 'id', id: 'title' }, iters: 2_000_000 },
@@ -587,6 +587,36 @@ runPerfScenarios('jsdom-perf', [
         op: 'match', selector: ':nth-of-type(9), [data-hot="yes"], #i9',
         ref: { by: 'id', id: 'i9' }, iters: 200_000,
       },
+    ],
+  },
+
+  {
+    name: 'match hot element accessors',
+    status: 'only',
+    markupMode: 'html-body',
+    markup: `
+      <div id="access-root">
+        <h1 id="access-target" class="alpha beta gamma" lang="tr" data-hot="yes" title="hello"></h1>
+        <h2 id="access-other" class="alpha" lang="en" data-hot="no"></h2>
+      </div>
+    `,
+    quickIters: 200_000,
+    benches: [
+      { op: 'match', selector: '#access-target', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+
+      { op: 'match', selector: '.alpha', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: '.beta', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: '.missing', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+
+      { op: 'match', selector: 'h1', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: 'h2', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+
+      { op: 'match', selector: '[id="access-target"]', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: '[class~="beta"]', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: '[lang="tr"]', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+      { op: 'match', selector: '[data-hot="yes"]', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
+
+      { op: 'match', selector: 'h1#access-target.alpha[lang="tr"][data-hot="yes"]', ref: { by: 'id', id: 'access-target' }, iters: 200_000 },
     ],
   },
 

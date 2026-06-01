@@ -33,8 +33,8 @@ const groupedDupedIds = (n: number) => {
 runPerfScenarios('perf', [
   {
     name: 'blob mixed overview',
-    // status: 'only',
-    status: 'skip',
+    status: 'only',
+    // status: 'skip',
     browsers: ['chromium'],
     markup: htmlStandard,
     probeKeys: ['select', 'selBuild', 'match', 'matBuild'],
@@ -2179,7 +2179,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'pseudo-lift and selector-list ordering',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',
@@ -2206,6 +2206,38 @@ runPerfScenarios('perf', [
 
       { op: 'match', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'id', id: 'title' }, iters: 20_000 },
       { op: 'match', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'id', id: 'title' }, iters: 20_000 },
+    ],
+  },
+
+  {
+    name: 'match hot element accessors',
+    status: 'only',
+    browsers: ['chromium'],
+    markupMode: 'html-body',
+    markup: `
+      <div id="access-root">
+        <h1 id="access-target" class="alpha beta gamma" lang="tr" data-hot="yes" title="hello"></h1>
+        <h2 id="access-other" class="alpha" lang="en" data-hot="no"></h2>
+      </div>
+    `,
+    probeKeys: ['match'],
+    quickIters: 200_000,
+    benches: [
+      { op: 'match', selector: '#access-target', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+
+      { op: 'match', selector: '.alpha', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: '.beta', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: '.missing', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+
+      { op: 'match', selector: 'h1', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: 'h2', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+
+      { op: 'match', selector: '[id="access-target"]', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: '[class~="beta"]', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: '[lang="tr"]', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+      { op: 'match', selector: '[data-hot="yes"]', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
+
+      { op: 'match', selector: 'h1#access-target.alpha[lang="tr"][data-hot="yes"]', ref: { by: 'id', id: 'access-target' }, iters: 5_000_000 },
     ],
   },
 

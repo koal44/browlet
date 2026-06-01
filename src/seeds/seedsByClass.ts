@@ -1,6 +1,6 @@
 import type { SelectletCaps } from '../selectlet';
 import { collectionToArray, concatCollection, iterableToArray } from '../utils/collections';
-import { getClassAttr, isDocument, isElement } from '../utils/dom';
+import { isDocument, isElement } from '../utils/dom';
 
 export type SeedClassFn = (classes: string[], context: QueryContext) => Element[];
 type ClassCap<R> = (root: R, classes: readonly string[]) => Iterable<Element>;
@@ -55,7 +55,7 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
     const reCls = snap.getClassRegex(cls);
 
     for (let el = context.firstElementChild; el; el = el.nextElementSibling) {
-      if (reCls.test(getClassAttr(el))) nodes.push(el);
+      if (reCls.test(snap.getClass(el))) nodes.push(el);
       concatCollection(nodes, el.getElementsByClassName(cls));
     }
 
@@ -65,7 +65,7 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
   const tests = classes.map((cls) => snap.getClassRegex(cls));
 
   for (let el = context.firstElementChild; el; el = el.nextElementSibling) {
-    const attr = getClassAttr(el);
+    const attr = snap.getClass(el);
 
     let matched = true;
     for (let i = 0, l = tests.length; i < l; ++i) {

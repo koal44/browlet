@@ -41,6 +41,16 @@ export class Snapshot {
   readonly docDesignMode: (doc: Document) => string | undefined;
   checkCacheWatermark: () => void;
 
+  getId: (e: Element) => string;
+  getClass: (e: Element) => string;
+  getLocalName: (e: Element) => string;
+  getNamespaceURI: (e: Element) => string | null;
+
+  getAttribute: (e: Element, name: string) => string | null;
+  getAttributeNS: (e: Element, namespace: string | null, localName: string) => string | null;
+  hasAttribute: (e: Element, name: string) => boolean;
+  hasAttributeNS: (e: Element, namespace: string | null, localName: string) => boolean;
+
   // state for dynamic pseudo-classes
   hoverTarget: Element | null = null;
   activeTarget: Element | null = null;
@@ -61,7 +71,6 @@ export class Snapshot {
 
   clearCache(): void {
     this.cacheSize = 0;
-
     this.strictMatchResolvers.clear();
     this.selectResolvers.clear();
     this.firstResolvers.clear();
@@ -115,6 +124,17 @@ export class Snapshot {
     this.checkCacheWatermark = watermark <= 0 || !Number.isFinite(watermark)
       ? () => {}
       : () => { if (this.cacheSize > watermark) this.clearCache(); };
+
+    const elCaps = caps?.el;
+
+    this.getId = elCaps?.getId ?? getIdAttr;
+    this.getClass = elCaps?.getClass ?? getClassAttr;
+    this.getLocalName = elCaps?.getLocalName ?? defaultGetLocalName;
+    this.getNamespaceURI = elCaps?.getNamespaceURI ?? defaultGetNamespaceURI;
+    this.getAttribute = elCaps?.getAttribute ?? defaultGetAttribute;
+    this.getAttributeNS = elCaps?.getAttributeNS ?? defaultGetAttributeNS;
+    this.hasAttribute = elCaps?.hasAttribute ?? defaultHasAttribute;
+    this.hasAttributeNS = elCaps?.hasAttributeNS ?? defaultHasAttributeNS;
   }
 
   update(ctx: QueryContext, updateScope = false): void {
@@ -216,6 +236,10 @@ export class Snapshot {
 
   // -------- Runtime matchers used by emitted selector functions --------
 
+  isHtmlElement(e: Element): e is HTMLElement {
+    return this.getNamespaceURI(e) === 'http://www.w3.org/1999/xhtml';
+  }
+
   // full selector match
   matchStrict(selector: string, element: Element, h: HashCache | null = null) {
     return matchStrict(selector, element, this, h);
@@ -228,9 +252,9 @@ export class Snapshot {
   matchAncestor = matchAncestor;
 
   // basic element tests
-  checkId = checkId;
+  checkId(e: Element, id: string) { return checkId(e, id, this); }
   checkClass(e: Element, cls: string) { return checkClass(e, cls, this); }
-  checkTag = checkTag;
+  checkTag(e: Element, lowerTag: string, tag: string) { return checkTag(e, lowerTag, tag, this); }
   isScope(e: Element) { return isScope(e, this); }
   isRoot(e: Element) { return isRoot(e, this); }
   isEmpty = isEmpty;
@@ -248,22 +272,22 @@ export class Snapshot {
   isFirstChild = isFirstChild;
   isLastChild = isLastChild;
   isOnlyChild = isOnlyChild;
-  isFirstOfType = isFirstOfType;
-  isLastOfType = isLastOfType;
-  isOnlyOfType = isOnlyOfType;
+  isFirstOfType(e: Element) { return isFirstOfType(e, this); }
+  isLastOfType(e: Element) { return isLastOfType(e, this); }
+  isOnlyOfType(e: Element) { return isOnlyOfType(e, this); }
   matchesNthIndex = matchesNthIndex;
-  nthOfType = nthOfType;
+  nthOfType(element: Element, fromLast: boolean, h: HashCache | null) { return nthOfType(element, fromLast, h, this); }
   nthElement = nthElement;
   isNthElement = isNthElement;
-  isNthOfType = isNthOfType;
+  isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null) { return isNthOfType(element, index, fromLast, h, this); }
 
   // relational / language / link-state
   matchHas(steps: [SelectorCombinator, string][], anchor: Element, h: HashCache) {
     return matchHasFrom(steps, 0, anchor, this, h);
   }
-  matchDir = matchDir;
-  matchLang = matchLang;
-  isAnyLink = isAnyLink;
+  matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }
+  matchLang(wanted: string, element: Element) { return matchLang(wanted, element, this); }
+  isAnyLink(e: Element) { return isAnyLink(e, this); }
   isTarget(e: Element) { return isTarget(e, this); }
   defined(element: Element) { return isDefined(element, this); }
 
@@ -271,23 +295,23 @@ export class Snapshot {
   isHovered(e: Element) { return isHovered(e, this); }
   isActive(e: Element) { return isActive(e, this); }
   isFocusWithin(e: Element) { return isFocusWithin(e, this); }
-  isFocused(node: Element) { return isFocused(node, this); }
+  isFocused(e: Element) { return isFocused(e, this); }
 
   // form / validity / media state
-  isDisabled = isDisabled;
-  isEnabled = isEnabled;
-  isReadWrite = (e: Element) => isReadWrite(e, this);
+  isDisabled(e: Element) { return isDisabled(e, this); }
+  isEnabled(e: Element) { return isEnabled(e, this); }
+  isReadWrite(e: Element) { return isReadWrite(e, this); }
   isFormStateElement = isFormStateElement;
-  isPlaceholderShown = isPlaceholderShown;
-  isDefault = isDefault;
+  isPlaceholderShown(e: Element) { return isPlaceholderShown(e, this); }
+  isDefault(e: Element) { return isDefault(e, this); }
   isChecked = isChecked;
-  isIndeterminate = isIndeterminate;
-  isRequired = isRequired;
-  isOptional = isOptional;
+  isIndeterminate(e: Element) { return isIndeterminate(e, this); }
+  isRequired(e: Element) { return isRequired(e, this); }
+  isOptional(e: Element) { return isOptional(e, this); }
   isValid = isValid;
   isInvalid = isInvalid;
-  isInRange = isInRange;
-  isOutOfRange = isOutOfRange;
+  isInRange(e: Element) { return isInRange(e, this); }
+  isOutOfRange(e: Element) { return isOutOfRange(e, this); }
   isPlaying = isPlaying;
   isPaused = isPaused;
   isSeeking = isSeeking;
@@ -331,4 +355,38 @@ export class Snapshot {
     }, null, 2);
   }
 
+}
+
+function getIdAttr(e: Element): string {
+  const v = e.id;
+  return typeof v === 'string' ? v : e.getAttribute('id') || '';
+}
+
+function getClassAttr(e: Element): string {
+  const v = e.className;
+  return typeof v === 'string' ? v : e.getAttribute('class') || '';
+}
+
+function defaultGetLocalName(e: Element): string {
+  return e.localName;
+}
+
+function defaultGetNamespaceURI(e: Element): string | null {
+  return e.namespaceURI;
+}
+
+function defaultGetAttribute(e: Element, name: string): string | null {
+  return e.getAttribute(name);
+}
+
+function defaultGetAttributeNS(e: Element, namespace: string | null, localName: string): string | null {
+  return e.getAttributeNS(namespace, localName);
+}
+
+function defaultHasAttribute(e: Element, name: string): boolean {
+  return e.hasAttribute(name);
+}
+
+function defaultHasAttributeNS(e: Element, namespace: string | null, localName: string): boolean {
+  return e.hasAttributeNS(namespace, localName);
 }

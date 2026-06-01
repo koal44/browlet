@@ -1,6 +1,6 @@
 import { collectionToArray, concatCollection, mergeDocumentOrder } from '../utils/collections';
 import { asciiLower } from '../utils/css';
-import { isDocumentFragment, isHtmlElement } from '../utils/dom';
+import { isDocumentFragment } from '../utils/dom';
 
 export function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!tag) return [];
@@ -18,7 +18,7 @@ export function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): 
   if (tag === lowerTag) {
     return collectionToArray(context.getElementsByTagNameNS('*', tag));
   }
-  return seedsByTagNsUnion(tag, lowerTag, context);
+  return seedsByTagNsUnion(tag, lowerTag, context, snap);
 }
 
 function seedsByTagFragment(tag: string, context: DocumentFragment, snap: Snapshot): Element[] {
@@ -33,7 +33,7 @@ function seedsByTagFragment(tag: string, context: DocumentFragment, snap: Snapsh
 
     const found = tagIsLower || !snap.isHtml
       ? root.getElementsByTagNameNS('*', tag)
-      : seedsByTagNsUnion(tag, lowerTag, root);
+      : seedsByTagNsUnion(tag, lowerTag, root, snap);
 
     for (const e of found) nodes[nodes.length] = e;
   }
@@ -41,7 +41,7 @@ function seedsByTagFragment(tag: string, context: DocumentFragment, snap: Snapsh
   return nodes;
 }
 
-function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | Element): Element[] {
+function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | Element, snap: Snapshot): Element[] {
   const exact = context.getElementsByTagNameNS('*', tag);
   const lower = context.getElementsByTagNameNS('*', lowerTag);
 
@@ -51,13 +51,13 @@ function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | El
   for (const e of exact) {
     // Exact-cased selector tag should keep XML/foreign localName matches,
     // but not weird XHTML-namespace mixed-case elements created via createElementNS.
-    if (!isHtmlElement(e)) exactNodes[exactNodes.length] = e;
+    if (!snap.isHtmlElement(e)) exactNodes[exactNodes.length] = e;
   }
 
   for (const e of lower) {
     // Folded lowerTag side is only for HTML elements in an HTML document.
     // XML/imported XML lowercase localName matches are false positives for e.g. selector "Foo".
-    if (isHtmlElement(e)) lowerNodes[lowerNodes.length] = e;
+    if (snap.isHtmlElement(e)) lowerNodes[lowerNodes.length] = e;
   }
 
   if (!exactNodes.length) return lowerNodes;
@@ -82,8 +82,8 @@ function seedsByAllTag(context: QueryContext): Element[] {
 
 // null lowerTag means tag==lowerTag
 export function sameSelectorTag(e: Element, tag: string, lowerTag: string |  null, snap: Snapshot): boolean {
-  if (lowerTag === null) return e.localName === tag;
-  return snap.isHtml && isHtmlElement(e)
-    ? e.localName === lowerTag
-    : e.localName === tag;
+  if (lowerTag === null) return snap.getLocalName(e) === tag;
+  return snap.isHtml && snap.isHtmlElement(e)
+    ? snap.getLocalName(e) === lowerTag
+    : snap.getLocalName(e) === tag;
 }

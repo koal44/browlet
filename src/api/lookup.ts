@@ -2,7 +2,7 @@ import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
 import { collectionToArray, concatCollection } from '../utils/collections';
 import { asciiLower } from '../utils/css';
-import { getClassAttr, isDocumentFragment, isElement, isNamedItemAnElement } from '../utils/dom';
+import { isDocumentFragment, isElement, isNamedItemAnElement } from '../utils/dom';
 
 // scoped getElementById for Document, DocumentFragment, and Element contexts
 export function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {
@@ -91,7 +91,7 @@ export function byClass(cls: string, context: QueryContext, snap: Snapshot): Ele
   let el = context.firstElementChild;
 
   while (el) {
-    if (reCls.test(getClassAttr(el))) nodes.push(el);
+    if (reCls.test(snap.getClass(el))) nodes.push(el);
     concatCollection(nodes, el.getElementsByClassName(cls));
     el = el.nextElementSibling;
   }
@@ -129,7 +129,7 @@ export function byTag(tag: string, context: QueryContext, snap: Snapshot): Eleme
 }
 
 // context agnostic getElementsByTagNameNS
-export function byTagNs(ns: string | null, local: string, context: QueryContext, _snap: Snapshot): Element[] {
+export function byTagNs(ns: string | null, local: string, context: QueryContext, snap: Snapshot): Element[] {
   if (!local) return [];
 
   if (!isDocumentFragment(context)) {
@@ -140,8 +140,8 @@ export function byTagNs(ns: string | null, local: string, context: QueryContext,
   let el = context.firstElementChild;
 
   while (el) {
-    const nsMatch = ns === '*' || el.namespaceURI === ns;
-    const localMatch = local === '*' || el.localName === local;
+    const nsMatch = ns === '*' || snap.getNamespaceURI(el) === ns;
+    const localMatch = local === '*' || snap.getLocalName(el) === local;
 
     if (nsMatch && localMatch) nodes.push(el);
 
