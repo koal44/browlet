@@ -11,7 +11,7 @@ import {
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator,
-  isHost,
+  frontierFilter, frontierNext, frontierFollowing, frontierChildren, isHost,
 } from './compile/runtime';
 import type {
   CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
@@ -22,9 +22,9 @@ import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from '
 import { querySelect, type DebugSelect, type SelectResolver } from './api/select';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './utils/util';
-import { SelectorSyntaxError } from './parser/cursor';
 import { toNodeList } from './utils/collections';
 import { RuntimeCache } from './compile/runtimeCache';
+import { SelectorSyntaxError } from './parser/cursor';
 
 export class Snapshot {
   doc: Document;
@@ -360,6 +360,11 @@ export class Snapshot {
   isPaused = isPaused;
   isSeeking = isSeeking;
   isMuted = isMuted;
+
+  frontierFilter = frontierFilter;
+  frontierNext = frontierNext;
+  frontierFollowing = frontierFollowing;
+  frontierChildren = frontierChildren;
 
   // debugging
   isDebug = false;

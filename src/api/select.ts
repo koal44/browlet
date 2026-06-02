@@ -30,10 +30,10 @@ export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Ele
 
   if (groups.length === 1) {
     const group = groups[0];
-    const candidates = group.plan.candidates.lookup(ctx);
-    const results = group.select(candidates, rc);
+    const run = lookupCandidates(group, ctx, rc);
+    const results = group.select(run.candidates, rc, run.provenPart);
 
-    if (isDebug) updateDebugRun(snap, group, candidates, results);
+    if (isDebug) updateDebugRun(snap, group, run, results);
 
     return results;
   }
@@ -43,11 +43,11 @@ export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Ele
 
   for (let k = 0; k < groups.length; k++) {
     const group = groups[k];
-    const candidates = group.plan.candidates.lookup(ctx);
-    const results = group.select(candidates, rc);
+    const run = lookupCandidates(group, ctx, rc);
+    const results = group.select(run.candidates, rc, run.provenPart);
 
     if (results.length) lists[i++] = results;
-    if (isDebug) updateDebugRun(snap, group, candidates, results);
+    if (isDebug) updateDebugRun(snap, group, run, results);
   }
 
   return mergeDocumentOrderLists(lists);
@@ -63,6 +63,41 @@ type SelectGroup = {
   plan: CandidateGroupPlan;
   select: SelectFn;
 };
+
+type CandidateRun = {
+  lookupCtx: QueryContext;
+  provenPart: number;
+  candidates: Element[];
+  usedFrontier: boolean;
+  frontierKind?: 'context' | 'candidates';
+};
+
+function lookupCandidates(group: SelectGroup, ctx: QueryContext, rc: RuntimeCache | null): CandidateRun {
+  const plan = group.plan.candidates;
+  const frontier = plan.frontier?.(ctx, rc);
+
+  if (frontier?.kind === 'candidates') {
+    return {
+      lookupCtx: ctx,
+      provenPart: frontier.provenPart,
+      candidates: frontier.candidates,
+      usedFrontier: true,
+      frontierKind: 'candidates',
+    };
+  }
+
+  const lookupCtx = frontier?.ctx ?? ctx;
+  const provenPart = frontier?.provenPart ?? -1;
+  const candidates = plan.lookup(lookupCtx);
+
+  return {
+    lookupCtx,
+    provenPart,
+    candidates,
+    usedFrontier: frontier !== undefined,
+    frontierKind: frontier?.kind,
+  };
+}
 
 function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver {
   snap.checkCacheWatermark();
@@ -92,13 +127,13 @@ function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver
   return { groups, usesScope, usesCache };
 }
 
-type SelectFn = (candidates: Element[], rc: RuntimeCache | null) => Element[];
+type SelectFn = (candidates: Element[], rc: RuntimeCache | null, provenPart: number) => Element[];
 
 function compileSelect(filter: Filter, snap: Snapshot): SelectFn {
   const f =
     `"use strict";` +
     filter.declarations.join('') +
-    `return function Select(c,rc){` +
+    `return function Select(c,rc,provenPart){` +
       `var e,k=-1,j=-1,r=[];` +
       `while((e=c[++k])){` +
         `if(${filter.source}){` +
@@ -121,6 +156,7 @@ export type DebugSelect = {
   build: {
     usesScope: boolean;
     usesCache: boolean;
+    hasFrontier: boolean;
     strategy: string;
     lookupQuery: string;
     filterCost: number;
@@ -129,6 +165,11 @@ export type DebugSelect = {
   run: {
     strategy: string;
     lookupQuery: string;
+    hasFrontier: boolean;
+    frontierKind?: 'context' | 'candidates';
+    frontierContext?: QueryContextDescription;
+    usedFrontier: boolean;
+    provenPart: number;
     candidates: string[];
     selectSrcText: string;
     results: string[];
@@ -152,13 +193,20 @@ function initDebug(snap: Snapshot, sel: string, ctx: QueryContext): void {
 function updateDebugRun(
   snap: Snapshot,
   group: SelectGroup,
-  candidates: Element[],
+  run: CandidateRun,
   results: Element[],
 ): void {
+  const hasFrontier = group.plan.candidates.frontier !== undefined;
+
   snap.debugSelect?.run.push({
     strategy: group.plan.candidates.strategy,
     lookupQuery: group.plan.candidates.lookupQuery,
-    candidates: describeElements(candidates),
+    hasFrontier,
+    frontierContext: run.frontierKind === 'context' ? describeContext(run.lookupCtx) : undefined,
+    frontierKind: run.frontierKind,
+    usedFrontier: run.usedFrontier,
+    provenPart: run.provenPart,
+    candidates: describeElements(run.candidates),
     selectSrcText: String(group.select),
     results: describeElements(results),
   });
@@ -172,6 +220,7 @@ function updateDebugBuild(
   snap.debugSelect?.build.push({
     usesScope: plan.filter.usesScope === true,
     usesCache: plan.filter.usesCache === true,
+    hasFrontier: plan.candidates.frontier !== undefined,
     strategy: plan.candidates.strategy,
     lookupQuery: plan.candidates.lookupQuery,
     filterCost: plan.filter.cost,

@@ -12,14 +12,13 @@ export function queryMatches(selectors: string, element: Element, snap: Snapshot
 
   if (resolver.usesScope) snap.update(element, true /*updateScope*/);
 
-  // let rc: RuntimeCache | null = null;
-  // if (resolver.usesCache && snap.hasTreeVersion) {
-  //   snap.syncRuntimeCache(element);
-  //   rc = snap.runtimeCache;
-  // }
+  let rc: RuntimeCache | null = null;
+  if (resolver.usesCache && snap.hasTreeVersion) {
+    snap.syncRuntimeCache(element);
+    rc = snap.runtimeCache;
+  }
 
-  // const result = resolver.match(element, rc);
-  const result = resolver.match(element, null);
+  const result = resolver.match(element, rc);
 
   if (isDebug) updateDebugMatch(snap, result);
 

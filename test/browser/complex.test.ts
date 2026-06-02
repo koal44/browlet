@@ -35,7 +35,7 @@ Selectivity:
 runScenarios('complex selector', 'normal', [
   {
     name: 'jsdom complex selector selectivity',
-    status: 'only',
+    // status: 'only',
     markup: complexMarkup(),
     cases: [
       { select: '.box', expect: { ids: ['box0', 'box1', 'box2', 'box3', 'box4'] } },

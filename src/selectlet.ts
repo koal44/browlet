@@ -1,4 +1,3 @@
-import type { SelectorSyntaxError } from './parser/cursor';
 import { Snapshot } from './snapshot';
 import { toNodeList } from './utils/collections';
 import { isElement, isNode, isText } from './utils/dom';
@@ -60,7 +59,7 @@ export type SelectletOptions = {
 };
 
 export type SelectletErrorOptions = {
-  syntax?: (err: SelectorSyntaxError) => Error;
+  syntax?: (err: SyntaxError) => Error;
 };
 
 export type SelectletCaps<

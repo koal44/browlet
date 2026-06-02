@@ -4,8 +4,9 @@ import { buildStrictComplexMatcher, createBuildContext } from './filter';
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import { cssIdentUnescape } from '../utils/css';
 import { expandSelectorListForSeeding } from './pseudo-lift';
+import { attachFrontiers, type FrontierFn } from './frontier';
 
-type CandidateGroupDraft = {
+export type CandidateGroupDraft = {
   arms: ComplexSelector[];
   candidates: CandidatePlan;
 };
@@ -19,12 +20,12 @@ export function planCandidateGroups(list: SelectorList, snap: Snapshot): Candida
   const arms = expandSelectorListForSeeding(list);
   const drafts = buildCandidateGroupDrafts(arms, snap);
   drafts.sort(compareCandidateGroupDrafts);
+  attachFrontiers(drafts, snap);
   return finalizeCandidateGroupDrafts(drafts);
 }
 
 function buildCandidateGroupDrafts(arms: ComplexSelector[], snap: Snapshot): CandidateGroupDraft[] {
   arms.sort((a, b) => a.cost - b.cost);
-  // arms.sort((a, b) => b.cost - a.cost);
 
   const drafts: CandidateGroupDraft[] = [];
 
@@ -64,9 +65,10 @@ function finalizeCandidateGroupDrafts(drafts: CandidateGroupDraft[]): CandidateG
     let usesScope = false;
     let usesCache = false;
 
+    const frontierAware = d.arms.length === 1 && d.candidates.frontier !== undefined;
     for (let j = 0; j < d.arms.length; j++) {
       const arm = d.arms[j];
-      const built = buildStrictComplexMatcher(arm, ctx);
+      const built = buildStrictComplexMatcher(arm, ctx, { frontierAware });
 
       sources[j] = built.source;
       cost += built.cost;
@@ -100,6 +102,7 @@ export type CandidatePlan = {
   strategy: 'id' | 'class' | 'tag' | 'walk';
   lookupQuery: string;
   lookup: (ctx: QueryContext) => Element[];
+  frontier?: FrontierFn;
 };
 
 // Marks seed-supplied simple selectors so residual matcher generation can skip them.
@@ -188,4 +191,3 @@ function draftCost(draft: CandidateGroupDraft): number {
   }
   return cost;
 }
-

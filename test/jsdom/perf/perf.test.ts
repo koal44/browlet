@@ -592,7 +592,7 @@ runPerfScenarios('jsdom-perf', [
 
   {
     name: 'match hot element accessors',
-    status: 'only',
+    // status: 'only',
     markupMode: 'html-body',
     markup: `
       <div id="access-root">
@@ -620,4 +620,130 @@ runPerfScenarios('jsdom-perf', [
     ],
   },
 
+  {
+    name: 'nth predicate cost with tree versioning',
+    status: 'only',
+    engines: ['sx-vendor', 'selectlet'],
+    markup: `
+      <div id="short">
+        <i id="si1"></i><span id="ss1"></span><i id="si2"></i><span id="ss2"></span><i id="si3"></i><span id="ss3"></span>
+      </div>
+
+      <div id="long">
+        <b id="b1"></b><i id="i1"></i><span id="sp1"></span>
+        <b id="b2"></b><i id="i2"></i><span id="sp2"></span>
+        <b id="b3"></b><i id="i3"></i><span id="sp3"></span>
+        <b id="b4"></b><i id="i4"></i><span id="sp4"></span>
+        <b id="b5"></b><i id="i5"></i><span id="sp5"></span>
+        <b id="b6"></b><i id="i6"></i><span id="sp6"></span>
+        <b id="b7"></b><i id="i7"></i><span id="sp7"></span>
+        <b id="b8"></b><i id="i8"></i><span id="sp8"></span>
+        <b id="b9"></b><i id="i9"></i><span id="sp9"></span>
+        <b id="b10"></b><i id="i10"></i><span id="sp10"></span>
+      </div>
+    `,
+    quickIters: 200_000,
+    benches: [
+      { op: 'select', selector: ':nth-child(4)',             iters: 20_000 },
+      { op: 'select', selector: ':nth-last-child(3)',        iters: 20_000 },
+      { op: 'select', selector: ':nth-of-type(2)',           iters: 20_000 },
+      { op: 'select', selector: ':nth-last-of-type(2)',      iters: 20_000 },
+
+      { op: 'select', selector: ':nth-child(odd)',           iters: 20_000 },
+      { op: 'select', selector: ':nth-child(even)',          iters: 20_000 },
+      { op: 'select', selector: ':nth-of-type(odd)',         iters: 20_000 },
+      { op: 'select', selector: ':nth-of-type(even)',        iters: 20_000 },
+
+      { op: 'select', selector: ':nth-child(3n+1)',          iters: 20_000 },
+      { op: 'select', selector: ':nth-of-type(3n+1)',        iters: 20_000 },
+
+      { op: 'select', selector: ':nth-child(27)',            iters: 20_000 },
+      { op: 'select', selector: ':nth-last-child(27)',       iters: 20_000 },
+      { op: 'select', selector: ':nth-of-type(9)',           iters: 20_000 },
+      { op: 'select', selector: ':nth-last-of-type(9)',      iters: 20_000 },
+    ],
+  },
+
 ]);
+
+const SELECTOR = '.box:first-child ~ .box:nth-of-type(4n) + .box .block.inner > .content';
+
+/*
+Selector:
+  .box:first-child ~ .box:nth-of-type(4n) + .box .block.inner > .content
+
+Tree:
+  body
+  └─ #container.container
+     ├─ #box0.box.container                  .box:first-child
+     │  ├─ .block.outer × 5
+     │  │  └─ .block.inner × 5
+     │  │     └─ p.content × 25
+     │  ├─ total .content under #box0: 25
+     │
+     ├─ #box1.box.container
+     │  └─ .content × 25
+     │
+     ├─ #box2.box.container
+     │  └─ .content × 25
+     │
+     ├─ #box3.box.container
+     │  └─ .content × 25
+     │
+     └─ #box4.box.container
+        ├─ .block.outer × 5
+        │  └─ .block.inner × 5
+        │     └─ p.content × 25
+*/
+
+runPerfScenarios('perf', [
+  {
+    name: 'complex selector jsdom shape',
+    // status: 'only',
+    markup: complexMarkup(),
+    benches: [
+      { op: 'select', selector: SELECTOR, iters: 200 },
+      { op: 'first', selector: SELECTOR, iters: 200 },
+
+      { op: 'match', selector: SELECTOR, ref: { by: 'id', id: 'p4-4-4' }, iters: 200 },
+      { op: 'closest', selector: SELECTOR, ref: { by: 'id', id: 'p4-4-4' }, iters: 200 },
+
+      { op: 'select', selector: '.content', iters: 200 },
+      { op: 'first', selector: '.content', iters: 200 },
+      { op: 'select', selector: '#box4 .content', iters: 200 },
+      { op: 'first', selector: '#box4 .content', iters: 200 },
+
+      { op: 'select', selector: '#box4 .block.inner > .content', iters: 200 },
+      { op: 'first', selector: '#box4 .block.inner > .content', iters: 200 },
+    ],
+  },
+]);
+
+function complexMarkup(): string {
+  const x = 5;
+  const y = 5;
+  const z = 5;
+  let html = '<div id="container" class="container">';
+
+  for (let i = 0; i < x; i++) {
+    html += `<div id="box${i}" class="box container">`;
+
+    for (let j = 0; j < y; j++) {
+      html += `<div id="div${i}-${j}" class="block outer">`;
+
+      for (let k = 0; k < z; k++) {
+        html += `<div id="div${i}-${j}-${k}" class="block inner">`;
+        html += `<p id="p${i}-${j}-${k}" class="content">${i}-${j}-${k}</p>`;
+        html += '</div>';
+      }
+
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
