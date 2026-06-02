@@ -226,30 +226,11 @@ function deriveExpandedSubjectCompound(
   liftedSeed: LiftedSeed,
   residualArm: ComplexSelector,
 ): CompoundSelector | null {
-  // #a:is(#b) and div:is(span) are incompatible intersections.
-  // if (
-  //   subjectCompound.id &&
-  //   liftedSeed.id &&
-  //   subjectCompound.id.raw !== liftedSeed.id.raw
-  // ) {
-  //   return null;
-  // }
-
-  // if (subjectCompound.tag && liftedSeed.tag) {
-  //   if (
-  //     subjectCompound.tag.prefixRaw !== liftedSeed.tag.prefixRaw ||
-  //     subjectCompound.tag.localRaw !== liftedSeed.tag.localRaw
-  //   ) {
-  //     return null;
-  //   }
-  // }
-
   if (
     subjectCompound.id &&
     liftedSeed.id &&
     subjectCompound.id.raw !== liftedSeed.id.raw
   ) {
-    // return buildAlwaysFalseSeedableCompound();
     return NEVER_CMPD;
   }
 

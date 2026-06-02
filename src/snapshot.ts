@@ -11,6 +11,7 @@ import {
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   type SelectorCombinator, type HashCache,
+  isHost,
 } from './compile/runtime';
 import type {
   CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
@@ -303,6 +304,7 @@ export class Snapshot {
   checkTag(e: Element, lowerTag: string, tag: string) { return checkTag(e, lowerTag, tag, this); }
   isScope(e: Element) { return isScope(e, this); }
   isRoot(e: Element) { return isRoot(e, this); }
+  isHost(e: Element) { return isHost(e, this); }
   isEmpty = isEmpty;
 
   // attributes

@@ -6,7 +6,7 @@ import {
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
   emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest,
   emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest,
-  emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
+  emitHasPseudoTest, emitHostPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
   emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest,
   emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest,
   emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
@@ -492,6 +492,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     // tree-structural pseudo-classes
     case 'scope': return emitScopePseudoTest();
     case 'root': return emitRootPseudoTest();
+    case 'host': return emitHostPseudoTest();
     case 'empty': return emitEmptyPseudoTest();
     case 'first-child': return emitFirstChildPseudoTest();
     case 'last-child': return emitLastChildPseudoTest();
@@ -639,24 +640,27 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
 
 export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
   c.expect('(');
-  consumeTrivia(c);
-
-  let ch = c.peek();
-
-  if (ch === ')' || ch === '') {
-    c.error(`Expected selector in pseudo-class body, got ${ch || '<eof>'}`);
-  }
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let cost = 0;
 
-  while (ch !== ')' && ch !== '') {
+  while (true) {
     consumeTrivia(c);
-    ch = c.peek();
+    let ch = c.peek();
 
-    if (ch === ',' || ch === ')' || ch === '') {
-      c.error(`Expected selector in pseudo-class body, got ${ch || '<eof>'}`);
+    if (ch === ')') {
+      c.advance();
+      break;
+    }
+
+    if (ch === '') {
+      break;
+    }
+
+    if (ch === ',') {
+      c.advance();
+      continue;
     }
 
     const armStart = c.pos();
@@ -675,22 +679,22 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
     consumeTrivia(c);
     ch = c.peek();
 
-    if (ch === ')' || ch === '') break;
-
-    if (ch !== ',') {
-      c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
+    if (ch === ',') {
+      c.advance();
+      continue;
     }
 
-    c.advance();
-    consumeTrivia(c);
-    ch = c.peek();
-
-    if (ch === ',' || ch === ')' || ch === '') {
-      c.error(`Expected selector after comma in pseudo-class body, got ${ch || '<eof>'}`);
+    if (ch === ')') {
+      c.advance();
+      break;
     }
+
+    if (ch === '') {
+      break;
+    }
+
+    c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
   }
-
-  if (ch === ')') c.advance();
 
   return { selectors, usesScope, cost };
 }

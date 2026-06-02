@@ -105,6 +105,11 @@ export function emitRootPseudoTest(): CandidateTest {
   return { source: 's.isRoot(e)', unique: true, cost: 1 };
 }
 
+// :host
+export function emitHostPseudoTest(): CandidateTest {
+  return { source: 's.isHost(e)', cost: 2, debug: { kind: 'pseudo', name: 'host' } };
+}
+
 // :empty
 export function emitEmptyPseudoTest(): CandidateTest {
   return { source: 's.isEmpty(e)', cost: 2 };

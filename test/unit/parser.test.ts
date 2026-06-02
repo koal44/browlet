@@ -936,6 +936,27 @@ describe('parseAttributeSelector legacy edge cases', () => {
 });
 
 describe('parse logical pseudo nesting and continuation', () => {
+  it('parses empty forgiving is/where pseudos', () => {
+    for (const input of [':is()', ':where()']) {
+      const c = parseCompoundSelector(new Cursor(input), {});
+      expect(c.tests.length).toBe(1);
+    }
+  });
+
+  it('parses empty forgiving is/where selector lists', () => {
+    for (const input of [':is()', ':where()']) {
+      const list = parseSelectorList(input, {});
+      expect(list.selectors).toHaveLength(1);
+      expect(list.selectors[0].parts[0].compound.tests.length).toBe(1);
+    }
+  });
+
+  it('rejects empty non-forgiving functional pseudos', () => {
+    for (const input of [':not()', ':has()']) {
+      expect(() => parseSelectorList(input, {})).toThrow();
+    }
+  });
+
   it('parses nested logical selectors followed by functional pseudos', () => {
     for (const input of [
       ':is(:not(.a), .b):nth-child(2n+1)',
@@ -1414,8 +1435,12 @@ describe('parseSelectorList chained and scoped functional pseudos', () => {
   });
 
   it('rejects malformed generic functional pseudo bodies', () => {
-    for (const input of [':has(> )', ':has(+ )', ':not()', ':is(,)', ':is(.a,, .b)']) {
+    for (const input of [':has(> )', ':has(+ )', ':not()']) {
       expect(() => parseSelectorList(input, {})).toThrow();
+    }
+
+    for (const input of [':is()', ':where()', ':is(,)', ':where(,)', ':is(.a,, .b)', ':where(.a,, .b)']) {
+      expect(() => parseSelectorList(input, {})).not.toThrow();
     }
   });
 
@@ -1505,10 +1530,10 @@ describe('parseForgivingPseudoBodySelectorList', () => {
     expect(list.selectors).toHaveLength(0);
   });
 
-  it('still rejects empty or syntactically empty forgiving lists', () => {
-    expect(() => parseForgivingSelectorList(new Cursor('()'), {})).toThrow();
-    expect(() => parseForgivingSelectorList(new Cursor('(,)'), {})).toThrow();
-    expect(() => parseForgivingSelectorList(new Cursor('(.a,, .b)'), {})).toThrow();
+  it('accepts empty or syntactically empty forgiving lists', () => {
+    expect(parseForgivingSelectorList(new Cursor('()'), {}).selectors).toHaveLength(0);
+    expect(parseForgivingSelectorList(new Cursor('(,)'), {}).selectors).toHaveLength(0);
+    expect(parseForgivingSelectorList(new Cursor('(.a,, .b)'), {}).selectors).toHaveLength(2);
   });
 });
 

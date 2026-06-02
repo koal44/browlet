@@ -1,5 +1,5 @@
 import {
-  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith, hasCssToken,
+  asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiLower, asciiStartsWith, hasCssToken,
 } from '../utils/css';
 import {
   isFormStateElement, isHtmlButton, isValidityElement,
@@ -536,45 +536,109 @@ function nextDescendant(root: Element, node: Element): Element | null {
 }
 
 export function matchLang(wanted: string, element: Element, snap: Snapshot): boolean {
-  const n = wanted.length;
+  wanted = asciiLower(wanted);
 
-  for (let node: Element | null = element; node; node = node.parentElement) {
-    const actual = snap.getAttribute(node, 'lang');
+  for (let node: Element | null = element; node; node = langParent(node)) {
+    const actual = elementLanguage(node, snap);
 
-    if (actual) {
-      const lang = actual.toLowerCase();
-      return lang === wanted || (lang.length > n && lang.charAt(n) === '-' && lang.startsWith(wanted));
+    if (actual !== null) {
+      if (actual === '') return false;
+
+      const lang = asciiLower(actual);
+      const n = wanted.length;
+
+      return lang === wanted ||
+        (lang.length > n && lang.charAt(n) === '-' && lang.startsWith(wanted));
     }
   }
 
   return false;
 }
 
+function langParent(element: Element): Element | null {
+  if (element.parentElement) return element.parentElement;
+
+  const root = element.getRootNode();
+
+  if (root.nodeType === 11 && 'host' in root) {
+    return (root as ShadowRoot).host;
+  }
+
+  return null;
+}
+
+const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+
+function elementLanguage(element: Element, snap: Snapshot): string | null {
+  const lang = snap.getAttribute(element, 'lang');
+  if (lang !== null) return lang;
+
+  return snap.getAttributeNS(element, XML_NS, 'lang');
+}
+
 export function matchDir(wanted: string, element: Element, snap: Snapshot): boolean {
-  for (let node: Element | null = element; node; node = node.parentElement) {
-    const actual = snap.getAttribute(node, 'dir');
+  return elementDir(element, snap) === wanted;
+}
 
-    if (actual) {
-      const dir = actual.toLowerCase();
+function elementDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
+  const local = snap.getLocalName(element);
 
-      if (dir === 'ltr' || dir === 'rtl') {
-        return dir === wanted;
+  if (snap.isHtmlElement(element)) {
+    if (local === 'input') return inputDir(element as HTMLInputElement, snap);
+    if (local === 'textarea') return attrDir(element, snap, (element as HTMLTextAreaElement).value || '');
+
+    if (local === 'bdi') {
+      const attr = snap.getAttribute(element, 'dir');
+
+      if (attr) {
+        const dir = attr.toLowerCase();
+        if (dir === 'ltr' || dir === 'rtl') return dir;
       }
 
-      if (dir === 'auto') {
-        const auto = autoDir(node.textContent || '');
-        return auto ? auto === wanted : wanted === 'ltr';
-      }
-    }
-
-    // <bdi> defaults to auto directionality even without a dir attribute.
-    if (node === element && snap.getLocalName(node) === 'bdi') {
-      const auto = autoDir(node.textContent || '');
-      return auto ? auto === wanted : wanted === 'ltr';
+      return autoDir(element.textContent || '') ?? 'ltr';
     }
   }
 
-  return wanted === 'ltr';
+  return attrDir(element, snap, element.textContent || '');
+}
+
+function attrDir(element: Element, snap: Snapshot, autoText: string): 'ltr' | 'rtl' {
+  const attr = snap.getAttribute(element, 'dir');
+
+  if (attr) {
+    const dir = attr.toLowerCase();
+    if (dir === 'ltr' || dir === 'rtl') return dir;
+    if (dir === 'auto') return autoDir(autoText) ?? 'ltr';
+  }
+
+  const parent = element.parentElement;
+  return parent ? elementDir(parent, snap) : 'ltr';
+}
+
+const inputValueDirTypes = new Set([
+  'hidden', 'text', 'search', 'tel', 'url', 'email', 'password', 'submit', 'reset', 'button',
+]);
+
+function inputDir(input: HTMLInputElement, snap: Snapshot): 'ltr' | 'rtl' {
+  const attr = snap.getAttribute(input, 'dir');
+  const type = input.type;
+
+  if (attr) {
+    const dir = attr.toLowerCase();
+
+    if (dir === 'ltr' || dir === 'rtl') return dir;
+
+    if (dir === 'auto') {
+      return inputValueDirTypes.has(type) ?
+        autoDir(input.value || '') ?? 'ltr' :
+        'ltr';
+    }
+  }
+
+  if (type === 'tel') return 'ltr';
+
+  const parent = input.parentElement;
+  return parent ? elementDir(parent, snap) : 'ltr';
 }
 
 // TODO: cover more edge cases
@@ -985,4 +1049,9 @@ export function isSeeking(e: Element): boolean {
 export function isMuted(e: Element): boolean {
   const media = getMediaElement(e);
   return !!media && media.muted;
+}
+
+export function isHost(_e: Element, _snap: Snapshot): boolean {
+  return false;
+  // not yet implemented
 }
