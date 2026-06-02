@@ -159,7 +159,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..116bcb51 100644
+index b85d6b0e..61699f7b 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -1,7 +1,7 @@
@@ -180,7 +180,7 @@ index b85d6b0e..116bcb51 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -216,19 +216,79 @@ class DocumentImpl extends NodeImpl {
+@@ -216,19 +216,82 @@ class DocumentImpl extends NodeImpl {
      this._styleCache = new WeakMap();
    }
  
@@ -225,6 +225,9 @@ index b85d6b0e..116bcb51 100644
 +          syntax: err => DOMException.create(this._globalObject, [err.message, "SyntaxError"])
 +        },
 +        caps: {
++          tree: {
++            treeVersion: node => node._version
++          },
 +          doc: {
 +            cachedIds: (doc, id) => doc._byIdCache.getAll(id),
 +            designMode: doc => {

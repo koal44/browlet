@@ -9,6 +9,7 @@ export type Filter = {
   declarations: string[];
   cost: number;
   usesScope: boolean;
+  usesCache: boolean;
 };
 
 export function buildStrictMatcher(list: SelectorList, ctx: BuildContext): Filter {
@@ -17,6 +18,7 @@ export function buildStrictMatcher(list: SelectorList, ctx: BuildContext): Filte
     declarations: ctx.declarations,
     cost: list.cost,
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
   };
 }
 
@@ -26,6 +28,7 @@ export function buildStrictComplexMatcher(complex: ComplexSelector, ctx: BuildCo
     declarations: ctx.declarations,
     cost: complex.cost,
     usesScope: complex.usesScope,
+    usesCache: complex.usesCache,
   };
 }
 
@@ -110,10 +113,10 @@ export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext)
 
 function buildCombinatorCall(combinator: Combinator | null, pred: string): string {
   switch (combinator) {
-    case ' ': return `s.matchAncestor(e,${pred},h)`;
-    case '>': return `s.matchParent(e,${pred},h)`;
-    case '+': return `s.matchPrev(e,${pred},h)`;
-    case '~': return `s.matchPrevAny(e,${pred},h)`;
+    case ' ': return `s.matchAncestor(e,${pred},rc)`;
+    case '>': return `s.matchParent(e,${pred},rc)`;
+    case '+': return `s.matchPrev(e,${pred},rc)`;
+    case '~': return `s.matchPrevAny(e,${pred},rc)`;
     default:
       throw new Error(`Invalid combinator in complex selector: ${String(combinator)}`);
   }
@@ -128,7 +131,7 @@ export function buildRelativeSelectorListMatch(list: RelativeSelectorList, _ctx:
       step.compound.source,
     ]);
 
-    return `s.matchHas(${JSON.stringify(steps)},e,h)`;
+    return `s.matchHas(${JSON.stringify(steps)},e,rc)`;
   });
 
   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
@@ -140,6 +143,6 @@ function buildCandidateTest(test: CandidateTest, ctx: BuildContext): string {
 
 function definePredicate(source: string, ctx: BuildContext): string {
   const name = `P${ctx.nextPredicate++}`;
-  ctx.declarations.push(`function ${name}(e,h){return (${source});}\n`);
+  ctx.declarations.push(`function ${name}(e,rc){return (${source});}\n`);
   return name;
 }

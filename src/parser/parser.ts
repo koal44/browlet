@@ -27,6 +27,7 @@ import { combinatorCost } from '../planner/cost';
 export type SelectorList = {
   selectors: ComplexSelector[];
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
 };
 
@@ -34,8 +35,8 @@ export type Combinator = ' ' | '>' | '+' | '~';
 
 export type ComplexSelector = {
   parts: ComplexPart[];
-  // source: string;
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
 
   // Whether a contained compound's ID/class/tag was used as a seed
@@ -55,6 +56,7 @@ export type CompoundSelector = {
   classes?: ClassSelector[];
   tag?: TagSelector;
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
   tests: CandidateTest[];
 };
@@ -90,6 +92,7 @@ export type BuildContext = {
 type BaseCandidateTest = {
   unique?: boolean;
   usesScope?: boolean;
+  usesCache?: boolean;
   cost: number;
   pseudoIs?: SelectorList;
   pseudoWhere?: SelectorList;
@@ -128,6 +131,7 @@ export function parseSelectorList(input: string, ctx: ParseContext): SelectorLis
 function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let usesCache = false;
   let cost = 0;
 
   consumeTrivia(c);
@@ -140,6 +144,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     const complex = parseComplexSelector(c, ctx);
 
     if (complex.usesScope) usesScope = true;
+    if (complex.usesCache) usesCache = true;
     cost += complex.cost;
     selectors.push(complex);
 
@@ -160,7 +165,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     c.error(`Unexpected character ${c.peek()}`);
   }
 
-  return { selectors, usesScope, cost };
+  return { selectors, usesScope, usesCache, cost };
 }
 
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
@@ -177,6 +182,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   parts.push(firstPart);
 
   let usesScope = first.usesScope;
+  let usesCache = first.usesCache;
   let cost = firstPart.cost;
   // let end = c.pos();
 
@@ -206,6 +212,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     const compound = parseCompoundSelector(c, ctx);
     const partCost = combinatorCost(combinator) + compound.cost;
     if (compound.usesScope) usesScope = true;
+    if (compound.usesCache) usesCache = true;
     cost += partCost;
     // end = c.pos();
 
@@ -216,7 +223,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   }
 
   return {
-    parts, usesScope, cost,
+    parts, usesScope, usesCache, cost,
     // source: c.slice(start, end),
   };
 }
@@ -224,6 +231,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
 export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSelector {
   const compound: CompoundSelector = {
     usesScope: false,
+    usesCache: false,
     cost: 0,
     tests: [],
   };
@@ -273,6 +281,7 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   if (ch === ':') {
     const pseudoTest = parsePseudoTestSource(c, ctx);
     if (pseudoTest.usesScope) compound.usesScope = true;
+    if (pseudoTest.usesCache) compound.usesCache = true;
     compound.tests.push(pseudoTest);
     compound.cost += pseudoTest.cost;
     return;
@@ -604,12 +613,14 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let usesCache = false;
   let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     const complex = parseComplexSelector(c, ctx);
 
     if (complex.usesScope) usesScope = true;
+    if (complex.usesCache) usesCache = true;
     cost += complex.cost;
     selectors.push(complex);
 
@@ -635,7 +646,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
     c.advance();
   }
 
-  return { selectors, usesScope, cost };
+  return { selectors, usesScope, usesCache, cost };
 }
 
 export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
@@ -643,6 +654,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
 
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
+  let usesCache = false;
   let cost = 0;
 
   while (true) {
@@ -669,6 +681,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
       const complex = parseComplexSelector(c, ctx);
 
       if (complex.usesScope) usesScope = true;
+      if (complex.usesCache) usesCache = true;
       cost += complex.cost;
       selectors.push(complex);
     } catch {
@@ -696,7 +709,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
     c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
   }
 
-  return { selectors, usesScope, cost };
+  return { selectors, usesScope, usesCache, cost };
 }
 
 function consumeForgivingSelectorArm(c: Cursor): void {
@@ -787,12 +800,14 @@ function consumeForgivingSelectorArm(c: Cursor): void {
 export type RelativeSelectorList = {
   arms: RelativeComplexSelector[];
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
 };
 
 export type RelativeComplexSelector = {
   steps: RelativeStep[];
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
 };
 
@@ -805,6 +820,7 @@ type RelativeStep = {
 export type RelativeCompoundSelector = {
   source: string;
   usesScope: boolean;
+  usesCache: boolean;
   cost: number;
 };
 
@@ -820,11 +836,13 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
 
   const arms: RelativeComplexSelector[] = [];
   let usesScope = false;
+  let usesCache = false;
   let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     const arm = parseRelativeComplexSelector(c, ctx);
     if (arm.usesScope) usesScope = true;
+    if (arm.usesCache) usesCache = true;
     cost += arm.cost;
     arms.push(arm);
 
@@ -848,12 +866,13 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
 
   if (ch === ')') c.advance();
 
-  return { arms, usesScope, cost };
+  return { arms, usesScope, usesCache, cost };
 }
 
 function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeComplexSelector {
   const steps: RelativeStep[] = [];
   let usesScope = false;
+  let usesCache = false;
   let cost = 0;
 
   consumeTrivia(c);
@@ -873,6 +892,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     const source = c.slice(start, c.pos());
 
     if (compound.usesScope) usesScope = true;
+    if (compound.usesCache) usesCache = true;
 
     const stepCost = combinatorCost(combinator) + compound.cost;
     cost += stepCost;
@@ -883,6 +903,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
       compound: {
         source,
         usesScope: compound.usesScope === true,
+        usesCache: compound.usesCache === true,
         cost: compound.cost,
       },
     });
@@ -904,7 +925,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     }
   }
 
-  return { steps, usesScope, cost };
+  return { steps, usesScope, usesCache, cost };
 }
 
 function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {

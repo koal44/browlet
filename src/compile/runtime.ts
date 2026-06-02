@@ -7,37 +7,32 @@ import {
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
 } from '../utils/dom';
+import type { RuntimeCache } from './runtimeCache';
 
-// cache for runtime matchers
-export type HashCache = {
-  nthElement?: WeakMap<ParentNode, NthElementIndexMap>;
-  nthOfType?: WeakMap<ParentNode, NthOfTypeParentMap>;
-};
+export type CombinatorTest = (e: Element, rc: RuntimeCache | null) => boolean;
 
-export type CombinatorTest = (e: Element, h: HashCache | null) => boolean;
-
-export function matchParent(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+export function matchParent(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   const parent = e.parentElement;
-  return !!parent && test(parent, h);
+  return !!parent && test(parent, rc);
 }
 
-export function matchAncestor(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+export function matchAncestor(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   let node: Element | null = e;
   while ((node = node.parentElement)) {
-    if (test(node, h)) return true;
+    if (test(node, rc)) return true;
   }
   return false;
 }
 
-export function matchPrev(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+export function matchPrev(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   const prev = e.previousElementSibling;
-  return !!prev && test(prev, h);
+  return !!prev && test(prev, rc);
 }
 
-export function matchPrevAny(e: Element, test: CombinatorTest, h: HashCache | null): boolean {
+export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   let node: Element | null = e;
   while ((node = node.previousElementSibling)) {
-    if (test(node, h)) return true;
+    if (test(node, rc)) return true;
   }
   return false;
 }
@@ -285,17 +280,17 @@ export function matchesNthIndex(n: number, step: number, absStep: number, offset
     : n <= offset && congruent;
 }
 
-type NthElementIndexMap = WeakMap<Element, number>;
+export type NthElementIndexMap = WeakMap<Element, number>;
 
 // fast resolver for :nth-child() and :nth-last-child()
 // use cache if available to get the 1-based index of element among its siblings
-export function nthElement(element: Element, fromLast: boolean, h: HashCache | null): number {
-  if (!h) return nthElementLocal(element, fromLast);
+export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache | null): number {
+  if (!rc) return nthElementLocal(element, fromLast);
 
   const parent = element.parentNode;
   if (!parent) return 1; // detached/rootless/root
 
-  const cache = h.nthElement ??= new WeakMap<ParentNode, NthElementIndexMap>();
+  const cache = rc.nthElement ??= new WeakMap<ParentNode, NthElementIndexMap>();
 
   let indexMap = cache.get(parent);
   if (!indexMap) {
@@ -327,7 +322,7 @@ function nthElementLocal(element: Element, fromLast: boolean): number {
   return n;
 }
 
-type NthOfTypeParentMap = Map<string, NthOfTypeIndexEntry>;
+export type NthOfTypeParentMap = Map<string, NthOfTypeIndexEntry>;
 type NthOfTypeIndexEntry = {
   length: number;
   indexMap: WeakMap<Element, number>;
@@ -335,8 +330,8 @@ type NthOfTypeIndexEntry = {
 
 // fast resolver for :nth-of-type() and :nth-last-of-type()
 // use cache if available to get the 1-based index of element among same-type siblings
-export function nthOfType(element: Element, fromLast: boolean, h: HashCache | null, snap: Snapshot): number {
-  if (!h) return nthOfTypeLocal(element, fromLast, snap);
+export function nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): number {
+  if (!rc) return nthOfTypeLocal(element, fromLast, snap);
 
   const parent = element.parentNode;
   if (!parent) return 1;
@@ -345,7 +340,7 @@ export function nthOfType(element: Element, fromLast: boolean, h: HashCache | nu
   const localName = snap.getLocalName(element);
   const typeKey = `${namespaceURI ?? ''}\x00${localName}`;
 
-  const cache = h.nthOfType ??= new WeakMap<ParentNode, NthOfTypeParentMap>();
+  const cache = rc.nthOfType ??= new WeakMap<ParentNode, NthOfTypeParentMap>();
 
   let typeMap = cache.get(parent);
   if (!typeMap) {
@@ -391,14 +386,14 @@ function nthOfTypeLocal(element: Element, fromLast: boolean, snap: Snapshot): nu
   return n;
 }
 
-export function isNthElement(element: Element, index: number, fromLast: boolean, h: HashCache | null): boolean {
-  if (!h) return isNthElementLocal(element, index, fromLast);
-  return nthElement(element, fromLast, h) === index;
+export function isNthElement(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null): boolean {
+  if (!rc) return isNthElementLocal(element, index, fromLast);
+  return nthElement(element, fromLast, rc) === index;
 }
 
-export function isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null, snap: Snapshot): boolean {
-  if (!h) return isNthOfTypeLocal(element, index, fromLast, snap);
-  return nthOfType(element, fromLast, h, snap) === index;
+export function isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): boolean {
+  if (!rc) return isNthOfTypeLocal(element, index, fromLast, snap);
+  return nthOfType(element, fromLast, rc, snap) === index;
 }
 
 function isNthElementLocal(element: Element, target: number, fromLast: boolean): boolean {
@@ -477,7 +472,7 @@ export function isFocused(el: Element, snap: Snapshot): boolean {
 }
 
 export type SelectorCombinator = ' ' | '>' | '+' | '~';
-export function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, h: HashCache): boolean {
+export function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, rc: RuntimeCache): boolean {
   // steps: RelativeStep[]
   if (index >= steps.length) {
     return true;
@@ -491,7 +486,7 @@ export function matchHasFrom(steps: [SelectorCombinator, string][], index: numbe
   switch (combinator) {
     case ' ':
       for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
-        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
+        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
           return true;
         }
       }
@@ -499,7 +494,7 @@ export function matchHasFrom(steps: [SelectorCombinator, string][], index: numbe
 
     case '>':
       for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
-        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
+        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
           return true;
         }
       }
@@ -507,12 +502,12 @@ export function matchHasFrom(steps: [SelectorCombinator, string][], index: numbe
 
     case '+': {
       const node = base.nextElementSibling;
-      return !!node && snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h);
+      return !!node && snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc);
     }
 
     case '~':
       for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
-        if (snap.matchStrict(source, node, h) && matchHasFrom(steps, next, node, snap, h)) {
+        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
           return true;
         }
       }

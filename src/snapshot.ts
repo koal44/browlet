@@ -10,7 +10,7 @@ import {
   isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
-  type SelectorCombinator, type HashCache,
+  type SelectorCombinator,
   isHost,
 } from './compile/runtime';
 import type {
@@ -24,6 +24,7 @@ import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './utils/util';
 import { SelectorSyntaxError } from './parser/cursor';
 import { toNodeList } from './utils/collections';
+import { RuntimeCache } from './compile/runtimeCache';
 
 export class Snapshot {
   doc: Document;
@@ -44,11 +45,14 @@ export class Snapshot {
   seedsById: SeedIdFn;
   seedsByClass: SeedClassFn;
   readonly docDesignMode: (doc: Document) => string | undefined;
+  readonly treeVersion: (ctx: QueryContext) => number | undefined;
+  readonly hasTreeVersion: boolean;
+
   checkCacheWatermark: () => void;
 
-  matches: (sel: string, context: Element, h?: HashCache | null) => boolean;
-  select: (sel: string, context?: QueryContext, isApiEntry?: boolean) => ElementList;
-  first: (sel: string, context?: QueryContext, isApiEntry?: boolean) => Element | null;
+  matches: (sel: string, context: Element) => boolean;
+  select: (sel: string, context?: QueryContext) => ElementList;
+  first: (sel: string, context?: QueryContext) => Element | null;
   closest: (sel: string, context: Element) => Element | null;
 
   getId: (e: Element) => string;
@@ -92,6 +96,8 @@ export class Snapshot {
     this.tokenRegex_I.clear();
   }
 
+  runtimeCache = new RuntimeCache();
+
   // perf testing hooks
   probe = {
     select: 0,
@@ -118,6 +124,8 @@ export class Snapshot {
     this.seedsById = buildSeedsById(caps, this);
     this.seedsByClass = buildSeedsByClass(caps, this);
     this.docDesignMode = caps?.doc?.designMode ?? ((doc) => doc.designMode);
+    this.treeVersion = caps?.tree?.treeVersion ?? defaultTreeVersion;
+    this.hasTreeVersion = caps?.tree?.treeVersion !== undefined;
 
     this.doc = doc;
     this.from = doc;
@@ -150,13 +158,13 @@ export class Snapshot {
     if (syntax) {
       const wrapErr = (err: unknown): never => rethrowSelectorError(err, syntax);
 
-      this.matches = (sel, context, h: HashCache | null = null) => {
-        try { return queryMatches(sel, context, this, h); }
+      this.matches = (sel, context) => {
+        try { return queryMatches(sel, context, this); }
         catch (err) { return wrapErr(err); }
       };
 
-      this.first = (sel, context, isApiEntry) => {
-        try { return queryFirst(sel, context ?? this.doc, this, isApiEntry); }
+      this.first = (sel, context) => {
+        try { return queryFirst(sel, context ?? this.doc, this); }
         catch (err) { return wrapErr(err); }
       };
 
@@ -166,21 +174,21 @@ export class Snapshot {
       };
 
       this.select = config.NODE_LIST ?
-        (sel, context, isApiEntry) => {
-          try { return toNodeList(querySelect(sel, context ?? this.doc, this, isApiEntry), this.doc); }
+        (sel, context) => {
+          try { return toNodeList(querySelect(sel, context ?? this.doc, this), this.doc); }
           catch (err) { return wrapErr(err); }
         } :
-        (sel, context, isApiEntry) => {
-          try { return querySelect(sel, context ?? this.doc, this, isApiEntry); }
+        (sel, context) => {
+          try { return querySelect(sel, context ?? this.doc, this); }
           catch (err) { return wrapErr(err); }
         };
     } else {
-      this.matches = (sel, context, h = null) => queryMatches(sel, context, this, h);
-      this.first = (sel, context, isApiEntry) => queryFirst(sel, context ?? this.doc, this, isApiEntry);
+      this.matches = (sel, context) => queryMatches(sel, context, this);
+      this.first = (sel, context) => queryFirst(sel, context ?? this.doc, this);
       this.closest = (sel, context) => queryClosest(sel, context, this);
       this.select = config.NODE_LIST ?
-        (sel, context, isApiEntry) => toNodeList(querySelect(sel, context ?? this.doc, this, isApiEntry), this.doc) :
-        (sel, context, isApiEntry) => querySelect(sel, context ?? this.doc, this, isApiEntry);
+        (sel, context) => toNodeList(querySelect(sel, context ?? this.doc, this), this.doc) :
+        (sel, context) => querySelect(sel, context ?? this.doc, this);
     }
   }
 
@@ -248,6 +256,10 @@ export class Snapshot {
     return regex;
   }
 
+  syncRuntimeCache(ctx: QueryContext): void {
+    this.runtimeCache.sync(this.treeVersion(ctx));
+  }
+
   // public API methods
   byId(id: string, context?: QueryContext) {
     return byId(id, context ?? this.doc, this);
@@ -265,22 +277,6 @@ export class Snapshot {
     return byClass(cls, context ?? this.doc, this);
   }
 
-  // first(sel: string, context?: QueryContext, isApiEntry?: boolean) {
-  //   return queryFirst(sel, context ?? this.doc, this, isApiEntry);
-  // }
-
-  // matches(sel: string, context: Element, h: HashCache | null = null) {
-  //   return queryMatches(sel, context, this, h);
-  // }
-
-  // select(sel: string, context?: QueryContext, isApiEntry?: boolean) {
-  //   return querySelect(sel, context ?? this.doc, this, isApiEntry);
-  // }
-
-  // closest(sel: string, context: Element) {
-  //   return queryClosest(sel, context, this);
-  // }
-
   // -------- Runtime matchers used by emitted selector functions --------
 
   isHtmlElement(e: Element): e is HTMLElement {
@@ -288,8 +284,8 @@ export class Snapshot {
   }
 
   // full selector match
-  matchStrict(selector: string, element: Element, h: HashCache | null = null) {
-    return matchStrict(selector, element, this, h);
+  matchStrict(selector: string, element: Element, rc: RuntimeCache | null = null) {
+    return matchStrict(selector, element, this, rc);
   }
 
   // combinators
@@ -324,14 +320,14 @@ export class Snapshot {
   isLastOfType(e: Element) { return isLastOfType(e, this); }
   isOnlyOfType(e: Element) { return isOnlyOfType(e, this); }
   matchesNthIndex = matchesNthIndex;
-  nthOfType(element: Element, fromLast: boolean, h: HashCache | null) { return nthOfType(element, fromLast, h, this); }
+  nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null) { return nthOfType(element, fromLast, rc, this); }
   nthElement = nthElement;
   isNthElement = isNthElement;
-  isNthOfType(element: Element, index: number, fromLast: boolean, h: HashCache | null) { return isNthOfType(element, index, fromLast, h, this); }
+  isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null) { return isNthOfType(element, index, fromLast, rc, this); }
 
   // relational / language / link-state
-  matchHas(steps: [SelectorCombinator, string][], anchor: Element, h: HashCache) {
-    return matchHasFrom(steps, 0, anchor, this, h);
+  matchHas(steps: [SelectorCombinator, string][], anchor: Element, rc: RuntimeCache) {
+    return matchHasFrom(steps, 0, anchor, this, rc);
   }
   matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }
   matchLang(wanted: string, element: Element) { return matchLang(wanted, element, this); }
@@ -437,6 +433,10 @@ function defaultHasAttribute(e: Element, name: string): boolean {
 
 function defaultHasAttributeNS(e: Element, namespace: string | null, localName: string): boolean {
   return e.hasAttributeNS(namespace, localName);
+}
+
+function defaultTreeVersion(_ctx: QueryContext): number | undefined {
+  return undefined;
 }
 
 function rethrowSelectorError(

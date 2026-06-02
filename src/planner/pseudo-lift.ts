@@ -17,6 +17,7 @@ const NEVER_CMPD: CompoundSelector = {
   id: { raw: '__never__', seed: false, cost: 3 },
   tests: [{ source: 'false', cost: 0, debug: { kind: 'pseudo', name: 'xfalse' } }],
   usesScope: false,
+  usesCache: false,
   cost: 3,
 };
 
@@ -28,6 +29,7 @@ const NEVER_ARM: ComplexSelector = {
   }],
   hasSeed: false,
   usesScope: false,
+  usesCache: false,
   cost: NEVER_CMPD.cost,
 };
 
@@ -145,6 +147,7 @@ function deriveSeedLiftedArm(
   return {
     parts,
     usesScope: hostArm.usesScope || argumentArm.usesScope,
+    usesCache: hostArm.usesCache || argumentArm.usesCache,
     cost: costComplex(parts),
     hasSeed: false,
   };
@@ -318,6 +321,7 @@ function buildResidualIsWhereTest(residualArm: ComplexSelector, isOrWhere: 'is' 
     selectors: [residualArm],
     cost: residualArm.cost,
     usesScope: residualArm.usesScope,
+    usesCache: residualArm.usesCache,
   };
 
   const where = isOrWhere === 'where';
@@ -329,6 +333,7 @@ function buildResidualIsWhereTest(residualArm: ComplexSelector, isOrWhere: 'is' 
     },
     cost: list.cost,
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
     pseudoIs: where ? undefined : list,
     pseudoWhere: where ? list : undefined,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),

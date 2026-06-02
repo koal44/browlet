@@ -71,12 +71,14 @@ export type SelectletCaps<
   doc?: DocumentCaps<E, D>;
   frag?: FragmentCaps<E, F>;
   el?: ElementCaps<E>;
+  tree?: TreeCaps<QueryContext>;
 };
 
 export type DocumentCaps<E extends Element, D extends Document> = {
   cachedIds?: (doc: D, id: string) => Iterable<E>;
   cachedClasses?: (doc: D, classes: readonly string[]) => Iterable<E>;
   designMode?: (doc: D) => string | undefined;
+  treeVersion?: (doc: D) => number | undefined;
 };
 
 export type FragmentCaps<E extends Element, F extends DocumentFragment> = {
@@ -94,6 +96,10 @@ export type ElementCaps<E extends Element> = {
   getAttributeNS?: (el: E, namespace: string | null, localName: string) => string | null;
   hasAttribute?: (el: E, name: string) => boolean;
   hasAttributeNS?: (el: E, namespace: string | null, localName: string) => boolean;
+};
+
+export type TreeCaps<N extends QueryContext = QueryContext> = {
+  treeVersion?: (root: N) => number | undefined;
 };
 
 export type CustomPseudoPredicate = (element: Element) => boolean;
@@ -140,11 +146,11 @@ export function createSelectlet(doc: Document, opts: SelectletOptions = {}): Sel
     },
 
     select(sel: string, ctx?: QueryContext): ElementList {
-      return _snap.select(sel, ctx, true /* isApiEntry */);
+      return _snap.select(sel, ctx);
     },
 
     first(sel: string, ctx?: QueryContext): Element | null {
-      return _snap.first(sel, ctx, true /* isApiEntry */);
+      return _snap.first(sel, ctx);
     },
 
     closest(sel: string, el: Element): Element | null {

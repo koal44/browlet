@@ -156,29 +156,31 @@ export function emitNthPseudoTest(nth: NthArgs, meta: { ofType: boolean; last: b
   if (step === 0) {
     return {
       source: ofType
-        ? `s.isNthOfType(e,${offset},${last},h)`
-        : `s.isNthElement(e,${offset},${last},h)`,
+        ? `s.isNthOfType(e,${offset},${last},rc)`
+        : `s.isNthElement(e,${offset},${last},rc)`,
       cost,
+      usesCache: true,
     };
   }
 
-  const index = ofType ? `s.nthOfType(e,${last},h)` : `s.nthElement(e,${last},h)`;
+  const index = ofType ? `s.nthOfType(e,${last},rc)` : `s.nthElement(e,${last},rc)`;
   const absStep = Math.abs(step);
 
-  if (absStep === 1) return { source: step > 0 ? `${index}>=${offset}` : `${index}<=${offset}`, cost };
-  if (step === 2 && offset === 0) return { source: `${index}%2===0`, cost };
-  if (step === 2 && offset === 1) return { source: `${index}%2===1`, cost };
+  if (absStep === 1) return { source: step > 0 ? `${index}>=${offset}` : `${index}<=${offset}`, cost, usesCache: true };
+  if (step === 2 && offset === 0) return { source: `${index}%2===0`, cost, usesCache: true };
+  if (step === 2 && offset === 1) return { source: `${index}%2===1`, cost, usesCache: true };
 
-  return { source: `s.matchesNthIndex(${index},${step},${absStep},${offset})`, cost };
+  return { source: `s.matchesNthIndex(${index},${step},${absStep},${offset})`, cost, usesCache: true };
 }
 
 // :is()
 export function emitIsPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
     cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
-    pseudoWhere: list,
+    pseudoIs: list,
     debug: { kind: 'is', list },
   };
 }
@@ -187,9 +189,10 @@ export function emitIsPseudoTest(list: SelectorList): CandidateTest {
 export function emitWherePseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
     cost: list.cost,
     buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
-    pseudoIs: list,
+    pseudoWhere: list,
     debug: { kind: 'where', list },
   };
 }
@@ -198,6 +201,7 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
     cost: list.cost,
     buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`,
     debug: { kind: 'not', list },
@@ -208,6 +212,7 @@ export function emitNotPseudoTest(list: SelectorList): CandidateTest {
 export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
   return {
     usesScope: list.usesScope,
+    usesCache: list.usesCache,
     cost: list.cost + 1,
     buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx),
     debug: { kind: 'has', list },

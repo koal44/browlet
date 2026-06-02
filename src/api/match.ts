@@ -1,34 +1,39 @@
 import { buildStrictMatcher, createBuildContext, type Filter } from '../planner/filter';
-import type { HashCache } from '../compile/runtime';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import { describeContext, type QueryContextDescription } from '../utils/util';
+import type { RuntimeCache } from '../compile/runtimeCache';
 
-export function queryMatches(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
+export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
   snap.probe.match++;
   const isDebug = snap.isDebug;
-  if (isDebug) initDebugMatch(snap, selectors, element, true /*isApiEntry*/);
+  if (isDebug) initDebugMatch(snap, selectors, element);
 
   const resolver = getStrictMatchResolver(selectors, snap);
 
-  if (resolver.usesScope) {
-    snap.update(element, true /*updateScope*/);
-  }
+  if (resolver.usesScope) snap.update(element, true /*updateScope*/);
 
-  const result = resolver.match(element, h);
+  // let rc: RuntimeCache | null = null;
+  // if (resolver.usesCache && snap.hasTreeVersion) {
+  //   snap.syncRuntimeCache(element);
+  //   rc = snap.runtimeCache;
+  // }
+
+  // const result = resolver.match(element, rc);
+  const result = resolver.match(element, null);
 
   if (isDebug) updateDebugMatch(snap, result);
 
   return result;
 }
 
-export function matchStrict(selectors: string, element: Element, snap: Snapshot, h: HashCache | null): boolean {
+export function matchStrict(selectors: string, element: Element, snap: Snapshot, rc: RuntimeCache | null): boolean {
   const resolver = getStrictMatchResolver(selectors, snap);
-  return resolver.match(element, h);
+  return resolver.match(element, rc);
 }
 
-export type MatchResolver = { match: MatchFn; usesScope: boolean; };
+export type MatchResolver = { match: MatchFn; usesScope: boolean; usesCache: boolean; };
 
-function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
+export function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
   let resolver = snap.strictMatchResolvers.get(selectors);
 
   if (!resolver) {
@@ -62,16 +67,17 @@ function buildStrictMatchResolver(list: SelectorList, snap: Snapshot): MatchReso
   return {
     match,
     usesScope: filter.usesScope,
+    usesCache: filter.usesCache,
   };
 }
 
-export type MatchFn = (candidate: Element, h: HashCache | null) => boolean;
+export type MatchFn = (candidate: Element, rc: RuntimeCache | null) => boolean;
 
 function compileMatch(filter: Filter, snap: Snapshot): MatchFn {
   const f =
     `"use strict";` +
     filter.declarations.join('') +
-    `return function Match(c,h){` +
+    `return function Match(c,rc){` +
       `var e=c;` +
       `return ${filter.source};` +
     `}`;
@@ -84,12 +90,12 @@ function compileMatch(filter: Filter, snap: Snapshot): MatchFn {
 
 export type DebugMatch = {
   kind: 'match';
-  isApiEntry: boolean;
   element?: QueryContextDescription;
   selectors?: string;
   parse?: {
     arms: number;
     usesScope: boolean;
+    usesCache: boolean;
     cost: number;
   };
   matchSrcText?: string;
@@ -97,10 +103,10 @@ export type DebugMatch = {
   error?: string;
 };
 
-function initDebugMatch(snap: Snapshot, selectors: string, element: Element, isApiEntry: boolean): void {
-  if (isApiEntry) snap.debugStack.length = 0;
+function initDebugMatch(snap: Snapshot, selectors: string, element: Element): void {
+  snap.debugStack.length = 0;
   const dbg: DebugMatch = {
-    kind: 'match', isApiEntry, selectors,
+    kind: 'match', selectors,
     element: describeContext(element),
   };
 
@@ -119,6 +125,7 @@ function updateDebugParse(snap: Snapshot, parsed: SelectorList): void {
     snap.debugMatch.parse = {
       arms: parsed.selectors.length,
       usesScope: parsed.usesScope,
+      usesCache: parsed.usesCache,
       cost: parsed.cost,
     };
   }

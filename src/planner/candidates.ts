@@ -62,6 +62,7 @@ function finalizeCandidateGroupDrafts(drafts: CandidateGroupDraft[]): CandidateG
     const sources: string[] = [];
     let cost = 0;
     let usesScope = false;
+    let usesCache = false;
 
     for (let j = 0; j < d.arms.length; j++) {
       const arm = d.arms[j];
@@ -70,6 +71,7 @@ function finalizeCandidateGroupDrafts(drafts: CandidateGroupDraft[]): CandidateG
       sources[j] = built.source;
       cost += built.cost;
       usesScope ||= built.usesScope;
+      usesCache ||= built.usesCache;
     }
 
     plans[i] = {
@@ -81,6 +83,7 @@ function finalizeCandidateGroupDrafts(drafts: CandidateGroupDraft[]): CandidateG
         declarations: ctx.declarations,
         cost,
         usesScope,
+        usesCache,
       },
     };
   }

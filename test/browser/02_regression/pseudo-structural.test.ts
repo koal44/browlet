@@ -378,7 +378,7 @@ runScenarios('pseudo-structural', 'normal', [
       { select: '#typed > i:nth-of-type(odd)', expect: { ids: ['i1', 'i3'] } },
       { select: '#typed > i:nth-of-type(even)', expect: { ids: ['i2'] } },
 
-      // Logical pseudo: select-owned h is passed into internal s.match(..., h).
+      // Logical pseudo: select-owned h is passed into internal s.matchStrict(..., rc).
       { select: '#list > li:is(:nth-child(3), .missing)', expect: { ids: ['li3'] } },
       { select: '#list > li:not(:nth-child(even))', expect: { ids: ['li1', 'li3', 'li5'] } },
       { select: '#typed > i:is(:nth-of-type(2), .missing)', expect: { ids: ['i2'] } },
