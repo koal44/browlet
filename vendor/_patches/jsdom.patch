@@ -15,109 +15,6 @@ index c049973a..795587b7 100644
    get [idlUtils.supportedPropertyIndices]() {
      return this._attributeList.keys();
    }
-diff --git a/lib/jsdom/living/css/helpers/computed-style.js b/lib/jsdom/living/css/helpers/computed-style.js
-index 6ee5cd43..4c9fd3b3 100644
---- a/lib/jsdom/living/css/helpers/computed-style.js
-+++ b/lib/jsdom/living/css/helpers/computed-style.js
-@@ -101,28 +101,25 @@ function handleSheet(sheetImpl, elementImpl, declaration, specificities) {
- }
- 
- function handleRule(ruleImpl, elementImpl, declaration, specificities) {
--  if (ruleMightMatchElement(ruleImpl, elementImpl)) {
--    const { ast, match } = matches(ruleImpl.selectorText, elementImpl);
--    if (match) {
--      handleStyle(ruleImpl.style, declaration, specificities, ast);
--    }
-+  if (ruleMightMatchElement(ruleImpl, elementImpl) && matches(ruleImpl.selectorText, elementImpl)) {
-+    handleStyle(ruleImpl.style, declaration, specificities, ruleImpl.selectorText);
-   }
- }
- 
--function handleStyle(style, declaration, specificities, ast) {
-+function handleStyle(style, declaration, specificities, selectorText) {
-   for (let i = 0; i < style.length; i++) {
-     const property = style.item(i);
--    handleProperty(property, declaration, style, specificities, ast);
-+    handleProperty(property, declaration, style, specificities, selectorText);
-   }
- }
- 
--function handleProperty(property, declaration, style, specificities, ast) {
-+function handleProperty(property, declaration, style, specificities, selectorText) {
-   const value = style.getPropertyValue(property);
-   const priority = style.getPropertyPriority(property);
-   if (priority) {
-     declaration.setProperty(property, value, priority);
-   } else if (!declaration.getPropertyPriority(property)) {
--    const { value: specificity } = Specificity.max(...Specificity.calculate(ast));
-+    const { value: specificity } = Specificity.max(...Specificity.calculate(selectorText));
-     if (specificities.has(property)) {
-       if (Specificity.compare(specificity, specificities.get(property)) >= 0) {
-         specificities.set(property, specificity);
-@@ -143,55 +140,18 @@ function handlePropertyForInlineStyle(property, declaration, style) {
-   }
- }
- 
--function ruleMightMatchElement(ruleImpl, elementImpl) {
--  if (!ruleImpl._selectorSubjects) {
--    const domSelector = elementImpl._ownerDocument._getDOMSelector();
--    ruleImpl._selectorSubjects =
--      domSelector.extractSubjects(
--        ruleImpl.selectorText,
--        elementImpl._ownerDocument.contentType !== "text/html"
--      );
--  }
--
--  const subjects = ruleImpl._selectorSubjects;
--  if (subjects.length === 0) {
--    return true;
--  }
--
--  const id = elementImpl.getAttributeNS(null, "id");
--  const { classList } = elementImpl;
--  // TODO: Remove toLowerCase() after updating the dom-selector.
--  const tag = elementImpl._localName.toLowerCase();
--  for (const keys of subjects) {
--    let mightMatch = true;
--    if (keys.id && keys.id !== id) {
--      mightMatch = false;
--    } else if (keys.className && !classList.contains(keys.className)) {
--      mightMatch = false;
--      // TODO: Remove toLowerCase() after updating the dom-selector.
--    } else if (keys.tag && keys.tag.toLowerCase() !== tag) {
--      mightMatch = false;
--    }
--
--    if (mightMatch) {
--      return true;
--    }
--  }
--
--  return false;
-+function ruleMightMatchElement() {
-+  return true;
- }
- 
- function matches(selectorText, elementImpl) {
--  const domSelector = elementImpl._ownerDocument._getDOMSelector();
--  const { ast, match, pseudoElement } = domSelector.check(selectorText, elementImpl);
--  // `pseudoElement` is a pseudo-element selector (e.g. `::before`).
--  // However, we do not support getComputedStyle(element, pseudoElement), so `match` is set to `false`.
--  if (pseudoElement) {
--    return {
--      match: false
--    };
-+  const engine = elementImpl._ownerDocument._getSelectorEngine();
-+
-+  try {
-+    return engine.matches(selectorText, elementImpl);
-+  } catch {
-+    return false;
-   }
--  return { ast, match, pseudoElement };
- }
- 
- function replaceEmptyValueAndKeywords(
 diff --git a/lib/jsdom/living/helpers/by-id-cache.js b/lib/jsdom/living/helpers/by-id-cache.js
 index 24b397b5..763ab983 100644
 --- a/lib/jsdom/living/helpers/by-id-cache.js
@@ -159,37 +56,29 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..37caf596 100644
+index b85d6b0e..b9f975f3 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
-@@ -1,7 +1,7 @@
- "use strict";
+@@ -2,6 +2,7 @@
  
  const { CookieJar } = require("tough-cookie");
--const { DOMSelector } = require("@asamuzakjp/dom-selector");
+ const { DOMSelector } = require("@asamuzakjp/dom-selector");
 +const { createSelectlet } = require("selectlet");
  
  const NodeImpl = require("./Node-impl").implementation;
  const idlUtils = require("../../../generated/idl/utils");
-@@ -116,7 +116,7 @@ const eventInterfaceTable = {
- };
+@@ -117,6 +118,7 @@ const eventInterfaceTable = {
  
  class DocumentImpl extends NodeImpl {
--  #domSelector = null;
+   #domSelector = null;
 +  #selectorEngine = null;
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -216,19 +216,84 @@ class DocumentImpl extends NodeImpl {
-     this._styleCache = new WeakMap();
+@@ -231,6 +233,86 @@ class DocumentImpl extends NodeImpl {
+     this.#domSelector?.clear();
    }
  
--  // The `DOMSelector` instance is lazily created, as it is somewhat expensive to create and not always needed.
--  _getDOMSelector() {
--    if (!this.#domSelector) {
--      this.#domSelector = new DOMSelector(this._globalObject, this._ownerDocument, {
--        domSymbolTree,
--        idlUtils
 +  _getSelectorEngine() {
 +    if (!this.#selectorEngine) {
 +      function htmlAttrName(el, name) {
@@ -265,32 +154,19 @@ index b85d6b0e..37caf596 100644
 +            hasAttributeNS: (el, namespace, localName) => attrByNameNS(el, namespace, localName) !== null
 +          }
 +        }
-       });
-     }
--    return this.#domSelector;
--  }
--
--  _clearDOMSelector() {
--    this.#domSelector?.clear();
++      });
++    }
 +    return this.#selectorEngine;
-   }
- 
++  }
++
    _clearBaseURLCache() {
+     this._baseURLCache = null;
+     this._baseURLSerializedCache = null;
 diff --git a/lib/jsdom/living/nodes/Element-impl.js b/lib/jsdom/living/nodes/Element-impl.js
-index 0ef1ce89..76e7d644 100644
+index 0ef1ce89..fef8f274 100644
 --- a/lib/jsdom/living/nodes/Element-impl.js
 +++ b/lib/jsdom/living/nodes/Element-impl.js
-@@ -99,9 +99,6 @@ class ElementImpl extends NodeImpl {
-       this._classList.attrModified();
-     }
- 
--    // Clear domSelector cached results on attribute change.
--    this._ownerDocument._clearDOMSelector();
--
-     this._attrModifiedSlotableMixin(name, value, oldValue);
-   }
- 
-@@ -530,13 +527,13 @@ class ElementImpl extends NodeImpl {
+@@ -530,13 +530,13 @@ class ElementImpl extends NodeImpl {
    }
  
    closest(selectors) {
@@ -339,14 +215,14 @@ index adfc851d..c0b67324 100644
    }
  }
 diff --git a/package-lock.json b/package-lock.json
-index 5383c4ba..5f108a33 100644
+index 5383c4ba..b47eba40 100644
 --- a/package-lock.json
 +++ b/package-lock.json
 @@ -22,6 +22,7 @@
          "lru-cache": "^11.3.5",
          "parse5": "^8.0.1",
          "saxes": "^6.0.0",
-+        "selectlet": "^0.1.1",
++        "selectlet": "0.1.2",
          "symbol-tree": "^3.2.4",
          "tough-cookie": "^6.0.1",
          "undici": "^7.25.0",
@@ -355,23 +231,23 @@ index 5383c4ba..5f108a33 100644
        }
      },
 +    "node_modules/selectlet": {
-+      "version": "0.1.1",
-+      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.1.tgz",
-+      "integrity": "sha512-OD2+V+qrIQFplV2oksJb9hrvrLAn8W7cLQCKKA2MUlKaH45cP34qxEUtpoE+Sl50Y5uvKuPssVCcZItULxWkbQ==",
++      "version": "0.1.2",
++      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.2.tgz",
++      "integrity": "sha512-AcK57YQFJC9FirHjx1Lbnf6P8iCWyzxgR19LZxk2GD6okLoUe4/tPLaKNIGmr3QAjxwqx766mdQszvVfd+vIsg==",
 +      "license": "MIT"
 +    },
      "node_modules/semver": {
        "version": "7.7.4",
        "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz",
 diff --git a/package.json b/package.json
-index 2c0b1770..bdb9fb26 100644
+index 2c0b1770..87010243 100644
 --- a/package.json
 +++ b/package.json
 @@ -36,6 +36,7 @@
      "lru-cache": "^11.3.5",
      "parse5": "^8.0.1",
      "saxes": "^6.0.0",
-+    "selectlet": "^0.1.1",
++    "selectlet": "0.1.2",
      "symbol-tree": "^3.2.4",
      "tough-cookie": "^6.0.1",
      "undici": "^7.25.0",
@@ -457,3 +333,50 @@ index 6d337513..50acab29 100644
  pseudo-classes/autofill.html: [fail, Unknown]
  pseudo-classes/focus-autofocus.html: [timeout, Unknown]
  pseudo-classes/focus.html: [timeout, Unknown]
+diff --git a/test/web-platform-tests/to-upstream-expectations.yaml b/test/web-platform-tests/to-upstream-expectations.yaml
+index f8c65db6..a2e6a2ad 100644
+--- a/test/web-platform-tests/to-upstream-expectations.yaml
++++ b/test/web-platform-tests/to-upstream-expectations.yaml
+@@ -36,6 +36,42 @@ custom-elements/ElementInternals-accessibility.html:
+   "ariaFlowToElements": [fail, Element reflection not implemented]
+   "ariaLabelledByElements": [fail, Element reflection not implemented]
+   "ariaOwnsElements": [fail, Element reflection not implemented]
++dom/nodes/ParentNode-querySelector-All-dont-upstream.html:
++  "Document.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++dom/nodes/ParentNode-querySelector-All-xht-dont-upstream.xht:
++  "Document.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Document.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Detached Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "Fragment.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++  "In-document Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
++dom/nodes/ParentNode-querySelector-host-pseudo-class.html:
++  "Using :host pseudo-class selector in shadow DOM": [fail, "selectlet does not yet implement :host in DOM query APIs"]
+ html/semantics/scripting-1/the-script-element/execution-timing/insert-script.html: [fail, https://github.com/jsdom/jsdom/issues/159]
+ jsdom-only/failure-example-1.html: [fail, https://github.com/jsdom/jsdom/issues/3835]
+ jsdom-only/failure-example-2.html:
