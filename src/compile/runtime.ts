@@ -472,44 +472,40 @@ export function isFocused(el: Element, snap: Snapshot): boolean {
 }
 
 export type SelectorCombinator = ' ' | '>' | '+' | '~';
-export function matchHasFrom(steps: [SelectorCombinator, string][], index: number, base: Element, snap: Snapshot, rc: RuntimeCache): boolean {
-  // steps: RelativeStep[]
-  if (index >= steps.length) {
-    return true;
-  }
+export type HasStep = [SelectorCombinator, (e: Element, rc: RuntimeCache) => boolean];
+export function matchHasFrom(
+  steps: HasStep[],
+  index: number,
+  base: Element,
+  snap: Snapshot,
+  rc: RuntimeCache,
+): boolean {
+  if (index >= steps.length) return true;
 
-  const step = steps[index];
-  const source = step[1];
-  const combinator = step[0];
+  const [combinator, test] = steps[index];
   const next = index + 1;
 
   switch (combinator) {
     case ' ':
       for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
-        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
-          return true;
-        }
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
       }
       return false;
 
     case '>':
       for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
-        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
-          return true;
-        }
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
       }
       return false;
 
     case '+': {
       const node = base.nextElementSibling;
-      return !!node && snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc);
+      return !!node && test(node, rc) && matchHasFrom(steps, next, node, snap, rc);
     }
 
     case '~':
       for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
-        if (snap.matchStrict(source, node, rc) && matchHasFrom(steps, next, node, snap, rc)) {
-          return true;
-        }
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
       }
       return false;
   }

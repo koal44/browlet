@@ -121,6 +121,7 @@ export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
 
 export type ParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
+  inHas?: boolean;
 };
 
 export function parseSelectorList(input: string, ctx: ParseContext): SelectorList {
@@ -517,10 +518,26 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'nth-last-of-type': return emitNthPseudoTest(parseNthArgs(c), { ofType: true,  last: true });
 
     // logical / relational pseudo-classes
-    case 'is': return emitIsPseudoTest(parseForgivingSelectorList(c, ctx));
-    case 'where': return emitWherePseudoTest(parseForgivingSelectorList(c, ctx));
-    case 'not': return emitNotPseudoTest(parseStrictSelectorList(c, ctx));
-    case 'has': return emitHasPseudoTest(parseRelativeSelectorList(c, ctx));
+    case 'is': {
+      const pseudoList = parseForgivingSelectorList(c, ctx);
+      if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('is');
+      return emitIsPseudoTest(pseudoList);
+    }
+
+    case 'where': {
+      const pseudoList = parseForgivingSelectorList(c, ctx);
+      if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('where');
+      return emitWherePseudoTest(pseudoList);
+    }
+    case 'not': {
+      return emitNotPseudoTest(parseStrictSelectorList(c, ctx));
+    }
+    case 'has': {
+      if (ctx.inHas) c.error('Nested :has() is not allowed');
+      const relativeList = parseRelativeSelectorList(c, { ...ctx, inHas: true });
+      if (relativeList.arms.length === 0) c.error('Expected selector in :has() body');
+      return emitHasPseudoTest(relativeList);
+    }
     case 'matches': return c.error('Unsupported pseudo-class :matches(); use :is()');
 
     // linguistic pseudo-classes
@@ -818,7 +835,7 @@ type RelativeStep = {
 };
 
 export type RelativeCompoundSelector = {
-  source: string;
+  compound: CompoundSelector;
   usesScope: boolean;
   usesCache: boolean;
   cost: number;
@@ -887,9 +904,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
       c.error(`Expected compound selector after combinator in relative selector, got ${ch || '<eof>'}`);
     }
 
-    const start = c.pos();
     const compound = parseCompoundSelector(c, ctx);
-    const source = c.slice(start, c.pos());
 
     if (compound.usesScope) usesScope = true;
     if (compound.usesCache) usesCache = true;
@@ -901,7 +916,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
       combinator,
       cost: stepCost,
       compound: {
-        source,
+        compound,
         usesScope: compound.usesScope === true,
         usesCache: compound.usesCache === true,
         cost: compound.cost,

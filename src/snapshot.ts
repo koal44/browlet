@@ -2,6 +2,7 @@ import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
 import { buildSeedsByClass, type SeedClassFn } from './seeds/seedsByClass';
 import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
+import type { HasStep } from './compile/runtime';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
@@ -10,7 +11,6 @@ import {
   isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
-  type SelectorCombinator,
   frontierFilter, frontierNext, frontierFollowing, frontierChildren, isHost,
 } from './compile/runtime';
 import type {
@@ -326,7 +326,10 @@ export class Snapshot {
   isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null) { return isNthOfType(element, index, fromLast, rc, this); }
 
   // relational / language / link-state
-  matchHas(steps: [SelectorCombinator, string][], anchor: Element, rc: RuntimeCache) {
+  // matchHas(steps: [SelectorCombinator, string][], anchor: Element, rc: RuntimeCache) {
+  //   return matchHasFrom(steps, 0, anchor, this, rc);
+  // }
+  matchHas(steps: HasStep[], anchor: Element, rc: RuntimeCache) {
     return matchHasFrom(steps, 0, anchor, this, rc);
   }
   matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }

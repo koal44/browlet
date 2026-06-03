@@ -144,16 +144,17 @@ function buildCombinatorCall(combinator: Combinator | null, pred: string, mode: 
   }
 }
 
-export function buildRelativeSelectorListMatch(list: RelativeSelectorList, _ctx: BuildContext): string {
+export function buildRelativeSelectorListMatch(list: RelativeSelectorList, ctx: BuildContext): string {
   if (list.arms.length === 0) return 'false';
 
   const arms = list.arms.map((arm) => {
-    const steps = arm.steps.map((step) => [
-      step.combinator,
-      step.compound.source,
-    ]);
+    const steps = arm.steps.map((step, i) => {
+      const source = buildCompoundTest(step.compound.compound, ctx);
+      const pred = definePredicate(source, ctx, i, {});
+      return `[${JSON.stringify(step.combinator)},${pred}]`;
+    });
 
-    return `s.matchHas(${JSON.stringify(steps)},e,rc)`;
+    return `s.matchHas([${steps.join(',')}],e,rc)`;
   });
 
   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
