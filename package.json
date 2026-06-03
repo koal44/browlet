@@ -1,6 +1,6 @@
 {
   "name": "selectlet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A JavaScript CSS selector engine",
   "homepage": "https://github.com/koal44/selectlet",
   "main": "./dist/index.cjs",

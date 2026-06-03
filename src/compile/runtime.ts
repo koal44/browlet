@@ -539,15 +539,54 @@ export function matchLang(wanted: string, element: Element, snap: Snapshot): boo
     if (actual !== null) {
       if (actual === '') return false;
 
-      const lang = asciiLower(actual);
-      const n = wanted.length;
-
-      return lang === wanted ||
-        (lang.length > n && lang.charAt(n) === '-' && lang.startsWith(wanted));
+      return extendedLangMatch(wanted, asciiLower(actual));
     }
   }
 
   return false;
+}
+
+export function extendedLangMatch(range: string, lang: string): boolean {
+  const rangeParts = range.split('-');
+  const langParts = lang.split('-');
+
+  if (rangeParts.length === 0 || langParts.length === 0) return false;
+
+  if (rangeParts[0] !== '*' && rangeParts[0] !== langParts[0]) {
+    return false;
+  }
+
+  let ri = 1;
+  let li = 1;
+
+  while (ri < rangeParts.length) {
+    const r = rangeParts[ri];
+
+    if (r === '*') {
+      ri++;
+      continue;
+    }
+
+    if (li >= langParts.length) {
+      return false;
+    }
+
+    const l = langParts[li];
+
+    if (r === l) {
+      ri++;
+      li++;
+      continue;
+    }
+
+    if (l.length === 1) {
+      return false;
+    }
+
+    li++;
+  }
+
+  return true;
 }
 
 function langParent(element: Element): Element | null {
@@ -580,33 +619,52 @@ function elementDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
 
   if (snap.isHtmlElement(element)) {
     if (local === 'input') return inputDir(element as HTMLInputElement, snap);
-    if (local === 'textarea') return attrDir(element, snap, (element as HTMLTextAreaElement).value || '');
-
-    if (local === 'bdi') {
-      const attr = snap.getAttribute(element, 'dir');
-
-      if (attr) {
-        const dir = attr.toLowerCase();
-        if (dir === 'ltr' || dir === 'rtl') return dir;
-      }
-
-      return autoDir(element.textContent || '') ?? 'ltr';
-    }
+    if (local === 'textarea') return textareaDir(element as HTMLTextAreaElement, snap);
+    if (local === 'bdi') return bdiDir(element, snap);
   }
 
-  return attrDir(element, snap, element.textContent || '');
+  return attrDir(element, snap);
 }
 
-function attrDir(element: Element, snap: Snapshot, autoText: string): 'ltr' | 'rtl' {
+function attrDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
   const attr = snap.getAttribute(element, 'dir');
 
   if (attr) {
     const dir = attr.toLowerCase();
+
     if (dir === 'ltr' || dir === 'rtl') return dir;
-    if (dir === 'auto') return autoDir(autoText) ?? 'ltr';
+    if (dir === 'auto') return autoDirFromElement(element, snap) ?? 'ltr';
   }
 
   const parent = element.parentElement;
+  return parent ? elementDir(parent, snap) : 'ltr';
+}
+
+function bdiDir(element: Element, snap: Snapshot): 'ltr' | 'rtl' {
+  const attr = snap.getAttribute(element, 'dir');
+
+  if (attr) {
+    const dir = attr.toLowerCase();
+
+    if (dir === 'ltr' || dir === 'rtl') return dir;
+    if (dir === 'auto') return autoDirFromElement(element, snap) ?? 'ltr';
+  }
+
+  // <bdi> defaults to auto directionality.
+  return autoDirFromElement(element, snap) ?? 'ltr';
+}
+
+function textareaDir(textarea: HTMLTextAreaElement, snap: Snapshot): 'ltr' | 'rtl' {
+  const attr = snap.getAttribute(textarea, 'dir');
+
+  if (attr) {
+    const dir = attr.toLowerCase();
+
+    if (dir === 'ltr' || dir === 'rtl') return dir;
+    if (dir === 'auto') return autoDir(textarea.value || '') ?? 'ltr';
+  }
+
+  const parent = textarea.parentElement;
   return parent ? elementDir(parent, snap) : 'ltr';
 }
 
@@ -636,7 +694,47 @@ function inputDir(input: HTMLInputElement, snap: Snapshot): 'ltr' | 'rtl' {
   return parent ? elementDir(parent, snap) : 'ltr';
 }
 
-// TODO: cover more edge cases
+function autoDirFromElement(element: Element, snap: Snapshot): 'ltr' | 'rtl' | null {
+  return autoDirFromChildren(element, snap);
+}
+
+function autoDirFromChildren(node: Node, snap: Snapshot): 'ltr' | 'rtl' | null {
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 3) {
+      const dir = autoDir(child.textContent || '');
+      if (dir) return dir;
+      continue;
+    }
+
+    if (child.nodeType !== 1) continue;
+
+    const el = child as Element;
+
+    if (isDirBoundary(el, snap)) {
+      continue;
+    }
+
+    const dir = autoDirFromChildren(el, snap);
+    if (dir) return dir;
+  }
+
+  return null;
+}
+
+function isDirBoundary(element: Element, snap: Snapshot): boolean {
+  const attr = snap.getAttribute(element, 'dir');
+
+  if (attr) {
+    const dir = attr.toLowerCase();
+    if (dir === 'ltr' || dir === 'rtl' || dir === 'auto') return true;
+  }
+
+  // <bdi> has default auto directionality, so it should also isolate its text
+  // from ancestor dir=auto scans even without an explicit dir attribute.
+  return snap.isHtmlElement(element) && snap.getLocalName(element) === 'bdi';
+}
+
+// TODO: cover more Unicode bidi edge cases.
 // Minimal first-strong direction check for :dir(auto) / <bdi>.
 function autoDir(text: string): 'ltr' | 'rtl' | null {
   for (let i = 0; i < text.length; i++) {

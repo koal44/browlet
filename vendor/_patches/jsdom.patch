@@ -159,7 +159,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..e656c5c3 100644
+index b85d6b0e..37caf596 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -1,7 +1,7 @@
@@ -227,7 +227,7 @@ index b85d6b0e..e656c5c3 100644
 +        caps: {
 +          tree: {
 +            treeVersion: node => {
-+              return node.nodeType === 1 ? node._ownerDocument?._version : node._version;
++              return node.nodeType === NODE_TYPE.ELEMENT_NODE ? node._ownerDocument?._version : node._version;
 +            }
 +          },
 +          doc: {
@@ -309,19 +309,10 @@ index 0ef1ce89..76e7d644 100644
  
    webkitMatchesSelector(selectors) {
 diff --git a/lib/jsdom/living/nodes/ParentNode-impl.js b/lib/jsdom/living/nodes/ParentNode-impl.js
-index adfc851d..c0623e89 100644
+index adfc851d..c0b67324 100644
 --- a/lib/jsdom/living/nodes/ParentNode-impl.js
 +++ b/lib/jsdom/living/nodes/ParentNode-impl.js
-@@ -6,6 +6,8 @@ const { domSymbolTree } = require("../helpers/internal-constants");
- const NODE_TYPE = require("../node-type");
- const { convertNodesIntoNode } = require("../node");
- 
-+// const idlUtils = require("../../../generated/idl/utils");
-+
- class ParentNodeImpl {
-   get children() {
-     if (!this._childrenList) {
-@@ -63,19 +65,19 @@ class ParentNodeImpl {
+@@ -63,19 +63,19 @@ class ParentNodeImpl {
      if (shouldAlwaysSelectNothing(this)) {
        return null;
      }
@@ -348,14 +339,14 @@ index adfc851d..c0623e89 100644
    }
  }
 diff --git a/package-lock.json b/package-lock.json
-index 5383c4ba..ce28de74 100644
+index 5383c4ba..5f108a33 100644
 --- a/package-lock.json
 +++ b/package-lock.json
 @@ -22,6 +22,7 @@
          "lru-cache": "^11.3.5",
          "parse5": "^8.0.1",
          "saxes": "^6.0.0",
-+        "selectlet": "^0.1.0-alpha.1",
++        "selectlet": "^0.1.1",
          "symbol-tree": "^3.2.4",
          "tough-cookie": "^6.0.1",
          "undici": "^7.25.0",
@@ -364,31 +355,47 @@ index 5383c4ba..ce28de74 100644
        }
      },
 +    "node_modules/selectlet": {
-+      "version": "0.1.0-alpha.1",
-+      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.0-alpha.1.tgz",
-+      "integrity": "sha512-DdEj73l+gJeDxdHATB46wpHOb9Lqe7xKnIC4NedMY4YIxpDNkqlH5h+mueWH2raNdVOHUSlkB/yHxN9lBfB/IA==",
++      "version": "0.1.1",
++      "resolved": "https://registry.npmjs.org/selectlet/-/selectlet-0.1.1.tgz",
++      "integrity": "sha512-OD2+V+qrIQFplV2oksJb9hrvrLAn8W7cLQCKKA2MUlKaH45cP34qxEUtpoE+Sl50Y5uvKuPssVCcZItULxWkbQ==",
 +      "license": "MIT"
 +    },
      "node_modules/semver": {
        "version": "7.7.4",
        "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz",
 diff --git a/package.json b/package.json
-index 2c0b1770..4ada0090 100644
+index 2c0b1770..bdb9fb26 100644
 --- a/package.json
 +++ b/package.json
 @@ -36,6 +36,7 @@
      "lru-cache": "^11.3.5",
      "parse5": "^8.0.1",
      "saxes": "^6.0.0",
-+    "selectlet": "^0.1.0-alpha.1",
++    "selectlet": "^0.1.1",
      "symbol-tree": "^3.2.4",
      "tough-cookie": "^6.0.1",
      "undici": "^7.25.0",
 diff --git a/test/web-platform-tests/to-run.yaml b/test/web-platform-tests/to-run.yaml
-index 6d337513..5ae43a0f 100644
+index 6d337513..50acab29 100644
 --- a/test/web-platform-tests/to-run.yaml
 +++ b/test/web-platform-tests/to-run.yaml
-@@ -658,7 +658,6 @@ parsing/parse-class.html: [fail, Unknown]
+@@ -311,6 +311,7 @@ has-slotted-manual-assignment.html: [fail, Unknown]
+ has-slotted-query-selector.html: [fail, Unknown]
+ host-context-parsing.html: [fail, Unknown]
+ host-descendant-invalidation.html: [fail, Unknown]
++host-dom-001.html: [fail, Unknown]
+ host-functional-descendant-invalidation.html: [fail, Unknown]
+ host-parsing.html: [fail, Unknown]
+ keyframes-001.html: [fail, Unknown]
+@@ -327,6 +328,7 @@ shadow-shared-style-cache-001.html: [fail, Unknown]
+ slot-non-html-display-value.html: [fail, Our getComputedStyle implementation doesn't care about @namespace-rules (see https://github.com/jsdom/cssstyle/issues/193 and default-stylesheet.css)]
+ slotted-invalidation.html: [fail, Unknown]
+ slotted-link.html: [fail, Unknown]
++slotted-matches.html: [fail, Unknown]
+ slotted-nested.html: [fail, Unknown]
+ slotted-parsing.html: [fail, Unknown]
+ slotted-slot.html: [fail, Unknown]
+@@ -658,7 +660,6 @@ parsing/parse-class.html: [fail, Unknown]
  parsing/parse-descendant.html: [fail, Unknown]
  parsing/parse-focus-visible.html: [fail, Unknown]
  parsing/parse-has-disallow-nesting-has-inside-has.html: [fail, Unknown]
@@ -396,7 +403,7 @@ index 6d337513..5ae43a0f 100644
  parsing/parse-has-slotted.tentative.html: [fail, Unknown]
  parsing/parse-has.html: [fail, Unknown]
  parsing/parse-id.html: [fail, Unknown]
-@@ -1930,53 +1929,6 @@ template-element/template-content-hierarcy.html: [fail, "We do not implement htt
+@@ -1930,53 +1931,6 @@ template-element/template-content-hierarcy.html: [fail, "We do not implement htt
  
  DIR: html/semantics/selectors
  
