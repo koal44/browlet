@@ -1,8 +1,8 @@
-import type { AttributeSelector, CandidateTest, RelativeSelectorList, SelectorList } from '../parser/parser';
+import type { AttributeSelector, CandidateTest, CompoundSelector, RelativeSelectorList, SelectorList } from '../parser/parser';
 import type { NthArgs } from '../parser/nth';
 import { asciiLower, cssIdentUnescape } from '../utils/css';
 import { assertNever } from '../utils/util';
-import { buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from '../planner/filter';
+import { buildCompoundTest, buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from '../planner/filter';
 
 // [attr], [attr=value], [ns|attr op value flag]
 export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
@@ -108,6 +108,17 @@ export function emitRootPseudoTest(): CandidateTest {
 // :host
 export function emitHostPseudoTest(): CandidateTest {
   return { source: 's.isHost(e)', cost: 2, debug: { kind: 'pseudo', name: 'host' } };
+}
+
+// :host(<compound-selector>)
+export function emitHostWithArgPseudoTest(arg: CompoundSelector): CandidateTest {
+  return {
+    usesScope: arg.usesScope,
+    usesCache: arg.usesCache,
+    cost: arg.cost + 2,
+    buildSource: (ctx) => `s.isHost(e)&&(${buildCompoundTest(arg, ctx)})`,
+    debug: { kind: 'host', arg },
+  };
 }
 
 // :empty
@@ -399,6 +410,26 @@ export function emitNoMatchPseudoTest(name: string): CandidateTest {
 // parse-valid no-match pseudo-element
 export function emitNoMatchPseudoElementTest(name: string): CandidateTest {
   return { source: 'false', cost: 0, debug: { kind: 'pseudo-element', name } };
+}
+
+// ::part() pseudo-element
+export function emitPartPseudoElementTest(parts: string[]): CandidateTest {
+  return { source: 'false', cost: 0, debug: { kind: 'parts', parts } };
+}
+
+export function emitSlottedPseudoElementTest(arg: CompoundSelector): CandidateTest {
+  return {
+    usesScope: arg.usesScope,
+    usesCache: arg.usesCache,
+    cost: arg.cost,
+    source: 'false',
+    debug: { kind: 'pseudo-element', name: 'slotted' },
+  };
+}
+
+// :state() pseudo-class
+export function emitStatePseudoTest(raw: string): CandidateTest {
+  return { source: 'false', cost: 0, debug: { kind: 'pseudo', name: `state(${raw})` } };
 }
 
 // registered pseudo-class

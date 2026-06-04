@@ -124,20 +124,23 @@ function describeRelativeArm(arm: RelativeComplexSelector): string {
 
   for (let i = 0; i < arm.steps.length; i++) {
     const step = arm.steps[i];
-
-    out += describeRelativeCombinator(step.combinator);
-    out += describeRelativeCompound(step.compound);
+    out += describeRelativeStep(step);
+    if (i !== arm.steps.length - 1) out += ' ';
   }
 
   return out;
+}
+
+export function describeRelativeStep(step: { combinator: Combinator; compound: RelativeCompoundSelector; }): string {
+  return `${describeRelativeCombinator(step.combinator)}${describeRelativeCompound(step.compound)}`;
 }
 
 function describeRelativeCombinator(combinator: Combinator): string {
   return combinator === ' ' ? ' ' : `${combinator} `;
 }
 
-function describeRelativeCompound(compound: RelativeCompoundSelector): string {
-  return compound.source;
+export function describeRelativeCompound(compound: RelativeCompoundSelector): string {
+  return describeCompound(compound.compound);
 }
 
 function describeTag(tag: TagSelector): string {

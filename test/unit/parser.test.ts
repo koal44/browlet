@@ -6,6 +6,8 @@ import {
 import { Cursor } from '../../src/parser/cursor';
 import { consumeIdent } from '../../src/parser/lex';
 import { parseNthArgs } from '../../src/parser/nth';
+import { describeRelativeCompound, describeRelativeStep } from '../utils/util';
+// import { describeRelativeCompound } from '../utils/util';
 
 describe('parseSelectorList', () => {
   it('parses a single selector', () => {
@@ -662,7 +664,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parsed.arms[0].steps).toHaveLength(1);
 
     expect(parsed.arms[0].steps[0].combinator).toBe(' ');
-    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
+    expect(describeRelativeCompound(parsed.arms[0].steps[0].compound)).toBe('img');
   });
 
   it('parses an explicit leading child combinator', () => {
@@ -672,21 +674,20 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parsed.arms[0].steps).toHaveLength(1);
 
     expect(parsed.arms[0].steps[0].combinator).toBe('>');
-    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
+    expect(describeRelativeCompound(parsed.arms[0].steps[0].compound)).toBe('img');
   });
 
   it('parses explicit leading sibling combinators', () => {
-    expect(parseRelativeSelectorList(new Cursor('(+ dt)'), {})
-      .arms[0].steps[0]).toMatchObject({
-      combinator: '+',
-      compound: { source: 'dt' },
-    });
+    expect(describeRelativeStep(
+      parseRelativeSelectorList(new Cursor('(+ dt)'), {})
+        .arms[0].steps[0])).toBe('+ dt');
 
     expect(parseRelativeSelectorList(new Cursor('(~ .item)'), {})
       .arms[0].steps[0].combinator).toBe('~');
 
-    expect(parseRelativeSelectorList(new Cursor('(~ .item)'), {})
-      .arms[0].steps[0].compound.source).toBe('.item');
+    expect(describeRelativeCompound((
+      parseRelativeSelectorList(new Cursor('(~ .item)'), {})
+        .arms[0].steps[0].compound))).toBe('.item');
   });
 
   it('parses multiple steps with mixed combinators', () => {
@@ -695,7 +696,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     const steps = parsed.arms[0].steps;
 
     expect(steps.map((s) => s.combinator)).toEqual(['>', '+', '~', ' ']);
-    expect(steps.map((s) => s.compound.source)).toEqual(['.item', 'dt', 'dd', 'span']);
+    expect(steps.map((s) => describeRelativeCompound(s.compound))).toEqual(['.item', 'dt', 'dd', 'span']);
   });
 
   it('parses comma-separated relative selector arms', () => {
@@ -704,13 +705,13 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parsed.arms).toHaveLength(3);
 
     expect(parsed.arms[0].steps.map((s) => s.combinator)).toEqual(['>']);
-    expect(parsed.arms[0].steps.map((s) => s.compound.source)).toEqual(['img']);
+    expect(parsed.arms[0].steps.map((s) => describeRelativeCompound((s.compound)))).toEqual(['img']);
 
     expect(parsed.arms[1].steps.map((s) => s.combinator)).toEqual(['+']);
-    expect(parsed.arms[1].steps.map((s) => s.compound.source)).toEqual(['dt']);
+    expect(parsed.arms[1].steps.map((s) => describeRelativeCompound(s.compound))).toEqual(['dt']);
 
     expect(parsed.arms[2].steps.map((s) => s.combinator)).toEqual([' ', ' ']);
-    expect(parsed.arms[2].steps.map((s) => s.compound.source)).toEqual(['.item', '.child']);
+    expect(parsed.arms[2].steps.map((s) => describeRelativeCompound(s.compound))).toEqual(['.item', '.child']);
   });
 
   it('ignores padding whitespace around arms and before closing paren', () => {
@@ -719,10 +720,10 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parsed.arms).toHaveLength(2);
 
     expect(parsed.arms[0].steps[0].combinator).toBe('>');
-    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
+    expect(describeRelativeCompound(parsed.arms[0].steps[0].compound)).toBe('img');
 
     expect(parsed.arms[1].steps[0].combinator).toBe(' ');
-    expect(parsed.arms[1].steps[0].compound.source).toBe('.item');
+    expect(describeRelativeCompound(parsed.arms[1].steps[0].compound)).toBe('.item');
   });
 
   it('allows EOF in place of the closing paren for now', () => {
@@ -730,7 +731,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
 
     expect(parsed.arms).toHaveLength(1);
     expect(parsed.arms[0].steps[0].combinator).toBe('>');
-    expect(parsed.arms[0].steps[0].compound.source).toBe('img');
+    expect(describeRelativeCompound(parsed.arms[0].steps[0].compound)).toBe('img');
   });
 
   it('throws on empty body', () => {
@@ -770,7 +771,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
 
     expect(parsed.arms[0].steps).toHaveLength(1);
     expect(parsed.arms[1].steps[0].combinator).toBe('>');
-    expect(parsed.arms[1].steps[0].compound.source).toBe('img');
+    expect(describeRelativeCompound(parsed.arms[1].steps[0].compound)).toBe('img');
   });
 });
 
@@ -1774,12 +1775,15 @@ describe('parseAttributeSelector quoted bracket values and EOF bracket tolerance
   });
 });
 
-describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', () => {
-  const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map((selector) =>
-      selector.steps.map((step) => [step.combinator, step.compound.source])
-    );
+function stepsOf(source: string) {
+  const parsed = parseRelativeSelectorList(new Cursor(`(${source})`), {});
 
+  return parsed.arms.map((arm) =>
+    arm.steps.map((step) => [step.combinator, describeRelativeCompound(step.compound)])
+  );
+}
+
+describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', () => {
   it('parses a single implicit descendant step', () => {
     expect(stepsOf('.a')).toEqual([[[' ', '.a']]]);
   });
@@ -1800,11 +1804,6 @@ describe('parsePseudoBodyRelativeSelectorList legacy relative selector cases', (
 });
 
 describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases', () => {
-  const stepsOf = (source: string) =>
-    parseRelativeSelectorList(new Cursor(`(${source})`), {}).arms.map((arm) =>
-      arm.steps.map((step) => [step.combinator, step.compound.source])
-    );
-
   it('parses general sibling followed by child and descendant steps', () => {
     expect(stepsOf('~ .a > .b .c')).toEqual([[['~', '.a'], ['>', '.b'], [' ', '.c']]]);
   });
@@ -1845,15 +1844,15 @@ describe('parsePseudoBodyRelativeSelectorList advanced relative selector cases',
     const parsed = parseRelativeSelectorList(new Cursor('(.a:has(> .x + .y) > .b)'), {});
     const arms = parsed.arms[0].steps;
     expect(arms.map((s) => s.combinator)).toEqual([' ', '>']);
-    expect(arms[0].compound.source).toBe('.a:has(> .x + .y)');
-    expect(arms[1].compound.source).toBe('.b');
+    expect(describeRelativeCompound(arms[0].compound)).toBe('.a:has(> .x + .y)');
+    expect(describeRelativeCompound(arms[1].compound)).toBe('.b');
   });
 
   it('parses nested logical pseudos with selector lists as part of the compound test set', () => {
     const parsed = parseRelativeSelectorList(new Cursor('(:is(.a > .b, .c + .d) ~ .e)'), {});
     const arms = parsed.arms[0].steps;
     expect(arms.map((s) => s.combinator)).toEqual([' ', '~']);
-    expect(arms[1].compound.source).toBe('.e');
+    expect(describeRelativeCompound(arms[1].compound)).toBe('.e');
   });
 });
 
@@ -1973,14 +1972,6 @@ describe('scope propagation through nested selector pseudos', () => {
 });
 
 describe('parseRelativeSelectorList', () => {
-  const stepsOf = (source: string) => {
-    const parsed = parseRelativeSelectorList(new Cursor(`(${source})`), {});
-
-    return parsed.arms.map((arm) =>
-      arm.steps.map((step) => [step.combinator, step.compound.source])
-    );
-  };
-
   it('parses a single implicit descendant step', () => {
     expect(stepsOf('.a')).toEqual([
       [[' ', '.a']],
@@ -2126,15 +2117,10 @@ describe('parseRelativeSelectorList', () => {
 
     expect(parsed.arms).toHaveLength(2);
 
-    expect(parsed.arms[0].steps[0]).toMatchObject({
-      combinator: '>',
-      compound: { source: 'div.foo[attr="x"]' },
-    });
+    expect(describeRelativeStep(parsed.arms[0].steps[0])).toBe(
+      '> div.foo[attr="x"]');
 
-    expect(parsed.arms[1].steps[0]).toMatchObject({
-      combinator: ' ',
-      compound: { source: '.c' },
-    });
+    expect(describeRelativeStep(parsed.arms[1].steps[0])).toBe(' .c');
   });
 });
 

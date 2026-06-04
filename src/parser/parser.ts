@@ -6,15 +6,16 @@ import {
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
   emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest,
   emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest,
-  emitHasPseudoTest, emitHostPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
+  emitHasPseudoTest, emitHostPseudoTest, emitHostWithArgPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
   emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest,
   emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest,
   emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
-  emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPausedPseudoTest,
+  emitOnlyOfTypePseudoTest, emitOptionalPseudoTest, emitOutOfRangePseudoTest, emitPartPseudoElementTest, emitPausedPseudoTest,
   emitPlaceholderShownPseudoTest, emitPlayingPseudoTest, emitReadOnlyPseudoTest, emitReadWritePseudoTest,
   emitRegisteredPseudoTest,
   emitRequiredPseudoTest, emitRootPseudoTest, emitScopePseudoTest, emitSeekingPseudoTest,
-  emitStalledPseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest,
+  emitSlottedPseudoElementTest,
+  emitStalledPseudoTest, emitStatePseudoTest, emitTargetPseudoTest, emitValidPseudoTest, emitVisitedPseudoTest,
   emitVolumeLockedPseudoTest, emitWherePseudoTest,
 } from '../compile/emit';
 import {
@@ -107,7 +108,10 @@ type CandidateTestDebug =
   | { kind: 'is' | 'where'; list: SelectorList; }
   | { kind: 'expanded'; list: SelectorList; }
   | { kind: 'not'; list: SelectorList; }
-  | { kind: 'has'; list: RelativeSelectorList; };
+  | { kind: 'has'; list: RelativeSelectorList; }
+  | { kind: 'host'; arg?: CompoundSelector; }
+  | { kind: 'parts'; parts: string[]; }
+
 
 type StaticCandidateTest = BaseCandidateTest & {
   source: string;
@@ -121,8 +125,23 @@ export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
 
 export type ParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
+
+  // Scoped grammar context: do not mutate/reset on shared ctx.
   inHas?: boolean;
+  inHost?: boolean;
+  forbidEls?: boolean;
+
+  // Linear parser state: mutated while parsing one selector arm.
+  afterPart?: boolean;
+  afterSlotted?: boolean;
+  afterNonPartEl?: boolean; // ::pseudo (mod ::part)
 };
+
+function resetSelectorArmState(ctx: ParseContext): void {
+  if (ctx.afterPart) ctx.afterPart = false;
+  if (ctx.afterSlotted) ctx.afterSlotted = false;
+  if (ctx.afterNonPartEl) ctx.afterNonPartEl = false;
+}
 
 export function parseSelectorList(input: string, ctx: ParseContext): SelectorList {
   const c = new Cursor(input);
@@ -142,6 +161,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   }
 
   while (!c.eof()) {
+    resetSelectorArmState(ctx);
     const complex = parseComplexSelector(c, ctx);
 
     if (complex.usesScope) usesScope = true;
@@ -185,13 +205,13 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   let usesScope = first.usesScope;
   let usesCache = first.usesCache;
   let cost = firstPart.cost;
-  // let end = c.pos();
 
   while (true) {
     const sawWs = consumeTrivia(c);
     let ch = c.peek();
 
     if (!ch || ch === ',' || ch === ')') break;
+    if (ctx.afterPart) c.error('Combinators are not allowed after ::part()');
 
     let combinator: Combinator;
 
@@ -215,7 +235,6 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     if (compound.usesScope) usesScope = true;
     if (compound.usesCache) usesCache = true;
     cost += partCost;
-    // end = c.pos();
 
     parts.push({
       combinator, compound,
@@ -256,6 +275,7 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
 }
 
 function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstInCompound: boolean, ctx: ParseContext): void {
+  if (ctx.afterSlotted) c.error('No selectors are allowed after ::slotted()');
   const ch = c.peek();
 
   if (ch === '#') {
@@ -498,11 +518,21 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
   const lowerName = rawName.toLowerCase();
   const name = isElement ? `:${lowerName}` : lowerName;
 
+  if (isElement && ctx.forbidEls) {
+    c.error(`Pseudo-element ::${lowerName} is not allowed here`);
+  }
+
   switch (name) {
     // tree-structural pseudo-classes
     case 'scope': return emitScopePseudoTest();
     case 'root': return emitRootPseudoTest();
-    case 'host': return emitHostPseudoTest();
+    case 'host': {
+      if (c.peek() === '(') {
+        const x = { ...ctx, forbidEls: true, inHost: true };
+        return emitHostWithArgPseudoTest(parseCompoundPseudoArg(c, x, ':host()'));
+      }
+      return emitHostPseudoTest();
+    }
     case 'empty': return emitEmptyPseudoTest();
     case 'first-child': return emitFirstChildPseudoTest();
     case 'last-child': return emitLastChildPseudoTest();
@@ -519,22 +549,30 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
 
     // logical / relational pseudo-classes
     case 'is': {
-      const pseudoList = parseForgivingSelectorList(c, ctx);
+      const x = { ...ctx, forbidEls: true };
+      const pseudoList = parseForgivingSelectorList(c, x);
       if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('is');
       return emitIsPseudoTest(pseudoList);
     }
 
     case 'where': {
-      const pseudoList = parseForgivingSelectorList(c, ctx);
+      const x = { ...ctx, forbidEls: true };
+      const pseudoList = parseForgivingSelectorList(c, x);
       if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('where');
       return emitWherePseudoTest(pseudoList);
     }
     case 'not': {
-      return emitNotPseudoTest(parseStrictSelectorList(c, ctx));
+      const x = { ...ctx, forbidEls: true };
+      if (x.inHost) {
+        return emitNotPseudoTest(selectorListFromCompound(parseCompoundPseudoArg(c, x, ':not()')));
+      }
+      return emitNotPseudoTest(parseStrictSelectorList(c, x));
     }
     case 'has': {
+      if (ctx.afterPart) c.error(':has() is not allowed after ::part()');
+      const x = { ...ctx, forbidEls: true, inHas: true };
       if (ctx.inHas) c.error('Nested :has() is not allowed');
-      const relativeList = parseRelativeSelectorList(c, { ...ctx, inHas: true });
+      const relativeList = parseRelativeSelectorList(c, x);
       if (relativeList.arms.length === 0) c.error('Expected selector in :has() body');
       return emitHasPseudoTest(relativeList);
     }
@@ -585,6 +623,14 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'muted': return emitMutedPseudoTest();
     case 'volume-locked': return emitVolumeLockedPseudoTest();
 
+    case 'state': {
+      if (ctx.afterNonPartEl) {
+        c.error(':state() is not allowed after this pseudo-element');
+      }
+
+      return emitStatePseudoTest(parseIdentPseudoArg(c, ':state() argument'));
+    }
+
     // parse-valid no-op pseudo-classes
     case 'autofill': return emitNoMatchPseudoTest('autofill');
     case '-webkit-autofill': return emitNoMatchPseudoTest('-webkit-autofill');
@@ -595,12 +641,53 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'first-letter': return emitNoMatchPseudoElementTest('first-letter');
     case 'first-line': return emitNoMatchPseudoElementTest('first-line');
 
-    case ':after': return emitNoMatchPseudoElementTest('after');
-    case ':before': return emitNoMatchPseudoElementTest('before');
-    case ':first-letter': return emitNoMatchPseudoElementTest('first-letter');
-    case ':first-line': return emitNoMatchPseudoElementTest('first-line');
-    case ':selection': return emitNoMatchPseudoElementTest('selection');
-    case ':placeholder': return emitNoMatchPseudoElementTest('placeholder');
+    case ':after': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('after');
+    }
+    case ':before': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('before');
+    }
+    case ':first-letter': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('first-letter');
+    }
+    case ':first-line': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('first-line');
+    }
+    case ':selection': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('selection');
+    }
+    case ':placeholder': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('placeholder');
+    }
+    case ':file-selector-button': {
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitNoMatchPseudoElementTest('file-selector-button');
+    }
+    case ':part': {
+      ctx.afterNonPartEl = false;
+      ctx.afterPart = true;
+      return emitPartPseudoElementTest(parseIdentListPseudoArg(c));
+    }
+    case ':slotted': {
+      const compound = parseCompoundPseudoArg(c, ctx, '::slotted()');
+      ctx.afterSlotted = true;
+      ctx.afterNonPartEl = true;
+      ctx.afterPart = false;
+      return emitSlottedPseudoElementTest(compound);
+    }
 
     default: {
       if (isElement && lowerName.startsWith('-webkit-') && lowerName.length > '-webkit-'.length) {
@@ -984,4 +1071,93 @@ function parsePseudoBodyIdentArg(c: Cursor): string {
   }
 
   return arg;
+}
+
+function parseCompoundPseudoArg(c: Cursor, ctx: ParseContext, label = 'pseudo'): CompoundSelector {
+  c.expect('(');
+  consumeTrivia(c);
+
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected selector in ${label} body, got ${ch || '<eof>'}`);
+  }
+
+  const compound = parseCompoundSelector(c, ctx);
+
+  consumeTrivia(c);
+  ch = c.peek();
+
+  if (ch !== ')') {
+    c.error(`Expected ")" after ${label} argument, got ${ch || '<eof>'}`);
+  }
+
+  c.advance();
+  return compound;
+}
+
+function parseIdentListPseudoArg(c: Cursor): string[] {
+  c.expect('(');
+  consumeTrivia(c);
+
+  const idents: string[] = [];
+
+  while (true) {
+    const ch = c.peek();
+
+    if (ch === ')' || ch === '') {
+      break;
+    }
+
+    idents.push(consumeIdent(c));
+
+    consumeTrivia(c);
+  }
+
+  if (idents.length === 0) {
+    c.error(`Expected part name in ::part() body, got ${c.peek() || '<eof>'}`);
+  }
+
+  if (!c.match(')')) {
+    c.error(`Expected ")" after ::part() argument, got ${c.peek() || '<eof>'}`);
+  }
+
+  return idents;
+}
+
+function parseIdentPseudoArg(c: Cursor, label: string): string {
+  c.expect('(');
+  consumeTrivia(c);
+
+  let ch = c.peek();
+
+  if (ch === ')' || ch === '') {
+    c.error(`Expected ${label} in pseudo-class body, got ${ch || '<eof>'}`);
+  }
+
+  const raw = consumeIdent(c);
+
+  consumeTrivia(c);
+  ch = c.peek();
+
+  if (ch !== ')') {
+    c.error(`Expected ")" after ${label}, got ${ch || '<eof>'}`);
+  }
+
+  c.advance();
+  return raw;
+}
+
+function selectorListFromCompound(compound: CompoundSelector): SelectorList {
+  return {
+    selectors: [{
+      parts: [{ combinator: null, compound, cost: compound.cost }],
+      usesScope: compound.usesScope,
+      usesCache: compound.usesCache,
+      cost: compound.cost,
+    }],
+    usesScope: compound.usesScope,
+    usesCache: compound.usesCache,
+    cost: compound.cost,
+  };
 }

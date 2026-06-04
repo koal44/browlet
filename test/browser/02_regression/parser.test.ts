@@ -323,4 +323,121 @@ runScenarios('parser', 'normal', [
     ],
   },
 
+  {
+    name: 'linear pseudo-element state resets across selector-list arms',
+    // status: 'only',
+    markup: `
+      <my-input id="input"></my-input>
+      <div id="box"></div>
+    `,
+    cases: [
+      // ::after should not poison the second selector arm.
+      { match: 'my-input::after, :state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // non-part pseudo-elements should also not poison the second selector arm.
+      { match: 'my-input::before, :state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+      { match: 'my-input::first-letter, :state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+      { match: 'my-input::first-line, :state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // ::part state should also reset across selector arms.
+      { match: '::part(foo), :has(div)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // ::slotted terminal state should reset across selector arms.
+      { match: '::slotted(foo), .foo', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+      { match: '::slotted(foo), :state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+    ],
+  },
+
+  {
+    name: 'linear pseudo-element state still applies within same selector arm',
+    // status: 'only',
+    markup: `
+      <my-input id="input"></my-input>
+      <div id="box"></div>
+    `,
+    cases: [
+      // Same compound: invalid.
+      { match: 'my-input::after:state(foo)', ref: { by: 'id', id: 'input' }, expect: { throws: true } },
+      { match: 'my-input::before:state(foo)', ref: { by: 'id', id: 'input' }, expect: { throws: true } },
+      { match: 'my-input::first-letter:state(foo)', ref: { by: 'id', id: 'input' }, expect: { throws: true } },
+
+      // Same compound after ::slotted: invalid.
+      { match: '::slotted(foo):state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+      { match: '::slotted(foo):hover', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+
+      // Same complex selector after ::part combinator: invalid.
+      { match: '::part(foo) + div', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+
+      // Same compound after ::part: :has is invalid.
+      { match: '::part(foo):has(li)', ref: { by: 'id', id: 'box' }, expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
+      { match: '::part(foo):has(li)', ref: { by: 'id', id: 'box' }, expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+    ],
+  },
+
+  {
+    name: 'part state survives allowed trailing pseudos until another pseudo-element',
+    // status: 'only',
+    markup: `
+      <div id="box"></div>
+    `,
+    cases: [
+      // :state after ::part is valid.
+      { match: '::part(inner):state(bar)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // :state after ::part then ::before is invalid: ::before becomes non-part pseudo-element state.
+      { match: '::part(inner):state(bar)::before:state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+      { match: '::part(inner):state(bar)::after:state(foo)', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+
+      // But stopping at ::before/::after is valid.
+      { match: '::part(inner):state(bar)::before', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+      { match: '::part(inner):state(bar)::after', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+    ],
+  },
+
+  {
+    name: 'scoped grammar context does not leak between selector-list arms',
+    // status: 'only',
+    markup: `
+      <div id="box"></div>
+    `,
+    cases: [
+      // :host() argument restricts nested :not() to compound-only, but that should not poison next arm.
+      { match: ':host(:not(.a .b)), :not(.a .b)', ref: { by: 'id', id: 'box' }, expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
+      { match: ':host(:not(.a .b)), :not(.a .b)', ref: { by: 'id', id: 'box' }, expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+
+      // Reverse ordering: the ordinary :not(.a .b) arm is valid, but host arm still invalid.
+      { match: ':not(.a .b), :host(:not(.a .b))', ref: { by: 'id', id: 'box' }, expect: { throws: true }, browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'] },
+      { match: ':not(.a .b), :host(:not(.a .b))', ref: { by: 'id', id: 'box' }, expect: { throws: false }, browsers: ['webkit'], engines: ['native'] },
+
+      // Ordinary :not(.a .b) alone remains valid.
+      { match: ':not(.a .b)', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // Functional :host with compound :not remains valid syntactically.
+      { match: ':host(:not(.a))', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+    ],
+  },
+
+  {
+    name: 'nested relative selector context probes',
+    // status: 'only',
+    markup: `
+      <div id="box">
+        <div class="a"></div>
+      </div>
+    `,
+    cases: [
+      // Nested :has still invalid.
+      { match: ':has(:has(.a))', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+
+      // :has inside forgiving :is under :has should be dropped, not poison if another arm survives.
+      { match: ':has(:is(:has(.a), .a))', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+
+      // Pseudo-elements inside :has should be invalid.
+      { match: ':has(::before)', ref: { by: 'id', id: 'box' }, expect: { throws: true } },
+
+      // Pseudo-elements inside forgiving :is inside :has should be dropped.
+      { match: ':has(:is(::before, .a))', ref: { by: 'id', id: 'box' }, expect: { throws: false } },
+    ],
+  },
+
 ]);
