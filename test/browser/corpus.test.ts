@@ -31,7 +31,7 @@ runScenarios('various', 'normal', [
       // Table / structural selectors
       { select: 'table.selectorsReview tr > td.pattern', expect: { count: 39 } },
       { select: 'li.tocline2 > a[href^="#"]', expect: { count: 12 } },
-      { select: 'li.tocline3 > ul.toc a[href="#universal-selector"]', expect: { count: 0 } },
+      { select: 'li.tocline3 > ul.toc a[href="#universal-selector"]', expect: { count: 0 }, debug: false },
 
       // :has()
       { select: 'tr:has(> td.pattern)', expect: { count: 39 } },

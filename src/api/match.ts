@@ -122,7 +122,7 @@ function updateDebugMatch(snap: Snapshot, result: boolean): void {
 function updateDebugParse(snap: Snapshot, parsed: SelectorList): void {
   if (snap.debugMatch) {
     snap.debugMatch.parse = {
-      arms: parsed.selectors.length,
+      arms: parsed.arms.length,
       usesScope: parsed.usesScope,
       usesCache: parsed.usesCache,
       cost: parsed.cost,

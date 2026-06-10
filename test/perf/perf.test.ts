@@ -33,7 +33,7 @@ const groupedDupedIds = (n: number) => {
 runPerfScenarios('perf', [
   {
     name: 'blob mixed overview',
-    status: 'only',
+    // status: 'only',
     // status: 'skip',
     browsers: ['chromium'],
     markup: htmlStandard,
@@ -2211,7 +2211,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'match hot element accessors',
-    status: 'only',
+    // status: 'only',
     browsers: ['chromium'],
     markupMode: 'html-body',
     markup: `

@@ -74,7 +74,8 @@ type CandidateRun = {
 
 function lookupCandidates(group: SelectGroup, ctx: QueryContext, rc: RuntimeCache | null): CandidateRun {
   const plan = group.plan.candidates;
-  const frontier = plan.frontier?.(ctx, rc);
+  let frontier = plan.frontier?.(ctx, rc);
+  // if (6 === 6) frontier = undefined;
 
   if (frontier?.kind === 'candidates') {
     return {

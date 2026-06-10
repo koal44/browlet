@@ -534,4 +534,27 @@ runScenarios('pseudo-relational', 'normal', [
     ],
   },
 
+  {
+    name: 'element context must not hide ancestor proof outside context',
+    // status: 'only',
+    markup: `
+      <div id="outer" class="bar">
+        <div id="mid-outside" class="mid">
+          <div id="inner">
+            <div id="outer" class="bar">
+              <div id="mid-inside" class="mid">
+                <span id="inside-x" class="x"></span>
+              </div>
+            </div>
+
+            <span id="outer-x" class="x"></span>
+          </div>
+        </div>
+      </div>
+    `,
+    cases: [
+      { select: '#outer.bar > .mid .x', ref: { by: 'id', id: 'inner' }, expect: { ids: ['inside-x', 'outer-x'] } },
+    ],
+  },
+
 ]);

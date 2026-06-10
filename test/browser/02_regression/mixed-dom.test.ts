@@ -312,7 +312,7 @@ runScenarios('mixed-dom', 'normal', [
     cases: [
       // Type selector casing remains XML-sensitive even for XHTML-namespace elements.
       { select: '*|input', expect: { ids: ['xhtml-input-upper', 'xhtml-input-lower'] } },
-      { select: '*|Input', expect: { ids: [] } },
+      { select: '*|Input', expect: { ids: [] }, debug: false },
 
       // Attribute names and values remain XML-sensitive; HTML folding must not leak here.
       { select: '*|input[TYPE]', expect: { ids: [] } },
@@ -325,6 +325,31 @@ runScenarios('mixed-dom', 'normal', [
       // Lowercase valid custom element names are unresolved unless registered.
       { select: '*|X-Plain:defined', expect: { ids: ['xhtml-custom-upper'] } },
       { select: '*|x-plain:defined', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'xml residual tag casing after seeded ancestor',
+    // status: 'only',
+    markupMode: 'xml-document',
+    markup: `
+      <root xmlns:h="http://www.w3.org/1999/xhtml">
+        <group class="seed">
+          <h:input id="xhtml-input-upper" type="TEXT" />
+          <h:input id="xhtml-input-lower" type="text" />
+          <h:X-Plain id="xhtml-custom-upper" />
+          <h:x-plain id="xhtml-custom-lower" />
+        </group>
+      </root>
+    `,
+    cases: [
+      // The seed is .seed. The right-hand type selector must be tested residually.
+      { select: '.seed > *|Input', expect: { ids: [] } },
+      { select: '.seed > *|input', expect: { ids: ['xhtml-input-upper', 'xhtml-input-lower'] } },
+
+      // Same idea, but descendant instead of child, so it exercises applyFilter + boundary.
+      { select: '.seed *|Input', expect: { ids: [] } },
+      { select: '.seed *|input', expect: { ids: ['xhtml-input-upper', 'xhtml-input-lower'] } },
     ],
   },
 

@@ -15,12 +15,12 @@ function unchanged(selector: string): void {
 describe('planner :is/:where expansion', () => {
   it('describes attribute tests from debug metadata', () => {
     const list = parseSelectorList('[lang="tr"]', {});
-    expect(describeComplex(list.selectors[0])).toBe('[lang="tr"]');
+    expect(describeComplex(list.arms[0])).toBe('[lang="tr"]');
   });
 
   it('describes is/where tests from debug metadata', () => {
     const list = parseSelectorList(':is(h1, h2)', {});
-    expect(describeComplex(list.selectors[0])).toBe(':is(h1, h2)');
+    expect(describeComplex(list.arms[0])).toBe(':is(h1, h2)');
   });
 
   it('expands seedless subject :is() into tag arms', () => {
@@ -246,12 +246,12 @@ describe('planner :is/:where expansion', () => {
 
   it('does not mutate the original parsed selector while deriving seed-lifted arms', () => {
     const list = parseSelectorList(':is(h1, h2)', {});
-    const before = describeComplex(list.selectors[0]);
+    const before = describeComplex(list.arms[0]);
 
     const out = expandSelectorListForSeeding(list).map(describeComplex);
 
     expect(out).toEqual(['h1', 'h2']);
-    expect(describeComplex(list.selectors[0])).toBe(before);
+    expect(describeComplex(list.arms[0])).toBe(before);
   });
 
   it('preserves :where() as a remaining test when expanding a later :is()', () => {
@@ -335,7 +335,7 @@ describe('planner :is/:where expansion', () => {
 
   it('updates lifted arm costs after moving argument subject seeds onto the host subject', () => {
     const list = parseSelectorList('[data-x]:is(.a > h1.foo:hover, .b > h2.bar)', {});
-    const original = list.selectors[0];
+    const original = list.arms[0];
 
     const expanded = expandSelectorListForSeeding(list);
 

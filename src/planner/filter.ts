@@ -49,11 +49,11 @@ export function buildStrictSelectorListMatch(
   ctx: BuildContext,
   mode: BuildMode = {},
 ): string {
-  if (list.selectors.length === 0) {
+  if (list.arms.length === 0) {
     throw new Error('Cannot build matcher for empty selector list');
   }
 
-  const selectors = list.selectors.slice();
+  const selectors = list.arms.slice();
   selectors.sort((a, b) => a.cost - b.cost);
 
   const arms = selectors.map((complex) => buildComplexSelectorMatch(complex, ctx, mode));
@@ -65,7 +65,7 @@ export function buildForgivingSelectorListMatch(
   ctx: BuildContext,
   mode: BuildMode = {},
 ): string {
-  if (list.selectors.length === 0) return 'false';
+  if (list.arms.length === 0) return 'false';
 
   return buildStrictSelectorListMatch(list, ctx, mode);
 }

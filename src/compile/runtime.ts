@@ -48,7 +48,7 @@ export function checkClass(e: Element, cls: string, snap: Snapshot): boolean {
 export function checkTag(e: Element, lowerTag: string, tag: string, snap: Snapshot): boolean {
   // perf if lowerTag==tag, but only caller already checks, so no null lowerTag case here
   const localName = snap.getLocalName(e);
-  return snap.isHtmlElement(e) ? localName === lowerTag : localName === tag;
+  return snap.isHtml && snap.isHtmlElement(e) ? localName === lowerTag : localName === tag;
 }
 
 export function hasAttr(
@@ -1173,11 +1173,14 @@ export function frontierNext(xs: Element[], pred: FrontierPredicate, rc: Runtime
 
 export function frontierFollowing(xs: Element[], pred: FrontierPredicate, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
-  let j = -1;
+  const seen = new Set<Element>();
 
   for (let i = 0; i < xs.length; i++) {
     for (let e = xs[i].nextElementSibling; e; e = e.nextElementSibling) {
-      if (pred(e, rc)) out[++j] = e;
+      if (pred(e, rc) && !seen.has(e)) {
+        seen.add(e);
+        out[out.length] = e;
+      }
     }
   }
 
@@ -1195,4 +1198,103 @@ export function frontierChildren(xs: Element[], pred: FrontierPredicate, rc: Run
   }
 
   return out;
+}
+
+export function applyFilter(
+  candidates: Element[],
+  pred: (e: Element, w: Element[] | null, rc: RuntimeCache | null) => boolean,
+  witnesses: Element[] | null,
+  rc: RuntimeCache | null,
+): Element[] {
+  const out: Element[] = [];
+  let j = 0;
+
+  for (let i = 0; i < candidates.length; i++) {
+    const e = candidates[i];
+    if (pred(e, witnesses, rc)) out[j++] = e;
+  }
+
+  return out;
+}
+
+function inElementSet(xs: Element[] | null, e: Element): boolean {
+  if (!xs) return false;
+
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] === e) return true;
+  }
+
+  return false;
+}
+
+export function matchAncestorInSet(e: Element, xs: Element[] | null): boolean {
+  for (let p = e.parentElement; p; p = p.parentElement) {
+    if (inElementSet(xs, p)) return true;
+  }
+
+  return false;
+}
+
+export function matchParentInSet(e: Element, xs: Element[] | null): boolean {
+  const p = e.parentElement;
+  return p !== null && inElementSet(xs, p);
+}
+
+export function matchPrevInSet(e: Element, xs: Element[] | null): boolean {
+  const p = e.previousElementSibling;
+  return p !== null && inElementSet(xs, p);
+}
+
+export function matchPrevAnyInSet(e: Element, xs: Element[] | null): boolean {
+  for (let p = e.previousElementSibling; p; p = p.previousElementSibling) {
+    if (inElementSet(xs, p)) return true;
+  }
+
+  return false;
+}
+
+export function matchAncestorW(
+  e: Element,
+  pred: (e: Element, w: Element[] | null, rc: RuntimeCache | null) => boolean,
+  w: Element[] | null,
+  rc: RuntimeCache | null,
+): boolean {
+  for (let p = e.parentElement; p; p = p.parentElement) {
+    if (pred(p, w, rc)) return true;
+  }
+
+  return false;
+}
+
+export function matchParentW(
+  e: Element,
+  pred: (e: Element, w: Element[] | null, rc: RuntimeCache | null) => boolean,
+  w: Element[] | null,
+  rc: RuntimeCache | null,
+): boolean {
+  const p = e.parentElement;
+  return p !== null && pred(p, w, rc);
+}
+
+export function matchPrevW(
+  e: Element,
+  pred: (e: Element, w: Element[] | null, rc: RuntimeCache | null) => boolean,
+  w: Element[] | null,
+  rc: RuntimeCache | null,
+): boolean {
+  const p = e.previousElementSibling;
+  return p !== null && pred(p, w, rc);
+}
+
+export function matchPrevAnyW(
+  e: Element,
+  pred: (e: Element, w: Element[] | null, rc: RuntimeCache | null) => boolean,
+  w: Element[] | null,
+  rc: RuntimeCache | null,
+): boolean {
+  for (let p = e.previousElementSibling; p; p = p.previousElementSibling) {
+    if (pred(p, w, rc)) return true;
+  }
+
+  return false;
 }

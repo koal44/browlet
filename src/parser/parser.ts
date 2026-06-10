@@ -26,7 +26,7 @@ import { parseNthArgs } from './nth';
 import { combinatorCost } from '../planner/cost';
 
 export type SelectorList = {
-  selectors: ComplexSelector[];
+  arms: ComplexSelector[];
   usesScope: boolean;
   usesCache: boolean;
   cost: number;
@@ -186,7 +186,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     c.error(`Unexpected character ${c.peek()}`);
   }
 
-  return { selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, cost };
 }
 
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
@@ -551,14 +551,14 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'is': {
       const x = { ...ctx, forbidEls: true };
       const pseudoList = parseForgivingSelectorList(c, x);
-      if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('is');
+      if (pseudoList.arms.length === 0) return emitNoMatchPseudoTest('is');
       return emitIsPseudoTest(pseudoList);
     }
 
     case 'where': {
       const x = { ...ctx, forbidEls: true };
       const pseudoList = parseForgivingSelectorList(c, x);
-      if (pseudoList.selectors.length === 0) return emitNoMatchPseudoTest('where');
+      if (pseudoList.arms.length === 0) return emitNoMatchPseudoTest('where');
       return emitWherePseudoTest(pseudoList);
     }
     case 'not': {
@@ -750,7 +750,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
     c.advance();
   }
 
-  return { selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, cost };
 }
 
 export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
@@ -813,7 +813,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
     c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
   }
 
-  return { selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, cost };
 }
 
 function consumeForgivingSelectorArm(c: Cursor): void {
@@ -1150,7 +1150,7 @@ function parseIdentPseudoArg(c: Cursor, label: string): string {
 
 function selectorListFromCompound(compound: CompoundSelector): SelectorList {
   return {
-    selectors: [{
+    arms: [{
       parts: [{ combinator: null, compound, cost: compound.cost }],
       usesScope: compound.usesScope,
       usesCache: compound.usesCache,

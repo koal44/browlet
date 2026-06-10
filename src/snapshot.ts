@@ -12,6 +12,8 @@ import {
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
   frontierFilter, frontierNext, frontierFollowing, frontierChildren, isHost,
+  applyFilter, matchAncestorInSet, matchParentInSet, matchPrevInSet, matchPrevAnyInSet,
+  matchAncestorW, matchParentW, matchPrevW, matchPrevAnyW,
 } from './compile/runtime';
 import type {
   CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
@@ -19,12 +21,16 @@ import type {
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from './api/match';
-import { querySelect, type DebugSelect, type SelectResolver } from './api/select';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './utils/util';
 import { toNodeList } from './utils/collections';
 import { RuntimeCache } from './compile/runtimeCache';
 import { SelectorSyntaxError } from './parser/cursor';
+
+import { type DebugSelect, type SelectResolver } from './api/select';
+import { type DebugSelectWitness, type SelectWitnessResolver } from './api/select-witness';
+// import { querySelect } from './api/select';
+import { querySelect } from './api/select-witness';
 
 export class Snapshot {
   doc: Document;
@@ -81,6 +87,8 @@ export class Snapshot {
   tokenRegex_S = new Map<string, RegExp>();
   tokenRegex_I = new Map<string, RegExp>();
 
+  selectWitnessResolvers = new Map<string, SelectWitnessResolver>();
+
   cacheSize = 0;
 
   clearCache(): void {
@@ -94,6 +102,8 @@ export class Snapshot {
     this.classRegex_I.clear();
     this.tokenRegex_S.clear();
     this.tokenRegex_I.clear();
+
+    this.selectWitnessResolvers.clear();
   }
 
   runtimeCache = new RuntimeCache();
@@ -369,13 +379,24 @@ export class Snapshot {
   frontierFollowing = frontierFollowing;
   frontierChildren = frontierChildren;
 
+  applyFilter = applyFilter;
+  matchAncestorInSet = matchAncestorInSet;
+  matchParentInSet = matchParentInSet;
+  matchPrevInSet = matchPrevInSet;
+  matchPrevAnyInSet = matchPrevAnyInSet;
+  matchAncestorW = matchAncestorW;
+  matchParentW = matchParentW;
+  matchPrevW = matchPrevW;
+  matchPrevAnyW = matchPrevAnyW;
+
   // debugging
   isDebug = false;
   debugSelect: DebugSelect | undefined;
   debugMatch: DebugMatch | undefined;
   debugFirst: DebugFirst | undefined;
-  debugStack: (DebugSelect | DebugFirst | DebugMatch)[] = [];
+  debugStack: (DebugSelect | DebugFirst | DebugMatch | DebugSelectWitness)[] = [];
   debugCompile: string | undefined;
+  debugSelectWitness: DebugSelectWitness | undefined;
 
   setDebug(enabled: boolean): void {
     this.isDebug = enabled;

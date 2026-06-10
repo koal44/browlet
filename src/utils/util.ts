@@ -38,11 +38,12 @@ const TEXT_NODE = 3;
 export function describeContext(ctx: QueryContext): QueryContextDescription {
   if (isDocument(ctx)) {
     const root = ctx.documentElement;
-    const body = ctx.body;
+    const body = ctx.body as Element | null;
+    const html = body ? body.outerHTML : root.outerHTML || '';
     return {
       kind: 'document',
       summary: '#document',
-      preview: previewText(body.outerHTML || root.outerHTML || ''),
+      preview: previewText(html),
     };
   }
 

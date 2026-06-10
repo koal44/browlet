@@ -35,7 +35,7 @@ const NEVER_ARM: ComplexSelector = {
 
 export function expandSelectorListForSeeding(list: SelectorList): ComplexSelector[] {
   const out: ComplexSelector[] = [];
-  const arms = list.selectors;
+  const arms = list.arms;
 
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i];
@@ -88,8 +88,8 @@ function expandSeedLiftableIsWhere(
   const expanded: ComplexSelector[] = [];
 
   // Split :is(.a > h1, .b) into one seed-lifted planning arm per argument arm.
-  for (let i = 0; i < argumentList.selectors.length; i++) {
-    const argumentArm = argumentList.selectors[i];
+  for (let i = 0; i < argumentList.arms.length; i++) {
+    const argumentArm = argumentList.arms[i];
 
     // section ~ [lang]:is(.a > h1) -> section ~ h1[lang]:is(.a > *)
     const liftedArm = deriveSeedLiftedArm(
@@ -318,7 +318,7 @@ function isTrivialResidualArm(arm: ComplexSelector): boolean {
 function buildResidualIsWhereTest(residualArm: ComplexSelector, isOrWhere: 'is' | 'where'): CandidateTest {
   // Rebuild the selected :is/:where test with only this residual arm.
   const list: SelectorList = {
-    selectors: [residualArm],
+    arms: [residualArm],
     cost: residualArm.cost,
     usesScope: residualArm.usesScope,
     usesCache: residualArm.usesCache,
@@ -353,13 +353,13 @@ function getSubjectSeedRank(arm: ComplexSelector): SeedRank {
 }
 
 function getWorstSubjectSeedRank(list: SelectorList): SeedRank {
-  if (list.selectors.length === 0) return SeedRank.None;
+  if (list.arms.length === 0) return SeedRank.None;
 
   let minRank = SeedRank.Id;
 
   // :is(#a, .b, h1) has minimum rank Tag, so every expanded arm is at least tag-seedable.
-  for (let i = 0; i < list.selectors.length; i++) {
-    const rank = getSubjectSeedRank(list.selectors[i]);
+  for (let i = 0; i < list.arms.length; i++) {
+    const rank = getSubjectSeedRank(list.arms[i]);
 
     if (rank === SeedRank.None) return SeedRank.None;
     if (rank < minRank) minRank = rank;
