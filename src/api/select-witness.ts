@@ -1,70 +1,21 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-implied-eval */
 import type { BuildContext, CompoundSelector } from '../parser/parser';
-import { parseSelectorList, type ComplexSelector, type SelectorList } from '../parser/parser';
+import type { ComplexSelector, SelectorList } from '../parser/parser';
 import { mergeDocumentOrderLists } from '../utils/collections';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import { buildCompoundTest, createBuildContext } from '../planner/filter';
 import { cssIdentUnescape } from '../utils/css';
-import { describeContext, describeElements, type QueryContextDescription } from '../utils/util';
+import { describeElements } from '../utils/util';
+import type { SelectRunFn } from './select';
 
-export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
-  snap.probe.select++;
-  const isDebug = snap.isDebug;
-  if (isDebug) initDebug(snap, sel, ctx);
-
-  let resolver = snap.selectWitnessResolvers.get(sel);
-  if (!resolver) {
-    const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    resolver = buildSelectWitnessResolver(parsed, snap);
-    snap.selectWitnessResolvers.set(sel, resolver);
-    snap.cacheSize++;
-  }
-
-  snap.update(ctx, resolver.usesScope);
-
-  let rc: RuntimeCache | null = null;
-  if (resolver.usesCache) {
-    snap.syncRuntimeCache(ctx);
-    rc = snap.runtimeCache;
-  }
-
-  const lists: Element[][] = [];
-  let i = 0;
-
-  for (let k = 0; k < resolver.lambdas.length; k++) {
-    const select = resolver.lambdas[k];
-    const results = select(ctx, rc);
-
-    if (results.length) lists[i++] = results;
-    if (isDebug) updateDebugRun(snap, k, select, results);
-  }
-
-  return mergeDocumentOrderLists(lists);
-}
-
-export type SelectWitnessResolver = {
-  lambdas: SelectWitnessFn[];
-  usesScope: boolean;
-  usesCache: boolean;
-};
-
-function buildSelectWitnessResolver(list: SelectorList, snap: Snapshot): SelectWitnessResolver {
-  snap.checkCacheWatermark();
-  snap.probe.selBuild++;
-
+export function buildWitnessSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = expandSelectorListForSeeding(list);
   const lambdas: SelectWitnessFn[] = [];
 
-  let usesScope = false;
-  let usesCache = false;
-
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i];
-
-    usesScope ||= arm.usesScope;
-    usesCache ||= arm.usesCache;
 
     const select = compileWitnessSelect(arm, snap);
     lambdas[i] = select;
@@ -74,7 +25,40 @@ function buildSelectWitnessResolver(list: SelectorList, snap: Snapshot): SelectW
     }
   }
 
-  return { lambdas, usesScope, usesCache };
+  return function WitnessSelect(ctx, rc, snap) {
+    return runWitnessSelect(lambdas, ctx, rc, snap);
+  };
+}
+
+function runWitnessSelect(
+  lambdas: SelectWitnessFn[],
+  ctx: QueryContext,
+  rc: RuntimeCache | null,
+  snap: Snapshot,
+): Element[] {
+  const isDebug = snap.isDebug;
+
+  if (lambdas.length === 1) {
+    const select = lambdas[0];
+    const results = select(ctx, rc);
+
+    if (isDebug) updateDebugRun(snap, 0, select, results);
+
+    return results;
+  }
+
+  const lists: Element[][] = [];
+  let i = 0;
+
+  for (let k = 0; k < lambdas.length; k++) {
+    const select = lambdas[k];
+    const results = select(ctx, rc);
+
+    if (results.length) lists[i++] = results;
+    if (isDebug) updateDebugRun(snap, k, select, results);
+  }
+
+  return mergeDocumentOrderLists(lists);
 }
 
 type SelectWitnessFn = (ctx: QueryContext, rc: RuntimeCache | null) => Element[];
@@ -231,46 +215,14 @@ function emitCandidateLookup(compound: CompoundSelector): string | undefined {
   return undefined;
 }
 
-export type DebugSelectWitness = {
-  kind: 'select-witness';
-  selectors: string;
-  context?: QueryContextDescription;
-  build: {
-    usesScope: boolean;
-    usesCache: boolean;
-    armIndex: number;
-    selectSrcText: string;
-  }[];
-  run: {
-    armIndex: number;
-    selectSrcText: string;
-    results: string[];
-  }[];
-  error?: string;
-};
-
-function initDebug(snap: Snapshot, sel: string, ctx: QueryContext): void {
-  snap.debugStack.length = 0;
-
-  const dbgSelect: DebugSelectWitness = {
-    kind: 'select-witness',
-    selectors: sel,
-    context: describeContext(ctx),
-    build: [],
-    run: [],
-  };
-
-  snap.debugSelectWitness = dbgSelect;
-  snap.debugStack.push(dbgSelect);
-}
-
 function updateDebugRun(
   snap: Snapshot,
   armIndex: number,
   select: SelectWitnessFn,
   results: Element[],
 ): void {
-  snap.debugSelectWitness?.run.push({
+  snap.debugSelect?.run.push({
+    engine: 'witness',
     armIndex,
     selectSrcText: String(select),
     results: describeElements(results),
@@ -283,7 +235,8 @@ function updateDebugBuild(
   arm: ComplexSelector,
   select: SelectWitnessFn,
 ): void {
-  snap.debugSelectWitness?.build.push({
+  snap.debugSelect?.build.push({
+    engine: 'witness',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
     armIndex,

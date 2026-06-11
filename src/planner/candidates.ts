@@ -4,7 +4,6 @@ import { buildStrictComplexMatcher, createBuildContext } from './filter';
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import { cssIdentUnescape } from '../utils/css';
 import { expandSelectorListForSeeding } from './pseudo-lift';
-import { attachFrontiers, type FrontierFn } from './frontier';
 
 export type CandidateGroupDraft = {
   arms: ComplexSelector[];
@@ -20,7 +19,6 @@ export function planCandidateGroups(list: SelectorList, snap: Snapshot): Candida
   const arms = expandSelectorListForSeeding(list);
   const drafts = buildCandidateGroupDrafts(arms, snap);
   drafts.sort(compareCandidateGroupDrafts);
-  attachFrontiers(drafts, snap);
   return finalizeCandidateGroupDrafts(drafts);
 }
 
@@ -65,10 +63,9 @@ function finalizeCandidateGroupDrafts(drafts: CandidateGroupDraft[]): CandidateG
     let usesScope = false;
     let usesCache = false;
 
-    const frontierAware = d.arms.length === 1 && d.candidates.frontier !== undefined;
     for (let j = 0; j < d.arms.length; j++) {
       const arm = d.arms[j];
-      const built = buildStrictComplexMatcher(arm, ctx, { frontierAware });
+      const built = buildStrictComplexMatcher(arm, ctx);
 
       sources[j] = built.source;
       cost += built.cost;
@@ -102,7 +99,6 @@ export type CandidatePlan = {
   strategy: 'id' | 'class' | 'tag' | 'walk';
   lookupQuery: string;
   lookup: (ctx: QueryContext) => Element[];
-  frontier?: FrontierFn;
 };
 
 // Marks seed-supplied simple selectors so residual matcher generation can skip them.

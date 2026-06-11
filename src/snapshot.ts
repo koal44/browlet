@@ -11,7 +11,7 @@ import {
   isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
-  frontierFilter, frontierNext, frontierFollowing, frontierChildren, isHost,
+  frontierNext, frontierFollowing, frontierChildren, isHost,
   applyFilter, matchAncestorInSet, matchParentInSet, matchPrevInSet, matchPrevAnyInSet,
   matchAncestorW, matchParentW, matchPrevW, matchPrevAnyW,
 } from './compile/runtime';
@@ -27,10 +27,7 @@ import { toNodeList } from './utils/collections';
 import { RuntimeCache } from './compile/runtimeCache';
 import { SelectorSyntaxError } from './parser/cursor';
 
-import { type DebugSelect, type SelectResolver } from './api/select';
-import { type DebugSelectWitness, type SelectWitnessResolver } from './api/select-witness';
-// import { querySelect } from './api/select';
-import { querySelect } from './api/select-witness';
+import { querySelect, type SelectResolver, type DebugSelect } from './api/select';
 
 export class Snapshot {
   doc: Document;
@@ -87,7 +84,7 @@ export class Snapshot {
   tokenRegex_S = new Map<string, RegExp>();
   tokenRegex_I = new Map<string, RegExp>();
 
-  selectWitnessResolvers = new Map<string, SelectWitnessResolver>();
+  selectWitnessResolvers = new Map<string, SelectResolver>();
 
   cacheSize = 0;
 
@@ -374,7 +371,6 @@ export class Snapshot {
   isSeeking = isSeeking;
   isMuted = isMuted;
 
-  frontierFilter = frontierFilter;
   frontierNext = frontierNext;
   frontierFollowing = frontierFollowing;
   frontierChildren = frontierChildren;
@@ -394,9 +390,8 @@ export class Snapshot {
   debugSelect: DebugSelect | undefined;
   debugMatch: DebugMatch | undefined;
   debugFirst: DebugFirst | undefined;
-  debugStack: (DebugSelect | DebugFirst | DebugMatch | DebugSelectWitness)[] = [];
+  debugStack: (DebugSelect | DebugFirst | DebugMatch)[] = [];
   debugCompile: string | undefined;
-  debugSelectWitness: DebugSelectWitness | undefined;
 
   setDebug(enabled: boolean): void {
     this.isDebug = enabled;

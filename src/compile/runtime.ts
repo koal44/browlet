@@ -9,30 +9,30 @@ import {
 } from '../utils/dom';
 import type { RuntimeCache } from './runtimeCache';
 
-export type CombinatorTest = (e: Element, rc: RuntimeCache | null, provenPart?: number) => boolean;
+export type CombinatorTest = (e: Element, rc: RuntimeCache | null) => boolean;
 
-export function matchParent(e: Element, test: CombinatorTest, rc: RuntimeCache | null, provenPart?: number): boolean {
+export function matchParent(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   const parent = e.parentElement;
-  return !!parent && test(parent, rc, provenPart);
+  return !!parent && test(parent, rc);
 }
 
-export function matchAncestor(e: Element, test: CombinatorTest, rc: RuntimeCache | null, provenPart?: number): boolean {
+export function matchAncestor(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   let node: Element | null = e;
   while ((node = node.parentElement)) {
-    if (test(node, rc, provenPart)) return true;
+    if (test(node, rc)) return true;
   }
   return false;
 }
 
-export function matchPrev(e: Element, test: CombinatorTest, rc: RuntimeCache | null, provenPart?: number): boolean {
+export function matchPrev(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   const prev = e.previousElementSibling;
-  return !!prev && test(prev, rc, provenPart);
+  return !!prev && test(prev, rc);
 }
 
-export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache | null, provenPart?: number): boolean {
+export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
   let node: Element | null = e;
   while ((node = node.previousElementSibling)) {
-    if (test(node, rc, provenPart)) return true;
+    if (test(node, rc)) return true;
   }
   return false;
 }
@@ -1146,18 +1146,6 @@ export function isHost(_e: Element, _snap: Snapshot): boolean {
 }
 
 type FrontierPredicate = (e: Element, rc: RuntimeCache | null) => boolean;
-
-export function frontierFilter(xs: Element[], pred: FrontierPredicate, rc: RuntimeCache | null): Element[] {
-  const out: Element[] = [];
-  let j = -1;
-
-  for (let i = 0; i < xs.length; i++) {
-    const e = xs[i];
-    if (pred(e, rc)) out[++j] = e;
-  }
-
-  return out;
-}
 
 export function frontierNext(xs: Element[], pred: FrontierPredicate, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
