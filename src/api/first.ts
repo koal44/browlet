@@ -1,23 +1,26 @@
-import type { Filter } from '../planner/filter';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
-import { precedesByDocPosition } from '../utils/collections';
-import { describeContext, describeElement, describeElements, type QueryContextDescription } from '../utils/debug';
-import { planCandidateGroups, type CandidateGroupPlan } from '../planner/candidates';
 import type { RuntimeCache } from '../compile/runtimeCache';
+import { describeContext, describeElement, type QueryContextDescription } from '../utils/debug';
+import { isElement } from '../utils/dom';
+import { buildSubjectFirst } from './first-subject';
+import { buildWitnessFirst } from './first-witness';
+import type { DebugWitnessProgram } from './witness';
 
-export function queryFirst(selectors: string, ctx: QueryContext, snap: Snapshot): Element | null {
+export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
   snap.probe.first++;
 
   const isDebug = snap.isDebug;
-  if (isDebug) initDebug(snap, selectors, ctx);
+  if (isDebug) initDebug(snap, sel, ctx);
 
-  let resolver = snap.firstResolvers.get(selectors);
+  let resolver = snap.firstResolvers.get(sel);
   if (!resolver) {
-    const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
+    const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
     resolver = buildFirstResolver(parsed, snap);
-    snap.firstResolvers.set(selectors, resolver);
+    snap.firstResolvers.set(sel, resolver);
     snap.cacheSize++;
   }
+
+  const first = resolveFirstStrategy(resolver, ctx, snap);
 
   snap.update(ctx, resolver.usesScope);
 
@@ -27,121 +30,101 @@ export function queryFirst(selectors: string, ctx: QueryContext, snap: Snapshot)
     rc = snap.runtimeCache;
   }
 
-  const groups = resolver.groups;
+  const result = first(ctx, rc, snap);
 
-  if (groups.length === 1) {
-    const group = groups[0];
-    const candidates = group.plan.candidates.lookup(ctx);
-    const found = group.first(candidates, rc);
-
-    if (isDebug) {
-      updateDebugRun(snap, group, candidates, found);
-      updateDebugResult(snap, found);
-    }
-
-    return found;
+  if (isDebug) {
+    updateDebugResult(snap, result);
   }
 
-  let best: Element | null = null;
-
-  for (let i = 0; i < groups.length; i++) {
-    const group = groups[i];
-    const candidates = group.plan.candidates.lookup(ctx);
-    const found = group.first(candidates, rc);
-
-    if (isDebug) updateDebugRun(snap, group, candidates, found);
-
-    if (!found) continue;
-    if (!best || precedesByDocPosition(found, best)) best = found;
-  }
-
-  if (isDebug) updateDebugResult(snap, best);
-
-  return best;
+  return result;
 }
 
 export type FirstResolver = {
-  groups: FirstGroup[];
+  list: SelectorList;
   usesScope: boolean;
   usesCache: boolean;
+  subject?: FirstRunFn;
+  witness?: FirstRunFn;
 };
 
-type FirstGroup = {
-  plan: CandidateGroupPlan;
-  first: FirstFn;
-};
+export type FirstRunFn = (
+  ctx: QueryContext,
+  rc: RuntimeCache | null,
+  snap: Snapshot,
+) => Element | null;
 
 function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
   snap.checkCacheWatermark();
   snap.probe.firstBuild++;
 
-  const plans = planCandidateGroups(list, snap);
-  const groups: FirstGroup[] = [];
-
-  let usesScope = false;
-  let usesCache = false;
-
-  for (let i = 0; i < plans.length; i++) {
-    const plan = plans[i];
-    usesScope ||= plan.filter.usesScope;
-    usesCache ||= plan.filter.usesCache;
-
-    const first = compileFirst(plan.filter, snap);
-    const group: FirstGroup = { plan, first };
-
-    groups[i] = group;
-
-    if (snap.isDebug) {
-      updateDebugBuild(snap, plan, first);
-    }
-  }
-
-  return { groups, usesScope, usesCache };
+  return {
+    list,
+    usesScope: list.usesScope,
+    usesCache: list.usesCache,
+  };
 }
 
-type FirstFn = (candidates: Element[], rc: RuntimeCache | null) => Element | null;
-
-function compileFirst(filter: Filter, snap: Snapshot): FirstFn {
-  const f =
-    `"use strict";` +
-    filter.declarations.join('') +
-    `return function First(c,rc){` +
-      `var e,k=-1;` +
-      `while((e=c[++k])){` +
-        `if(${filter.source}){` +
-          `return e;` +
-        `}` +
-      `}` +
-      `return null;` +
-    `}`;
-
-  if (snap.isDebug) snap.debugCompile = f;
-
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call
-  return Function('s', f)(snap) as FirstFn;
+function resolveFirstStrategy(
+  resolver: FirstResolver,
+  ctx: QueryContext,
+  snap: Snapshot,
+): FirstRunFn {
+  if (isElement(ctx)) {
+    let subject = resolver.subject;
+    if (!subject) {
+      subject = buildSubjectFirst(resolver.list, snap);
+      resolver.subject = subject;
+    }
+    return subject;
+  } else { // Document, DocumentFragment
+    let witness = resolver.witness;
+    if (!witness) {
+      witness = buildWitnessFirst(resolver.list, snap);
+      resolver.witness = witness;
+    }
+    return witness;
+  }
 }
 
 export type DebugFirst = {
   kind: 'first';
   selectors: string;
   context?: QueryContextDescription;
-  build: {
-    usesScope: boolean;
-    usesCache: boolean;
-    strategy: string;
-    lookupQuery: string;
-    filterCost: number;
-    firstSrcText: string;
-  }[];
-  run: {
-    strategy: string;
-    lookupQuery: string;
-    candidates: string[];
-    firstSrcText: string;
-    result: string | null;
-  }[];
+  build: DebugFirstBuild[];
+  run: DebugFirstRun[];
   result?: string | null;
   error?: string;
+};
+
+export type DebugFirstBuild = {
+  engine: 'subject' | 'witness';
+  usesScope: boolean;
+  usesCache: boolean;
+
+  // subject-only
+  lookupStrategy?: string;
+  lookupQuery?: string;
+  filterCost?: number;
+  srcText?: string;
+
+  // witness-only
+  armIndex?: number;
+};
+
+export type DebugFirstRun = {
+  engine: 'subject' | 'witness';
+
+  // subject-only
+  lookupStrategy?: string;
+  lookupQuery?: string;
+  candidates?: string[];
+  srcText?: string;
+
+  // witness-only
+  armIndex?: number;
+  program?: DebugWitnessProgram;
+
+  result: string | null;
 };
 
 function initDebug(snap: Snapshot, sel: string, ctx: QueryContext): void {
@@ -157,38 +140,6 @@ function initDebug(snap: Snapshot, sel: string, ctx: QueryContext): void {
 
   snap.debugFirst = dbgFirst;
   snap.debugStack.push(dbgFirst);
-}
-
-function updateDebugBuild(
-  snap: Snapshot,
-  plan: CandidateGroupPlan,
-  first: FirstFn,
-): void {
-  snap.debugFirst?.build.push({
-    usesScope: plan.filter.usesScope === true,
-    usesCache: plan.filter.usesCache === true,
-    strategy: plan.candidates.strategy,
-    lookupQuery: plan.candidates.lookupQuery,
-    filterCost: plan.filter.cost,
-    firstSrcText: snap.debugCompile ?? first.toString(),
-  });
-
-  snap.debugCompile = undefined;
-}
-
-function updateDebugRun(
-  snap: Snapshot,
-  group: FirstGroup,
-  candidates: Element[],
-  result: Element | null,
-): void {
-  snap.debugFirst?.run.push({
-    strategy: group.plan.candidates.strategy,
-    lookupQuery: group.plan.candidates.lookupQuery,
-    candidates: describeElements(candidates),
-    firstSrcText: String(group.first),
-    result: result ? describeElement(result) : null,
-  });
 }
 
 function updateDebugResult(snap: Snapshot, result: Element | null): void {

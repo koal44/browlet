@@ -3,7 +3,8 @@ import type { RuntimeCache } from '../compile/runtimeCache';
 import { describeContext, type QueryContextDescription } from '../utils/debug';
 import { isElement } from '../utils/dom';
 import { buildSubjectSelect } from './select-subject';
-import { buildWitnessSelect, type DebugWitnessProgram } from './select-witness';
+import { buildWitnessSelect } from './select-witness';
+import type { DebugWitnessProgram } from './witness';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;

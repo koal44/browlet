@@ -1,62 +1,66 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import type { SelectRunFn } from './select';
-import { mergeDocumentOrderLists } from '../utils/collections';
+import type { FirstRunFn } from './first';
+import { precedesByDocPosition } from '../utils/collections';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import {
-  buildWitnessProgram, canAdvance, describeWitnessProgram, getAdvanceMove, getBridgeMove, resetWitnessDebug, runAdvanceMove, runBridgeMove, type WitnessProgram, type WitnessState,
+  buildWitnessProgram, canAdvance, describeWitnessProgram, getAdvanceMove,
+  getBridgeMove, resetWitnessDebug, runAdvanceMove, runBridgeMove,
+  type WitnessProgram, type WitnessState,
 } from './witness';
-import { describeElements } from '../utils/debug';
+import { describeElement } from '../utils/debug';
 
-export function buildWitnessSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
+export function buildWitnessFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
   const arms = expandSelectorListForSeeding(list);
-  const selects: ArmSelectFn[] = [];
+  const firsts: ArmFirstFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
     const arm = arms[i];
 
-    const select = buildArmFn(arm, i, snap);
-    selects[i] = select;
+    const first = buildArmFn(arm, i, snap);
+    firsts[i] = first;
 
     if (snap.isDebug) {
       updateDebugBuild(snap, i, arm);
     }
   }
 
-  return function Select(ctx, rc, snap) {
-    return runSelect(selects, ctx, rc, snap);
+  return function First(ctx, rc, snap) {
+    return runFirst(firsts, ctx, rc, snap);
   };
 }
 
-function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache | null, _snap: Snapshot): Element[] {
-  if (selects.length === 1) {
-    return selects[0](ctx, rc);
+function runFirst(firsts: ArmFirstFn[], ctx: QueryContext, rc: RuntimeCache | null, _snap: Snapshot): Element | null {
+  if (firsts.length === 1) {
+    return firsts[0](ctx, rc);
   }
 
-  const lists: Element[][] = [];
-  let i = 0;
+  let best: Element | null = null;
 
-  for (let k = 0; k < selects.length; k++) {
-    const results = selects[k](ctx, rc);
-    if (results.length) lists[i++] = results;
+  for (let i = 0; i < firsts.length; i++) {
+    const result = firsts[i](ctx, rc);
+
+    if (!result) continue;
+    if (!best || precedesByDocPosition(result, best)) best = result;
   }
 
-  return mergeDocumentOrderLists(lists);
+  return best;
 }
 
-type ArmSelectFn = (ctx: QueryContext, rc: RuntimeCache | null) => Element[];
+type ArmFirstFn = (ctx: QueryContext, rc: RuntimeCache | null) => Element | null;
 
-function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot): ArmSelectFn {
+function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot): ArmFirstFn {
   const program = buildWitnessProgram(complex, snap);
 
-  return function Select(ctx, rc) {
+  return function First(ctx, rc) {
     const results = runWitnessProgram(program, ctx, rc, snap);
+    const result = results[0] ?? null;
 
     if (snap.isDebug) {
-      updateDebugRun(snap, armIndex, program, results);
+      updateDebugRun(snap, armIndex, program, result);
     }
 
-    return results;
+    return result;
   };
 }
 
@@ -120,13 +124,13 @@ function updateDebugRun(
   snap: Snapshot,
   armIndex: number,
   program: WitnessProgram,
-  results: Element[],
+  result: Element | null,
 ): void {
-  snap.debugSelect?.run.push({
+  snap.debugFirst?.run.push({
     engine: 'witness',
     armIndex,
     program: describeWitnessProgram(program),
-    results: describeElements(results),
+    result: result ? describeElement(result) : null,
   });
 }
 
@@ -135,7 +139,7 @@ function updateDebugBuild(
   armIndex: number,
   arm: ComplexSelector,
 ): void {
-  snap.debugSelect?.build.push({
+  snap.debugFirst?.build.push({
     engine: 'witness',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,

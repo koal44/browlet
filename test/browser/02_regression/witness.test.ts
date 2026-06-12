@@ -19,6 +19,10 @@ runScenarios('witness', 'normal', [
       { select: '.outer .hit', expect: { ids: ['hit'] } },
       { select: '.outer .hit', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['hit'] } },
       { select: '.outer .hit', expect: { ids: ['hit'] } },
+
+      { first: '.outer .hit', expect: { ids: ['hit'] } },
+      { first: '.outer .hit', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['hit'] } },
+      { first: '.outer .hit', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -36,6 +40,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: 'div:first-child .target', expect: { ids: ['hit'] } },
+      { first: 'div:first-child .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -55,6 +60,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.a > .x', expect: { ids: ['before', 'inside', 'after'] } },
+      { first: '.a > .x', expect: { ids: ['before'] } },
     ],
   },
 
@@ -71,6 +77,9 @@ runScenarios('witness', 'normal', [
     cases: [
       { select: '.hit, .outer .hit', expect: { ids: ['hit', 'sibling'] } },
       { select: '.outer .hit, .hit', expect: { ids: ['hit', 'sibling'] } },
+
+      { first: '.hit, .outer .hit', expect: { ids: ['hit'] } },
+      { first: '.outer .hit, .hit', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -92,6 +101,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.box:first-child ~ .box + .box .inner .target', expect: { ids: ['hit'] }, debug: false },
+      { first: '.box:first-child ~ .box + .box .inner .target', expect: { ids: ['hit'] }, debug: false },
     ],
   },
 
@@ -111,6 +121,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.left ~ .mid + .target', expect: { ids: ['hit'] } },
+      { first: '.left ~ .mid + .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -130,6 +141,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.left ~ .mid ~ .target', expect: { ids: ['hit'] } },
+      { first: '.left ~ .mid ~ .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -147,6 +159,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.scope :first-child + .target', expect: { ids: ['hit'] } },
+      { first: '.scope :first-child + .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -166,6 +179,9 @@ runScenarios('witness', 'normal', [
     cases: [
       { select: '.left + .mid #good', expect: { ids: ['good'] } },
       { select: '.left + .mid #bad', expect: { ids: [] } },
+
+      { first: '.left + .mid #good', expect: { ids: ['good'] } },
+      { first: '.left + .mid #bad', expect: { ids: [] } },
     ],
   },
 
@@ -182,6 +198,9 @@ runScenarios('witness', 'normal', [
     cases: [
       { select: '.left + #hit.target', expect: { ids: ['hit'] } },
       { select: '.left + #miss.target', expect: { ids: [] } },
+
+      { first: '.left + #hit.target', expect: { ids: ['hit'] } },
+      { first: '.left + #miss.target', expect: { ids: [] } },
     ],
   },
 
@@ -197,6 +216,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '#scope .a.b', expect: { ids: ['hit'] } },
+      { first: '#scope .a.b', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -212,6 +232,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '#scope span.target:first-child', expect: { ids: ['first'] } },
+      { first: '#scope span.target:first-child', expect: { ids: ['first'] } },
     ],
   },
 
@@ -226,6 +247,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '#scope .foo\\ bar', expect: { ids: [] } },
+      { first: '#scope .foo\\ bar', expect: { ids: [] } },
     ],
   },
 
@@ -245,6 +267,10 @@ runScenarios('witness', 'normal', [
       { select: '.scope > #direct', expect: { ids: ['direct'] } },
       { select: '.scope > #nested', expect: { ids: [] } },
       { select: '.scope #nested', expect: { ids: ['nested'] } },
+
+      { first: '.scope > #direct', expect: { ids: ['direct'] } },
+      { first: '.scope > #nested', expect: { ids: [] } },
+      { first: '.scope #nested', expect: { ids: ['nested'] } },
     ],
   },
 
@@ -264,6 +290,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.parent > .target', expect: { ids: ['hit'] } },
+      { first: '.parent > .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -283,6 +310,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.left + .target', expect: { ids: ['hit-a', 'hit-b'] } },
+      { first: '.left + .target', expect: { ids: ['hit-a'] } },
     ],
   },
 
@@ -312,6 +340,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.left ~ .target', expect: { ids: ['hit-a', 'hit-b'] } },
+      { first: '.left ~ .target', expect: { ids: ['hit-a'] } },
     ],
   },
 
@@ -334,6 +363,9 @@ runScenarios('witness', 'normal', [
     cases: [
       { select: '.scope .grand .parent #good', expect: { ids: ['good'] } },
       { select: '.scope .grand .parent #bad', expect: { ids: [] } },
+
+      { first: '.scope .grand .parent #good', expect: { ids: ['good'] } },
+      { first: '.scope .grand .parent #bad', expect: { ids: [] } },
     ],
   },
 
@@ -354,6 +386,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.a + .b .target', expect: { ids: ['hit'] } },
+      { first: '.a + .b .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -374,6 +407,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.a + .b ~ .target', expect: { ids: ['hit'] } },
+      { first: '.a + .b ~ .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -397,6 +431,7 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.grand > .parent .target', expect: { ids: ['hit'] } },
+      { first: '.grand > .parent .target', expect: { ids: ['hit'] } },
     ],
   },
 
@@ -415,6 +450,155 @@ runScenarios('witness', 'normal', [
     `,
     cases: [
       { select: '.grand > .parent > .target', expect: { ids: ['hit'] } },
+      { first: '.grand > .parent > .target', expect: { ids: ['hit'] } },
+    ],
+  },
+
+  {
+    name: 'unseedable final bridge after multi-witness descendant',
+    // status: 'only',
+    markup: `
+      <div id="box0" class="box"></div>
+      <div id="box1" class="box"></div>
+      <div id="box2" class="box">
+        <section class="inner">
+          <span id="hit-a" foo></span>
+        </section>
+        <section class="inner">
+          <span id="hit-b" foo></span>
+        </section>
+        <section class="inner">
+          <span id="miss-no-attr"></span>
+        </section>
+      </div>
+
+      <section class="inner">
+        <span id="miss-outside" foo></span>
+      </section>
+    `,
+    cases: [
+      { select: '.box:first-child ~ .box + .box .inner [foo]', expect: { ids: ['hit-a', 'hit-b'] }, debug: false },
+      { first: '.box:first-child ~ .box + .box .inner [foo]', expect: { ids: ['hit-a'] }, debug: false },
+    ],
+  },
+
+  {
+    name: 'unseedable descendant bridge does not duplicate through nested witnesses',
+    // status: 'only',
+    markup: `
+      <div id="scope" class="scope">
+        <section class="inner">
+          <section class="inner">
+            <span id="hit" foo></span>
+          </section>
+        </section>
+
+        <span id="miss-outside-inner" foo></span>
+      </div>
+    `,
+    cases: [
+      { select: '.scope .inner [foo]', expect: { ids: ['hit'] } },
+      { first: '.scope .inner [foo]', expect: { ids: ['hit'] } },
+    ],
+  },
+
+  {
+    name: 'first selector-list uses document order not arm order',
+    // status: 'only',
+    markup: `
+      <div id="early" class="b"></div>
+      <div id="late" class="a"></div>
+    `,
+    cases: [
+      { first: '.a, .b', expect: { ids: ['early'] } },
+      { first: '.b, .a', expect: { ids: ['early'] } },
+    ],
+  },
+
+  {
+    name: 'first element context still proves selector outside context',
+    // status: 'only',
+    markup: `
+      <div id="outer" class="outer">
+        <section id="ctx">
+          <span id="hit" class="hit"></span>
+        </section>
+      </div>
+
+      <section id="other">
+        <span id="miss" class="hit"></span>
+      </section>
+    `,
+    cases: [
+      { first: '.outer .hit', ref: { by: 'id', id: 'ctx' }, expect: { ids: ['hit'] } },
+    ],
+  },
+
+  {
+    name: 'first witness preserves lookup root across sibling edges',
+    // status: 'only',
+    markup: `
+      <div id="box0" class="box"></div>
+      <div id="box1" class="box"></div>
+      <div id="box2" class="box">
+        <section class="inner">
+          <span id="hit" class="target"></span>
+        </section>
+      </div>
+
+      <section class="inner">
+        <span id="miss" class="target"></span>
+      </section>
+    `,
+    cases: [
+      { first: '.box:first-child ~ .box + .box .inner .target', expect: { ids: ['hit'] } },
+    ],
+  },
+
+  {
+    name: 'first unseedable final bridge stays inside proved witness chain',
+    // status: 'only',
+    markup: `
+      <div id="box0" class="box"></div>
+      <div id="box1" class="box"></div>
+      <div id="box2" class="box">
+        <section class="inner">
+          <span id="hit-a" foo></span>
+        </section>
+        <section class="inner">
+          <span id="hit-b" foo></span>
+        </section>
+      </div>
+
+      <section class="inner">
+        <span id="miss-outside" foo></span>
+      </section>
+    `,
+    cases: [
+      { first: '.box:first-child ~ .box + .box .inner [foo]', expect: { ids: ['hit-a'] } },
+    ],
+  },
+
+  {
+    name: 'first compares witness arms after pseudo expansion',
+    // status: 'only',
+    markup: `
+      <h2 id="early" class="title"></h2>
+      <h1 id="late" class="title"></h1>
+    `,
+    cases: [
+      { first: ':is(h1, h2).title', expect: { ids: ['early'] } },
+    ],
+  },
+
+  {
+    name: 'first ignores empty earlier selector-list arms',
+    // status: 'only',
+    markup: `
+      <div id="hit" class="target"></div>
+    `,
+    cases: [
+      { first: '.missing, .target', expect: { ids: ['hit'] } },
     ],
   },
 
