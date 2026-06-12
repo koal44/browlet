@@ -4,8 +4,8 @@ import type { FirstRunFn } from './first';
 import { precedesByDocPosition } from '../utils/collections';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import {
-  buildWitnessProgram, canAdvance, describeWitnessProgram, getAdvanceMove,
-  getBridgeMove, resetWitnessDebug, runAdvanceMove, runBridgeMove,
+  buildWitnessProgram, canAdvance, describeWitnessProgram, getAdvanceMove, getFinalBridgeMove, resetWitnessDebug,
+  runAdvanceMove, runBridgeMove, runFirstAdvanceMove, runFirstBridgeMove,
   type WitnessProgram, type WitnessState,
 } from './witness';
 import { describeElement } from '../utils/debug';
@@ -53,8 +53,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   const program = buildWitnessProgram(complex, snap);
 
   return function First(ctx, rc) {
-    const results = runWitnessProgram(program, ctx, rc, snap);
-    const result = results[0] ?? null;
+    const result = runWitnessFirstProgram(program, ctx, rc, snap);
 
     if (snap.isDebug) {
       updateDebugRun(snap, armIndex, program, result);
@@ -64,7 +63,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   };
 }
 
-function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
+function runWitnessFirstProgram(program: WitnessProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
   const isDebug = snap.isDebug;
   if (isDebug) resetWitnessDebug(program);
 
@@ -73,17 +72,23 @@ function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: Runti
     witnesses: null,
   };
 
+  const last = program.steps.length - 1;
+
+  if (program.start.to === last) {
+    const found = runFirstBridgeMove(state, program.start, rc);
+    if (isDebug) program.start.count = found ? 1 : 0;
+    return found;
+  }
+
   runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, rc);
 
   if (isDebug) {
     program.start.count = state.witnesses?.length ?? 0;
   }
 
-  if (!state.witnesses?.length) return [];
+  if (!state.witnesses?.length) return null;
 
   let index = program.start.to;
-  const last = program.steps.length - 1;
-
   while (index < last) {
     const from = index;
     const step = program.steps[from];
@@ -94,30 +99,32 @@ function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: Runti
       if (advance) {
         if (isDebug) step.lookupRoot = state.root;
 
+        if (advance.to === last) {
+          const found = runFirstAdvanceMove(state, advance, rc);
+          if (isDebug) step.count = found ? 1 : 0;
+          return found;
+        }
+
         runAdvanceMove(state, advance, program.steps[advance.to].canRoot, rc);
 
         if (isDebug) step.count = state.witnesses.length;
 
         index = advance.to;
-        if (!state.witnesses.length) return [];
+        if (!state.witnesses.length) return null;
         continue;
       }
     }
 
-    const bridge = getBridgeMove(program, from, snap);
-    if (!bridge) break;
-
     if (isDebug) step.lookupRoot = state.root;
+    const bridge = getFinalBridgeMove(program, from, snap);
+    const found = runFirstBridgeMove(state, bridge, rc);
 
-    runBridgeMove(state, bridge, program.steps[bridge.to].canRoot, rc);
+    if (isDebug) step.count = found ? 1 : 0;
 
-    if (isDebug) step.count = state.witnesses.length;
-
-    index = bridge.to;
-    if (!state.witnesses.length) return [];
+    return found;
   }
 
-  return state.witnesses;
+  throw new Error(`Unreachable witness first runner state at step ${index}`);
 }
 
 function updateDebugRun(

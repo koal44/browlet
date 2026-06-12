@@ -17,6 +17,7 @@ export type WitnessProgram = {
 type WitnessStep = {
   advance: AdvanceMove | null | undefined;
   bridge: BridgeMove | null | undefined;
+  finalBridge: BridgeMove | null | undefined;
   canRoot: boolean;
   count?: number;
   lookupRoot?: QueryContext;
@@ -38,8 +39,13 @@ type BridgeMove = {
 type AdvanceMove = {
   to: number;
   run: AdvanceFn;
+  first?: AdvanceFirstFn;
+  combinator: AdvanceCombinator;
+  filter: CompoundFilter;
   debug?: string;
 };
+
+type AdvanceCombinator = '>' | '+' | '~';
 
 type CompoundFilter = (candidate: Element, rc: RuntimeCache | null) => boolean;
 type BridgeFilter = (candidate: Element, witnesses: Element[] | null, rc: RuntimeCache | null) => boolean;
@@ -60,6 +66,7 @@ export function buildWitnessProgram(complex: ComplexSelector, snap: Snapshot): W
     steps[i] = {
       advance: undefined,
       bridge: undefined,
+      finalBridge: undefined,
       canRoot: canRootAt(parts, i),
     };
   }
@@ -99,6 +106,29 @@ export function getBridgeMove(program: WitnessProgram, index: number, snap: Snap
   return bridge;
 }
 
+export function getFinalBridgeMove(program: WitnessProgram, index: number, snap: Snapshot): BridgeMove {
+  const step = program.steps[index];
+
+  if (step.finalBridge !== undefined) {
+    if (step.finalBridge === null) {
+      throw new Error(`Invalid final witness bridge from terminal step: ${index}`);
+    }
+
+    return step.finalBridge;
+  }
+
+  const last = program.parts.length - 1;
+
+  if (index >= last) {
+    step.finalBridge = null;
+    throw new Error(`Invalid final witness bridge from terminal step: ${index}`);
+  }
+
+  const bridge = buildBridgeMove(program.parts, index, last, snap);
+  step.finalBridge = bridge;
+  return bridge;
+}
+
 export function canAdvance(state: WitnessState): boolean {
   // Multi-witness advance is not order-safe unless the witness wave is known
   // to be an ancestor-antichain. Keep singleton-only until that proof exists.
@@ -124,10 +154,37 @@ export function runAdvanceMove(state: WitnessState, move: AdvanceMove, canRoot: 
   updateWitnessState(state, next, canRoot);
 }
 
+export function runFirstAdvanceMove(state: WitnessState, move: AdvanceMove, rc: RuntimeCache | null): Element | null {
+  const witnesses = state.witnesses;
+  if (!witnesses) return null;
+
+  let first = move.first;
+  if (!first) {
+    first = buildAdvanceFirstFn(move.combinator, move.filter);
+    move.first = first;
+  }
+
+  return first(witnesses, rc);
+}
+
 export function runBridgeMove(state: WitnessState, move: BridgeMove, canRoot: boolean, rc: RuntimeCache | null): void {
   const candidates = move.lookup(state.root);
   const next = applyBridgeFilter(candidates, move.filter, state.witnesses, rc);
   updateWitnessState(state, next, canRoot);
+}
+
+export function runFirstBridgeMove(state: WitnessState, move: BridgeMove, rc: RuntimeCache | null): Element | null {
+  const candidates = move.lookup(state.root);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const e = candidates[i];
+
+    if (move.filter(e, state.witnesses, rc)) {
+      return e;
+    }
+  }
+
+  return null;
 }
 
 function updateWitnessState(state: WitnessState, witnesses: Element[], canRoot: boolean): void {
@@ -217,10 +274,15 @@ function buildAdvanceMove(parts: ComplexPart[], from: number, snap: Snapshot): A
   if (to >= parts.length) return null;
 
   const { combinator, compound } = parts[to];
-  const run = buildAdvanceFn(combinator, compileCompoundFilter(compound, snap));
-  if (!run) return null;
+  if (combinator === null) {
+    throw new Error(`Missing combinator at part ${to} in witness advance move`);
+  }
+  if (combinator === ' ') return null;
 
-  const move: AdvanceMove = { to, run };
+  const filter = compileCompoundFilter(compound, snap);
+  const run = buildAdvanceFn(combinator, filter);
+
+  const move: AdvanceMove = { to, run, combinator, filter };
   if (snap.isDebug) {
     move.debug = `advance ${describeMove(from, to)} · ${describeCombinator(combinator)} · test ${describeFilter(compound)}`;
   }
@@ -266,14 +328,21 @@ function compileCompoundFilter(compound: CompoundSelector, snap: Snapshot): Comp
   return Function('s', f)(snap) as CompoundFilter;
 }
 
-function buildAdvanceFn(combinator: string | null, filter: CompoundFilter): AdvanceFn | null {
+function buildAdvanceFn(combinator: AdvanceCombinator, filter: CompoundFilter): AdvanceFn {
   switch (combinator) {
     case '>': return (witnesses, rc) => advanceChildren(witnesses, filter, rc);
     case '+': return (witnesses, rc) => advanceNextSibling(witnesses, filter, rc);
     case '~': return (witnesses, rc) => advanceFollowingSiblings(witnesses, filter, rc);
-    case ' ': return null;
-    default:
-      throw new Error(`Invalid witness advance combinator: ${String(combinator)}`);
+  }
+}
+
+type AdvanceFirstFn = (witnesses: Element[], rc: RuntimeCache | null) => Element | null;
+
+function buildAdvanceFirstFn(combinator: AdvanceCombinator, filter: CompoundFilter): AdvanceFirstFn {
+  switch (combinator) {
+    case '>': return (witnesses, rc) => firstChild(witnesses, filter, rc);
+    case '+': return (witnesses, rc) => firstNextSibling(witnesses, filter, rc);
+    case '~': return (witnesses, rc) => firstFollowingSibling(witnesses, filter, rc);
   }
 }
 
@@ -318,6 +387,34 @@ function advanceChildren(witnesses: Element[], filter: CompoundFilter, rc: Runti
   return out;
 }
 
+function firstNextSibling(witnesses: Element[], filter: CompoundFilter, rc: RuntimeCache | null): Element | null {
+  for (let i = 0; i < witnesses.length; i++) {
+    const candidate = witnesses[i].nextElementSibling;
+    if (candidate && filter(candidate, rc)) return candidate;
+  }
+
+  return null;
+}
+
+function firstFollowingSibling(witnesses: Element[], filter: CompoundFilter, rc: RuntimeCache | null): Element | null {
+  for (let i = 0; i < witnesses.length; i++) {
+    for (let candidate = witnesses[i].nextElementSibling; candidate; candidate = candidate.nextElementSibling) {
+      if (filter(candidate, rc)) return candidate;
+    }
+  }
+
+  return null;
+}
+
+function firstChild(witnesses: Element[], filter: CompoundFilter, rc: RuntimeCache | null): Element | null {
+  for (let i = 0; i < witnesses.length; i++) {
+    for (let candidate = witnesses[i].firstElementChild; candidate; candidate = candidate.nextElementSibling) {
+      if (filter(candidate, rc)) return candidate;
+    }
+  }
+
+  return null;
+}
 
 function buildBridgeFilter(parts: ComplexPart[], from: number, to: number, snap: Snapshot): BridgeFilter {
   if (to <= from) {
@@ -487,6 +584,7 @@ type DebugWitnessStep = {
   index: number;
   advance: string;
   bridge: string;
+  finalBridge: string;
   canRoot: boolean;
   count?: number;
   lookupRoot?: QueryContextDescription;
@@ -504,6 +602,7 @@ export function describeWitnessProgram(program: WitnessProgram): DebugWitnessPro
       canRoot: step.canRoot,
       advance: describeAdvanceMove(step.advance, i),
       bridge: describeBridgeMove(step.bridge, i),
+      finalBridge: describeBridgeMove(step.finalBridge, i),
       lookupRoot: step.lookupRoot ? describeContext(step.lookupRoot, { preview: false }) : undefined,
     };
 
@@ -544,8 +643,6 @@ function describeMove(from: number, to: number): string {
 function describeIndex(index: number): string {
   return index < 0 ? 'entry' : String(index);
 }
-
-
 
 export function resetWitnessDebug(program: WitnessProgram): void {
   program.start.count = undefined;

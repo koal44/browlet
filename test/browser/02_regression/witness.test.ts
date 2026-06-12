@@ -602,4 +602,128 @@ runScenarios('witness', 'normal', [
     ],
   },
 
+  {
+    name: 'first final bridge beats unsafe multi-witness terminal advance',
+    // status: 'only',
+    markup: `
+      <div id="outer" class="a">
+        <div id="inner" class="a">
+          <span id="early" class="x"></span>
+        </div>
+
+        <span id="late" class="x"></span>
+      </div>
+    `,
+    cases: [
+      // If first naively advanced from the first .a witness (#outer), it would
+      // return #late. Correct first is #early, from the nested .a witness.
+      { first: '.a > .x', expect: { ids: ['early'] } },
+    ],
+  },
+
+  {
+    name: 'first terminal following-sibling advance returns first sibling only',
+    // status: 'only',
+    markup: `
+      <div id="start"></div>
+      <em></em>
+      <span id="hit-a" class="target"></span>
+      <span id="hit-b" class="target"></span>
+    `,
+    cases: [
+      { first: '#start ~ .target', expect: { ids: ['hit-a'] } },
+    ],
+  },
+
+  {
+    name: 'first start bridge short-circuits final subject',
+    // status: 'only',
+    markup: `
+      <span id="hit-a" foo></span>
+      <span id="hit-b" foo></span>
+    `,
+    cases: [
+      { first: '[foo]', expect: { ids: ['hit-a'] } },
+    ],
+  },
+
+  {
+    name: 'first terminal child advance is direct-only',
+    // status: 'only',
+    markup: `
+      <div id="parent">
+        <div>
+          <span id="miss-nested" class="target"></span>
+        </div>
+
+        <span id="hit" class="target"></span>
+      </div>
+    `,
+    cases: [
+      { first: '#parent > .target', expect: { ids: ['hit'] } },
+    ],
+  },
+
+  {
+    name: 'first terminal adjacent advance is exact',
+    // status: 'only',
+    markup: `
+      <div id="start"></div>
+      <em></em>
+      <span id="miss-gap" class="target"></span>
+    `,
+    cases: [
+      { first: '#start + .target', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'first terminal following-sibling advance is parent-local',
+    // status: 'only',
+    markup: `
+      <section>
+        <div id="start"></div>
+      </section>
+
+      <span id="miss-outside-parent" class="target"></span>
+    `,
+    cases: [
+      { first: '#start ~ .target', expect: { ids: [] } },
+    ],
+  },
+
+  {
+    name: 'first final bridge skips earlier failing final candidates',
+    // status: 'only',
+    markup: `
+      <span id="miss-before" class="target"></span>
+
+      <div class="left"></div>
+      <span id="hit-a" class="target"></span>
+
+      <div class="left"></div>
+      <span id="hit-b" class="target"></span>
+    `,
+    cases: [
+      { first: '.left ~ .target', expect: { ids: ['hit-a'] } },
+    ],
+  },
+
+  {
+    name: 'first final bridge beats unsafe nested witness advance',
+    // status: 'only',
+    markup: `
+      <div id="outer" class="a">
+        <div id="inner" class="a">
+          <span id="early" class="x"></span>
+        </div>
+
+        <span id="late" class="x"></span>
+      </div>
+    `,
+    cases: [
+      { first: '.a > .x', expect: { ids: ['early'] } },
+    ],
+  },
+
 ]);
