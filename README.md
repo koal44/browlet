@@ -2,21 +2,7 @@
 
 A TypeScript CSS selector engine for JavaScript DOM implementations.
 
-`selectlet` is a re-engineered fork of `nwsapi` focused on browser-aligned behavior, faster conformance iteration, and implementation-level optimization hooks. It is designed for DOM implementations that need selector APIs such as `matches()`, `closest()`, `querySelector()`, and `querySelectorAll()` outside a browser engine.
-
-The project is pre-1.0 and under active development. The public API and package shape may still change.
-
-## Why
-
-Selector engines for DOM implementations are difficult to maintain because correctness, browser compatibility, and performance interact in awkward ways. `selectlet` tries to make that work more explicit:
-
-* typed parser, planner, and runtime stages;
-* browser-oracle scenario tests across Chromium, Firefox, and WebKit;
-* focused jsdom/WPT-style conformance scenarios;
-* inspectable debug output for candidate plans and compiled matchers;
-* host capability hooks for faster access to DOM implementation internals.
-
-The goal is not only to run selectors quickly, but to make selector behavior easier to test, debug, and evolve.
+`selectlet` provides selector APIs such as `matches()`, `closest()`, `querySelector()`, and `querySelectorAll()` for DOM environments outside browser engines. It is developed against browser-oracle tests for Chromium, Firefox, and WebKit, including translated WPT cases and jsdom integration scenarios.
 
 ## Installation
 
@@ -87,108 +73,51 @@ type Selectlet = {
 
 `QueryContext` may be a `Document`, `Element`, or `DocumentFragment`.
 
-By default, multi-element APIs return arrays. If `NODE_LIST` is enabled, they return a NodeList-like indexed object.
+By default, multi-element APIs return arrays. With `NODE_LIST` enabled, they return a NodeList-like indexed object.
 
-## Capabilities
+## DOM implementation hooks
 
-`selectlet` can run against ordinary DOM APIs, but DOM implementations may pass capability hooks to avoid wrapper overhead or expose internal indexes.
-
-Examples include fast ID/class lookup, direct attribute access, namespace/local-name access, and tree-version hooks for cache invalidation.
-
-A jsdom-style integration can provide internal accessors like this:
+`selectlet` can use DOM-internal hooks for lower wrapper overhead and faster implementation-owned lookup paths.
 
 ```js
 const sx = createSelectlet(documentImpl, {
   errors: {
-    syntax: err => DOMException.create(documentImpl._globalObject, [
-      err.message,
-      "SyntaxError"
-    ])
+    syntax: err => createSyntaxError(err)
   },
 
   caps: {
     tree: {
-      treeVersion: node => {
-        return node.nodeType === 1 ? node._ownerDocument?._version : node._version;
-      }
+      treeVersion: node => getTreeVersion(node)
     },
 
     doc: {
-      cachedIds: (doc, id) => doc._byIdCache.getAll(id),
-
-      designMode: doc => {
-        const wrapper = idlUtils.wrapperForImpl(doc);
-        return typeof wrapper?.designMode === "string"
-          ? wrapper.designMode
-          : undefined;
-      }
+      cachedIds: (doc, id) => getElementsByIdFromCache(doc, id)
     },
 
     el: {
-      getId: el => {
-        const entry = el._attributesByNameMap.get("id");
-        return entry ? entry[0]._value : "";
-      },
-
-      getClass: el => {
-        const entry = el._attributesByNameMap.get("class");
-        return entry ? entry[0]._value : "";
-      },
-
-      getLocalName: el => el._localName,
-      getNamespaceURI: el => el._namespaceURI,
-
-      getAttribute: (el, name) => {
-        const attr = attrByName(el, name);
-        return attr ? attr._value : null;
-      },
-
-      getAttributeNS: (el, namespace, localName) => {
-        const attr = attrByNameNS(el, namespace, localName);
-        return attr ? attr._value : null;
-      },
-
-      hasAttribute: (el, name) => attrByName(el, name) !== null,
-      hasAttributeNS: (el, namespace, localName) => attrByNameNS(el, namespace, localName) !== null
+      getId: el => getInternalId(el),
+      getClass: el => getInternalClass(el),
+      getLocalName: el => getInternalLocalName(el),
+      getNamespaceURI: el => getInternalNamespace(el),
+      getAttribute: (el, name) => getInternalAttribute(el, name),
+      hasAttribute: (el, name) => hasInternalAttribute(el, name)
     }
   }
 });
 ```
 
-Capabilities are intended mainly for DOM implementation authors. Ordinary browser-style use does not require them.
-
-## Optimization model
-
-`selectlet` separates selector parsing from candidate planning and compiled runtime checks.
-
-Candidate plans can seed from IDs, classes, tags, or tree walks. Predicate tests are cost-ordered before compilation. Structural checks such as `:nth-child()` and `:nth-of-type()` can use runtime caches when the host provides a stable tree-version capability.
-
-The engine also includes experimental frontier planning for complex selectors. A selective left prefix can be used to narrow the later candidate lookup context, and compiled matchers can skip already-proven selector prefixes during verification.
-
-These optimizations are still evolving, but the architecture is designed to make planning decisions inspectable and testable.
-
 ## Status
 
-`selectlet` is currently under active development.
-
-Known areas still being worked on include:
-
-* additional CSS scoping and shadow DOM selectors such as `:host` and `::slotted()`;
-* broader frontier planning and cost modeling;
-* deeper jsdom style-system integration;
-* compatibility polish for some edge-case parser behavior;
-* public API and package-shape stabilization.
-
-The current focus is jsdom-style DOM implementation integration, conformance work, and performance experiments.
+`selectlet` is under active development. Current work is focused on jsdom integration, browser/WPT conformance coverage, shadow DOM selector behavior, and selector API performance.
 
 ## Development
-
-The repository includes browser-oracle scenario tests, jsdom-oriented scenarios, and performance scenarios. See `package.json` for the current build and test scripts.
 
 ```sh
 npm test
 npm run build
 ```
+
+The repository includes unit tests, browser-oracle scenario tests, jsdom-oriented scenarios, and benchmark tests. See `package.json` for the current scripts.
 
 ## License
 
