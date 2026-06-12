@@ -1,6 +1,6 @@
 import { buildStrictMatcher, createBuildContext, type Filter } from '../planner/filter';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
-import { describeContext, type QueryContextDescription } from '../utils/util';
+import { describeContext, type QueryContextDescription } from '../utils/debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 
 export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {

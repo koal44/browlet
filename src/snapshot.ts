@@ -8,12 +8,9 @@ import {
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
   isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
   matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass,
-  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
+  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType, isHost,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
-  frontierNext, frontierFollowing, frontierChildren, isHost,
-  applyFilter, matchAncestorInSet, matchParentInSet, matchPrevInSet, matchPrevAnyInSet,
-  matchAncestorW, matchParentW, matchPrevW, matchPrevAnyW,
 } from './compile/runtime';
 import type {
   CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
@@ -22,7 +19,7 @@ import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
 import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
-import { describeContext, describeElement } from './utils/util';
+import { describeContext, describeElement } from './utils/debug';
 import { toNodeList } from './utils/collections';
 import { RuntimeCache } from './compile/runtimeCache';
 import { SelectorSyntaxError } from './parser/cursor';
@@ -370,20 +367,6 @@ export class Snapshot {
   isPaused = isPaused;
   isSeeking = isSeeking;
   isMuted = isMuted;
-
-  frontierNext = frontierNext;
-  frontierFollowing = frontierFollowing;
-  frontierChildren = frontierChildren;
-
-  applyFilter = applyFilter;
-  matchAncestorInSet = matchAncestorInSet;
-  matchParentInSet = matchParentInSet;
-  matchPrevInSet = matchPrevInSet;
-  matchPrevAnyInSet = matchPrevAnyInSet;
-  matchAncestorW = matchAncestorW;
-  matchParentW = matchParentW;
-  matchPrevW = matchPrevW;
-  matchPrevAnyW = matchPrevAnyW;
 
   // debugging
   isDebug = false;

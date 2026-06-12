@@ -1,7 +1,7 @@
 import type { Filter } from '../planner/filter';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import { precedesByDocPosition } from '../utils/collections';
-import { describeContext, describeElement, describeElements, type QueryContextDescription } from '../utils/util';
+import { describeContext, describeElement, describeElements, type QueryContextDescription } from '../utils/debug';
 import { planCandidateGroups, type CandidateGroupPlan } from '../planner/candidates';
 import type { RuntimeCache } from '../compile/runtimeCache';
 

@@ -1,6 +1,6 @@
 import type {
   AttributeSelector, CandidateTest, Combinator, ComplexSelector, CompoundSelector,
-  RelativeComplexSelector, RelativeCompoundSelector, RelativeSelectorList, TagSelector,
+  RelativeComplexSelector, RelativeCompoundSelector, RelativeSelectorList, SelectorList, TagSelector,
 } from '../../src/parser/parser';
 
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -70,8 +70,8 @@ export function cssEscape(ident: string): string {
   return out;
 }
 
-export function describeList(list: { selectors: ComplexSelector[]; }): string {
-  return list.selectors.map(describeComplex).join(', ');
+export function describeList(list: SelectorList): string {
+  return list.arms.map(describeComplex).join(', ');
 }
 
 export function describeComplex(complex: ComplexSelector): string {

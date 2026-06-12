@@ -1,7 +1,7 @@
 import type { Filter } from '../planner/filter';
 import type { SelectorList } from '../parser/parser';
 import { mergeDocumentOrderLists } from '../utils/collections';
-import { describeElements } from '../utils/util';
+import { describeElements } from '../utils/debug';
 import { planCandidateGroups, type CandidateGroupPlan } from '../planner/candidates';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
@@ -97,7 +97,7 @@ function updateDebugRun(
     lookupStrategy: group.plan.candidates.strategy,
     lookupQuery: group.plan.candidates.lookupQuery,
     candidates: describeElements(candidates),
-    selectSrcText: String(group.select),
+    srcText: String(group.select),
     results: describeElements(results),
   });
 }
@@ -114,7 +114,7 @@ function updateDebugBuild(
     lookupStrategy: plan.candidates.strategy,
     lookupQuery: plan.candidates.lookupQuery,
     filterCost: plan.filter.cost,
-    selectSrcText: snap.debugCompile ?? select.toString(),
+    srcText: snap.debugCompile ?? select.toString(),
   });
 
   snap.debugCompile = undefined;

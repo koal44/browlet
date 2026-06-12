@@ -1,9 +1,9 @@
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import { describeContext, type QueryContextDescription } from '../utils/util';
+import { describeContext, type QueryContextDescription } from '../utils/debug';
 import { isElement } from '../utils/dom';
 import { buildSubjectSelect } from './select-subject';
-import { buildWitnessSelect } from './select-witness';
+import { buildWitnessSelect, type DebugWitnessProgram } from './select-witness';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;
@@ -36,7 +36,6 @@ export type SelectResolver = {
   list: SelectorList;
   usesScope: boolean;
   usesCache: boolean;
-  subjectOnly: boolean;
   subject?: SelectRunFn;
   witness?: SelectRunFn;
 };
@@ -55,7 +54,6 @@ function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver
     list,
     usesScope: list.usesScope,
     usesCache: list.usesCache,
-    subjectOnly: isSubjectOnlySelectorList(list),
   };
 }
 
@@ -64,49 +62,30 @@ function resolveSelectStrategy(
   ctx: QueryContext,
   snap: Snapshot,
 ): SelectRunFn {
-  // Element contexts constrain returned subjects, but do not bound selector proof:
-  // ancestors/siblings outside the element can still prove the selector.
-  //
-  // Root-like contexts can use witness selection because the query context is
-  // also the proof universe for the current non-shadow selector model.
+  // Element contexts force subject selection. Although element.querySelectorAll()
+  // feels like a subtree query, the context only constrains returned subjects;
+  // selector proof may still depend on ancestors/siblings outside the subtree.
+  // Witness selection narrows the proof universe while walking left-to-right,
+  // so it is not safe for element contexts.
   if (isElement(ctx)) {
     let subject = resolver.subject;
     if (!subject) {
       subject = buildSubjectSelect(resolver.list, snap);
       resolver.subject = subject;
-
-      if (resolver.subjectOnly) {
-        resolver.witness = subject;
-      }
     }
-
     return subject;
-  }
-
-  let witness = resolver.witness;
-  if (!witness) {
-    if (resolver.subjectOnly) {
-      witness = resolver.subject;
-      if (!witness) {
-        witness = buildSubjectSelect(resolver.list, snap);
-        resolver.subject = witness;
-      }
-    } else {
+  } else { // Document, DocumentFragment
+    // Document and fragment contexts prefer witness selection: author-written
+    // selectors usually encode a left-to-right narrowing path. Subject grouping
+    // can still beat witness for some selector lists, especially because merging
+    // arms back into document order can be expensive.
+    let witness = resolver.witness;
+    if (!witness) {
       witness = buildWitnessSelect(resolver.list, snap);
+      resolver.witness = witness;
     }
-
-    resolver.witness = witness;
+    return witness;
   }
-
-  return witness;
-}
-
-function isSubjectOnlySelectorList(list: SelectorList): boolean {
-  for (let i = 0; i < list.arms.length; i++) {
-    if (list.arms[i].parts.length !== 1) return false;
-  }
-
-  return true;
 }
 
 export type DebugSelect = {
@@ -127,11 +106,10 @@ export type DebugSelectBuild = {
   lookupStrategy?: string;
   lookupQuery?: string;
   filterCost?: number;
+  srcText?: string;
 
   // witness-only
   armIndex?: number;
-
-  selectSrcText: string;
 };
 
 export type DebugSelectRun = {
@@ -141,11 +119,12 @@ export type DebugSelectRun = {
   lookupStrategy?: string;
   lookupQuery?: string;
   candidates?: string[];
+  srcText?: string;
 
   // witness-only
   armIndex?: number;
+  program?: DebugWitnessProgram;
 
-  selectSrcText: string;
   results: string[];
 };
 
