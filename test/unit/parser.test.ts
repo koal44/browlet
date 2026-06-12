@@ -204,6 +204,22 @@ describe('parseCompoundSelector', () => {
       expect(compound.tests.length).toBeGreaterThan(0);
     }
   });
+
+  it('accepts multiple ID selectors in one compound 1', () => {
+    expect(() => parseCompoundSelector(new Cursor('#a#a'), {})).not.toThrow();
+    expect(() => parseCompoundSelector(new Cursor('#a#b'), {})).not.toThrow();
+    expect(() => parseSelectorList('#a#b, #ok', {})).not.toThrow();
+  });
+
+  it('accepts multiple ID selectors in one compound 2', () => {
+    let compound = parseCompoundSelector(new Cursor('#a#a'), {});
+    expect(compound.id?.raw).toBe('a');
+
+    compound = parseCompoundSelector(new Cursor('#a#b'), {});
+    expect(compound.id?.raw).toBe('a');
+
+    expect(() => parseSelectorList('#a#b, #ok', {})).not.toThrow();
+  });
 });
 
 describe('consumeIdent', () => {

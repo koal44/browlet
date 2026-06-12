@@ -46,7 +46,7 @@ export function runScenarios(
 
       testFn(name, async () => {
         await runScenario(s, JSDOM);
-      });
+      }, s.timeout);
     }
   });
 }

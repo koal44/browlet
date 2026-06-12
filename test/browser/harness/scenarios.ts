@@ -39,6 +39,7 @@ export type Scenario = {
   browsers?: BrowserName[];
   engines?: Engine[];
   steps?: ScenarioStep[];
+  timeout?: number;
 
   // ergonomic sugar for simple scenarios that don't require multiple steps
   setupPage?: (page: Page) => void | Promise<void>;
@@ -168,7 +169,7 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
       const testFn = getTestFn(s.status);
       testFn(s.name, async () => {
         await runScenario(s, pages);
-      });
+      }, s.timeout);
     }
   });
 }
@@ -366,7 +367,7 @@ function getDescribeFn(mode?: ScenariosStatus): DescribeFn {
   return (title, callback) => test.describe(title, callback);
 }
 
-type TestFn = (title: string, callback: () => Promise<void>) => void;
+type TestFn = (title: string, callback: () => Promise<void>, timeout?: number) => void;
 function getTestFn(mode?: ScenarioStatus): TestFn {
   if (mode === 'skip') return (title, callback) => test.skip(title, callback);
   if (mode === 'only') return (title, callback) => test.only(title, callback);

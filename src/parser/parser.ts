@@ -24,6 +24,7 @@ import {
 } from './lex';
 import { parseNthArgs } from './nth';
 import { combinatorCost } from '../planner/cost';
+import { emitIdTest } from '../compile/emit-seedable';
 
 export type SelectorList = {
   arms: ComplexSelector[];
@@ -279,9 +280,17 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   const ch = c.peek();
 
   if (ch === '#') {
-    if (compound.id) c.error(`Duplicate ID selector in compound, already have ${compound.id.raw}`);
-    compound.id = parseIdSelector(c);
-    compound.cost += compound.id.cost;
+    const id = parseIdSelector(c);
+
+    if (!compound.id) {
+      compound.id = id;
+      compound.cost += id.cost;
+      return;
+    }
+
+    const test = emitIdTest(id);
+    compound.tests.push(test);
+    compound.cost += test.cost;
     return;
   }
 
