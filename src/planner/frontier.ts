@@ -1,13 +1,11 @@
-import type { CompoundSelector } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { QueryContextDescription } from '../utils/debug';
-import { describeCombinator, describeCompound, describeContext, describeLookup } from '../utils/debug';
-import { seedsByTag } from '../seeds/seedsByTag';
-import { cssIdentUnescape } from '../utils/css';
+import { describeCombinator, describeCompound, describeContext } from '../utils/debug';
 import {
-  buildAdvanceFirstFn, buildAdvanceMove, buildProof,
-  type AdvanceMove, type Chain, type ProofFn,
+  buildAdvanceFirstFn, buildAdvanceMove,
+  type AdvanceMove, type Chain,
 } from './chain';
+import { type BridgeMove, buildBridgeMove, describeBridgeMove, proveBridgeCandidates } from './bridge';
 
 export type FrontierProgram = {
   chain: Chain;
@@ -28,17 +26,6 @@ export type FrontierState = {
   root: QueryContext;
   frontier: Element[] | null;
 };
-
-type BridgeMove = {
-  from: number;
-  to: number;
-  lookup: LookupFn;
-  proof: ProofFn;
-  debug?: string;
-  count?: number;
-};
-
-type LookupFn = (root: QueryContext) => Element[];
 
 export function buildFrontierProgram(chain: Chain, snap: Snapshot): FrontierProgram {
   const start = buildBridgeMove(chain, -1, chooseBridgeTarget(chain, -1), snap);
@@ -181,18 +168,6 @@ function updateFrontierState(state: FrontierState, frontier: Element[], canRoot:
   }
 }
 
-function proveBridgeCandidates(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
-  const out: Element[] = [];
-  let j = -1;
-
-  for (let i = 0; i < candidates.length; i++) {
-    const e = candidates[i];
-    if (proof(e, frontier, rc)) out[++j] = e;
-  }
-
-  return out;
-}
-
 function chooseBridgeTarget(chain: Chain, from: number): number {
   const start = from + 1;
   const last = chain.length - 1;
@@ -208,77 +183,6 @@ function chooseBridgeTarget(chain: Chain, from: number): number {
   return last;
 }
 
-function buildBridgeMove(chain: Chain, from: number, to: number, snap: Snapshot): BridgeMove {
-  const compound = chain[to].right.compound;
-  const lookup = buildLookup(compound, snap);
-
-  markLookupSeed(compound);
-  try {
-    const move: BridgeMove = {
-      from, to, lookup, proof: buildProof(chain, from, to, snap),
-    };
-    if (snap.isDebug) {
-      move.debug = `${describeBridgeMove(move)} · lookup ${describeLookup(compound)}`;
-    }
-    return move;
-  } finally {
-    resetCompoundSeeds(compound);
-  }
-}
-
-function markLookupSeed(compound: CompoundSelector): void {
-  if (compound.id) {
-    compound.id.seed = true;
-  } else if (compound.classes?.length) {
-    for (let i = 0; i < compound.classes.length; i++) {
-      compound.classes[i].seed = true;
-    }
-  } else if (compound.tag) {
-    const { prefixRaw } = compound.tag;
-
-    // seedsByTag is a localName superset. Explicit empty namespace selectors
-    // like |tag and |* still need the residual namespace/type test.
-    if (prefixRaw !== '') {
-      compound.tag.seed = true;
-    }
-  }
-}
-
-function resetCompoundSeeds(compound: CompoundSelector): void {
-  if (compound.id) compound.id.seed = false;
-  if (compound.tag) compound.tag.seed = false;
-
-  if (compound.classes) {
-    for (let i = 0; i < compound.classes.length; i++) {
-      compound.classes[i].seed = false;
-    }
-  }
-}
-
-function buildLookup(compound: CompoundSelector, snap: Snapshot): LookupFn {
-  if (compound.id) {
-    const id = cssIdentUnescape(compound.id.raw);
-    return (root) => snap.seedsById(id, root);
-  }
-
-  if (compound.classes?.length) {
-    const classes = compound.classes.map((c) => cssIdentUnescape(c.raw));
-
-    if (classes.some((c) => /[\t\n\f\r ]/.test(c))) {
-      return () => [];
-    }
-
-    return (root) => snap.seedsByClass(classes, root);
-  }
-
-  if (compound.tag) {
-    const { localRaw } = compound.tag;
-    const query = localRaw === '*' ? '*' : cssIdentUnescape(localRaw);
-    return (root) => seedsByTag(query, root, snap);
-  }
-
-  return (root) => seedsByTag('*', root, snap);
-}
 
 export type DebugFrontierProgram = {
   start: DebugFrontierStart;
@@ -338,12 +242,6 @@ function describeAdvanceMove(move: AdvanceMove | null | undefined): string {
   if (move === undefined) return 'unbuilt';
   if (move === null) return 'cannot';
   return move.debug ?? `advance ${move.from} ➝ ${move.to}`;
-}
-
-function describeBridgeMove(move: BridgeMove | null | undefined): string {
-  if (move === undefined) return 'unbuilt';
-  if (move === null) return 'cannot';
-  return move.debug ?? `bridge ${move.from} ➝ ${move.to}`;
 }
 
 export function resetFrontierDebug(program: FrontierProgram): void {

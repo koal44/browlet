@@ -104,6 +104,29 @@ export function buildProof(chain: Chain, from: number, to: number, snap: Snapsho
   return proof;
 }
 
+export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
+  if (chains.length === 0) {
+    throw new Error('Cannot build multi-chain proof for empty chain list');
+  }
+
+  const proofs: ProofFn[] = [];
+
+  for (let i = 0; i < chains.length; i++) {
+    const chain = chains[i];
+    proofs[i] = buildProof(chain, -1, chain.length - 1, snap);
+  }
+
+  if (proofs.length === 1) return proofs[0];
+
+  return function proof(candidate, frontier, rc) {
+    for (let i = 0; i < proofs.length; i++) {
+      if (proofs[i](candidate, frontier, rc)) return true;
+    }
+
+    return false;
+  };
+}
+
 function buildConnectionToFrontier(rel: ChainRelation): ProofFn {
   switch (rel.combinator) {
     case ' ':
