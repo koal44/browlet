@@ -4,9 +4,10 @@ import type { SelectRunFn } from './select';
 import { mergeDocumentOrderLists } from '../utils/collections';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import {
-  buildWitnessProgram, canAdvance, describeWitnessProgram, getAdvanceMove, getBridgeMove, resetWitnessDebug, runAdvanceMove, runBridgeMove, type WitnessProgram, type WitnessState,
-} from './witness';
+  buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeMove, resetFrontierDebug, runAdvanceMove, runBridgeMove, type FrontierProgram, type FrontierState,
+} from '../planner/frontier';
 import { describeElements } from '../utils/debug';
+import { buildChain } from '../planner/chain';
 
 export function buildWitnessSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = expandSelectorListForSeeding(list);
@@ -47,7 +48,8 @@ function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache |
 type ArmSelectFn = (ctx: QueryContext, rc: RuntimeCache | null) => Element[];
 
 function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot): ArmSelectFn {
-  const program = buildWitnessProgram(complex, snap);
+  const chain = buildChain(complex);
+  const program = buildFrontierProgram(chain, snap);
 
   return function Select(ctx, rc) {
     const results = runWitnessProgram(program, ctx, rc, snap);
@@ -60,22 +62,22 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   };
 }
 
-function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
+function runWitnessProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
   const isDebug = snap.isDebug;
-  if (isDebug) resetWitnessDebug(program);
+  if (isDebug) resetFrontierDebug(program);
 
-  const state: WitnessState = {
+  const state: FrontierState = {
     root: ctx,
-    witnesses: null,
+    frontier: null,
   };
 
   runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, rc);
 
   if (isDebug) {
-    program.start.count = state.witnesses?.length ?? 0;
+    program.start.count = state.frontier?.length ?? 0;
   }
 
-  if (!state.witnesses?.length) return [];
+  if (!state.frontier?.length) return [];
 
   let index = program.start.to;
   const last = program.steps.length - 1;
@@ -92,10 +94,10 @@ function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: Runti
 
         runAdvanceMove(state, advance, program.steps[advance.to].canRoot, rc);
 
-        if (isDebug) step.count = state.witnesses.length;
+        if (isDebug) step.count = state.frontier.length;
 
         index = advance.to;
-        if (!state.witnesses.length) return [];
+        if (!state.frontier.length) return [];
         continue;
       }
     }
@@ -107,25 +109,25 @@ function runWitnessProgram(program: WitnessProgram, ctx: QueryContext, rc: Runti
 
     runBridgeMove(state, bridge, program.steps[bridge.to].canRoot, rc);
 
-    if (isDebug) step.count = state.witnesses.length;
+    if (isDebug) step.count = state.frontier.length;
 
     index = bridge.to;
-    if (!state.witnesses.length) return [];
+    if (!state.frontier.length) return [];
   }
 
-  return state.witnesses;
+  return state.frontier;
 }
 
 function updateDebugRun(
   snap: Snapshot,
   armIndex: number,
-  program: WitnessProgram,
+  program: FrontierProgram,
   results: Element[],
 ): void {
   snap.debugSelect?.run.push({
     engine: 'witness',
     armIndex,
-    program: describeWitnessProgram(program),
+    program: describeFrontierProgram(program),
     results: describeElements(results),
   });
 }

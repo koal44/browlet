@@ -4,7 +4,7 @@ import { describeContext, type QueryContextDescription } from '../utils/debug';
 import { isElement } from '../utils/dom';
 import { buildSubjectSelect } from './select-subject';
 import { buildWitnessSelect } from './select-witness';
-import type { DebugWitnessProgram } from './witness';
+import type { DebugFrontierProgram } from '../planner/frontier';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;
@@ -124,7 +124,7 @@ export type DebugSelectRun = {
 
   // witness-only
   armIndex?: number;
-  program?: DebugWitnessProgram;
+  program?: DebugFrontierProgram;
 
   results: string[];
 };

@@ -8,7 +8,7 @@ export type QueryContextDescription = {
   preview?: string;
 };
 
-export function describeFilter(compound: CompoundSelector): string {
+export function describeCompound(compound: CompoundSelector): string {
   let out = '';
 
   if (compound.tag) {

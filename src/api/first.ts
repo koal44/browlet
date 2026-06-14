@@ -4,7 +4,7 @@ import { describeContext, describeElement, type QueryContextDescription } from '
 import { isElement } from '../utils/dom';
 import { buildSubjectFirst } from './first-subject';
 import { buildWitnessFirst } from './first-witness';
-import type { DebugWitnessProgram } from './witness';
+import type { DebugFrontierProgram } from '../planner/frontier';
 
 export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
   snap.probe.first++;
@@ -122,7 +122,7 @@ export type DebugFirstRun = {
 
   // witness-only
   armIndex?: number;
-  program?: DebugWitnessProgram;
+  program?: DebugFrontierProgram;
 
   result: string | null;
 };
