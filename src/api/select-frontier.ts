@@ -9,7 +9,7 @@ import {
 import { describeElements } from '../utils/debug';
 import { buildChain } from '../planner/chain';
 
-export function buildWitnessSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
+export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = expandSelectorListForSeeding(list);
   const selects: ArmSelectFn[] = [];
 
@@ -24,12 +24,12 @@ export function buildWitnessSelect(list: SelectorList, snap: Snapshot): SelectRu
     }
   }
 
-  return function Select(ctx, rc, snap) {
-    return runSelect(selects, ctx, rc, snap);
+  return function Select(ctx, rc) {
+    return runSelect(selects, ctx, rc);
   };
 }
 
-function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache | null, _snap: Snapshot): Element[] {
+function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache | null): Element[] {
   if (selects.length === 1) {
     return selects[0](ctx, rc);
   }
@@ -52,7 +52,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   const program = buildFrontierProgram(chain, snap);
 
   return function Select(ctx, rc) {
-    const results = runWitnessProgram(program, ctx, rc, snap);
+    const results = runFrontierProgram(program, ctx, rc, snap);
 
     if (snap.isDebug) {
       updateDebugRun(snap, armIndex, program, results);
@@ -62,7 +62,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   };
 }
 
-function runWitnessProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
+function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element[] {
   const isDebug = snap.isDebug;
   if (isDebug) resetFrontierDebug(program);
 
@@ -125,7 +125,7 @@ function updateDebugRun(
   results: Element[],
 ): void {
   snap.debugSelect?.run.push({
-    engine: 'witness',
+    engine: 'frontier',
     armIndex,
     program: describeFrontierProgram(program),
     results: describeElements(results),
@@ -138,7 +138,7 @@ function updateDebugBuild(
   arm: ComplexSelector,
 ): void {
   snap.debugSelect?.build.push({
-    engine: 'witness',
+    engine: 'frontier',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
     armIndex,

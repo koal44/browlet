@@ -2,8 +2,8 @@ import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { describeContext, type QueryContextDescription } from '../utils/debug';
 import { isElement } from '../utils/dom';
-import { buildSubjectSelect } from './select-subject';
-import { buildWitnessSelect } from './select-witness';
+import { buildFullBridgeSelect } from './select-fullbridge';
+import { buildFrontierSelect } from './select-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
@@ -30,21 +30,20 @@ export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Ele
     rc = snap.runtimeCache;
   }
 
-  return select(ctx, rc, snap);
+  return select(ctx, rc);
 }
 
 export type SelectResolver = {
   list: SelectorList;
   usesScope: boolean;
   usesCache: boolean;
-  subject?: SelectRunFn;
-  witness?: SelectRunFn;
+  fullBridge?: SelectRunFn;
+  frontier?: SelectRunFn;
 };
 
 export type SelectRunFn = (
   ctx: QueryContext,
   rc: RuntimeCache | null,
-  snap: Snapshot,
 ) => Element[];
 
 function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver {
@@ -63,30 +62,31 @@ function resolveSelectStrategy(
   ctx: QueryContext,
   snap: Snapshot,
 ): SelectRunFn {
-  // Element contexts force subject selection. Although element.querySelectorAll()
-  // feels like a subtree query, the context only constrains returned subjects;
-  // selector proof may still depend on ancestors/siblings outside the subtree.
-  // Witness selection narrows the proof universe while walking left-to-right,
-  // so it is not safe for element contexts.
+  // Element contexts force full-bridge selection. Although
+  // element.querySelectorAll() feels like a subtree query, the context only
+  // constrains returned subjects; selector proof may still depend on
+  // ancestors/siblings outside the subtree. Frontier selection narrows the proof
+  // universe while moving through the chain, so it is not safe for element
+  // contexts.
   if (isElement(ctx)) {
-    let subject = resolver.subject;
-    if (!subject) {
-      subject = buildSubjectSelect(resolver.list, snap);
-      resolver.subject = subject;
+    let fullBridge = resolver.fullBridge;
+    if (!fullBridge) {
+      fullBridge = buildFullBridgeSelect(resolver.list, snap);
+      resolver.fullBridge = fullBridge;
     }
-    return subject;
-  } else { // Document, DocumentFragment
-    // Document and fragment contexts prefer witness selection: author-written
-    // selectors usually encode a left-to-right narrowing path. Subject grouping
-    // can still beat witness for some selector lists, especially because merging
-    // arms back into document order can be expensive.
-    let witness = resolver.witness;
-    if (!witness) {
-      witness = buildWitnessSelect(resolver.list, snap);
-      resolver.witness = witness;
-    }
-    return witness;
+    return fullBridge;
   }
+
+  // Document and fragment contexts prefer frontier selection: author-written
+  // selectors usually encode a left-to-right narrowing path. Full-bridge
+  // grouping can still beat frontier for some selector lists, especially
+  // because merging arms back into document order can be expensive.
+  let frontier = resolver.frontier;
+  if (!frontier) {
+    frontier = buildFrontierSelect(resolver.list, snap);
+    resolver.frontier = frontier;
+  }
+  return frontier;
 }
 
 export type DebugSelect = {
@@ -99,30 +99,30 @@ export type DebugSelect = {
 };
 
 export type DebugSelectBuild = {
-  engine: 'subject' | 'witness';
+  engine: 'full-bridge' | 'frontier';
   usesScope: boolean;
   usesCache: boolean;
 
-  // subject-only
+  // full-bridge-only
   lookupStrategy?: string;
   lookupQuery?: string;
-  filterCost?: number;
-  srcText?: string;
+  cost?: number;
+  bridge?: string;
 
-  // witness-only
+  // frontier-only
   armIndex?: number;
 };
 
 export type DebugSelectRun = {
-  engine: 'subject' | 'witness';
+  engine: 'full-bridge' | 'frontier';
 
-  // subject-only
+  // full-bridge-only
   lookupStrategy?: string;
   lookupQuery?: string;
   candidates?: string[];
-  srcText?: string;
+  bridge?: string;
 
-  // witness-only
+  // frontier-only
   armIndex?: number;
   program?: DebugFrontierProgram;
 
