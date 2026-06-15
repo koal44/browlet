@@ -46,28 +46,24 @@ export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Sn
 }
 
 export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBridgeMove {
-  if (chains.length === 0) {
-    throw new Error('Cannot build multi-bridge move for empty chain list');
-  }
-
   const compounds: CompoundSelector[] = [];
   const lookups: LookupPlan[] = [];
 
-  const firstCompound = chains[0][chains[0].length - 1].right.compound;
-  const firstLookup = buildLookupPlan(firstCompound, snap);
+  const baseCompound = chains[0][chains[0].length - 1].right.compound;
+  const baseLookup = buildLookupPlan(baseCompound, snap);
 
-  compounds[0] = firstCompound;
-  lookups[0] = firstLookup;
+  compounds[0] = baseCompound;
+  lookups[0] = baseLookup;
 
   for (let i = 1; i < chains.length; i++) {
     const chain = chains[i];
     const compound = chain[chain.length - 1].right.compound;
     const lookup = buildLookupPlan(compound, snap);
 
-    if (!sameLookupPlan(firstLookup, lookup)) {
+    if (!sameLookupPlan(baseLookup, lookup)) {
       throw new Error(
         `Cannot build multi-bridge move for mixed lookups: ` +
-        `${describeLookupPlan(firstLookup)} vs ${describeLookupPlan(lookup)}`,
+        `${describeLookupPlan(baseLookup)} vs ${describeLookupPlan(lookup)}`,
       );
     }
 
@@ -81,12 +77,12 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
 
   try {
     const move: MultiBridgeMove = {
-      lookup: firstLookup.lookup,
+      lookup: baseLookup.lookup,
       proof: buildMultiChainProof(chains, snap),
     };
 
     if (snap.isDebug) {
-      move.debug = `bridge entry ➝ end · lookup ${describeLookupPlan(firstLookup)}`;
+      move.debug = `bridge entry ➝ end · lookup ${describeLookupPlan(baseLookup)}`;
     }
 
     return move;
@@ -97,7 +93,7 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   }
 }
 
-export function proveBridgeCandidates(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
+export function filterBridgeCandidates(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   let j = -1;
 
@@ -112,10 +108,7 @@ export function proveBridgeCandidates(candidates: Element[], proof: ProofFn, fro
 export function findFirstBridgeCandidate(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element | null {
   for (let i = 0; i < candidates.length; i++) {
     const e = candidates[i];
-
-    if (proof(e, frontier, rc)) {
-      return e;
-    }
+    if (proof(e, frontier, rc)) return e;
   }
 
   return null;

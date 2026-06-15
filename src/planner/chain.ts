@@ -1,8 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-implied-eval */
+import { collectCompoundTests } from '../compile/emit-seedable';
+import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import type { Combinator, ComplexPart, ComplexSelector, CompoundSelector, SelectorList } from '../parser/parser';
-import { buildCompoundTest, createBuildContext } from './build-tests';
+import type {
+  CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, RelativeSelectorList, SelectorList,
+} from '../parser/parser';
 
 export type Chain = ChainRelation[];
 
@@ -42,37 +43,77 @@ export function buildChain(complex: ComplexSelector): Chain {
   return chain;
 }
 
-type CompoundTestFn = (candidate: Element, rc: RuntimeCache | null) => boolean;
+export function buildStrictSelectorListTest(list: SelectorList, snap: Snapshot): CandidatePredicate {
+  const proof = buildSelectorListProof(list, snap);
+  return (candidate, rc) => proof(candidate, null, rc);
+}
 
-function compileStepProof(rel: ChainRelation, snap: Snapshot): ProofFn {
-  const test = compileStepTest(rel, snap);
+export function buildForgivingSelectorListTest(list: SelectorList, snap: Snapshot): CandidatePredicate {
+  if (list.arms.length === 0) return () => false;
+  return buildStrictSelectorListTest(list, snap);
+}
 
-  return function proof(candidate, _frontier, rc) {
-    return test(candidate, rc);
+export function buildRelativeSelectorListTest(list: RelativeSelectorList, snap: Snapshot): CandidatePredicate {
+  if (list.arms.length === 0) return () => false;
+
+  const arms: CandidatePredicate[] = list.arms.map((arm) => {
+    const steps: HasStep[] = arm.steps.map((step) => {
+      const test = buildCompoundTest(step.compound.compound, snap);
+      return [step.combinator, test];
+    });
+
+    return (e, rc) => matchHasFrom(steps, 0, e, snap, rc);
+  });
+
+  if (arms.length === 1) return arms[0];
+
+  return function relativeSelectorListTest(e, rc) {
+    for (let i = 0; i < arms.length; i++) {
+      if (arms[i](e, rc)) return true;
+    }
+
+    return false;
   };
 }
 
-function compileStepTest(rel: ChainRelation, snap: Snapshot): CompoundTestFn {
-  return compileCompoundTest(rel.right.compound, snap);
+function buildStepTest(rel: ChainRelation, snap: Snapshot): CandidatePredicate {
+  return buildCompoundTest(rel.right.compound, snap);
 }
 
-function compileCompoundTest(compound: CompoundSelector, snap: Snapshot): CompoundTestFn {
-  const ctx = createBuildContext();
-  const source = buildCompoundTest(compound, ctx);
+export function buildCompoundTest(compound: CompoundSelector, snap: Snapshot): CandidatePredicate {
+  const tests = collectCompoundTests(compound);
 
-  const f =
-    `"use strict";` +
-    ctx.declarations.join('') +
-    `return function compoundTest(e,rc){` +
-      `return (${source});` +
-    `}`;
+  const n = tests.length;
+  if (n === 0) return () => true;
+  if (n === 1) return tests[0].build(snap);
 
-  return Function('s', f)(snap) as CompoundTestFn;
+  tests.sort((a, b) => a.cost - b.cost);
+
+  const predicates: CandidatePredicate[] = [];
+  for (let i = 0; i < n; i++) {
+    predicates[i] = tests[i].build(snap);
+  }
+
+  return function compoundTest(e, rc) {
+    for (let i = 0; i < n; i++) {
+      if (!predicates[i](e, rc)) return false;
+    }
+
+    return true;
+  };
 }
 
 // -------------- PROOF -----------------
 
 export type ProofFn = (candidate: Element, frontier: Element[] | null, rc: RuntimeCache | null) => boolean;
+
+function buildStepProof(rel: ChainRelation, snap: Snapshot): ProofFn {
+  const test = buildStepTest(rel, snap);
+
+  return function proof(candidate, _frontier, rc) {
+    return test(candidate, rc);
+  };
+}
 
 export function buildProof(chain: Chain, from: number, to: number, snap: Snapshot): ProofFn {
   if (from < -1 || to < 0 || to >= chain.length || to <= from) {
@@ -80,7 +121,7 @@ export function buildProof(chain: Chain, from: number, to: number, snap: Snapsho
   }
 
   const start = from + 1;
-  let proof: ProofFn = compileStepProof(chain[start], snap);
+  let proof: ProofFn = buildStepProof(chain[start], snap);
 
   if (from >= 0) {
     const prev = proof;
@@ -92,7 +133,7 @@ export function buildProof(chain: Chain, from: number, to: number, snap: Snapsho
   }
 
   for (let i = start + 1; i <= to; i++) {
-    const step = compileStepTest(chain[i], snap);
+    const step = buildStepTest(chain[i], snap);
     const prev = proof;
     const connect = extendProof(chain[i], prev);
 
@@ -113,13 +154,14 @@ export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
     throw new Error('Cannot build multi-chain proof for empty chain list');
   }
 
-  const proofs: ProofFn[] = [];
+  if (chains.length === 1) {
+    return buildFullProof(chains[0], snap);
+  }
 
+  const proofs: ProofFn[] = [];
   for (let i = 0; i < chains.length; i++) {
     proofs[i] = buildFullProof(chains[i], snap);
   }
-
-  if (proofs.length === 1) return proofs[0];
 
   return function proof(candidate, frontier, rc) {
     for (let i = 0; i < proofs.length; i++) {
@@ -130,16 +172,17 @@ export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
   };
 }
 
-export function buildComplexProof(complex: ComplexSelector, snap: Snapshot): ProofFn {
-  return buildFullProof(buildChain(complex), snap);
-}
-
 export function buildSelectorListProof(list: SelectorList, snap: Snapshot): ProofFn {
-  if (list.arms.length === 0) {
-    throw new Error('Cannot build proof for empty selector list');
+  const arms = list.arms;
+
+  if (arms.length === 0) {
+    throw new Error('Cannot build selector list proof for empty selector list');
   }
 
-  const arms = list.arms;
+  if (arms.length === 1) {
+    return buildFullProof(buildChain(arms[0]), snap);
+  }
+
   arms.sort((a, b) => a.cost - b.cost);
 
   const chains: Chain[] = [];
@@ -273,7 +316,7 @@ export type AdvanceMove = {
   from: number;
   to: number;
   run: AdvanceFn;
-  test: CompoundTestFn;
+  test: CandidatePredicate;
   first?: AdvanceFirstFn;
   debug?: string;
 };
@@ -296,7 +339,7 @@ export function buildAdvanceMove(chain: Chain, from: number, snap: Snapshot): Ad
 
   if (combinator === ' ') return null;
 
-  const test = compileStepTest(rel, snap);
+  const test = buildStepTest(rel, snap);
   const run = buildAdvanceFn(combinator, test);
 
   const move: AdvanceMove = { from, to, run, combinator, test };
@@ -304,7 +347,7 @@ export function buildAdvanceMove(chain: Chain, from: number, snap: Snapshot): Ad
   return move;
 }
 
-function buildAdvanceFn(combinator: AdvanceCombinator, test: CompoundTestFn): AdvanceFn {
+function buildAdvanceFn(combinator: AdvanceCombinator, test: CandidatePredicate): AdvanceFn {
   switch (combinator) {
     case '>': return (frontier, rc) => advanceChildren(frontier, test, rc);
     case '+': return (frontier, rc) => advanceNextSibling(frontier, test, rc);
@@ -312,25 +355,25 @@ function buildAdvanceFn(combinator: AdvanceCombinator, test: CompoundTestFn): Ad
   }
 }
 
-function advanceNextSibling(frontier: Element[], proof: CompoundTestFn, rc: RuntimeCache | null): Element[] {
+function advanceNextSibling(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   let j = -1;
 
   for (let i = 0; i < frontier.length; i++) {
     const candidate = frontier[i].nextElementSibling;
-    if (candidate && proof(candidate, rc)) out[++j] = candidate;
+    if (candidate && test(candidate, rc)) out[++j] = candidate;
   }
 
   return out;
 }
 
-function advanceFollowingSiblings(frontier: Element[], proof: CompoundTestFn, rc: RuntimeCache | null): Element[] {
+function advanceFollowingSiblings(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   const seen = new Set<Element>();
 
   for (let i = 0; i < frontier.length; i++) {
     for (let candidate = frontier[i].nextElementSibling; candidate; candidate = candidate.nextElementSibling) {
-      if (proof(candidate, rc) && !seen.has(candidate)) {
+      if (!seen.has(candidate) && test(candidate, rc)) {
         seen.add(candidate);
         out[out.length] = candidate;
       }
@@ -340,7 +383,7 @@ function advanceFollowingSiblings(frontier: Element[], proof: CompoundTestFn, rc
   return out;
 }
 
-function advanceChildren(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache | null): Element[] {
+function advanceChildren(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   let j = -1;
 
@@ -353,7 +396,7 @@ function advanceChildren(frontier: Element[], test: CompoundTestFn, rc: RuntimeC
   return out;
 }
 
-export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: CompoundTestFn): AdvanceFirstFn {
+export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: CandidatePredicate): AdvanceFirstFn {
   switch (combinator) {
     case '>': return (frontier, rc) => firstChild(frontier, test, rc);
     case '+': return (frontier, rc) => firstNextSibling(frontier, test, rc);
@@ -361,7 +404,7 @@ export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: Compoun
   }
 }
 
-function firstNextSibling(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache | null): Element | null {
+function firstNextSibling(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     const candidate = frontier[i].nextElementSibling;
     if (candidate && test(candidate, rc)) return candidate;
@@ -370,7 +413,7 @@ function firstNextSibling(frontier: Element[], test: CompoundTestFn, rc: Runtime
   return null;
 }
 
-function firstFollowingSibling(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache | null): Element | null {
+function firstFollowingSibling(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     for (let candidate = frontier[i].nextElementSibling; candidate; candidate = candidate.nextElementSibling) {
       if (test(candidate, rc)) return candidate;
@@ -380,7 +423,7 @@ function firstFollowingSibling(frontier: Element[], test: CompoundTestFn, rc: Ru
   return null;
 }
 
-function firstChild(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache | null): Element | null {
+function firstChild(frontier: Element[], test: CandidatePredicate, rc: RuntimeCache | null): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     for (let candidate = frontier[i].firstElementChild; candidate; candidate = candidate.nextElementSibling) {
       if (test(candidate, rc)) return candidate;
@@ -388,4 +431,44 @@ function firstChild(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache 
   }
 
   return null;
+}
+
+type SelectorCombinator = ' ' | '>' | '+' | '~';
+export type HasStep = [SelectorCombinator, (e: Element, rc: RuntimeCache | null) => boolean];
+export function matchHasFrom(
+  steps: HasStep[],
+  index: number,
+  base: Element,
+  snap: Snapshot,
+  rc: RuntimeCache | null,
+): boolean {
+  if (index >= steps.length) return true;
+
+  const [combinator, test] = steps[index];
+  const next = index + 1;
+
+  switch (combinator) {
+    case ' ':
+      for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      }
+      return false;
+
+    case '>':
+      for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      }
+      return false;
+
+    case '+': {
+      const node = base.nextElementSibling;
+      return !!node && test(node, rc) && matchHasFrom(steps, next, node, snap, rc);
+    }
+
+    case '~':
+      for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
+        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
+      }
+      return false;
+  }
 }

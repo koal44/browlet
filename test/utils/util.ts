@@ -149,6 +149,10 @@ function describeTag(tag: TagSelector): string {
 }
 
 function describeCandidateTest(test: CandidateTest): string {
+  if (test.debug?.kind === 'static') {
+    return test.debug.value ? 'true' : 'false';
+  }
+
   if (test.debug?.kind === 'attr') {
     return describeAttribute(test.debug.attr);
   }
@@ -157,18 +161,34 @@ function describeCandidateTest(test: CandidateTest): string {
     return `:${test.debug.name}`;
   }
 
+  if (test.debug?.kind === 'pseudo-element') {
+    return `::${test.debug.name}`;
+  }
+
+  if (test.debug?.kind === 'registered-pseudo') {
+    return `:${test.debug.name}`;
+  }
+
   if (test.debug?.kind === 'is') return `:is(${describeList(test.debug.list)})`;
   if (test.debug?.kind === 'where') return `:where(${describeList(test.debug.list)})`;
   if (test.debug?.kind === 'not') return `:not(${describeList(test.debug.list)})`;
   if (test.debug?.kind === 'has') return `:has(${describeRelativeList(test.debug.list)})`;
+
+  if (test.debug?.kind === 'host') {
+    return test.debug.arg ? `:host(${describeCompound(test.debug.arg)})` : ':host';
+  }
+
+  if (test.debug?.kind === 'parts') {
+    return `::part(${test.debug.parts.join(' ')})`;
+  }
+
   if (test.debug?.kind === 'expanded') {
     return test.pseudoIs
       ? `:xis(${describeList(test.pseudoIs)})`
       : test.pseudoWhere ? `:xwhere(${describeList(test.pseudoWhere)})` : '??';
   }
 
-  if ('source' in test) return describeStaticSource(test.source);
-  return '<deferred>';
+  return '<test>';
 }
 
 function describeAttribute(attr: AttributeSelector): string {
@@ -183,60 +203,4 @@ function describeAttribute(attr: AttributeSelector): string {
 
   const flag = attr.flag ? ` ${attr.flag}` : '';
   return `[${name}${attr.op}"${attr.valueRaw ?? ''}"${flag}]`;
-}
-
-function describeStaticSource(source: string): string {
-  if (source === 'true') return 'true';
-  if (source === 'false') return 'false';
-
-  if (source === 's.isScope(e)') return ':scope';
-  if (source === 's.isRoot(e)') return ':root';
-  if (source === 's.isEmpty(e)') return ':empty';
-  if (source === 's.isFirstChild(e)') return ':first-child';
-  if (source === 's.isLastChild(e)') return ':last-child';
-  if (source === 's.isOnlyChild(e)') return ':only-child';
-  if (source === 's.isFirstOfType(e)') return ':first-of-type';
-  if (source === 's.isLastOfType(e)') return ':last-of-type';
-  if (source === 's.isOnlyOfType(e)') return ':only-of-type';
-
-  if (source === 's.isAnyLink(e)') return ':any-link';
-  if (source === 's.isTarget(e)') return ':target';
-  if (source === 's.defined(e)') return ':defined';
-
-  if (source === 's.isHovered(e)') return ':hover';
-  if (source === 's.isActive(e)') return ':active';
-  if (source === 's.isFocused(e)') return ':focus';
-  if (source === 's.isFocusWithin(e)') return ':focus-within';
-
-  if (source === 's.isEnabled(e)') return ':enabled';
-  if (source === 's.isDisabled(e)') return ':disabled';
-  if (source === '!s.isReadWrite(e)') return ':read-only';
-  if (source === 's.isReadWrite(e)') return ':read-write';
-  if (source === 's.isPlaceholderShown(e)') return ':placeholder-shown';
-  if (source === 's.isDefault(e)') return ':default';
-
-  if (source === 's.isChecked(e)') return ':checked';
-  if (source === 's.isIndeterminate(e)') return ':indeterminate';
-  if (source === 's.isRequired(e)') return ':required';
-  if (source === 's.isOptional(e)') return ':optional';
-  if (source === 's.isInvalid(e)') return ':invalid';
-  if (source === 's.isValid(e)') return ':valid';
-  if (source === 's.isInRange(e)') return ':in-range';
-  if (source === 's.isOutOfRange(e)') return ':out-of-range';
-
-  if (source === 's.isPlaying(e)') return ':playing';
-  if (source === 's.isPaused(e)') return ':paused';
-  if (source === 's.isSeeking(e)') return ':seeking';
-  if (source === 's.isMuted(e)') return ':muted';
-
-  if (source.startsWith('s.hasAttr(')) return '[attr]';
-  if (source.startsWith('s.matchAttribute(')) return '[attr op value]';
-  if (source.startsWith('s.matchLang(')) return ':lang(...)';
-  if (source.startsWith('s.matchDir(')) return ':dir(...)';
-  if (source.startsWith('s.isNthElement(')) return ':nth-child(...)';
-  if (source.startsWith('s.isNthOfType(')) return ':nth-of-type(...)';
-  if (source.includes('s.nthElement(')) return ':nth-child(...)';
-  if (source.includes('s.nthOfType(')) return ':nth-of-type(...)';
-
-  return `<source:${source}>`;
 }

@@ -25,6 +25,7 @@ import {
 import { parseNthArgs } from './nth';
 import { combinatorCost } from '../planner/cost';
 import { emitIdTest } from '../compile/emit-seedable';
+import type { RuntimeCache } from '../compile/runtimeCache';
 
 export type SelectorList = {
   arms: ComplexSelector[];
@@ -86,12 +87,9 @@ export type TagSelector = {
   seed?: boolean;
 };
 
-export type BuildContext = {
-  nextPredicate: number;
-  declarations: string[];
-};
+export type CandidateTest = {
+  build: (snap: Snapshot) => CandidatePredicate;
 
-type BaseCandidateTest = {
   unique?: boolean;
   usesScope?: boolean;
   usesCache?: boolean;
@@ -101,7 +99,10 @@ type BaseCandidateTest = {
   debug?: CandidateTestDebug;
 };
 
+export type CandidatePredicate = (e: Element, rc: RuntimeCache | null) => boolean;
+
 type CandidateTestDebug =
+  | { kind: 'static'; value: boolean; }
   | { kind: 'attr'; attr: AttributeSelector; }
   | { kind: 'pseudo'; name: string; }
   | { kind: 'pseudo-element'; name: string; }
@@ -112,17 +113,6 @@ type CandidateTestDebug =
   | { kind: 'has'; list: RelativeSelectorList; }
   | { kind: 'host'; arg?: CompoundSelector; }
   | { kind: 'parts'; parts: string[]; }
-
-
-type StaticCandidateTest = BaseCandidateTest & {
-  source: string;
-};
-
-type DeferredCandidateTest = BaseCandidateTest & {
-  buildSource(ctx: BuildContext): string;
-};
-
-export type CandidateTest = StaticCandidateTest | DeferredCandidateTest;
 
 export type ParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;

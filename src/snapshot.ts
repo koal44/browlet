@@ -2,12 +2,11 @@ import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
 import { buildSeedsByClass, type SeedClassFn } from './seeds/seedsByClass';
 import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
-import type { HasStep } from './compile/runtime';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
   isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
-  matchDir, matchHasFrom, matchLang, nthElement, nthOfType, checkId, checkClass,
+  matchDir, matchLang, nthElement, nthOfType, checkId, checkClass,
   isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType, isHost,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
   matchPrevAny, matchPrev, matchParent, matchAncestor,
@@ -308,10 +307,10 @@ export class Snapshot {
   isEmpty = isEmpty;
 
   // attributes
-  hasAttr(e: Element, anyNs: boolean, local: string, htmlLocal: string, hasColon: boolean): boolean {
+  hasAttr(e: Element, anyNs: boolean, local: string, htmlLocal: string | null, hasColon: boolean): boolean {
     return hasAttr(e, anyNs, local, htmlLocal, hasColon, this);
   }
-  matchAttribute(e: Element, anyNs: boolean, name: string, htmlName: string, hasColonName: boolean,
+  matchAttribute(e: Element, anyNs: boolean, name: string, htmlName: string | null, hasColonName: boolean,
     pattern: string, expected: string, htmlExpected: string, sensitivity: number) {
     return matchAttribute(e, anyNs, name, htmlName, hasColonName, pattern, expected, htmlExpected, sensitivity, this);
   }
@@ -330,12 +329,6 @@ export class Snapshot {
   isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null) { return isNthOfType(element, index, fromLast, rc, this); }
 
   // relational / language / link-state
-  // matchHas(steps: [SelectorCombinator, string][], anchor: Element, rc: RuntimeCache) {
-  //   return matchHasFrom(steps, 0, anchor, this, rc);
-  // }
-  matchHas(steps: HasStep[], anchor: Element, rc: RuntimeCache) {
-    return matchHasFrom(steps, 0, anchor, this, rc);
-  }
   matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }
   matchLang(wanted: string, element: Element) { return matchLang(wanted, element, this); }
   isAnyLink(e: Element) { return isAnyLink(e, this); }

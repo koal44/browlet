@@ -1,10 +1,10 @@
-import { buildForgivingSelectorListTest } from './build-tests';
 import type {
   CandidateTest, CompoundSelector, ComplexSelector, SelectorList, IdSelector, TagSelector, ClassSelector,
   ComplexPart,
 } from '../parser/parser';
 import { costComplex, costPart } from './cost';
 import { asciiLower } from '../utils/css';
+import { buildForgivingSelectorListTest } from './chain';
 
 const enum SeedRank {
   None = 0,
@@ -15,7 +15,7 @@ const enum SeedRank {
 
 const NEVER_CMPD: CompoundSelector = {
   id: { raw: '__never__', seed: false, cost: 3 },
-  tests: [{ source: 'false', cost: 0, debug: { kind: 'pseudo', name: 'xfalse' } }],
+  tests: [{ build: () => () => false, cost: 0, debug: { kind: 'pseudo', name: 'xfalse' } }],
   usesScope: false,
   usesCache: false,
   cost: 3,
@@ -336,7 +336,7 @@ function buildResidualIsWhereTest(residualArm: ComplexSelector, isOrWhere: 'is' 
     usesCache: list.usesCache,
     pseudoIs: where ? undefined : list,
     pseudoWhere: where ? list : undefined,
-    buildSource: (ctx) => buildForgivingSelectorListTest(list, ctx),
+    build: (s) => buildForgivingSelectorListTest(list, s),
   };
 }
 

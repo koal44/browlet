@@ -368,7 +368,7 @@ describe('planner :is/:where expansion', () => {
 
     expect(subject.id?.raw).toBe('__never__');
     expect(subject.tests.some(
-      (test) => 'source' in test && test.source === 'false',
+      (test) => test.debug?.kind === 'pseudo' && test.debug.name === 'xfalse',
     )).toBe(true);
   });
 

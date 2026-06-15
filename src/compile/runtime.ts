@@ -37,6 +37,21 @@ export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache 
   return false;
 }
 
+export function nextDescendant(root: Element, node: Element): Element | null {
+  if (node.firstElementChild) return node.firstElementChild;
+
+  while (node !== root) {
+    if (node.nextElementSibling) return node.nextElementSibling;
+
+    const parent = node.parentElement;
+    if (!parent) return null;
+
+    node = parent;
+  }
+
+  return null;
+}
+
 export function checkId(e: Element, id: string, snap: Snapshot): boolean {
   return snap.getId(e) === id;
 }
@@ -194,7 +209,7 @@ export function isRoot(e: Element, snap: Snapshot): boolean {
 }
 
 // :empty
-export function isEmpty(e: Element): boolean {
+export function isEmpty(e: Element, _snap: Snapshot): boolean {
   let n = e.firstChild;
 
   while (n && n.nodeType !== 1 && n.nodeType !== 3) {
@@ -205,17 +220,17 @@ export function isEmpty(e: Element): boolean {
 }
 
 // :first-child
-export function isFirstChild(e: Element): boolean {
+export function isFirstChild(e: Element, _snap: Snapshot): boolean {
   return !e.previousElementSibling;
 }
 
 // :last-child
-export function isLastChild(e: Element): boolean {
+export function isLastChild(e: Element, _snap: Snapshot): boolean {
   return !e.nextElementSibling;
 }
 
 // :only-child
-export function isOnlyChild(e: Element): boolean {
+export function isOnlyChild(e: Element, _snap: Snapshot): boolean {
   return !e.previousElementSibling && !e.nextElementSibling;
 }
 
@@ -269,7 +284,7 @@ export function isOnlyOfType(e: Element, snap: Snapshot): boolean {
   return !n;
 }
 
-export function matchesNthIndex(n: number, step: number, absStep: number, offset: number): boolean {
+export function matchesNthIndex(n: number, step: number, absStep: number, offset: number, _snap: Snapshot): boolean {
   if (step === 0) {
     throw new Error(`Invalid nth-child step value: ${step}; should have been handled earlier`);
   }
@@ -284,7 +299,7 @@ export type NthElementIndexMap = WeakMap<Element, number>;
 
 // fast resolver for :nth-child() and :nth-last-child()
 // use cache if available to get the 1-based index of element among its siblings
-export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache | null): number {
+export function nthElement(element: Element, fromLast: boolean, rc: RuntimeCache | null, _snap: Snapshot): number {
   if (!rc) return nthElementLocal(element, fromLast);
 
   const parent = element.parentNode;
@@ -386,9 +401,9 @@ function nthOfTypeLocal(element: Element, fromLast: boolean, snap: Snapshot): nu
   return n;
 }
 
-export function isNthElement(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null): boolean {
+export function isNthElement(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): boolean {
   if (!rc) return isNthElementLocal(element, index, fromLast);
-  return nthElement(element, fromLast, rc) === index;
+  return nthElement(element, fromLast, rc, snap) === index;
 }
 
 export function isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null, snap: Snapshot): boolean {
@@ -469,61 +484,6 @@ export function isFocused(el: Element, snap: Snapshot): boolean {
   }
 
   return el === doc.activeElement && doc.hasFocus();
-}
-
-export type SelectorCombinator = ' ' | '>' | '+' | '~';
-export type HasStep = [SelectorCombinator, (e: Element, rc: RuntimeCache) => boolean];
-export function matchHasFrom(
-  steps: HasStep[],
-  index: number,
-  base: Element,
-  snap: Snapshot,
-  rc: RuntimeCache,
-): boolean {
-  if (index >= steps.length) return true;
-
-  const [combinator, test] = steps[index];
-  const next = index + 1;
-
-  switch (combinator) {
-    case ' ':
-      for (let node = base.firstElementChild; node; node = nextDescendant(base, node)) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
-      }
-      return false;
-
-    case '>':
-      for (let node = base.firstElementChild; node; node = node.nextElementSibling) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
-      }
-      return false;
-
-    case '+': {
-      const node = base.nextElementSibling;
-      return !!node && test(node, rc) && matchHasFrom(steps, next, node, snap, rc);
-    }
-
-    case '~':
-      for (let node = base.nextElementSibling; node; node = node.nextElementSibling) {
-        if (test(node, rc) && matchHasFrom(steps, next, node, snap, rc)) return true;
-      }
-      return false;
-  }
-}
-
-function nextDescendant(root: Element, node: Element): Element | null {
-  if (node.firstElementChild) return node.firstElementChild;
-
-  while (node !== root) {
-    if (node.nextElementSibling) return node.nextElementSibling;
-
-    const parent = node.parentElement;
-    if (!parent) return null;
-
-    node = parent;
-  }
-
-  return null;
 }
 
 export function matchLang(wanted: string, element: Element, snap: Snapshot): boolean {
@@ -980,7 +940,7 @@ export function isDefault(e: Element, snap: Snapshot): boolean {
   return firstSubmit === e;
 }
 
-export function isChecked(e: Element): boolean {
+export function isChecked(e: Element, _snap: Snapshot): boolean {
   if (isHtmlInput(e)) return (e.type === 'checkbox' || e.type === 'radio') && e.checked;
   if (isHtmlOption(e)) return e.selected;
   return false;
@@ -1050,11 +1010,11 @@ export function isOptional(e: Element, snap: Snapshot): boolean {
   return (isHtmlInput(e) || isHtmlSelect(e) || isHtmlTextArea(e)) && !isRequired(e, snap);
 }
 
-export function isInvalid(e: Element): boolean {
+export function isInvalid(e: Element, snap: Snapshot): boolean {
   if (isHtmlForm(e)) return !e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return hasInvalidDescendant(e);
+    return hasInvalidDescendant(e, snap);
   }
 
   if (isValidityElement(e)) {
@@ -1064,11 +1024,11 @@ export function isInvalid(e: Element): boolean {
   return false;
 }
 
-export function isValid(e: Element): boolean {
+export function isValid(e: Element, snap: Snapshot): boolean {
   if (isHtmlForm(e)) return e.checkValidity();
 
   if (isHtmlFieldSet(e)) {
-    return !hasInvalidDescendant(e);
+    return !hasInvalidDescendant(e, snap);
   }
 
   if (isValidityElement(e)) {
@@ -1078,9 +1038,9 @@ export function isValid(e: Element): boolean {
   return false;
 }
 
-function hasInvalidDescendant(root: Element): boolean {
+function hasInvalidDescendant(root: Element, snap: Snapshot): boolean {
   for (let node = root.firstElementChild; node; node = nextDescendant(root, node)) {
-    if (isInvalid(node)) return true;
+    if (isInvalid(node, snap)) return true;
   }
   return false;
 }
@@ -1120,22 +1080,22 @@ function getMediaElement(e: Element): HTMLMediaElement | null {
   return parent && isHtmlMediaElement(parent) ? parent : null;
 }
 
-export function isPlaying(e: Element): boolean {
+export function isPlaying(e: Element, _snap: Snapshot): boolean {
   const media = getMediaElement(e);
   return !!media && media.currentTime > 0 && !media.paused && !media.ended && media.readyState > 2;
 }
 
-export function isPaused(e: Element): boolean {
+export function isPaused(e: Element, _snap: Snapshot): boolean {
   const media = getMediaElement(e);
   return !!media && media.paused;
 }
 
-export function isSeeking(e: Element): boolean {
+export function isSeeking(e: Element, _snap: Snapshot): boolean {
   const media = getMediaElement(e);
   return !!media && media.seeking;
 }
 
-export function isMuted(e: Element): boolean {
+export function isMuted(e: Element, _snap: Snapshot): boolean {
   const media = getMediaElement(e);
   return !!media && media.muted;
 }

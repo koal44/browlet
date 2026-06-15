@@ -33,7 +33,7 @@ const groupedDupedIds = (n: number) => {
 runPerfScenarios('perf', [
   {
     name: 'blob mixed overview',
-    // status: 'only',
+    status: 'only',
     // status: 'skip',
     browsers: ['chromium'],
     markup: htmlStandard,
@@ -2017,7 +2017,8 @@ runPerfScenarios('perf', [
 
   {
     name: 'select cold slick template-standard selector corpus',
-    status: 'skip',
+    status: 'only',
+    // status: 'skip',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',
@@ -2068,7 +2069,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'select hot slick template-standard selector corpus',
-    // status: 'only',
+    status: 'only',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',
@@ -2179,7 +2180,7 @@ runPerfScenarios('perf', [
 
   {
     name: 'pseudo-lift and selector-list ordering',
-    // status: 'only',
+    status: 'only',
     browsers: ['chromium'],
     markup: htmlStandard,
     markupMode: 'html-document',

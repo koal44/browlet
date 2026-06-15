@@ -1894,6 +1894,13 @@
   matchResolvers = { },
   selectResolvers = { },
 
+  clearCache = function() {
+    matchLambdas = {};
+    selectLambdas = {};
+    matchResolvers = {};
+    selectResolvers = {};
+  },
+
   // passed to resolvers
   Snapshot = {
 
@@ -1913,11 +1920,16 @@
 
     isFocusable: isFocusable,
     isContentEditable: isContentEditable,
-    hasAttributeNS: hasAttributeNS
+    hasAttributeNS: hasAttributeNS,
+
+    clearCache: clearCache
   },
 
   // public exported methods/objects
   Dom = {
+
+    // perf-harness/internal snapshot alias
+    snapshot: Snapshot,
 
     // exported cache objects
 
@@ -1926,13 +1938,6 @@
 
     matchResolvers: matchResolvers,
     selectResolvers: selectResolvers,
-
-    clearCache: function() {
-      matchLambdas = {};
-      selectLambdas = {};
-      matchResolvers = {};
-      selectResolvers = {};
-    },
 
     // exported compiler macros
 

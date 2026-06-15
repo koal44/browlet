@@ -53,7 +53,7 @@ export function describeTest(test: CandidateTest): string {
   if (debug?.kind === 'has') return ':has(...)';
   if (debug?.kind === 'expanded') return test.pseudoIs ? ':xis(...)' : ':xwhere(...)';
 
-  if ('source' in test) return describeStaticTestSource(test.source);
+  // if ('source' in test) return describeStaticTestSource(test.source);
 
   return '<test>';
 }

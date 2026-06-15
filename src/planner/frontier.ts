@@ -5,7 +5,7 @@ import {
   buildAdvanceFirstFn, buildAdvanceMove,
   type AdvanceMove, type Chain,
 } from './chain';
-import { type BridgeMove, buildBridgeMove, describeBridgeMove, proveBridgeCandidates } from './bridge';
+import { type BridgeMove, buildBridgeMove, describeBridgeMove, filterBridgeCandidates } from './bridge';
 
 export type FrontierProgram = {
   chain: Chain;
@@ -142,7 +142,7 @@ export function runFirstAdvanceMove(state: FrontierState, move: AdvanceMove, rc:
 
 export function runBridgeMove(state: FrontierState, move: BridgeMove, canRoot: boolean, rc: RuntimeCache | null): void {
   const candidates = move.lookup(state.root);
-  const next = proveBridgeCandidates(candidates, move.proof, state.frontier, rc);
+  const next = filterBridgeCandidates(candidates, move.proof, state.frontier, rc);
   updateFrontierState(state, next, canRoot);
 }
 
