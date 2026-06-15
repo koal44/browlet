@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-implied-eval */
 import type { RuntimeCache } from '../compile/runtimeCache';
-import type { Combinator, ComplexPart, ComplexSelector, CompoundSelector } from '../parser/parser';
-import { buildCompoundTest, createBuildContext } from './filter';
+import type { Combinator, ComplexPart, ComplexSelector, CompoundSelector, SelectorList } from '../parser/parser';
+import { buildCompoundTest, createBuildContext } from './build-tests';
 
 export type Chain = ChainRelation[];
 
@@ -104,6 +104,10 @@ export function buildProof(chain: Chain, from: number, to: number, snap: Snapsho
   return proof;
 }
 
+export function buildFullProof(chain: Chain, snap: Snapshot): ProofFn {
+  return buildProof(chain, -1, chain.length - 1, snap);
+}
+
 export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
   if (chains.length === 0) {
     throw new Error('Cannot build multi-chain proof for empty chain list');
@@ -112,8 +116,7 @@ export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
   const proofs: ProofFn[] = [];
 
   for (let i = 0; i < chains.length; i++) {
-    const chain = chains[i];
-    proofs[i] = buildProof(chain, -1, chain.length - 1, snap);
+    proofs[i] = buildFullProof(chains[i], snap);
   }
 
   if (proofs.length === 1) return proofs[0];
@@ -125,6 +128,26 @@ export function buildMultiChainProof(chains: Chain[], snap: Snapshot): ProofFn {
 
     return false;
   };
+}
+
+export function buildComplexProof(complex: ComplexSelector, snap: Snapshot): ProofFn {
+  return buildFullProof(buildChain(complex), snap);
+}
+
+export function buildSelectorListProof(list: SelectorList, snap: Snapshot): ProofFn {
+  if (list.arms.length === 0) {
+    throw new Error('Cannot build proof for empty selector list');
+  }
+
+  const arms = list.arms;
+  arms.sort((a, b) => a.cost - b.cost);
+
+  const chains: Chain[] = [];
+  for (let i = 0; i < arms.length; i++) {
+    chains[i] = buildChain(arms[i]);
+  }
+
+  return buildMultiChainProof(chains, snap);
 }
 
 function buildConnectionToFrontier(rel: ChainRelation): ProofFn {
@@ -153,7 +176,6 @@ function buildConnectionToFrontier(rel: ChainRelation): ProofFn {
       throw new Error(`Invalid frontier connection combinator: ${String(rel.combinator)}`);
   }
 }
-
 
 function inFrontier(e: Element, frontier: Element[] | null): boolean {
   if (!frontier) return false;

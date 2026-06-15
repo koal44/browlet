@@ -2,7 +2,7 @@ import type { AttributeSelector, CandidateTest, CompoundSelector, RelativeSelect
 import type { NthArgs } from '../parser/nth';
 import { asciiLower, cssIdentUnescape } from '../utils/css';
 import { assertNever } from '../utils/util';
-import { buildCompoundTest, buildForgivingSelectorListMatch, buildRelativeSelectorListMatch, buildStrictSelectorListMatch } from '../planner/filter';
+import { buildCompoundTest, buildForgivingSelectorListTest, buildRelativeSelectorListTest, buildStrictSelectorListTest } from '../planner/build-tests';
 
 // [attr], [attr=value], [ns|attr op value flag]
 export function emitAttributeTest(attr: AttributeSelector): CandidateTest {
@@ -190,7 +190,7 @@ export function emitIsPseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     usesCache: list.usesCache,
     cost: list.cost,
-    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
+    buildSource: (ctx) => buildForgivingSelectorListTest(list, ctx),
     pseudoIs: list,
     debug: { kind: 'is', list },
   };
@@ -202,7 +202,7 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     usesCache: list.usesCache,
     cost: list.cost,
-    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
+    buildSource: (ctx) => buildForgivingSelectorListTest(list, ctx),
     pseudoWhere: list,
     debug: { kind: 'where', list },
   };
@@ -214,7 +214,7 @@ export function emitNotPseudoTest(list: SelectorList): CandidateTest {
     usesScope: list.usesScope,
     usesCache: list.usesCache,
     cost: list.cost,
-    buildSource: (ctx) => `!(${buildStrictSelectorListMatch(list, ctx)})`,
+    buildSource: (ctx) => `!(${buildStrictSelectorListTest(list, ctx)})`,
     debug: { kind: 'not', list },
   };
 }
@@ -225,7 +225,7 @@ export function emitHasPseudoTest(list: RelativeSelectorList): CandidateTest {
     usesScope: list.usesScope,
     usesCache: list.usesCache,
     cost: list.cost + 1,
-    buildSource: (ctx) => buildRelativeSelectorListMatch(list, ctx),
+    buildSource: (ctx) => buildRelativeSelectorListTest(list, ctx),
     debug: { kind: 'has', list },
   };
 }

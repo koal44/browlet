@@ -4,45 +4,11 @@ import type {
 } from '../parser/parser';
 import { emitClassTest, emitIdTest, emitTagTest } from '../compile/emit-seedable';
 
-export type Filter = {
-  source: string;
-  declarations: string[];
-  cost: number;
-  usesScope: boolean;
-  usesCache: boolean;
-};
-
-export function buildStrictMatcher(list: SelectorList, ctx: BuildContext): Filter {
-  return {
-    source: buildStrictSelectorListMatch(list, ctx),
-    declarations: ctx.declarations,
-    cost: list.cost,
-    usesScope: list.usesScope,
-    usesCache: list.usesCache,
-  };
-}
-
-export function buildStrictComplexMatcher(
-  complex: ComplexSelector,
-  ctx: BuildContext,
-): Filter {
-  return {
-    source: buildComplexSelectorMatch(complex, ctx),
-    declarations: ctx.declarations,
-    cost: complex.cost,
-    usesScope: complex.usesScope,
-    usesCache: complex.usesCache,
-  };
-}
-
 export function createBuildContext(): BuildContext {
   return { nextPredicate: 0, declarations: [] };
 }
 
-export function buildStrictSelectorListMatch(
-  list: SelectorList,
-  ctx: BuildContext,
-): string {
+export function buildStrictSelectorListTest(list: SelectorList, ctx: BuildContext): string {
   if (list.arms.length === 0) {
     throw new Error('Cannot build matcher for empty selector list');
   }
@@ -50,23 +16,17 @@ export function buildStrictSelectorListMatch(
   const selectors = list.arms.slice();
   selectors.sort((a, b) => a.cost - b.cost);
 
-  const arms = selectors.map((complex) => buildComplexSelectorMatch(complex, ctx));
+  const arms = selectors.map((complex) => buildComplexSelectorTest(complex, ctx));
   return arms.length === 1 ? arms[0] : `((${arms.join(')||(')}))`;
 }
 
-export function buildForgivingSelectorListMatch(
-  list: SelectorList,
-  ctx: BuildContext,
-): string {
+export function buildForgivingSelectorListTest(list: SelectorList, ctx: BuildContext): string {
   if (list.arms.length === 0) return 'false';
 
-  return buildStrictSelectorListMatch(list, ctx);
+  return buildStrictSelectorListTest(list, ctx);
 }
 
-export function buildComplexSelectorMatch(
-  complex: ComplexSelector,
-  ctx: BuildContext,
-): string {
+function buildComplexSelectorTest( complex: ComplexSelector, ctx: BuildContext): string {
   const { parts } = complex;
 
   if (parts.length === 0) {
@@ -78,16 +38,16 @@ export function buildComplexSelectorMatch(
   for (let i = 1; i < parts.length; i++) {
     const { combinator, compound } = parts[i];
 
-    const left = definePredicate(source, ctx);
+    const left = buildPredicateTest(source, ctx);
     const right = buildCompoundTest(compound, ctx);
 
-    source = `${right}&&${buildCombinatorCall(combinator, left)}`;
+    source = `${right}&&${buildCombinatorTest(combinator, left)}`;
   }
 
   return source;
 }
 
-export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext): string {
+export function collectCompoundTests(compound: CompoundSelector): CandidateTest[] {
   const tests: CandidateTest[] = [];
 
   if (compound.id && !compound.id.seed) {
@@ -109,6 +69,12 @@ export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext)
     tests.push(compound.tests[i]);
   }
 
+  return tests;
+}
+
+export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext): string {
+  const tests = collectCompoundTests(compound);
+
   const n = tests.length;
   if (n === 0) return 'true';
   if (n === 1) return buildCandidateTest(tests[0], ctx);
@@ -123,7 +89,7 @@ export function buildCompoundTest(compound: CompoundSelector, ctx: BuildContext)
   return sources.join('&&');
 }
 
-function buildCombinatorCall(combinator: Combinator | null, pred: string): string {
+function buildCombinatorTest(combinator: Combinator | null, pred: string): string {
   switch (combinator) {
     case ' ': return `s.matchAncestor(e,${pred},rc)`;
     case '>': return `s.matchParent(e,${pred},rc)`;
@@ -134,13 +100,13 @@ function buildCombinatorCall(combinator: Combinator | null, pred: string): strin
   }
 }
 
-export function buildRelativeSelectorListMatch(list: RelativeSelectorList, ctx: BuildContext): string {
+export function buildRelativeSelectorListTest(list: RelativeSelectorList, ctx: BuildContext): string {
   if (list.arms.length === 0) return 'false';
 
   const arms = list.arms.map((arm) => {
     const steps = arm.steps.map((step) => {
       const source = buildCompoundTest(step.compound.compound, ctx);
-      const pred = definePredicate(source, ctx);
+      const pred = buildPredicateTest(source, ctx);
       return `[${JSON.stringify(step.combinator)},${pred}]`;
     });
 
@@ -154,7 +120,7 @@ function buildCandidateTest(test: CandidateTest, ctx: BuildContext): string {
   return 'buildSource' in test ? test.buildSource(ctx) : test.source;
 }
 
-function definePredicate(source: string, ctx: BuildContext): string {
+function buildPredicateTest(source: string, ctx: BuildContext): string {
   const name = `P${ctx.nextPredicate++}`;
   ctx.declarations.push(`function ${name}(e,rc){return (${source});}\n`);
   return name;

@@ -1,7 +1,7 @@
-import { buildStrictMatcher, createBuildContext, type Filter } from '../planner/filter';
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import { describeContext, type QueryContextDescription } from '../utils/debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
+import { buildSelectorListProof, type ProofFn } from '../planner/chain';
 
 export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
   snap.probe.match++;
@@ -30,7 +30,13 @@ export function matchStrict(selectors: string, element: Element, snap: Snapshot,
   return resolver.match(element, rc);
 }
 
-export type MatchResolver = { match: MatchFn; usesScope: boolean; usesCache: boolean; };
+export type MatchResolver = {
+  match: MatchFn;
+  usesScope: boolean;
+  usesCache: boolean;
+};
+
+export type MatchFn = (candidate: Element, rc: RuntimeCache | null) => boolean;
 
 export function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
   let resolver = snap.strictMatchResolvers.get(selectors);
@@ -54,37 +60,24 @@ function buildStrictMatchResolver(list: SelectorList, snap: Snapshot): MatchReso
   snap.probe.matBuild++;
   snap.checkCacheWatermark();
 
-  const ctx = createBuildContext();
-  const filter = buildStrictMatcher(list, ctx);
-  const match = compileMatch(filter, snap);
+  const proof = buildSelectorListProof(list, snap);
+  const match = buildMatchFn(proof);
 
   if (snap.isDebug && snap.debugMatch) {
-    snap.debugMatch.matchSrcText = snap.debugCompile ?? match.toString();
     snap.debugCompile = undefined;
   }
 
   return {
     match,
-    usesScope: filter.usesScope,
-    usesCache: filter.usesCache,
+    usesScope: list.usesScope,
+    usesCache: list.usesCache,
   };
 }
 
-export type MatchFn = (candidate: Element, rc: RuntimeCache | null) => boolean;
-
-function compileMatch(filter: Filter, snap: Snapshot): MatchFn {
-  const f =
-    `"use strict";` +
-    filter.declarations.join('') +
-    `return function Match(c,rc){` +
-      `var e=c;` +
-      `return ${filter.source};` +
-    `}`;
-
-  if (snap.isDebug) snap.debugCompile = f;
-
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call
-  return Function('s', f)(snap) as MatchFn;
+function buildMatchFn(proof: ProofFn): MatchFn {
+  return function Match(candidate, rc) {
+    return proof(candidate, null, rc);
+  };
 }
 
 export type DebugMatch = {
@@ -97,7 +90,6 @@ export type DebugMatch = {
     usesCache: boolean;
     cost: number;
   };
-  matchSrcText?: string;
   result?: boolean;
   error?: string;
 };

@@ -1,4 +1,4 @@
-import { buildForgivingSelectorListMatch } from './filter';
+import { buildForgivingSelectorListTest } from './build-tests';
 import type {
   CandidateTest, CompoundSelector, ComplexSelector, SelectorList, IdSelector, TagSelector, ClassSelector,
   ComplexPart,
@@ -336,7 +336,7 @@ function buildResidualIsWhereTest(residualArm: ComplexSelector, isOrWhere: 'is' 
     usesCache: list.usesCache,
     pseudoIs: where ? undefined : list,
     pseudoWhere: where ? list : undefined,
-    buildSource: (ctx) => buildForgivingSelectorListMatch(list, ctx),
+    buildSource: (ctx) => buildForgivingSelectorListTest(list, ctx),
   };
 }
 

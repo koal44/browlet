@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseSelectorList } from '../../src/parser/parser';
-import { buildStrictSelectorListMatch, createBuildContext } from '../../src/planner/filter';
+import { buildStrictSelectorListTest, createBuildContext } from '../../src/planner/build-tests';
 
 describe('buildStrictSelectorListMatch', () => {
   it('orders strict selector-list matcher arms by cost', () => {
     const list = parseSelectorList(':nth-of-type(9), [data-hot="yes"], #i9', {});
     const ctx = createBuildContext();
 
-    const source = buildStrictSelectorListMatch(list, ctx);
+    const source = buildStrictSelectorListTest(list, ctx);
 
     expect(source.indexOf('s.checkId')).toBeGreaterThanOrEqual(0);
     expect(source.indexOf('s.matchAttribute')).toBeGreaterThanOrEqual(0);
@@ -25,7 +25,7 @@ describe('buildStrictSelectorListMatch', () => {
   it('orders compound candidate tests by cost', () => {
     const list = parseSelectorList(':nth-of-type(9)[data-hot="yes"]#i9', {});
     const ctx = createBuildContext();
-    const source = buildStrictSelectorListMatch(list, ctx);
+    const source = buildStrictSelectorListTest(list, ctx);
 
     const id = source.indexOf('s.checkId');
     const attr = source.indexOf('s.matchAttribute');
