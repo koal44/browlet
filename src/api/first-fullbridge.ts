@@ -1,0 +1,77 @@
+import type { SelectorList } from '../parser/parser';
+import type { RuntimeCache } from '../compile/runtimeCache';
+import type { FirstRunFn } from './first';
+import { precedesByDocPosition } from '../utils/collections';
+import { describeElement, describeElements } from '../utils/debug';
+import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
+import { findFirstBridgeCandidate } from '../planner/bridge';
+import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
+
+export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
+  const arms = expandSelectorListForSeeding(list);
+  const groups = buildFullBridgeGroups(arms, snap);
+
+  if (snap.isDebug) {
+    for (let i = 0; i < groups.length; i++) {
+      updateDebugBuild(snap, groups[i]);
+    }
+  }
+
+  return function FullBridgeFirst(ctx, rc) {
+    return runFullBridgeFirst(groups, ctx, rc, snap);
+  };
+}
+
+function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
+  const isDebug = snap.isDebug;
+
+  if (groups.length === 1) {
+    const group = groups[0];
+    const candidates = group.bridge.lookup(ctx);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, null, rc);
+
+    if (isDebug) updateDebugRun(snap, group, candidates, result);
+
+    return result;
+  }
+
+  let best: Element | null = null;
+
+  for (let k = 0; k < groups.length; k++) {
+    const group = groups[k];
+    const candidates = group.bridge.lookup(ctx);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, null, rc);
+
+    if (isDebug) updateDebugRun(snap, group, candidates, result);
+
+    if (!result) continue;
+    if (!best || precedesByDocPosition(result, best)) best = result;
+  }
+
+  return best;
+}
+
+function updateDebugRun(snap: Snapshot, group: FullBridgeGroup, candidates: Element[], result: Element | null): void {
+  snap.debugFirst?.run.push({
+    engine: 'full-bridge',
+    lookupStrategy: group.lookup.strategy,
+    lookupQuery: group.lookup.lookupQuery,
+    bridge: group.bridge.debug,
+    candidates: describeElements(candidates),
+    result: result ? describeElement(result) : null,
+  });
+}
+
+function updateDebugBuild(snap: Snapshot, group: FullBridgeGroup): void {
+  snap.debugFirst?.build.push({
+    engine: 'full-bridge',
+    usesScope: group.usesScope,
+    usesCache: group.usesCache,
+    lookupStrategy: group.lookup.strategy,
+    lookupQuery: group.lookup.lookupQuery,
+    cost: group.cost,
+    bridge: group.bridge.debug,
+  });
+
+  snap.debugCompile = undefined;
+}

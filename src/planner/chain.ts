@@ -339,7 +339,6 @@ export function buildAdvanceFirstFn(combinator: AdvanceCombinator, test: Compoun
   }
 }
 
-
 function firstNextSibling(frontier: Element[], test: CompoundTestFn, rc: RuntimeCache | null): Element | null {
   for (let i = 0; i < frontier.length; i++) {
     const candidate = frontier[i].nextElementSibling;

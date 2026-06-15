@@ -11,7 +11,7 @@ import {
 import { describeElement } from '../utils/debug';
 import { buildChain } from '../planner/chain';
 
-export function buildWitnessFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
+export function buildFrontierFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
   const arms = expandSelectorListForSeeding(list);
   const firsts: ArmFirstFn[] = [];
 
@@ -26,12 +26,12 @@ export function buildWitnessFirst(list: SelectorList, snap: Snapshot): FirstRunF
     }
   }
 
-  return function First(ctx, rc, snap) {
-    return runFirst(firsts, ctx, rc, snap);
+  return function First(ctx, rc) {
+    return runFirst(firsts, ctx, rc);
   };
 }
 
-function runFirst(firsts: ArmFirstFn[], ctx: QueryContext, rc: RuntimeCache | null, _snap: Snapshot): Element | null {
+function runFirst(firsts: ArmFirstFn[], ctx: QueryContext, rc: RuntimeCache | null): Element | null {
   if (firsts.length === 1) {
     return firsts[0](ctx, rc);
   }
@@ -55,7 +55,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   const program = buildFrontierProgram(chain, snap);
 
   return function First(ctx, rc) {
-    const result = runWitnessFirstProgram(program, ctx, rc, snap);
+    const result = runFrontierFirstProgram(program, ctx, rc, snap);
 
     if (snap.isDebug) {
       updateDebugRun(snap, armIndex, program, result);
@@ -65,7 +65,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
   };
 }
 
-function runWitnessFirstProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
+function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
   const isDebug = snap.isDebug;
   if (isDebug) resetFrontierDebug(program);
 
@@ -126,7 +126,7 @@ function runWitnessFirstProgram(program: FrontierProgram, ctx: QueryContext, rc:
     return found;
   }
 
-  throw new Error(`Unreachable witness first runner state at step ${index}`);
+  throw new Error(`Unreachable frontier first runner state at step ${index}`);
 }
 
 function updateDebugRun(
@@ -136,7 +136,7 @@ function updateDebugRun(
   result: Element | null,
 ): void {
   snap.debugFirst?.run.push({
-    engine: 'witness',
+    engine: 'frontier',
     armIndex,
     program: describeFrontierProgram(program),
     result: result ? describeElement(result) : null,
@@ -149,7 +149,7 @@ function updateDebugBuild(
   arm: ComplexSelector,
 ): void {
   snap.debugFirst?.build.push({
-    engine: 'witness',
+    engine: 'frontier',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
     armIndex,

@@ -2,8 +2,8 @@ import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { describeContext, describeElement, type QueryContextDescription } from '../utils/debug';
 import { isElement } from '../utils/dom';
-import { buildSubjectFirst } from './first-subject';
-import { buildWitnessFirst } from './first-witness';
+import { buildFullBridgeFirst } from './first-fullbridge';
+import { buildFrontierFirst } from './first-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
 
 export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
@@ -30,7 +30,7 @@ export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Elem
     rc = snap.runtimeCache;
   }
 
-  const result = first(ctx, rc, snap);
+  const result = first(ctx, rc);
 
   if (isDebug) {
     updateDebugResult(snap, result);
@@ -43,14 +43,13 @@ export type FirstResolver = {
   list: SelectorList;
   usesScope: boolean;
   usesCache: boolean;
-  subject?: FirstRunFn;
-  witness?: FirstRunFn;
+  fullBridge?: FirstRunFn;
+  frontier?: FirstRunFn;
 };
 
 export type FirstRunFn = (
   ctx: QueryContext,
   rc: RuntimeCache | null,
-  snap: Snapshot,
 ) => Element | null;
 
 function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
@@ -64,26 +63,30 @@ function buildFirstResolver(list: SelectorList, snap: Snapshot): FirstResolver {
   };
 }
 
-function resolveFirstStrategy(
-  resolver: FirstResolver,
-  ctx: QueryContext,
-  snap: Snapshot,
-): FirstRunFn {
+function resolveFirstStrategy(resolver: FirstResolver, ctx: QueryContext, snap: Snapshot): FirstRunFn {
+  // Element contexts force full-bridge selection. Although element.querySelector()
+  // feels like a subtree query, the context only constrains returned subjects;
+  // selector proof may still depend on ancestors/siblings outside the subtree.
+  // Frontier selection narrows the proof universe while moving through the chain,
+  // so it is not safe for element contexts.
   if (isElement(ctx)) {
-    let subject = resolver.subject;
-    if (!subject) {
-      subject = buildSubjectFirst(resolver.list, snap);
-      resolver.subject = subject;
+    let fullBridge = resolver.fullBridge;
+    if (!fullBridge) {
+      fullBridge = buildFullBridgeFirst(resolver.list, snap);
+      resolver.fullBridge = fullBridge;
     }
-    return subject;
-  } else { // Document, DocumentFragment
-    let witness = resolver.witness;
-    if (!witness) {
-      witness = buildWitnessFirst(resolver.list, snap);
-      resolver.witness = witness;
-    }
-    return witness;
+    return fullBridge;
   }
+
+  // Document and fragment contexts prefer frontier selection: author-written
+  // selectors usually encode a left-to-right narrowing path. Full-bridge
+  // grouping can still beat frontier for some selector lists.
+  let frontier = resolver.frontier;
+  if (!frontier) {
+    frontier = buildFrontierFirst(resolver.list, snap);
+    resolver.frontier = frontier;
+  }
+  return frontier;
 }
 
 export type DebugFirst = {
@@ -97,28 +100,28 @@ export type DebugFirst = {
 };
 
 export type DebugFirstBuild = {
-  engine: 'subject' | 'witness';
+  engine: 'full-bridge' | 'frontier';
   usesScope: boolean;
   usesCache: boolean;
 
-  // subject-only
+  // fullbridge-only
   lookupStrategy?: string;
   lookupQuery?: string;
-  filterCost?: number;
-  srcText?: string;
+  cost?: number;
+  bridge?: string;
 
-  // witness-only
+  // frontier-only
   armIndex?: number;
 };
 
 export type DebugFirstRun = {
-  engine: 'subject' | 'witness';
+  engine: 'full-bridge' | 'frontier';
 
-  // subject-only
+  // fullbridge-only
   lookupStrategy?: string;
   lookupQuery?: string;
   candidates?: string[];
-  srcText?: string;
+  bridge?: string;
 
   // witness-only
   armIndex?: number;

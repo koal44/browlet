@@ -109,6 +109,18 @@ export function proveBridgeCandidates(candidates: Element[], proof: ProofFn, fro
   return out;
 }
 
+export function findFirstBridgeCandidate(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element | null {
+  for (let i = 0; i < candidates.length; i++) {
+    const e = candidates[i];
+
+    if (proof(e, frontier, rc)) {
+      return e;
+    }
+  }
+
+  return null;
+}
+
 export function describeBridgeMove(move: BridgeMove | null | undefined): string {
   if (move === undefined) return 'unbuilt';
   if (move === null) return 'cannot';
