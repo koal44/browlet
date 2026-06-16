@@ -1,20 +1,7 @@
+import { LOOKUP_COPY, type LookupMode } from '../constants';
 import type { IndexedNodeList } from '../selectlet';
 
-// export function concatCollection(list: Element[], nodes: HTMLCollectionOf<Element>): void {
-//   for (let i = 0, j = list.length, l = nodes.length; i < l; ++i) {
-//     list[j++] = nodes[i];
-//   }
-// }
-
-// export function collectionToArray(nodes: HTMLCollectionOf<Element>): Element[] {
-//   const list: Element[] = [];
-//   for (let i = 0, l = nodes.length; i < l; ++i) {
-//     list[i] = nodes[i];
-//   }
-//   return list;
-// }
-
-type ElementCollection = {
+export type ElementCollection = {
   length: number;
   item?: (index: number) => Element | null;
   [index: number]: Element | undefined;
@@ -47,13 +34,12 @@ export function concatCollection(list: Element[], nodes: ElementCollection): voi
 
 export function collectionToArray(nodes: ElementCollection): Element[] {
   const length = nodes.length;
-  const list: Element[] = [];
+  const list = new Array<Element>(length);
   if (length === 0) return list;
 
   if (nodes[0]) {
     for (let i = 0; i < length; ++i) {
-      const node = nodes[i];
-      if (!node) throw new Error(`Indexed collection returned empty item at ${i}`);
+      const node = nodes[i]!;
       list[i] = node;
     }
     return list;
@@ -86,6 +72,15 @@ export function iterableToArray<T>(items: Iterable<T>): T[] {
   return list;
 }
 
+export function htmlCollectionSource(collection: ElementCollection & Iterable<Element>, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
+  const array = snap.htmlCollectionArray?.(collection);
+  if (array) return array;
+
+  return lookupMode === LOOKUP_COPY
+    ? collectionToArray(collection)
+    : collection;
+}
+
 // create a NodeList-like object from an element array
 let emptyNL: NodeListOf<ChildNode> | undefined;
 export function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList {
@@ -112,8 +107,6 @@ export function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList
   // return an object pretending to be a NodeList.
   return fakeNL;
 }
-
-
 
 const DOCUMENT_POSITION_FOLLOWING = 4;
 export type Precedes<T> = (a: T, b: T) => boolean;

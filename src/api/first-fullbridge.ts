@@ -1,11 +1,11 @@
 import type { SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
-import { precedesByDocPosition } from '../utils/collections';
 import { describeElement, describeElements } from '../utils/debug';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import { findFirstBridgeCandidate } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
+import { LOOKUP_VIEW } from '../constants';
 
 export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
   const arms = expandSelectorListForSeeding(list);
@@ -25,33 +25,34 @@ export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstR
 function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: RuntimeCache | null, snap: Snapshot): Element | null {
   const isDebug = snap.isDebug;
 
+  const frontier = null;  // frontier is always null for full-bridge
+  let best: Element | null = null;
+
   if (groups.length === 1) {
     const group = groups[0];
-    const candidates = group.bridge.lookup(ctx);
-    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, null, rc);
+    const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
 
     if (isDebug) updateDebugRun(snap, group, candidates, result);
 
     return result;
   }
 
-  let best: Element | null = null;
-
   for (let k = 0; k < groups.length; k++) {
     const group = groups[k];
-    const candidates = group.bridge.lookup(ctx);
-    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, null, rc);
+    const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
+    const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
 
     if (isDebug) updateDebugRun(snap, group, candidates, result);
 
     if (!result) continue;
-    if (!best || precedesByDocPosition(result, best)) best = result;
+    best = result;
   }
 
   return best;
 }
 
-function updateDebugRun(snap: Snapshot, group: FullBridgeGroup, candidates: Element[], result: Element | null): void {
+function updateDebugRun(snap: Snapshot, group: FullBridgeGroup, candidates: Iterable<Element>, result: Element | null): void {
   snap.debugFirst?.run.push({
     engine: 'full-bridge',
     lookupStrategy: group.lookup.strategy,

@@ -8,6 +8,7 @@ import {
 } from '../planner/frontier';
 import { describeElements } from '../utils/debug';
 import { buildChain } from '../planner/chain';
+import { LOOKUP_COPY } from '../constants';
 
 export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = expandSelectorListForSeeding(list);
@@ -71,7 +72,7 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
     frontier: null,
   };
 
-  runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, rc);
+  runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, LOOKUP_COPY, rc);
 
   if (isDebug) {
     program.start.count = state.frontier?.length ?? 0;
@@ -107,7 +108,7 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
 
     if (isDebug) step.lookupRoot = state.root;
 
-    runBridgeMove(state, bridge, program.steps[bridge.to].canRoot, rc);
+    runBridgeMove(state, bridge, program.steps[bridge.to].canRoot, LOOKUP_COPY, rc);
 
     if (isDebug) step.count = state.frontier.length;
 

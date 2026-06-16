@@ -48,19 +48,23 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "lint": "eslint src test scripts",
-
     "vendor": "tsx scripts/vendor.ts",
-    "install:jsdom": "npm run build && tsx scripts/install-jsdom.ts",
 
-    "test:quick": "npm run lint && npm run build && vitest run --project=unit && node test/artifact/cjs.test.cjs && node test/artifact/esm.test.mjs && node test/artifact/global.test.cjs && npm run test:jsdom:sv",
-    "test:all": "npm run vendor && npm run test:jsdom:sv && npm run test:quick && npm run test:browser && npm run install:jsdom && npm run test:jsdom:sx",
+    "install:jsdom:run": "tsx scripts/install-jsdom.ts",
+    "install:jsdom": "npm run build && npm run install:jsdom:run",
 
-    "test:unit": "npm run build && vitest run --project=unit",
-    "test:artifact": "npm run build && node test/artifact/cjs.test.cjs && node test/artifact/esm.test.mjs && node test/artifact/global.test.cjs",
+    "test:unit:run": "vitest run --project=unit",
+    "test:unit": "npm run build && npm run test:unit:run",
 
-    "test:browser": "npm run build && cross-env HARNESS_MODE=normal playwright test --project=browser",
+    "test:artifact:run": "node test/artifact/cjs.test.cjs && node test/artifact/esm.test.mjs && node test/artifact/global.test.cjs",
+    "test:artifact": "npm run build && npm run test:artifact:run",
+
+    "test:browser:run": "cross-env HARNESS_MODE=normal playwright test --project=browser",
+    "test:browser": "npm run build && npm run test:browser:run",
     "test:browser:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=browser",
+
     "test:perf": "npm run build && playwright test --project=perf --workers=1",
+    "test:jsdom:perf": "vitest run --project=jsdom-perf",
 
     "test:jsdom:sv": "cross-env HARNESS=jsdom ENGINE=sx-vendor vitest run --project=jsdom",
     "test:jsdom:sx": "cross-env HARNESS=jsdom ENGINE=selectlet vitest run --project=jsdom",
@@ -72,7 +76,8 @@
     "test:jsdom:nwonly": "cross-env HARNESS=jsdom ENGINE=nwsapi ONLY=only vitest run --project=jsdom",
     "test:jsdom:dsonly": "cross-env HARNESS=jsdom ENGINE=dom-selector ONLY=only vitest run --project=jsdom",
 
-    "test:jsdom:perf": "vitest run --project=jsdom-perf"
+    "test:quick": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run test:jsdom:sv",
+    "test:all": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run vendor && npm run install:jsdom:run && npm run test:jsdom:sx && npm run test:jsdom:sv && npm run test:browser:run"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

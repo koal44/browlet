@@ -93,9 +93,16 @@ export function describeElement(el: Element | null | undefined): string {
   return `<${el.tagName.toLowerCase()}${id ? ` id='${id}'` : ''}${cls ? ` class='${cls}'` : ''}>`;
 }
 
-export function describeElements(els: Element[], max = 10): string[] {
-  const out = els.slice(0, max).map(describeElement);
-  if (els.length > max) out.push(`… (${els.length - max} more)`);
+export function describeElements(els: Iterable<Element>, max = 10): string[] {
+  const out: string[] = [];
+  let count = 0;
+
+  for (const e of els) {
+    if (count < max) out[out.length] = describeElement(e);
+    count++;
+  }
+
+  if (count > max) out[out.length] = `… (${count - max} more)`;
   return out;
 }
 

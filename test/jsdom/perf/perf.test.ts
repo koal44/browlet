@@ -622,7 +622,7 @@ runPerfScenarios('jsdom-perf', [
 
   {
     name: 'nth predicate cost with tree versioning',
-    status: 'only',
+    // status: 'only',
     engines: ['sx-vendor', 'selectlet'],
     markup: `
       <div id="short">
@@ -747,3 +747,72 @@ function complexMarkup(): string {
   return html;
 }
 
+runPerfScenarios('perf2', [
+  {
+    name: 'html collection source first paths',
+    status: 'only',
+    engines: ['sx-vendor'],
+    markupMode: 'html-document',
+    markup: htmlCollectionSourceMarkup(600),
+    quickIters: 1_000,
+    benches: [
+      // Controls: pure tag lookup.
+      { op: 'first',  selector: 'a', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'select', selector: 'a', ref: { by: 'document' }, iters: 5_000 },
+
+      // Tag-seeded attr proof: should use getElementsByTagName('a') as candidate source.
+      { label: 'first a[data-probe-near]', op: 'first',  selector: 'a[data-probe-near]', ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first a[data-probe-mid]',  op: 'first',  selector: 'a[data-probe-mid]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first a[data-probe-far]',  op: 'first',  selector: 'a[data-probe-far]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first a[data-probe-miss]', op: 'first',  selector: 'a[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+
+      { label: 'select a[data-probe-near]', op: 'select', selector: 'a[data-probe-near]', ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select a[data-probe-mid]',  op: 'select', selector: 'a[data-probe-mid]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select a[data-probe-far]',  op: 'select', selector: 'a[data-probe-far]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select a[data-probe-miss]', op: 'select', selector: 'a[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+
+      // Universal/unseeded attr proof: should use getElementsByTagName('*') or equivalent walk source.
+      { label: 'first [data-probe-near]', op: 'first',  selector: '[data-probe-near]', ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first [data-probe-mid]',  op: 'first',  selector: '[data-probe-mid]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first [data-probe-far]',  op: 'first',  selector: '[data-probe-far]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'first [data-probe-miss]', op: 'first',  selector: '[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+
+      { label: 'select [data-probe-near]', op: 'select', selector: '[data-probe-near]', ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select [data-probe-mid]',  op: 'select', selector: '[data-probe-mid]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select [data-probe-far]',  op: 'select', selector: '[data-probe-far]',  ref: { by: 'document' }, iters: 5_000 },
+      { label: 'select [data-probe-miss]', op: 'select', selector: '[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+
+      // Early-exit universal control. This should already be fast.
+      { op: 'first', selector: ':not(button)', ref: { by: 'document' }, iters: 5_000 },
+
+      //
+      { op: 'first', selector: '.row', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'select', selector: '.row', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'first', selector: '.row[data-probe-far]', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'first', selector: '.row[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'select', selector: '.row[data-probe-far]', ref: { by: 'document' }, iters: 5_000 },
+      { op: 'select', selector: '.row[data-probe-miss]', ref: { by: 'document' }, iters: 5_000 },
+    ],
+  },
+]);
+
+function htmlCollectionSourceMarkup(count: number): string {
+  const mid = Math.floor(count / 2);
+  let html = '<!doctype html><html><body><main id="root">';
+
+  for (let i = 0; i < count; i++) {
+    const attrs = [
+      i === 0 ? 'data-probe-near="yes"' : '',
+      i === mid ? 'data-probe-mid="yes"' : '',
+      i === count - 1 ? 'data-probe-far="yes"' : '',
+    ].filter(Boolean).join(' ');
+
+    html += `<section class="row" id="row-${i}">`;
+    html += `<a id="link-${i}" href="#link-${i}" ${attrs}>link ${i}</a>`;
+    html += `<span class="filler">filler ${i}</span>`;
+    html += `</section>`;
+  }
+
+  html += '</main></body></html>';
+  return html;
+}

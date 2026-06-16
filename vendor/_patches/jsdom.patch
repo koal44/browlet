@@ -56,7 +56,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..b9f975f3 100644
+index b85d6b0e..b21e6fb4 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -2,6 +2,7 @@
@@ -75,7 +75,7 @@ index b85d6b0e..b9f975f3 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -231,6 +233,86 @@ class DocumentImpl extends NodeImpl {
+@@ -231,6 +233,89 @@ class DocumentImpl extends NodeImpl {
      this.#domSelector?.clear();
    }
  
@@ -118,6 +118,9 @@ index b85d6b0e..b9f975f3 100644
 +            treeVersion: node => {
 +              return node.nodeType === NODE_TYPE.ELEMENT_NODE ? node._ownerDocument?._version : node._version;
 +            }
++          },
++          htmlCollectionArray: collection => {
++            return collection._list;
 +          },
 +          doc: {
 +            cachedIds: (doc, id) => doc._byIdCache.getAll(id),

@@ -12,7 +12,7 @@ import {
   matchPrevAny, matchPrev, matchParent, matchAncestor,
 } from './compile/runtime';
 import type {
-  CustomPseudoPredicate, ElementList, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
+  CustomPseudoPredicate, ElementList, HtmlCollectionArray, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
 } from './selectlet';
 import { escapeRegExp } from './utils/css';
 import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
@@ -46,6 +46,7 @@ export class Snapshot {
   readonly docDesignMode: (doc: Document) => string | undefined;
   readonly treeVersion: (ctx: QueryContext) => number | undefined;
   readonly hasTreeVersion: boolean;
+  readonly htmlCollectionArray: HtmlCollectionArray | undefined;
 
   checkCacheWatermark: () => void;
 
@@ -129,6 +130,7 @@ export class Snapshot {
     this.docDesignMode = caps?.doc?.designMode ?? ((doc) => doc.designMode);
     this.treeVersion = caps?.tree?.treeVersion ?? defaultTreeVersion;
     this.hasTreeVersion = caps?.tree?.treeVersion !== undefined;
+    this.htmlCollectionArray = caps?.htmlCollectionArray;
 
     this.doc = doc;
     this.from = doc;

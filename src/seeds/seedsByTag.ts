@@ -1,23 +1,25 @@
-import { collectionToArray, concatCollection, mergeDocumentOrder } from '../utils/collections';
+import { type LookupMode } from '../constants';
+import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../utils/collections';
 import { asciiLower } from '../utils/css';
 import { isDocumentFragment } from '../utils/dom';
 
-export function seedsByTag(tag: string, context: QueryContext, snap: Snapshot): Element[] {
+export function seedsByTag(tag: string, context: QueryContext, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
   if (!tag) return [];
-  if (tag === '*') return seedsByAllTag(context);
+  if (tag === '*') return seedsByAllTag(context, lookupMode, snap);
 
   if (isDocumentFragment(context)) {
     return seedsByTagFragment(tag, context, snap);
   }
 
   if (!snap.isHtml) {
-    return collectionToArray(context.getElementsByTagNameNS('*', tag));
+    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode, snap);
   }
 
   const lowerTag = asciiLower(tag);
   if (tag === lowerTag) {
-    return collectionToArray(context.getElementsByTagNameNS('*', tag));
+    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode, snap);
   }
+
   return seedsByTagNsUnion(tag, lowerTag, context, snap);
 }
 
@@ -66,9 +68,9 @@ function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | El
   return mergeDocumentOrder(exactNodes, lowerNodes);
 }
 
-function seedsByAllTag(context: QueryContext): Element[] {
+function seedsByAllTag(context: QueryContext, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
   if (!isDocumentFragment(context)) {
-    return collectionToArray(context.getElementsByTagName('*'));
+    return htmlCollectionSource(context.getElementsByTagName('*'), lookupMode, snap);
   }
 
   const nodes: Element[] = [];

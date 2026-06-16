@@ -2199,8 +2199,18 @@ runPerfScenarios('perf', [
       { op: 'first', selector: '[lang="tr"]:where(h1, h2, h3)', ref: { by: 'document' }, iters: 20_000 },
 
       // Selector-list ordering: cheap/selective first vs expensive late/early.
+      { op: 'select', selector: '#title', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'a[href*="Consortium/Legal"]', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'a', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'select', selector: 'input:invalid', ref: { by: 'document' }, iters: 20_000 },
+
       { op: 'select', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 20_000 },
       { op: 'select', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 20_000 },
+
+      { op: 'first', selector: '#title', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: 'a[href*="Consortium/Legal"]', ref: { by: 'document' }, iters: 20_000, debug: false },
+      { op: 'first', selector: 'a', ref: { by: 'document' }, iters: 20_000 },
+      { op: 'first', selector: 'input:invalid', ref: { by: 'document' }, iters: 20_000 },
 
       { op: 'first', selector: '#title, a[href*="Consortium/Legal"], input:invalid', ref: { by: 'document' }, iters: 20_000 },
       { op: 'first', selector: 'input:invalid, a[href*="Consortium/Legal"], #title', ref: { by: 'document' }, iters: 20_000 },

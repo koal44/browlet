@@ -6,6 +6,7 @@ import { describeElements } from '../utils/debug';
 import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
+import { LOOKUP_COPY } from '../constants';
 
 export function buildFullBridgeSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = expandSelectorListForSeeding(list);
@@ -32,7 +33,7 @@ function runFullBridgeSelect(
 
   if (groups.length === 1) {
     const group = groups[0];
-    const candidates = group.bridge.lookup(ctx);
+    const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 
     if (isDebug) updateDebugRun(snap, group, candidates, results);
@@ -45,7 +46,7 @@ function runFullBridgeSelect(
 
   for (let k = 0; k < groups.length; k++) {
     const group = groups[k];
-    const candidates = group.bridge.lookup(ctx);
+    const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 
     if (results.length) lists[i++] = results;
@@ -58,7 +59,7 @@ function runFullBridgeSelect(
 function updateDebugRun(
   snap: Snapshot,
   group: FullBridgeGroup,
-  candidates: Element[],
+  candidates: Iterable<Element>,
   results: Element[],
 ): void {
   snap.debugSelect?.run.push({

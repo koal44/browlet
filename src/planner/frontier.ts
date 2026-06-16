@@ -5,7 +5,8 @@ import {
   buildAdvanceFirstFn, buildAdvanceMove,
   type AdvanceMove, type Chain,
 } from './chain';
-import { type BridgeMove, buildBridgeMove, describeBridgeMove, filterBridgeCandidates } from './bridge';
+import { type BridgeMove, buildBridgeMove, describeBridgeMove, filterBridgeCandidates, findFirstBridgeCandidate } from './bridge';
+import { type LookupMode } from '../constants';
 
 export type FrontierProgram = {
   chain: Chain;
@@ -140,24 +141,15 @@ export function runFirstAdvanceMove(state: FrontierState, move: AdvanceMove, rc:
   return first(frontier, rc);
 }
 
-export function runBridgeMove(state: FrontierState, move: BridgeMove, canRoot: boolean, rc: RuntimeCache | null): void {
-  const candidates = move.lookup(state.root);
+export function runBridgeMove(state: FrontierState, move: BridgeMove, canRoot: boolean, lookupMode: LookupMode, rc: RuntimeCache | null): void {
+  const candidates = move.lookup(state.root, lookupMode);
   const next = filterBridgeCandidates(candidates, move.proof, state.frontier, rc);
   updateFrontierState(state, next, canRoot);
 }
 
-export function runFirstBridgeMove(state: FrontierState, move: BridgeMove, rc: RuntimeCache | null): Element | null {
-  const candidates = move.lookup(state.root);
-
-  for (let i = 0; i < candidates.length; i++) {
-    const e = candidates[i];
-
-    if (move.proof(e, state.frontier, rc)) {
-      return e;
-    }
-  }
-
-  return null;
+export function runFirstBridgeMove(state: FrontierState, move: BridgeMove, lookupMode: LookupMode, rc: RuntimeCache | null, best: Element | null): Element | null {
+  const candidates = move.lookup(state.root, lookupMode);
+  return findFirstBridgeCandidate(candidates, move.proof, state.frontier, rc, best);
 }
 
 function updateFrontierState(state: FrontierState, frontier: Element[], canRoot: boolean): void {

@@ -1,8 +1,9 @@
+import type { LookupMode } from '../constants';
 import type { SelectletCaps } from '../selectlet';
 import { iterableToArray } from '../utils/collections';
 import { isDocument, isElement, isNamedItemAnElement } from '../utils/dom';
 
-export type SeedIdFn = (id: string, context: QueryContext) => Element[];
+export type SeedIdFn = (id: string, context: QueryContext, lookupMode: LookupMode) => Element[];
 
 type IdsCap<R> = ((root: R, id: string) => Iterable<Element>) | null | undefined;
 
@@ -10,7 +11,7 @@ export function buildSeedsById(caps: SelectletCaps | undefined, snap: Snapshot):
   const docCap = caps?.doc?.cachedIds;
   const fragCap = caps?.frag?.cachedIds;
 
-  return (id, context) => {
+  return (id, context, _mode) => {
     return isDocument(context) ? seedsByIdInDocument(id, context, snap, docCap)
       : isElement(context) ? seedsByIdInElement(id, context, snap, docCap)
       : seedsByIdInFragment(id, context, snap, fragCap);

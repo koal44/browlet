@@ -71,6 +71,7 @@ export type SelectletCaps<
   frag?: FragmentCaps<E, F>;
   el?: ElementCaps<E>;
   tree?: TreeCaps<QueryContext>;
+  htmlCollectionArray?: HtmlCollectionArray<E>;
 };
 
 export type DocumentCaps<E extends Element, D extends Document> = {
@@ -100,6 +101,9 @@ export type ElementCaps<E extends Element> = {
 export type TreeCaps<N extends QueryContext = QueryContext> = {
   treeVersion?: (root: N) => number | undefined;
 };
+
+export type HtmlCollectionArray<E extends Element = Element> =
+  (collection: unknown) => readonly E[] | null;
 
 export type CustomPseudoPredicate = (element: Element) => boolean;
 

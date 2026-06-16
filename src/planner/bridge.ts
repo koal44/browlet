@@ -4,6 +4,8 @@ import { seedsByTag } from '../seeds/seedsByTag';
 import { cssIdentUnescape } from '../utils/css';
 import { buildMultiChainProof, buildProof } from './chain';
 import type { RuntimeCache } from '../compile/runtimeCache';
+import { precedesByDocPosition } from '../utils/collections';
+import { type LookupMode } from '../constants';
 
 export type BridgeMove = {
   from: number;
@@ -21,7 +23,12 @@ export type MultiBridgeMove = {
   count?: number;
 };
 
-export type LookupFn = (root: QueryContext) => Element[];
+export type LookupFn = (root: QueryContext, mode: LookupMode) => Iterable<Element>;
+
+// export type ElementSource = {
+//   length: number;
+//   [index: number]: Element;
+// };
 
 export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Snapshot): BridgeMove {
   const compound = chain[to].right.compound;
@@ -93,26 +100,79 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   }
 }
 
-export function filterBridgeCandidates(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
+export function filterBridgeCandidates(candidates: Iterable<Element>, proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   let j = -1;
 
-  for (let i = 0; i < candidates.length; i++) {
-    const e = candidates[i];
+  for (const e of candidates) {
     if (proof(e, frontier, rc)) out[++j] = e;
   }
 
   return out;
 }
 
-export function findFirstBridgeCandidate(candidates: Element[], proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element | null {
-  for (let i = 0; i < candidates.length; i++) {
-    const e = candidates[i];
+export function findFirstBridgeCandidate(
+  candidates: Iterable<Element>,
+  proof: ProofFn,
+  frontier: Element[] | null,
+  rc: RuntimeCache | null,
+  best: Element | null,
+): Element | null {
+  for (const e of candidates) {
+    if (best && !precedesByDocPosition(e, best)) return null;
     if (proof(e, frontier, rc)) return e;
   }
 
   return null;
 }
+
+// function upperBoundBefore(candidates: ElementSource, best: Element): number {
+//   const n = candidates.length;
+
+//   for (let i = 0; i < n && i < 8; i++) {
+//     if (!precedesByDocPosition(candidates[i], best)) return i;
+//   }
+
+//   let lo = 8;
+//   if (lo >= n) return n;
+
+//   if (!precedesByDocPosition(candidates[lo], best)) {
+//     let hi = lo;
+
+//     lo = 8;
+//     while (lo < hi) {
+//       const mid = (lo + hi) >>> 1;
+
+//       if (precedesByDocPosition(candidates[mid], best)) {
+//         lo = mid + 1;
+//       } else {
+//         hi = mid;
+//       }
+//     }
+
+//     return lo;
+//   }
+
+//   let hi = 16;
+//   while (hi < n && precedesByDocPosition(candidates[hi], best)) {
+//     lo = hi + 1;
+//     hi <<= 1;
+//   }
+
+//   if (hi > n) hi = n;
+
+//   while (lo < hi) {
+//     const mid = (lo + hi) >>> 1;
+
+//     if (precedesByDocPosition(candidates[mid], best)) {
+//       lo = mid + 1;
+//     } else {
+//       hi = mid;
+//     }
+//   }
+
+//   return lo;
+// }
 
 export function describeBridgeMove(move: BridgeMove | null | undefined): string {
   if (move === undefined) return 'unbuilt';
@@ -137,7 +197,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
     return {
       strategy: 'id',
       lookupQuery: id,
-      lookup: (root) => snap.seedsById(id, root),
+      lookup: (root, mode) => snap.seedsById(id, root, mode),
       seed: 'id',
     };
   }
@@ -157,7 +217,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
     return {
       strategy: 'class',
       lookupQuery: classes.join('.'),
-      lookup: (root) => snap.seedsByClass(classes, root),
+      lookup: (root, mode) => snap.seedsByClass(classes, root, mode),
       seed: 'classes',
     };
   }
@@ -169,7 +229,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
     return {
       strategy: 'tag',
       lookupQuery: query,
-      lookup: (root) => seedsByTag(query, root, snap),
+      lookup: (root, mode) => seedsByTag(query, root, mode, snap),
       seed: prefixRaw !== '' ? 'tag' : null,
     };
   }
@@ -177,7 +237,7 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
   return {
     strategy: 'walk',
     lookupQuery: '*',
-    lookup: (root) => seedsByTag('*', root, snap),
+    lookup: (root, mode) => seedsByTag('*', root, mode, snap),
     seed: null,
   };
 }

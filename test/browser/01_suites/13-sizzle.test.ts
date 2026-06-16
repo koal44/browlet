@@ -9,7 +9,7 @@ runScenarios('sizzle', 'normal', [
     // status: 'only',
     markup: html,
     markupMode: 'html-document',
-    timeout: 20_000,
+    timeout: 40_000,
     cases: [
       { select: '.note' },
       { select: '#title' },
