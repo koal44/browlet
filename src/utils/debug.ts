@@ -45,6 +45,10 @@ export function describeCompound(compound: CompoundSelector): string {
     out += compound.host.arg ? `:host(${describeCompound(compound.host.arg)})` : ':host';
   }
 
+  if (compound.hostContext) {
+    out += `:host-context(${describeCompound(compound.hostContext.arg)})`;
+  }
+
   for (let i = 0; i < compound.tests.length; i++) {
     out += describeTest(compound.tests[i]);
   }

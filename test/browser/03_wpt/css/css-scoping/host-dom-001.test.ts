@@ -152,4 +152,47 @@ runScenarios('host pseudo', 'normal', [
     ],
   },
 
+  {
+    name: 'native host pseudo is argument restrictions',
+    // status: 'only',
+    markup: `
+      <main id="outer">
+        <section id="bar" class="theme">
+          <div id="host" class="foo"></div>
+        </section>
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <article id="article">
+            <div id="inside"></div>
+          </article>
+          <div id="top"></div>
+        `;
+      });
+    },
+    cases: [
+      // Simple :is() arms inside :host() are allowed everywhere.
+      { select: ':host(:is(.foo, .missing)) #inside', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+
+      // #bar > #host is true for the host in the light DOM.
+      // Chromium/Firefox/selectlet reject that complex arm inside :host(:is()).
+      { select: ':host(:is(#bar > #host)) #inside', browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+      // WebKit native currently allows the complex arm through.
+      { select: ':host(:is(#bar > #host)) #inside', browsers: ['webkit'], engines: ['native'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+
+      // Complex arm should not save the selector when the simple arm misses.
+      { select: ':host(:is(.missing, #bar > #host)) #inside', browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+      // WebKit native lets the complex arm save it.
+      { select: ':host(:is(.missing, #bar > #host)) #inside', browsers: ['webkit'], engines: ['native'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+
+      // A valid simple arm survives beside the rejected complex arm.
+      { select: ':host(:is(.foo, #bar > #host)) #inside', browsers: ['chromium', 'firefox'], engines: ['native', 'selectlet'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+      // WebKit also matches, but for a more permissive reason.
+      { select: ':host(:is(.foo, #bar > #host)) #inside', browsers: ['webkit'], engines: ['native'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside'] } },
+    ],
+  },
+
 ]);

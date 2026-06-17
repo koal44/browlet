@@ -176,6 +176,7 @@ function cloneCompound(compound: CompoundSelector): CompoundSelector {
     tag: cloneTag(compound.tag),
     classes: cloneClasses(compound.classes),
     host: compound.host,
+    hostContext: compound.hostContext,
     tests: compound.tests.slice(),
     usesScope: false,
     usesCache: false,
@@ -202,7 +203,7 @@ function complexContainsHost(complex: ComplexSelector): boolean {
 }
 
 function compoundContainsHost(compound: CompoundSelector): boolean {
-  if (compound.host) return true;
+  if (compound.host || compound.hostContext) return true;
 
   const tests = compound.tests;
   for (let i = 0; i < tests.length; i++) {
@@ -226,6 +227,7 @@ function compoundWithoutTest(compound: CompoundSelector, testIndex: number): Com
     tag: cloneTag(compound.tag),
     classes: cloneClasses(compound.classes),
     host: compound.host,
+    hostContext: compound.hostContext,
     tests,
     usesScope: false,
     usesCache: false,
@@ -245,6 +247,7 @@ function mergeCompounds(base: CompoundSelector, argument: CompoundSelector): Com
     tag,
     classes: mergeClasses(base.classes, argument.classes),
     host: base.host ?? argument.host,
+    hostContext: base.hostContext ?? argument.hostContext,
     tests: [...argument.tests, ...base.tests],
     usesScope: false,
     usesCache: false,
@@ -325,6 +328,7 @@ function compoundCost(compound: CompoundSelector): number {
 
 function compoundUsesScope(compound: CompoundSelector): boolean {
   if (compound.host?.arg?.usesScope) return true;
+  if (compound.hostContext?.arg.usesScope) return true;
 
   for (let i = 0; i < compound.tests.length; i++) {
     if (compound.tests[i].usesScope) return true;
@@ -335,6 +339,7 @@ function compoundUsesScope(compound: CompoundSelector): boolean {
 
 function compoundUsesCache(compound: CompoundSelector): boolean {
   if (compound.host?.arg?.usesCache) return true;
+  if (compound.hostContext?.arg.usesCache) return true;
 
   for (let i = 0; i < compound.tests.length; i++) {
     if (compound.tests[i].usesCache) return true;

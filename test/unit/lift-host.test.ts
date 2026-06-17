@@ -9,14 +9,18 @@ function expanded(selector: string): string[] {
 }
 
 function unchanged(selector: string): void {
-  expect(expanded(selector)).toEqual([selector]);
+  return withCallerStack(unchanged, () => {
+    expect(expanded(selector)).toEqual([selector]);
+  });
 }
 
 function expectExpandedWithParsedCosts(selector: string, expected: string[]): void {
-  const arms = expandedArms(selector);
+  return withCallerStack(expectExpandedWithParsedCosts, () => {
+    const arms = expandedArms(selector);
 
-  expect(arms.map(describeComplex)).toEqual(expected);
-  expect(arms.map((arm) => arm.cost)).toEqual(expected.map(costOfSingleArm));
+    expect(arms.map(describeComplex)).toEqual(expected);
+    expect(arms.map((arm) => arm.cost)).toEqual(expected.map(costOfSingleArm));
+  });
 }
 
 function expandedArms(selector: string): ComplexSelector[] {
@@ -25,9 +29,30 @@ function expandedArms(selector: string): ComplexSelector[] {
 }
 
 function costOfSingleArm(selector: string): number {
-  const list = parseSelectorList(selector, {});
-  expect(list.arms).toHaveLength(1);
-  return list.arms[0].cost;
+  return withCallerStack(costOfSingleArm, () => {
+    const list = parseSelectorList(selector, {});
+    expect(list.arms).toHaveLength(1);
+    return list.arms[0].cost;
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+function withCallerStack<T>(skip: Function, fn: () => T): T {
+  const caller = new Error();
+
+  if ('captureStackTrace' in Error) {
+    Error.captureStackTrace(caller, skip);
+  }
+
+  try {
+    return fn();
+  } catch (err) {
+    if (err instanceof Error && caller.stack) {
+      err.stack = `${err.message}\n${caller.stack.split('\n').slice(1).join('\n')}`;
+    }
+
+    throw err;
+  }
 }
 
 describe('planner :is/:where host expansion', () => {
@@ -376,5 +401,48 @@ describe('planner :is/:where host expansion', () => {
     expect(describeComplex(list.arms[0])).toBe(before);
     expect(list.arms[0].cost).toBe(originalCost);
   });
+
+  it('does not expand direct host-context outside :is/:where', () => {
+    unchanged(':host-context(.theme) *');
+  });
+
+  it('expands standalone :is() containing a host-context arm', () => {
+    expect(expanded(':is(:host-context(.theme)) *')).toEqual([
+      ':host-context(.theme) *',
+    ]);
+  });
+
+  it('expands standalone :where() containing a host-context arm', () => {
+    expect(expanded(':where(:host-context(.theme)) *')).toEqual([
+      ':host-context(.theme) *',
+    ]);
+  });
+
+  it('preserves argument arm order when expanding :is() with host-context', () => {
+    expect(expanded(':is(:host-context(.theme), #article) *')).toEqual([
+      ':host-context(.theme) *',
+      '#article *',
+    ]);
+  });
+
+  it('expands complex argument arm with host-context boundary subject', () => {
+    expect(expanded(':is(:host-context(.theme) > #article) #inside')).toEqual([
+      ':host-context(.theme) > #article #inside',
+    ]);
+  });
+
+  it('merges outer compound classes onto the subject of a complex host-context argument arm', () => {
+    expect(expanded('.bar:is(:host-context(.theme) > #article) *')).toEqual([
+      ':host-context(.theme) > #article.bar *',
+    ]);
+  });
+
+  it('updates lifted arm costs after expanding host-context-containing :is() arms', () => {
+    expectExpandedWithParsedCosts(':is(:host-context(.theme), #article) *', [
+      ':host-context(.theme) *',
+      '#article *',
+    ]);
+  });
+
 });
 

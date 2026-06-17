@@ -59,6 +59,7 @@ export type CompoundSelector = {
   classes?: ClassSelector[];
   tag?: TagSelector;
   host?: HostSelector;
+  hostContext?: HostContextSelector;
   usesScope: boolean;
   usesCache: boolean;
   cost: number;
@@ -93,6 +94,11 @@ export type HostSelector = {
   cost: number;
 };
 
+export type HostContextSelector = {
+  arg: CompoundSelector;
+  cost: number;
+};
+
 export type CandidateTest = {
   build: (snap: Snapshot) => CandidatePredicate;
 
@@ -117,7 +123,6 @@ type CandidateTestDebug =
   | { kind: 'expanded'; list: SelectorList; }
   | { kind: 'not'; list: SelectorList; }
   | { kind: 'has'; list: RelativeSelectorList; }
-  | { kind: 'host'; arg?: CompoundSelector; }
   | { kind: 'parts'; parts: string[]; }
 
 export type ParseContext = {
@@ -314,6 +319,13 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
       return;
     }
 
+    if (name === 'host-context') {
+      const hostContext = parseHostContextSelector(c, ctx);
+      compound.hostContext = hostContext;
+      compound.cost += hostContext.cost;
+      return;
+    }
+
     const pseudoTest = parsePseudoTestSource(c, ctx, name);
     if (pseudoTest.usesScope) compound.usesScope = true;
     if (pseudoTest.usesCache) compound.usesCache = true;
@@ -432,6 +444,16 @@ function parseHostSelector(c: Cursor, ctx: ParseContext): HostSelector {
 
   const x = { ...ctx, forbidEls: true, inHost: true };
   const arg = parseCompoundPseudoArg(c, x, ':host()');
+
+  return {
+    arg,
+    cost: 1 + arg.cost,
+  };
+}
+
+function parseHostContextSelector(c: Cursor, ctx: ParseContext): HostContextSelector {
+  const x = { ...ctx, forbidEls: true, inHost: true };
+  const arg = parseCompoundPseudoArg(c, x, ':host-context()');
 
   return {
     arg,
@@ -563,6 +585,9 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
     case 'host': {
       return c.error('Internal parser error: :host should be parsed as a structural host selector');
     }
+    case 'host-context': {
+      return c.error('Internal parser error: :host-context should be parsed as a structural host-context selector');
+    }
     case 'empty': return emitEmptyPseudoTest();
     case 'first-child': return emitFirstChildPseudoTest();
     case 'last-child': return emitLastChildPseudoTest();
@@ -580,14 +605,20 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
     // logical / relational pseudo-classes
     case 'is': {
       const x = { ...ctx, forbidEls: true };
-      const pseudoList = parseForgivingSelectorList(c, x);
+      const pseudoList = x.inHost
+        ? keepCompoundArms(parseForgivingSelectorList(c, x))
+        : parseForgivingSelectorList(c, x);
+
       if (pseudoList.arms.length === 0) return emitNoMatchPseudoTest('is');
       return emitIsPseudoTest(pseudoList);
     }
 
     case 'where': {
       const x = { ...ctx, forbidEls: true };
-      const pseudoList = parseForgivingSelectorList(c, x);
+      const pseudoList = x.inHost
+        ? keepCompoundArms(parseForgivingSelectorList(c, x))
+        : parseForgivingSelectorList(c, x);
+
       if (pseudoList.arms.length === 0) return emitNoMatchPseudoTest('where');
       return emitWherePseudoTest(pseudoList);
     }
@@ -1189,5 +1220,30 @@ function selectorListFromCompound(compound: CompoundSelector): SelectorList {
     usesScope: compound.usesScope,
     usesCache: compound.usesCache,
     cost: compound.cost,
+  };
+}
+
+function keepCompoundArms(list: SelectorList): SelectorList {
+  const arms: ComplexSelector[] = [];
+  let cost = 0;
+  let usesScope = false;
+  let usesCache = false;
+
+  for (let i = 0; i < list.arms.length; i++) {
+    const arm = list.arms[i];
+
+    if (arm.parts.length !== 1) continue;
+
+    arms.push(arm);
+    cost += arm.cost;
+    usesScope = usesScope || arm.usesScope;
+    usesCache = usesCache || arm.usesCache;
+  }
+
+  return {
+    arms,
+    cost,
+    usesScope,
+    usesCache,
   };
 }

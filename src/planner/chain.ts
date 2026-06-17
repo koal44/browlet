@@ -2,7 +2,7 @@ import { collectCompoundTests } from '../compile/emit-seedable';
 import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type {
-  CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, HostSelector, RelativeSelectorList, SelectorList,
+  CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, HostContextSelector, HostSelector, RelativeSelectorList, SelectorList,
 } from '../parser/parser';
 import { assertNever } from '../utils/util';
 
@@ -63,14 +63,15 @@ function normalizeChainCombinator(
   const leftCompound = left.compound;
   const rightCompound = right.compound;
 
-  // A host compound cannot be the real/right candidate side of a relation.
-  if (rightCompound.host) return CHAIN_NEVER;
+  // A host-boundary compound cannot be the real/right candidate side of a relation.
+  if (rightCompound.host || rightCompound.hostContext) return CHAIN_NEVER;
 
-  const leftHost = leftCompound.host;
-  if (!leftHost) return combinator;
+  const hasHostBoundary = leftCompound.host || leftCompound.hostContext;
+  if (!hasHostBoundary) return combinator;
 
-  // :host only works as a bare virtual boundary.
-  // :host.foo, .foo:host, :host[attr], etc. are parse-valid but unprovable.
+  // Host-boundary pseudos only work as a bare virtual boundary.
+  // :host.foo, .foo:host-context(...), :host-context(...)[attr], etc.
+  // are parse-valid but unprovable as real elements.
   if (
     leftCompound.id ||
     leftCompound.tag ||
@@ -80,16 +81,15 @@ function normalizeChainCombinator(
     return CHAIN_NEVER;
   }
 
-  // :host is only meaningful as the left side of the first real relation.
+  // The host boundary is only meaningful as the left side of the first real relation.
   if (i !== 1) return CHAIN_NEVER;
 
   if (combinator === ' ') return CHAIN_HOST_DESCENDANT;
   if (combinator === '>') return CHAIN_HOST_CHILD;
 
-  // Sibling combinators from :host are meaningless.
+  // Sibling combinators from a virtual host boundary are meaningless.
   return CHAIN_NEVER;
 }
-
 export function buildStrictSelectorListTest(list: SelectorList, snap: Snapshot): CandidatePredicate {
   const proof = buildSelectorListProof(list, snap);
   return (candidate, rc) => proof(candidate, null, rc);
@@ -128,7 +128,7 @@ function buildStepTest(rel: ChainRelation, snap: Snapshot): CandidatePredicate {
 }
 
 export function buildCompoundTest(compound: CompoundSelector, snap: Snapshot): CandidatePredicate {
-  if (compound.host) return () => false;
+  if (compound.host || compound.hostContext) return () => false;
   const tests = collectCompoundTests(compound);
 
   const n = tests.length;
@@ -364,24 +364,40 @@ function buildPrevAnyProof(prev: ProofFn): ProofFn {
 }
 
 function buildHostAncestorProof(rel: ChainRelation, snap: Snapshot): ProofFn {
-  const host = rel.left.compound.host!;
-  const hostTest = buildHostArgTest(host, snap);
+  const boundaryTest = buildHostBoundaryTest(rel.left.compound, snap);
 
   return function proof(candidate, _frontier, rc) {
     const root = candidateShadowRoot(candidate);
-    return root !== null && hostTest(root.host, rc);
+    return root !== null && boundaryTest(root.host, rc);
   };
 }
 
 function buildHostParentProof(rel: ChainRelation, snap: Snapshot): ProofFn {
-  const host = rel.left.compound.host!;
-  const hostTest = buildHostArgTest(host, snap);
+  const boundaryTest = buildHostBoundaryTest(rel.left.compound, snap);
 
   return function proof(candidate, _frontier, rc) {
     const root = candidateShadowRoot(candidate);
     return root !== null &&
       candidate.parentNode === root &&
-      hostTest(root.host, rc);
+      boundaryTest(root.host, rc);
+  };
+}
+
+type HostBoundaryPredicate = (host: Element, rc: RuntimeCache | null) => boolean;
+
+function buildHostBoundaryTest(compound: CompoundSelector, snap: Snapshot): HostBoundaryPredicate {
+  const hostTest = compound.host
+    ? buildHostArgTest(compound.host, snap)
+    : null;
+
+  const hostContextTest = compound.hostContext
+    ? buildHostContextArgTest(compound.hostContext, snap)
+    : null;
+
+  return function hostBoundaryTest(host, rc) {
+    if (hostTest && !hostTest(host, rc)) return false;
+    if (hostContextTest && !hostContextTest(host, rc)) return false;
+    return true;
   };
 }
 
@@ -389,6 +405,18 @@ function buildHostArgTest(host: HostSelector, snap: Snapshot): CandidatePredicat
   return host.arg
     ? buildCompoundTest(host.arg, snap)
     : () => true;
+}
+
+function buildHostContextArgTest(hostContext: HostContextSelector, snap: Snapshot): HostBoundaryPredicate {
+  const test = buildCompoundTest(hostContext.arg, snap);
+
+  return function hostContextArgTest(host, rc) {
+    for (let e: Element | null = host; e; e = e.parentElement) {
+      if (test(e, rc)) return true;
+    }
+
+    return false;
+  };
 }
 
 function asShadowRoot(root: Node): ShadowRoot | null {

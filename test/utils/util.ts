@@ -112,6 +112,10 @@ export function describeCompound(c: CompoundSelector): string {
     out += c.host.arg ? `:host(${describeCompound(c.host.arg)})` : ':host';
   }
 
+  if (c.hostContext) {
+    out += `:host-context(${describeCompound(c.hostContext.arg)})`;
+  }
+
   for (let i = 0; i < c.tests.length; i++) {
     out += describeCandidateTest(c.tests[i]);
   }
@@ -183,10 +187,6 @@ function describeCandidateTest(test: CandidateTest): string {
   if (test.debug?.kind === 'where') return `:where(${describeList(test.debug.list)})`;
   if (test.debug?.kind === 'not') return `:not(${describeList(test.debug.list)})`;
   if (test.debug?.kind === 'has') return `:has(${describeRelativeList(test.debug.list)})`;
-
-  if (test.debug?.kind === 'host') {
-    return test.debug.arg ? `:host(${describeCompound(test.debug.arg)})` : ':host';
-  }
 
   if (test.debug?.kind === 'parts') {
     return `::part(${test.debug.parts.join(' ')})`;
