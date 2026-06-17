@@ -104,5 +104,42 @@ runScenarios('pseudo-elements', 'normal', [
     ],
   },
 
+  {
+    name: '::part() DOM selector API behavior',
+    // status: 'only',
+    markup: `<div id="host"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <div id="inner" part="foo bar">
+            <span id="child" part="child"></span>
+          </div>
+        `;
+      });
+    },
+    cases: [
+      // Chromium/WebKit/selectlet treat ::part() as a pseudo-element, not a real Element result.
+      { select: '::part(foo)', browsers: ['chromium', 'webkit'], engines: ['native', 'selectlet'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+      { match: '::part(foo)', browsers: ['chromium', 'webkit'], engines: ['native', 'selectlet'], ref: { by: 'id', id: 'inner', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: [] } },
+
+      // Firefox native currently exposes bare ::part(foo) inside the shadow tree as the part-bearing element.
+      { select: '::part(foo)', browsers: ['firefox'], engines: ['native'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+      { match: '::part(foo)', browsers: ['firefox'], engines: ['native'], ref: { by: 'id', id: 'inner', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['inner'] } },
+
+      // A host-originating ::part() selector still does not match the host itself.
+      { match: '#host::part(foo)', ref: { by: 'id', id: 'host' }, expect: { ids: [] } },
+
+      // The part attribute itself is ordinary selector machinery inside the shadow tree.
+      { select: '[part~="foo"]', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+      { match: '[part~="foo"]', ref: { by: 'id', id: 'inner', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['inner'] } },
+
+      // ::part() remains pseudo-element-only even for multiple names;
+      // [part] is the real element-facing selector path.
+      { select: '::part(foo bar)', browsers: ['chromium', 'webkit'], engines: ['native', 'selectlet'], ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+      { select: '[part~="foo"][part~="bar"]', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inner'] } },
+    ],
+  },
+
 ]);
 
