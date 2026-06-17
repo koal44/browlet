@@ -2,16 +2,27 @@ import { collectCompoundTests } from '../compile/emit-seedable';
 import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type {
-  CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, RelativeSelectorList, SelectorList,
+  CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, HostSelector, RelativeSelectorList, SelectorList,
 } from '../parser/parser';
+import { assertNever } from '../utils/util';
 
 export type Chain = ChainRelation[];
 
 export type ChainRelation = {
-  combinator: Combinator | null;
+  combinator: ChainCombinator | null;
   left: ComplexPart;
   right: ComplexPart;
 };
+
+const CHAIN_NEVER = 0;
+const CHAIN_HOST_DESCENDANT = 1;
+const CHAIN_HOST_CHILD = 2;
+
+type ChainCombinator =
+  | Combinator
+  | typeof CHAIN_NEVER
+  | typeof CHAIN_HOST_DESCENDANT
+  | typeof CHAIN_HOST_CHILD;
 
 export function buildChain(complex: ComplexSelector): Chain {
   const { parts } = complex;
@@ -34,13 +45,49 @@ export function buildChain(complex: ComplexSelector): Chain {
     }
 
     chain[i] = {
-      combinator,
+      combinator: normalizeChainCombinator(i, combinator, parts[i - 1], parts[i]),
       left: parts[i - 1],
       right: parts[i],
     };
   }
 
   return chain;
+}
+
+function normalizeChainCombinator(
+  i: number,
+  combinator: Combinator,
+  left: ComplexPart,
+  right: ComplexPart,
+): ChainCombinator {
+  const leftCompound = left.compound;
+  const rightCompound = right.compound;
+
+  // A host compound cannot be the real/right candidate side of a relation.
+  if (rightCompound.host) return CHAIN_NEVER;
+
+  const leftHost = leftCompound.host;
+  if (!leftHost) return combinator;
+
+  // :host only works as a bare virtual boundary.
+  // :host.foo, .foo:host, :host[attr], etc. are parse-valid but unprovable.
+  if (
+    leftCompound.id ||
+    leftCompound.tag ||
+    leftCompound.classes?.length ||
+    leftCompound.tests.length !== 0
+  ) {
+    return CHAIN_NEVER;
+  }
+
+  // :host is only meaningful as the left side of the first real relation.
+  if (i !== 1) return CHAIN_NEVER;
+
+  if (combinator === ' ') return CHAIN_HOST_DESCENDANT;
+  if (combinator === '>') return CHAIN_HOST_CHILD;
+
+  // Sibling combinators from :host are meaningless.
+  return CHAIN_NEVER;
 }
 
 export function buildStrictSelectorListTest(list: SelectorList, snap: Snapshot): CandidatePredicate {
@@ -81,6 +128,7 @@ function buildStepTest(rel: ChainRelation, snap: Snapshot): CandidatePredicate {
 }
 
 export function buildCompoundTest(compound: CompoundSelector, snap: Snapshot): CandidatePredicate {
+  if (compound.host) return () => false;
   const tests = collectCompoundTests(compound);
 
   const n = tests.length;
@@ -135,7 +183,7 @@ export function buildProof(chain: Chain, from: number, to: number, snap: Snapsho
   for (let i = start + 1; i <= to; i++) {
     const step = buildStepTest(chain[i], snap);
     const prev = proof;
-    const connect = extendProof(chain[i], prev);
+    const connect = extendProof(chain[i], prev, snap);
 
     proof = function proof(candidate, frontier, rc) {
       return step(candidate, rc) && connect(candidate, frontier, rc);
@@ -195,29 +243,62 @@ export function buildSelectorListProof(list: SelectorList, snap: Snapshot): Proo
 
 function buildConnectionToFrontier(rel: ChainRelation): ProofFn {
   switch (rel.combinator) {
-    case ' ':
-      return function proof(candidate, frontier) {
-        return matchAncestorInFrontier(candidate, frontier);
-      };
+    case ' ': return buildAncestorInFrontierProof();
+    case '>': return buildParentInFrontierProof();
+    case '+': return buildPrevInFrontierProof();
+    case '~': return buildPrevAnyInFrontierProof();
+    case CHAIN_NEVER: return buildNeverProof();
 
-    case '>':
-      return function proof(candidate, frontier) {
-        return matchParentInFrontier(candidate, frontier);
-      };
+    case null:
+      throw new Error('Cannot connect chain start relation to frontier.');
 
-    case '+':
-      return function proof(candidate, frontier) {
-        return matchPrevInFrontier(candidate, frontier);
-      };
-
-    case '~':
-      return function proof(candidate, frontier) {
-        return matchPrevAnyInFrontier(candidate, frontier);
-      };
+    case CHAIN_HOST_DESCENDANT:
+    case CHAIN_HOST_CHILD:
+      throw new Error(`Host boundary combinator cannot connect to frontier: ${String(rel.combinator)}`);
 
     default:
-      throw new Error(`Invalid frontier connection combinator: ${String(rel.combinator)}`);
+      return assertNever(rel.combinator);
   }
+}
+
+function buildNeverProof(): ProofFn {
+  return function proof() {
+    return false;
+  };
+}
+
+function buildAncestorInFrontierProof(): ProofFn {
+  return function proof(candidate, frontier) {
+    for (let p = candidate.parentElement; p; p = p.parentElement) {
+      if (inFrontier(p, frontier)) return true;
+    }
+
+    return false;
+  };
+}
+
+function buildParentInFrontierProof(): ProofFn {
+  return function proof(candidate, frontier) {
+    const p = candidate.parentElement;
+    return p !== null && inFrontier(p, frontier);
+  };
+}
+
+function buildPrevInFrontierProof(): ProofFn {
+  return function proof(candidate, frontier) {
+    const p = candidate.previousElementSibling;
+    return p !== null && inFrontier(p, frontier);
+  };
+}
+
+function buildPrevAnyInFrontierProof(): ProofFn {
+  return function proof(candidate, frontier) {
+    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+      if (inFrontier(p, frontier)) return true;
+    }
+
+    return false;
+  };
 }
 
 function inFrontier(e: Element, frontier: Element[] | null): boolean {
@@ -230,83 +311,94 @@ function inFrontier(e: Element, frontier: Element[] | null): boolean {
   return false;
 }
 
-function matchAncestorInFrontier(e: Element, frontier: Element[] | null): boolean {
-  for (let p = e.parentElement; p; p = p.parentElement) {
-    if (inFrontier(p, frontier)) return true;
-  }
-
-  return false;
-}
-
-function matchParentInFrontier(e: Element, frontier: Element[] | null): boolean {
-  const p = e.parentElement;
-  return p !== null && inFrontier(p, frontier);
-}
-
-function matchPrevInFrontier(e: Element, frontier: Element[] | null): boolean {
-  const p = e.previousElementSibling;
-  return p !== null && inFrontier(p, frontier);
-}
-
-function matchPrevAnyInFrontier(e: Element, frontier: Element[] | null): boolean {
-  for (let p = e.previousElementSibling; p; p = p.previousElementSibling) {
-    if (inFrontier(p, frontier)) return true;
-  }
-
-  return false;
-}
-
-function extendProof(rel: ChainRelation, prev: ProofFn): ProofFn {
+function extendProof(rel: ChainRelation, prev: ProofFn, snap: Snapshot): ProofFn {
   switch (rel.combinator) {
-    case ' ':
-      return function proof(candidate, frontier, rc) {
-        return matchAncestorBy(candidate, prev, frontier, rc);
-      };
+    case ' ': return buildAncestorProof(prev);
+    case '>': return buildParentProof(prev);
+    case '+': return buildPrevProof(prev);
+    case '~': return buildPrevAnyProof(prev);
+    case CHAIN_HOST_DESCENDANT: return buildHostAncestorProof(rel, snap);
+    case CHAIN_HOST_CHILD: return buildHostParentProof(rel, snap);
+    case CHAIN_NEVER: return buildNeverProof();
 
-    case '>':
-      return function proof(candidate, frontier, rc) {
-        return matchParentBy(candidate, prev, frontier, rc);
-      };
-
-    case '+':
-      return function proof(candidate, frontier, rc) {
-        return matchPrevBy(candidate, prev, frontier, rc);
-      };
-
-    case '~':
-      return function proof(candidate, frontier, rc) {
-        return matchPrevAnyBy(candidate, prev, frontier, rc);
-      };
+    case null:
+      throw new Error('Cannot extend proof from chain start relation.');
 
     default:
-      throw new Error(`Invalid proof extension combinator: ${String(rel.combinator)}`);
+      return assertNever(rel.combinator);
   }
 }
 
-function matchAncestorBy(e: Element, proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): boolean {
-  for (let p = e.parentElement; p; p = p.parentElement) {
-    if (proof(p, frontier, rc)) return true;
-  }
+function buildAncestorProof(prev: ProofFn): ProofFn {
+  return function proof(candidate, frontier, rc) {
+    for (let p = candidate.parentElement; p; p = p.parentElement) {
+      if (prev(p, frontier, rc)) return true;
+    }
 
-  return false;
+    return false;
+  };
 }
 
-function matchParentBy(e: Element, proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): boolean {
-  const p = e.parentElement;
-  return p !== null && proof(p, frontier, rc);
+function buildParentProof(prev: ProofFn): ProofFn {
+  return function proof(candidate, frontier, rc) {
+    const p = candidate.parentElement;
+    return p !== null && prev(p, frontier, rc);
+  };
 }
 
-function matchPrevBy(e: Element, proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): boolean {
-  const p = e.previousElementSibling;
-  return p !== null && proof(p, frontier, rc);
+function buildPrevProof(prev: ProofFn): ProofFn {
+  return function proof(candidate, frontier, rc) {
+    const p = candidate.previousElementSibling;
+    return p !== null && prev(p, frontier, rc);
+  };
 }
 
-function matchPrevAnyBy(e: Element, proof: ProofFn, frontier: Element[] | null, rc: RuntimeCache | null): boolean {
-  for (let p = e.previousElementSibling; p; p = p.previousElementSibling) {
-    if (proof(p, frontier, rc)) return true;
-  }
+function buildPrevAnyProof(prev: ProofFn): ProofFn {
+  return function proof(candidate, frontier, rc) {
+    for (let p = candidate.previousElementSibling; p; p = p.previousElementSibling) {
+      if (prev(p, frontier, rc)) return true;
+    }
 
-  return false;
+    return false;
+  };
+}
+
+function buildHostAncestorProof(rel: ChainRelation, snap: Snapshot): ProofFn {
+  const host = rel.left.compound.host!;
+  const hostTest = buildHostArgTest(host, snap);
+
+  return function proof(candidate, _frontier, rc) {
+    const root = candidateShadowRoot(candidate);
+    return root !== null && hostTest(root.host, rc);
+  };
+}
+
+function buildHostParentProof(rel: ChainRelation, snap: Snapshot): ProofFn {
+  const host = rel.left.compound.host!;
+  const hostTest = buildHostArgTest(host, snap);
+
+  return function proof(candidate, _frontier, rc) {
+    const root = candidateShadowRoot(candidate);
+    return root !== null &&
+      candidate.parentNode === root &&
+      hostTest(root.host, rc);
+  };
+}
+
+function buildHostArgTest(host: HostSelector, snap: Snapshot): CandidatePredicate {
+  return host.arg
+    ? buildCompoundTest(host.arg, snap)
+    : () => true;
+}
+
+function asShadowRoot(root: Node): ShadowRoot | null {
+  return root.nodeType === 11 && 'host' in root
+    ? root as ShadowRoot
+    : null;
+}
+
+function candidateShadowRoot(candidate: Element): ShadowRoot | null {
+  return asShadowRoot(candidate.getRootNode());
 }
 
 // -------------- ADVANCE MOVES -----------------
@@ -337,7 +429,9 @@ export function buildAdvanceMove(chain: Chain, from: number, snap: Snapshot): Ad
     throw new Error(`Missing combinator at chain relation ${to} in frontier advance move`);
   }
 
-  if (combinator === ' ') return null;
+  if (combinator !== '>' && combinator !== '+' && combinator !== '~') {
+    return null;
+  }
 
   const test = buildStepTest(rel, snap);
   const run = buildAdvanceFn(combinator, test);

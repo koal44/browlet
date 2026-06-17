@@ -108,6 +108,10 @@ export function describeCompound(c: CompoundSelector): string {
     }
   }
 
+  if (c.host) {
+    out += c.host.arg ? `:host(${describeCompound(c.host.arg)})` : ':host';
+  }
+
   for (let i = 0; i < c.tests.length; i++) {
     out += describeCandidateTest(c.tests[i]);
   }
@@ -124,7 +128,13 @@ function describeRelativeArm(arm: RelativeComplexSelector): string {
 
   for (let i = 0; i < arm.steps.length; i++) {
     const step = arm.steps[i];
-    out += describeRelativeStep(step);
+
+    if (i === 0 && step.combinator === ' ') {
+      out += describeRelativeCompound(step.compound);
+    } else {
+      out += describeRelativeStep(step);
+    }
+
     if (i !== arm.steps.length - 1) out += ' ';
   }
 

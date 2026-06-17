@@ -1,4 +1,4 @@
-import type { CandidateTest, CompoundSelector, TagSelector } from '../parser/parser';
+import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from '../parser/parser';
 import { cssIdentUnescape } from './css';
 import { isDocument, isDocumentFragment, isElement } from './dom';
 
@@ -7,6 +7,22 @@ export type QueryContextDescription = {
   summary: string;
   preview?: string;
 };
+
+export function describeComplex(complex: ComplexSelector): string {
+  let out = '';
+
+  for (let i = 0; i < complex.parts.length; i++) {
+    const part = complex.parts[i];
+
+    if (i > 0) {
+      out += part.combinator === ' ' ? ' ' : ` ${part.combinator} `;
+    }
+
+    out += describeCompound(part.compound);
+  }
+
+  return out;
+}
 
 export function describeCompound(compound: CompoundSelector): string {
   let out = '';
@@ -23,6 +39,10 @@ export function describeCompound(compound: CompoundSelector): string {
     for (let i = 0; i < compound.classes.length; i++) {
       out += `.${cssIdentUnescape(compound.classes[i].raw)}`;
     }
+  }
+
+  if (compound.host) {
+    out += compound.host.arg ? `:host(${describeCompound(compound.host.arg)})` : ':host';
   }
 
   for (let i = 0; i < compound.tests.length; i++) {

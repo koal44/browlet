@@ -2,13 +2,13 @@ import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
 import { precedesByDocPosition } from '../utils/collections';
-import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
+import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeToEndMove, resetFrontierDebug,
   runAdvanceMove, runBridgeMove, runFirstAdvanceMove, runFirstBridgeMove,
   type FrontierProgram, type FrontierState,
 } from '../planner/frontier';
-import { describeElement } from '../utils/debug';
+import { describeComplex, describeElement } from '../utils/debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_VIEW } from '../constants';
 
@@ -55,7 +55,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
     const result = runFrontierFirstProgram(program, ctx, rc, best, snap);
 
     if (snap.isDebug) {
-      updateDebugRun(snap, armIndex, program, result);
+      updateDebugRun(snap, armIndex, complex, program, result);
     }
 
     return result;
@@ -132,12 +132,14 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
 function updateDebugRun(
   snap: Snapshot,
   armIndex: number,
+  arm: ComplexSelector,
   program: FrontierProgram,
   result: Element | null,
 ): void {
   snap.debugFirst?.run.push({
     engine: 'frontier',
     armIndex,
+    arm: describeComplex(arm),
     program: describeFrontierProgram(program),
     result: result ? describeElement(result) : null,
   });
@@ -153,6 +155,7 @@ function updateDebugBuild(
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
     armIndex,
+    arm: describeComplex(arm),
   });
 
   snap.debugCompile = undefined;

@@ -1,7 +1,7 @@
 import type { LookupMode } from '../constants';
 import type { SelectletCaps } from '../selectlet';
 import { iterableToArray } from '../utils/collections';
-import { isDocument, isElement, isNamedItemAnElement } from '../utils/dom';
+import { isDocument, isDocumentFragment, isElement, isNamedItemAnElement } from '../utils/dom';
 
 export type SeedIdFn = (id: string, context: QueryContext, lookupMode: LookupMode) => Element[];
 
@@ -13,7 +13,7 @@ export function buildSeedsById(caps: SelectletCaps | undefined, snap: Snapshot):
 
   return (id, context, _mode) => {
     return isDocument(context) ? seedsByIdInDocument(id, context, snap, docCap)
-      : isElement(context) ? seedsByIdInElement(id, context, snap, docCap)
+      : isElement(context) ? seedsByIdInElement(id, context, snap, docCap, fragCap)
       : seedsByIdInFragment(id, context, snap, fragCap);
   };
 }
@@ -27,25 +27,34 @@ function seedsByIdInDocument(id: string, context: Document, snap: Snapshot, cap:
   return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
 }
 
-function seedsByIdInElement(id: string, context: Element, snap: Snapshot, docCap: IdsCap<Document>): Element[] {
-  if (context.isConnected) {
+function seedsByIdInElement(id: string, context: Element, snap: Snapshot, docCap: IdsCap<Document>, fragCap: IdsCap<DocumentFragment>): Element[] {
+  const root = context.getRootNode();
+
+  if (isDocument(root)) {
     if (docCap) {
-      const nodes: Element[] = [];
-      let j = 0;
-
-      for (const e of docCap(context.ownerDocument, id)) {
-        if (e !== context && context.contains(e)) {
-          nodes[j++] = e;
-        }
-      }
-
-      return nodes;
+      return containedIdCandidates(docCap(root, id), context);
     }
 
     if (snap.hasDocumentAll) return seedsById_All(id, context);
     if (snap.config.MUTATE_IDS) return seedsById_MutateInEl(id, context);
+
+    return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
   }
 
+  if (isDocumentFragment(root)) {
+    if (fragCap) {
+      return containedIdCandidates(fragCap(root, id), context);
+    }
+
+    if (snap.config.MUTATE_IDS) {
+      return containedIdCandidates(seedsById_MutateInDoc(id, root), context);
+    }
+
+    // No fragment cache/mutate fast path available. Walk only the element subtree, not the whole fragment.
+    return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
+  }
+
+  // Detached element/root weirdness. Local traversal is the only safe thing.
   return snap.hasTreeWalker ? seedsById_TreeWalk(id, context) : seedsById_Walk(id, context);
 }
 
@@ -57,8 +66,8 @@ function seedsByIdInFragment(id: string, context: DocumentFragment, snap: Snapsh
 }
 
 function seedsById_All(id: string, context: Document | Element): Element[] {
-  // document.all only sees connected document-tree elements.
-  // Detached elements, fragments, and template contents need local traversal.
+  // document.all is only a document-root fast path.
+  // Element callers must already have been routed through a Document root.
 
   const isDoc = isDocument(context);
 
@@ -111,7 +120,7 @@ function seedsById_MutateInDoc(id: string, context: Document | DocumentFragment)
 
 function seedsById_MutateInEl(id: string, context: Element): Element[] {
   if (!context.isConnected) {
-    throw new Error('byId_MutateInEl cannot be used on a disconnected element');
+    throw new Error('byId_MutateInEl should only be called for element contexts whose root is the owner document');
   }
 
   const doc = context.ownerDocument;
@@ -203,4 +212,17 @@ export function sameId(e: Element, id: string): boolean {
   // return isHtmlForm(e) ? e.getAttribute('id') === id : e.id === id;  // compromise
   const v = e.id;
   return typeof v === 'string' ? v === id : e.getAttribute('id') === id; // best compromise
+}
+
+function containedIdCandidates(candidates: Iterable<Element>, context: Element): Element[] {
+  const nodes: Element[] = [];
+  let j = 0;
+
+  for (const e of candidates) {
+    if (e !== context && context.contains(e)) {
+      nodes[j++] = e;
+    }
+  }
+
+  return nodes;
 }

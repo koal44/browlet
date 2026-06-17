@@ -1099,8 +1099,3 @@ export function isMuted(e: Element, _snap: Snapshot): boolean {
   const media = getMediaElement(e);
   return !!media && media.muted;
 }
-
-export function isHost(_e: Element, _snap: Snapshot): boolean {
-  return false;
-  // not yet implemented
-}

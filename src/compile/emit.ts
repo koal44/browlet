@@ -9,10 +9,10 @@ import {
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
   isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, isValid, matchAttribute,
   matchDir, matchLang, nthElement, nthOfType,
-  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType, isHost,
+  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType,
   isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
 } from './runtime';
-import { buildForgivingSelectorListTest, buildStrictSelectorListTest, buildCompoundTest, buildRelativeSelectorListTest  } from '../planner/chain';
+import { buildForgivingSelectorListTest, buildStrictSelectorListTest, buildRelativeSelectorListTest  } from '../planner/chain';
 
 const TRUE_PREDICATE: CandidatePredicate = () => true;
 const FALSE_PREDICATE: CandidatePredicate = () => false;
@@ -112,25 +112,6 @@ export function emitScopePseudoTest(): CandidateTest {
 // :root
 export function emitRootPseudoTest(): CandidateTest {
   return { build: (s) => (e) => isRoot(e, s), unique: true, cost: 1, debug: { kind: 'pseudo', name: 'root' } };
-}
-
-// :host
-export function emitHostPseudoTest(): CandidateTest {
-  return { build: (s) => (e) => isHost(e, s), cost: 2, debug: { kind: 'pseudo', name: 'host' } };
-}
-
-// :host(<compound-selector>)
-export function emitHostWithArgPseudoTest(arg: CompoundSelector): CandidateTest {
-  return {
-    usesScope: arg.usesScope,
-    usesCache: arg.usesCache,
-    cost: arg.cost + 2,
-    build: (s) => {
-      const test = buildCompoundTest(arg, s);
-      return (e, rc) => isHost(e, s) && test(e, rc);
-    },
-    debug: { kind: 'host', arg },
-  };
 }
 
 // :empty

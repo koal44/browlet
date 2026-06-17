@@ -3,7 +3,7 @@ import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
 import { mergeDocumentOrderLists } from '../utils/collections';
 import { describeElements } from '../utils/debug';
-import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
+import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_COPY } from '../constants';

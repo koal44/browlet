@@ -2,6 +2,7 @@ import { type CandidatePredicate, parseSelectorList, type SelectorList } from '.
 import { describeContext, type QueryContextDescription } from '../utils/debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
+import { liftHostSelectorList } from '../planner/lift-host';
 
 export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
   snap.probe.match++;
@@ -25,10 +26,10 @@ export function queryMatches(selectors: string, element: Element, snap: Snapshot
   return result;
 }
 
-export function matchStrict(selectors: string, element: Element, snap: Snapshot, rc: RuntimeCache | null): boolean {
-  const resolver = getStrictMatchResolver(selectors, snap);
-  return resolver.match(element, rc);
-}
+// export function matchStrict(selectors: string, element: Element, snap: Snapshot, rc: RuntimeCache | null): boolean {
+//   const resolver = getStrictMatchResolver(selectors, snap);
+//   return resolver.match(element, rc);
+// }
 
 export type MatchResolver = {
   match: CandidatePredicate;
@@ -41,12 +42,13 @@ export function getStrictMatchResolver(selectors: string, snap: Snapshot): Match
 
   if (!resolver) {
     const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
+    const lifted = liftHostSelectorList(parsed);
 
     if (snap.isDebug && snap.debugMatch) {
-      updateDebugParse(snap, parsed);
+      updateDebugParse(snap, lifted);
     }
 
-    resolver = buildStrictMatchResolver(parsed, snap);
+    resolver = buildStrictMatchResolver(lifted, snap);
     snap.strictMatchResolvers.set(selectors, resolver);
     snap.cacheSize++;
   }

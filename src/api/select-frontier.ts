@@ -2,11 +2,11 @@ import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
 import { mergeDocumentOrderLists } from '../utils/collections';
-import { expandSelectorListForSeeding } from '../planner/pseudo-lift';
+import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeMove, resetFrontierDebug, runAdvanceMove, runBridgeMove, type FrontierProgram, type FrontierState,
 } from '../planner/frontier';
-import { describeElements } from '../utils/debug';
+import { describeComplex, describeElements } from '../utils/debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_COPY } from '../constants';
 
@@ -56,7 +56,7 @@ function buildArmFn(complex: ComplexSelector, armIndex: number, snap: Snapshot):
     const results = runFrontierProgram(program, ctx, rc, snap);
 
     if (snap.isDebug) {
-      updateDebugRun(snap, armIndex, program, results);
+      updateDebugRun(snap, armIndex, complex, program, results);
     }
 
     return results;
@@ -122,12 +122,14 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
 function updateDebugRun(
   snap: Snapshot,
   armIndex: number,
+  arm: ComplexSelector,
   program: FrontierProgram,
   results: Element[],
 ): void {
   snap.debugSelect?.run.push({
     engine: 'frontier',
     armIndex,
+    arm: describeComplex(arm),
     program: describeFrontierProgram(program),
     results: describeElements(results),
   });
@@ -143,6 +145,7 @@ function updateDebugBuild(
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
     armIndex,
+    arm: describeComplex(arm),
   });
 
   snap.debugCompile = undefined;

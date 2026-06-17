@@ -25,11 +25,6 @@ export type MultiBridgeMove = {
 
 export type LookupFn = (root: QueryContext, mode: LookupMode) => Iterable<Element>;
 
-// export type ElementSource = {
-//   length: number;
-//   [index: number]: Element;
-// };
-
 export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Snapshot): BridgeMove {
   const compound = chain[to].right.compound;
   const lookup = buildLookupPlan(compound, snap);

@@ -1,7 +1,7 @@
 import type { LookupMode } from '../constants';
 import type { SelectletCaps } from '../selectlet';
 import { concatCollection, htmlCollectionSource } from '../utils/collections';
-import { isDocument, isElement } from '../utils/dom';
+import { isDocument, isDocumentFragment, isElement } from '../utils/dom';
 
 export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;
 type ClassCap<R> = (root: R, classes: readonly string[]) => Iterable<Element>;
@@ -12,7 +12,7 @@ export function buildSeedsByClass(caps: SelectletCaps | undefined, snap: Snapsho
 
   return (classes, context, mode) =>
     isDocument(context) ? seedsByClassInDocument(classes, context, mode, docCap, snap)
-    : isElement(context) ? seedsByClassInElement(classes, context, mode, docCap, snap)
+    : isElement(context) ? seedsByClassInElement(classes, context, mode, docCap, fragCap, snap)
     : seedsByClassInFragmentRoot(classes, context, fragCap, snap);
 }
 
@@ -23,18 +23,17 @@ function seedsByClassInDocument(classes: string[], doc: Document, lookupMode: Lo
     : htmlCollectionSource(doc.getElementsByClassName(classes.join(' ')), lookupMode, snap);
 }
 
-function seedsByClassInElement(classes: string[], el: Element, lookupMode: LookupMode, docCap: ClassCap<Document> | undefined, snap: Snapshot): Iterable<Element> {
+function seedsByClassInElement(classes: string[], el: Element, lookupMode: LookupMode, docCap: ClassCap<Document> | undefined, fragCap: ClassCap<DocumentFragment> | undefined, snap: Snapshot): Iterable<Element> {
   if (classes.length === 0) return [];
 
-  if (el.isConnected && docCap) {
-    const nodes: Element[] = [];
-    let j = 0;
+  const root = el.getRootNode();
 
-    for (const e of docCap(el.ownerDocument, classes)) {
-      if (e !== el && el.contains(e)) nodes[j++] = e;
-    }
+  if (docCap && isDocument(root)) {
+    return containedClassCandidates(docCap(root, classes), el);
+  }
 
-    return nodes;
+  if (fragCap && isDocumentFragment(root)) {
+    return containedClassCandidates(fragCap(root, classes), el);
   }
 
   return htmlCollectionSource(el.getElementsByClassName(classes.join(' ')), lookupMode, snap);
@@ -80,6 +79,19 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
 
     if (matched) nodes.push(el);
     concatCollection(nodes, el.getElementsByClassName(query));
+  }
+
+  return nodes;
+}
+
+function containedClassCandidates(candidates: Iterable<Element>, context: Element): Element[] {
+  const nodes: Element[] = [];
+  let j = 0;
+
+  for (const e of candidates) {
+    if (e !== context && context.contains(e)) {
+      nodes[j++] = e;
+    }
   }
 
   return nodes;

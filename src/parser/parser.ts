@@ -6,7 +6,7 @@ import {
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
   emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest,
   emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest,
-  emitHasPseudoTest, emitHostPseudoTest, emitHostWithArgPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
+  emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
   emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest,
   emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest,
   emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
@@ -58,6 +58,7 @@ export type CompoundSelector = {
   id?: IdSelector;
   classes?: ClassSelector[];
   tag?: TagSelector;
+  host?: HostSelector;
   usesScope: boolean;
   usesCache: boolean;
   cost: number;
@@ -85,6 +86,11 @@ export type TagSelector = {
   localRaw: string;
   cost: number;
   seed?: boolean;
+};
+
+export type HostSelector = {
+  arg?: CompoundSelector;
+  cost: number;
 };
 
 export type CandidateTest = {
@@ -299,7 +305,16 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   }
 
   if (ch === ':') {
-    const pseudoTest = parsePseudoTestSource(c, ctx);
+    const name = parsePseudoIdent(c);
+
+    if (name === 'host') {
+      const host = parseHostSelector(c, ctx);
+      compound.host = host;
+      compound.cost += host.cost;
+      return;
+    }
+
+    const pseudoTest = parsePseudoTestSource(c, ctx, name);
     if (pseudoTest.usesScope) compound.usesScope = true;
     if (pseudoTest.usesCache) compound.usesCache = true;
     compound.tests.push(pseudoTest);
@@ -410,6 +425,20 @@ export type AttributeSelector = {
   flag?: 'i' | 's';
 };
 
+function parseHostSelector(c: Cursor, ctx: ParseContext): HostSelector {
+  if (c.peek() !== '(') {
+    return { cost: 1 };
+  }
+
+  const x = { ...ctx, forbidEls: true, inHost: true };
+  const arg = parseCompoundPseudoArg(c, x, ':host()');
+
+  return {
+    arg,
+    cost: 1 + arg.cost,
+  };
+}
+
 type AttrOperator = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
 export function parseAttributeSelector(c: Cursor): AttributeSelector {
@@ -509,13 +538,19 @@ function parseAttributeFlag(c: Cursor): 'i' | 's' {
   c.error(`Invalid attribute selector flag ${JSON.stringify(raw)}`);
 }
 
-function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
+function parsePseudoIdent(c: Cursor): string {
   c.expect(':');
 
   const isElement = c.match(':');
   const rawName = consumeIdent(c);
   const lowerName = rawName.toLowerCase();
-  const name = isElement ? `:${lowerName}` : lowerName;
+
+  return isElement ? `:${lowerName}` : lowerName;
+}
+
+function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): CandidateTest {
+  const isElement = name.startsWith(':');
+  const lowerName = isElement ? name.slice(1) : name;
 
   if (isElement && ctx.forbidEls) {
     c.error(`Pseudo-element ::${lowerName} is not allowed here`);
@@ -526,11 +561,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext): CandidateTest {
     case 'scope': return emitScopePseudoTest();
     case 'root': return emitRootPseudoTest();
     case 'host': {
-      if (c.peek() === '(') {
-        const x = { ...ctx, forbidEls: true, inHost: true };
-        return emitHostWithArgPseudoTest(parseCompoundPseudoArg(c, x, ':host()'));
-      }
-      return emitHostPseudoTest();
+      return c.error('Internal parser error: :host should be parsed as a structural host selector');
     }
     case 'empty': return emitEmptyPseudoTest();
     case 'first-child': return emitFirstChildPseudoTest();

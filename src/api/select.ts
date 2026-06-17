@@ -5,6 +5,7 @@ import { isElement } from '../utils/dom';
 import { buildFullBridgeSelect } from './select-fullbridge';
 import { buildFrontierSelect } from './select-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
+import { liftHostSelectorList } from '../planner/lift-host';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;
@@ -15,7 +16,8 @@ export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Ele
   let resolver = snap.selectResolvers.get(sel);
   if (!resolver) {
     const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    resolver = buildSelectResolver(parsed, snap);
+    const lifted = liftHostSelectorList(parsed);
+    resolver = buildSelectResolver(lifted, snap);
     snap.selectResolvers.set(sel, resolver);
     snap.cacheSize++;
   }
@@ -111,6 +113,7 @@ export type DebugSelectBuild = {
 
   // frontier-only
   armIndex?: number;
+  arm?: string;
 };
 
 export type DebugSelectRun = {
@@ -124,6 +127,7 @@ export type DebugSelectRun = {
 
   // frontier-only
   armIndex?: number;
+  arm?: string;
   program?: DebugFrontierProgram;
 
   results: string[];

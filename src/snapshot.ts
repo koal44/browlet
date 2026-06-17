@@ -2,21 +2,12 @@ import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
 import { buildSeedsByClass, type SeedClassFn } from './seeds/seedsByClass';
 import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
-import {
-  hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
-  isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,
-  isPlaceholderShown, isPlaying, isReadWrite, isRequired, isSeeking, checkTag, isValid, matchAttribute,
-  matchDir, matchLang, nthElement, nthOfType, checkId, checkClass,
-  isScope, isRoot, isEmpty, isFirstChild, isLastChild, isOnlyChild, isFirstOfType, isHost,
-  isLastOfType, isOnlyOfType, matchesNthIndex, isAnyLink, isTarget, isHovered, isActive, isFocusWithin,
-  matchPrevAny, matchPrev, matchParent, matchAncestor,
-} from './compile/runtime';
 import type {
   CustomPseudoPredicate, ElementList, HtmlCollectionArray, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
 } from './selectlet';
 import { escapeRegExp } from './utils/css';
-import { isDocument, isElement, isFormStateElement, isHtmlDoc, isQuirksMode } from './utils/dom';
-import { matchStrict, queryMatches, type DebugMatch, type MatchResolver } from './api/match';
+import { isDocument, isElement, isHtmlDoc, isQuirksMode } from './utils/dom';
+import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './utils/debug';
 import { toNodeList } from './utils/collections';
@@ -288,80 +279,79 @@ export class Snapshot {
     return this.getNamespaceURI(e) === 'http://www.w3.org/1999/xhtml';
   }
 
-  // full selector match
-  matchStrict(selector: string, element: Element, rc: RuntimeCache | null = null) {
-    return matchStrict(selector, element, this, rc);
-  }
+  // // full selector match
+  // matchStrict(selector: string, element: Element, rc: RuntimeCache | null = null) {
+  //   return matchStrict(selector, element, this, rc);
+  // }
 
-  // combinators
-  matchPrevAny = matchPrevAny;
-  matchPrev = matchPrev;
-  matchParent = matchParent;
-  matchAncestor = matchAncestor;
+  // // combinators
+  // matchPrevAny = matchPrevAny;
+  // matchPrev = matchPrev;
+  // matchParent = matchParent;
+  // matchAncestor = matchAncestor;
 
-  // basic element tests
-  checkId(e: Element, id: string) { return checkId(e, id, this); }
-  checkClass(e: Element, cls: string) { return checkClass(e, cls, this); }
-  checkTag(e: Element, lowerTag: string, tag: string) { return checkTag(e, lowerTag, tag, this); }
-  isScope(e: Element) { return isScope(e, this); }
-  isRoot(e: Element) { return isRoot(e, this); }
-  isHost(e: Element) { return isHost(e, this); }
-  isEmpty = isEmpty;
+  // // basic element tests
+  // checkId(e: Element, id: string) { return checkId(e, id, this); }
+  // checkClass(e: Element, cls: string) { return checkClass(e, cls, this); }
+  // checkTag(e: Element, lowerTag: string, tag: string) { return checkTag(e, lowerTag, tag, this); }
+  // isScope(e: Element) { return isScope(e, this); }
+  // isRoot(e: Element) { return isRoot(e, this); }
+  // isEmpty = isEmpty;
 
-  // attributes
-  hasAttr(e: Element, anyNs: boolean, local: string, htmlLocal: string | null, hasColon: boolean): boolean {
-    return hasAttr(e, anyNs, local, htmlLocal, hasColon, this);
-  }
-  matchAttribute(e: Element, anyNs: boolean, name: string, htmlName: string | null, hasColonName: boolean,
-    pattern: string, expected: string, htmlExpected: string, sensitivity: number) {
-    return matchAttribute(e, anyNs, name, htmlName, hasColonName, pattern, expected, htmlExpected, sensitivity, this);
-  }
+  // // attributes
+  // hasAttr(e: Element, anyNs: boolean, local: string, htmlLocal: string | null, hasColon: boolean): boolean {
+  //   return hasAttr(e, anyNs, local, htmlLocal, hasColon, this);
+  // }
+  // matchAttribute(e: Element, anyNs: boolean, name: string, htmlName: string | null, hasColonName: boolean,
+  //   pattern: string, expected: string, htmlExpected: string, sensitivity: number) {
+  //   return matchAttribute(e, anyNs, name, htmlName, hasColonName, pattern, expected, htmlExpected, sensitivity, this);
+  // }
 
-  // structural position
-  isFirstChild = isFirstChild;
-  isLastChild = isLastChild;
-  isOnlyChild = isOnlyChild;
-  isFirstOfType(e: Element) { return isFirstOfType(e, this); }
-  isLastOfType(e: Element) { return isLastOfType(e, this); }
-  isOnlyOfType(e: Element) { return isOnlyOfType(e, this); }
-  matchesNthIndex = matchesNthIndex;
-  nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null) { return nthOfType(element, fromLast, rc, this); }
-  nthElement = nthElement;
-  isNthElement = isNthElement;
-  isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null) { return isNthOfType(element, index, fromLast, rc, this); }
+  // // structural position
+  // isFirstChild = isFirstChild;
+  // isLastChild = isLastChild;
+  // isOnlyChild = isOnlyChild;
+  // isFirstOfType(e: Element) { return isFirstOfType(e, this); }
+  // isLastOfType(e: Element) { return isLastOfType(e, this); }
+  // isOnlyOfType(e: Element) { return isOnlyOfType(e, this); }
+  // matchesNthIndex = matchesNthIndex;
+  // nthOfType(element: Element, fromLast: boolean, rc: RuntimeCache | null) { return nthOfType(element, fromLast, rc, this); }
+  // nthElement = nthElement;
+  // isNthElement = isNthElement;
+  // isNthOfType(element: Element, index: number, fromLast: boolean, rc: RuntimeCache | null) { return isNthOfType(element, index, fromLast, rc, this); }
 
-  // relational / language / link-state
-  matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }
-  matchLang(wanted: string, element: Element) { return matchLang(wanted, element, this); }
-  isAnyLink(e: Element) { return isAnyLink(e, this); }
-  isTarget(e: Element) { return isTarget(e, this); }
-  defined(element: Element) { return isDefined(element, this); }
+  // // relational / language / link-state
+  // matchDir(wanted: string, element: Element) { return matchDir(wanted, element, this); }
+  // matchLang(wanted: string, element: Element) { return matchLang(wanted, element, this); }
+  // isAnyLink(e: Element) { return isAnyLink(e, this); }
+  // isTarget(e: Element) { return isTarget(e, this); }
+  // defined(element: Element) { return isDefined(element, this); }
 
-  // dynamic state
-  isHovered(e: Element) { return isHovered(e, this); }
-  isActive(e: Element) { return isActive(e, this); }
-  isFocusWithin(e: Element) { return isFocusWithin(e, this); }
-  isFocused(e: Element) { return isFocused(e, this); }
+  // // dynamic state
+  // isHovered(e: Element) { return isHovered(e, this); }
+  // isActive(e: Element) { return isActive(e, this); }
+  // isFocusWithin(e: Element) { return isFocusWithin(e, this); }
+  // isFocused(e: Element) { return isFocused(e, this); }
 
-  // form / validity / media state
-  isDisabled(e: Element) { return isDisabled(e, this); }
-  isEnabled(e: Element) { return isEnabled(e, this); }
-  isReadWrite(e: Element) { return isReadWrite(e, this); }
-  isFormStateElement = isFormStateElement;
-  isPlaceholderShown(e: Element) { return isPlaceholderShown(e, this); }
-  isDefault(e: Element) { return isDefault(e, this); }
-  isChecked = isChecked;
-  isIndeterminate(e: Element) { return isIndeterminate(e, this); }
-  isRequired(e: Element) { return isRequired(e, this); }
-  isOptional(e: Element) { return isOptional(e, this); }
-  isValid = isValid;
-  isInvalid = isInvalid;
-  isInRange(e: Element) { return isInRange(e, this); }
-  isOutOfRange(e: Element) { return isOutOfRange(e, this); }
-  isPlaying = isPlaying;
-  isPaused = isPaused;
-  isSeeking = isSeeking;
-  isMuted = isMuted;
+  // // form / validity / media state
+  // isDisabled(e: Element) { return isDisabled(e, this); }
+  // isEnabled(e: Element) { return isEnabled(e, this); }
+  // isReadWrite(e: Element) { return isReadWrite(e, this); }
+  // isFormStateElement = isFormStateElement;
+  // isPlaceholderShown(e: Element) { return isPlaceholderShown(e, this); }
+  // isDefault(e: Element) { return isDefault(e, this); }
+  // isChecked = isChecked;
+  // isIndeterminate(e: Element) { return isIndeterminate(e, this); }
+  // isRequired(e: Element) { return isRequired(e, this); }
+  // isOptional(e: Element) { return isOptional(e, this); }
+  // isValid = isValid;
+  // isInvalid = isInvalid;
+  // isInRange(e: Element) { return isInRange(e, this); }
+  // isOutOfRange(e: Element) { return isOutOfRange(e, this); }
+  // isPlaying = isPlaying;
+  // isPaused = isPaused;
+  // isSeeking = isSeeking;
+  // isMuted = isMuted;
 
   // debugging
   isDebug = false;
