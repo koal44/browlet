@@ -471,7 +471,14 @@ export function emitSlottedPseudoElementTest(arg: CompoundSelector): CandidateTe
 
 // :state() pseudo-class
 export function emitStatePseudoTest(raw: string): CandidateTest {
-  return { build: () => FALSE_PREDICATE, cost: 0, debug: { kind: 'pseudo', name: `state(${raw})` } };
+  const stateName = cssIdentUnescape(raw);
+  return {
+    cost: 1,
+    build: (s) => {
+      return (e) => s.hasCustomState(e, stateName);
+    },
+    debug: { kind: 'pseudo', name: `state(${raw})` },
+  };
 }
 
 // registered pseudo-class

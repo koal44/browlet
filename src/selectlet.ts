@@ -96,6 +96,8 @@ export type ElementCaps<E extends Element> = {
   getAttributeNS?: (el: E, namespace: string | null, localName: string) => string | null;
   hasAttribute?: (el: E, name: string) => boolean;
   hasAttributeNS?: (el: E, namespace: string | null, localName: string) => boolean;
+
+  hasCustomState?: (el: E, name: string) => boolean;
 };
 
 export type TreeCaps<N extends QueryContext = QueryContext> = {

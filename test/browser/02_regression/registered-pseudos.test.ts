@@ -50,7 +50,6 @@ runScenarios('registered-pseudos', 'normal', [
     ],
   },
 
-
   {
     name: 'registered pseudos can emulate jquery element filters',
     // status: 'only',
