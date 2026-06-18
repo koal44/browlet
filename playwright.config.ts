@@ -11,6 +11,11 @@ export default defineConfig({
       workers: 8,
     },
     {
+      name: 'style',
+      testDir: 'test/style',
+      workers: 8,
+    },
+    {
       name: 'perf',
       testDir: 'test/perf',
       workers: 1,

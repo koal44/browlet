@@ -63,6 +63,10 @@
     "test:browser": "npm run build && npm run test:browser:run",
     "test:browser:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=browser",
 
+    "test:style:run": "cross-env HARNESS_MODE=normal playwright test --project=style",
+    "test:style": "npm run build && npm run test:style:run",
+    "test:style:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=style",
+
     "test:perf": "npm run build && playwright test --project=perf --workers=1",
     "test:jsdom:perf": "vitest run --project=jsdom-perf",
 
@@ -77,7 +81,7 @@
     "test:jsdom:dsonly": "cross-env HARNESS=jsdom ENGINE=dom-selector ONLY=only vitest run --project=jsdom",
 
     "test:quick": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run test:jsdom:sv",
-    "test:all": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run vendor && npm run install:jsdom:run && npm run test:jsdom:sx && npm run test:jsdom:sv && npm run test:browser:run"
+    "test:all": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run vendor && npm run install:jsdom:run && npm run test:jsdom:sx && npm run test:jsdom:sv && npm run test:browser:run && npm run test:style:run"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

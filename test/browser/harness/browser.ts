@@ -4,7 +4,7 @@ import type { Engine, EquivalentCase, ContextRef, ContextHome, SelectletId } fro
 
 export type PwHelpers = {
   resolveContext(doc: Document, ref?: ContextRef): QueryContext | null;
-  runQuery(query: () => Element[]): QueryResult;
+  runQuery(query: () => QueryOutput): QueryResult;
   compareQueryResults(a: NamedQueryResult, b: NamedQueryResult): string | undefined;
   toEngineResult(res: QueryResult): EngineResult;
   getResults(queryFn: EngineQuery, query: string, ctx: QueryContext | null, ctxErrorMsg?: string): EngineAndQueryResult;
@@ -26,14 +26,18 @@ export type EngineResult = {
   count: number;
   ids: string[];
   classes: string[];
+  value: string;
   threw: boolean;
   error: string;
 };
 
-export type EngineQuery = (query: string, ctx: QueryContext) => () => Element[];
+export type QueryOutput = Element[] | NodeListOf<Element> | string;
+export type EngineQuery = (query: string, ctx: QueryContext) => () => QueryOutput;
 export type EngineAndQueryResult = { queryResult: QueryResult; engineResult: EngineResult; };
 export type NamedQueryResult = { name: string; result: QueryResult; };
-export type QueryResult = { elements: Element[]; error: string; };
+export type QueryResult = ElementResult | ValueResult;
+export type ElementResult = { kind: 'elements'; elements: Element[]; error: string; };
+export type ValueResult = { kind: 'value'; value: string; error: string; };
 
 export function installBrowserHelpers(): void {
   const HARNESS_NODE_ID = 'data-harness-node-id';
@@ -78,13 +82,17 @@ export function installBrowserHelpers(): void {
     return json.replace(/"/g, "'").replace(/\s+/g, ' ');
   }
 
-  function runQuery(query: () => Element[] | NodeListOf<Element>) {
+  function runQuery(query: () => QueryOutput): QueryResult {
     try {
+      const out = query();
+      if (typeof out === 'string') {
+        return { kind: 'value', value: out, error: '' };
+      }
       const id: SelectletId = 'selectlet-bootstrap';
-      const els = [...query()].filter((el) => el.getAttribute('id') !== id);
-      return { elements: els, error: '' };
+      const els = [...out].filter((el) => el.getAttribute('id') !== id);
+      return { kind: 'elements', elements: els, error: '' };
     } catch (e) {
-      return { elements: [], error: e instanceof Error ? e.message : String(e) };
+      return { kind: 'elements', elements: [], error: e instanceof Error ? e.message : String(e) };
     }
   }
 
@@ -104,6 +112,22 @@ export function installBrowserHelpers(): void {
       return a.result.error
         ? `Throw mismatch:\n  ${a.name} threw while ${b.name} did not.\n  error: ${a.result.error}`
         : `Throw mismatch:\n  ${b.name} threw while ${a.name} did not.\n  error: ${b.result.error}`;
+    }
+
+    if (a.result.kind === 'value' && b.result.kind === 'value') {
+      return a.result.value === b.result.value
+        ? undefined
+        : `Value mismatch:\n` +
+          `  ${a.name} = ${JSON.stringify(a.result.value)}\n` +
+          `  ${b.name} = ${JSON.stringify(b.result.value)}`;
+    }
+
+    if (a.result.kind !== 'elements' || b.result.kind !== 'elements') {
+      throw new Error(
+        `Invalid comparison between different result kinds:\n` +
+        `  ${a.name} kind: ${a.result.kind}\n` +
+        `  ${b.name} kind: ${b.result.kind}`
+      );
     }
 
     const aElems = a.result.elements;
@@ -192,10 +216,19 @@ export function installBrowserHelpers(): void {
   }
 
   function toEngineResult(res: QueryResult): EngineResult {
+    if (res.kind === 'value') {
+      return {
+        count: 0, ids: [], classes: [],
+        value: res.value,
+        threw: !!res.error,
+        error: res.error,
+      };
+    }
     return {
       count: res.elements.length,
       ids: res.elements.map((el) => el.getAttribute('id') ?? ''),
       classes: res.elements.map((el) => el.getAttribute('class') ?? ''),
+      value: '',
       threw: !!res.error,
       error: res.error,
     };
@@ -204,7 +237,7 @@ export function installBrowserHelpers(): void {
   function getResults(queryFn: EngineQuery, query: string, ctx: QueryContext | null, ctxErrorMsg?: string): EngineAndQueryResult {
     const queryResult: QueryResult = ctx
       ? runQuery(queryFn(query, ctx))
-      : { elements: [], error: ctxErrorMsg ?? 'No context provided' };
+      : { kind: 'elements', elements: [], error: ctxErrorMsg ?? 'No context provided' };
 
     const engineResult = toEngineResult(queryResult);
     return { queryResult, engineResult };
@@ -219,12 +252,13 @@ export function installBrowserHelpers(): void {
     if (!sxlt) throw new Error('selectlet is not available');
 
     switch (true) {
-      case 'select' in c:
+      case 'select' in c: {
         if (ng === 'native') return (query, ctx) => () => [...ctx.querySelectorAll(query)];
         if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.select(query, ctx));
         break;
+      }
 
-      case 'first' in c:
+      case 'first' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             const el = ctx.querySelector(query);
@@ -238,8 +272,9 @@ export function installBrowserHelpers(): void {
           };
         }
         break;
+      }
 
-      case 'byTag' in c:
+      case 'byTag' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
@@ -248,8 +283,9 @@ export function installBrowserHelpers(): void {
         }
         if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byTag(query, ctx));
         break;
+      }
 
-      case 'byTagNs' in c:
+      case 'byTagNs' in c: {
         if (ng === 'native') {
           return (_query, ctx) => () => {
             const { ns, local } = c.byTagNs;
@@ -264,8 +300,9 @@ export function installBrowserHelpers(): void {
           };
         }
         break;
+      }
 
-      case 'byClass' in c:
+      case 'byClass' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             const base = isDocFrag(ctx) ? fragmentAsElementContext(ctx) : ctx;
@@ -274,8 +311,9 @@ export function installBrowserHelpers(): void {
         }
         if (ng === 'selectlet') return (query, ctx) => () => toArr(sxlt.byClass(query, ctx));
         break;
+      }
 
-      case 'byId' in c:
+      case 'byId' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             const found = queryId(ctx, query);
@@ -289,8 +327,9 @@ export function installBrowserHelpers(): void {
           };
         }
         break;
+      }
 
-      case 'match' in c:
+      case 'match' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'match' case must be an Element`);
@@ -306,8 +345,9 @@ export function installBrowserHelpers(): void {
           };
         }
         break;
+      }
 
-      case 'closest' in c:
+      case 'closest' in c: {
         if (ng === 'native') {
           return (query, ctx) => () => {
             if (!isElement(ctx)) throw new Error(`Context for 'closest' case must be an Element`);
@@ -325,6 +365,19 @@ export function installBrowserHelpers(): void {
           };
         }
         break;
+      }
+
+      case 'computedStyle' in c: {
+        if (ng === 'native') {
+          return (query, ctx) => () => {
+            if (!isElement(ctx)) {
+              throw new Error(`Context for 'computedStyle' case must be an Element`);
+            }
+            return getComputedStyle(ctx).getPropertyValue(query).trim();
+          };
+        }
+        throw new Error(`computedStyle cases do not support engine ${ng}`);
+      }
 
       default:
         assertNever(c);
@@ -365,6 +418,7 @@ export function installBrowserHelpers(): void {
       case 'byId' in c: return c.byId;
       case 'match' in c: return c.match;
       case 'closest' in c: return c.closest;
+      case 'computedStyle' in c: return c.computedStyle;
       default: assertNever(c);
     }
   }
@@ -410,6 +464,11 @@ export function installBrowserHelpers(): void {
         return engine === 'native'
           ? `closest(${c.closest})`
           : `sxlt.closest(${c.closest})`;
+
+      case 'computedStyle' in c:
+        return engine === 'native'
+          ? `getComputedStyle(...).getPropertyValue(${c.computedStyle})`
+          : `sxlt.computedStyle(..., ${c.computedStyle})`;
 
       default:
         assertNever(c);

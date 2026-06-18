@@ -19,6 +19,7 @@ export type FirstCase =   { first: string;   ref?: ContextRef; } & CaseBase;
 export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
 export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
 export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
+export type ComputedStyleCase = { computedStyle: string; ref: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -28,7 +29,10 @@ type CaseBase = {
   debug?: boolean;
 };
 
-export type TestCase = SelectCase | ByIdCase | ByTagCase | ByClassCase | MatchCase | FirstCase | ClosestCase | ByTagNsCase;
+export type TestCase =
+  | SelectCase | MatchCase | FirstCase | ClosestCase
+  | ByIdCase | ByTagCase | ByClassCase | ByTagNsCase
+  | ComputedStyleCase;
 
 export type Scenario = {
   name: string;
@@ -63,6 +67,7 @@ export type Expectation = {
   excludesClasses?: string[];
   throws?: boolean;
   equivalentCase?: EquivalentCase;
+  value?: string;
 };
 
 export type EquivalentCase = DistributiveOmit<TestCase, 'expect' | 'status' | 'browsers' | 'engines'>;
@@ -466,6 +471,7 @@ function runEngineChecks(
           case 'classes': return sameIds(r.classes, other.classes);
           case 'threw':   return r.threw === other.threw;
           case 'error':   return true; // errors can differ even if threw is the same, so ignore them for grouping purposes
+          case 'value':   return r.value === other.value;
           default:        return assertNever(key);
         }
       })
@@ -548,6 +554,13 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
         expect(classTokens, `${errLabel}\n\n${header}${ngLabel}`).not.toContain(cls);
       });
     }
+  }
+
+  if (expectation.value !== undefined) {
+    runEngineChecks(result, msg, 'value', (r, ngLabel) => {
+      const errLabel = `Expected value ${JSON.stringify(expectation.value)}, got ${JSON.stringify(r.value)}.`;
+      expect(r.value, `${errLabel}\n\n${header}${ngLabel}`).toEqual(expectation.value);
+    });
   }
 
   expect(!!result.mismatchMsg, `Expected engine agreement, but they differed.\n\n${header}${msg}`).toBe(false);
