@@ -182,11 +182,11 @@ runScenarios('w3c iframes', 'normal', [
               style.textContent = s + ' { visibility:hidden }';
               assert_equals(style.sheet?.cssRules.length, 1, testName, 'valid rule didn\'t parse into CSSOM');
               assert_equals(global.getComputedStyle(elm).visibility, 'hidden', testName, 'valid selector didn\'t match');
-            };
+            }
             {
               const testName = s + ' with querySelector in ' + global.mode;
               assert_equals(global.document.querySelector(s), elm, testName, 'valid selector');
-            };
+            }
           });
           invalid.forEach(function(s) {
             {
@@ -195,13 +195,13 @@ runScenarios('w3c iframes', 'normal', [
               style.textContent = s + ' { visibility:hidden }';
               assert_equals(style.sheet?.cssRules.length, 0, testName, 'invalid rule parsed into CSSOM');
               assert_equals(global.getComputedStyle(elm).visibility, 'visible', testName, 'invalid selector matched');
-            };
+            }
             {
               const testName = s + ' with querySelector in ' + global.mode;
               assert_throws('SyntaxError', function() {
                 global.document.querySelector(s);
               }, testName, 'invalid selector');
-            };
+            }
           });
         });
 

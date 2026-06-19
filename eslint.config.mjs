@@ -94,6 +94,7 @@ export default tseslint.config(
       }],
       '@stylistic/space-infix-ops': ['warn', { int32Hint: false }],
       '@stylistic/no-trailing-spaces': 'warn',
+      '@stylistic/no-extra-semi': 'warn',
       '@stylistic/indent': ['warn', 2, {
         SwitchCase: 1,
         flatTernaryExpressions: true,

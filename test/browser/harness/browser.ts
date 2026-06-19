@@ -806,4 +806,4 @@ export function installBrowserHelpers(): void {
     stringify,
     isRehomed,
   };
-};
+}
