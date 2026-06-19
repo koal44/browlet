@@ -20,6 +20,7 @@ export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
 export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
 export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
 export type ComputedStyleCase = { computedStyle: string; ref: ContextRef; } & CaseBase;
+export type CssomCase = { cssom: CssomRead; ref?: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -29,10 +30,16 @@ type CaseBase = {
   debug?: boolean;
 };
 
+export type CssomRead =
+  | { kind: 'rules'; sheet?: number; }
+  | { kind: 'rule'; sheet?: number; rule: number; }
+  | { kind: 'declarations'; sheet?: number; rule: number; }
+  | { kind: 'declaration'; sheet?: number; rule?: number; name: string; };
+
 export type TestCase =
   | SelectCase | MatchCase | FirstCase | ClosestCase
   | ByIdCase | ByTagCase | ByClassCase | ByTagNsCase
-  | ComputedStyleCase;
+  | ComputedStyleCase | CssomCase;
 
 export type Scenario = {
   name: string;
@@ -68,6 +75,7 @@ export type Expectation = {
   throws?: boolean;
   equivalentCase?: EquivalentCase;
   value?: string;
+  cssom?: unknown[] | Record<string, unknown>;
 };
 
 export type EquivalentCase = DistributiveOmit<TestCase, 'expect' | 'status' | 'browsers' | 'engines'>;
@@ -462,6 +470,9 @@ function runEngineChecks(
   const sameIds = (a: string[], b: string[]): boolean =>
     a.length === b.length && a.every((x, i) => x === b[i]);
 
+  const sameJson = (a: unknown, b: unknown): boolean =>
+    JSON.stringify(a) === JSON.stringify(b);
+
   for (const [, r] of entries) {
     const enginesWithSameOutcome = entries
       .filter(([, other]) => {
@@ -472,6 +483,7 @@ function runEngineChecks(
           case 'threw':   return r.threw === other.threw;
           case 'error':   return true; // errors can differ even if threw is the same, so ignore them for grouping purposes
           case 'value':   return r.value === other.value;
+          case 'cssom': return sameJson(r.cssom, other.cssom);
           default:        return assertNever(key);
         }
       })
@@ -560,6 +572,19 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
     runEngineChecks(result, msg, 'value', (r, ngLabel) => {
       const errLabel = `Expected value ${JSON.stringify(expectation.value)}, got ${JSON.stringify(r.value)}.`;
       expect(r.value, `${errLabel}\n\n${header}${ngLabel}`).toEqual(expectation.value);
+    });
+  }
+
+  if (expectation.cssom !== undefined) {
+    runEngineChecks(result, msg, 'cssom', (r, ngLabel) => {
+      const errLabel =
+        `Expected CSSOM ${JSON.stringify(expectation.cssom)}, got ${JSON.stringify(r.cssom)}.`;
+
+      if (expectation.cssom === undefined) {
+        expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toBeUndefined();
+        return;
+      }
+      expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toMatchObject(expectation.cssom);
     });
   }
 

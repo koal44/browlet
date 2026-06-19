@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import type { ElementList } from '../../../src/selectlet';
-import type { Engine, EquivalentCase, ContextRef, ContextHome, SelectletId } from './scenarios';
+import type {
+  Engine, EquivalentCase, ContextRef, ContextHome, SelectletId, CssomRead,
+} from './scenarios';
 
 export type PwHelpers = {
   resolveContext(doc: Document, ref?: ContextRef): QueryContext | null;
@@ -27,17 +29,20 @@ export type EngineResult = {
   ids: string[];
   classes: string[];
   value: string;
+  cssom: unknown;
   threw: boolean;
   error: string;
 };
 
-export type QueryOutput = Element[] | NodeListOf<Element> | string;
+export type CssomOutput = { kind: 'cssom'; cssom: unknown; };
+export type QueryOutput = Element[] | NodeListOf<Element> | string | CssomOutput;
 export type EngineQuery = (query: string, ctx: QueryContext) => () => QueryOutput;
 export type EngineAndQueryResult = { queryResult: QueryResult; engineResult: EngineResult; };
 export type NamedQueryResult = { name: string; result: QueryResult; };
-export type QueryResult = ElementResult | ValueResult;
+export type QueryResult = ElementResult | ValueResult | CssomResult;
 export type ElementResult = { kind: 'elements'; elements: Element[]; error: string; };
 export type ValueResult = { kind: 'value'; value: string; error: string; };
+export type CssomResult = { kind: 'cssom'; cssom: unknown; error: string; };
 
 export function installBrowserHelpers(): void {
   const HARNESS_NODE_ID = 'data-harness-node-id';
@@ -72,6 +77,10 @@ export function installBrowserHelpers(): void {
     return 'home' in ref && !!ref.home && ref.home !== 'document';
   }
 
+  function isCssomOutput(x: unknown): x is CssomOutput {
+    return typeof x === 'object' && x !== null && 'kind' in x && x.kind === 'cssom';
+  }
+
   // Source - https://stackoverflow.com/a/65443215
   function stringify(obj: unknown): string {
     let json = JSON.stringify(obj, null, 2) as string | undefined;
@@ -87,6 +96,9 @@ export function installBrowserHelpers(): void {
       const out = query();
       if (typeof out === 'string') {
         return { kind: 'value', value: out, error: '' };
+      }
+      if (isCssomOutput(out)) {
+        return { kind: 'cssom', cssom: out.cssom, error: '' };
       }
       const id: SelectletId = 'selectlet-bootstrap';
       const els = [...out].filter((el) => el.getAttribute('id') !== id);
@@ -120,6 +132,17 @@ export function installBrowserHelpers(): void {
         : `Value mismatch:\n` +
           `  ${a.name} = ${JSON.stringify(a.result.value)}\n` +
           `  ${b.name} = ${JSON.stringify(b.result.value)}`;
+    }
+
+    if (a.result.kind === 'cssom' && b.result.kind === 'cssom') {
+      const aJson = JSON.stringify(a.result.cssom);
+      const bJson = JSON.stringify(b.result.cssom);
+
+      return aJson === bJson
+        ? undefined
+        : `CSSOM mismatch:\n` +
+          `  ${a.name} = ${aJson}\n` +
+          `  ${b.name} = ${bJson}`;
     }
 
     if (a.result.kind !== 'elements' || b.result.kind !== 'elements') {
@@ -220,6 +243,16 @@ export function installBrowserHelpers(): void {
       return {
         count: 0, ids: [], classes: [],
         value: res.value,
+        cssom: undefined,
+        threw: !!res.error,
+        error: res.error,
+      };
+    }
+    if (res.kind === 'cssom') {
+      return {
+        count: 0, ids: [], classes: [],
+        value: '',
+        cssom: res.cssom,
         threw: !!res.error,
         error: res.error,
       };
@@ -229,6 +262,7 @@ export function installBrowserHelpers(): void {
       ids: res.elements.map((el) => el.getAttribute('id') ?? ''),
       classes: res.elements.map((el) => el.getAttribute('class') ?? ''),
       value: '',
+      cssom: undefined,
       threw: !!res.error,
       error: res.error,
     };
@@ -246,6 +280,274 @@ export function installBrowserHelpers(): void {
   function toArr(list: ElementList): Element[] {
     return Array.isArray(list) ? list : [...list];
   }
+
+
+  type JsonRecord = Record<string, unknown>;
+  type InspectOptions = { skipEmptyStrings?: boolean; };
+
+  const DEFAULT_INSPECT_OPTIONS: InspectOptions = {
+    skipEmptyStrings: true,
+  };
+
+  function inspectObject(
+    value: unknown,
+    depth = 2,
+    options: InspectOptions = DEFAULT_INSPECT_OPTIONS,
+  ): unknown {
+    return inspectObjectInner(value, depth, options, new WeakSet<object>());
+  }
+
+  function inspectObjectInner(
+    value: unknown,
+    depth: number,
+    options: InspectOptions,
+    seen: WeakSet<object>,
+  ): unknown {
+    if (value === null || value === undefined) return null;
+
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean') return value;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+    if (t === 'function') return `[Function ${(value as Function).name || 'anonymous'}]`;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    if (t !== 'object') return String(value);
+
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+
+    // Special CSSOM containers get inspected even near the depth boundary
+    if (isCssStyleDeclaration(value)) {
+      return inspectStyleDeclaration(value, depth, options, seen);
+    }
+
+    if (isCssRuleList(value)) {
+      return Array.from(value).map((rule) =>
+        inspectObjectInner(rule, depth - 1, options, seen)
+      );
+    }
+
+    if (depth < 0) {
+      return `[${value.constructor?.name ?? 'Object'}]`;
+    }
+
+    return inspectHostObject(value, depth, options, seen);
+  }
+
+  function inspectHostObject(
+    obj: object,
+    depth: number,
+    options: InspectOptions,
+    seen: WeakSet<object>,
+  ): JsonRecord {
+    const out: JsonRecord = {
+      $type: obj.constructor?.name ?? 'Object',
+    };
+
+    const names = new Set<string>();
+
+    for (
+      let proto: object | null = obj;
+      proto && proto !== Object.prototype;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      proto = Object.getPrototypeOf(proto)
+    ) {
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        if (name === 'constructor') continue;
+        names.add(name);
+      }
+    }
+
+    for (const name of names) {
+      try {
+        const v = (obj as Record<string, unknown>)[name];
+
+        if (typeof v === 'function') continue;
+        if (v === undefined) continue;
+        if (options.skipEmptyStrings && v === '') continue;
+
+        out[name] = inspectObjectInner(v, depth - 1, options, seen);
+      } catch (err) {
+        out[name] = `[Throws: ${err instanceof Error ? err.message : String(err)}]`;
+      }
+    }
+
+    return out;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  function hasFn<K extends string>(x: object, key: K): x is object & Record<K, Function> {
+    return key in x && typeof (x as Record<K, unknown>)[key] === 'function';
+  }
+
+  function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
+    return typeof x === 'object'
+      && x !== null
+      && 'length' in x
+      && 'cssText' in x
+      && hasFn(x, 'item')
+      && hasFn(x, 'getPropertyValue')
+      && hasFn(x, 'getPropertyPriority');
+  }
+
+  function isCssRuleList(x: unknown): x is CSSRuleList {
+    return typeof x === 'object'
+      && x !== null
+      && 'length' in x
+      && hasFn(x, 'item')
+      && !hasFn(x, 'getPropertyValue');
+  }
+
+  function inspectStyleDeclaration(
+    style: CSSStyleDeclaration,
+    depth: number,
+    options: InspectOptions,
+    seen: WeakSet<object>,
+  ): JsonRecord {
+    const out = inspectHostObject(style, Math.max(depth, 0), options, seen);
+
+    out.kind = 'styleDeclaration';
+
+    const active = [];
+    for (let i = 0; i < style.length; i++) {
+      const name = style.item(i);
+      const priority = style.getPropertyPriority(name);
+
+      active.push({
+        kind: 'declaration',
+        index: i,
+        name,
+        value: style.getPropertyValue(name),
+        priority,
+        important: priority === 'important',
+      });
+    }
+
+    out.active = active;
+    out.length = style.length;
+    out.cssText = style.cssText;
+
+    return out;
+  }
+
+
+
+
+  function resolveCssomSheet(ctx: QueryContext, index = 0): CSSStyleSheet {
+    if (isDocument(ctx)) {
+      const sheet = ctx.styleSheets[index];
+      if (!sheet) throw new Error(`No stylesheet at index ${index}`);
+      return sheet;
+    }
+
+    if (isElement(ctx) && 'sheet' in ctx) {
+      const sheet = (ctx as HTMLStyleElement | HTMLLinkElement).sheet;
+      if (!sheet) throw new Error(`Referenced element has no stylesheet`);
+      return sheet;
+    }
+
+    throw new Error(`Context for 'cssom' case must be a Document or a stylesheet-owning Element`);
+  }
+
+  function getRule(sheet: CSSStyleSheet, index: number): CSSRule {
+    const rule = sheet.cssRules[index];
+    if (!rule) throw new Error(`No CSS rule at index ${index}`);
+    return rule;
+  }
+
+  function getStyleRule(sheet: CSSStyleSheet, index: number): CSSStyleRule {
+    const rule = getRule(sheet, index);
+    if (rule.type !== CSSRule.STYLE_RULE) {
+      throw new Error(`CSS rule at index ${index} is not a style rule`);
+    }
+
+    return rule as CSSStyleRule;
+  }
+
+  function getActiveDeclarations(style: CSSStyleDeclaration): JsonRecord[] {
+    const decls: JsonRecord[] = [];
+
+    for (let i = 0; i < style.length; i++) {
+      const name = style.item(i);
+      const priority = style.getPropertyPriority(name);
+
+      decls.push({
+        kind: 'declaration',
+        index: i,
+        name,
+        value: style.getPropertyValue(name),
+        priority,
+        important: priority === 'important',
+      });
+    }
+
+    return decls;
+  }
+
+  function readCssom(read: CssomRead, ctx: QueryContext): unknown {
+    const sheet = resolveCssomSheet(ctx, read.sheet ?? 0);
+
+    switch (read.kind) {
+      case 'rules':
+        return Array.from(sheet.cssRules).map((rule) => inspectObject(rule));
+
+      case 'rule':
+        return inspectObject(getRule(sheet, read.rule));
+
+      case 'declarations':
+        return inspectObject(getStyleRule(sheet, read.rule).style);
+
+      case 'declaration': {
+        const matches: JsonRecord[] = [];
+
+        if (read.rule !== undefined) {
+          const style = getStyleRule(sheet, read.rule).style;
+          matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+        } else {
+          for (let i = 0; i < sheet.cssRules.length; i++) {
+            const rule = sheet.cssRules[i];
+            if (rule.type !== CSSRule.STYLE_RULE) continue;
+
+            const style = (rule as CSSStyleRule).style;
+            matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+          }
+        }
+
+        if (matches.length === 0) {
+          throw new Error(`No CSS declaration named ${JSON.stringify(read.name)}`);
+        }
+
+        if (matches.length > 1) {
+          throw new Error(`Ambiguous CSS declaration ${JSON.stringify(read.name)} matched ${matches.length} declarations`);
+        }
+
+        return matches[0];
+      }
+
+      default:
+        return assertNever(read);
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   function getEngineQuery(c: EquivalentCase, ng: Engine): EngineQuery {
     const sxlt = selectlet;
@@ -379,6 +681,17 @@ export function installBrowserHelpers(): void {
         throw new Error(`computedStyle cases do not support engine ${ng}`);
       }
 
+      case 'cssom' in c: {
+        if (ng === 'native') {
+          return (_query, ctx) => () => ({
+            kind: 'cssom',
+            cssom: readCssom(c.cssom, ctx),
+          });
+        }
+
+        throw new Error(`cssom cases do not support engine ${ng}`);
+      }
+
       default:
         assertNever(c);
     }
@@ -419,6 +732,7 @@ export function installBrowserHelpers(): void {
       case 'match' in c: return c.match;
       case 'closest' in c: return c.closest;
       case 'computedStyle' in c: return c.computedStyle;
+      case 'cssom' in c: return `cssom:${stringify(c.cssom)}`;
       default: assertNever(c);
     }
   }
@@ -469,6 +783,11 @@ export function installBrowserHelpers(): void {
         return engine === 'native'
           ? `getComputedStyle(...).getPropertyValue(${c.computedStyle})`
           : `sxlt.computedStyle(..., ${c.computedStyle})`;
+
+      case 'cssom' in c:
+        return engine === 'native'
+          ? `cssom(${stringify(c.cssom)})`
+          : `sxlt.cssom(${stringify(c.cssom)})`;
 
       default:
         assertNever(c);

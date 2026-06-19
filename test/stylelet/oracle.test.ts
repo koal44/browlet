@@ -160,4 +160,256 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     ],
   },
 
+  {
+    name: 'cssom keeps valid declaration after malformed declaration',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { color red; margin-left: 3px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '3px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom expands background shorthand into longhand declarations',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { background: blue; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'background' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'background-color' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'background-color', value: 'blue', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom reads first document stylesheet when ref is omitted',
+    engines: ['native'],
+    markup: `
+      <style>
+        .foo { margin-left: 3px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        expect: {
+          cssom: { name: 'margin-left', value: '3px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom exposes declaration block inspection',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { margin-left: 3px; margin-right: 4px !important; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declarations', rule: 0 },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: {
+            // $type: 'CSSStyleDeclaration',
+            kind: 'styleDeclaration',
+            active: [
+              { name: 'margin-left', value: '3px', important: false },
+              { name: 'margin-right', value: '4px', important: true },
+            ],
+          },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom inspects nested media rules',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        @media screen {
+          .foo { margin-left: 3px; }
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'rules' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: [
+            {
+              $type: 'CSSMediaRule',
+              conditionText: 'screen',
+              cssRules: [
+                {
+                  $type: 'CSSStyleRule',
+                  selectorText: '.foo',
+                  style: {
+                    kind: 'styleDeclaration',
+                    active: [
+                      { name: 'margin-left', value: '3px', important: false },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom drops invalid selector list rule and keeps following rule',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo, { margin-left: 3px; }
+        .bar { margin-left: 4px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'rules' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: [
+            {
+              $type: 'CSSStyleRule',
+              selectorText: '.bar',
+              style: {
+                active: [
+                  { name: 'margin-left', value: '4px', important: false },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom keeps last normal duplicate declaration',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { margin-left: 1px; margin-left: 2px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '2px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom important duplicate beats later normal declaration',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { margin-left: 1px !important; margin-left: 2px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '1px', important: true },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom does not split declaration value on semicolon inside string',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { font-family: "x;y"; margin-left: 3px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'font-family' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'font-family', value: '"x;y"', important: false },
+        },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '3px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'cssom drops invalid selector list but keeps forgiving pseudo rules',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .list, :bogus { margin-top: 1px; }
+        :is(.is, :bogus) { margin-left: 2px; }
+        :where(.where, :bogus) { margin-right: 3px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-top' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '2px', important: false },
+        },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-right', value: '3px', important: false },
+        },
+      },
+    ],
+  },
+
 ]);
