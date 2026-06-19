@@ -8,6 +8,10 @@ if (typeof mod.createSelectlet !== "function") {
   throw new Error(`Expected createSelectlet export to be function, got ${typeof mod.createSelectlet}`);
 }
 
+if (typeof mod.createStylelet !== "function") {
+  throw new Error(`Expected createStylelet export to be function, got ${typeof mod.createStylelet}`);
+}
+
 if (!mod.DEFAULT_CONFIG || typeof mod.DEFAULT_CONFIG !== "object") {
   throw new Error(`Expected DEFAULT_CONFIG export to be object, got ${typeof mod.DEFAULT_CONFIG}`);
 }

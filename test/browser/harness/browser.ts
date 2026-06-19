@@ -81,6 +81,41 @@ export function installBrowserHelpers(): void {
     return typeof x === 'object' && x !== null && 'kind' in x && x.kind === 'cssom';
   }
 
+  function isHtmlElement(x: unknown): x is HTMLElement {
+    return isElement(x) && x.namespaceURI === 'http://www.w3.org/1999/xhtml';
+  }
+
+  function isHtmlLink(x: unknown): x is HTMLLinkElement {
+    return isHtmlElement(x) && x.localName === 'link';
+  }
+
+  function isHtmlStyle(x: unknown): x is HTMLStyleElement {
+    return isHtmlElement(x) && x.localName === 'style';
+  }
+
+  function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
+    return typeof x === 'object'
+      && x !== null
+      && 'length' in x
+      && 'cssText' in x
+      && hasFn(x, 'item')
+      && hasFn(x, 'getPropertyValue')
+      && hasFn(x, 'getPropertyPriority');
+  }
+
+  function isCssRuleList(x: unknown): x is CSSRuleList {
+    return typeof x === 'object'
+      && x !== null
+      && 'length' in x
+      && hasFn(x, 'item')
+      && !hasFn(x, 'getPropertyValue');
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  function hasFn<K extends string>(x: object, key: K): x is object & Record<K, Function> {
+    return key in x && typeof (x as Record<K, unknown>)[key] === 'function';
+  }
+
   // Source - https://stackoverflow.com/a/65443215
   function stringify(obj: unknown): string {
     let json = JSON.stringify(obj, null, 2) as string | undefined;
@@ -282,251 +317,6 @@ export function installBrowserHelpers(): void {
   }
 
 
-  type JsonRecord = Record<string, unknown>;
-  type InspectOptions = { skipEmptyStrings?: boolean; };
-
-  const DEFAULT_INSPECT_OPTIONS: InspectOptions = {
-    skipEmptyStrings: true,
-  };
-
-  function inspectObject(
-    value: unknown,
-    depth = 2,
-    options: InspectOptions = DEFAULT_INSPECT_OPTIONS,
-  ): unknown {
-    return inspectObjectInner(value, depth, options, new WeakSet<object>());
-  }
-
-  function inspectObjectInner(
-    value: unknown,
-    depth: number,
-    options: InspectOptions,
-    seen: WeakSet<object>,
-  ): unknown {
-    if (value === null || value === undefined) return null;
-
-    const t = typeof value;
-    if (t === 'string' || t === 'number' || t === 'boolean') return value;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-    if (t === 'function') return `[Function ${(value as Function).name || 'anonymous'}]`;
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string
-    if (t !== 'object') return String(value);
-
-    if (seen.has(value)) return '[Circular]';
-    seen.add(value);
-
-    // Special CSSOM containers get inspected even near the depth boundary
-    if (isCssStyleDeclaration(value)) {
-      return inspectStyleDeclaration(value, depth, options, seen);
-    }
-
-    if (isCssRuleList(value)) {
-      return Array.from(value).map((rule) =>
-        inspectObjectInner(rule, depth - 1, options, seen)
-      );
-    }
-
-    if (depth < 0) {
-      return `[${value.constructor?.name ?? 'Object'}]`;
-    }
-
-    return inspectHostObject(value, depth, options, seen);
-  }
-
-  function inspectHostObject(
-    obj: object,
-    depth: number,
-    options: InspectOptions,
-    seen: WeakSet<object>,
-  ): JsonRecord {
-    const out: JsonRecord = {
-      $type: obj.constructor?.name ?? 'Object',
-    };
-
-    const names = new Set<string>();
-
-    for (
-      let proto: object | null = obj;
-      proto && proto !== Object.prototype;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      proto = Object.getPrototypeOf(proto)
-    ) {
-      for (const name of Object.getOwnPropertyNames(proto)) {
-        if (name === 'constructor') continue;
-        names.add(name);
-      }
-    }
-
-    for (const name of names) {
-      try {
-        const v = (obj as Record<string, unknown>)[name];
-
-        if (typeof v === 'function') continue;
-        if (v === undefined) continue;
-        if (options.skipEmptyStrings && v === '') continue;
-
-        out[name] = inspectObjectInner(v, depth - 1, options, seen);
-      } catch (err) {
-        out[name] = `[Throws: ${err instanceof Error ? err.message : String(err)}]`;
-      }
-    }
-
-    return out;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  function hasFn<K extends string>(x: object, key: K): x is object & Record<K, Function> {
-    return key in x && typeof (x as Record<K, unknown>)[key] === 'function';
-  }
-
-  function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
-    return typeof x === 'object'
-      && x !== null
-      && 'length' in x
-      && 'cssText' in x
-      && hasFn(x, 'item')
-      && hasFn(x, 'getPropertyValue')
-      && hasFn(x, 'getPropertyPriority');
-  }
-
-  function isCssRuleList(x: unknown): x is CSSRuleList {
-    return typeof x === 'object'
-      && x !== null
-      && 'length' in x
-      && hasFn(x, 'item')
-      && !hasFn(x, 'getPropertyValue');
-  }
-
-  function inspectStyleDeclaration(
-    style: CSSStyleDeclaration,
-    depth: number,
-    options: InspectOptions,
-    seen: WeakSet<object>,
-  ): JsonRecord {
-    const out = inspectHostObject(style, Math.max(depth, 0), options, seen);
-
-    out.kind = 'styleDeclaration';
-
-    const active = [];
-    for (let i = 0; i < style.length; i++) {
-      const name = style.item(i);
-      const priority = style.getPropertyPriority(name);
-
-      active.push({
-        kind: 'declaration',
-        index: i,
-        name,
-        value: style.getPropertyValue(name),
-        priority,
-        important: priority === 'important',
-      });
-    }
-
-    out.active = active;
-    out.length = style.length;
-    out.cssText = style.cssText;
-
-    return out;
-  }
-
-
-
-
-  function resolveCssomSheet(ctx: QueryContext, index = 0): CSSStyleSheet {
-    if (isDocument(ctx)) {
-      const sheet = ctx.styleSheets[index];
-      if (!sheet) throw new Error(`No stylesheet at index ${index}`);
-      return sheet;
-    }
-
-    if (isElement(ctx) && 'sheet' in ctx) {
-      const sheet = (ctx as HTMLStyleElement | HTMLLinkElement).sheet;
-      if (!sheet) throw new Error(`Referenced element has no stylesheet`);
-      return sheet;
-    }
-
-    throw new Error(`Context for 'cssom' case must be a Document or a stylesheet-owning Element`);
-  }
-
-  function getRule(sheet: CSSStyleSheet, index: number): CSSRule {
-    const rule = sheet.cssRules[index];
-    if (!rule) throw new Error(`No CSS rule at index ${index}`);
-    return rule;
-  }
-
-  function getStyleRule(sheet: CSSStyleSheet, index: number): CSSStyleRule {
-    const rule = getRule(sheet, index);
-    if (rule.type !== CSSRule.STYLE_RULE) {
-      throw new Error(`CSS rule at index ${index} is not a style rule`);
-    }
-
-    return rule as CSSStyleRule;
-  }
-
-  function getActiveDeclarations(style: CSSStyleDeclaration): JsonRecord[] {
-    const decls: JsonRecord[] = [];
-
-    for (let i = 0; i < style.length; i++) {
-      const name = style.item(i);
-      const priority = style.getPropertyPriority(name);
-
-      decls.push({
-        kind: 'declaration',
-        index: i,
-        name,
-        value: style.getPropertyValue(name),
-        priority,
-        important: priority === 'important',
-      });
-    }
-
-    return decls;
-  }
-
-  function readCssom(read: CssomRead, ctx: QueryContext): unknown {
-    const sheet = resolveCssomSheet(ctx, read.sheet ?? 0);
-
-    switch (read.kind) {
-      case 'rules':
-        return Array.from(sheet.cssRules).map((rule) => inspectObject(rule));
-
-      case 'rule':
-        return inspectObject(getRule(sheet, read.rule));
-
-      case 'declarations':
-        return inspectObject(getStyleRule(sheet, read.rule).style);
-
-      case 'declaration': {
-        const matches: JsonRecord[] = [];
-
-        if (read.rule !== undefined) {
-          const style = getStyleRule(sheet, read.rule).style;
-          matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
-        } else {
-          for (let i = 0; i < sheet.cssRules.length; i++) {
-            const rule = sheet.cssRules[i];
-            if (rule.type !== CSSRule.STYLE_RULE) continue;
-
-            const style = (rule as CSSStyleRule).style;
-            matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
-          }
-        }
-
-        if (matches.length === 0) {
-          throw new Error(`No CSS declaration named ${JSON.stringify(read.name)}`);
-        }
-
-        if (matches.length > 1) {
-          throw new Error(`Ambiguous CSS declaration ${JSON.stringify(read.name)} matched ${matches.length} declarations`);
-        }
-
-        return matches[0];
-      }
-
-      default:
-        return assertNever(read);
-    }
-  }
 
 
 
@@ -685,11 +475,28 @@ export function installBrowserHelpers(): void {
         if (ng === 'native') {
           return (_query, ctx) => () => ({
             kind: 'cssom',
-            cssom: readCssom(c.cssom, ctx),
+            cssom: readCssom(c.cssom, ctx, { kind: 'sheet' }),
           });
         }
 
-        throw new Error(`cssom cases do not support engine ${ng}`);
+        if (ng === 'selectlet') {
+          return (_query, ctx) => () => {
+            const stlt = stylelet;
+            if (!stlt) throw new Error('stylelet is not available');
+
+            return {
+              kind: 'cssom',
+              cssom: readCssom(c.cssom, ctx, {
+                kind: 'styleText',
+                createSheet(source) {
+                  return stlt.createStyleSheet(source);
+                },
+              }),
+            };
+          };
+        }
+
+        return assertNever(ng);
       }
 
       default:
@@ -793,6 +600,255 @@ export function installBrowserHelpers(): void {
         assertNever(c);
     }
   }
+
+  type CssomReadFrom =
+    | { kind: 'sheet'; }
+    | { kind: 'styleText'; createSheet: (source: string) => CSSStyleSheet; };
+
+  function readCssom(read: CssomRead, ctx: QueryContext, from: CssomReadFrom): unknown {
+    const sheet = from.kind === 'sheet'
+      ? resolveCssomSheet(ctx, read.sheet ?? 0)
+      : createCssomSheetFromStyleText(read, ctx, from);
+
+    return readCssomSheet(read, sheet);
+  }
+
+  function readCssomSheet(read: CssomRead, sheet: CSSStyleSheet): unknown {
+    switch (read.kind) {
+      case 'rules':
+        return ruleListToArray(sheet.cssRules).map((rule) => inspectObject(rule));
+
+      case 'rule':
+        return inspectObject(getRule(sheet, read.rule));
+
+      case 'declarations':
+        return inspectObject(getStyleRule(sheet, read.rule).style);
+
+      case 'declaration': {
+        const matches: JsonRecord[] = [];
+
+        if (read.rule !== undefined) {
+          const style = getStyleRule(sheet, read.rule).style;
+          matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+        } else {
+          const rules = ruleListToArray(sheet.cssRules);
+
+          for (const rule of rules) {
+            if (rule.type !== CSSRule.STYLE_RULE) continue;
+
+            const style = (rule as CSSStyleRule).style;
+            matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+          }
+        }
+
+        if (matches.length === 0) {
+          throw new Error(`No CSS declaration named ${JSON.stringify(read.name)}`);
+        }
+
+        if (matches.length > 1) {
+          throw new Error(`Ambiguous CSS declaration ${JSON.stringify(read.name)} matched ${matches.length} declarations`);
+        }
+
+        return matches[0];
+      }
+
+      default:
+        return assertNever(read);
+    }
+  }
+
+  function ruleListToArray(list: CSSRuleList): CSSRule[] {
+    const rules: CSSRule[] = [];
+
+    for (let i = 0; i < list.length; i++) {
+      const rule = list.item(i);
+      if (rule) rules.push(rule);
+    }
+
+    return rules;
+  }
+
+  function resolveCssomSheet(ctx: QueryContext, index = 0): CSSStyleSheet {
+    if (isDocument(ctx)) {
+      const sheet = ctx.styleSheets[index];
+      if (!sheet) throw new Error(`No stylesheet at index ${index}`);
+      return sheet;
+    }
+
+    if (isHtmlStyle(ctx) || isHtmlLink(ctx)) {
+      const sheet = ctx.sheet;
+      if (!sheet) throw new Error(`Referenced element has no stylesheet`);
+      return sheet;
+    }
+
+    throw new Error(`Context for 'cssom' sheet read must be a Document, <style>, or <link>`);
+  }
+
+  function createCssomSheetFromStyleText(read: CssomRead, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CSSStyleSheet {
+    const source = resolveCssomStyleText(ctx, read.sheet ?? 0);
+    return from.createSheet(source);
+  }
+
+  function resolveCssomStyleText(ctx: QueryContext, index = 0): string {
+    if (isHtmlStyle(ctx)) {
+      if (index !== 0) throw new Error(`No <style> element at index ${index}`);
+      return ctx.textContent ?? '';
+    }
+
+    if (isHtmlLink(ctx)) {
+      throw new Error(`Cannot read selectlet cssom source from <link>; use inline <style> for now`);
+    }
+
+    if (isDocument(ctx) || isDocFrag(ctx) || isElement(ctx)) {
+      const styles = [...ctx.querySelectorAll('style')].filter(isHtmlStyle);
+      const style = styles[index];
+
+      if (!style) throw new Error(`No <style> element at index ${index}`);
+
+      return style.textContent ?? '';
+    }
+
+    throw new Error(`Context for 'cssom' styleText read must be a Document, DocumentFragment, Element, or <style>`);
+  }
+
+  type JsonRecord = Record<string, unknown>;
+  type InspectOptions = { skipEmptyStrings?: boolean; };
+  const DEFAULT_INSPECT_OPTIONS: InspectOptions = { skipEmptyStrings: true };
+
+  function inspectObject(value: unknown, depth = 2, opts: InspectOptions = DEFAULT_INSPECT_OPTIONS): unknown {
+    return inspectObjectInner(value, depth, opts, new WeakSet<object>());
+  }
+
+  function inspectObjectInner(value: unknown, depth: number, opts: InspectOptions, seen: WeakSet<object>): unknown {
+    if (value === null || value === undefined) return null;
+
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean') return value;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+    if (t === 'function') return `[Function ${(value as Function).name || 'anonymous'}]`;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    if (t !== 'object') return String(value);
+
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+
+    // Special CSSOM containers get inspected even near the depth boundary
+    if (isCssStyleDeclaration(value)) {
+      return inspectStyleDeclaration(value, depth, opts, seen);
+    }
+
+    if (isCssRuleList(value)) {
+      return Array.from(value).map((rule) =>
+        inspectObjectInner(rule, depth - 1, opts, seen)
+      );
+    }
+
+    if (depth < 0) {
+      return `[${value.constructor?.name ?? 'Object'}]`;
+    }
+
+    return inspectHostObject(value, depth, opts, seen);
+  }
+
+  function inspectHostObject(obj: object, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
+    const out: JsonRecord = {
+      $type: obj.constructor?.name ?? 'Object',
+    };
+
+    const names = new Set<string>();
+
+    for (
+      let proto: object | null = obj;
+      proto && proto !== Object.prototype;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      proto = Object.getPrototypeOf(proto)
+    ) {
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        if (name === 'constructor') continue;
+        names.add(name);
+      }
+    }
+
+    for (const name of names) {
+      try {
+        const v = (obj as Record<string, unknown>)[name];
+
+        if (typeof v === 'function') continue;
+        if (v === undefined) continue;
+        if (opts.skipEmptyStrings && v === '') continue;
+
+        out[name] = inspectObjectInner(v, depth - 1, opts, seen);
+      } catch (err) {
+        out[name] = `[Throws: ${err instanceof Error ? err.message : String(err)}]`;
+      }
+    }
+
+    return out;
+  }
+
+  function inspectStyleDeclaration(style: CSSStyleDeclaration, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
+    const out = inspectHostObject(style, Math.max(depth, 0), opts, seen);
+
+    out.kind = 'styleDeclaration';
+
+    const active = [];
+    for (let i = 0; i < style.length; i++) {
+      const name = style.item(i);
+      const priority = style.getPropertyPriority(name);
+
+      active.push({
+        kind: 'declaration',
+        index: i,
+        name,
+        value: style.getPropertyValue(name),
+        priority,
+        important: priority === 'important',
+      });
+    }
+
+    out.active = active;
+    out.length = style.length;
+    out.cssText = style.cssText;
+
+    return out;
+  }
+
+  function getStyleRule(sheet: CSSStyleSheet, index: number): CSSStyleRule {
+    const rule = getRule(sheet, index);
+    if (rule.type !== CSSRule.STYLE_RULE) {
+      throw new Error(`CSS rule at index ${index} is not a style rule`);
+    }
+
+    return rule as CSSStyleRule;
+  }
+
+  function getRule(sheet: CSSStyleSheet, index: number): CSSRule {
+    const rule = sheet.cssRules[index];
+    if (!rule) throw new Error(`No CSS rule at index ${index}`);
+    return rule;
+  }
+
+  function getActiveDeclarations(style: CSSStyleDeclaration): JsonRecord[] {
+    const decls: JsonRecord[] = [];
+
+    for (let i = 0; i < style.length; i++) {
+      const name = style.item(i);
+      const priority = style.getPropertyPriority(name);
+
+      decls.push({
+        kind: 'declaration',
+        index: i,
+        name,
+        value: style.getPropertyValue(name),
+        priority,
+        important: priority === 'important',
+      });
+    }
+
+    return decls;
+  }
+
+
 
   window.__pwHelpers = {
     resolveContext,

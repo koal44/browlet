@@ -1,12 +1,13 @@
 import fs from 'node:fs';
-import path from 'node:path';
+// import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { rollup } from 'rollup';
+import dts from 'rollup-plugin-dts';
 
 const distDir = 'dist';
 const tmpDir = 'dist/.tmp';
 
-const moduleInputFile = 'dist/.tmp/selectlet.js';
+const moduleInputFile = 'dist/.tmp/index.js';
 const browserInputFile = 'dist/.tmp/browser.js';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -80,7 +81,22 @@ await browserBundle.write({
 
 await browserBundle.close();
 
-copyFileIfExists('dist/.tmp/selectlet.d.ts', 'dist/index.d.ts');
+// copyFileIfExists('dist/.tmp/index.d.ts', 'dist/index.d.ts');
+// copyDtsTree(tmpDir, distDir);
+
+const dtsBundle = await rollup({
+  input: 'dist/.tmp/index.d.ts',
+  plugins: [
+    dts(),
+  ],
+});
+
+await dtsBundle.write({
+  file: 'dist/index.d.ts',
+  format: 'es',
+});
+
+await dtsBundle.close();
 
 fs.rmSync(tmpDir, { recursive: true, force: true });
 
@@ -90,16 +106,16 @@ syncBuiltArtifacts();
 
 console.log('synced built artifacts\n');
 
-function copyFileIfExists(from, to) {
-  if (!fs.existsSync(from)) {
-    console.warn(`missing '${from}'`);
-    return;
-  }
+// function copyFileIfExists(from, to) {
+//   if (!fs.existsSync(from)) {
+//     console.warn(`missing '${from}'`);
+//     return;
+//   }
 
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(from, to);
-  // console.log(`wrote '${to}'`);
-}
+//   fs.mkdirSync(path.dirname(to), { recursive: true });
+//   fs.copyFileSync(from, to);
+//   // console.log(`wrote '${to}'`);
+// }
 
 function syncBuiltArtifacts() {
   syncFile(
@@ -149,3 +165,20 @@ function syncSelectletPackageDist(destDir) {
     // console.log(`updated '${to}'`);
   }
 }
+
+// function copyDtsTree(fromDir, toDir) {
+//   for (const entry of fs.readdirSync(fromDir, { withFileTypes: true })) {
+//     const from = path.join(fromDir, entry.name);
+//     const to = path.join(toDir, entry.name);
+
+//     if (entry.isDirectory()) {
+//       copyDtsTree(from, to);
+//       continue;
+//     }
+
+//     if (!entry.name.endsWith('.d.ts')) continue;
+
+//     fs.mkdirSync(path.dirname(to), { recursive: true });
+//     fs.copyFileSync(from, to);
+//   }
+// }

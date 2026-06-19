@@ -27,9 +27,19 @@ if (typeof context.createSelectlet !== "function") {
   throw new Error(`Expected global createSelectlet function, got ${typeof context.createSelectlet}`);
 }
 
+if (typeof context.createStylelet !== "function") {
+  throw new Error(`Expected global createStylelet function, got ${typeof context.createStylelet}`);
+}
+
 const sxlt = context.createSelectlet(document);
 
 if (typeof sxlt.select !== "function") throw new Error("Expected sxlt.select");
 if (typeof sxlt.matches !== "function") throw new Error("Expected sxlt.matches");
+
+const stlt = context.createStylelet(document);
+
+if (typeof stlt.createStyleSheet !== "function") {
+  throw new Error("Expected stlt.createStyleSheet");
+}
 
 console.log("global artifact passed");

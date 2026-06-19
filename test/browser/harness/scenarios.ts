@@ -440,21 +440,33 @@ async function initPage(page: Page, scenario: Scenario): Promise<void> {
 async function ensureHarnessInstalled(page: Page): Promise<void> {
   const state = await page.evaluate(() => ({
     hasHelpers: !!window.__pwHelpers,
+    hasCreateSelectlet: typeof window.createSelectlet === 'function',
+    hasCreateStylelet: typeof window.createStylelet === 'function',
     hasSxlt: !!window.selectlet && typeof window.selectlet.select === 'function',
-  })).catch(() => ({ hasHelpers: false, hasSxlt: false }));
+    hasStlt: !!window.stylelet && typeof window.stylelet.createStyleSheet === 'function',
+  })).catch(() => ({
+    hasHelpers: false,
+    hasCreateSelectlet: false,
+    hasCreateStylelet: false,
+    hasSxlt: false,
+    hasStlt: false,
+  }));
 
   if (!state.hasHelpers) {
     await page.evaluate(installBrowserHelpers);
   }
 
-  if (!state.hasSxlt) {
+  if (!state.hasCreateSelectlet || !state.hasCreateStylelet) {
     const script = await page.addScriptTag({ path: 'dist/selectlet.js' });
     await script.evaluate((el) => {
       (el as HTMLScriptElement).id = 'selectlet-bootstrap' satisfies SelectletId;
     });
+  }
 
+  if (!state.hasSxlt || !state.hasStlt) {
     await page.evaluate(() => {
       window.selectlet = window.createSelectlet(document) as typeof selectlet;
+      window.stylelet = window.createStylelet(document);
     });
   }
 }
