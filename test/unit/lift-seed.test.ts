@@ -1,7 +1,7 @@
-import { parseSelectorList } from '../../src/parser/parser';
+import { parseSelectorList } from '../../src/selectlet/parser/parser';
 import { expect, it, describe } from 'vitest';
 import { describeComplex } from '../utils/util';
-import { expandSelectorListForSeeding } from '../../src/planner/lift-seed';
+import { expandSelectorListForSeeding } from '../../src/selectlet/planner/lift-seed';
 
 function expanded(selector: string): string[] {
   const list = parseSelectorList(selector, {});

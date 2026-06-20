@@ -4,7 +4,7 @@ import type { RuntimeCache } from '../compile/runtimeCache';
 import type {
   CandidatePredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, HostContextSelector, HostSelector, RelativeSelectorList, SelectorList,
 } from '../parser/parser';
-import { assertNever } from '../utils/util';
+import { assertNever } from '../../utils/util';
 
 export type Chain = ChainRelation[];
 

@@ -1,7 +1,7 @@
 import { type LookupMode } from '../constants';
-import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../utils/collections';
-import { asciiLower } from '../utils/css';
-import { isDocumentFragment } from '../utils/dom';
+import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../../utils/collections';
+import { asciiLower } from '../../utils/css';
+import { isDocumentFragment } from '../../utils/dom';
 
 export function seedsByTag(tag: string, context: QueryContext, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
   if (!tag) return [];

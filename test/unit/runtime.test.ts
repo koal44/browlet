@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extendedLangMatch } from '../../src/compile/runtime';
+import { extendedLangMatch } from '../../src/selectlet/compile/runtime';
 
 describe('extendedLangMatch', () => {
   it('matches Selectors 4 language ranges with intervening subtags', () => {

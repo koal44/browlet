@@ -3,7 +3,7 @@ import type {
   ComplexPart,
 } from '../parser/parser';
 import { costComplex, costPart } from './cost';
-import { asciiLower } from '../utils/css';
+import { asciiLower } from '../../utils/css';
 import { buildForgivingSelectorListTest } from './chain';
 
 const enum SeedRank {

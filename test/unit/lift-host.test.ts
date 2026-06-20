@@ -1,7 +1,7 @@
-import { type ComplexSelector, parseSelectorList } from '../../src/parser/parser';
+import { type ComplexSelector, parseSelectorList } from '../../src/selectlet/parser/parser';
 import { expect, it, describe } from 'vitest';
 import { describeComplex } from '../utils/util';
-import { liftHostSelectorList } from '../../src/planner/lift-host';
+import { liftHostSelectorList } from '../../src/selectlet/planner/lift-host';
 
 function expanded(selector: string): string[] {
   const list = parseSelectorList(selector, {});

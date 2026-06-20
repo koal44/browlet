@@ -1,7 +1,7 @@
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import { describeContext, type QueryContextDescription } from '../utils/debug';
-import { isElement } from '../utils/dom';
+import { describeContext, type QueryContextDescription } from '../debug';
+import { isElement } from '../../utils/dom';
 import { buildFullBridgeSelect } from './select-fullbridge';
 import { buildFrontierSelect } from './select-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';

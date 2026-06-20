@@ -1,10 +1,10 @@
 import type { CompoundSelector } from '../parser/parser';
 import type { Chain, ProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';
-import { cssIdentUnescape } from '../utils/css';
+import { cssIdentUnescape } from '../../utils/css';
 import { buildMultiChainProof, buildProof } from './chain';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import { precedesByDocPosition } from '../utils/collections';
+import { precedesByDocPosition } from '../../utils/collections';
 import { type LookupMode } from '../constants';
 
 export type BridgeMove = {

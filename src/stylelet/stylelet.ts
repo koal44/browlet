@@ -1,4 +1,4 @@
-import { type SelectletCaps, type SelectletErrorOptions } from '../selectlet';
+import { type SelectletCaps, type SelectletErrorOptions } from '../selectlet/selectlet';
 import { SelectletCSSStyleSheet } from './cssom/stylesheet';
 
 export type Stylelet = {

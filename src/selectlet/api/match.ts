@@ -1,5 +1,5 @@
 import { type CandidatePredicate, parseSelectorList, type SelectorList } from '../parser/parser';
-import { describeContext, type QueryContextDescription } from '../utils/debug';
+import { describeContext, type QueryContextDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
 import { liftHostSelectorList } from '../planner/lift-host';

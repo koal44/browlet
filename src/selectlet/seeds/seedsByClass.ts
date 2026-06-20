@@ -1,7 +1,7 @@
 import type { LookupMode } from '../constants';
 import type { SelectletCaps } from '../selectlet';
-import { concatCollection, htmlCollectionSource } from '../utils/collections';
-import { isDocument, isDocumentFragment, isElement } from '../utils/dom';
+import { concatCollection, htmlCollectionSource } from '../../utils/collections';
+import { isDocument, isDocumentFragment, isElement } from '../../utils/dom';
 
 export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;
 type ClassCap<R> = (root: R, classes: readonly string[]) => Iterable<Element>;

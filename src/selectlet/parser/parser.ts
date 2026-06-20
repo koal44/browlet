@@ -1,5 +1,5 @@
 import type { CustomPseudoPredicate } from '../selectlet';
-import { cssIdentUnescape } from '../utils/css';
+import { cssIdentUnescape } from '../../utils/css';
 import { Cursor, SelectorSyntaxError } from './cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,

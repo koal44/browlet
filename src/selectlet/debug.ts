@@ -1,6 +1,6 @@
-import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from '../parser/parser';
-import { cssIdentUnescape } from './css';
-import { isDocument, isDocumentFragment, isElement } from './dom';
+import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from './parser/parser';
+import { cssIdentUnescape } from '../utils/css';
+import { isDocument, isDocumentFragment, isElement } from '../utils/dom';
 
 export type QueryContextDescription = {
   kind: 'document' | 'fragment' | 'element' | 'unknown';

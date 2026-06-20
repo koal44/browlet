@@ -1,4 +1,4 @@
-import { createSelectlet } from './selectlet';
+import { createSelectlet } from './selectlet/selectlet';
 import { createStylelet } from './stylelet/stylelet';
 
 const root = globalThis as typeof globalThis & {

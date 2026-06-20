@@ -1,7 +1,7 @@
 import type {
   CandidateTest, ClassSelector, ComplexPart, ComplexSelector, CompoundSelector, IdSelector, SelectorList, TagSelector,
 } from '../parser/parser';
-import { asciiLower } from '../utils/css';
+import { asciiLower } from '../../utils/css';
 import { costComplex, costPart } from './cost';
 
 const NEVER_CMPD: CompoundSelector = {

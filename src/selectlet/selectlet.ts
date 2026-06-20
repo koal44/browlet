@@ -1,6 +1,6 @@
 import { Snapshot } from './snapshot';
-import { toNodeList } from './utils/collections';
-import { isElement, isNode, isText } from './utils/dom';
+import { toNodeList } from '../utils/collections';
+import { isElement, isNode, isText } from '../utils/dom';
 
 export const DEFAULT_CONFIG = {
   /**

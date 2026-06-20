@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Cursor } from '../../../src/parser/cursor';
-import { parseSelectorList, parseSelectorPrelude } from '../../../src/parser/parser';
+import { Cursor } from '../../../src/selectlet/parser/cursor';
+import { parseSelectorList, parseSelectorPrelude } from '../../../src/selectlet/parser/parser';
 
 describe('parseSelectorPrelude', () => {
   it('stops before a style block opener without consuming it', () => {

@@ -1,4 +1,4 @@
-import type { RelativeSelectorList, SelectorList } from '../../parser/parser';
+import type { RelativeSelectorList, SelectorList } from '../../selectlet/parser/parser';
 import type { ColorValue } from './color';
 
 // Stylesheet

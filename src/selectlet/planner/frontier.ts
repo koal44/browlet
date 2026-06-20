@@ -1,6 +1,6 @@
 import type { RuntimeCache } from '../compile/runtimeCache';
-import type { QueryContextDescription } from '../utils/debug';
-import { describeCombinator, describeCompound, describeContext } from '../utils/debug';
+import type { QueryContextDescription } from '../debug';
+import { describeCombinator, describeCompound, describeContext } from '../debug';
 import {
   buildAdvanceFirstFn, buildAdvanceMove,
   type AdvanceMove, type Chain,

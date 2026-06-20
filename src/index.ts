@@ -1,7 +1,7 @@
 export {
   createSelectlet,
   DEFAULT_CONFIG,
-} from './selectlet';
+} from './selectlet/selectlet';
 
 export type {
   Selectlet,
@@ -13,7 +13,7 @@ export type {
   ElementList,
   IndexedNodeList,
   CustomPseudoPredicate,
-} from './selectlet';
+} from './selectlet/selectlet';
 
 export { createStylelet } from './stylelet/stylelet';
 

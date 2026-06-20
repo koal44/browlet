@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-import type { ElementList } from '../../../src/selectlet';
+import type { ElementList } from '../../../src/selectlet/selectlet';
 import type {
   Engine, EquivalentCase, ContextRef, ContextHome, SelectletId, CssomRead,
 } from './scenarios';

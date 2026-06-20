@@ -1,7 +1,7 @@
 import type {
   AttributeSelector, CandidateTest, Combinator, ComplexSelector, CompoundSelector,
   RelativeComplexSelector, RelativeCompoundSelector, RelativeSelectorList, SelectorList, TagSelector,
-} from '../../src/parser/parser';
+} from '../../src/selectlet/parser/parser';
 
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 

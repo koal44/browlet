@@ -1,14 +1,14 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
-import { precedesByDocPosition } from '../utils/collections';
+import { precedesByDocPosition } from '../../utils/collections';
 import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeToEndMove, resetFrontierDebug,
   runAdvanceMove, runBridgeMove, runFirstAdvanceMove, runFirstBridgeMove,
   type FrontierProgram, type FrontierState,
 } from '../planner/frontier';
-import { describeComplex, describeElement } from '../utils/debug';
+import { describeComplex, describeElement } from '../debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_VIEW } from '../constants';
 

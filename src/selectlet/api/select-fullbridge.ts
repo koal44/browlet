@@ -1,8 +1,8 @@
 import type { SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
-import { mergeDocumentOrderLists } from '../utils/collections';
-import { describeElements } from '../utils/debug';
+import { mergeDocumentOrderLists } from '../../utils/collections';
+import { describeElements } from '../debug';
 import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';

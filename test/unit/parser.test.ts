@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { ParseContext } from '../../src/parser/parser';
+import type { ParseContext } from '../../src/selectlet/parser/parser';
 import {
   parseAttributeSelector, parseComplexSelector, parseCompoundSelector, parseForgivingSelectorList, parseRelativeSelectorList, parseSelectorList, parseStrictSelectorList,
-} from '../../src/parser/parser';
-import { Cursor } from '../../src/parser/cursor';
-import { consumeIdent } from '../../src/parser/lex';
-import { parseNthArgs } from '../../src/parser/nth';
+} from '../../src/selectlet/parser/parser';
+import { Cursor } from '../../src/selectlet/parser/cursor';
+import { consumeIdent } from '../../src/selectlet/parser/lex';
+import { parseNthArgs } from '../../src/selectlet/parser/nth';
 import { describeRelativeCompound, describeRelativeStep } from '../utils/util';
 // import { describeRelativeCompound } from '../utils/util';
 
