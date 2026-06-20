@@ -3,7 +3,7 @@ import { runScenarios } from '../dispatch';
 runScenarios('style oracle selector prelude boundaries', 'normal', [
   {
     name: 'selectlet cssom reads a simple declaration',
-    status: 'only',
+    // status: 'only',
     engines: ['native', 'selectlet'],
     markup: `
       <style id="sheet">

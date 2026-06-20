@@ -1,6 +1,7 @@
 import { createCSSStyleDeclaration } from './declaration';
 import { SelectletCSSRuleList } from './rule-list';
 import { notImplemented } from '../util';
+import type { StyleRuleAst } from '../parser/types';
 
 export class SelectletCSSStyleRule implements CSSStyleRule {
   readonly STYLE_RULE = 1 as const;
@@ -21,6 +22,10 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
 
   private _style = createCSSStyleDeclaration();
   private _cssRules = new SelectletCSSRuleList();
+
+  constructor(rule?: StyleRuleAst) {
+    this._style = createCSSStyleDeclaration(rule?.block);
+  }
 
   get cssRules(): CSSRuleList {
     return this._cssRules;

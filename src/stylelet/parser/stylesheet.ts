@@ -7,18 +7,18 @@ import {
 import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
 import type { ColorSource, ColorValue } from './color';
 import { ColorNameByText, ColorSourceKind, namedColorRgba } from './color';
-import type { ColorDeclaration, RawDeclaration } from './types';
+import type { ColorDeclarationAst, RawDeclarationAst } from './types';
 import {
   AtRuleKind, AtRuleKindByName, BlockItemKind, PropertyId, PropertyIdByName, RuleKind,
-  type AtRule, type StyleBlock, type StyleRule, type Stylesheet, type CssRule,
-  type InvalidRule, type StyleBlockItem, type Declaration, type InvalidBlockItem,
+  type AtRuleAst, type StyleBlockAst, type StyleRuleAst, type StyleSheetAst, type CssRuleAst,
+  type InvalidRuleAst, type StyleBlockItemAst, type DeclarationAst, type InvalidBlockItemAst,
 } from './types';
 
 export type StyleParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
 };
 
-export function parseStylesheet(input: string, ctx: StyleParseContext = {}): Stylesheet {
+export function parseStylesheet(input: string, ctx: StyleParseContext = {}): StyleSheetAst {
   const c = new Cursor(input);
   const rules = parseRuleList(c, ctx);
 
@@ -30,8 +30,8 @@ export function parseStylesheet(input: string, ctx: StyleParseContext = {}): Sty
   return { rules };
 }
 
-function parseRuleList(c: Cursor, ctx: StyleParseContext): CssRule[] {
-  const rules: CssRule[] = [];
+function parseRuleList(c: Cursor, ctx: StyleParseContext): CssRuleAst[] {
+  const rules: CssRuleAst[] = [];
 
   while (true) {
     consumeTrivia(c);
@@ -45,7 +45,7 @@ function parseRuleList(c: Cursor, ctx: StyleParseContext): CssRule[] {
   return rules;
 }
 
-function parseAtRule(c: Cursor, _ctx: StyleParseContext): AtRule {
+function parseAtRule(c: Cursor, _ctx: StyleParseContext): AtRuleAst {
   if (c.peek() !== '@') {
     c.error(`Expected at-rule, got ${c.peek() || '<eof>'}`);
   }
@@ -81,7 +81,7 @@ function parseAtRule(c: Cursor, _ctx: StyleParseContext): AtRule {
   c.error(`Expected ; or block after at-rule, got ${c.peek() || '<eof>'}`);
 }
 
-function parseStyleRuleOrInvalid(c: Cursor, ctx: StyleParseContext): StyleRule | InvalidRule {
+function parseStyleRuleOrInvalid(c: Cursor, ctx: StyleParseContext): StyleRuleAst | InvalidRuleAst {
   const start = c.pos();
 
   try {
@@ -97,7 +97,7 @@ function parseStyleRuleOrInvalid(c: Cursor, ctx: StyleParseContext): StyleRule |
   }
 }
 
-function parseStyleRule(c: Cursor, ctx: StyleParseContext): StyleRule {
+function parseStyleRule(c: Cursor, ctx: StyleParseContext): StyleRuleAst {
   const selector = parseSelectorPrelude(c, selectorPreludeContext(ctx));
 
   consumeTrivia(c);
@@ -219,14 +219,14 @@ function consumeInvalidDeclaration(c: Cursor): string {
   }
 }
 
-function parseStyleBlock(c: Cursor, ctx: StyleParseContext): StyleBlock {
+function parseStyleBlock(c: Cursor, ctx: StyleParseContext): StyleBlockAst {
   if (c.peek() !== '{') {
     c.error(`Expected {, got ${c.peek() || '<eof>'}`);
   }
 
   c.advance();
 
-  const items: StyleBlockItem[] = [];
+  const items: StyleBlockItemAst[] = [];
 
   while (true) {
     consumeTrivia(c);
@@ -248,7 +248,7 @@ function parseStyleBlock(c: Cursor, ctx: StyleParseContext): StyleBlock {
   return { items };
 }
 
-function parseDeclarationOrInvalid(c: Cursor, ctx: StyleParseContext): Declaration | InvalidBlockItem {
+function parseDeclarationOrInvalid(c: Cursor, ctx: StyleParseContext): DeclarationAst | InvalidBlockItemAst {
   const start = c.pos();
 
   try {
@@ -264,7 +264,7 @@ function parseDeclarationOrInvalid(c: Cursor, ctx: StyleParseContext): Declarati
   }
 }
 
-function parseDeclaration(c: Cursor, _ctx: StyleParseContext): Declaration {
+function parseDeclaration(c: Cursor, _ctx: StyleParseContext): DeclarationAst {
   consumeTrivia(c);
 
   const name = consumeIdent(c);
@@ -286,7 +286,7 @@ function propertyIdForRawName(name: string): PropertyId {
   return PropertyIdByName[name.toLowerCase()] ?? PropertyId.Unknown;
 }
 
-function parseDeclarationValue(c: Cursor, prop: PropertyId, name: string): Declaration {
+function parseDeclarationValue(c: Cursor, prop: PropertyId, name: string): DeclarationAst {
   switch (prop) {
     case PropertyId.Color:
     case PropertyId.BackgroundColor:
@@ -297,7 +297,7 @@ function parseDeclarationValue(c: Cursor, prop: PropertyId, name: string): Decla
   }
 }
 
-function parseRawDeclarationValue(c: Cursor, prop: PropertyId, name: string): RawDeclaration {
+function parseRawDeclarationValue(c: Cursor, prop: PropertyId, name: string): RawDeclarationAst {
   const value = consumeDeclarationValue(c);
   const parsed = stripImportant(value);
 
@@ -318,7 +318,7 @@ function parseRawDeclarationValue(c: Cursor, prop: PropertyId, name: string): Ra
 function parseColorDeclaration(
   c: Cursor,
   prop: PropertyId.Color | PropertyId.BackgroundColor,
-): ColorDeclaration {
+): ColorDeclarationAst {
   const value = parseColorValue(c);
   const important = finishDeclaration(c);
 

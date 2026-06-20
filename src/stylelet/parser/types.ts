@@ -3,32 +3,32 @@ import type { ColorValue } from './color';
 
 // Stylesheet
 
-export type Stylesheet = {
-  rules: CssRule[];
-}
+export type StyleSheetAst = {
+  rules: CssRuleAst[];
+};
 
 // Rules
 
-export type CssRule =
-  | StyleRule
-  | AtRule
-  | InvalidRule;
+export type CssRuleAst =
+  | StyleRuleAst
+  | AtRuleAst
+  | InvalidRuleAst;
 
-export type StyleRule = {
+export type StyleRuleAst = {
   kind: RuleKind.Style;
   selector: SelectorList;
-  block: StyleBlock;
+  block: StyleBlockAst;
 };
 
-export type AtRule = {
+export type AtRuleAst = {
   kind: RuleKind.At;
   at: AtRuleKind;
   name: string;
   prelude: string;
-  block?: StyleBlock | string;
+  block?: StyleBlockAst | string;
 };
 
-export type InvalidRule = {
+export type InvalidRuleAst = {
   kind: RuleKind.Invalid;
   source: string;
   reason?: string;
@@ -68,23 +68,23 @@ export function atRuleKindFor(name: string): AtRuleKind {
 
 // Blocks
 
-export type StyleBlock = {
-  items: StyleBlockItem[];
+export type StyleBlockAst = {
+  items: StyleBlockItemAst[];
 };
 
-export type StyleBlockItem =
-  | Declaration
-  | NestedStyleRule
-  | AtRule
-  | InvalidBlockItem;
+export type StyleBlockItemAst =
+  | DeclarationAst
+  | NestedStyleRuleAst
+  | AtRuleAst
+  | InvalidBlockItemAst;
 
-export type NestedStyleRule = {
+export type NestedStyleRuleAst = {
   kind: BlockItemKind.NestedStyle;
   selector: RelativeSelectorList;
-  block: StyleBlock;
+  block: StyleBlockAst;
 };
 
-export type InvalidBlockItem = {
+export type InvalidBlockItemAst = {
   kind: BlockItemKind.Invalid;
   source: string;
   reason?: string;
@@ -99,14 +99,14 @@ export enum BlockItemKind {
 
 // Declarations
 
-export type Declaration =
-  | ColorDeclaration
-  | DisplayDeclaration
-  | MarginDeclaration
-  | MarginSideDeclaration
-  | RawDeclaration;
+export type DeclarationAst =
+  | ColorDeclarationAst
+  | DisplayDeclarationAst
+  | MarginDeclarationAst
+  | MarginSideDeclarationAst
+  | RawDeclarationAst;
 
-export type DeclarationBase<P extends PropertyId, V> = {
+export type DeclarationBaseAst<P extends PropertyId, V> = {
   kind: BlockItemKind.Declaration;
   prop: P;
   value: V | GlobalValue;
@@ -125,7 +125,7 @@ export enum GlobalKeyword {
   RevertLayer,
 }
 
-export type RawDeclaration = {
+export type RawDeclarationAst = {
   kind: BlockItemKind.Declaration;
   raw: true;
   prop: PropertyId;
@@ -134,21 +134,21 @@ export type RawDeclaration = {
   important: boolean;
 };
 
-export type ColorDeclaration =
-  DeclarationBase<ColorPropertyId, ColorValue>;
+export type ColorDeclarationAst =
+  DeclarationBaseAst<ColorPropertyId, ColorValue>;
 
 export type ColorPropertyId =
   | PropertyId.Color
   | PropertyId.BackgroundColor;
 
-export type DisplayDeclaration =
-  DeclarationBase<PropertyId.Display, DisplayValue>;
+export type DisplayDeclarationAst =
+  DeclarationBaseAst<PropertyId.Display, DisplayValue>;
 
-export type MarginDeclaration =
-  DeclarationBase<PropertyId.Margin, BoxValue<LengthPercentageAuto>>;
+export type MarginDeclarationAst =
+  DeclarationBaseAst<PropertyId.Margin, BoxValue<LengthPercentageAuto>>;
 
-export type MarginSideDeclaration =
-  DeclarationBase<MarginSidePropertyId, LengthPercentageAuto>;
+export type MarginSideDeclarationAst =
+  DeclarationBaseAst<MarginSidePropertyId, LengthPercentageAuto>;
 
 export type MarginSidePropertyId =
   | PropertyId.MarginTop

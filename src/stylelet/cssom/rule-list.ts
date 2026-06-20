@@ -1,12 +1,13 @@
-import type { Stylesheet } from '../parser/types';
+import { RuleKind, type StyleSheetAst } from '../parser/types';
+import { SelectletCSSStyleRule } from './rules';
 
 export class SelectletCSSRuleList implements CSSRuleList {
   [index: number]: CSSRule;
 
-  private readonly rules: CSSRule[];
+  private _rules: CSSRule[];
 
   constructor(rules: CSSRule[] = []) {
-    this.rules = rules;
+    this._rules = rules;
 
     for (let i = 0; i < rules.length; i++) {
       this[i] = rules[i];
@@ -14,18 +15,26 @@ export class SelectletCSSRuleList implements CSSRuleList {
   }
 
   get length(): number {
-    return this.rules.length;
+    return this._rules.length;
   }
 
   item(index: number): CSSRule | null {
-    return this.rules[index] ?? null;
+    return this._rules[index] ?? null;
   }
 
   [Symbol.iterator](): ArrayIterator<CSSRule> {
-    return this.rules[Symbol.iterator]();
+    return this._rules[Symbol.iterator]();
   }
 }
 
-export function buildCSSRuleList(_sheet: Stylesheet): SelectletCSSRuleList {
-  return new SelectletCSSRuleList();
+export function buildCSSRuleList(sheet: StyleSheetAst): SelectletCSSRuleList {
+  const rules: CSSRule[] = [];
+
+  for (const rule of sheet.rules) {
+    if (rule.kind === RuleKind.Style) {
+      rules.push(new SelectletCSSStyleRule(rule));
+    }
+  }
+
+  return new SelectletCSSRuleList(rules);
 }
