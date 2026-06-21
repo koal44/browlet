@@ -1,19 +1,14 @@
 import { Cursor } from '../../selectlet/parser/cursor';
 import { consumeIdent, consumeTrivia } from '../../selectlet/parser/lex';
-import {
-  parseSelectorPrelude,
-  type ParseContext as SelectorParseContext,
-} from '../../selectlet/parser/parser';
+import { parseSelectorPrelude, type ParseContext as SelectorParseContext } from '../../selectlet/parser/parser';
 import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
-import type { ColorDeclarationAst, ColorPropertyId, MarginSideDeclarationAst, MarginSidePropertyId, RawDeclarationAst } from './types';
+import { consumeComponentValue, consumeRawBlock } from './component';
+import { parseDeclarationOrInvalid } from './declaration';
 import {
-  AtRuleKind, AtRuleKindByName, BlockItemKind, PropertyId, RuleKind,
+  AtRuleKind, AtRuleKindByName, RuleKind,
   type AtRuleAst, type StyleBlockAst, type StyleRuleAst, type StyleSheetAst, type CssRuleAst,
-  type InvalidRuleAst, type StyleBlockItemAst, type DeclarationAst, type InvalidBlockItemAst,
-  propertyIdFor,
+  type InvalidRuleAst, type StyleBlockItemAst,
 } from './types';
-import { parseLengthPercentageAuto } from '../values/length-percentage';
-import { parseColorValue } from '../values/color';
 
 export type StyleParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
@@ -92,7 +87,7 @@ function parseStyleRuleOrInvalid(c: Cursor, ctx: StyleParseContext): StyleRuleAs
 
     return {
       kind: RuleKind.Invalid,
-      source: consumeInvalidQualifiedRule(c),
+      source: consumeInvalidRule(c),
       reason: err instanceof Error ? err.message : undefined,
     };
   }
@@ -108,116 +103,6 @@ function parseStyleRule(c: Cursor, ctx: StyleParseContext): StyleRuleAst {
     selector,
     block: parseStyleBlock(c, ctx),
   };
-}
-
-function consumeInvalidQualifiedRule(c: Cursor): string {
-  const start = c.pos();
-
-  while (true) {
-    const ch = c.peek();
-
-    if (!ch) {
-      return c.slice(start);
-    }
-
-    if (ch === '{') {
-      consumeRawBlock(c);
-      return c.slice(start);
-    }
-
-    consumeComponentText(c);
-  }
-}
-
-function consumeComponentText(c: Cursor): void {
-  const ch = c.peek();
-
-  if (!ch) return;
-
-  if (ch === '/' && c.peek(1) === '*') {
-    consumeTrivia(c);
-    return;
-  }
-
-  if (ch === '"' || ch === "'") {
-    consumeQuotedText(c);
-    return;
-  }
-
-  if (ch === '(') {
-    consumeBalancedText(c, '(', ')');
-    return;
-  }
-
-  if (ch === '[') {
-    consumeBalancedText(c, '[', ']');
-    return;
-  }
-
-  if (ch === '{') {
-    consumeRawBlock(c);
-    return;
-  }
-
-  c.advance();
-}
-
-function consumeQuotedText(c: Cursor): void {
-  const quote = c.next();
-
-  while (!c.eof()) {
-    const ch = c.next();
-
-    if (ch === '\\' && !c.eof()) {
-      c.advance();
-      continue;
-    }
-
-    if (ch === quote) return;
-  }
-}
-
-function consumeBalancedText(c: Cursor, open: string, close: string): void {
-  if (c.peek() !== open) {
-    c.error(`Expected ${open}, got ${c.peek() || '<eof>'}`);
-  }
-
-  c.advance();
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    if (ch === close) {
-      c.advance();
-      return;
-    }
-
-    // Do not eat the style block boundary while recovering an unclosed paren/bracket.
-    if (ch === '}') {
-      return;
-    }
-
-    consumeComponentText(c);
-  }
-}
-
-function consumeInvalidDeclaration(c: Cursor): string {
-  const start = c.pos();
-
-  while (true) {
-    const ch = c.peek();
-
-    if (!ch || ch === '}') {
-      return c.slice(start);
-    }
-
-    if (ch === ';') {
-      c.advance();
-      return c.slice(start);
-    }
-
-    consumeComponentText(c);
-  }
 }
 
 function parseStyleBlock(c: Cursor, ctx: StyleParseContext): StyleBlockAst {
@@ -243,261 +128,45 @@ function parseStyleBlock(c: Cursor, ctx: StyleParseContext): StyleBlockAst {
       break;
     }
 
-    items.push(ch === '@' ? parseAtRule(c, ctx) : parseDeclarationOrInvalid(c, ctx));
+    items.push(ch === '@' ? parseAtRule(c, ctx) : parseDeclarationOrInvalid(c));
   }
 
   return { items };
 }
 
-function parseDeclarationOrInvalid(c: Cursor, ctx: StyleParseContext): DeclarationAst | InvalidBlockItemAst {
-  const start = c.pos();
-
-  try {
-    return parseDeclaration(c, ctx);
-  } catch (err) {
-    c.restore(start);
-
-    return {
-      kind: BlockItemKind.Invalid,
-      source: consumeInvalidDeclaration(c),
-      reason: err instanceof Error ? err.message : undefined,
-    };
-  }
-}
-
-function parseDeclaration(c: Cursor, _ctx: StyleParseContext): DeclarationAst {
-  consumeTrivia(c);
-
-  const name = consumeIdent(c);
-  const prop = propertyIdFor(name);
-
-  consumeTrivia(c);
-
-  if (c.peek() !== ':') {
-    c.error(`Expected : after declaration name, got ${c.peek() || '<eof>'}`);
-  }
-
-  c.advance();
-  consumeTrivia(c);
-
-  return parseDeclarationValue(c, prop, name);
-}
-
-function parseDeclarationValue(c: Cursor, prop: PropertyId, name: string): DeclarationAst {
-  switch (prop) {
-    case PropertyId.Color:
-    case PropertyId.BackgroundColor:
-      return parseColorDeclaration(c, prop);
-
-    case PropertyId.MarginTop:
-    case PropertyId.MarginRight:
-    case PropertyId.MarginBottom:
-    case PropertyId.MarginLeft:
-      return parseMarginSideDeclaration(c, prop);
-
-    case PropertyId.Custom:
-      return parseCustomPropertyDeclaration(c, name);
-
-    case PropertyId.Unknown:
-      return c.error(`Unknown CSS property ${name}`);
-
-    default:
-      return c.error(`Unsupported CSS property ${name}`);
-  }
-}
-
-function parseCustomPropertyDeclaration(c: Cursor, name: string): RawDeclarationAst {
-  const parsed = consumeRawDeclarationValue(c);
-
-  return {
-    kind: BlockItemKind.Declaration,
-    prop: PropertyId.Custom,
-    name,
-    value: parsed.value,
-    important: parsed.important,
-  };
-}
-
-function parseColorDeclaration(c: Cursor, prop: ColorPropertyId): ColorDeclarationAst {
-  const value = parseColorValue(c);
-  const important = finishDeclaration(c);
-
-  return {
-    kind: BlockItemKind.Declaration,
-    prop,
-    value,
-    important,
-  };
-}
-
-function finishDeclaration(c: Cursor): boolean {
-  const important = consumeImportant(c);
-
-  consumeTrivia(c);
-
-  const ch = c.peek();
-
-  if (ch === ';') {
-    c.advance();
-    return important;
-  }
-
-  if (!ch || ch === '}') {
-    return important;
-  }
-
-  c.error(`Expected declaration end, got ${ch}`);
-}
-
-function consumeRawDeclarationValue(c: Cursor): { value: string; important: boolean; } {
-  const value = consumeDeclarationValue(c);
-  const parsed = stripImportant(value);
-
-  if (c.peek() === ';') {
-    c.advance();
-  }
-
-  return parsed;
-}
-
-function consumeDeclarationValue(c: Cursor): string {
+function consumeInvalidRule(c: Cursor): string {
   const start = c.pos();
 
   while (true) {
     const ch = c.peek();
 
-    if (!ch || ch === ';' || ch === '}') {
-      break;
+    if (!ch) {
+      return c.slice(start);
     }
 
-    consumeComponentText(c);
+    if (ch === '{') {
+      consumeRawBlock(c);
+      return c.slice(start);
+    }
+
+    consumeComponentValue(c);
   }
-
-  return c.slice(start, c.pos());
-}
-
-function consumeImportant(c: Cursor): boolean {
-  const start = c.pos();
-
-  consumeTrivia(c);
-
-  if (c.peek() !== '!') {
-    c.restore(start);
-    return false;
-  }
-
-  c.advance();
-  consumeTrivia(c);
-
-  let ident = '';
-
-  try {
-    ident = consumeIdent(c);
-  } catch {
-    c.restore(start);
-    return false;
-  }
-
-  if (ident.toLowerCase() !== 'important') {
-    c.restore(start);
-    return false;
-  }
-
-  return true;
 }
 
 function consumeAtRulePrelude(c: Cursor): string {
-  let text = '';
+  const start = c.pos();
 
   while (!c.eof()) {
     const ch = c.peek();
 
     if (ch === ';' || ch === '{') break;
 
-    text += ch;
-    c.advance();
+    consumeComponentValue(c);
   }
 
-  return text;
-}
-
-function consumeRawBlock(c: Cursor): string {
-  if (c.peek() !== '{') {
-    c.error(`Expected block, got ${c.peek() || '<eof>'}`);
-  }
-
-  let text = '';
-  let depth = 0;
-  let quote = '';
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    text += ch;
-    c.advance();
-
-    if (quote) {
-      if (ch === '\\' && !c.eof()) {
-        text += c.peek();
-        c.advance();
-        continue;
-      }
-
-      if (ch === quote) {
-        quote = '';
-      }
-
-      continue;
-    }
-
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-
-    if (ch === '{') {
-      depth++;
-      continue;
-    }
-
-    if (ch === '}') {
-      depth--;
-
-      if (depth === 0) {
-        return text;
-      }
-    }
-  }
-
-  c.error('Unexpected EOF in block');
+  return c.slice(start, c.pos());
 }
 
 function selectorPreludeContext(ctx: StyleParseContext): SelectorParseContext {
   return ctx.pseudos ? { pseudos: ctx.pseudos } : {};
-}
-
-function stripImportant(value: string): { value: string; important: boolean; } {
-  const trimmed = value.trim();
-  const important = /!\s*important\s*$/i.test(trimmed);
-
-  if (!important) {
-    return { value: trimmed, important: false };
-  }
-
-  return {
-    value: trimmed.replace(/!\s*important\s*$/i, '').trim(),
-    important: true,
-  };
-}
-
-function parseMarginSideDeclaration(c: Cursor, prop: MarginSidePropertyId): MarginSideDeclarationAst {
-  const value = parseLengthPercentageAuto(c);
-  const important = finishDeclaration(c);
-
-  return {
-    kind: BlockItemKind.Declaration,
-    prop,
-    value,
-    important,
-  };
 }

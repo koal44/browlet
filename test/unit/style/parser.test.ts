@@ -8,19 +8,17 @@ const cls = (raw: string) => ({ compound: { classes: [{ raw }] } });
 const id = (raw: string) => ({ compound: { id: { raw } } });
 const arm = (...parts: unknown[]) => ({ parts });
 
-// const rawDecl = (
-//   prop: PropertyId,
-//   name: string,
-//   value: string,
-//   important = false,
-// ) => ({
-//   kind: BlockItemKind.Declaration,
-//   raw: true,
-//   prop,
-//   name,
-//   value,
-//   important,
-// });
+const customDecl = (
+  name: string,
+  value: string,
+  important = false,
+) => ({
+  kind: BlockItemKind.Declaration,
+  prop: PropertyId.Custom,
+  name,
+  value,
+  important,
+});
 
 const namedColorDecl = (
   prop: PropertyId.Color | PropertyId.BackgroundColor,
@@ -189,6 +187,16 @@ describe('parseStylesheet', () => {
     });
   });
 
+  it('parses custom properties as raw declarations', () => {
+    expect(parseStylesheet('.foo { --banana-mode: turbo; }')).toMatchObject({
+      rules: [{
+        kind: RuleKind.Style,
+        selector: { arms: [arm(cls('foo'))] },
+        block: { items: [customDecl('--banana-mode', 'turbo')] },
+      }],
+    });
+  });
+
   // it('parses important raw declarations', () => {
   //   expect(parseStylesheet('.foo { font-size: 12px !important; }')).toMatchObject({
   //     rules: [{
@@ -253,6 +261,24 @@ describe('parseStylesheet', () => {
         name: 'media',
         prelude: 'screen',
         block: '{ .foo { color: red; } }',
+      }],
+    });
+  });
+
+  it('does not split at-rule preludes on semicolons inside strings', () => {
+    expect(parseStylesheet('@import url("x;y.css");')).toMatchObject({
+      rules: [{
+        kind: RuleKind.At, at: AtRuleKind.Import,
+        name: 'import', prelude: 'url("x;y.css")',
+      }],
+    });
+  });
+
+  it('does not split block at-rule preludes on semicolons inside strings', () => {
+    expect(parseStylesheet('@supports (content: "x;y") { .foo { color: red; } }')).toMatchObject({
+      rules: [{
+        kind: RuleKind.At, at: AtRuleKind.Supports,
+        name: 'supports', prelude: '(content: "x;y")', block: '{ .foo { color: red; } }',
       }],
     });
   });
@@ -414,9 +440,34 @@ describe('parseStylesheet', () => {
     }
   });
 
+  it('parses final important in custom properties as declaration priority', () => {
+    expect(parseStylesheet('.foo { --x: foo !important; }')).toMatchObject({
+      rules: [{
+        kind: RuleKind.Style,
+        selector: { arms: [arm(cls('foo'))] },
+        block: { items: [customDecl('--x', 'foo', true)] },
+      }],
+    });
+  });
 
+  it('keeps non-final important text inside custom property values', () => {
+    expect(parseStylesheet('.foo { --x: foo !important bar; }')).toMatchObject({
+      rules: [{
+        kind: RuleKind.Style,
+        selector: { arms: [arm(cls('foo'))] },
+        block: { items: [customDecl('--x', 'foo !important bar')] },
+      }],
+    });
+  });
 
-
-
+  it('keeps important text inside custom property strings', () => {
+    expect(parseStylesheet('.foo { --x: "foo !important"; }')).toMatchObject({
+      rules: [{
+        kind: RuleKind.Style,
+        selector: { arms: [arm(cls('foo'))] },
+        block: { items: [customDecl('--x', '"foo !important"')] },
+      }],
+    });
+  });
 
 });

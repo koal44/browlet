@@ -1,5 +1,6 @@
 import type { RelativeSelectorList, SelectorList } from '../../selectlet/parser/parser';
 import type { ColorValue } from '../values/color';
+import type { CssWideValue } from '../values/css-wide';
 import type { LengthPercentageAuto } from '../values/length-percentage';
 
 // Stylesheet
@@ -110,29 +111,12 @@ export type DeclarationAst =
 export type DeclarationBaseAst<P extends PropertyId, V> = {
   kind: BlockItemKind.Declaration;
   prop: P;
-  value: V | GlobalValue;
+  value: V | CssWideValue;
   important: boolean;
 };
 
-export type GlobalValue = {
-  type: 'global';
-  keyword: GlobalKeyword;
-};
-
-export type GlobalKeyword =
-  | 'inherit'
-  | 'initial'
-  | 'unset'
-  | 'revert'
-  | 'revert-layer';
-
-export type RawDeclarationAst = {
-  kind: BlockItemKind.Declaration;
-  prop: PropertyId.Custom | PropertyId.Unknown;
-  name: string;
-  value: string;
-  important: boolean;
-};
+export type RawDeclarationAst =
+  DeclarationBaseAst<PropertyId.Custom, string> & { name: string; };
 
 export type ColorDeclarationAst =
   DeclarationBaseAst<ColorPropertyId, ColorValue>;

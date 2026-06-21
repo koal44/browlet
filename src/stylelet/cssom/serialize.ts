@@ -1,6 +1,7 @@
-import { assertNever } from '../../utils/util';
-import type { DeclarationAst, GlobalValue, MarginSideDeclarationAst } from '../parser/types';
-import { PropertyId } from '../parser/types';
+import { requireDefined } from '../../utils/util';
+import type { DeclarationAst } from '../parser/types';
+import { PropertyId, propertyNameFor } from '../parser/types';
+import { isCssWideValue, serializeCssWideValue, type CssWideValue } from '../values/css-wide';
 import { serializeLengthPercentageAuto } from '../values/length-percentage';
 
 export type SerializedDeclaration = {
@@ -15,12 +16,16 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
     case PropertyId.MarginRight:
     case PropertyId.MarginTop:
     case PropertyId.MarginBottom:
-      return serializeMarginSideDeclaration(declaration);
+      return {
+        name: getName(declaration.prop),
+        value: serialize(declaration.value, serializeLengthPercentageAuto),
+        important: declaration.important,
+      };
 
     case PropertyId.Custom:
       return {
         name: declaration.name,
-        value: declaration.value,
+        value: serialize(declaration.value, (v) => v),
         important: declaration.important,
       };
 
@@ -29,40 +34,15 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
   }
 }
 
-function isGlobalValue(value: unknown): value is GlobalValue {
-  return !!value
-    && typeof value === 'object'
-    && (value as { type?: unknown; }).type === 'global';
+function serialize<T>(value: T | CssWideValue, serialize: (value: T) => string): string {
+  return isCssWideValue(value)
+    ? serializeCssWideValue(value)
+    : serialize(value);
 }
 
-function serializeGlobalValue(value: GlobalValue): string {
-  switch (value.keyword) {
-    case 'inherit': return 'inherit';
-    case 'initial': return 'initial';
-    case 'unset': return 'unset';
-    case 'revert': return 'revert';
-    case 'revert-layer': return 'revert-layer';
-    default: assertNever(value.keyword);
-  }
-}
-
-
-function serializeMarginSideDeclaration(declaration: MarginSideDeclarationAst): SerializedDeclaration {
-  const value = isGlobalValue(declaration.value)
-    ? serializeGlobalValue(declaration.value)
-    : serializeLengthPercentageAuto(declaration.value);
-  return {
-    name: marginSidePropertyName(declaration.prop),
-    value: value,
-    important: declaration.important,
-  };
-}
-
-function marginSidePropertyName(prop: MarginSideDeclarationAst['prop']): string {
-  switch (prop) {
-    case PropertyId.MarginTop: return 'margin-top';
-    case PropertyId.MarginRight: return 'margin-right';
-    case PropertyId.MarginBottom: return 'margin-bottom';
-    case PropertyId.MarginLeft: return 'margin-left';
-  }
+function getName(prop: PropertyId): string {
+  return requireDefined(
+    propertyNameFor(prop),
+    () => `No serialized property name for PropertyId ${prop}`,
+  );
 }
