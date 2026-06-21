@@ -108,7 +108,9 @@ const sx = createSelectlet(documentImpl, {
 
 ## Status
 
-`selectlet` is under active development. Current work is focused on jsdom integration, browser/WPT conformance coverage, shadow DOM selector behavior, and selector API performance.
+`selectlet` is under active development. The selector engine supports document, element, and `ShadowRoot` query contexts, with coverage for scoped shadow-DOM selector behavior such as `:host`, `:host-context()`, `::part()`, and `::slotted()`.
+
+Current work is focused on browser/WPT conformance coverage, jsdom integration, selector API performance, and early style/CSSOM infrastructure.
 
 ## Development
 
