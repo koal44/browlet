@@ -5,14 +5,15 @@ import {
   type ParseContext as SelectorParseContext,
 } from '../../selectlet/parser/parser';
 import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
-import type { ColorSource, ColorValue } from './color';
-import { ColorNameByText, ColorSourceKind, namedColorRgba } from './color';
-import type { ColorDeclarationAst, RawDeclarationAst } from './types';
+import type { ColorDeclarationAst, ColorPropertyId, MarginSideDeclarationAst, MarginSidePropertyId, RawDeclarationAst } from './types';
 import {
-  AtRuleKind, AtRuleKindByName, BlockItemKind, PropertyId, PropertyIdByName, RuleKind,
+  AtRuleKind, AtRuleKindByName, BlockItemKind, PropertyId, RuleKind,
   type AtRuleAst, type StyleBlockAst, type StyleRuleAst, type StyleSheetAst, type CssRuleAst,
   type InvalidRuleAst, type StyleBlockItemAst, type DeclarationAst, type InvalidBlockItemAst,
+  propertyIdFor,
 } from './types';
+import { parseLengthPercentageAuto } from '../values/length-percentage';
+import { parseColorValue } from '../values/color';
 
 export type StyleParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
@@ -268,7 +269,7 @@ function parseDeclaration(c: Cursor, _ctx: StyleParseContext): DeclarationAst {
   consumeTrivia(c);
 
   const name = consumeIdent(c);
-  const prop = propertyIdForRawName(name);
+  const prop = propertyIdFor(name);
 
   consumeTrivia(c);
 
@@ -282,43 +283,42 @@ function parseDeclaration(c: Cursor, _ctx: StyleParseContext): DeclarationAst {
   return parseDeclarationValue(c, prop, name);
 }
 
-function propertyIdForRawName(name: string): PropertyId {
-  return PropertyIdByName[name.toLowerCase()] ?? PropertyId.Unknown;
-}
-
 function parseDeclarationValue(c: Cursor, prop: PropertyId, name: string): DeclarationAst {
   switch (prop) {
     case PropertyId.Color:
     case PropertyId.BackgroundColor:
       return parseColorDeclaration(c, prop);
 
+    case PropertyId.MarginTop:
+    case PropertyId.MarginRight:
+    case PropertyId.MarginBottom:
+    case PropertyId.MarginLeft:
+      return parseMarginSideDeclaration(c, prop);
+
+    case PropertyId.Custom:
+      return parseCustomPropertyDeclaration(c, name);
+
+    case PropertyId.Unknown:
+      return c.error(`Unknown CSS property ${name}`);
+
     default:
-      return parseRawDeclarationValue(c, prop, name);
+      return c.error(`Unsupported CSS property ${name}`);
   }
 }
 
-function parseRawDeclarationValue(c: Cursor, prop: PropertyId, name: string): RawDeclarationAst {
-  const value = consumeDeclarationValue(c);
-  const parsed = stripImportant(value);
-
-  if (c.peek() === ';') {
-    c.advance();
-  }
+function parseCustomPropertyDeclaration(c: Cursor, name: string): RawDeclarationAst {
+  const parsed = consumeRawDeclarationValue(c);
 
   return {
     kind: BlockItemKind.Declaration,
-    raw: true,
-    prop,
+    prop: PropertyId.Custom,
     name,
     value: parsed.value,
     important: parsed.important,
   };
 }
 
-function parseColorDeclaration(
-  c: Cursor,
-  prop: PropertyId.Color | PropertyId.BackgroundColor,
-): ColorDeclarationAst {
+function parseColorDeclaration(c: Cursor, prop: ColorPropertyId): ColorDeclarationAst {
   const value = parseColorValue(c);
   const important = finishDeclaration(c);
 
@@ -328,34 +328,6 @@ function parseColorDeclaration(
     value,
     important,
   };
-}
-
-function parseColorValue(c: Cursor): ColorValue {
-  const raw = consumeIdent(c);
-  const text = raw.toLowerCase();
-
-  if (text === 'currentcolor') {
-    return {
-      source: {
-        kind: ColorSourceKind.CurrentColor,
-      },
-    };
-  }
-
-  const name = ColorNameByText[text];
-
-  if (name === undefined) {
-    c.error(`Expected color, got ${raw}`);
-  }
-
-  const source: ColorSource = {
-    kind: ColorSourceKind.Named,
-    name,
-  };
-
-  const rgba = namedColorRgba(name);
-
-  return rgba === undefined ? { source } : { source, rgba };
 }
 
 function finishDeclaration(c: Cursor): boolean {
@@ -375,6 +347,17 @@ function finishDeclaration(c: Cursor): boolean {
   }
 
   c.error(`Expected declaration end, got ${ch}`);
+}
+
+function consumeRawDeclarationValue(c: Cursor): { value: string; important: boolean; } {
+  const value = consumeDeclarationValue(c);
+  const parsed = stripImportant(value);
+
+  if (c.peek() === ';') {
+    c.advance();
+  }
+
+  return parsed;
 }
 
 function consumeDeclarationValue(c: Cursor): string {
@@ -507,3 +490,14 @@ function stripImportant(value: string): { value: string; important: boolean; } {
   };
 }
 
+function parseMarginSideDeclaration(c: Cursor, prop: MarginSidePropertyId): MarginSideDeclarationAst {
+  const value = parseLengthPercentageAuto(c);
+  const important = finishDeclaration(c);
+
+  return {
+    kind: BlockItemKind.Declaration,
+    prop,
+    value,
+    important,
+  };
+}

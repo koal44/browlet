@@ -1,6 +1,3 @@
-import { RuleKind, type StyleSheetAst } from '../parser/types';
-import { SelectletCSSStyleRule } from './rules';
-
 export class SelectletCSSRuleList implements CSSRuleList {
   [index: number]: CSSRule;
 
@@ -25,16 +22,4 @@ export class SelectletCSSRuleList implements CSSRuleList {
   [Symbol.iterator](): ArrayIterator<CSSRule> {
     return this._rules[Symbol.iterator]();
   }
-}
-
-export function buildCSSRuleList(sheet: StyleSheetAst): SelectletCSSRuleList {
-  const rules: CSSRule[] = [];
-
-  for (const rule of sheet.rules) {
-    if (rule.kind === RuleKind.Style) {
-      rules.push(new SelectletCSSStyleRule(rule));
-    }
-  }
-
-  return new SelectletCSSRuleList(rules);
 }

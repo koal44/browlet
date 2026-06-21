@@ -1,20 +1,13 @@
-import {
-  BlockItemKind,
-  type DeclarationAst, type RawDeclarationAst, type StyleBlockAst,
-} from '../parser/types';
+import { BlockItemKind, type DeclarationAst, type StyleBlockAst } from '../parser/types';
 import { notImplemented } from '../util';
-
-type ActiveDeclaration = {
-  name: string;
-  value: string;
-  important: boolean;
-};
+import type { SerializedDeclaration } from './serialize';
+import { serializeAstDeclaration } from './serialize';
 
 export class SelectletCSSStyleDeclaration {
   [index: number]: string;
 
   private _names: string[] = [];
-  private _declarations = new Map<string, ActiveDeclaration>();
+  private _declarations = new Map<string, SerializedDeclaration>();
 
   constructor(block?: StyleBlockAst) {
     if (block) {
@@ -70,19 +63,13 @@ export class SelectletCSSStyleDeclaration {
   }
 
   private addDeclaration(declaration: DeclarationAst): void {
-    if (!isRawDeclaration(declaration)) {
-      return;
-    }
-
-    this.setActiveDeclaration({
-      name: declaration.name,
-      value: declaration.value,
-      important: declaration.important,
-    });
+    const active = serializeAstDeclaration(declaration);
+    if (!active) return;
+    this.setActiveDeclaration(active);
   }
 
-  private setActiveDeclaration(declaration: ActiveDeclaration): void {
-    const name = normalizePropertyName(declaration.name);
+  private setActiveDeclaration(declaration: SerializedDeclaration): void {
+    const name = declaration.name;
     const previous = this._declarations.get(name);
 
     if (previous?.important && !declaration.important) {
@@ -101,14 +88,6 @@ export class SelectletCSSStyleDeclaration {
   }
 }
 
-export function createCSSStyleDeclaration(block?: StyleBlockAst): CSSStyleDeclaration {
-  return new SelectletCSSStyleDeclaration(block) as unknown as CSSStyleDeclaration;
-}
-
-function isRawDeclaration(declaration: DeclarationAst): declaration is RawDeclarationAst {
-  return 'raw' in declaration;
-}
-
 function normalizePropertyName(name: string): string {
-  return name.toLowerCase();
+  return name.startsWith('--') ? name : name.toLowerCase();
 }

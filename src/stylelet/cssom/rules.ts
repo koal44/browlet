@@ -1,7 +1,7 @@
-import { createCSSStyleDeclaration } from './declaration';
+import { SelectletCSSStyleDeclaration } from './declaration';
 import { SelectletCSSRuleList } from './rule-list';
 import { notImplemented } from '../util';
-import type { StyleRuleAst } from '../parser/types';
+import type { StyleBlockAst, StyleRuleAst } from '../parser/types';
 
 export class SelectletCSSStyleRule implements CSSStyleRule {
   readonly STYLE_RULE = 1 as const;
@@ -20,11 +20,11 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
 
   selectorText = '';
 
-  private _style = createCSSStyleDeclaration();
+  private _style: CSSStyleDeclaration;
   private _cssRules = new SelectletCSSRuleList();
 
   constructor(rule?: StyleRuleAst) {
-    this._style = createCSSStyleDeclaration(rule?.block);
+    this._style = rule ? createCSSStyleDeclaration(rule.block) : createCSSStyleDeclaration();
   }
 
   get cssRules(): CSSRuleList {
@@ -66,4 +66,8 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
   get styleMap(): StylePropertyMap {
     return notImplemented('CSSStyleRule.styleMap');
   }
+}
+
+function createCSSStyleDeclaration(block?: StyleBlockAst): CSSStyleDeclaration {
+  return new SelectletCSSStyleDeclaration(block) as unknown as CSSStyleDeclaration;
 }

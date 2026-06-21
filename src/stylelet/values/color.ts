@@ -1,3 +1,6 @@
+import type { Cursor } from '../../selectlet/parser/cursor';
+import { consumeIdent } from '../../selectlet/parser/lex';
+
 export type ColorValue = {
   source: ColorSource;
   rgba?: number;
@@ -811,4 +814,32 @@ function unit(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
+}
+
+export function parseColorValue(c: Cursor): ColorValue {
+  const raw = consumeIdent(c);
+  const text = raw.toLowerCase();
+
+  if (text === 'currentcolor') {
+    return {
+      source: {
+        kind: ColorSourceKind.CurrentColor,
+      },
+    };
+  }
+
+  const name = ColorNameByText[text];
+
+  if (name === undefined) {
+    c.error(`Expected color, got ${raw}`);
+  }
+
+  const source: ColorSource = {
+    kind: ColorSourceKind.Named,
+    name,
+  };
+
+  const rgba = namedColorRgba(name);
+
+  return rgba === undefined ? { source } : { source, rgba };
 }

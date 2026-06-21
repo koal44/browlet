@@ -1,6 +1,8 @@
 import { parseStylesheet, type StyleParseContext } from '../parser/stylesheet';
+import { RuleKind, type StyleSheetAst } from '../parser/types';
 import { notImplemented } from '../util';
-import { buildCSSRuleList, SelectletCSSRuleList } from './rule-list';
+import { SelectletCSSRuleList } from './rule-list';
+import { SelectletCSSStyleRule } from './rules';
 
 export class SelectletCSSStyleSheet implements CSSStyleSheet {
   private _source = '';
@@ -89,4 +91,16 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
   removeRule(_index?: number): void {
     return notImplemented('CSSStyleSheet.removeRule');
   }
+}
+
+function buildCSSRuleList(sheet: StyleSheetAst): SelectletCSSRuleList {
+  const rules: CSSRule[] = [];
+
+  for (const rule of sheet.rules) {
+    if (rule.kind === RuleKind.Style) {
+      rules.push(new SelectletCSSStyleRule(rule));
+    }
+  }
+
+  return new SelectletCSSRuleList(rules);
 }

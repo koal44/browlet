@@ -316,29 +316,6 @@ export function installBrowserHelpers(): void {
     return Array.isArray(list) ? list : [...list];
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   function getEngineQuery(c: EquivalentCase, ng: Engine): EngineQuery {
     const sxlt = selectlet;
     if (!sxlt) throw new Error('selectlet is not available');
@@ -588,13 +565,13 @@ export function installBrowserHelpers(): void {
 
       case 'computedStyle' in c:
         return engine === 'native'
-          ? `getComputedStyle(...).getPropertyValue(${c.computedStyle})`
-          : `sxlt.computedStyle(..., ${c.computedStyle})`;
+          ? `native getComputedStyle(...).getPropertyValue(${c.computedStyle})`
+          : `stylelet computedStyle(..., ${c.computedStyle})`;
 
       case 'cssom' in c:
         return engine === 'native'
-          ? `cssom(${stringify(c.cssom)})`
-          : `sxlt.cssom(${stringify(c.cssom)})`;
+          ? `native CSSOM ${stringify(c.cssom)}`
+          : `stylelet CSSOM ${stringify(c.cssom)}`;
 
       default:
         assertNever(c);
@@ -847,8 +824,6 @@ export function installBrowserHelpers(): void {
 
     return decls;
   }
-
-
 
   window.__pwHelpers = {
     resolveContext,

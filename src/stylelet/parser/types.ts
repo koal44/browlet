@@ -1,5 +1,6 @@
 import type { RelativeSelectorList, SelectorList } from '../../selectlet/parser/parser';
-import type { ColorValue } from './color';
+import type { ColorValue } from '../values/color';
+import type { LengthPercentageAuto } from '../values/length-percentage';
 
 // Stylesheet
 
@@ -114,21 +115,20 @@ export type DeclarationBaseAst<P extends PropertyId, V> = {
 };
 
 export type GlobalValue = {
-  global: GlobalKeyword;
+  type: 'global';
+  keyword: GlobalKeyword;
 };
 
-export enum GlobalKeyword {
-  Inherit = 1,
-  Initial,
-  Unset,
-  Revert,
-  RevertLayer,
-}
+export type GlobalKeyword =
+  | 'inherit'
+  | 'initial'
+  | 'unset'
+  | 'revert'
+  | 'revert-layer';
 
 export type RawDeclarationAst = {
   kind: BlockItemKind.Declaration;
-  raw: true;
-  prop: PropertyId;
+  prop: PropertyId.Custom | PropertyId.Unknown;
   name: string;
   value: string;
   important: boolean;
@@ -165,27 +165,6 @@ export enum DisplayValue {
   None,
 }
 
-export enum SizeKind {
-  Auto = 1,
-  Length,
-  Percentage,
-}
-
-export enum LengthUnit {
-  None = 0,
-  Px,
-  Em,
-  Rem,
-  Vw,
-  Vh,
-}
-
-export type LengthPercentageAuto = {
-  kind: SizeKind;
-  value: number;
-  unit: LengthUnit;
-};
-
 export type BoxValue<T> = {
   top: T;
   right: T;
@@ -197,6 +176,7 @@ export type BoxValue<T> = {
 
 export enum PropertyId {
   Unknown = 0,
+  Custom,
 
   AlignSelf,
   Azimuth,
@@ -276,7 +256,7 @@ export enum PropertyId {
   WritingMode,
 }
 
-export const PropertyIdByName: { [name: string]: PropertyId | undefined; } = {
+const PropertyIdByName: { [name: string]: PropertyId | undefined; } = {
   'align-self': PropertyId.AlignSelf,
   azimuth: PropertyId.Azimuth,
   background: PropertyId.Background,
@@ -356,5 +336,26 @@ export const PropertyIdByName: { [name: string]: PropertyId | undefined; } = {
 };
 
 export function propertyIdFor(name: string): PropertyId {
+  if (isCustomPropertyName(name)) return PropertyId.Custom;
   return PropertyIdByName[name.toLowerCase()] ?? PropertyId.Unknown;
+}
+
+const PropertyNameById: Readonly<Partial<Record<PropertyId, string>>> = (() => {
+  const names: Partial<Record<PropertyId, string>> = {};
+
+  for (const [name, id] of Object.entries(PropertyIdByName)) {
+    if (id !== undefined) {
+      names[id] = name;
+    }
+  }
+
+  return names;
+})();
+
+export function propertyNameFor(id: PropertyId): string | undefined {
+  return PropertyNameById[id];
+}
+
+function isCustomPropertyName(name: string): boolean {
+  return name.startsWith('--');
 }

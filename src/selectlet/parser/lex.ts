@@ -191,7 +191,7 @@ function isAlpha(ch: string): boolean {
   );
 }
 
-function isDigit(ch: string): boolean {
+export function isDigit(ch: string): boolean {
   const code = ch.charCodeAt(0);
   return code >= 48 && code <= 57;
 }

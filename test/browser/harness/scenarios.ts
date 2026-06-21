@@ -495,7 +495,7 @@ function runEngineChecks(
           case 'threw':   return r.threw === other.threw;
           case 'error':   return true; // errors can differ even if threw is the same, so ignore them for grouping purposes
           case 'value':   return r.value === other.value;
-          case 'cssom': return sameJson(r.cssom, other.cssom);
+          case 'cssom':   return sameJson(r.cssom, other.cssom);
           default:        return assertNever(key);
         }
       })
