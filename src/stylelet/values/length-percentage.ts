@@ -1,10 +1,8 @@
 import type { Cursor } from '../../selectlet/parser/cursor';
-import { consumeTrivia } from '../../selectlet/parser/lex';
-import type { AutoValue } from './auto';
-import { LengthUnit, serializeLength, tryConsumeLengthUnit, type LengthValue } from './length';
-import { tryConsumeKeywordIn } from './keyword';
-import { tryConsumeNumber } from './number';
-import { serializePercentage, type PercentageValue } from './percentage';
+import { tryParseAuto, type AutoValue } from './auto';
+import { serializeLength, tryParseLength, type LengthValue } from './length';
+import { serializePercentage, tryParsePercentage, type PercentageValue } from './percentage';
+import { oneOf } from '../parser/component';
 
 export type LengthPercentageAuto =
   | LengthPercentage
@@ -14,29 +12,20 @@ export type LengthPercentage =
   | LengthValue
   | PercentageValue;
 
+const tryParseLengthPercentageAuto = oneOf(
+  tryParseAuto,
+  tryParsePercentage,
+  tryParseLength,
+);
+
 export function parseLengthPercentageAuto(c: Cursor): LengthPercentageAuto {
-  consumeTrivia(c);
+  const value = tryParseLengthPercentageAuto(c);
 
-  const auto = tryConsumeKeywordIn(c, ['auto'] as const);
-  if (auto) return { type: 'auto' };
-
-  const n = tryConsumeNumber(c);
-  if (!n) c.error('Expected <length-percentage> or auto');
-
-  if (c.match('%')) {
-    return { type: 'percentage', value: n.value };
+  if (value !== null) {
+    return value;
   }
 
-  const unit = tryConsumeLengthUnit(c);
-  if (unit !== null) {
-    return { type: 'length', value: n.value, unit };
-  }
-
-  if (n.value === 0) {
-    return { type: 'length', value: 0, unit: LengthUnit.None };
-  }
-
-  c.error('Expected length unit or % after number');
+  c.error('Expected <length-percentage> or auto');
 }
 
 export function serializeLengthPercentageAuto(value: LengthPercentageAuto): string {

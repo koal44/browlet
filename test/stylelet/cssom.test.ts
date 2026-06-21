@@ -190,22 +190,23 @@ runScenarios('style CSSOM declaration rules', 'normal', [
     ],
   },
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  {
+    name: 'auto and percentage margin declarations are exposed',
+    engines: ['native', 'selectlet'],
+    markup: `
+      <style>
+        .foo { margin-left: auto; margin-right: 10%; }
+      </style>`,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        expect: { cssom: { name: 'margin-left', value: 'auto', important: false } },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-right' },
+        expect: { cssom: { name: 'margin-right', value: '10%', important: false } },
+      },
+    ],
+  },
 
 ]);

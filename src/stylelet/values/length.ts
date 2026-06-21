@@ -1,7 +1,7 @@
 import type { Cursor } from '../../selectlet/parser/cursor';
-import { canStartIdent, consumeIdent } from '../../selectlet/parser/lex';
+import { canStartIdent, consumeIdent, consumeTrivia } from '../../selectlet/parser/lex';
 import { asciiLower } from '../../utils/css';
-import { serializeNumber } from './number';
+import { serializeNumber, tryConsumeNumber } from './number';
 
 export type LengthValue = {
   type: 'length';
@@ -32,6 +32,30 @@ export function tryConsumeLengthUnit(c: Cursor): LengthUnit | null {
   }
 
   return unit;
+}
+
+export function tryParseLength(c: Cursor): LengthValue | null {
+  const start = c.pos();
+
+  consumeTrivia(c);
+
+  const n = tryConsumeNumber(c);
+  if (n === null) {
+    c.restore(start);
+    return null;
+  }
+
+  const unit = tryConsumeLengthUnit(c);
+  if (unit !== null) {
+    return { type: 'length', value: n.value, unit };
+  }
+
+  if (n.value === 0) {
+    return { type: 'length', value: 0, unit: LengthUnit.None };
+  }
+
+  c.restore(start);
+  return null;
 }
 
 export function serializeLength(value: LengthValue): string {
