@@ -56,7 +56,7 @@ index 24b397b5..763ab983 100644
 +  }
  };
 diff --git a/lib/jsdom/living/nodes/Document-impl.js b/lib/jsdom/living/nodes/Document-impl.js
-index b85d6b0e..b21e6fb4 100644
+index b85d6b0e..db5f195f 100644
 --- a/lib/jsdom/living/nodes/Document-impl.js
 +++ b/lib/jsdom/living/nodes/Document-impl.js
 @@ -2,6 +2,7 @@
@@ -75,7 +75,7 @@ index b85d6b0e..b21e6fb4 100644
  
    constructor(globalObject, args, privateData) {
      super(globalObject, args, privateData);
-@@ -231,6 +233,89 @@ class DocumentImpl extends NodeImpl {
+@@ -231,6 +233,95 @@ class DocumentImpl extends NodeImpl {
      this.#domSelector?.clear();
    }
  
@@ -154,7 +154,13 @@ index b85d6b0e..b21e6fb4 100644
 +            },
 +
 +            hasAttribute: (el, name) => attrByName(el, name) !== null,
-+            hasAttributeNS: (el, namespace, localName) => attrByNameNS(el, namespace, localName) !== null
++            hasAttributeNS: (el, namespace, localName) => attrByNameNS(el, namespace, localName) !== null,
++
++            hasCustomState: () => {
++              // lib/jsdom/living/custom-elements/ElementInternals.webidl
++              // ElementInternals.states is not implemented yet.
++              return false;
++            }
 +          }
 +        }
 +      });
@@ -255,26 +261,10 @@ index 2c0b1770..87010243 100644
      "tough-cookie": "^6.0.1",
      "undici": "^7.25.0",
 diff --git a/test/web-platform-tests/to-run.yaml b/test/web-platform-tests/to-run.yaml
-index 6d337513..50acab29 100644
+index 6d337513..5ae43a0f 100644
 --- a/test/web-platform-tests/to-run.yaml
 +++ b/test/web-platform-tests/to-run.yaml
-@@ -311,6 +311,7 @@ has-slotted-manual-assignment.html: [fail, Unknown]
- has-slotted-query-selector.html: [fail, Unknown]
- host-context-parsing.html: [fail, Unknown]
- host-descendant-invalidation.html: [fail, Unknown]
-+host-dom-001.html: [fail, Unknown]
- host-functional-descendant-invalidation.html: [fail, Unknown]
- host-parsing.html: [fail, Unknown]
- keyframes-001.html: [fail, Unknown]
-@@ -327,6 +328,7 @@ shadow-shared-style-cache-001.html: [fail, Unknown]
- slot-non-html-display-value.html: [fail, Our getComputedStyle implementation doesn't care about @namespace-rules (see https://github.com/jsdom/cssstyle/issues/193 and default-stylesheet.css)]
- slotted-invalidation.html: [fail, Unknown]
- slotted-link.html: [fail, Unknown]
-+slotted-matches.html: [fail, Unknown]
- slotted-nested.html: [fail, Unknown]
- slotted-parsing.html: [fail, Unknown]
- slotted-slot.html: [fail, Unknown]
-@@ -658,7 +660,6 @@ parsing/parse-class.html: [fail, Unknown]
+@@ -658,7 +658,6 @@ parsing/parse-class.html: [fail, Unknown]
  parsing/parse-descendant.html: [fail, Unknown]
  parsing/parse-focus-visible.html: [fail, Unknown]
  parsing/parse-has-disallow-nesting-has-inside-has.html: [fail, Unknown]
@@ -282,7 +272,7 @@ index 6d337513..50acab29 100644
  parsing/parse-has-slotted.tentative.html: [fail, Unknown]
  parsing/parse-has.html: [fail, Unknown]
  parsing/parse-id.html: [fail, Unknown]
-@@ -1930,53 +1931,6 @@ template-element/template-content-hierarcy.html: [fail, "We do not implement htt
+@@ -1930,53 +1929,6 @@ template-element/template-content-hierarcy.html: [fail, "We do not implement htt
  
  DIR: html/semantics/selectors
  
@@ -336,50 +326,3 @@ index 6d337513..50acab29 100644
  pseudo-classes/autofill.html: [fail, Unknown]
  pseudo-classes/focus-autofocus.html: [timeout, Unknown]
  pseudo-classes/focus.html: [timeout, Unknown]
-diff --git a/test/web-platform-tests/to-upstream-expectations.yaml b/test/web-platform-tests/to-upstream-expectations.yaml
-index f8c65db6..a2e6a2ad 100644
---- a/test/web-platform-tests/to-upstream-expectations.yaml
-+++ b/test/web-platform-tests/to-upstream-expectations.yaml
-@@ -36,6 +36,42 @@ custom-elements/ElementInternals-accessibility.html:
-   "ariaFlowToElements": [fail, Element reflection not implemented]
-   "ariaLabelledByElements": [fail, Element reflection not implemented]
-   "ariaOwnsElements": [fail, Element reflection not implemented]
-+dom/nodes/ParentNode-querySelector-All-dont-upstream.html:
-+  "Document.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+dom/nodes/ParentNode-querySelector-All-xht-dont-upstream.xht:
-+  "Document.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Document.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Detached Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "Fragment.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelectorAll: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelector: Slotted selector: ::slotted(foo)": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelectorAll: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+  "In-document Element.querySelector: Slotted selector (no matching closing paren): ::slotted(foo": [fail, "selectlet does not yet implement ::slotted()"]
-+dom/nodes/ParentNode-querySelector-host-pseudo-class.html:
-+  "Using :host pseudo-class selector in shadow DOM": [fail, "selectlet does not yet implement :host in DOM query APIs"]
- html/semantics/scripting-1/the-script-element/execution-timing/insert-script.html: [fail, https://github.com/jsdom/jsdom/issues/159]
- jsdom-only/failure-example-1.html: [fail, https://github.com/jsdom/jsdom/issues/3835]
- jsdom-only/failure-example-2.html:

@@ -440,4 +440,22 @@ runScenarios('parser', 'normal', [
     ],
   },
 
+  {
+    name: 'shadow-root/functional-pseudo-args-allow-eof-after-valid-body',
+    // status: 'only',
+    markup: `<div id="host"><foo id="light" slot="x"></foo></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML =
+          `<slot name="x"></slot>`;
+      });
+    },
+    cases: [
+      { select: '::slotted(foo', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+      { select: '::part(foo', expect: { throws: false } },
+      { select: ':lang(zz', expect: { throws: false } },
+    ],
+  },
+
 ]);

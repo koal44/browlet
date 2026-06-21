@@ -764,7 +764,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
     case ':part': {
       ctx.afterNonPartEl = false;
       ctx.afterPart = true;
-      return emitPartPseudoElementTest(parseIdentListPseudoArg(c));
+      return emitPartPseudoElementTest(parsePartNameListArg(c));
     }
     case ':slotted': {
       const compound = parseCompoundPseudoArg(c, ctx, '::slotted()');
@@ -1173,15 +1173,19 @@ function parseCompoundPseudoArg(c: Cursor, ctx: ParseContext, label = 'pseudo'):
   consumeTrivia(c);
   ch = c.peek();
 
-  if (ch !== ')') {
-    c.error(`Expected ")" after ${label} argument, got ${ch || '<eof>'}`);
+  if (ch === ')') {
+    c.advance();
+    return compound;
   }
 
-  c.advance();
+  if (ch !== '') {
+    c.error(`Expected ")" after ${label} argument, got ${ch}`);
+  }
+
   return compound;
 }
 
-function parseIdentListPseudoArg(c: Cursor): string[] {
+function parsePartNameListArg(c: Cursor): string[] {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1195,7 +1199,6 @@ function parseIdentListPseudoArg(c: Cursor): string[] {
     }
 
     idents.push(consumeIdent(c));
-
     consumeTrivia(c);
   }
 
@@ -1203,8 +1206,15 @@ function parseIdentListPseudoArg(c: Cursor): string[] {
     c.error(`Expected part name in ::part() body, got ${c.peek() || '<eof>'}`);
   }
 
-  if (!c.match(')')) {
-    c.error(`Expected ")" after ::part() argument, got ${c.peek() || '<eof>'}`);
+  const ch = c.peek();
+
+  if (ch === ')') {
+    c.advance();
+    return idents;
+  }
+
+  if (ch !== '') {
+    c.error(`Expected ")" after ::part() argument, got ${ch}`);
   }
 
   return idents;

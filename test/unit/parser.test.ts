@@ -855,6 +855,12 @@ describe('parsePseudoTestSource oddball pseudo parsing', () => {
       'Unsupported pseudo-element'
     );
   });
+
+  it('accepts EOF in place of closing paren for supported pseudo-element args', () => {
+    expect(parseCompoundSelector(new Cursor(':lang(foo'), {}).tests.length).toBe(1);
+    expect(parseCompoundSelector(new Cursor('::slotted(foo'), {}).tests.length).toBe(1);
+    expect(parseCompoundSelector(new Cursor('::part(foo'), {}).tests.length).toBe(1);
+  });
 });
 
 describe('parseAttributeSelector escaped values', () => {

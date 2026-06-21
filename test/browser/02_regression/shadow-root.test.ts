@@ -107,4 +107,21 @@ runScenarios('shadow-root', 'normal', [
     ],
   },
 
+  {
+    name: 'shadow-root/slotted-pseudo-element-valid-and-malformed-empty',
+    // status: 'only',
+    markup: `<div id="host"><foo id="light" slot="x"></foo></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML =
+          `<slot name="x"></slot>`;
+      });
+    },
+    cases: [
+      { select: '::slotted(foo)', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 0 } },
+      { select: '::slotted(foo', ref: { by: 'shadowRoot', id: 'host' }, expect: { count: 0 } },
+    ],
+  },
+
 ]);
