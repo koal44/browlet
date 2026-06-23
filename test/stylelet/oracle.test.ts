@@ -413,3 +413,142 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
   },
 
 ]);
+
+runScenarios('style oracle tokenizer recovery', 'normal', [
+  {
+    name: 'unterminated comment keeps prior declaration and consumes rest of stylesheet',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo { margin-left: 1px; /* unterminated
+        .bar { margin-left: 2px; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'rules' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: [
+            {
+              $type: 'CSSStyleRule',
+              selectorText: '.foo',
+              style: {
+                active: [
+                  { name: 'margin-left', value: '1px', important: false },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'newline in string swallows later same-block declaration but later rule survives',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo {
+          margin-right: 5px;
+          font-family: "x
+          y";
+          margin-left: 3px;
+        }
+        .bar {
+          margin-top: 1px;
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-right', value: '5px', important: false },
+        },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'font-family' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-top' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-top', value: '1px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'newline in string followed by bare semicolon recovers following declaration',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo {
+          margin-right: 5px;
+          font-family: "x
+          ;
+          margin-left: 3px;
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-right', value: '5px', important: false },
+        },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'font-family' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '3px', important: false },
+        },
+      },
+    ],
+  },
+
+  {
+    name: 'bad url drops current declaration and keeps following declaration',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .foo {
+          background-image: url(foo"bar);
+          margin-left: 4px;
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { kind: 'declaration', name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+      {
+        cssom: { kind: 'declaration', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: { name: 'margin-left', value: '4px', important: false },
+        },
+      },
+    ],
+  },
+]);
