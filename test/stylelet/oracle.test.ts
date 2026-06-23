@@ -552,3 +552,57 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
     ],
   },
 ]);
+
+runScenarios('style oracle nesting declaration order', 'normal', [
+  {
+    name: 'nested ampersand after declaration wins when later in source',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        .foo {
+          background-color: rgb(0, 255, 0);
+
+          & {
+            background-color: rgb(255, 0, 0);
+          }
+        }
+      </style>
+
+      <div id="target" class="foo"></div>
+    `,
+    cases: [
+      {
+        computedStyle: 'background-color',
+        ref: { by: 'id', id: 'target' },
+        expect: { value: 'rgb(255, 0, 0)' },
+      },
+    ],
+  },
+
+  {
+    name: 'declaration after nested ampersand wins when later in source',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        .foo {
+          & {
+            background-color: rgb(255, 0, 0);
+          }
+
+          background-color: rgb(0, 255, 0);
+        }
+      </style>
+
+      <div id="target" class="foo"></div>
+    `,
+    cases: [
+      {
+        computedStyle: 'background-color',
+        ref: { by: 'id', id: 'target' },
+        expect: { value: 'rgb(0, 255, 0)' },
+      },
+    ],
+  },
+]);
