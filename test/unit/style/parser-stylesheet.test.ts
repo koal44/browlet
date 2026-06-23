@@ -423,6 +423,7 @@ describe('parseStylesheet', () => {
       ['nonzero unitless number', '.foo { margin-bottom: 3; margin-bottom: 3px; }', 'margin-bottom: 3;', PropertyId.MarginBottom],
       ['deferred calc function', '.foo { margin-left: calc(1px + 2px); margin-left: 3px; }', 'margin-left: calc(1px + 2px);', PropertyId.MarginLeft],
       ['deferred var function', '.foo { margin-right: var(--gap); margin-right: 3px; }', 'margin-right: var(--gap);', PropertyId.MarginRight],
+      ['adjacent lengths are one invalid dimension token', '.foo { margin-left: 1em2em; margin-left: 3px; }', 'margin-left: 1em2em;', PropertyId.MarginLeft],
     ] as const;
 
     for (const [name, css, invalid, prop] of cases) {

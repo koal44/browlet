@@ -1,5 +1,4 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { consumeTrivia } from '../../selectlet/parser/lex';
+import { consumeTrivia, type Cursor } from '../parser/lex';
 
 export function consumeComponentValue(c: Cursor): void {
   const ch = c.peek();
@@ -193,7 +192,11 @@ export function parseUnorderedSome<P extends AnyUnorderedPart[]>(
   const result = consumeUnordered(c, parts);
 
   if (!hasAnyMultiplierValue(result.values)) {
-    c.error('Expected one or more value components');
+    const allOptional = parts.every((part) => part.required === false);
+
+    if (!allOptional) {
+      c.error('Expected one or more value components');
+    }
   }
 
   return result.values as UnorderedResult<P>;
@@ -218,11 +221,6 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
 
     for (let i = 0; i < remaining.length; i++) {
       const part = remaining[i];
-
-      // if (part === undefined) {
-      //   continue;
-      // }
-
       const start = c.pos();
       const value = part.parse(c);
 
@@ -249,12 +247,7 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
 
     const matchedPart = remaining[matchedIndex];
 
-    // if (matchedPart === undefined) {
-    //   c.error('Internal unordered parser error');
-    // }
-
     remaining.splice(matchedIndex, 1);
-
     seen.add(matchedPart.key);
     values[matchedPart.key] = matchedValue;
 

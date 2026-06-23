@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Cursor } from '../../../src/selectlet/parser/cursor';
-import { consumeTrivia } from '../../../src/selectlet/parser/lex';
+import { consumeTrivia, Cursor } from '../../../src/stylelet/parser/lex';
 import {
   allOf, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
   type TryMultiplierParser, type TryValueParser,
@@ -614,6 +613,94 @@ describe('component value combinators', () => {
     const missing = new Cursor('c a');
     expect(() => parseUnorderedAll(missing, parts)).toThrow('Expected b');
   });
+
+  it('matches zero or more components in any order: A? || B? || C?', () => {
+    const parts = [
+      optionalPart('a', one(parseA)),
+      optionalPart('b', one(parseB)),
+      optionalPart('c', one(parseC)),
+    ];
+
+    // A? || B? || C?
+    const empty = new Cursor('');
+    expect(parseUnorderedSome(empty, parts)).toMatchObject({});
+    expectDone(empty);
+
+    const reordered = new Cursor('c a');
+    expect(parseUnorderedSome(reordered, parts)).toMatchObject({
+      a: ['a'],
+      c: ['c'],
+    });
+    expectDone(reordered);
+  });
+
+  it('allows comments between juxtaposed components', () => {
+    const c = new Cursor('a/**/b');
+
+    const parseAB = sequence(one(parseA), one(parseB));
+
+    expect(parseAB(c)).toEqual([['a'], ['b']]);
+    expectDone(c);
+  });
+
+  it('allows comments around comma separators', () => {
+    const c = new Cursor('a/**/,/**/a');
+
+    const parseACommaList = repeatComma(parseA);
+
+    expect(parseACommaList(c)).toEqual(['a', 'a']);
+    expectDone(c);
+  });
+
+  it('keeps exclusive alternatives outside unordered groups', () => {
+    const parseNone = literalParser('none');
+    const parseUnderline = literalParser('underline');
+    const parseOverline = literalParser('overline');
+    const parseLineThrough = literalParser('line-through');
+    const parseBlink = literalParser('blink');
+
+    // none | underline || overline || line-through || blink
+    const parseTextDecorationLine = oneOf(
+      one(parseNone),
+      someOf([
+        part('underline', one(parseUnderline)),
+        part('overline', one(parseOverline)),
+        part('lineThrough', one(parseLineThrough)),
+        part('blink', one(parseBlink)),
+      ]),
+    );
+
+    // combinator precedence should not allow this to be parsed as
+    // // (none | underline) || overline || line-through || blink
+    // const parseTextDecorationLine_Wrong = oneOf(
+    //   oneOf(one(parseNone), one(parseUnderline)),
+    //   someOf([
+    //     part('overline', one(parseOverline)),
+    //     part('lineThrough', one(parseLineThrough)),
+    //     part('blink', one(parseBlink)),
+    //   ]),
+    // );
+
+    const none = new Cursor('none');
+    expect(parseTextDecorationLine(none)).toEqual(['none']);
+    expectDone(none);
+
+    const reordered = new Cursor('overline underline');
+    expect(parseTextDecorationLine(reordered)).toMatchObject({
+      underline: ['underline'],
+      overline: ['overline'],
+    });
+    expectDone(reordered);
+
+    const invalid = new Cursor('none overline');
+    expect(parseTextDecorationLine(invalid)).toEqual(['none']);
+
+    consumeTrivia(invalid);
+    expect(invalid.peek()).toBe('o');
+  });
+
+
+
 
 
 });

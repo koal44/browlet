@@ -1,5 +1,4 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { canStartIdent, consumeIdent, consumeTrivia } from '../../selectlet/parser/lex';
+import { canStartIdent, consumeIdent, consumeTrivia, type Cursor } from '../parser/lex';
 import { asciiLower } from '../../utils/css';
 import { serializeNumber, tryConsumeNumber } from './number';
 

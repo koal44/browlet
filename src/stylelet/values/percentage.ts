@@ -1,5 +1,4 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { consumeTrivia } from '../../selectlet/parser/lex';
+import { consumeTrivia, type Cursor } from '../parser/lex';
 import { serializeNumber, tryConsumeNumber } from './number';
 
 export type PercentageValue = {

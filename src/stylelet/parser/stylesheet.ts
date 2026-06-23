@@ -1,5 +1,4 @@
-import { Cursor } from '../../selectlet/parser/cursor';
-import { consumeIdent, consumeTrivia } from '../../selectlet/parser/lex';
+import { consumeIdent, consumeTrivia, Cursor } from '../parser/lex';
 import { parseSelectorPrelude, type ParseContext as SelectorParseContext } from '../../selectlet/parser/parser';
 import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
 import { consumeComponentValue, consumeRawBlock } from './component';
