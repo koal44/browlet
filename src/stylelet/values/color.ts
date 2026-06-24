@@ -1,5 +1,4 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { consumeIdent } from '../../selectlet/parser/lex';
+import { singleIdentToken, type ComponentValue } from '../parser/syntax';
 
 export type ColorValue = {
   source: ColorSource;
@@ -816,9 +815,11 @@ function unit(value: number): number {
   return value;
 }
 
-export function parseColorValue(c: Cursor): ColorValue {
-  const raw = consumeIdent(c);
-  const text = raw.toLowerCase();
+export function parseColorValue(components: readonly ComponentValue[]): ColorValue | null {
+  const token = singleIdentToken(components);
+  if (token === null) return null;
+
+  const text = token.value.toLowerCase();
 
   if (text === 'currentcolor') {
     return {
@@ -829,10 +830,7 @@ export function parseColorValue(c: Cursor): ColorValue {
   }
 
   const name = ColorNameByText[text];
-
-  if (name === undefined) {
-    c.error(`Expected color, got ${raw}`);
-  }
+  if (name === undefined) return null;
 
   const source: ColorSource = {
     kind: ColorSourceKind.Named,
@@ -840,6 +838,5 @@ export function parseColorValue(c: Cursor): ColorValue {
   };
 
   const rgba = namedColorRgba(name);
-
   return rgba === undefined ? { source } : { source, rgba };
 }

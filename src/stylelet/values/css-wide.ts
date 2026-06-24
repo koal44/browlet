@@ -1,5 +1,4 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { tryConsumeKeywordIn } from './keyword';
+import { singleIdentToken, type ComponentValue } from '../parser/syntax';
 
 export type CssWideKeyword =
   | 'inherit'
@@ -13,17 +12,23 @@ export type CssWideValue = {
   keyword: CssWideKeyword;
 };
 
-const cssWideKeywords = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-] as const;
+export function tryParseCssWideValue(components: readonly ComponentValue[]): CssWideValue | null {
+  const token = singleIdentToken(components);
+  if (token === null) return null;
 
-export function tryParseCssWideValue(c: Cursor): CssWideValue | null {
-  const keyword = tryConsumeKeywordIn(c, cssWideKeywords);
-  return keyword === null ? null : { type: 'css-wide', keyword };
+  const keyword = token.value.toLowerCase();
+
+  switch (keyword) {
+    case 'inherit':
+    case 'initial':
+    case 'unset':
+    case 'revert':
+    case 'revert-layer':
+      return { type: 'css-wide', keyword };
+
+    default:
+      return null;
+  }
 }
 
 export function isCssWideValue(value: unknown): value is CssWideValue {

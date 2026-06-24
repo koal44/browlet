@@ -1,5 +1,5 @@
-import { parseStylesheet, type StyleParseContext } from '../parser/stylesheet';
-import { RuleKind, type StyleSheetAst } from '../parser/types';
+import { parseStylesheet, type StyleParseContext } from '../parser/ast';
+import { type StyleSheetAst } from '../parser/types';
 import { notImplemented } from '../util';
 import { SelectletCSSRuleList } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
@@ -94,13 +94,7 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
 }
 
 function buildCSSRuleList(sheet: StyleSheetAst): SelectletCSSRuleList {
-  const rules: CSSRule[] = [];
-
-  for (const rule of sheet.rules) {
-    if (rule.kind === RuleKind.Style) {
-      rules.push(new SelectletCSSStyleRule(rule));
-    }
-  }
-
-  return new SelectletCSSRuleList(rules);
+  return new SelectletCSSRuleList(
+    sheet.rules.map((rule) => new SelectletCSSStyleRule(rule)),
+  );
 }

@@ -1,7 +1,9 @@
-import type { RelativeSelectorList, SelectorList } from '../../selectlet/parser/parser';
+/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
+import type { ComponentValue } from './syntax';
 import type { ColorValue } from '../values/color';
 import type { CssWideValue } from '../values/css-wide';
 import type { LengthPercentageAuto } from '../values/length-percentage';
+import { asciiLower } from '../../utils/css';
 
 // Stylesheet
 
@@ -13,39 +15,27 @@ export type StyleSheetAst = {
 
 export type CssRuleAst =
   | StyleRuleAst
-  | AtRuleAst
-  | InvalidRuleAst;
+  | AtRuleAst;
 
 export type StyleRuleAst = {
-  kind: RuleKind.Style;
-  selector: SelectorList;
+  kind: RuleKindAst.Style;
+
+  // Temporary: this is the qualified-rule prelude interpreted as a style-rule
+  // selector position, but not yet parsed into SelectorListAst.
+  selector: readonly ComponentValue[];
+
   block: StyleBlockAst;
 };
 
-export type AtRuleAst = {
-  kind: RuleKind.At;
-  at: AtRuleKind;
-  name: string;
-  prelude: string;
-  block?: StyleBlockAst | string;
-};
+export type AtRuleAst = never;
 
-export type InvalidRuleAst = {
-  kind: RuleKind.Invalid;
-  source: string;
-  reason?: string;
-};
-
-export enum RuleKind {
+export enum RuleKindAst {
   Style = 1,
   At,
-  Invalid,
 }
 
-export enum AtRuleKind {
-  Unknown = 0,
-
-  Media,
+export enum AtRuleKindAst {
+  Media = 1,
   Supports,
   Import,
   Layer,
@@ -54,18 +44,18 @@ export enum AtRuleKind {
   Scope,
 }
 
-export const AtRuleKindByName: { [name: string]: AtRuleKind | undefined; } = {
-  media: AtRuleKind.Media,
-  supports: AtRuleKind.Supports,
-  import: AtRuleKind.Import,
-  layer: AtRuleKind.Layer,
-  keyframes: AtRuleKind.Keyframes,
-  'font-face': AtRuleKind.FontFace,
-  scope: AtRuleKind.Scope,
+export const AtRuleKindAstByName: { [name: string]: AtRuleKindAst | undefined; } = {
+  media: AtRuleKindAst.Media,
+  supports: AtRuleKindAst.Supports,
+  import: AtRuleKindAst.Import,
+  layer: AtRuleKindAst.Layer,
+  keyframes: AtRuleKindAst.Keyframes,
+  'font-face': AtRuleKindAst.FontFace,
+  scope: AtRuleKindAst.Scope,
 };
 
-export function atRuleKindFor(name: string): AtRuleKind {
-  return AtRuleKindByName[name.toLowerCase()] ?? AtRuleKind.Unknown;
+export function getAtRuleKindAst(name: string): AtRuleKindAst | undefined {
+  return AtRuleKindAstByName[name.toLowerCase()];
 }
 
 // Blocks
@@ -77,26 +67,22 @@ export type StyleBlockAst = {
 export type StyleBlockItemAst =
   | DeclarationAst
   | NestedStyleRuleAst
-  | AtRuleAst
-  | InvalidBlockItemAst;
+  | AtRuleAst;
 
 export type NestedStyleRuleAst = {
-  kind: BlockItemKind.NestedStyle;
-  selector: RelativeSelectorList;
+  kind: BlockItemAstKind.NestedStyle;
+
+  // Temporary for same reason as StyleRuleAst.selector.
+  // Eventually this should be RelativeSelectorListAst.
+  selector: readonly ComponentValue[];
+
   block: StyleBlockAst;
 };
 
-export type InvalidBlockItemAst = {
-  kind: BlockItemKind.Invalid;
-  source: string;
-  reason?: string;
-};
-
-export enum BlockItemKind {
+export enum BlockItemAstKind {
   Declaration = 1,
   NestedStyle,
   At,
-  Invalid,
 }
 
 // Declarations
@@ -106,17 +92,22 @@ export type DeclarationAst =
   | DisplayDeclarationAst
   | MarginDeclarationAst
   | MarginSideDeclarationAst
-  | RawDeclarationAst;
+  | CustomPropertyDeclarationAst;
 
 export type DeclarationBaseAst<P extends PropertyId, V> = {
-  kind: BlockItemKind.Declaration;
+  kind: BlockItemAstKind.Declaration;
   prop: P;
   value: V | CssWideValue;
   important: boolean;
 };
 
-export type RawDeclarationAst =
-  DeclarationBaseAst<PropertyId.Custom, string> & { name: string; };
+export type CustomPropertyDeclarationAst = {
+  kind: BlockItemAstKind.Declaration;
+  prop: PropertyId.Custom;
+  name: string;
+  value: readonly ComponentValue[];
+  important: boolean;
+};
 
 export type ColorDeclarationAst =
   DeclarationBaseAst<ColorPropertyId, ColorValue>;
@@ -319,9 +310,9 @@ const PropertyIdByName: { [name: string]: PropertyId | undefined; } = {
   'writing-mode': PropertyId.WritingMode,
 };
 
-export function propertyIdFor(name: string): PropertyId {
+export function getPropertyId(name: string): PropertyId {
   if (isCustomPropertyName(name)) return PropertyId.Custom;
-  return PropertyIdByName[name.toLowerCase()] ?? PropertyId.Unknown;
+  return PropertyIdByName[asciiLower(name)] ?? PropertyId.Unknown;
 }
 
 const PropertyNameById: Readonly<Partial<Record<PropertyId, string>>> = (() => {
@@ -336,7 +327,7 @@ const PropertyNameById: Readonly<Partial<Record<PropertyId, string>>> = (() => {
   return names;
 })();
 
-export function propertyNameFor(id: PropertyId): string | undefined {
+export function getPropertyName(id: PropertyId): string | undefined {
   return PropertyNameById[id];
 }
 

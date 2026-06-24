@@ -1,38 +1,30 @@
-import type { Cursor } from '../../selectlet/parser/cursor';
-import { consumeIdent } from '../../selectlet/parser/lex';
+import type { ComponentCursor } from '../parser/component-cursor';
 import { asciiLower } from '../../utils/css';
+import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
 
-export function tryConsumeKeywordIn<K extends string>(c: Cursor, keywords: readonly K[]): K | null {
+export function tryConsumeKeywordIn<K extends string>(
+  c: ComponentCursor,
+  keywords: readonly K[],
+): K | null {
   const start = c.pos();
 
-  if (!canStartAnyKeyword(c.peek(), keywords)) return null;
+  consumeComponentTrivia(c);
 
-  const raw = consumeIdent(c);
-  const lower = raw.toLowerCase();
+  const comp = c.next();
+
+  if (!isIdentToken(comp)) {
+    c.restore(start);
+    return null;
+  }
+
+  const lower = asciiLower(comp.value);
 
   for (const keyword of keywords) {
-    if (lower === keyword) return keyword;
+    if (lower === keyword) {
+      return keyword;
+    }
   }
 
   c.restore(start);
   return null;
 }
-
-function canStartAnyKeyword(ch: string, keywords: readonly string[]): boolean {
-  if (!ch) return false;
-
-  // Allow escaped keyword starts, e.g. \61 uto for auto.
-  if (ch === '\\') return true;
-
-  const lower = asciiLower(ch);
-
-  for (const keyword of keywords) {
-    if (keyword && asciiLower(keyword[0]) === lower) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-

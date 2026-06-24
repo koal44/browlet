@@ -1,28 +1,27 @@
-import { consumeTrivia, type Cursor } from '../parser/lex';
-import { serializeNumber, tryConsumeNumber } from './number';
+import type { ComponentCursor } from '../parser/component-cursor';
+import { consumeComponentTrivia } from '../parser/component';
+import { isTokenKind } from '../parser/syntax';
+import { TokenKind } from '../parser/tokens';
+import { serializeNumber } from './number';
 
 export type PercentageValue = {
   type: 'percentage';
   value: number;
 };
 
-export function tryParsePercentage(c: Cursor): PercentageValue | null {
+export function tryParsePercentage(c: ComponentCursor): PercentageValue | null {
   const start = c.pos();
 
-  consumeTrivia(c);
+  consumeComponentTrivia(c);
 
-  const n = tryConsumeNumber(c);
-  if (n === null) {
+  const comp = c.next();
+
+  if (!isTokenKind(comp, TokenKind.Percentage)) {
     c.restore(start);
     return null;
   }
 
-  if (!c.match('%')) {
-    c.restore(start);
-    return null;
-  }
-
-  return { type: 'percentage', value: n.value };
+  return { type: 'percentage', value: comp.value };
 }
 
 export function serializePercentage(value: PercentageValue): string {

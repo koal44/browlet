@@ -1,4 +1,4 @@
-import { BlockItemKind, type DeclarationAst, type StyleBlockAst } from '../parser/types';
+import { BlockItemAstKind, type DeclarationAst, type StyleBlockAst } from '../parser/types';
 import { notImplemented } from '../util';
 import type { SerializedDeclaration } from './serialize';
 import { serializeAstDeclaration } from './serialize';
@@ -57,7 +57,7 @@ export class SelectletCSSStyleDeclaration {
 
   private load(block: StyleBlockAst): void {
     for (const item of block.items) {
-      if (item.kind !== BlockItemKind.Declaration) continue;
+      if (item.kind !== BlockItemAstKind.Declaration) continue;
       this.addDeclaration(item);
     }
   }

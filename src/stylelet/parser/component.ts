@@ -1,132 +1,26 @@
-import { consumeTrivia, type Cursor } from '../parser/lex';
+import type { ComponentCursor } from './component-cursor';
+import { TokenKind } from './tokens';
 
-export function consumeComponentValue(c: Cursor): void {
-  const ch = c.peek();
+export type TryValueParser<T> = (c: ComponentCursor) => T | null;
+export type TryMultiplierParser<T> = (c: ComponentCursor) => T | null;
+export type ValueParser<T> = (c: ComponentCursor) => T;
 
-  if (!ch) return;
+export function consumeComponentTrivia(c: ComponentCursor): void {
+  while (true) {
+    const value = c.peek();
 
-  if (ch === '/' && c.peek(1) === '*') {
-    consumeTrivia(c);
-    return;
-  }
-
-  if (ch === '"' || ch === "'") {
-    consumeQuotedText(c);
-    return;
-  }
-
-  if (ch === '(') {
-    consumeBalancedText(c, '(', ')');
-    return;
-  }
-
-  if (ch === '[') {
-    consumeBalancedText(c, '[', ']');
-    return;
-  }
-
-  if (ch === '{') {
-    consumeRawBlock(c);
-    return;
-  }
-
-  c.advance();
-}
-
-function consumeQuotedText(c: Cursor): void {
-  const quote = c.next();
-
-  while (!c.eof()) {
-    const ch = c.next();
-
-    if (ch === '\\' && !c.eof()) {
-      c.advance();
+    if (
+      value !== null &&
+      'kind' in value &&
+      value.kind === TokenKind.Whitespace
+    ) {
+      c.next();
       continue;
     }
 
-    if (ch === quote) return;
+    return;
   }
 }
-
-function consumeBalancedText(c: Cursor, open: string, close: string): void {
-  if (c.peek() !== open) {
-    c.error(`Expected ${open}, got ${c.peek() || '<eof>'}`);
-  }
-
-  c.advance();
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    if (ch === close) {
-      c.advance();
-      return;
-    }
-
-    // Do not eat the style block boundary while recovering an unclosed paren/bracket.
-    if (ch === '}') {
-      return;
-    }
-
-    consumeComponentValue(c);
-  }
-}
-
-export function consumeRawBlock(c: Cursor): string {
-  if (c.peek() !== '{') {
-    c.error(`Expected block, got ${c.peek() || '<eof>'}`);
-  }
-
-  let text = '';
-  let depth = 0;
-  let quote = '';
-
-  while (!c.eof()) {
-    const ch = c.peek();
-
-    text += ch;
-    c.advance();
-
-    if (quote) {
-      if (ch === '\\' && !c.eof()) {
-        text += c.peek();
-        c.advance();
-        continue;
-      }
-
-      if (ch === quote) {
-        quote = '';
-      }
-
-      continue;
-    }
-
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-
-    if (ch === '{') {
-      depth++;
-      continue;
-    }
-
-    if (ch === '}') {
-      depth--;
-
-      if (depth === 0) {
-        return text;
-      }
-    }
-  }
-
-  c.error('Unexpected EOF in block');
-}
-
-
-export type TryValueParser<T> = (c: Cursor) => T | null;
-export type TryMultiplierParser<T> = (c: Cursor) => T | null;
-export type ValueParser<T> = (c: Cursor) => T;
 
 export type AnyUnorderedPart = UnorderedPart<string, unknown>;
 
@@ -171,7 +65,7 @@ function hasAnyMultiplierValue(value: unknown): boolean {
 }
 
 export function parseUnorderedAll<P extends AnyUnorderedPart[]>(
-  c: Cursor,
+  c: ComponentCursor,
   parts: P,
 ): UnorderedResult<P> {
   const result = consumeUnordered(c, parts);
@@ -186,7 +80,7 @@ export function parseUnorderedAll<P extends AnyUnorderedPart[]>(
 }
 
 export function parseUnorderedSome<P extends AnyUnorderedPart[]>(
-  c: Cursor,
+  c: ComponentCursor,
   parts: P,
 ): UnorderedResult<P> {
   const result = consumeUnordered(c, parts);
@@ -203,7 +97,7 @@ export function parseUnorderedSome<P extends AnyUnorderedPart[]>(
 }
 
 function consumeUnordered<P extends AnyUnorderedPart[]>(
-  c: Cursor,
+  c: ComponentCursor,
   parts: P,
 ): {
   values: Record<string, unknown>;
@@ -213,7 +107,7 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
   const values: Record<string, unknown> = {};
   const seen = new Set<string>();
 
-  consumeTrivia(c);
+  consumeComponentTrivia(c);
 
   while (remaining.length > 0) {
     let matchedIndex = -1;
@@ -251,7 +145,7 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
     seen.add(matchedPart.key);
     values[matchedPart.key] = matchedValue;
 
-    consumeTrivia(c);
+    consumeComponentTrivia(c);
   }
 
   return { values, seen };
@@ -273,11 +167,11 @@ type SequenceValue<P extends TryMultiplierParser<unknown>[]> = {
 export function sequence<P extends TryMultiplierParser<unknown>[]>(
   ...parsers: P
 ): TryMultiplierParser<SequenceValue<P>> {
-  return (c: Cursor): SequenceValue<P> | null => {
+  return (c: ComponentCursor): SequenceValue<P> | null => {
     const start = c.pos();
     const values: unknown[] = [];
 
-    consumeTrivia(c);
+    consumeComponentTrivia(c);
 
     for (const parse of parsers) {
       const componentStart = c.pos();
@@ -293,7 +187,7 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
       }
 
       values.push(value);
-      consumeTrivia(c);
+      consumeComponentTrivia(c);
     }
 
     return values as SequenceValue<P>;
@@ -306,10 +200,10 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
 export function oneOf<P extends TryMultiplierParser<unknown>[]>(
   ...parsers: P
 ): TryMultiplierParser<MultiplierValueOfParser<P[number]>> {
-  return (c: Cursor): MultiplierValueOfParser<P[number]> | null => {
+  return (c: ComponentCursor): MultiplierValueOfParser<P[number]> | null => {
     const start = c.pos();
 
-    consumeTrivia(c);
+    consumeComponentTrivia(c);
 
     const branchStart = c.pos();
 
@@ -328,7 +222,7 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
         c.error('Alternative parser produced a value without consuming input');
       }
 
-      consumeTrivia(c);
+      consumeComponentTrivia(c);
 
       return value as MultiplierValueOfParser<P[number]>;
     }
@@ -344,7 +238,7 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
 export function allOf<P extends AnyUnorderedPart[]>(
   parts: P,
 ): TryMultiplierParser<UnorderedResult<P>> {
-  return (c: Cursor): UnorderedResult<P> | null => {
+  return (c: ComponentCursor): UnorderedResult<P> | null => {
     const start = c.pos();
     const result = consumeUnordered(c, parts);
 
@@ -365,7 +259,7 @@ export function allOf<P extends AnyUnorderedPart[]>(
 export function someOf<P extends AnyUnorderedPart[]>(
   parts: P,
 ): TryMultiplierParser<UnorderedResult<P>> {
-  return (c: Cursor): UnorderedResult<P> | null => {
+  return (c: ComponentCursor): UnorderedResult<P> | null => {
     const start = c.pos();
     const result = consumeUnordered(c, parts);
 
@@ -388,7 +282,7 @@ export function required<T>(
   parse: TryMultiplierParser<T>,
   expected: string,
 ): ValueParser<T> {
-  return (c: Cursor): T => {
+  return (c: ComponentCursor): T => {
     const start = c.pos();
     const value = parse(c);
 
@@ -414,11 +308,11 @@ export function repeat<T>(
     throw new Error(`Invalid repeat maximum ${max}`);
   }
 
-  return (c: Cursor): T[] | null => {
+  return (c: ComponentCursor): T[] | null => {
     const start = c.pos();
     const values: T[] = [];
 
-    consumeTrivia(c);
+    consumeComponentTrivia(c);
 
     while (values.length < max) {
       const itemStart = c.pos();
@@ -434,7 +328,7 @@ export function repeat<T>(
       }
 
       values.push(value);
-      consumeTrivia(c);
+      consumeComponentTrivia(c);
     }
 
     if (values.length < min) {
@@ -459,11 +353,11 @@ export function repeatComma<T>(
     throw new Error(`Invalid comma repeat maximum ${max}`);
   }
 
-  return (c: Cursor): T[] | null => {
+  return (c: ComponentCursor): T[] | null => {
     const start = c.pos();
     const values: T[] = [];
 
-    consumeTrivia(c);
+    consumeComponentTrivia(c);
 
     const parseItem = (): T | null => {
       const itemStart = c.pos();
@@ -478,7 +372,7 @@ export function repeatComma<T>(
         c.error('Comma repeated parser matched without consuming input');
       }
 
-      consumeTrivia(c);
+      consumeComponentTrivia(c);
       return value;
     };
 
@@ -498,11 +392,11 @@ export function repeatComma<T>(
     while (values.length < max) {
       const commaStart = c.pos();
 
-      if (!c.match(',')) {
+      if (!c.match(TokenKind.Comma)) {
         break;
       }
 
-      consumeTrivia(c);
+      consumeComponentTrivia(c);
 
       const next = parseItem();
 

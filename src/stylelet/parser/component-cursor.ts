@@ -1,5 +1,5 @@
-// component-cursor.ts
 import type { ComponentValue } from './syntax';
+import type { TokenKind } from './tokens';
 
 export class ComponentCursor {
   constructor(
@@ -31,9 +31,35 @@ export class ComponentCursor {
     const value = this.next();
 
     if (value === null) {
-      throw new Error('consumeComponentValue called at end of component list');
+      this.error('Unexpected end of component list');
     }
 
     return value;
+  }
+
+  match(kind: TokenKind): boolean {
+    const value = this.peek();
+
+    if (
+      value === null ||
+      !('kind' in value) ||
+      value.kind !== kind
+    ) {
+      return false;
+    }
+
+    this.i++;
+    return true;
+  }
+
+  error(message: string): never {
+    throw new ComponentCursorError(message, this.i);
+  }
+}
+
+export class ComponentCursorError extends SyntaxError {
+  constructor(message: string, public position: number) {
+    super(`${message} at component ${position}`);
+    this.name = 'ComponentCursorError';
   }
 }

@@ -15,6 +15,7 @@ export enum BlockKind {
   Brace = 1,
   Bracket,
   Parens,
+  Function,
 }
 
 export type StyleSheet = {
@@ -40,8 +41,7 @@ export type QualifiedRule = {
 
 export type ComponentValue =
   | PreservedToken
-  | FunctionBlock
-  | SimpleBlock;
+  | ComponentBlock;
 
 export type PreservedToken =
   | IdentToken
@@ -65,13 +65,23 @@ export type PreservedToken =
   | StaticToken<TokenKind.RightParen>
   | StaticToken<TokenKind.RightBrace>;
 
-export type FunctionBlock = {
-  name: string;
+export type ComponentBlock =
+  | SimpleBlock
+  | FunctionBlock;
+
+export type SimpleBlock<K extends SimpleBlockKind = SimpleBlockKind> = {
+  block: K;
   value: ComponentValue[];
 };
 
-export type SimpleBlock<K extends BlockKind = BlockKind> = {
-  block: K;
+export type SimpleBlockKind =
+  | BlockKind.Brace
+  | BlockKind.Bracket
+  | BlockKind.Parens;
+
+export type FunctionBlock = {
+  block: BlockKind.Function;
+  name: string;
   value: ComponentValue[];
 };
 
@@ -157,9 +167,16 @@ export type StyleBlockItem = Declaration | Rule;
 export type StyleBlockContents = StyleBlockItem[];
 
 // 5.3.7. Parse a style block's contents
-export function parseStyleBlockContents(input: string): StyleBlockContents {
-  const c = new TokenCursor(tokenize(input));
-  return consumeStyleBlockContents(c);
+export function parseStyleBlockContents(input: string): StyleBlockContents;
+export function parseStyleBlockContents(input: readonly ComponentValue[]): StyleBlockContents;
+export function parseStyleBlockContents(
+  input: string | readonly ComponentValue[],
+): StyleBlockContents {
+  const components = typeof input === 'string'
+    ? parseListOfComponentValues(input)
+    : input;
+
+  return consumeStyleBlockContents(new ComponentCursor(components));
 }
 
 export type DeclarationOrAtRule = Declaration | AtRule;
@@ -310,6 +327,42 @@ function consumeAtRule(c: TokenCursor): AtRule {
   }
 }
 
+function consumeAtRuleFromComponents(c: ComponentCursor): AtRule {
+  const at = c.consume();
+
+  if (!isTokenKind(at, TokenKind.AtKeyword)) {
+    c.error('Expected at-keyword');
+  }
+
+  const rule: AtRule = {
+    kind: RuleKind.At,
+    name: at.value,
+    prelude: [],
+    block: null,
+  };
+
+  while (true) {
+    const comp = c.peek();
+
+    if (comp === null) {
+      return rule;
+    }
+
+    if (isTokenKind(comp, TokenKind.Semicolon)) {
+      c.next();
+      return rule;
+    }
+
+    if (isBraceBlock(comp)) {
+      c.next();
+      rule.block = comp;
+      return rule;
+    }
+
+    rule.prelude.push(c.consume());
+  }
+}
+
 // 5.4.3. Consume a qualified rule
 function consumeQualifiedRule(c: TokenCursor): QualifiedRule | null {
   const prelude: ComponentValue[] = [];
@@ -335,36 +388,53 @@ function consumeQualifiedRule(c: TokenCursor): QualifiedRule | null {
   }
 }
 
+function consumeQualifiedRuleFromComponents(c: ComponentCursor): QualifiedRule | null {
+  const prelude: ComponentValue[] = [];
+
+  while (true) {
+    const comp = c.peek();
+
+    if (comp === null) {
+      return null;
+    }
+
+    if (isBraceBlock(comp)) {
+      c.next();
+
+      return {
+        kind: RuleKind.Qualified,
+        prelude,
+        block: comp,
+      };
+    }
+
+    prelude.push(c.consume());
+  }
+}
+
 // 5.4.4. Consume a style block's contents
-function consumeStyleBlockContents(c: TokenCursor): StyleBlockContents {
+function consumeStyleBlockContents(c: ComponentCursor): StyleBlockContents {
   const items: StyleBlockContents = [];
 
   while (true) {
-    const pos = c.pos();
-    const token = c.next();
+    consumeComponentTriviaAndSemicolons(c);
 
-    if (
-      token.kind === TokenKind.Whitespace ||
-      token.kind === TokenKind.Semicolon
-    ) {
-      continue;
-    }
+    const comp = c.peek();
 
-    if (token.kind === TokenKind.EOF) {
+    if (comp === null) {
       return items;
     }
 
-    if (token.kind === TokenKind.AtKeyword) {
-      c.restore(pos);
-      items.push(consumeAtRule(c));
+    if (isTokenKind(comp, TokenKind.AtKeyword)) {
+      items.push(consumeAtRuleFromComponents(c));
       continue;
     }
 
-    if (token.kind === TokenKind.Ident) {
-      const temp: ComponentValue[] = [token];
+    if (isIdentToken(comp)) {
+      const temp: ComponentValue[] = [];
 
-      while (!isDeclarationEnd(c.peek())) {
-        temp.push(consumeComponentValue(c));
+      while (!isComponentDeclarationEnd(c.peek())) {
+        temp.push(c.consume());
       }
 
       const declaration = consumeDeclaration(new ComponentCursor(temp));
@@ -373,19 +443,15 @@ function consumeStyleBlockContents(c: TokenCursor): StyleBlockContents {
       continue;
     }
 
-    if (token.kind === TokenKind.Delim && token.value === '&') {
-      c.restore(pos);
-
-      const rule = consumeQualifiedRule(c);
+    if (isDelimToken(comp, '&')) {
+      const rule = consumeQualifiedRuleFromComponents(c);
       if (rule !== null) items.push(rule);
 
       continue;
     }
 
-    c.restore(pos);
-
-    while (!isDeclarationEnd(c.peek())) {
-      consumeComponentValue(c);
+    while (!isComponentDeclarationEnd(c.peek())) {
+      c.consume();
     }
   }
 }
@@ -450,7 +516,7 @@ function consumeDeclaration(c: ComponentCursor): Declaration | null {
     important: false,
   };
 
-  while (isTokenKind(c.peek(), TokenKind.Whitespace)) {
+  while (isWhitespaceToken(c.peek())) {
     c.next();
   }
 
@@ -460,7 +526,7 @@ function consumeDeclaration(c: ComponentCursor): Declaration | null {
 
   c.next();
 
-  while (isTokenKind(c.peek(), TokenKind.Whitespace)) {
+  while (isWhitespaceToken(c.peek())) {
     c.next();
   }
 
@@ -498,7 +564,7 @@ function consumeImportantFlag(declaration: Declaration): void {
 
 function lastNonWhitespaceIndex(values: readonly ComponentValue[], start: number): number {
   for (let i = start; i >= 0; i--) {
-    if (!isTokenKind(values[i], TokenKind.Whitespace)) {
+    if (!isWhitespaceToken(values[i])) {
       return i;
     }
   }
@@ -507,7 +573,7 @@ function lastNonWhitespaceIndex(values: readonly ComponentValue[], start: number
 }
 
 function trimTrailingWhitespace(values: ComponentValue[]): void {
-  while (values.length > 0 && isTokenKind(values[values.length - 1], TokenKind.Whitespace)) {
+  while (values.length > 0 && isWhitespaceToken(values[values.length - 1])) {
     values.pop();
   }
 }
@@ -540,7 +606,7 @@ function consumeComponentValue(c: TokenCursor): ComponentValue {
 }
 
 // 5.4.8. Consume a simple block
-function consumeSimpleBlock<K extends BlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
+function consumeSimpleBlock<K extends SimpleBlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
   const result: SimpleBlock<K> = {
     block,
     value: [],
@@ -574,6 +640,7 @@ function blockEndingTokenKind(block: BlockKind): TokenKind {
       return TokenKind.RightBracket;
 
     case BlockKind.Parens:
+    case BlockKind.Function:
       return TokenKind.RightParen;
   }
 }
@@ -581,6 +648,7 @@ function blockEndingTokenKind(block: BlockKind): TokenKind {
 // 5.4.9. Consume a function
 function consumeFunction(c: TokenCursor, name: string): FunctionBlock {
   const result: FunctionBlock = {
+    block: BlockKind.Function,
     name,
     value: [],
   };
@@ -602,23 +670,130 @@ function consumeFunction(c: TokenCursor, name: string): FunctionBlock {
   }
 }
 
+// ---
+
+export function consumeComponentTrivia(c: ComponentCursor): void {
+  while (isWhitespaceToken(c.peek())) {
+    c.next();
+  }
+}
+
+function consumeComponentTriviaAndSemicolons(c: ComponentCursor): void {
+  while (true) {
+    const comp = c.peek();
+
+    if (
+      isWhitespaceToken(comp) ||
+      isTokenKind(comp, TokenKind.Semicolon)
+    ) {
+      c.next();
+      continue;
+    }
+
+    return;
+  }
+}
+
 type PreservedTokenKind = PreservedToken['kind'];
 
-function isTokenKind<K extends PreservedTokenKind>(value: ComponentValue | null, kind: K): value is Extract<PreservedToken, { kind: K; }> {
-  return value !== null && 'kind' in value && value.kind === kind;
+export function isTokenKind<K extends PreservedTokenKind>(comp: ComponentValue | null, kind: K): comp is Extract<PreservedToken, { kind: K; }> {
+  return comp !== null && 'kind' in comp && comp.kind === kind;
 }
 
-function isIdentToken(value: ComponentValue | null): value is IdentToken {
-  return value !== null && 'kind' in value && value.kind === TokenKind.Ident;
+export function isIdentToken(comp: ComponentValue | null): comp is IdentToken {
+  return isTokenKind(comp, TokenKind.Ident);
 }
 
-function isDelimToken(value: ComponentValue | null, delim: string): value is DelimToken {
-  return (
-    value !== null &&
-    'kind' in value &&
-    value.kind === TokenKind.Delim &&
-    value.value === delim
-  );
+export function isDelimToken(comp: ComponentValue | null, delim: string): comp is DelimToken {
+  return isTokenKind(comp, TokenKind.Delim) && comp.value === delim;
+}
+
+export function isWhitespaceToken(comp: ComponentValue | null): comp is StaticToken<TokenKind.Whitespace> {
+  return isTokenKind(comp, TokenKind.Whitespace);
+}
+
+export function isIdentTokenWithValue(comp: ComponentValue | null, expected: string, isInsensitive = false): comp is IdentToken {
+  return isIdentToken(comp)
+    && (
+      isInsensitive
+        ? asciiLower(comp.value) === asciiLower(expected)
+        : comp.value === expected
+    );
+}
+
+export function isComponentBlock(comp: ComponentValue | null): comp is ComponentBlock {
+  return comp !== null && !('kind' in comp);
+}
+
+export function isBlockKind<K extends BlockKind>(
+  comp: ComponentValue | null,
+  block: K,
+): comp is Extract<ComponentBlock, { block: K; }> {
+  return isComponentBlock(comp) && comp.block === block;
+}
+
+export function isBraceBlock(comp: ComponentValue | null): comp is BraceBlock {
+  return isBlockKind(comp, BlockKind.Brace);
+}
+
+export function isFunctionBlock(comp: ComponentValue | null): comp is FunctionBlock {
+  return isBlockKind(comp, BlockKind.Function);
+}
+
+export function isAnyValue(cvs: readonly ComponentValue[]): boolean {
+  for (const comp of cvs) {
+    if ('kind' in comp) {
+      switch (comp.kind) {
+        case TokenKind.BadString:
+        case TokenKind.BadUrl:
+        case TokenKind.RightParen:
+        case TokenKind.RightBracket:
+        case TokenKind.RightBrace:
+          return false;
+
+        default:
+          continue;
+      }
+    }
+
+    if (!isAnyValue(comp.value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function isDeclarationValue(cvs: readonly ComponentValue[], topLevel = true): boolean {
+  for (const comp of cvs) {
+    if ('kind' in comp) {
+      switch (comp.kind) {
+        case TokenKind.BadString:
+        case TokenKind.BadUrl:
+        case TokenKind.RightParen:
+        case TokenKind.RightBracket:
+        case TokenKind.RightBrace:
+          return false;
+
+        case TokenKind.Semicolon:
+          if (topLevel) return false;
+          continue;
+
+        case TokenKind.Delim:
+          if (topLevel && comp.value === '!') return false;
+          continue;
+
+        default:
+          continue;
+      }
+    }
+
+    if (!isDeclarationValue(comp.value, false)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function isPreservedToken(token: Token): token is PreservedToken {
@@ -635,58 +810,28 @@ function isDeclarationEnd(token: Token): token is StaticToken<TokenKind.Semicolo
   return token.kind === TokenKind.Semicolon || token.kind === TokenKind.EOF;
 }
 
-export function isAnyValue(values: readonly ComponentValue[]): boolean {
-  for (const value of values) {
-    if ('kind' in value) {
-      switch (value.kind) {
-        case TokenKind.BadString:
-        case TokenKind.BadUrl:
-        case TokenKind.RightParen:
-        case TokenKind.RightBracket:
-        case TokenKind.RightBrace:
-          return false;
-
-        default:
-          continue;
-      }
-    }
-
-    if (!isAnyValue(value.value)) {
-      return false;
-    }
-  }
-
-  return true;
+function isComponentDeclarationEnd(comp: ComponentValue | null): boolean {
+  return comp === null || isTokenKind(comp, TokenKind.Semicolon);
 }
 
-export function isDeclarationValue(values: readonly ComponentValue[], topLevel = true): boolean {
-  for (const value of values) {
-    if ('kind' in value) {
-      switch (value.kind) {
-        case TokenKind.BadString:
-        case TokenKind.BadUrl:
-        case TokenKind.RightParen:
-        case TokenKind.RightBracket:
-        case TokenKind.RightBrace:
-          return false;
+export function singleIdentToken(components: readonly ComponentValue[]): IdentToken | null {
+  let ident: IdentToken | null = null;
 
-        case TokenKind.Semicolon:
-          if (topLevel) return false;
-          continue;
-
-        case TokenKind.Delim:
-          if (topLevel && value.value === '!') return false;
-          continue;
-
-        default:
-          continue;
-      }
+  for (const component of components) {
+    if (isWhitespaceToken(component)) {
+      continue;
     }
 
-    if (!isDeclarationValue(value.value, false)) {
-      return false;
+    if (!isIdentToken(component)) {
+      return null;
     }
+
+    if (ident !== null) {
+      return null;
+    }
+
+    ident = component;
   }
 
-  return true;
+  return ident;
 }

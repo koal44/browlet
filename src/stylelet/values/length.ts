@@ -1,6 +1,9 @@
-import { canStartIdent, consumeIdent, consumeTrivia, type Cursor } from '../parser/lex';
 import { asciiLower } from '../../utils/css';
-import { serializeNumber, tryConsumeNumber } from './number';
+import type { ComponentCursor } from '../parser/component-cursor';
+import { consumeComponentTrivia } from '../parser/component';
+import { isTokenKind } from '../parser/syntax';
+import { TokenKind } from '../parser/tokens';
+import { serializeNumber } from './number';
 
 export type LengthValue = {
   type: 'length';
@@ -17,40 +20,34 @@ export enum LengthUnit {
   Vh,
 }
 
-export function tryConsumeLengthUnit(c: Cursor): LengthUnit | null {
+export function tryParseLength(c: ComponentCursor): LengthValue | null {
   const start = c.pos();
 
-  if (!canStartIdent(c.peek())) return null;
+  consumeComponentTrivia(c);
 
-  const raw = consumeIdent(c);
-  const unit = lengthUnitFor(raw);
+  const comp = c.next();
 
-  if (unit === null) {
-    c.restore(start);
-    return null;
+  if (isTokenKind(comp, TokenKind.Dimension)) {
+    const unit = lengthUnitFor(comp.unit);
+
+    if (unit === null) {
+      c.restore(start);
+      return null;
+    }
+
+    return {
+      type: 'length',
+      value: comp.value,
+      unit,
+    };
   }
 
-  return unit;
-}
-
-export function tryParseLength(c: Cursor): LengthValue | null {
-  const start = c.pos();
-
-  consumeTrivia(c);
-
-  const n = tryConsumeNumber(c);
-  if (n === null) {
-    c.restore(start);
-    return null;
-  }
-
-  const unit = tryConsumeLengthUnit(c);
-  if (unit !== null) {
-    return { type: 'length', value: n.value, unit };
-  }
-
-  if (n.value === 0) {
-    return { type: 'length', value: 0, unit: LengthUnit.None };
+  if (isTokenKind(comp, TokenKind.Number) && comp.value === 0) {
+    return {
+      type: 'length',
+      value: 0,
+      unit: LengthUnit.None,
+    };
   }
 
   c.restore(start);
