@@ -8,6 +8,7 @@ import {
   type Rule as SyntaxRule,
   type StyleBlockItem as SyntaxStyleBlockItem,
   type StyleSheet as SyntaxStyleSheet,
+  type Declaration as SyntaxDeclaration,
 } from './syntax';
 import {
   RuleKindAst,
@@ -22,10 +23,12 @@ import {
 } from './types';
 import { buildDeclarationAst } from './declaration';
 import { assertNever } from '../../utils/util';
+import { serializeComponentValues } from '../cssom/serialize';
+import { parseSelectorList, type SelectorList } from '../../selectlet/parser/parser';
+import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
 
 export type StyleParseContext = {
-  // Keep this if other code expects it, but selector parsing is deferred.
-  pseudos?: unknown;
+  pseudos?: Record<string, CustomPseudoPredicate> | undefined;
 };
 
 export function parseStylesheet(input: string, ctx: StyleParseContext = {}): StyleSheetAst {
@@ -54,9 +57,25 @@ function buildTopLevelRuleAst(rule: SyntaxRule, ctx: StyleParseContext): CssRule
 }
 
 function buildStyleRuleAst(rule: SyntaxQualifiedRule, ctx: StyleParseContext): StyleRuleAst | null {
+  const selectorText = serializeComponentValues(rule.prelude);
+
+  let selectorList: SelectorList;
+
+  try {
+    selectorList = parseSelectorList(selectorText, { pseudos: ctx.pseudos });
+  } catch {
+    return null;
+  }
+
+  if (selectorList.arms.length === 0) {
+    return null;
+  }
+
   return {
     kind: RuleKindAst.Style,
     selector: rule.prelude,
+    selectorText,
+    selectorList,
     block: buildStyleBlockAst(rule.block, ctx),
   };
 }
@@ -84,7 +103,7 @@ function buildStyleBlockAst(block: BraceBlock, ctx: StyleParseContext): StyleBlo
 }
 
 function buildStyleBlockItemAst(item: SyntaxStyleBlockItem, ctx: StyleParseContext): StyleBlockItemAst | null {
-  if ('value' in item) {
+  if (isSyntaxDeclaration(item)) {
     return buildDeclarationAst(item);
   }
 
@@ -105,4 +124,8 @@ function buildNestedStyleRuleAst(rule: SyntaxQualifiedRule, ctx: StyleParseConte
     selector: rule.prelude,
     block: buildStyleBlockAst(rule.block, ctx),
   };
+}
+
+function isSyntaxDeclaration(item: SyntaxStyleBlockItem): item is SyntaxDeclaration {
+  return 'value' in item;
 }

@@ -106,7 +106,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
 
   {
     name: 'invalid selector list rule is dropped before following rule',
-    status: 'skip',
+    // status: 'only',
     engines: ['native', 'selectlet'],
     markup: `
       <style>
@@ -123,7 +123,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
 
   {
     name: 'invalid selector list rule is omitted',
-    status: 'skip',
+    // status: 'only',
     engines: ['native', 'selectlet'],
     markup: `
       <style>

@@ -3,6 +3,7 @@ import type { ComponentValue } from './syntax';
 import type { ColorValue } from '../values/color';
 import type { CssWideValue } from '../values/css-wide';
 import type { LengthPercentageAuto } from '../values/length-percentage';
+import type { SelectorList } from '../../selectlet/parser/parser';
 import { asciiLower } from '../../utils/css';
 
 // Stylesheet
@@ -20,9 +21,12 @@ export type CssRuleAst =
 export type StyleRuleAst = {
   kind: RuleKindAst.Style;
 
-  // Temporary: this is the qualified-rule prelude interpreted as a style-rule
-  // selector position, but not yet parsed into SelectorListAst.
+  // temporary raw syntax, still useful for future component parser/debugging
   selector: readonly ComponentValue[];
+
+  // temporary bridge result
+  selectorText: string;
+  selectorList: SelectorList; // existing selector parser output
 
   block: StyleBlockAst;
 };

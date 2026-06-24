@@ -5,9 +5,9 @@ import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../
 import { LengthUnit } from '../../../src/stylelet/values/length';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 
-// const cls = (raw: string) => ({ compound: { classes: [{ raw }] } });
-// const id = (raw: string) => ({ compound: { id: { raw } } });
-// const arm = (...parts: unknown[]) => ({ parts });
+const cls = (raw: string) => ({ compound: { classes: [{ raw }] } });
+const id = (raw: string) => ({ compound: { id: { raw } } });
+const arm = (...parts: unknown[]) => ({ parts });
 
 const ident = (value: string) => ({ kind: TokenKind.Ident, value });
 // const ws = () => ({ kind: TokenKind.Whitespace });
@@ -88,7 +88,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { color: red; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [namedColorDecl(PropertyId.Color, ColorName.red)] },
       }],
     });
@@ -98,7 +98,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo, #bar { color: red; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo')), arm(id('bar'))] },
+        selectorList: { arms: [arm(cls('foo')), arm(id('bar'))] },
         block: { items: [namedColorDecl(PropertyId.Color, ColorName.red)] },
       }],
     });
@@ -108,7 +108,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { --banana-mode: turbo; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [customDecl('--banana-mode', [ident('turbo')])] },
       }],
     });
@@ -118,7 +118,7 @@ describe('parseStylesheet', () => {
   //   expect(parseStylesheet('.foo { font-size: 12px !important; }')).toMatchObject({
   //     rules: [{
   //       kind: RuleKind.Style,
-  //       selector: { arms: [arm(cls('foo'))] },
+  //       selectorList: { arms: [arm(cls('foo'))] },
   //       block: { items: [rawDecl(PropertyId.FontSize, 'font-size', '12px', true)] },
   //     }],
   //   });
@@ -128,7 +128,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { banana-mode: turbo; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [] },
       }],
     });
@@ -138,7 +138,7 @@ describe('parseStylesheet', () => {
   //   expect(parseStylesheet('.foo { --banana-mode: turbo; }')).toMatchObject({
   //     rules: [{
   //       kind: RuleKind.Style,
-  //       selector: { arms: [arm(cls('foo'))] },
+  //       selectorList: { arms: [arm(cls('foo'))] },
   //       block: { items: [rawDecl(PropertyId.Unknown, '--banana-mode', 'turbo')] },
   //     }],
   //   });
@@ -148,7 +148,7 @@ describe('parseStylesheet', () => {
   //   expect(parseStylesheet('.foo { background-image: url("x;y"); color: red; }')).toMatchObject({
   //     rules: [{
   //       kind: RuleKind.Style,
-  //       selector: { arms: [arm(cls('foo'))] },
+  //       selectorList: { arms: [arm(cls('foo'))] },
   //       block: {
   //         items: [
   //           rawDecl(PropertyId.BackgroundImage, 'background-image', 'url("x;y")'),
@@ -204,7 +204,7 @@ describe('parseStylesheet', () => {
   //   expect(parseStylesheet('.foo { color red; background: blue; }')).toMatchObject({
   //     rules: [{
   //       kind: RuleKind.Style,
-  //       selector: { arms: [arm(cls('foo'))] },
+  //       selectorList: { arms: [arm(cls('foo'))] },
   //       block: {
   //         items: [
   //           {
@@ -237,7 +237,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { margin-left: 3px; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [marginSideDecl(PropertyId.MarginLeft, px(3))] },
       }],
     });
@@ -247,7 +247,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { margin-left: 3px !important; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [marginSideDecl(PropertyId.MarginLeft, px(3), true)] },
       }],
     });
@@ -257,7 +257,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { margin-left: ; margin-left: 3px; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: {
           items: [marginSideDecl(PropertyId.MarginLeft, px(3))],
         },
@@ -269,7 +269,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { margin-left: nonsense; margin-left: 3px; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: {
           items: [marginSideDecl(PropertyId.MarginLeft, px(3))],
         },
@@ -355,7 +355,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { --x: foo !important; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [customDecl('--x', [ident('foo')], true)] },
       }],
     });
@@ -374,7 +374,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { --x: "foo !important"; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        // selector: { arms: [arm(cls('foo'))] },
+        selectorList: { arms: [arm(cls('foo'))] },
         block: { items: [customDecl('--x', [str('foo !important')])] },
       }],
     });

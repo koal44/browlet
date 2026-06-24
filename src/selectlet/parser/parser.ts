@@ -128,9 +128,6 @@ type CandidateTestDebug =
 export type ParseContext = {
   pseudos?: Record<string, CustomPseudoPredicate>;
 
-  // Outer selector-list stop. Used by stylesheet rule prelude parsing.
-  stop?: '{';
-
   // Scoped grammar context: do not mutate/reset on shared ctx.
   inHas?: boolean;
   inHost?: boolean;
@@ -153,26 +150,21 @@ export function parseSelectorList(input: string, ctx: ParseContext): SelectorLis
   return parseSelectorListFrom(c, ctx);
 }
 
-export function parseSelectorPrelude(c: Cursor, ctx: ParseContext): SelectorList {
-  return parseSelectorListFrom(c, { ...ctx, stop: '{' });
-}
-
 function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
   let cost = 0;
-  const stop = ctx.stop ?? '';
 
   consumeTrivia(c);
 
   let ch = c.peek();
 
-  if (ch === '' || ch === stop) {
-    c.error(`Expected selector, got ${ch || '<eof>'}`);
+  if (ch === '') {
+    c.error('Expected selector, got <eof>');
   }
 
-  while (ch !== '' && ch !== stop) {
+  while (ch !== '') {
     resetSelectorArmState(ctx);
     const complex = parseComplexSelector(c, ctx);
 
@@ -190,19 +182,15 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     consumeTrivia(c);
     ch = c.peek();
 
-    if (ch === '' || ch === stop) {
-      c.error(`Expected selector after comma, got ${ch || '<eof>'}`);
+    if (ch === '') {
+      c.error('Expected selector after comma, got <eof>');
     }
   }
 
   consumeTrivia(c);
   ch = c.peek();
 
-  if (stop) {
-    if (ch !== stop) {
-      c.error(`Expected ${JSON.stringify(stop)} after selector list, got ${ch || '<eof>'}`);
-    }
-  } else if (ch !== '') {
+  if (ch !== '') {
     c.error(`Unexpected character ${ch}`);
   }
 
@@ -212,7 +200,6 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
   // const start = c.pos();
   const parts: ComplexPart[] = [];
-  const stop = ctx.stop ?? '';
 
   const first = parseCompoundSelector(c, ctx);
   const firstPart: ComplexPart = {
@@ -231,7 +218,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     const sawWs = consumeTrivia(c);
     let ch = c.peek();
 
-    if (!ch || ch === ',' || ch === ')' || ch === stop) break;
+    if (!ch || ch === ',' || ch === ')') break;
     if (ctx.afterPart) c.error('Combinators are not allowed after ::part()');
 
     let combinator: Combinator;
@@ -247,7 +234,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
       c.error(`Expected combinator, got ${ch}`);
     }
 
-    if (!ch || ch === ',' || ch === ')' || ch === stop || isCombinator(ch)) {
+    if (!ch || ch === ',' || ch === ')' || isCombinator(ch)) {
       c.error(`Expected compound selector after combinator, got ${ch || '<eof>'}`);
     }
 
@@ -278,17 +265,16 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
   };
 
   let count = 0;
-  const stop = ctx.stop ?? '';
 
   while (true) {
     const ch = c.peek();
-    if (!ch || ch === ',' || ch === ')' || ch === stop || !canStartSimpleSelector(ch)) break;
+    if (!ch || ch === ',' || ch === ')' || !canStartSimpleSelector(ch)) break;
 
     parseSimpleSelectorInto(c, compound, count === 0, ctx);
     count++;
 
     const next = c.peek();
-    if (!next || next === ',' || next === ')' || next === stop) break;
+    if (!next || next === ',' || next === ')') break;
 
     assertCompoundBoundary(next);
   }
