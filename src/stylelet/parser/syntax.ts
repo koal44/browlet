@@ -634,3 +634,59 @@ function isPreservedToken(token: Token): token is PreservedToken {
 function isDeclarationEnd(token: Token): token is StaticToken<TokenKind.Semicolon> | StaticToken<TokenKind.EOF> {
   return token.kind === TokenKind.Semicolon || token.kind === TokenKind.EOF;
 }
+
+export function isAnyValue(values: readonly ComponentValue[]): boolean {
+  for (const value of values) {
+    if ('kind' in value) {
+      switch (value.kind) {
+        case TokenKind.BadString:
+        case TokenKind.BadUrl:
+        case TokenKind.RightParen:
+        case TokenKind.RightBracket:
+        case TokenKind.RightBrace:
+          return false;
+
+        default:
+          continue;
+      }
+    }
+
+    if (!isAnyValue(value.value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function isDeclarationValue(values: readonly ComponentValue[], topLevel = true): boolean {
+  for (const value of values) {
+    if ('kind' in value) {
+      switch (value.kind) {
+        case TokenKind.BadString:
+        case TokenKind.BadUrl:
+        case TokenKind.RightParen:
+        case TokenKind.RightBracket:
+        case TokenKind.RightBrace:
+          return false;
+
+        case TokenKind.Semicolon:
+          if (topLevel) return false;
+          continue;
+
+        case TokenKind.Delim:
+          if (topLevel && value.value === '!') return false;
+          continue;
+
+        default:
+          continue;
+      }
+    }
+
+    if (!isDeclarationValue(value.value, false)) {
+      return false;
+    }
+  }
+
+  return true;
+}
