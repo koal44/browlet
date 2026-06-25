@@ -1,7 +1,6 @@
 import { ComponentCursor } from '../parser/component-cursor';
-import type { ComponentValue } from '../parser/syntax';
+import { consumeComponentTrivia, type ComponentValue } from '../parser/syntax';
 import {
-  consumeComponentTrivia,
   one,
   oneOf,
   repeatComma,

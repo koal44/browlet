@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
-import { isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
+import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, consumeComponentTrivia, one, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
+  allOf, one, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
+  withComponentTrivia,
   type TryValueParser,
 } from '../../../src/stylelet/parser/component';
 
@@ -13,9 +14,6 @@ const cursor = (css: string): ComponentCursor =>
 const literalParser = <T extends string>(expected: T): TryValueParser<T> => {
   return (c: ComponentCursor): T | null => {
     const start = c.pos();
-
-    consumeComponentTrivia(c);
-
     const comp = c.next();
 
     if (
@@ -31,9 +29,12 @@ const literalParser = <T extends string>(expected: T): TryValueParser<T> => {
   };
 };
 
-const parseA = literalParser('a');
-const parseB = literalParser('b');
-const parseC = literalParser('c');
+const valueLiteralParser = <T extends string>(expected: T): TryValueParser<T> =>
+  withComponentTrivia(literalParser(expected));
+
+const parseA = valueLiteralParser('a');
+const parseB = valueLiteralParser('b');
+const parseC = valueLiteralParser('c');
 
 function expectDone(c: ComponentCursor): void {
   consumeComponentTrivia(c);
@@ -237,9 +238,9 @@ describe('component value combinators', () => {
   });
 
   it('composes the spec precedence example', () => {
-    const parseD = literalParser('d');
-    const parseE = literalParser('e');
-    const parseF = literalParser('f');
+    const parseD = valueLiteralParser('d');
+    const parseE = valueLiteralParser('e');
+    const parseF = valueLiteralParser('f');
 
     const parseAB = sequence(one(parseA), one(parseB));
     const parseEF = sequence(one(parseE), one(parseF));
@@ -663,11 +664,11 @@ describe('component value combinators', () => {
   });
 
   it('keeps exclusive alternatives outside unordered groups', () => {
-    const parseNone = literalParser('none');
-    const parseUnderline = literalParser('underline');
-    const parseOverline = literalParser('overline');
-    const parseLineThrough = literalParser('line-through');
-    const parseBlink = literalParser('blink');
+    const parseNone = valueLiteralParser('none');
+    const parseUnderline = valueLiteralParser('underline');
+    const parseOverline = valueLiteralParser('overline');
+    const parseLineThrough = valueLiteralParser('line-through');
+    const parseBlink = valueLiteralParser('blink');
 
     // none | underline || overline || line-through || blink
     const parseTextDecorationLine = oneOf(
@@ -707,4 +708,128 @@ describe('component value combinators', () => {
     expectNextIdent(invalid, 'overline');
   });
 
+});
+
+describe('component grammar trivia ownership', () => {
+  const rawA = literalParser('a');
+  const rawB = literalParser('b');
+
+  it('keeps sequence tight when parsers are tight', () => {
+    const c = cursor('a b');
+
+    const parseAB = sequence(
+      one(rawA),
+      one(rawB),
+    );
+
+    expect(parseAB(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it('allows value parsers to own leading trivia', () => {
+    const c = cursor('a b');
+
+    const parseAB = sequence(
+      one(withComponentTrivia(rawA)),
+      one(withComponentTrivia(rawB)),
+    );
+
+    expect(parseAB(c)).toEqual([['a'], ['b']]);
+    expectDone(c);
+  });
+});
+
+describe('selector separator trivia prototype', () => {
+  type DemoCombinator = ' ' | '>' | '+' | '~' | '||';
+
+  const parseExplicitCombinator: TryValueParser<DemoCombinator> = (c) => {
+    const start = c.pos();
+    const first = c.next();
+
+    if (
+      first !== null &&
+      'kind' in first &&
+      first.kind === TokenKind.Delim
+    ) {
+      switch (first.value) {
+        case '>':
+        case '+':
+        case '~':
+          return first.value;
+
+        case '|': {
+          const second = c.next();
+
+          if (
+            second !== null &&
+            'kind' in second &&
+            second.kind === TokenKind.Delim &&
+            second.value === '|'
+          ) {
+            return '||';
+          }
+
+          c.restore(start);
+          return null;
+        }
+      }
+    }
+
+    c.restore(start);
+    return null;
+  };
+
+  const parseSelectorSeparator: TryValueParser<DemoCombinator> = (c) => {
+    const start = c.pos();
+
+    const sawWhitespace = c.match(TokenKind.Whitespace);
+    const explicit = parseExplicitCombinator(c);
+
+    if (explicit !== null) {
+      consumeComponentTrivia(c);
+      return explicit;
+    }
+
+    if (sawWhitespace) {
+      return ' ';
+    }
+
+    c.restore(start);
+    return null;
+  };
+
+  it('parses whitespace as descendant combinator fallback', () => {
+    const c = cursor(' a');
+
+    expect(parseSelectorSeparator(c)).toBe(' ');
+    expectNextIdent(c, 'a');
+  });
+
+  it('treats whitespace before an explicit combinator as padding', () => {
+    const c = cursor(' + a');
+
+    expect(parseSelectorSeparator(c)).toBe('+');
+    expectNextIdent(c, 'a');
+  });
+
+  it('parses explicit combinator without leading whitespace', () => {
+    const c = cursor('+ a');
+
+    expect(parseSelectorSeparator(c)).toBe('+');
+    expectNextIdent(c, 'a');
+  });
+
+  it('parses column combinator', () => {
+    const c = cursor(' || a');
+
+    expect(parseSelectorSeparator(c)).toBe('||');
+    expectNextIdent(c, 'a');
+  });
+
+  it('does not invent a separator without whitespace or explicit combinator', () => {
+    const c = cursor('a');
+
+    expect(parseSelectorSeparator(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
 });

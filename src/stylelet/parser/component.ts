@@ -1,26 +1,10 @@
 import type { ComponentCursor } from './component-cursor';
+import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 
 export type TryValueParser<T> = (c: ComponentCursor) => T | null;
 export type TryMultiplierParser<T> = (c: ComponentCursor) => T | null;
 export type ValueParser<T> = (c: ComponentCursor) => T;
-
-export function consumeComponentTrivia(c: ComponentCursor): void {
-  while (true) {
-    const value = c.peek();
-
-    if (
-      value !== null &&
-      'kind' in value &&
-      value.kind === TokenKind.Whitespace
-    ) {
-      c.next();
-      continue;
-    }
-
-    return;
-  }
-}
 
 export type AnyUnorderedPart = UnorderedPart<string, unknown>;
 
@@ -107,7 +91,7 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
   const values: Record<string, unknown> = {};
   const seen = new Set<string>();
 
-  consumeComponentTrivia(c);
+  // consumeComponentTrivia(c);
 
   while (remaining.length > 0) {
     let matchedIndex = -1;
@@ -145,7 +129,7 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
     seen.add(matchedPart.key);
     values[matchedPart.key] = matchedValue;
 
-    consumeComponentTrivia(c);
+    // consumeComponentTrivia(c);
   }
 
   return { values, seen };
@@ -171,7 +155,7 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
     const start = c.pos();
     const values: unknown[] = [];
 
-    consumeComponentTrivia(c);
+    // consumeComponentTrivia(c);
 
     for (const parse of parsers) {
       const componentStart = c.pos();
@@ -187,7 +171,7 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
       }
 
       values.push(value);
-      consumeComponentTrivia(c);
+      // consumeComponentTrivia(c);
     }
 
     return values as SequenceValue<P>;
@@ -203,7 +187,7 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
   return (c: ComponentCursor): MultiplierValueOfParser<P[number]> | null => {
     const start = c.pos();
 
-    consumeComponentTrivia(c);
+    // consumeComponentTrivia(c);
 
     const branchStart = c.pos();
 
@@ -222,7 +206,7 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
         c.error('Alternative parser produced a value without consuming input');
       }
 
-      consumeComponentTrivia(c);
+      // consumeComponentTrivia(c);
 
       return value as MultiplierValueOfParser<P[number]>;
     }
@@ -312,7 +296,7 @@ export function repeat<T>(
     const start = c.pos();
     const values: T[] = [];
 
-    consumeComponentTrivia(c);
+    // consumeComponentTrivia(c);
 
     while (values.length < max) {
       const itemStart = c.pos();
@@ -328,7 +312,7 @@ export function repeat<T>(
       }
 
       values.push(value);
-      consumeComponentTrivia(c);
+      // consumeComponentTrivia(c);
     }
 
     if (values.length < min) {
@@ -357,8 +341,6 @@ export function repeatComma<T>(
     const start = c.pos();
     const values: T[] = [];
 
-    consumeComponentTrivia(c);
-
     const parseItem = (): T | null => {
       const itemStart = c.pos();
       const value = parse(c);
@@ -372,7 +354,6 @@ export function repeatComma<T>(
         c.error('Comma repeated parser matched without consuming input');
       }
 
-      consumeComponentTrivia(c);
       return value;
     };
 
@@ -390,9 +371,12 @@ export function repeatComma<T>(
     values.push(first);
 
     while (values.length < max) {
-      const commaStart = c.pos();
+      const separatorStart = c.pos();
+
+      consumeComponentTrivia(c);
 
       if (!c.match(TokenKind.Comma)) {
+        c.restore(separatorStart);
         break;
       }
 
@@ -401,7 +385,7 @@ export function repeatComma<T>(
       const next = parseItem();
 
       if (next === null) {
-        c.restore(commaStart);
+        c.restore(separatorStart);
         break;
       }
 
@@ -419,4 +403,35 @@ export function repeatComma<T>(
 
 export function one<T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> {
   return repeat(parse, 1, 1);
+}
+
+export function withComponentTrivia<T>(parse: TryValueParser<T>): TryValueParser<T> {
+  return (c) => {
+    const start = c.pos();
+
+    consumeComponentTrivia(c);
+
+    const value = parse(c);
+
+    if (value === null) {
+      c.restore(start);
+      return null;
+    }
+
+    return value;
+  };
+}
+
+export function map<A, B>(parse: TryMultiplierParser<A>, fn: (value: A) => B): TryMultiplierParser<B> {
+  return (c) => {
+    const start = c.pos();
+    const value = parse(c);
+
+    if (value === null) {
+      c.restore(start);
+      return null;
+    }
+
+    return fn(value);
+  };
 }

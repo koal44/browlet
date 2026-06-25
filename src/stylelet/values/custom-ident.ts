@@ -1,7 +1,6 @@
 import { asciiLower } from '../../utils/css';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { consumeComponentTrivia } from '../parser/component';
-import { isIdentToken } from '../parser/syntax';
+import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
 
 export type CustomIdentValue = {
   type: 'custom-ident';

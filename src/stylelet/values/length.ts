@@ -1,7 +1,6 @@
 import { asciiLower } from '../../utils/css';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { consumeComponentTrivia } from '../parser/component';
-import { isTokenKind } from '../parser/syntax';
+import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { serializeNumber } from './number';
 

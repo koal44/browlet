@@ -1,6 +1,6 @@
 import { ComponentCursor } from '../parser/component-cursor';
-import type { ComponentValue } from '../parser/syntax';
-import { consumeComponentTrivia, oneOf, repeat } from '../parser/component';
+import { consumeComponentTrivia, type ComponentValue } from '../parser/syntax';
+import { one, oneOf } from '../parser/component';
 import { tryParseAuto, type AutoValue } from './auto';
 import { serializeLength, tryParseLength, type LengthValue } from './length';
 import { serializePercentage, tryParsePercentage, type PercentageValue } from './percentage';
@@ -14,9 +14,9 @@ export type LengthPercentage =
   | PercentageValue;
 
 const tryParseLengthPercentageAuto = oneOf(
-  repeat(tryParseAuto, 1, 1),
-  repeat(tryParsePercentage, 1, 1),
-  repeat(tryParseLength, 1, 1),
+  one(tryParseAuto),
+  one(tryParsePercentage),
+  one(tryParseLength),
 );
 
 export function parseLengthPercentageAuto(
