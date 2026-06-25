@@ -209,4 +209,234 @@ runScenarios('style CSSOM declaration rules', 'normal', [
     ],
   },
 
+  // {
+  //   name: 'animation-name custom ident and string declarations are exposed',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in, "slide"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in, slide', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name custom ident and string declarations are exposed 2',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in, "slide with space"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in, slide\\ with\\ space', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name custom ident and string declarations are exposed 3',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: "slide with space"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'slide\\ with\\ space', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name accepts css-wide keyword as whole value',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: initial; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'initial', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name rejects css-wide keyword inside comma list',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in; animation-name: initial, slide; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name rejects css-wide keyword after comma',
+  //   status: 'only',
+  //   // engines: ['native', 'selectlet'],
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in; animation-name: slide, initial; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name distinguishes local none keyword from quoted keyframes name',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: "none"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: '"none"', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name allows bare none inside comma list',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in, none, slide; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in, none, slide', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name preserves quoted none inside comma list',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in, "none", slide; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in, "none", slide', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name rejects bare css-wide keyword inside comma list',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in; animation-name: initial, slide; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name preserves quoted css-wide keyword as keyframes name',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: "initial"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: '"initial"', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name preserves quoted css-wide keyword inside comma list',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: fade-in, "initial", slide; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'fade-in, "initial", slide', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name quoted ordinary string canonicalizes to identifier',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: "slide with space"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'slide\\ with\\ space', important: false } },
+  //     },
+  //   ],
+  // },
+
+  // {
+  //   name: 'animation-name quoted string with comma canonicalizes to escaped identifier',
+  //   status: 'only',
+  //   engines: ['native'],
+  //   markup: `
+  //     <style>
+  //       .foo { animation-name: "slide,comma"; }
+  //     </style>`,
+  //   cases: [
+  //     {
+  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       expect: { cssom: { name: 'animation-name', value: 'slide\\,comma', important: false } },
+  //     },
+  //   ],
+  // },
+
 ]);

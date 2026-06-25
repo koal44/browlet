@@ -5,6 +5,7 @@ import type { CssWideValue } from '../values/css-wide';
 import type { LengthPercentageAuto } from '../values/length-percentage';
 import type { SelectorList } from '../../selectlet/parser/parser';
 import { asciiLower } from '../../utils/css';
+import type { AnimationNameValue } from '../props/animation-name';
 
 // Stylesheet
 
@@ -92,6 +93,7 @@ export enum BlockItemAstKind {
 // Declarations
 
 export type DeclarationAst =
+  | AnimationNameDeclarationAst
   | ColorDeclarationAst
   | DisplayDeclarationAst
   | MarginDeclarationAst
@@ -112,6 +114,9 @@ export type CustomPropertyDeclarationAst = {
   value: readonly ComponentValue[];
   important: boolean;
 };
+
+export type AnimationNameDeclarationAst =
+  DeclarationBaseAst<PropertyId.AnimationName, AnimationNameValue>;
 
 export type ColorDeclarationAst =
   DeclarationBaseAst<ColorPropertyId, ColorValue>;
@@ -158,6 +163,7 @@ export enum PropertyId {
   Custom,
 
   AlignSelf,
+  AnimationName,
   Azimuth,
   Background,
   BackgroundAttachment,
@@ -237,6 +243,7 @@ export enum PropertyId {
 
 const PropertyIdByName: { [name: string]: PropertyId | undefined; } = {
   'align-self': PropertyId.AlignSelf,
+  'animation-name': PropertyId.AnimationName,
   azimuth: PropertyId.Azimuth,
   background: PropertyId.Background,
   'background-attachment': PropertyId.BackgroundAttachment,

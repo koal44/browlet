@@ -3,8 +3,8 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, consumeComponentTrivia, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
-  type TryMultiplierParser, type TryValueParser,
+  allOf, consumeComponentTrivia, one, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
+  type TryValueParser,
 } from '../../../src/stylelet/parser/component';
 
 const cursor = (css: string): ComponentCursor =>
@@ -30,9 +30,6 @@ const literalParser = <T extends string>(expected: T): TryValueParser<T> => {
     return expected;
   };
 };
-
-const one = <T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> =>
-  repeat(parse, 1, 1);
 
 const parseA = literalParser('a');
 const parseB = literalParser('b');

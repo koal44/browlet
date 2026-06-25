@@ -9,6 +9,7 @@ import {
 import { tryParseCssWideValue } from '../values/css-wide';
 import { parseColorValue } from '../values/color';
 import { parseLengthPercentageAuto } from '../values/length-percentage';
+import { parseAnimationNameValue } from '../props/animation-name';
 
 export function buildDeclarationAst(declaration: SyntaxDeclaration): DeclarationAst | null {
   if (!isDeclarationValue(declaration.value)) {
@@ -43,6 +44,18 @@ export function buildDeclarationAst(declaration: SyntaxDeclaration): Declaration
 
       if (value === null) return null;
 
+      return {
+        kind: BlockItemAstKind.Declaration,
+        prop,
+        value,
+        important: declaration.important,
+      };
+    }
+
+    case PropertyId.AnimationName: {
+      const value =
+        tryParseCssWideValue(declaration.value) ?? parseAnimationNameValue(declaration.value);
+      if (value === null) return null;
       return {
         kind: BlockItemAstKind.Declaration,
         prop,

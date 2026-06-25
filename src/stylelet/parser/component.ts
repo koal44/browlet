@@ -416,3 +416,7 @@ export function repeatComma<T>(
     return values;
   };
 }
+
+export function one<T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> {
+  return repeat(parse, 1, 1);
+}

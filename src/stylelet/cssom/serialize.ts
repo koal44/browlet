@@ -3,6 +3,7 @@ import { BlockKind, type ComponentValue } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import type { DeclarationAst } from '../parser/types';
 import { PropertyId, getPropertyName } from '../parser/types';
+import { serializeAnimationName } from '../props/animation-name';
 import { isCssWideValue, serializeCssWideValue, type CssWideValue } from '../values/css-wide';
 import { serializeLengthPercentageAuto } from '../values/length-percentage';
 
@@ -28,6 +29,13 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
       return {
         name: declaration.name,
         value: serializeComponentValues(declaration.value),
+        important: declaration.important,
+      };
+
+    case PropertyId.AnimationName:
+      return {
+        name: getName(declaration.prop),
+        value: serialize(declaration.value, serializeAnimationName),
         important: declaration.important,
       };
 
