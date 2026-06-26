@@ -1,19 +1,15 @@
 import { ComponentCursor } from '../parser/component-cursor';
 import {
-  one,
-  oneOf,
-  repeatComma,
+  commaRepeat, one, oneOf,
   type TryValueParser,
 } from '../parser/component';
 import { tryConsumeKeywordIn } from '../values/keyword';
 import {
-  serializeCustomIdent,
-  tryParseCustomIdent,
+  serializeCustomIdent, tryParseCustomIdent,
   type CustomIdentValue,
 } from '../values/custom-ident';
 import {
-  serializeString,
-  tryParseString,
+  serializeString, tryParseString,
   type StringValue,
 } from '../values/string';
 import { type ComponentValue, consumeComponentTrivia } from '../parser/syntax';
@@ -57,7 +53,7 @@ const tryParseAnimationNameItem: TryValueParser<AnimationNameItemValue> = oneOf(
   ([value]): AnimationNameItemValue => value,
 );
 
-const tryParseAnimationNameList = repeatComma(
+const tryParseAnimationNameList = commaRepeat(
   tryParseAnimationNameItem,
   1,
 );
@@ -65,7 +61,7 @@ const tryParseAnimationNameList = repeatComma(
 export function tryParseAnimationName(c: ComponentCursor): AnimationNameValue | null {
   const start = c.pos();
 
-  const values = tryParseAnimationNameList.parse(c);
+  const values = tryParseAnimationNameList(c);
 
   if (values === null) {
     c.restore(start);

@@ -3,8 +3,8 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, one, oneOf, opt, repeat, repeatComma, required, requiredAllOf, requiredSequence, requiredSomeOf, sequence, someOf,
-  withComponentTrivia,
+  allOf, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
+  requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
   type TryValueParser,
 } from '../../../src/stylelet/parser/component';
 
@@ -235,7 +235,7 @@ describe('component value combinators', () => {
   it('parses juxtaposed components with sequence', () => {
     const c = cursor('a b');
 
-    const parseAB = sequence(
+    const parseAB = sequenceOf(
       one(parseA),
       one(parseB),
       (value) => value,
@@ -282,14 +282,14 @@ describe('component value combinators', () => {
     const parseF = valueLiteralParser('f');
 
     // a b
-    const parseAB = sequence(
+    const parseAB = sequenceOf(
       one(parseA),
       one(parseB),
       (value) => value,
     );
 
     // e f
-    const parseEF = sequence(
+    const parseEF = sequenceOf(
       one(parseE),
       one(parseF),
       (value) => value,
@@ -358,7 +358,7 @@ describe('component value combinators', () => {
 
     // a*
     const parseAStar = repeat(parseA, 0);
-    const result = parseAStar.parse(c);
+    const result = parseAStar(c);
 
     expect(result).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -369,7 +369,7 @@ describe('component value combinators', () => {
 
     // a+
     const parseAPlus = repeat(parseA, 1);
-    const result = parseAPlus.parse(c);
+    const result = parseAPlus(c);
 
     expect(result).toEqual(['a', 'a']);
 
@@ -381,7 +381,7 @@ describe('component value combinators', () => {
 
     // a{1,3}
     const parseOneToThreeA = repeat(parseA, 1, 3);
-    const result = parseOneToThreeA.parse(c);
+    const result = parseOneToThreeA(c);
 
     expect(result).toEqual(['a', 'a', 'a']);
     expectNextIdent(c, 'a');
@@ -393,13 +393,13 @@ describe('component value combinators', () => {
     // a{2,3}
     const parseTwoToThreeA = repeat(parseA, 2, 3);
 
-    expect(parseTwoToThreeA.parse(c)).toBeNull();
+    expect(parseTwoToThreeA(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('uses zero-to-one repetition as an optional component in sequence', () => {
     // a? b
-    const parseMaybeAThenB = sequence(
+    const parseMaybeAThenB = sequenceOf(
       repeat(parseA, 0, 1),
       one(parseB),
       (value) => value,
@@ -418,8 +418,8 @@ describe('component value combinators', () => {
     const c = cursor('a, a, a');
 
     // a#
-    const parseACommaList = repeatComma(parseA);
-    const result = parseACommaList.parse(c);
+    const parseACommaList = commaRepeat(parseA);
+    const result = parseACommaList(c);
 
     expect(result).toEqual(['a', 'a', 'a']);
     expectDone(c);
@@ -429,8 +429,8 @@ describe('component value combinators', () => {
     const c = cursor('a, a, a');
 
     // a#{1,2}
-    const parseOneToTwoA = repeatComma(parseA, 1, 2);
-    const result = parseOneToTwoA.parse(c);
+    const parseOneToTwoA = commaRepeat(parseA, 1, 2);
+    const result = parseOneToTwoA(c);
 
     expect(result).toEqual(['a', 'a']);
     expectNextComma(c);
@@ -440,8 +440,8 @@ describe('component value combinators', () => {
     const c = cursor('a,');
 
     // a#
-    const parseACommaList = repeatComma(parseA);
-    const result = parseACommaList.parse(c);
+    const parseACommaList = commaRepeat(parseA);
+    const result = parseACommaList(c);
 
     expect(result).toEqual(['a']);
     expectNextComma(c);
@@ -451,9 +451,9 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a#
-    const parseACommaList = repeatComma(parseA);
+    const parseACommaList = commaRepeat(parseA);
 
-    expect(parseACommaList.parse(c)).toBeNull();
+    expect(parseACommaList(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -469,13 +469,13 @@ describe('component value combinators', () => {
     expect(invalid.pos()).toBe(0);
   });
 
-  it('throws when a repeated parser succeeds without consuming input', () => {
+  it('throws when a repeat parser succeeds without consuming input', () => {
     const parseEmpty: TryValueParser<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
     // empty+
-    expect(() => repeat(parseEmpty, 1).parse(c)).toThrow('Repeated parser matched without consuming input');
+    expect(() => plus(parseEmpty)(c)).toThrow('Repeated parser matched without consuming input');
   });
 
   it('parses exact repetitions', () => {
@@ -483,7 +483,7 @@ describe('component value combinators', () => {
 
     // a{2}
     const parseExactlyTwoA = repeat(parseA, 2, 2);
-    const result = parseExactlyTwoA.parse(c);
+    const result = parseExactlyTwoA(c);
 
     expect(result).toEqual(['a', 'a']);
     expectNextIdent(c, 'b');
@@ -494,7 +494,7 @@ describe('component value combinators', () => {
 
     // a{0}
     const parseExactlyZeroA = repeat(parseA, 0, 0);
-    const result = parseExactlyZeroA.parse(c);
+    const result = parseExactlyZeroA(c);
 
     expect(result).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -506,7 +506,7 @@ describe('component value combinators', () => {
     // a{2,3}
     const parseTwoToThreeA = repeat(parseA, 2, 3);
 
-    expect(parseTwoToThreeA.parse(c)).toBeNull();
+    expect(parseTwoToThreeA(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -516,7 +516,7 @@ describe('component value combinators', () => {
 
     // a+
     const parseAPlus = repeat(parseA, 1);
-    const result = parseAPlus.parse(c);
+    const result = parseAPlus(c);
 
     expect(result).toHaveLength(20);
     expectNextIdent(c, 'a');
@@ -526,8 +526,8 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a#?
-    const parseOptionalACommaList = repeatComma(parseA, 0);
-    const result = parseOptionalACommaList.parse(c);
+    const parseOptionalACommaList = commaRepeat(parseA, 0);
+    const result = parseOptionalACommaList(c);
 
     expect(result).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -537,9 +537,9 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a#{2,3}
-    const parseTwoToThreeA = repeatComma(parseA, 2, 3);
+    const parseTwoToThreeA = commaRepeat(parseA, 2, 3);
 
-    expect(parseTwoToThreeA.parse(c)).toBeNull();
+    expect(parseTwoToThreeA(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -547,9 +547,9 @@ describe('component value combinators', () => {
     const c = cursor(', a');
 
     // a#
-    const parseACommaList = repeatComma(parseA);
+    const parseACommaList = commaRepeat(parseA);
 
-    expect(parseACommaList.parse(c)).toBeNull();
+    expect(parseACommaList(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -557,8 +557,8 @@ describe('component value combinators', () => {
     const c = cursor('a ,  a');
 
     // a#
-    const parseACommaList = repeatComma(parseA);
-    const result = parseACommaList.parse(c);
+    const parseACommaList = commaRepeat(parseA);
+    const result = parseACommaList(c);
 
     expect(result).toEqual(['a', 'a']);
     expectDone(c);
@@ -569,25 +569,25 @@ describe('component value combinators', () => {
     const c = cursor(css);
 
     // a#
-    const parseACommaList = repeatComma(parseA);
-    const result = parseACommaList.parse(c);
+    const parseACommaList = commaRepeat(parseA);
+    const result = parseACommaList(c);
 
     expect(result).toHaveLength(20);
     expectNextComma(c);
   });
 
-  it('throws when a comma-repeated parser succeeds without consuming input', () => {
+  it('throws when a comma-repeat parser succeeds without consuming input', () => {
     const parseEmpty: TryValueParser<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
     // empty#
-    expect(() => repeatComma(parseEmpty).parse(c)).toThrow('Comma repeated parser matched without consuming input');
+    expect(() => commaRepeat(parseEmpty)(c)).toThrow('Comma repeat matched without consuming input');
   });
 
   it('matches zero or more components in order: A? B? C?', () => {
     // A? B? C?
-    const parseZeroOrMoreInOrder = sequence(
+    const parseZeroOrMoreInOrder = sequenceOf(
       repeat(parseA, 0, 1),
       repeat(parseB, 0, 1),
       repeat(parseC, 0, 1),
@@ -606,7 +606,7 @@ describe('component value combinators', () => {
   it('matches one or more components in order: [ A? B? C? ]!', () => {
     // [ A? B? C? ]!
     const parseOneOrMoreInOrder = required(
-      requiredSequence(
+      requiredSequenceOf(
         repeat(parseA, 0, 1),
         repeat(parseB, 0, 1),
         repeat(parseC, 0, 1),
@@ -625,7 +625,7 @@ describe('component value combinators', () => {
 
   it('matches all components in order: A B C', () => {
     // A B C
-    const parseAllInOrder = sequence(
+    const parseAllInOrder = sequenceOf(
       one(parseA),
       one(parseB),
       one(parseC),
@@ -748,7 +748,7 @@ describe('component value combinators', () => {
   it('allows comments between juxtaposed components', () => {
     const c = cursor('a/**/b');
 
-    const parseAB = sequence(
+    const parseAB = sequenceOf(
       one(parseA),
       one(parseB),
       (value) => value,
@@ -761,9 +761,9 @@ describe('component value combinators', () => {
   it('allows comments around comma separators', () => {
     const c = cursor('a/**/,/**/a');
 
-    const parseACommaList = repeatComma(parseA);
+    const parseACommaList = commaRepeat(parseA);
 
-    expect(parseACommaList.parse(c)).toEqual(['a', 'a']);
+    expect(parseACommaList(c)).toEqual(['a', 'a']);
     expectDone(c);
   });
 
@@ -833,7 +833,7 @@ describe('component grammar trivia ownership', () => {
   it('keeps sequence tight when parsers are tight', () => {
     const c = cursor('a b');
 
-    const parseAB = sequence(
+    const parseAB = sequenceOf(
       one(rawA),
       one(rawB),
       (value) => value,
@@ -846,7 +846,7 @@ describe('component grammar trivia ownership', () => {
   it('allows value parsers to own leading trivia', () => {
     const c = cursor('a b');
 
-    const parseAB = sequence(
+    const parseAB = sequenceOf(
       one(withComponentTrivia(rawA)),
       one(withComponentTrivia(rawB)),
       (value) => value,
@@ -980,7 +980,7 @@ describe('selector separator trivia prototype', () => {
 
   it('requires at least one multiplier value without throwing', () => {
     // [ a? b? ]!
-    const parseOneOrMoreAB = requiredSequence(
+    const parseOneOrMoreAB = requiredSequenceOf(
       repeat(parseA, 0, 1),
       repeat(parseB, 0, 1),
       (value) => value,
@@ -997,7 +997,7 @@ describe('selector separator trivia prototype', () => {
 
   it('restores when requiredSequence sees only empty multiplier values', () => {
     // [ a? b? ]!
-    const parseOneOrMoreAB = requiredSequence(
+    const parseOneOrMoreAB = requiredSequenceOf(
       repeat(parseA, 0, 1),
       repeat(parseB, 0, 1),
       (value) => value,

@@ -1,8 +1,7 @@
 import { asciiLower } from '../../utils/css';
 import {
-  any,
-  type MultiplierParser, one, oneOf, opt, repeatComma, sequence, withComponentTrivia, type TryValueParser,
-  requiredSequence,
+  any, commaRepeat, one, oneOf, opt, sequenceOf, withComponentTrivia, requiredSequenceOf,
+  type TryValueParser,
 } from './component';
 import { ComponentCursor } from './component-cursor';
 import type { BracketBlock, ComponentValue, FunctionBlock } from './syntax';
@@ -30,11 +29,11 @@ const parseSelectorList: TryValueParser<SelectorList> =
 export type ComplexSelectorList = ComplexSelector[];
 
 function tryParseComplexSelectorList(c: ComponentCursor): ComplexSelectorList | null {
-  return parseComplexSelectorList.parse(c);
+  return parseComplexSelectorList(c);
 }
 
-const parseComplexSelectorList: MultiplierParser<ComplexSelectorList> =
-  repeatComma(tryParseComplexSelector);
+const parseComplexSelectorList: TryValueParser<ComplexSelectorList> =
+  commaRepeat(tryParseComplexSelector);
 
 /**
  * <complex-real-selector-list> = <complex-real-selector>#
@@ -42,11 +41,11 @@ const parseComplexSelectorList: MultiplierParser<ComplexSelectorList> =
 export type ComplexRealSelectorList = ComplexRealSelector[];
 
 export function tryParseComplexRealSelectorList(c: ComponentCursor): ComplexRealSelectorList | null {
-  return parseComplexRealSelectorList.parse(c);
+  return parseComplexRealSelectorList(c);
 }
 
-const parseComplexRealSelectorList: MultiplierParser<ComplexRealSelectorList> =
-  repeatComma(tryParseComplexRealSelector);
+const parseComplexRealSelectorList: TryValueParser<ComplexRealSelectorList> =
+  commaRepeat(tryParseComplexRealSelector);
 
 /**
  * <compound-selector-list> = <compound-selector>#
@@ -54,11 +53,11 @@ const parseComplexRealSelectorList: MultiplierParser<ComplexRealSelectorList> =
 export type CompoundSelectorList = CompoundSelector[];
 
 export function tryParseCompoundSelectorList(c: ComponentCursor): CompoundSelectorList | null {
-  return parseCompoundSelectorList.parse(c);
+  return parseCompoundSelectorList(c);
 }
 
-const parseCompoundSelectorList: MultiplierParser<CompoundSelectorList> =
-  repeatComma(tryParseCompoundSelector);
+const parseCompoundSelectorList: TryValueParser<CompoundSelectorList> =
+  commaRepeat(tryParseCompoundSelector);
 
 /**
  * <simple-selector-list> = <simple-selector>#
@@ -66,11 +65,11 @@ const parseCompoundSelectorList: MultiplierParser<CompoundSelectorList> =
 export type SimpleSelectorList = SimpleSelector[];
 
 export function tryParseSimpleSelectorList(c: ComponentCursor): SimpleSelectorList | null {
-  return parseSimpleSelectorList.parse(c);
+  return parseSimpleSelectorList(c);
 }
 
-const parseSimpleSelectorList: MultiplierParser<SimpleSelectorList> =
-  repeatComma(tryParseSimpleSelector);
+const parseSimpleSelectorList: TryValueParser<SimpleSelectorList> =
+  commaRepeat(tryParseSimpleSelector);
 
 /**
  * <relative-selector-list> = <relative-selector>#
@@ -78,11 +77,11 @@ const parseSimpleSelectorList: MultiplierParser<SimpleSelectorList> =
 export type RelativeSelectorList = RelativeSelector[];
 
 export function tryParseRelativeSelectorList(c: ComponentCursor): RelativeSelectorList | null {
-  return parseRelativeSelectorList.parse(c);
+  return parseRelativeSelectorList(c);
 }
 
-const parseRelativeSelectorList: MultiplierParser<RelativeSelectorList> =
-  repeatComma(tryParseRelativeSelector);
+const parseRelativeSelectorList: TryValueParser<RelativeSelectorList> =
+  commaRepeat(tryParseRelativeSelector);
 
 /**
  * <relative-real-selector-list> = <relative-real-selector>#
@@ -90,11 +89,11 @@ const parseRelativeSelectorList: MultiplierParser<RelativeSelectorList> =
 export type RelativeRealSelectorList = RelativeRealSelector[];
 
 export function tryParseRelativeRealSelectorList(c: ComponentCursor): RelativeRealSelectorList | null {
-  return parseRelativeRealSelectorList.parse(c);
+  return parseRelativeRealSelectorList(c);
 }
 
-const parseRelativeRealSelectorList: MultiplierParser<RelativeRealSelectorList> =
-  repeatComma(tryParseRelativeRealSelector);
+const parseRelativeRealSelectorList: TryValueParser<RelativeRealSelectorList> =
+  commaRepeat(tryParseRelativeRealSelector);
 
 
 /**
@@ -114,11 +113,11 @@ function tryParseComplexSelector(c: ComponentCursor): ComplexSelector | null {
   return parseComplexSelector(c);
 }
 
-const parseComplexSelector: TryValueParser<ComplexSelector> = sequence(
+const parseComplexSelector: TryValueParser<ComplexSelector> = sequenceOf(
   one(tryParseComplexSelectorUnit),
 
   any(
-    sequence(
+    sequenceOf(
       one(tryParseCombinator),
       one(tryParseComplexSelectorUnit),
       ([[combinator], [unit]]) => ({
@@ -149,7 +148,7 @@ function tryParseComplexSelectorUnit(c: ComponentCursor): ComplexSelectorUnit | 
   return parseComplexSelectorUnit(c);
 }
 
-const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSequence(
+const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSequenceOf(
   opt(tryParseCompoundSelector),
   any(tryParsePseudoCompoundSelector),
 
@@ -177,11 +176,11 @@ function tryParseComplexRealSelector(c: ComponentCursor): ComplexRealSelector | 
   return parseComplexRealSelector(c);
 }
 
-const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequence(
+const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequenceOf(
   one(tryParseCompoundSelector),
 
   any(
-    sequence(
+    sequenceOf(
       one(tryParseCombinator),
       one(tryParseCompoundSelector),
       ([[combinator], [compound]]) => ({
@@ -211,7 +210,7 @@ export function tryParseRelativeSelector(c: ComponentCursor): RelativeSelector |
   return parseRelativeSelector(c);
 }
 
-const parseRelativeSelector: TryValueParser<RelativeSelector> = sequence(
+const parseRelativeSelector: TryValueParser<RelativeSelector> = sequenceOf(
   opt(tryParseCombinator),
   one(tryParseComplexSelector),
 
@@ -235,7 +234,7 @@ export function tryParseRelativeRealSelector(c: ComponentCursor): RelativeRealSe
   return parseRelativeRealSelector(c);
 }
 
-const parseRelativeRealSelector: TryValueParser<RelativeRealSelector> = sequence(
+const parseRelativeRealSelector: TryValueParser<RelativeRealSelector> = sequenceOf(
   opt(tryParseCombinator),
   one(tryParseComplexRealSelector),
 
@@ -259,7 +258,7 @@ function tryParseCompoundSelector(c: ComponentCursor): CompoundSelector | null {
   return parseCompoundSelector(c);
 }
 
-const parseCompoundSelector: TryValueParser<CompoundSelector> = requiredSequence(
+const parseCompoundSelector: TryValueParser<CompoundSelector> = requiredSequenceOf(
   opt(tryParseTypeSelector),
   any(tryParseSubclassSelector),
 
@@ -284,7 +283,7 @@ function tryParsePseudoCompoundSelector(c: ComponentCursor): PseudoCompoundSelec
   return parsePseudoCompoundSelector(c);
 }
 
-const parsePseudoCompoundSelector: TryValueParser<PseudoCompoundSelector> = sequence(
+const parsePseudoCompoundSelector: TryValueParser<PseudoCompoundSelector> = sequenceOf(
   one(tryParsePseudoElementSelector),
   any(tryParsePseudoClassSelector),
 
@@ -393,7 +392,7 @@ function tryParseWqName(c: ComponentCursor): WqName | null {
 
 const parseWqName: TryValueParser<WqName> = oneOf(
   one(
-    sequence(
+    sequenceOf(
       one(tryParseNsPrefix),
       one(tryParseIdentToken),
 
@@ -406,7 +405,7 @@ const parseWqName: TryValueParser<WqName> = oneOf(
   ),
 
   one(
-    sequence(
+    sequenceOf(
       one(tryParseIdentToken),
 
       ([[name]]): WqName => ({
@@ -432,7 +431,7 @@ function tryParseNsPrefix(c: ComponentCursor): NsPrefix | null {
   return parseNsPrefix(c);
 }
 
-const parseNsPrefix: TryValueParser<NsPrefix> = sequence(
+const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
   opt(
     oneOf(
       one(tryParseIdentToken),
@@ -468,7 +467,7 @@ function tryParseTypeSelector(c: ComponentCursor): TypeSelector | null {
 
 const parseTypeSelector: TryValueParser<TypeSelector> = oneOf(
   one(
-    sequence(
+    sequenceOf(
       one(tryParseWqName),
 
       ([[name]]): TypeSelector => ({
@@ -480,7 +479,7 @@ const parseTypeSelector: TryValueParser<TypeSelector> = oneOf(
   ),
 
   one(
-    sequence(
+    sequenceOf(
       opt(tryParseNsPrefix),
       one(tryParseDelim('*')),
 
@@ -534,7 +533,7 @@ function tryParseIdSelector(c: ComponentCursor): IdSelector | null {
   return parseIdSelector(c);
 }
 
-const parseIdSelector: TryValueParser<IdSelector> = sequence(
+const parseIdSelector: TryValueParser<IdSelector> = sequenceOf(
   one(tryParseIdHashToken),
 
   ([[hash]]): IdSelector => ({
@@ -555,7 +554,7 @@ function tryParseClassSelector(c: ComponentCursor): ClassSelector | null {
   return parseClassSelector(c);
 }
 
-const parseClassSelector: TryValueParser<ClassSelector> = sequence(
+const parseClassSelector: TryValueParser<ClassSelector> = sequenceOf(
   one(tryParseDelim('.')),
   one(tryParseIdentToken),
 
@@ -585,7 +584,7 @@ function tryParseAttributeSelector(c: ComponentCursor): AttributeSelector | null
 const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
   oneOf(
     one(
-      sequence(
+      sequenceOf(
         one(withComponentTrivia(tryParseWqName)),
         one(withComponentTrivia(tryParseAttrMatcher)),
         one(withComponentTrivia(tryParseAttrValue)),
@@ -602,7 +601,7 @@ const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
     ),
 
     one(
-      sequence(
+      sequenceOf(
         one(withComponentTrivia(tryParseWqName)),
 
         ([[name]]): AttributeSelector => ({
@@ -632,7 +631,7 @@ const parseAttrMatcher: TryValueParser<AttrMatcher> = oneOf(
   one(tryParseDelim('=')),
 
   one(
-    sequence(
+    sequenceOf(
       one(
         oneOf(
           one(tryParseDelim('~')),
@@ -666,7 +665,7 @@ function tryParseAttrValue(c: ComponentCursor): AttrValue | null {
 
 const parseAttrValue: TryValueParser<AttrValue> = oneOf(
   one(
-    sequence(
+    sequenceOf(
       one(tryParseStringToken),
 
       ([[value]]): AttrValue => ({
@@ -677,7 +676,7 @@ const parseAttrValue: TryValueParser<AttrValue> = oneOf(
   ),
 
   one(
-    sequence(
+    sequenceOf(
       one(tryParseIdentToken),
 
       ([[value]]): AttrValue => ({
@@ -723,7 +722,7 @@ function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | 
 
 const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
   one(
-    sequence(
+    sequenceOf(
       one(tryParseColon),
       one(tryParseNonLegacyIdentToken),
 
@@ -736,7 +735,7 @@ const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
   ),
 
   one(
-    sequence(
+    sequenceOf(
       one(tryParseColon),
       one(tryParseFunctionBlock),
 
@@ -768,7 +767,7 @@ function tryParsePseudoElementSelector(c: ComponentCursor): PseudoElementSelecto
 
 const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
   one(
-    sequence(
+    sequenceOf(
       one(tryParseLegacyPseudoElementSelector),
 
       ([[legacy]]): PseudoElementSelector => ({
@@ -781,13 +780,13 @@ const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
   ),
 
   one(
-    sequence(
+    sequenceOf(
       one(tryParseColon),
       one(tryParseColon),
       one(
         oneOf(
           one(
-            sequence(
+            sequenceOf(
               one(tryParseIdentToken),
 
               ([[ident]]) => ({
@@ -798,7 +797,7 @@ const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
           ),
 
           one(
-            sequence(
+            sequenceOf(
               one(tryParseFunctionBlock),
 
               ([[fn]]) => ({
@@ -838,7 +837,7 @@ function tryParseLegacyPseudoElementSelector(c: ComponentCursor): LegacyPseudoEl
   return parseLegacyPseudoElementSelector(c);
 }
 
-const parseLegacyPseudoElementSelector: TryValueParser<LegacyPseudoElementSelector> = sequence(
+const parseLegacyPseudoElementSelector: TryValueParser<LegacyPseudoElementSelector> = sequenceOf(
   one(tryParseColon),
   one(
     oneOf(
