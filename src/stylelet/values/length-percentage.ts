@@ -1,6 +1,6 @@
 import { ComponentCursor } from '../parser/component-cursor';
 import { consumeComponentTrivia, type ComponentValue } from '../parser/syntax';
-import { one, oneOf } from '../parser/component';
+import { map, type MultiplierParser, one, oneOf } from '../parser/component';
 import { tryParseAuto, type AutoValue } from './auto';
 import { serializeLength, tryParseLength, type LengthValue } from './length';
 import { serializePercentage, tryParsePercentage, type PercentageValue } from './percentage';
@@ -13,17 +13,20 @@ export type LengthPercentage =
   | LengthValue
   | PercentageValue;
 
-const tryParseLengthPercentageAuto = oneOf(
-  one(tryParseAuto),
-  one(tryParsePercentage),
-  one(tryParseLength),
+const tryParseLengthPercentageAuto: MultiplierParser<LengthPercentageAuto> = map(
+  oneOf(
+    one(tryParseAuto),
+    one(tryParsePercentage),
+    one(tryParseLength),
+  ),
+  ([value]): LengthPercentageAuto => value,
 );
 
 export function parseLengthPercentageAuto(
   components: readonly ComponentValue[],
 ): LengthPercentageAuto | null {
   const c = new ComponentCursor(components);
-  const value = tryParseLengthPercentageAuto(c);
+  const value = tryParseLengthPercentageAuto.parse(c);
 
   if (value === null) {
     return null;
@@ -35,7 +38,7 @@ export function parseLengthPercentageAuto(
     return null;
   }
 
-  return value[0];
+  return value;
 }
 
 export function serializeLengthPercentageAuto(value: LengthPercentageAuto): string {

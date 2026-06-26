@@ -56,7 +56,7 @@ const tryParseAnimationNameItemGrammar = oneOf(
 );
 
 const tryParseAnimationNameItem: TryValueParser<AnimationNameItemValue> = (c) => {
-  const value = tryParseAnimationNameItemGrammar(c);
+  const value = tryParseAnimationNameItemGrammar.parse(c);
 
   if (value === null) {
     return null;
@@ -73,7 +73,7 @@ const tryParseAnimationNameList = repeatComma(
 export function tryParseAnimationName(c: ComponentCursor): AnimationNameValue | null {
   const start = c.pos();
 
-  const values = tryParseAnimationNameList(c);
+  const values = tryParseAnimationNameList.parse(c);
 
   if (values === null) {
     c.restore(start);
