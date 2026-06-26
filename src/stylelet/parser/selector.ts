@@ -1,7 +1,8 @@
 import { asciiLower } from '../../utils/css';
 import {
   any,
-  map, type MultiplierParser, one, oneOf, opt, repeatComma, requireAny, sequence, withComponentTrivia, type TryValueParser,
+  type MultiplierParser, one, oneOf, opt, repeatComma, sequence, withComponentTrivia, type TryValueParser,
+  requiredSequence,
 } from './component';
 import { ComponentCursor } from './component-cursor';
 import type { BracketBlock, ComponentValue, FunctionBlock } from './syntax';
@@ -110,25 +111,23 @@ export type ComplexSelector = {
 };
 
 function tryParseComplexSelector(c: ComponentCursor): ComplexSelector | null {
-  return parseComplexSelector.parse(c);
+  return parseComplexSelector(c);
 }
 
-const parseComplexSelector: MultiplierParser<ComplexSelector> = map(
-  sequence(
-    one(tryParseComplexSelectorUnit),
-    any(
-      map(
-        sequence(
-          one(tryParseCombinator),
-          one(tryParseComplexSelectorUnit),
-        ),
-        ([[combinator], [unit]]) => ({
-          combinator,
-          unit,
-        }),
-      ).parse
+const parseComplexSelector: TryValueParser<ComplexSelector> = sequence(
+  one(tryParseComplexSelectorUnit),
+
+  any(
+    sequence(
+      one(tryParseCombinator),
+      one(tryParseComplexSelectorUnit),
+      ([[combinator], [unit]]) => ({
+        combinator,
+        unit,
+      }),
     ),
   ),
+
   ([[head], tail]): ComplexSelector => ({
     type: 'complex-selector',
     head,
@@ -147,16 +146,13 @@ export type ComplexSelectorUnit = {
 };
 
 function tryParseComplexSelectorUnit(c: ComponentCursor): ComplexSelectorUnit | null {
-  return parseComplexSelectorUnit.parse(c);
+  return parseComplexSelectorUnit(c);
 }
 
-const parseComplexSelectorUnit: MultiplierParser<ComplexSelectorUnit> = map(
-  requireAny(
-    sequence(
-      opt(tryParseCompoundSelector),
-      any(tryParsePseudoCompoundSelector),
-    ),
-  ),
+const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSequence(
+  opt(tryParseCompoundSelector),
+  any(tryParsePseudoCompoundSelector),
+
   ([compound, pseudoCompounds]): ComplexSelectorUnit => ({
     type: 'complex-selector-unit',
     compound: compound[0] ?? null,
@@ -178,25 +174,23 @@ export type ComplexRealSelector = {
 };
 
 function tryParseComplexRealSelector(c: ComponentCursor): ComplexRealSelector | null {
-  return parseComplexRealSelector.parse(c);
+  return parseComplexRealSelector(c);
 }
 
-const parseComplexRealSelector: MultiplierParser<ComplexRealSelector> = map(
-  sequence(
-    one(tryParseCompoundSelector),
-    any(
-      map(
-        sequence(
-          one(tryParseCombinator),
-          one(tryParseCompoundSelector),
-        ),
-        ([[combinator], [compound]]) => ({
-          combinator,
-          compound,
-        }),
-      ).parse,
+const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequence(
+  one(tryParseCompoundSelector),
+
+  any(
+    sequence(
+      one(tryParseCombinator),
+      one(tryParseCompoundSelector),
+      ([[combinator], [compound]]) => ({
+        combinator,
+        compound,
+      }),
     ),
   ),
+
   ([[head], tail]): ComplexRealSelector => ({
     type: 'complex-real-selector',
     head,
@@ -214,14 +208,13 @@ export type RelativeSelector = {
 };
 
 export function tryParseRelativeSelector(c: ComponentCursor): RelativeSelector | null {
-  return parseRelativeSelector.parse(c);
+  return parseRelativeSelector(c);
 }
 
-const parseRelativeSelector: MultiplierParser<RelativeSelector> = map(
-  sequence(
-    opt(tryParseCombinator),
-    one(tryParseComplexSelector),
-  ),
+const parseRelativeSelector: TryValueParser<RelativeSelector> = sequence(
+  opt(tryParseCombinator),
+  one(tryParseComplexSelector),
+
   ([combinator, [selector]]): RelativeSelector => ({
     type: 'relative-selector',
     combinator: combinator[0] ?? null,
@@ -239,14 +232,13 @@ export type RelativeRealSelector = {
 };
 
 export function tryParseRelativeRealSelector(c: ComponentCursor): RelativeRealSelector | null {
-  return parseRelativeRealSelector.parse(c);
+  return parseRelativeRealSelector(c);
 }
 
-const parseRelativeRealSelector: MultiplierParser<RelativeRealSelector> = map(
-  sequence(
-    opt(tryParseCombinator),
-    one(tryParseComplexRealSelector),
-  ),
+const parseRelativeRealSelector: TryValueParser<RelativeRealSelector> = sequence(
+  opt(tryParseCombinator),
+  one(tryParseComplexRealSelector),
+
   ([combinator, [selector]]): RelativeRealSelector => ({
     type: 'relative-real-selector',
     combinator: combinator[0] ?? null,
@@ -264,16 +256,13 @@ export type CompoundSelector = {
 };
 
 function tryParseCompoundSelector(c: ComponentCursor): CompoundSelector | null {
-  return parseCompoundSelector.parse(c);
+  return parseCompoundSelector(c);
 }
 
-const parseCompoundSelector: MultiplierParser<CompoundSelector> = map(
-  requireAny(
-    sequence(
-      opt(tryParseTypeSelector),
-      any(tryParseSubclassSelector),
-    ),
-  ),
+const parseCompoundSelector: TryValueParser<CompoundSelector> = requiredSequence(
+  opt(tryParseTypeSelector),
+  any(tryParseSubclassSelector),
+
   ([typeSelector, subclasses]): CompoundSelector => ({
     type: 'compound-selector',
     typeSelector: typeSelector[0] ?? null,
@@ -292,14 +281,13 @@ export type PseudoCompoundSelector = {
 };
 
 function tryParsePseudoCompoundSelector(c: ComponentCursor): PseudoCompoundSelector | null {
-  return parsePseudoCompoundSelector.parse(c);
+  return parsePseudoCompoundSelector(c);
 }
 
-const parsePseudoCompoundSelector: MultiplierParser<PseudoCompoundSelector> = map(
-  sequence(
-    one(tryParsePseudoElementSelector),
-    any(tryParsePseudoClassSelector),
-  ),
+const parsePseudoCompoundSelector: TryValueParser<PseudoCompoundSelector> = sequence(
+  one(tryParsePseudoElementSelector),
+  any(tryParsePseudoClassSelector),
+
   ([[pseudoElement], pseudoClasses]): PseudoCompoundSelector => ({
     type: 'pseudo-compound-selector',
     pseudoElement,
@@ -313,14 +301,13 @@ const parsePseudoCompoundSelector: MultiplierParser<PseudoCompoundSelector> = ma
 export type SimpleSelector = TypeSelector | SubclassSelector;
 
 function tryParseSimpleSelector(c: ComponentCursor): SimpleSelector | null {
-  return parseSimpleSelector.parse(c);
+  return parseSimpleSelector(c);
 }
 
-const parseSimpleSelector: MultiplierParser<SimpleSelector> = map(
-  oneOf(
-    one(tryParseTypeSelector),
-    one(tryParseSubclassSelector),
-  ),
+const parseSimpleSelector: TryValueParser<SimpleSelector> = oneOf(
+  one(tryParseTypeSelector),
+  one(tryParseSubclassSelector),
+
   ([selector]): SimpleSelector => selector,
 );
 
@@ -390,14 +377,13 @@ export type WqName = {
 };
 
 function tryParseWqName(c: ComponentCursor): WqName | null {
-  return parseWqName.parse(c);
+  return parseWqName(c);
 }
 
-// const parseWqName: TryValueParser<WqName> = map(
-//   sequence(
-//     opt(tryParseNsPrefix),
-//     one(tryParseIdentToken),
-//   ),
+// const parseWqName: TryValueParser<WqName> = sequence(
+//   opt(tryParseNsPrefix),
+//   one(tryParseIdentToken),
+
 //   ([namespace, [name]]): WqName => ({
 //     type: 'wq-name',
 //     namespace: namespace[0] ?? null,
@@ -405,27 +391,33 @@ function tryParseWqName(c: ComponentCursor): WqName | null {
 //   }),
 // );
 
-const parseWqName: MultiplierParser<WqName> = oneOf(
-  map(
+const parseWqName: TryValueParser<WqName> = oneOf(
+  one(
     sequence(
       one(tryParseNsPrefix),
       one(tryParseIdentToken),
+
+      ([[namespace], [name]]): WqName => ({
+        type: 'wq-name',
+        namespace,
+        name: name.value,
+      }),
     ),
-    ([[namespace], [name]]): WqName => ({
-      type: 'wq-name',
-      namespace,
-      name: name.value,
-    }),
   ),
 
-  map(
-    one(tryParseIdentToken),
-    ([name]): WqName => ({
-      type: 'wq-name',
-      namespace: null,
-      name: name.value,
-    }),
+  one(
+    sequence(
+      one(tryParseIdentToken),
+
+      ([[name]]): WqName => ({
+        type: 'wq-name',
+        namespace: null,
+        name: name.value,
+      }),
+    ),
   ),
+
+  ([name]): WqName => name,
 );
 
 /**
@@ -437,19 +429,24 @@ export type NsPrefix = {
 };
 
 function tryParseNsPrefix(c: ComponentCursor): NsPrefix | null {
-  return parseNsPrefix.parse(c);
+  return parseNsPrefix(c);
 }
 
-const parseNsPrefix: MultiplierParser<NsPrefix> = map(
-  sequence(
-    opt(
-      oneOf(
-        map(one(tryParseIdentToken), ([ident]) => ident.value),
-        map(one(tryParseDelim('*')), ([star]) => star),
-      ).parse,
+const parseNsPrefix: TryValueParser<NsPrefix> = sequence(
+  opt(
+    oneOf(
+      one(tryParseIdentToken),
+      one(tryParseDelim('*')),
+
+      ([prefix]) => (
+        typeof prefix === 'string'
+          ? prefix
+          : prefix.value
+      ),
     ),
-    one(tryParseDelim('|')),
   ),
+  one(tryParseDelim('|')),
+
   ([prefix]): NsPrefix => ({
     type: 'ns-prefix',
     prefix: prefix[0] ?? null,
@@ -466,30 +463,36 @@ export type TypeSelector = {
 };
 
 function tryParseTypeSelector(c: ComponentCursor): TypeSelector | null {
-  return parseTypeSelector.parse(c);
+  return parseTypeSelector(c);
 }
 
-const parseTypeSelector: MultiplierParser<TypeSelector> = oneOf(
-  map(
-    one(tryParseWqName),
-    ([name]): TypeSelector => ({
-      type: 'type-selector',
-      namespace: name.namespace,
-      name: name.name,
-    }),
+const parseTypeSelector: TryValueParser<TypeSelector> = oneOf(
+  one(
+    sequence(
+      one(tryParseWqName),
+
+      ([[name]]): TypeSelector => ({
+        type: 'type-selector',
+        namespace: name.namespace,
+        name: name.name,
+      }),
+    ),
   ),
 
-  map(
+  one(
     sequence(
       opt(tryParseNsPrefix),
       one(tryParseDelim('*')),
+
+      ([namespace]): TypeSelector => ({
+        type: 'type-selector',
+        namespace: namespace[0] ?? null,
+        name: '*',
+      }),
     ),
-    ([namespace]): TypeSelector => ({
-      type: 'type-selector',
-      namespace: namespace[0] ?? null,
-      name: '*',
-    }),
   ),
+
+  ([selector]): TypeSelector => selector,
 );
 
 /**
@@ -504,16 +507,15 @@ export type SubclassSelector =
   | PseudoClassSelector;
 
 function tryParseSubclassSelector(c: ComponentCursor): SubclassSelector | null {
-  return parseSubclassSelector.parse(c);
+  return parseSubclassSelector(c);
 }
 
-const parseSubclassSelector: MultiplierParser<SubclassSelector> = map(
-  oneOf(
-    one(tryParseIdSelector),
-    one(tryParseClassSelector),
-    one(tryParseAttributeSelector),
-    one(tryParsePseudoClassSelector),
-  ),
+const parseSubclassSelector: TryValueParser<SubclassSelector> = oneOf(
+  one(tryParseIdSelector),
+  one(tryParseClassSelector),
+  one(tryParseAttributeSelector),
+  one(tryParsePseudoClassSelector),
+
   ([selector]): SubclassSelector => selector,
 );
 
@@ -529,12 +531,13 @@ export type IdSelector = {
 };
 
 function tryParseIdSelector(c: ComponentCursor): IdSelector | null {
-  return parseIdSelector.parse(c);
+  return parseIdSelector(c);
 }
 
-const parseIdSelector: MultiplierParser<IdSelector> = map(
+const parseIdSelector: TryValueParser<IdSelector> = sequence(
   one(tryParseIdHashToken),
-  ([hash]): IdSelector => ({
+
+  ([[hash]]): IdSelector => ({
     type: 'id-selector',
     name: hash.value,
   }),
@@ -549,14 +552,13 @@ export type ClassSelector = {
 };
 
 function tryParseClassSelector(c: ComponentCursor): ClassSelector | null {
-  return parseClassSelector.parse(c);
+  return parseClassSelector(c);
 }
 
-const parseClassSelector: MultiplierParser<ClassSelector> = map(
-  sequence(
-    one(tryParseDelim('.')),
-    one(tryParseIdentToken),
-  ),
+const parseClassSelector: TryValueParser<ClassSelector> = sequence(
+  one(tryParseDelim('.')),
+  one(tryParseIdentToken),
+
   ([, [ident]]): ClassSelector => ({
     type: 'class-selector',
     name: ident.value,
@@ -582,35 +584,39 @@ function tryParseAttributeSelector(c: ComponentCursor): AttributeSelector | null
 
 const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
   oneOf(
-    map(
+    one(
       sequence(
         one(withComponentTrivia(tryParseWqName)),
         one(withComponentTrivia(tryParseAttrMatcher)),
         one(withComponentTrivia(tryParseAttrValue)),
         opt(withComponentTrivia(tryParseAttrModifier)),
+
+        ([[name], [matcher], [value], modifier]): AttributeSelector => ({
+          type: 'attribute-selector',
+          name,
+          matcher,
+          value,
+          modifier: modifier[0] ?? null,
+        }),
       ),
-      ([[name], [matcher], [value], modifier]): AttributeSelector => ({
-        type: 'attribute-selector',
-        name,
-        matcher,
-        value,
-        modifier: modifier[0] ?? null,
-      }),
     ),
 
-    map(
+    one(
       sequence(
         one(withComponentTrivia(tryParseWqName)),
+
+        ([[name]]): AttributeSelector => ({
+          type: 'attribute-selector',
+          name,
+          matcher: null,
+          value: null,
+          modifier: null,
+        }),
       ),
-      ([[name]]): AttributeSelector => ({
-        type: 'attribute-selector',
-        name,
-        matcher: null,
-        value: null,
-        modifier: null,
-      }),
     ),
-  ).parse,
+
+    ([selector]): AttributeSelector => selector,
+  ),
 );
 
 /**
@@ -619,28 +625,32 @@ const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
 export type AttrMatcher = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
 function tryParseAttrMatcher(c: ComponentCursor): AttrMatcher | null {
-  return parseAttrMatcher.parse(c);
+  return parseAttrMatcher(c);
 }
 
-const parseAttrMatcher: MultiplierParser<AttrMatcher> = oneOf(
-  map(
-    one(tryParseDelim('=')),
-    ([matcher]): AttrMatcher => matcher,
-  ),
+const parseAttrMatcher: TryValueParser<AttrMatcher> = oneOf(
+  one(tryParseDelim('=')),
 
-  map(
+  one(
     sequence(
-      oneOf(
-        one(tryParseDelim('~')),
-        one(tryParseDelim('|')),
-        one(tryParseDelim('^')),
-        one(tryParseDelim('$')),
-        one(tryParseDelim('*')),
+      one(
+        oneOf(
+          one(tryParseDelim('~')),
+          one(tryParseDelim('|')),
+          one(tryParseDelim('^')),
+          one(tryParseDelim('$')),
+          one(tryParseDelim('*')),
+
+          ([prefix]) => prefix,
+        )
       ),
       one(tryParseDelim('=')),
+
+      ([[prefix]]): AttrMatcher => `${prefix}=`,
     ),
-    ([[prefix]]): AttrMatcher => `${prefix}=`,
   ),
+
+  ([matcher]): AttrMatcher => matcher,
 );
 
 /**
@@ -651,25 +661,33 @@ export type AttrValue =
   | { type: 'ident'; value: string; };
 
 function tryParseAttrValue(c: ComponentCursor): AttrValue | null {
-  return parseAttrValue.parse(c);
+  return parseAttrValue(c);
 }
 
-const parseAttrValue: MultiplierParser<AttrValue> = oneOf(
-  map(
-    one(tryParseStringToken),
-    ([value]): AttrValue => ({
-      type: 'string',
-      value: value.value,
-    }),
+const parseAttrValue: TryValueParser<AttrValue> = oneOf(
+  one(
+    sequence(
+      one(tryParseStringToken),
+
+      ([[value]]): AttrValue => ({
+        type: 'string',
+        value: value.value,
+      }),
+    ),
   ),
 
-  map(
-    one(tryParseIdentToken),
-    ([value]): AttrValue => ({
-      type: 'ident',
-      value: value.value,
-    }),
+  one(
+    sequence(
+      one(tryParseIdentToken),
+
+      ([[value]]): AttrValue => ({
+        type: 'ident',
+        value: value.value,
+      }),
+    ),
   ),
+
+  ([value]): AttrValue => value,
 );
 
 /**
@@ -678,14 +696,13 @@ const parseAttrValue: MultiplierParser<AttrValue> = oneOf(
 export type AttrModifier = 'i' | 's';
 
 function tryParseAttrModifier(c: ComponentCursor): AttrModifier | null {
-  return parseAttrModifier.parse(c);
+  return parseAttrModifier(c);
 }
 
-const parseAttrModifier: MultiplierParser<AttrModifier> = map(
-  oneOf(
-    one(tryParseIdent('i')),
-    one(tryParseIdent('s')),
-  ),
+const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
+  one(tryParseIdent('i')),
+  one(tryParseIdent('s')),
+
   ([modifier]): AttrModifier => modifier,
 );
 
@@ -700,35 +717,39 @@ export type PseudoClassSelector = {
   value: ComponentValue[] | null;
 };
 
-const parsePseudoClassSelector: MultiplierParser<PseudoClassSelector> = oneOf(
-  map(
+function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | null {
+  return parsePseudoClassSelector(c);
+}
+
+const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
+  one(
     sequence(
       one(tryParseColon),
       one(tryParseNonLegacyIdentToken),
+
+      ([, [ident]]): PseudoClassSelector => ({
+        type: 'pseudo-class-selector',
+        name: ident.value,
+        value: null,
+      }),
     ),
-    ([, [ident]]): PseudoClassSelector => ({
-      type: 'pseudo-class-selector',
-      name: ident.value,
-      value: null,
-    }),
   ),
 
-  map(
+  one(
     sequence(
       one(tryParseColon),
       one(tryParseFunctionBlock),
-    ),
-    ([, [fn]]): PseudoClassSelector => ({
-      type: 'pseudo-class-selector',
-      name: fn.name,
-      value: fn.value,
-    }),
-  ),
-);
 
-function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | null {
-  return parsePseudoClassSelector.parse(c);
-}
+      ([, [fn]]): PseudoClassSelector => ({
+        type: 'pseudo-class-selector',
+        name: fn.name,
+        value: fn.value,
+      }),
+    ),
+  ),
+
+  ([selector]): PseudoClassSelector => selector,
+);
 
 /**
  * <pseudo-element-selector> =
@@ -742,49 +763,65 @@ export type PseudoElementSelector = {
 };
 
 function tryParsePseudoElementSelector(c: ComponentCursor): PseudoElementSelector | null {
-  return parsePseudoElementSelector.parse(c);
+  return parsePseudoElementSelector(c);
 }
 
-const parsePseudoElementSelector: MultiplierParser<PseudoElementSelector> = oneOf(
-  map(
-    one(tryParseLegacyPseudoElementSelector),
-    ([legacy]): PseudoElementSelector => ({
-      type: 'pseudo-element-selector',
-      name: legacy.name,
-      value: null,
-      legacy: true,
-    }),
+const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
+  one(
+    sequence(
+      one(tryParseLegacyPseudoElementSelector),
+
+      ([[legacy]]): PseudoElementSelector => ({
+        type: 'pseudo-element-selector',
+        name: legacy.name,
+        value: null,
+        legacy: true,
+      }),
+    ),
   ),
 
-  map(
+  one(
     sequence(
       one(tryParseColon),
       one(tryParseColon),
-      oneOf(
-        map(
-          one(tryParseIdentToken),
-          ([ident]) => ({
-            name: ident.value,
-            value: null,
-          }),
-        ),
+      one(
+        oneOf(
+          one(
+            sequence(
+              one(tryParseIdentToken),
 
-        map(
-          one(tryParseFunctionBlock),
-          ([fn]) => ({
-            name: fn.name,
-            value: fn.value,
-          }),
+              ([[ident]]) => ({
+                name: ident.value,
+                value: null,
+              }),
+            ),
+          ),
+
+          one(
+            sequence(
+              one(tryParseFunctionBlock),
+
+              ([[fn]]) => ({
+                name: fn.name,
+                value: fn.value,
+              }),
+            ),
+          ),
+
+          ([pseudo]) => pseudo,
         ),
       ),
+
+      ([, , [pseudo]]): PseudoElementSelector => ({
+        type: 'pseudo-element-selector',
+        name: pseudo.name,
+        value: pseudo.value,
+        legacy: false,
+      }),
     ),
-    ([, , pseudo]): PseudoElementSelector => ({
-      type: 'pseudo-element-selector',
-      name: pseudo.name,
-      value: pseudo.value,
-      legacy: false,
-    }),
   ),
+
+  ([selector]): PseudoElementSelector => selector,
 );
 
 /**
@@ -797,25 +834,28 @@ export type LegacyPseudoElementSelector = {
   name: 'before' | 'after' | 'first-line' | 'first-letter';
 };
 
-const parseLegacyPseudoElementSelector: MultiplierParser<LegacyPseudoElementSelector> = map(
-  sequence(
-    one(tryParseColon),
+function tryParseLegacyPseudoElementSelector(c: ComponentCursor): LegacyPseudoElementSelector | null {
+  return parseLegacyPseudoElementSelector(c);
+}
+
+const parseLegacyPseudoElementSelector: TryValueParser<LegacyPseudoElementSelector> = sequence(
+  one(tryParseColon),
+  one(
     oneOf(
       one(tryParseIdent('before')),
       one(tryParseIdent('after')),
       one(tryParseIdent('first-line')),
       one(tryParseIdent('first-letter')),
+
+      ([name]) => name,
     ),
   ),
+
   ([, [name]]): LegacyPseudoElementSelector => ({
     type: 'legacy-pseudo-element-selector',
     name,
   }),
 );
-
-function tryParseLegacyPseudoElementSelector(c: ComponentCursor): LegacyPseudoElementSelector | null {
-  return parseLegacyPseudoElementSelector.parse(c);
-}
 
 
 // Helpers and simple parsers

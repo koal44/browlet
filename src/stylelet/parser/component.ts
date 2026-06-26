@@ -3,180 +3,244 @@ import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 
 export type TryValueParser<T> = (c: ComponentCursor) => T | null;
+
 export type MultiplierParser<T> = {
   parse: TryValueParser<T>;
   min: number;
   max: number;
 };
 
-type SequenceValue<P extends MultiplierParser<unknown>[]> = {
+type MultiplierValueOfParser<P> =
+  P extends MultiplierParser<infer V> ? V : never;
+
+type SequenceValue<P extends readonly MultiplierParser<unknown>[]> = {
   [I in keyof P]: MultiplierValueOfParser<P[I]>;
 };
 
-type MultiplierValueOfParser<P> =
-  P extends MultiplierParser<infer V> ? V : never;
+type AlternativeValue<P extends readonly MultiplierParser<unknown>[]> =
+  MultiplierValueOfParser<P[number]>;
+
+type UnorderedValue<P extends readonly MultiplierParser<unknown>[]> = {
+  [I in keyof P]: MultiplierValueOfParser<P[I]> | undefined;
+};
 
 /**
  * CSS value juxtaposition: `a b`
  */
-export function sequence<P extends MultiplierParser<unknown>[]>(
-  ...parsers: P
-): MultiplierParser<SequenceValue<P>> {
-  return {
-    parse: (c: ComponentCursor): SequenceValue<P> | null => {
-      const start = c.pos();
-      const values: unknown[] = [];
+export function sequence<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R]
+): TryValueParser<R> {
+  return parseSequence(false, ...args);
+}
 
-      for (const parser of parsers) {
-        const componentStart = c.pos();
-        const value = parser.parse(c);
+/**
+ * CSS value required group: `[ a b c ]!`
+ */
+export function requiredSequence<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R]
+): TryValueParser<R> {
+  return parseSequence(true, ...args);
+}
 
-        if (value === null) {
-          c.restore(start);
-          return null;
-        }
+function parseSequence<P extends readonly MultiplierParser<unknown>[], R>(
+  requireAnyValue: boolean,
+  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R]
+): TryValueParser<R> {
+  const project = args[args.length - 1] as (value: SequenceValue<P>) => R;
+  const parsers = args.slice(0, -1) as unknown as P;
 
-        if (c.pos() === componentStart && hasAnyValue(value)) {
-          c.error('Sequence parser produced a value without consuming input');
-        }
+  return (c: ComponentCursor): R | null => {
+    const start = c.pos();
+    const values: unknown[] = [];
 
-        values.push(value);
+    for (const parser of parsers) {
+      const componentStart = c.pos();
+      const value = parser.parse(c);
+
+      if (value === null) {
+        c.restore(start);
+        return null;
       }
 
-      return values as SequenceValue<P>;
-    },
-    min: 1,
-    max: 1,
+      if (c.pos() === componentStart && hasAnyValue(value)) {
+        c.error('Sequence parser produced a value without consuming input');
+      }
+
+      values.push(value);
+    }
+
+    const raw = values as SequenceValue<P>;
+
+    if (requireAnyValue && !hasAnyValue(raw)) {
+      c.restore(start);
+      return null;
+    }
+
+    return project(raw);
   };
 }
 
 /**
  * CSS value alternative: `a | b`
  */
-export function oneOf<P extends MultiplierParser<unknown>[]>(
-  ...parsers: P
-): MultiplierParser<MultiplierValueOfParser<P[number]>> {
-  return {
-    parse: (c: ComponentCursor): MultiplierValueOfParser<P[number]> | null => {
-      const start = c.pos();
-      const branchStart = c.pos();
+export function oneOf<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: AlternativeValue<P>) => R]
+): TryValueParser<R> {
+  const project = args[args.length - 1] as (value: AlternativeValue<P>) => R;
+  const parsers = args.slice(0, -1) as unknown as P;
 
-      for (const parser of parsers) {
-        c.restore(branchStart);
+  return (c: ComponentCursor): R | null => {
+    const start = c.pos();
 
-        const componentStart = c.pos();
-        const value = parser.parse(c);
+    for (const parser of parsers) {
+      c.restore(start);
 
-        if (value === null) {
-          c.restore(branchStart);
-          continue;
-        }
+      const componentStart = c.pos();
+      const value = parser.parse(c);
 
-        if (c.pos() === componentStart && hasAnyValue(value)) {
-          c.error('Alternative parser produced a value without consuming input');
-        }
-
-        return value as MultiplierValueOfParser<P[number]>;
+      if (value === null) {
+        c.restore(start);
+        continue;
       }
 
-      c.restore(start);
-      return null;
-    },
-    min: 1,
-    max: 1,
+      if (c.pos() === componentStart && hasAnyValue(value)) {
+        c.error('Alternative parser produced a value without consuming input');
+      }
+
+      return project(value as AlternativeValue<P>);
+    }
+
+    c.restore(start);
+    return null;
   };
 }
-
-type UnorderedValue<P extends MultiplierParser<unknown>[]> = {
-  [I in keyof P]: MultiplierValueOfParser<P[I]> | undefined;
-};
 
 /**
  * CSS value double ampersand: `a && b`
  */
-export function allOf<P extends MultiplierParser<unknown>[]>(
-  ...parsers: P
-): MultiplierParser<UnorderedValue<P>> {
-  return {
-    parse: (c: ComponentCursor): UnorderedValue<P> | null => {
-      const start = c.pos();
-      const result = consumeUnordered(c, parsers);
+export function allOf<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  return parseAllOf(false, ...args);
+}
 
-      for (let i = 0; i < parsers.length; i++) {
-        if (result.seen.has(i)) {
-          continue;
-        }
+/**
+ * CSS value required double ampersand group: `[ a && b ]!`
+ */
+export function requiredAllOf<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  return parseAllOf(true, ...args);
+}
 
-        const empty = parseEmpty(c, parsers[i]);
+function parseAllOf<P extends readonly MultiplierParser<unknown>[], R>(
+  requireAnyValue: boolean,
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  const project = args[args.length - 1] as (value: UnorderedValue<P>) => R;
+  const parsers = args.slice(0, -1) as unknown as P;
 
-        if (empty === null) {
-          c.restore(start);
-          return null;
-        }
+  return (c: ComponentCursor): R | null => {
+    const start = c.pos();
+    const result = consumeUnordered(c, parsers);
 
-        result.values[i] = empty;
+    for (let i = 0; i < parsers.length; i++) {
+      if (result.seen.has(i)) {
+        continue;
       }
 
-      return result.values as UnorderedValue<P>;
-    },
-    min: 1,
-    max: 1,
+      const empty = parseEmpty(c, parsers[i]);
+
+      if (empty === null) {
+        c.restore(start);
+        return null;
+      }
+
+      result.values[i] = empty;
+    }
+
+    const raw = result.values as UnorderedValue<P>;
+
+    if (requireAnyValue && !hasAnyValue(raw)) {
+      c.restore(start);
+      return null;
+    }
+
+    return project(raw);
   };
 }
 
 /**
  * CSS value double bar: `a || b`
  */
-export function someOf<P extends MultiplierParser<unknown>[]>(
-  ...parsers: P
-): MultiplierParser<UnorderedValue<P>> {
-  return {
-    parse: (c: ComponentCursor): UnorderedValue<P> | null => {
-      const start = c.pos();
-      const result = consumeUnordered(c, parsers);
-      const hasConsumedValue = hasAnyValue(result.values);
+export function someOf<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  return parseSomeOf(false, ...args);
+}
 
-      let canMatchEmpty = true;
+/**
+ * CSS value required double bar group: `[ a || b ]!`
+ */
+export function requiredSomeOf<P extends readonly MultiplierParser<unknown>[], R>(
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  return parseSomeOf(true, ...args);
+}
 
-      for (let i = 0; i < parsers.length; i++) {
-        if (result.seen.has(i)) {
-          continue;
-        }
+function parseSomeOf<P extends readonly MultiplierParser<unknown>[], R>(
+  requireAnyValue: boolean,
+  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R]
+): TryValueParser<R> {
+  const project = args[args.length - 1] as (value: UnorderedValue<P>) => R;
+  const parsers = args.slice(0, -1) as unknown as P;
 
-        const empty = parseEmpty(c, parsers[i]);
+  return (c: ComponentCursor): R | null => {
+    const start = c.pos();
+    const result = consumeUnordered(c, parsers);
+    const hasConsumedValue = hasAnyValue(result.values);
 
-        if (empty === null) {
-          canMatchEmpty = false;
-          continue;
-        }
+    let canMatchEmpty = true;
 
-        result.values[i] = empty;
+    for (let i = 0; i < parsers.length; i++) {
+      if (result.seen.has(i)) {
+        continue;
       }
 
-      if (!hasConsumedValue && !canMatchEmpty) {
-        c.restore(start);
-        return null;
+      const empty = parseEmpty(c, parsers[i]);
+
+      if (empty === null) {
+        canMatchEmpty = false;
+        continue;
       }
 
-      return result.values as UnorderedValue<P>;
-    },
-    min: 1,
-    max: 1,
+      result.values[i] = empty;
+    }
+
+    const raw = result.values as UnorderedValue<P>;
+
+    if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasAnyValue(raw))) {
+      c.restore(start);
+      return null;
+    }
+
+    return project(raw);
   };
 }
 
 export const DEFAULT_REPEAT_LIMIT = 20;
+
 export type ValueParser<T> = (c: ComponentCursor) => T;
 
 export function required<T>(
-  parser: MultiplierParser<T>,
+  parse: TryValueParser<T>,
   expected: string,
 ): ValueParser<T> {
   return (c: ComponentCursor): T => {
     const start = c.pos();
-    const value = parser.parse(c);
+    const value = parse(c);
 
-    if (value !== null && hasAnyValue(value)) {
+    if (value !== null) {
       return value;
     }
 
@@ -185,6 +249,12 @@ export function required<T>(
   };
 }
 
+/**
+ * CSS value bounded repetition: `a{min,max}`.
+ *
+ * The parser is greedy. Backtracking support can later be attached here by
+ * exposing repetition choices without changing the public shape.
+ */
 export function repeat<T>(
   parse: TryValueParser<T>,
   min: number,
@@ -231,6 +301,9 @@ export function repeat<T>(
   };
 }
 
+/**
+ * CSS value comma repetition: `a#` / `a#{min,max}`.
+ */
 export function repeatComma<T>(
   parse: TryValueParser<T>,
   min = 1,
@@ -312,16 +385,32 @@ export function repeatComma<T>(
   };
 }
 
+/**
+ * CSS value default multiplicity: `a`.
+ */
 export function one<T>(parse: TryValueParser<T>): MultiplierParser<T[]> {
   return repeat(parse, 1, 1);
 }
 
+/**
+ * CSS value optional multiplicity: `a?`.
+ */
 export function opt<T>(parse: TryValueParser<T>): MultiplierParser<T[]> {
   return repeat(parse, 0, 1);
 }
 
+/**
+ * CSS value zero-or-more multiplicity: `a*`.
+ */
 export function any<T>(parse: TryValueParser<T>): MultiplierParser<T[]> {
   return repeat(parse, 0, DEFAULT_REPEAT_LIMIT);
+}
+
+/**
+ * CSS value one-or-more multiplicity: `a+`.
+ */
+export function plus<T>(parse: TryValueParser<T>): MultiplierParser<T[]> {
+  return repeat(parse, 1, DEFAULT_REPEAT_LIMIT);
 }
 
 export function withComponentTrivia<T>(parse: TryValueParser<T>): TryValueParser<T> {
@@ -338,45 +427,6 @@ export function withComponentTrivia<T>(parse: TryValueParser<T>): TryValueParser
     }
 
     return value;
-  };
-}
-
-export function map<A, B>(
-  parser: MultiplierParser<A>,
-  fn: (value: A) => B,
-): MultiplierParser<B> {
-  return {
-    parse: (c) => {
-      const start = c.pos();
-      const value = parser.parse(c);
-
-      if (value === null) {
-        c.restore(start);
-        return null;
-      }
-
-      return fn(value);
-    },
-    min: parser.min,
-    max: parser.max,
-  };
-}
-
-export function requireAny<T>(parser: MultiplierParser<T>): MultiplierParser<T> {
-  return {
-    parse: (c) => {
-      const start = c.pos();
-      const value = parser.parse(c);
-
-      if (value === null || !hasAnyValue(value)) {
-        c.restore(start);
-        return null;
-      }
-
-      return value;
-    },
-    min: parser.min,
-    max: parser.max,
   };
 }
 
@@ -401,7 +451,7 @@ function parseEmpty<T>(
   return value;
 }
 
-function consumeUnordered<P extends MultiplierParser<unknown>[]>(
+function consumeUnordered<P extends readonly MultiplierParser<unknown>[]>(
   c: ComponentCursor,
   parsers: P,
 ): {
@@ -467,33 +517,4 @@ function hasAnyValue(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
-// function parseMultiplier<T>(
-//   c: ComponentCursor,
-//   multiplier: MultiplierParser<T>,
-// ): T[] | null {
-//   const start = c.pos();
-//   const values: T[] = [];
 
-//   while (values.length < multiplier.max) {
-//     const itemStart = c.pos();
-//     const value = multiplier.parse(c);
-
-//     if (value === null) {
-//       c.restore(itemStart);
-//       break;
-//     }
-
-//     if (c.pos() === itemStart) {
-//       c.error('Repeated parser matched without consuming input');
-//     }
-
-//     values.push(value);
-//   }
-
-//   if (values.length < multiplier.min) {
-//     c.restore(start);
-//     return null;
-//   }
-
-//   return values;
-// }

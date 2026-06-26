@@ -1,5 +1,4 @@
 import { ComponentCursor } from '../parser/component-cursor';
-import { consumeComponentTrivia, type ComponentValue } from '../parser/syntax';
 import {
   one,
   oneOf,
@@ -17,6 +16,7 @@ import {
   tryParseString,
   type StringValue,
 } from '../values/string';
+import { type ComponentValue, consumeComponentTrivia } from '../parser/syntax';
 
 export type AnimationNameValue = {
   type: 'animation-name';
@@ -45,25 +45,17 @@ const tryParseNone: TryValueParser<AnimationNameNoneValue> = (c) => {
   return { type: 'none' };
 };
 
-const tryParseKeyframesName = oneOf(
+const tryParseKeyframesName: TryValueParser<KeyframesNameValue> = oneOf(
   one((c) => tryParseCustomIdent(c, ['none'])),
   one(tryParseString),
+  ([value]): KeyframesNameValue => value,
 );
 
-const tryParseAnimationNameItemGrammar = oneOf(
+const tryParseAnimationNameItem: TryValueParser<AnimationNameItemValue> = oneOf(
   one(tryParseNone),
-  tryParseKeyframesName,
+  one(tryParseKeyframesName),
+  ([value]): AnimationNameItemValue => value,
 );
-
-const tryParseAnimationNameItem: TryValueParser<AnimationNameItemValue> = (c) => {
-  const value = tryParseAnimationNameItemGrammar.parse(c);
-
-  if (value === null) {
-    return null;
-  }
-
-  return value[0];
-};
 
 const tryParseAnimationNameList = repeatComma(
   tryParseAnimationNameItem,

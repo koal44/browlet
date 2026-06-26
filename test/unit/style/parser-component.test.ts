@@ -3,7 +3,7 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, one, oneOf, opt, repeat, repeatComma, requireAny, required, sequence, someOf,
+  allOf, one, oneOf, opt, repeat, repeatComma, required, requiredAllOf, requiredSequence, requiredSomeOf, sequence, someOf,
   withComponentTrivia,
   type TryValueParser,
 } from '../../../src/stylelet/parser/component';
@@ -67,9 +67,13 @@ describe('component value combinators', () => {
     const c = cursor('a b');
 
     // a && b
-    const parseAAndB = allOf(one(parseA), one(parseB));
+    const parseAAndB = allOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAAndB.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAAndB(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -77,9 +81,13 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a && b
-    const parseAAndB = allOf(one(parseA), one(parseB));
+    const parseAAndB = allOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAAndB.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAAndB(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -87,9 +95,13 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a && b?
-    const parseAAndMaybeB = allOf(one(parseA), opt(parseB));
+    const parseAAndMaybeB = allOf(
+      one(parseA),
+      opt(parseB),
+      (value) => value,
+    );
 
-    expect(parseAAndMaybeB.parse(c)).toEqual([['a'], []]);
+    expect(parseAAndMaybeB(c)).toEqual([['a'], []]);
     expectDone(c);
   });
 
@@ -97,9 +109,13 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a && b?
-    const parseAAndMaybeB = allOf(one(parseA), opt(parseB));
+    const parseAAndMaybeB = allOf(
+      one(parseA),
+      opt(parseB),
+      (value) => value,
+    );
 
-    expect(parseAAndMaybeB.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAAndMaybeB(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -107,9 +123,13 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a && b?
-    const parseAAndMaybeB = allOf(one(parseA), opt(parseB));
+    const parseAAndMaybeB = allOf(
+      one(parseA),
+      opt(parseB),
+      (value) => value,
+    );
 
-    expect(parseAAndMaybeB.parse(c)).toBeNull();
+    expect(parseAAndMaybeB(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -117,9 +137,13 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(one(parseA), one(parseB));
+    const parseAOrBOrBoth = someOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAOrBOrBoth.parse(c)).toEqual([['a'], undefined]);
+    expect(parseAOrBOrBoth(c)).toEqual([['a'], undefined]);
     expectDone(c);
   });
 
@@ -127,9 +151,13 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(one(parseA), one(parseB));
+    const parseAOrBOrBoth = someOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAOrBOrBoth.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAOrBOrBoth(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -137,9 +165,13 @@ describe('component value combinators', () => {
     const c = cursor('d');
 
     // a || b
-    const parseAOrBOrBoth = someOf(one(parseA), one(parseB));
+    const parseAOrBOrBoth = someOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAOrBOrBoth.parse(c)).toBeNull();
+    expect(parseAOrBOrBoth(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -147,9 +179,13 @@ describe('component value combinators', () => {
     const c = cursor('a a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(one(parseA), one(parseB));
+    const parseAOrBOrBoth = someOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAOrBOrBoth.parse(c)).toEqual([['a'], undefined]);
+    expect(parseAOrBOrBoth(c)).toEqual([['a'], undefined]);
     expectNextIdent(c, 'a');
   });
 
@@ -175,11 +211,15 @@ describe('component value combinators', () => {
     };
 
     // a || [ b c ]
-    const parseAOrGroupedBCOrBoth = someOf(one(parseA), one(groupedBC));
+    const parseAOrGroupedBCOrBoth = someOf(
+      one(parseA),
+      one(groupedBC),
+      (value) => value,
+    );
 
     const valid = cursor('a b c');
 
-    expect(parseAOrGroupedBCOrBoth.parse(valid)).toEqual([
+    expect(parseAOrGroupedBCOrBoth(valid)).toEqual([
       ['a'],
       [['b', 'c']],
     ]);
@@ -188,15 +228,20 @@ describe('component value combinators', () => {
 
     const invalid = cursor('b a c');
 
-    expect(parseAOrGroupedBCOrBoth.parse(invalid)).toBeNull();
+    expect(parseAOrGroupedBCOrBoth(invalid)).toBeNull();
     expect(invalid.pos()).toBe(0);
   });
 
   it('parses juxtaposed components with sequence', () => {
     const c = cursor('a b');
 
-    const parseAB = sequence(one(parseA), one(parseB));
-    const result = parseAB.parse(c);
+    const parseAB = sequence(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
+
+    const result = parseAB(c);
 
     expect(result).toEqual([['a'], ['b']]);
     expectDone(c);
@@ -205,8 +250,13 @@ describe('component value combinators', () => {
   it('parses alternatives with oneOf', () => {
     const c = cursor('b');
 
-    const parseAOrB = oneOf(one(parseA), one(parseB));
-    const result = parseAOrB.parse(c);
+    const parseAOrB = oneOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
+
+    const result = parseAOrB(c);
 
     expect(result).toEqual(['b']);
     expectDone(c);
@@ -215,9 +265,13 @@ describe('component value combinators', () => {
   it('returns null from oneOf when no alternatives match', () => {
     const c = cursor('c');
 
-    const parseAOrB = oneOf(one(parseA), one(parseB));
+    const parseAOrB = oneOf(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAOrB.parse(c)).toBeNull();
+    expect(parseAOrB(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -228,35 +282,52 @@ describe('component value combinators', () => {
     const parseF = valueLiteralParser('f');
 
     // a b
-    const parseAB = sequence(one(parseA), one(parseB));
+    const parseAB = sequence(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
     // e f
-    const parseEF = sequence(one(parseE), one(parseF));
+    const parseEF = sequence(
+      one(parseE),
+      one(parseF),
+      (value) => value,
+    );
 
     // d && e f
     const parseDAndEF = allOf(
       one(parseD),
-      parseEF,
+      one(parseEF),
+      ([d, ef]) => [
+        d,
+        ef![0],
+      ],
     );
 
     // c || d && e f
     const parseCOrDAndEF = someOf(
       one(parseC),
-      parseDAndEF,
+      one(parseDAndEF),
+      ([c, dAndEF]) => [
+        c,
+        dAndEF?.[0],
+      ],
     );
 
     // a b | c || d && e f
     const parseWhole = oneOf(
-      parseAB,
-      parseCOrDAndEF,
+      one(parseAB),
+      one(parseCOrDAndEF),
+      ([value]) => value,
     );
 
     const ab = cursor('a b');
-    expect(parseWhole.parse(ab)).toEqual([['a'], ['b']]);
+    expect(parseWhole(ab)).toEqual([['a'], ['b']]);
     expectDone(ab);
 
     const reordered = cursor('e f d c');
-    expect(parseWhole.parse(reordered)).toEqual([
+    expect(parseWhole(reordered)).toEqual([
       ['c'],
       [
         ['d'],
@@ -269,7 +340,7 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const partial = cursor('e f d');
-    expect(parseWhole.parse(partial)).toEqual([
+    expect(parseWhole(partial)).toEqual([
       undefined,
       [
         ['d'],
@@ -331,14 +402,15 @@ describe('component value combinators', () => {
     const parseMaybeAThenB = sequence(
       repeat(parseA, 0, 1),
       one(parseB),
+      (value) => value,
     );
 
     const withA = cursor('a b');
-    expect(parseMaybeAThenB.parse(withA)).toEqual([['a'], ['b']]);
+    expect(parseMaybeAThenB(withA)).toEqual([['a'], ['b']]);
     expectDone(withA);
 
     const withoutA = cursor('b');
-    expect(parseMaybeAThenB.parse(withoutA)).toEqual([[], ['b']]);
+    expect(parseMaybeAThenB(withoutA)).toEqual([[], ['b']]);
     expectDone(withoutA);
   });
 
@@ -386,11 +458,10 @@ describe('component value combinators', () => {
   });
 
   it('wraps try parsers as required parsers', () => {
-    // a!
-    const parseRequiredA = required(one(parseA), 'Expected a');
+    const parseRequiredA = required(parseA, 'Expected a');
 
     const valid = cursor('a');
-    expect(parseRequiredA(valid)).toEqual(['a']);
+    expect(parseRequiredA(valid)).toBe('a');
     expectDone(valid);
 
     const invalid = cursor('b');
@@ -520,24 +591,26 @@ describe('component value combinators', () => {
       repeat(parseA, 0, 1),
       repeat(parseB, 0, 1),
       repeat(parseC, 0, 1),
+      (value) => value,
     );
 
     const empty = cursor('');
-    expect(parseZeroOrMoreInOrder.parse(empty)).toEqual([[], [], []]);
+    expect(parseZeroOrMoreInOrder(empty)).toEqual([[], [], []]);
     expectDone(empty);
 
     const sparse = cursor('a c');
-    expect(parseZeroOrMoreInOrder.parse(sparse)).toEqual([['a'], [], ['c']]);
+    expect(parseZeroOrMoreInOrder(sparse)).toEqual([['a'], [], ['c']]);
     expectDone(sparse);
   });
 
   it('matches one or more components in order: [ A? B? C? ]!', () => {
     // [ A? B? C? ]!
     const parseOneOrMoreInOrder = required(
-      sequence(
+      requiredSequence(
         repeat(parseA, 0, 1),
         repeat(parseB, 0, 1),
         repeat(parseC, 0, 1),
+        (value) => value,
       ),
       'Expected one or more of a, b, c',
     );
@@ -556,14 +629,15 @@ describe('component value combinators', () => {
       one(parseA),
       one(parseB),
       one(parseC),
+      (value) => value,
     );
 
     const valid = cursor('a b c');
-    expect(parseAllInOrder.parse(valid)).toEqual([['a'], ['b'], ['c']]);
+    expect(parseAllInOrder(valid)).toEqual([['a'], ['b'], ['c']]);
     expectDone(valid);
 
     const invalid = cursor('a c');
-    expect(parseAllInOrder.parse(invalid)).toBeNull();
+    expect(parseAllInOrder(invalid)).toBeNull();
     expect(invalid.pos()).toBe(0);
   });
 
@@ -573,10 +647,11 @@ describe('component value combinators', () => {
       opt(parseA),
       opt(parseB),
       opt(parseC),
+      (value) => value,
     );
 
     const empty = cursor('');
-    expect(parseOptionalABC.parse(empty)).toEqual([
+    expect(parseOptionalABC(empty)).toEqual([
       [],
       [],
       [],
@@ -584,7 +659,7 @@ describe('component value combinators', () => {
     expectDone(empty);
 
     const reordered = cursor('c a');
-    expect(parseOptionalABC.parse(reordered)).toEqual([
+    expect(parseOptionalABC(reordered)).toEqual([
       ['a'],
       [],
       ['c'],
@@ -598,10 +673,11 @@ describe('component value combinators', () => {
       one(parseA),
       one(parseB),
       one(parseC),
+      (value) => value,
     );
 
     const c = cursor('b');
-    expect(parseOneOrMoreABC.parse(c)).toEqual([
+    expect(parseOneOrMoreABC(c)).toEqual([
       undefined,
       ['b'],
       undefined,
@@ -609,7 +685,7 @@ describe('component value combinators', () => {
     expectDone(c);
 
     const reordered = cursor('c a');
-    expect(parseOneOrMoreABC.parse(reordered)).toEqual([
+    expect(parseOneOrMoreABC(reordered)).toEqual([
       ['a'],
       undefined,
       ['c'],
@@ -617,7 +693,7 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const empty = cursor('');
-    expect(parseOneOrMoreABC.parse(empty)).toBeNull();
+    expect(parseOneOrMoreABC(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
   });
 
@@ -627,10 +703,11 @@ describe('component value combinators', () => {
       one(parseA),
       one(parseB),
       one(parseC),
+      (value) => value,
     );
 
     const reordered = cursor('c a b');
-    expect(parseAllABC.parse(reordered)).toEqual([
+    expect(parseAllABC(reordered)).toEqual([
       ['a'],
       ['b'],
       ['c'],
@@ -638,7 +715,7 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const missing = cursor('c a');
-    expect(parseAllABC.parse(missing)).toBeNull();
+    expect(parseAllABC(missing)).toBeNull();
     expect(missing.pos()).toBe(0);
   });
 
@@ -648,10 +725,11 @@ describe('component value combinators', () => {
       opt(parseA),
       opt(parseB),
       opt(parseC),
+      (value) => value,
     );
 
     const empty = cursor('');
-    expect(parseOptionalABC.parse(empty)).toEqual([
+    expect(parseOptionalABC(empty)).toEqual([
       [],
       [],
       [],
@@ -659,7 +737,7 @@ describe('component value combinators', () => {
     expectDone(empty);
 
     const reordered = cursor('c a');
-    expect(parseOptionalABC.parse(reordered)).toEqual([
+    expect(parseOptionalABC(reordered)).toEqual([
       ['a'],
       [],
       ['c'],
@@ -670,9 +748,13 @@ describe('component value combinators', () => {
   it('allows comments between juxtaposed components', () => {
     const c = cursor('a/**/b');
 
-    const parseAB = sequence(one(parseA), one(parseB));
+    const parseAB = sequence(
+      one(parseA),
+      one(parseB),
+      (value) => value,
+    );
 
-    expect(parseAB.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAB(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -692,32 +774,44 @@ describe('component value combinators', () => {
     const parseLineThrough = valueLiteralParser('line-through');
     const parseBlink = valueLiteralParser('blink');
 
+    // underline || overline || line-through || blink
+    const parseTextDecorationKeywords = someOf(
+      one(parseUnderline),
+      one(parseOverline),
+      one(parseLineThrough),
+      one(parseBlink),
+      (value) => value,
+    );
+
     // none | underline || overline || line-through || blink
     const parseTextDecorationLine = oneOf(
       one(parseNone),
-      someOf(
-        one(parseUnderline),
-        one(parseOverline),
-        one(parseLineThrough),
-        one(parseBlink),
-      ),
+      one(parseTextDecorationKeywords),
+      ([value]) => value,
     );
 
     // combinator precedence should not allow this to be parsed as
     // (none | underline) || overline || line-through || blink
     // const parseTextDecorationLine_Wrong = someOf(
-    //   oneOf(one(parseNone), one(parseUnderline)),
+    //   one(
+    //     oneOf(
+    //       one(parseNone),
+    //       one(parseUnderline),
+    //       ([value]) => value,
+    //     ),
+    //   ),
     //   one(parseOverline),
     //   one(parseLineThrough),
     //   one(parseBlink),
+    //   value => value,
     // );
 
     const none = cursor('none');
-    expect(parseTextDecorationLine.parse(none)).toEqual(['none']);
+    expect(parseTextDecorationLine(none)).toEqual('none');
     expectDone(none);
 
     const reordered = cursor('overline underline');
-    expect(parseTextDecorationLine.parse(reordered)).toEqual([
+    expect(parseTextDecorationLine(reordered)).toEqual([
       ['underline'],
       ['overline'],
       undefined,
@@ -726,7 +820,7 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const invalid = cursor('none overline');
-    expect(parseTextDecorationLine.parse(invalid)).toEqual(['none']);
+    expect(parseTextDecorationLine(invalid)).toEqual('none');
     expectNextIdent(invalid, 'overline');
   });
 
@@ -742,9 +836,10 @@ describe('component grammar trivia ownership', () => {
     const parseAB = sequence(
       one(rawA),
       one(rawB),
+      (value) => value,
     );
 
-    expect(parseAB.parse(c)).toBeNull();
+    expect(parseAB(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -754,9 +849,10 @@ describe('component grammar trivia ownership', () => {
     const parseAB = sequence(
       one(withComponentTrivia(rawA)),
       one(withComponentTrivia(rawB)),
+      (value) => value,
     );
 
-    expect(parseAB.parse(c)).toEqual([['a'], ['b']]);
+    expect(parseAB(c)).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 });
@@ -855,54 +951,79 @@ describe('selector separator trivia prototype', () => {
     expect(c.pos()).toBe(0);
   });
 
-  it('requires at least one multiplier value without throwing', () => {
-    // [ a? b? ]!
-    const parseOneOrMoreAB = requireAny(
-      sequence(
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
-      ),
+  it('requires at least one value in unordered all-of groups', () => {
+    // [ a? && b? ]!
+    const parseOneOrMoreAB = requiredAllOf(
+      opt(parseA),
+      opt(parseB),
+      (value) => value,
     );
 
     const empty = cursor('');
-    expect(parseOneOrMoreAB.parse(empty)).toBeNull();
+    expect(parseOneOrMoreAB(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
 
     const valid = cursor('b');
-    expect(parseOneOrMoreAB.parse(valid)).toEqual([[], ['b']]);
+    expect(parseOneOrMoreAB(valid)).toEqual([
+      [],
+      ['b'],
+    ]);
+    expectDone(valid);
+
+    const reordered = cursor('b a');
+    expect(parseOneOrMoreAB(reordered)).toEqual([
+      ['a'],
+      ['b'],
+    ]);
+    expectDone(reordered);
+  });
+
+  it('requires at least one multiplier value without throwing', () => {
+    // [ a? b? ]!
+    const parseOneOrMoreAB = requiredSequence(
+      repeat(parseA, 0, 1),
+      repeat(parseB, 0, 1),
+      (value) => value,
+    );
+
+    const empty = cursor('');
+    expect(parseOneOrMoreAB(empty)).toBeNull();
+    expect(empty.pos()).toBe(0);
+
+    const valid = cursor('b');
+    expect(parseOneOrMoreAB(valid)).toEqual([[], ['b']]);
     expectDone(valid);
   });
 
-  it('restores when requireAny sees only empty multiplier values', () => {
+  it('restores when requiredSequence sees only empty multiplier values', () => {
     // [ a? b? ]!
-    const parseOneOrMoreAB = requireAny(
-      sequence(
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
-      ),
+    const parseOneOrMoreAB = requiredSequence(
+      repeat(parseA, 0, 1),
+      repeat(parseB, 0, 1),
+      (value) => value,
     );
 
     const c = cursor('c');
 
-    expect(parseOneOrMoreAB.parse(c)).toBeNull();
+    expect(parseOneOrMoreAB(c)).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'c');
   });
 
-  it('treats non-empty nested unordered values as present in requireAny', () => {
-    const parseAOrB = requireAny(
-      someOf(
-        opt(parseA),
-        opt(parseB),
-      ),
+  it('treats non-empty nested unordered values as present in requiredSomeOf', () => {
+    // [ a? || b? ]!
+    const parseAOrB = requiredSomeOf(
+      opt(parseA),
+      opt(parseB),
+      (value) => value,
     );
 
     const empty = cursor('');
-    expect(parseAOrB.parse(empty)).toBeNull();
+    expect(parseAOrB(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
 
     const valid = cursor('a');
-    expect(parseAOrB.parse(valid)).toEqual([
+    expect(parseAOrB(valid)).toEqual([
       ['a'],
       [],
     ]);
