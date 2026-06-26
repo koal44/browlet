@@ -129,7 +129,6 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
     seen.add(matchedPart.key);
     values[matchedPart.key] = matchedValue;
 
-    // consumeComponentTrivia(c);
   }
 
   return { values, seen };
@@ -137,9 +136,6 @@ function consumeUnordered<P extends AnyUnorderedPart[]>(
 
 type MultiplierValueOfParser<P> =
   P extends TryMultiplierParser<infer V> ? V : never;
-
-// type MultiplierValueOfPart<P> =
-//   P extends UnorderedPart<string, infer V> ? V : never;
 
 type SequenceValue<P extends TryMultiplierParser<unknown>[]> = {
   [I in keyof P]: MultiplierValueOfParser<P[I]>;
@@ -155,8 +151,6 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
     const start = c.pos();
     const values: unknown[] = [];
 
-    // consumeComponentTrivia(c);
-
     for (const parse of parsers) {
       const componentStart = c.pos();
       const value = parse(c);
@@ -171,7 +165,6 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
       }
 
       values.push(value);
-      // consumeComponentTrivia(c);
     }
 
     return values as SequenceValue<P>;
@@ -186,9 +179,6 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
 ): TryMultiplierParser<MultiplierValueOfParser<P[number]>> {
   return (c: ComponentCursor): MultiplierValueOfParser<P[number]> | null => {
     const start = c.pos();
-
-    // consumeComponentTrivia(c);
-
     const branchStart = c.pos();
 
     for (const parse of parsers) {
@@ -205,8 +195,6 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
       if (c.pos() === componentStart && hasAnyMultiplierValue(value)) {
         c.error('Alternative parser produced a value without consuming input');
       }
-
-      // consumeComponentTrivia(c);
 
       return value as MultiplierValueOfParser<P[number]>;
     }
@@ -296,8 +284,6 @@ export function repeat<T>(
     const start = c.pos();
     const values: T[] = [];
 
-    // consumeComponentTrivia(c);
-
     while (values.length < max) {
       const itemStart = c.pos();
       const value = parse(c);
@@ -312,7 +298,6 @@ export function repeat<T>(
       }
 
       values.push(value);
-      // consumeComponentTrivia(c);
     }
 
     if (values.length < min) {
@@ -405,6 +390,14 @@ export function one<T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> {
   return repeat(parse, 1, 1);
 }
 
+export function opt<T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> {
+  return repeat(parse, 0, 1);
+}
+
+export function any<T>(parse: TryValueParser<T>): TryMultiplierParser<T[]> {
+  return repeat(parse, 0, DEFAULT_REPEAT_LIMIT);
+}
+
 export function withComponentTrivia<T>(parse: TryValueParser<T>): TryValueParser<T> {
   return (c) => {
     const start = c.pos();
@@ -434,4 +427,31 @@ export function map<A, B>(parse: TryMultiplierParser<A>, fn: (value: A) => B): T
 
     return fn(value);
   };
+}
+
+export function requireAny<T>(parse: TryValueParser<T>): TryValueParser<T> {
+  return (c) => {
+    const start = c.pos();
+    const value = parse(c);
+
+    if (value === null || !hasAnyValue(value)) {
+      c.restore(start);
+      return null;
+    }
+
+    return value;
+  };
+}
+
+function hasAnyValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasAnyValue);
+  }
+
+  if (value && typeof value === 'object') {
+    const values = Object.values(value);
+    return values.length > 0 && values.some(hasAnyValue);
+  }
+
+  return value !== null && value !== undefined;
 }

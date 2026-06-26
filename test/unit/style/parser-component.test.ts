@@ -3,7 +3,7 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, one, oneOf, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, required, sequence, someOf,
+  allOf, any, one, oneOf, opt, optionalPart, parseUnorderedAll, parseUnorderedSome, part, repeat, repeatComma, requireAny, required, sequence, someOf,
   withComponentTrivia,
   type TryValueParser,
 } from '../../../src/stylelet/parser/component';
@@ -831,5 +831,87 @@ describe('selector separator trivia prototype', () => {
 
     expect(parseSelectorSeparator(c)).toBeNull();
     expect(c.pos()).toBe(0);
+  });
+
+  it('requires at least one multiplier value without throwing', () => {
+    // [ a? b? ]!
+    const parseOneOrMoreAB = requireAny(
+      sequence(
+        repeat(parseA, 0, 1),
+        repeat(parseB, 0, 1),
+      ),
+    );
+
+    const empty = cursor('');
+    expect(parseOneOrMoreAB(empty)).toBeNull();
+    expect(empty.pos()).toBe(0);
+
+    const valid = cursor('b');
+    expect(parseOneOrMoreAB(valid)).toEqual([[], ['b']]);
+    expectDone(valid);
+  });
+
+  it('restores when requireAny sees only empty multiplier values', () => {
+    // [ a? b? ]!
+    const parseOneOrMoreAB = requireAny(
+      sequence(
+        repeat(parseA, 0, 1),
+        repeat(parseB, 0, 1),
+      ),
+    );
+
+    const c = cursor('c');
+
+    expect(parseOneOrMoreAB(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'c');
+  });
+
+  it('treats nested object values as present in requireAny', () => {
+    const parseAOrB = requireAny(
+      someOf([
+        optionalPart('a', one(parseA)),
+        optionalPart('b', one(parseB)),
+      ]),
+    );
+
+    const empty = cursor('');
+    expect(parseAOrB(empty)).toBeNull();
+    expect(empty.pos()).toBe(0);
+
+    const valid = cursor('a');
+    expect(parseAOrB(valid)).toMatchObject({ a: ['a'] });
+    expectDone(valid);
+  });
+
+  it('backtracks optional repetition when a later required component needs the token', () => {
+    // a? a
+    const parseMaybeAThenA = sequence(
+      opt(parseA),
+      one(parseA),
+    );
+
+    const c = cursor('a');
+
+    expect(parseMaybeAThenA(c)).toEqual([[], ['a']]);
+    expectDone(c);
+  });
+
+  it('backtracks greedy repetition when a later required component needs a token', () => {
+    // a* a b*
+    const parseAStarThenAThenBStar = sequence(
+      any(parseA),
+      one(parseA),
+      any(parseB),
+    );
+
+    const c = cursor('a a b b');
+
+    expect(parseAStarThenAThenBStar(c)).toEqual([
+      ['a'],
+      ['a'],
+      ['b', 'b'],
+    ]);
+    expectDone(c);
   });
 });
