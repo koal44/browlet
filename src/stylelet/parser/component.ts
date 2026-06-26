@@ -4,142 +4,13 @@ import { TokenKind } from './tokens';
 
 export type TryValueParser<T> = (c: ComponentCursor) => T | null;
 export type TryMultiplierParser<T> = (c: ComponentCursor) => T | null;
-export type ValueParser<T> = (c: ComponentCursor) => T;
-
-export type AnyUnorderedPart = UnorderedPart<string, unknown>;
-
-export type UnorderedPart<K extends string, V> = {
-  key: K;
-  parse: TryMultiplierParser<V>;
-  required?: boolean;
-};
-
-export type UnorderedResult<P extends AnyUnorderedPart[]> = {
-  [K in P[number]['key']]?: PartValue<P[number], K>;
-};
-
-type PartValue<P, K extends string> =
-  P extends UnorderedPart<K, infer V> ? V : never;
-
-export function part<K extends string, V>(
-  key: K,
-  parse: TryMultiplierParser<V>,
-): UnorderedPart<K, V> {
-  return { key, parse };
-}
-
-export function optionalPart<K extends string, V>(
-  key: K,
-  parse: TryMultiplierParser<V>,
-): UnorderedPart<K, V> {
-  return { key, parse, required: false };
-}
-
-function hasAnyMultiplierValue(value: unknown): boolean {
-  if (Array.isArray(value)) {
-    return value.some(hasAnyMultiplierValue);
-  }
-
-  if (value && typeof value === 'object') {
-    const values = Object.values(value);
-    return values.length > 0 && values.some(hasAnyMultiplierValue);
-  }
-
-  return value !== null && value !== undefined;
-}
-
-export function parseUnorderedAll<P extends AnyUnorderedPart[]>(
-  c: ComponentCursor,
-  parts: P,
-): UnorderedResult<P> {
-  const result = consumeUnordered(c, parts);
-
-  for (const part of parts) {
-    if (part.required !== false && !result.seen.has(part.key)) {
-      c.error(`Expected ${part.key}`);
-    }
-  }
-
-  return result.values as UnorderedResult<P>;
-}
-
-export function parseUnorderedSome<P extends AnyUnorderedPart[]>(
-  c: ComponentCursor,
-  parts: P,
-): UnorderedResult<P> {
-  const result = consumeUnordered(c, parts);
-
-  if (!hasAnyMultiplierValue(result.values)) {
-    const allOptional = parts.every((part) => part.required === false);
-
-    if (!allOptional) {
-      c.error('Expected one or more value components');
-    }
-  }
-
-  return result.values as UnorderedResult<P>;
-}
-
-function consumeUnordered<P extends AnyUnorderedPart[]>(
-  c: ComponentCursor,
-  parts: P,
-): {
-  values: Record<string, unknown>;
-  seen: Set<string>;
-} {
-  const remaining = [...parts];
-  const values: Record<string, unknown> = {};
-  const seen = new Set<string>();
-
-  // consumeComponentTrivia(c);
-
-  while (remaining.length > 0) {
-    let matchedIndex = -1;
-    let matchedValue: unknown;
-
-    for (let i = 0; i < remaining.length; i++) {
-      const part = remaining[i];
-      const start = c.pos();
-      const value = part.parse(c);
-
-      if (value === null) {
-        c.restore(start);
-        continue;
-      }
-
-      if (c.pos() === start && !hasAnyMultiplierValue(value)) {
-        c.restore(start);
-        continue;
-      }
-
-      if (c.pos() === start && hasAnyMultiplierValue(value)) {
-        c.error(`Parser for ${part.key} produced a value without consuming input`);
-      }
-
-      matchedIndex = i;
-      matchedValue = value;
-      break;
-    }
-
-    if (matchedIndex === -1) break;
-
-    const matchedPart = remaining[matchedIndex];
-
-    remaining.splice(matchedIndex, 1);
-    seen.add(matchedPart.key);
-    values[matchedPart.key] = matchedValue;
-
-  }
-
-  return { values, seen };
-}
-
-type MultiplierValueOfParser<P> =
-  P extends TryMultiplierParser<infer V> ? V : never;
 
 type SequenceValue<P extends TryMultiplierParser<unknown>[]> = {
   [I in keyof P]: MultiplierValueOfParser<P[I]>;
 };
+
+type MultiplierValueOfParser<P> =
+  P extends TryMultiplierParser<infer V> ? V : never;
 
 /**
  * CSS value juxtaposition: `a b`
@@ -160,7 +31,7 @@ export function sequence<P extends TryMultiplierParser<unknown>[]>(
         return null;
       }
 
-      if (c.pos() === componentStart && hasAnyMultiplierValue(value)) {
+      if (c.pos() === componentStart && hasAnyValue(value)) {
         c.error('Sequence parser produced a value without consuming input');
       }
 
@@ -192,7 +63,7 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
         continue;
       }
 
-      if (c.pos() === componentStart && hasAnyMultiplierValue(value)) {
+      if (c.pos() === componentStart && hasAnyValue(value)) {
         c.error('Alternative parser produced a value without consuming input');
       }
 
@@ -204,51 +75,78 @@ export function oneOf<P extends TryMultiplierParser<unknown>[]>(
   };
 }
 
+type UnorderedValue<P extends TryMultiplierParser<unknown>[]> = {
+  [I in keyof P]: MultiplierValueOfParser<P[I]> | undefined;
+};
+
 /**
  * CSS value double ampersand: `a && b`
  */
-export function allOf<P extends AnyUnorderedPart[]>(
-  parts: P,
-): TryMultiplierParser<UnorderedResult<P>> {
-  return (c: ComponentCursor): UnorderedResult<P> | null => {
+export function allOf<P extends TryMultiplierParser<unknown>[]>(
+  ...parsers: P
+): TryMultiplierParser<UnorderedValue<P>> {
+  return (c: ComponentCursor): UnorderedValue<P> | null => {
     const start = c.pos();
-    const result = consumeUnordered(c, parts);
+    const result = consumeUnordered(c, parsers);
 
-    for (const part of parts) {
-      if (part.required !== false && !result.seen.has(part.key)) {
+    for (let i = 0; i < parsers.length; i++) {
+      if (result.seen.has(i)) {
+        continue;
+      }
+
+      const empty = parseEmpty(c, parsers[i]);
+
+      if (empty === null) {
         c.restore(start);
         return null;
       }
+
+      result.values[i] = empty;
     }
 
-    return result.values as UnorderedResult<P>;
+    return result.values as UnorderedValue<P>;
   };
 }
 
 /**
  * CSS value double bar: `a || b`
  */
-export function someOf<P extends AnyUnorderedPart[]>(
-  parts: P,
-): TryMultiplierParser<UnorderedResult<P>> {
-  return (c: ComponentCursor): UnorderedResult<P> | null => {
+export function someOf<P extends TryMultiplierParser<unknown>[]>(
+  ...parsers: P
+): TryMultiplierParser<UnorderedValue<P>> {
+  return (c: ComponentCursor): UnorderedValue<P> | null => {
     const start = c.pos();
-    const result = consumeUnordered(c, parts);
+    const result = consumeUnordered(c, parsers);
+    const hasConsumedValue = hasAnyValue(result.values);
 
-    if (!hasAnyMultiplierValue(result.values)) {
-      const allOptional = parts.every((part) => part.required === false);
+    let canMatchEmpty = true;
 
-      if (!allOptional) {
-        c.restore(start);
-        return null;
+    for (let i = 0; i < parsers.length; i++) {
+      if (result.seen.has(i)) {
+        continue;
       }
+
+      const empty = parseEmpty(c, parsers[i]);
+
+      if (empty === null) {
+        canMatchEmpty = false;
+        continue;
+      }
+
+      result.values[i] = empty;
     }
 
-    return result.values as UnorderedResult<P>;
+    if (!hasConsumedValue && !canMatchEmpty) {
+      c.restore(start);
+      return null;
+    }
+
+    return result.values as UnorderedValue<P>;
   };
 }
 
 export const DEFAULT_REPEAT_LIMIT = 20;
+export type ValueParser<T> = (c: ComponentCursor) => T;
 
 export function required<T>(
   parse: TryMultiplierParser<T>,
@@ -258,7 +156,7 @@ export function required<T>(
     const start = c.pos();
     const value = parse(c);
 
-    if (value !== null && hasAnyMultiplierValue(value)) {
+    if (value !== null && hasAnyValue(value)) {
       return value;
     }
 
@@ -441,6 +339,80 @@ export function requireAny<T>(parse: TryValueParser<T>): TryValueParser<T> {
 
     return value;
   };
+}
+
+function parseEmpty<T>(
+  c: ComponentCursor,
+  parse: TryMultiplierParser<T>,
+): T | null {
+  const start = c.pos();
+  const value = parse(c);
+  const end = c.pos();
+
+  c.restore(start);
+
+  if (value === null || end !== start) {
+    return null;
+  }
+
+  if (hasAnyValue(value)) {
+    c.error('Parser produced a value without consuming input');
+  }
+
+  return value;
+}
+
+function consumeUnordered<P extends TryMultiplierParser<unknown>[]>(
+  c: ComponentCursor,
+  parsers: P,
+): {
+  values: unknown[];
+  seen: Set<number>;
+} {
+  const remaining = parsers.map((parse, index) => ({ parse, index }));
+  const values: unknown[] = Array.from({ length: parsers.length });
+  const seen = new Set<number>();
+
+  while (remaining.length > 0) {
+    let matchedIndex = -1;
+    let matchedValue: unknown;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const part = remaining[i];
+      const start = c.pos();
+      const value = part.parse(c);
+
+      if (value === null) {
+        c.restore(start);
+        continue;
+      }
+
+      if (c.pos() === start && !hasAnyValue(value)) {
+        c.restore(start);
+        continue;
+      }
+
+      if (c.pos() === start && hasAnyValue(value)) {
+        c.error('Unordered parser produced a value without consuming input');
+      }
+
+      matchedIndex = i;
+      matchedValue = value;
+      break;
+    }
+
+    if (matchedIndex === -1) {
+      break;
+    }
+
+    const matched = remaining[matchedIndex];
+
+    remaining.splice(matchedIndex, 1);
+    seen.add(matched.index);
+    values[matched.index] = matchedValue;
+  }
+
+  return { values, seen };
 }
 
 function hasAnyValue(value: unknown): boolean {
