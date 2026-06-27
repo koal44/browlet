@@ -1,49 +1,61 @@
-import type { ComplexRealSelectorList, CompoundSelector, RelativeSelectorList, SelectorList } from './selectlet';
+import type { ComplexRealSelectorList, ComplexSelectorList, CompoundSelector, RelativeSelectorList, SelectorList } from './selectlet';
+import { addSpecificity, type Specificity, SpecificityB, SpecificityC, Specificity0 } from './specificity';
 import { type ComponentValue } from './syntax';
 
 export enum PseudoClassArgumentKind {
-  SelectorList = 'selector-list',
   ForgivingSelectorList = 'forgiving-selector-list',
   RelativeSelectorList = 'relative-selector-list',
   ComplexRealSelectorList = 'complex-real-selector-list',
   CompoundSelector = 'compound-selector',
-  AnPlusB = 'an-plus-b',
-  Ident = 'ident',
-  Raw = 'raw',
-}
 
-export enum PseudoClassSpecificityKind {
-  PseudoClass = 'pseudo-class',
-  Zero = 'zero',
-  MaxSelectorList = 'max-selector-list',
-  PseudoClassPlusMaxSelectorList = 'pseudo-class-plus-max-selector-list',
-  PseudoClassPlusArgument = 'pseudo-class-plus-argument',
+  Direction = 'direction',
+  LanguageRangeList = 'language-range-list',
+
+  AnPlusB = 'an-plus-b',
+  NthChild = 'nth-child',
 }
 
 export type PseudoClassBareForm = {
-  specificity: PseudoClassSpecificityKind;
-};
-
-export type PseudoClassFunctionForm = {
-  argument: PseudoClassArgumentKind;
-  specificity: PseudoClassSpecificityKind;
+  specificity: Specificity;
 };
 
 export type PseudoClassDefinition = {
   bare?: PseudoClassBareForm;
-  functional?: PseudoClassFunctionForm;
+  functional?: AnyPseudoClassFunctionForm;
 };
 
+export type AnyPseudoClassFunctionForm = {
+  [K in keyof PseudoClassArgumentByKind]: PseudoClassFunctionForm<K>;
+}[keyof PseudoClassArgumentByKind];
+
 const barePseudo = (
-  specificity = PseudoClassSpecificityKind.PseudoClass,
+  specificity = SpecificityB,
 ): PseudoClassBareForm => ({
   specificity,
 });
 
-const functionPseudo = (
-  argument: PseudoClassArgumentKind,
-  specificity = PseudoClassSpecificityKind.PseudoClass,
-): PseudoClassFunctionForm => ({
+export type PseudoClassFunctionForm<
+  K extends keyof PseudoClassArgumentByKind = keyof PseudoClassArgumentByKind,
+> = {
+  argument: K;
+  specificity: (argument: PseudoClassArgumentByKind[K]) => Specificity;
+};
+
+type PseudoClassArgumentByKind = {
+  [PseudoClassArgumentKind.ForgivingSelectorList]: ForgivingSelectorListPseudoClassArgument;
+  [PseudoClassArgumentKind.RelativeSelectorList]: RelativeSelectorListPseudoClassArgument;
+  [PseudoClassArgumentKind.ComplexRealSelectorList]: ComplexRealSelectorListPseudoClassArgument;
+  [PseudoClassArgumentKind.CompoundSelector]: CompoundSelectorPseudoClassArgument;
+  [PseudoClassArgumentKind.AnPlusB]: AnPlusBPseudoClassArgument;
+  [PseudoClassArgumentKind.NthChild]: NthChildPseudoClassArgument;
+  [PseudoClassArgumentKind.Direction]: DirectionPseudoClassArgument;
+  [PseudoClassArgumentKind.LanguageRangeList]: LanguageRangeListPseudoClassArgument;
+};
+
+const functionPseudo = <K extends keyof PseudoClassArgumentByKind>(
+  argument: K,
+  specificity: (argument: PseudoClassArgumentByKind[K]) => Specificity,
+): PseudoClassFunctionForm<K> => ({
   argument,
   specificity,
 });
@@ -56,64 +68,53 @@ export const PSEUDO_CLASSES: Record<string, PseudoClassDefinition | undefined> =
   is: {
     functional: functionPseudo(
       PseudoClassArgumentKind.ForgivingSelectorList,
-      PseudoClassSpecificityKind.MaxSelectorList,
+      (argument) => argument.selectors.specificity,
     ),
   },
 
   where: {
     functional: functionPseudo(
       PseudoClassArgumentKind.ForgivingSelectorList,
-      PseudoClassSpecificityKind.Zero,
+      () => Specificity0,
     ),
   },
 
   not: {
     functional: functionPseudo(
       PseudoClassArgumentKind.ComplexRealSelectorList,
-      PseudoClassSpecificityKind.MaxSelectorList,
+      (argument) => argument.selectors.specificity,
     ),
   },
 
   has: {
     functional: functionPseudo(
       PseudoClassArgumentKind.RelativeSelectorList,
-      PseudoClassSpecificityKind.MaxSelectorList,
+      (argument) => argument.selectors.specificity,
     ),
   },
 
-  // CSS Scoping, not Selectors 4 proper.
   host: {
     bare: barePseudo(),
     functional: functionPseudo(
       PseudoClassArgumentKind.CompoundSelector,
-      PseudoClassSpecificityKind.PseudoClassPlusArgument,
+      (argument) => addSpecificity(SpecificityB, argument.selector.specificity),
     ),
   },
 };
 
 export type PseudoClassArgument =
-  | RawPseudoClassArgument
-  | SelectorListPseudoClassArgument
   | ForgivingSelectorListPseudoClassArgument
   | RelativeSelectorListPseudoClassArgument
   | ComplexRealSelectorListPseudoClassArgument
   | CompoundSelectorPseudoClassArgument
+  | DirectionPseudoClassArgument
+  | LanguageRangeListPseudoClassArgument
   | AnPlusBPseudoClassArgument
-  | IdentPseudoClassArgument;
-
-export type RawPseudoClassArgument = {
-  type: PseudoClassArgumentKind.Raw;
-  value: ComponentValue[];
-};
-
-export type SelectorListPseudoClassArgument = {
-  type: PseudoClassArgumentKind.SelectorList;
-  selectors: SelectorList;
-};
+  | NthChildPseudoClassArgument;
 
 export type ForgivingSelectorListPseudoClassArgument = {
   type: PseudoClassArgumentKind.ForgivingSelectorList;
-  selectors: SelectorList;
+  selectors: ComplexSelectorList;
 };
 
 export type RelativeSelectorListPseudoClassArgument = {
@@ -131,15 +132,29 @@ export type CompoundSelectorPseudoClassArgument = {
   selector: CompoundSelector;
 };
 
+export type DirectionPseudoClassArgument = {
+  type: PseudoClassArgumentKind.Direction;
+  value: 'ltr' | 'rtl';
+};
+
+export type LanguageRangeListPseudoClassArgument = {
+  type: PseudoClassArgumentKind.LanguageRangeList;
+  ranges: LanguageRange[];
+};
+
+type LanguageRange = unknown; // TODO
+
 export type AnPlusBPseudoClassArgument = {
   type: PseudoClassArgumentKind.AnPlusB;
   a: number;
   b: number;
 };
 
-export type IdentPseudoClassArgument = {
-  type: PseudoClassArgumentKind.Ident;
-  value: string;
+export type NthChildPseudoClassArgument = {
+  type: PseudoClassArgumentKind.NthChild;
+  a: number;
+  b: number;
+  selectorList: ComplexRealSelectorList | null;
 };
 
 // -------------------------------------------------------------------------
@@ -173,11 +188,12 @@ export type IdentPseudoElementArgument = {
 };
 
 export type PseudoElementBareForm = {
-  legacy?: boolean;
+  specificity: Specificity;
 };
 
 export type PseudoElementFunctionForm = {
   argument: PseudoElementArgumentKind;
+  specificity: (argument: PseudoElementArgument) => Specificity;
 };
 
 export type PseudoElementDefinition = {
@@ -186,32 +202,44 @@ export type PseudoElementDefinition = {
   legacy?: boolean;
 };
 
+const barePseudoElement = (
+  specificity = SpecificityC,
+): PseudoElementBareForm => ({
+  specificity,
+});
+
+const functionPseudoElement = (
+  argument: PseudoElementArgumentKind,
+  specificity: (argument: PseudoElementArgument) => Specificity = () => SpecificityC,
+): PseudoElementFunctionForm => ({
+  argument,
+  specificity,
+});
+
 export const PSEUDO_ELEMENTS: Record<string, PseudoElementDefinition | undefined> = {
   before: {
-    bare: {},
+    bare: barePseudoElement(),
     legacy: true,
   },
 
   after: {
-    bare: {},
+    bare: barePseudoElement(),
     legacy: true,
   },
 
   'first-line': {
-    bare: {},
+    bare: barePseudoElement(),
     legacy: true,
   },
 
   'first-letter': {
-    bare: {},
+    bare: barePseudoElement(),
     legacy: true,
   },
 
   part: {
-    functional: {
-      argument: PseudoElementArgumentKind.Ident,
-    },
+    functional: functionPseudoElement(
+      PseudoElementArgumentKind.Ident,
+    ),
   },
 };
-
-

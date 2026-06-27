@@ -33,7 +33,7 @@ function rethrowFromCaller(error: unknown, caller: Function): never {
   throw error;
 }
 
-function expectComplexSelectorList(css: string): ComplexSelector[] {
+function expectComplexSelectorList(css: string): ComplexSelectorList {
   try {
     const result = parseFull(css);
 
@@ -49,9 +49,9 @@ function expectComplexSelector(css: string): ComplexSelector {
   try {
     const result = expectComplexSelectorList(css);
 
-    expect(result, `Expected exactly one selector for: ${css}`).toHaveLength(1);
+    expect(result.arms, `Expected exactly one selector for: ${css}`).toHaveLength(1);
 
-    return result[0];
+    return result.arms[0];
   } catch (error) {
     rethrowFromCaller(error, expectComplexSelector);
   }
@@ -189,6 +189,10 @@ const pseudoElementPart = (name: string, rest: object = {}, pseudoClasses: unkno
 const pseudoElementArgument = (type: PseudoElementArgumentKind, rest: object = {}) => ({
   type,
   ...rest,
+});
+
+const selectorList = (arms: unknown[]) => ({
+  arms,
 });
 
 describe('selector parser basics', () => {
@@ -524,7 +528,7 @@ describe('selector parser pseudo-class selectors', () => {
       parts: [
         pseudoClassPart('is', {
           argument: pseudoArgument(PseudoClassArgumentKind.ForgivingSelectorList, {
-            selectors: [
+            selectors: selectorList([
               {
                 parts: [
                   classPart(null, 'foo'),
@@ -535,7 +539,7 @@ describe('selector parser pseudo-class selectors', () => {
                   idPart(null, 'bar'),
                 ],
               },
-            ],
+            ]),
           }),
         }),
       ],
@@ -547,13 +551,13 @@ describe('selector parser pseudo-class selectors', () => {
       parts: [
         pseudoClassPart('where', {
           argument: pseudoArgument(PseudoClassArgumentKind.ForgivingSelectorList, {
-            selectors: [
+            selectors: selectorList([
               {
                 parts: [
                   classPart(null, 'foo'),
                 ],
               },
-            ],
+            ]),
           }),
         }),
       ],
@@ -565,7 +569,7 @@ describe('selector parser pseudo-class selectors', () => {
       parts: [
         pseudoClassPart('not', {
           argument: pseudoArgument(PseudoClassArgumentKind.ComplexRealSelectorList, {
-            selectors: [
+            selectors: selectorList([
               {
                 parts: [
                   {
@@ -586,7 +590,7 @@ describe('selector parser pseudo-class selectors', () => {
                   },
                 ],
               },
-            ],
+            ]),
           }),
         }),
       ],
@@ -598,7 +602,7 @@ describe('selector parser pseudo-class selectors', () => {
       parts: [
         pseudoClassPart('has', {
           argument: pseudoArgument(PseudoClassArgumentKind.RelativeSelectorList, {
-            selectors: [
+            selectors: selectorList([
               {
                 combinator: '>',
                 selector: {
@@ -607,7 +611,7 @@ describe('selector parser pseudo-class selectors', () => {
                   ],
                 },
               },
-            ],
+            ]),
           }),
         }),
       ],
@@ -712,5 +716,79 @@ describe('selector parser pseudo-element selectors', () => {
         ),
       ],
     });
+  });
+});
+
+const specificity = (a: number, b: number, c: number) => ({
+  a, b, c,
+});
+
+describe('selector parser specificity', () => {
+  it('computes simple selector specificity columns', () => {
+    expect(expectComplexSelector('*').specificity).toEqual(specificity(0, 0, 0));
+    expect(expectComplexSelector('div').specificity).toEqual(specificity(0, 0, 1));
+    expect(expectComplexSelector('#foo').specificity).toEqual(specificity(1, 0, 0));
+    expect(expectComplexSelector('.foo').specificity).toEqual(specificity(0, 1, 0));
+    expect(expectComplexSelector('[href]').specificity).toEqual(specificity(0, 1, 0));
+    expect(expectComplexSelector(':hover').specificity).toEqual(specificity(0, 1, 0));
+    expect(expectComplexSelector('::before').specificity).toEqual(specificity(0, 0, 1));
+  });
+
+  it('sums specificity across compound and complex selectors', () => {
+    expect(expectComplexSelector('div#main.foo[href]:hover').specificity)
+      .toEqual(specificity(1, 3, 1));
+
+    expect(expectComplexSelector('main > section .card + .card').specificity)
+      .toEqual(specificity(0, 2, 2));
+
+    expect(expectComplexSelector('::before:hover').specificity)
+      .toEqual(specificity(0, 1, 1));
+  });
+
+  it('uses max specificity for selector lists', () => {
+    const result = expectComplexSelectorList('*, div, .foo, #bar');
+
+    expect(result.specificity).toEqual(specificity(1, 0, 0));
+    expect(result.arms.map((arm) => arm.specificity)).toEqual([
+      specificity(0, 0, 0),
+      specificity(0, 0, 1),
+      specificity(0, 1, 0),
+      specificity(1, 0, 0),
+    ]);
+  });
+
+  it('computes special pseudo-class specificity rules', () => {
+    expect(expectComplexSelector(':is(.foo, #bar)').specificity)
+      .toEqual(specificity(1, 0, 0));
+
+    expect(expectComplexSelector(':where(#foo.bar)').specificity)
+      .toEqual(specificity(0, 0, 0));
+
+    expect(expectComplexSelector('.qux:where(em, #foo#bar#baz)').specificity)
+      .toEqual(specificity(0, 1, 0));
+
+    expect(expectComplexSelector(':has(> img)').specificity)
+      .toEqual(specificity(0, 0, 1));
+
+    expect(expectComplexSelector(':host(.foo)').specificity)
+      .toEqual(specificity(0, 2, 0));
+  });
+
+  it('computes specificity for a tortured selector list', () => {
+    const result = expectComplexSelectorList([
+      '*',
+      'main#app.layout[data-mode=dark]:hover > section.card:is(.featured, #hero) ::before:hover',
+      '.shell:where(#ignored.deep[attr]) :has(> img.thumb[src])',
+      ':host(.active)#root::before:hover',
+    ].join(', '));
+
+    expect(result.arms.map((arm) => arm.specificity)).toEqual([
+      specificity(0, 0, 0),
+      specificity(2, 5, 3),
+      specificity(0, 3, 1),
+      specificity(1, 3, 1),
+    ]);
+
+    expect(result.specificity).toEqual(specificity(2, 5, 3));
   });
 });
