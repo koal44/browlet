@@ -95,16 +95,14 @@ export function tryParseRelativeRealSelectorList(c: ComponentCursor): RelativeRe
 const parseRelativeRealSelectorList: TryValueParser<RelativeRealSelectorList> =
   commaRepeat(tryParseRelativeRealSelector);
 
-
 /**
  * <complex-selector> =
  *   <complex-selector-unit> [ <combinator>? <complex-selector-unit> ]*
  */
 export type ComplexSelector = {
   type: 'complex-selector';
-  head: ComplexSelectorUnit;
-  tail: {
-    combinator: Combinator;
+  parts: {
+    combinator: Combinator | null;
     unit: ComplexSelectorUnit;
   }[];
 };
@@ -129,8 +127,7 @@ const parseComplexSelector: TryValueParser<ComplexSelector> = sequenceOf(
 
   ([[head], tail]): ComplexSelector => ({
     type: 'complex-selector',
-    head,
-    tail,
+    parts: [{ combinator: null, unit: head }, ...tail],
   }),
 );
 
@@ -165,9 +162,8 @@ const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSe
  */
 export type ComplexRealSelector = {
   type: 'complex-real-selector';
-  head: CompoundSelector;
-  tail: {
-    combinator: Combinator;
+  parts: {
+    combinator: Combinator | null;
     compound: CompoundSelector;
   }[];
 };
@@ -192,8 +188,7 @@ const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequenceOf
 
   ([[head], tail]): ComplexRealSelector => ({
     type: 'complex-real-selector',
-    head,
-    tail,
+    parts: [{ combinator: null, compound: head }, ...tail],
   }),
 );
 
@@ -689,24 +684,20 @@ const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
 export type PseudoClassSelector = {
   type: 'pseudo-class-selector';
   name: string;
-  value: ComponentValue[] | null;
+  argument: PseudoClassArgument | null;
 };
 
 function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | null {
   return parsePseudoClassSelector(c);
 }
 
-const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
+const parsePseudoClassSelector: TryValueParser<PseudoClassSelector | null> = oneOf(
   one(
     sequenceOf(
       one(tryParseColon),
       one(tryParseNonLegacyIdentToken),
 
-      ([, [ident]]): PseudoClassSelector => ({
-        type: 'pseudo-class-selector',
-        name: ident.value,
-        value: null,
-      }),
+      ([, [ident]]) => createPseudoClassSelector(ident.value, null),
     ),
   ),
 
@@ -715,15 +706,11 @@ const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
       one(tryParseColon),
       one(tryParseFunctionBlock),
 
-      ([, [fn]]): PseudoClassSelector => ({
-        type: 'pseudo-class-selector',
-        name: fn.name,
-        value: fn.value,
-      }),
+      ([, [fn]]) => createPseudoClassSelector(fn.name, fn.value),
     ),
   ),
 
-  ([selector]): PseudoClassSelector => selector,
+  ([selector]): PseudoClassSelector | null => selector,
 );
 
 /**
@@ -982,3 +969,70 @@ function isLegacyPseudoElementName(name: string): boolean {
       return false;
   }
 }
+
+export type PseudoClassArgument =
+  | SelectorListPseudoClassArgument
+  | RelativeSelectorListPseudoClassArgument
+  | AnPlusBPseudoClassArgument;
+
+export type SelectorListPseudoClassArgument = {
+  type: 'selector-list';
+  selectors: SelectorList;
+};
+
+export type RelativeSelectorListPseudoClassArgument = {
+  type: 'relative-selector-list';
+  selectors: RelativeSelectorList;
+};
+
+export type AnPlusBPseudoClassArgument = {
+  type: 'an-plus-b';
+  a: number;
+  b: number;
+};
+
+function createPseudoClassSelector(name: string, value: ComponentValue[] | null): PseudoClassSelector | null {
+  const argument = parsePseudoClassArgument(name, value);
+
+  if (argument === null) {
+    return null;
+  }
+
+  return {
+    type: 'pseudo-class-selector',
+    name,
+    argument,
+  };
+}
+
+function parsePseudoClassArgument(_name: string, _value: ComponentValue[] | null): PseudoClassArgument | null {
+  throw new Error('Function not implemented.');
+}
+
+// function parsePseudoClassArgument(
+//   name: string,
+//   value: ComponentValue[],
+// ): PseudoClassArgument | null {
+//   switch (asciiLower(name)) {
+//     case 'is':
+//     case 'where':
+//     case 'not':
+//       return parseSelectorListArgument(value);
+
+//     case 'has':
+//       return parseRelativeSelectorListArgument(value);
+
+//     case 'nth-child':
+//     case 'nth-last-child':
+//     case 'nth-of-type':
+//     case 'nth-last-of-type':
+//       return parseAnPlusBArgument(value);
+
+//     default:
+//       return {
+//         type: 'raw',
+//         value,
+//       };
+//   }
+// }
+

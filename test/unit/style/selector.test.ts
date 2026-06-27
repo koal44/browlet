@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
-import { tryParseSelectorList } from '../../../src/stylelet/parser/selector';
+import { type ComplexSelector, type ComplexSelectorList, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
 import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));
 
-type SelectorListResult = NonNullable<ReturnType<typeof tryParseSelectorList>>;
-type SelectorResult = SelectorListResult[number];
-
-function parseFull(css: string): SelectorListResult | null {
+function parseFull(css: string): ComplexSelectorList | null {
   const c = cursor(css);
   const result = tryParseSelectorList(c);
 
@@ -35,27 +32,27 @@ function rethrowFromCaller(error: unknown, caller: Function): never {
   throw error;
 }
 
-function expectSelectorList(css: string): SelectorListResult {
+function expectComplexSelectorList(css: string): ComplexSelector[] {
   try {
     const result = parseFull(css);
 
     expect(result, `Expected selector list to parse: ${css}`).not.toBeNull();
 
-    return result as SelectorListResult;
+    return result!;
   } catch (error) {
-    rethrowFromCaller(error, expectSelectorList);
+    rethrowFromCaller(error, expectComplexSelectorList);
   }
 }
 
-function expectOneSelector(css: string): SelectorResult {
+function expectComplexSelector(css: string): ComplexSelector {
   try {
-    const result = expectSelectorList(css);
+    const result = expectComplexSelectorList(css);
 
     expect(result, `Expected exactly one selector for: ${css}`).toHaveLength(1);
 
     return result[0];
   } catch (error) {
-    rethrowFromCaller(error, expectOneSelector);
+    rethrowFromCaller(error, expectComplexSelector);
   }
 }
 
@@ -69,101 +66,140 @@ function expectInvalidSelector(css: string): void {
   }
 }
 
+// =============================================================================
+// Expected selector AST builders
+// =============================================================================
+
+type TestCombinator = string | null;
+
+const ns = (prefix: string | null) => ({
+  prefix,
+});
+
+const typeSelector = (name: string, namespace: unknown = null) => ({
+  name,
+  namespace,
+});
+
+const idSelector = (name: string) => ({
+  type: 'id-selector',
+  name,
+});
+
+const classSelector = (name: string) => ({
+  type: 'class-selector',
+  name,
+});
+
+const attrName = (name: string, namespace: unknown = null) => ({
+  name,
+  namespace,
+});
+
+const attrSelector = (name: string, rest: object = {}) => ({
+  type: 'attribute-selector',
+  name: attrName(name),
+  ...rest,
+});
+
+const compound = (typeSelectorValue: unknown = null, subclasses: unknown[] = []) => ({
+  typeSelector: typeSelectorValue,
+  subclasses,
+});
+
+const unit = (compoundValue: unknown = null, pseudoCompounds: unknown[] = []) => ({
+  compound: compoundValue,
+  pseudoCompounds,
+});
+
+const part = (combinator: TestCombinator, compoundValue: unknown = null, pseudoCompounds: unknown[] = []) => ({
+  combinator,
+  unit: unit(compoundValue, pseudoCompounds),
+});
+
+const typePart = (combinator: TestCombinator, name: string, namespace: unknown = null) => part(
+  combinator,
+  compound(typeSelector(name, namespace)),
+);
+
+const idPart = (combinator: TestCombinator, name: string) => part(
+  combinator,
+  compound(null, [idSelector(name)]),
+);
+
+const classPart = (combinator: TestCombinator, name: string) => part(
+  combinator,
+  compound(null, [classSelector(name)]),
+);
+
+const attrPart = (combinator: TestCombinator, name: string, rest: object = {}) => part(
+  combinator,
+  compound(null, [attrSelector(name, rest)]),
+);
+
+const identValue = (value: string) => ({
+  type: 'ident',
+  value,
+});
+
+const stringValue = (value: string) => ({
+  type: 'string',
+  value,
+});
+
 describe('selector parser basics', () => {
   it('rejects an empty selector list', () => {
     expectInvalidSelector('');
   });
 
   it('parses a type selector', () => {
-    expect(expectOneSelector('div')).toMatchObject({
+    expect(expectComplexSelector('div')).toMatchObject({
       type: 'complex-selector',
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'div',
-            namespace: null,
-          },
-          subclasses: [],
-        },
-        pseudoCompounds: [],
-      },
-      tail: [],
+      parts: [
+        typePart(null, 'div'),
+      ],
     });
   });
 
   it('parses a universal selector', () => {
-    expect(expectOneSelector('*')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: '*',
-            namespace: null,
-          },
-          subclasses: [],
-        },
-      },
-      tail: [],
+    expect(expectComplexSelector('*')).toMatchObject({
+      parts: [
+        typePart(null, '*'),
+      ],
     });
   });
 
   it('parses an id selector', () => {
-    expect(expectOneSelector('#foo')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: null,
-          subclasses: [
-            {
-              type: 'id-selector',
-              name: 'foo',
-            },
-          ],
-        },
-      },
-      tail: [],
+    expect(expectComplexSelector('#foo')).toMatchObject({
+      parts: [
+        idPart(null, 'foo'),
+      ],
     });
   });
 
   it('parses a class selector', () => {
-    expect(expectOneSelector('.foo')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: null,
-          subclasses: [
-            {
-              type: 'class-selector',
-              name: 'foo',
-            },
-          ],
-        },
-      },
-      tail: [],
+    expect(expectComplexSelector('.foo')).toMatchObject({
+      parts: [
+        classPart(null, 'foo'),
+      ],
     });
   });
 
   it('parses a compound selector with type, id, and class selectors', () => {
-    expect(expectOneSelector('div#main.foo.bar')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'div',
-          },
-          subclasses: [
-            {
-              type: 'id-selector',
-              name: 'main',
-            },
-            {
-              type: 'class-selector',
-              name: 'foo',
-            },
-            {
-              type: 'class-selector',
-              name: 'bar',
-            },
-          ],
-        },
-      },
-      tail: [],
+    expect(expectComplexSelector('div#main.foo.bar')).toMatchObject({
+      parts: [
+        part(
+          null,
+          compound(
+            typeSelector('div'),
+            [
+              idSelector('main'),
+              classSelector('foo'),
+              classSelector('bar'),
+            ],
+          ),
+        ),
+      ],
     });
   });
 
@@ -182,77 +218,42 @@ describe('selector parser basics', () => {
 
 describe('selector parser namespace and type selectors', () => {
   it('parses a namespace-qualified type selector', () => {
-    expect(expectOneSelector('svg|circle')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            namespace: {
-              prefix: 'svg',
-            },
-            name: 'circle',
-          },
-        },
-      },
+    expect(expectComplexSelector('svg|circle')).toMatchObject({
+      parts: [
+        typePart(null, 'circle', ns('svg')),
+      ],
     });
   });
 
   it('parses an empty namespace prefix', () => {
-    expect(expectOneSelector('|circle')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            namespace: {
-              prefix: null,
-            },
-            name: 'circle',
-          },
-        },
-      },
+    expect(expectComplexSelector('|circle')).toMatchObject({
+      parts: [
+        typePart(null, 'circle', ns(null)),
+      ],
     });
   });
 
   it('parses a wildcard namespace prefix', () => {
-    expect(expectOneSelector('*|circle')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            namespace: {
-              prefix: '*',
-            },
-            name: 'circle',
-          },
-        },
-      },
+    expect(expectComplexSelector('*|circle')).toMatchObject({
+      parts: [
+        typePart(null, 'circle', ns('*')),
+      ],
     });
   });
 
   it('parses a namespace-qualified universal selector', () => {
-    expect(expectOneSelector('svg|*')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            namespace: {
-              prefix: 'svg',
-            },
-            name: '*',
-          },
-        },
-      },
+    expect(expectComplexSelector('svg|*')).toMatchObject({
+      parts: [
+        typePart(null, '*', ns('svg')),
+      ],
     });
   });
 
   it('parses a wildcard namespace universal selector', () => {
-    expect(expectOneSelector('*|*')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            namespace: {
-              prefix: '*',
-            },
-            name: '*',
-          },
-        },
-      },
+    expect(expectComplexSelector('*|*')).toMatchObject({
+      parts: [
+        typePart(null, '*', ns('*')),
+      ],
     });
   });
 
@@ -263,215 +264,93 @@ describe('selector parser namespace and type selectors', () => {
 
 describe('selector parser attribute selectors', () => {
   it('parses an existence attribute selector', () => {
-    expect(expectOneSelector('[href]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'attribute-selector',
-              name: {
-                name: 'href',
-                namespace: null,
-              },
-              matcher: null,
-              value: null,
-              modifier: null,
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[href]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href'),
+      ],
     });
   });
 
   it('parses an exact-match attribute selector with ident value', () => {
-    expect(expectOneSelector('[href=example]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'attribute-selector',
-              name: {
-                name: 'href',
-              },
-              matcher: '=',
-              value: {
-                type: 'ident',
-                value: 'example',
-              },
-              modifier: null,
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[href=example]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          matcher: '=',
+          value: {
+            type: 'ident',
+            value: 'example',
+          },
+        }),
+      ],
     });
   });
 
   it('parses an exact-match attribute selector with string value', () => {
-    expect(expectOneSelector('[href="example"]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'attribute-selector',
-              name: {
-                name: 'href',
-              },
-              matcher: '=',
-              value: {
-                type: 'string',
-                value: 'example',
-              },
-              modifier: null,
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[href="example"]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          matcher: '=',
+          value: stringValue('example'),
+        }),
+      ],
     });
   });
 
   it('parses attribute selector whitespace around components', () => {
-    expect(expectOneSelector('[ href = example ]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'attribute-selector',
-              name: {
-                name: 'href',
-              },
-              matcher: '=',
-              value: {
-                type: 'ident',
-                value: 'example',
-              },
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[ href = example ]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          matcher: '=',
+          value: identValue('example'),
+        }),
+      ],
     });
   });
 
   it('parses all attribute matcher prefixes', () => {
-    // // const c = cursor('[a|=b]');
-    // const comp = parseListOfComponentValues('[a|=b]');
-    // throw new Error(JSON.stringify(comp, null, 2));
-    expect(expectOneSelector('[a~=b]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '~=',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(expectOneSelector('[a|=b]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '|=',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(expectOneSelector('[a^=b]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '^=',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(expectOneSelector('[a$=b]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '$=',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(expectOneSelector('[a*=b]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '*=',
-            },
-          ],
-        },
-      },
-    });
+    for (const matcher of ['~=', '|=', '^=', '$=', '*='] as const) {
+      expect(expectComplexSelector(`[a${matcher}b]`), matcher).toMatchObject({
+        parts: [
+          attrPart(null, 'a', {
+            matcher,
+          }),
+        ],
+      });
+    }
   });
 
   it('parses an ASCII case-insensitive attribute modifier', () => {
-    expect(expectOneSelector('[href=example i]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '=',
-              value: {
-                type: 'ident',
-                value: 'example',
-              },
-              modifier: 'i',
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[href=example i]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          matcher: '=',
+          value: identValue('example'),
+          modifier: 'i',
+        }),
+      ],
     });
   });
 
   it('parses an ASCII case-sensitive attribute modifier', () => {
-    expect(expectOneSelector('[href=example s]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              matcher: '=',
-              value: {
-                type: 'ident',
-                value: 'example',
-              },
-              modifier: 's',
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[href=example s]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          matcher: '=',
+          value: identValue('example'),
+          modifier: 's',
+        }),
+      ],
     });
   });
 
   it('parses a namespaced attribute name', () => {
-    expect(expectOneSelector('[svg|href=value]')).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'attribute-selector',
-              name: {
-                namespace: {
-                  prefix: 'svg',
-                },
-                name: 'href',
-              },
-              matcher: '=',
-            },
-          ],
-        },
-      },
+    expect(expectComplexSelector('[svg|href=value]')).toMatchObject({
+      parts: [
+        attrPart(null, 'href', {
+          name: attrName('href', ns('svg')),
+          matcher: '=',
+        }),
+      ],
     });
   });
 
@@ -498,151 +377,64 @@ describe('selector parser attribute selectors', () => {
 
 describe('selector parser combinators', () => {
   it('parses a descendant combinator', () => {
-    expect(expectOneSelector('div span')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'div',
-          },
-        },
-      },
-      tail: [
-        {
-          combinator: ' ',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'span',
-              },
-            },
-          },
-        },
+    expect(expectComplexSelector('div span')).toMatchObject({
+      parts: [
+        typePart(null, 'div'),
+        typePart(' ', 'span'),
       ],
     });
   });
 
   it('parses a child combinator with whitespace', () => {
-    expect(expectOneSelector('div > span')).toMatchObject({
-      tail: [
-        {
-          combinator: '>',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'span',
-              },
-            },
-          },
-        },
+    expect(expectComplexSelector('div > span')).toMatchObject({
+      parts: [
+        typePart(null, 'div'),
+        typePart('>', 'span'),
       ],
     });
   });
 
   it('parses a child combinator without whitespace', () => {
-    expect(expectOneSelector('div>span')).toMatchObject({
-      tail: [
-        {
-          combinator: '>',
-        },
+    expect(expectComplexSelector('div>span')).toMatchObject({
+      parts: [
+        typePart(null, 'div'),
+        typePart('>', 'span'),
       ],
     });
   });
 
   it('parses adjacent and subsequent sibling combinators', () => {
-    expect(expectOneSelector('h1 + p')).toMatchObject({
-      tail: [
-        {
-          combinator: '+',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'p',
-              },
-            },
-          },
-        },
+    expect(expectComplexSelector('h1 + p')).toMatchObject({
+      parts: [
+        typePart(null, 'h1'),
+        typePart('+', 'p'),
       ],
     });
 
-    expect(expectOneSelector('h1 ~ p')).toMatchObject({
-      tail: [
-        {
-          combinator: '~',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'p',
-              },
-            },
-          },
-        },
+    expect(expectComplexSelector('h1 ~ p')).toMatchObject({
+      parts: [
+        typePart(null, 'h1'),
+        typePart('~', 'p'),
       ],
     });
   });
 
   it('parses the column combinator', () => {
-    expect(expectOneSelector('col || td')).toMatchObject({
-      tail: [
-        {
-          combinator: '||',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'td',
-              },
-            },
-          },
-        },
+    expect(expectComplexSelector('col || td')).toMatchObject({
+      parts: [
+        typePart(null, 'col'),
+        typePart('||', 'td'),
       ],
     });
   });
 
   it('parses a longer complex selector chain', () => {
-    expect(expectOneSelector('main > section .card + .card')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'main',
-          },
-        },
-      },
-      tail: [
-        {
-          combinator: '>',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'section',
-              },
-            },
-          },
-        },
-        {
-          combinator: ' ',
-          unit: {
-            compound: {
-              subclasses: [
-                {
-                  type: 'class-selector',
-                  name: 'card',
-                },
-              ],
-            },
-          },
-        },
-        {
-          combinator: '+',
-          unit: {
-            compound: {
-              subclasses: [
-                {
-                  type: 'class-selector',
-                  name: 'card',
-                },
-              ],
-            },
-          },
-        },
+    expect(expectComplexSelector('main > section .card + .card')).toMatchObject({
+      parts: [
+        typePart(null, 'main'),
+        typePart('>', 'section'),
+        classPart(' ', 'card'),
+        classPart('+', 'card'),
       ],
     });
   });
@@ -657,362 +449,5 @@ describe('selector parser combinators', () => {
 
   it('rejects a malformed column combinator', () => {
     expectInvalidSelector('col ||| td');
-  });
-});
-
-describe('selector parser selector lists', () => {
-  it('parses a comma-separated selector list', () => {
-    const result = expectSelectorList('div, .foo, #bar');
-
-    expect(result).toHaveLength(3);
-
-    expect(result[0]).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'div',
-          },
-        },
-      },
-    });
-
-    expect(result[1]).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'class-selector',
-              name: 'foo',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(result[2]).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'id-selector',
-              name: 'bar',
-            },
-          ],
-        },
-      },
-    });
-  });
-
-  it('allows whitespace around selector-list commas', () => {
-    const result = expectSelectorList('div ,  span');
-
-    expect(result).toHaveLength(2);
-  });
-
-  it('rejects a leading comma', () => {
-    expectInvalidSelector(', div');
-  });
-
-  it('rejects a trailing comma', () => {
-    expectInvalidSelector('div,');
-  });
-
-  it('rejects an empty selector between commas', () => {
-    expectInvalidSelector('div,, span');
-  });
-});
-
-describe('selector parser pseudo selectors', () => {
-  it('parses a pseudo-class selector', () => {
-    expect(expectOneSelector(':hover')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: null,
-          subclasses: [
-            {
-              type: 'pseudo-class-selector',
-              name: 'hover',
-              value: null,
-            },
-          ],
-        },
-        pseudoCompounds: [],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses a functional pseudo-class selector and preserves its component values', () => {
-    const selector = expectOneSelector(':nth-child(2n + 1)');
-
-    expect(selector).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'pseudo-class-selector',
-              name: 'nth-child',
-            },
-          ],
-        },
-      },
-    });
-
-    expect(selector.head.compound?.subclasses[0]).toHaveProperty('value');
-    // expect(selector.head.compound?.subclasses[0]).toMatchObject({
-    //   value: expect.any(Array),
-    // });
-  });
-
-  it('parses a selector-list pseudo-class as a preserved function value', () => {
-    const selector = expectOneSelector(':is(.foo, #bar)');
-
-    expect(selector).toMatchObject({
-      head: {
-        compound: {
-          subclasses: [
-            {
-              type: 'pseudo-class-selector',
-              name: 'is',
-              // value: expect.any(Array),
-            },
-          ],
-        },
-      },
-    });
-  });
-
-  it('does not parse legacy pseudo-element names as pseudo-classes', () => {
-    expect(expectOneSelector(':before')).toMatchObject({
-      head: {
-        compound: null,
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'before',
-              legacy: true,
-            },
-            pseudoClasses: [],
-          },
-        ],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses a double-colon pseudo-element', () => {
-    expect(expectOneSelector('::before')).toMatchObject({
-      head: {
-        compound: null,
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'before',
-              legacy: false,
-            },
-            pseudoClasses: [],
-          },
-        ],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses a functional pseudo-element', () => {
-    expect(expectOneSelector('::part(button)')).toMatchObject({
-      head: {
-        compound: null,
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'part',
-              legacy: false,
-              // value: expect.any(Array),
-            },
-            pseudoClasses: [],
-          },
-        ],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses pseudo-classes after a pseudo-element', () => {
-    expect(expectOneSelector('::before:hover')).toMatchObject({
-      head: {
-        compound: null,
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'before',
-            },
-            pseudoClasses: [
-              {
-                name: 'hover',
-              },
-            ],
-          },
-        ],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses compound selector followed by pseudo-element', () => {
-    expect(expectOneSelector('button.primary::before')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'button',
-          },
-          subclasses: [
-            {
-              type: 'class-selector',
-              name: 'primary',
-            },
-          ],
-        },
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'before',
-            },
-          },
-        ],
-      },
-      tail: [],
-    });
-  });
-
-  it('rejects a class selector after a pseudo-element without a combinator', () => {
-    expectInvalidSelector('::before.foo');
-  });
-});
-
-describe('selector parser mixed selectors', () => {
-  it('parses a realistic compound selector', () => {
-    expect(expectOneSelector('section#main.content[data-state=open]:hover')).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'section',
-          },
-          subclasses: [
-            {
-              type: 'id-selector',
-              name: 'main',
-            },
-            {
-              type: 'class-selector',
-              name: 'content',
-            },
-            {
-              type: 'attribute-selector',
-              name: {
-                name: 'data-state',
-              },
-              matcher: '=',
-              value: {
-                type: 'ident',
-                value: 'open',
-              },
-            },
-            {
-              type: 'pseudo-class-selector',
-              name: 'hover',
-            },
-          ],
-        },
-        pseudoCompounds: [],
-      },
-      tail: [],
-    });
-  });
-
-  it('parses a realistic selector list', () => {
-    const result = expectSelectorList(
-      'main > section.card[data-active=true], nav a:hover, button::before',
-    );
-
-    expect(result).toHaveLength(3);
-
-    expect(result[0]).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'main',
-          },
-        },
-      },
-      tail: [
-        {
-          combinator: '>',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'section',
-              },
-              subclasses: [
-                {
-                  type: 'class-selector',
-                  name: 'card',
-                },
-                {
-                  type: 'attribute-selector',
-                  name: {
-                    name: 'data-active',
-                  },
-                },
-              ],
-            },
-          },
-        },
-      ],
-    });
-
-    expect(result[1]).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'nav',
-          },
-        },
-      },
-      tail: [
-        {
-          combinator: ' ',
-          unit: {
-            compound: {
-              typeSelector: {
-                name: 'a',
-              },
-              subclasses: [
-                {
-                  type: 'pseudo-class-selector',
-                  name: 'hover',
-                },
-              ],
-            },
-          },
-        },
-      ],
-    });
-
-    expect(result[2]).toMatchObject({
-      head: {
-        compound: {
-          typeSelector: {
-            name: 'button',
-          },
-        },
-        pseudoCompounds: [
-          {
-            pseudoElement: {
-              name: 'before',
-            },
-          },
-        ],
-      },
-    });
   });
 });
