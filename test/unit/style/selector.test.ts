@@ -226,20 +226,20 @@ describe('selector parser namespace and type selectors', () => {
     });
   });
 
-  // it('parses a namespace-qualified universal selector', () => {
-  //   expect(expectOneSelector('svg|*')).toMatchObject({
-  //     head: {
-  //       compound: {
-  //         typeSelector: {
-  //           namespace: {
-  //             prefix: 'svg',
-  //           },
-  //           name: '*',
-  //         },
-  //       },
-  //     },
-  //   });
-  // });
+  it('parses a namespace-qualified universal selector', () => {
+    expect(expectOneSelector('svg|*')).toMatchObject({
+      head: {
+        compound: {
+          typeSelector: {
+            namespace: {
+              prefix: 'svg',
+            },
+            name: '*',
+          },
+        },
+      },
+    });
+  });
 
   it('parses a wildcard namespace universal selector', () => {
     expect(expectOneSelector('*|*')).toMatchObject({

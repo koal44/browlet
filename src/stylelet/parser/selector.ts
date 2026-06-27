@@ -379,44 +379,15 @@ function tryParseWqName(c: ComponentCursor): WqName | null {
   return parseWqName(c);
 }
 
-// const parseWqName: TryValueParser<WqName> = sequence(
-//   opt(tryParseNsPrefix),
-//   one(tryParseIdentToken),
+const parseWqName: TryValueParser<WqName> = sequenceOf(
+  opt(tryParseNsPrefix),
+  one(tryParseIdentToken),
 
-//   ([namespace, [name]]): WqName => ({
-//     type: 'wq-name',
-//     namespace: namespace[0] ?? null,
-//     name: name.value,
-//   }),
-// );
-
-const parseWqName: TryValueParser<WqName> = oneOf(
-  one(
-    sequenceOf(
-      one(tryParseNsPrefix),
-      one(tryParseIdentToken),
-
-      ([[namespace], [name]]): WqName => ({
-        type: 'wq-name',
-        namespace,
-        name: name.value,
-      }),
-    ),
-  ),
-
-  one(
-    sequenceOf(
-      one(tryParseIdentToken),
-
-      ([[name]]): WqName => ({
-        type: 'wq-name',
-        namespace: null,
-        name: name.value,
-      }),
-    ),
-  ),
-
-  ([name]): WqName => name,
+  ([namespace, [name]]): WqName => ({
+    type: 'wq-name',
+    namespace: namespace[0] ?? null,
+    name: name.value,
+  }),
 );
 
 /**
@@ -454,6 +425,17 @@ const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
 
 /**
  * <type-selector> = <wq-name> | <ns-prefix>? '*'
+ *
+ * Since:
+ *
+ *   <wq-name> = <ns-prefix>? <ident-token>
+ *
+ * We parse the equivalent factored form:
+ *
+ *   <type-selector> = <ns-prefix>? [ <ident-token> | '*' ]
+ *
+ * This avoids the committed-alternative ambiguity where `svg|*` can be
+ * partially accepted as a bare `<wq-name>` `svg`, leaving `|*` behind.
  */
 export type TypeSelector = {
   type: 'type-selector';
@@ -465,33 +447,27 @@ function tryParseTypeSelector(c: ComponentCursor): TypeSelector | null {
   return parseTypeSelector(c);
 }
 
-const parseTypeSelector: TryValueParser<TypeSelector> = oneOf(
-  one(
-    sequenceOf(
-      one(tryParseWqName),
-
-      ([[name]]): TypeSelector => ({
-        type: 'type-selector',
-        namespace: name.namespace,
-        name: name.name,
-      }),
-    ),
-  ),
+const parseTypeSelector: TryValueParser<TypeSelector> = sequenceOf(
+  opt(tryParseNsPrefix),
 
   one(
-    sequenceOf(
-      opt(tryParseNsPrefix),
+    oneOf(
+      one(tryParseIdentToken),
       one(tryParseDelim('*')),
 
-      ([namespace]): TypeSelector => ({
-        type: 'type-selector',
-        namespace: namespace[0] ?? null,
-        name: '*',
-      }),
+      ([name]): string => (
+        typeof name === 'string'
+          ? name
+          : name.value
+      ),
     ),
   ),
 
-  ([selector]): TypeSelector => selector,
+  ([namespace, [name]]): TypeSelector => ({
+    type: 'type-selector',
+    namespace: namespace[0] ?? null,
+    name,
+  }),
 );
 
 /**

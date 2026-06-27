@@ -3,7 +3,8 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  allOf, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
+  __nextSequenceCaps, __parseSequenceAttempt,
+  allOf, any, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
   requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
   type TryValueParser,
 } from '../../../src/stylelet/parser/component';
@@ -1030,34 +1031,498 @@ describe('selector separator trivia prototype', () => {
     expectDone(valid);
   });
 
-  // it('backtracks optional repetition when a later required component needs the token', () => {
-  //   // a? a
-  //   const parseMaybeAThenA = sequence(
-  //     opt(parseA),
-  //     one(parseA),
-  //   );
+  it('backtracks optional repetition when a later required component needs the token', () => {
+    // a? a
+    const parseMaybeAThenA = sequenceOf(
+      opt(parseA),
+      one(parseA),
+      (value) => value
+    );
 
-  //   const c = cursor('a');
+    const c = cursor('a');
 
-  //   expect(parseMaybeAThenA(c)).toEqual([[], ['a']]);
-  //   expectDone(c);
-  // });
+    expect(parseMaybeAThenA(c)).toEqual([[], ['a']]);
+    expectDone(c);
+  });
 
-  // it('backtracks greedy repetition when a later required component needs a token', () => {
-  //   // a* a b*
-  //   const parseAStarThenAThenBStar = sequence(
-  //     any(parseA),
-  //     one(parseA),
-  //     any(parseB),
-  //   );
+  it('backtracks greedy repetition when a later required component needs a token', () => {
+    // a* a b*
+    const parseAStarThenAThenBStar = sequenceOf(
+      any(parseA),
+      one(parseA),
+      any(parseB),
+      (value) => value
+    );
 
-  //   const c = cursor('a a b b');
+    const c = cursor('a a b b');
 
-  //   expect(parseAStarThenAThenBStar(c)).toEqual([
-  //     ['a'],
-  //     ['a'],
-  //     ['b', 'b'],
-  //   ]);
-  //   expectDone(c);
-  // });
+    expect(parseAStarThenAThenBStar(c)).toEqual([
+      ['a'],
+      ['a'],
+      ['b', 'b'],
+    ]);
+    expectDone(c);
+  });
+});
+
+describe('component sequence backtracking support', () => {
+  const parseAB = oneOf(
+    one(parseA),
+    one(parseB),
+    ([value]) => value,
+  );
+
+  const frameCounts = (attempt: {
+    frames: { values: unknown[]; }[];
+  }) => attempt.frames.map((frame) => frame.values.length);
+
+  it('records actual greedy counts under fixed caps', () => {
+    const c = cursor('a a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 5),
+        one(parseB),
+      ],
+      [
+        5,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      ['a', 'a', 'a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      3,
+      1,
+    ]);
+    expectDone(c);
+  });
+
+  it('returns successful prefix frames when a later slot fails', () => {
+    const c = cursor('a a a c');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 5),
+        one(parseB),
+      ],
+      [
+        5,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(false);
+    expect(attempt.values).toEqual([
+      ['a', 'a', 'a'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      3,
+    ]);
+
+    // The failed slot restores to its own start, not to the sequence start.
+    expectNextIdent(c, 'c');
+  });
+
+  it('uses caps as upper bounds for each slot', () => {
+    const c = cursor('a a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 2),
+        one(parseA),
+        one(parseB),
+      ],
+      [
+        2,
+        1,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      ['a', 'a'],
+      ['a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      2,
+      1,
+      1,
+    ]);
+    expectDone(c);
+  });
+
+  it('allows a reduced cap to expose input to the suffix', () => {
+    const c = cursor('a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 1),
+        one(parseA),
+        one(parseB),
+      ],
+      [
+        1,
+        1,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      ['a'],
+      ['a'],
+      ['b'],
+    ]);
+    expectDone(c);
+  });
+
+  it('honors zero caps without consuming input', () => {
+    const c = cursor('a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 1),
+        one(parseA),
+        one(parseB),
+      ],
+      [
+        0,
+        1,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      [],
+      ['a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      0,
+      1,
+      1,
+    ]);
+    expectDone(c);
+  });
+
+  it('returns no frame for a first-slot failure', () => {
+    const c = cursor('b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        one(parseA),
+        one(parseB),
+      ],
+      [
+        1,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(false);
+    expect(attempt.values).toEqual([]);
+    expect(attempt.frames).toEqual([]);
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'b');
+  });
+
+  it('records that a greedy ambiguous slot consumed input needed by the suffix', () => {
+    const c = cursor('a a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseAB, 0, 20),
+        one(parseB),
+      ],
+      [
+        20,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(false);
+    expect(attempt.values).toEqual([
+      ['a', 'a', 'a', 'b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      4,
+    ]);
+
+    // The failing B slot started at EOF, so the attempt should leave us there.
+    expectDone(c);
+  });
+
+  it('can expose suffix input when the ambiguous slot cap is reduced', () => {
+    const c = cursor('a a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseAB, 0, 20),
+        one(parseB),
+      ],
+      [
+        3,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      ['a', 'a', 'a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      3,
+      1,
+    ]);
+    expectDone(c);
+  });
+
+  it('clamps actual count below an oversized cap', () => {
+    const c = cursor('a a b');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 20),
+        one(parseB),
+      ],
+      [
+        20,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(true);
+    expect(attempt.values).toEqual([
+      ['a', 'a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      2,
+      1,
+    ]);
+    expectDone(c);
+  });
+
+  it('returns all successful prefix frames when a later slot fails', () => {
+    const c = cursor('a a b c');
+
+    const attempt = __parseSequenceAttempt(
+      c,
+      [
+        repeat(parseA, 0, 20),
+        one(parseB),
+        one(parseB),
+      ],
+      [
+        20,
+        1,
+        1,
+      ],
+    );
+
+    expect(attempt.ok).toBe(false);
+    expect(attempt.values).toEqual([
+      ['a', 'a'],
+      ['b'],
+    ]);
+    expect(frameCounts(attempt)).toEqual([
+      2,
+      1,
+    ]);
+
+    expectNextIdent(c, 'c');
+  });
+
+  it('backtracks an optional prefix when the required suffix needs its input', () => {
+    const c = cursor('a b');
+
+    const parse = sequenceOf(
+      opt(parseAB),
+      one(parseA),
+      one(parseB),
+      ([prefix, name, suffix]) => ({
+        prefix,
+        name,
+        suffix,
+      }),
+    );
+
+    expect(parse(c)).toEqual({
+      prefix: [],
+      name: ['a'],
+      suffix: ['b'],
+    });
+    expectDone(c);
+  });
+
+  it('does not backtrack into a parser that closes over its own multiplier', () => {
+    const parseAorB = oneOf(
+      one(parseA),
+      one(parseB),
+      ([value]) => value,
+    );
+
+    const parseAB: TryValueParser<string[]> = any(parseAorB);
+
+    const parse = sequenceOf(
+      one(parseAB),
+      one(parseB),
+      one(parseB),
+      (value) => value,
+    );
+
+    const c = cursor('a b b');
+
+    expect(parse(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it('backtracks a direct greedy multiplier slot', () => {
+    const parseAorB = oneOf(
+      one(parseA),
+      one(parseB),
+      ([value]) => value,
+    );
+
+    const parse = sequenceOf(
+      any(parseAorB),
+      one(parseB),
+      one(parseB),
+      (value) => value,
+    );
+
+    const c = cursor('a b b');
+
+    expect(parse(c)).toEqual([
+      ['a'],
+      ['b'],
+      ['b'],
+    ]);
+    expectDone(c);
+  });
+
+});
+
+describe('component sequence backtracking caps', () => {
+  const framesWithCounts = (...counts: number[]) => counts.map((count) => ({
+    start: 0,
+    values: Array.from({ length: count }, (_, index) => index),
+  }));
+
+  it('decrements the rightmost reducible actual count', () => {
+    const caps = __nextSequenceCaps(
+      [
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 20),
+        one(parseB),
+      ],
+      framesWithCounts(3, 1, 6),
+    );
+
+    expect(caps).toEqual([
+      3,
+      1,
+      5,
+      1,
+    ]);
+  });
+
+  it('skips a slot that is already at minimum', () => {
+    const caps = __nextSequenceCaps(
+      [
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 20),
+        one(parseB),
+      ],
+      framesWithCounts(3, 1, 0),
+    );
+
+    expect(caps).toEqual([
+      3,
+      0,
+      20,
+      1,
+    ]);
+  });
+
+  it('resets suffix slots to declared max after decrementing an earlier slot', () => {
+    const caps = __nextSequenceCaps(
+      [
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 5),
+        repeat(parseA, 0, 20),
+        one(parseB),
+      ],
+      framesWithCounts(3, 0, 0),
+    );
+
+    expect(caps).toEqual([
+      2,
+      5,
+      20,
+      1,
+    ]);
+  });
+
+  it('respects non-zero minimums', () => {
+    const caps = __nextSequenceCaps(
+      [
+        repeat(parseA, 4, 9),
+        repeat(parseA, 2, 5),
+        repeat(parseA, 0, 20),
+      ],
+      framesWithCounts(7, 2, 0),
+    );
+
+    expect(caps).toEqual([
+      6,
+      5,
+      20,
+    ]);
+  });
+
+  it('returns null when no slot can be reduced', () => {
+    const caps = __nextSequenceCaps(
+      [
+        repeat(parseA, 2, 5),
+        repeat(parseA, 1, 5),
+        repeat(parseA, 0, 20),
+      ],
+      framesWithCounts(2, 1, 0),
+    );
+
+    expect(caps).toBeNull();
+  });
+
+  it('returns null when the first slot failed before producing frames', () => {
+    const caps = __nextSequenceCaps(
+      [
+        one(parseA),
+        one(parseB),
+      ],
+      [],
+    );
+
+    expect(caps).toBeNull();
+  });
 });

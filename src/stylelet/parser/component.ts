@@ -50,6 +50,8 @@ export function requiredSequenceOf<P extends readonly Multiplier<unknown>[], R>(
   return parseSequenceOf(true, ...args);
 }
 
+// Local multiplier backtracking for direct sequence slots only. Nested parsers
+// remain opaque; their internal multipliers are not re-entered.
 function parseSequenceOf<P extends readonly Multiplier<unknown>[], R>(
   requireAnyValue: boolean,
   ...args: [...parsers: P, project: (value: SequenceValue<P>) => R]
@@ -59,34 +61,70 @@ function parseSequenceOf<P extends readonly Multiplier<unknown>[], R>(
 
   return (c: ComponentCursor): R | null => {
     const start = c.pos();
-    const values: unknown[] = [];
+    let caps = parsers.map((parser) => parser.max);
 
-    for (const parser of parsers) {
-      const componentStart = c.pos();
-      const value = parseMultiplier(c, parser);
+    while (true) {
+      c.restore(start);
 
-      if (value === null) {
+      const attempt = __parseSequenceAttempt(c, parsers, caps);
+
+      if (attempt.ok) {
+        const raw = attempt.values as SequenceValue<P>;
+
+        if (!requireAnyValue || hasAnyValue(raw)) {
+          return project(raw);
+        }
+      }
+
+      const nextCaps = __nextSequenceCaps(parsers, attempt.frames);
+
+      if (nextCaps === null) {
         c.restore(start);
         return null;
       }
 
-      if (c.pos() === componentStart && hasAnyValue(value)) {
-        c.error('Sequence parser produced a value without consuming input');
-      }
-
-      values.push(value);
+      caps = nextCaps;
     }
-
-    const raw = values as SequenceValue<P>;
-
-    if (requireAnyValue && !hasAnyValue(raw)) {
-      c.restore(start);
-      return null;
-    }
-
-    return project(raw);
   };
 }
+
+// function parseSequenceOf<P extends readonly Multiplier<unknown>[], R>(
+//   requireAnyValue: boolean,
+//   ...args: [...parsers: P, project: (value: SequenceValue<P>) => R]
+// ): TryValueParser<R> {
+//   const project = args[args.length - 1] as (value: SequenceValue<P>) => R;
+//   const parsers = args.slice(0, -1) as unknown as P;
+
+//   return (c: ComponentCursor): R | null => {
+//     const start = c.pos();
+//     const values: unknown[] = [];
+
+//     for (const parser of parsers) {
+//       const componentStart = c.pos();
+//       const value = parseMultiplier(c, parser);
+
+//       if (value === null) {
+//         c.restore(start);
+//         return null;
+//       }
+
+//       if (c.pos() === componentStart && hasAnyValue(value)) {
+//         c.error('Sequence parser produced a value without consuming input');
+//       }
+
+//       values.push(value);
+//     }
+
+//     const raw = values as SequenceValue<P>;
+
+//     if (requireAnyValue && !hasAnyValue(raw)) {
+//       c.restore(start);
+//       return null;
+//     }
+
+//     return project(raw);
+//   };
+// }
 
 /**
  * CSS value alternative: `a | b`
@@ -573,4 +611,87 @@ function hasAnyValue(value: unknown): boolean {
   }
 
   return value !== null && value !== undefined;
+}
+
+// =============================================================================
+// Backtracking support
+// =============================================================================
+
+type SequenceFrame = {
+  start: number;
+  values: unknown[];
+};
+
+type SequenceAttempt = {
+  ok: boolean;
+  values: unknown[];
+  frames: SequenceFrame[];
+}
+
+export function __parseSequenceAttempt<P extends readonly Multiplier<unknown>[]>(
+  c: ComponentCursor,
+  parsers: P,
+  caps: readonly number[],
+): SequenceAttempt {
+  const values: unknown[] = [];
+  const frames: SequenceFrame[] = [];
+
+  for (let i = 0; i < parsers.length; i++) {
+    const parser = parsers[i];
+    const slotStart = c.pos();
+    const value = parseMultiplier(c, parser, caps[i]);
+
+    if (value === null) {
+      c.restore(slotStart);
+
+      return {
+        ok: false,
+        values,
+        frames,
+      };
+    }
+
+    if (c.pos() === slotStart && hasAnyValue(value)) {
+      c.error('Sequence parser produced a value without consuming input');
+    }
+
+    values[i] = value;
+    frames[i] = {
+      start: slotStart,
+      values: value,
+    };
+  }
+
+  return {
+    ok: true,
+    values,
+    frames,
+  };
+}
+
+export function __nextSequenceCaps<P extends readonly Multiplier<unknown>[]>(
+  parsers: P,
+  frames: readonly SequenceFrame[],
+): number[] | null {
+  for (let i = frames.length - 1; i >= 0; i--) {
+    const parser = parsers[i];
+    const frame = frames[i];
+    const nextCap = frame.values.length - 1;
+
+    if (nextCap < parser.min) {
+      continue;
+    }
+
+    const caps = parsers.map((parser) => parser.max);
+
+    for (let j = 0; j < i; j++) {
+      caps[j] = frames[j].values.length;
+    }
+
+    caps[i] = nextCap;
+
+    return caps;
+  }
+
+  return null;
 }
