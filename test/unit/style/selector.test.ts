@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { type ComplexSelector, type ComplexSelectorList, SelectorType, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
 import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
-import { PseudoClassArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
+import { PseudoClassArgumentKind, PseudoElementArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));
@@ -162,6 +162,31 @@ const pseudoClassPart = (name: string, rest: object = {}) => part(
 );
 
 const pseudoArgument = (type: PseudoClassArgumentKind, rest: object = {}) => ({
+  type,
+  ...rest,
+});
+
+const pseudoElement = (name: string, rest: object = {}) => ({
+  type: SelectorType.PseudoElementSelector,
+  name,
+  ...rest,
+});
+
+const pseudoCompound = (name: string, rest: object = {}, pseudoClasses: unknown[] = []) => ({
+  type: SelectorType.PseudoCompoundSelector,
+  pseudoElement: pseudoElement(name, rest),
+  pseudoClasses,
+});
+
+const pseudoElementPart = (name: string, rest: object = {}, pseudoClasses: unknown[] = []) => part(
+  null,
+  null,
+  [
+    pseudoCompound(name, rest, pseudoClasses),
+  ],
+);
+
+const pseudoElementArgument = (type: PseudoElementArgumentKind, rest: object = {}) => ({
   type,
   ...rest,
 });
@@ -615,5 +640,77 @@ describe('selector parser pseudo-class selectors', () => {
 
   it('rejects :nth-child() until An+B parsing is implemented', () => {
     expectInvalidSelector(':nth-child(2n + 1)');
+  });
+});
+
+describe('selector parser pseudo-element selectors', () => {
+  it('parses legacy single-colon pseudo-elements', () => {
+    expect(expectComplexSelector(':before')).toMatchObject({
+      parts: [
+        pseudoElementPart('before', {
+          argument: null,
+          legacy: true,
+        }),
+      ],
+    });
+  });
+
+  it('parses double-colon pseudo-elements', () => {
+    expect(expectComplexSelector('::before')).toMatchObject({
+      parts: [
+        pseudoElementPart('before', {
+          argument: null,
+          legacy: false,
+        }),
+      ],
+    });
+  });
+
+  it('parses functional pseudo-elements with arguments', () => {
+    expect(expectComplexSelector('::part(foo)')).toMatchObject({
+      parts: [
+        pseudoElementPart('part', {
+          argument: pseudoElementArgument(PseudoElementArgumentKind.Ident, {
+            value: 'foo',
+          }),
+          legacy: false,
+        }),
+      ],
+    });
+  });
+
+  it('rejects functional pseudo-elements in single-colon form', () => {
+    expectInvalidSelector(':part(foo)');
+  });
+
+  it('rejects functional pseudo-elements missing arguments', () => {
+    expectInvalidSelector('::part');
+  });
+
+  it('rejects bare pseudo-elements used as functions', () => {
+    expectInvalidSelector('::before()');
+  });
+
+  it('rejects unknown pseudo-elements', () => {
+    expectInvalidSelector('::made-up');
+  });
+
+  it('parses pseudo-classes after pseudo-elements', () => {
+    expect(expectComplexSelector('::before:hover')).toMatchObject({
+      parts: [
+        pseudoElementPart(
+          'before',
+          {
+            argument: null,
+            legacy: false,
+          },
+          [
+            pseudoClass('hover', {
+              argument: null,
+            }),
+          ],
+        ),
+      ],
+    });
   });
 });

@@ -141,3 +141,77 @@ export type IdentPseudoClassArgument = {
   type: PseudoClassArgumentKind.Ident;
   value: string;
 };
+
+// -------------------------------------------------------------------------
+// Pseudo-element definitions
+// -------------------------------------------------------------------------
+
+export enum PseudoElementArgumentKind {
+  Ident = 'ident',
+  SelectorList = 'selector-list',
+  Raw = 'raw',
+}
+
+export type PseudoElementArgument =
+  | RawPseudoElementArgument
+  | SelectorListPseudoElementArgument
+  | IdentPseudoElementArgument;
+
+export type RawPseudoElementArgument = {
+  type: PseudoElementArgumentKind.Raw;
+  value: ComponentValue[];
+};
+
+export type SelectorListPseudoElementArgument = {
+  type: PseudoElementArgumentKind.SelectorList;
+  selectors: SelectorList;
+};
+
+export type IdentPseudoElementArgument = {
+  type: PseudoElementArgumentKind.Ident;
+  value: string;
+};
+
+export type PseudoElementBareForm = {
+  legacy?: boolean;
+};
+
+export type PseudoElementFunctionForm = {
+  argument: PseudoElementArgumentKind;
+};
+
+export type PseudoElementDefinition = {
+  bare?: PseudoElementBareForm;
+  functional?: PseudoElementFunctionForm;
+  legacy?: boolean;
+};
+
+export const PSEUDO_ELEMENTS: Record<string, PseudoElementDefinition | undefined> = {
+  before: {
+    bare: {},
+    legacy: true,
+  },
+
+  after: {
+    bare: {},
+    legacy: true,
+  },
+
+  'first-line': {
+    bare: {},
+    legacy: true,
+  },
+
+  'first-letter': {
+    bare: {},
+    legacy: true,
+  },
+
+  part: {
+    functional: {
+      argument: PseudoElementArgumentKind.Ident,
+    },
+  },
+};
+
+

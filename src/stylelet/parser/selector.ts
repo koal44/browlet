@@ -12,9 +12,11 @@ import type { HashToken, StringToken } from './tokens';
 import { HashTokenFlag, type IdentToken, TokenKind } from './tokens';
 import type {
   AnPlusBPseudoClassArgument, ComplexRealSelectorListPseudoClassArgument, CompoundSelectorPseudoClassArgument, ForgivingSelectorListPseudoClassArgument, IdentPseudoClassArgument,
-  PseudoClassArgument, RelativeSelectorListPseudoClassArgument, SelectorListPseudoClassArgument,
+  IdentPseudoElementArgument,
+  PseudoClassArgument, PseudoElementArgument, RelativeSelectorListPseudoClassArgument, SelectorListPseudoClassArgument,
+  SelectorListPseudoElementArgument,
 } from './selector-pseudo';
-import { PSEUDO_CLASSES, PseudoClassArgumentKind } from './selector-pseudo';
+import { PSEUDO_CLASSES, PSEUDO_ELEMENTS, PseudoClassArgumentKind, PseudoElementArgumentKind } from './selector-pseudo';
 
 export enum SelectorType {
   ComplexSelector = 'complex-selector',
@@ -713,13 +715,21 @@ function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | 
   return parsePseudoClassSelector(c);
 }
 
-const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
+type PseudoSelectorHead = {
+  name: string;
+  value: ComponentValue[] | null;
+};
+
+const parsePseudoSelectorHead: TryValueParser<PseudoSelectorHead> = oneOf(
   one(
     sequenceOf(
       one(tryParseColon),
-      one(tryParseNonLegacyIdentToken),
+      one(tryParseIdentToken),
 
-      ([, [ident]]) => createPseudoClassSelector(ident.value, null),
+      ([, [ident]]): PseudoSelectorHead => ({
+        name: ident.value,
+        value: null,
+      }),
     ),
   ),
 
@@ -728,11 +738,21 @@ const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
       one(tryParseColon),
       one(tryParseFunctionBlock),
 
-      ([, [fn]]) => createPseudoClassSelector(fn.name, fn.value),
+      ([, [fn]]): PseudoSelectorHead => ({
+        name: fn.name,
+        value: fn.value,
+      }),
     ),
   ),
 
-  ([selector]): PseudoClassSelector | null => selector,
+  ([head]): PseudoSelectorHead => head,
+);
+
+const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = sequenceOf(
+  one(parsePseudoSelectorHead),
+
+  ([[head]]): PseudoClassSelector | null =>
+    createPseudoClassSelector(head.name, head.value),
 );
 
 /**
@@ -742,7 +762,7 @@ const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
 export type PseudoElementSelector = {
   type: SelectorType.PseudoElementSelector;
   name: string;
-  value: ComponentValue[] | null;
+  argument: PseudoElementArgument | null;
   legacy: boolean;
 };
 
@@ -755,57 +775,22 @@ const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
     sequenceOf(
       one(tryParseLegacyPseudoElementSelector),
 
-      ([[legacy]]): PseudoElementSelector => ({
-        type: SelectorType.PseudoElementSelector,
-        name: legacy.name,
-        value: null,
-        legacy: true,
-      }),
+      ([[legacy]]): PseudoElementSelector | null =>
+        createPseudoElementSelector(legacy.name, null, true),
     ),
   ),
 
   one(
     sequenceOf(
       one(tryParseColon),
-      one(tryParseColon),
-      one(
-        oneOf(
-          one(
-            sequenceOf(
-              one(tryParseIdentToken),
+      one(parsePseudoSelectorHead),
 
-              ([[ident]]) => ({
-                name: ident.value,
-                value: null,
-              }),
-            ),
-          ),
-
-          one(
-            sequenceOf(
-              one(tryParseFunctionBlock),
-
-              ([[fn]]) => ({
-                name: fn.name,
-                value: fn.value,
-              }),
-            ),
-          ),
-
-          ([pseudo]) => pseudo,
-        ),
-      ),
-
-      ([, , [pseudo]]): PseudoElementSelector => ({
-        type: SelectorType.PseudoElementSelector,
-        name: pseudo.name,
-        value: pseudo.value,
-        legacy: false,
-      }),
+      ([, [head]]): PseudoElementSelector | null =>
+        createPseudoElementSelector(head.name, head.value, false),
     ),
   ),
 
-  ([selector]): PseudoElementSelector => selector,
+  ([selector]): PseudoElementSelector | null => selector,
 );
 
 /**
@@ -871,17 +856,17 @@ function bracketed<T>(parse: TryValueParser<T>): TryValueParser<T> {
   };
 }
 
-function tryParseNonLegacyIdentToken(c: ComponentCursor): IdentToken | null {
-  const start = c.pos();
-  const ident = tryParseIdentToken(c);
+// function tryParseNonLegacyIdentToken(c: ComponentCursor): IdentToken | null {
+//   const start = c.pos();
+//   const ident = tryParseIdentToken(c);
 
-  if (ident === null || isLegacyPseudoElementName(ident.value)) {
-    c.restore(start);
-    return null;
-  }
+//   if (ident === null || isLegacyPseudoElementName(ident.value)) {
+//     c.restore(start);
+//     return null;
+//   }
 
-  return ident;
-}
+//   return ident;
+// }
 
 function tryParseColon(c: ComponentCursor): ':' | null {
   return c.match(TokenKind.Colon) ? ':' : null;
@@ -978,18 +963,18 @@ function tryParseBracketBlock(c: ComponentCursor): BracketBlock | null {
   return comp;
 }
 
-function isLegacyPseudoElementName(name: string): boolean {
-  switch (asciiLower(name)) {
-    case 'before':
-    case 'after':
-    case 'first-line':
-    case 'first-letter':
-      return true;
+// function isLegacyPseudoElementName(name: string): boolean {
+//   switch (asciiLower(name)) {
+//     case 'before':
+//     case 'after':
+//     case 'first-line':
+//     case 'first-letter':
+//       return true;
 
-    default:
-      return false;
-  }
-}
+//     default:
+//       return false;
+//   }
+// }
 
 function createPseudoClassSelector(
   rawName: string,
@@ -1037,7 +1022,7 @@ export function parsePseudoClassArgument(
 ): PseudoClassArgument | null {
   switch (kind) {
     case PseudoClassArgumentKind.SelectorList:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseSelectorList,
         (selectors): SelectorListPseudoClassArgument => ({
@@ -1047,7 +1032,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.ForgivingSelectorList:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseSelectorList,
         (selectors): ForgivingSelectorListPseudoClassArgument => ({
@@ -1057,7 +1042,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.RelativeSelectorList:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseRelativeSelectorList,
         (selectors): RelativeSelectorListPseudoClassArgument => ({
@@ -1067,7 +1052,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.ComplexRealSelectorList:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseComplexRealSelectorList,
         (selectors): ComplexRealSelectorListPseudoClassArgument => ({
@@ -1077,7 +1062,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.CompoundSelector:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseCompoundSelector,
         (selector): CompoundSelectorPseudoClassArgument => ({
@@ -1087,7 +1072,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.AnPlusB:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseAnPlusB,
         (anb): AnPlusBPseudoClassArgument => ({
@@ -1097,7 +1082,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.Ident:
-      return parseWholeArgument(
+      return parseWholePseudoClassArgument(
         value,
         tryParseIdentToken,
         (ident): IdentPseudoClassArgument => ({
@@ -1114,7 +1099,21 @@ export function parsePseudoClassArgument(
   }
 }
 
-function parseWholeArgument<T, R extends PseudoClassArgument>(
+function parseWholePseudoClassArgument<T, R extends PseudoClassArgument>(
+  value: ComponentValue[],
+  parse: TryValueParser<T>,
+  create: (value: T) => R,
+): R | null {
+  const parsed = parseWholeComponentValueList(value, parse);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  return create(parsed);
+}
+
+function parseWholePseudoElementArgument<T, R extends PseudoElementArgument>(
   value: ComponentValue[],
   parse: TryValueParser<T>,
   create: (value: T) => R,
@@ -1150,4 +1149,88 @@ function parseWholeComponentValueList<T>(
 
 function tryParseAnPlusB(_c: ComponentCursor): { a: number; b: number; } | null {
   return null; // TODO: Implement An+B parser
+}
+
+function createPseudoElementSelector(
+  rawName: string,
+  value: ComponentValue[] | null,
+  legacy: boolean,
+): PseudoElementSelector | null {
+  const name = asciiLower(rawName);
+  const def = PSEUDO_ELEMENTS[name];
+
+  if (def === undefined) {
+    return null;
+  }
+
+  if (legacy && def.legacy !== true) {
+    return null;
+  }
+
+  if (value === null) {
+    if (def.bare === undefined) {
+      return null;
+    }
+
+    return {
+      type: SelectorType.PseudoElementSelector,
+      name,
+      argument: null,
+      legacy,
+    };
+  }
+
+  if (def.functional === undefined) {
+    return null;
+  }
+
+  if (legacy) {
+    return null;
+  }
+
+  const argument = parsePseudoElementArgument(def.functional.argument, value);
+
+  if (argument === null) {
+    return null;
+  }
+
+  return {
+    type: SelectorType.PseudoElementSelector,
+    name,
+    argument,
+    legacy: false,
+  };
+}
+
+function parsePseudoElementArgument(
+  kind: PseudoElementArgumentKind,
+  value: ComponentValue[],
+): PseudoElementArgument | null {
+  switch (kind) {
+    case PseudoElementArgumentKind.Ident:
+      return parseWholePseudoElementArgument(
+        value,
+        tryParseIdentToken,
+        (ident): IdentPseudoElementArgument => ({
+          type: PseudoElementArgumentKind.Ident,
+          value: ident.value,
+        }),
+      );
+
+    case PseudoElementArgumentKind.SelectorList:
+      return parseWholePseudoElementArgument(
+        value,
+        tryParseSelectorList,
+        (selectors): SelectorListPseudoElementArgument => ({
+          type: PseudoElementArgumentKind.SelectorList,
+          selectors,
+        }),
+      );
+
+    case PseudoElementArgumentKind.Raw:
+      return {
+        type: PseudoElementArgumentKind.Raw,
+        value,
+      };
+  }
 }
