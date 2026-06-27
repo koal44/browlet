@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
-import { type ComplexSelector, type ComplexSelectorList, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
+import { type ComplexSelector, type ComplexSelectorList, SelectorType, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
 import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
+import { PseudoClassArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));
@@ -145,6 +146,24 @@ const identValue = (value: string) => ({
 const stringValue = (value: string) => ({
   type: 'string',
   value,
+});
+
+const pseudoClass = (name: string, rest: object = {}) => ({
+  type: SelectorType.PseudoClassSelector,
+  name,
+  ...rest,
+});
+
+const pseudoClassPart = (name: string, rest: object = {}) => part(
+  null,
+  compound(null, [
+    pseudoClass(name, rest),
+  ]),
+);
+
+const pseudoArgument = (type: PseudoClassArgumentKind, rest: object = {}) => ({
+  type,
+  ...rest,
 });
 
 describe('selector parser basics', () => {
@@ -449,5 +468,152 @@ describe('selector parser combinators', () => {
 
   it('rejects a malformed column combinator', () => {
     expectInvalidSelector('col ||| td');
+  });
+});
+
+describe('selector parser pseudo-class selectors', () => {
+  it('parses a known bare pseudo-class', () => {
+    expect(expectComplexSelector(':hover')).toMatchObject({
+      parts: [
+        pseudoClassPart('hover', {
+          argument: null,
+        }),
+      ],
+    });
+  });
+
+  it('rejects an unknown bare pseudo-class', () => {
+    expectInvalidSelector(':made-up');
+  });
+
+  it('rejects a bare pseudo-class used as a function', () => {
+    expectInvalidSelector(':hover()');
+  });
+
+  it('rejects a functional pseudo-class used bare', () => {
+    expectInvalidSelector(':is');
+  });
+
+  it('parses :is() as a forgiving selector-list pseudo-class argument', () => {
+    expect(expectComplexSelector(':is(.foo, #bar)')).toMatchObject({
+      parts: [
+        pseudoClassPart('is', {
+          argument: pseudoArgument(PseudoClassArgumentKind.ForgivingSelectorList, {
+            selectors: [
+              {
+                parts: [
+                  classPart(null, 'foo'),
+                ],
+              },
+              {
+                parts: [
+                  idPart(null, 'bar'),
+                ],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('parses :where() as a forgiving selector-list pseudo-class argument', () => {
+    expect(expectComplexSelector(':where(.foo)')).toMatchObject({
+      parts: [
+        pseudoClassPart('where', {
+          argument: pseudoArgument(PseudoClassArgumentKind.ForgivingSelectorList, {
+            selectors: [
+              {
+                parts: [
+                  classPart(null, 'foo'),
+                ],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('parses :not() as a complex-real-selector-list pseudo-class argument', () => {
+    expect(expectComplexSelector(':not(.foo, #bar)')).toMatchObject({
+      parts: [
+        pseudoClassPart('not', {
+          argument: pseudoArgument(PseudoClassArgumentKind.ComplexRealSelectorList, {
+            selectors: [
+              {
+                parts: [
+                  {
+                    combinator: null,
+                    compound: compound(null, [
+                      classSelector('foo'),
+                    ]),
+                  },
+                ],
+              },
+              {
+                parts: [
+                  {
+                    combinator: null,
+                    compound: compound(null, [
+                      idSelector('bar'),
+                    ]),
+                  },
+                ],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('parses :has() as a relative-selector-list pseudo-class argument', () => {
+    expect(expectComplexSelector(':has(> img)')).toMatchObject({
+      parts: [
+        pseudoClassPart('has', {
+          argument: pseudoArgument(PseudoClassArgumentKind.RelativeSelectorList, {
+            selectors: [
+              {
+                combinator: '>',
+                selector: {
+                  parts: [
+                    typePart(null, 'img'),
+                  ],
+                },
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('parses :host as a bare pseudo-class', () => {
+    expect(expectComplexSelector(':host')).toMatchObject({
+      parts: [
+        pseudoClassPart('host', {
+          argument: null,
+        }),
+      ],
+    });
+  });
+
+  it('parses :host() as a compound-selector pseudo-class argument', () => {
+    expect(expectComplexSelector(':host(.foo)')).toMatchObject({
+      parts: [
+        pseudoClassPart('host', {
+          argument: pseudoArgument(PseudoClassArgumentKind.CompoundSelector, {
+            selector: compound(null, [
+              classSelector('foo'),
+            ]),
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('rejects :nth-child() until An+B parsing is implemented', () => {
+    expectInvalidSelector(':nth-child(2n + 1)');
   });
 });
