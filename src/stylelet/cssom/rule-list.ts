@@ -7,7 +7,7 @@ export class SelectletCSSRuleList implements CSSRuleList {
     this._rules = rules;
 
     for (let i = 0; i < rules.length; i++) {
-      this[i] = rules[i];
+      this[i] = rules[i]!;
     }
   }
 

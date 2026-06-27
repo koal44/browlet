@@ -8,25 +8,29 @@ import { TokenKind } from './tokens';
 
 export type TryValueParser<T> = (c: ComponentCursor) => T | null;
 
-export type Multiplier<T> = TryValueParser<T[]> & {
+export type OptionalValue<T> = [] | [T];
+export type NonEmptyArray<T> = [T, ...T[]];
+
+export type Multiplier<T, Output extends T[] = T[]> = TryValueParser<Output> & {
   base: TryValueParser<T>;
   min: number;
   max: number;
   separator: 'none' | 'comma';
 };
 
-type SequenceValue<P extends readonly Multiplier<unknown>[]> = {
-  [I in keyof P]: MultiplierValueOf<P[I]>[];
+type SequenceValue<P extends readonly AnyMultiplier[]> = {
+  -readonly [I in keyof P]: MultiplierOutputOf<P[I]>;
 };
 
-type UnorderedValue<P extends readonly Multiplier<unknown>[]> = {
-  [I in keyof P]: MultiplierValueOf<P[I]>[] | undefined;
+type UnorderedValue<P extends readonly AnyMultiplier[]> = {
+  -readonly [I in keyof P]: MultiplierOutputOf<P[I]> | undefined;
 };
 
-type AlternativeValue<P extends readonly Multiplier<unknown>[]> =
-  MultiplierValueOf<P[number]>[];
+type AlternativeValue<P extends readonly AnyMultiplier[]> =
+  MultiplierOutputOf<P[number]>;
 
-type MultiplierValueOf<P> = P extends Multiplier<infer V> ? V : never;
+type AnyMultiplier = Multiplier<unknown, unknown[]>;
+type MultiplierOutputOf<P> = P extends Multiplier<unknown, infer Output> ? Output : never;
 
 // =============================================================================
 // Structural grammar combinators
@@ -35,7 +39,7 @@ type MultiplierValueOf<P> = P extends Multiplier<infer V> ? V : never;
 /**
  * CSS value juxtaposition: `a b`
  */
-export function sequenceOf<P extends readonly Multiplier<unknown>[], R>(
+export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseSequenceOf(false, ...args);
@@ -44,7 +48,7 @@ export function sequenceOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value required group: `[ a b c ]!`
  */
-export function requiredSequenceOf<P extends readonly Multiplier<unknown>[], R>(
+export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseSequenceOf(true, ...args);
@@ -52,7 +56,7 @@ export function requiredSequenceOf<P extends readonly Multiplier<unknown>[], R>(
 
 // Local multiplier backtracking for direct sequence slots only. Nested parsers
 // remain opaque; their internal multipliers are not re-entered.
-function parseSequenceOf<P extends readonly Multiplier<unknown>[], R>(
+function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
 ): TryValueParser<R> {
@@ -95,7 +99,7 @@ function parseSequenceOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value alternative: `a | b`
  */
-export function oneOf<P extends readonly Multiplier<unknown>[], R>(
+export function oneOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: AlternativeValue<P>) => R | null]
 ): TryValueParser<R> {
   const project = args[args.length - 1] as (value: AlternativeValue<P>) => R | null;
@@ -137,7 +141,7 @@ export function oneOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value double ampersand: `a && b`
  */
-export function allOf<P extends readonly Multiplier<unknown>[], R>(
+export function allOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseAllOf(false, ...args);
@@ -146,13 +150,13 @@ export function allOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value required double ampersand group: `[ a && b ]!`
  */
-export function requiredAllOf<P extends readonly Multiplier<unknown>[], R>(
+export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseAllOf(true, ...args);
 }
 
-function parseAllOf<P extends readonly Multiplier<unknown>[], R>(
+function parseAllOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
@@ -168,7 +172,7 @@ function parseAllOf<P extends readonly Multiplier<unknown>[], R>(
         continue;
       }
 
-      const empty = parseEmpty(c, parsers[i]);
+      const empty = parseEmpty(c, parsers[i]!);
 
       if (empty === null) {
         c.restore(start);
@@ -199,7 +203,7 @@ function parseAllOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value double bar: `a || b`
  */
-export function someOf<P extends readonly Multiplier<unknown>[], R>(
+export function someOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseSomeOf(false, ...args);
@@ -208,13 +212,13 @@ export function someOf<P extends readonly Multiplier<unknown>[], R>(
 /**
  * CSS value required double bar group: `[ a || b ]!`
  */
-export function requiredSomeOf<P extends readonly Multiplier<unknown>[], R>(
+export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
   return parseSomeOf(true, ...args);
 }
 
-function parseSomeOf<P extends readonly Multiplier<unknown>[], R>(
+function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
 ): TryValueParser<R> {
@@ -233,7 +237,7 @@ function parseSomeOf<P extends readonly Multiplier<unknown>[], R>(
         continue;
       }
 
-      const empty = parseEmpty(c, parsers[i]);
+      const empty = parseEmpty(c, parsers[i]!);
 
       if (empty === null) {
         canMatchEmpty = false;
@@ -293,29 +297,29 @@ export const DEFAULT_REPEAT_LIMIT = 20;
 /**
  * CSS value default multiplicity: `a`.
  */
-export function one<T>(parse: TryValueParser<T>): Multiplier<T> {
-  return repeat(parse, 1, 1);
+export function one<T>(parse: TryValueParser<T>): Multiplier<T, [T]> {
+  return createMultiplier<T, [T]>(parse, 1, 1, 'none');
 }
 
 /**
  * CSS value optional multiplicity: `a?`.
  */
-export function opt<T>(parse: TryValueParser<T>): Multiplier<T> {
-  return repeat(parse, 0, 1);
+export function opt<T>(parse: TryValueParser<T>): Multiplier<T, OptionalValue<T>> {
+  return createMultiplier<T, OptionalValue<T>>(parse, 0, 1, 'none');
 }
 
 /**
  * CSS value zero-or-more multiplicity: `a*`.
  */
-export function any<T>(parse: TryValueParser<T>): Multiplier<T> {
-  return repeat(parse, 0, DEFAULT_REPEAT_LIMIT);
+export function any<T>(parse: TryValueParser<T>): Multiplier<T, T[]> {
+  return createMultiplier<T, T[]>(parse, 0, DEFAULT_REPEAT_LIMIT, 'none');
 }
 
 /**
  * CSS value one-or-more multiplicity: `a+`.
  */
-export function plus<T>(parse: TryValueParser<T>): Multiplier<T> {
-  return repeat(parse, 1, DEFAULT_REPEAT_LIMIT);
+export function plus<T>(parse: TryValueParser<T>): Multiplier<T, NonEmptyArray<T>> {
+  return createMultiplier<T, NonEmptyArray<T>>(parse, 1, DEFAULT_REPEAT_LIMIT, 'none');
 }
 
 /**
@@ -324,11 +328,10 @@ export function plus<T>(parse: TryValueParser<T>): Multiplier<T> {
  * The parser is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T>(
-  item: TryValueParser<T>,
-  min: number,
-  max = DEFAULT_REPEAT_LIMIT,
-): Multiplier<T> {
+export function repeat<T>(item: TryValueParser<T>, min: 1, max?: number): Multiplier<T, NonEmptyArray<T>>;
+export function repeat<T>(item: TryValueParser<T>, min: 0, max?: number): Multiplier<T, T[]>;
+export function repeat<T>(item: TryValueParser<T>, min: number, max?: number): Multiplier<T, T[]>;
+export function repeat<T>(item: TryValueParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT): Multiplier<T, T[]> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid repeat minimum ${min}`);
   }
@@ -337,17 +340,17 @@ export function repeat<T>(
     throw new Error(`Invalid repeat maximum ${max}`);
   }
 
-  return createMultiplier(item, min, max, 'none');
+  return createMultiplier<T, T[]>(item, min, max, 'none');
 }
 
 /**
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
-export function commaRepeat<T>(
-  item: TryValueParser<T>,
-  min = 1,
-  max = DEFAULT_REPEAT_LIMIT,
-): Multiplier<T> {
+export function commaRepeat<T>(item: TryValueParser<T>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryValueParser<T>, min: 1, max?: number): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryValueParser<T>, min: 0, max?: number): Multiplier<T, T[]>;
+export function commaRepeat<T>(item: TryValueParser<T>, min: number, max?: number): Multiplier<T, T[]>;
+export function commaRepeat<T>(item: TryValueParser<T>, min = 1, max = DEFAULT_REPEAT_LIMIT): Multiplier<T, T[]> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid comma repeat minimum ${min}`);
   }
@@ -356,18 +359,18 @@ export function commaRepeat<T>(
     throw new Error(`Invalid comma repeat maximum ${max}`);
   }
 
-  return createMultiplier(item, min, max, 'comma');
+  return createMultiplier<T, T[]>(item, min, max, 'comma');
 }
 
-function createMultiplier<T>(
+function createMultiplier<T, Output extends T[]>(
   base: TryValueParser<T>,
   min: number,
   max: number,
   separator: 'none' | 'comma',
-): Multiplier<T> {
-  const multiplier = ((c: ComponentCursor): T[] | null => {
+): Multiplier<T, Output> {
+  const multiplier = ((c: ComponentCursor): Output | null => {
     return parseMultiplier(c, multiplier);
-  }) as Multiplier<T>;
+  }) as Multiplier<T, Output>;
 
   multiplier.base = base;
   multiplier.min = min;
@@ -402,21 +405,22 @@ export function withComponentTrivia<T>(parse: TryValueParser<T>): TryValueParser
 // Grammar execution helpers
 // =============================================================================
 
-function parseMultiplier<T>(
+function parseMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
-  multiplier: Multiplier<T>,
+  multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): T[] | null {
-  if (multiplier.separator === 'comma') {
-    return parseCommaMultiplier(c, multiplier, max);
-  }
+): Output | null {
+  const value =
+    multiplier.separator === 'comma'
+      ? parseCommaMultiplier(c, multiplier, max)
+      : parsePlainMultiplier(c, multiplier, max);
 
-  return parsePlainMultiplier(c, multiplier, max);
+  return value as Output | null;
 }
 
 function parsePlainMultiplier<T>(
   c: ComponentCursor,
-  multiplier: Multiplier<T>,
+  multiplier: Multiplier<T, T[]>,
   max = multiplier.max,
 ): T[] | null {
   const start = c.pos();
@@ -448,7 +452,7 @@ function parsePlainMultiplier<T>(
 
 function parseCommaMultiplier<T>(
   c: ComponentCursor,
-  multiplier: Multiplier<T>,
+  multiplier: Multiplier<T, T[]>,
   max = multiplier.max,
 ): T[] | null {
   const start = c.pos();
@@ -513,10 +517,10 @@ function parseCommaMultiplier<T>(
   return values;
 }
 
-function parseEmpty<T>(
+function parseEmpty<T, Output extends T[]>(
   c: ComponentCursor,
-  multiplier: Multiplier<T>,
-): T[] | null {
+  multiplier: Multiplier<T, Output>,
+): Output | null {
   const start = c.pos();
   const value = parseMultiplier(c, multiplier);
   const end = c.pos();
@@ -534,7 +538,7 @@ function parseEmpty<T>(
   return value;
 }
 
-function consumeUnordered<P extends readonly Multiplier<unknown>[]>(
+function consumeUnordered<const P extends readonly AnyMultiplier[]>(
   c: ComponentCursor,
   parsers: P,
 ): {
@@ -550,7 +554,7 @@ function consumeUnordered<P extends readonly Multiplier<unknown>[]>(
     let matchedValue: unknown;
 
     for (let i = 0; i < remaining.length; i++) {
-      const part = remaining[i];
+      const part = remaining[i]!;
       const start = c.pos();
       const value = parseMultiplier(c, part.parser);
 
@@ -577,7 +581,7 @@ function consumeUnordered<P extends readonly Multiplier<unknown>[]>(
       break;
     }
 
-    const matched = remaining[matchedIndex];
+    const matched = remaining[matchedIndex]!;
 
     remaining.splice(matchedIndex, 1);
     seen.add(matched.index);
@@ -615,7 +619,7 @@ type SequenceAttempt = {
   frames: SequenceFrame[];
 }
 
-export function __parseSequenceAttempt<P extends readonly Multiplier<unknown>[]>(
+export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>(
   c: ComponentCursor,
   parsers: P,
   caps: readonly number[],
@@ -624,7 +628,7 @@ export function __parseSequenceAttempt<P extends readonly Multiplier<unknown>[]>
   const frames: SequenceFrame[] = [];
 
   for (let i = 0; i < parsers.length; i++) {
-    const parser = parsers[i];
+    const parser = parsers[i]!;
     const slotStart = c.pos();
     const value = parseMultiplier(c, parser, caps[i]);
 
@@ -656,13 +660,13 @@ export function __parseSequenceAttempt<P extends readonly Multiplier<unknown>[]>
   };
 }
 
-export function __nextSequenceCaps<P extends readonly Multiplier<unknown>[]>(
+export function __nextSequenceCaps<const P extends readonly AnyMultiplier[]>(
   parsers: P,
   frames: readonly SequenceFrame[],
 ): number[] | null {
   for (let i = frames.length - 1; i >= 0; i--) {
-    const parser = parsers[i];
-    const frame = frames[i];
+    const parser = parsers[i]!;
+    const frame = frames[i]!;
     const nextCap = frame.values.length - 1;
 
     if (nextCap < parser.min) {
@@ -672,7 +676,7 @@ export function __nextSequenceCaps<P extends readonly Multiplier<unknown>[]>(
     const caps = parsers.map((parser) => parser.max);
 
     for (let j = 0; j < i; j++) {
-      caps[j] = frames[j].values.length;
+      caps[j] = frames[j]!.values.length;
     }
 
     caps[i] = nextCap;

@@ -7,15 +7,7 @@
     "lib": ["ESNext", "DOM"],
     "types": ["node"],
     "skipLibCheck": false,
+    "noUncheckedIndexedAccess": true,
   },
-  "include": [
-    "src/**/*.ts",
-    "test/**/*.ts",
-    "scripts/**/*.ts",
-    "vitest.config.ts",
-    "playwright.config.ts"
-  ],
-  "exclude": [
-    "src/stylelet/**/*"
-  ]
+  "include": ["**/*"],
 }

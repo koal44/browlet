@@ -549,8 +549,8 @@ function consumeImportantFlag(declaration: Declaration): void {
   const bangIndex = lastNonWhitespaceIndex(value, importantIndex - 1);
   if (bangIndex < 0) return;
 
-  const bang = value[bangIndex];
-  const important = value[importantIndex];
+  const bang = value[bangIndex]!;
+  const important = value[importantIndex]!;
 
   if (
     isDelimToken(bang, '!') &&
@@ -564,7 +564,7 @@ function consumeImportantFlag(declaration: Declaration): void {
 
 function lastNonWhitespaceIndex(values: readonly ComponentValue[], start: number): number {
   for (let i = start; i >= 0; i--) {
-    if (!isWhitespaceToken(values[i])) {
+    if (!isWhitespaceToken(values[i]!)) {
       return i;
     }
   }
@@ -573,7 +573,7 @@ function lastNonWhitespaceIndex(values: readonly ComponentValue[], start: number
 }
 
 function trimTrailingWhitespace(values: ComponentValue[]): void {
-  while (values.length > 0 && isWhitespaceToken(values[values.length - 1])) {
+  while (values.length > 0 && isWhitespaceToken(values[values.length - 1]!)) {
     values.pop();
   }
 }

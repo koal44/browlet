@@ -24,7 +24,7 @@ export class ComponentCursor {
       return null;
     }
 
-    return this.input[this.i++];
+    return this.input[this.i++]!;
   }
 
   consume(): ComponentValue {

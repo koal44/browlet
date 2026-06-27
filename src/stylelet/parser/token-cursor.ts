@@ -23,6 +23,6 @@ export class TokenCursor {
       return EOFToken;
     }
 
-    return this.input[this.i++];
+    return this.input[this.i++]!;
   }
 }
