@@ -1526,3 +1526,127 @@ describe('component sequence backtracking caps', () => {
     expect(caps).toBeNull();
   });
 });
+
+describe('component combinator null projections', () => {
+  it('treats a null sequence projection as parser failure', () => {
+    const c = cursor('a');
+
+    const parse = sequenceOf(
+      one(parseA),
+      (): 'accepted' | null => null,
+    );
+
+    expect(parse(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'a');
+  });
+
+  it('continues sequence backtracking when projection rejects a successful attempt', () => {
+    const parseAB = oneOf(
+      one(parseA),
+      one(parseB),
+      ([value]) => value,
+    );
+
+    const projectedPrefixLengths: number[] = [];
+
+    // (a | b)* b
+    const parse = sequenceOf(
+      any(parseAB),
+      one(parseB),
+      ([prefix, suffix]) => {
+        projectedPrefixLengths.push(prefix.length);
+
+        if (prefix.length !== 1) {
+          return null;
+        }
+
+        return {
+          prefix,
+          suffix,
+        };
+      },
+    );
+
+    const c = cursor('a b b');
+
+    expect(parse(c)).toEqual({
+      prefix: ['a'],
+      suffix: ['b'],
+    });
+
+    // The first full sequence match used prefix length 2 and was rejected.
+    // The next successful backtracked match used prefix length 1 and was accepted.
+    expect(projectedPrefixLengths).toEqual([2, 1]);
+
+    // The accepted parse consumed `a b`; the final `b` remains for the caller.
+    expectNextIdent(c, 'b');
+  });
+
+  it('tries the next alternative when a oneOf projection returns null', () => {
+    const parseFirstA: TryValueParser<'first'> = (c) => {
+      const value = parseA(c);
+
+      if (value === null) {
+        return null;
+      }
+
+      return 'first';
+    };
+
+    const parseSecondA: TryValueParser<'second'> = (c) => {
+      const value = parseA(c);
+
+      if (value === null) {
+        return null;
+      }
+
+      return 'second';
+    };
+
+    const parse = oneOf(
+      one(parseFirstA),
+      one(parseSecondA),
+      ([value]) => {
+        if (value === 'first') {
+          return null;
+        }
+
+        return value;
+      },
+    );
+
+    const c = cursor('a');
+
+    expect(parse(c)).toBe('second');
+    expectDone(c);
+  });
+
+  it('restores and fails allOf when its projection returns null', () => {
+    const parse = allOf(
+      one(parseA),
+      one(parseB),
+      (): 'accepted' | null => null,
+    );
+
+    const c = cursor('b a');
+
+    expect(parse(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'b');
+  });
+
+  it('restores and fails someOf when its projection returns null', () => {
+    const parse = someOf(
+      one(parseA),
+      one(parseB),
+      (): 'accepted' | null => null,
+    );
+
+    const c = cursor('a');
+
+    expect(parse(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'a');
+  });
+});

@@ -691,7 +691,7 @@ function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | 
   return parsePseudoClassSelector(c);
 }
 
-const parsePseudoClassSelector: TryValueParser<PseudoClassSelector | null> = oneOf(
+const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
   one(
     sequenceOf(
       one(tryParseColon),
