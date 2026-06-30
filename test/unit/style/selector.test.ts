@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
-import { type ComplexSelector, type ComplexSelectorList, SelectorType, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
+import { type ComplexSelector, type ComplexSelectorList, SelectorKind, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
 import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { PseudoClassArgumentKind, PseudoElementArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
 
@@ -149,7 +149,7 @@ const stringValue = (value: string) => ({
 });
 
 const pseudoClass = (name: string, rest: object = {}) => ({
-  type: SelectorType.PseudoClassSelector,
+  type: SelectorKind.PseudoClassSelector,
   name,
   ...rest,
 });
@@ -167,13 +167,13 @@ const pseudoArgument = (type: PseudoClassArgumentKind, rest: object = {}) => ({
 });
 
 const pseudoElement = (name: string, rest: object = {}) => ({
-  type: SelectorType.PseudoElementSelector,
+  type: SelectorKind.PseudoElementSelector,
   name,
   ...rest,
 });
 
 const pseudoCompound = (name: string, rest: object = {}, pseudoClasses: unknown[] = []) => ({
-  type: SelectorType.PseudoCompoundSelector,
+  type: SelectorKind.PseudoCompoundSelector,
   pseudoElement: pseudoElement(name, rest),
   pseudoClasses,
 });
@@ -653,7 +653,6 @@ describe('selector parser pseudo-element selectors', () => {
       parts: [
         pseudoElementPart('before', {
           argument: null,
-          legacy: true,
         }),
       ],
     });
@@ -664,7 +663,6 @@ describe('selector parser pseudo-element selectors', () => {
       parts: [
         pseudoElementPart('before', {
           argument: null,
-          legacy: false,
         }),
       ],
     });
@@ -677,7 +675,6 @@ describe('selector parser pseudo-element selectors', () => {
           argument: pseudoElementArgument(PseudoElementArgumentKind.Ident, {
             value: 'foo',
           }),
-          legacy: false,
         }),
       ],
     });
@@ -706,7 +703,6 @@ describe('selector parser pseudo-element selectors', () => {
           'before',
           {
             argument: null,
-            legacy: false,
           },
           [
             pseudoClass('hover', {
@@ -790,5 +786,25 @@ describe('selector parser specificity', () => {
     ]);
 
     expect(result.specificity).toEqual(specificity(2, 5, 3));
+  });
+});
+
+describe('selector parser canonical AST', () => {
+  it('canonicalizes legacy single-colon pseudo-elements', () => {
+    for (const css of [':before', '::before']) {
+      const selector = expectComplexSelector(css);
+
+      expect(selector).toMatchObject({
+        parts: [
+          pseudoElementPart('before', {
+            argument: null,
+          }),
+        ],
+      });
+
+      const pseudo = selector.parts[0].unit.pseudoCompounds[0].pseudoElement;
+
+      expect(pseudo).not.toHaveProperty('legacy');
+    }
   });
 });

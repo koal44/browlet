@@ -20,7 +20,7 @@ import {
   listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity, type Specificity,
 } from './specificity';
 
-export enum SelectorType {
+export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
   ComplexRealSelectorList = 'complex-real-selector-list',
   CompoundSelectorList = 'compound-selector-list',
@@ -59,7 +59,7 @@ const parseSelectorList: TryValueParser<SelectorList> =
  * <complex-selector-list> = <complex-selector>#
  */
 export type ComplexSelectorList = {
-  type: SelectorType.ComplexSelectorList;
+  kind: SelectorKind.ComplexSelectorList;
   arms: ComplexSelector[];
   specificity: Specificity;
 }
@@ -69,7 +69,7 @@ function tryParseComplexSelectorList(c: ComponentCursor): ComplexSelectorList | 
   if (arms === null) return null;
 
   return {
-    type: SelectorType.ComplexSelectorList,
+    kind: SelectorKind.ComplexSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -82,7 +82,7 @@ const parseComplexSelectorListArms: TryValueParser<ComplexSelector[]> =
  * <complex-real-selector-list> = <complex-real-selector>#
  */
 export type ComplexRealSelectorList = {
-  type: SelectorType.ComplexRealSelectorList;
+  kind: SelectorKind.ComplexRealSelectorList;
   arms: ComplexRealSelector[];
   specificity: Specificity;
 }
@@ -92,7 +92,7 @@ export function tryParseComplexRealSelectorList(c: ComponentCursor): ComplexReal
   if (arms === null) return null;
 
   return {
-    type: SelectorType.ComplexRealSelectorList,
+    kind: SelectorKind.ComplexRealSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -105,7 +105,7 @@ const parseComplexRealSelectorListArms: TryValueParser<ComplexRealSelector[]> =
  * <compound-selector-list> = <compound-selector>#
  */
 export type CompoundSelectorList = {
-  type: SelectorType.CompoundSelectorList;
+  kind: SelectorKind.CompoundSelectorList;
   arms: CompoundSelector[];
   specificity: Specificity;
 }
@@ -115,7 +115,7 @@ export function tryParseCompoundSelectorList(c: ComponentCursor): CompoundSelect
   if (arms === null) return null;
 
   return {
-    type: SelectorType.CompoundSelectorList,
+    kind: SelectorKind.CompoundSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -128,7 +128,7 @@ const parseCompoundSelectorListArms: TryValueParser<CompoundSelector[]> =
  * <simple-selector-list> = <simple-selector>#
  */
 export type SimpleSelectorList = {
-  type: SelectorType.SimpleSelectorList;
+  kind: SelectorKind.SimpleSelectorList;
   arms: SimpleSelector[];
   specificity: Specificity;
 }
@@ -138,7 +138,7 @@ export function tryParseSimpleSelectorList(c: ComponentCursor): SimpleSelectorLi
   if (arms === null) return null;
 
   return {
-    type: SelectorType.SimpleSelectorList,
+    kind: SelectorKind.SimpleSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -151,7 +151,7 @@ const parseSimpleSelectorListArms: TryValueParser<SimpleSelector[]> =
  * <relative-selector-list> = <relative-selector>#
  */
 export type RelativeSelectorList = {
-  type: SelectorType.RelativeSelectorList;
+  kind: SelectorKind.RelativeSelectorList;
   arms: RelativeSelector[];
   specificity: Specificity;
 }
@@ -161,7 +161,7 @@ export function tryParseRelativeSelectorList(c: ComponentCursor): RelativeSelect
   if (arms === null) return null;
 
   return {
-    type: SelectorType.RelativeSelectorList,
+    kind: SelectorKind.RelativeSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -174,7 +174,7 @@ const parseRelativeSelectorListArms: TryValueParser<RelativeSelector[]> =
  * <relative-real-selector-list> = <relative-real-selector>#
  */
 export type RelativeRealSelectorList = {
-  type: SelectorType.RelativeRealSelectorList;
+  kind: SelectorKind.RelativeRealSelectorList;
   arms: RelativeRealSelector[];
   specificity: Specificity;
 }
@@ -184,7 +184,7 @@ export function tryParseRelativeRealSelectorList(c: ComponentCursor): RelativeRe
   if (arms === null) return null;
 
   return {
-    type: SelectorType.RelativeRealSelectorList,
+    kind: SelectorKind.RelativeRealSelectorList,
     arms,
     specificity: listSpecificity(arms),
   };
@@ -198,7 +198,7 @@ const parseRelativeRealSelectorListArms: TryValueParser<RelativeRealSelector[]> 
  *   <complex-selector-unit> [ <combinator>? <complex-selector-unit> ]*
  */
 export type ComplexSelector = {
-  type: SelectorType.ComplexSelector;
+  kind: SelectorKind.ComplexSelector;
   parts: {
     combinator: Combinator | null;
     unit: ComplexSelectorUnit;
@@ -225,7 +225,7 @@ const parseComplexSelector: TryValueParser<ComplexSelector> = sequenceOf(
   ),
 
   ([[head], tail]): ComplexSelector => ({
-    type: SelectorType.ComplexSelector,
+    kind: SelectorKind.ComplexSelector,
     parts: [{ combinator: null, unit: head }, ...tail],
     specificity: sumSpecificity([
       head.specificity,
@@ -239,7 +239,7 @@ const parseComplexSelector: TryValueParser<ComplexSelector> = sequenceOf(
  *   [ <compound-selector>? <pseudo-compound-selector>* ]!
  */
 export type ComplexSelectorUnit = {
-  type: SelectorType.ComplexSelectorUnit;
+  kind: SelectorKind.ComplexSelectorUnit;
   compound: CompoundSelector | null;
   pseudoCompounds: PseudoCompoundSelector[];
   specificity: Specificity;
@@ -254,7 +254,7 @@ const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSe
   any(tryParsePseudoCompoundSelector),
 
   ([[compound], pseudoCompounds]): ComplexSelectorUnit => ({
-    type: SelectorType.ComplexSelectorUnit,
+    kind: SelectorKind.ComplexSelectorUnit,
     compound: compound ?? null,
     pseudoCompounds,
     specificity: sumSpecificity([
@@ -269,7 +269,7 @@ const parseComplexSelectorUnit: TryValueParser<ComplexSelectorUnit> = requiredSe
  *   <compound-selector> [ <combinator>? <compound-selector> ]*
  */
 export type ComplexRealSelector = {
-  type: SelectorType.ComplexRealSelector;
+  kind: SelectorKind.ComplexRealSelector;
   parts: {
     combinator: Combinator | null;
     compound: CompoundSelector;
@@ -296,7 +296,7 @@ const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequenceOf
   ),
 
   ([[head], tail]): ComplexRealSelector => ({
-    type: SelectorType.ComplexRealSelector,
+    kind: SelectorKind.ComplexRealSelector,
     parts: [{ combinator: null, compound: head }, ...tail],
     specificity: sumSpecificity([
       head.specificity,
@@ -309,7 +309,7 @@ const parseComplexRealSelector: TryValueParser<ComplexRealSelector> = sequenceOf
  * <relative-selector> = <combinator>? <complex-selector>
  */
 export type RelativeSelector = {
-  type: SelectorType.RelativeSelector;
+  kind: SelectorKind.RelativeSelector;
   combinator: Combinator | null;
   selector: ComplexSelector;
   specificity: Specificity;
@@ -324,7 +324,7 @@ const parseRelativeSelector: TryValueParser<RelativeSelector> = sequenceOf(
   one(tryParseComplexSelector),
 
   ([combinator, [selector]]): RelativeSelector => ({
-    type: SelectorType.RelativeSelector,
+    kind: SelectorKind.RelativeSelector,
     combinator: combinator[0] ?? null,
     selector,
     specificity: selector.specificity,
@@ -335,7 +335,7 @@ const parseRelativeSelector: TryValueParser<RelativeSelector> = sequenceOf(
  * <relative-real-selector> = <combinator>? <complex-real-selector>
  */
 export type RelativeRealSelector = {
-  type: SelectorType.RelativeRealSelector;
+  kind: SelectorKind.RelativeRealSelector;
   combinator: Combinator | null;
   selector: ComplexRealSelector;
   specificity: Specificity;
@@ -350,7 +350,7 @@ const parseRelativeRealSelector: TryValueParser<RelativeRealSelector> = sequence
   one(tryParseComplexRealSelector),
 
   ([combinator, [selector]]): RelativeRealSelector => ({
-    type: SelectorType.RelativeRealSelector,
+    kind: SelectorKind.RelativeRealSelector,
     combinator: combinator[0] ?? null,
     selector,
     specificity: selector.specificity,
@@ -361,7 +361,7 @@ const parseRelativeRealSelector: TryValueParser<RelativeRealSelector> = sequence
  * <compound-selector> = [ <type-selector>? <subclass-selector>* ]!
  */
 export type CompoundSelector = {
-  type: SelectorType.CompoundSelector;
+  kind: SelectorKind.CompoundSelector;
   typeSelector: TypeSelector | null;
   subclasses: SubclassSelector[];
   specificity: Specificity;
@@ -376,7 +376,7 @@ const parseCompoundSelector: TryValueParser<CompoundSelector> = requiredSequence
   any(tryParseSubclassSelector),
 
   ([[typeSelector], subclasses]): CompoundSelector => ({
-    type: SelectorType.CompoundSelector,
+    kind: SelectorKind.CompoundSelector,
     typeSelector: typeSelector ?? null,
     subclasses,
     specificity: sumSpecificity([
@@ -391,7 +391,7 @@ const parseCompoundSelector: TryValueParser<CompoundSelector> = requiredSequence
  *   <pseudo-element-selector> <pseudo-class-selector>*
  */
 export type PseudoCompoundSelector = {
-  type: SelectorType.PseudoCompoundSelector;
+  kind: SelectorKind.PseudoCompoundSelector;
   pseudoElement: PseudoElementSelector;
   pseudoClasses: PseudoClassSelector[];
   specificity: Specificity;
@@ -406,7 +406,7 @@ const parsePseudoCompoundSelector: TryValueParser<PseudoCompoundSelector> = sequ
   any(tryParsePseudoClassSelector),
 
   ([[pseudoElement], pseudoClasses]): PseudoCompoundSelector => ({
-    type: SelectorType.PseudoCompoundSelector,
+    kind: SelectorKind.PseudoCompoundSelector,
     pseudoElement,
     pseudoClasses,
     specificity: sumSpecificity([
@@ -560,7 +560,7 @@ const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
  * partially accepted as a bare `<wq-name>` `svg`, leaving `|*` behind.
  */
 export type TypeSelector = {
-  type: SelectorType.TypeSelector;
+  kind: SelectorKind.TypeSelector;
   namespace: NsPrefix | null;
   name: string;
   specificity: Specificity;
@@ -587,7 +587,7 @@ const parseTypeSelector: TryValueParser<TypeSelector> = sequenceOf(
   ),
 
   ([namespace, [name]]): TypeSelector => ({
-    type: SelectorType.TypeSelector,
+    kind: SelectorKind.TypeSelector,
     namespace: namespace[0] ?? null,
     name,
     specificity: name === '*' ? Specificity0 : SpecificityC,
@@ -625,7 +625,7 @@ const parseSubclassSelector: TryValueParser<SubclassSelector> = oneOf(
  *   The <hash-token>'s value must be an identifier.
  */
 export type IdSelector = {
-  type: SelectorType.IdSelector;
+  kind: SelectorKind.IdSelector;
   name: string;
   specificity: Specificity;
 };
@@ -638,7 +638,7 @@ const parseIdSelector: TryValueParser<IdSelector> = sequenceOf(
   one(tryParseIdHashToken),
 
   ([[hash]]): IdSelector => ({
-    type: SelectorType.IdSelector,
+    kind: SelectorKind.IdSelector,
     name: hash.value,
     specificity: SpecificityA,
   }),
@@ -648,7 +648,7 @@ const parseIdSelector: TryValueParser<IdSelector> = sequenceOf(
  * <class-selector> = '.' <ident-token>
  */
 export type ClassSelector = {
-  type: SelectorType.ClassSelector;
+  kind: SelectorKind.ClassSelector;
   name: string;
   specificity: Specificity;
 };
@@ -662,7 +662,7 @@ const parseClassSelector: TryValueParser<ClassSelector> = sequenceOf(
   one(tryParseIdentToken),
 
   ([, [ident]]): ClassSelector => ({
-    type: SelectorType.ClassSelector,
+    kind: SelectorKind.ClassSelector,
     name: ident.value,
     specificity: SpecificityB,
   }),
@@ -674,7 +674,7 @@ const parseClassSelector: TryValueParser<ClassSelector> = sequenceOf(
  *   '[' <wq-name> <attr-matcher> [ <string-token> | <ident-token> ] <attr-modifier>? ']'
  */
 export type AttributeSelector = {
-  type: SelectorType.AttributeSelector;
+  kind: SelectorKind.AttributeSelector;
   name: WqName;
   matcher: AttrMatcher | null;
   value: AttrValue | null;
@@ -696,7 +696,7 @@ const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
         opt(withComponentTrivia(tryParseAttrModifier)),
 
         ([[name], [matcher], [value], modifier]): AttributeSelector => ({
-          type: SelectorType.AttributeSelector,
+          kind: SelectorKind.AttributeSelector,
           name,
           matcher,
           value,
@@ -711,7 +711,7 @@ const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
         one(withComponentTrivia(tryParseWqName)),
 
         ([[name]]): AttributeSelector => ({
-          type: SelectorType.AttributeSelector,
+          kind: SelectorKind.AttributeSelector,
           name,
           matcher: null,
           value: null,
@@ -818,7 +818,7 @@ const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
  *   : <function-token> <any-value> )
  */
 export type PseudoClassSelector = {
-  type: SelectorType.PseudoClassSelector;
+  kind: SelectorKind.PseudoClassSelector;
   name: string;
   argument: PseudoClassArgument | null;
   specificity: Specificity;
@@ -873,10 +873,10 @@ const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = sequenceOf
  *   : <pseudo-class-selector> | <legacy-pseudo-element-selector>
  */
 export type PseudoElementSelector = {
-  type: SelectorType.PseudoElementSelector;
+  kind: SelectorKind.PseudoElementSelector;
   name: string;
   argument: PseudoElementArgument | null;
-  legacy: boolean;
+  // legacy: boolean;
   specificity: Specificity;
 };
 
@@ -912,7 +912,7 @@ const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
  *   : [before | after | first-line | first-letter]
  */
 export type LegacyPseudoElementSelector = {
-  type: SelectorType.LegacyPseudoElementSelector;
+  kind: SelectorKind.LegacyPseudoElementSelector;
   name: 'before' | 'after' | 'first-line' | 'first-letter';
   specificity: Specificity;
 };
@@ -935,7 +935,7 @@ const parseLegacyPseudoElementSelector: TryValueParser<LegacyPseudoElementSelect
   ),
 
   ([, [name]]): LegacyPseudoElementSelector => ({
-    type: SelectorType.LegacyPseudoElementSelector,
+    kind: SelectorKind.LegacyPseudoElementSelector,
     name,
     specificity: SpecificityC,
   }),
@@ -1083,7 +1083,7 @@ function createPseudoClassSelector(
     }
 
     return {
-      type: SelectorType.PseudoClassSelector,
+      kind: SelectorKind.PseudoClassSelector,
       name,
       argument: null,
       specificity: def.bare.specificity,
@@ -1101,7 +1101,7 @@ function createPseudoClassSelector(
   }
 
   return {
-    type: SelectorType.PseudoClassSelector,
+    kind: SelectorKind.PseudoClassSelector,
     name,
     argument,
     specificity: def.functional.specificity(argument as never),
@@ -1244,10 +1244,10 @@ function createPseudoElementSelector(
     }
 
     return {
-      type: SelectorType.PseudoElementSelector,
+      kind: SelectorKind.PseudoElementSelector,
       name,
       argument: null,
-      legacy,
+      // legacy,
       specificity: def.bare.specificity,
     };
   }
@@ -1267,10 +1267,10 @@ function createPseudoElementSelector(
   }
 
   return {
-    type: SelectorType.PseudoElementSelector,
+    kind: SelectorKind.PseudoElementSelector,
     name,
     argument,
-    legacy: false,
+    // legacy: false,
     specificity: def.functional.specificity(argument),
   };
 }
