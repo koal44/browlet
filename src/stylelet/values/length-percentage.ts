@@ -1,6 +1,6 @@
 import { ComponentCursor } from '../parser/component-cursor';
 import { consumeComponentTrivia, type ComponentValue } from '../parser/syntax';
-import { one, oneOf, type TryValueParser } from '../parser/component';
+import { one, oneOf, type TryValueParser } from '../parser/component-grammar';
 import { tryParseAuto, type AutoValue } from './auto';
 import { serializeLength, tryParseLength, type LengthValue } from './length';
 import { serializePercentage, tryParsePercentage, type PercentageValue } from './percentage';

@@ -7,7 +7,7 @@ import {
   allOf, any, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
   requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
   type TryValueParser,
-} from '../../../src/stylelet/parser/component';
+} from '../../../src/stylelet/parser/component-grammar';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));

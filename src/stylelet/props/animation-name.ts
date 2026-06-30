@@ -2,7 +2,7 @@ import { ComponentCursor } from '../parser/component-cursor';
 import {
   commaRepeat, one, oneOf,
   type TryValueParser,
-} from '../parser/component';
+} from '../parser/component-grammar';
 import { tryConsumeKeywordIn } from '../values/keyword';
 import {
   serializeCustomIdent, tryParseCustomIdent,

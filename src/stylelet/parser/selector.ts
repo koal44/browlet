@@ -2,7 +2,7 @@ import { asciiLower } from '../../utils/css';
 import {
   any, commaRepeat, one, oneOf, opt, sequenceOf, withComponentTrivia, requiredSequenceOf,
   type TryValueParser,
-} from './component';
+} from './component-grammar';
 import { ComponentCursor } from './component-cursor';
 import type { BracketBlock, ComponentValue, FunctionBlock } from './syntax';
 import {
@@ -18,7 +18,7 @@ import type {
 import { PSEUDO_CLASSES, PSEUDO_ELEMENTS, PseudoClassArgumentKind, PseudoElementArgumentKind } from './selector-pseudo';
 import {
   listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity, type Specificity,
-} from './specificity';
+} from './selector-specificity';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -1118,7 +1118,7 @@ export function parsePseudoClassArgument(
         value,
         tryParseSelectorList,
         (selectors): ForgivingSelectorListPseudoClassArgument => ({
-          type: PseudoClassArgumentKind.ForgivingSelectorList,
+          kind: PseudoClassArgumentKind.ForgivingSelectorList,
           selectors,
         }),
       );
@@ -1128,7 +1128,7 @@ export function parsePseudoClassArgument(
         value,
         tryParseRelativeSelectorList,
         (selectors): RelativeSelectorListPseudoClassArgument => ({
-          type: PseudoClassArgumentKind.RelativeSelectorList,
+          kind: PseudoClassArgumentKind.RelativeSelectorList,
           selectors,
         }),
       );
@@ -1138,7 +1138,7 @@ export function parsePseudoClassArgument(
         value,
         tryParseComplexRealSelectorList,
         (selectors): ComplexRealSelectorListPseudoClassArgument => ({
-          type: PseudoClassArgumentKind.ComplexRealSelectorList,
+          kind: PseudoClassArgumentKind.ComplexRealSelectorList,
           selectors,
         }),
       );
@@ -1148,7 +1148,7 @@ export function parsePseudoClassArgument(
         value,
         tryParseCompoundSelector,
         (selector): CompoundSelectorPseudoClassArgument => ({
-          type: PseudoClassArgumentKind.CompoundSelector,
+          kind: PseudoClassArgumentKind.CompoundSelector,
           selector,
         }),
       );
@@ -1158,7 +1158,7 @@ export function parsePseudoClassArgument(
         value,
         tryParseAnPlusB,
         (anb): AnPlusBPseudoClassArgument => ({
-          type: PseudoClassArgumentKind.AnPlusB,
+          kind: PseudoClassArgumentKind.AnPlusB,
           ...anb,
         }),
       );
@@ -1285,7 +1285,7 @@ function parsePseudoElementArgument(
         value,
         tryParseIdentToken,
         (ident): IdentPseudoElementArgument => ({
-          type: PseudoElementArgumentKind.Ident,
+          kind: PseudoElementArgumentKind.Ident,
           value: ident.value,
         }),
       );
@@ -1295,14 +1295,14 @@ function parsePseudoElementArgument(
         value,
         tryParseSelectorList,
         (selectors): SelectorListPseudoElementArgument => ({
-          type: PseudoElementArgumentKind.SelectorList,
+          kind: PseudoElementArgumentKind.SelectorList,
           selectors,
         }),
       );
 
     case PseudoElementArgumentKind.Raw:
       return {
-        type: PseudoElementArgumentKind.Raw,
+        kind: PseudoElementArgumentKind.Raw,
         value,
       };
   }

@@ -1,5 +1,5 @@
 import type { ComplexRealSelectorList, ComplexSelectorList, CompoundSelector, RelativeSelectorList, SelectorList } from './selectlet';
-import { addSpecificity, type Specificity, SpecificityB, SpecificityC, Specificity0 } from './specificity';
+import { addSpecificity, type Specificity, SpecificityB, SpecificityC, Specificity0 } from './selector-specificity';
 import { type ComponentValue } from './syntax';
 
 export enum PseudoClassArgumentKind {
@@ -113,45 +113,45 @@ export type PseudoClassArgument =
   | NthChildPseudoClassArgument;
 
 export type ForgivingSelectorListPseudoClassArgument = {
-  type: PseudoClassArgumentKind.ForgivingSelectorList;
+  kind: PseudoClassArgumentKind.ForgivingSelectorList;
   selectors: ComplexSelectorList;
 };
 
 export type RelativeSelectorListPseudoClassArgument = {
-  type: PseudoClassArgumentKind.RelativeSelectorList;
+  kind: PseudoClassArgumentKind.RelativeSelectorList;
   selectors: RelativeSelectorList;
 };
 
 export type ComplexRealSelectorListPseudoClassArgument = {
-  type: PseudoClassArgumentKind.ComplexRealSelectorList;
+  kind: PseudoClassArgumentKind.ComplexRealSelectorList;
   selectors: ComplexRealSelectorList;
 };
 
 export type CompoundSelectorPseudoClassArgument = {
-  type: PseudoClassArgumentKind.CompoundSelector;
+  kind: PseudoClassArgumentKind.CompoundSelector;
   selector: CompoundSelector;
 };
 
 export type DirectionPseudoClassArgument = {
-  type: PseudoClassArgumentKind.Direction;
+  kind: PseudoClassArgumentKind.Direction;
   value: 'ltr' | 'rtl';
 };
 
 export type LanguageRangeListPseudoClassArgument = {
-  type: PseudoClassArgumentKind.LanguageRangeList;
+  kind: PseudoClassArgumentKind.LanguageRangeList;
   ranges: LanguageRange[];
 };
 
 type LanguageRange = unknown; // TODO
 
 export type AnPlusBPseudoClassArgument = {
-  type: PseudoClassArgumentKind.AnPlusB;
+  kind: PseudoClassArgumentKind.AnPlusB;
   a: number;
   b: number;
 };
 
 export type NthChildPseudoClassArgument = {
-  type: PseudoClassArgumentKind.NthChild;
+  kind: PseudoClassArgumentKind.NthChild;
   a: number;
   b: number;
   selectorList: ComplexRealSelectorList | null;
@@ -173,17 +173,17 @@ export type PseudoElementArgument =
   | IdentPseudoElementArgument;
 
 export type RawPseudoElementArgument = {
-  type: PseudoElementArgumentKind.Raw;
+  kind: PseudoElementArgumentKind.Raw;
   value: ComponentValue[];
 };
 
 export type SelectorListPseudoElementArgument = {
-  type: PseudoElementArgumentKind.SelectorList;
+  kind: PseudoElementArgumentKind.SelectorList;
   selectors: SelectorList;
 };
 
 export type IdentPseudoElementArgument = {
-  type: PseudoElementArgumentKind.Ident;
+  kind: PseudoElementArgumentKind.Ident;
   value: string;
 };
 

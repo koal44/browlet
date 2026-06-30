@@ -83,12 +83,12 @@ const typeSelector = (name: string, namespace: unknown = null) => ({
 });
 
 const idSelector = (name: string) => ({
-  type: 'id-selector',
+  kind: SelectorKind.IdSelector,
   name,
 });
 
 const classSelector = (name: string) => ({
-  type: 'class-selector',
+  kind: SelectorKind.ClassSelector,
   name,
 });
 
@@ -98,7 +98,7 @@ const attrName = (name: string, namespace: unknown = null) => ({
 });
 
 const attrSelector = (name: string, rest: object = {}) => ({
-  type: 'attribute-selector',
+  kind: SelectorKind.AttributeSelector,
   name: attrName(name),
   ...rest,
 });
@@ -149,7 +149,7 @@ const stringValue = (value: string) => ({
 });
 
 const pseudoClass = (name: string, rest: object = {}) => ({
-  type: SelectorKind.PseudoClassSelector,
+  kind: SelectorKind.PseudoClassSelector,
   name,
   ...rest,
 });
@@ -161,19 +161,19 @@ const pseudoClassPart = (name: string, rest: object = {}) => part(
   ]),
 );
 
-const pseudoArgument = (type: PseudoClassArgumentKind, rest: object = {}) => ({
-  type,
+const pseudoArgument = (kind: PseudoClassArgumentKind, rest: object = {}) => ({
+  kind,
   ...rest,
 });
 
 const pseudoElement = (name: string, rest: object = {}) => ({
-  type: SelectorKind.PseudoElementSelector,
+  kind: SelectorKind.PseudoElementSelector,
   name,
   ...rest,
 });
 
 const pseudoCompound = (name: string, rest: object = {}, pseudoClasses: unknown[] = []) => ({
-  type: SelectorKind.PseudoCompoundSelector,
+  kind: SelectorKind.PseudoCompoundSelector,
   pseudoElement: pseudoElement(name, rest),
   pseudoClasses,
 });
@@ -186,8 +186,8 @@ const pseudoElementPart = (name: string, rest: object = {}, pseudoClasses: unkno
   ],
 );
 
-const pseudoElementArgument = (type: PseudoElementArgumentKind, rest: object = {}) => ({
-  type,
+const pseudoElementArgument = (kind: PseudoElementArgumentKind, rest: object = {}) => ({
+  kind,
   ...rest,
 });
 
@@ -202,7 +202,7 @@ describe('selector parser basics', () => {
 
   it('parses a type selector', () => {
     expect(expectComplexSelector('div')).toMatchObject({
-      type: 'complex-selector',
+      kind: SelectorKind.ComplexSelector,
       parts: [
         typePart(null, 'div'),
       ],
