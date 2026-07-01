@@ -4,21 +4,22 @@ import {
   type TryValueParser,
 } from './component-grammar';
 import { ComponentCursor } from './component-cursor';
-import type { BracketBlock, ComponentValue, FunctionBlock } from './syntax';
+import type { ComponentValue, FunctionBlock } from './syntax';
 import {
-  BlockKind, consumeComponentTrivia, isBlockKind, isDelimToken, isFunctionBlock, isIdentToken, isIdentTokenWithValue, isTokenKind,
+  consumeComponentTrivia, isBracketBlock, isDelimToken, isFunctionBlock, isIdentToken, isTokenKind,
 } from './syntax';
 import type { HashToken, StringToken } from './tokens';
 import { HashTokenFlag, type IdentToken, TokenKind } from './tokens';
 import type {
   AnPlusBPseudoClassArgument, ComplexRealSelectorListPseudoClassArgument, CompoundSelectorPseudoClassArgument, ForgivingSelectorListPseudoClassArgument,
-  IdentPseudoElementArgument, PseudoClassArgument, PseudoElementArgument, RelativeSelectorListPseudoClassArgument,
+  PseudoClassArgument, PseudoElementArgument, RelativeSelectorListPseudoClassArgument,
   SelectorListPseudoElementArgument,
 } from './selector-pseudo';
 import { PSEUDO_CLASSES, PSEUDO_ELEMENTS, PseudoClassArgumentKind, PseudoElementArgumentKind } from './selector-pseudo';
 import {
   listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity, type Specificity,
 } from './selector-specificity';
+import { assertNever } from '../../utils/util';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -492,8 +493,7 @@ const parseCombinator: TryValueParser<Combinator> = (c) => {
  * <wq-name> = <ns-prefix>? <ident-token>
  */
 export type WqName = {
-  type: 'wq-name';
-  namespace: NsPrefix | null;
+  namespace: string | null;
   name: string;
 };
 
@@ -506,7 +506,6 @@ const parseWqName: TryValueParser<WqName> = sequenceOf(
   one(tryParseIdentToken),
 
   ([namespace, [name]]): WqName => ({
-    type: 'wq-name',
     namespace: namespace[0] ?? null,
     name: name.value,
   }),
@@ -515,20 +514,18 @@ const parseWqName: TryValueParser<WqName> = sequenceOf(
 /**
  * <ns-prefix> = [ <ident-token> | '*' ]? '|'
  */
-export type NsPrefix = {
-  type: 'ns-prefix';
-  prefix: string | null;
-};
-
-function tryParseNsPrefix(c: ComponentCursor): NsPrefix | null {
+function tryParseNsPrefix(c: ComponentCursor): string | null {
   return parseNsPrefix(c);
 }
 
-const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
+const tryParseStarDelim = createDelimParser('*');
+const tryParsePipeDelim = createDelimParser('|');
+
+const parseNsPrefix: TryValueParser<string> = sequenceOf(
   opt(
     oneOf(
       one(tryParseIdentToken),
-      one(tryParseDelim('*')),
+      one(tryParseStarDelim),
 
       ([prefix]) => (
         typeof prefix === 'string'
@@ -537,12 +534,9 @@ const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
       ),
     ),
   ),
-  one(tryParseDelim('|')),
+  one(tryParsePipeDelim),
 
-  ([prefix]): NsPrefix => ({
-    type: 'ns-prefix',
-    prefix: prefix[0] ?? null,
-  }),
+  ([prefix]): string => prefix[0] ?? '',
 );
 
 /**
@@ -561,7 +555,7 @@ const parseNsPrefix: TryValueParser<NsPrefix> = sequenceOf(
  */
 export type TypeSelector = {
   kind: SelectorKind.TypeSelector;
-  namespace: NsPrefix | null;
+  namespace: string | null;
   name: string;
   specificity: Specificity;
 };
@@ -576,7 +570,7 @@ const parseTypeSelector: TryValueParser<TypeSelector> = sequenceOf(
   one(
     oneOf(
       one(tryParseIdentToken),
-      one(tryParseDelim('*')),
+      one(tryParseStarDelim),
 
       ([name]): string => (
         typeof name === 'string'
@@ -657,8 +651,10 @@ function tryParseClassSelector(c: ComponentCursor): ClassSelector | null {
   return parseClassSelector(c);
 }
 
+const tryParseDotDelim = createDelimParser('.');
+
 const parseClassSelector: TryValueParser<ClassSelector> = sequenceOf(
-  one(tryParseDelim('.')),
+  one(tryParseDotDelim),
   one(tryParseIdentToken),
 
   ([, [ident]]): ClassSelector => ({
@@ -677,7 +673,7 @@ export type AttributeSelector = {
   kind: SelectorKind.AttributeSelector;
   name: WqName;
   matcher: AttrMatcher | null;
-  value: AttrValue | null;
+  value: string | null;
   modifier: AttrModifier | null;
   specificity: Specificity;
 };
@@ -686,44 +682,69 @@ function tryParseAttributeSelector(c: ComponentCursor): AttributeSelector | null
   return parseAttributeSelector(c);
 }
 
-const parseAttributeSelector: TryValueParser<AttributeSelector> = bracketed(
-  oneOf(
-    one(
-      sequenceOf(
-        one(withComponentTrivia(tryParseWqName)),
-        one(withComponentTrivia(tryParseAttrMatcher)),
-        one(withComponentTrivia(tryParseAttrValue)),
-        opt(withComponentTrivia(tryParseAttrModifier)),
+const parseAttributeSelectorBody: TryValueParser<AttributeSelector> = oneOf(
+  one(
+    sequenceOf(
+      one(withComponentTrivia(tryParseWqName)),
+      one(withComponentTrivia(tryParseAttrMatcher)),
+      one(withComponentTrivia(tryParseAttrValue)),
+      opt(withComponentTrivia(tryParseAttrModifier)),
 
-        ([[name], [matcher], [value], modifier]): AttributeSelector => ({
-          kind: SelectorKind.AttributeSelector,
-          name,
-          matcher,
-          value,
-          modifier: modifier[0] ?? null,
-          specificity: SpecificityB,
-        }),
-      ),
+      ([[name], [matcher], [value], modifier]): AttributeSelector => ({
+        kind: SelectorKind.AttributeSelector,
+        name,
+        matcher,
+        value,
+        modifier: modifier[0] ?? null,
+        specificity: SpecificityB,
+      }),
     ),
-
-    one(
-      sequenceOf(
-        one(withComponentTrivia(tryParseWqName)),
-
-        ([[name]]): AttributeSelector => ({
-          kind: SelectorKind.AttributeSelector,
-          name,
-          matcher: null,
-          value: null,
-          modifier: null,
-          specificity: SpecificityB,
-        }),
-      ),
-    ),
-
-    ([selector]): AttributeSelector => selector,
   ),
+
+  one(
+    sequenceOf(
+      one(withComponentTrivia(tryParseWqName)),
+
+      ([[name]]): AttributeSelector => ({
+        kind: SelectorKind.AttributeSelector,
+        name,
+        matcher: null,
+        value: null,
+        modifier: null,
+        specificity: SpecificityB,
+      }),
+    ),
+  ),
+
+  ([selector]): AttributeSelector => selector,
 );
+
+const parseAttributeSelector: TryValueParser<AttributeSelector> = (c) => {
+  const start = c.pos();
+  const block = c.next();
+
+  if (!isBracketBlock(block)) {
+    c.restore(start);
+    return null;
+  }
+
+  const inner = new ComponentCursor(block.value);
+  const selector = parseAttributeSelectorBody(inner);
+
+  if (selector === null) {
+    c.restore(start);
+    return null;
+  }
+
+  consumeComponentTrivia(inner);
+
+  if (inner.peek() !== null) {
+    c.restore(start);
+    return null;
+  }
+
+  return selector;
+};
 
 /**
  * <attr-matcher> = [ '~' | '|' | '^' | '$' | '*' ]? '='
@@ -734,66 +755,63 @@ function tryParseAttrMatcher(c: ComponentCursor): AttrMatcher | null {
   return parseAttrMatcher(c);
 }
 
-const parseAttrMatcher: TryValueParser<AttrMatcher> = oneOf(
-  one(tryParseDelim('=')),
+const parseAttrMatcher: TryValueParser<AttrMatcher> = (c) => {
+  const start = c.pos();
+  const first = c.next();
 
-  one(
-    sequenceOf(
-      one(
-        oneOf(
-          one(tryParseDelim('~')),
-          one(tryParseDelim('|')),
-          one(tryParseDelim('^')),
-          one(tryParseDelim('$')),
-          one(tryParseDelim('*')),
+  if (isDelimToken(first, '=')) {
+    return '=';
+  }
 
-          ([prefix]) => prefix,
-        ),
-      ),
-      one(tryParseDelim('=')),
+  let prefix: '~' | '|' | '^' | '$' | '*' | null = null;
 
-      ([[prefix]]): AttrMatcher => `${prefix}=`,
-    ),
-  ),
+  if (isDelimToken(first, '~')) prefix = '~';
+  else if (isDelimToken(first, '|')) prefix = '|';
+  else if (isDelimToken(first, '^')) prefix = '^';
+  else if (isDelimToken(first, '$')) prefix = '$';
+  else if (isDelimToken(first, '*')) prefix = '*';
 
-  ([matcher]): AttrMatcher => matcher,
-);
+  if (prefix !== null && isDelimToken(c.next(), '=')) {
+    return `${prefix}=`;
+  }
+
+  c.restore(start);
+  return null;
+};
+
+// type AttrMatcherPrefix = '~' | '|' | '^' | '$' | '*';
+
+// const parseAttrMatcherPrefix: TryValueParser<AttrMatcherPrefix> = oneOf(
+//   one(delim('~')),
+//   one(delim('|')),
+//   one(delim('^')),
+//   one(delim('$')),
+//   one(delim('*')),
+
+//   ([prefix]) => prefix,
+// );
+
+// const parseAttrMatcher: TryValueParser<AttrMatcher> = sequenceOf(
+//   opt(parseAttrMatcherPrefix),
+//   one(delim('=')),
+
+//   ([prefix]): AttrMatcher =>
+//     `${prefix[0] ?? ''}=`,
+// );
 
 /**
  * [ <string-token> | <ident-token> ]
  */
-export type AttrValue =
-  | { type: 'string'; value: string; }
-  | { type: 'ident'; value: string; };
 
-function tryParseAttrValue(c: ComponentCursor): AttrValue | null {
+function tryParseAttrValue(c: ComponentCursor): string | null {
   return parseAttrValue(c);
 }
 
-const parseAttrValue: TryValueParser<AttrValue> = oneOf(
-  one(
-    sequenceOf(
-      one(tryParseStringToken),
+const parseAttrValue: TryValueParser<string> = oneOf(
+  one(tryParseStringToken),
+  one(tryParseIdentToken),
 
-      ([[value]]): AttrValue => ({
-        type: 'string',
-        value: value.value,
-      }),
-    ),
-  ),
-
-  one(
-    sequenceOf(
-      one(tryParseIdentToken),
-
-      ([[value]]): AttrValue => ({
-        type: 'ident',
-        value: value.value,
-      }),
-    ),
-  ),
-
-  ([value]): AttrValue => value,
+  ([token]): string => token.value,
 );
 
 /**
@@ -805,12 +823,30 @@ function tryParseAttrModifier(c: ComponentCursor): AttrModifier | null {
   return parseAttrModifier(c);
 }
 
-const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
-  one(tryParseIdent('i')),
-  one(tryParseIdent('s')),
+const parseAttrModifier: TryValueParser<AttrModifier> = (c) => {
+  const start = c.pos();
+  const ident = tryParseIdentToken(c);
 
-  ([modifier]): AttrModifier => modifier,
-);
+  if (ident === null) {
+    return null;
+  }
+
+  const value = asciiLower(ident.value);
+
+  if (value === 'i' || value === 's') {
+    return value;
+  }
+
+  c.restore(start);
+  return null;
+};
+
+// const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
+//   one(identValue('i')),
+//   one(identValue('s')),
+
+//   ([modifier]): AttrModifier => modifier,
+// );
 
 /**
  * <pseudo-class-selector> =
@@ -828,21 +864,14 @@ function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | 
   return parsePseudoClassSelector(c);
 }
 
-type PseudoSelectorHead = {
-  name: string;
-  value: ComponentValue[] | null;
-};
-
-const parsePseudoSelectorHead: TryValueParser<PseudoSelectorHead> = oneOf(
+const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = oneOf(
   one(
     sequenceOf(
       one(tryParseColon),
       one(tryParseIdentToken),
 
-      ([, [ident]]): PseudoSelectorHead => ({
-        name: ident.value,
-        value: null,
-      }),
+      ([, [ident]]): PseudoClassSelector | null =>
+        createPseudoClassSelector(ident.value, null),
     ),
   ),
 
@@ -851,21 +880,12 @@ const parsePseudoSelectorHead: TryValueParser<PseudoSelectorHead> = oneOf(
       one(tryParseColon),
       one(tryParseFunctionBlock),
 
-      ([, [fn]]): PseudoSelectorHead => ({
-        name: fn.name,
-        value: fn.value,
-      }),
+      ([, [fn]]): PseudoClassSelector | null =>
+        createPseudoClassSelector(fn.name, fn.value),
     ),
   ),
 
-  ([head]): PseudoSelectorHead => head,
-);
-
-const parsePseudoClassSelector: TryValueParser<PseudoClassSelector> = sequenceOf(
-  one(parsePseudoSelectorHead),
-
-  ([[head]]): PseudoClassSelector | null =>
-    createPseudoClassSelector(head.name, head.value),
+  ([selector]): PseudoClassSelector | null => selector,
 );
 
 /**
@@ -876,7 +896,6 @@ export type PseudoElementSelector = {
   kind: SelectorKind.PseudoElementSelector;
   name: string;
   argument: PseudoElementArgument | null;
-  // legacy: boolean;
   specificity: Specificity;
 };
 
@@ -887,20 +906,32 @@ function tryParsePseudoElementSelector(c: ComponentCursor): PseudoElementSelecto
 const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
   one(
     sequenceOf(
-      one(tryParseLegacyPseudoElementSelector),
+      one(tryParseLegacyPseudoElementName),
 
-      ([[legacy]]): PseudoElementSelector | null =>
-        createPseudoElementSelector(legacy.name, null, true),
+      ([[name]]): PseudoElementSelector | null =>
+        createPseudoElementSelector(name, null, true),
     ),
   ),
 
   one(
     sequenceOf(
       one(tryParseColon),
-      one(parsePseudoSelectorHead),
+      one(tryParseColon),
+      one(tryParseIdentToken),
 
-      ([, [head]]): PseudoElementSelector | null =>
-        createPseudoElementSelector(head.name, head.value, false),
+      ([, , [ident]]): PseudoElementSelector | null =>
+        createPseudoElementSelector(ident.value, null, false),
+    ),
+  ),
+
+  one(
+    sequenceOf(
+      one(tryParseColon),
+      one(tryParseColon),
+      one(tryParseFunctionBlock),
+
+      ([, , [fn]]): PseudoElementSelector | null =>
+        createPseudoElementSelector(fn.name, fn.value, false),
     ),
   ),
 
@@ -911,82 +942,66 @@ const parsePseudoElementSelector: TryValueParser<PseudoElementSelector> = oneOf(
  * <legacy-pseudo-element-selector> =
  *   : [before | after | first-line | first-letter]
  */
-export type LegacyPseudoElementSelector = {
-  kind: SelectorKind.LegacyPseudoElementSelector;
-  name: 'before' | 'after' | 'first-line' | 'first-letter';
-  specificity: Specificity;
-};
+type LegacyPseudoElementName =
+  | 'before'
+  | 'after'
+  | 'first-line'
+  | 'first-letter';
 
-function tryParseLegacyPseudoElementSelector(c: ComponentCursor): LegacyPseudoElementSelector | null {
-  return parseLegacyPseudoElementSelector(c);
+function tryParseLegacyPseudoElementName(c: ComponentCursor): LegacyPseudoElementName | null {
+  return parseLegacyPseudoElementName(c);
 }
 
-const parseLegacyPseudoElementSelector: TryValueParser<LegacyPseudoElementSelector> = sequenceOf(
-  one(tryParseColon),
-  one(
-    oneOf(
-      one(tryParseIdent('before')),
-      one(tryParseIdent('after')),
-      one(tryParseIdent('first-line')),
-      one(tryParseIdent('first-letter')),
+const parseLegacyPseudoElementName: TryValueParser<LegacyPseudoElementName> = (c) => {
+  const start = c.pos();
 
-      ([name]) => name,
-    ),
-  ),
+  if (tryParseColon(c) === null) {
+    return null;
+  }
 
-  ([, [name]]): LegacyPseudoElementSelector => ({
-    kind: SelectorKind.LegacyPseudoElementSelector,
-    name,
-    specificity: SpecificityC,
-  }),
-);
+  const ident = tryParseIdentToken(c);
+
+  if (ident === null) {
+    c.restore(start);
+    return null;
+  }
+
+  const name = asciiLower(ident.value);
+
+  if (!isLegacyPseudoElementName(name)) {
+    c.restore(start);
+    return null;
+  }
+
+  return name;
+};
+
+function isLegacyPseudoElementName(value: string): value is LegacyPseudoElementName {
+  return (
+    value === 'before' || value === 'after' || value === 'first-line' || value === 'first-letter'
+  );
+}
+
+// const parseLegacyPseudoElementName: TryValueParser<LegacyPseudoElementName> = sequenceOf(
+//   one(tryParseColon),
+//   one(
+//     oneOf(
+//       one(identValue('before')),
+//       one(identValue('after')),
+//       one(identValue('first-line')),
+//       one(identValue('first-letter')),
+
+//       ([name]) => name,
+//     ),
+//   ),
+
+//   ([, [name]]): LegacyPseudoElementName => name,
+// );
 
 // Helpers and simple parsers
 
-function bracketed<T>(parse: TryValueParser<T>): TryValueParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const block = tryParseBracketBlock(c);
-
-    if (block === null) {
-      return null;
-    }
-
-    const inner = new ComponentCursor(block.value);
-    const value = parse(inner);
-
-    if (value === null) {
-      c.restore(start);
-      return null;
-    }
-
-    consumeComponentTrivia(inner);
-
-    if (inner.peek() !== null) {
-      c.restore(start);
-      return null;
-    }
-
-    return value;
-  };
-}
-
 function tryParseColon(c: ComponentCursor): ':' | null {
   return c.match(TokenKind.Colon) ? ':' : null;
-}
-
-function tryParseDelim<T extends string>(expected: T): TryValueParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const comp = c.next();
-
-    if (!isDelimToken(comp, expected)) {
-      c.restore(start);
-      return null;
-    }
-
-    return expected;
-  };
 }
 
 function tryParseIdentToken(c: ComponentCursor): IdentToken | null {
@@ -999,20 +1014,6 @@ function tryParseIdentToken(c: ComponentCursor): IdentToken | null {
   }
 
   return comp;
-}
-
-function tryParseIdent<T extends string>(expected: T): TryValueParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const comp = c.next();
-
-    if (!isIdentTokenWithValue(comp, expected, true)) {
-      c.restore(start);
-      return null;
-    }
-
-    return expected;
-  };
 }
 
 function tryParseStringToken(c: ComponentCursor): StringToken | null {
@@ -1054,17 +1055,33 @@ function tryParseFunctionBlock(c: ComponentCursor): FunctionBlock | null {
   return comp;
 }
 
-function tryParseBracketBlock(c: ComponentCursor): BracketBlock | null {
-  const start = c.pos();
-  const comp = c.next();
+function createDelimParser<T extends string>(expected: T): TryValueParser<T> {
+  return (c) => {
+    const start = c.pos();
+    const comp = c.next();
 
-  if (!isBlockKind(comp, BlockKind.Bracket)) {
-    c.restore(start);
-    return null;
-  }
+    if (!isDelimToken(comp, expected)) {
+      c.restore(start);
+      return null;
+    }
 
-  return comp;
+    return expected;
+  };
 }
+
+// function identValue<T extends string>(expected: T): TryValueParser<T> {
+//   return (c) => {
+//     const start = c.pos();
+//     const comp = c.next();
+
+//     if (!isIdentTokenWithValue(comp, expected, true)) {
+//       c.restore(start);
+//       return null;
+//     }
+
+//     return expected;
+//   };
+// }
 
 function createPseudoClassSelector(
   rawName: string,
@@ -1104,7 +1121,7 @@ function createPseudoClassSelector(
     kind: SelectorKind.PseudoClassSelector,
     name,
     argument,
-    specificity: def.functional.specificity(argument as never),
+    specificity: def.functional.specificity(argument),
   };
 }
 
@@ -1114,7 +1131,7 @@ export function parsePseudoClassArgument(
 ): PseudoClassArgument | null {
   switch (kind) {
     case PseudoClassArgumentKind.ForgivingSelectorList:
-      return parseWholePseudoClassArgument(
+      return parseWholeArgument(
         value,
         tryParseSelectorList,
         (selectors): ForgivingSelectorListPseudoClassArgument => ({
@@ -1124,7 +1141,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.RelativeSelectorList:
-      return parseWholePseudoClassArgument(
+      return parseWholeArgument(
         value,
         tryParseRelativeSelectorList,
         (selectors): RelativeSelectorListPseudoClassArgument => ({
@@ -1134,7 +1151,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.ComplexRealSelectorList:
-      return parseWholePseudoClassArgument(
+      return parseWholeArgument(
         value,
         tryParseComplexRealSelectorList,
         (selectors): ComplexRealSelectorListPseudoClassArgument => ({
@@ -1144,7 +1161,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.CompoundSelector:
-      return parseWholePseudoClassArgument(
+      return parseWholeArgument(
         value,
         tryParseCompoundSelector,
         (selector): CompoundSelectorPseudoClassArgument => ({
@@ -1154,7 +1171,7 @@ export function parsePseudoClassArgument(
       );
 
     case PseudoClassArgumentKind.AnPlusB:
-      return parseWholePseudoClassArgument(
+      return parseWholeArgument(
         value,
         tryParseAnPlusB,
         (anb): AnPlusBPseudoClassArgument => ({
@@ -1170,42 +1187,15 @@ export function parsePseudoClassArgument(
   }
 }
 
-function parseWholePseudoClassArgument<T, R extends PseudoClassArgument>(
+function parseWholeArgument<T, R>(
   value: ComponentValue[],
   parse: TryValueParser<T>,
   create: (value: T) => R,
 ): R | null {
-  const parsed = parseWholeComponentValueList(value, parse);
-
-  if (parsed === null) {
-    return null;
-  }
-
-  return create(parsed);
-}
-
-function parseWholePseudoElementArgument<T, R extends PseudoElementArgument>(
-  value: ComponentValue[],
-  parse: TryValueParser<T>,
-  create: (value: T) => R,
-): R | null {
-  const parsed = parseWholeComponentValueList(value, parse);
-
-  if (parsed === null) {
-    return null;
-  }
-
-  return create(parsed);
-}
-
-function parseWholeComponentValueList<T>(
-  value: ComponentValue[],
-  parse: TryValueParser<T>,
-): T | null {
   const c = new ComponentCursor(value);
-  const result = parse(c);
+  const parsed = parse(c);
 
-  if (result === null) {
+  if (parsed === null) {
     return null;
   }
 
@@ -1215,7 +1205,7 @@ function parseWholeComponentValueList<T>(
     return null;
   }
 
-  return result;
+  return create(parsed);
 }
 
 function tryParseAnPlusB(_c: ComponentCursor): { a: number; b: number; } | null {
@@ -1280,18 +1270,18 @@ function parsePseudoElementArgument(
   value: ComponentValue[],
 ): PseudoElementArgument | null {
   switch (kind) {
-    case PseudoElementArgumentKind.Ident:
-      return parseWholePseudoElementArgument(
-        value,
-        tryParseIdentToken,
-        (ident): IdentPseudoElementArgument => ({
-          kind: PseudoElementArgumentKind.Ident,
-          value: ident.value,
-        }),
-      );
+    // case PseudoElementArgumentKind.Ident:
+    //   return parseWholeArgument(
+    //     value,
+    //     tryParseIdentToken,
+    //     (ident): IdentPseudoElementArgument => ({
+    //       kind: PseudoElementArgumentKind.Ident,
+    //       value: ident.value,
+    //     }),
+    //   );
 
     case PseudoElementArgumentKind.SelectorList:
-      return parseWholePseudoElementArgument(
+      return parseWholeArgument(
         value,
         tryParseSelectorList,
         (selectors): SelectorListPseudoElementArgument => ({
@@ -1300,10 +1290,11 @@ function parsePseudoElementArgument(
         }),
       );
 
-    case PseudoElementArgumentKind.Raw:
-      return {
-        kind: PseudoElementArgumentKind.Raw,
-        value,
-      };
+    // case PseudoElementArgumentKind.Raw:
+    //   return {
+    //     kind: PseudoElementArgumentKind.Raw,
+    //     value,
+    //   };
+    default: assertNever(kind);
   }
 }

@@ -728,12 +728,20 @@ export function isComponentBlock(comp: ComponentValue | null): comp is Component
 export function isBlockKind<K extends BlockKind>(
   comp: ComponentValue | null,
   block: K,
-): comp is Extract<ComponentBlock, { block: K; }> {
+): comp is ComponentBlock & { block: K; } {
   return isComponentBlock(comp) && comp.block === block;
 }
 
 export function isBraceBlock(comp: ComponentValue | null): comp is BraceBlock {
   return isBlockKind(comp, BlockKind.Brace);
+}
+
+export function isBracketBlock(comp: ComponentValue | null): comp is BracketBlock {
+  return isBlockKind(comp, BlockKind.Bracket);
+}
+
+export function isParensBlock(comp: ComponentValue | null): comp is ParensBlock {
+  return isBlockKind(comp, BlockKind.Parens);
 }
 
 export function isFunctionBlock(comp: ComponentValue | null): comp is FunctionBlock {
