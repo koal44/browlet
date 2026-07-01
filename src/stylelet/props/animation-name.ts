@@ -1,7 +1,7 @@
 import { ComponentCursor } from '../parser/component-cursor';
 import {
   commaRepeat, one, oneOf,
-  type TryValueParser,
+  type TryComponentParser,
 } from '../parser/component-grammar';
 import { tryConsumeKeywordIn } from '../values/keyword';
 import {
@@ -31,7 +31,7 @@ export type KeyframesNameValue =
   | CustomIdentValue
   | StringValue;
 
-const tryParseNone: TryValueParser<AnimationNameNoneValue> = (c) => {
+const tryParseNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
   const value = tryConsumeKeywordIn(c, ['none'] as const);
 
   if (value === null) {
@@ -41,13 +41,13 @@ const tryParseNone: TryValueParser<AnimationNameNoneValue> = (c) => {
   return { type: 'none' };
 };
 
-const tryParseKeyframesName: TryValueParser<KeyframesNameValue> = oneOf(
+const tryParseKeyframesName: TryComponentParser<KeyframesNameValue> = oneOf(
   one((c) => tryParseCustomIdent(c, ['none'])),
   one(tryParseString),
   ([value]): KeyframesNameValue => value,
 );
 
-const tryParseAnimationNameItem: TryValueParser<AnimationNameItemValue> = oneOf(
+const tryParseAnimationNameItem: TryComponentParser<AnimationNameItemValue> = oneOf(
   one(tryParseNone),
   one(tryParseKeyframesName),
   ([value]): AnimationNameItemValue => value,

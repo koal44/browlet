@@ -1,5 +1,6 @@
 import { asciiLower } from '../../utils/css';
 import { ComponentCursor } from './component-cursor';
+import type { TryComponentParser } from './component-grammar';
 import { TokenCursor } from './token-cursor';
 import type {
   AtKeywordToken, DelimToken, DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken, StaticToken, StringToken, Token, UrlToken,
@@ -95,11 +96,47 @@ export type Declaration = {
   important: boolean;
 };
 
+// 5.3.1. Parse something according to a CSS grammar
+export function parseAsComponentGrammar<T>(
+  input: string | readonly ComponentValue[],
+  parse: TryComponentParser<T>,
+): T | null {
+  const components = parseListOfComponentValues(input);
+  const c = new ComponentCursor(components);
+  const value = parse(c);
+
+  if (value === null) {
+    return null;
+  }
+
+  consumeComponentTrivia(c);
+
+  if (c.peek() !== null) {
+    return null;
+  }
+
+  return value;
+}
+
+// 5.3.2. Parse a comma-separated list according to a CSS grammar
+export function parseListAsComponentGrammar<T>(
+  input: string | readonly ComponentValue[],
+  parse: TryComponentParser<T>,
+): (T | null)[] {
+  const lists = parseCommaSeparatedListOfComponentValues(input);
+
+  if (lists.length === 1 && lists[0]!.every(isWhitespaceToken)) {
+    return [];
+  }
+
+  return lists.map((item) => parseAsComponentGrammar(item, parse));
+}
+
 // 5.3.3. Parse a stylesheet
 // Spec divergence: AST parser is string-only; source location belongs to the owning sheet/CSSOM layer.
 export function parseStylesheet(input: string): StyleSheet {
   const tokens = tokenize(input);
-  const rules = consumeListOfRules(new TokenCursor(tokens), true);
+  const rules = consumeListOfRulesFromTokens(new TokenCursor(tokens), true);
 
   return { rules };
 }
@@ -107,7 +144,7 @@ export function parseStylesheet(input: string): StyleSheet {
 // 5.3.4. Parse a list of rules
 export function parseListOfRules(input: string): Rule[] {
   const tokens = tokenize(input);
-  return consumeListOfRules(new TokenCursor(tokens), false);
+  return consumeListOfRulesFromTokens(new TokenCursor(tokens), false);
 }
 
 // 5.3.5. Parse a rule
@@ -122,8 +159,8 @@ export function parseRule(input: string): Rule | null {
 
   const rule =
     c.peek().kind === TokenKind.AtKeyword
-      ? consumeAtRule(c)
-      : consumeQualifiedRule(c);
+      ? consumeAtRuleFromTokens(c)
+      : consumeQualifiedRuleFromTokens(c);
 
   if (rule === null) {
     return null;
@@ -157,26 +194,21 @@ export function parseDeclaration(input: string): Declaration | null {
   const values: ComponentValue[] = [];
 
   while (c.peek().kind !== TokenKind.EOF) {
-    values.push(consumeComponentValue(c));
+    values.push(consumeComponentValueFromTokens(c));
   }
 
-  return consumeDeclaration(new ComponentCursor(values));
+  return consumeDeclarationFromComponents(new ComponentCursor(values));
 }
 
 export type StyleBlockItem = Declaration | Rule;
 export type StyleBlockContents = StyleBlockItem[];
 
 // 5.3.7. Parse a style block's contents
-export function parseStyleBlockContents(input: string): StyleBlockContents;
-export function parseStyleBlockContents(input: readonly ComponentValue[]): StyleBlockContents;
 export function parseStyleBlockContents(
   input: string | readonly ComponentValue[],
 ): StyleBlockContents {
-  const components = typeof input === 'string'
-    ? parseListOfComponentValues(input)
-    : input;
-
-  return consumeStyleBlockContents(new ComponentCursor(components));
+  const components = parseListOfComponentValues(input);
+  return consumeStyleBlockContentsFromComponents(new ComponentCursor(components));
 }
 
 export type DeclarationOrAtRule = Declaration | AtRule;
@@ -185,7 +217,7 @@ export type DeclarationOrAtRuleList = DeclarationOrAtRule[];
 // 5.3.8. Parse a list of declarations
 export function parseListOfDeclarations(input: string): DeclarationOrAtRuleList {
   const c = new TokenCursor(tokenize(input));
-  return consumeListOfDeclarations(c);
+  return consumeListOfDeclarationsFromTokens(c);
 }
 
 // 5.3.9. Parse a component value
@@ -198,7 +230,7 @@ export function parseComponentValue(input: string): ComponentValue | null {
     return null;
   }
 
-  const value = consumeComponentValue(c);
+  const value = consumeComponentValueFromTokens(c);
 
   consumeWhitespaceTokens(c);
 
@@ -210,46 +242,78 @@ export function parseComponentValue(input: string): ComponentValue | null {
 }
 
 // 5.3.10. Parse a list of component values
-export function parseListOfComponentValues(input: string): ComponentValue[] {
+export function parseListOfComponentValues(input: string | readonly ComponentValue[]): readonly ComponentValue[] {
+  if (typeof input !== 'string') {
+    return input;
+  }
+
   const c = new TokenCursor(tokenize(input));
   const values: ComponentValue[] = [];
 
   while (c.peek().kind !== TokenKind.EOF) {
-    values.push(consumeComponentValue(c));
+    values.push(consumeComponentValueFromTokens(c));
   }
 
   return values;
 }
 
 // 5.3.11. Parse a comma-separated list of component values
-export function parseCommaSeparatedListOfComponentValues(input: string): ComponentValue[][] {
-  const c = new TokenCursor(tokenize(input));
+export function parseCommaSeparatedListOfComponentValues(
+  input: string | readonly ComponentValue[],
+): ComponentValue[][] {
   const lists: ComponentValue[][] = [];
 
-  while (true) {
-    const values: ComponentValue[] = [];
+  if (typeof input === 'string') {
+    const c = new TokenCursor(tokenize(input));
 
     while (true) {
-      const token = c.peek();
+      const values: ComponentValue[] = [];
 
-      if (token.kind === TokenKind.EOF) {
-        lists.push(values);
-        return lists;
+      while (true) {
+        const token = c.peek();
+
+        if (token.kind === TokenKind.EOF) {
+          lists.push(values);
+          return lists;
+        }
+
+        if (token.kind === TokenKind.Comma) {
+          c.next();
+          lists.push(values);
+          break;
+        }
+
+        values.push(consumeComponentValueFromTokens(c));
       }
+    }
+  } else {
+    const c = new ComponentCursor(input);
 
-      if (token.kind === TokenKind.Comma) {
-        c.next();
-        lists.push(values);
-        break;
+    while (true) {
+      const values: ComponentValue[] = [];
+
+      while (true) {
+        const component = c.peek();
+
+        if (component === null) {
+          lists.push(values);
+          return lists;
+        }
+
+        if (isTokenKind(component, TokenKind.Comma)) {
+          c.next();
+          lists.push(values);
+          break;
+        }
+
+        values.push(c.consume());
       }
-
-      values.push(consumeComponentValue(c));
     }
   }
 }
 
 // 5.4.1. Consume a list of rules
-function consumeListOfRules(c: TokenCursor, topLevel: boolean): Rule[] {
+function consumeListOfRulesFromTokens(c: TokenCursor, topLevel: boolean): Rule[] {
   const rules: Rule[] = [];
 
   while (true) {
@@ -271,7 +335,7 @@ function consumeListOfRules(c: TokenCursor, topLevel: boolean): Rule[] {
 
       c.restore(pos);
 
-      const rule = consumeQualifiedRule(c);
+      const rule = consumeQualifiedRuleFromTokens(c);
       if (rule !== null) rules.push(rule);
 
       continue;
@@ -279,23 +343,23 @@ function consumeListOfRules(c: TokenCursor, topLevel: boolean): Rule[] {
 
     if (token.kind === TokenKind.AtKeyword) {
       c.restore(pos);
-      rules.push(consumeAtRule(c));
+      rules.push(consumeAtRuleFromTokens(c));
       continue;
     }
 
     c.restore(pos);
 
-    const rule = consumeQualifiedRule(c);
+    const rule = consumeQualifiedRuleFromTokens(c);
     if (rule !== null) rules.push(rule);
   }
 }
 
 // 5.4.2. Consume an at-rule
-function consumeAtRule(c: TokenCursor): AtRule {
+function consumeAtRuleFromTokens(c: TokenCursor): AtRule {
   const token = c.next();
 
   if (token.kind !== TokenKind.AtKeyword) {
-    throw new Error('consumeAtRule called without an at-keyword token');
+    throw new Error('consumeAtRuleFromTokens called without an at-keyword token');
   }
 
   const rule: AtRule = {
@@ -318,12 +382,12 @@ function consumeAtRule(c: TokenCursor): AtRule {
     }
 
     if (next.kind === TokenKind.LeftBrace) {
-      rule.block = consumeSimpleBlock(c, BlockKind.Brace);
+      rule.block = consumeSimpleBlockFromTokens(c, BlockKind.Brace);
       return rule;
     }
 
     c.restore(pos);
-    rule.prelude.push(consumeComponentValue(c));
+    rule.prelude.push(consumeComponentValueFromTokens(c));
   }
 }
 
@@ -364,7 +428,7 @@ function consumeAtRuleFromComponents(c: ComponentCursor): AtRule {
 }
 
 // 5.4.3. Consume a qualified rule
-function consumeQualifiedRule(c: TokenCursor): QualifiedRule | null {
+function consumeQualifiedRuleFromTokens(c: TokenCursor): QualifiedRule | null {
   const prelude: ComponentValue[] = [];
 
   while (true) {
@@ -379,12 +443,12 @@ function consumeQualifiedRule(c: TokenCursor): QualifiedRule | null {
       return {
         kind: RuleKind.Qualified,
         prelude,
-        block: consumeSimpleBlock(c, BlockKind.Brace),
+        block: consumeSimpleBlockFromTokens(c, BlockKind.Brace),
       };
     }
 
     c.restore(pos);
-    prelude.push(consumeComponentValue(c));
+    prelude.push(consumeComponentValueFromTokens(c));
   }
 }
 
@@ -413,7 +477,7 @@ function consumeQualifiedRuleFromComponents(c: ComponentCursor): QualifiedRule |
 }
 
 // 5.4.4. Consume a style block's contents
-function consumeStyleBlockContents(c: ComponentCursor): StyleBlockContents {
+function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlockContents {
   const items: StyleBlockContents = [];
 
   while (true) {
@@ -437,7 +501,7 @@ function consumeStyleBlockContents(c: ComponentCursor): StyleBlockContents {
         temp.push(c.consume());
       }
 
-      const declaration = consumeDeclaration(new ComponentCursor(temp));
+      const declaration = consumeDeclarationFromComponents(new ComponentCursor(temp));
       if (declaration !== null) items.push(declaration);
 
       continue;
@@ -457,7 +521,7 @@ function consumeStyleBlockContents(c: ComponentCursor): StyleBlockContents {
 }
 
 // 5.4.5. Consume a list of declarations
-function consumeListOfDeclarations(c: TokenCursor): DeclarationOrAtRuleList {
+function consumeListOfDeclarationsFromTokens(c: TokenCursor): DeclarationOrAtRuleList {
   const declarations: DeclarationOrAtRuleList = [];
 
   while (true) {
@@ -477,7 +541,7 @@ function consumeListOfDeclarations(c: TokenCursor): DeclarationOrAtRuleList {
 
     if (token.kind === TokenKind.AtKeyword) {
       c.restore(pos);
-      declarations.push(consumeAtRule(c));
+      declarations.push(consumeAtRuleFromTokens(c));
       continue;
     }
 
@@ -485,10 +549,10 @@ function consumeListOfDeclarations(c: TokenCursor): DeclarationOrAtRuleList {
       const temp: ComponentValue[] = [token];
 
       while (!isDeclarationEnd(c.peek())) {
-        temp.push(consumeComponentValue(c));
+        temp.push(consumeComponentValueFromTokens(c));
       }
 
-      const declaration = consumeDeclaration(new ComponentCursor(temp));
+      const declaration = consumeDeclarationFromComponents(new ComponentCursor(temp));
       if (declaration !== null) declarations.push(declaration);
 
       continue;
@@ -497,17 +561,17 @@ function consumeListOfDeclarations(c: TokenCursor): DeclarationOrAtRuleList {
     c.restore(pos);
 
     while (!isDeclarationEnd(c.peek())) {
-      consumeComponentValue(c);
+      consumeComponentValueFromTokens(c);
     }
   }
 }
 
 // 5.4.6. Consume a declaration
-function consumeDeclaration(c: ComponentCursor): Declaration | null {
+function consumeDeclarationFromComponents(c: ComponentCursor): Declaration | null {
   const comp = c.next();
 
   if (!isIdentToken(comp)) {
-    throw new Error('consumeDeclaration called without an ident token');
+    throw new Error('consumeDeclarationFromComponents called without an ident token');
   }
 
   const declaration: Declaration = {
@@ -579,34 +643,34 @@ function trimTrailingWhitespace(values: ComponentValue[]): void {
 }
 
 // 5.4.7. Consume a component value
-function consumeComponentValue(c: TokenCursor): ComponentValue {
+function consumeComponentValueFromTokens(c: TokenCursor): ComponentValue {
   const token = c.next();
 
   if (token.kind === TokenKind.LeftBrace) {
-    return consumeSimpleBlock(c, BlockKind.Brace);
+    return consumeSimpleBlockFromTokens(c, BlockKind.Brace);
   }
 
   if (token.kind === TokenKind.LeftBracket) {
-    return consumeSimpleBlock(c, BlockKind.Bracket);
+    return consumeSimpleBlockFromTokens(c, BlockKind.Bracket);
   }
 
   if (token.kind === TokenKind.LeftParen) {
-    return consumeSimpleBlock(c, BlockKind.Parens);
+    return consumeSimpleBlockFromTokens(c, BlockKind.Parens);
   }
 
   if (token.kind === TokenKind.Function) {
-    return consumeFunction(c, token.value);
+    return consumeFunctionFromTokens(c, token.value);
   }
 
   if (!isPreservedToken(token)) {
-    throw new Error('consumeComponentValue called at EOF or with a non-preserved token');
+    throw new Error('consumeComponentValueFromTokens called at EOF or with a non-preserved token');
   }
 
   return token;
 }
 
 // 5.4.8. Consume a simple block
-function consumeSimpleBlock<K extends SimpleBlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
+function consumeSimpleBlockFromTokens<K extends SimpleBlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
   const result: SimpleBlock<K> = {
     block,
     value: [],
@@ -627,7 +691,7 @@ function consumeSimpleBlock<K extends SimpleBlockKind>(c: TokenCursor, block: K)
     }
 
     c.restore(pos);
-    result.value.push(consumeComponentValue(c));
+    result.value.push(consumeComponentValueFromTokens(c));
   }
 }
 
@@ -646,7 +710,7 @@ function blockEndingTokenKind(block: BlockKind): TokenKind {
 }
 
 // 5.4.9. Consume a function
-function consumeFunction(c: TokenCursor, name: string): FunctionBlock {
+function consumeFunctionFromTokens(c: TokenCursor, name: string): FunctionBlock {
   const result: FunctionBlock = {
     block: BlockKind.Function,
     name,
@@ -666,7 +730,7 @@ function consumeFunction(c: TokenCursor, name: string): FunctionBlock {
     }
 
     c.restore(pos);
-    result.value.push(consumeComponentValue(c));
+    result.value.push(consumeComponentValueFromTokens(c));
   }
 }
 

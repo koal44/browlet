@@ -6,13 +6,13 @@ import {
   __nextSequenceCaps, __parseSequenceAttempt,
   allOf, any, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
   requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
-  type TryValueParser,
+  type TryComponentParser,
 } from '../../../src/stylelet/parser/component-grammar';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));
 
-const literalParser = <T extends string>(expected: T): TryValueParser<T> => {
+const literalParser = <T extends string>(expected: T): TryComponentParser<T> => {
   return (c: ComponentCursor): T | null => {
     const start = c.pos();
     const comp = c.next();
@@ -30,7 +30,7 @@ const literalParser = <T extends string>(expected: T): TryValueParser<T> => {
   };
 };
 
-const valueLiteralParser = <T extends string>(expected: T): TryValueParser<T> =>
+const valueLiteralParser = <T extends string>(expected: T): TryComponentParser<T> =>
   withComponentTrivia(literalParser(expected));
 
 const parseA = valueLiteralParser('a');
@@ -191,7 +191,7 @@ describe('component value combinators', () => {
   });
 
   it('does not interleave inside grouped components', () => {
-    const groupedBC: TryValueParser<readonly ['b', 'c']> = (c: ComponentCursor) => {
+    const groupedBC: TryComponentParser<readonly ['b', 'c']> = (c: ComponentCursor) => {
       const start = c.pos();
 
       const bv = parseB(c);
@@ -471,7 +471,7 @@ describe('component value combinators', () => {
   });
 
   it('throws when a repeat parser succeeds without consuming input', () => {
-    const parseEmpty: TryValueParser<'empty'> = () => 'empty';
+    const parseEmpty: TryComponentParser<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
@@ -578,7 +578,7 @@ describe('component value combinators', () => {
   });
 
   it('throws when a comma-repeat parser succeeds without consuming input', () => {
-    const parseEmpty: TryValueParser<'empty'> = () => 'empty';
+    const parseEmpty: TryComponentParser<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
@@ -861,7 +861,7 @@ describe('component grammar trivia ownership', () => {
 describe('selector separator trivia prototype', () => {
   type DemoCombinator = ' ' | '>' | '+' | '~' | '||';
 
-  const parseExplicitCombinator: TryValueParser<DemoCombinator> = (c) => {
+  const parseExplicitCombinator: TryComponentParser<DemoCombinator> = (c) => {
     const start = c.pos();
     const first = c.next();
 
@@ -898,7 +898,7 @@ describe('selector separator trivia prototype', () => {
     return null;
   };
 
-  const parseSelectorSeparator: TryValueParser<DemoCombinator> = (c) => {
+  const parseSelectorSeparator: TryComponentParser<DemoCombinator> = (c) => {
     const start = c.pos();
 
     const sawWhitespace = c.match(TokenKind.Whitespace);
@@ -1380,7 +1380,7 @@ describe('component sequence backtracking support', () => {
       ([value]) => value,
     );
 
-    const parseAB: TryValueParser<string[]> = any(parseAorB);
+    const parseAB: TryComponentParser<string[]> = any(parseAorB);
 
     const parse = sequenceOf(
       one(parseAB),
@@ -1584,7 +1584,7 @@ describe('component combinator null projections', () => {
   });
 
   it('tries the next alternative when a oneOf projection returns null', () => {
-    const parseFirstA: TryValueParser<'first'> = (c) => {
+    const parseFirstA: TryComponentParser<'first'> = (c) => {
       const value = parseA(c);
 
       if (value === null) {
@@ -1594,7 +1594,7 @@ describe('component combinator null projections', () => {
       return 'first';
     };
 
-    const parseSecondA: TryValueParser<'second'> = (c) => {
+    const parseSecondA: TryComponentParser<'second'> = (c) => {
       const value = parseA(c);
 
       if (value === null) {

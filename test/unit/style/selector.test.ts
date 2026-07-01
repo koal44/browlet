@@ -5,7 +5,7 @@ import type {
 } from '../../../src/stylelet/parser/selector';
 import { SelectorKind, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
 import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
-import { PseudoClassArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
+import { PseudoClassArgumentKind, PseudoElementArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
 
 const cursor = (css: string): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css));
@@ -153,28 +153,49 @@ const pseudoClassPart = (name: string, argument?: unknown) => part(
   ]),
 );
 
-const pseudoElement = (name: string) => ({
+const pseudoElement = (name: string, argument?: unknown) => ({
   kind: SelectorKind.PseudoElementSelector,
   name,
+  argument: argument ?? null,
 });
 
-const pseudoCompound = (name: string, pseudoClasses: unknown[] = []) => ({
+const pseudoCompound = (name: string, pseudoClasses: unknown[] = [], argument?: unknown) => ({
   kind: SelectorKind.PseudoCompoundSelector,
-  pseudoElement: pseudoElement(name),
+  pseudoElement: pseudoElement(name, argument),
   pseudoClasses,
 });
 
-const pseudoElementPart = (combinator: Combinator | null, name: string, pseudoClasses: unknown[] = []) => part(
+const pseudoElementPart = (
+  combinator: Combinator | null,
+  name: string,
+  pseudoClasses: unknown[] = [],
+  argument?: unknown,
+) => part(
   combinator,
   null,
   [
-    pseudoCompound(name, pseudoClasses),
+    pseudoCompound(name, pseudoClasses, argument),
   ],
 );
 
 const selectorList = (arms: unknown[]) => ({
   arms,
 });
+
+const realPart = (combinator: Combinator | null, compoundValue: unknown = null) => ({
+  combinator,
+  compound: compoundValue,
+});
+
+const realClassPart = (combinator: Combinator | null, name: string) => realPart(
+  combinator,
+  compound(null, [classSelector(name)]),
+);
+
+const realIdPart = (combinator: Combinator | null, name: string) => realPart(
+  combinator,
+  compound(null, [idSelector(name)]),
+);
 
 describe('selector parser basics', () => {
   it('rejects an empty selector list', () => {
@@ -485,12 +506,12 @@ describe('selector parser pseudo-class selectors', () => {
           selectors: selectorList([
             {
               parts: [
-                classPart(null, 'foo'),
+                realClassPart(null, 'foo'),
               ],
             },
             {
               parts: [
-                idPart(null, 'bar'),
+                realIdPart(null, 'bar'),
               ],
             },
           ]),
@@ -507,7 +528,7 @@ describe('selector parser pseudo-class selectors', () => {
           selectors: selectorList([
             {
               parts: [
-                classPart(null, 'foo'),
+                realClassPart(null, 'foo'),
               ],
             },
           ]),
@@ -524,22 +545,12 @@ describe('selector parser pseudo-class selectors', () => {
           selectors: selectorList([
             {
               parts: [
-                {
-                  combinator: null,
-                  compound: compound(null, [
-                    classSelector('foo'),
-                  ]),
-                },
+                realClassPart(null, 'foo'),
               ],
             },
             {
               parts: [
-                {
-                  combinator: null,
-                  compound: compound(null, [
-                    idSelector('bar'),
-                  ]),
-                },
+                realIdPart(null, 'bar'),
               ],
             },
           ]),
@@ -611,16 +622,16 @@ describe('selector parser pseudo-element selectors', () => {
     });
   });
 
-  // it('parses functional pseudo-elements with arguments', () => {
-  //   expect(expectComplexSelector('::part(foo)')).toMatchObject({
-  //     parts: [
-  //       pseudoElementPart(null, 'part', [{
-  //         kind: PseudoElementArgumentKind.Ident,
-  //         value: 'foo',
-  //       }]),
-  //     ],
-  //   });
-  // });
+  it('parses functional pseudo-elements with arguments', () => {
+    expect(expectComplexSelector('::part(foo)')).toMatchObject({
+      parts: [
+        pseudoElementPart(null, 'part', [], {
+          kind: PseudoElementArgumentKind.PartNameList,
+          names: ['foo'],
+        }),
+      ],
+    });
+  });
 
   it('rejects functional pseudo-elements in single-colon form', () => {
     expectInvalidSelector(':part(foo)');
@@ -785,4 +796,148 @@ describe('selector parser canonical AST', () => {
     expectInvalidSelector('[href]div');
     expectInvalidSelector('div*');
   });
+});
+
+it('drops invalid arms from forgiving selector-list pseudo-class arguments', () => {
+  expect(expectComplexSelector(':is(.foo ???, #bar)')).toMatchObject({
+    parts: [
+      pseudoClassPart('is', {
+        kind: PseudoClassArgumentKind.ForgivingSelectorList,
+        selectors: selectorList([
+          {
+            parts: [
+              realIdPart(null, 'bar'),
+            ],
+          },
+        ]),
+      }),
+    ],
+  });
+});
+
+it('allows forgiving selector-list pseudo-class arguments to become empty', () => {
+  expect(expectComplexSelector(':is(???, !!!)')).toMatchObject({
+    parts: [
+      pseudoClassPart('is', {
+        kind: PseudoClassArgumentKind.ForgivingSelectorList,
+        selectors: selectorList([]),
+      }),
+    ],
+  });
+});
+
+it('parses whitespace-separated ::part() names', () => {
+  expect(expectComplexSelector('::part( foo active )')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'part', [], {
+        kind: PseudoElementArgumentKind.PartNameList,
+        names: ['foo', 'active'],
+      }),
+    ],
+  });
+});
+
+it('rejects comma-separated ::part() names', () => {
+  expectInvalidSelector('::part(foo, active)');
+});
+
+it('parses ::highlight() with a custom-ident argument', () => {
+  expect(expectComplexSelector('::highlight(foo)')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'highlight', [], {
+        kind: PseudoElementArgumentKind.CustomIdent,
+        value: {
+          type: 'custom-ident',
+          value: 'foo',
+        },
+      }),
+    ],
+  });
+});
+
+it('rejects CSS-wide keywords as ::highlight() names', () => {
+  expectInvalidSelector('::highlight(inherit)');
+  expectInvalidSelector('::highlight(initial)');
+  expectInvalidSelector('::highlight(unset)');
+  expectInvalidSelector('::highlight(revert)');
+  expectInvalidSelector('::highlight(revert-layer)');
+});
+
+it('parses ::slotted() with a compound-selector argument', () => {
+  expect(expectComplexSelector('::slotted(.foo)')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'slotted', [], {
+        kind: PseudoElementArgumentKind.CompoundSelector,
+        selector: compound(null, [
+          classSelector('foo'),
+        ]),
+      }),
+    ],
+  });
+});
+
+it('rejects pseudo-compounds inside ::slotted() compound-selector arguments', () => {
+  expectInvalidSelector('::slotted(.foo::before)');
+});
+
+it('parses :host-context() as a compound-selector pseudo-class argument', () => {
+  expect(expectComplexSelector(':host-context(.theme)')).toMatchObject({
+    parts: [
+      pseudoClassPart('host-context', {
+        kind: PseudoClassArgumentKind.CompoundSelector,
+        selector: compound(null, [
+          classSelector('theme'),
+        ]),
+      }),
+    ],
+  });
+});
+
+it('parses :has-slotted as a bare pseudo-class', () => {
+  expect(expectComplexSelector(':has-slotted')).toMatchObject({
+    parts: [
+      pseudoClassPart('has-slotted'),
+    ],
+  });
+});
+
+it('rejects functional :has-slotted() for now', () => {
+  expectInvalidSelector(':has-slotted(*)');
+});
+
+it('parses CSS Pseudo 4 bare pseudo-elements', () => {
+  expect(expectComplexSelector('::selection')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'selection'),
+    ],
+  });
+
+  expect(expectComplexSelector('::target-text')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'target-text'),
+    ],
+  });
+
+  expect(expectComplexSelector('::file-selector-button')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'file-selector-button'),
+    ],
+  });
+
+  expect(expectComplexSelector('::details-content')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'details-content'),
+    ],
+  });
+});
+
+it('computes specificity for shadow and highlight pseudo-elements', () => {
+  expect(expectComplexSelector('::highlight(foo)').specificity)
+    .toEqual(specificity(0, 0, 1));
+
+  expect(expectComplexSelector('::part(foo active)').specificity)
+    .toEqual(specificity(0, 0, 1));
+
+  expect(expectComplexSelector('::slotted(.foo)').specificity)
+    .toEqual(specificity(0, 1, 1));
 });
