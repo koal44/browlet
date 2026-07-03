@@ -12,20 +12,10 @@ import {
 } from './syntax';
 import type { HashToken, StringToken } from './tokens';
 import { HashTokenFlag, type IdentToken, TokenKind } from './tokens';
-import type {
-  AnPlusBPseudoClassArgument, ComplexRealSelectorListPseudoClassArgument, CompoundSelectorPseudoClassArgument, CompoundSelectorPseudoElementArgument, CustomIdentPseudoElementArgument, DirectionPseudoClassArgument, ForgivingSelectorListPseudoClassArgument,
-  LanguageRange,
-  LanguageRangeListPseudoClassArgument,
-  PartNameListPseudoElementArgument,
-  PseudoClassArgument, PseudoElementArgument, RelativeSelectorListPseudoClassArgument,
-  SelectorListPseudoElementArgument,
-} from './selector-pseudo';
-import { PSEUDO_CLASSES, PSEUDO_ELEMENTS, PseudoClassArgumentKind, PseudoElementArgumentKind } from './selector-pseudo';
 import {
-  listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity, type Specificity,
+  addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity, type Specificity,
 } from './selector-specificity';
-import { assertNever } from '../../utils/util';
-import { tryParseCustomIdent } from '../values/custom-ident';
+import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -50,17 +40,52 @@ export enum SelectorKind {
   LegacyPseudoElementSelector = 'legacy-pseudo-element-selector',
 }
 
+export type SelectorParseInput = string | readonly ComponentValue[];
+export type SelectorParserContext = { foo?: 'bar'; } | null;
+
+/**
+ * 17.1. Parse a selector
+ *
+ * Spec hook. Despite the singular name, this parses as <selector-list>
+ * and returns a complex selector list.
+ */
+export function parseSelector(
+  input: SelectorParseInput,
+  context: SelectorParserContext = null,
+): SelectorList | null {
+  return parseSelectorList(input, context);
+}
+
+/**
+ * 17.2. Parse a relative selector
+ *
+ * Spec hook. Despite the singular name, this parses as <relative-selector-list>.
+ */
+export function parseRelativeSelector(
+  input: SelectorParseInput,
+  context: SelectorParserContext = null,
+): RelativeSelectorList | null {
+  return parseRelativeSelectorList(input, context);
+}
+
 /**
  * <selector-list> = <complex-selector-list>
  */
 export type SelectorList = ComplexSelectorList;
 
-export function tryParseSelectorList(c: ComponentCursor): SelectorList | null {
-  return parseSelectorList(c);
+export function parseSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): SelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeSelectorList);
 }
 
-const parseSelectorList: TryComponentParser<SelectorList> =
-  tryParseComplexSelectorList;
+function tryConsumeSelectorList(c: ComponentCursor): SelectorList | null {
+  return consumeSelectorList(c);
+}
+
+const consumeSelectorList: TryComponentParser<SelectorList> =
+  tryConsumeComplexSelectorList;
 
 /**
  * <complex-selector-list> = <complex-selector>#
@@ -69,10 +94,17 @@ export type ComplexSelectorList = {
   kind: SelectorKind.ComplexSelectorList;
   arms: ComplexSelector[];
   specificity: Specificity;
+};
+
+export function parseComplexSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): ComplexSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeComplexSelectorList);
 }
 
-function tryParseComplexSelectorList(c: ComponentCursor): ComplexSelectorList | null {
-  const arms = parseComplexSelectorListArms(c);
+function tryConsumeComplexSelectorList(c: ComponentCursor): ComplexSelectorList | null {
+  const arms = consumeComplexSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -82,8 +114,8 @@ function tryParseComplexSelectorList(c: ComponentCursor): ComplexSelectorList | 
   };
 }
 
-const parseComplexSelectorListArms: TryComponentParser<ComplexSelector[]> =
-  commaRepeat(tryParseComplexSelector);
+const consumeComplexSelectorListArms: TryComponentParser<ComplexSelector[]> =
+  commaRepeat(tryConsumeComplexSelector);
 
 /**
  * <complex-real-selector-list> = <complex-real-selector>#
@@ -92,10 +124,17 @@ export type ComplexRealSelectorList = {
   kind: SelectorKind.ComplexRealSelectorList;
   arms: ComplexRealSelector[];
   specificity: Specificity;
+};
+
+export function parseComplexRealSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): ComplexRealSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeComplexRealSelectorList);
 }
 
-export function tryParseComplexRealSelectorList(c: ComponentCursor): ComplexRealSelectorList | null {
-  const arms = parseComplexRealSelectorListArms(c);
+function tryConsumeComplexRealSelectorList(c: ComponentCursor): ComplexRealSelectorList | null {
+  const arms = consumeComplexRealSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -105,8 +144,8 @@ export function tryParseComplexRealSelectorList(c: ComponentCursor): ComplexReal
   };
 }
 
-const parseComplexRealSelectorListArms: TryComponentParser<ComplexRealSelector[]> =
-  commaRepeat(tryParseComplexRealSelector);
+const consumeComplexRealSelectorListArms: TryComponentParser<ComplexRealSelector[]> =
+  commaRepeat(tryConsumeComplexRealSelector);
 
 /**
  * <compound-selector-list> = <compound-selector>#
@@ -115,10 +154,17 @@ export type CompoundSelectorList = {
   kind: SelectorKind.CompoundSelectorList;
   arms: CompoundSelector[];
   specificity: Specificity;
+};
+
+export function parseCompoundSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): CompoundSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeCompoundSelectorList);
 }
 
-export function tryParseCompoundSelectorList(c: ComponentCursor): CompoundSelectorList | null {
-  const arms = parseCompoundSelectorListArms(c);
+function tryConsumeCompoundSelectorList(c: ComponentCursor): CompoundSelectorList | null {
+  const arms = consumeCompoundSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -128,8 +174,8 @@ export function tryParseCompoundSelectorList(c: ComponentCursor): CompoundSelect
   };
 }
 
-const parseCompoundSelectorListArms: TryComponentParser<CompoundSelector[]> =
-  commaRepeat(tryParseCompoundSelector);
+const consumeCompoundSelectorListArms: TryComponentParser<CompoundSelector[]> =
+  commaRepeat(tryConsumeCompoundSelector);
 
 /**
  * <simple-selector-list> = <simple-selector>#
@@ -138,10 +184,17 @@ export type SimpleSelectorList = {
   kind: SelectorKind.SimpleSelectorList;
   arms: SimpleSelector[];
   specificity: Specificity;
+};
+
+export function parseSimpleSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): SimpleSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeSimpleSelectorList);
 }
 
-export function tryParseSimpleSelectorList(c: ComponentCursor): SimpleSelectorList | null {
-  const arms = parseSimpleSelectorListArms(c);
+function tryConsumeSimpleSelectorList(c: ComponentCursor): SimpleSelectorList | null {
+  const arms = consumeSimpleSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -151,8 +204,8 @@ export function tryParseSimpleSelectorList(c: ComponentCursor): SimpleSelectorLi
   };
 }
 
-const parseSimpleSelectorListArms: TryComponentParser<SimpleSelector[]> =
-  commaRepeat(tryParseSimpleSelector);
+const consumeSimpleSelectorListArms: TryComponentParser<SimpleSelector[]> =
+  commaRepeat(tryConsumeSimpleSelector);
 
 /**
  * <relative-selector-list> = <relative-selector>#
@@ -161,10 +214,17 @@ export type RelativeSelectorList = {
   kind: SelectorKind.RelativeSelectorList;
   arms: RelativeSelector[];
   specificity: Specificity;
+};
+
+export function parseRelativeSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): RelativeSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeRelativeSelectorList);
 }
 
-export function tryParseRelativeSelectorList(c: ComponentCursor): RelativeSelectorList | null {
-  const arms = parseRelativeSelectorListArms(c);
+function tryConsumeRelativeSelectorList(c: ComponentCursor): RelativeSelectorList | null {
+  const arms = consumeRelativeSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -174,8 +234,8 @@ export function tryParseRelativeSelectorList(c: ComponentCursor): RelativeSelect
   };
 }
 
-const parseRelativeSelectorListArms: TryComponentParser<RelativeSelector[]> =
-  commaRepeat(tryParseRelativeSelector);
+const consumeRelativeSelectorListArms: TryComponentParser<RelativeSelector[]> =
+  commaRepeat(tryConsumeRelativeSelector);
 
 /**
  * <relative-real-selector-list> = <relative-real-selector>#
@@ -184,10 +244,17 @@ export type RelativeRealSelectorList = {
   kind: SelectorKind.RelativeRealSelectorList;
   arms: RelativeRealSelector[];
   specificity: Specificity;
+};
+
+export function parseRelativeRealSelectorList(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): RelativeRealSelectorList | null {
+  return parseAsComponentGrammar(input, tryConsumeRelativeRealSelectorList);
 }
 
-export function tryParseRelativeRealSelectorList(c: ComponentCursor): RelativeRealSelectorList | null {
-  const arms = parseRelativeRealSelectorListArms(c);
+function tryConsumeRelativeRealSelectorList(c: ComponentCursor): RelativeRealSelectorList | null {
+  const arms = consumeRelativeRealSelectorListArms(c);
   if (arms === null) return null;
 
   return {
@@ -197,8 +264,8 @@ export function tryParseRelativeRealSelectorList(c: ComponentCursor): RelativeRe
   };
 }
 
-const parseRelativeRealSelectorListArms: TryComponentParser<RelativeRealSelector[]> =
-  commaRepeat(tryParseRelativeRealSelector);
+const consumeRelativeRealSelectorListArms: TryComponentParser<RelativeRealSelector[]> =
+  commaRepeat(tryConsumeRelativeRealSelector);
 
 /**
  * <complex-selector> =
@@ -213,17 +280,24 @@ export type ComplexSelector = {
   specificity: Specificity;
 };
 
-function tryParseComplexSelector(c: ComponentCursor): ComplexSelector | null {
-  return parseComplexSelector(c);
+export function parseComplexSelector(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): ComplexSelector | null {
+  return parseAsComponentGrammar(input, tryConsumeComplexSelector);
 }
 
-const parseComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
-  one(tryParseComplexSelectorUnit),
+function tryConsumeComplexSelector(c: ComponentCursor): ComplexSelector | null {
+  return consumeComplexSelector(c);
+}
+
+const consumeComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
+  one(tryConsumeComplexSelectorUnit),
 
   any(
     sequenceOf(
-      one(tryParseCombinator),
-      one(tryParseComplexSelectorUnit),
+      one(tryConsumeCombinator),
+      one(tryConsumeComplexSelectorUnit),
       ([[combinator], [unit]]) => ({
         combinator: combinator,
         unit: unit,
@@ -252,13 +326,13 @@ export type ComplexSelectorUnit = {
   specificity: Specificity;
 };
 
-function tryParseComplexSelectorUnit(c: ComponentCursor): ComplexSelectorUnit | null {
-  return parseComplexSelectorUnit(c);
+function tryConsumeComplexSelectorUnit(c: ComponentCursor): ComplexSelectorUnit | null {
+  return consumeComplexSelectorUnit(c);
 }
 
-const parseComplexSelectorUnit: TryComponentParser<ComplexSelectorUnit> = requiredSequenceOf(
-  opt(tryParseCompoundSelector),
-  any(tryParsePseudoCompoundSelector),
+const consumeComplexSelectorUnit: TryComponentParser<ComplexSelectorUnit> = requiredSequenceOf(
+  opt(tryConsumeCompoundSelector),
+  any(tryConsumePseudoCompoundSelector),
 
   ([[compound], pseudoCompounds]): ComplexSelectorUnit => ({
     kind: SelectorKind.ComplexSelectorUnit,
@@ -284,17 +358,24 @@ export type ComplexRealSelector = {
   specificity: Specificity;
 };
 
-function tryParseComplexRealSelector(c: ComponentCursor): ComplexRealSelector | null {
-  return parseComplexRealSelector(c);
+export function parseComplexRealSelector(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): ComplexRealSelector | null {
+  return parseAsComponentGrammar(input, tryConsumeComplexRealSelector);
 }
 
-const parseComplexRealSelector: TryComponentParser<ComplexRealSelector> = sequenceOf(
-  one(tryParseCompoundSelector),
+function tryConsumeComplexRealSelector(c: ComponentCursor): ComplexRealSelector | null {
+  return consumeComplexRealSelector(c);
+}
+
+const consumeComplexRealSelector: TryComponentParser<ComplexRealSelector> = sequenceOf(
+  one(tryConsumeCompoundSelector),
 
   any(
     sequenceOf(
-      one(tryParseCombinator),
-      one(tryParseCompoundSelector),
+      one(tryConsumeCombinator),
+      one(tryConsumeCompoundSelector),
       ([[combinator], [compound]]) => ({
         combinator,
         compound,
@@ -322,13 +403,13 @@ export type RelativeSelector = {
   specificity: Specificity;
 };
 
-export function tryParseRelativeSelector(c: ComponentCursor): RelativeSelector | null {
-  return parseRelativeSelector(c);
+function tryConsumeRelativeSelector(c: ComponentCursor): RelativeSelector | null {
+  return consumeRelativeSelector(c);
 }
 
-const parseRelativeSelector: TryComponentParser<RelativeSelector> = sequenceOf(
-  opt(tryParseCombinator),
-  one(tryParseComplexSelector),
+const consumeRelativeSelector: TryComponentParser<RelativeSelector> = sequenceOf(
+  opt(tryConsumeCombinator),
+  one(tryConsumeComplexSelector),
 
   ([combinator, [selector]]): RelativeSelector => ({
     kind: SelectorKind.RelativeSelector,
@@ -348,13 +429,13 @@ export type RelativeRealSelector = {
   specificity: Specificity;
 };
 
-export function tryParseRelativeRealSelector(c: ComponentCursor): RelativeRealSelector | null {
-  return parseRelativeRealSelector(c);
+function tryConsumeRelativeRealSelector(c: ComponentCursor): RelativeRealSelector | null {
+  return consumeRelativeRealSelector(c);
 }
 
-const parseRelativeRealSelector: TryComponentParser<RelativeRealSelector> = sequenceOf(
-  opt(tryParseCombinator),
-  one(tryParseComplexRealSelector),
+const consumeRelativeRealSelector: TryComponentParser<RelativeRealSelector> = sequenceOf(
+  opt(tryConsumeCombinator),
+  one(tryConsumeComplexRealSelector),
 
   ([combinator, [selector]]): RelativeRealSelector => ({
     kind: SelectorKind.RelativeRealSelector,
@@ -374,13 +455,20 @@ export type CompoundSelector = {
   specificity: Specificity;
 };
 
-function tryParseCompoundSelector(c: ComponentCursor): CompoundSelector | null {
-  return parseCompoundSelector(c);
+export function parseCompoundSelector(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): CompoundSelector | null {
+  return parseAsComponentGrammar(input, tryConsumeCompoundSelector);
 }
 
-const parseCompoundSelector: TryComponentParser<CompoundSelector> = requiredSequenceOf(
-  opt(tryParseTypeSelector),
-  any(tryParseSubclassSelector),
+function tryConsumeCompoundSelector(c: ComponentCursor): CompoundSelector | null {
+  return consumeCompoundSelector(c);
+}
+
+const consumeCompoundSelector: TryComponentParser<CompoundSelector> = requiredSequenceOf(
+  opt(tryConsumeTypeSelector),
+  any(tryConsumeSubclassSelector),
 
   ([[typeSelector], subclasses]): CompoundSelector => ({
     kind: SelectorKind.CompoundSelector,
@@ -404,13 +492,13 @@ export type PseudoCompoundSelector = {
   specificity: Specificity;
 };
 
-function tryParsePseudoCompoundSelector(c: ComponentCursor): PseudoCompoundSelector | null {
-  return parsePseudoCompoundSelector(c);
+function tryConsumePseudoCompoundSelector(c: ComponentCursor): PseudoCompoundSelector | null {
+  return consumePseudoCompoundSelector(c);
 }
 
-const parsePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> = sequenceOf(
-  one(tryParsePseudoElementSelector),
-  any(tryParsePseudoClassSelector),
+const consumePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> = sequenceOf(
+  one(tryConsumePseudoElementSelector),
+  any(tryConsumePseudoClassSelector),
 
   ([[pseudoElement], pseudoClasses]): PseudoCompoundSelector => ({
     kind: SelectorKind.PseudoCompoundSelector,
@@ -428,13 +516,20 @@ const parsePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> = 
  */
 export type SimpleSelector = TypeSelector | SubclassSelector;
 
-function tryParseSimpleSelector(c: ComponentCursor): SimpleSelector | null {
-  return parseSimpleSelector(c);
+export function parseSimpleSelector(
+  input: SelectorParseInput,
+  _context: SelectorParserContext = null,
+): SimpleSelector | null {
+  return parseAsComponentGrammar(input, tryConsumeSimpleSelector);
 }
 
-const parseSimpleSelector: TryComponentParser<SimpleSelector> = oneOf(
-  one(tryParseTypeSelector),
-  one(tryParseSubclassSelector),
+function tryConsumeSimpleSelector(c: ComponentCursor): SimpleSelector | null {
+  return consumeSimpleSelector(c);
+}
+
+const consumeSimpleSelector: TryComponentParser<SimpleSelector> = oneOf(
+  one(tryConsumeTypeSelector),
+  one(tryConsumeSubclassSelector),
 
   ([selector]): SimpleSelector => selector,
 );
@@ -450,11 +545,11 @@ const parseSimpleSelector: TryComponentParser<SimpleSelector> = oneOf(
  */
 export type Combinator = ' ' | '>' | '+' | '~' | '||';
 
-function tryParseCombinator(c: ComponentCursor): Combinator | null {
-  return parseCombinator(c);
+function tryConsumeCombinator(c: ComponentCursor): Combinator | null {
+  return consumeCombinator(c);
 }
 
-const parseCombinator: TryComponentParser<Combinator> = (c) => {
+const consumeCombinator: TryComponentParser<Combinator> = (c) => {
   const start = c.pos();
 
   const sawWhitespace = c.match(TokenKind.Whitespace);
@@ -503,13 +598,13 @@ export type WqName = {
   name: string;
 };
 
-function tryParseWqName(c: ComponentCursor): WqName | null {
-  return parseWqName(c);
+function tryConsumeWqName(c: ComponentCursor): WqName | null {
+  return consumeWqName(c);
 }
 
-const parseWqName: TryComponentParser<WqName> = sequenceOf(
-  opt(tryParseNsPrefix),
-  one(tryParseIdentToken),
+const consumeWqName: TryComponentParser<WqName> = sequenceOf(
+  opt(tryConsumeNsPrefix),
+  one(tryConsumeIdentToken),
 
   ([namespace, [name]]): WqName => ({
     namespace: namespace[0] ?? null,
@@ -520,18 +615,18 @@ const parseWqName: TryComponentParser<WqName> = sequenceOf(
 /**
  * <ns-prefix> = [ <ident-token> | '*' ]? '|'
  */
-function tryParseNsPrefix(c: ComponentCursor): string | null {
-  return parseNsPrefix(c);
+function tryConsumeNsPrefix(c: ComponentCursor): string | null {
+  return consumeNsPrefix(c);
 }
 
-const tryParseStarDelim = createDelimParser('*');
-const tryParsePipeDelim = createDelimParser('|');
+const tryConsumeStarDelim = createDelimConsumer('*');
+const tryConsumePipeDelim = createDelimConsumer('|');
 
-const parseNsPrefix: TryComponentParser<string> = sequenceOf(
+const consumeNsPrefix: TryComponentParser<string> = sequenceOf(
   opt(
     oneOf(
-      one(tryParseIdentToken),
-      one(tryParseStarDelim),
+      one(tryConsumeIdentToken),
+      one(tryConsumeStarDelim),
 
       ([prefix]) => (
         typeof prefix === 'string'
@@ -540,7 +635,7 @@ const parseNsPrefix: TryComponentParser<string> = sequenceOf(
       ),
     ),
   ),
-  one(tryParsePipeDelim),
+  one(tryConsumePipeDelim),
 
   ([prefix]): string => prefix[0] ?? '',
 );
@@ -566,17 +661,17 @@ export type TypeSelector = {
   specificity: Specificity;
 };
 
-function tryParseTypeSelector(c: ComponentCursor): TypeSelector | null {
-  return parseTypeSelector(c);
+function tryConsumeTypeSelector(c: ComponentCursor): TypeSelector | null {
+  return consumeTypeSelector(c);
 }
 
-const parseTypeSelector: TryComponentParser<TypeSelector> = sequenceOf(
-  opt(tryParseNsPrefix),
+const consumeTypeSelector: TryComponentParser<TypeSelector> = sequenceOf(
+  opt(tryConsumeNsPrefix),
 
   one(
     oneOf(
-      one(tryParseIdentToken),
-      one(tryParseStarDelim),
+      one(tryConsumeIdentToken),
+      one(tryConsumeStarDelim),
 
       ([name]): string => (
         typeof name === 'string'
@@ -605,15 +700,15 @@ export type SubclassSelector =
   | AttributeSelector
   | PseudoClassSelector;
 
-function tryParseSubclassSelector(c: ComponentCursor): SubclassSelector | null {
-  return parseSubclassSelector(c);
+function tryConsumeSubclassSelector(c: ComponentCursor): SubclassSelector | null {
+  return consumeSubclassSelector(c);
 }
 
-const parseSubclassSelector: TryComponentParser<SubclassSelector> = oneOf(
-  one(tryParseIdSelector),
-  one(tryParseClassSelector),
-  one(tryParseAttributeSelector),
-  one(tryParsePseudoClassSelector),
+const consumeSubclassSelector: TryComponentParser<SubclassSelector> = oneOf(
+  one(tryConsumeIdSelector),
+  one(tryConsumeClassSelector),
+  one(tryConsumeAttributeSelector),
+  one(tryConsumePseudoClassSelector),
 
   ([selector]): SubclassSelector => selector,
 );
@@ -630,12 +725,12 @@ export type IdSelector = {
   specificity: Specificity;
 };
 
-function tryParseIdSelector(c: ComponentCursor): IdSelector | null {
-  return parseIdSelector(c);
+function tryConsumeIdSelector(c: ComponentCursor): IdSelector | null {
+  return consumeIdSelector(c);
 }
 
-const parseIdSelector: TryComponentParser<IdSelector> = sequenceOf(
-  one(tryParseIdHashToken),
+const consumeIdSelector: TryComponentParser<IdSelector> = sequenceOf(
+  one(tryConsumeIdHashToken),
 
   ([[hash]]): IdSelector => ({
     kind: SelectorKind.IdSelector,
@@ -653,15 +748,15 @@ export type ClassSelector = {
   specificity: Specificity;
 };
 
-function tryParseClassSelector(c: ComponentCursor): ClassSelector | null {
-  return parseClassSelector(c);
+function tryConsumeClassSelector(c: ComponentCursor): ClassSelector | null {
+  return consumeClassSelector(c);
 }
 
-const tryParseDotDelim = createDelimParser('.');
+const tryConsumeDotDelim = createDelimConsumer('.');
 
-const parseClassSelector: TryComponentParser<ClassSelector> = sequenceOf(
-  one(tryParseDotDelim),
-  one(tryParseIdentToken),
+const consumeClassSelector: TryComponentParser<ClassSelector> = sequenceOf(
+  one(tryConsumeDotDelim),
+  one(tryConsumeIdentToken),
 
   ([, [ident]]): ClassSelector => ({
     kind: SelectorKind.ClassSelector,
@@ -684,17 +779,17 @@ export type AttributeSelector = {
   specificity: Specificity;
 };
 
-function tryParseAttributeSelector(c: ComponentCursor): AttributeSelector | null {
-  return parseAttributeSelector(c);
+function tryConsumeAttributeSelector(c: ComponentCursor): AttributeSelector | null {
+  return consumeAttributeSelector(c);
 }
 
-const parseAttributeSelectorBody: TryComponentParser<AttributeSelector> = oneOf(
+const consumeAttributeSelectorBody: TryComponentParser<AttributeSelector> = oneOf(
   one(
     sequenceOf(
-      one(withComponentTrivia(tryParseWqName)),
-      one(withComponentTrivia(tryParseAttrMatcher)),
-      one(withComponentTrivia(tryParseAttrValue)),
-      opt(withComponentTrivia(tryParseAttrModifier)),
+      one(withComponentTrivia(tryConsumeWqName)),
+      one(withComponentTrivia(tryConsumeAttrMatcher)),
+      one(withComponentTrivia(tryConsumeAttrValue)),
+      opt(withComponentTrivia(tryConsumeAttrModifier)),
 
       ([[name], [matcher], [value], modifier]): AttributeSelector => ({
         kind: SelectorKind.AttributeSelector,
@@ -709,7 +804,7 @@ const parseAttributeSelectorBody: TryComponentParser<AttributeSelector> = oneOf(
 
   one(
     sequenceOf(
-      one(withComponentTrivia(tryParseWqName)),
+      one(withComponentTrivia(tryConsumeWqName)),
 
       ([[name]]): AttributeSelector => ({
         kind: SelectorKind.AttributeSelector,
@@ -725,7 +820,7 @@ const parseAttributeSelectorBody: TryComponentParser<AttributeSelector> = oneOf(
   ([selector]): AttributeSelector => selector,
 );
 
-const parseAttributeSelector: TryComponentParser<AttributeSelector> = (c) => {
+const consumeAttributeSelector: TryComponentParser<AttributeSelector> = (c) => {
   const start = c.pos();
   const block = c.next();
 
@@ -735,7 +830,7 @@ const parseAttributeSelector: TryComponentParser<AttributeSelector> = (c) => {
   }
 
   const inner = new ComponentCursor(block.value);
-  const selector = parseAttributeSelectorBody(inner);
+  const selector = consumeAttributeSelectorBody(inner);
 
   if (selector === null) {
     c.restore(start);
@@ -757,11 +852,11 @@ const parseAttributeSelector: TryComponentParser<AttributeSelector> = (c) => {
  */
 export type AttrMatcher = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
-function tryParseAttrMatcher(c: ComponentCursor): AttrMatcher | null {
-  return parseAttrMatcher(c);
+function tryConsumeAttrMatcher(c: ComponentCursor): AttrMatcher | null {
+  return consumeAttrMatcher(c);
 }
 
-const parseAttrMatcher: TryComponentParser<AttrMatcher> = (c) => {
+const consumeAttrMatcher: TryComponentParser<AttrMatcher> = (c) => {
   const start = c.pos();
   const first = c.next();
 
@@ -785,37 +880,17 @@ const parseAttrMatcher: TryComponentParser<AttrMatcher> = (c) => {
   return null;
 };
 
-// type AttrMatcherPrefix = '~' | '|' | '^' | '$' | '*';
-
-// const parseAttrMatcherPrefix: TryValueParser<AttrMatcherPrefix> = oneOf(
-//   one(delim('~')),
-//   one(delim('|')),
-//   one(delim('^')),
-//   one(delim('$')),
-//   one(delim('*')),
-
-//   ([prefix]) => prefix,
-// );
-
-// const parseAttrMatcher: TryValueParser<AttrMatcher> = sequenceOf(
-//   opt(parseAttrMatcherPrefix),
-//   one(delim('=')),
-
-//   ([prefix]): AttrMatcher =>
-//     `${prefix[0] ?? ''}=`,
-// );
 
 /**
- * [ <string-token> | <ident-token> ]
+ * <attr-value> = [ <string-token> | <ident-token> ]
  */
-
-function tryParseAttrValue(c: ComponentCursor): string | null {
-  return parseAttrValue(c);
+function tryConsumeAttrValue(c: ComponentCursor): string | null {
+  return consumeAttrValue(c);
 }
 
-const parseAttrValue: TryComponentParser<string> = oneOf(
-  one(tryParseStringToken),
-  one(tryParseIdentToken),
+const consumeAttrValue: TryComponentParser<string> = oneOf(
+  one(tryConsumeStringToken),
+  one(tryConsumeIdentToken),
 
   ([token]): string => token.value,
 );
@@ -825,13 +900,13 @@ const parseAttrValue: TryComponentParser<string> = oneOf(
  */
 export type AttrModifier = 'i' | 's';
 
-function tryParseAttrModifier(c: ComponentCursor): AttrModifier | null {
-  return parseAttrModifier(c);
+function tryConsumeAttrModifier(c: ComponentCursor): AttrModifier | null {
+  return consumeAttrModifier(c);
 }
 
-const parseAttrModifier: TryComponentParser<AttrModifier> = (c) => {
+const consumeAttrModifier: TryComponentParser<AttrModifier> = (c) => {
   const start = c.pos();
-  const ident = tryParseIdentToken(c);
+  const ident = tryConsumeIdentToken(c);
 
   if (ident === null) {
     return null;
@@ -847,13 +922,6 @@ const parseAttrModifier: TryComponentParser<AttrModifier> = (c) => {
   return null;
 };
 
-// const parseAttrModifier: TryValueParser<AttrModifier> = oneOf(
-//   one(identValue('i')),
-//   one(identValue('s')),
-
-//   ([modifier]): AttrModifier => modifier,
-// );
-
 /**
  * <pseudo-class-selector> =
  *   : <ident-token> |
@@ -864,17 +932,18 @@ export type PseudoClassSelector = {
   name: string;
   argument: PseudoClassArgument | null;
   specificity: Specificity;
+  isFeatureless: PseudoFeatureless;
 };
 
-function tryParsePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | null {
-  return parsePseudoClassSelector(c);
+function tryConsumePseudoClassSelector(c: ComponentCursor): PseudoClassSelector | null {
+  return consumePseudoClassSelector(c);
 }
 
-const parsePseudoClassSelector: TryComponentParser<PseudoClassSelector> = oneOf(
+const consumePseudoClassSelector: TryComponentParser<PseudoClassSelector> = oneOf(
   one(
     sequenceOf(
-      one(tryParseColon),
-      one(tryParseIdentToken),
+      one(tryConsumeColon),
+      one(tryConsumeIdentToken),
 
       ([, [ident]]): PseudoClassSelector | null =>
         createPseudoClassSelector(ident.value, null),
@@ -883,8 +952,8 @@ const parsePseudoClassSelector: TryComponentParser<PseudoClassSelector> = oneOf(
 
   one(
     sequenceOf(
-      one(tryParseColon),
-      one(tryParseFunctionBlock),
+      one(tryConsumeColon),
+      one(tryConsumeFunctionBlock),
 
       ([, [fn]]): PseudoClassSelector | null =>
         createPseudoClassSelector(fn.name, fn.value),
@@ -903,16 +972,17 @@ export type PseudoElementSelector = {
   name: string;
   argument: PseudoElementArgument | null;
   specificity: Specificity;
+  isFeatureless: PseudoFeatureless;
 };
 
-function tryParsePseudoElementSelector(c: ComponentCursor): PseudoElementSelector | null {
-  return parsePseudoElementSelector(c);
+function tryConsumePseudoElementSelector(c: ComponentCursor): PseudoElementSelector | null {
+  return consumePseudoElementSelector(c);
 }
 
-const parsePseudoElementSelector: TryComponentParser<PseudoElementSelector> = oneOf(
+const consumePseudoElementSelector: TryComponentParser<PseudoElementSelector> = oneOf(
   one(
     sequenceOf(
-      one(tryParseLegacyPseudoElementName),
+      one(tryConsumeLegacyPseudoElementName),
 
       ([[name]]): PseudoElementSelector | null =>
         createPseudoElementSelector(name, null, true),
@@ -921,9 +991,9 @@ const parsePseudoElementSelector: TryComponentParser<PseudoElementSelector> = on
 
   one(
     sequenceOf(
-      one(tryParseColon),
-      one(tryParseColon),
-      one(tryParseIdentToken),
+      one(tryConsumeColon),
+      one(tryConsumeColon),
+      one(tryConsumeIdentToken),
 
       ([, , [ident]]): PseudoElementSelector | null =>
         createPseudoElementSelector(ident.value, null, false),
@@ -932,9 +1002,9 @@ const parsePseudoElementSelector: TryComponentParser<PseudoElementSelector> = on
 
   one(
     sequenceOf(
-      one(tryParseColon),
-      one(tryParseColon),
-      one(tryParseFunctionBlock),
+      one(tryConsumeColon),
+      one(tryConsumeColon),
+      one(tryConsumeFunctionBlock),
 
       ([, , [fn]]): PseudoElementSelector | null =>
         createPseudoElementSelector(fn.name, fn.value, false),
@@ -954,18 +1024,18 @@ type LegacyPseudoElementName =
   | 'first-line'
   | 'first-letter';
 
-function tryParseLegacyPseudoElementName(c: ComponentCursor): LegacyPseudoElementName | null {
-  return parseLegacyPseudoElementName(c);
+function tryConsumeLegacyPseudoElementName(c: ComponentCursor): LegacyPseudoElementName | null {
+  return consumeLegacyPseudoElementName(c);
 }
 
-const parseLegacyPseudoElementName: TryComponentParser<LegacyPseudoElementName> = (c) => {
+const consumeLegacyPseudoElementName: TryComponentParser<LegacyPseudoElementName> = (c) => {
   const start = c.pos();
 
-  if (tryParseColon(c) === null) {
+  if (tryConsumeColon(c) === null) {
     return null;
   }
 
-  const ident = tryParseIdentToken(c);
+  const ident = tryConsumeIdentToken(c);
 
   if (ident === null) {
     c.restore(start);
@@ -988,29 +1058,13 @@ function isLegacyPseudoElementName(value: string): value is LegacyPseudoElementN
   );
 }
 
-// const parseLegacyPseudoElementName: TryValueParser<LegacyPseudoElementName> = sequenceOf(
-//   one(tryParseColon),
-//   one(
-//     oneOf(
-//       one(identValue('before')),
-//       one(identValue('after')),
-//       one(identValue('first-line')),
-//       one(identValue('first-letter')),
+// Token and delimiter consumers
 
-//       ([name]) => name,
-//     ),
-//   ),
-
-//   ([, [name]]): LegacyPseudoElementName => name,
-// );
-
-// Helpers and simple parsers
-
-function tryParseColon(c: ComponentCursor): ':' | null {
+function tryConsumeColon(c: ComponentCursor): ':' | null {
   return c.match(TokenKind.Colon) ? ':' : null;
 }
 
-function tryParseIdentToken(c: ComponentCursor): IdentToken | null {
+function tryConsumeIdentToken(c: ComponentCursor): IdentToken | null {
   const start = c.pos();
   const comp = c.next();
 
@@ -1022,7 +1076,7 @@ function tryParseIdentToken(c: ComponentCursor): IdentToken | null {
   return comp;
 }
 
-function tryParseStringToken(c: ComponentCursor): StringToken | null {
+function tryConsumeStringToken(c: ComponentCursor): StringToken | null {
   const start = c.pos();
   const comp = c.next();
 
@@ -1034,7 +1088,7 @@ function tryParseStringToken(c: ComponentCursor): StringToken | null {
   return comp;
 }
 
-function tryParseIdHashToken(c: ComponentCursor): HashToken | null {
+function tryConsumeIdHashToken(c: ComponentCursor): HashToken | null {
   const start = c.pos();
   const comp = c.next();
 
@@ -1049,7 +1103,7 @@ function tryParseIdHashToken(c: ComponentCursor): HashToken | null {
   return comp;
 }
 
-function tryParseFunctionBlock(c: ComponentCursor): FunctionBlock | null {
+function tryConsumeFunctionBlock(c: ComponentCursor): FunctionBlock | null {
   const start = c.pos();
   const comp = c.next();
 
@@ -1061,7 +1115,7 @@ function tryParseFunctionBlock(c: ComponentCursor): FunctionBlock | null {
   return comp;
 }
 
-function createDelimParser<T extends string>(expected: T): TryComponentParser<T> {
+function createDelimConsumer<T extends string>(expected: T): TryComponentParser<T> {
   return (c) => {
     const start = c.pos();
     const comp = c.next();
@@ -1075,59 +1129,444 @@ function createDelimParser<T extends string>(expected: T): TryComponentParser<T>
   };
 }
 
-// function identValue<T extends string>(expected: T): TryValueParser<T> {
-//   return (c) => {
-//     const start = c.pos();
-//     const comp = c.next();
+function createIdentValueConsumer<T extends string>(
+  expected: T,
+): TryComponentParser<T> {
+  return (c) => {
+    const start = c.pos();
+    const ident = tryConsumeIdentToken(c);
 
-//     if (!isIdentTokenWithValue(comp, expected, true)) {
-//       c.restore(start);
-//       return null;
-//     }
-
-//     return expected;
-//   };
-// }
-
-function createPseudoClassSelector(
-  rawName: string,
-  value: ComponentValue[] | null,
-): PseudoClassSelector | null {
-  const name = canonicalPseudoClassName(rawName);
-  const def = PSEUDO_CLASSES[name];
-
-  if (def === undefined) {
-    return null;
-  }
-
-  if (value === null) {
-    if (def.bare === undefined) {
+    if (ident === null) {
+      c.restore(start);
       return null;
     }
 
-    return {
-      kind: SelectorKind.PseudoClassSelector,
-      name,
-      argument: null,
-      specificity: def.bare.specificity,
-    };
+    if (asciiLower(ident.value) !== expected) {
+      c.restore(start);
+      return null;
+    }
+
+    return expected;
+  };
+}
+
+export enum PseudoFeatureless {
+  False = 'false',
+  True = 'true',
+  Maybe = 'maybe',
+}
+
+function createPseudoClassSelector(
+  rawName: string,
+  value: readonly ComponentValue[] | null,
+  _context: SelectorParserContext = null,
+): PseudoClassSelector | null {
+  const name = canonicalPseudoClassName(rawName);
+
+  switch (name) {
+    // Logical combination pseudo-classes
+
+    case 'is': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseForgivingSelectorListArgument(value);
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: argument.selectors.specificity,
+        isFeatureless: PseudoFeatureless.Maybe,
+      };
+    }
+
+    case 'where': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseForgivingSelectorListArgument(value);
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: Specificity0,
+        isFeatureless: PseudoFeatureless.Maybe,
+      };
+    }
+
+    case 'not': {
+      if (value === null) {
+        return null;
+      }
+
+      const selectors = parseComplexRealSelectorList(value);
+
+      if (selectors === null) {
+        return null;
+      }
+
+      const argument: ComplexRealSelectorListPseudoArgument = {
+        kind: PseudoArgumentKind.ComplexRealSelectorList,
+        selectors,
+      };
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: argument.selectors.specificity,
+        isFeatureless: PseudoFeatureless.Maybe,
+      };
+    }
+
+    case 'has': {
+      if (value === null) {
+        return null;
+      }
+
+      const selectors = parseRelativeSelectorList(value);
+
+      if (selectors === null) {
+        return null;
+      }
+
+      const argument: RelativeSelectorListPseudoArgument = {
+        kind: PseudoArgumentKind.RelativeSelectorList,
+        selectors,
+      };
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: argument.selectors.specificity,
+        isFeatureless: PseudoFeatureless.Maybe,
+      };
+    }
+
+    // Elemental pseudo-classes
+
+    case 'defined': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Linguistic pseudo-classes
+
+    case 'dir': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseDirectionArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: SpecificityB,
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    case 'lang': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseLanguageRangeListArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: SpecificityB,
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    // Location pseudo-classes
+
+    case 'any-link':
+    case 'link':
+    case 'visited':
+    case 'target': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    case 'scope': {
+      return createNoArgumentPseudoClassSelector(
+        name,
+        value,
+        SpecificityB,
+        PseudoFeatureless.Maybe,
+      );
+    }
+
+    // User action pseudo-classes
+
+    case 'hover':
+    case 'active':
+    case 'focus':
+    case 'focus-visible':
+    case 'focus-within': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Resource state pseudo-classes
+
+    case 'playing':
+    case 'paused':
+    case 'seeking':
+    case 'buffering':
+    case 'stalled':
+    case 'muted':
+    case 'volume-locked': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Element display state pseudo-classes
+
+    case 'open':
+    case 'popover-open':
+    case 'modal':
+    case 'fullscreen':
+    case 'picture-in-picture': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Input pseudo-classes
+
+    case 'enabled':
+    case 'disabled':
+    case 'read-only':
+    case 'read-write':
+    case 'placeholder-shown':
+    case 'autofill':
+    case 'default':
+    case 'checked':
+    case 'unchecked':
+    case 'indeterminate':
+    case 'valid':
+    case 'invalid':
+    case 'in-range':
+    case 'out-of-range':
+    case 'required':
+    case 'optional':
+    case 'user-valid':
+    case 'user-invalid': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Tree-structural pseudo-classes
+
+    case 'root':
+    case 'empty': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Child-indexed pseudo-classes
+
+    case 'nth-child': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseNthChildArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: addSpecificity(
+          SpecificityB,
+          argument.of?.specificity ?? Specificity0,
+        ),
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    case 'nth-last-child': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseNthChildArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: addSpecificity(
+          SpecificityB,
+          argument.of?.specificity ?? Specificity0,
+        ),
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    case 'first-child':
+    case 'last-child':
+    case 'only-child': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Typed child-indexed pseudo-classes
+
+    case 'nth-of-type': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseAnPlusBArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: SpecificityB,
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    case 'nth-last-of-type': {
+      if (value === null) {
+        return null;
+      }
+
+      const argument = parseAnPlusBArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: SpecificityB,
+        isFeatureless: PseudoFeatureless.False,
+      };
+    }
+
+    case 'first-of-type':
+    case 'last-of-type':
+    case 'only-of-type': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Shadow pseudo-classes
+
+    case 'host': {
+      if (value === null) {
+        return {
+          kind: SelectorKind.PseudoClassSelector,
+          name,
+          argument: null,
+          specificity: SpecificityB,
+          isFeatureless: PseudoFeatureless.True,
+        };
+      }
+
+      const selector = parseCompoundSelector(value);
+
+      if (selector === null) {
+        return null;
+      }
+
+      const argument: CompoundSelectorPseudoArgument = {
+        kind: PseudoArgumentKind.CompoundSelector,
+        selector,
+      };
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: addSpecificity(
+          SpecificityB,
+          argument.selector.specificity,
+        ),
+        isFeatureless: PseudoFeatureless.True,
+      };
+    }
+
+    case 'host-context': {
+      if (value === null) {
+        return null;
+      }
+
+      const selector = parseCompoundSelector(value);
+
+      if (selector === null) {
+        return null;
+      }
+
+      const argument: CompoundSelectorPseudoArgument = {
+        kind: PseudoArgumentKind.CompoundSelector,
+        selector,
+      };
+
+      return {
+        kind: SelectorKind.PseudoClassSelector,
+        name,
+        argument,
+        specificity: addSpecificity(
+          SpecificityB,
+          argument.selector.specificity,
+        ),
+        isFeatureless: PseudoFeatureless.True,
+      };
+    }
+
+    case 'has-slotted': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    default:
+      return null;
   }
+}
 
-  if (def.functional === undefined) {
-    return null;
-  }
-
-  const argument = parsePseudoClassArgument(def.functional.argument, value);
-
-  if (argument === null) {
+function createNoArgumentPseudoClassSelector(
+  name: string,
+  value: readonly ComponentValue[] | null,
+  specificity: Specificity = SpecificityB,
+  isFeatureless: PseudoFeatureless = PseudoFeatureless.False,
+): PseudoClassSelector | null {
+  if (value !== null) {
     return null;
   }
 
   return {
     kind: SelectorKind.PseudoClassSelector,
     name,
-    argument,
-    specificity: def.functional.specificity(argument),
+    argument: null,
+    specificity,
+    isFeatureless,
   };
 }
 
@@ -1147,82 +1586,16 @@ function canonicalPseudoClassName(rawName: string): string {
   return PSEUDO_CLASS_ALIASES[name] ?? name;
 }
 
-export function parsePseudoClassArgument(
-  kind: PseudoClassArgumentKind,
-  value: ComponentValue[],
-): PseudoClassArgument | null {
-  switch (kind) {
-    case PseudoClassArgumentKind.ForgivingSelectorList:
-      return parseForgivingSelectorListArgument(value);
-
-    case PseudoClassArgumentKind.RelativeSelectorList:
-      return parseWholeArgument(
-        value,
-        tryParseRelativeSelectorList,
-        (selectors): RelativeSelectorListPseudoClassArgument => ({
-          kind: PseudoClassArgumentKind.RelativeSelectorList,
-          selectors,
-        }),
-      );
-
-    case PseudoClassArgumentKind.ComplexRealSelectorList:
-      return parseWholeArgument(
-        value,
-        tryParseComplexRealSelectorList,
-        (selectors): ComplexRealSelectorListPseudoClassArgument => ({
-          kind: PseudoClassArgumentKind.ComplexRealSelectorList,
-          selectors,
-        }),
-      );
-
-    case PseudoClassArgumentKind.CompoundSelector:
-      return parseWholeArgument(
-        value,
-        tryParseCompoundSelector,
-        (selector): CompoundSelectorPseudoClassArgument => ({
-          kind: PseudoClassArgumentKind.CompoundSelector,
-          selector,
-        }),
-      );
-
-    case PseudoClassArgumentKind.AnPlusB:
-      return parseWholeArgument(
-        value,
-        tryParseAnPlusB,
-        (anb): AnPlusBPseudoClassArgument => ({
-          kind: PseudoClassArgumentKind.AnPlusB,
-          ...anb,
-        }),
-      );
-
-    case PseudoClassArgumentKind.Direction:
-      return parseWholeArgument(
-        value,
-        tryParseDirection,
-        (direction): DirectionPseudoClassArgument => ({
-          kind: PseudoClassArgumentKind.Direction,
-          value: direction,
-        }),
-      );
-
-    case PseudoClassArgumentKind.LanguageRangeList:
-      return parseLanguageRangeListArgument(value);
-
-    case PseudoClassArgumentKind.NthChild:
-      return null;
-  }
-}
-
 function parseForgivingSelectorListArgument(
-  arg: ComponentValue[],
-): ForgivingSelectorListPseudoClassArgument {
+  arg: readonly ComponentValue[],
+): ForgivingSelectorListPseudoArgument {
   const arms = parseListAsComponentGrammar(
     arg,
-    withComponentTrivia(tryParseComplexRealSelector),
+    withComponentTrivia(tryConsumeComplexRealSelector),
   ).filter((selector): selector is ComplexRealSelector => selector !== null);
 
   return {
-    kind: PseudoClassArgumentKind.ForgivingSelectorList,
+    kind: PseudoArgumentKind.ForgivingSelectorList,
     selectors: {
       kind: SelectorKind.ComplexRealSelectorList,
       arms,
@@ -1231,37 +1604,82 @@ function parseForgivingSelectorListArgument(
   };
 }
 
-function parseWholeArgument<T, R>(
-  value: ComponentValue[],
-  parse: TryComponentParser<T>,
-  create: (value: T) => R,
-): R | null {
-  const c = new ComponentCursor(value);
-  const parsed = parse(c);
+function parseAnPlusBArgument(
+  value: readonly ComponentValue[],
+): AnPlusBPseudoArgument | null {
+  const anb = parseAsComponentGrammar(
+    value,
+    withComponentTrivia(tryConsumeAnPlusB),
+  );
 
-  if (parsed === null) {
+  if (anb === null) {
     return null;
   }
 
-  consumeComponentTrivia(c);
-
-  if (c.peek() !== null) {
-    return null;
-  }
-
-  return create(parsed);
+  return {
+    kind: PseudoArgumentKind.AnPlusB,
+    ...anb,
+  };
 }
 
-function tryParseAnPlusB(_c: ComponentCursor): { a: number; b: number; } | null {
+function tryConsumeAnPlusB(_c: ComponentCursor): { a: number; b: number; } | null {
   return null; // TODO: Implement An+B parser
 }
 
+function parseNthChildArgument(
+  value: readonly ComponentValue[],
+): NthChildPseudoArgument | null {
+  return parseAsComponentGrammar(
+    value,
+    tryConsumeNthChildArgument,
+  );
+}
+
+function tryConsumeNthChildArgument(c: ComponentCursor): NthChildPseudoArgument | null {
+  const start = c.pos();
+
+  const anb = withComponentTrivia(tryConsumeAnPlusB)(c);
+
+  if (anb === null) {
+    c.restore(start);
+    return null;
+  }
+
+  const of = tryConsumeNthChildOfClause(c);
+
+  return {
+    kind: PseudoArgumentKind.NthChild,
+    ...anb,
+    of,
+  };
+}
+
+const tryConsumeOfIdent = createIdentValueConsumer('of');
+
+function tryConsumeNthChildOfClause(c: ComponentCursor): ComplexRealSelectorList | null {
+  const start = c.pos();
+
+  if (withComponentTrivia(tryConsumeOfIdent)(c) === null) {
+    c.restore(start);
+    return null;
+  }
+
+  const selectors = withComponentTrivia(tryConsumeComplexRealSelectorList)(c);
+
+  if (selectors === null) {
+    c.restore(start);
+    return null;
+  }
+
+  return selectors;
+}
+
 function parseLanguageRangeListArgument(
-  value: ComponentValue[],
-): LanguageRangeListPseudoClassArgument | null {
+  value: readonly ComponentValue[],
+): LanguageRangeListPseudoArgument | null {
   const parsed = parseListAsComponentGrammar(
     value,
-    withComponentTrivia(tryParseLanguageRange),
+    withComponentTrivia(tryConsumeLanguageRange),
   );
 
   const ranges: LanguageRange[] = [];
@@ -1279,12 +1697,12 @@ function parseLanguageRangeListArgument(
   }
 
   return {
-    kind: PseudoClassArgumentKind.LanguageRangeList,
+    kind: PseudoArgumentKind.LanguageRangeList,
     ranges,
   };
 }
 
-function tryParseLanguageRange(c: ComponentCursor): LanguageRange | null {
+function tryConsumeLanguageRange(c: ComponentCursor): LanguageRange | null {
   const start = c.pos();
   const component = c.next();
 
@@ -1300,7 +1718,25 @@ function tryParseLanguageRange(c: ComponentCursor): LanguageRange | null {
   return null;
 }
 
-function tryParseDirection(c: ComponentCursor): string | null {
+function parseDirectionArgument(
+  value: readonly ComponentValue[],
+): DirectionPseudoArgument | null {
+  const raw = parseAsComponentGrammar(
+    value,
+    withComponentTrivia(tryConsumeDirectionIdent),
+  );
+
+  if (raw === null) {
+    return null; // invalid syntax: not a single ident, trailing junk, etc.
+  }
+
+  return {
+    kind: PseudoArgumentKind.Direction,
+    value: raw === 'ltr' || raw === 'rtl' ? raw : null,
+  };
+}
+
+function tryConsumeDirectionIdent(c: ComponentCursor): string | null {
   const start = c.pos();
   const ident = c.next();
 
@@ -1314,147 +1750,275 @@ function tryParseDirection(c: ComponentCursor): string | null {
 
 function createPseudoElementSelector(
   rawName: string,
-  value: ComponentValue[] | null,
+  value: readonly ComponentValue[] | null,
   legacy: boolean,
+  _context: SelectorParserContext = null,
 ): PseudoElementSelector | null {
   const name = asciiLower(rawName);
-  const def = PSEUDO_ELEMENTS[name];
 
-  if (def === undefined) {
-    return null;
-  }
+  switch (name) {
+    // Typographic pseudo-elements
 
-  if (value === null) {
-    if (def.bare === undefined) {
-      return null;
+    case 'first-line':
+    case 'first-letter': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
     }
 
-    return {
-      kind: SelectorKind.PseudoElementSelector,
-      name,
-      argument: null,
-      specificity: def.bare.specificity,
-    };
-  }
+    // Sub-pseudo-elements of ::first-letter.
+    // Valid in chains like ::first-letter::prefix / ::first-letter::suffix.
+    // Placement validity is not handled here yet.
 
-  if (def.functional === undefined) {
+    case 'prefix':
+    case 'suffix': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    // Highlight pseudo-elements
+
+    case 'selection':
+    case 'search-text':
+    case 'target-text':
+    case 'spelling-error':
+    case 'grammar-error': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    case 'highlight': {
+      if (legacy || value === null) {
+        return null;
+      }
+
+      const ident = parseCustomIdent(value);
+
+      if (ident === null) {
+        return null;
+      }
+
+      const argument: CustomIdentPseudoArgument = {
+        kind: PseudoArgumentKind.CustomIdent,
+        value: ident,
+      };
+
+      return {
+        kind: SelectorKind.PseudoElementSelector,
+        name,
+        argument,
+        specificity: SpecificityC,
+        isFeatureless: PseudoFeatureless.True,
+      };
+    }
+
+    // Generated content pseudo-elements
+
+    case 'before':
+    case 'after': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    // List marker pseudo-elements
+
+    case 'marker': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    // Input pseudo-elements
+
+    case 'placeholder': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    // Element-backed pseudo-elements
+
+    case 'file-selector-button':
+    case 'details-content': {
+      return createNoArgumentPseudoElementSelector(name, value, legacy);
+    }
+
+    // Shadow pseudo-elements
+
+    case 'slotted': {
+      if (legacy || value === null) {
+        return null;
+      }
+
+      const selector = parseCompoundSelector(value);
+
+      if (selector === null) {
+        return null;
+      }
+
+      const argument: CompoundSelectorPseudoArgument = {
+        kind: PseudoArgumentKind.CompoundSelector,
+        selector,
+      };
+
+      return {
+        kind: SelectorKind.PseudoElementSelector,
+        name,
+        argument,
+        specificity: addSpecificity(
+          SpecificityC,
+          argument.selector.specificity,
+        ),
+        isFeatureless: PseudoFeatureless.True,
+      };
+    }
+
+    case 'part': {
+      if (legacy || value === null) {
+        return null;
+      }
+
+      const argument = parsePartNameListArgument(value);
+
+      if (argument === null) {
+        return null;
+      }
+
+      return {
+        kind: SelectorKind.PseudoElementSelector,
+        name,
+        argument,
+        specificity: SpecificityC,
+        isFeatureless: PseudoFeatureless.True,
+      };
+    }
+
+    default: {
+      return null;
+    }
+  }
+}
+
+function createNoArgumentPseudoElementSelector(
+  name: string,
+  value: readonly ComponentValue[] | null,
+  legacy: boolean,
+  specificity: Specificity = SpecificityC,
+): PseudoElementSelector | null {
+  if (value !== null) {
     return null;
   }
 
-  if (legacy) {
-    return null;
-  }
-
-  const argument = parsePseudoElementArgument(def.functional.argument, value);
-
-  if (argument === null) {
+  // Defensive only. The parser already restricts legacy names before this.
+  if (legacy && !isLegacyPseudoElementName(name)) {
     return null;
   }
 
   return {
     kind: SelectorKind.PseudoElementSelector,
     name,
-    argument,
-    specificity: def.functional.specificity(argument),
+    argument: null,
+    specificity,
+    isFeatureless: PseudoFeatureless.True,
   };
 }
 
-function parsePseudoElementArgument(
-  kind: PseudoElementArgumentKind,
-  value: ComponentValue[],
-): PseudoElementArgument | null {
-  switch (kind) {
-    case PseudoElementArgumentKind.CompoundSelector:
-      return parseWholeArgument(
-        value,
-        tryParseCompoundSelector,
-        (selector): CompoundSelectorPseudoElementArgument => ({
-          kind: PseudoElementArgumentKind.CompoundSelector,
-          selector,
-        }),
-      );
-
-    case PseudoElementArgumentKind.PartNameList:
-      return parsePartNameListArgument(value);
-
-    case PseudoElementArgumentKind.SelectorList:
-      return parseWholeArgument(
-        value,
-        tryParseSelectorList,
-        (selectors): SelectorListPseudoElementArgument => ({
-          kind: PseudoElementArgumentKind.SelectorList,
-          selectors,
-        }),
-      );
-
-    case PseudoElementArgumentKind.CustomIdent:
-      return parseWholeArgument(
-        value,
-        tryParseCustomIdent,
-        (ident): CustomIdentPseudoElementArgument => ({
-          kind: PseudoElementArgumentKind.CustomIdent,
-          value: ident,
-        }),
-      );
-
-    default: assertNever(kind);
-  }
+function tryConsumePartNameList(c: ComponentCursor): string[] | null {
+  return consumePartNameList(c);
 }
 
-// function parsePartNameListArgument(
-//   value: readonly ComponentValue[],
-// ): PartNameListPseudoElementArgument | null {
-//   const names = parseAsComponentGrammar(
-//     value,
-//     tryParsePartNameList,
-//   );
-
-//   if (names === null) {
-//     return null;
-//   }
-
-//   return {
-//     kind: PseudoElementArgumentKind.PartNameList,
-//     names,
-//   };
-// }
-
-const tryParsePartNameList = plus(
+const consumePartNameList: TryComponentParser<string[]> = plus(
   withComponentTrivia((c): string | null => {
-    const ident = tryParseIdentToken(c);
+    const ident = tryConsumeIdentToken(c);
     return ident?.value ?? null;
   }),
 );
 
 function parsePartNameListArgument(
   value: readonly ComponentValue[],
-): PartNameListPseudoElementArgument | null {
-  const names = parseAsComponentGrammar(value, tryParsePartNameList);
+): PartNameListPseudoArgument | null {
+  const names = parseAsComponentGrammar(value, tryConsumePartNameList);
 
   if (names === null) {
     return null;
   }
 
   return {
-    kind: PseudoElementArgumentKind.PartNameList,
+    kind: PseudoArgumentKind.PartNameList,
     names,
   };
 }
 
-// const tryParsePartNameList: TryComponentParser<string[]> = (c) => {
-//   const names: string[] = [];
+export enum PseudoArgumentKind {
+  ForgivingSelectorList = 'forgiving-selector-list',
+  ComplexRealSelectorList = 'complex-real-selector-list',
+  RelativeSelectorList = 'relative-selector-list',
+  CompoundSelector = 'compound-selector',
+  Direction = 'direction',
+  LanguageRangeList = 'language-range-list',
+  AnPlusB = 'an-plus-b',
+  NthChild = 'nth-child',
+  PartNameList = 'part-name-list',
+  CustomIdent = 'custom-ident',
+}
 
-//   while (true) {
-//     consumeComponentTrivia(c);
+type PseudoClassArgument =
+  | ForgivingSelectorListPseudoArgument
+  | ComplexRealSelectorListPseudoArgument
+  | RelativeSelectorListPseudoArgument
+  | CompoundSelectorPseudoArgument
+  | DirectionPseudoArgument
+  | LanguageRangeListPseudoArgument
+  | AnPlusBPseudoArgument
+  | NthChildPseudoArgument;
 
-//     const ident = tryParseIdentToken(c);
+type PseudoElementArgument =
+  | CompoundSelectorPseudoArgument
+  | PartNameListPseudoArgument
+  | CustomIdentPseudoArgument;
 
-//     if (ident === null) {
-//       break;
-//     }
+type ForgivingSelectorListPseudoArgument = {
+  kind: PseudoArgumentKind.ForgivingSelectorList;
+  selectors: ComplexRealSelectorList;
+};
 
-//     names.push(ident.value);
-//   }
+type RelativeSelectorListPseudoArgument = {
+  kind: PseudoArgumentKind.RelativeSelectorList;
+  selectors: RelativeSelectorList;
+};
 
-//   return names.length > 0 ? names : null;
-// };
+type ComplexRealSelectorListPseudoArgument = {
+  kind: PseudoArgumentKind.ComplexRealSelectorList;
+  selectors: ComplexRealSelectorList;
+};
+
+type CompoundSelectorPseudoArgument = {
+  kind: PseudoArgumentKind.CompoundSelector;
+  selector: CompoundSelector;
+};
+
+type DirectionPseudoArgument = {
+  kind: PseudoArgumentKind.Direction;
+  value: 'ltr' | 'rtl' | null;
+};
+
+type LanguageRangeListPseudoArgument = {
+  kind: PseudoArgumentKind.LanguageRangeList;
+  ranges: LanguageRange[];
+};
+
+type LanguageRange = string;
+
+type AnPlusBPseudoArgument = {
+  kind: PseudoArgumentKind.AnPlusB;
+  a: number;
+  b: number;
+};
+
+type NthChildPseudoArgument = {
+  kind: PseudoArgumentKind.NthChild;
+  a: number;
+  b: number;
+  of: ComplexRealSelectorList | null;
+};
+
+type PartNameListPseudoArgument = {
+  kind: PseudoArgumentKind.PartNameList;
+  names: string[];
+};
+
+type CustomIdentPseudoArgument = {
+  kind: PseudoArgumentKind.CustomIdent;
+  value: CustomIdentValue;
+};

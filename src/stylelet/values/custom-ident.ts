@@ -1,11 +1,17 @@
 import { asciiLower } from '../../utils/css';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
+import { withComponentTrivia } from '../parser/component-grammar';
+import {
+  isIdentToken, parseAsComponentGrammar,
+  type ComponentValue,
+} from '../parser/syntax';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
   value: string;
 };
+
+export type CustomIdentParseInput = string | readonly ComponentValue[];
 
 const CSS_WIDE_KEYWORDS = [
   'inherit',
@@ -15,14 +21,21 @@ const CSS_WIDE_KEYWORDS = [
   'revert-layer',
 ] as const;
 
-export function tryParseCustomIdent(
+export function parseCustomIdent(
+  input: CustomIdentParseInput,
+  excluded: readonly string[] = [],
+): CustomIdentValue | null {
+  return parseAsComponentGrammar(
+    input,
+    withComponentTrivia((c) => tryConsumeCustomIdent(c, excluded)),
+  );
+}
+
+export function tryConsumeCustomIdent(
   c: ComponentCursor,
   excluded: readonly string[] = [],
 ): CustomIdentValue | null {
   const start = c.pos();
-
-  consumeComponentTrivia(c);
-
   const comp = c.next();
 
   if (!isIdentToken(comp)) {

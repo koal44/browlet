@@ -5,7 +5,7 @@ import {
 } from '../parser/component-grammar';
 import { tryConsumeKeywordIn } from '../values/keyword';
 import {
-  serializeCustomIdent, tryParseCustomIdent,
+  serializeCustomIdent, tryConsumeCustomIdent,
   type CustomIdentValue,
 } from '../values/custom-ident';
 import {
@@ -42,7 +42,7 @@ const tryParseNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
 };
 
 const tryParseKeyframesName: TryComponentParser<KeyframesNameValue> = oneOf(
-  one((c) => tryParseCustomIdent(c, ['none'])),
+  one((c) => tryConsumeCustomIdent(c, ['none'])),
   one(tryParseString),
   ([value]): KeyframesNameValue => value,
 );

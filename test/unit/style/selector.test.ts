@@ -1,31 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import type {
   AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList, WqName,
 } from '../../../src/stylelet/parser/selector';
-import { SelectorKind, tryParseSelectorList } from '../../../src/stylelet/parser/selector';
-import { consumeComponentTrivia, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
-import { PseudoClassArgumentKind, PseudoElementArgumentKind } from '../../../src/stylelet/parser/selector-pseudo';
-
-const cursor = (css: string): ComponentCursor =>
-  new ComponentCursor(parseListOfComponentValues(css));
-
-function parseFull(css: string): ComplexSelectorList | null {
-  const c = cursor(css);
-  const result = tryParseSelectorList(c);
-
-  if (result === null) {
-    return null;
-  }
-
-  consumeComponentTrivia(c);
-
-  if (c.peek() !== null) {
-    return null;
-  }
-
-  return result;
-}
+import { parseComplexSelectorList, parseSelectorList, PseudoArgumentKind, SelectorKind } from '../../../src/stylelet/parser/selector';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 function rethrowFromCaller(error: unknown, caller: Function): never {
@@ -38,7 +15,7 @@ function rethrowFromCaller(error: unknown, caller: Function): never {
 
 function expectComplexSelectorList(css: string): ComplexSelectorList {
   try {
-    const result = parseFull(css);
+    const result = parseComplexSelectorList(css);
 
     expect(result, `Expected selector list to parse: ${css}`).not.toBeNull();
 
@@ -62,7 +39,7 @@ function expectComplexSelector(css: string): ComplexSelector {
 
 function expectInvalidSelector(css: string): void {
   try {
-    const result = parseFull(css);
+    const result = parseSelectorList(css);
 
     expect(result, `Expected selector to be invalid: ${css}`).toBeNull();
   } catch (error) {
@@ -502,7 +479,7 @@ describe('selector parser pseudo-class selectors', () => {
     expect(expectComplexSelector(':is(.foo, #bar)')).toMatchObject({
       parts: [
         pseudoClassPart('is', {
-          kind: PseudoClassArgumentKind.ForgivingSelectorList,
+          kind: PseudoArgumentKind.ForgivingSelectorList,
           selectors: selectorList([
             {
               parts: [
@@ -524,7 +501,7 @@ describe('selector parser pseudo-class selectors', () => {
     expect(expectComplexSelector(':where(.foo)')).toMatchObject({
       parts: [
         pseudoClassPart('where', {
-          kind: PseudoClassArgumentKind.ForgivingSelectorList,
+          kind: PseudoArgumentKind.ForgivingSelectorList,
           selectors: selectorList([
             {
               parts: [
@@ -541,7 +518,7 @@ describe('selector parser pseudo-class selectors', () => {
     expect(expectComplexSelector(':not(.foo, #bar)')).toMatchObject({
       parts: [
         pseudoClassPart('not', {
-          kind: PseudoClassArgumentKind.ComplexRealSelectorList,
+          kind: PseudoArgumentKind.ComplexRealSelectorList,
           selectors: selectorList([
             {
               parts: [
@@ -563,7 +540,7 @@ describe('selector parser pseudo-class selectors', () => {
     expect(expectComplexSelector(':has(> img)')).toMatchObject({
       parts: [
         pseudoClassPart('has', {
-          kind: PseudoClassArgumentKind.RelativeSelectorList,
+          kind: PseudoArgumentKind.RelativeSelectorList,
           selectors: selectorList([
             {
               combinator: '>',
@@ -591,7 +568,7 @@ describe('selector parser pseudo-class selectors', () => {
     expect(expectComplexSelector(':host(.foo)')).toMatchObject({
       parts: [
         pseudoClassPart('host', {
-          kind: PseudoClassArgumentKind.CompoundSelector,
+          kind: PseudoArgumentKind.CompoundSelector,
           selector: compound(null, [
             classSelector('foo'),
           ]),
@@ -626,7 +603,7 @@ describe('selector parser pseudo-element selectors', () => {
     expect(expectComplexSelector('::part(foo)')).toMatchObject({
       parts: [
         pseudoElementPart(null, 'part', [], {
-          kind: PseudoElementArgumentKind.PartNameList,
+          kind: PseudoArgumentKind.PartNameList,
           names: ['foo'],
         }),
       ],
@@ -802,7 +779,7 @@ it('drops invalid arms from forgiving selector-list pseudo-class arguments', () 
   expect(expectComplexSelector(':is(.foo ???, #bar)')).toMatchObject({
     parts: [
       pseudoClassPart('is', {
-        kind: PseudoClassArgumentKind.ForgivingSelectorList,
+        kind: PseudoArgumentKind.ForgivingSelectorList,
         selectors: selectorList([
           {
             parts: [
@@ -819,7 +796,7 @@ it('allows forgiving selector-list pseudo-class arguments to become empty', () =
   expect(expectComplexSelector(':is(???, !!!)')).toMatchObject({
     parts: [
       pseudoClassPart('is', {
-        kind: PseudoClassArgumentKind.ForgivingSelectorList,
+        kind: PseudoArgumentKind.ForgivingSelectorList,
         selectors: selectorList([]),
       }),
     ],
@@ -830,7 +807,7 @@ it('parses whitespace-separated ::part() names', () => {
   expect(expectComplexSelector('::part( foo active )')).toMatchObject({
     parts: [
       pseudoElementPart(null, 'part', [], {
-        kind: PseudoElementArgumentKind.PartNameList,
+        kind: PseudoArgumentKind.PartNameList,
         names: ['foo', 'active'],
       }),
     ],
@@ -845,7 +822,7 @@ it('parses ::highlight() with a custom-ident argument', () => {
   expect(expectComplexSelector('::highlight(foo)')).toMatchObject({
     parts: [
       pseudoElementPart(null, 'highlight', [], {
-        kind: PseudoElementArgumentKind.CustomIdent,
+        kind: PseudoArgumentKind.CustomIdent,
         value: {
           type: 'custom-ident',
           value: 'foo',
@@ -867,7 +844,7 @@ it('parses ::slotted() with a compound-selector argument', () => {
   expect(expectComplexSelector('::slotted(.foo)')).toMatchObject({
     parts: [
       pseudoElementPart(null, 'slotted', [], {
-        kind: PseudoElementArgumentKind.CompoundSelector,
+        kind: PseudoArgumentKind.CompoundSelector,
         selector: compound(null, [
           classSelector('foo'),
         ]),
@@ -884,7 +861,7 @@ it('parses :host-context() as a compound-selector pseudo-class argument', () => 
   expect(expectComplexSelector(':host-context(.theme)')).toMatchObject({
     parts: [
       pseudoClassPart('host-context', {
-        kind: PseudoClassArgumentKind.CompoundSelector,
+        kind: PseudoArgumentKind.CompoundSelector,
         selector: compound(null, [
           classSelector('theme'),
         ]),
@@ -940,4 +917,42 @@ it('computes specificity for shadow and highlight pseudo-elements', () => {
 
   expect(expectComplexSelector('::slotted(.foo)').specificity)
     .toEqual(specificity(0, 1, 1));
+});
+
+it('parses :dir(ltr) and :dir(rtl)', () => {
+  expect(expectComplexSelector(':dir(ltr)')).toMatchObject({
+    parts: [
+      pseudoClassPart('dir', {
+        kind: PseudoArgumentKind.Direction,
+        value: 'ltr',
+      }),
+    ],
+  });
+
+  expect(expectComplexSelector(':dir(RTL)')).toMatchObject({
+    parts: [
+      pseudoClassPart('dir', {
+        kind: PseudoArgumentKind.Direction,
+        value: 'rtl',
+      }),
+    ],
+  });
+});
+
+it('parses unknown :dir() identifiers as non-matching directions', () => {
+  expect(expectComplexSelector(':dir(sideways)')).toMatchObject({
+    parts: [
+      pseudoClassPart('dir', {
+        kind: PseudoArgumentKind.Direction,
+        value: null,
+      }),
+    ],
+  });
+});
+
+it('rejects syntactically invalid :dir() arguments', () => {
+  expectInvalidSelector(':dir()');
+  expectInvalidSelector(':dir("ltr")');
+  expectInvalidSelector(':dir(ltr rtl)');
+  expectInvalidSelector(':dir(>)');
 });

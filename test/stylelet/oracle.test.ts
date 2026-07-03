@@ -606,3 +606,66 @@ runScenarios('style oracle nesting declaration order', 'normal', [
     ],
   },
 ]);
+
+runScenarios('testing pseudo elements', 'normal', [
+  {
+    name: 'pseudo-element selectors distinguish valid empty from invalid chains',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <ol>
+        <li id="item">one</li>
+      </ol>
+    `,
+    cases: [
+      // Pseudo-element selectors are valid CSS selectors, but DOM selection APIs
+      // return Elements, so these should not return pseudo-elements.
+      { select: 'li::marker', expect: { throws: false, count: 0 } },
+
+      // CSS Pseudo says ::before::marker / ::after::marker are valid selector
+      // chains for marker boxes of generated pseudo-elements that are list items.
+      // In DOM selection APIs they should still return no Elements.
+      { select: 'li::before::marker', expect: { throws: false, count: 0 }, browsers: ['chromium', 'firefox'] },
+      { select: 'li::before::marker', expect: { throws: true, count: 0 }, browsers: ['webkit'] },
+      { select: 'li::after::marker', expect: { throws: false, count: 0 }, browsers: ['chromium', 'firefox'] },
+      { select: 'li::after::marker', expect: { throws: true, count: 0 }, browsers: ['webkit'] },
+
+      // CSS Pseudo says ::marker::marker is invalid.
+      { select: 'li::marker::marker', expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'invalid pseudo-element chain rule is omitted before following rule',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        li::marker::marker { margin-left: 3px; }
+        .ok { margin-left: 4px; }
+      </style>`,
+    cases: [
+      {
+        cssom: { kind: 'declaration', rule: 0, name: 'margin-left' },
+        expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
+      },
+      { cssom: { kind: 'rule', rule: 1 }, expect: { throws: true } },
+    ],
+  },
+
+  {
+    name: 'valid marker pseudo-element rule is preserved',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        li::marker { color: red; }
+        .ok { margin-left: 4px; }
+      </style>`,
+    cases: [
+      { cssom: { kind: 'rule', rule: 0 }, expect: { throws: false } },
+      { cssom: { kind: 'rule', rule: 1 }, expect: { throws: false } },
+    ],
+  },
+
+]);
