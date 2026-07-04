@@ -32,6 +32,9 @@ type AlternativeValue<P extends readonly AnyMultiplier[]> =
 type AnyMultiplier = Multiplier<unknown, unknown[]>;
 type MultiplierOutputOf<P> = P extends Multiplier<unknown, infer Output> ? Output : never;
 
+type Projector<Value, R> =
+  (value: Value, context: unknown) => R | null;
+
 // =============================================================================
 // Structural grammar combinators
 // =============================================================================
@@ -40,29 +43,29 @@ type MultiplierOutputOf<P> = P extends Multiplier<unknown, infer Output> ? Outpu
  * CSS value juxtaposition: `a b`
  */
 export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
+  parsers: P,
+  project: Projector<SequenceValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseSequenceOf(false, ...args);
+  return parseSequenceOf(false, parsers, project);
 }
 
 /**
  * CSS value required group: `[ a b c ]!`
  */
 export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
+  parsers: P,
+  project: Projector<SequenceValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseSequenceOf(true, ...args);
+  return parseSequenceOf(true, parsers, project);
 }
 
 // Local multiplier backtracking for direct sequence slots only. Nested parsers
 // remain opaque; their internal multipliers are not re-entered.
 function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  ...args: [...parsers: P, project: (value: SequenceValue<P>) => R | null]
+  parsers: P,
+  project: Projector<SequenceValue<P>, R>,
 ): TryComponentParser<R> {
-  const project = args[args.length - 1] as (value: SequenceValue<P>) => R | null;
-  const parsers = args.slice(0, -1) as unknown as P;
-
   return (c: ComponentCursor): R | null => {
     const start = c.pos();
     let caps = parsers.map((parser) => parser.max);
@@ -76,7 +79,7 @@ function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
         const raw = attempt.values as SequenceValue<P>;
 
         if (!requireAnyValue || hasAnyValue(raw)) {
-          const projected = project(raw);
+          const projected = project(raw, c.context);
 
           if (projected !== null) {
             return projected;
@@ -100,11 +103,9 @@ function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value alternative: `a | b`
  */
 export function oneOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: AlternativeValue<P>) => R | null]
+  parsers: P,
+  project: Projector<AlternativeValue<P>, R>,
 ): TryComponentParser<R> {
-  const project = args[args.length - 1] as (value: AlternativeValue<P>) => R | null;
-  const parsers = args.slice(0, -1) as unknown as P;
-
   return (c: ComponentCursor): R | null => {
     const start = c.pos();
 
@@ -123,7 +124,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
         c.error('Alternative parser produced a value without consuming input');
       }
 
-      const projected = project(value as AlternativeValue<P>);
+      const projected = project(value as AlternativeValue<P>, c.context);
 
       if (projected !== null) {
         return projected;
@@ -142,27 +143,27 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value double ampersand: `a && b`
  */
 export function allOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseAllOf(false, ...args);
+  return parseAllOf(false, parsers, project);
 }
 
 /**
  * CSS value required double ampersand group: `[ a && b ]!`
  */
 export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseAllOf(true, ...args);
+  return parseAllOf(true, parsers, project);
 }
 
 function parseAllOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  const project = args[args.length - 1] as (value: UnorderedValue<P>) => R | null;
-  const parsers = args.slice(0, -1) as unknown as P;
-
   return (c: ComponentCursor): R | null => {
     const start = c.pos();
     const result = consumeUnordered(c, parsers);
@@ -189,7 +190,7 @@ function parseAllOf<const P extends readonly AnyMultiplier[], R>(
       return null;
     }
 
-    const projected = project(raw);
+    const projected = project(raw, c.context);
 
     if (projected === null) {
       c.restore(start);
@@ -204,27 +205,27 @@ function parseAllOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value double bar: `a || b`
  */
 export function someOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseSomeOf(false, ...args);
+  return parseSomeOf(false, parsers, project);
 }
 
 /**
  * CSS value required double bar group: `[ a || b ]!`
  */
 export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  return parseSomeOf(true, ...args);
+  return parseSomeOf(true, parsers, project);
 }
 
 function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  ...args: [...parsers: P, project: (value: UnorderedValue<P>) => R | null]
+  parsers: P,
+  project: Projector<UnorderedValue<P>, R>,
 ): TryComponentParser<R> {
-  const project = args[args.length - 1] as (value: UnorderedValue<P>) => R | null;
-  const parsers = args.slice(0, -1) as unknown as P;
-
   return (c: ComponentCursor): R | null => {
     const start = c.pos();
     const result = consumeUnordered(c, parsers);
@@ -254,7 +255,7 @@ function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
       return null;
     }
 
-    const projected = project(raw);
+    const projected = project(raw, c.context);
 
     if (projected === null) {
       c.restore(start);

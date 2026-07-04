@@ -96,13 +96,16 @@ export type Declaration = {
   important: boolean;
 };
 
+export type ParserInput = string | readonly ComponentValue[];
+
 // 5.3.1. Parse something according to a CSS grammar
 export function parseAsComponentGrammar<T>(
-  input: string | readonly ComponentValue[],
+  input: ParserInput,
   parse: TryComponentParser<T>,
+  context: unknown = undefined,
 ): T | null {
   const components = parseListOfComponentValues(input);
-  const c = new ComponentCursor(components);
+  const c = new ComponentCursor(components, { context });
   const value = parse(c);
 
   if (value === null) {
@@ -120,8 +123,9 @@ export function parseAsComponentGrammar<T>(
 
 // 5.3.2. Parse a comma-separated list according to a CSS grammar
 export function parseListAsComponentGrammar<T>(
-  input: string | readonly ComponentValue[],
+  input: ParserInput,
   parse: TryComponentParser<T>,
+  context: unknown = undefined,
 ): (T | null)[] {
   const lists = parseCommaSeparatedListOfComponentValues(input);
 
@@ -129,7 +133,7 @@ export function parseListAsComponentGrammar<T>(
     return [];
   }
 
-  return lists.map((item) => parseAsComponentGrammar(item, parse));
+  return lists.map((item) => parseAsComponentGrammar(item, parse, context));
 }
 
 // 5.3.3. Parse a stylesheet
@@ -182,7 +186,10 @@ function consumeWhitespaceTokens(c: TokenCursor): void {
 }
 
 // 5.3.6. Parse a declaration
-export function parseDeclaration(input: string): Declaration | null {
+export function parseDeclaration(
+  input: string,
+  context: unknown = undefined
+): Declaration | null {
   const c = new TokenCursor(tokenize(input));
 
   consumeWhitespaceTokens(c);
@@ -197,7 +204,7 @@ export function parseDeclaration(input: string): Declaration | null {
     values.push(consumeComponentValueFromTokens(c));
   }
 
-  return consumeDeclarationFromComponents(new ComponentCursor(values));
+  return consumeDeclarationFromComponents(new ComponentCursor(values, { context }));
 }
 
 export type StyleBlockItem = Declaration | Rule;
@@ -205,10 +212,11 @@ export type StyleBlockContents = StyleBlockItem[];
 
 // 5.3.7. Parse a style block's contents
 export function parseStyleBlockContents(
-  input: string | readonly ComponentValue[],
+  input: ParserInput,
+  context: unknown = undefined,
 ): StyleBlockContents {
   const components = parseListOfComponentValues(input);
-  return consumeStyleBlockContentsFromComponents(new ComponentCursor(components));
+  return consumeStyleBlockContentsFromComponents(new ComponentCursor(components, { context }));
 }
 
 export type DeclarationOrAtRule = Declaration | AtRule;
@@ -242,7 +250,7 @@ export function parseComponentValue(input: string): ComponentValue | null {
 }
 
 // 5.3.10. Parse a list of component values
-export function parseListOfComponentValues(input: string | readonly ComponentValue[]): readonly ComponentValue[] {
+export function parseListOfComponentValues(input: ParserInput): readonly ComponentValue[] {
   if (typeof input !== 'string') {
     return input;
   }
@@ -501,7 +509,10 @@ function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlock
         temp.push(c.consume());
       }
 
-      const declaration = consumeDeclarationFromComponents(new ComponentCursor(temp));
+      const declaration = consumeDeclarationFromComponents(
+        new ComponentCursor(temp, { context: c.context }),
+      );
+
       if (declaration !== null) items.push(declaration);
 
       continue;

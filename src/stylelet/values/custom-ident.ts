@@ -3,15 +3,13 @@ import type { ComponentCursor } from '../parser/component-cursor';
 import { withComponentTrivia } from '../parser/component-grammar';
 import {
   isIdentToken, parseAsComponentGrammar,
-  type ComponentValue,
+  type ParserInput,
 } from '../parser/syntax';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
   value: string;
 };
-
-export type CustomIdentParseInput = string | readonly ComponentValue[];
 
 const CSS_WIDE_KEYWORDS = [
   'inherit',
@@ -22,12 +20,14 @@ const CSS_WIDE_KEYWORDS = [
 ] as const;
 
 export function parseCustomIdent(
-  input: CustomIdentParseInput,
+  input: ParserInput,
   excluded: readonly string[] = [],
+  context: unknown = undefined,
 ): CustomIdentValue | null {
   return parseAsComponentGrammar(
     input,
     withComponentTrivia((c) => tryConsumeCustomIdent(c, excluded)),
+    context,
   );
 }
 

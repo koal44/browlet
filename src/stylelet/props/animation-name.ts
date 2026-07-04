@@ -1,6 +1,5 @@
-import { ComponentCursor } from '../parser/component-cursor';
 import {
-  commaRepeat, one, oneOf,
+  commaRepeat, one, oneOf, withComponentTrivia,
   type TryComponentParser,
 } from '../parser/component-grammar';
 import { tryConsumeKeywordIn } from '../values/keyword';
@@ -12,7 +11,11 @@ import {
   serializeString, tryParseString,
   type StringValue,
 } from '../values/string';
-import { type ComponentValue, consumeComponentTrivia } from '../parser/syntax';
+import {
+  parseAsComponentGrammar,
+  type ParserInput,
+} from '../parser/syntax';
+import type { ComponentCursor } from '../parser/component-cursor';
 
 export type AnimationNameValue = {
   type: 'animation-name';
@@ -31,37 +34,21 @@ export type KeyframesNameValue =
   | CustomIdentValue
   | StringValue;
 
-const tryParseNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
-  const value = tryConsumeKeywordIn(c, ['none'] as const);
+export function parseAnimationNameValue(
+  input: ParserInput,
+  context: unknown = undefined,
+): AnimationNameValue | null {
+  return parseAsComponentGrammar(
+    input,
+    withComponentTrivia(tryConsumeAnimationName),
+    context,
+  );
+}
 
-  if (value === null) {
-    return null;
-  }
-
-  return { type: 'none' };
-};
-
-const tryParseKeyframesName: TryComponentParser<KeyframesNameValue> = oneOf(
-  one((c) => tryConsumeCustomIdent(c, ['none'])),
-  one(tryParseString),
-  ([value]): KeyframesNameValue => value,
-);
-
-const tryParseAnimationNameItem: TryComponentParser<AnimationNameItemValue> = oneOf(
-  one(tryParseNone),
-  one(tryParseKeyframesName),
-  ([value]): AnimationNameItemValue => value,
-);
-
-const tryParseAnimationNameList = commaRepeat(
-  tryParseAnimationNameItem,
-  1,
-);
-
-export function tryParseAnimationName(c: ComponentCursor): AnimationNameValue | null {
+export function tryConsumeAnimationName(c: ComponentCursor): AnimationNameValue | null {
   const start = c.pos();
 
-  const values = tryParseAnimationNameList(c);
+  const values = tryConsumeAnimationNameList(c);
 
   if (values === null) {
     c.restore(start);
@@ -74,24 +61,36 @@ export function tryParseAnimationName(c: ComponentCursor): AnimationNameValue | 
   };
 }
 
-export function parseAnimationNameValue(
-  components: readonly ComponentValue[],
-): AnimationNameValue | null {
-  const c = new ComponentCursor(components);
-  const value = tryParseAnimationName(c);
+const tryConsumeNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
+  const value = tryConsumeKeywordIn(c, ['none'] as const);
 
   if (value === null) {
     return null;
   }
 
-  consumeComponentTrivia(c);
+  return { type: 'none' };
+};
 
-  if (c.peek() !== null) {
-    return null;
-  }
+const tryConsumeKeyframesName: TryComponentParser<KeyframesNameValue> = oneOf(
+  [
+    one((c) => tryConsumeCustomIdent(c, ['none'])),
+    one(tryParseString),
+  ],
+  ([value]): KeyframesNameValue => value,
+);
 
-  return value;
-}
+const tryConsumeAnimationNameItem: TryComponentParser<AnimationNameItemValue> = oneOf(
+  [
+    one(tryConsumeNone),
+    one(tryConsumeKeyframesName),
+  ],
+  ([value]): AnimationNameItemValue => value,
+);
+
+const tryConsumeAnimationNameList = commaRepeat(
+  tryConsumeAnimationNameItem,
+  1,
+);
 
 export function serializeAnimationName(value: AnimationNameValue): string {
   return value.values.map(serializeAnimationNameItem).join(', ');

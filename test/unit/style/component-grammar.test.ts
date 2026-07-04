@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
-import { consumeComponentTrivia, isIdentToken, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
+import { consumeComponentTrivia, isIdentToken, parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
   __nextSequenceCaps, __parseSequenceAttempt,
@@ -9,8 +9,8 @@ import {
   type TryComponentParser,
 } from '../../../src/stylelet/parser/component-grammar';
 
-const cursor = (css: string): ComponentCursor =>
-  new ComponentCursor(parseListOfComponentValues(css));
+const cursor = (css: string, context: unknown = undefined): ComponentCursor =>
+  new ComponentCursor(parseListOfComponentValues(css), { context });
 
 const literalParser = <T extends string>(expected: T): TryComponentParser<T> => {
   return (c: ComponentCursor): T | null => {
@@ -69,8 +69,10 @@ describe('component value combinators', () => {
 
     // a && b
     const parseAAndB = allOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -83,8 +85,10 @@ describe('component value combinators', () => {
 
     // a && b
     const parseAAndB = allOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -97,8 +101,10 @@ describe('component value combinators', () => {
 
     // a && b?
     const parseAAndMaybeB = allOf(
-      one(parseA),
-      opt(parseB),
+      [
+        one(parseA),
+        opt(parseB),
+      ],
       (value) => value,
     );
 
@@ -111,8 +117,10 @@ describe('component value combinators', () => {
 
     // a && b?
     const parseAAndMaybeB = allOf(
-      one(parseA),
-      opt(parseB),
+      [
+        one(parseA),
+        opt(parseB),
+      ],
       (value) => value,
     );
 
@@ -125,8 +133,10 @@ describe('component value combinators', () => {
 
     // a && b?
     const parseAAndMaybeB = allOf(
-      one(parseA),
-      opt(parseB),
+      [
+        one(parseA),
+        opt(parseB),
+      ],
       (value) => value,
     );
 
@@ -139,8 +149,10 @@ describe('component value combinators', () => {
 
     // a || b
     const parseAOrBOrBoth = someOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -153,8 +165,10 @@ describe('component value combinators', () => {
 
     // a || b
     const parseAOrBOrBoth = someOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -167,8 +181,10 @@ describe('component value combinators', () => {
 
     // a || b
     const parseAOrBOrBoth = someOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -181,8 +197,10 @@ describe('component value combinators', () => {
 
     // a || b
     const parseAOrBOrBoth = someOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -213,8 +231,10 @@ describe('component value combinators', () => {
 
     // a || [ b c ]
     const parseAOrGroupedBCOrBoth = someOf(
-      one(parseA),
-      one(groupedBC),
+      [
+        one(parseA),
+        one(groupedBC),
+      ],
       (value) => value,
     );
 
@@ -237,8 +257,10 @@ describe('component value combinators', () => {
     const c = cursor('a b');
 
     const parseAB = sequenceOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -252,8 +274,10 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     const parseAOrB = oneOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -267,8 +291,10 @@ describe('component value combinators', () => {
     const c = cursor('c');
 
     const parseAOrB = oneOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -284,22 +310,28 @@ describe('component value combinators', () => {
 
     // a b
     const parseAB = sequenceOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
     // e f
     const parseEF = sequenceOf(
-      one(parseE),
-      one(parseF),
+      [
+        one(parseE),
+        one(parseF),
+      ],
       (value) => value,
     );
 
     // d && e f
     const parseDAndEF = allOf(
-      one(parseD),
-      one(parseEF),
+      [
+        one(parseD),
+        one(parseEF),
+      ],
       ([d, ef]) => [
         d,
         ef![0],
@@ -308,8 +340,10 @@ describe('component value combinators', () => {
 
     // c || d && e f
     const parseCOrDAndEF = someOf(
-      one(parseC),
-      one(parseDAndEF),
+      [
+        one(parseC),
+        one(parseDAndEF),
+      ],
       ([c, dAndEF]) => [
         c,
         dAndEF?.[0],
@@ -318,8 +352,10 @@ describe('component value combinators', () => {
 
     // a b | c || d && e f
     const parseWhole = oneOf(
-      one(parseAB),
-      one(parseCOrDAndEF),
+      [
+        one(parseAB),
+        one(parseCOrDAndEF),
+      ],
       ([value]) => value,
     );
 
@@ -401,8 +437,10 @@ describe('component value combinators', () => {
   it('uses zero-to-one repetition as an optional component in sequence', () => {
     // a? b
     const parseMaybeAThenB = sequenceOf(
-      repeat(parseA, 0, 1),
-      one(parseB),
+      [
+        repeat(parseA, 0, 1),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -589,9 +627,11 @@ describe('component value combinators', () => {
   it('matches zero or more components in order: A? B? C?', () => {
     // A? B? C?
     const parseZeroOrMoreInOrder = sequenceOf(
-      repeat(parseA, 0, 1),
-      repeat(parseB, 0, 1),
-      repeat(parseC, 0, 1),
+      [
+        repeat(parseA, 0, 1),
+        repeat(parseB, 0, 1),
+        repeat(parseC, 0, 1),
+      ],
       (value) => value,
     );
 
@@ -608,9 +648,11 @@ describe('component value combinators', () => {
     // [ A? B? C? ]!
     const parseOneOrMoreInOrder = required(
       requiredSequenceOf(
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
-        repeat(parseC, 0, 1),
+        [
+          repeat(parseA, 0, 1),
+          repeat(parseB, 0, 1),
+          repeat(parseC, 0, 1),
+        ],
         (value) => value,
       ),
       'Expected one or more of a, b, c',
@@ -627,9 +669,11 @@ describe('component value combinators', () => {
   it('matches all components in order: A B C', () => {
     // A B C
     const parseAllInOrder = sequenceOf(
-      one(parseA),
-      one(parseB),
-      one(parseC),
+      [
+        one(parseA),
+        one(parseB),
+        one(parseC),
+      ],
       (value) => value,
     );
 
@@ -645,9 +689,11 @@ describe('component value combinators', () => {
   it('matches zero or more components in any order: A? && B? && C?', () => {
     // A? && B? && C?
     const parseOptionalABC = allOf(
-      opt(parseA),
-      opt(parseB),
-      opt(parseC),
+      [
+        opt(parseA),
+        opt(parseB),
+        opt(parseC),
+      ],
       (value) => value,
     );
 
@@ -671,9 +717,11 @@ describe('component value combinators', () => {
   it('matches one or more components in any order: A || B || C', () => {
     // A || B || C
     const parseOneOrMoreABC = someOf(
-      one(parseA),
-      one(parseB),
-      one(parseC),
+      [
+        one(parseA),
+        one(parseB),
+        one(parseC),
+      ],
       (value) => value,
     );
 
@@ -701,9 +749,11 @@ describe('component value combinators', () => {
   it('matches all components in any order: A && B && C', () => {
     // A && B && C
     const parseAllABC = allOf(
-      one(parseA),
-      one(parseB),
-      one(parseC),
+      [
+        one(parseA),
+        one(parseB),
+        one(parseC),
+      ],
       (value) => value,
     );
 
@@ -723,9 +773,11 @@ describe('component value combinators', () => {
   it('matches zero or more components in any order: A? || B? || C?', () => {
     // A? || B? || C?
     const parseOptionalABC = someOf(
-      opt(parseA),
-      opt(parseB),
-      opt(parseC),
+      [
+        opt(parseA),
+        opt(parseB),
+        opt(parseC),
+      ],
       (value) => value,
     );
 
@@ -750,8 +802,10 @@ describe('component value combinators', () => {
     const c = cursor('a/**/b');
 
     const parseAB = sequenceOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -777,17 +831,21 @@ describe('component value combinators', () => {
 
     // underline || overline || line-through || blink
     const parseTextDecorationKeywords = someOf(
-      one(parseUnderline),
-      one(parseOverline),
-      one(parseLineThrough),
-      one(parseBlink),
+      [
+        one(parseUnderline),
+        one(parseOverline),
+        one(parseLineThrough),
+        one(parseBlink),
+      ],
       (value) => value,
     );
 
     // none | underline || overline || line-through || blink
     const parseTextDecorationLine = oneOf(
-      one(parseNone),
-      one(parseTextDecorationKeywords),
+      [
+        one(parseNone),
+        one(parseTextDecorationKeywords),
+      ],
       ([value]) => value,
     );
 
@@ -835,8 +893,10 @@ describe('component grammar trivia ownership', () => {
     const c = cursor('a b');
 
     const parseAB = sequenceOf(
-      one(rawA),
-      one(rawB),
+      [
+        one(rawA),
+        one(rawB),
+      ],
       (value) => value,
     );
 
@@ -848,8 +908,10 @@ describe('component grammar trivia ownership', () => {
     const c = cursor('a b');
 
     const parseAB = sequenceOf(
-      one(withComponentTrivia(rawA)),
-      one(withComponentTrivia(rawB)),
+      [
+        one(withComponentTrivia(rawA)),
+        one(withComponentTrivia(rawB)),
+      ],
       (value) => value,
     );
 
@@ -955,8 +1017,10 @@ describe('selector separator trivia prototype', () => {
   it('requires at least one value in unordered all-of groups', () => {
     // [ a? && b? ]!
     const parseOneOrMoreAB = requiredAllOf(
-      opt(parseA),
-      opt(parseB),
+      [
+        opt(parseA),
+        opt(parseB),
+      ],
       (value) => value,
     );
 
@@ -982,8 +1046,10 @@ describe('selector separator trivia prototype', () => {
   it('requires at least one multiplier value without throwing', () => {
     // [ a? b? ]!
     const parseOneOrMoreAB = requiredSequenceOf(
-      repeat(parseA, 0, 1),
-      repeat(parseB, 0, 1),
+      [
+        repeat(parseA, 0, 1),
+        repeat(parseB, 0, 1),
+      ],
       (value) => value,
     );
 
@@ -999,8 +1065,10 @@ describe('selector separator trivia prototype', () => {
   it('restores when requiredSequence sees only empty multiplier values', () => {
     // [ a? b? ]!
     const parseOneOrMoreAB = requiredSequenceOf(
-      repeat(parseA, 0, 1),
-      repeat(parseB, 0, 1),
+      [
+        repeat(parseA, 0, 1),
+        repeat(parseB, 0, 1),
+      ],
       (value) => value,
     );
 
@@ -1014,8 +1082,10 @@ describe('selector separator trivia prototype', () => {
   it('treats non-empty nested unordered values as present in requiredSomeOf', () => {
     // [ a? || b? ]!
     const parseAOrB = requiredSomeOf(
-      opt(parseA),
-      opt(parseB),
+      [
+        opt(parseA),
+        opt(parseB),
+      ],
       (value) => value,
     );
 
@@ -1034,8 +1104,10 @@ describe('selector separator trivia prototype', () => {
   it('backtracks optional repetition when a later required component needs the token', () => {
     // a? a
     const parseMaybeAThenA = sequenceOf(
-      opt(parseA),
-      one(parseA),
+      [
+        opt(parseA),
+        one(parseA),
+      ],
       (value) => value
     );
 
@@ -1048,9 +1120,11 @@ describe('selector separator trivia prototype', () => {
   it('backtracks greedy repetition when a later required component needs a token', () => {
     // a* a b*
     const parseAStarThenAThenBStar = sequenceOf(
-      any(parseA),
-      one(parseA),
-      any(parseB),
+      [
+        any(parseA),
+        one(parseA),
+        any(parseB),
+      ],
       (value) => value
     );
 
@@ -1067,8 +1141,10 @@ describe('selector separator trivia prototype', () => {
 
 describe('component sequence backtracking support', () => {
   const parseAB = oneOf(
-    one(parseA),
-    one(parseB),
+    [
+      one(parseA),
+      one(parseB),
+    ],
     ([value]) => value,
   );
 
@@ -1355,9 +1431,11 @@ describe('component sequence backtracking support', () => {
     const c = cursor('a b');
 
     const parse = sequenceOf(
-      opt(parseAB),
-      one(parseA),
-      one(parseB),
+      [
+        opt(parseAB),
+        one(parseA),
+        one(parseB),
+      ],
       ([prefix, name, suffix]) => ({
         prefix,
         name,
@@ -1375,17 +1453,21 @@ describe('component sequence backtracking support', () => {
 
   it('does not backtrack into a parser that closes over its own multiplier', () => {
     const parseAorB = oneOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       ([value]) => value,
     );
 
     const parseAB: TryComponentParser<string[]> = any(parseAorB);
 
     const parse = sequenceOf(
-      one(parseAB),
-      one(parseB),
-      one(parseB),
+      [
+        one(parseAB),
+        one(parseB),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -1397,15 +1479,19 @@ describe('component sequence backtracking support', () => {
 
   it('backtracks a direct greedy multiplier slot', () => {
     const parseAorB = oneOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       ([value]) => value,
     );
 
     const parse = sequenceOf(
-      any(parseAorB),
-      one(parseB),
-      one(parseB),
+      [
+        any(parseAorB),
+        one(parseB),
+        one(parseB),
+      ],
       (value) => value,
     );
 
@@ -1532,7 +1618,7 @@ describe('component combinator null projections', () => {
     const c = cursor('a');
 
     const parse = sequenceOf(
-      one(parseA),
+      [one(parseA)],
       (): 'accepted' | null => null,
     );
 
@@ -1543,8 +1629,10 @@ describe('component combinator null projections', () => {
 
   it('continues sequence backtracking when projection rejects a successful attempt', () => {
     const parseAB = oneOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       ([value]) => value,
     );
 
@@ -1552,8 +1640,10 @@ describe('component combinator null projections', () => {
 
     // (a | b)* b
     const parse = sequenceOf(
-      any(parseAB),
-      one(parseB),
+      [
+        any(parseAB),
+        one(parseB),
+      ],
       ([prefix, suffix]) => {
         projectedPrefixLengths.push(prefix.length);
 
@@ -1605,8 +1695,10 @@ describe('component combinator null projections', () => {
     };
 
     const parse = oneOf(
-      one(parseFirstA),
-      one(parseSecondA),
+      [
+        one(parseFirstA),
+        one(parseSecondA),
+      ],
       ([value]) => {
         if (value === 'first') {
           return null;
@@ -1624,8 +1716,10 @@ describe('component combinator null projections', () => {
 
   it('restores and fails allOf when its projection returns null', () => {
     const parse = allOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (): 'accepted' | null => null,
     );
 
@@ -1638,8 +1732,10 @@ describe('component combinator null projections', () => {
 
   it('restores and fails someOf when its projection returns null', () => {
     const parse = someOf(
-      one(parseA),
-      one(parseB),
+      [
+        one(parseA),
+        one(parseB),
+      ],
       (): 'accepted' | null => null,
     );
 
@@ -1648,5 +1744,133 @@ describe('component combinator null projections', () => {
     expect(parse(c)).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'a');
+  });
+});
+
+describe('component grammar context plumbing', () => {
+  it('passes context through parseAsComponentGrammar', () => {
+    const context = { mode: 'test' };
+    const seen: unknown[] = [];
+
+    const parse: TryComponentParser<'a'> = (c) => {
+      seen.push(c.context);
+      return parseA(c);
+    };
+
+    expect(parseAsComponentGrammar('a', parse, context)).toBe('a');
+    expect(seen).toEqual([context]);
+  });
+
+  it('passes context through parseListAsComponentGrammar items', () => {
+    const context = { mode: 'list-test' };
+    const seen: unknown[] = [];
+
+    const parse: TryComponentParser<'a'> = (c) => {
+      seen.push(c.context);
+      return parseA(c);
+    };
+
+    expect(parseListAsComponentGrammar('a, a', parse, context)).toEqual([
+      'a',
+      'a',
+    ]);
+
+    expect(seen).toEqual([
+      context,
+      context,
+    ]);
+  });
+
+  it('preserves cursor context through grammar combinators', () => {
+    const context = { mode: 'combinator-test' };
+    const seen: unknown[] = [];
+
+    const parseContextAwareA: TryComponentParser<'a'> = (c) => {
+      seen.push(c.context);
+      return parseA(c);
+    };
+
+    const parse = sequenceOf(
+      [
+        one(parseContextAwareA),
+        one(parseB),
+      ],
+      (value) => value,
+    );
+
+    const c = cursor('a b', context);
+
+    expect(parse(c)).toEqual([
+      ['a'],
+      ['b'],
+    ]);
+
+    expectDone(c);
+    expect(seen).toEqual([context]);
+  });
+});
+
+describe('component grammar projection context', () => {
+  it('passes cursor context to sequence projections', () => {
+    const context = { foo: 'bar' };
+    const seen: unknown[] = [];
+
+    const parse = sequenceOf(
+      [one(parseA)],
+      ([value], ctx) => {
+        seen.push(ctx);
+        return value[0];
+      },
+    );
+
+    const c = cursor('a', context);
+
+    expect(parse(c)).toBe('a');
+    expect(seen).toEqual([context]);
+    expectDone(c);
+  });
+
+  it('passes cursor context to alternative projections', () => {
+    const context = { foo: 'bar' };
+    const seen: unknown[] = [];
+
+    const parse = oneOf(
+      [
+        one(parseA),
+        one(parseB),
+      ],
+      (value, ctx) => {
+        seen.push(ctx);
+        return value;
+      },
+    );
+
+    const c = cursor('b', context);
+
+    expect(parse(c)).toEqual(['b']);
+    expect(seen).toEqual([context]);
+    expectDone(c);
+  });
+
+  it('passes cursor context to unordered projections', () => {
+    const context = { foo: 'bar' };
+    const seen: unknown[] = [];
+
+    const parse = allOf(
+      [
+        one(parseA),
+        one(parseB),
+      ],
+      (value, ctx) => {
+        seen.push(ctx);
+        return value;
+      },
+    );
+
+    const c = cursor('b a', context);
+
+    expect(parse(c)).toEqual([['a'], ['b']]);
+    expect(seen).toEqual([context]);
+    expectDone(c);
   });
 });

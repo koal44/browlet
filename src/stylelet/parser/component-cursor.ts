@@ -1,11 +1,22 @@
 import type { ComponentValue } from './syntax';
 import type { TokenKind } from './tokens';
 
+export type ComponentCursorOptions = {
+  position?: number;
+  context?: unknown;
+};
+
 export class ComponentCursor {
+  private i: number;
+  readonly context: unknown;
+
   constructor(
     private readonly input: readonly ComponentValue[],
-    private i = 0,
-  ) {}
+    options: ComponentCursorOptions = {},
+  ) {
+    this.i = options.position ?? 0;
+    this.context = options.context;
+  }
 
   pos(): number {
     return this.i;

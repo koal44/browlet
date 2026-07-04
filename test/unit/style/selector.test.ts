@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList, WqName,
+  AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList, SelectorParserContext, WqName,
 } from '../../../src/stylelet/parser/selector';
 import { parseComplexSelectorList, parseSelectorList, PseudoArgumentKind, SelectorKind } from '../../../src/stylelet/parser/selector';
 
@@ -13,9 +13,9 @@ function rethrowFromCaller(error: unknown, caller: Function): never {
   throw error;
 }
 
-function expectComplexSelectorList(css: string): ComplexSelectorList {
+function expectComplexSelectorList(css: string, context: SelectorParserContext = {}): ComplexSelectorList {
   try {
-    const result = parseComplexSelectorList(css);
+    const result = parseComplexSelectorList(css, context);
 
     expect(result, `Expected selector list to parse: ${css}`).not.toBeNull();
 
