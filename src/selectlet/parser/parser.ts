@@ -108,6 +108,7 @@ export type CandidateTest = {
   cost: number;
   pseudoIs?: SelectorList;
   pseudoWhere?: SelectorList;
+  pseudoNot?: SelectorList;
   debug?: CandidateTestDebug;
 };
 

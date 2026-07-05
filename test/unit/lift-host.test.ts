@@ -55,7 +55,7 @@ function withCallerStack<T>(skip: Function, fn: () => T): T {
   }
 }
 
-describe('planner :is/:where host expansion', () => {
+describe('planner host-boundary expansion', () => {
   it('does not expand a selector with no :is/:where', () => {
     unchanged('section > article *');
   });
@@ -281,8 +281,12 @@ describe('planner :is/:where host expansion', () => {
     ]);
   });
 
-  it('does not expand :not() merely because it contains host', () => {
-    unchanged(':not(:host(.foo)) *');
+  it('does not expand :not() merely because its argument contains host', () => {
+    unchanged(':not(.foo:host) *');
+  });
+
+  it('does not expand :not() with a mixed :host compound argument', () => {
+    unchanged(':not(.foo:host) *');
   });
 
   it('does not expand :has() merely because it contains host', () => {
@@ -446,3 +450,103 @@ describe('planner :is/:where host expansion', () => {
 
 });
 
+describe(':not() host-boundary expansion', () => {
+  it('expands :not() of a functional host question into ordinary and host-boundary arms', () => {
+    expect(expanded(':not(:host(.foo)) *')).toEqual([
+      '* *',
+      ':host(:not(.foo)) *',
+    ]);
+  });
+
+  it('expands :not() of a missing functional host question the same way structurally', () => {
+    expect(expanded(':not(:host(.missing)) *')).toEqual([
+      '* *',
+      ':host(:not(.missing)) *',
+    ]);
+  });
+
+  it('expands :not(:host) to the ordinary branch only', () => {
+    expect(expanded(':not(:host) *')).toEqual([
+      '* *',
+    ]);
+  });
+
+  it('absorbs :not(:host(...)) into an explicit host boundary compound', () => {
+    expect(expanded(':host:not(:host(.foo)) *')).toEqual([
+      ':host(:not(.foo)) *',
+    ]);
+  });
+
+  it('turns :host:not(:host) into a never arm', () => {
+    expect(expanded(':host:not(:host) *')).toEqual([
+      '#__never__:xfalse *',
+    ]);
+  });
+
+  it('preserves existing host arguments while absorbing negated host arguments', () => {
+    expect(expanded(':host(.bar):not(:host(.foo)) *')).toEqual([
+      ':host(.bar:not(.foo)) *',
+    ]);
+  });
+
+  it('does not lift :not() when the host argument compound has ordinary peer selectors', () => {
+    unchanged(':not(.foo:host) *');
+  });
+
+  it('does not lift :not() when the host selector itself has ordinary peer selectors', () => {
+    unchanged(':not(.foo:host) *');
+  });
+
+  it('does not lift :not() with multiple selector-list arms', () => {
+    unchanged(':not(:host(.foo), .bar) *');
+  });
+
+  it('expands :not() through a single-arm :is() host question', () => {
+    expect(expanded(':not(:is(:host(.foo))) *')).toEqual([
+      '* *',
+      ':host(:not(.foo)) *',
+    ]);
+  });
+
+  it('expands :not() through a single-arm :where() host question', () => {
+    expect(expanded(':not(:where(:host(.foo))) *')).toEqual([
+      '* *',
+      ':host(:not(.foo)) *',
+    ]);
+  });
+
+  it('does not lift :not() through mixed :is() alternatives', () => {
+    unchanged(':not(:is(:host(.foo), .bar)) *');
+  });
+
+  it('does not lift :not() through mixed :where() alternatives', () => {
+    unchanged(':not(:where(:host(.foo), .bar)) *');
+  });
+
+  it('updates lifted arm costs for :not(:host(...)) expansion', () => {
+    expectExpandedWithParsedCosts(':not(:host(.foo)) *', [
+      '* *',
+      ':host(:not(.foo)) *',
+    ]);
+  });
+
+  it('does not mutate the original parsed selector while expanding :not(:host(...))', () => {
+    const list = parseSelectorList(':not(:host(.foo)) *', {});
+    const before = describeComplex(list.arms[0]);
+    const originalCost = list.arms[0].cost;
+
+    const lifted = liftHostSelectorList(list);
+    const arms = lifted.arms;
+
+    expect(lifted).not.toBe(list);
+    expect(arms).not.toBe(list.arms);
+
+    expect(arms.map(describeComplex)).toEqual([
+      '* *',
+      ':host(:not(.foo)) *',
+    ]);
+
+    expect(describeComplex(list.arms[0])).toBe(before);
+    expect(list.arms[0].cost).toBe(originalCost);
+  });
+});

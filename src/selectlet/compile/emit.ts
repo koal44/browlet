@@ -248,6 +248,7 @@ export function emitWherePseudoTest(list: SelectorList): CandidateTest {
 // :not()
 export function emitNotPseudoTest(list: SelectorList): CandidateTest {
   return {
+    pseudoNot: list,
     usesScope: list.usesScope,
     usesCache: list.usesCache,
     cost: list.cost,

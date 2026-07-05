@@ -668,4 +668,50 @@ runScenarios('testing pseudo elements', 'normal', [
     ],
   },
 
+  {
+    name: 'native host pseudo not featureless probes',
+    // status: 'only',
+    // engines: ['native'],
+    markup: `<div id="host" class="foo"></div>`,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <div id="inside"></div>
+          <div id="insideFoo" class="foo"></div>
+        `;
+      });
+    },
+    cases: [
+      // Baseline: direct compound mixing ordinary .foo with :host is impossible.
+      { select: '.foo:host *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+      { select: ':host.foo *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+
+      // This is the pressure test.
+      // The argument .foo:host is impossible, so a normal div should satisfy :not(.foo:host).
+      { select: 'div:not(.foo:host)', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] } },
+      { select: 'div', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] } },
+
+      // Same point, but as match() on concrete normal elements.
+      { match: 'div:not(.foo:host)', ref: { by: 'id', id: 'inside', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['inside'] } },
+      { match: 'div:not(.foo:host)', ref: { by: 'id', id: 'insideFoo', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['insideFoo'] } },
+
+      // But once :host is the subject-side requirement, the compound becomes impossible.
+      { select: ':host:not(.foo:host) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+
+      // For contrast: :host:not(.missing:host) should also be empty if the featureless restriction applies.
+      // Even though the host does not have .missing, the argument is still not allowed to match featureless.
+      { select: ':host:not(.missing:host) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+
+      // But :host:not(:host(.missing)) should match, because :host(.missing) is allowed-to-match-featureless
+      // and evaluates false for this host.
+      { select: ':not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] }, browsers: ['chromium', 'firefox'] },
+      { select: ':host:not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] }, browsers: ['chromium', 'firefox'] },
+      { select: ':host:not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] }, browsers: ['webkit'], engines: ['native'] }, // WebKit currently diverges on host-boundary :not(:host(...)) behavior.
+
+      // And :host:not(:host(.foo)) should not match, because the host does have .foo.
+      { select: ':host:not(:host(.foo)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
+    ],
+  },
+
 ]);

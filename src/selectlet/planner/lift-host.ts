@@ -1,8 +1,9 @@
 import type {
-  CandidateTest, ClassSelector, ComplexPart, ComplexSelector, CompoundSelector, IdSelector, SelectorList, TagSelector,
+  CandidateTest, ClassSelector, ComplexPart, ComplexSelector, CompoundSelector, HostSelector, IdSelector, SelectorList, TagSelector,
 } from '../parser/parser';
 import { asciiLower } from '../../utils/css';
-import { costComplex, costPart } from './cost';
+import { costComplex, costCompound, costPart } from './cost';
+import { emitNotPseudoTest } from '../compile/emit';
 
 const NEVER_CMPD: CompoundSelector = {
   id: { raw: '__never__', seed: false, cost: 3 },
@@ -50,7 +51,8 @@ function expandSelectorListContainingHost(list: SelectorList): ComplexSelector[]
 
     for (let i = 0; i < current.length; i++) {
       const arm = current[i];
-      const expanded = expandOneHostIsWhereArm(arm);
+      const expanded = expandOneHostArm(arm);
+      // const expanded = expandOneHostIsWhereArm(arm);
 
       if (!expanded) {
         if (next) next.push(arm);
@@ -68,6 +70,10 @@ function expandSelectorListContainingHost(list: SelectorList): ComplexSelector[]
     if (!changed) return current;
     current = next!;
   }
+}
+
+function expandOneHostArm(arm: ComplexSelector): ComplexSelector[] | null {
+  return expandOneHostIsWhereArm(arm) ?? expandOneHostNotArm(arm);
 }
 
 function expandOneHostIsWhereArm(arm: ComplexSelector): ComplexSelector[] | null {
@@ -170,12 +176,255 @@ function expandArgumentArmIntoHostArm(
   };
 }
 
+type HostNotProjection = {
+  // null means :not(:host), which has no host-boundary arm.
+  arg: CompoundSelector | null;
+};
+
+function expandOneHostNotArm(arm: ComplexSelector): ComplexSelector[] | null {
+  const parts = arm.parts;
+
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex];
+    const compound = part.compound;
+    const tests = compound.tests;
+
+    for (let testIndex = 0; testIndex < tests.length; testIndex++) {
+      const test = tests[testIndex];
+      if (!test.pseudoNot) continue;
+
+      const projection = extractHostNotProjection(test.pseudoNot);
+      if (!projection) continue;
+
+      return expandAtHostNot(arm, partIndex, testIndex, projection);
+    }
+  }
+
+  return null;
+}
+
+function expandAtHostNot(
+  arm: ComplexSelector,
+  partIndex: number,
+  testIndex: number,
+  projection: HostNotProjection,
+): ComplexSelector[] {
+  const outerPart = arm.parts[partIndex];
+  const baseCompound = compoundWithoutTest(outerPart.compound, testIndex);
+  const expanded: ComplexSelector[] = [];
+
+  // Ordinary element branch:
+  //
+  // :not(:host(.x)) is true for ordinary elements because :host(.x)
+  // is false on ordinary elements. So remove the :not() test.
+  //
+  // But if the remaining base compound itself contains :host/:host-context,
+  // there is no ordinary branch.
+  if (!compoundHasDirectHostBoundary(baseCompound)) {
+    expanded.push(replacePartCompound(arm, partIndex, baseCompound));
+  }
+
+  // Host-boundary branch:
+  //
+  // :not(:host) contributes no host branch.
+  // :not(:host(.x)) contributes :host(:not(.x)).
+  if (projection.arg) {
+    const hostBase = projectCompoundToHostBoundary(baseCompound);
+
+    if (hostBase) {
+      const hostCompound = applyNegatedHostArg(hostBase, projection.arg);
+      expanded.push(replacePartCompound(arm, partIndex, hostCompound));
+    }
+  }
+
+  // Example: :host:not(:host) has no ordinary branch and no host branch.
+  if (expanded.length === 0) {
+    return [replacePartCompound(arm, partIndex, NEVER_CMPD)];
+  }
+
+  return expanded;
+}
+
+function extractHostNotProjection(list: SelectorList): HostNotProjection | null {
+  const arg = extractBareHostQuestionArg(list);
+  if (arg === undefined) return null;
+
+  return { arg };
+}
+
+function extractBareHostQuestionArg(list: SelectorList): CompoundSelector | null | undefined {
+  if (list.arms.length !== 1) return undefined;
+
+  const arm = list.arms[0];
+  if (arm.parts.length !== 1) return undefined;
+
+  return extractBareHostQuestionArgFromCompound(arm.parts[0].compound);
+}
+
+function extractBareHostQuestionArgFromCompound(compound: CompoundSelector): CompoundSelector | null | undefined {
+  if (
+    compound.id ||
+    compound.tag ||
+    compound.classes?.length ||
+    compound.hostContext
+  ) {
+    return undefined;
+  }
+
+  // :host or :host(ARG)
+  if (compound.host) {
+    if (compound.tests.length !== 0) return undefined;
+    return compound.host.arg ? cloneCompound(compound.host.arg) : null;
+  }
+
+  // Narrow nested logical support:
+  // :not(:is(:host(.x)))
+  // :not(:where(:host(.x)))
+  if (compound.tests.length === 1) {
+    const list = compound.tests[0].pseudoIs ?? compound.tests[0].pseudoWhere;
+    if (!list) return undefined;
+
+    return extractBareHostQuestionArg(list);
+  }
+
+  return undefined;
+}
+
+function compoundHasDirectHostBoundary(compound: CompoundSelector): boolean {
+  return !!compound.host || !!compound.hostContext;
+}
+
+function projectCompoundToHostBoundary(compound: CompoundSelector): CompoundSelector | null {
+  if (
+    compound.id ||
+    compound.tag ||
+    compound.classes?.length ||
+    compound.tests.length !== 0
+  ) {
+    return null;
+  }
+
+  // Existing host-boundary compound.
+  if (compound.host || compound.hostContext) {
+    return cloneCompound(compound);
+  }
+
+  // Empty base compound from :not(:host(...)).
+  // Synthesize the featureless host boundary.
+  return finalizeCompound({
+    host: { cost: 1 },
+    tests: [],
+    usesScope: false,
+    usesCache: false,
+    cost: 0,
+  });
+}
+
+function applyNegatedHostArg(base: CompoundSelector, arg: CompoundSelector): CompoundSelector {
+  const negatedArg = compoundFromTest(
+    emitNotPseudoTest(selectorListFromCompound(cloneCompound(arg))),
+  );
+
+  const out = cloneCompound(base);
+  out.host = mergeHostWithArg(out.host, negatedArg);
+
+  return finalizeCompound(out);
+}
+
+function mergeHostWithArg(host: HostSelector | undefined, arg: CompoundSelector): HostSelector {
+  if (!host) {
+    return {
+      arg,
+      cost: 1 + arg.cost,
+    };
+  }
+
+  if (!host.arg) {
+    return {
+      arg,
+      cost: 1 + arg.cost,
+    };
+  }
+
+  const merged = mergeCompounds(host.arg, arg);
+
+  return {
+    arg: merged,
+    cost: 1 + merged.cost,
+  };
+}
+
+function compoundFromTest(test: CandidateTest): CompoundSelector {
+  return finalizeCompound({
+    tests: [test],
+    usesScope: false,
+    usesCache: false,
+    cost: 0,
+  });
+}
+
+function selectorListFromCompound(compound: CompoundSelector): SelectorList {
+  return {
+    arms: [{
+      parts: [{ combinator: null, compound, cost: compound.cost }],
+      usesScope: compound.usesScope,
+      usesCache: compound.usesCache,
+      cost: compound.cost,
+    }],
+    usesScope: compound.usesScope,
+    usesCache: compound.usesCache,
+    cost: compound.cost,
+  };
+}
+
+function replacePartCompound(
+  arm: ComplexSelector,
+  partIndex: number,
+  compound: CompoundSelector,
+): ComplexSelector {
+  const parts: ComplexPart[] = [];
+
+  for (let i = 0; i < arm.parts.length; i++) {
+    const old = arm.parts[i];
+
+    if (i !== partIndex) {
+      parts.push(old);
+      continue;
+    }
+
+    const part: ComplexPart = {
+      combinator: old.combinator,
+      compound,
+      cost: 0,
+    };
+
+    part.cost = costPart(part);
+    parts.push(part);
+  }
+
+  return {
+    parts,
+    usesScope: complexUsesScope(parts),
+    usesCache: complexUsesCache(parts),
+    cost: costComplex(parts),
+    hasSeed: false,
+  };
+}
+
+function cloneHost(host: HostSelector | undefined): HostSelector | undefined {
+  if (!host) return undefined;
+
+  return host.arg
+    ? { arg: cloneCompound(host.arg), cost: host.cost }
+    : { cost: host.cost };
+}
+
 function cloneCompound(compound: CompoundSelector): CompoundSelector {
   return finalizeCompound({
     id: cloneId(compound.id),
     tag: cloneTag(compound.tag),
     classes: cloneClasses(compound.classes),
-    host: compound.host,
+    host: cloneHost(compound.host),
     hostContext: compound.hostContext,
     tests: compound.tests.slice(),
     usesScope: false,
@@ -207,7 +456,8 @@ function compoundContainsHost(compound: CompoundSelector): boolean {
 
   const tests = compound.tests;
   for (let i = 0; i < tests.length; i++) {
-    const list = tests[i].pseudoIs ?? tests[i].pseudoWhere;
+    // const list = tests[i].pseudoIs ?? tests[i].pseudoWhere;
+    const list = tests[i].pseudoIs ?? tests[i].pseudoWhere ?? tests[i].pseudoNot;
 
     if (list && selectorListContainsHost(list)) return true;
   }
@@ -226,7 +476,7 @@ function compoundWithoutTest(compound: CompoundSelector, testIndex: number): Com
     id: cloneId(compound.id),
     tag: cloneTag(compound.tag),
     classes: cloneClasses(compound.classes),
-    host: compound.host,
+    host: cloneHost(compound.host),
     hostContext: compound.hostContext,
     tests,
     usesScope: false,
@@ -246,7 +496,7 @@ function mergeCompounds(base: CompoundSelector, argument: CompoundSelector): Com
     id,
     tag,
     classes: mergeClasses(base.classes, argument.classes),
-    host: base.host ?? argument.host,
+    host: mergeHosts(base.host, argument.host),
     hostContext: base.hostContext ?? argument.hostContext,
     tests: [...argument.tests, ...base.tests],
     usesScope: false,
@@ -299,31 +549,30 @@ function mergeClasses(
   return out.length ? out : undefined;
 }
 
+function mergeHosts(a: HostSelector | undefined, b: HostSelector | undefined): HostSelector | undefined {
+  if (!a) return cloneHost(b);
+  if (!b) return cloneHost(a);
+
+  if (!a.arg && !b.arg) {
+    return { cost: 1 };
+  }
+
+  if (!a.arg) return cloneHost(b);
+  if (!b.arg) return cloneHost(a);
+
+  const arg = mergeCompounds(a.arg, b.arg);
+
+  return {
+    arg,
+    cost: 1 + arg.cost,
+  };
+}
+
 function finalizeCompound(compound: CompoundSelector): CompoundSelector {
   compound.usesScope = compoundUsesScope(compound);
   compound.usesCache = compoundUsesCache(compound);
-  compound.cost = compoundCost(compound);
+  compound.cost = costCompound(compound);
   return compound;
-}
-
-function compoundCost(compound: CompoundSelector): number {
-  let cost = 0;
-
-  if (compound.id) cost += compound.id.cost;
-  if (compound.tag) cost += compound.tag.cost;
-  if (compound.host) cost += compound.host.cost;
-
-  if (compound.classes) {
-    for (let i = 0; i < compound.classes.length; i++) {
-      cost += compound.classes[i].cost;
-    }
-  }
-
-  for (let i = 0; i < compound.tests.length; i++) {
-    cost += compound.tests[i].cost;
-  }
-
-  return cost;
 }
 
 function compoundUsesScope(compound: CompoundSelector): boolean {
