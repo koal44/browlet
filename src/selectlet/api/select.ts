@@ -5,7 +5,6 @@ import { isElement } from '../../utils/dom';
 import { buildFullBridgeSelect } from './select-fullbridge';
 import { buildFrontierSelect } from './select-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
-import { liftHostSelectorList } from '../planner/lift-host';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;
@@ -16,8 +15,7 @@ export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Ele
   let resolver = snap.selectResolvers.get(sel);
   if (!resolver) {
     const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    const lifted = liftHostSelectorList(parsed);
-    resolver = buildSelectResolver(lifted, snap);
+    resolver = buildSelectResolver(parsed, snap);
     snap.selectResolvers.set(sel, resolver);
     snap.cacheSize++;
   }
@@ -39,6 +37,7 @@ export type SelectResolver = {
   list: SelectorList;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   fullBridge?: SelectRunFn;
   frontier?: SelectRunFn;
 };
@@ -56,6 +55,7 @@ function buildSelectResolver(list: SelectorList, snap: Snapshot): SelectResolver
     list,
     usesScope: list.usesScope,
     usesCache: list.usesCache,
+    usesHost: list.usesHost,
   };
 }
 
@@ -70,7 +70,7 @@ function resolveSelectStrategy(
   // ancestors/siblings outside the subtree. Frontier selection narrows the proof
   // universe while moving through the chain, so it is not safe for element
   // contexts.
-  if (isElement(ctx)) {
+  if (isElement(ctx) || resolver.usesHost) {
     let fullBridge = resolver.fullBridge;
     if (!fullBridge) {
       fullBridge = buildFullBridgeSelect(resolver.list, snap);
@@ -104,6 +104,7 @@ export type DebugSelectBuild = {
   engine: 'full-bridge' | 'frontier';
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
 
   // full-bridge-only
   lookupStrategy?: string;

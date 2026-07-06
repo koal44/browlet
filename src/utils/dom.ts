@@ -121,6 +121,18 @@ export function isNamedItemAnElement(item: Element | HTMLCollection): item is El
   return (item as { nodeType?: unknown; }).nodeType === 1;
 }
 
+export function isShadowRoot(n: Node): n is ShadowRoot {
+  return n.nodeType === DOCUMENT_FRAGMENT_NODE &&
+    'host' in n &&
+    isElement((n as ShadowRoot).host);
+}
+
+// Returns the node's root if that root is a ShadowRoot.
+export function getShadowTreeRoot(n: Node): ShadowRoot | null {
+  const root = n.getRootNode();
+  return isShadowRoot(root) ? root : null;
+}
+
 // export function getIdAttr(e: Element): string {
 //   // return e.getAttribute('id') || '';
 //   const v = e.id;

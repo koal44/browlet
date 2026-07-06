@@ -108,14 +108,6 @@ export function describeCompound(c: CompoundSelector): string {
     }
   }
 
-  if (c.host) {
-    out += c.host.arg ? `:host(${describeCompound(c.host.arg)})` : ':host';
-  }
-
-  if (c.hostContext) {
-    out += `:host-context(${describeCompound(c.hostContext.arg)})`;
-  }
-
   for (let i = 0; i < c.tests.length; i++) {
     out += describeCandidateTest(c.tests[i]);
   }
@@ -190,12 +182,6 @@ function describeCandidateTest(test: CandidateTest): string {
 
   if (test.debug?.kind === 'parts') {
     return `::part(${test.debug.parts.join(' ')})`;
-  }
-
-  if (test.debug?.kind === 'expanded') {
-    return test.pseudoIs
-      ? `:xis(${describeList(test.pseudoIs)})`
-      : test.pseudoWhere ? `:xwhere(${describeList(test.pseudoWhere)})` : '??';
   }
 
   return '<test>';

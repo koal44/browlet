@@ -6,7 +6,7 @@ import {
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
   emitDisabledPseudoTest, emitEmptyPseudoTest, emitEnabledPseudoTest, emitFirstChildPseudoTest,
   emitFirstOfTypePseudoTest, emitFocusPseudoTest, emitFocusVisiblePseudoTest, emitFocusWithinPseudoTest,
-  emitHasPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
+  emitHasPseudoTest, emitHostContextPseudoTest, emitHostPseudoTest, emitHoverPseudoTest, emitIndeterminatePseudoTest, emitInRangePseudoTest,
   emitInvalidPseudoTest, emitIsPseudoTest, emitLangPseudoTest, emitLastChildPseudoTest,
   emitLastOfTypePseudoTest, emitLinkPseudoTest, emitMutedPseudoTest, emitNoMatchPseudoElementTest,
   emitNoMatchPseudoTest, emitNotPseudoTest, emitNthPseudoTest, emitOnlyChildPseudoTest,
@@ -26,11 +26,13 @@ import { parseNthArgs } from './nth';
 import { combinatorCost } from '../planner/cost';
 import { emitIdTest } from '../compile/emit-seedable';
 import type { RuntimeCache } from '../compile/runtimeCache';
+import type { SubjectKind } from '../constants';
 
 export type SelectorList = {
   arms: ComplexSelector[];
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
 };
 
@@ -40,6 +42,7 @@ export type ComplexSelector = {
   parts: ComplexPart[];
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
 
   // Whether a contained compound's ID/class/tag was used as a seed
@@ -58,10 +61,9 @@ export type CompoundSelector = {
   id?: IdSelector;
   classes?: ClassSelector[];
   tag?: TagSelector;
-  host?: HostSelector;
-  hostContext?: HostContextSelector;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
   tests: CandidateTest[];
 };
@@ -89,39 +91,39 @@ export type TagSelector = {
   seed?: boolean;
 };
 
-export type HostSelector = {
-  arg?: CompoundSelector;
-  cost: number;
-};
-
-export type HostContextSelector = {
-  arg: CompoundSelector;
-  cost: number;
-};
+export type BuildBi = (snap: Snapshot) => CandidateBiPredicate;
+export type BuildTri = (snap: Snapshot) => CandidateTriPredicate;
 
 export type CandidateTest = {
-  build: (snap: Snapshot) => CandidatePredicate;
+  buildBi: BuildBi;
+  buildTri?: BuildTri;
 
   unique?: boolean;
   usesScope?: boolean;
   usesCache?: boolean;
+  usesHost?: boolean;
   cost: number;
-  pseudoIs?: SelectorList;
-  pseudoWhere?: SelectorList;
-  pseudoNot?: SelectorList;
   debug?: CandidateTestDebug;
 };
 
-export type CandidatePredicate = (e: Element, rc: RuntimeCache | null) => boolean;
+export type CandidateBiPredicate =
+  (e: Element, rc: RuntimeCache | null) => boolean;
+
+export type CandidateTriPredicate =
+  (e: Element, rc: RuntimeCache | null, kind: SubjectKind) => TriMatch;
+
+export type TriMatch = true | false | null;
 
 type CandidateTestDebug =
   | { kind: 'static'; value: boolean; }
   | { kind: 'attr'; attr: AttributeSelector; }
   | { kind: 'pseudo'; name: string; }
+  | { kind: 'host'; arg?: CompoundSelector; }
+  | { kind: 'host-context'; arg: CompoundSelector; }
   | { kind: 'pseudo-element'; name: string; }
   | { kind: 'registered-pseudo'; name: string; }
-  | { kind: 'is' | 'where'; list: SelectorList; }
-  | { kind: 'expanded'; list: SelectorList; }
+  | { kind: 'is'; list: SelectorList; }
+  | { kind: 'where'; list: SelectorList; }
   | { kind: 'not'; list: SelectorList; }
   | { kind: 'has'; list: RelativeSelectorList; }
   | { kind: 'parts'; parts: string[]; }
@@ -155,6 +157,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
   let cost = 0;
 
   consumeTrivia(c);
@@ -171,6 +174,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
 
     if (complex.usesScope) usesScope = true;
     if (complex.usesCache) usesCache = true;
+    if (complex.usesHost) usesHost = true;
     cost += complex.cost;
     selectors.push(complex);
 
@@ -195,7 +199,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
     c.error(`Unexpected character ${ch}`);
   }
 
-  return { arms: selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
 export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
@@ -213,6 +217,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
 
   let usesScope = first.usesScope;
   let usesCache = first.usesCache;
+  let usesHost = first.usesHost;
   let cost = firstPart.cost;
 
   while (true) {
@@ -243,6 +248,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
     const partCost = combinatorCost(combinator) + compound.cost;
     if (compound.usesScope) usesScope = true;
     if (compound.usesCache) usesCache = true;
+    if (compound.usesHost) usesHost = true;
     cost += partCost;
 
     parts.push({
@@ -252,7 +258,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   }
 
   return {
-    parts, usesScope, usesCache, cost,
+    parts, usesScope, usesCache, usesHost, cost,
     // source: c.slice(start, end),
   };
 }
@@ -261,6 +267,7 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
   const compound: CompoundSelector = {
     usesScope: false,
     usesCache: false,
+    usesHost: false,
     cost: 0,
     tests: [],
   };
@@ -322,24 +329,10 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
 
   if (ch === ':') {
     const name = parsePseudoIdent(c);
-
-    if (name === 'host') {
-      const host = parseHostSelector(c, ctx);
-      compound.host = host;
-      compound.cost += host.cost;
-      return;
-    }
-
-    if (name === 'host-context') {
-      const hostContext = parseHostContextSelector(c, ctx);
-      compound.hostContext = hostContext;
-      compound.cost += hostContext.cost;
-      return;
-    }
-
     const pseudoTest = parsePseudoTestSource(c, ctx, name);
     if (pseudoTest.usesScope) compound.usesScope = true;
     if (pseudoTest.usesCache) compound.usesCache = true;
+    if (pseudoTest.usesHost) compound.usesHost = true;
     compound.tests.push(pseudoTest);
     compound.cost += pseudoTest.cost;
     return;
@@ -448,28 +441,16 @@ export type AttributeSelector = {
   flag?: 'i' | 's';
 };
 
-function parseHostSelector(c: Cursor, ctx: ParseContext): HostSelector {
-  if (c.peek() !== '(') {
-    return { cost: 1 };
-  }
+function parseHostPseudoArg(c: Cursor, ctx: ParseContext): CompoundSelector | undefined {
+  if (c.peek() !== '(') return undefined;
 
-  const x = { ...ctx, forbidEls: true, inHost: true };
-  const arg = parseCompoundPseudoArg(c, x, ':host()');
-
-  return {
-    arg,
-    cost: 1 + arg.cost,
-  };
+  const x: ParseContext = { ...ctx, forbidEls: true, inHost: true };
+  return parseCompoundPseudoArg(c, x, ':host()');
 }
 
-function parseHostContextSelector(c: Cursor, ctx: ParseContext): HostContextSelector {
-  const x = { ...ctx, forbidEls: true, inHost: true };
-  const arg = parseCompoundPseudoArg(c, x, ':host-context()');
-
-  return {
-    arg,
-    cost: 1 + arg.cost,
-  };
+function parseHostContextPseudoArg(c: Cursor, ctx: ParseContext): CompoundSelector {
+  const x: ParseContext = { ...ctx, forbidEls: true, inHost: true };
+  return parseCompoundPseudoArg(c, x, ':host-context()');
 }
 
 type AttrOperator = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
@@ -594,10 +575,11 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
     case 'scope': return emitScopePseudoTest();
     case 'root': return emitRootPseudoTest();
     case 'host': {
-      return c.error('Internal parser error: :host should be parsed as a structural host selector');
+      return emitHostPseudoTest(parseHostPseudoArg(c, ctx));
     }
+
     case 'host-context': {
-      return c.error('Internal parser error: :host-context should be parsed as a structural host-context selector');
+      return emitHostContextPseudoTest(parseHostContextPseudoArg(c, ctx));
     }
     case 'empty': return emitEmptyPseudoTest();
     case 'first-child': return emitFirstChildPseudoTest();
@@ -615,7 +597,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
 
     // logical / relational pseudo-classes
     case 'is': {
-      const x = { ...ctx, forbidEls: true };
+      const x: ParseContext = { ...ctx, forbidEls: true };
       const pseudoList = x.inHost
         ? keepCompoundArms(parseForgivingSelectorList(c, x))
         : parseForgivingSelectorList(c, x);
@@ -625,7 +607,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
     }
 
     case 'where': {
-      const x = { ...ctx, forbidEls: true };
+      const x: ParseContext = { ...ctx, forbidEls: true };
       const pseudoList = x.inHost
         ? keepCompoundArms(parseForgivingSelectorList(c, x))
         : parseForgivingSelectorList(c, x);
@@ -633,16 +615,21 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
       if (pseudoList.arms.length === 0) return emitNoMatchPseudoTest('where');
       return emitWherePseudoTest(pseudoList);
     }
+
     case 'not': {
-      const x = { ...ctx, forbidEls: true };
+      const x: ParseContext = { ...ctx, forbidEls: true };
+
       if (x.inHost) {
-        return emitNotPseudoTest(selectorListFromCompound(parseCompoundPseudoArg(c, x, ':not()')));
+        return emitNotPseudoTest(
+          selectorListFromCompound(parseCompoundPseudoArg(c, x, ':not()')),
+        );
       }
+
       return emitNotPseudoTest(parseStrictSelectorList(c, x));
     }
     case 'has': {
       if (ctx.afterPart) c.error(':has() is not allowed after ::part()');
-      const x = { ...ctx, forbidEls: true, inHas: true };
+      const x: ParseContext = { ...ctx, forbidEls: true, inHas: true };
       if (ctx.inHas) c.error('Nested :has() is not allowed');
       const relativeList = parseRelativeSelectorList(c, x);
       if (relativeList.arms.length === 0) c.error('Expected selector in :has() body');
@@ -790,6 +777,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
   let cost = 0;
 
   while (ch !== ')' && ch !== '') {
@@ -797,6 +785,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
 
     if (complex.usesScope) usesScope = true;
     if (complex.usesCache) usesCache = true;
+    if (complex.usesHost) usesHost = true;
     cost += complex.cost;
     selectors.push(complex);
 
@@ -822,7 +811,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
     c.advance();
   }
 
-  return { arms: selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
 export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
@@ -831,6 +820,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
   let cost = 0;
 
   while (true) {
@@ -858,6 +848,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
 
       if (complex.usesScope) usesScope = true;
       if (complex.usesCache) usesCache = true;
+      if (complex.usesHost) usesHost = true;
       cost += complex.cost;
       selectors.push(complex);
     } catch {
@@ -885,7 +876,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
     c.error(`Expected "," or ")" in pseudo-class body, got ${ch}`);
   }
 
-  return { arms: selectors, usesScope, usesCache, cost };
+  return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
 function consumeForgivingSelectorArm(c: Cursor): void {
@@ -977,6 +968,7 @@ export type RelativeSelectorList = {
   arms: RelativeComplexSelector[];
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
 };
 
@@ -984,6 +976,7 @@ export type RelativeComplexSelector = {
   steps: RelativeStep[];
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
 };
 
@@ -997,6 +990,7 @@ export type RelativeCompoundSelector = {
   compound: CompoundSelector;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
   cost: number;
 };
 
@@ -1013,12 +1007,14 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
   const arms: RelativeComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
   let cost = 0;
 
   while (ch !== ')' && ch !== '') {
     const arm = parseRelativeComplexSelector(c, ctx);
     if (arm.usesScope) usesScope = true;
     if (arm.usesCache) usesCache = true;
+    if (arm.usesHost) usesHost = true;
     cost += arm.cost;
     arms.push(arm);
 
@@ -1042,13 +1038,14 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
 
   if (ch === ')') c.advance();
 
-  return { arms, usesScope, usesCache, cost };
+  return { arms, usesScope, usesCache, usesHost, cost };
 }
 
 function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeComplexSelector {
   const steps: RelativeStep[] = [];
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
   let cost = 0;
 
   consumeTrivia(c);
@@ -1067,6 +1064,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
 
     if (compound.usesScope) usesScope = true;
     if (compound.usesCache) usesCache = true;
+    if (compound.usesHost) usesHost = true;
 
     const stepCost = combinatorCost(combinator) + compound.cost;
     cost += stepCost;
@@ -1078,6 +1076,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
         compound,
         usesScope: compound.usesScope === true,
         usesCache: compound.usesCache === true,
+        usesHost: compound.usesHost === true,
         cost: compound.cost,
       },
     });
@@ -1099,7 +1098,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
     }
   }
 
-  return { steps, usesScope, usesCache, cost };
+  return { steps, usesScope, usesCache, usesHost, cost };
 }
 
 function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
@@ -1236,10 +1235,12 @@ function selectorListFromCompound(compound: CompoundSelector): SelectorList {
       parts: [{ combinator: null, compound, cost: compound.cost }],
       usesScope: compound.usesScope,
       usesCache: compound.usesCache,
+      usesHost: compound.usesHost,
       cost: compound.cost,
     }],
     usesScope: compound.usesScope,
     usesCache: compound.usesCache,
+    usesHost: compound.usesHost,
     cost: compound.cost,
   };
 }
@@ -1249,6 +1250,7 @@ function keepCompoundArms(list: SelectorList): SelectorList {
   let cost = 0;
   let usesScope = false;
   let usesCache = false;
+  let usesHost = false;
 
   for (let i = 0; i < list.arms.length; i++) {
     const arm = list.arms[i];
@@ -1259,6 +1261,7 @@ function keepCompoundArms(list: SelectorList): SelectorList {
     cost += arm.cost;
     usesScope = usesScope || arm.usesScope;
     usesCache = usesCache || arm.usesCache;
+    usesHost = usesHost || arm.usesHost;
   }
 
   return {
@@ -1266,5 +1269,6 @@ function keepCompoundArms(list: SelectorList): SelectorList {
     cost,
     usesScope,
     usesCache,
+    usesHost,
   };
 }

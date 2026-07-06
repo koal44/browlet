@@ -20,6 +20,7 @@ type FullBridgeDraft = {
   cost: number;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
 };
 
 export type FullBridgeGroup = {
@@ -28,6 +29,7 @@ export type FullBridgeGroup = {
   cost: number;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
 };
 
 function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBridgeDraft[] {
@@ -61,6 +63,7 @@ function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBri
       draft.cost += arm.cost;
       draft.usesScope ||= arm.usesScope === true;
       draft.usesCache ||= arm.usesCache === true;
+      draft.usesHost ||= arm.usesHost === true;
       continue;
     }
 
@@ -70,6 +73,7 @@ function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBri
       cost: arm.cost,
       usesScope: arm.usesScope === true,
       usesCache: arm.usesCache === true,
+      usesHost: arm.usesHost === true,
     });
   }
 
@@ -95,6 +99,7 @@ function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], snap: Snapshot): Fu
       cost: draft.cost,
       usesScope: draft.usesScope,
       usesCache: draft.usesCache,
+      usesHost: draft.usesHost,
     };
   }
 

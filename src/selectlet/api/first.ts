@@ -5,7 +5,6 @@ import { isElement } from '../../utils/dom';
 import { buildFullBridgeFirst } from './first-fullbridge';
 import { buildFrontierFirst } from './first-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
-import { liftHostSelectorList } from '../planner/lift-host';
 
 export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
   snap.probe.first++;
@@ -16,8 +15,7 @@ export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Elem
   let resolver = snap.firstResolvers.get(sel);
   if (!resolver) {
     const parsed = parseSelectorList(sel, { pseudos: snap.pseudos });
-    const lifted = liftHostSelectorList(parsed);
-    resolver = buildFirstResolver(lifted, snap);
+    resolver = buildFirstResolver(parsed, snap);
     snap.firstResolvers.set(sel, resolver);
     snap.cacheSize++;
   }

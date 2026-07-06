@@ -2,7 +2,6 @@ import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
 import { mergeDocumentOrderLists } from '../../utils/collections';
-import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeMove, resetFrontierDebug, runAdvanceMove, runBridgeMove, type FrontierProgram, type FrontierState,
 } from '../planner/frontier';
@@ -11,7 +10,7 @@ import { buildChain } from '../planner/chain';
 import { LOOKUP_COPY } from '../constants';
 
 export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
-  const arms = expandSelectorListForSeeding(list);
+  const arms = list.arms;
   const selects: ArmSelectFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
@@ -144,6 +143,7 @@ function updateDebugBuild(
     engine: 'frontier',
     usesScope: arm.usesScope === true,
     usesCache: arm.usesCache === true,
+    usesHost: arm.usesHost === true,
     armIndex,
     arm: describeComplex(arm),
   });

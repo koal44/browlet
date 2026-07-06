@@ -1,8 +1,7 @@
-import { type CandidatePredicate, parseSelectorList, type SelectorList } from '../parser/parser';
+import { type CandidateBiPredicate, parseSelectorList, type SelectorList } from '../parser/parser';
 import { describeContext, type QueryContextDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
-import { liftHostSelectorList } from '../planner/lift-host';
 
 export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
   snap.probe.match++;
@@ -26,15 +25,11 @@ export function queryMatches(selectors: string, element: Element, snap: Snapshot
   return result;
 }
 
-// export function matchStrict(selectors: string, element: Element, snap: Snapshot, rc: RuntimeCache | null): boolean {
-//   const resolver = getStrictMatchResolver(selectors, snap);
-//   return resolver.match(element, rc);
-// }
-
 export type MatchResolver = {
-  match: CandidatePredicate;
+  match: CandidateBiPredicate;
   usesScope: boolean;
   usesCache: boolean;
+  usesHost: boolean;
 };
 
 export function getStrictMatchResolver(selectors: string, snap: Snapshot): MatchResolver {
@@ -42,13 +37,12 @@ export function getStrictMatchResolver(selectors: string, snap: Snapshot): Match
 
   if (!resolver) {
     const parsed = parseSelectorList(selectors, { pseudos: snap.pseudos });
-    const lifted = liftHostSelectorList(parsed);
 
     if (snap.isDebug && snap.debugMatch) {
-      updateDebugParse(snap, lifted);
+      updateDebugParse(snap, parsed);
     }
 
-    resolver = buildStrictMatchResolver(lifted, snap);
+    resolver = buildStrictMatchResolver(parsed, snap);
     snap.strictMatchResolvers.set(selectors, resolver);
     snap.cacheSize++;
   }
@@ -70,6 +64,7 @@ function buildStrictMatchResolver(list: SelectorList, snap: Snapshot): MatchReso
     match,
     usesScope: list.usesScope,
     usesCache: list.usesCache,
+    usesHost: list.usesHost,
   };
 }
 
@@ -81,6 +76,7 @@ export type DebugMatch = {
     arms: number;
     usesScope: boolean;
     usesCache: boolean;
+    usesHost: boolean;
     cost: number;
   };
   result?: boolean;
@@ -110,6 +106,7 @@ function updateDebugParse(snap: Snapshot, parsed: SelectorList): void {
       arms: parsed.arms.length,
       usesScope: parsed.usesScope,
       usesCache: parsed.usesCache,
+      usesHost: parsed.usesHost,
       cost: parsed.cost,
     };
   }

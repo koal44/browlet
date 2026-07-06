@@ -20,8 +20,6 @@ export function costCompound(compound: CompoundSelector): number {
 
   if (compound.id) cost += compound.id.cost;
   if (compound.tag) cost += compound.tag.cost;
-  if (compound.host) cost += compound.host.cost;
-  if (compound.hostContext) cost += compound.hostContext.cost;
 
   if (compound.classes) {
     for (let i = 0; i < compound.classes.length; i++) {

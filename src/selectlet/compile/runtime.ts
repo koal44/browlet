@@ -9,33 +9,33 @@ import {
 } from '../../utils/dom';
 import type { RuntimeCache } from './runtimeCache';
 
-export type CombinatorTest = (e: Element, rc: RuntimeCache | null) => boolean;
+// export type CombinatorTest = (e: Element, rc: RuntimeCache | null) => boolean;
 
-export function matchParent(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
-  const parent = e.parentElement;
-  return !!parent && test(parent, rc);
-}
+// export function matchParent(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
+//   const parent = e.parentElement;
+//   return !!parent && test(parent, rc);
+// }
 
-export function matchAncestor(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
-  let node: Element | null = e;
-  while ((node = node.parentElement)) {
-    if (test(node, rc)) return true;
-  }
-  return false;
-}
+// export function matchAncestor(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
+//   let node: Element | null = e;
+//   while ((node = node.parentElement)) {
+//     if (test(node, rc)) return true;
+//   }
+//   return false;
+// }
 
-export function matchPrev(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
-  const prev = e.previousElementSibling;
-  return !!prev && test(prev, rc);
-}
+// export function matchPrev(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
+//   const prev = e.previousElementSibling;
+//   return !!prev && test(prev, rc);
+// }
 
-export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
-  let node: Element | null = e;
-  while ((node = node.previousElementSibling)) {
-    if (test(node, rc)) return true;
-  }
-  return false;
-}
+// export function matchPrevAny(e: Element, test: CombinatorTest, rc: RuntimeCache | null): boolean {
+//   let node: Element | null = e;
+//   while ((node = node.previousElementSibling)) {
+//     if (test(node, rc)) return true;
+//   }
+//   return false;
+// }
 
 export function nextDescendant(root: Element, node: Element): Element | null {
   if (node.firstElementChild) return node.firstElementChild;

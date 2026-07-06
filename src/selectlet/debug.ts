@@ -41,14 +41,6 @@ export function describeCompound(compound: CompoundSelector): string {
     }
   }
 
-  if (compound.host) {
-    out += compound.host.arg ? `:host(${describeCompound(compound.host.arg)})` : ':host';
-  }
-
-  if (compound.hostContext) {
-    out += `:host-context(${describeCompound(compound.hostContext.arg)})`;
-  }
-
   for (let i = 0; i < compound.tests.length; i++) {
     out += describeTest(compound.tests[i]);
   }
@@ -75,9 +67,8 @@ export function describeTest(test: CandidateTest): string {
   if (debug?.kind === 'where') return ':where(...)';
   if (debug?.kind === 'not') return ':not(...)';
   if (debug?.kind === 'has') return ':has(...)';
-  if (debug?.kind === 'expanded') return test.pseudoIs ? ':xis(...)' : ':xwhere(...)';
-
-  // if ('source' in test) return describeStaticTestSource(test.source);
+  if (debug?.kind === 'host') return debug.arg ? `:host(${describeCompound(debug.arg)})` : ':host';
+  if (debug?.kind === 'host-context') return `:host-context(${describeCompound(debug.arg)})`;
 
   return '<test>';
 }

@@ -3,13 +3,12 @@ import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
 import { mergeDocumentOrderLists } from '../../utils/collections';
 import { describeElements } from '../debug';
-import { expandSelectorListForSeeding } from '../planner/lift-seed';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_COPY } from '../constants';
 
 export function buildFullBridgeSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
-  const arms = expandSelectorListForSeeding(list);
+  const arms = list.arms;
   const groups = buildFullBridgeGroups(arms, snap);
 
   if (snap.isDebug) {
@@ -80,6 +79,7 @@ function updateDebugBuild(
     engine: 'full-bridge',
     usesScope: group.usesScope,
     usesCache: group.usesCache,
+    usesHost: group.usesHost,
     lookupStrategy: group.lookup.strategy,
     lookupQuery: group.lookup.lookupQuery,
     cost: group.cost,
