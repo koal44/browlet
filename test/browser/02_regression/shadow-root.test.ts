@@ -221,4 +221,37 @@ runScenarios('shadow-root', 'normal', [
     ],
   },
 
+  {
+    name: 'shadow-root/host-boundary-then-singleton-advance',
+    // status: 'only',
+    browsers: ['chromium', 'firefox'],
+    markup: `
+      <main id="outer">
+        <div id="host" class="foo"></div>
+      </main>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <section id="a" class="foo">
+            <div id="bar" class="bar"></div>
+            <div id="baz" class="baz"></div>
+          </section>
+          <section id="c">
+            <div id="cBar" class="bar"></div>
+            <div id="cBaz" class="baz"></div>
+          </section>
+          <div id="looseBar" class="bar"></div>
+        `;
+      });
+    },
+    cases: [
+      { select: ':host > .foo', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['a'] }, debug: false },
+      { select: ':host > .foo > .bar', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['bar'] }, debug: false },
+      { select: ':host > .foo > .bar + .baz', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['baz'] }, debug: false },
+      { select: ':host .foo > .bar + .baz', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['baz'] }, debug: false },
+    ],
+  },
+
 ]);

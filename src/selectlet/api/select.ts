@@ -70,7 +70,7 @@ function resolveSelectStrategy(
   // ancestors/siblings outside the subtree. Frontier selection narrows the proof
   // universe while moving through the chain, so it is not safe for element
   // contexts.
-  if (isElement(ctx) || resolver.usesHost) {
+  if (isElement(ctx)) {
     let fullBridge = resolver.fullBridge;
     if (!fullBridge) {
       fullBridge = buildFullBridgeSelect(resolver.list, snap);

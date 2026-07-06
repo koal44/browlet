@@ -1,17 +1,17 @@
 import type {
-  CandidateTest, IdSelector, ClassSelector, TagSelector, CandidateBiPredicate, CompoundSelector,
-  BuildBi,
+  CandidateTest, IdSelector, ClassSelector, TagSelector, CandidateElementPredicate, CompoundSelector,
+  BuildElementPredicate,
 } from '../parser/parser';
 import { asciiLower, cssIdentUnescape } from '../../utils/css';
 import { checkClass, checkId, checkTag } from './runtime';
 
-const TRUE_PREDICATE: CandidateBiPredicate = () => true;
-const FALSE_PREDICATE: CandidateBiPredicate = () => false;
+const TRUE_PREDICATE: CandidateElementPredicate = () => true;
+const FALSE_PREDICATE: CandidateElementPredicate = () => false;
 
 // id
 export function emitIdTest(id: IdSelector): CandidateTest {
   const value = cssIdentUnescape(id.raw);
-  return { buildBi: (s) => (e) => checkId(e, value, s), cost: id.cost };
+  return { buildElement: (s) => (e) => checkId(e, value, s), cost: id.cost };
 }
 
 // class
@@ -19,16 +19,16 @@ export function emitClassTest(cls: ClassSelector): CandidateTest {
   const value = cssIdentUnescape(cls.raw);
 
   if (/[\t\n\f\r ]/.test(value)) {
-    return { buildBi: () => FALSE_PREDICATE, cost: 0 };
+    return { buildElement: () => FALSE_PREDICATE, cost: 0 };
   }
 
-  return { buildBi: (s) => (e) => checkClass(e, value, s), cost: cls.cost };
+  return { buildElement: (s) => (e) => checkClass(e, value, s), cost: cls.cost };
 }
 
 // tag
 export function emitTagTest(tag: TagSelector): CandidateTest {
   const local = cssIdentUnescape(tag.localRaw);
-  let build: BuildBi;
+  let build: BuildElementPredicate;
 
   if (local === '*') {
     build = () => TRUE_PREDICATE;
@@ -39,11 +39,11 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
       : (s) => (e) => checkTag(e, lower, local, s);
   }
 
-  if (tag.prefixRaw === '*') return { buildBi: build, cost: tag.cost };
+  if (tag.prefixRaw === '*') return { buildElement: build, cost: tag.cost };
 
   if (tag.prefixRaw === '') {
     return {
-      buildBi: (s) => {
+      buildElement: (s) => {
         const test = build(s);
         return (e, rc) => !s.getNamespaceURI(e) && test(e, rc);
       },
@@ -51,7 +51,7 @@ export function emitTagTest(tag: TagSelector): CandidateTest {
     };
   }
 
-  return { buildBi: build, cost: tag.cost };
+  return { buildElement: build, cost: tag.cost };
 }
 
 export function collectCompoundTests(compound: CompoundSelector): CandidateTest[] {

@@ -1,4 +1,4 @@
-import { type CandidateBiPredicate, parseSelectorList, type SelectorList } from '../parser/parser';
+import { type CandidateElementPredicate, parseSelectorList, type SelectorList } from '../parser/parser';
 import { describeContext, type QueryContextDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
@@ -26,7 +26,7 @@ export function queryMatches(selectors: string, element: Element, snap: Snapshot
 }
 
 export type MatchResolver = {
-  match: CandidateBiPredicate;
+  match: CandidateElementPredicate;
   usesScope: boolean;
   usesCache: boolean;
   usesHost: boolean;

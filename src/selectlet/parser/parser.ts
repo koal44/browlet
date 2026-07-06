@@ -91,12 +91,12 @@ export type TagSelector = {
   seed?: boolean;
 };
 
-export type BuildBi = (snap: Snapshot) => CandidateBiPredicate;
-export type BuildTri = (snap: Snapshot) => CandidateTriPredicate;
+export type BuildElementPredicate = (snap: Snapshot) => CandidateElementPredicate;
+export type BuildSubjectPredicate = (snap: Snapshot) => CandidateSubjectPredicate;
 
 export type CandidateTest = {
-  buildBi: BuildBi;
-  buildTri?: BuildTri;
+  buildElement: BuildElementPredicate;
+  buildSubject?: BuildSubjectPredicate;
 
   unique?: boolean;
   usesScope?: boolean;
@@ -106,11 +106,11 @@ export type CandidateTest = {
   debug?: CandidateTestDebug;
 };
 
-export type CandidateBiPredicate =
+export type CandidateElementPredicate =
   (e: Element, rc: RuntimeCache | null) => boolean;
 
-export type CandidateTriPredicate =
-  (e: Element, rc: RuntimeCache | null, kind: SubjectKind) => TriMatch;
+export type CandidateSubjectPredicate =
+  (e: Element, rc: RuntimeCache | null, kind: SubjectKind) => true | false | null;
 
 export type TriMatch = true | false | null;
 

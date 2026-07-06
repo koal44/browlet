@@ -1,24 +1,24 @@
 import type { CompoundSelector } from '../parser/parser';
-import type { Chain, BiProofFn } from './chain';
+import type { Chain, ElementProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';
 import { cssIdentUnescape } from '../../utils/css';
-import { buildMultiChainBiProof, buildBiProof, buildTriProof, buildMultiChainTriProof } from './chain';
+import { buildChainProof, buildMultiChainProof } from './chain';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { precedesByDocPosition } from '../../utils/collections';
-import { SubjectKind, type LookupMode } from '../constants';
+import { type LookupMode } from '../constants';
 
 export type BridgeMove = {
   from: number;
   to: number;
   lookup: LookupFn;
-  proof: BiProofFn;
+  proof: ElementProofFn;
   debug?: string;
   count?: number;
 };
 
 export type MultiBridgeMove = {
   lookup: LookupFn;
-  proof: BiProofFn;
+  proof: ElementProofFn;
   debug?: string;
   count?: number;
 };
@@ -34,7 +34,7 @@ export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Sn
     const move: BridgeMove = {
       from, to,
       lookup: lookup.lookup,
-      proof: buildBridgeProof(chain, from, to, snap),
+      proof: buildChainProof(chain, from, to, snap),
     };
 
     if (snap.isDebug) {
@@ -80,7 +80,7 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   try {
     const move: MultiBridgeMove = {
       lookup: baseLookup.lookup,
-      proof: buildMultiBridgeProof(chains, snap),
+      proof: buildMultiChainProof(chains, snap),
     };
 
     if (snap.isDebug) {
@@ -95,7 +95,7 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   }
 }
 
-export function filterBridgeCandidates(candidates: Iterable<Element>, proof: BiProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
+export function filterBridgeCandidates(candidates: Iterable<Element>, proof: ElementProofFn, frontier: Element[] | null, rc: RuntimeCache | null): Element[] {
   const out: Element[] = [];
   let j = -1;
 
@@ -108,7 +108,7 @@ export function filterBridgeCandidates(candidates: Iterable<Element>, proof: BiP
 
 export function findFirstBridgeCandidate(
   candidates: Iterable<Element>,
-  proof: BiProofFn,
+  proof: ElementProofFn,
   frontier: Element[] | null,
   rc: RuntimeCache | null,
   best: Element | null,
@@ -168,42 +168,6 @@ export function findFirstBridgeCandidate(
 
 //   return lo;
 // }
-
-function buildBridgeProof(
-  chain: Chain, from: number, to: number, snap: Snapshot,
-): BiProofFn {
-  if (!chainRangeUsesHost(chain, from, to)) {
-    return buildBiProof(chain, from, to, snap);
-  }
-
-  const tri = buildTriProof(chain, from, to, snap);
-
-  return (candidate, frontier, rc) =>
-    tri(candidate, frontier, rc, SubjectKind.Element) === true;
-}
-
-function buildMultiBridgeProof(chains: Chain[], snap: Snapshot): BiProofFn {
-  if (!chainsUseHost(chains)) {
-    return buildMultiChainBiProof(chains, snap);
-  }
-
-  const tri = buildMultiChainTriProof(chains, snap);
-
-  return (candidate, frontier, rc) =>
-    tri(candidate, frontier, rc, SubjectKind.Element) === true;
-}
-
-function chainsUseHost(chains: Chain[]): boolean {
-  for (let i = 0; i < chains.length; i++) {
-    const chain = chains[i];
-
-    for (let j = 0; j < chain.length; j++) {
-      if (chain[j].right.compound.usesHost) return true;
-    }
-  }
-
-  return false;
-}
 
 export function describeBridgeMove(move: BridgeMove | null | undefined): string {
   if (move === undefined) return 'unbuilt';
@@ -326,12 +290,4 @@ function resetLookupSeed(compound: CompoundSelector, plan: LookupPlan): void {
 
 function describeLookupPlan(plan: LookupPlan): string {
   return `${plan.strategy} ${plan.lookupQuery}`;
-}
-
-function chainRangeUsesHost(chain: Chain, from: number, to: number): boolean {
-  for (let i = from + 1; i <= to; i++) {
-    if (chain[i].right.compound.usesHost) return true;
-  }
-
-  return false;
 }
