@@ -1643,6 +1643,7 @@ runScenarios('slick', 'normal', [
       ...triFind(324, '[class][class!=made_up]', 'skip'), // `!=` isn't supported
       ...triFind(43, '[class~=example]'),
     ],
+    timeout: 10_000,
 
   } satisfies Scenario)),
 

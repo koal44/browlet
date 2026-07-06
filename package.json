@@ -1,6 +1,6 @@
 {
   "name": "selectlet",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A JavaScript CSS selector engine",
   "homepage": "https://github.com/koal44/selectlet",
   "main": "./dist/index.cjs",
@@ -75,13 +75,13 @@
     "test:all": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run vendor && npm run install:jsdom:run && npm run test:jsdom:sx && npm run test:jsdom:sv && npm run test:browser:run && npm run test:style:run"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "1.61.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^25.5.2",
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
-    "playwright": "^1.59.1",
+    "playwright": "1.61.1",
     "rollup": "^4.60.4",
     "rollup-plugin-dts": "^6.4.1",
     "tsx": "^4.21.0",

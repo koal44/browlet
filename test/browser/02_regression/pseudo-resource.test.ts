@@ -42,12 +42,12 @@ runScenarios('pseudo-resource', 'normal', [
     engines: ['native'],
     markup: `<audio id="audio"></audio><video id="video"></video>`,
     cases: [
-      { select: '#audio:paused', expect: { throws: true }, browsers: ['chromium', 'firefox'] },
-      { select: '#audio:paused', expect: { throws: false, ids: ['audio'] }, browsers: ['webkit'] },
-      { select: '#audio:playing', expect: { throws: true }, browsers: ['chromium', 'firefox']  },
-      { select: '#audio:playing', expect: { throws: false, ids: [] }, browsers: ['webkit']  },
-      { select: '#audio:muted', expect: { throws: true }, browsers: ['chromium', 'firefox']  },
-      { select: '#audio:muted', expect: { throws: false, ids: [] }, browsers: ['webkit']  },
+      { select: '#audio:paused', expect: { throws: true }, browsers: ['chromium'] },
+      { select: '#audio:paused', expect: { throws: false, ids: ['audio'] }, browsers: ['firefox', 'webkit'] },
+      { select: '#audio:playing', expect: { throws: true }, browsers: ['chromium']  },
+      { select: '#audio:playing', expect: { throws: false, ids: [] }, browsers: ['firefox', 'webkit']  },
+      { select: '#audio:muted', expect: { throws: true }, browsers: ['chromium']  },
+      { select: '#audio:muted', expect: { throws: false, ids: [] }, browsers: ['firefox', 'webkit']  },
     ],
   },
 
