@@ -170,7 +170,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '3px', important: false },
@@ -189,12 +189,12 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'background' },
+        cssom: { target: 'style.property', name: 'background' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'background-color' },
+        cssom: { target: 'style.property', name: 'background-color' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'background-color', value: 'blue', important: false },
@@ -213,7 +213,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: {
           cssom: { name: 'margin-left', value: '3px', important: false },
         },
@@ -231,7 +231,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declarations', rule: 0 },
+        cssom: { target: 'rule.style', rule: 0 },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: {
@@ -259,7 +259,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'rules' },
+        cssom: { target: 'sheet.cssRules' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: [
@@ -296,7 +296,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'rules' },
+        cssom: { target: 'sheet.cssRules' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: [
@@ -325,7 +325,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '2px', important: false },
@@ -344,7 +344,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '1px', important: true },
@@ -363,14 +363,14 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'font-family' },
+        cssom: { target: 'style.property', name: 'font-family' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'font-family', value: '"x;y"', important: false },
         },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '3px', important: false },
@@ -391,19 +391,19 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-top' },
+        cssom: { target: 'style.property', name: 'margin-top' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '2px', important: false },
         },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-right' },
+        cssom: { target: 'style.property', name: 'margin-right' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-right', value: '3px', important: false },
@@ -426,7 +426,7 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'rules' },
+        cssom: { target: 'sheet.cssRules' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: [
@@ -463,24 +463,24 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-right' },
+        cssom: { target: 'style.property', name: 'margin-right' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-right', value: '5px', important: false },
         },
       },
       {
-        cssom: { kind: 'declaration', name: 'font-family' },
+        cssom: { target: 'style.property', name: 'font-family' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-top' },
+        cssom: { target: 'style.property', name: 'margin-top' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-top', value: '1px', important: false },
@@ -504,19 +504,19 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-right' },
+        cssom: { target: 'style.property', name: 'margin-right' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-right', value: '5px', important: false },
         },
       },
       {
-        cssom: { kind: 'declaration', name: 'font-family' },
+        cssom: { target: 'style.property', name: 'font-family' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '3px', important: false },
@@ -538,12 +538,12 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
     `,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'background-image' },
+        cssom: { target: 'style.property', name: 'background-image' },
         ref: { by: 'id', id: 'sheet' },
         expect: { throws: true },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
         expect: {
           cssom: { name: 'margin-left', value: '4px', important: false },
@@ -646,10 +646,10 @@ runScenarios('testing pseudo elements', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', rule: 0, name: 'margin-left' },
+        cssom: { target: 'style.property', rule: 0, name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
       },
-      { cssom: { kind: 'rule', rule: 1 }, expect: { throws: true } },
+      { cssom: { target: 'sheet.cssRules.item', rule: 1 }, expect: { throws: true } },
     ],
   },
 
@@ -663,8 +663,8 @@ runScenarios('testing pseudo elements', 'normal', [
         .ok { margin-left: 4px; }
       </style>`,
     cases: [
-      { cssom: { kind: 'rule', rule: 0 }, expect: { throws: false } },
-      { cssom: { kind: 'rule', rule: 1 }, expect: { throws: false } },
+      { cssom: { target: 'sheet.cssRules.item', rule: 0 }, expect: { throws: false } },
+      { cssom: { target: 'sheet.cssRules.item', rule: 1 }, expect: { throws: false } },
     ],
   },
 

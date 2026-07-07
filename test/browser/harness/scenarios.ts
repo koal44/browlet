@@ -20,7 +20,7 @@ export type MatchCase =   { match: string;   ref:  ContextRef; } & CaseBase;
 export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
 export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
 export type ComputedStyleCase = { computedStyle: string; ref: ContextRef; } & CaseBase;
-export type CssomCase = { cssom: CssomRead; ref?: ContextRef; } & CaseBase;
+export type CssomCase = { cssom: CssomProbe; ref?: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -30,11 +30,11 @@ type CaseBase = {
   debug?: boolean;
 };
 
-export type CssomRead =
-  | { kind: 'rules'; sheet?: number; }
-  | { kind: 'rule'; sheet?: number; rule: number; }
-  | { kind: 'declarations'; sheet?: number; rule: number; }
-  | { kind: 'declaration'; sheet?: number; rule?: number; name: string; };
+export type CssomProbe =
+  | { target: 'sheet.cssRules'; sheet?: number; }
+  | { target: 'sheet.cssRules.item'; sheet?: number; rule: number; }
+  | { target: 'rule.style'; sheet?: number; rule: number; }
+  | { target: 'style.property'; sheet?: number; rule?: number; name: string; };
 
 export type TestCase =
   | SelectCase | MatchCase | FirstCase | ClosestCase

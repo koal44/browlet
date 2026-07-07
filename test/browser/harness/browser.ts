@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 import type { ElementList } from '../../../src/selectlet/selectlet';
 import type {
-  Engine, EquivalentCase, ContextRef, ContextHome, SelectletId, CssomRead,
+  Engine, EquivalentCase, ContextRef, ContextHome, SelectletId, CssomProbe,
 } from './scenarios';
 
 export type PwHelpers = {
@@ -582,31 +582,31 @@ export function installBrowserHelpers(): void {
     | { kind: 'sheet'; }
     | { kind: 'styleText'; createSheet: (source: string) => CSSStyleSheet; };
 
-  function readCssom(read: CssomRead, ctx: QueryContext, from: CssomReadFrom): unknown {
+  function readCssom(cssom: CssomProbe, ctx: QueryContext, from: CssomReadFrom): unknown {
     const sheet = from.kind === 'sheet'
-      ? resolveCssomSheet(ctx, read.sheet ?? 0)
-      : createCssomSheetFromStyleText(read, ctx, from);
+      ? resolveCssomSheet(ctx, cssom.sheet ?? 0)
+      : createCssomSheetFromStyleText(cssom, ctx, from);
 
-    return readCssomSheet(read, sheet);
+    return readCssomSheet(cssom, sheet);
   }
 
-  function readCssomSheet(read: CssomRead, sheet: CSSStyleSheet): unknown {
-    switch (read.kind) {
-      case 'rules':
+  function readCssomSheet(cssom: CssomProbe, sheet: CSSStyleSheet): unknown {
+    switch (cssom.target) {
+      case 'sheet.cssRules':
         return ruleListToArray(sheet.cssRules).map((rule) => inspectObject(rule));
 
-      case 'rule':
-        return inspectObject(getRule(sheet, read.rule));
+      case 'sheet.cssRules.item':
+        return inspectObject(getRule(sheet, cssom.rule));
 
-      case 'declarations':
-        return inspectObject(getStyleRule(sheet, read.rule).style);
+      case 'rule.style':
+        return inspectObject(getStyleRule(sheet, cssom.rule).style);
 
-      case 'declaration': {
+      case 'style.property': {
         const matches: JsonRecord[] = [];
 
-        if (read.rule !== undefined) {
-          const style = getStyleRule(sheet, read.rule).style;
-          matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+        if (cssom.rule !== undefined) {
+          const style = getStyleRule(sheet, cssom.rule).style;
+          matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === cssom.name));
         } else {
           const rules = ruleListToArray(sheet.cssRules);
 
@@ -614,23 +614,23 @@ export function installBrowserHelpers(): void {
             if (rule.type !== CSSRule.STYLE_RULE) continue;
 
             const style = (rule as CSSStyleRule).style;
-            matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === read.name));
+            matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === cssom.name));
           }
         }
 
         if (matches.length === 0) {
-          throw new Error(`No CSS declaration named ${JSON.stringify(read.name)}`);
+          throw new Error(`No CSS declaration named ${JSON.stringify(cssom.name)}`);
         }
 
         if (matches.length > 1) {
-          throw new Error(`Ambiguous CSS declaration ${JSON.stringify(read.name)} matched ${matches.length} declarations`);
+          throw new Error(`Ambiguous CSS declaration ${JSON.stringify(cssom.name)} matched ${matches.length} declarations`);
         }
 
         return matches[0];
       }
 
       default:
-        return assertNever(read);
+        return assertNever(cssom);
     }
   }
 
@@ -661,8 +661,8 @@ export function installBrowserHelpers(): void {
     throw new Error(`Context for 'cssom' sheet read must be a Document, <style>, or <link>`);
   }
 
-  function createCssomSheetFromStyleText(read: CssomRead, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CSSStyleSheet {
-    const source = resolveCssomStyleText(ctx, read.sheet ?? 0);
+  function createCssomSheetFromStyleText(cssom: CssomProbe, ctx: QueryContext, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CSSStyleSheet {
+    const source = resolveCssomStyleText(ctx, cssom.sheet ?? 0);
     return from.createSheet(source);
   }
 

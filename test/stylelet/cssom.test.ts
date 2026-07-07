@@ -11,7 +11,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' }, ref: { by: 'id', id: 'sheet' },
+        cssom: { target: 'style.property', name: 'margin-left' }, ref: { by: 'id', id: 'sheet' },
         expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
       },
     ],
@@ -27,7 +27,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
       },
     ],
@@ -43,7 +43,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '2px', important: false } },
       },
     ],
@@ -59,7 +59,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '1px', important: true } },
       },
     ],
@@ -74,11 +74,11 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: '--family' },
+        cssom: { target: 'style.property', name: '--family' },
         expect: { cssom: { name: '--family', value: '"x;y"', important: false } },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
       },
     ],
@@ -94,11 +94,11 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'font-family' },
+  //       cssom: { read: 'style.property', name: 'font-family' },
   //       expect: { cssom: { name: 'font-family', value: '"x;y"', important: false } },
   //     },
   //     {
-  //       cssom: { kind: 'declaration', name: 'margin-left' },
+  //       cssom: { read: 'style.property', name: 'margin-left' },
   //       expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
   //     },
   //   ],
@@ -115,7 +115,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
       },
     ],
@@ -132,11 +132,11 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', rule: 0, name: 'margin-left' },
+        cssom: { target: 'style.property', rule: 0, name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
       },
       {
-        cssom: { kind: 'rule', rule: 1 },
+        cssom: { target: 'sheet.cssRules.item', rule: 1 },
         expect: { throws: true },
       },
     ],
@@ -152,7 +152,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '2px', important: true } },
       },
     ],
@@ -168,7 +168,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '1px', important: false } },
       },
     ],
@@ -184,7 +184,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
       },
     ],
@@ -199,11 +199,11 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       </style>`,
     cases: [
       {
-        cssom: { kind: 'declaration', name: 'margin-left' },
+        cssom: { target: 'style.property', name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: 'auto', important: false } },
       },
       {
-        cssom: { kind: 'declaration', name: 'margin-right' },
+        cssom: { target: 'style.property', name: 'margin-right' },
         expect: { cssom: { name: 'margin-right', value: '10%', important: false } },
       },
     ],
@@ -220,7 +220,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in, slide', important: false } },
   //     },
   //   ],
@@ -237,7 +237,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in, slide\\ with\\ space', important: false } },
   //     },
   //   ],
@@ -254,7 +254,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'slide\\ with\\ space', important: false } },
   //     },
   //   ],
@@ -271,7 +271,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'initial', important: false } },
   //     },
   //   ],
@@ -288,7 +288,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
   //     },
   //   ],
@@ -305,7 +305,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
   //     },
   //   ],
@@ -321,7 +321,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: '"none"', important: false } },
   //     },
   //   ],
@@ -337,7 +337,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in, none, slide', important: false } },
   //     },
   //   ],
@@ -353,7 +353,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in, "none", slide', important: false } },
   //     },
   //   ],
@@ -369,7 +369,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in', important: false } },
   //     },
   //   ],
@@ -385,7 +385,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: '"initial"', important: false } },
   //     },
   //   ],
@@ -401,7 +401,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'fade-in, "initial", slide', important: false } },
   //     },
   //   ],
@@ -417,7 +417,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'slide\\ with\\ space', important: false } },
   //     },
   //   ],
@@ -433,7 +433,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //     </style>`,
   //   cases: [
   //     {
-  //       cssom: { kind: 'declaration', name: 'animation-name' },
+  //       cssom: { read: 'style.property', name: 'animation-name' },
   //       expect: { cssom: { name: 'animation-name', value: 'slide\\,comma', important: false } },
   //     },
   //   ],
