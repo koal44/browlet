@@ -1,11 +1,15 @@
 import type { ComponentCursor } from '../parser/component-cursor';
 import { asciiLower } from '../../utils/css';
 import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
+import {
+  ok,
+  type TryComponentParserResult,
+} from '../parser/component-try-parser';
 
 export function tryConsumeKeywordIn<K extends string>(
   c: ComponentCursor,
   keywords: readonly K[],
-): K | null {
+): TryComponentParserResult<K> {
   const start = c.pos();
 
   consumeComponentTrivia(c);
@@ -21,7 +25,7 @@ export function tryConsumeKeywordIn<K extends string>(
 
   for (const keyword of keywords) {
     if (lower === keyword) {
-      return keyword;
+      return ok(keyword);
     }
   }
 

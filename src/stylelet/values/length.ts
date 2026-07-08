@@ -2,6 +2,10 @@ import { asciiLower } from '../../utils/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
+import {
+  ok,
+  type TryComponentParserResult,
+} from '../parser/component-try-parser';
 import { serializeNumber } from './number';
 
 export type LengthValue = {
@@ -19,7 +23,7 @@ export enum LengthUnit {
   Vh,
 }
 
-export function tryParseLength(c: ComponentCursor): LengthValue | null {
+export function tryParseLength(c: ComponentCursor): TryComponentParserResult<LengthValue> {
   const start = c.pos();
 
   consumeComponentTrivia(c);
@@ -34,19 +38,19 @@ export function tryParseLength(c: ComponentCursor): LengthValue | null {
       return null;
     }
 
-    return {
+    return ok({
       type: 'length',
       value: comp.value,
       unit,
-    };
+    });
   }
 
   if (isTokenKind(comp, TokenKind.Number) && comp.value === 0) {
-    return {
+    return ok({
       type: 'length',
       value: 0,
       unit: LengthUnit.None,
-    };
+    });
   }
 
   c.restore(start);

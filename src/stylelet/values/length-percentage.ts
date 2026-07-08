@@ -1,8 +1,13 @@
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { one, oneOf, withComponentTrivia, type TryComponentParser } from '../parser/component-grammar';
+import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
 import { tryParseAuto, type AutoValue } from './auto';
 import { serializeLength, tryParseLength, type LengthValue } from './length';
 import { serializePercentage, tryParsePercentage, type PercentageValue } from './percentage';
+import {
+  ok,
+  unwrapParseResultOrThrow,
+  type TryComponentParser,
+} from '../parser/component-try-parser';
 
 export type LengthPercentageAuto =
   | LengthPercentage
@@ -16,10 +21,13 @@ export function parseLengthPercentageAuto(
   input: ParserInput,
   context: unknown = undefined,
 ): LengthPercentageAuto | null {
-  return parseAsComponentGrammar(
-    input,
-    withComponentTrivia(tryConsumeLengthPercentageAuto),
-    context,
+  return unwrapParseResultOrThrow(
+    parseAsComponentGrammar(
+      input,
+      withComponentTrivia(tryConsumeLengthPercentageAuto),
+      context,
+    ),
+    'length-percentage-auto value',
   );
 }
 
@@ -29,7 +37,7 @@ const tryConsumeLengthPercentageAuto: TryComponentParser<LengthPercentageAuto> =
     one(tryParsePercentage),
     one(tryParseLength),
   ],
-  ([value]): LengthPercentageAuto => value,
+  ([value]) => ok(value),
 );
 
 export function serializeLengthPercentageAuto(value: LengthPercentageAuto): string {

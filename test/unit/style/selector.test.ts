@@ -40,12 +40,21 @@ function expectComplexSelector(css: string): ComplexSelector {
 function expectInvalidSelector(css: string): void {
   try {
     const result = parseSelectorList(css);
-
     expect(result, `Expected selector to be invalid: ${css}`).toBeNull();
   } catch (error) {
     rethrowFromCaller(error, expectInvalidSelector);
   }
 }
+
+// function expectValidSelector(css: string, context: SelectorParserContext = {}): ComplexSelectorList {
+//   try {
+//     const result = parseSelectorList(css, context);
+//     expect(result, `Expected selector to be valid: ${css}`).not.toBeNull();
+//     return result!;
+//   } catch (error) {
+//     rethrowFromCaller(error, expectValidSelector);
+//   }
+// }
 
 // =============================================================================
 // Expected selector AST builders
@@ -633,6 +642,167 @@ describe('selector parser pseudo-element selectors', () => {
       ],
     });
   });
+
+  // it('threads pseudo-element-tail validity restrictions through logical pseudo arguments', () => {
+  //   const expectForgivingTailPseudoNames = (css: string, expectedNames: string[]) => {
+  //     const selector = expectComplexSelector(css);
+  //     const pseudoClasses = selector.parts[0].unit.pseudoCompounds[0].pseudoClasses;
+
+  //     expect(pseudoClasses, css).toHaveLength(1);
+  //     expect(pseudoClasses[0].name, css).toBe('is');
+  //     expect(pseudoClasses[0].argument, css).toMatchObject({
+  //       kind: PseudoArgumentKind.ForgivingSelectorList,
+  //     });
+
+  //     const argument = pseudoClasses[0].argument;
+  //     if (argument?.kind !== PseudoArgumentKind.ForgivingSelectorList) {
+  //       throw new Error(`Expected :is() forgiving argument for ${css}`);
+  //     }
+
+  //     const names = argument.selectors.arms.map((arm) => {
+  //       expect(arm.parts, css).toHaveLength(1);
+  //       expect(arm.parts[0].compound.typeSelector, css).toBeNull();
+  //       expect(arm.parts[0].compound.subclasses, css).toHaveLength(1);
+
+  //       const subclass = arm.parts[0].compound.subclasses[0];
+
+  //       expect(subclass.kind, css).toBe(SelectorKind.PseudoClassSelector);
+
+  //       return subclass.name;
+  //     });
+
+  //     expect(names, css).toEqual(expectedNames);
+  //   };
+
+  //   // Direct tail: logical and user-action pseudo-classes are valid.
+  //   for (const css of [
+  //     '::before:hover',
+  //     '::before:active',
+  //     '::before:focus',
+  //     '::before:focus-visible',
+  //     '::before:focus-within',
+  //     '::before:is(:hover)',
+  //     '::before:where(:hover)',
+  //     '::before:not(:hover)',
+  //   ]) {
+  //     expectValidSelector(css);
+  //   }
+
+  //   // Direct tail: non-logical, non-user-action pseudo-classes are invalid.
+  //   for (const css of [
+  //     '::before:defined',
+  //     '::before:dir(ltr)',
+  //     '::before:lang(en)',
+  //     '::before:any-link',
+  //     '::before:scope',
+  //     '::before:has(*)',
+  //     '::before:enabled',
+  //     '::before:root',
+  //     '::before:nth-of-type(1)',
+  //   ]) {
+  //     expectInvalidSelector(css);
+  //   }
+
+  //   // Direct tail: ordinary selectors/combinators cannot appear after the pseudo-element.
+  //   for (const css of [
+  //     '::before.foo',
+  //     '::before#id',
+  //     '::before[hidden]',
+  //     '::before*',
+  //     '::before div',
+  //     '::before > div',
+  //     '::before + div',
+  //     '::before ~ div',
+  //   ]) {
+  //     expectInvalidSelector(css);
+  //   }
+
+  //   // Forgiving logical arguments inherit pseudo-element-tail restrictions.
+  //   // Invalid ordinary selector arms are dropped, leaving only valid tail pseudos.
+  //   expectForgivingTailPseudoNames(
+  //     '::before:is(*, div, #id, .foo, [hidden], :hover)',
+  //     ['hover'],
+  //   );
+
+  //   expectForgivingTailPseudoNames(
+  //     '::before:is(:defined, :dir(ltr), :lang(en), :has(*), :active)',
+  //     ['active'],
+  //   );
+
+  //   // Complex arms are invalid in the pseudo-element tail, even when their first
+  //   // compound starts with an otherwise-valid user-action pseudo-class.
+  //   expectForgivingTailPseudoNames(
+  //     '::before:is(:hover > .x, :active + .y, :focus)',
+  //     ['focus'],
+  //   );
+
+  //   // Nested forgiving pseudos also inherit the pseudo-element-tail restrictions.
+  //   // The inner :where(*, .foo, :hover) should keep only :hover.
+  //   expect(expectComplexSelector('::before:is(:where(*, .foo, :hover), :active)')).toMatchObject({
+  //     parts: [
+  //       pseudoElementPart(null, 'before', [
+  //         pseudoClass('is', {
+  //           kind: PseudoArgumentKind.ForgivingSelectorList,
+  //           selectors: selectorList([
+  //             {
+  //               parts: [
+  //                 realPart(null, compound(null, [
+  //                   pseudoClass('where', {
+  //                     kind: PseudoArgumentKind.ForgivingSelectorList,
+  //                     selectors: selectorList([
+  //                       {
+  //                         parts: [
+  //                           realPart(null, compound(null, [
+  //                             pseudoClass('hover'),
+  //                           ])),
+  //                         ],
+  //                       },
+  //                     ]),
+  //                   }),
+  //                 ])),
+  //               ],
+  //             },
+  //             {
+  //               parts: [
+  //                 realPart(null, compound(null, [
+  //                   pseudoClass('active'),
+  //                 ])),
+  //               ],
+  //             },
+  //           ]),
+  //         }),
+  //       ]),
+  //     ],
+  //   });
+
+  //   // :not is strict. Contextual invalidity inside :not poisons the whole selector.
+  //   for (const css of [
+  //     '::before:not(.foo)',
+  //     '::before:not(#id)',
+  //     '::before:not([hidden])',
+  //     '::before:not(div)',
+  //     '::before:not(*)',
+  //     '::before:not(:defined)',
+  //     '::before:not(:has(*))',
+  //     '::before:not(:hover > .x)',
+  //     '::before:not(:not(.foo))',
+  //   ]) {
+  //     expectInvalidSelector(css);
+  //   }
+
+  //   // But :not() may contain a forgiving logical pseudo whose own bad arms
+  //   // have been dropped under the inherited pseudo-element-tail restrictions.
+  //   for (const css of [
+  //     '::before:not(:is(.foo))',
+  //     '::before:not(:where(.foo, #id, [hidden]))',
+  //     '::before:not(:is(:has(*), div, .foo))',
+  //     '::before:not(:is(:hover))',
+  //     '::before:not(:where(:focus-visible))',
+  //   ]) {
+  //     expectValidSelector(css);
+  //   }
+  // });
+
 });
 
 const specificity = (a: number, b: number, c: number) => ({

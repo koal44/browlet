@@ -1,6 +1,6 @@
 import { asciiLower } from '../../utils/css';
 import { ComponentCursor } from './component-cursor';
-import type { TryComponentParser } from './component-grammar';
+import { isBad, type TryComponentParserResult, type TryComponentParser } from './component-try-parser';
 import { TokenCursor } from './token-cursor';
 import type {
   AtKeywordToken, DelimToken, DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken, StaticToken, StringToken, Token, UrlToken,
@@ -103,13 +103,17 @@ export function parseAsComponentGrammar<T>(
   input: ParserInput,
   parse: TryComponentParser<T>,
   context: unknown = undefined,
-): T | null {
+): TryComponentParserResult<T> {
   const components = parseListOfComponentValues(input);
   const c = new ComponentCursor(components, { context });
-  const value = parse(c);
+  const result = parse(c);
 
-  if (value === null) {
+  if (result === null) {
     return null;
+  }
+
+  if (isBad(result)) {
+    return result;
   }
 
   consumeComponentTrivia(c);
@@ -118,7 +122,7 @@ export function parseAsComponentGrammar<T>(
     return null;
   }
 
-  return value;
+  return result;
 }
 
 // 5.3.2. Parse a comma-separated list according to a CSS grammar
@@ -126,7 +130,7 @@ export function parseListAsComponentGrammar<T>(
   input: ParserInput,
   parse: TryComponentParser<T>,
   context: unknown = undefined,
-): (T | null)[] {
+): (TryComponentParserResult<T>)[] {
   const lists = parseCommaSeparatedListOfComponentValues(input);
 
   if (lists.length === 1 && lists[0]!.every(isWhitespaceToken)) {

@@ -1,13 +1,17 @@
 import type { ComponentCursor } from '../parser/component-cursor';
 import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
+import {
+  ok,
+  type TryComponentParserResult,
+} from '../parser/component-try-parser';
 
 export type StringValue = {
   type: 'string';
   value: string;
 };
 
-export function tryParseString(c: ComponentCursor): StringValue | null {
+export function tryParseString(c: ComponentCursor): TryComponentParserResult<StringValue> {
   const start = c.pos();
 
   consumeComponentTrivia(c);
@@ -19,10 +23,10 @@ export function tryParseString(c: ComponentCursor): StringValue | null {
     return null;
   }
 
-  return {
+  return ok({
     type: 'string',
     value: comp.value,
-  };
+  });
 }
 
 export function serializeString(value: StringValue): string {

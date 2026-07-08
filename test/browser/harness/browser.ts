@@ -442,7 +442,7 @@ export function installBrowserHelpers(): void {
             if (!isElement(ctx)) {
               throw new Error(`Context for 'computedStyle' case must be an Element`);
             }
-            return getComputedStyle(ctx).getPropertyValue(query).trim();
+            return getComputedStyle(ctx, c.pseudo).getPropertyValue(query).trim();
           };
         }
         throw new Error(`computedStyle cases do not support engine ${ng}`);
@@ -523,58 +523,60 @@ export function installBrowserHelpers(): void {
 
   function getCaseLabel(c: EquivalentCase, engine: Engine): string {
     switch (true) {
-      case 'select' in c:
+      case 'select' in c: {
         return engine === 'native'
           ? `querySelectorAll(${c.select})`
           : `sxlt.select(${c.select})`;
-
-      case 'first' in c:
+      }
+      case 'first' in c: {
         return engine === 'native'
           ? `querySelector(${c.first})`
           : `sxlt.first(${c.first})`;
-
-      case 'byTag' in c:
+      }
+      case 'byTag' in c: {
         return engine === 'native'
           ? `byTag(${c.byTag})`
           : `sxlt.byTag(${c.byTag})`;
-
-      case 'byTagNs' in c:
+      }
+      case 'byTagNs' in c: {
         return engine === 'native'
           ? `byTag(${c.byTagNs.ns}:${c.byTagNs.local})`
           : `sxlt.byTagNs(${c.byTagNs.ns}:${c.byTagNs.local})`;
-
-      case 'byClass' in c:
+      }
+      case 'byClass' in c: {
         return engine === 'native'
           ? `byClass(${c.byClass})`
           : `sxlt.byClass(${c.byClass})`;
-
-      case 'byId' in c:
+      }
+      case 'byId' in c: {
         return engine === 'native'
           ? `byId(${c.byId})`
           : `sxlt.byId(${c.byId})`;
-
-      case 'match' in c:
+      }
+      case 'match' in c: {
         return engine === 'native'
           ? `matches(${c.match})`
           : `sxlt.match(${c.match})`;
-
-      case 'closest' in c:
+      }
+      case 'closest' in c: {
         return engine === 'native'
           ? `closest(${c.closest})`
           : `sxlt.closest(${c.closest})`;
-
-      case 'computedStyle' in c:
+      }
+      case 'computedStyle' in c: {
+        const pseudo = c.pseudo === undefined ? '' : `, ${JSON.stringify(c.pseudo)}`;
         return engine === 'native'
-          ? `native getComputedStyle(...).getPropertyValue(${c.computedStyle})`
-          : `stylelet computedStyle(..., ${c.computedStyle})`;
-
-      case 'cssom' in c:
+          ? `native getComputedStyle(...${pseudo}).getPropertyValue(${c.computedStyle})`
+          : `stylelet computedStyle(...${pseudo}, ${c.computedStyle})`;
+      }
+      case 'cssom' in c: {
         return engine === 'native'
           ? `native CSSOM ${stringify(c.cssom)}`
           : `stylelet CSSOM ${stringify(c.cssom)}`;
-
-      default:
+      }
+      default: {
         assertNever(c);
+      }
     }
   }
 

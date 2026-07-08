@@ -5,6 +5,11 @@ import {
   isIdentToken, parseAsComponentGrammar,
   type ParserInput,
 } from '../parser/syntax';
+import {
+  ok,
+  unwrapParseResultOrThrow,
+  type TryComponentParserResult,
+} from '../parser/component-try-parser';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
@@ -24,17 +29,20 @@ export function parseCustomIdent(
   excluded: readonly string[] = [],
   context: unknown = undefined,
 ): CustomIdentValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withComponentTrivia((c) => tryConsumeCustomIdent(c, excluded)),
-    context,
+  return unwrapParseResultOrThrow(
+    parseAsComponentGrammar(
+      input,
+      withComponentTrivia((c) => tryConsumeCustomIdent(c, excluded)),
+      context,
+    ),
+    'custom ident',
   );
 }
 
 export function tryConsumeCustomIdent(
   c: ComponentCursor,
   excluded: readonly string[] = [],
-): CustomIdentValue | null {
+): TryComponentParserResult<CustomIdentValue> {
   const start = c.pos();
   const comp = c.next();
 
@@ -59,10 +67,10 @@ export function tryConsumeCustomIdent(
     }
   }
 
-  return {
+  return ok({
     type: 'custom-ident',
     value: comp.value,
-  };
+  });
 }
 
 export function serializeCustomIdent(value: CustomIdentValue): string {

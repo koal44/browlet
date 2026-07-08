@@ -715,3 +715,305 @@ runScenarios('testing pseudo elements', 'normal', [
   },
 
 ]);
+
+runScenarios('pseudo-element tail selector API validity', 'normal', [
+  {
+    name: 'dom selector validity shows generated pseudo-element tail gaps',
+    engines: ['native'],
+    markup: `
+      <ol>
+        <li id="item" class="foo">one</li>
+      </ol>
+    `,
+    cases: [
+      // Baseline: valid pseudo-element selector, but DOM APIs return Elements, not pseudo-elements.
+      { select: 'li::before', expect: { throws: false, count: 0 } },
+
+      // Spec target: user-action pseudo-classes are allowed after pseudo-elements.
+      // Native engines currently reject the generated-pseudo case at the selector API boundary.
+      { select: 'li::before:hover', expect: { throws: false, count: 0 }, status: 'fail' },
+
+      // Same gap through a strict logical pseudo with an otherwise valid user-action argument.
+      { select: 'li::before:not(:hover)', expect: { throws: false, count: 0 }, status: 'fail' },
+
+      // Forgiving wrappers are accepted. This does not prove :hover survived;
+      // it may have been dropped by forgiving-list behavior.
+      { select: 'li::before:is(:hover)', expect: { throws: false, count: 0 } },
+      { select: 'li::before:where(:hover)', expect: { throws: false, count: 0 } },
+
+      // Ordinary selectors are invalid in the pseudo-element tail.
+      // :is/:where forgive the invalid branch and become valid-but-empty.
+      { select: 'li::before:is(.foo)', expect: { throws: false, count: 0 } },
+      { select: 'li::before:where(.foo)', expect: { throws: false, count: 0 } },
+
+      // Combinators after ordinary generated pseudo-elements are invalid;
+      // forgiving wrappers drop the bad arm.
+      { select: 'li::before:is(> span)', expect: { throws: false, count: 0 } },
+      { select: 'li::before:where(> span)', expect: { throws: false, count: 0 } },
+
+      // :not is strict: contextual invalidity inside it poisons the selector.
+      { select: 'li::before:not(.foo)', expect: { throws: true } },
+      { select: 'li::before:not(> span)', expect: { throws: true } },
+      { select: 'li::before:not(.foo > .bar)', expect: { throws: true } },
+
+      // :has is relational, not logical; it is not granted pseudo-element-tail permission.
+      { select: 'li::before:has(*)', expect: { throws: true }, browsers: ['chromium', 'firefox'] },
+      { select: 'li::before:has(*)', expect: { throws: true }, browsers: ['webkit'], status: 'fail' },
+
+      // Direct combinator after ::before remains invalid.
+      { select: 'li::before > span', expect: { throws: true } },
+    ],
+  },
+]);
+
+runScenarios('pseudo-element tail CSSOM preservation and omission', 'normal', [
+  {
+    name: 'forgiving empty is after pseudo-element preserves rule but does not match origin class',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        #target::before {
+          content: "x";
+          color: rgb(255, 0, 0);
+        }
+
+        #target::before:is(.foo) {
+          color: rgb(0, 255, 0);
+          margin-left: 3px;
+        }
+      </style>
+
+      <div id="target" class="foo"></div>
+    `,
+    cases: [
+      // The rule is preserved: :is(.foo) becomes valid-but-empty.
+      {
+        cssom: { target: 'style.property', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
+      },
+
+      // But it does not mean "originating element has class foo".
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'target' },
+        expect: { value: 'rgb(255, 0, 0)' },
+      },
+    ],
+  },
+
+  {
+    name: 'strict not with ordinary selector after pseudo-element drops rule',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        #target::before:not(.foo) { margin-left: 3px; }
+        .ok { margin-right: 4px; }
+      </style>
+
+      <div id="target" class="foo"></div>
+      <div class="ok"></div>
+    `,
+    cases: [
+      // Unique property: if the invalid rule is omitted, this declaration is absent.
+      {
+        cssom: { target: 'style.property', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+      },
+
+      // Sanity check: following valid rule survived recovery.
+      {
+        cssom: { target: 'style.property', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-right', value: '4px', important: false } },
+      },
+    ],
+  },
+
+  {
+    name: 'has after pseudo-element is a native divergence in WebKit',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        #target::before:has(*) { margin-left: 3px; }
+        .ok { margin-right: 4px; }
+      </style>
+
+      <div id="target"></div>
+      <div class="ok"></div>
+    `,
+    cases: [
+      // Spec target: :has is not logical/user-action, so this declaration should be absent.
+      {
+        cssom: { target: 'style.property', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+        browsers: ['chromium', 'firefox'],
+      },
+      {
+        cssom: { target: 'style.property', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { throws: true },
+        browsers: ['webkit'],
+        status: 'fail',
+      },
+
+      // Recovery sanity check.
+      {
+        cssom: { target: 'style.property', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-right', value: '4px', important: false } },
+      },
+    ],
+  },
+
+  {
+    name: 'direct user-action pseudo after before is spec target but native gap',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        #target::before:hover { margin-left: 3px; }
+        #target::before:focus { margin-right: 5px; }
+        .ok { margin-top: 7px; }
+      </style>
+
+      <div id="target"></div>
+      <div class="ok"></div>
+    `,
+    cases: [
+      // Spec target: these declarations should be preserved.
+      // Current native engines drop the generated-pseudo user-action rules.
+      {
+        cssom: { target: 'style.property', name: 'margin-left' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-left', value: '3px', important: false } },
+        status: 'fail',
+      },
+      {
+        cssom: { target: 'style.property', name: 'margin-right' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-right', value: '5px', important: false } },
+        status: 'fail',
+      },
+
+      // Following valid rule survives, proving stylesheet recovery.
+      {
+        cssom: { target: 'style.property', name: 'margin-top' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'margin-top', value: '7px', important: false } },
+      },
+    ],
+  },
+]);
+
+runScenarios('pseudo-element tail nested forgiving logical behavior', 'normal', [
+  {
+    name: 'forgiving empty is can be negated in pseudo-element tail',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        #target::before {
+          content: "x";
+          color: rgb(255, 0, 0);
+        }
+
+        #target::before:not(:is(.foo)) {
+          color: rgb(0, 255, 0);
+        }
+      </style>
+
+      <div id="target" class="foo"></div>
+    `,
+    cases: [
+      // Spec-forgiving reading:
+      //   .foo is contextually invalid in the pseudo-element tail.
+      //   :is(.foo) drops the invalid arm and matches nothing.
+      //   :not(:is(.foo)) therefore matches.
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'target' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['chromium', 'firefox'],
+      },
+
+      // WebKit diverges from Chromium/Firefox here.
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'target' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['webkit'],
+        status: 'fail',
+      },
+    ],
+  },
+]);
+
+runScenarios('pseudo-element tail nested forgiving matching diagnosis', 'normal', [
+  {
+    name: 'nested forgiving empty is matches under not except in WebKit',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style>
+        #withFoo::before,
+        #withoutFoo::before {
+          content: "x";
+          color: rgb(255, 0, 0);
+        }
+
+        #withFoo::before:not(:is(.foo)),
+        #withoutFoo::before:not(:is(.foo)) {
+          color: rgb(0, 255, 0);
+        }
+      </style>
+
+      <div id="withFoo" class="foo"></div>
+      <div id="withoutFoo"></div>
+    `,
+    cases: [
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'withFoo' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['chromium', 'firefox'],
+      },
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'withoutFoo' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['chromium', 'firefox'],
+      },
+
+      // WebKit preserves the rule in CSSOM, but both withFoo and withoutFoo stay red.
+      // That rules out simple origin-element leakage; WebKit behaves as if the invalid
+      // class selector remains inapplicable/null-ish through :is() and :not().
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'withFoo' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['webkit'],
+        status: 'fail',
+      },
+      {
+        computedStyle: 'color',
+        pseudo: '::before',
+        ref: { by: 'id', id: 'withoutFoo' },
+        expect: { value: 'rgb(0, 255, 0)' },
+        browsers: ['webkit'],
+        status: 'fail',
+      },
+    ],
+  },
+]);
