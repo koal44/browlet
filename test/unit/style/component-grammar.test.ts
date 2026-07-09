@@ -2016,3 +2016,229 @@ describe('component parser bad results', () => {
   });
 
 });
+
+type DemoContext = { mode?: string; };
+
+const contextParser = <T extends string, R extends string>(
+  expectedMode: string,
+  literal: T,
+  value: R,
+): TryComponentParser<R> => {
+  return (c) => {
+    const context = c.context as DemoContext;
+
+    if (context.mode !== expectedMode) {
+      return null;
+    }
+
+    const matched = unwrapParseResultOrThrow(
+      valueLiteralParser(literal)(c),
+      `context literal ${literal}`,
+    );
+
+    if (matched === null) {
+      return null;
+    }
+
+    return ok(value);
+  };
+};
+
+const contextLeakingNullParser = (
+  mode: string,
+): TryComponentParser<'leaked'> => {
+  return (c) => {
+    c.context = { mode };
+    return null;
+  };
+};
+
+describe('component grammar contextAfter', () => {
+  it('threads contextAfter from one sequence slot to later slots', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const parse = sequenceOf(
+      [
+        one(parseA, {
+          contextAfter: ([value], context) => ({
+            ...(context as DemoContext),
+            mode: value,
+          }),
+        }),
+        one(contextParser('a', 'b', 'seen-a')),
+      ],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a b', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([
+      ['a'],
+      ['seen-a'],
+    ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('passes contextAfter context to sequence projection', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+    const seen: unknown[] = [];
+
+    const parse = sequenceOf(
+      [
+        one(parseA, {
+          contextAfter: ([value], context) => ({
+            ...(context as DemoContext),
+            mode: value,
+          }),
+        }),
+      ],
+      ([value], context) => {
+        seen.push(context);
+        return ok(value);
+      },
+    );
+
+    const c = cursor('a', baseContext);
+
+    expect(unwrap(parse(c))).toEqual(['a']);
+    expect(seen).toEqual([{ mode: 'a' }]);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('threads contextAfter through nested sequence parsers', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const inner = sequenceOf(
+      [
+        one(contextParser('a', 'b', 'inner')),
+      ],
+      ([value]) => ok(value),
+    );
+
+    const parse = sequenceOf(
+      [
+        one(parseA, {
+          contextAfter: ([value], context) => ({
+            ...(context as DemoContext),
+            mode: value,
+          }),
+        }),
+        one(inner),
+      ],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a b', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([
+      ['a'],
+      [['inner']],
+    ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('does not apply contextAfter inside oneOf alternatives to following alternatives', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const parse = oneOf(
+      [
+        one(parseA, {
+          contextAfter: () => ({ mode: 'first' }),
+        }),
+        one(contextParser('first', 'a', 'leaked')),
+      ],
+      (value) => {
+        if (value[0] === 'a') {
+          return null;
+        }
+
+        return ok(value);
+      },
+    );
+
+    const c = cursor('a', baseContext);
+
+    expect(unwrap(parse(c))).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'a');
+    expect(c.context).toBe(baseContext);
+  });
+});
+
+describe('component grammar context restoration', () => {
+  it('restores context when withComponentTrivia wrapper returns null', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const parse = withComponentTrivia(
+      contextLeakingNullParser('leaked'),
+    );
+
+    const c = cursor(' a', baseContext);
+
+    expect(unwrap(parse(c))).toBeNull();
+    expect(c.pos()).toBe(0);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('restores context when a plain repetition item probe returns null', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const parse = any(
+      contextLeakingNullParser('leaked'),
+    );
+
+    const c = cursor('b', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([]);
+    expect(c.pos()).toBe(0);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('restores context when a comma repetition first item probe returns null', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    const parse = commaRepeat(
+      contextLeakingNullParser('leaked'),
+      0,
+    );
+
+    const c = cursor('b', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([]);
+    expect(c.pos()).toBe(0);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('recomputes contextAfter when sequence backtracks a direct multiplier slot', () => {
+    const baseContext: DemoContext = { mode: 'base' };
+
+    // a? a, where the second `a` only matches after the first slot backtracks
+    // to empty and recomputes contextAfter with [].
+    const parse = sequenceOf(
+      [
+        opt(parseA, {
+          contextAfter: (value, context) => ({
+            ...(context as DemoContext),
+            mode: value.length === 0 ? 'empty-prefix' : 'used-prefix',
+          }),
+        }),
+        one(contextParser('empty-prefix', 'a', 'suffix')),
+      ],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([
+      [],
+      ['suffix'],
+    ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+});

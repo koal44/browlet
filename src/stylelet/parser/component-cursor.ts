@@ -8,7 +8,7 @@ export type ComponentCursorOptions = {
 
 export class ComponentCursor {
   private i: number;
-  readonly context: unknown;
+  context: unknown;
 
   constructor(
     private readonly input: readonly ComponentValue[],

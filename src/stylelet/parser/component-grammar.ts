@@ -15,7 +15,15 @@ export type Multiplier<T, Output extends T[] = T[]> = TryComponentParser<Output>
   min: number;
   max: number;
   separator: 'none' | 'comma';
+  contextAfter?: ContextAfter<Output>;
 };
+
+type MultiplierOptions<Output> = {
+  contextAfter?: ContextAfter<Output>;
+};
+
+type ContextAfter<Output> =
+  (output: Output, context: unknown) => unknown;
 
 type SequenceValue<P extends readonly AnyMultiplier[]> = {
   -readonly [I in keyof P]: MultiplierOutputOf<P[I]>;
@@ -28,8 +36,10 @@ type UnorderedValue<P extends readonly AnyMultiplier[]> = {
 type AlternativeValue<P extends readonly AnyMultiplier[]> =
   MultiplierOutputOf<P[number]>;
 
-type AnyMultiplier = Multiplier<unknown, unknown[]>;
-type MultiplierOutputOf<P> = P extends Multiplier<unknown, infer Output> ? Output : never;
+type AnyMultiplier = Multiplier<any, any>;
+
+type MultiplierOutputOf<P> =
+  P extends Multiplier<any, infer Output> ? Output : never;
 
 type Projector<Value, R> =
   (value: Value, context: unknown) => TryComponentParserResult<R>;
@@ -67,41 +77,45 @@ function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
 ): TryComponentParser<R> {
   return (c): TryComponentParserResult<R> => {
     const start = c.pos();
+    const outerContext = c.context;
     let caps = parsers.map((parser) => parser.max);
 
-    while (true) {
-      c.restore(start);
+    try {
+      while (true) {
+        c.restore(start);
+        c.context = outerContext;
 
-      const attempt = __parseSequenceAttempt(c, parsers, caps);
+        const attempt = __parseSequenceAttempt(c, parsers, caps, outerContext);
 
-      if ('kind' in attempt && isBad(attempt)) {
-        return attempt;
-      }
+        if ('kind' in attempt && isBad(attempt)) {
+          return attempt;
+        }
 
-      if (attempt.matched) {
-        const raw = attempt.values as SequenceValue<P>;
+        if (attempt.matched) {
+          const raw = attempt.values as SequenceValue<P>;
 
-        if (!requireAnyValue || hasAnyValue(raw)) {
-          const projected = project(raw, c.context);
+          if (!requireAnyValue || hasAnyValue(raw)) {
+            const projected = project(raw, c.context);
 
-          if (projected === null) {
-            // Try the next cap set.
-          } else if (isBad(projected)) {
-            return projected;
-          } else {
-            return projected;
+            if (projected === null) {
+              // Try the next cap set.
+            } else {
+              return projected;
+            }
           }
         }
+
+        const nextCaps = __nextSequenceCaps(parsers, attempt.frames);
+
+        if (nextCaps === null) {
+          c.restore(start);
+          return null;
+        }
+
+        caps = nextCaps;
       }
-
-      const nextCaps = __nextSequenceCaps(parsers, attempt.frames);
-
-      if (nextCaps === null) {
-        c.restore(start);
-        return null;
-      }
-
-      caps = nextCaps;
+    } finally {
+      c.context = outerContext;
     }
   };
 }
@@ -115,44 +129,48 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
 ): TryComponentParser<R> {
   return (c): TryComponentParserResult<R> => {
     const start = c.pos();
+    const outerContext = c.context;
 
-    for (const parser of parsers) {
-      c.restore(start);
-
-      const componentStart = c.pos();
-      const result = parseMultiplier(c, parser);
-
-      if (result === null) {
+    try {
+      for (const parser of parsers) {
         c.restore(start);
-        continue;
-      }
+        c.context = outerContext;
 
-      if (isBad(result)) {
-        return result;
-      }
+        const componentStart = c.pos();
+        const result = parseMultiplier(c, parser);
 
-      const value = result.value;
+        if (result === null) {
+          c.restore(start);
+          c.context = outerContext;
+          continue;
+        }
 
-      if (c.pos() === componentStart && hasAnyValue(value)) {
-        c.error('Alternative parser produced a value without consuming input');
-      }
+        if (isBad(result)) {
+          return result;
+        }
 
-      const projected = project(value as AlternativeValue<P>, c.context);
+        const value = result.value as AlternativeValue<P>;
 
-      if (projected === null) {
-        c.restore(start);
-        continue;
-      }
+        if (c.pos() === componentStart && hasAnyValue(value)) {
+          return c.error('Alternative parser produced a value without consuming input');
+        }
 
-      if (isBad(projected)) {
+        const projected = project(value, c.context);
+
+        if (projected === null) {
+          c.restore(start);
+          c.context = outerContext;
+          continue;
+        }
+
         return projected;
       }
 
-      return projected;
+      c.restore(start);
+      return null;
+    } finally {
+      c.context = outerContext;
     }
-
-    c.restore(start);
-    return null;
   };
 }
 
@@ -183,46 +201,52 @@ function parseAllOf<const P extends readonly AnyMultiplier[], R>(
 ): TryComponentParser<R> {
   return (c): TryComponentParserResult<R> => {
     const start = c.pos();
-    const result = consumeUnordered(c, parsers);
+    const outerContext = c.context;
 
-    if ('kind' in result && isBad(result)) {
-      return result;
-    }
+    try {
+      const result = consumeUnordered(c, parsers);
 
-    for (let i = 0; i < parsers.length; i++) {
-      if (result.seen.has(i)) {
-        continue;
+      if ('kind' in result && isBad(result)) {
+        return result;
       }
 
-      const empty = parseEmpty(c, parsers[i]!);
+      for (let i = 0; i < parsers.length; i++) {
+        if (result.seen.has(i)) {
+          continue;
+        }
 
-      if (empty === null) {
+        const empty = parseEmpty(c, parsers[i]!);
+
+        if (empty === null) {
+          c.restore(start);
+          return null;
+        }
+
+        if (isBad(empty)) {
+          return empty;
+        }
+
+        result.values[i] = empty.value;
+      }
+
+      const raw = result.values as UnorderedValue<P>;
+
+      if (requireAnyValue && !hasAnyValue(raw)) {
         c.restore(start);
         return null;
       }
 
-      if (isBad(empty)) {
-        return empty;
+      const projected = project(raw, c.context);
+
+      if (projected === null) {
+        c.restore(start);
+        return null;
       }
 
-      result.values[i] = empty.value;
+      return projected;
+    } finally {
+      c.context = outerContext;
     }
-
-    const raw = result.values as UnorderedValue<P>;
-
-    if (requireAnyValue && !hasAnyValue(raw)) {
-      c.restore(start);
-      return null;
-    }
-
-    const projected = project(raw, c.context);
-
-    if (projected === null) {
-      c.restore(start);
-      return null;
-    }
-
-    return projected;
   };
 }
 
@@ -253,50 +277,56 @@ function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
 ): TryComponentParser<R> {
   return (c): TryComponentParserResult<R> => {
     const start = c.pos();
-    const result = consumeUnordered(c, parsers);
+    const outerContext = c.context;
 
-    if ('kind' in result && isBad(result)) {
-      return result;
-    }
+    try {
+      const result = consumeUnordered(c, parsers);
 
-    const hasConsumedValue = hasAnyValue(result.values);
-
-    let canMatchEmpty = true;
-
-    for (let i = 0; i < parsers.length; i++) {
-      if (result.seen.has(i)) {
-        continue;
+      if ('kind' in result && isBad(result)) {
+        return result;
       }
 
-      const empty = parseEmpty(c, parsers[i]!);
+      const hasConsumedValue = hasAnyValue(result.values);
 
-      if (empty === null) {
-        canMatchEmpty = false;
-        continue;
+      let canMatchEmpty = true;
+
+      for (let i = 0; i < parsers.length; i++) {
+        if (result.seen.has(i)) {
+          continue;
+        }
+
+        const empty = parseEmpty(c, parsers[i]!);
+
+        if (empty === null) {
+          canMatchEmpty = false;
+          continue;
+        }
+
+        if (isBad(empty)) {
+          return empty;
+        }
+
+        result.values[i] = empty.value;
       }
 
-      if (isBad(empty)) {
-        return empty;
+      const raw = result.values as UnorderedValue<P>;
+
+      if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasAnyValue(raw))) {
+        c.restore(start);
+        return null;
       }
 
-      result.values[i] = empty.value;
+      const projected = project(raw, c.context);
+
+      if (projected === null) {
+        c.restore(start);
+        return null;
+      }
+
+      return projected;
+    } finally {
+      c.context = outerContext;
     }
-
-    const raw = result.values as UnorderedValue<P>;
-
-    if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasAnyValue(raw))) {
-      c.restore(start);
-      return null;
-    }
-
-    const projected = project(raw, c.context);
-
-    if (projected === null) {
-      c.restore(start);
-      return null;
-    }
-
-    return projected;
   };
 }
 
@@ -312,18 +342,24 @@ export function required<T>(
 ): ValueParser<T> {
   return (c): T => {
     const start = c.pos();
-    const result = parse(c);
+    const outerContext = c.context;
 
-    if (result === null) {
-      c.restore(start);
-      return c.error(expected);
+    try {
+      const result = parse(c);
+
+      if (result === null) {
+        c.restore(start);
+        return c.error(expected);
+      }
+
+      if (isBad(result)) {
+        return c.error(result.message ?? result.reason);
+      }
+
+      return result.value;
+    } finally {
+      c.context = outerContext;
     }
-
-    if (isBad(result)) {
-      return c.error(result.message ?? result.reason);
-    }
-
-    return result.value;
   };
 }
 
@@ -336,29 +372,41 @@ export const DEFAULT_REPEAT_LIMIT = 20;
 /**
  * CSS value default multiplicity: `a`.
  */
-export function one<T>(parse: TryComponentParser<T>): Multiplier<T, [T]> {
-  return createMultiplier<T, [T]>(parse, 1, 1, 'none');
+export function one<T>(
+  parse: TryComponentParser<T>,
+  options?: MultiplierOptions<[T]>,
+): Multiplier<T, [T]> {
+  return createMultiplier<T, [T]>(parse, 1, 1, 'none', options);
 }
 
 /**
  * CSS value optional multiplicity: `a?`.
  */
-export function opt<T>(parse: TryComponentParser<T>): Multiplier<T, OptionalValue<T>> {
-  return createMultiplier<T, OptionalValue<T>>(parse, 0, 1, 'none');
+export function opt<T>(
+  parse: TryComponentParser<T>,
+  options?: MultiplierOptions<OptionalValue<T>>,
+): Multiplier<T, OptionalValue<T>> {
+  return createMultiplier<T, OptionalValue<T>>(parse, 0, 1, 'none', options);
 }
 
 /**
  * CSS value zero-or-more multiplicity: `a*`.
  */
-export function any<T>(parse: TryComponentParser<T>): Multiplier<T, T[]> {
-  return createMultiplier<T, T[]>(parse, 0, DEFAULT_REPEAT_LIMIT, 'none');
+export function any<T>(
+  parse: TryComponentParser<T>,
+  options?: MultiplierOptions<T[]>,
+): Multiplier<T, T[]> {
+  return createMultiplier<T, T[]>(parse, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
  * CSS value one-or-more multiplicity: `a+`.
  */
-export function plus<T>(parse: TryComponentParser<T>): Multiplier<T, NonEmptyArray<T>> {
-  return createMultiplier<T, NonEmptyArray<T>>(parse, 1, DEFAULT_REPEAT_LIMIT, 'none');
+export function plus<T>(
+  parse: TryComponentParser<T>,
+  options?: MultiplierOptions<NonEmptyArray<T>>,
+): Multiplier<T, NonEmptyArray<T>> {
+  return createMultiplier<T, NonEmptyArray<T>>(parse, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
@@ -367,10 +415,10 @@ export function plus<T>(parse: TryComponentParser<T>): Multiplier<T, NonEmptyArr
  * The parser is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T>(item: TryComponentParser<T>, min: 1, max?: number): Multiplier<T, NonEmptyArray<T>>;
-export function repeat<T>(item: TryComponentParser<T>, min: 0, max?: number): Multiplier<T, T[]>;
-export function repeat<T>(item: TryComponentParser<T>, min: number, max?: number): Multiplier<T, T[]>;
-export function repeat<T>(item: TryComponentParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT): Multiplier<T, T[]> {
+export function repeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
+export function repeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
+export function repeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
+export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<Output>): Multiplier<T, Output> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid repeat minimum ${min}`);
   }
@@ -379,17 +427,27 @@ export function repeat<T>(item: TryComponentParser<T>, min: number, max = DEFAUL
     throw new Error(`Invalid repeat maximum ${max}`);
   }
 
-  return createMultiplier<T, T[]>(item, min, max, 'none');
+  return createMultiplier<T, Output>(item, min, max, 'none', options);
 }
 
 /**
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
-export function commaRepeat<T>(item: TryComponentParser<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 1, max?: number): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 0, max?: number): Multiplier<T, T[]>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: number, max?: number): Multiplier<T, T[]>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min = 1, max = DEFAULT_REPEAT_LIMIT): Multiplier<T, T[]> {
+export function commaRepeat<T>(item: TryComponentParser<T>, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
+export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, minOrOptions: number | MultiplierOptions<Output> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<Output>): Multiplier<T, Output> {
+  const min =
+    typeof minOrOptions === 'number'
+      ? minOrOptions
+      : 1;
+
+  const resolvedOptions =
+    typeof minOrOptions === 'number'
+      ? options
+      : minOrOptions;
+
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid comma repeat minimum ${min}`);
   }
@@ -398,7 +456,7 @@ export function commaRepeat<T>(item: TryComponentParser<T>, min = 1, max = DEFAU
     throw new Error(`Invalid comma repeat maximum ${max}`);
   }
 
-  return createMultiplier<T, T[]>(item, min, max, 'comma');
+  return createMultiplier<T, Output>(item, min, max, 'comma', resolvedOptions);
 }
 
 function createMultiplier<T, Output extends T[]>(
@@ -406,6 +464,7 @@ function createMultiplier<T, Output extends T[]>(
   min: number,
   max: number,
   separator: 'none' | 'comma',
+  options?: MultiplierOptions<Output>,
 ): Multiplier<T, Output> {
   const multiplier = ((c: ComponentCursor): TryComponentParserResult<Output> => {
     return parseMultiplier(c, multiplier);
@@ -415,6 +474,7 @@ function createMultiplier<T, Output extends T[]>(
   multiplier.min = min;
   multiplier.max = max;
   multiplier.separator = separator;
+  multiplier.contextAfter = options?.contextAfter;
 
   return multiplier;
 }
@@ -426,17 +486,22 @@ function createMultiplier<T, Output extends T[]>(
 export function withComponentTrivia<T>(parse: TryComponentParser<T>): TryComponentParser<T> {
   return (c) => {
     const start = c.pos();
+    const outerContext = c.context;
 
-    consumeComponentTrivia(c);
+    try {
+      consumeComponentTrivia(c);
 
-    const result = parse(c);
+      const result = parse(c);
 
-    if (result === null) {
-      c.restore(start);
-      return null;
+      if (result === null) {
+        c.restore(start);
+        return null;
+      }
+
+      return result;
+    } finally {
+      c.context = outerContext;
     }
-
-    return result;
   };
 }
 
@@ -449,83 +514,96 @@ function parseMultiplier<T, Output extends T[]>(
   multiplier: Multiplier<T, Output>,
   max = multiplier.max,
 ): TryComponentParserResult<Output> {
-  const result =
-    multiplier.separator === 'comma'
-      ? parseCommaMultiplier(c, multiplier, max)
-      : parsePlainMultiplier(c, multiplier, max);
-
-  return result as TryComponentParserResult<Output>;
+  return multiplier.separator === 'comma'
+    ? parseCommaMultiplier(c, multiplier, max)
+    : parsePlainMultiplier(c, multiplier, max);
 }
 
-function parsePlainMultiplier<T>(
+function parsePlainMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
-  multiplier: Multiplier<T, T[]>,
+  multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): TryComponentParserResult<T[]> {
+): TryComponentParserResult<Output> {
   const start = c.pos();
+  const outerContext = c.context;
   const values: T[] = [];
 
   while (values.length < max) {
     const itemStart = c.pos();
+    const itemContext = c.context;
     const result = multiplier.base(c);
 
     if (result === null) {
       c.restore(itemStart);
+      c.context = itemContext;
       break;
     }
 
     if (isBad(result)) {
+      c.context = itemContext;
       return result;
     }
 
     if (c.pos() === itemStart) {
-      c.error('Repeated parser matched without consuming input');
+      c.context = itemContext;
+      return c.error('Repeated parser matched without consuming input');
     }
 
     values.push(result.value);
+    c.context = itemContext;
   }
 
   if (values.length < multiplier.min) {
     c.restore(start);
+    c.context = outerContext;
     return null;
   }
 
-  return ok(values);
+  c.context = outerContext;
+  return ok(values as Output);
 }
 
-function parseCommaMultiplier<T>(
+function parseCommaMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
-  multiplier: Multiplier<T, T[]>,
+  multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): TryComponentParserResult<T[]> {
+): TryComponentParserResult<Output> {
   const start = c.pos();
+  const outerContext = c.context;
   const values: T[] = [];
 
   const parseItem = (): TryComponentParserResult<T> => {
     const itemStart = c.pos();
+    const itemContext = c.context;
     const result = multiplier.base(c);
 
     if (result === null) {
       c.restore(itemStart);
+      c.context = itemContext;
       return null;
     }
 
     if (isBad(result)) {
+      c.context = itemContext;
       return result;
     }
 
     if (c.pos() === itemStart) {
-      c.error('Comma repeat matched without consuming input');
+      c.context = itemContext;
+      return c.error('Comma repeat matched without consuming input');
     }
 
+    c.context = itemContext;
     return result;
   };
 
   const first = parseItem();
 
   if (first === null) {
+    c.context = outerContext;
+
     if (multiplier.min === 0) {
-      return ok([]);
+      return ok([] as unknown as Output);
     }
 
     c.restore(start);
@@ -566,10 +644,12 @@ function parseCommaMultiplier<T>(
 
   if (values.length < multiplier.min) {
     c.restore(start);
+    c.context = outerContext;
     return null;
   }
 
-  return ok(values);
+  c.context = outerContext;
+  return ok(values as Output);
 }
 
 function parseEmpty<T, Output extends T[]>(
@@ -577,10 +657,13 @@ function parseEmpty<T, Output extends T[]>(
   multiplier: Multiplier<T, Output>,
 ): TryComponentParserResult<Output> {
   const start = c.pos();
+  const outerContext = c.context;
+
   const result = parseMultiplier(c, multiplier);
   const end = c.pos();
 
   c.restore(start);
+  c.context = outerContext;
 
   if (result === null || end !== start) {
     return null;
@@ -591,7 +674,7 @@ function parseEmpty<T, Output extends T[]>(
   }
 
   if (hasAnyValue(result.value)) {
-    c.error('Parser produced a value without consuming input');
+    return c.error('Parser produced a value without consuming input');
   }
 
   return result;
@@ -616,27 +699,34 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
     for (let i = 0; i < remaining.length; i++) {
       const part = remaining[i]!;
       const start = c.pos();
+      const outerContext = c.context;
       const result = parseMultiplier(c, part.parser);
 
       if (result === null) {
         c.restore(start);
+        c.context = outerContext;
         continue;
       }
 
       if (isBad(result)) {
+        c.context = outerContext;
         return result;
       }
 
-      const value = result.value;
+      const value = result.value as unknown;
 
       if (c.pos() === start && !hasAnyValue(value)) {
         c.restore(start);
+        c.context = outerContext;
         continue;
       }
 
       if (c.pos() === start && hasAnyValue(value)) {
-        c.error('Unordered parser produced a value without consuming input');
+        c.context = outerContext;
+        return c.error('Unordered parser produced a value without consuming input');
       }
+
+      c.context = outerContext;
 
       matchedIndex = i;
       matchedValue = value;
@@ -687,7 +777,10 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
   c: ComponentCursor,
   parsers: P,
   caps: readonly number[],
+  context: unknown = c.context,
 ): SequenceAttempt {
+  c.context = context;
+
   const values: unknown[] = [];
   const frames: SequenceFrame[] = [];
 
@@ -698,6 +791,7 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
 
     if (result === null) {
       c.restore(slotStart);
+      c.context = context;
 
       return {
         matched: false,
@@ -707,20 +801,26 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
     }
 
     if (isBad(result)) {
+      c.context = context;
       return result;
     }
 
-    const value = result.value;
+    const value = result.value as unknown;
 
     if (c.pos() === slotStart && hasAnyValue(value)) {
-      c.error('Sequence parser produced a value without consuming input');
+      c.context = context;
+      return c.error('Sequence parser produced a value without consuming input');
     }
 
     values[i] = value;
     frames[i] = {
       start: slotStart,
-      values: value,
+      values: value as unknown[],
     };
+
+    if (parser.contextAfter !== undefined) {
+      c.context = parser.contextAfter(value, c.context);
+    }
   }
 
   return {
