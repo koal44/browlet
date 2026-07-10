@@ -38,6 +38,7 @@ export enum ComponentParserResultKind {
 
 export enum ComponentParserBadReason {
   Invalid = 'invalid',
+  InvalidPseudoElementTail = 'invalid-pseudo-element-tail',
 }
 
 export function ok<T>(value: T): ComponentParserOk<T> {
@@ -85,7 +86,10 @@ export function unwrapParseResultOrThrow<T>(
 
   if (isBad(result)) {
     throw new Error(
-      `Uncontained bad parser result while parsing ${label}: ${result.message ?? result.reason}`,
+      [
+        `Uncontained bad parser result while parsing ${label}: ${result.message ?? result.reason}.`,
+        `Expected bad parser results must be handled by the nearest parser that understands the reason.`,
+      ].join('\n'),
     );
   }
 

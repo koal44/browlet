@@ -15,8 +15,10 @@ import {
   type Specificity,
 } from './selector-specificity';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
-import { DEFAULT_VALID_TAIL_PSEUDO_CLASSES } from '../constants';
-import { isOk, ok, type TryComponentParser, type TryComponentParserResult, unwrapParseResultOrThrow } from './component-try-parser';
+import {
+  bad, ComponentParserBadReason, isBad, isOk, ok, unwrapParseResultOrThrow,
+  type TryComponentParser, type TryComponentParserResult,
+} from './component-try-parser';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -42,7 +44,7 @@ export enum SelectorKind {
 }
 
 export type SelectorParserContext = {
-  foo?: 'bar';
+  pseudoElement?: PseudoElementName;
 };
 
 /**
@@ -112,15 +114,26 @@ export function parseComplexSelectorList(
 }
 
 function tryConsumeComplexSelectorList(c: ComponentCursor): TryComponentParserResult<ComplexSelectorList> {
-  const arms = unwrapParseResultOrThrow(consumeComplexSelectorListArms(c), 'complex selector list arms');
-  if (arms === null) return null;
+  const start = c.pos();
+  const armsResult = consumeComplexSelectorListArms(c);
 
-  const res: ComplexSelectorList = {
+  if (armsResult === null) {
+    c.restore(start);
+    return null;
+  }
+
+  if (isBad(armsResult)) {
+    c.restore(start);
+    return null;
+  }
+
+  const arms = armsResult.value;
+
+  return ok({
     kind: SelectorKind.ComplexSelectorList,
     arms,
     specificity: listSpecificity(arms),
-  };
-  return ok(res);
+  });
 }
 
 const consumeComplexSelectorListArms: TryComponentParser<ComplexSelector[]> =
@@ -567,7 +580,12 @@ function tryConsumePseudoCompoundSelector(c: ComponentCursor): TryComponentParse
 
 const consumePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> = sequenceOf(
   [
-    one(tryConsumePseudoElementSelector),
+    one(tryConsumePseudoElementSelector, {
+      contextAfter: ([pseudoElement], context) => ({
+        ...(context as SelectorParserContext),
+        pseudoElement: pseudoElement.name,
+      }),
+    }),
     any(tryConsumePseudoClassSelector),
   ],
 
@@ -743,6 +761,12 @@ export type TypeSelector = {
 };
 
 function tryConsumeTypeSelector(c: ComponentCursor): TryComponentParserResult<TypeSelector> {
+  const ctx = c.context as SelectorParserContext;
+
+  if (ctx.pseudoElement !== undefined) {
+    return null;
+  }
+
   return consumeTypeSelector(c);
 }
 
@@ -812,6 +836,12 @@ export type IdSelector = {
 };
 
 function tryConsumeIdSelector(c: ComponentCursor): TryComponentParserResult<IdSelector> {
+  const ctx = c.context as SelectorParserContext;
+
+  if (ctx.pseudoElement !== undefined) {
+    return null;
+  }
+
   return consumeIdSelector(c);
 }
 
@@ -837,6 +867,12 @@ export type ClassSelector = {
 };
 
 function tryConsumeClassSelector(c: ComponentCursor): TryComponentParserResult<ClassSelector> {
+  const ctx = c.context as SelectorParserContext;
+
+  if (ctx.pseudoElement !== undefined) {
+    return null;
+  }
+
   return consumeClassSelector(c);
 }
 
@@ -870,6 +906,12 @@ export type AttributeSelector = {
 };
 
 function tryConsumeAttributeSelector(c: ComponentCursor): TryComponentParserResult<AttributeSelector> {
+  const ctx = c.context as SelectorParserContext;
+
+  if (ctx.pseudoElement !== undefined) {
+    return null;
+  }
+
   return consumeAttributeSelector(c);
 }
 
@@ -1073,7 +1115,6 @@ export type PseudoElementSelector = {
   name: string;
   argument: PseudoElementArgument | null;
   specificity: Specificity;
-  validTailPseudoClasses: string[];
 };
 
 function tryConsumePseudoElementSelector(c: ComponentCursor): TryComponentParserResult<PseudoElementSelector> {
@@ -1265,12 +1306,100 @@ function createIdentValueConsumer<T extends string>(
   };
 }
 
+export type PseudoClassName =
+  // Logical combination pseudo-classes
+  | 'is' | 'where' | 'not' | 'has'
+
+  // Elemental / linguistic / location pseudo-classes
+  | 'defined'
+  | 'dir' | 'lang'
+  | 'any-link' | 'link' | 'visited' | 'target' | 'scope'
+
+  // User action pseudo-classes
+  | 'hover' | 'active' | 'focus' | 'focus-visible' | 'focus-within'
+
+  // Resource state pseudo-classes
+  | 'playing' | 'paused' | 'seeking' | 'buffering' | 'stalled' | 'muted' | 'volume-locked'
+
+  // Element display state pseudo-classes
+  | 'open' | 'popover-open' | 'modal' | 'fullscreen' | 'picture-in-picture'
+
+  // Input pseudo-classes
+  | 'enabled' | 'disabled' | 'read-only' | 'read-write' | 'placeholder-shown' | 'autofill'
+  | 'default' | 'checked' | 'unchecked' | 'indeterminate'
+  | 'valid' | 'invalid' | 'in-range' | 'out-of-range'
+  | 'required' | 'optional' | 'user-valid' | 'user-invalid'
+
+  // Tree-structural pseudo-classes
+  | 'root' | 'empty'
+  | 'nth-child' | 'nth-last-child' | 'first-child' | 'last-child' | 'only-child'
+  | 'nth-of-type' | 'nth-last-of-type' | 'first-of-type' | 'last-of-type' | 'only-of-type'
+
+  // Shadow pseudo-classes
+  | 'host' | 'host-context' | 'has-slotted';
+
+// Removed/deferred Selectors Level 4 draft pseudo-classes.
+// :target-within was removed in favor of :has(:target).
+// :local-link, :blank, :interest-source, :interest-target,
+// :nth-col(), :nth-last-col(), and time-dimensional pseudo-classes
+// were deferred to Selectors Level 5.
+// Drag-and-drop pseudo-classes such as :drop() were dropped.
+function canonicalPseudoClassName(rawName: string): PseudoClassName | null {
+  const name = asciiLower(rawName);
+
+  switch (name) {
+    // Aliases
+    case 'matches':
+      return 'is';
+    case '-webkit-autofill':
+      return 'autofill';
+
+    case 'is': case 'where': case 'not': case 'has':
+    case 'defined':
+    case 'dir': case 'lang':
+    case 'any-link': case 'link': case 'visited': case 'target': case 'scope':
+    case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
+    case 'playing': case 'paused': case 'seeking': case 'buffering':
+    case 'stalled': case 'muted': case 'volume-locked':
+    case 'open': case 'popover-open': case 'modal': case 'fullscreen': case 'picture-in-picture':
+    case 'enabled': case 'disabled': case 'read-only': case 'read-write': case 'placeholder-shown':
+    case 'autofill': case 'default': case 'checked': case 'unchecked': case 'indeterminate':
+    case 'valid': case 'invalid': case 'in-range': case 'out-of-range':
+    case 'required': case 'optional': case 'user-valid': case 'user-invalid':
+    case 'root': case 'empty':
+    case 'nth-child': case 'nth-last-child': case 'first-child': case 'last-child': case 'only-child':
+    case 'nth-of-type': case 'nth-last-of-type':
+    case 'first-of-type': case 'last-of-type': case 'only-of-type':
+    case 'host': case 'host-context': case 'has-slotted':
+      return name;
+
+    default:
+      return null;
+  }
+}
+
 function createPseudoClassSelector(
   rawName: string,
   value: readonly ComponentValue[] | null,
   context: SelectorParserContext,
 ): TryComponentParserResult<PseudoClassSelector> {
   const name = canonicalPseudoClassName(rawName);
+
+  if (name === null) {
+    return null;
+  }
+
+  const pseudoElement = context.pseudoElement;
+
+  if (
+    pseudoElement !== undefined &&
+    !isValidPseudoClassAfterPseudoElement(pseudoElement, name)
+  ) {
+    return bad(
+      ComponentParserBadReason.InvalidPseudoElementTail,
+      `Pseudo-class :${name} is not valid after ::${pseudoElement}`,
+    );
+  }
 
   switch (name) {
     // Logical combination pseudo-classes
@@ -1304,12 +1433,15 @@ function createPseudoClassSelector(
     case 'not': {
       if (value === null) return null;
 
-      const selectors = parseComplexRealSelectorList(value, context);
-      if (selectors === null) return null;
+      const selectors = parseStrictComplexRealSelectorListArgument(value, context);
+
+      if (selectors === null || isBad(selectors)) {
+        return selectors;
+      }
 
       const argument: ComplexRealSelectorListPseudoArgument = {
         kind: PseudoArgumentKind.ComplexRealSelectorList,
-        selectors,
+        selectors: selectors.value,
       };
 
       return ok({
@@ -1557,6 +1689,28 @@ function createPseudoClassSelector(
   }
 }
 
+function isValidPseudoClassAfterPseudoElement(
+  _pseudoElementName: PseudoElementName,
+  pseudoClassName: PseudoClassName,
+): boolean {
+  return isDefaultValidTailPseudoClass(pseudoClassName);
+}
+
+function isDefaultValidTailPseudoClass(name: PseudoClassName): boolean {
+  switch (name) {
+    // User action pseudo-classes
+    case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
+      return true;
+
+    // Logical pseudo-classes that inherit the pseudo-element tail context
+    case 'is': case 'where': case 'not':
+      return true;
+
+    default:
+      return false;
+  }
+}
+
 function createNoArgumentPseudoClassSelector(
   name: string,
   value: readonly ComponentValue[] | null,
@@ -1574,29 +1728,18 @@ function createNoArgumentPseudoClassSelector(
   });
 }
 
-// Removed/deferred Selectors Level 4 draft pseudo-classes.
-// :target-within was removed in favor of :has(:target).
-// :local-link, :blank, :interest-source, :interest-target,
-// :nth-col(), :nth-last-col(), and time-dimensional pseudo-classes
-// were deferred to Selectors Level 5.
-// Drag-and-drop pseudo-classes such as :drop() were dropped.
-const PSEUDO_CLASS_ALIASES: Record<string, string | undefined> = {
-  matches: 'is',
-  '-webkit-autofill': 'autofill',
-};
-
-function canonicalPseudoClassName(rawName: string): string {
-  const name = asciiLower(rawName);
-  return PSEUDO_CLASS_ALIASES[name] ?? name;
-}
-
 function parseForgivingSelectorListArgument(
   arg: readonly ComponentValue[],
   context: SelectorParserContext,
 ): ForgivingSelectorListPseudoArgument {
+  const parseSelector =
+    context.pseudoElement === undefined
+      ? tryConsumeComplexRealSelector
+      : tryConsumeCompoundAsComplexRealSelector;
+
   const parsed = parseListAsComponentGrammar(
     arg,
-    withComponentTrivia(tryConsumeComplexRealSelector),
+    withComponentTrivia(parseSelector),
     context,
   );
 
@@ -1613,6 +1756,70 @@ function parseForgivingSelectorListArgument(
     },
   };
 }
+
+function parseStrictComplexRealSelectorListArgument(
+  arg: readonly ComponentValue[],
+  context: SelectorParserContext,
+): TryComponentParserResult<ComplexRealSelectorList> {
+  const parseSelector =
+    context.pseudoElement === undefined
+      ? tryConsumeComplexRealSelector
+      : tryConsumeCompoundAsComplexRealSelector;
+
+  const parsed = parseListAsComponentGrammar(
+    arg,
+    withComponentTrivia(parseSelector),
+    context,
+  );
+
+  const arms: ComplexRealSelector[] = [];
+
+  for (const result of parsed) {
+    if (isBad(result)) {
+      return result;
+    }
+
+    if (result === null) {
+      return context.pseudoElement === undefined
+        ? null
+        : bad(
+          ComponentParserBadReason.InvalidPseudoElementTail,
+          `Selector is not valid after ::${context.pseudoElement}`,
+        );
+    }
+
+    arms.push(result.value);
+  }
+
+  if (arms.length === 0) {
+    return null;
+  }
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelectorList,
+    arms,
+    specificity: listSpecificity(arms),
+  });
+}
+
+const tryConsumeCompoundAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
+  const result = tryConsumeCompoundSelector(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelector,
+    parts: [
+      {
+        combinator: null,
+        compound: result.value,
+      },
+    ],
+    specificity: result.value.specificity,
+  });
+};
 
 function parseAnPlusBArgument(
   value: readonly ComponentValue[],
@@ -1779,13 +1986,50 @@ function tryConsumeDirectionIdent(c: ComponentCursor): TryComponentParserResult<
   return ok(asciiLower(ident.value));
 }
 
+export type PseudoElementName =
+  // Typographic pseudo-elements
+  | 'first-line' | 'first-letter' | 'prefix' | 'suffix'
+
+  // Highlight pseudo-elements
+  | 'selection' | 'search-text' | 'target-text' | 'spelling-error' | 'grammar-error' | 'highlight'
+
+  // Generated / marker / input pseudo-elements
+  | 'before' | 'after' | 'marker' | 'placeholder'
+
+  // Element-backed pseudo-elements
+  | 'file-selector-button' | 'details-content'
+
+  // Shadow pseudo-elements
+  | 'slotted' | 'part';
+
+function canonicalPseudoElementName(rawName: string): PseudoElementName | null {
+  const name = asciiLower(rawName);
+
+  switch (name) {
+    case 'first-line': case 'first-letter': case 'prefix': case 'suffix':
+    case 'selection': case 'search-text': case 'target-text':
+    case 'spelling-error': case 'grammar-error': case 'highlight':
+    case 'before': case 'after': case 'marker': case 'placeholder':
+    case 'file-selector-button': case 'details-content':
+    case 'slotted': case 'part':
+      return name;
+
+    default:
+      return null;
+  }
+}
+
 function createPseudoElementSelector(
   rawName: string,
   value: readonly ComponentValue[] | null,
   legacy: boolean,
   context: SelectorParserContext,
 ): TryComponentParserResult<PseudoElementSelector> {
-  const name = asciiLower(rawName);
+  const name = canonicalPseudoElementName(rawName);
+
+  if (name === null) {
+    return null;
+  }
 
   switch (name) {
     // Typographic pseudo-elements
@@ -1835,7 +2079,6 @@ function createPseudoElementSelector(
         name,
         argument,
         specificity: SpecificityC,
-        validTailPseudoClasses: [...DEFAULT_VALID_TAIL_PSEUDO_CLASSES],
       });
     }
 
@@ -1891,7 +2134,6 @@ function createPseudoElementSelector(
           SpecificityC,
           argument.selector.specificity,
         ),
-        validTailPseudoClasses: [...DEFAULT_VALID_TAIL_PSEUDO_CLASSES],
       });
     }
 
@@ -1911,7 +2153,6 @@ function createPseudoElementSelector(
         name,
         argument,
         specificity: SpecificityC,
-        validTailPseudoClasses: [...DEFAULT_VALID_TAIL_PSEUDO_CLASSES],
       });
     }
 
@@ -1941,7 +2182,6 @@ function createNoArgumentPseudoElementSelector(
     name,
     argument: null,
     specificity,
-    validTailPseudoClasses: [...DEFAULT_VALID_TAIL_PSEUDO_CLASSES],
   });
 }
 
