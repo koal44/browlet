@@ -25,9 +25,9 @@ function expectComplexSelectorList(css: string, context: SelectorParserContext =
   }
 }
 
-function expectComplexSelector(css: string): ComplexSelector {
+function expectComplexSelector(css: string, context: SelectorParserContext = {}): ComplexSelector {
   try {
-    const result = expectComplexSelectorList(css);
+    const result = expectComplexSelectorList(css, context);
 
     expect(result.arms, `Expected exactly one selector for: ${css}`).toHaveLength(1);
 
@@ -37,9 +37,9 @@ function expectComplexSelector(css: string): ComplexSelector {
   }
 }
 
-function expectInvalidSelector(css: string): void {
+function expectInvalidSelector(css: string, context: SelectorParserContext = {}): void {
   try {
-    const result = parseSelectorList(css);
+    const result = parseSelectorList(css, context);
     expect(result, `Expected selector to be invalid: ${css}`).toBeNull();
   } catch (error) {
     rethrowFromCaller(error, expectInvalidSelector);
@@ -183,6 +183,11 @@ const realIdPart = (combinator: Combinator | null, name: string) => realPart(
   compound(null, [idSelector(name)]),
 );
 
+// pre-defined context
+const namespaceContext: SelectorParserContext = {
+  declaredNamespacePrefixes: new Set(['svg', 'xlink']),
+};
+
 describe('selector parser basics', () => {
   it('rejects an empty selector list', () => {
     expectInvalidSelector('');
@@ -254,7 +259,7 @@ describe('selector parser basics', () => {
 
 describe('selector parser namespace and type selectors', () => {
   it('parses a namespace-qualified type selector', () => {
-    expect(expectComplexSelector('svg|circle')).toMatchObject({
+    expect(expectComplexSelector('svg|circle', namespaceContext)).toMatchObject({
       parts: [
         typePart(null, 'circle', 'svg'),
       ],
@@ -278,7 +283,7 @@ describe('selector parser namespace and type selectors', () => {
   });
 
   it('parses a namespace-qualified universal selector', () => {
-    expect(expectComplexSelector('svg|*')).toMatchObject({
+    expect(expectComplexSelector('svg|*', namespaceContext)).toMatchObject({
       parts: [
         typePart(null, '*', 'svg'),
       ],
@@ -358,7 +363,7 @@ describe('selector parser attribute selectors', () => {
   });
 
   it('parses a namespaced attribute name', () => {
-    expect(expectComplexSelector('[svg|href=value]')).toMatchObject({
+    expect(expectComplexSelector('[svg|href=value]', namespaceContext)).toMatchObject({
       parts: [
         attrPart(null, attrName('href', 'svg'), '='),
       ],
@@ -1267,4 +1272,43 @@ it('rejects syntactically invalid :dir() arguments', () => {
   expectInvalidSelector(':dir("ltr")');
   expectInvalidSelector(':dir(ltr rtl)');
   expectInvalidSelector(':dir(>)');
+});
+
+it('handles namespaced valid/invalidation rules', () => {
+  expectComplexSelector('svg|circle', namespaceContext);
+  expectComplexSelector('svg|*', namespaceContext);
+
+  expectInvalidSelector('svg|circle');
+  expectInvalidSelector('svg|*');
+  expectInvalidSelector('math|mi', namespaceContext);
+
+  // Prefixes are case-sensitive.
+  expectInvalidSelector('SVG|circle', namespaceContext);
+
+  // These never require declarations.
+  expectValidSelector('|circle');
+  expectValidSelector('|*');
+  expectValidSelector('*|circle');
+  expectValidSelector('*|*');
+
+  // Attribute selectors
+  expectComplexSelector('[xlink|href]', namespaceContext);
+
+  expectInvalidSelector('[xlink|href]');
+  expectInvalidSelector('[math|value]', namespaceContext);
+
+  // These never require declarations.
+  expectValidSelector('[href]');
+  expectValidSelector('[|href]');
+  expectValidSelector('[*|href]');
+
+  // context threading
+  expectValidSelector(':not(svg|circle[xlink|href])', namespaceContext);
+  expectInvalidSelector(':not(svg|circle[xlink|href])');
+
+  expectValidSelector(':has(> svg|circle[xlink|href])', namespaceContext);
+  expectInvalidSelector(':has(> svg|circle[xlink|href])');
+
+  expectValidSelector('::slotted(svg|circle[xlink|href])', namespaceContext);
+  expectInvalidSelector('::slotted(svg|circle[xlink|href])');
 });

@@ -52,6 +52,9 @@ export type SelectorParserContext = Readonly<{
 
   // Final pseudo-element of the preceding complex-selector unit, used to validate the next combinator.
   previousUnitPseudoElement?: PseudoElementName;
+
+  // Named namespace prefixes declared for this parse; absence means none are declared.
+  declaredNamespacePrefixes?: ReadonlySet<string>;
 }>;
 
 /**
@@ -332,6 +335,11 @@ const consumeRelativeRealSelectorListArms: TryComponentParser<RelativeRealSelect
 /**
  * <complex-selector> =
  *   <complex-selector-unit> [ <combinator>? <complex-selector-unit> ]*
+ *
+ * The parser-level combinator represents omitted descendant combinators as
+ * whitespace, so execution uses the equivalent normalized tail:
+ *
+ *   <complex-selector-unit> [ <parser-combinator> <complex-selector-unit> ]*
  */
 export type ComplexSelector = {
   kind: SelectorKind.ComplexSelector;
@@ -790,7 +798,27 @@ const consumeWqName: TryComponentParser<WqName> = sequenceOf(
  * <ns-prefix> = [ <ident-token> | '*' ]? '|'
  */
 function tryConsumeNsPrefix(c: ComponentCursor): TryComponentParserResult<string> {
-  return consumeNsPrefix(c);
+  const start = c.pos();
+  const result = consumeNsPrefix(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  const prefix = result.value;
+
+  if (prefix === '' || prefix === '*') {
+    return result;
+  }
+
+  const context = c.context as SelectorParserContext;
+
+  if (context.declaredNamespacePrefixes?.has(prefix) !== true) {
+    c.restore(start);
+    return null;
+  }
+
+  return result;
 }
 
 const tryConsumeStarDelim = createDelimConsumer('*');
@@ -972,7 +1000,12 @@ const consumeClassSelector: TryComponentParser<ClassSelector> = sequenceOf(
 /**
  * <attribute-selector> =
  *   '[' <wq-name> ']' |
- *   '[' <wq-name> <attr-matcher> [ <string-token> | <ident-token> ] <attr-modifier>? ']'
+ *   '[' <wq-name> <attr-matcher>
+ *       [ <string-token> | <ident-token> ] <attr-modifier>? ']'
+ *
+ * Component-value tokenization represents the brackets and their contents as
+ * one bracket block. consumeAttributeSelector unwraps that block, and
+ * consumeAttributeSelectorBody parses the grammar between the brackets.
  */
 export type AttributeSelector = {
   kind: SelectorKind.AttributeSelector;
@@ -1146,6 +1179,13 @@ const consumeAttrModifier: TryComponentParser<AttrModifier> = (c) => {
  * <pseudo-class-selector> =
  *   : <ident-token> |
  *   : <function-token> <any-value> )
+ *
+ * Representing functional notation using the parser's component-value
+ * <function-block> gives the equivalent execution grammar:
+ *
+ *   <pseudo-class-selector> =
+ *     : <ident-token> |
+ *     : <function-block>
  */
 export type PseudoClassSelector = {
   kind: SelectorKind.PseudoClassSelector;
@@ -2286,6 +2326,9 @@ function createNoArgumentPseudoElementSelector(
   });
 }
 
+/**
+ * <part-name-list> = <ident-token>+
+ */
 function tryConsumePartNameList(c: ComponentCursor): TryComponentParserResult<string[]> {
   return consumePartNameList(c);
 }
