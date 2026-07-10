@@ -15,15 +15,15 @@ export type Multiplier<T, Output extends T[] = T[]> = TryComponentParser<Output>
   min: number;
   max: number;
   separator: 'none' | 'comma';
-  contextAfter?: ContextAfter<Output>;
+  contextAfter?: ContextAfter<T>;
 };
 
-type MultiplierOptions<Output> = {
-  contextAfter?: ContextAfter<Output>;
+type MultiplierOptions<T> = {
+  contextAfter?: ContextAfter<T>;
 };
 
-type ContextAfter<Output> =
-  (output: Output, context: unknown) => unknown;
+type ContextAfter<T> =
+  (value: T, context: unknown) => unknown;
 
 type SequenceValue<P extends readonly AnyMultiplier[]> = {
   -readonly [I in keyof P]: MultiplierOutputOf<P[I]>;
@@ -374,7 +374,7 @@ export const DEFAULT_REPEAT_LIMIT = 20;
  */
 export function one<T>(
   parse: TryComponentParser<T>,
-  options?: MultiplierOptions<[T]>,
+  options?: MultiplierOptions<T>,
 ): Multiplier<T, [T]> {
   return createMultiplier<T, [T]>(parse, 1, 1, 'none', options);
 }
@@ -384,7 +384,7 @@ export function one<T>(
  */
 export function opt<T>(
   parse: TryComponentParser<T>,
-  options?: MultiplierOptions<OptionalValue<T>>,
+  options?: MultiplierOptions<T>,
 ): Multiplier<T, OptionalValue<T>> {
   return createMultiplier<T, OptionalValue<T>>(parse, 0, 1, 'none', options);
 }
@@ -394,7 +394,7 @@ export function opt<T>(
  */
 export function any<T>(
   parse: TryComponentParser<T>,
-  options?: MultiplierOptions<T[]>,
+  options?: MultiplierOptions<T>,
 ): Multiplier<T, T[]> {
   return createMultiplier<T, T[]>(parse, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
@@ -404,7 +404,7 @@ export function any<T>(
  */
 export function plus<T>(
   parse: TryComponentParser<T>,
-  options?: MultiplierOptions<NonEmptyArray<T>>,
+  options?: MultiplierOptions<T>,
 ): Multiplier<T, NonEmptyArray<T>> {
   return createMultiplier<T, NonEmptyArray<T>>(parse, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
@@ -415,10 +415,10 @@ export function plus<T>(
  * The parser is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
-export function repeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
-export function repeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
-export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<Output>): Multiplier<T, Output> {
+export function repeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function repeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function repeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid repeat minimum ${min}`);
   }
@@ -433,11 +433,11 @@ export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: 
 /**
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
-export function commaRepeat<T>(item: TryComponentParser<T>, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<NonEmptyArray<T>>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T[]>): Multiplier<T, T[]>;
-export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, minOrOptions: number | MultiplierOptions<Output> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<Output>): Multiplier<T, Output> {
+export function commaRepeat<T>(item: TryComponentParser<T>, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function commaRepeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, minOrOptions: number | MultiplierOptions<T> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   const min =
     typeof minOrOptions === 'number'
       ? minOrOptions
@@ -456,7 +456,13 @@ export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, 
     throw new Error(`Invalid comma repeat maximum ${max}`);
   }
 
-  return createMultiplier<T, Output>(item, min, max, 'comma', resolvedOptions);
+  return createMultiplier<T, Output>(
+    item,
+    min,
+    max,
+    'comma',
+    resolvedOptions,
+  );
 }
 
 function createMultiplier<T, Output extends T[]>(
@@ -464,7 +470,7 @@ function createMultiplier<T, Output extends T[]>(
   min: number,
   max: number,
   separator: 'none' | 'comma',
-  options?: MultiplierOptions<Output>,
+  options?: MultiplierOptions<T>,
 ): Multiplier<T, Output> {
   const multiplier = ((c: ComponentCursor): TryComponentParserResult<Output> => {
     return parseMultiplier(c, multiplier);
@@ -540,17 +546,20 @@ function parsePlainMultiplier<T, Output extends T[]>(
     }
 
     if (isBad(result)) {
-      c.context = itemContext;
+      c.context = outerContext;
       return result;
     }
 
     if (c.pos() === itemStart) {
-      c.context = itemContext;
+      c.context = outerContext;
       return c.error('Repeated parser matched without consuming input');
     }
 
     values.push(result.value);
-    c.context = itemContext;
+
+    c.context = multiplier.contextAfter === undefined
+      ? itemContext
+      : multiplier.contextAfter(result.value, itemContext);
   }
 
   if (values.length < multiplier.min) {
@@ -559,7 +568,6 @@ function parsePlainMultiplier<T, Output extends T[]>(
     return null;
   }
 
-  c.context = outerContext;
   return ok(values as Output);
 }
 
@@ -571,6 +579,12 @@ function parseCommaMultiplier<T, Output extends T[]>(
   const start = c.pos();
   const outerContext = c.context;
   const values: T[] = [];
+
+  if (max === 0) {
+    return multiplier.min === 0
+      ? ok([] as unknown as Output)
+      : null;
+  }
 
   const parseItem = (): TryComponentParserResult<T> => {
     const itemStart = c.pos();
@@ -584,16 +598,19 @@ function parseCommaMultiplier<T, Output extends T[]>(
     }
 
     if (isBad(result)) {
-      c.context = itemContext;
+      c.context = outerContext;
       return result;
     }
 
     if (c.pos() === itemStart) {
-      c.context = itemContext;
+      c.context = outerContext;
       return c.error('Comma repeat matched without consuming input');
     }
 
-    c.context = itemContext;
+    c.context = multiplier.contextAfter === undefined
+      ? itemContext
+      : multiplier.contextAfter(result.value, itemContext);
+
     return result;
   };
 
@@ -648,7 +665,6 @@ function parseCommaMultiplier<T, Output extends T[]>(
     return null;
   }
 
-  c.context = outerContext;
   return ok(values as Output);
 }
 
@@ -817,10 +833,6 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
       start: slotStart,
       values: value as unknown[],
     };
-
-    if (parser.contextAfter !== undefined) {
-      c.context = parser.contextAfter(value, c.context);
-    }
   }
 
   return {

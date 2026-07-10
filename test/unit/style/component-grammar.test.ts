@@ -2054,13 +2054,13 @@ const contextLeakingNullParser = (
 };
 
 describe('component grammar contextAfter', () => {
-  it('threads contextAfter from one sequence slot to later slots', () => {
+  it('passes advanced context to later sequence slots', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
     const parse = sequenceOf(
       [
         one(parseA, {
-          contextAfter: ([value], context) => ({
+          contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
           }),
@@ -2081,14 +2081,14 @@ describe('component grammar contextAfter', () => {
     expect(c.context).toBe(baseContext);
   });
 
-  it('passes contextAfter context to sequence projection', () => {
+  it('passes advanced context to the sequence projection', () => {
     const baseContext: DemoContext = { mode: 'base' };
     const seen: unknown[] = [];
 
     const parse = sequenceOf(
       [
         one(parseA, {
-          contextAfter: ([value], context) => ({
+          contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
           }),
@@ -2107,7 +2107,7 @@ describe('component grammar contextAfter', () => {
     expect(c.context).toBe(baseContext);
   });
 
-  it('threads contextAfter through nested sequence parsers', () => {
+  it('passes advanced context into a nested sequence parser', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
     const inner = sequenceOf(
@@ -2120,7 +2120,7 @@ describe('component grammar contextAfter', () => {
     const parse = sequenceOf(
       [
         one(parseA, {
-          contextAfter: ([value], context) => ({
+          contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
           }),
@@ -2141,7 +2141,7 @@ describe('component grammar contextAfter', () => {
     expect(c.context).toBe(baseContext);
   });
 
-  it('does not apply contextAfter inside oneOf alternatives to following alternatives', () => {
+  it('does not leak contextAfter from a rejected oneOf alternative', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
     const parse = oneOf(
@@ -2167,6 +2167,141 @@ describe('component grammar contextAfter', () => {
     expectNextIdent(c, 'a');
     expect(c.context).toBe(baseContext);
   });
+
+  it('applies contextAfter to each plain multiplier item', () => {
+    type ItemContext = {
+      values: unknown[];
+    };
+
+    const baseContext: ItemContext = {
+      values: [],
+    };
+
+    const parse = sequenceOf(
+      [
+        any(parseA, {
+          contextAfter: (value, context) => {
+            const current = context as ItemContext;
+
+            return {
+              ...current,
+              values: [...current.values, value],
+            };
+          },
+        }),
+      ],
+      ([values], context) => ok({
+        values,
+        contextValues: (context as ItemContext).values,
+      }),
+    );
+
+    const c = cursor('a a', baseContext);
+
+    expect(unwrap(parse(c))).toEqual({
+      values: ['a', 'a'],
+      contextValues: ['a', 'a'],
+    });
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('threads context between plain multiplier items without leaking item-local context', () => {
+    const baseContext: DemoContext = {
+      mode: 'base',
+    };
+
+    const parseContextMutatingA: TryComponentParser<string> = (c) => {
+      const mode = (c.context as DemoContext).mode ?? 'missing';
+
+      const value = unwrapParseResultOrThrow(
+        parseA(c),
+        'context repetition item',
+      );
+
+      if (value === null) {
+        return null;
+      }
+
+      c.context = {
+        mode: 'item-local',
+      };
+
+      return ok(mode);
+    };
+
+    const parse = sequenceOf(
+      [
+        any(parseContextMutatingA, {
+          contextAfter: (_value, context) => {
+            const current = context as DemoContext;
+
+            return {
+              ...current,
+              mode:
+                current.mode === 'base'
+                  ? 'after-first'
+                  : 'after-second',
+            };
+          },
+        }),
+
+        one(contextParser('after-second', 'b', 'suffix')),
+      ],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a a b', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([
+      ['base', 'after-first'],
+      ['suffix'],
+    ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('applies contextAfter to each comma multiplier item', () => {
+    type ItemContext = {
+      values: unknown[];
+    };
+
+    const baseContext: ItemContext = {
+      values: [],
+    };
+
+    const parse = sequenceOf(
+      [
+        commaRepeat(parseA, {
+          contextAfter: (value, context) => {
+            const current = context as ItemContext;
+
+            return {
+              ...current,
+              values: [...current.values, value],
+            };
+          },
+        }),
+      ],
+      ([values], context) => ok({
+        values,
+        contextValues: (context as ItemContext).values,
+      }),
+    );
+
+    const c = cursor('a, a', baseContext);
+
+    expect(unwrap(parse(c))).toEqual({
+      values: ['a', 'a'],
+      contextValues: ['a', 'a'],
+    });
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
 });
 
 describe('component grammar context restoration', () => {
@@ -2213,20 +2348,24 @@ describe('component grammar context restoration', () => {
     expect(c.context).toBe(baseContext);
   });
 
-  it('recomputes contextAfter when sequence backtracks a direct multiplier slot', () => {
-    const baseContext: DemoContext = { mode: 'base' };
+  it('does not apply contextAfter when backtracking an optional slot to empty', () => {
+    const baseContext: DemoContext = {
+      mode: 'base',
+    };
 
-    // a? a, where the second `a` only matches after the first slot backtracks
-    // to empty and recomputes contextAfter with [].
+    // The greedy attempt consumes `a` in the optional slot and advances its
+    // context. The retry caps that slot at zero, so no item-level transition
+    // occurs and the suffix sees the original context.
     const parse = sequenceOf(
       [
         opt(parseA, {
-          contextAfter: (value, context) => ({
+          contextAfter: (_value, context) => ({
             ...(context as DemoContext),
-            mode: value.length === 0 ? 'empty-prefix' : 'used-prefix',
+            mode: 'used-prefix',
           }),
         }),
-        one(contextParser('empty-prefix', 'a', 'suffix')),
+
+        one(contextParser('base', 'a', 'suffix')),
       ],
       (value) => ok(value),
     );
@@ -2237,6 +2376,101 @@ describe('component grammar context restoration', () => {
       [],
       ['suffix'],
     ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('does not apply contextAfter when backtracking a comma multiplier to empty', () => {
+    const baseContext: DemoContext = {
+      mode: 'base',
+    };
+
+    const parse = sequenceOf(
+      [
+        commaRepeat(parseA, 0, 1, {
+          contextAfter: (_value, context) => ({
+            ...(context as DemoContext),
+            mode: 'used-prefix',
+          }),
+        }),
+
+        one(contextParser('base', 'a', 'suffix')),
+      ],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a', baseContext);
+
+    expect(unwrap(parse(c))).toEqual([
+      [],
+      ['suffix'],
+    ]);
+
+    expectDone(c);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('restores accumulated context when repetition minimum is not met', () => {
+    const baseContext: DemoContext = {
+      mode: 'base',
+    };
+
+    const parse = repeat(parseA, 2, 2, {
+      contextAfter: (_value, context) => ({
+        ...(context as DemoContext),
+        mode: 'advanced',
+      }),
+    });
+
+    const c = cursor('a b', baseContext);
+
+    expect(unwrap(parse(c))).toBeNull();
+    expect(c.pos()).toBe(0);
+    expect(c.context).toBe(baseContext);
+  });
+
+  it('restores accumulated context when a later repetition item is bad', () => {
+    const baseContext: DemoContext = {
+      mode: 'base',
+    };
+
+    const parseAOrBadB: TryComponentParser<'a'> = (c) => {
+      const a = parseA(c);
+
+      if (a !== null) {
+        return a;
+      }
+
+      const b = unwrapParseResultOrThrow(
+        parseB(c),
+        'bad repetition item',
+      );
+
+      if (b === null) {
+        return null;
+      }
+
+      return bad(
+        ComponentParserBadReason.Invalid,
+        'bad repetition item',
+      );
+    };
+
+    const parse = plus(parseAOrBadB, {
+      contextAfter: (_value, context) => ({
+        ...(context as DemoContext),
+        mode: 'advanced',
+      }),
+    });
+
+    const c = cursor('a b', baseContext);
+    const result = parse(c);
+
+    expect(isBad(result)).toBe(true);
+    expect(result).toMatchObject({
+      message: 'bad repetition item',
+    });
 
     expectDone(c);
     expect(c.context).toBe(baseContext);

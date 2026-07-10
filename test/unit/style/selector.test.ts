@@ -710,7 +710,7 @@ describe('selector parser pseudo-element selectors', () => {
       expectInvalidSelector(css);
     }
 
-    // Direct tail: ordinary selectors/combinators cannot appear after the pseudo-element.
+    // Direct tail: ordinary simple selectors cannot follow the pseudo-element.
     for (const css of [
       '::before.foo',
       '::before#id',
@@ -719,19 +719,6 @@ describe('selector parser pseudo-element selectors', () => {
     ]) {
       expectInvalidSelector(css);
     }
-
-    // // TODO: pseudo-element internal-structure policy.
-    // // Selectors containing combinators after a pseudo-element are invalid unless
-    // // the pseudo-element is defined to have internal structure. This is not part
-    // // of pseudo-class-tail validation.
-    // for (const css of [
-    //   '::before div',
-    //   '::before > div',
-    //   '::before + div',
-    //   '::before ~ div',
-    // ]) {
-    //   expectInvalidSelector(css);
-    // }
 
     // Forgiving logical arguments inherit pseudo-element-tail restrictions.
     // Invalid ordinary selector arms are dropped, leaving only valid tail pseudos.
@@ -817,6 +804,96 @@ describe('selector parser pseudo-element selectors', () => {
     ]) {
       expectValidSelector(css);
     }
+  });
+
+  it('rejects combinators after pseudo-elements without internal structure', () => {
+    // Baseline: combinators before the pseudo-element are still ordinary selector structure.
+    expectValidSelector('.foo ::before');
+
+    // Ordinary generated pseudo-elements cannot be followed by combinators.
+    for (const css of [
+      '::before div',
+      '::before > div',
+      '::before + div',
+      '::before ~ div',
+      '.foo::before span',
+      '.foo::before > span',
+      '.foo::before + span',
+      '.foo::before ~ span',
+    ]) {
+      expectInvalidSelector(css);
+    }
+
+    // Tail pseudo-classes do not reset the pseudo-element combinator restriction.
+    for (const css of [
+      '::before:hover span',
+      '::before:hover > span',
+      '::before:is(:hover) span',
+      '::before:not(:is(.foo)) > span',
+    ]) {
+      expectInvalidSelector(css);
+    }
+
+    // Pseudo-element chains are still pseudo-element-ending units.
+    for (const css of [
+      '::before::marker > span',
+      '::first-letter::prefix > span',
+      '::first-letter::suffix > span',
+      '::part(foo) > span',
+      '::slotted(*) > span',
+    ]) {
+      expectInvalidSelector(css);
+    }
+
+    // Strict selector lists are poisoned by an invalid pseudo-element-combinator arm.
+    expectInvalidSelector('::before > div, .ok');
+  });
+
+  it('handles pseudo-element combinator context edge cases without leaking state', () => {
+    // Trailing trivia after a pseudo-element is not a descendant combinator.
+    expectValidSelector('::before ');
+    expectValidSelector('.foo ::before ');
+
+    // Explicit trailing combinators after a pseudo-element are still invalid.
+    for (const css of [
+      '::before >',
+      '::before +',
+      '::before ~',
+      '::before ||',
+    ]) {
+      expectInvalidSelector(css);
+    }
+
+    // The previous-unit marker must not leak across selector-list arms.
+    expectValidSelector('::before, div span');
+    expectValidSelector('::before, .foo ::after');
+    expectValidSelector('.foo ::before, div span');
+    expectValidSelector('.foo ::before, div > span');
+
+    // A combinator before a pseudo-element is allowed; after it is not.
+    expectValidSelector('div > ::before');
+    expectInvalidSelector('div > ::before > span');
+    for (const css of [
+      'div > ::before span',
+      'div > ::before > span',
+      'div > ::before + span',
+      'div > ::before ~ span',
+      'div > ::before || span',
+      '::before || div',
+      '.foo::before || span',
+    ]) {
+      expectInvalidSelector(css);
+    }
+
+    // Pseudo-element chains still count as ending in a pseudo-element.
+    expectInvalidSelector('div > ::before::marker > span');
+
+    // Forgiving logical pseudos drop arms invalid in pseudo-element-tail context.
+    expectValidSelector('::before:is(::after > span, :hover)');
+    expectValidSelector('::before:where(::after > span, :focus)');
+
+    // Strict :not is poisoned by the same invalid arm.
+    expectInvalidSelector('::before:not(::after > span)');
   });
 
 });

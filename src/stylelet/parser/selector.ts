@@ -45,6 +45,7 @@ export enum SelectorKind {
 
 export type SelectorParserContext = {
   pseudoElement?: PseudoElementName;
+  prevUnitPseudoElement?: PseudoElementName;
 };
 
 /**
@@ -351,7 +352,10 @@ function tryConsumeComplexSelector(c: ComponentCursor): TryComponentParserResult
 
 const consumeComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
   [
-    one(tryConsumeComplexSelectorUnit),
+    one(tryConsumeComplexSelectorUnit, {
+      contextAfter: (unit, context) =>
+        contextAfterPrevUnitPseudoElement(context as SelectorParserContext, unit),
+    }),
 
     any(
       sequenceOf(
@@ -365,6 +369,10 @@ const consumeComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
           unit,
         }),
       ),
+      {
+        contextAfter: (tailPart, context) =>
+          contextAfterPrevUnitPseudoElement(context as SelectorParserContext, tailPart.unit),
+      },
     ),
   ],
 
@@ -377,6 +385,70 @@ const consumeComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
     ]),
   }),
 );
+
+function contextAfterPrevUnitPseudoElement(
+  context: SelectorParserContext,
+  unit: ComplexSelectorUnit,
+): SelectorParserContext {
+  const pseudoCompound = unit.pseudoCompounds[unit.pseudoCompounds.length - 1];
+
+  return {
+    ...context,
+    prevUnitPseudoElement: pseudoCompound?.pseudoElement.name as PseudoElementName | undefined,
+  };
+}
+
+// const consumeComplexSelector: TryComponentParser<ComplexSelector> = sequenceOf(
+//   [
+//     one(tryConsumeComplexSelectorUnit),
+
+//     any(
+//       sequenceOf(
+//         [
+//           one(tryConsumeCombinator),
+//           one(tryConsumeComplexSelectorUnit),
+//         ],
+
+//         ([[combinator], [unit]]) => ok({
+//           combinator,
+//           unit,
+//         }),
+//       ),
+//     ),
+//   ],
+
+//   ([[head], tail]) => {
+//     const parts: ComplexSelector['parts'] = [
+//       { combinator: null, unit: head },
+//       ...tail,
+//     ];
+
+//     for (let i = 1; i < parts.length; i++) {
+//       const previousUnit = parts[i - 1]!.unit;
+//       const pseudoCompound = previousUnit.pseudoCompounds[previousUnit.pseudoCompounds.length - 1];
+//       const pseudoElement = pseudoCompound?.pseudoElement.name as PseudoElementName | undefined;
+
+//       if (
+//         pseudoElement !== undefined &&
+//         !isValidCombinatorAfterPseudoElement(pseudoElement, parts[i]!.combinator!)
+//       ) {
+//         return bad(
+//           ComponentParserBadReason.Invalid,
+//           `invalid combinator ${parts[i]!.combinator === ' ' ? 'descendant' : parts[i]!.combinator} after pseudo-element ${pseudoElement}`,
+//         );
+//       }
+//     }
+
+//     return ok({
+//       kind: SelectorKind.ComplexSelector,
+//       parts,
+//       specificity: sumSpecificity([
+//         head.specificity,
+//         ...tail.map((part) => part.unit.specificity),
+//       ]),
+//     });
+//   },
+// );
 
 /**
  * <complex-selector-unit> =
@@ -581,7 +653,7 @@ function tryConsumePseudoCompoundSelector(c: ComponentCursor): TryComponentParse
 const consumePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> = sequenceOf(
   [
     one(tryConsumePseudoElementSelector, {
-      contextAfter: ([pseudoElement], context) => ({
+      contextAfter: (pseudoElement, context) => ({
         ...(context as SelectorParserContext),
         pseudoElement: pseudoElement.name,
       }),
@@ -640,7 +712,25 @@ const consumeSimpleSelector: TryComponentParser<SimpleSelector> = oneOf(
 export type Combinator = ' ' | '>' | '+' | '~' | '||';
 
 function tryConsumeCombinator(c: ComponentCursor): TryComponentParserResult<Combinator> {
-  return consumeCombinator(c);
+  const start = c.pos();
+  const result = consumeCombinator(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  const context = c.context as SelectorParserContext;
+  const pseudoElement = context.prevUnitPseudoElement;
+
+  if (
+    pseudoElement !== undefined &&
+    !isValidCombinatorAfterPseudoElement(pseudoElement, result.value)
+  ) {
+    c.restore(start);
+    return null;
+  }
+
+  return result;
 }
 
 const consumeCombinator: TryComponentParser<Combinator> = (c) => {
@@ -1709,6 +1799,23 @@ function isDefaultValidTailPseudoClass(name: PseudoClassName): boolean {
     default:
       return false;
   }
+}
+
+function isValidCombinatorAfterPseudoElement(pseudoElement: PseudoElementName, combinator: Combinator): boolean {
+  switch (combinator) {
+    case ' ':
+    case '>':
+      return hasPseudoElementInternalStructure(pseudoElement);
+
+    case '+':
+    case '~':
+    case '||':
+      return false;
+  }
+}
+
+function hasPseudoElementInternalStructure(_pseudoElement: PseudoElementName): boolean {
+  return false;
 }
 
 function createNoArgumentPseudoClassSelector(
