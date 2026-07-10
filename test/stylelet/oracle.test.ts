@@ -1020,7 +1020,7 @@ runScenarios('pseudo-element tail nested forgiving matching diagnosis', 'normal'
 
 runScenarios('pseudo-element internal structure combinator oracle', 'normal', [
   {
-    name: 'native selector api validity for child combinators after pseudo-elements',
+    name: 'spec validity against native selector APIs for combinators after pseudo-elements',
     // status: 'only',
     engines: ['native'],
     markup: `
@@ -1059,39 +1059,39 @@ runScenarios('pseudo-element internal structure combinator oracle', 'normal', [
       });
     },
     cases: [
-      // Baselines: if the bare pseudo-element selector throws, then its
-      // child-combinator row below is not an internal-structure signal.
+      // Baselines distinguish supported pseudo-elements and chains from probes whose
+      // native rejection cannot specifically be attributed to the combinator.
 
       // Typographic pseudo-elements
-      { select: '#target::first-line', expect: { throws: false, count: 0 } },
-      { select: '#target::first-letter', expect: { throws: false, count: 0 } },
-      { select: '#target::first-letter::prefix', expect: { throws: true } },
-      { select: '#target::first-letter::suffix', expect: { throws: true } },
+      { select: '#target::first-line', expect: { throws: false } },
+      { select: '#target::first-letter', expect: { throws: false } },
+      { select: '#target::first-letter::prefix', expect: { throws: false }, status: 'fail' },
+      { select: '#target::first-letter::suffix', expect: { throws: false }, status: 'fail' },
 
       // Highlight pseudo-elements
-      { select: '#target::selection', expect: { throws: false, count: 0 } },
-      { select: '#target::search-text', expect: { throws: false, count: 0 }, browsers: ['chromium'] },
-      { select: '#target::search-text', expect: { throws: true, count: 0 }, browsers: ['firefox', 'webkit'] },
-      { select: '#target::target-text', expect: { throws: false, count: 0 } },
-      { select: '#target::spelling-error', expect: { throws: false, count: 0 }, browsers: ['chromium', 'webkit'] },
-      { select: '#target::spelling-error', expect: { throws: true, count: 0 }, browsers: ['firefox'] },
-      { select: '#target::grammar-error', expect: { throws: false, count: 0 }, browsers: ['chromium', 'webkit'] },
-      { select: '#target::grammar-error', expect: { throws: true, count: 0 }, browsers: ['firefox'] },
-      { select: '#target::highlight(foo)', expect: { throws: false, count: 0 } },
+      { select: '#target::selection', expect: { throws: false } },
+      { select: '#target::search-text', expect: { throws: false }, browsers: ['chromium'] },
+      { select: '#target::search-text', expect: { throws: false }, browsers: ['firefox', 'webkit'], status: 'fail' },
+      { select: '#target::target-text', expect: { throws: false } },
+      { select: '#target::spelling-error', expect: { throws: false }, browsers: ['chromium', 'webkit'] },
+      { select: '#target::spelling-error', expect: { throws: false }, browsers: ['firefox'], status: 'fail' },
+      { select: '#target::grammar-error', expect: { throws: false }, browsers: ['chromium', 'webkit'] },
+      { select: '#target::grammar-error', expect: { throws: false }, browsers: ['firefox'], status: 'fail' },
+      { select: '#target::highlight(foo)', expect: { throws: false } },
 
       // Generated / marker / input pseudo-elements
-      { select: '#target::before', expect: { throws: false, count: 0 } },
-      { select: '#target::after', expect: { throws: false, count: 0 } },
-      { select: '#item::marker', expect: { throws: false, count: 0 } },
-      { select: '#input::placeholder', expect: { throws: false, count: 0 } },
+      { select: '#target::before', expect: { throws: false } },
+      { select: '#target::after', expect: { throws: false } },
+      { select: '#item::marker', expect: { throws: false } },
+      { select: '#input::placeholder', expect: { throws: false } },
 
       // Element-backed pseudo-elements
-      { select: '#file::file-selector-button', expect: { throws: false, count: 0 } },
-      { select: '#details::details-content', expect: { throws: false, count: 0 } },
+      { select: '#file::file-selector-button', expect: { throws: false } },
+      { select: '#details::details-content', expect: { throws: false } },
 
       // Shadow pseudo-elements
-      { select: '#host::part(foo)', expect: { throws: false, count: 0 } },
-      { select: '::slotted(*)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false, count: 0 } },
+      { select: '#host::part(foo)', expect: { throws: false } },
+      { select: '::slotted(*)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
 
       // Child combinator probes. Expected result: throw unless the pseudo-element
       // is defined to expose internal structure to child/descendant combinators.
@@ -1127,6 +1127,74 @@ runScenarios('pseudo-element internal structure combinator oracle', 'normal', [
       // Sibling sanity check: internal structure, if any, would be child/descendant,
       // not sibling traversal away from the pseudo-element.
       { select: '#target::before + *', expect: { throws: true } },
+    ],
+  },
+]);
+
+runScenarios('pseudo-element sub-origin selector API validity', 'normal', [
+  {
+    name: 'native validity for element-backed and slotted pseudo-element chains',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <div id="target">target</div>
+
+      <ol>
+        <li id="item">item</li>
+      </ol>
+
+      <input id="file" type="file">
+
+      <details id="details">
+        <summary>summary</summary>
+        <span>content</span>
+      </details>
+
+      <div id="host">
+        <span>assigned</span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <div part="foo">
+            <slot></slot>
+          </div>
+        `;
+      });
+    },
+    cases: [
+      // Baselines distinguish unsupported pseudo-elements from rejected chains.
+      { select: '#file::file-selector-button', expect: { throws: false } },
+      { select: '#details::details-content', expect: { throws: false } },
+      { select: '#host::part(foo)', expect: { throws: false } },
+      { select: '::slotted(*)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+
+      // Specification-valid element-backed chains.
+      { select: '#file::file-selector-button::before', expect: { throws: false }, status: 'fail' },
+      { select: '#details::details-content::before', expect: { throws: false } },
+      { select: '#host::part(foo)::before', expect: { throws: false } },
+
+      // Syntactically valid but specified never to match.
+      { select: '#host::part(foo)::part(bar)', expect: { throws: false }, status: 'fail' },
+
+      // ::slotted() allows tree-abiding pseudo-elements.
+      { select: '::slotted(*)::before', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+
+      // Pairwise chain advancement.
+      { select: '#host::part(foo)::before::marker', expect: { throws: false }, browsers: ['chromium', 'firefox'] },
+      { select: '#host::part(foo)::before::marker', expect: { throws: false }, browsers: ['webkit'], status: 'fail' },
+
+      // Invalid origins.
+      { select: '::prefix', expect: { throws: true } },
+      { select: '::suffix', expect: { throws: true } },
+      { select: '#target::before::before', expect: { throws: true } },
+      { select: '#item::marker::before', expect: { throws: true } },
+      { select: '#target::selection::before', expect: { throws: true } },
+      { select: '#host::part(foo)::marker::before', expect: { throws: true } },
+      { select: '::slotted(*)::selection', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true } },
     ],
   },
 ]);

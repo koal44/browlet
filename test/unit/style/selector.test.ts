@@ -896,6 +896,55 @@ describe('selector parser pseudo-element selectors', () => {
     expectInvalidSelector('::before:not(::after > span)');
   });
 
+  it('accepts pseudo-element chains with defined origins', () => {
+    for (const css of [
+      // Explicit CSS Pseudo sub-pseudo-elements.
+      '::before::marker',
+      '::after::marker',
+      '::first-letter::prefix',
+      '::first-letter::suffix',
+
+      // All pseudo-elements are syntactically allowed after element-backed pseudos.
+      '::file-selector-button::before',
+      '::details-content::before',
+      '::part(foo)::before',
+      '::part(foo)::part(bar)',
+
+      // ::slotted() allows tree-abiding pseudo-elements.
+      '::slotted(*)::before',
+
+      // Each link in a longer chain is validated against its immediate origin.
+      '::part(foo)::before::marker',
+    ]) {
+      expectValidSelector(css);
+    }
+  });
+
+  it('rejects pseudo-element chains without defined origins', () => {
+    for (const css of [
+      // ::prefix and ::suffix require a valid pseudo-element origin.
+      '::prefix',
+      '::suffix',
+
+      // Ordinary tree-abiding and highlight pseudo-elements do not accept
+      // arbitrary sub-pseudo-elements.
+      '::before::before',
+      '::before::prefix',
+      '::marker::marker',
+      '::marker::before',
+      '::first-letter::marker',
+      '::selection::before',
+      '::highlight(foo)::before',
+
+      // ::slotted() only allows tree-abiding pseudo-elements.
+      '::slotted(*)::selection',
+
+      // The immediately preceding pseudo-element controls each chain link.
+      '::part(foo)::marker::before',
+    ]) {
+      expectInvalidSelector(css);
+    }
+  });
 });
 
 const specificity = (a: number, b: number, c: number) => ({
