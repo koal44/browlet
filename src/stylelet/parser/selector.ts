@@ -15,6 +15,7 @@ import {
   type Specificity,
 } from './selector-specificity';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
+import { tryParseAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
 import {
   bad, ComponentParserBadReason, isBad, isOk, ok, unwrapParseResultOrThrow,
   type TryComponentParser, type TryComponentParserResult,
@@ -1956,12 +1957,16 @@ const tryConsumeCompoundAsComplexRealSelector: TryComponentParser<ComplexRealSel
   });
 };
 
+// --------------------------------------
+// Nth
+// --------------------------------------
+
 function parseAnPlusBArgument(
   value: readonly ComponentValue[],
   context: SelectorParserContext,
 ): AnPlusBPseudoArgument | null {
   const anb = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeAnPlusB), context),
+    parseAsComponentGrammar(value, withComponentTrivia(tryParseAnPlusB), context),
     'An+B argument',
   );
 
@@ -1975,9 +1980,6 @@ function parseAnPlusBArgument(
   };
 }
 
-function tryConsumeAnPlusB(_c: ComponentCursor): TryComponentParserResult<{ a: number; b: number; }> {
-  return null; // TODO: Implement An+B parser
-}
 
 function parseNthChildArgument(
   value: readonly ComponentValue[],
@@ -1993,7 +1995,7 @@ function tryConsumeNthChildArgument(c: ComponentCursor): TryComponentParserResul
   const start = c.pos();
 
   const anb = unwrapParseResultOrThrow(
-    withComponentTrivia(tryConsumeAnPlusB)(c),
+    withComponentTrivia(tryParseAnPlusB)(c),
     'nth-child An+B',
   );
 
@@ -2009,7 +2011,7 @@ function tryConsumeNthChildArgument(c: ComponentCursor): TryComponentParserResul
 
   return ok({
     kind: PseudoArgumentKind.NthChild,
-    ...anb,
+    formula: anb,
     of,
   });
 }
@@ -2030,7 +2032,7 @@ function tryConsumeNthChildOfClause(c: ComponentCursor): TryComponentParserResul
   }
 
   const selectors = unwrapParseResultOrThrow(
-    withComponentTrivia(tryConsumeComplexRealSelectorList)(c),
+    tryConsumeNthChildOfSelectorList(c),
     'nth-child of selector list',
   );
 
@@ -2040,6 +2042,19 @@ function tryConsumeNthChildOfClause(c: ComponentCursor): TryComponentParserResul
   }
 
   return ok(selectors);
+}
+
+function tryConsumeNthChildOfSelectorList(
+  c: ComponentCursor,
+): TryComponentParserResult<ComplexRealSelectorList> {
+  const outerContext = c.context as SelectorParserContext;
+
+  try {
+    c.context = contextForSelectorArgument(outerContext);
+    return withComponentTrivia(tryConsumeComplexRealSelectorList)(c);
+  } finally {
+    c.context = outerContext;
+  }
 }
 
 function parseLanguageRangeListArgument(
@@ -2461,14 +2476,11 @@ type LanguageRange = string;
 
 type AnPlusBPseudoArgument = {
   kind: PseudoArgumentKind.AnPlusB;
-  a: number;
-  b: number;
-};
+} & AnPlusBValue;
 
 type NthChildPseudoArgument = {
   kind: PseudoArgumentKind.NthChild;
-  a: number;
-  b: number;
+  formula: AnPlusBValue;
   of: ComplexRealSelectorList | null;
 };
 

@@ -591,8 +591,126 @@ describe('selector parser pseudo-class selectors', () => {
     });
   });
 
-  it('rejects :nth-child() until An+B parsing is implemented', () => {
-    expectInvalidSelector(':nth-child(2n + 1)');
+  it.each([
+    ['odd', 2, 1],
+    ['EVEN', 2, 0],
+    ['1', 0, 1],
+    ['+1', 0, 1],
+    ['-1', 0, -1],
+    ['n', 1, 0],
+    ['+n', 1, 0],
+    ['-n', -1, 0],
+    ['2n', 2, 0],
+    ['+2n', 2, 0],
+    ['-2n', -2, 0],
+    ['n+1', 1, 1],
+    ['n + 1', 1, 1],
+    ['n +1', 1, 1],
+    ['n-1', 1, -1],
+    ['n - 1', 1, -1],
+    ['n -1', 1, -1],
+    ['2n+3', 2, 3],
+    ['2n + 3', 2, 3],
+    ['2n-123', 2, -123],
+    ['+n-123', 1, -123],
+    ['-n-123', -1, -123],
+    ['2n- 123', 2, -123],
+    ['+n- 123', 1, -123],
+    ['-n- 123', -1, -123],
+    ['-0n+0', 0, 0],
+    ['N-12', 1, -12],
+    ['n/**/+1', 1, 1],
+    ['+/**/n', 1, 0],
+    ['n\\2d 12', 1, -12],
+  ] as const)('parses :nth-child(%s) as An+B (%i, %i)', (formula, a, b) => {
+    expect(expectComplexSelector(`:nth-child(${formula})`)).toMatchObject({
+      parts: [
+        pseudoClassPart('nth-child', {
+          kind: PseudoArgumentKind.NthChild,
+          formula: { a, b },
+          of: null,
+        }),
+      ],
+    });
+  });
+
+  it.each([
+    '',
+    '+ n',
+    '+ 2n',
+    '3 n',
+    '3n + -6',
+    'n + +1',
+    'n - -1',
+    '1.0',
+    '2.0n',
+    '1e0',
+    'n 1',
+    'n- -1',
+    'foo',
+    '2nn',
+    '+/**/ n',
+    'n/**/ 1',
+    '2n+-1',
+    'n--1',
+  ])('rejects invalid :nth-child(%s) An+B syntax', (formula) => {
+    expectInvalidSelector(`:nth-child(${formula})`);
+  });
+
+  it.each([
+    'nth-child',
+    'nth-last-child',
+    'nth-of-type',
+    'nth-last-of-type',
+  ])('parses An+B arguments for :%s()', (name) => {
+    expect(expectComplexSelector(`:${name}(2n + 1)`)).toMatchObject({
+      parts: [
+        pseudoClassPart(name, {
+          kind: name.includes('of-type')
+            ? PseudoArgumentKind.AnPlusB
+            : PseudoArgumentKind.NthChild,
+          ...(name.includes('of-type')
+            ? { a: 2, b: 1 }
+            : { formula: { a: 2, b: 1 } }),
+        }),
+      ],
+    });
+  });
+
+  it('parses a selector list after the :nth-child() of keyword', () => {
+    expect(expectComplexSelector(':nth-child(2n + 1 of .item, [hidden])')).toMatchObject({
+      parts: [
+        pseudoClassPart('nth-child', {
+          kind: PseudoArgumentKind.NthChild,
+          formula: { a: 2, b: 1 },
+          of: selectorList([
+            {
+              parts: [
+                realClassPart(null, 'item'),
+              ],
+            },
+            {
+              parts: [
+                realPart(null, compound(null, [attrSelector('hidden')])),
+              ],
+            },
+          ]),
+        }),
+      ],
+    });
+  });
+
+  it('parses complex selectors after the :nth-last-child() of keyword', () => {
+    expectValidSelector(':nth-last-child(odd of article > .entry)');
+  });
+
+  it.each([
+    ':nth-child(2n of)',
+    ':nth-child(2n of .item,)',
+    ':nth-child(2n of > .item)',
+    ':nth-of-type(2n of .item)',
+  ])('rejects an invalid An+B of clause in %s', (selector) => {
+    expectInvalidSelector(selector);
   });
 });
 
@@ -838,7 +956,7 @@ describe('selector parser pseudo-element selectors', () => {
       '::part(label):host(.label)',
       '::part(label):host-context(.label)',
       '::part(label)::slotted(.label)',
-      // '::part(label):nth-child(2n of .label)',
+      '::part(label):nth-child(2n of .label)',
     ]) {
       expectValidSelector(css);
     }

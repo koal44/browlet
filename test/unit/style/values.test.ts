@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseStylesheet } from '../../../src/stylelet/parser/ast';
 import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parser/types';
+import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 
 const animationName = (...values: unknown[]) => ({
   type: 'animation-name',
@@ -25,6 +26,19 @@ function valueOf(css: string): unknown {
 }
 
 describe('style values', () => {
+
+  describe('An+B', () => {
+    it.each([
+      [{ a: 0, b: 3 }, '3'],
+      [{ a: 1, b: 0 }, 'n'],
+      [{ a: -1, b: 3 }, '-n+3'],
+      [{ a: 2, b: -1 }, '2n-1'],
+      [{ a: -2, b: 0 }, '-2n'],
+      [{ a: 0, b: -0 }, '0'],
+    ] as const)('serializes %j as %s', (value, expected) => {
+      expect(serializeAnPlusB(value)).toBe(expected);
+    });
+  });
 
   // This is unfinished!! we'll come back to it later. promise.
   describe.skip('animation-name', () => {
