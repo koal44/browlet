@@ -1271,3 +1271,65 @@ runScenarios('element-backed pseudo-element pseudo-class validity', 'normal', [
     ],
   },
 ]);
+
+runScenarios('logical selector argument restrictions', 'normal', [
+  {
+    name: 'native validity for compound-only logical arguments and has restrictions',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <div id="host">
+        <span class="a"><span class="b">nested</span></span>
+        <span class="a b">slotted</span>
+      </div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = '<slot></slot>';
+      });
+    },
+    cases: [
+      // Baselines: the shadow selector functionals accept compound arguments.
+      { select: '::slotted(.a)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+      { select: ':host(.a)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+      { select: ':host-context(.a)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, browsers: ['chromium'] },
+      { select: ':host-context(.a)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, browsers: ['firefox', 'webkit'], status: 'fail' },
+
+      // Preserve ::slotted()'s compound boundary through nested selector arguments.
+      // Otherwise shadow style invalidation can depend on arbitrary light-tree structure.
+      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium'], status: 'fail' },
+      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['firefox', 'webkit'] },
+
+      // Logical pseudo-classes do inherit the compound-only restriction.
+      // :not() is strict, while :is() and :where() drop the invalid complex arm.
+      { select: '::slotted(:not(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium', 'firefox'] },
+      { select: '::slotted(:not(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['webkit'], status: 'fail' },
+      { select: '::slotted(:is(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+      { select: '::slotted(:where(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false } },
+      { select: ':host(:not(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium', 'firefox'] },
+      { select: ':host(:not(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['webkit'], status: 'fail' },
+      { select: ':host-context(:is(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, browsers: ['chromium'] },
+      { select: ':host-context(:is(.a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, browsers: ['firefox', 'webkit'], status: 'fail' },
+
+      // :has() takes inherently complex relative selectors, so it is invalid
+      // where the surrounding grammar permits compound selectors only.
+      { select: '::slotted(:has(.b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium'] },
+      { select: '::slotted(:has(.b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['firefox', 'webkit'], status: 'fail' },
+
+      { select: ':host-context(:has(.b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true } },
+
+      // Direct and strict-indirect nesting of :has() invalidates the selector.
+      { select: ':has(:has(.b))', expect: { throws: true } },
+      { select: ':has(:not(:has(.b)))', expect: { throws: true } },
+
+      // A nested :has() inside forgiving :is() is an invalid arm and is dropped.
+      { select: ':has(:is(:has(.b)))', expect: { throws: false } },
+
+      // No currently supported pseudo-element is defined as :has-allowed.
+      { select: ':has(::before)', expect: { throws: true } },
+      { select: ':has(:not(::before))', expect: { throws: true } },
+      { select: ':has(:is(::before))', expect: { throws: false } },
+    ],
+  },
+]);

@@ -56,20 +56,43 @@ export type SelectorParserContext = Readonly<{
 
   // Named namespace prefixes declared for this parse; absence means none are declared.
   declaredNamespacePrefixes?: ReadonlySet<string>;
+
+  // Strongest selector grammar allowed by the enclosing selector argument.
+  selectorRestriction?: SelectorRestriction;
+
+  // Whether this selector is nested anywhere inside a :has() argument.
+  insideHas?: boolean;
 }>;
+
+export type SelectorRestriction = 'complex-real' | 'compound' | 'simple';
 
 function contextForSelectorArgument(
   context: SelectorParserContext,
+  restriction?: SelectorRestriction,
 ): SelectorParserContext {
   const pseudoElement = context.pseudoClassTailElement;
 
   return {
     declaredNamespacePrefixes: context.declaredNamespacePrefixes,
+    selectorRestriction: narrowSelectorRestriction(
+      context.selectorRestriction,
+      restriction,
+    ),
+    insideHas: context.insideHas,
     pseudoClassTailElement:
       pseudoElement !== undefined && !isElementBackedPseudoElement(pseudoElement)
         ? pseudoElement
         : undefined,
   };
+}
+
+function narrowSelectorRestriction(
+  a?: SelectorRestriction,
+  b?: SelectorRestriction,
+): SelectorRestriction {
+  if (a === 'simple' || b === 'simple') return 'simple';
+  if (a === 'compound' || b === 'compound') return 'compound';
+  return 'complex-real';
 }
 
 /**
@@ -662,9 +685,18 @@ const consumePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> 
   [
     one(tryConsumePseudoElementSelector, {
       contextAfter: (pseudoElement, context) => {
+        const pseudoElName = canonicalPseudoElementName(pseudoElement.name);
+        const selectorContext = context as SelectorParserContext;
         const newContext: SelectorParserContext = {
-          ...(context as SelectorParserContext),
-          pseudoClassTailElement: canonicalPseudoElementName(pseudoElement.name) ?? undefined,
+          ...selectorContext,
+          pseudoClassTailElement: pseudoElName ?? undefined,
+          selectorRestriction:
+            pseudoElName !== null && !isElementBackedPseudoElement(pseudoElName)
+              ? narrowSelectorRestriction(
+                selectorContext.selectorRestriction,
+                'compound',
+              )
+              : selectorContext.selectorRestriction,
         };
         return newContext;
       },
@@ -1600,11 +1632,21 @@ function createPseudoClassSelector(
     }
 
     case 'has': {
-      if (value === null) return null;
+      if (
+        value === null ||
+        context.insideHas === true ||
+        context.selectorRestriction === 'compound' ||
+        context.selectorRestriction === 'simple'
+      ) return null;
+
+      const argumentContext: SelectorParserContext = {
+        ...contextForSelectorArgument(context),
+        insideHas: true,
+      };
 
       const selectors = parseRelativeSelectorList(
         value,
-        contextForSelectorArgument(context),
+        argumentContext,
       );
       if (selectors === null) return null;
 
@@ -1789,9 +1831,9 @@ function createPseudoClassSelector(
         });
       }
 
-      const selector = parseCompoundSelector(
+      const selector = parseRestrictedCompoundSelectorArgument(
         value,
-        contextForSelectorArgument(context),
+        context,
       );
       if (selector === null) return null;
 
@@ -1814,9 +1856,9 @@ function createPseudoClassSelector(
     case 'host-context': {
       if (value === null) return null;
 
-      const selector = parseCompoundSelector(
+      const selector = parseRestrictedCompoundSelectorArgument(
         value,
-        contextForSelectorArgument(context),
+        context,
       );
       if (selector === null) return null;
 
@@ -1867,10 +1909,7 @@ function parseForgivingSelectorListArgument(
   context: SelectorParserContext,
 ): ForgivingSelectorListPseudoArgument {
   const argumentContext = contextForSelectorArgument(context);
-  const parseSelector =
-    argumentContext.pseudoClassTailElement === undefined
-      ? tryConsumeComplexRealSelector
-      : tryConsumeCompoundAsComplexRealSelector;
+  const parseSelector = parserForSelectorRestriction(argumentContext);
 
   const parsed = parseListAsComponentGrammar(
     arg,
@@ -1897,10 +1936,7 @@ function parseStrictComplexRealSelectorListArgument(
   context: SelectorParserContext,
 ): TryComponentParserResult<ComplexRealSelectorList> {
   const argumentContext = contextForSelectorArgument(context);
-  const parseSelector =
-    argumentContext.pseudoClassTailElement === undefined
-      ? tryConsumeComplexRealSelector
-      : tryConsumeCompoundAsComplexRealSelector;
+  const parseSelector = parserForSelectorRestriction(argumentContext);
 
   const parsed = parseListAsComponentGrammar(
     arg,
@@ -1956,6 +1992,66 @@ const tryConsumeCompoundAsComplexRealSelector: TryComponentParser<ComplexRealSel
     specificity: result.value.specificity,
   });
 };
+
+const tryConsumeSimpleAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
+  const result = tryConsumeSimpleSelector(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  const selector = result.value;
+  const compound: CompoundSelector = {
+    kind: SelectorKind.CompoundSelector,
+    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
+    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
+    specificity: selector.specificity,
+  };
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelector,
+    parts: [{ combinator: null, compound }],
+    specificity: compound.specificity,
+  });
+};
+
+function parserForSelectorRestriction(
+  context: SelectorParserContext,
+): TryComponentParser<ComplexRealSelector> {
+  switch (context.selectorRestriction) {
+    case 'simple':
+      return tryConsumeSimpleAsComplexRealSelector;
+    case 'compound':
+      return tryConsumeCompoundAsComplexRealSelector;
+    case 'complex-real':
+    case undefined:
+      return tryConsumeComplexRealSelector;
+  }
+}
+
+function parseRestrictedCompoundSelectorArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): CompoundSelector | null {
+  const argumentContext = contextForSelectorArgument(context, 'compound');
+
+  if (argumentContext.selectorRestriction !== 'simple') {
+    return parseCompoundSelector(value, argumentContext);
+  }
+
+  const selector = parseSimpleSelector(value, argumentContext);
+
+  if (selector === null) {
+    return null;
+  }
+
+  return {
+    kind: SelectorKind.CompoundSelector,
+    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
+    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
+    specificity: selector.specificity,
+  };
+}
 
 // --------------------------------------
 // Nth
@@ -2048,10 +2144,26 @@ function tryConsumeNthChildOfSelectorList(
   c: ComponentCursor,
 ): TryComponentParserResult<ComplexRealSelectorList> {
   const outerContext = c.context as SelectorParserContext;
+  const argumentContext = contextForSelectorArgument(outerContext);
 
   try {
-    c.context = contextForSelectorArgument(outerContext);
-    return withComponentTrivia(tryConsumeComplexRealSelectorList)(c);
+    c.context = argumentContext;
+
+    const consumeArms = commaRepeat(parserForSelectorRestriction(argumentContext));
+    const arms = unwrapParseResultOrThrow(
+      withComponentTrivia(consumeArms)(c),
+      'restricted nth-child of selector list arms',
+    );
+
+    if (arms === null) {
+      return null;
+    }
+
+    return ok({
+      kind: SelectorKind.ComplexRealSelectorList,
+      arms,
+      specificity: listSpecificity(arms),
+    });
   } finally {
     c.context = outerContext;
   }
@@ -2216,6 +2328,10 @@ function createPseudoElementSelector(
     return null;
   }
 
+  if (context.insideHas === true && !isHasAllowedPseudoElement(name)) {
+    return null;
+  }
+
   switch (name) {
     // Typographic pseudo-elements
 
@@ -2300,9 +2416,9 @@ function createPseudoElementSelector(
         return null;
       }
 
-      const selector = parseCompoundSelector(
+      const selector = parseRestrictedCompoundSelectorArgument(
         value,
-        contextForSelectorArgument(context),
+        context,
       );
 
       if (selector === null) {
@@ -2557,6 +2673,11 @@ function isValidSubPseudoElement(
     default:
       return false;
   }
+}
+
+function isHasAllowedPseudoElement(_pseudoElement: PseudoElementName): boolean {
+  // Selectors 4 defines the opt-in hook, but no current pseudo-element uses it.
+  return false;
 }
 
 function isValidCombinatorAfterPseudoElement(pseudoElement: PseudoElementName, combinator: Combinator): boolean {

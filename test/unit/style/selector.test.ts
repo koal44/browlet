@@ -1357,6 +1357,86 @@ it('rejects pseudo-compounds inside ::slotted() compound-selector arguments', ()
   expectInvalidSelector('::slotted(.foo::before)');
 });
 
+it.each([
+  '::slotted(:not(.a > .b))',
+  ':host(:not(.a > .b))',
+  ':host-context(:not(.a > .b))',
+  '::slotted(:has(.b))',
+  '::slotted(:nth-child(2n of .a > .b))',
+  '::slotted(:nth-last-child(2n of .a .b))',
+])('preserves compound-only shadow argument restrictions through %s', (css) => {
+  expectInvalidSelector(css);
+});
+
+it('allows compound selectors in nested ::slotted() selector arguments', () => {
+  expectValidSelector('::slotted(:nth-child(2n of .a.b))');
+});
+
+it('drops complex forgiving arms under compound-only shadow arguments', () => {
+  expect(expectComplexSelector('::slotted(:is(.a > .b, .a.b))')).toMatchObject({
+    parts: [
+      pseudoElementPart(null, 'slotted', [], {
+        kind: PseudoArgumentKind.CompoundSelector,
+        selector: compound(null, [
+          pseudoClass('is', {
+            kind: PseudoArgumentKind.ForgivingSelectorList,
+            selectors: selectorList([
+              {
+                parts: [
+                  realPart(null, compound(null, [
+                    classSelector('a'),
+                    classSelector('b'),
+                  ])),
+                ],
+              },
+            ]),
+          }),
+        ]),
+      }),
+    ],
+  });
+});
+
+it.each([
+  ':has(:has(.b))',
+  ':has(:not(:has(.b)))',
+  ':has(::before)',
+  ':has(:not(::before))',
+])('rejects nested :has() and pseudo-elements in %s', (css) => {
+  expectInvalidSelector(css);
+});
+
+it('drops nested :has() and pseudo-elements from forgiving arms inside :has()', () => {
+  expect(expectComplexSelector(':has(:is(:has(.b), ::before, .a))')).toMatchObject({
+    parts: [
+      pseudoClassPart('has', {
+        kind: PseudoArgumentKind.RelativeSelectorList,
+        selectors: selectorList([
+          {
+            combinator: null,
+            selector: {
+              parts: [
+                part(null, compound(null, [
+                  pseudoClass('is', {
+                    kind: PseudoArgumentKind.ForgivingSelectorList,
+                    selectors: selectorList([
+                      {
+                        parts: [
+                          realClassPart(null, 'a'),
+                        ],
+                      },
+                    ]),
+                  }),
+                ])),
+              ],
+            },
+          },
+        ]),
+      }),
+    ],
+  });
+});
+
 it('parses :host-context() as a compound-selector pseudo-class argument', () => {
   expect(expectComplexSelector(':host-context(.theme)')).toMatchObject({
     parts: [
