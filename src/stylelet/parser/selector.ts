@@ -9,7 +9,7 @@ import {
   parseAsComponentGrammar, parseListAsComponentGrammar,
 } from './syntax';
 import type { IdentToken, HashToken, StringToken } from './tokens';
-import { HashTokenFlag, TokenKind } from './tokens';
+import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
 import {
   addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity,
   type Specificity,
@@ -1490,12 +1490,13 @@ export type PseudoClassName =
   | 'is' | 'where' | 'not' | 'has'
 
   // Elemental / linguistic / location pseudo-classes
-  | 'defined'
+  | 'defined' | 'state'
   | 'dir' | 'lang'
-  | 'any-link' | 'link' | 'visited' | 'target' | 'scope'
+  | 'any-link' | 'link' | 'visited' | 'target' | 'local-link' | 'scope'
 
   // User action pseudo-classes
   | 'hover' | 'active' | 'focus' | 'focus-visible' | 'focus-within'
+  | 'interest-source' | 'interest-target'
 
   // Resource state pseudo-classes
   | 'playing' | 'paused' | 'seeking' | 'buffering' | 'stalled' | 'muted' | 'volume-locked'
@@ -1507,21 +1508,27 @@ export type PseudoClassName =
   | 'enabled' | 'disabled' | 'read-only' | 'read-write' | 'placeholder-shown' | 'autofill'
   | 'default' | 'checked' | 'unchecked' | 'indeterminate'
   | 'valid' | 'invalid' | 'in-range' | 'out-of-range'
-  | 'required' | 'optional' | 'user-valid' | 'user-invalid'
+  | 'required' | 'optional' | 'user-valid' | 'user-invalid' | 'blank'
+
+  // Time-dimensional pseudo-classes
+  | 'current' | 'past' | 'future'
+
+  // Heading pseudo-classes
+  | 'heading'
 
   // Tree-structural pseudo-classes
   | 'root' | 'empty'
   | 'nth-child' | 'nth-last-child' | 'first-child' | 'last-child' | 'only-child'
   | 'nth-of-type' | 'nth-last-of-type' | 'first-of-type' | 'last-of-type' | 'only-of-type'
 
+  // Grid-structural pseudo-classes
+  | 'nth-col' | 'nth-last-col'
+
   // Shadow pseudo-classes
   | 'host' | 'host-context' | 'has-slotted';
 
-// Removed/deferred Selectors Level 4 draft pseudo-classes.
+// Removed Selectors Level 4 draft pseudo-classes.
 // :target-within was removed in favor of :has(:target).
-// :local-link, :blank, :interest-source, :interest-target,
-// :nth-col(), :nth-last-col(), and time-dimensional pseudo-classes
-// were deferred to Selectors Level 5.
 // Drag-and-drop pseudo-classes such as :drop() were dropped.
 function canonicalPseudoClassName(rawName: string): PseudoClassName | null {
   const name = asciiLower(rawName);
@@ -1534,21 +1541,25 @@ function canonicalPseudoClassName(rawName: string): PseudoClassName | null {
       return 'autofill';
 
     case 'is': case 'where': case 'not': case 'has':
-    case 'defined':
+    case 'defined': case 'state':
     case 'dir': case 'lang':
-    case 'any-link': case 'link': case 'visited': case 'target': case 'scope':
+    case 'any-link': case 'link': case 'visited': case 'target': case 'local-link': case 'scope':
     case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
+    case 'interest-source': case 'interest-target':
     case 'playing': case 'paused': case 'seeking': case 'buffering':
     case 'stalled': case 'muted': case 'volume-locked':
     case 'open': case 'popover-open': case 'modal': case 'fullscreen': case 'picture-in-picture':
     case 'enabled': case 'disabled': case 'read-only': case 'read-write': case 'placeholder-shown':
     case 'autofill': case 'default': case 'checked': case 'unchecked': case 'indeterminate':
     case 'valid': case 'invalid': case 'in-range': case 'out-of-range':
-    case 'required': case 'optional': case 'user-valid': case 'user-invalid':
+    case 'required': case 'optional': case 'user-valid': case 'user-invalid': case 'blank':
+    case 'current': case 'past': case 'future':
+    case 'heading':
     case 'root': case 'empty':
     case 'nth-child': case 'nth-last-child': case 'first-child': case 'last-child': case 'only-child':
     case 'nth-of-type': case 'nth-last-of-type':
     case 'first-of-type': case 'last-of-type': case 'only-of-type':
+    case 'nth-col': case 'nth-last-col':
     case 'host': case 'host-context': case 'has-slotted':
       return name;
 
@@ -1669,34 +1680,18 @@ function createPseudoClassSelector(
       return createNoArgumentPseudoClassSelector(name, value);
     }
 
+    case 'state': {
+      return createArgumentPseudoClassSelector(name, value, context, parseIdentArgument);
+    }
+
     // Linguistic pseudo-classes
 
     case 'dir': {
-      if (value === null) return null;
-
-      const argument = parseDirectionArgument(value, context);
-      if (argument === null) return null;
-
-      return ok({
-        kind: SelectorKind.PseudoClassSelector,
-        name,
-        argument,
-        specificity: SpecificityB,
-      });
+      return createArgumentPseudoClassSelector(name, value, context, parseDirectionArgument);
     }
 
     case 'lang': {
-      if (value === null) return null;
-
-      const argument = parseLanguageRangeListArgument(value, context);
-      if (argument === null) return null;
-
-      return ok({
-        kind: SelectorKind.PseudoClassSelector,
-        name,
-        argument,
-        specificity: SpecificityB,
-      });
+      return createArgumentPseudoClassSelector(name, value, context, parseLanguageRangeListArgument);
     }
 
     // Location pseudo-classes
@@ -1706,6 +1701,19 @@ function createPseudoClassSelector(
     case 'visited':
     case 'target': {
       return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    case 'local-link': {
+      if (value === null) {
+        return createNoArgumentPseudoClassSelector(name, value);
+      }
+
+      return createArgumentPseudoClassSelector(
+        name,
+        value,
+        context,
+        parseNonNegativeIntegerArgument,
+      );
     }
 
     case 'scope': {
@@ -1718,7 +1726,9 @@ function createPseudoClassSelector(
     case 'active':
     case 'focus':
     case 'focus-visible':
-    case 'focus-within': {
+    case 'focus-within':
+    case 'interest-source':
+    case 'interest-target': {
       return createNoArgumentPseudoClassSelector(name, value);
     }
 
@@ -1763,8 +1773,39 @@ function createPseudoClassSelector(
     case 'required':
     case 'optional':
     case 'user-valid':
-    case 'user-invalid': {
+    case 'user-invalid':
+    case 'blank': {
       return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Time-dimensional pseudo-classes
+
+    case 'current': {
+      if (value === null) {
+        return createNoArgumentPseudoClassSelector(name, value);
+      }
+
+      return createArgumentPseudoClassSelector(
+        name,
+        value,
+        context,
+        parseCompoundSelectorListArgument,
+      );
+    }
+
+    case 'past':
+    case 'future': {
+      return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Heading pseudo-classes
+
+    case 'heading': {
+      if (value === null) {
+        return createNoArgumentPseudoClassSelector(name, value);
+      }
+
+      return createArgumentPseudoClassSelector(name, value, context, parseIntegerListArgument);
     }
 
     // Tree-structural pseudo-classes
@@ -1776,20 +1817,16 @@ function createPseudoClassSelector(
 
     case 'nth-child':
     case 'nth-last-child': {
-      if (value === null) return null;
-
-      const argument = parseNthChildArgument(value, context);
-      if (argument === null) return null;
-
-      return ok({
-        kind: SelectorKind.PseudoClassSelector,
+      return createArgumentPseudoClassSelector(
         name,
-        argument,
-        specificity: addSpecificity(
+        value,
+        context,
+        parseNthChildArgument,
+        (argument) => addSpecificity(
           SpecificityB,
           argument.of?.specificity ?? Specificity0,
         ),
-      });
+      );
     }
 
     case 'first-child':
@@ -1800,23 +1837,20 @@ function createPseudoClassSelector(
 
     case 'nth-of-type':
     case 'nth-last-of-type': {
-      if (value === null) return null;
-
-      const argument = parseAnPlusBArgument(value, context);
-      if (argument === null) return null;
-
-      return ok({
-        kind: SelectorKind.PseudoClassSelector,
-        name,
-        argument,
-        specificity: SpecificityB,
-      });
+      return createArgumentPseudoClassSelector(name, value, context, parseAnPlusBArgument);
     }
 
     case 'first-of-type':
     case 'last-of-type':
     case 'only-of-type': {
       return createNoArgumentPseudoClassSelector(name, value);
+    }
+
+    // Grid-structural pseudo-classes
+
+    case 'nth-col':
+    case 'nth-last-col': {
+      return createArgumentPseudoClassSelector(name, value, context, parseAnPlusBArgument);
     }
 
     // Shadow pseudo-classes
@@ -1903,6 +1937,37 @@ function createNoArgumentPseudoClassSelector(
     specificity,
   });
 }
+
+type PseudoClassArgumentParser<T extends PseudoClassArgument> = (
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+) => T | null;
+
+function createArgumentPseudoClassSelector<T extends PseudoClassArgument>(
+  name: PseudoClassName,
+  value: readonly ComponentValue[] | null,
+  context: SelectorParserContext,
+  parseArgument: PseudoClassArgumentParser<T>,
+  specificity: Specificity | ((argument: T) => Specificity) = SpecificityB,
+): TryComponentParserResult<PseudoClassSelector> {
+  if (value === null) return null;
+
+  const argument = parseArgument(value, context);
+  if (argument === null) return null;
+
+  return ok({
+    kind: SelectorKind.PseudoClassSelector,
+    name,
+    argument,
+    specificity: typeof specificity === 'function'
+      ? specificity(argument)
+      : specificity,
+  });
+}
+
+// --------------------------------------
+// Selector-valued arguments
+// --------------------------------------
 
 function parseForgivingSelectorListArgument(
   arg: readonly ComponentValue[],
@@ -2053,6 +2118,25 @@ function parseRestrictedCompoundSelectorArgument(
   };
 }
 
+function parseCompoundSelectorListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): CompoundSelectorListPseudoArgument | null {
+  const selectors = parseCompoundSelectorList(
+    value,
+    contextForSelectorArgument(context, 'compound'),
+  );
+
+  if (selectors === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.CompoundSelectorList,
+    selectors,
+  };
+}
+
 // --------------------------------------
 // Nth
 // --------------------------------------
@@ -2075,7 +2159,6 @@ function parseAnPlusBArgument(
     ...anb,
   };
 }
-
 
 function parseNthChildArgument(
   value: readonly ComponentValue[],
@@ -2167,6 +2250,102 @@ function tryConsumeNthChildOfSelectorList(
   } finally {
     c.context = outerContext;
   }
+}
+
+// --------------------------------------
+// Token-value arguments
+// --------------------------------------
+
+function parseIdentArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IdentPseudoArgument | null {
+  const ident = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeIdentToken), context),
+    'ident argument',
+  );
+
+  if (ident === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.Ident,
+    value: ident.value,
+  };
+}
+
+function parseIntegerArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerPseudoArgument | null {
+  const integer = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeInteger), context),
+    'integer argument',
+  );
+
+  if (integer === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.Integer,
+    value: integer,
+  };
+}
+
+function parseNonNegativeIntegerArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerPseudoArgument | null {
+  const argument = parseIntegerArgument(value, context);
+  return argument !== null && argument.value >= 0 ? argument : null;
+}
+
+function parseIntegerListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerListPseudoArgument | null {
+  const parsed = parseListAsComponentGrammar(
+    value,
+    withComponentTrivia(tryConsumeInteger),
+    context,
+  );
+  const values: number[] = [];
+
+  for (const result of parsed) {
+    const integer = unwrapParseResultOrThrow(result, 'integer list item');
+
+    if (integer === null) {
+      return null;
+    }
+
+    values.push(integer);
+  }
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.IntegerList,
+    values,
+  };
+}
+
+function tryConsumeInteger(c: ComponentCursor): TryComponentParserResult<number> {
+  const start = c.pos();
+  const component = c.next();
+
+  if (
+    !isTokenKind(component, TokenKind.Number) ||
+    component.flag !== NumberTokenFlag.Integer
+  ) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok(component.value);
 }
 
 function parseLanguageRangeListArgument(
@@ -2267,6 +2446,7 @@ function isDefaultValidTailPseudoClass(name: PseudoClassName): boolean {
   switch (name) {
     // User action pseudo-classes
     case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
+    case 'interest-source': case 'interest-target':
       return true;
 
     // Logical pseudo-classes that inherit the pseudo-element tail context
@@ -2534,11 +2714,15 @@ export enum PseudoArgumentKind {
   ForgivingSelectorList = 'forgiving-selector-list',
   ComplexRealSelectorList = 'complex-real-selector-list',
   RelativeSelectorList = 'relative-selector-list',
+  CompoundSelectorList = 'compound-selector-list',
   CompoundSelector = 'compound-selector',
   Direction = 'direction',
   LanguageRangeList = 'language-range-list',
   AnPlusB = 'an-plus-b',
   NthChild = 'nth-child',
+  Ident = 'ident',
+  Integer = 'integer',
+  IntegerList = 'integer-list',
   PartNameList = 'part-name-list',
   CustomIdent = 'custom-ident',
 }
@@ -2547,11 +2731,15 @@ type PseudoClassArgument =
   | ForgivingSelectorListPseudoArgument
   | ComplexRealSelectorListPseudoArgument
   | RelativeSelectorListPseudoArgument
+  | CompoundSelectorListPseudoArgument
   | CompoundSelectorPseudoArgument
   | DirectionPseudoArgument
   | LanguageRangeListPseudoArgument
   | AnPlusBPseudoArgument
-  | NthChildPseudoArgument;
+  | NthChildPseudoArgument
+  | IdentPseudoArgument
+  | IntegerPseudoArgument
+  | IntegerListPseudoArgument;
 
 type PseudoElementArgument =
   | CompoundSelectorPseudoArgument
@@ -2571,6 +2759,11 @@ type RelativeSelectorListPseudoArgument = {
 type ComplexRealSelectorListPseudoArgument = {
   kind: PseudoArgumentKind.ComplexRealSelectorList;
   selectors: ComplexRealSelectorList;
+};
+
+type CompoundSelectorListPseudoArgument = {
+  kind: PseudoArgumentKind.CompoundSelectorList;
+  selectors: CompoundSelectorList;
 };
 
 type CompoundSelectorPseudoArgument = {
@@ -2598,6 +2791,21 @@ type NthChildPseudoArgument = {
   kind: PseudoArgumentKind.NthChild;
   formula: AnPlusBValue;
   of: ComplexRealSelectorList | null;
+};
+
+type IdentPseudoArgument = {
+  kind: PseudoArgumentKind.Ident;
+  value: string;
+};
+
+type IntegerPseudoArgument = {
+  kind: PseudoArgumentKind.Integer;
+  value: number;
+};
+
+type IntegerListPseudoArgument = {
+  kind: PseudoArgumentKind.IntegerList;
+  values: number[];
 };
 
 type PartNameListPseudoArgument = {

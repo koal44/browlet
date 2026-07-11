@@ -875,6 +875,48 @@ describe('pseudo-class selectors', () => {
     });
   });
 
+  describe(':lang()', () => {
+    it('parses a comma-separated list of language ranges', () => {
+      expect(expectComplexSelector(':lang(en, "*-Latn")')).toMatchObject({
+        parts: [
+          pseudoClassPart('lang', {
+            kind: PseudoArgumentKind.LanguageRangeList,
+            ranges: ['en', '*-Latn'],
+          }),
+        ],
+      });
+    });
+
+    it('parses escaped wildcard and empty-string language ranges', () => {
+      expect(expectComplexSelector(String.raw`:lang(\*-CH, "")`)).toMatchObject({
+        parts: [
+          pseudoClassPart('lang', {
+            kind: PseudoArgumentKind.LanguageRangeList,
+            ranges: ['*-CH', ''],
+          }),
+        ],
+      });
+    });
+
+    it('accepts a CSS identifier that is not a well-formed BCP 47 language range', () => {
+      expect(expectComplexSelector(':lang(åå)')).toMatchObject({
+        parts: [
+          pseudoClassPart('lang', {
+            kind: PseudoArgumentKind.LanguageRangeList,
+            ranges: ['åå'],
+          }),
+        ],
+      });
+    });
+
+    it('rejects syntactically invalid :lang() arguments', () => {
+      expectInvalidSelector(':lang()');
+      expectInvalidSelector(':lang(*)');
+      expectInvalidSelector(':lang(en,)');
+      expectInvalidSelector(':lang(en fr)');
+    });
+  });
+
   describe(':dir()', () => {
     it('parses :dir(ltr) and :dir(rtl)', () => {
       expect(expectComplexSelector(':dir(ltr)')).toMatchObject({
@@ -915,6 +957,138 @@ describe('pseudo-class selectors', () => {
     });
   });
 
+  describe('Selectors Level 5 pseudo-classes', () => {
+    it.each([
+      'local-link',
+      'interest-source',
+      'interest-target',
+      'blank',
+      'current',
+      'past',
+      'future',
+      'heading',
+    ])('parses :%s as a bare pseudo-class', (name) => {
+      expect(expectComplexSelector(`:${name}`)).toMatchObject({
+        parts: [pseudoClassPart(name)],
+      });
+    });
+
+    it('parses :local-link() with one non-negative integer', () => {
+      expect(expectComplexSelector(':local-link(2)')).toMatchObject({
+        parts: [
+          pseudoClassPart('local-link', {
+            kind: PseudoArgumentKind.Integer,
+            value: 2,
+          }),
+        ],
+      });
+    });
+
+    it.each([
+      ':local-link()',
+      ':local-link(-1)',
+      ':local-link(1.0)',
+      ':local-link(1, 2)',
+    ])('rejects invalid functional local-link syntax in %s', (selector) => {
+      expectInvalidSelector(selector);
+    });
+
+    it('parses :current() with a compound-selector list', () => {
+      expect(expectComplexSelector(':current(p, .active)')).toMatchObject({
+        parts: [
+          pseudoClassPart('current', {
+            kind: PseudoArgumentKind.CompoundSelectorList,
+            selectors: {
+              kind: SelectorKind.CompoundSelectorList,
+              arms: [
+                compound(typeSelector('p')),
+                compound(null, [classSelector('active')]),
+              ],
+            },
+          }),
+        ],
+      });
+    });
+
+    it.each([
+      ':current()',
+      ':current(.a > .b)',
+      ':current(.a,)',
+      ':current(> .a)',
+    ])('rejects invalid :current() compound-selector lists in %s', (selector) => {
+      expectInvalidSelector(selector);
+    });
+
+    it('parses :state() with a case-preserving ident argument', () => {
+      expect(expectComplexSelector(':state(Ready)')).toMatchObject({
+        parts: [
+          pseudoClassPart('state', {
+            kind: PseudoArgumentKind.Ident,
+            value: 'Ready',
+          }),
+        ],
+      });
+    });
+
+    it.each([
+      ':state',
+      ':state()',
+      ':state("ready")',
+      ':state(ready now)',
+    ])('rejects invalid :state() syntax in %s', (selector) => {
+      expectInvalidSelector(selector);
+    });
+
+    it('parses :heading() with a comma-separated integer list', () => {
+      expect(expectComplexSelector(':heading(1, 2, -1)')).toMatchObject({
+        parts: [
+          pseudoClassPart('heading', {
+            kind: PseudoArgumentKind.IntegerList,
+            values: [1, 2, -1],
+          }),
+        ],
+      });
+    });
+
+    it.each([
+      ':heading()',
+      ':heading(1.0)',
+      ':heading(1 2)',
+      ':heading(1,)',
+    ])('rejects invalid functional heading syntax in %s', (selector) => {
+      expectInvalidSelector(selector);
+    });
+
+    it.each([
+      'nth-col',
+      'nth-last-col',
+    ])('parses An+B arguments for :%s()', (name) => {
+      expect(expectComplexSelector(`:${name}(2n + 1)`)).toMatchObject({
+        parts: [
+          pseudoClassPart(name, {
+            kind: PseudoArgumentKind.AnPlusB,
+            a: 2,
+            b: 1,
+          }),
+        ],
+      });
+    });
+
+    it.each([
+      ':nth-col',
+      ':nth-last-col()',
+      ':nth-col(2n of .item)',
+    ])('rejects invalid grid-structural pseudo-class syntax in %s', (selector) => {
+      expectInvalidSelector(selector);
+    });
+
+    it('classifies the interest pseudo-classes as user-action tails', () => {
+      expectValidSelector('::before:interest-source');
+      expectValidSelector('::before:interest-target');
+      expectInvalidSelector('::before:blank');
+      expectInvalidSelector('::before:state(ready)');
+    });
+  });
 });
 
 describe('pseudo-element selectors', () => {
