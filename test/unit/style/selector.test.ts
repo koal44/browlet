@@ -811,6 +811,71 @@ describe('selector parser pseudo-element selectors', () => {
     }
   });
 
+  it('allows all pseudo-classes after element-backed pseudo-elements', () => {
+    for (const css of [
+      '::file-selector-button:disabled',
+      '::file-selector-button:first-child',
+      '::file-selector-button:scope',
+      '::details-content:open',
+      '::details-content:empty',
+      '::part(label):disabled',
+      '::part(label):first-child',
+      '::part(label):scope',
+    ]) {
+      expectValidSelector(css);
+    }
+  });
+
+  it('treats element-backed pseudo-elements like type selectors in selector arguments', () => {
+    for (const css of [
+      '::file-selector-button:not(.missing)',
+      '::details-content:not([open])',
+      '::part(label):not(.container > .label)',
+      '::part(label):not(.disabled + .label)',
+      '::part(label):not(:not(.label))',
+      '::part(label):has(> .child)',
+      '::part(label):has(+ .sibling)',
+      '::part(label):host(.label)',
+      '::part(label):host-context(.label)',
+      '::part(label)::slotted(.label)',
+      // '::part(label):nth-child(2n of .label)',
+    ]) {
+      expectValidSelector(css);
+    }
+  });
+
+  it('retains forgiving complex selector arms after element-backed pseudo-elements', () => {
+    expect(expectComplexSelector('::part(label):is(.container > .label)')).toMatchObject({
+      parts: [
+        pseudoElementPart(null, 'part', [
+          pseudoClass('is', {
+            kind: PseudoArgumentKind.ForgivingSelectorList,
+            selectors: selectorList([
+              {
+                parts: [
+                  realClassPart(null, 'container'),
+                  realClassPart('>', 'label'),
+                ],
+              },
+            ]),
+          }),
+        ], {
+          kind: PseudoArgumentKind.PartNameList,
+          names: ['label'],
+        }),
+      ],
+    });
+  });
+
+  it('preserves namespace declarations in element-backed selector arguments', () => {
+    expectValidSelector('::part(label):not(svg|button)', namespaceContext);
+    expectInvalidSelector('::part(label):not(svg|button)');
+  });
+
+  it('does not carry sub-pseudo-element origins into selector arguments', () => {
+    expectInvalidSelector('::part(foo)::part(bar):has(::prefix)');
+  });
+
   it('rejects combinators after pseudo-elements without internal structure', () => {
     // Baseline: combinators before the pseudo-element are still ordinary selector structure.
     expectValidSelector('.foo ::before');

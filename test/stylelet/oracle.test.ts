@@ -1198,3 +1198,76 @@ runScenarios('pseudo-element sub-origin selector API validity', 'normal', [
     ],
   },
 ]);
+
+runScenarios('element-backed pseudo-element pseudo-class validity', 'normal', [
+  {
+    name: 'native selector APIs allow every pseudo-class after element-backed pseudo-elements',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <input id="file" type="file">
+
+      <details id="details">
+        <summary>summary</summary>
+        <span>content</span>
+      </details>
+
+      <div id="host"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.attachShadow({ mode: 'open' }).innerHTML = `
+          <span part="label">label</span>
+        `;
+      });
+    },
+    cases: [
+      // Baselines distinguish unsupported element-backed pseudo-elements from
+      // rejection of a particular pseudo-class tail.
+      { select: '#file::file-selector-button', expect: { throws: false } },
+      { select: '#details::details-content', expect: { throws: false } },
+      { select: '#host::part(label)', expect: { throws: false } },
+
+      // Element-backed pseudo-elements allow every pseudo-class syntactically,
+      // even when the pseudo-class is specified never to match.
+      { select: '#file::file-selector-button:hover', expect: { throws: false } },
+      { select: '#file::file-selector-button:disabled', expect: { throws: false }, status: 'fail' },
+      { select: '#file::file-selector-button:first-child', expect: { throws: false }, status: 'fail' },
+      { select: '#file::file-selector-button:has(*)', expect: { throws: false }, browsers: ['chromium', 'firefox'], status: 'fail' },
+      { select: '#file::file-selector-button:has(*)', expect: { throws: false }, browsers: ['webkit'] },
+      { select: '#file::file-selector-button:scope', expect: { throws: false }, status: 'fail' },
+
+      { select: '#details::details-content:hover', expect: { throws: false } },
+      { select: '#details::details-content:open', expect: { throws: false }, browsers: ['chromium', 'firefox'] },
+      { select: '#details::details-content:open', expect: { throws: false }, browsers: ['webkit'], status: 'fail' },
+      { select: '#details::details-content:empty', expect: { throws: false }, status: 'fail' },
+      { select: '#details::details-content:has(*)', expect: { throws: false }, browsers: ['chromium', 'firefox'], status: 'fail' },
+      { select: '#details::details-content:has(*)', expect: { throws: false }, browsers: ['webkit'] },
+
+      { select: '#host::part(label):hover', expect: { throws: false } },
+      { select: '#host::part(label):disabled', expect: { throws: false } },
+      { select: '#host::part(label):first-child', expect: { throws: false }, status: 'fail' },
+      { select: '#host::part(label):has(*)', expect: { throws: false }, browsers: ['chromium', 'firefox'], status: 'fail' },
+      { select: '#host::part(label):has(*)', expect: { throws: false }, browsers: ['webkit'] },
+      { select: '#host::part(label):scope', expect: { throws: false }, browsers: ['chromium', 'firefox'], status: 'fail' },
+      { select: '#host::part(label):scope', expect: { throws: false }, browsers: ['webkit'] },
+
+      // Logical pseudo-classes inherit the policy at their position. Treating
+      // the element-backed pseudo-element like a type selector should allow
+      // ordinary simple selectors in these arguments.
+      { select: '#file::file-selector-button:is(:disabled)', expect: { throws: false } },
+      { select: '#file::file-selector-button:not(.missing)', expect: { throws: false }, status: 'fail' },
+      { select: '#details::details-content:is([open])', expect: { throws: false } },
+      { select: '#host::part(label):where(.label)', expect: { throws: false } },
+      { select: '#host::part(label):is(* > .label)', expect: { throws: false } },
+      { select: '#host::part(label):not([hidden])', expect: { throws: false }, status: 'fail' },
+
+      // Other selector-valued functional arguments enter a nested selector frame.
+      { select: '::part(label):host(.label)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, status: 'fail' },
+      { select: '::part(label):host-context(.label)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, status: 'fail' },
+      { select: '#host::part(label):nth-child(2n of .label)', expect: { throws: false }, status: 'fail' },
+      { select: '::part(label)::slotted(.label)', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: false }, status: 'fail' },
+    ],
+  },
+]);

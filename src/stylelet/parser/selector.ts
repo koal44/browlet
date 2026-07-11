@@ -44,18 +44,32 @@ export enum SelectorKind {
 }
 
 export type SelectorParserContext = Readonly<{
-  // Pseudo-element governing pseudo-class validity within the current pseudo-compound.
-  pseudoCompoundElement?: PseudoElementName;
+  // Pseudo-element governing pseudo-class validity in this tail.
+  pseudoClassTailElement?: PseudoElementName;
 
-  // Pseudo-element from the preceding pseudo-compound, used to validate sub-pseudo-element chains.
-  previousPseudoCompoundElement?: PseudoElementName;
+  // Origin against which the next sub-pseudo-element candidate is validated.
+  subPseudoElementOrigin?: PseudoElementName;
 
-  // Final pseudo-element of the preceding complex-selector unit, used to validate the next combinator.
-  previousUnitPseudoElement?: PseudoElementName;
+  // Pseudo-element on the left side of the next potential combinator.
+  combinatorLeftPseudoElement?: PseudoElementName;
 
   // Named namespace prefixes declared for this parse; absence means none are declared.
   declaredNamespacePrefixes?: ReadonlySet<string>;
 }>;
+
+function contextForSelectorArgument(
+  context: SelectorParserContext,
+): SelectorParserContext {
+  const pseudoElement = context.pseudoClassTailElement;
+
+  return {
+    declaredNamespacePrefixes: context.declaredNamespacePrefixes,
+    pseudoClassTailElement:
+      pseudoElement !== undefined && !isElementBackedPseudoElement(pseudoElement)
+        ? pseudoElement
+        : undefined,
+  };
+}
 
 /**
  * 17.1. Parse a selector
@@ -408,7 +422,7 @@ function contextAfterComplexSelectorUnit(
   const pseudoElName = canonicalPseudoElementName(pseudoCompound?.pseudoElement.name);
   return {
     ...context,
-    previousUnitPseudoElement: pseudoElName ?? undefined,
+    combinatorLeftPseudoElement: pseudoElName ?? undefined,
   };
 }
 
@@ -437,7 +451,7 @@ const consumeComplexSelectorUnit: TryComponentParser<ComplexSelectorUnit> =
           const pseudoElName = canonicalPseudoElementName(pseudoCompound.pseudoElement.name);
           const newContext: SelectorParserContext = {
             ...(context as SelectorParserContext),
-            previousPseudoCompoundElement: pseudoElName ?? undefined,
+            subPseudoElementOrigin: pseudoElName ?? undefined,
           };
           return newContext;
         },
@@ -634,7 +648,7 @@ function tryConsumePseudoCompoundSelector(
 
   if (
     pseudoElement === null ||
-    !isValidSubPseudoElement(context.previousPseudoCompoundElement, pseudoElement)
+    !isValidSubPseudoElement(context.subPseudoElementOrigin, pseudoElement)
   ) {
     c.restore(start);
     return null;
@@ -649,7 +663,7 @@ const consumePseudoCompoundSelector: TryComponentParser<PseudoCompoundSelector> 
       contextAfter: (pseudoElement, context) => {
         const newContext: SelectorParserContext = {
           ...(context as SelectorParserContext),
-          pseudoCompoundElement: canonicalPseudoElementName(pseudoElement.name) ?? undefined,
+          pseudoClassTailElement: canonicalPseudoElementName(pseudoElement.name) ?? undefined,
         };
         return newContext;
       },
@@ -716,7 +730,7 @@ function tryConsumeCombinator(c: ComponentCursor): TryComponentParserResult<Comb
   }
 
   const context = c.context as SelectorParserContext;
-  const pseudoElement = context.previousUnitPseudoElement;
+  const pseudoElement = context.combinatorLeftPseudoElement;
 
   if (
     pseudoElement !== undefined &&
@@ -869,7 +883,7 @@ export type TypeSelector = {
 function tryConsumeTypeSelector(c: ComponentCursor): TryComponentParserResult<TypeSelector> {
   const ctx = c.context as SelectorParserContext;
 
-  if (ctx.pseudoCompoundElement !== undefined) {
+  if (ctx.pseudoClassTailElement !== undefined) {
     return null;
   }
 
@@ -944,7 +958,7 @@ export type IdSelector = {
 function tryConsumeIdSelector(c: ComponentCursor): TryComponentParserResult<IdSelector> {
   const ctx = c.context as SelectorParserContext;
 
-  if (ctx.pseudoCompoundElement !== undefined) {
+  if (ctx.pseudoClassTailElement !== undefined) {
     return null;
   }
 
@@ -975,7 +989,7 @@ export type ClassSelector = {
 function tryConsumeClassSelector(c: ComponentCursor): TryComponentParserResult<ClassSelector> {
   const ctx = c.context as SelectorParserContext;
 
-  if (ctx.pseudoCompoundElement !== undefined) {
+  if (ctx.pseudoClassTailElement !== undefined) {
     return null;
   }
 
@@ -1019,7 +1033,7 @@ export type AttributeSelector = {
 function tryConsumeAttributeSelector(c: ComponentCursor): TryComponentParserResult<AttributeSelector> {
   const ctx = c.context as SelectorParserContext;
 
-  if (ctx.pseudoCompoundElement !== undefined) {
+  if (ctx.pseudoClassTailElement !== undefined) {
     return null;
   }
 
@@ -1521,7 +1535,7 @@ function createPseudoClassSelector(
     return null;
   }
 
-  const pseudoElement = context.pseudoCompoundElement;
+  const pseudoElement = context.pseudoClassTailElement;
 
   if (
     pseudoElement !== undefined &&
@@ -1587,7 +1601,10 @@ function createPseudoClassSelector(
     case 'has': {
       if (value === null) return null;
 
-      const selectors = parseRelativeSelectorList(value, context);
+      const selectors = parseRelativeSelectorList(
+        value,
+        contextForSelectorArgument(context),
+      );
       if (selectors === null) return null;
 
       const argument: RelativeSelectorListPseudoArgument = {
@@ -1771,7 +1788,10 @@ function createPseudoClassSelector(
         });
       }
 
-      const selector = parseCompoundSelector(value, context);
+      const selector = parseCompoundSelector(
+        value,
+        contextForSelectorArgument(context),
+      );
       if (selector === null) return null;
 
       const argument: CompoundSelectorPseudoArgument = {
@@ -1793,7 +1813,10 @@ function createPseudoClassSelector(
     case 'host-context': {
       if (value === null) return null;
 
-      const selector = parseCompoundSelector(value, context);
+      const selector = parseCompoundSelector(
+        value,
+        contextForSelectorArgument(context),
+      );
       if (selector === null) return null;
 
       const argument: CompoundSelectorPseudoArgument = {
@@ -1842,15 +1865,16 @@ function parseForgivingSelectorListArgument(
   arg: readonly ComponentValue[],
   context: SelectorParserContext,
 ): ForgivingSelectorListPseudoArgument {
+  const argumentContext = contextForSelectorArgument(context);
   const parseSelector =
-    context.pseudoCompoundElement === undefined
+    argumentContext.pseudoClassTailElement === undefined
       ? tryConsumeComplexRealSelector
       : tryConsumeCompoundAsComplexRealSelector;
 
   const parsed = parseListAsComponentGrammar(
     arg,
     withComponentTrivia(parseSelector),
-    context,
+    argumentContext,
   );
 
   const arms = parsed
@@ -1871,15 +1895,16 @@ function parseStrictComplexRealSelectorListArgument(
   arg: readonly ComponentValue[],
   context: SelectorParserContext,
 ): TryComponentParserResult<ComplexRealSelectorList> {
+  const argumentContext = contextForSelectorArgument(context);
   const parseSelector =
-    context.pseudoCompoundElement === undefined
+    argumentContext.pseudoClassTailElement === undefined
       ? tryConsumeComplexRealSelector
       : tryConsumeCompoundAsComplexRealSelector;
 
   const parsed = parseListAsComponentGrammar(
     arg,
     withComponentTrivia(parseSelector),
-    context,
+    argumentContext,
   );
 
   const arms: ComplexRealSelector[] = [];
@@ -1890,11 +1915,11 @@ function parseStrictComplexRealSelectorListArgument(
     }
 
     if (result === null) {
-      return context.pseudoCompoundElement === undefined
+      return context.pseudoClassTailElement === undefined
         ? null
         : bad(
           ComponentParserBadReason.InvalidPseudoElementTail,
-          `Selector is not valid after ::${context.pseudoCompoundElement}`,
+          `Selector is not valid after ::${context.pseudoClassTailElement}`,
         );
     }
 
@@ -2101,9 +2126,13 @@ function tryConsumeDirectionIdent(c: ComponentCursor): TryComponentParserResult<
 // --------------------------------------
 
 function isValidPseudoClassAfterPseudoElement(
-  _pseudoElementName: PseudoElementName,
+  pseudoElementName: PseudoElementName,
   pseudoClassName: PseudoClassName,
 ): boolean {
+  if (isElementBackedPseudoElement(pseudoElementName)) {
+    return true;
+  }
+
   return isDefaultValidTailPseudoClass(pseudoClassName);
 }
 
@@ -2256,7 +2285,10 @@ function createPseudoElementSelector(
         return null;
       }
 
-      const selector = parseCompoundSelector(value, context);
+      const selector = parseCompoundSelector(
+        value,
+        contextForSelectorArgument(context),
+      );
 
       if (selector === null) {
         return null;
