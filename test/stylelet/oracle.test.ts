@@ -626,9 +626,9 @@ runScenarios('testing pseudo elements', 'normal', [
       // chains for marker boxes of generated pseudo-elements that are list items.
       // In DOM selection APIs they should still return no Elements.
       { select: 'li::before::marker', expect: { throws: false, count: 0 }, browsers: ['chromium', 'firefox'] },
-      { select: 'li::before::marker', expect: { throws: true, count: 0 }, browsers: ['webkit'] },
+      { select: 'li::before::marker', expect: { throws: false, count: 0 }, browsers: ['webkit'], status: 'fail' },
       { select: 'li::after::marker', expect: { throws: false, count: 0 }, browsers: ['chromium', 'firefox'] },
-      { select: 'li::after::marker', expect: { throws: true, count: 0 }, browsers: ['webkit'] },
+      { select: 'li::after::marker', expect: { throws: false, count: 0 }, browsers: ['webkit'], status: 'fail' },
 
       // CSS Pseudo says ::marker::marker is invalid.
       { select: 'li::marker::marker', expect: { throws: true } },
@@ -707,7 +707,7 @@ runScenarios('testing pseudo elements', 'normal', [
       // and evaluates false for this host.
       { select: ':not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] }, browsers: ['chromium', 'firefox'] },
       { select: ':host:not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] }, browsers: ['chromium', 'firefox'] },
-      { select: ':host:not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] }, browsers: ['webkit'], engines: ['native'] }, // WebKit currently diverges on host-boundary :not(:host(...)) behavior.
+      { select: ':host:not(:host(.missing)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: ['inside', 'insideFoo'] }, browsers: ['webkit'], engines: ['native'], status: 'fail' },
 
       // And :host:not(:host(.foo)) should not match, because the host does have .foo.
       { select: ':host:not(:host(.foo)) *', ref: { by: 'shadowRoot', id: 'host' }, expect: { ids: [] } },
@@ -1298,8 +1298,8 @@ runScenarios('logical selector argument restrictions', 'normal', [
 
       // Preserve ::slotted()'s compound boundary through nested selector arguments.
       // Otherwise shadow style invalidation can depend on arbitrary light-tree structure.
-      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium'], status: 'fail' },
-      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['firefox', 'webkit'] },
+      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['chromium', 'webkit'], status: 'fail' },
+      { select: '::slotted(:nth-child(2n of .a > .b))', ref: { by: 'shadowRoot', id: 'host' }, expect: { throws: true }, browsers: ['firefox'] },
 
       // Logical pseudo-classes do inherit the compound-only restriction.
       // :not() is strict, while :is() and :where() drop the invalid complex arm.
