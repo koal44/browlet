@@ -1,11 +1,12 @@
 import { asciiLower } from '../../utils/css';
+import { createDelimConsumer, createIdentValueConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
 import {
-  ok,
+  isBad, ok,
   type TryComponentParser, type TryComponentParserResult,
 } from '../parser/component-try-parser';
-import { isDelimToken, isIdentToken, isTokenKind } from '../parser/syntax';
+import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
 import { serializeNumber } from './number';
@@ -20,15 +21,11 @@ function createIntegerConsumer(
 ): TryComponentParser<NumberToken> {
   return (c) => {
     const start = c.pos();
-    const component = c.next();
+    const result = tryConsumeIntegerToken(c);
 
-    if (
-      !isTokenKind(component, TokenKind.Number) ||
-      component.flag !== NumberTokenFlag.Integer
-    ) {
-      c.restore(start);
-      return null;
-    }
+    if (result === null || isBad(result)) return result;
+
+    const component = result.value;
 
     const isSigned =
       component.repr.startsWith('+') ||
@@ -82,39 +79,6 @@ function createIdentPatternConsumer(
     }
 
     return ok(component);
-  };
-}
-
-function createDelimConsumer<T extends string>(expected: T): TryComponentParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (!isDelimToken(component, expected)) {
-      c.restore(start);
-      return null;
-    }
-
-    return ok(expected);
-  };
-}
-
-function createIdentValueConsumer<T extends string>(
-  expected: T,
-): TryComponentParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (
-      !isIdentToken(component) ||
-      asciiLower(component.value) !== expected
-    ) {
-      c.restore(start);
-      return null;
-    }
-
-    return ok(expected);
   };
 }
 

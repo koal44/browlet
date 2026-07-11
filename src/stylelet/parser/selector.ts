@@ -3,13 +3,17 @@ import {
   any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withComponentTrivia, requiredSequenceOf,
 } from './component-grammar';
 import type { ComponentCursor } from './component-cursor';
-import type { ComponentValue, FunctionBlock, ParserInput } from './syntax';
 import {
-  consumeComponentTrivia, isBracketBlock, isDelimToken, isFunctionBlock, isIdentToken, isTokenKind,
+  createDelimConsumer, createIdentValueConsumer,
+  tryConsumeColon, tryConsumeFunctionBlock, tryConsumeIdentToken,
+  tryConsumeIdHashToken, tryConsumeIntegerToken, tryConsumeStringToken,
+} from './component-consumers';
+import type { ComponentValue, ParserInput } from './syntax';
+import {
+  consumeComponentTrivia, isBracketBlock, isDelimToken, isIdentToken, isTokenKind,
   parseAsComponentGrammar, parseListAsComponentGrammar,
 } from './syntax';
-import type { IdentToken, HashToken, StringToken } from './tokens';
-import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
+import { TokenKind } from './tokens';
 import {
   addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity,
   type Specificity,
@@ -1237,7 +1241,7 @@ const consumeAttrModifier: TryComponentParser<AttrModifier> = (c) => {
 export type PseudoClassSelector = {
   kind: SelectorKind.PseudoClassSelector;
   name: string;
-  argument: PseudoClassArgument | null;
+  argument: PseudoArgument | null;
   specificity: Specificity;
 };
 
@@ -1286,7 +1290,7 @@ const consumePseudoClassSelector: TryComponentParser<PseudoClassSelector> = oneO
 export type PseudoElementSelector = {
   kind: SelectorKind.PseudoElementSelector;
   name: string;
-  argument: PseudoElementArgument | null;
+  argument: PseudoArgument | null;
   specificity: Specificity;
 };
 
@@ -1384,105 +1388,7 @@ function isLegacyPseudoElementName(value: string): value is LegacyPseudoElementN
 }
 
 // --------------------------------------
-// Token and delimiter consumers
-// --------------------------------------
-
-function tryConsumeColon(c: ComponentCursor): TryComponentParserResult<':'> {
-  return c.match(TokenKind.Colon) ? ok(':') : null;
-}
-
-function tryConsumeIdentToken(c: ComponentCursor): TryComponentParserResult<IdentToken> {
-  const start = c.pos();
-  const comp = c.next();
-
-  if (!isIdentToken(comp)) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(comp);
-}
-
-function tryConsumeStringToken(c: ComponentCursor): TryComponentParserResult<StringToken> {
-  const start = c.pos();
-  const comp = c.next();
-
-  if (!isTokenKind(comp, TokenKind.String)) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(comp);
-}
-
-function tryConsumeIdHashToken(c: ComponentCursor): TryComponentParserResult<HashToken> {
-  const start = c.pos();
-  const comp = c.next();
-
-  if (
-    !isTokenKind(comp, TokenKind.Hash) ||
-    comp.flag !== HashTokenFlag.Id
-  ) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(comp);
-}
-
-function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentParserResult<FunctionBlock> {
-  const start = c.pos();
-  const comp = c.next();
-
-  if (!isFunctionBlock(comp)) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(comp);
-}
-
-function createDelimConsumer<T extends string>(expected: T): TryComponentParser<T> {
-  return (c) => {
-    const start = c.pos();
-    const comp = c.next();
-
-    if (!isDelimToken(comp, expected)) {
-      c.restore(start);
-      return null;
-    }
-
-    return ok(expected);
-  };
-}
-
-function createIdentValueConsumer<T extends string>(
-  expected: T,
-): TryComponentParser<T> {
-  return (c) => {
-    const start = c.pos();
-
-    const ident = unwrapParseResultOrThrow(
-      tryConsumeIdentToken(c),
-      `ident ${expected}`,
-    );
-
-    if (ident === null) {
-      c.restore(start);
-      return null;
-    }
-
-    if (asciiLower(ident.value) !== expected) {
-      c.restore(start);
-      return null;
-    }
-
-    return ok(expected);
-  };
-}
-
-// --------------------------------------
-// Pseudo-class
+// Pseudo-class selectors
 // --------------------------------------
 
 export type PseudoClassName =
@@ -1938,16 +1844,11 @@ function createNoArgumentPseudoClassSelector(
   });
 }
 
-type PseudoClassArgumentParser<T extends PseudoClassArgument> = (
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-) => T | null;
-
-function createArgumentPseudoClassSelector<T extends PseudoClassArgument>(
+function createArgumentPseudoClassSelector<T extends PseudoArgument>(
   name: PseudoClassName,
   value: readonly ComponentValue[] | null,
   context: SelectorParserContext,
-  parseArgument: PseudoClassArgumentParser<T>,
+  parseArgument: PseudoArgumentParser<T>,
   specificity: Specificity | ((argument: T) => Specificity) = SpecificityB,
 ): TryComponentParserResult<PseudoClassSelector> {
   if (value === null) return null;
@@ -1966,500 +1867,7 @@ function createArgumentPseudoClassSelector<T extends PseudoClassArgument>(
 }
 
 // --------------------------------------
-// Selector-valued arguments
-// --------------------------------------
-
-function parseForgivingSelectorListArgument(
-  arg: readonly ComponentValue[],
-  context: SelectorParserContext,
-): ForgivingSelectorListPseudoArgument {
-  const argumentContext = contextForSelectorArgument(context);
-  const parseSelector = parserForSelectorRestriction(argumentContext);
-
-  const parsed = parseListAsComponentGrammar(
-    arg,
-    withComponentTrivia(parseSelector),
-    argumentContext,
-  );
-
-  const arms = parsed
-    .filter(isOk)
-    .map((result) => result.value);
-
-  return {
-    kind: PseudoArgumentKind.ForgivingSelectorList,
-    selectors: {
-      kind: SelectorKind.ComplexRealSelectorList,
-      arms,
-      specificity: listSpecificity(arms),
-    },
-  };
-}
-
-function parseStrictComplexRealSelectorListArgument(
-  arg: readonly ComponentValue[],
-  context: SelectorParserContext,
-): TryComponentParserResult<ComplexRealSelectorList> {
-  const argumentContext = contextForSelectorArgument(context);
-  const parseSelector = parserForSelectorRestriction(argumentContext);
-
-  const parsed = parseListAsComponentGrammar(
-    arg,
-    withComponentTrivia(parseSelector),
-    argumentContext,
-  );
-
-  const arms: ComplexRealSelector[] = [];
-
-  for (const result of parsed) {
-    if (isBad(result)) {
-      return result;
-    }
-
-    if (result === null) {
-      return context.pseudoClassTailElement === undefined
-        ? null
-        : bad(
-          ComponentParserBadReason.InvalidPseudoElementTail,
-          `Selector is not valid after ::${context.pseudoClassTailElement}`,
-        );
-    }
-
-    arms.push(result.value);
-  }
-
-  if (arms.length === 0) {
-    return null;
-  }
-
-  return ok({
-    kind: SelectorKind.ComplexRealSelectorList,
-    arms,
-    specificity: listSpecificity(arms),
-  });
-}
-
-const tryConsumeCompoundAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
-  const result = tryConsumeCompoundSelector(c);
-
-  if (result === null || isBad(result)) {
-    return result;
-  }
-
-  return ok({
-    kind: SelectorKind.ComplexRealSelector,
-    parts: [
-      {
-        combinator: null,
-        compound: result.value,
-      },
-    ],
-    specificity: result.value.specificity,
-  });
-};
-
-const tryConsumeSimpleAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
-  const result = tryConsumeSimpleSelector(c);
-
-  if (result === null || isBad(result)) {
-    return result;
-  }
-
-  const selector = result.value;
-  const compound: CompoundSelector = {
-    kind: SelectorKind.CompoundSelector,
-    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
-    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
-    specificity: selector.specificity,
-  };
-
-  return ok({
-    kind: SelectorKind.ComplexRealSelector,
-    parts: [{ combinator: null, compound }],
-    specificity: compound.specificity,
-  });
-};
-
-function parserForSelectorRestriction(
-  context: SelectorParserContext,
-): TryComponentParser<ComplexRealSelector> {
-  switch (context.selectorRestriction) {
-    case 'simple':
-      return tryConsumeSimpleAsComplexRealSelector;
-    case 'compound':
-      return tryConsumeCompoundAsComplexRealSelector;
-    case 'complex-real':
-    case undefined:
-      return tryConsumeComplexRealSelector;
-  }
-}
-
-function parseRestrictedCompoundSelectorArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): CompoundSelector | null {
-  const argumentContext = contextForSelectorArgument(context, 'compound');
-
-  if (argumentContext.selectorRestriction !== 'simple') {
-    return parseCompoundSelector(value, argumentContext);
-  }
-
-  const selector = parseSimpleSelector(value, argumentContext);
-
-  if (selector === null) {
-    return null;
-  }
-
-  return {
-    kind: SelectorKind.CompoundSelector,
-    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
-    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
-    specificity: selector.specificity,
-  };
-}
-
-function parseCompoundSelectorListArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): CompoundSelectorListPseudoArgument | null {
-  const selectors = parseCompoundSelectorList(
-    value,
-    contextForSelectorArgument(context, 'compound'),
-  );
-
-  if (selectors === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.CompoundSelectorList,
-    selectors,
-  };
-}
-
-// --------------------------------------
-// Nth
-// --------------------------------------
-
-function parseAnPlusBArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): AnPlusBPseudoArgument | null {
-  const anb = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, withComponentTrivia(tryParseAnPlusB), context),
-    'An+B argument',
-  );
-
-  if (anb === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.AnPlusB,
-    ...anb,
-  };
-}
-
-function parseNthChildArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): NthChildPseudoArgument | null {
-  return unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, tryConsumeNthChildArgument, context),
-    'nth-child argument',
-  );
-}
-
-function tryConsumeNthChildArgument(c: ComponentCursor): TryComponentParserResult<NthChildPseudoArgument> {
-  const start = c.pos();
-
-  const anb = unwrapParseResultOrThrow(
-    withComponentTrivia(tryParseAnPlusB)(c),
-    'nth-child An+B',
-  );
-
-  if (anb === null) {
-    c.restore(start);
-    return null;
-  }
-
-  const of = unwrapParseResultOrThrow(
-    tryConsumeNthChildOfClause(c),
-    'nth-child of clause',
-  );
-
-  return ok({
-    kind: PseudoArgumentKind.NthChild,
-    formula: anb,
-    of,
-  });
-}
-
-const tryConsumeOfIdent = createIdentValueConsumer('of');
-
-function tryConsumeNthChildOfClause(c: ComponentCursor): TryComponentParserResult<ComplexRealSelectorList | null> {
-  const start = c.pos();
-
-  const of = unwrapParseResultOrThrow(
-    withComponentTrivia(tryConsumeOfIdent)(c),
-    'nth-child of ident',
-  );
-
-  if (of === null) {
-    c.restore(start);
-    return ok(null);
-  }
-
-  const selectors = unwrapParseResultOrThrow(
-    tryConsumeNthChildOfSelectorList(c),
-    'nth-child of selector list',
-  );
-
-  if (selectors === null) {
-    c.restore(start);
-    return ok(null);
-  }
-
-  return ok(selectors);
-}
-
-function tryConsumeNthChildOfSelectorList(
-  c: ComponentCursor,
-): TryComponentParserResult<ComplexRealSelectorList> {
-  const outerContext = c.context as SelectorParserContext;
-  const argumentContext = contextForSelectorArgument(outerContext);
-
-  try {
-    c.context = argumentContext;
-
-    const consumeArms = commaRepeat(parserForSelectorRestriction(argumentContext));
-    const arms = unwrapParseResultOrThrow(
-      withComponentTrivia(consumeArms)(c),
-      'restricted nth-child of selector list arms',
-    );
-
-    if (arms === null) {
-      return null;
-    }
-
-    return ok({
-      kind: SelectorKind.ComplexRealSelectorList,
-      arms,
-      specificity: listSpecificity(arms),
-    });
-  } finally {
-    c.context = outerContext;
-  }
-}
-
-// --------------------------------------
-// Token-value arguments
-// --------------------------------------
-
-function parseIdentArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): IdentPseudoArgument | null {
-  const ident = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeIdentToken), context),
-    'ident argument',
-  );
-
-  if (ident === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.Ident,
-    value: ident.value,
-  };
-}
-
-function parseIntegerArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): IntegerPseudoArgument | null {
-  const integer = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeInteger), context),
-    'integer argument',
-  );
-
-  if (integer === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.Integer,
-    value: integer,
-  };
-}
-
-function parseNonNegativeIntegerArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): IntegerPseudoArgument | null {
-  const argument = parseIntegerArgument(value, context);
-  return argument !== null && argument.value >= 0 ? argument : null;
-}
-
-function parseIntegerListArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): IntegerListPseudoArgument | null {
-  const parsed = parseListAsComponentGrammar(
-    value,
-    withComponentTrivia(tryConsumeInteger),
-    context,
-  );
-  const values: number[] = [];
-
-  for (const result of parsed) {
-    const integer = unwrapParseResultOrThrow(result, 'integer list item');
-
-    if (integer === null) {
-      return null;
-    }
-
-    values.push(integer);
-  }
-
-  if (values.length === 0) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.IntegerList,
-    values,
-  };
-}
-
-function tryConsumeInteger(c: ComponentCursor): TryComponentParserResult<number> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (
-    !isTokenKind(component, TokenKind.Number) ||
-    component.flag !== NumberTokenFlag.Integer
-  ) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(component.value);
-}
-
-function parseLanguageRangeListArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): LanguageRangeListPseudoArgument | null {
-  const parsed = parseListAsComponentGrammar(
-    value,
-    withComponentTrivia(tryConsumeLanguageRange),
-    context,
-  );
-
-  const ranges: LanguageRange[] = [];
-
-  for (const result of parsed) {
-    const range = unwrapParseResultOrThrow(result, 'language range');
-
-    if (range === null) {
-      return null;
-    }
-
-    ranges.push(range);
-  }
-
-  if (ranges.length === 0) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.LanguageRangeList,
-    ranges,
-  };
-}
-
-function tryConsumeLanguageRange(c: ComponentCursor): TryComponentParserResult<LanguageRange> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (isIdentToken(component)) {
-    return ok(component.value);
-  }
-
-  if (isTokenKind(component, TokenKind.String)) {
-    return ok(component.value);
-  }
-
-  c.restore(start);
-  return null;
-}
-
-function parseDirectionArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): DirectionPseudoArgument | null {
-  const raw = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeDirectionIdent), context),
-    'direction argument',
-  );
-
-  if (raw === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.Direction,
-    value: raw === 'ltr' || raw === 'rtl' ? raw : null,
-  };
-}
-
-function tryConsumeDirectionIdent(c: ComponentCursor): TryComponentParserResult<string> {
-  const start = c.pos();
-  const ident = c.next();
-
-  if (!isIdentToken(ident)) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(asciiLower(ident.value));
-}
-
-// --------------------------------------
-// Pseudo-class Policy Invalidation
-// --------------------------------------
-
-function isValidPseudoClassAfterPseudoElement(
-  pseudoElementName: PseudoElementName,
-  pseudoClassName: PseudoClassName,
-): boolean {
-  if (isElementBackedPseudoElement(pseudoElementName)) {
-    return true;
-  }
-
-  return isDefaultValidTailPseudoClass(pseudoClassName);
-}
-
-function isDefaultValidTailPseudoClass(name: PseudoClassName): boolean {
-  switch (name) {
-    // User action pseudo-classes
-    case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
-    case 'interest-source': case 'interest-target':
-      return true;
-
-    // Logical pseudo-classes that inherit the pseudo-element tail context
-    case 'is': case 'where': case 'not':
-      return true;
-
-    default:
-      return false;
-  }
-}
-
-// --------------------------------------
-// Pseudo-elements
+// Pseudo-element selectors
 // --------------------------------------
 
 export type PseudoElementName =
@@ -2669,46 +2077,9 @@ function createNoArgumentPseudoElementSelector(
   });
 }
 
-/**
- * <part-name-list> = <ident-token>+
- */
-function tryConsumePartNameList(c: ComponentCursor): TryComponentParserResult<string[]> {
-  return consumePartNameList(c);
-}
-
-const consumePartNameList: TryComponentParser<string[]> = plus(
-  withComponentTrivia((c): TryComponentParserResult<string> => {
-    const ident = unwrapParseResultOrThrow(
-      tryConsumeIdentToken(c),
-      'part name',
-    );
-
-    if (ident === null) {
-      return null;
-    }
-
-    return ok(ident.value);
-  }),
-);
-
-function parsePartNameListArgument(
-  value: readonly ComponentValue[],
-  context: SelectorParserContext,
-): PartNameListPseudoArgument | null {
-  const names = unwrapParseResultOrThrow(
-    parseAsComponentGrammar(value, tryConsumePartNameList, context),
-    'part name list',
-  );
-
-  if (names === null) {
-    return null;
-  }
-
-  return {
-    kind: PseudoArgumentKind.PartNameList,
-    names,
-  };
-}
+// --------------------------------------
+// Pseudo arguments
+// --------------------------------------
 
 export enum PseudoArgumentKind {
   ForgivingSelectorList = 'forgiving-selector-list',
@@ -2727,7 +2098,7 @@ export enum PseudoArgumentKind {
   CustomIdent = 'custom-ident',
 }
 
-type PseudoClassArgument =
+type PseudoArgument =
   | ForgivingSelectorListPseudoArgument
   | ComplexRealSelectorListPseudoArgument
   | RelativeSelectorListPseudoArgument
@@ -2739,12 +2110,14 @@ type PseudoClassArgument =
   | NthChildPseudoArgument
   | IdentPseudoArgument
   | IntegerPseudoArgument
-  | IntegerListPseudoArgument;
-
-type PseudoElementArgument =
-  | CompoundSelectorPseudoArgument
+  | IntegerListPseudoArgument
   | PartNameListPseudoArgument
   | CustomIdentPseudoArgument;
+
+type PseudoArgumentParser<T extends PseudoArgument> = (
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+) => T | null;
 
 type ForgivingSelectorListPseudoArgument = {
   kind: PseudoArgumentKind.ForgivingSelectorList;
@@ -2771,17 +2144,186 @@ type CompoundSelectorPseudoArgument = {
   selector: CompoundSelector;
 };
 
-type DirectionPseudoArgument = {
-  kind: PseudoArgumentKind.Direction;
-  value: 'ltr' | 'rtl' | null;
+type IdentPseudoArgument = {
+  kind: PseudoArgumentKind.Ident;
+  value: string;
 };
 
-type LanguageRangeListPseudoArgument = {
-  kind: PseudoArgumentKind.LanguageRangeList;
-  ranges: LanguageRange[];
+// --------------------------------------
+// Selector-valued arguments
+// --------------------------------------
+
+function parseForgivingSelectorListArgument(
+  arg: readonly ComponentValue[],
+  context: SelectorParserContext,
+): ForgivingSelectorListPseudoArgument {
+  const argumentContext = contextForSelectorArgument(context);
+  const parseSelector = parserForSelectorRestriction(argumentContext);
+
+  const parsed = parseListAsComponentGrammar(
+    arg,
+    withComponentTrivia(parseSelector),
+    argumentContext,
+  );
+
+  const arms = parsed
+    .filter(isOk)
+    .map((result) => result.value);
+
+  return {
+    kind: PseudoArgumentKind.ForgivingSelectorList,
+    selectors: {
+      kind: SelectorKind.ComplexRealSelectorList,
+      arms,
+      specificity: listSpecificity(arms),
+    },
+  };
+}
+
+function parseStrictComplexRealSelectorListArgument(
+  arg: readonly ComponentValue[],
+  context: SelectorParserContext,
+): TryComponentParserResult<ComplexRealSelectorList> {
+  const argumentContext = contextForSelectorArgument(context);
+  const parseSelector = parserForSelectorRestriction(argumentContext);
+
+  const parsed = parseListAsComponentGrammar(
+    arg,
+    withComponentTrivia(parseSelector),
+    argumentContext,
+  );
+
+  const arms: ComplexRealSelector[] = [];
+
+  for (const result of parsed) {
+    if (isBad(result)) {
+      return result;
+    }
+
+    if (result === null) {
+      return context.pseudoClassTailElement === undefined
+        ? null
+        : bad(
+          ComponentParserBadReason.InvalidPseudoElementTail,
+          `Selector is not valid after ::${context.pseudoClassTailElement}`,
+        );
+    }
+
+    arms.push(result.value);
+  }
+
+  if (arms.length === 0) {
+    return null;
+  }
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelectorList,
+    arms,
+    specificity: listSpecificity(arms),
+  });
+}
+
+function parseRestrictedCompoundSelectorArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): CompoundSelector | null {
+  const argumentContext = contextForSelectorArgument(context, 'compound');
+
+  if (argumentContext.selectorRestriction !== 'simple') {
+    return parseCompoundSelector(value, argumentContext);
+  }
+
+  const selector = parseSimpleSelector(value, argumentContext);
+
+  if (selector === null) {
+    return null;
+  }
+
+  return {
+    kind: SelectorKind.CompoundSelector,
+    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
+    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
+    specificity: selector.specificity,
+  };
+}
+
+function parseCompoundSelectorListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): CompoundSelectorListPseudoArgument | null {
+  const selectors = parseCompoundSelectorList(
+    value,
+    contextForSelectorArgument(context, 'compound'),
+  );
+
+  if (selectors === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.CompoundSelectorList,
+    selectors,
+  };
+}
+
+function parserForSelectorRestriction(
+  context: SelectorParserContext,
+): TryComponentParser<ComplexRealSelector> {
+  switch (context.selectorRestriction) {
+    case 'simple':
+      return tryConsumeSimpleAsComplexRealSelector;
+    case 'compound':
+      return tryConsumeCompoundAsComplexRealSelector;
+    case 'complex-real':
+    case undefined:
+      return tryConsumeComplexRealSelector;
+  }
+}
+
+const tryConsumeCompoundAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
+  const result = tryConsumeCompoundSelector(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelector,
+    parts: [
+      {
+        combinator: null,
+        compound: result.value,
+      },
+    ],
+    specificity: result.value.specificity,
+  });
 };
 
-type LanguageRange = string;
+const tryConsumeSimpleAsComplexRealSelector: TryComponentParser<ComplexRealSelector> = (c) => {
+  const result = tryConsumeSimpleSelector(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  const selector = result.value;
+  const compound: CompoundSelector = {
+    kind: SelectorKind.CompoundSelector,
+    typeSelector: selector.kind === SelectorKind.TypeSelector ? selector : null,
+    subclasses: selector.kind === SelectorKind.TypeSelector ? [] : [selector],
+    specificity: selector.specificity,
+  };
+
+  return ok({
+    kind: SelectorKind.ComplexRealSelector,
+    parts: [{ combinator: null, compound }],
+    specificity: compound.specificity,
+  });
+};
+
+// --------------------------------------
+// An+B arguments
+// --------------------------------------
 
 type AnPlusBPseudoArgument = {
   kind: PseudoArgumentKind.AnPlusB;
@@ -2793,10 +2335,120 @@ type NthChildPseudoArgument = {
   of: ComplexRealSelectorList | null;
 };
 
-type IdentPseudoArgument = {
-  kind: PseudoArgumentKind.Ident;
-  value: string;
-};
+function parseAnPlusBArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): AnPlusBPseudoArgument | null {
+  const anb = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryParseAnPlusB), context),
+    'An+B argument',
+  );
+
+  if (anb === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.AnPlusB,
+    ...anb,
+  };
+}
+
+function parseNthChildArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): NthChildPseudoArgument | null {
+  return unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, tryConsumeNthChildArgument, context),
+    'nth-child argument',
+  );
+}
+
+function tryConsumeNthChildArgument(c: ComponentCursor): TryComponentParserResult<NthChildPseudoArgument> {
+  const start = c.pos();
+
+  const anb = unwrapParseResultOrThrow(
+    withComponentTrivia(tryParseAnPlusB)(c),
+    'nth-child An+B',
+  );
+
+  if (anb === null) {
+    c.restore(start);
+    return null;
+  }
+
+  const of = unwrapParseResultOrThrow(
+    tryConsumeNthChildOfClause(c),
+    'nth-child of clause',
+  );
+
+  return ok({
+    kind: PseudoArgumentKind.NthChild,
+    formula: anb,
+    of,
+  });
+}
+
+const tryConsumeOfIdent = createIdentValueConsumer('of');
+
+function tryConsumeNthChildOfClause(c: ComponentCursor): TryComponentParserResult<ComplexRealSelectorList | null> {
+  const start = c.pos();
+
+  const of = unwrapParseResultOrThrow(
+    withComponentTrivia(tryConsumeOfIdent)(c),
+    'nth-child of ident',
+  );
+
+  if (of === null) {
+    c.restore(start);
+    return ok(null);
+  }
+
+  const selectors = unwrapParseResultOrThrow(
+    tryConsumeNthChildOfSelectorList(c),
+    'nth-child of selector list',
+  );
+
+  if (selectors === null) {
+    c.restore(start);
+    return ok(null);
+  }
+
+  return ok(selectors);
+}
+
+function tryConsumeNthChildOfSelectorList(
+  c: ComponentCursor,
+): TryComponentParserResult<ComplexRealSelectorList> {
+  const outerContext = c.context as SelectorParserContext;
+  const argumentContext = contextForSelectorArgument(outerContext);
+
+  try {
+    c.context = argumentContext;
+
+    const consumeArms = commaRepeat(parserForSelectorRestriction(argumentContext));
+    const arms = unwrapParseResultOrThrow(
+      withComponentTrivia(consumeArms)(c),
+      'restricted nth-child of selector list arms',
+    );
+
+    if (arms === null) {
+      return null;
+    }
+
+    return ok({
+      kind: SelectorKind.ComplexRealSelectorList,
+      arms,
+      specificity: listSpecificity(arms),
+    });
+  } finally {
+    c.context = outerContext;
+  }
+}
+
+// --------------------------------------
+// Identifier and integer arguments
+// --------------------------------------
 
 type IntegerPseudoArgument = {
   kind: PseudoArgumentKind.Integer;
@@ -2808,10 +2460,244 @@ type IntegerListPseudoArgument = {
   values: number[];
 };
 
+function parseIdentArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IdentPseudoArgument | null {
+  const ident = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeIdentToken), context),
+    'ident argument',
+  );
+
+  if (ident === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.Ident,
+    value: ident.value,
+  };
+}
+
+function parseIntegerArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerPseudoArgument | null {
+  const integer = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeInteger), context),
+    'integer argument',
+  );
+
+  if (integer === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.Integer,
+    value: integer,
+  };
+}
+
+function parseNonNegativeIntegerArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerPseudoArgument | null {
+  const argument = parseIntegerArgument(value, context);
+  return argument !== null && argument.value >= 0 ? argument : null;
+}
+
+function parseIntegerListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): IntegerListPseudoArgument | null {
+  const parsed = parseListAsComponentGrammar(
+    value,
+    withComponentTrivia(tryConsumeInteger),
+    context,
+  );
+  const values: number[] = [];
+
+  for (const result of parsed) {
+    const integer = unwrapParseResultOrThrow(result, 'integer list item');
+
+    if (integer === null) {
+      return null;
+    }
+
+    values.push(integer);
+  }
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.IntegerList,
+    values,
+  };
+}
+
+function tryConsumeInteger(c: ComponentCursor): TryComponentParserResult<number> {
+  const token = unwrapParseResultOrThrow(
+    tryConsumeIntegerToken(c),
+    'integer token',
+  );
+  return token === null ? null : ok(token.value);
+}
+
+// --------------------------------------
+// Language-range-list arguments
+// --------------------------------------
+
+type LanguageRangeListPseudoArgument = {
+  kind: PseudoArgumentKind.LanguageRangeList;
+  ranges: LanguageRange[];
+};
+
+type LanguageRange = string;
+
+
+function parseLanguageRangeListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): LanguageRangeListPseudoArgument | null {
+  const parsed = parseListAsComponentGrammar(
+    value,
+    withComponentTrivia(tryConsumeLanguageRange),
+    context,
+  );
+
+  const ranges: LanguageRange[] = [];
+
+  for (const result of parsed) {
+    const range = unwrapParseResultOrThrow(result, 'language range');
+
+    if (range === null) {
+      return null;
+    }
+
+    ranges.push(range);
+  }
+
+  if (ranges.length === 0) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.LanguageRangeList,
+    ranges,
+  };
+}
+
+function tryConsumeLanguageRange(c: ComponentCursor): TryComponentParserResult<LanguageRange> {
+  const start = c.pos();
+  const component = c.next();
+
+  if (isIdentToken(component)) {
+    return ok(component.value);
+  }
+
+  if (isTokenKind(component, TokenKind.String)) {
+    return ok(component.value);
+  }
+
+  c.restore(start);
+  return null;
+}
+
+// --------------------------------------
+// Direction arguments
+// --------------------------------------
+
+type DirectionPseudoArgument = {
+  kind: PseudoArgumentKind.Direction;
+  value: 'ltr' | 'rtl' | null;
+};
+
+function parseDirectionArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): DirectionPseudoArgument | null {
+  const raw = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, withComponentTrivia(tryConsumeDirectionIdent), context),
+    'direction argument',
+  );
+
+  if (raw === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.Direction,
+    value: raw === 'ltr' || raw === 'rtl' ? raw : null,
+  };
+}
+
+function tryConsumeDirectionIdent(c: ComponentCursor): TryComponentParserResult<string> {
+  const start = c.pos();
+  const ident = c.next();
+
+  if (!isIdentToken(ident)) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok(asciiLower(ident.value));
+}
+
+// --------------------------------------
+// Part-name-list arguments
+// --------------------------------------
+
 type PartNameListPseudoArgument = {
   kind: PseudoArgumentKind.PartNameList;
   names: string[];
 };
+
+function parsePartNameListArgument(
+  value: readonly ComponentValue[],
+  context: SelectorParserContext,
+): PartNameListPseudoArgument | null {
+  const names = unwrapParseResultOrThrow(
+    parseAsComponentGrammar(value, tryConsumePartNameList, context),
+    'part name list',
+  );
+
+  if (names === null) {
+    return null;
+  }
+
+  return {
+    kind: PseudoArgumentKind.PartNameList,
+    names,
+  };
+}
+
+/**
+ * <part-name-list> = <ident-token>+
+ */
+function tryConsumePartNameList(c: ComponentCursor): TryComponentParserResult<string[]> {
+  return consumePartNameList(c);
+}
+
+const consumePartNameList: TryComponentParser<string[]> = plus(
+  withComponentTrivia((c): TryComponentParserResult<string> => {
+    const ident = unwrapParseResultOrThrow(
+      tryConsumeIdentToken(c),
+      'part name',
+    );
+
+    if (ident === null) {
+      return null;
+    }
+
+    return ok(ident.value);
+  }),
+);
+
+// --------------------------------------
+// Custom-ident arguments
+// --------------------------------------
 
 type CustomIdentPseudoArgument = {
   kind: PseudoArgumentKind.CustomIdent;
@@ -2819,8 +2705,39 @@ type CustomIdentPseudoArgument = {
 };
 
 // --------------------------------------
-// Pseudo-element Policy Invalidation
+// Pseudo-selector policy
 // --------------------------------------
+
+// Pseudo-class tails
+
+function isValidPseudoClassAfterPseudoElement(
+  pseudoElementName: PseudoElementName,
+  pseudoClassName: PseudoClassName,
+): boolean {
+  if (isElementBackedPseudoElement(pseudoElementName)) {
+    return true;
+  }
+
+  return isDefaultValidTailPseudoClass(pseudoClassName);
+}
+
+function isDefaultValidTailPseudoClass(name: PseudoClassName): boolean {
+  switch (name) {
+    // User action pseudo-classes
+    case 'hover': case 'active': case 'focus': case 'focus-visible': case 'focus-within':
+    case 'interest-source': case 'interest-target':
+      return true;
+
+    // Logical pseudo-classes that inherit the pseudo-element tail context
+    case 'is': case 'where': case 'not':
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+// Pseudo-element classification
 
 function isElementBackedPseudoElement(
   pseudoElement: PseudoElementName,
@@ -2854,6 +2771,8 @@ function isTreeAbidingPseudoElement(
       return false;
   }
 }
+
+// Pseudo-element placement and chaining
 
 function isValidSubPseudoElement(
   origin: PseudoElementName | undefined,
