@@ -61,7 +61,6 @@ export enum ComponentConsumerResultKind {
 
 export enum ComponentConsumerBadReason {
   Invalid = 'invalid',
-  InvalidPseudoElementTail = 'invalid-pseudo-element-tail',
 }
 
 export function ok<T>(value: T): ComponentConsumerOk<T> {

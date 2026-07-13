@@ -827,62 +827,6 @@ export function isFunctionBlock(comp: ComponentValue | null): comp is FunctionBl
   return isBlockKind(comp, BlockKind.Function);
 }
 
-export function isAnyValue(cvs: readonly ComponentValue[]): boolean {
-  for (const comp of cvs) {
-    if ('kind' in comp) {
-      switch (comp.kind) {
-        case TokenKind.BadString:
-        case TokenKind.BadUrl:
-        case TokenKind.RightParen:
-        case TokenKind.RightBracket:
-        case TokenKind.RightBrace:
-          return false;
-
-        default:
-          continue;
-      }
-    }
-
-    if (!isAnyValue(comp.value)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-export function isDeclarationValue(cvs: readonly ComponentValue[], topLevel = true): boolean {
-  for (const comp of cvs) {
-    if ('kind' in comp) {
-      switch (comp.kind) {
-        case TokenKind.BadString:
-        case TokenKind.BadUrl:
-        case TokenKind.RightParen:
-        case TokenKind.RightBracket:
-        case TokenKind.RightBrace:
-          return false;
-
-        case TokenKind.Semicolon:
-          if (topLevel) return false;
-          continue;
-
-        case TokenKind.Delim:
-          if (topLevel && comp.value === '!') return false;
-          continue;
-
-        default:
-          continue;
-      }
-    }
-
-    if (!isDeclarationValue(comp.value, false)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 function isPreservedToken(token: Token): token is PreservedToken {
   return (
     token.kind !== TokenKind.Function &&

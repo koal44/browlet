@@ -2,17 +2,15 @@ import {
   BlockItemAstKind, PropertyId, getPropertyId,
   type CustomPropertyDeclarationAst, type DeclarationAst,
 } from './types';
-import {
-  isDeclarationValue,
-  type Declaration as SyntaxDeclaration,
-} from './syntax';
+import type { Declaration as SyntaxDeclaration } from './syntax';
 import { parseCssWideValue } from '../values/css-wide';
 import { parseColorValue } from '../values/color';
+import { isDeclarationValue } from '../values/declaration-value';
 import { parseLengthPercentageAuto } from '../values/length-percentage';
 import { parseAnimationNameValue } from '../props/animation-name';
 
 export function buildDeclarationAst(declaration: SyntaxDeclaration): DeclarationAst | null {
-  if (!isDeclarationValue(declaration.value)) {
+  if (declaration.value.length > 0 && !isDeclarationValue(declaration.value)) {
     return null;
   }
 

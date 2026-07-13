@@ -1492,7 +1492,7 @@ function createPseudoClassSelector(
     !isValidPseudoClassAfterPseudoElement(pseudoElement, name)
   ) {
     return bad(
-      ComponentConsumerBadReason.InvalidPseudoElementTail,
+      ComponentConsumerBadReason.Invalid,
       `Pseudo-class :${name} is not valid after ::${pseudoElement}`,
     );
   }
@@ -2204,7 +2204,7 @@ function parseStrictComplexRealSelectorListArgument(
       return context.pseudoClassTailElement === undefined
         ? null
         : bad(
-          ComponentConsumerBadReason.InvalidPseudoElementTail,
+          ComponentConsumerBadReason.Invalid,
           `Selector is not valid after ::${context.pseudoClassTailElement}`,
         );
     }

@@ -520,6 +520,8 @@ function consumeMultiplier<T, Output extends T[]>(
   multiplier: Multiplier<T, Output>,
   max = multiplier.max,
 ): TryComponentConsumerResult<Output> {
+  // TODO: Consider consuming through the multiplier after a bad item while retaining
+  // the first bad result, so recovery can resume at the multiplier boundary.
   return multiplier.separator === 'comma'
     ? consumeCommaMultiplier(c, multiplier, max)
     : consumePlainMultiplier(c, multiplier, max);

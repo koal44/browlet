@@ -1,10 +1,8 @@
-import { describe, expect, it, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 import {
   BlockKind,
   RuleKind,
-  isAnyValue,
-  isDeclarationValue,
   parseCommaSeparatedListOfComponentValues,
   parseComponentValue,
   parseDeclaration,
@@ -970,66 +968,5 @@ describe('oracle-derived syntax recovery behavior', () => {
     expect(before).toHaveLength(2);
     expectQualifiedRule(before[0]);
     expectDeclaration(before[1]);
-  });
-});
-
-describe('CSS Syntax arbitrary value predicates', () => {
-  const values = parseListOfComponentValues;
-
-  it('accepts empty sequences', () => {
-    expect(isAnyValue([])).toBe(true);
-    expect(isDeclarationValue([])).toBe(true);
-  });
-
-  it('accepts ordinary component values', () => {
-    expect(isAnyValue(values('red 1px url(foo.png)'))).toBe(true);
-    expect(isDeclarationValue(values('red 1px url(foo.png)'))).toBe(true);
-  });
-
-  it('allows top-level semicolon and bang for any-value', () => {
-    expect(isAnyValue(values('a ! b; c'))).toBe(true);
-  });
-
-  it('rejects top-level semicolon and bang for declaration-value', () => {
-    expect(isDeclarationValue(values('a ! b'))).toBe(false);
-    expect(isDeclarationValue(values('a; b'))).toBe(false);
-  });
-
-  it('allows semicolon and bang below the top level for declaration-value', () => {
-    expect(isDeclarationValue(values('fn(a ! b; c)'))).toBe(true);
-    expect(isDeclarationValue(values('[a ! b; c]'))).toBe(true);
-    expect(isDeclarationValue(values('(a ! b; c)'))).toBe(true);
-  });
-
-  it('allows semicolon and bang when explicitly checking below top level', () => {
-    expect(isDeclarationValue(values('a ! b; c'), false)).toBe(true);
-  });
-
-  it('rejects bad strings recursively', () => {
-    expect(isAnyValue(values('"x\ny"'))).toBe(false);
-    expect(isAnyValue(values('fn("x\ny")'))).toBe(false);
-
-    expect(isDeclarationValue(values('"x\ny"'))).toBe(false);
-    expect(isDeclarationValue(values('fn("x\ny")'))).toBe(false);
-  });
-
-  it('rejects bad urls recursively', () => {
-    expect(isAnyValue(values('url(foo"bar)'))).toBe(false);
-    expect(isAnyValue(values('fn(url(foo"bar))'))).toBe(false);
-
-    expect(isDeclarationValue(values('url(foo"bar)'))).toBe(false);
-    expect(isDeclarationValue(values('fn(url(foo"bar))'))).toBe(false);
-  });
-
-  it('rejects unmatched closing tokens recursively', () => {
-    expect(isAnyValue(values(')'))).toBe(false);
-    expect(isAnyValue(values(']'))).toBe(false);
-    expect(isAnyValue(values('}'))).toBe(false);
-
-    expect(isAnyValue(values('fn(])'))).toBe(false);
-    expect(isAnyValue(values('[)]'))).toBe(false);
-
-    expect(isDeclarationValue(values('fn(])'))).toBe(false);
-    expect(isDeclarationValue(values('[)]'))).toBe(false);
   });
 });
