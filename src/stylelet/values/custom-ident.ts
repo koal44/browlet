@@ -1,27 +1,22 @@
 import { asciiLower } from '../../utils/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { withComponentTrivia } from '../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  isIdentToken, parseAsComponentGrammar,
-  type ParserInput,
-} from '../parser/syntax';
-import {
-  ok,
-  unwrapConsumeResultOrThrow,
+  isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
+import { CSS_WIDE_KEYWORDS } from './css-wide';
+import { serializeIdentifier, tryConsumeIdent } from './ident';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
   value: string;
 };
 
-const CSS_WIDE_KEYWORDS = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
+const RESERVED_CUSTOM_IDENT_KEYWORDS = [
+  ...CSS_WIDE_KEYWORDS,
+  'default',
 ] as const;
 
 export function parseCustomIdent(
@@ -44,16 +39,16 @@ export function tryConsumeCustomIdent(
   excluded: readonly string[] = [],
 ): TryComponentConsumerResult<CustomIdentValue> {
   const start = c.pos();
-  const comp = c.next();
+  const ident = tryConsumeIdent(c);
 
-  if (!isIdentToken(comp)) {
-    c.restore(start);
-    return null;
+  if (ident === null || isBad(ident)) {
+    return ident;
   }
 
-  const lower = asciiLower(comp.value);
+  const value = ident.value.value;
+  const lower = asciiLower(value);
 
-  for (const keyword of CSS_WIDE_KEYWORDS) {
+  for (const keyword of RESERVED_CUSTOM_IDENT_KEYWORDS) {
     if (lower === keyword) {
       c.restore(start);
       return null;
@@ -69,12 +64,10 @@ export function tryConsumeCustomIdent(
 
   return ok({
     type: 'custom-ident',
-    value: comp.value,
+    value,
   });
 }
 
 export function serializeCustomIdent(value: CustomIdentValue): string {
-  // This is intentionally minimal for now. We should replace this with a real
-  // CSS identifier serializer when tests force escaping behavior.
-  return value.value;
+  return serializeIdentifier(value.value);
 }

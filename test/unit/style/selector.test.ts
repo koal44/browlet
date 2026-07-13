@@ -1195,12 +1195,13 @@ describe('pseudo-element selectors', () => {
       });
     });
 
-    it('rejects CSS-wide keywords as ::highlight() names', () => {
+    it('rejects reserved custom-ident keywords as ::highlight() names', () => {
       expectInvalidSelector('::highlight(inherit)');
       expectInvalidSelector('::highlight(initial)');
       expectInvalidSelector('::highlight(unset)');
       expectInvalidSelector('::highlight(revert)');
       expectInvalidSelector('::highlight(revert-layer)');
+      expectInvalidSelector('::highlight(default)');
     });
   });
 

@@ -1333,3 +1333,58 @@ runScenarios('logical selector argument restrictions', 'normal', [
     ],
   },
 ]);
+
+runScenarios('custom-ident default reservation oracle', 'normal', [
+  {
+    name: 'native parsers reserve default except in highlight arguments',
+    engines: ['native'],
+    markup: `
+      <style>
+        #container { container-name: default; }
+      </style>
+      <div id="container"></div>
+      <div id="registered-property"></div>
+      <div id="highlight-target"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const result = document.getElementById('registered-property')!;
+
+        try {
+          CSS.registerProperty({
+            name: '--oracle-custom-ident-default',
+            syntax: '<custom-ident>',
+            inherits: false,
+            initialValue: 'default',
+          });
+          result.dataset.result = 'accepted';
+        } catch (error) {
+          result.dataset.result = error instanceof DOMException
+            ? error.name
+            : 'error';
+        }
+      });
+    },
+    cases: [
+      // container-name uses <custom-ident> and drops the reserved keyword.
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'container-name' },
+        expect: { throws: true },
+      },
+
+      // The Properties and Values API independently enforces the reservation.
+      {
+        select: '#registered-property[data-result="SyntaxError"]',
+        expect: { count: 1 },
+      },
+
+      // CSS Pseudo defines this argument as <custom-ident>, but browsers
+      // currently accept default as if the production were merely <ident>.
+      {
+        select: '#highlight-target::highlight(default)',
+        expect: { throws: true },
+        status: 'fail',
+      },
+    ],
+  },
+]);
