@@ -3,21 +3,20 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { consumeComponentTrivia, isIdentToken, parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 import {
-  __nextSequenceCaps, __parseSequenceAttempt,
+  __nextSequenceCaps, __consumeSequenceAttempt,
   allOf, any, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
   requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
 } from '../../../src/stylelet/parser/component-grammar';
 import {
-  bad,
-  ComponentParserBadReason,
-  isBad, ok, unwrapParseResultOrThrow, type ComponentParserBad, type TryComponentParser, type TryComponentParserResult,
-} from '../../../src/stylelet/parser/component-try-parser';
+  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow,
+  type ComponentConsumerBad, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../../src/stylelet/parser/component-try-consumer';
 
 const cursor = (css: string, context: unknown = undefined): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css), { context });
 
-const literalParser = <T extends string>(expected: T): TryComponentParser<T> => {
-  return (c: ComponentCursor): TryComponentParserResult<T> => {
+const literalConsumer = <T extends string>(expected: T): TryComponentConsumer<T> => {
+  return (c: ComponentCursor): TryComponentConsumerResult<T> => {
     const start = c.pos();
     const comp = c.next();
 
@@ -34,12 +33,12 @@ const literalParser = <T extends string>(expected: T): TryComponentParser<T> => 
   };
 };
 
-const valueLiteralParser = <T extends string>(expected: T): TryComponentParser<T> =>
-  withComponentTrivia(literalParser(expected));
+const valueLiteralConsumer = <T extends string>(expected: T): TryComponentConsumer<T> =>
+  withComponentTrivia(literalConsumer(expected));
 
-const parseA = valueLiteralParser('a');
-const parseB = valueLiteralParser('b');
-const parseC = valueLiteralParser('c');
+const consumeA = valueLiteralConsumer('a');
+const consumeB = valueLiteralConsumer('b');
+const consumeC = valueLiteralConsumer('c');
 
 function expectDone(c: ComponentCursor): void {
   consumeComponentTrivia(c);
@@ -67,14 +66,14 @@ function expectNextComma(c: ComponentCursor): void {
   });
 }
 
-const unwrap = <T>(result: TryComponentParserResult<T>): T | null =>
-  unwrapParseResultOrThrow(result, 'component grammar test result');
+const unwrap = <T>(result: TryComponentConsumerResult<T>): T | null =>
+  unwrapConsumeResultOrThrow(result, 'component grammar test result');
 
 type SequenceAttemptValue =
-  Exclude<ReturnType<typeof __parseSequenceAttempt>, ComponentParserBad>;
+  Exclude<ReturnType<typeof __consumeSequenceAttempt>, ComponentConsumerBad>;
 
 function expectSequenceAttempt(
-  attempt: ReturnType<typeof __parseSequenceAttempt>,
+  attempt: ReturnType<typeof __consumeSequenceAttempt>,
 ): SequenceAttemptValue {
   if (isBad(attempt)) {
     throw new Error(`Unexpected bad sequence attempt: ${attempt.message ?? attempt.reason}`);
@@ -83,15 +82,15 @@ function expectSequenceAttempt(
   return attempt;
 }
 
-const badAfterA = (message = 'bad test parser'): TryComponentParser<'bad'> => {
+const badAfterA = (message = 'bad test consumer'): TryComponentConsumer<'bad'> => {
   return (c) => {
-    const value = unwrapParseResultOrThrow(parseA(c), 'bad test prefix');
+    const value = unwrapConsumeResultOrThrow(consumeA(c), 'bad test prefix');
 
     if (value === null) {
       return null;
     }
 
-    return bad(ComponentParserBadReason.Invalid, message);
+    return bad(ComponentConsumerBadReason.Invalid, message);
   };
 };
 
@@ -100,15 +99,15 @@ describe('component value combinators', () => {
     const c = cursor('a b');
 
     // a && b
-    const parseAAndB = allOf(
+    const consumeAAndB = allOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAAndB(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAAndB(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -116,15 +115,15 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a && b
-    const parseAAndB = allOf(
+    const consumeAAndB = allOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAAndB(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAAndB(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -132,15 +131,15 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a && b?
-    const parseAAndMaybeB = allOf(
+    const consumeAAndMaybeB = allOf(
       [
-        one(parseA),
-        opt(parseB),
+        one(consumeA),
+        opt(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAAndMaybeB(c))).toEqual([['a'], []]);
+    expect(unwrap(consumeAAndMaybeB(c))).toEqual([['a'], []]);
     expectDone(c);
   });
 
@@ -148,15 +147,15 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a && b?
-    const parseAAndMaybeB = allOf(
+    const consumeAAndMaybeB = allOf(
       [
-        one(parseA),
-        opt(parseB),
+        one(consumeA),
+        opt(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAAndMaybeB(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAAndMaybeB(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -164,15 +163,15 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a && b?
-    const parseAAndMaybeB = allOf(
+    const consumeAAndMaybeB = allOf(
       [
-        one(parseA),
-        opt(parseB),
+        one(consumeA),
+        opt(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAAndMaybeB(c))).toBeNull();
+    expect(unwrap(consumeAAndMaybeB(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -180,15 +179,15 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(
+    const consumeAOrBOrBoth = someOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAOrBOrBoth(c))).toEqual([['a'], undefined]);
+    expect(unwrap(consumeAOrBOrBoth(c))).toEqual([['a'], undefined]);
     expectDone(c);
   });
 
@@ -196,15 +195,15 @@ describe('component value combinators', () => {
     const c = cursor('b a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(
+    const consumeAOrBOrBoth = someOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAOrBOrBoth(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAOrBOrBoth(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
@@ -212,15 +211,15 @@ describe('component value combinators', () => {
     const c = cursor('d');
 
     // a || b
-    const parseAOrBOrBoth = someOf(
+    const consumeAOrBOrBoth = someOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAOrBOrBoth(c))).toBeNull();
+    expect(unwrap(consumeAOrBOrBoth(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -228,23 +227,23 @@ describe('component value combinators', () => {
     const c = cursor('a a');
 
     // a || b
-    const parseAOrBOrBoth = someOf(
+    const consumeAOrBOrBoth = someOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAOrBOrBoth(c))).toEqual([['a'], undefined]);
+    expect(unwrap(consumeAOrBOrBoth(c))).toEqual([['a'], undefined]);
     expectNextIdent(c, 'a');
   });
 
   it('does not interleave inside grouped components', () => {
-    const groupedBC: TryComponentParser<readonly ['b', 'c']> = (c: ComponentCursor) => {
+    const groupedBC: TryComponentConsumer<readonly ['b', 'c']> = (c: ComponentCursor) => {
       const start = c.pos();
 
-      const bv = unwrapParseResultOrThrow(parseB(c), 'grouped b');
+      const bv = unwrapConsumeResultOrThrow(consumeB(c), 'grouped b');
 
       if (bv === null) {
         c.restore(start);
@@ -253,7 +252,7 @@ describe('component value combinators', () => {
 
       consumeComponentTrivia(c);
 
-      const cv = unwrapParseResultOrThrow(parseC(c), 'grouped c');
+      const cv = unwrapConsumeResultOrThrow(consumeC(c), 'grouped c');
 
       if (cv === null) {
         c.restore(start);
@@ -264,9 +263,9 @@ describe('component value combinators', () => {
     };
 
     // a || [ b c ]
-    const parseAOrGroupedBCOrBoth = someOf(
+    const consumeAOrGroupedBCOrBoth = someOf(
       [
-        one(parseA),
+        one(consumeA),
         one(groupedBC),
       ],
       (value) => ok(value),
@@ -274,7 +273,7 @@ describe('component value combinators', () => {
 
     const valid = cursor('a b c');
 
-    expect(unwrap(parseAOrGroupedBCOrBoth(valid))).toEqual([
+    expect(unwrap(consumeAOrGroupedBCOrBoth(valid))).toEqual([
       ['a'],
       [['b', 'c']],
     ]);
@@ -283,22 +282,22 @@ describe('component value combinators', () => {
 
     const invalid = cursor('b a c');
 
-    expect(unwrap(parseAOrGroupedBCOrBoth(invalid))).toBeNull();
+    expect(unwrap(consumeAOrGroupedBCOrBoth(invalid))).toBeNull();
     expect(invalid.pos()).toBe(0);
   });
 
   it('parses juxtaposed components with sequence', () => {
     const c = cursor('a b');
 
-    const parseAB = sequenceOf(
+    const consumeAB = sequenceOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    const result = parseAB(c);
+    const result = consumeAB(c);
 
     expect(unwrap(result)).toEqual([['a'], ['b']]);
     expectDone(c);
@@ -307,15 +306,15 @@ describe('component value combinators', () => {
   it('parses alternatives with oneOf', () => {
     const c = cursor('b');
 
-    const parseAOrB = oneOf(
+    const consumeAOrB = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    const result = parseAOrB(c);
+    const result = consumeAOrB(c);
 
     expect(unwrap(result)).toEqual(['b']);
     expectDone(c);
@@ -324,47 +323,47 @@ describe('component value combinators', () => {
   it('returns null from oneOf when no alternatives match', () => {
     const c = cursor('c');
 
-    const parseAOrB = oneOf(
+    const consumeAOrB = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAOrB(c))).toBeNull();
+    expect(unwrap(consumeAOrB(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   // a b | c || d && e f
   it('composes grammar combinator precedence', () => {
-    const parseD = valueLiteralParser('d');
-    const parseE = valueLiteralParser('e');
-    const parseF = valueLiteralParser('f');
+    const consumeD = valueLiteralConsumer('d');
+    const consumeE = valueLiteralConsumer('e');
+    const consumeF = valueLiteralConsumer('f');
 
     // a b
-    const parseAB = sequenceOf(
+    const consumeAB = sequenceOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
     // e f
-    const parseEF = sequenceOf(
+    const consumeEF = sequenceOf(
       [
-        one(parseE),
-        one(parseF),
+        one(consumeE),
+        one(consumeF),
       ],
       (value) => ok(value),
     );
 
     // d && e f
-    const parseDAndEF = allOf(
+    const consumeDAndEF = allOf(
       [
-        one(parseD),
-        one(parseEF),
+        one(consumeD),
+        one(consumeEF),
       ],
       ([d, ef]) => ok([
         d,
@@ -373,10 +372,10 @@ describe('component value combinators', () => {
     );
 
     // c || d && e f
-    const parseCOrDAndEF = someOf(
+    const consumeCOrDAndEF = someOf(
       [
-        one(parseC),
-        one(parseDAndEF),
+        one(consumeC),
+        one(consumeDAndEF),
       ],
       ([c, dAndEF]) => ok([
         c,
@@ -385,20 +384,20 @@ describe('component value combinators', () => {
     );
 
     // a b | c || d && e f
-    const parseWhole = oneOf(
+    const consumeWhole = oneOf(
       [
-        one(parseAB),
-        one(parseCOrDAndEF),
+        one(consumeAB),
+        one(consumeCOrDAndEF),
       ],
       ([value]) => ok(value),
     );
 
     const ab = cursor('a b');
-    expect(unwrap(parseWhole(ab))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeWhole(ab))).toEqual([['a'], ['b']]);
     expectDone(ab);
 
     const reordered = cursor('e f d c');
-    expect(unwrap(parseWhole(reordered))).toEqual([
+    expect(unwrap(consumeWhole(reordered))).toEqual([
       ['c'],
       [
         ['d'],
@@ -411,7 +410,7 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const partial = cursor('e f d');
-    expect(unwrap(parseWhole(partial))).toEqual([
+    expect(unwrap(consumeWhole(partial))).toEqual([
       undefined,
       [
         ['d'],
@@ -428,8 +427,8 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a*
-    const parseAStar = repeat(parseA, 0);
-    const result = parseAStar(c);
+    const consumeAStar = repeat(consumeA, 0);
+    const result = consumeAStar(c);
 
     expect(unwrap(result)).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -439,8 +438,8 @@ describe('component value combinators', () => {
     const c = cursor('a a b');
 
     // a+
-    const parseAPlus = repeat(parseA, 1);
-    const result = parseAPlus(c);
+    const consumeAPlus = repeat(consumeA, 1);
+    const result = consumeAPlus(c);
 
     expect(unwrap(result)).toEqual(['a', 'a']);
 
@@ -451,8 +450,8 @@ describe('component value combinators', () => {
     const c = cursor('a a a a');
 
     // a{1,3}
-    const parseOneToThreeA = repeat(parseA, 1, 3);
-    const result = parseOneToThreeA(c);
+    const consumeOneToThreeA = repeat(consumeA, 1, 3);
+    const result = consumeOneToThreeA(c);
 
     expect(unwrap(result)).toEqual(['a', 'a', 'a']);
     expectNextIdent(c, 'a');
@@ -462,28 +461,28 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a{2,3}
-    const parseTwoToThreeA = repeat(parseA, 2, 3);
+    const consumeTwoToThreeA = repeat(consumeA, 2, 3);
 
-    expect(unwrap(parseTwoToThreeA(c))).toBeNull();
+    expect(unwrap(consumeTwoToThreeA(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('uses zero-to-one repetition as an optional component in sequence', () => {
     // a? b
-    const parseMaybeAThenB = sequenceOf(
+    const consumeMaybeAThenB = sequenceOf(
       [
-        repeat(parseA, 0, 1),
-        one(parseB),
+        repeat(consumeA, 0, 1),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
     const withA = cursor('a b');
-    expect(unwrap(parseMaybeAThenB(withA))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeMaybeAThenB(withA))).toEqual([['a'], ['b']]);
     expectDone(withA);
 
     const withoutA = cursor('b');
-    expect(unwrap(parseMaybeAThenB(withoutA))).toEqual([[], ['b']]);
+    expect(unwrap(consumeMaybeAThenB(withoutA))).toEqual([[], ['b']]);
     expectDone(withoutA);
   });
 
@@ -491,19 +490,59 @@ describe('component value combinators', () => {
     const c = cursor('a, a, a');
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
-    const result = parseACommaList(c);
+    const consumeACommaList = commaRepeat(consumeA);
+    const result = consumeACommaList(c);
 
     expect(unwrap(result)).toEqual(['a', 'a', 'a']);
     expectDone(c);
+  });
+
+  it('parses comma repetitions of optional sequences when each item consumes a value', () => {
+    const c = cursor('a b c, a c, b');
+
+    // [ a? b? c? ]#
+    const tryConsumeOptionalABC = sequenceOf(
+      [
+        opt(consumeA),
+        opt(consumeB),
+        opt(consumeC),
+      ],
+      (value) => ok(value),
+    );
+    const tryConsumeOptionalABCList = commaRepeat(tryConsumeOptionalABC);
+
+    expect(unwrap(tryConsumeOptionalABCList(c))).toEqual([
+      [['a'], ['b'], ['c']],
+      [['a'], [], ['c']],
+      [[], ['b'], []],
+    ]);
+    expectDone(c);
+  });
+
+  it('throws when a comma-repeated optional sequence omits every item', () => {
+    const c = cursor('');
+
+    // [ a? b? c? ]#
+    const tryConsumeOptionalABC = sequenceOf(
+      [
+        opt(consumeA),
+        opt(consumeB),
+        opt(consumeC),
+      ],
+      (value) => ok(value),
+    );
+    const tryConsumeOptionalABCList = commaRepeat(tryConsumeOptionalABC);
+
+    expect(() => tryConsumeOptionalABCList(c)).toThrow('Comma repeat matched without consuming input');
+    expect(c.pos()).toBe(0);
   });
 
   it('parses bounded comma-separated repetitions', () => {
     const c = cursor('a, a, a');
 
     // a#{1,2}
-    const parseOneToTwoA = commaRepeat(parseA, 1, 2);
-    const result = parseOneToTwoA(c);
+    const consumeOneToTwoA = commaRepeat(consumeA, 1, 2);
+    const result = consumeOneToTwoA(c);
 
     expect(unwrap(result)).toEqual(['a', 'a']);
     expectNextComma(c);
@@ -513,8 +552,8 @@ describe('component value combinators', () => {
     const c = cursor('a,');
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
-    const result = parseACommaList(c);
+    const consumeACommaList = commaRepeat(consumeA);
+    const result = consumeACommaList(c);
 
     expect(unwrap(result)).toEqual(['a']);
     expectNextComma(c);
@@ -524,39 +563,39 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
+    const consumeACommaList = commaRepeat(consumeA);
 
-    expect(unwrap(parseACommaList(c))).toBeNull();
+    expect(unwrap(consumeACommaList(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('wraps try parsers as required parsers', () => {
-    const parseRequiredA = required(parseA, 'Expected a');
+    const consumeRequiredA = required(consumeA, 'Expected a');
 
     const valid = cursor('a');
-    expect(parseRequiredA(valid)).toBe('a');
+    expect(consumeRequiredA(valid)).toBe('a');
     expectDone(valid);
 
     const invalid = cursor('b');
-    expect(() => parseRequiredA(invalid)).toThrow('Expected a');
+    expect(() => consumeRequiredA(invalid)).toThrow('Expected a');
     expect(invalid.pos()).toBe(0);
   });
 
   it('throws when a repeat parser succeeds without consuming input', () => {
-    const parseEmpty: TryComponentParser<'empty'> = () => ok('empty');
+    const consumeEmpty: TryComponentConsumer<'empty'> = () => ok('empty');
 
     const c = cursor('a');
 
     // empty+
-    expect(() => plus(parseEmpty)(c)).toThrow('Repeated parser matched without consuming input');
+    expect(() => plus(consumeEmpty)(c)).toThrow('Repeated consumer matched without consuming input');
   });
 
   it('parses exact repetitions', () => {
     const c = cursor('a a b');
 
     // a{2}
-    const parseExactlyTwoA = repeat(parseA, 2, 2);
-    const result = parseExactlyTwoA(c);
+    const consumeExactlyTwoA = repeat(consumeA, 2, 2);
+    const result = consumeExactlyTwoA(c);
 
     expect(unwrap(result)).toEqual(['a', 'a']);
     expectNextIdent(c, 'b');
@@ -566,8 +605,8 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a{0}
-    const parseExactlyZeroA = repeat(parseA, 0, 0);
-    const result = parseExactlyZeroA(c);
+    const consumeExactlyZeroA = repeat(consumeA, 0, 0);
+    const result = consumeExactlyZeroA(c);
 
     expect(unwrap(result)).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -577,9 +616,9 @@ describe('component value combinators', () => {
     const c = cursor('a b');
 
     // a{2,3}
-    const parseTwoToThreeA = repeat(parseA, 2, 3);
+    const consumeTwoToThreeA = repeat(consumeA, 2, 3);
 
-    expect(unwrap(parseTwoToThreeA(c))).toBeNull();
+    expect(unwrap(consumeTwoToThreeA(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -588,8 +627,8 @@ describe('component value combinators', () => {
     const c = cursor(css);
 
     // a+
-    const parseAPlus = repeat(parseA, 1);
-    const result = parseAPlus(c);
+    const consumeAPlus = repeat(consumeA, 1);
+    const result = consumeAPlus(c);
 
     expect(unwrap(result)).toHaveLength(20);
     expectNextIdent(c, 'a');
@@ -599,8 +638,8 @@ describe('component value combinators', () => {
     const c = cursor('b');
 
     // a#?
-    const parseOptionalACommaList = commaRepeat(parseA, 0);
-    const result = parseOptionalACommaList(c);
+    const consumeOptionalACommaList = commaRepeat(consumeA, 0);
+    const result = consumeOptionalACommaList(c);
 
     expect(unwrap(result)).toEqual([]);
     expect(c.pos()).toBe(0);
@@ -610,9 +649,9 @@ describe('component value combinators', () => {
     const c = cursor('a');
 
     // a#{2,3}
-    const parseTwoToThreeA = commaRepeat(parseA, 2, 3);
+    const consumeTwoToThreeA = commaRepeat(consumeA, 2, 3);
 
-    expect(unwrap(parseTwoToThreeA(c))).toBeNull();
+    expect(unwrap(consumeTwoToThreeA(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -620,9 +659,9 @@ describe('component value combinators', () => {
     const c = cursor(', a');
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
+    const consumeACommaList = commaRepeat(consumeA);
 
-    expect(unwrap(parseACommaList(c))).toBeNull();
+    expect(unwrap(consumeACommaList(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -630,8 +669,8 @@ describe('component value combinators', () => {
     const c = cursor('a ,  a');
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
-    const result = parseACommaList(c);
+    const consumeACommaList = commaRepeat(consumeA);
+    const result = consumeACommaList(c);
 
     expect(unwrap(result)).toEqual(['a', 'a']);
     expectDone(c);
@@ -642,50 +681,50 @@ describe('component value combinators', () => {
     const c = cursor(css);
 
     // a#
-    const parseACommaList = commaRepeat(parseA);
-    const result = parseACommaList(c);
+    const consumeACommaList = commaRepeat(consumeA);
+    const result = consumeACommaList(c);
 
     expect(unwrap(result)).toHaveLength(20);
     expectNextComma(c);
   });
 
   it('throws when a comma-repeat parser succeeds without consuming input', () => {
-    const parseEmpty: TryComponentParser<'empty'> = () => ok('empty');
+    const consumeEmpty: TryComponentConsumer<'empty'> = () => ok('empty');
 
     const c = cursor('a');
 
     // empty#
-    expect(() => commaRepeat(parseEmpty)(c)).toThrow('Comma repeat matched without consuming input');
+    expect(() => commaRepeat(consumeEmpty)(c)).toThrow('Comma repeat matched without consuming input');
   });
 
   it('matches zero or more components in order: A? B? C?', () => {
     // A? B? C?
-    const parseZeroOrMoreInOrder = sequenceOf(
+    const consumeZeroOrMoreInOrder = sequenceOf(
       [
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
-        repeat(parseC, 0, 1),
+        repeat(consumeA, 0, 1),
+        repeat(consumeB, 0, 1),
+        repeat(consumeC, 0, 1),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseZeroOrMoreInOrder(empty))).toEqual([[], [], []]);
+    expect(unwrap(consumeZeroOrMoreInOrder(empty))).toEqual([[], [], []]);
     expectDone(empty);
 
     const sparse = cursor('a c');
-    expect(unwrap(parseZeroOrMoreInOrder(sparse))).toEqual([['a'], [], ['c']]);
+    expect(unwrap(consumeZeroOrMoreInOrder(sparse))).toEqual([['a'], [], ['c']]);
     expectDone(sparse);
   });
 
   it('matches one or more components in order: [ A? B? C? ]!', () => {
     // [ A? B? C? ]!
-    const parseOneOrMoreInOrder = required(
+    const consumeOneOrMoreInOrder = required(
       requiredSequenceOf(
         [
-          repeat(parseA, 0, 1),
-          repeat(parseB, 0, 1),
-          repeat(parseC, 0, 1),
+          repeat(consumeA, 0, 1),
+          repeat(consumeB, 0, 1),
+          repeat(consumeC, 0, 1),
         ],
         (value) => ok(value),
       ),
@@ -693,46 +732,46 @@ describe('component value combinators', () => {
     );
 
     const empty = cursor('');
-    expect(() => parseOneOrMoreInOrder(empty)).toThrow('Expected one or more of a, b, c');
+    expect(() => consumeOneOrMoreInOrder(empty)).toThrow('Expected one or more of a, b, c');
 
     const value = cursor('b c');
-    expect(parseOneOrMoreInOrder(value)).toEqual([[], ['b'], ['c']]);
+    expect(consumeOneOrMoreInOrder(value)).toEqual([[], ['b'], ['c']]);
     expectDone(value);
   });
 
   it('matches all components in order: A B C', () => {
     // A B C
-    const parseAllInOrder = sequenceOf(
+    const consumeAllInOrder = sequenceOf(
       [
-        one(parseA),
-        one(parseB),
-        one(parseC),
+        one(consumeA),
+        one(consumeB),
+        one(consumeC),
       ],
       (value) => ok(value),
     );
 
     const valid = cursor('a b c');
-    expect(unwrap(parseAllInOrder(valid))).toEqual([['a'], ['b'], ['c']]);
+    expect(unwrap(consumeAllInOrder(valid))).toEqual([['a'], ['b'], ['c']]);
     expectDone(valid);
 
     const invalid = cursor('a c');
-    expect(unwrap(parseAllInOrder(invalid))).toBeNull();
+    expect(unwrap(consumeAllInOrder(invalid))).toBeNull();
     expect(invalid.pos()).toBe(0);
   });
 
   it('matches zero or more components in any order: A? && B? && C?', () => {
     // A? && B? && C?
-    const parseOptionalABC = allOf(
+    const consumeOptionalABC = allOf(
       [
-        opt(parseA),
-        opt(parseB),
-        opt(parseC),
+        opt(consumeA),
+        opt(consumeB),
+        opt(consumeC),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseOptionalABC(empty))).toEqual([
+    expect(unwrap(consumeOptionalABC(empty))).toEqual([
       [],
       [],
       [],
@@ -740,7 +779,7 @@ describe('component value combinators', () => {
     expectDone(empty);
 
     const reordered = cursor('c a');
-    expect(unwrap(parseOptionalABC(reordered))).toEqual([
+    expect(unwrap(consumeOptionalABC(reordered))).toEqual([
       ['a'],
       [],
       ['c'],
@@ -750,17 +789,17 @@ describe('component value combinators', () => {
 
   it('matches one or more components in any order: A || B || C', () => {
     // A || B || C
-    const parseOneOrMoreABC = someOf(
+    const consumeOneOrMoreABC = someOf(
       [
-        one(parseA),
-        one(parseB),
-        one(parseC),
+        one(consumeA),
+        one(consumeB),
+        one(consumeC),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('b');
-    expect(unwrap(parseOneOrMoreABC(c))).toEqual([
+    expect(unwrap(consumeOneOrMoreABC(c))).toEqual([
       undefined,
       ['b'],
       undefined,
@@ -768,7 +807,7 @@ describe('component value combinators', () => {
     expectDone(c);
 
     const reordered = cursor('c a');
-    expect(unwrap(parseOneOrMoreABC(reordered))).toEqual([
+    expect(unwrap(consumeOneOrMoreABC(reordered))).toEqual([
       ['a'],
       undefined,
       ['c'],
@@ -776,23 +815,23 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const empty = cursor('');
-    expect(unwrap(parseOneOrMoreABC(empty))).toBeNull();
+    expect(unwrap(consumeOneOrMoreABC(empty))).toBeNull();
     expect(empty.pos()).toBe(0);
   });
 
   it('matches all components in any order: A && B && C', () => {
     // A && B && C
-    const parseAllABC = allOf(
+    const consumeAllABC = allOf(
       [
-        one(parseA),
-        one(parseB),
-        one(parseC),
+        one(consumeA),
+        one(consumeB),
+        one(consumeC),
       ],
       (value) => ok(value),
     );
 
     const reordered = cursor('c a b');
-    expect(unwrap(parseAllABC(reordered))).toEqual([
+    expect(unwrap(consumeAllABC(reordered))).toEqual([
       ['a'],
       ['b'],
       ['c'],
@@ -800,23 +839,23 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const missing = cursor('c a');
-    expect(unwrap(parseAllABC(missing))).toBeNull();
+    expect(unwrap(consumeAllABC(missing))).toBeNull();
     expect(missing.pos()).toBe(0);
   });
 
   it('matches zero or more components in any order: A? || B? || C?', () => {
     // A? || B? || C?
-    const parseOptionalABC = someOf(
+    const consumeOptionalABC = someOf(
       [
-        opt(parseA),
-        opt(parseB),
-        opt(parseC),
+        opt(consumeA),
+        opt(consumeB),
+        opt(consumeC),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseOptionalABC(empty))).toEqual([
+    expect(unwrap(consumeOptionalABC(empty))).toEqual([
       [],
       [],
       [],
@@ -824,7 +863,7 @@ describe('component value combinators', () => {
     expectDone(empty);
 
     const reordered = cursor('c a');
-    expect(unwrap(parseOptionalABC(reordered))).toEqual([
+    expect(unwrap(consumeOptionalABC(reordered))).toEqual([
       ['a'],
       [],
       ['c'],
@@ -835,76 +874,76 @@ describe('component value combinators', () => {
   it('allows comments between juxtaposed components', () => {
     const c = cursor('a/**/b');
 
-    const parseAB = sequenceOf(
+    const consumeAB = sequenceOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAB(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAB(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 
   it('allows comments around comma separators', () => {
     const c = cursor('a/**/,/**/a');
 
-    const parseACommaList = commaRepeat(parseA);
+    const consumeACommaList = commaRepeat(consumeA);
 
-    expect(unwrap(parseACommaList(c))).toEqual(['a', 'a']);
+    expect(unwrap(consumeACommaList(c))).toEqual(['a', 'a']);
     expectDone(c);
   });
 
   it('keeps exclusive alternatives outside unordered groups', () => {
-    const parseNone = valueLiteralParser('none');
-    const parseUnderline = valueLiteralParser('underline');
-    const parseOverline = valueLiteralParser('overline');
-    const parseLineThrough = valueLiteralParser('line-through');
-    const parseBlink = valueLiteralParser('blink');
+    const consumeNone = valueLiteralConsumer('none');
+    const consumeUnderline = valueLiteralConsumer('underline');
+    const consumeOverline = valueLiteralConsumer('overline');
+    const consumeLineThrough = valueLiteralConsumer('line-through');
+    const consumeBlink = valueLiteralConsumer('blink');
 
     // underline || overline || line-through || blink
-    const parseTextDecorationKeywords = someOf(
+    const consumeTextDecorationKeywords = someOf(
       [
-        one(parseUnderline),
-        one(parseOverline),
-        one(parseLineThrough),
-        one(parseBlink),
+        one(consumeUnderline),
+        one(consumeOverline),
+        one(consumeLineThrough),
+        one(consumeBlink),
       ],
       (value) => ok(value),
     );
 
     // none | underline || overline || line-through || blink
-    const parseTextDecorationLine = oneOf(
+    const consumeTextDecorationLine = oneOf(
       [
-        one(parseNone),
-        one(parseTextDecorationKeywords),
+        one(consumeNone),
+        one(consumeTextDecorationKeywords),
       ],
       ([value]) => ok(value),
     );
 
-    // combinator precedence should not allow this to be parsed as
+    // combinator precedence should not allow this to be consumed as
     // (none | underline) || overline || line-through || blink
-    // const parseTextDecorationLine_Wrong = someOf(
+    // const consumeTextDecorationLine_Wrong = someOf(
     //   one(
     //     oneOf(
-    //       one(parseNone),
-    //       one(parseUnderline),
+    //       one(consumeNone),
+    //       one(consumeUnderline),
     //       ([value]) => ok(value),
     //     ),
     //   ),
-    //   one(parseOverline),
-    //   one(parseLineThrough),
-    //   one(parseBlink),
+    //   one(consumeOverline),
+    //   one(consumeLineThrough),
+    //   one(consumeBlink),
     //   value => value,
     // );
 
     const none = cursor('none');
-    expect(unwrap(parseTextDecorationLine(none))).toEqual('none');
+    expect(unwrap(consumeTextDecorationLine(none))).toEqual('none');
     expectDone(none);
 
     const reordered = cursor('overline underline');
-    expect(unwrap(parseTextDecorationLine(reordered))).toEqual([
+    expect(unwrap(consumeTextDecorationLine(reordered))).toEqual([
       ['underline'],
       ['overline'],
       undefined,
@@ -913,20 +952,20 @@ describe('component value combinators', () => {
     expectDone(reordered);
 
     const invalid = cursor('none overline');
-    expect(unwrap(parseTextDecorationLine(invalid))).toEqual('none');
+    expect(unwrap(consumeTextDecorationLine(invalid))).toEqual('none');
     expectNextIdent(invalid, 'overline');
   });
 
 });
 
 describe('component grammar trivia ownership', () => {
-  const rawA = literalParser('a');
-  const rawB = literalParser('b');
+  const rawA = literalConsumer('a');
+  const rawB = literalConsumer('b');
 
   it('keeps sequence tight when parsers are tight', () => {
     const c = cursor('a b');
 
-    const parseAB = sequenceOf(
+    const consumeAB = sequenceOf(
       [
         one(rawA),
         one(rawB),
@@ -934,14 +973,14 @@ describe('component grammar trivia ownership', () => {
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAB(c))).toBeNull();
+    expect(unwrap(consumeAB(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('allows value parsers to own leading trivia', () => {
     const c = cursor('a b');
 
-    const parseAB = sequenceOf(
+    const consumeAB = sequenceOf(
       [
         one(withComponentTrivia(rawA)),
         one(withComponentTrivia(rawB)),
@@ -949,7 +988,7 @@ describe('component grammar trivia ownership', () => {
       (value) => ok(value),
     );
 
-    expect(unwrap(parseAB(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consumeAB(c))).toEqual([['a'], ['b']]);
     expectDone(c);
   });
 });
@@ -957,7 +996,7 @@ describe('component grammar trivia ownership', () => {
 describe('selector separator trivia prototype', () => {
   type DemoCombinator = ' ' | '>' | '+' | '~' | '||';
 
-  const parseExplicitCombinator: TryComponentParser<DemoCombinator> = (c) => {
+  const consumeExplicitCombinator: TryComponentConsumer<DemoCombinator> = (c) => {
     const start = c.pos();
     const first = c.next();
 
@@ -994,12 +1033,12 @@ describe('selector separator trivia prototype', () => {
     return null;
   };
 
-  const parseSelectorSeparator: TryComponentParser<DemoCombinator> = (c) => {
+  const consumeSelectorSeparator: TryComponentConsumer<DemoCombinator> = (c) => {
     const start = c.pos();
 
     const sawWhitespace = c.match(TokenKind.Whitespace);
-    const explicit = unwrapParseResultOrThrow(
-      parseExplicitCombinator(c),
+    const explicit = unwrapConsumeResultOrThrow(
+      consumeExplicitCombinator(c),
       'explicit combinator',
     );
 
@@ -1019,61 +1058,61 @@ describe('selector separator trivia prototype', () => {
   it('parses whitespace as descendant combinator fallback', () => {
     const c = cursor(' a');
 
-    expect(unwrap(parseSelectorSeparator(c))).toBe(' ');
+    expect(unwrap(consumeSelectorSeparator(c))).toBe(' ');
     expectNextIdent(c, 'a');
   });
 
   it('treats whitespace before an explicit combinator as padding', () => {
     const c = cursor(' + a');
 
-    expect(unwrap(parseSelectorSeparator(c))).toBe('+');
+    expect(unwrap(consumeSelectorSeparator(c))).toBe('+');
     expectNextIdent(c, 'a');
   });
 
   it('parses explicit combinator without leading whitespace', () => {
     const c = cursor('+ a');
 
-    expect(unwrap(parseSelectorSeparator(c))).toBe('+');
+    expect(unwrap(consumeSelectorSeparator(c))).toBe('+');
     expectNextIdent(c, 'a');
   });
 
   it('parses column combinator', () => {
     const c = cursor(' || a');
 
-    expect(unwrap(parseSelectorSeparator(c))).toBe('||');
+    expect(unwrap(consumeSelectorSeparator(c))).toBe('||');
     expectNextIdent(c, 'a');
   });
 
   it('does not invent a separator without whitespace or explicit combinator', () => {
     const c = cursor('a');
 
-    expect(unwrap(parseSelectorSeparator(c))).toBeNull();
+    expect(unwrap(consumeSelectorSeparator(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('requires at least one value in unordered all-of groups', () => {
     // [ a? && b? ]!
-    const parseOneOrMoreAB = requiredAllOf(
+    const consumeOneOrMoreAB = requiredAllOf(
       [
-        opt(parseA),
-        opt(parseB),
+        opt(consumeA),
+        opt(consumeB),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseOneOrMoreAB(empty))).toBeNull();
+    expect(unwrap(consumeOneOrMoreAB(empty))).toBeNull();
     expect(empty.pos()).toBe(0);
 
     const valid = cursor('b');
-    expect(unwrap(parseOneOrMoreAB(valid))).toEqual([
+    expect(unwrap(consumeOneOrMoreAB(valid))).toEqual([
       [],
       ['b'],
     ]);
     expectDone(valid);
 
     const reordered = cursor('b a');
-    expect(unwrap(parseOneOrMoreAB(reordered))).toEqual([
+    expect(unwrap(consumeOneOrMoreAB(reordered))).toEqual([
       ['a'],
       ['b'],
     ]);
@@ -1082,56 +1121,56 @@ describe('selector separator trivia prototype', () => {
 
   it('requires at least one multiplier value without throwing', () => {
     // [ a? b? ]!
-    const parseOneOrMoreAB = requiredSequenceOf(
+    const consumeOneOrMoreAB = requiredSequenceOf(
       [
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
+        repeat(consumeA, 0, 1),
+        repeat(consumeB, 0, 1),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseOneOrMoreAB(empty))).toBeNull();
+    expect(unwrap(consumeOneOrMoreAB(empty))).toBeNull();
     expect(empty.pos()).toBe(0);
 
     const valid = cursor('b');
-    expect(unwrap(parseOneOrMoreAB(valid))).toEqual([[], ['b']]);
+    expect(unwrap(consumeOneOrMoreAB(valid))).toEqual([[], ['b']]);
     expectDone(valid);
   });
 
   it('restores when requiredSequence sees only empty multiplier values', () => {
     // [ a? b? ]!
-    const parseOneOrMoreAB = requiredSequenceOf(
+    const consumeOneOrMoreAB = requiredSequenceOf(
       [
-        repeat(parseA, 0, 1),
-        repeat(parseB, 0, 1),
+        repeat(consumeA, 0, 1),
+        repeat(consumeB, 0, 1),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('c');
 
-    expect(unwrap(parseOneOrMoreAB(c))).toBeNull();
+    expect(unwrap(consumeOneOrMoreAB(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'c');
   });
 
   it('treats non-empty nested unordered values as present in requiredSomeOf', () => {
     // [ a? || b? ]!
-    const parseAOrB = requiredSomeOf(
+    const consumeAOrB = requiredSomeOf(
       [
-        opt(parseA),
-        opt(parseB),
+        opt(consumeA),
+        opt(consumeB),
       ],
       (value) => ok(value),
     );
 
     const empty = cursor('');
-    expect(unwrap(parseAOrB(empty))).toBeNull();
+    expect(unwrap(consumeAOrB(empty))).toBeNull();
     expect(empty.pos()).toBe(0);
 
     const valid = cursor('a');
-    expect(unwrap(parseAOrB(valid))).toEqual([
+    expect(unwrap(consumeAOrB(valid))).toEqual([
       ['a'],
       [],
     ]);
@@ -1140,34 +1179,34 @@ describe('selector separator trivia prototype', () => {
 
   it('backtracks optional repetition when a later required component needs the token', () => {
     // a? a
-    const parseMaybeAThenA = sequenceOf(
+    const consumeMaybeAThenA = sequenceOf(
       [
-        opt(parseA),
-        one(parseA),
+        opt(consumeA),
+        one(consumeA),
       ],
       (value) => ok(value)
     );
 
     const c = cursor('a');
 
-    expect(unwrap(parseMaybeAThenA(c))).toEqual([[], ['a']]);
+    expect(unwrap(consumeMaybeAThenA(c))).toEqual([[], ['a']]);
     expectDone(c);
   });
 
   it('backtracks greedy repetition when a later required component needs a token', () => {
     // a* a b*
-    const parseAStarThenAThenBStar = sequenceOf(
+    const consumeAStarThenAThenBStar = sequenceOf(
       [
-        any(parseA),
-        one(parseA),
-        any(parseB),
+        any(consumeA),
+        one(consumeA),
+        any(consumeB),
       ],
       (value) => ok(value)
     );
 
     const c = cursor('a a b b');
 
-    expect(unwrap(parseAStarThenAThenBStar(c))).toEqual([
+    expect(unwrap(consumeAStarThenAThenBStar(c))).toEqual([
       ['a'],
       ['a'],
       ['b', 'b'],
@@ -1177,10 +1216,10 @@ describe('selector separator trivia prototype', () => {
 });
 
 describe('component sequence backtracking support', () => {
-  const parseAB = oneOf(
+  const consumeAB = oneOf(
     [
-      one(parseA),
-      one(parseB),
+      one(consumeA),
+      one(consumeB),
     ],
     ([value]) => ok(value),
   );
@@ -1192,11 +1231,11 @@ describe('component sequence backtracking support', () => {
   it('records actual greedy counts under fixed caps', () => {
     const c = cursor('a a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 5),
-        one(parseB),
+        repeat(consumeA, 0, 5),
+        one(consumeB),
       ],
       [
         5,
@@ -1219,11 +1258,11 @@ describe('component sequence backtracking support', () => {
   it('returns successful prefix frames when a later slot fails', () => {
     const c = cursor('a a a c');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 5),
-        one(parseB),
+        repeat(consumeA, 0, 5),
+        one(consumeB),
       ],
       [
         5,
@@ -1246,12 +1285,12 @@ describe('component sequence backtracking support', () => {
   it('uses caps as upper bounds for each slot', () => {
     const c = cursor('a a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 2),
-        one(parseA),
-        one(parseB),
+        repeat(consumeA, 0, 2),
+        one(consumeA),
+        one(consumeB),
       ],
       [
         2,
@@ -1277,12 +1316,12 @@ describe('component sequence backtracking support', () => {
   it('allows a reduced cap to expose input to the suffix', () => {
     const c = cursor('a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 1),
-        one(parseA),
-        one(parseB),
+        repeat(consumeA, 0, 1),
+        one(consumeA),
+        one(consumeB),
       ],
       [
         1,
@@ -1303,12 +1342,12 @@ describe('component sequence backtracking support', () => {
   it('honors zero caps without consuming input', () => {
     const c = cursor('a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 1),
-        one(parseA),
-        one(parseB),
+        repeat(consumeA, 0, 1),
+        one(consumeA),
+        one(consumeB),
       ],
       [
         0,
@@ -1334,11 +1373,11 @@ describe('component sequence backtracking support', () => {
   it('returns no frame for a first-slot failure', () => {
     const c = cursor('b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       [
         1,
@@ -1356,11 +1395,11 @@ describe('component sequence backtracking support', () => {
   it('records that a greedy ambiguous slot consumed input needed by the suffix', () => {
     const c = cursor('a a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseAB, 0, 20),
-        one(parseB),
+        repeat(consumeAB, 0, 20),
+        one(consumeB),
       ],
       [
         20,
@@ -1383,11 +1422,11 @@ describe('component sequence backtracking support', () => {
   it('can expose suffix input when the ambiguous slot cap is reduced', () => {
     const c = cursor('a a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseAB, 0, 20),
-        one(parseB),
+        repeat(consumeAB, 0, 20),
+        one(consumeB),
       ],
       [
         3,
@@ -1410,11 +1449,11 @@ describe('component sequence backtracking support', () => {
   it('clamps actual count below an oversized cap', () => {
     const c = cursor('a a b');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 20),
-        one(parseB),
+        repeat(consumeA, 0, 20),
+        one(consumeB),
       ],
       [
         20,
@@ -1437,12 +1476,12 @@ describe('component sequence backtracking support', () => {
   it('returns all successful prefix frames when a later slot fails', () => {
     const c = cursor('a a b c');
 
-    const attempt = expectSequenceAttempt(__parseSequenceAttempt(
+    const attempt = expectSequenceAttempt(__consumeSequenceAttempt(
       c,
       [
-        repeat(parseA, 0, 20),
-        one(parseB),
-        one(parseB),
+        repeat(consumeA, 0, 20),
+        one(consumeB),
+        one(consumeB),
       ],
       [
         20,
@@ -1467,11 +1506,11 @@ describe('component sequence backtracking support', () => {
   it('backtracks an optional prefix when the required suffix needs its input', () => {
     const c = cursor('a b');
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        opt(parseAB),
-        one(parseA),
-        one(parseB),
+        opt(consumeAB),
+        one(consumeA),
+        one(consumeB),
       ],
       ([prefix, name, suffix]) => ok({
         prefix,
@@ -1480,7 +1519,7 @@ describe('component sequence backtracking support', () => {
       }),
     );
 
-    expect(unwrap(parse(c))).toEqual({
+    expect(unwrap(consume(c))).toEqual({
       prefix: [],
       name: ['a'],
       suffix: ['b'],
@@ -1489,52 +1528,52 @@ describe('component sequence backtracking support', () => {
   });
 
   it('does not backtrack into a parser that closes over its own multiplier', () => {
-    const parseAorB = oneOf(
+    const consumeAorB = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       ([value]) => ok(value),
     );
 
-    const parseAB: TryComponentParser<string[]> = any(parseAorB);
+    const consumeAB: TryComponentConsumer<string[]> = any(consumeAorB);
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        one(parseAB),
-        one(parseB),
-        one(parseB),
+        one(consumeAB),
+        one(consumeB),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a b b');
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('backtracks a direct greedy multiplier slot', () => {
-    const parseAorB = oneOf(
+    const consumeAorB = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       ([value]) => ok(value),
     );
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        any(parseAorB),
-        one(parseB),
-        one(parseB),
+        any(consumeAorB),
+        one(consumeB),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a b b');
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       ['a'],
       ['b'],
       ['b'],
@@ -1553,10 +1592,10 @@ describe('component sequence backtracking caps', () => {
   it('decrements the rightmost reducible actual count', () => {
     const caps = __nextSequenceCaps(
       [
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 20),
-        one(parseB),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 20),
+        one(consumeB),
       ],
       framesWithCounts(3, 1, 6),
     );
@@ -1572,10 +1611,10 @@ describe('component sequence backtracking caps', () => {
   it('skips a slot that is already at minimum', () => {
     const caps = __nextSequenceCaps(
       [
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 20),
-        one(parseB),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 20),
+        one(consumeB),
       ],
       framesWithCounts(3, 1, 0),
     );
@@ -1591,10 +1630,10 @@ describe('component sequence backtracking caps', () => {
   it('resets suffix slots to declared max after decrementing an earlier slot', () => {
     const caps = __nextSequenceCaps(
       [
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 5),
-        repeat(parseA, 0, 20),
-        one(parseB),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 5),
+        repeat(consumeA, 0, 20),
+        one(consumeB),
       ],
       framesWithCounts(3, 0, 0),
     );
@@ -1610,9 +1649,9 @@ describe('component sequence backtracking caps', () => {
   it('respects non-zero minimums', () => {
     const caps = __nextSequenceCaps(
       [
-        repeat(parseA, 4, 9),
-        repeat(parseA, 2, 5),
-        repeat(parseA, 0, 20),
+        repeat(consumeA, 4, 9),
+        repeat(consumeA, 2, 5),
+        repeat(consumeA, 0, 20),
       ],
       framesWithCounts(7, 2, 0),
     );
@@ -1627,9 +1666,9 @@ describe('component sequence backtracking caps', () => {
   it('returns null when no slot can be reduced', () => {
     const caps = __nextSequenceCaps(
       [
-        repeat(parseA, 2, 5),
-        repeat(parseA, 1, 5),
-        repeat(parseA, 0, 20),
+        repeat(consumeA, 2, 5),
+        repeat(consumeA, 1, 5),
+        repeat(consumeA, 0, 20),
       ],
       framesWithCounts(2, 1, 0),
     );
@@ -1640,8 +1679,8 @@ describe('component sequence backtracking caps', () => {
   it('returns null when the first slot failed before producing frames', () => {
     const caps = __nextSequenceCaps(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       [],
     );
@@ -1654,21 +1693,21 @@ describe('component combinator null projections', () => {
   it('treats a null sequence projection as parser failure', () => {
     const c = cursor('a');
 
-    const parse = sequenceOf(
-      [one(parseA)],
-      (): TryComponentParserResult<'accepted'> => null,
+    const consume = sequenceOf(
+      [one(consumeA)],
+      (): TryComponentConsumerResult<'accepted'> => null,
     );
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'a');
   });
 
   it('continues sequence backtracking when projection rejects a successful attempt', () => {
-    const parseAB = oneOf(
+    const consumeAB = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       ([value]) => ok(value),
     );
@@ -1676,10 +1715,10 @@ describe('component combinator null projections', () => {
     const projectedPrefixLengths: number[] = [];
 
     // (a | b)* b
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        any(parseAB),
-        one(parseB),
+        any(consumeAB),
+        one(consumeB),
       ],
       ([prefix, suffix]) => {
         projectedPrefixLengths.push(prefix.length);
@@ -1697,7 +1736,7 @@ describe('component combinator null projections', () => {
 
     const c = cursor('a b b');
 
-    expect(unwrap(parse(c))).toEqual({
+    expect(unwrap(consume(c))).toEqual({
       prefix: ['a'],
       suffix: ['b'],
     });
@@ -1711,8 +1750,8 @@ describe('component combinator null projections', () => {
   });
 
   it('tries the next alternative when a oneOf projection returns null', () => {
-    const parseFirstA: TryComponentParser<'first'> = (c) => {
-      const value = parseA(c);
+    const consumeFirstA: TryComponentConsumer<'first'> = (c) => {
+      const value = consumeA(c);
 
       if (value === null) {
         return null;
@@ -1721,8 +1760,8 @@ describe('component combinator null projections', () => {
       return ok('first');
     };
 
-    const parseSecondA: TryComponentParser<'second'> = (c) => {
-      const value = parseA(c);
+    const consumeSecondA: TryComponentConsumer<'second'> = (c) => {
+      const value = consumeA(c);
 
       if (value === null) {
         return null;
@@ -1731,10 +1770,10 @@ describe('component combinator null projections', () => {
       return ok('second');
     };
 
-    const parse = oneOf(
+    const consume = oneOf(
       [
-        one(parseFirstA),
-        one(parseSecondA),
+        one(consumeFirstA),
+        one(consumeSecondA),
       ],
       ([value]) => {
         if (value === 'first') {
@@ -1747,38 +1786,38 @@ describe('component combinator null projections', () => {
 
     const c = cursor('a');
 
-    expect(unwrap(parse(c))).toBe('second');
+    expect(unwrap(consume(c))).toBe('second');
     expectDone(c);
   });
 
   it('restores and fails allOf when its projection returns null', () => {
-    const parse = allOf(
+    const consume = allOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
-      (): TryComponentParserResult<'accepted'> => null,
+      (): TryComponentConsumerResult<'accepted'> => null,
     );
 
     const c = cursor('b a');
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'b');
   });
 
   it('restores and fails someOf when its projection returns null', () => {
-    const parse = someOf(
+    const consume = someOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
-      (): TryComponentParserResult<'accepted'> => null,
+      (): TryComponentConsumerResult<'accepted'> => null,
     );
 
     const c = cursor('a');
 
-    expect(parse(c)).toBeNull();
+    expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'a');
   });
@@ -1789,12 +1828,12 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'test' };
     const seen: unknown[] = [];
 
-    const parse: TryComponentParser<'a'> = (c) => {
+    const consume: TryComponentConsumer<'a'> = (c) => {
       seen.push(c.context);
-      return parseA(c);
+      return consumeA(c);
     };
 
-    expect(unwrap(parseAsComponentGrammar('a', parse, context))).toBe('a');
+    expect(unwrap(parseAsComponentGrammar('a', consume, context))).toBe('a');
     expect(seen).toEqual([context]);
   });
 
@@ -1802,12 +1841,12 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'list-test' };
     const seen: unknown[] = [];
 
-    const parse: TryComponentParser<'a'> = (c) => {
+    const consume: TryComponentConsumer<'a'> = (c) => {
       seen.push(c.context);
-      return parseA(c);
+      return consumeA(c);
     };
 
-    expect(parseListAsComponentGrammar('a, a', parse, context).map(unwrap)).toEqual([
+    expect(parseListAsComponentGrammar('a, a', consume, context).map(unwrap)).toEqual([
       'a',
       'a',
     ]);
@@ -1822,22 +1861,22 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'combinator-test' };
     const seen: unknown[] = [];
 
-    const parseContextAwareA: TryComponentParser<'a'> = (c) => {
+    const consumeContextAwareA: TryComponentConsumer<'a'> = (c) => {
       seen.push(c.context);
-      return parseA(c);
+      return consumeA(c);
     };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        one(parseContextAwareA),
-        one(parseB),
+        one(consumeContextAwareA),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a b', context);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       ['a'],
       ['b'],
     ]);
@@ -1852,8 +1891,8 @@ describe('component grammar projection context', () => {
     const context = { foo: 'bar' };
     const seen: unknown[] = [];
 
-    const parse = sequenceOf(
-      [one(parseA)],
+    const consume = sequenceOf(
+      [one(consumeA)],
       ([value], ctx) => {
         seen.push(ctx);
         return ok(value[0]);
@@ -1862,7 +1901,7 @@ describe('component grammar projection context', () => {
 
     const c = cursor('a', context);
 
-    expect(unwrap(parse(c))).toBe('a');
+    expect(unwrap(consume(c))).toBe('a');
     expect(seen).toEqual([context]);
     expectDone(c);
   });
@@ -1871,10 +1910,10 @@ describe('component grammar projection context', () => {
     const context = { foo: 'bar' };
     const seen: unknown[] = [];
 
-    const parse = oneOf(
+    const consume = oneOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value, ctx) => {
         seen.push(ctx);
@@ -1884,7 +1923,7 @@ describe('component grammar projection context', () => {
 
     const c = cursor('b', context);
 
-    expect(unwrap(parse(c))).toEqual(['b']);
+    expect(unwrap(consume(c))).toEqual(['b']);
     expect(seen).toEqual([context]);
     expectDone(c);
   });
@@ -1893,10 +1932,10 @@ describe('component grammar projection context', () => {
     const context = { foo: 'bar' };
     const seen: unknown[] = [];
 
-    const parse = allOf(
+    const consume = allOf(
       [
-        one(parseA),
-        one(parseB),
+        one(consumeA),
+        one(consumeB),
       ],
       (value, ctx) => {
         seen.push(ctx);
@@ -1906,7 +1945,7 @@ describe('component grammar projection context', () => {
 
     const c = cursor('b a', context);
 
-    expect(unwrap(parse(c))).toEqual([['a'], ['b']]);
+    expect(unwrap(consume(c))).toEqual([['a'], ['b']]);
     expect(seen).toEqual([context]);
     expectDone(c);
   });
@@ -1916,15 +1955,15 @@ describe('component parser bad results', () => {
   it('propagates bad from sequence components without restoring', () => {
     const c = cursor('a b');
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
         one(badAfterA('bad sequence')),
-        one(parseB),
+        one(consumeB),
       ],
       (value) => ok(value),
     );
 
-    const result = parse(c);
+    const result = consume(c);
 
     expect(isBad(result)).toBe(true);
     expect(result).toMatchObject({
@@ -1939,20 +1978,20 @@ describe('component parser bad results', () => {
 
     let triedSecond = false;
 
-    const parseSecond: TryComponentParser<'second'> = (inner) => {
+    const consumeSecond: TryComponentConsumer<'second'> = (inner) => {
       triedSecond = true;
-      return parseA(inner) === null ? null : ok('second');
+      return consumeA(inner) === null ? null : ok('second');
     };
 
-    const parse = oneOf(
+    const consume = oneOf(
       [
         one(badAfterA('bad alternative')),
-        one(parseSecond),
+        one(consumeSecond),
       ],
       ([value]) => ok(value),
     );
 
-    const result = parse(c);
+    const result = consume(c);
 
     expect(isBad(result)).toBe(true);
     expect(result).toMatchObject({
@@ -1965,8 +2004,8 @@ describe('component parser bad results', () => {
   it('propagates bad from repetitions without restoring', () => {
     const c = cursor('a b');
 
-    const parse = plus(badAfterA('bad repetition'));
-    const result = parse(c);
+    const consume = plus(badAfterA('bad repetition'));
+    const result = consume(c);
 
     expect(isBad(result)).toBe(true);
     expect(result).toMatchObject({
@@ -1974,6 +2013,48 @@ describe('component parser bad results', () => {
     });
 
     expectNextIdent(c, 'b');
+  });
+
+  it('propagates bad from a nullable probe without restoring', () => {
+    const context = { mode: 'test' };
+    let calls = 0;
+
+    const consumeProbe: TryComponentConsumer<'a'> = (c) => {
+      calls++;
+
+      if (calls === 1) {
+        return null;
+      }
+
+      const value = unwrapConsumeResultOrThrow(
+        consumeA(c),
+        'nullable bad probe',
+      );
+
+      if (value === null) {
+        return null;
+      }
+
+      return bad(
+        ComponentConsumerBadReason.Invalid,
+        'bad nullable probe',
+      );
+    };
+
+    const consume = allOf(
+      [opt(consumeProbe)],
+      (value) => ok(value),
+    );
+
+    const c = cursor('a', context);
+    const result = consume(c);
+
+    expect(isBad(result)).toBe(true);
+    expect(result).toMatchObject({
+      message: 'bad nullable probe',
+    });
+    expectDone(c);
+    expect(c.context).toBe(context);
   });
 
   it('preserves bad from parseAsComponentGrammar', () => {
@@ -2019,11 +2100,11 @@ describe('component parser bad results', () => {
 
 type DemoContext = { mode?: string; };
 
-const contextParser = <T extends string, R extends string>(
+const contextConsumer = <T extends string, R extends string>(
   expectedMode: string,
   literal: T,
   value: R,
-): TryComponentParser<R> => {
+): TryComponentConsumer<R> => {
   return (c) => {
     const context = c.context as DemoContext;
 
@@ -2031,8 +2112,8 @@ const contextParser = <T extends string, R extends string>(
       return null;
     }
 
-    const matched = unwrapParseResultOrThrow(
-      valueLiteralParser(literal)(c),
+    const matched = unwrapConsumeResultOrThrow(
+      valueLiteralConsumer(literal)(c),
       `context literal ${literal}`,
     );
 
@@ -2044,9 +2125,9 @@ const contextParser = <T extends string, R extends string>(
   };
 };
 
-const contextLeakingNullParser = (
+const contextLeakingNullConsumer = (
   mode: string,
-): TryComponentParser<'leaked'> => {
+): TryComponentConsumer<'leaked'> => {
   return (c) => {
     c.context = { mode };
     return null;
@@ -2057,22 +2138,22 @@ describe('component grammar contextAfter', () => {
   it('passes advanced context to later sequence slots', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        one(parseA, {
+        one(consumeA, {
           contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
           }),
         }),
-        one(contextParser('a', 'b', 'seen-a')),
+        one(contextConsumer('a', 'b', 'seen-a')),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a b', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       ['a'],
       ['seen-a'],
     ]);
@@ -2085,9 +2166,9 @@ describe('component grammar contextAfter', () => {
     const baseContext: DemoContext = { mode: 'base' };
     const seen: unknown[] = [];
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        one(parseA, {
+        one(consumeA, {
           contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
@@ -2102,7 +2183,7 @@ describe('component grammar contextAfter', () => {
 
     const c = cursor('a', baseContext);
 
-    expect(unwrap(parse(c))).toEqual(['a']);
+    expect(unwrap(consume(c))).toEqual(['a']);
     expect(seen).toEqual([{ mode: 'a' }]);
     expect(c.context).toBe(baseContext);
   });
@@ -2112,14 +2193,14 @@ describe('component grammar contextAfter', () => {
 
     const inner = sequenceOf(
       [
-        one(contextParser('a', 'b', 'inner')),
+        one(contextConsumer('a', 'b', 'inner')),
       ],
       ([value]) => ok(value),
     );
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        one(parseA, {
+        one(consumeA, {
           contextAfter: (value, context) => ({
             ...(context as DemoContext),
             mode: value,
@@ -2132,7 +2213,7 @@ describe('component grammar contextAfter', () => {
 
     const c = cursor('a b', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       ['a'],
       [['inner']],
     ]);
@@ -2144,12 +2225,12 @@ describe('component grammar contextAfter', () => {
   it('does not leak contextAfter from a rejected oneOf alternative', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
-    const parse = oneOf(
+    const consume = oneOf(
       [
-        one(parseA, {
+        one(consumeA, {
           contextAfter: () => ({ mode: 'first' }),
         }),
-        one(contextParser('first', 'a', 'leaked')),
+        one(contextConsumer('first', 'a', 'leaked')),
       ],
       (value) => {
         if (value[0] === 'a') {
@@ -2162,7 +2243,7 @@ describe('component grammar contextAfter', () => {
 
     const c = cursor('a', baseContext);
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expectNextIdent(c, 'a');
     expect(c.context).toBe(baseContext);
@@ -2177,9 +2258,9 @@ describe('component grammar contextAfter', () => {
       values: [],
     };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        any(parseA, {
+        any(consumeA, {
           contextAfter: (value, context) => {
             const current = context as ItemContext;
 
@@ -2198,7 +2279,7 @@ describe('component grammar contextAfter', () => {
 
     const c = cursor('a a', baseContext);
 
-    expect(unwrap(parse(c))).toEqual({
+    expect(unwrap(consume(c))).toEqual({
       values: ['a', 'a'],
       contextValues: ['a', 'a'],
     });
@@ -2212,11 +2293,11 @@ describe('component grammar contextAfter', () => {
       mode: 'base',
     };
 
-    const parseContextMutatingA: TryComponentParser<string> = (c) => {
+    const consumeContextMutatingA: TryComponentConsumer<string> = (c) => {
       const mode = (c.context as DemoContext).mode ?? 'missing';
 
-      const value = unwrapParseResultOrThrow(
-        parseA(c),
+      const value = unwrapConsumeResultOrThrow(
+        consumeA(c),
         'context repetition item',
       );
 
@@ -2231,9 +2312,9 @@ describe('component grammar contextAfter', () => {
       return ok(mode);
     };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        any(parseContextMutatingA, {
+        any(consumeContextMutatingA, {
           contextAfter: (_value, context) => {
             const current = context as DemoContext;
 
@@ -2247,14 +2328,14 @@ describe('component grammar contextAfter', () => {
           },
         }),
 
-        one(contextParser('after-second', 'b', 'suffix')),
+        one(contextConsumer('after-second', 'b', 'suffix')),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a a b', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       ['base', 'after-first'],
       ['suffix'],
     ]);
@@ -2272,9 +2353,9 @@ describe('component grammar contextAfter', () => {
       values: [],
     };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        commaRepeat(parseA, {
+        commaRepeat(consumeA, {
           contextAfter: (value, context) => {
             const current = context as ItemContext;
 
@@ -2293,7 +2374,7 @@ describe('component grammar contextAfter', () => {
 
     const c = cursor('a, a', baseContext);
 
-    expect(unwrap(parse(c))).toEqual({
+    expect(unwrap(consume(c))).toEqual({
       values: ['a', 'a'],
       contextValues: ['a', 'a'],
     });
@@ -2308,13 +2389,13 @@ describe('component grammar context restoration', () => {
   it('restores context when withComponentTrivia wrapper returns null', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
-    const parse = withComponentTrivia(
-      contextLeakingNullParser('leaked'),
+    const consume = withComponentTrivia(
+      contextLeakingNullConsumer('leaked'),
     );
 
     const c = cursor(' a', baseContext);
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expect(c.context).toBe(baseContext);
   });
@@ -2322,13 +2403,13 @@ describe('component grammar context restoration', () => {
   it('restores context when a plain repetition item probe returns null', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
-    const parse = any(
-      contextLeakingNullParser('leaked'),
+    const consume = any(
+      contextLeakingNullConsumer('leaked'),
     );
 
     const c = cursor('b', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([]);
+    expect(unwrap(consume(c))).toEqual([]);
     expect(c.pos()).toBe(0);
     expect(c.context).toBe(baseContext);
   });
@@ -2336,14 +2417,14 @@ describe('component grammar context restoration', () => {
   it('restores context when a comma repetition first item probe returns null', () => {
     const baseContext: DemoContext = { mode: 'base' };
 
-    const parse = commaRepeat(
-      contextLeakingNullParser('leaked'),
+    const consume = commaRepeat(
+      contextLeakingNullConsumer('leaked'),
       0,
     );
 
     const c = cursor('b', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([]);
+    expect(unwrap(consume(c))).toEqual([]);
     expect(c.pos()).toBe(0);
     expect(c.context).toBe(baseContext);
   });
@@ -2356,23 +2437,23 @@ describe('component grammar context restoration', () => {
     // The greedy attempt consumes `a` in the optional slot and advances its
     // context. The retry caps that slot at zero, so no item-level transition
     // occurs and the suffix sees the original context.
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        opt(parseA, {
+        opt(consumeA, {
           contextAfter: (_value, context) => ({
             ...(context as DemoContext),
             mode: 'used-prefix',
           }),
         }),
 
-        one(contextParser('base', 'a', 'suffix')),
+        one(contextConsumer('base', 'a', 'suffix')),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       [],
       ['suffix'],
     ]);
@@ -2386,23 +2467,23 @@ describe('component grammar context restoration', () => {
       mode: 'base',
     };
 
-    const parse = sequenceOf(
+    const consume = sequenceOf(
       [
-        commaRepeat(parseA, 0, 1, {
+        commaRepeat(consumeA, 0, 1, {
           contextAfter: (_value, context) => ({
             ...(context as DemoContext),
             mode: 'used-prefix',
           }),
         }),
 
-        one(contextParser('base', 'a', 'suffix')),
+        one(contextConsumer('base', 'a', 'suffix')),
       ],
       (value) => ok(value),
     );
 
     const c = cursor('a', baseContext);
 
-    expect(unwrap(parse(c))).toEqual([
+    expect(unwrap(consume(c))).toEqual([
       [],
       ['suffix'],
     ]);
@@ -2416,7 +2497,7 @@ describe('component grammar context restoration', () => {
       mode: 'base',
     };
 
-    const parse = repeat(parseA, 2, 2, {
+    const consume = repeat(consumeA, 2, 2, {
       contextAfter: (_value, context) => ({
         ...(context as DemoContext),
         mode: 'advanced',
@@ -2425,7 +2506,7 @@ describe('component grammar context restoration', () => {
 
     const c = cursor('a b', baseContext);
 
-    expect(unwrap(parse(c))).toBeNull();
+    expect(unwrap(consume(c))).toBeNull();
     expect(c.pos()).toBe(0);
     expect(c.context).toBe(baseContext);
   });
@@ -2435,15 +2516,15 @@ describe('component grammar context restoration', () => {
       mode: 'base',
     };
 
-    const parseAOrBadB: TryComponentParser<'a'> = (c) => {
-      const a = parseA(c);
+    const consumeAOrBadB: TryComponentConsumer<'a'> = (c) => {
+      const a = consumeA(c);
 
       if (a !== null) {
         return a;
       }
 
-      const b = unwrapParseResultOrThrow(
-        parseB(c),
+      const b = unwrapConsumeResultOrThrow(
+        consumeB(c),
         'bad repetition item',
       );
 
@@ -2452,12 +2533,12 @@ describe('component grammar context restoration', () => {
       }
 
       return bad(
-        ComponentParserBadReason.Invalid,
+        ComponentConsumerBadReason.Invalid,
         'bad repetition item',
       );
     };
 
-    const parse = plus(parseAOrBadB, {
+    const consume = plus(consumeAOrBadB, {
       contextAfter: (_value, context) => ({
         ...(context as DemoContext),
         mode: 'advanced',
@@ -2465,7 +2546,7 @@ describe('component grammar context restoration', () => {
     });
 
     const c = cursor('a b', baseContext);
-    const result = parse(c);
+    const result = consume(c);
 
     expect(isBad(result)).toBe(true);
     expect(result).toMatchObject({

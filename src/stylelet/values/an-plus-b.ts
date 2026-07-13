@@ -4,8 +4,8 @@ import type { ComponentCursor } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
 import {
   isBad, ok,
-  type TryComponentParser, type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
@@ -18,7 +18,7 @@ export type AnPlusBValue = {
 
 function createIntegerConsumer(
   sign: 'any' | 'signed' | 'signless',
-): TryComponentParser<NumberToken> {
+): TryComponentConsumer<NumberToken> {
   return (c) => {
     const start = c.pos();
     const result = tryConsumeIntegerToken(c);
@@ -45,7 +45,7 @@ function createIntegerConsumer(
 
 function createIntegerDimensionConsumer(
   unitPattern: RegExp,
-): TryComponentParser<DimensionToken> {
+): TryComponentConsumer<DimensionToken> {
   return (c) => {
     const start = c.pos();
     const component = c.next();
@@ -65,7 +65,7 @@ function createIntegerDimensionConsumer(
 
 function createIdentPatternConsumer(
   valuePattern: RegExp,
-): TryComponentParser<IdentToken> {
+): TryComponentConsumer<IdentToken> {
   return (c) => {
     const start = c.pos();
     const component = c.next();
@@ -98,9 +98,9 @@ function createIdentPatternConsumer(
  * The marked optional '+' is intentionally not trivia-wrapped: CSS Syntax
  * requires it to be adjacent to the ident beginning with "n".
  */
-export function tryParseAnPlusB(
+export function tryConsumeAnPlusB(
   c: ComponentCursor,
-): TryComponentParserResult<AnPlusBValue> {
+): TryComponentConsumerResult<AnPlusBValue> {
   return consumeAnPlusB(c);
 }
 
@@ -137,7 +137,7 @@ const tryConsumeDashN = createIdentValueConsumer('-n');
 const tryConsumeNDash = createIdentValueConsumer('n-');
 const tryConsumeDashNDash = createIdentValueConsumer('-n-');
 
-const consumePositiveN: TryComponentParser<number> = sequenceOf(
+const consumePositiveN: TryComponentConsumer<number> = sequenceOf(
   [
     opt(tryConsumePlus),
     one(tryConsumeN),
@@ -145,7 +145,7 @@ const consumePositiveN: TryComponentParser<number> = sequenceOf(
   () => ok(1),
 );
 
-const consumePositiveNDash: TryComponentParser<number> = sequenceOf(
+const consumePositiveNDash: TryComponentConsumer<number> = sequenceOf(
   [
     opt(tryConsumePlus),
     one(tryConsumeNDash),
@@ -153,7 +153,7 @@ const consumePositiveNDash: TryComponentParser<number> = sequenceOf(
   () => ok(1),
 );
 
-const consumeNHead: TryComponentParser<number> = oneOf(
+const consumeNHead: TryComponentConsumer<number> = oneOf(
   [
     one(tryConsumeNDimension),
     one(consumePositiveN),
@@ -168,7 +168,7 @@ const consumeNHead: TryComponentParser<number> = oneOf(
   ),
 );
 
-const consumeNDashHead: TryComponentParser<number> = oneOf(
+const consumeNDashHead: TryComponentConsumer<number> = oneOf(
   [
     one(tryConsumeNDashDimension),
     one(consumePositiveNDash),
@@ -183,7 +183,7 @@ const consumeNDashHead: TryComponentParser<number> = oneOf(
   ),
 );
 
-const consumeDelimitedOffset: TryComponentParser<number> = sequenceOf(
+const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
   [
     one(
       withComponentTrivia(
@@ -205,7 +205,7 @@ const consumeDelimitedOffset: TryComponentParser<number> = sequenceOf(
   ),
 );
 
-const consumeOffset: TryComponentParser<number> = oneOf(
+const consumeOffset: TryComponentConsumer<number> = oneOf(
   [
     one(withComponentTrivia(tryConsumeSignedInteger)),
     one(consumeDelimitedOffset),
@@ -217,7 +217,7 @@ const consumeOffset: TryComponentParser<number> = oneOf(
   ),
 );
 
-const consumeNExpression: TryComponentParser<AnPlusBValue> = sequenceOf(
+const consumeNExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
   [
     one(consumeNHead),
     opt(consumeOffset),
@@ -228,7 +228,7 @@ const consumeNExpression: TryComponentParser<AnPlusBValue> = sequenceOf(
   }),
 );
 
-const consumeNDashExpression: TryComponentParser<AnPlusBValue> = sequenceOf(
+const consumeNDashExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
   [
     one(consumeNDashHead),
     one(withComponentTrivia(tryConsumeSignlessInteger)),
@@ -239,7 +239,7 @@ const consumeNDashExpression: TryComponentParser<AnPlusBValue> = sequenceOf(
   }),
 );
 
-const consumeEmbeddedNegative: TryComponentParser<AnPlusBValue> = oneOf(
+const consumeEmbeddedNegative: TryComponentConsumer<AnPlusBValue> = oneOf(
   [
     one(tryConsumeNDashDigitDimension),
     one(
@@ -271,7 +271,7 @@ const consumeEmbeddedNegative: TryComponentParser<AnPlusBValue> = oneOf(
   },
 );
 
-const consumeParity: TryComponentParser<AnPlusBValue> = oneOf(
+const consumeParity: TryComponentConsumer<AnPlusBValue> = oneOf(
   [
     one(tryConsumeOdd),
     one(tryConsumeEven),
@@ -281,12 +281,12 @@ const consumeParity: TryComponentParser<AnPlusBValue> = oneOf(
     : { a: 2, b: 0 }),
 );
 
-const consumeInteger: TryComponentParser<AnPlusBValue> = sequenceOf(
+const consumeInteger: TryComponentConsumer<AnPlusBValue> = sequenceOf(
   [one(tryConsumeInteger)],
   ([[integer]]) => ok({ a: 0, b: integer.value }),
 );
 
-const consumeAnPlusBAtomic: TryComponentParser<AnPlusBValue> = oneOf(
+const consumeAnPlusBAtomic: TryComponentConsumer<AnPlusBValue> = oneOf(
   [
     one(consumeParity),
     one(consumeInteger),
@@ -295,7 +295,7 @@ const consumeAnPlusBAtomic: TryComponentParser<AnPlusBValue> = oneOf(
   ([value]) => ok(value),
 );
 
-const consumeAnPlusB: TryComponentParser<AnPlusBValue> = oneOf(
+const consumeAnPlusB: TryComponentConsumer<AnPlusBValue> = oneOf(
   [
     one(consumeAnPlusBAtomic),
     one(consumeNExpression),

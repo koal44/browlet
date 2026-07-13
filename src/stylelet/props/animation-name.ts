@@ -5,7 +5,7 @@ import {
   type CustomIdentValue,
 } from '../values/custom-ident';
 import {
-  serializeString, tryParseString,
+  serializeString, tryConsumeString,
   type StringValue,
 } from '../values/string';
 import {
@@ -14,9 +14,9 @@ import {
 } from '../parser/syntax';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
-  ok, unwrapParseResultOrThrow,
-  type TryComponentParser, type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  ok, unwrapConsumeResultOrThrow,
+  type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 
 export type AnimationNameValue = {
   type: 'animation-name';
@@ -39,7 +39,7 @@ export function parseAnimationNameValue(
   input: ParserInput,
   context: unknown = undefined,
 ): AnimationNameValue | null {
-  return unwrapParseResultOrThrow(
+  return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
       withComponentTrivia(tryConsumeAnimationName),
@@ -49,10 +49,10 @@ export function parseAnimationNameValue(
   );
 }
 
-export function tryConsumeAnimationName(c: ComponentCursor): TryComponentParserResult<AnimationNameValue> {
+export function tryConsumeAnimationName(c: ComponentCursor): TryComponentConsumerResult<AnimationNameValue> {
   const start = c.pos();
 
-  const values = unwrapParseResultOrThrow(
+  const values = unwrapConsumeResultOrThrow(
     tryConsumeAnimationNameList(c),
     'animation-name list',
   );
@@ -68,8 +68,8 @@ export function tryConsumeAnimationName(c: ComponentCursor): TryComponentParserR
   });
 }
 
-const tryConsumeNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
-  const value = unwrapParseResultOrThrow(
+const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
+  const value = unwrapConsumeResultOrThrow(
     tryConsumeKeywordIn(c, ['none'] as const),
     'animation-name none',
   );
@@ -81,15 +81,15 @@ const tryConsumeNone: TryComponentParser<AnimationNameNoneValue> = (c) => {
   return ok({ type: 'none' });
 };
 
-const tryConsumeKeyframesName: TryComponentParser<KeyframesNameValue> = oneOf(
+const tryConsumeKeyframesName: TryComponentConsumer<KeyframesNameValue> = oneOf(
   [
     one((c) => tryConsumeCustomIdent(c, ['none'])),
-    one(tryParseString),
+    one(tryConsumeString),
   ],
   ([value]) => ok(value),
 );
 
-const tryConsumeAnimationNameItem: TryComponentParser<AnimationNameItemValue> = oneOf(
+const tryConsumeAnimationNameItem: TryComponentConsumer<AnimationNameItemValue> = oneOf(
   [
     one(tryConsumeNone),
     one(tryConsumeKeyframesName),

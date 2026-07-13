@@ -6,7 +6,7 @@ import {
   isDeclarationValue,
   type Declaration as SyntaxDeclaration,
 } from './syntax';
-import { tryParseCssWideValue } from '../values/css-wide';
+import { parseCssWideValue } from '../values/css-wide';
 import { parseColorValue } from '../values/color';
 import { parseLengthPercentageAuto } from '../values/length-percentage';
 import { parseAnimationNameValue } from '../props/animation-name';
@@ -23,7 +23,7 @@ export function buildDeclarationAst(declaration: SyntaxDeclaration): Declaration
     case PropertyId.Color:
     case PropertyId.BackgroundColor: {
       const value =
-        tryParseCssWideValue(declaration.value) ?? parseColorValue(declaration.value);
+        parseCssWideValue(declaration.value) ?? parseColorValue(declaration.value);
 
       if (value === null) return null;
 
@@ -40,7 +40,7 @@ export function buildDeclarationAst(declaration: SyntaxDeclaration): Declaration
     case PropertyId.MarginBottom:
     case PropertyId.MarginLeft: {
       const value =
-        tryParseCssWideValue(declaration.value) ?? parseLengthPercentageAuto(declaration.value);
+        parseCssWideValue(declaration.value) ?? parseLengthPercentageAuto(declaration.value);
 
       if (value === null) return null;
 
@@ -54,7 +54,7 @@ export function buildDeclarationAst(declaration: SyntaxDeclaration): Declaration
 
     case PropertyId.AnimationName: {
       const value =
-        tryParseCssWideValue(declaration.value) ?? parseAnimationNameValue(declaration.value);
+        parseCssWideValue(declaration.value) ?? parseAnimationNameValue(declaration.value);
       if (value === null) return null;
       return {
         kind: BlockItemAstKind.Declaration,

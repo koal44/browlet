@@ -1,17 +1,17 @@
 import type { ComponentCursor } from './component-cursor';
-import { isBad, ok, type TryComponentParserResult, type ComponentParserBad, type TryComponentParser } from './component-try-parser';
+import { isBad, ok, type TryComponentConsumerResult, type ComponentConsumerBad, type TryComponentConsumer } from './component-try-consumer';
 import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 
 // =============================================================================
-// Public parser and multiplier types
+// Public consumer and multiplier types
 // =============================================================================
 
 export type OptionalValue<T> = [] | [T];
 export type NonEmptyArray<T> = [T, ...T[]];
 
-export type Multiplier<T, Output extends T[] = T[]> = TryComponentParser<Output> & {
-  base: TryComponentParser<T>;
+export type Multiplier<T, Output extends T[] = T[]> = TryComponentConsumer<Output> & {
+  base: TryComponentConsumer<T>;
   min: number;
   max: number;
   separator: 'none' | 'comma';
@@ -42,7 +42,7 @@ type MultiplierOutputOf<P> =
   P extends Multiplier<any, infer Output> ? Output : never;
 
 type Projector<Value, R> =
-  (value: Value, context: unknown) => TryComponentParserResult<R>;
+  (value: Value, context: unknown) => TryComponentConsumerResult<R>;
 
 // =============================================================================
 // Structural grammar combinators
@@ -52,40 +52,40 @@ type Projector<Value, R> =
  * CSS value juxtaposition: `a b`
  */
 export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<SequenceValue<P>, R>,
-): TryComponentParser<R> {
-  return parseSequenceOf(false, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeSequenceOf(false, consumers, project);
 }
 
 /**
  * CSS value required group: `[ a b c ]!`
  */
 export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<SequenceValue<P>, R>,
-): TryComponentParser<R> {
-  return parseSequenceOf(true, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeSequenceOf(true, consumers, project);
 }
 
-// Local multiplier backtracking for direct sequence slots only. Nested parsers
+// Local multiplier backtracking for direct sequence slots only. Nested consumers
 // remain opaque; their internal multipliers are not re-entered.
-function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
+function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  parsers: P,
+  consumers: P,
   project: Projector<SequenceValue<P>, R>,
-): TryComponentParser<R> {
-  return (c): TryComponentParserResult<R> => {
+): TryComponentConsumer<R> {
+  return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
-    let caps = parsers.map((parser) => parser.max);
+    let caps = consumers.map((consumer) => consumer.max);
 
     try {
       while (true) {
         c.restore(start);
         c.context = outerContext;
 
-        const attempt = __parseSequenceAttempt(c, parsers, caps, outerContext);
+        const attempt = __consumeSequenceAttempt(c, consumers, caps, outerContext);
 
         if ('kind' in attempt && isBad(attempt)) {
           return attempt;
@@ -105,7 +105,7 @@ function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
           }
         }
 
-        const nextCaps = __nextSequenceCaps(parsers, attempt.frames);
+        const nextCaps = __nextSequenceCaps(consumers, attempt.frames);
 
         if (nextCaps === null) {
           c.restore(start);
@@ -124,20 +124,20 @@ function parseSequenceOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value alternative: `a | b`
  */
 export function oneOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<AlternativeValue<P>, R>,
-): TryComponentParser<R> {
-  return (c): TryComponentParserResult<R> => {
+): TryComponentConsumer<R> {
+  return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
 
     try {
-      for (const parser of parsers) {
+      for (const consumer of consumers) {
         c.restore(start);
         c.context = outerContext;
 
         const componentStart = c.pos();
-        const result = parseMultiplier(c, parser);
+        const result = consumeMultiplier(c, consumer);
 
         if (result === null) {
           c.restore(start);
@@ -152,7 +152,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
         const value = result.value as AlternativeValue<P>;
 
         if (c.pos() === componentStart && hasAnyValue(value)) {
-          return c.error('Alternative parser produced a value without consuming input');
+          return c.error('Alternative consumer produced a value without consuming input');
         }
 
         const projected = project(value, c.context);
@@ -178,44 +178,44 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value double ampersand: `a && b`
  */
 export function allOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return parseAllOf(false, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeAllOf(false, consumers, project);
 }
 
 /**
  * CSS value required double ampersand group: `[ a && b ]!`
  */
 export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return parseAllOf(true, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeAllOf(true, consumers, project);
 }
 
-function parseAllOf<const P extends readonly AnyMultiplier[], R>(
+function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return (c): TryComponentParserResult<R> => {
+): TryComponentConsumer<R> {
+  return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
 
     try {
-      const result = consumeUnordered(c, parsers);
+      const result = consumeUnordered(c, consumers);
 
       if ('kind' in result && isBad(result)) {
         return result;
       }
 
-      for (let i = 0; i < parsers.length; i++) {
+      for (let i = 0; i < consumers.length; i++) {
         if (result.seen.has(i)) {
           continue;
         }
 
-        const empty = parseEmpty(c, parsers[i]!);
+        const empty = consumeEmpty(c, consumers[i]!);
 
         if (empty === null) {
           c.restore(start);
@@ -254,33 +254,33 @@ function parseAllOf<const P extends readonly AnyMultiplier[], R>(
  * CSS value double bar: `a || b`
  */
 export function someOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return parseSomeOf(false, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeSomeOf(false, consumers, project);
 }
 
 /**
  * CSS value required double bar group: `[ a || b ]!`
  */
 export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return parseSomeOf(true, parsers, project);
+): TryComponentConsumer<R> {
+  return tryConsumeSomeOf(true, consumers, project);
 }
 
-function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
+function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
-  parsers: P,
+  consumers: P,
   project: Projector<UnorderedValue<P>, R>,
-): TryComponentParser<R> {
-  return (c): TryComponentParserResult<R> => {
+): TryComponentConsumer<R> {
+  return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
 
     try {
-      const result = consumeUnordered(c, parsers);
+      const result = consumeUnordered(c, consumers);
 
       if ('kind' in result && isBad(result)) {
         return result;
@@ -290,12 +290,12 @@ function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
 
       let canMatchEmpty = true;
 
-      for (let i = 0; i < parsers.length; i++) {
+      for (let i = 0; i < consumers.length; i++) {
         if (result.seen.has(i)) {
           continue;
         }
 
-        const empty = parseEmpty(c, parsers[i]!);
+        const empty = consumeEmpty(c, consumers[i]!);
 
         if (empty === null) {
           canMatchEmpty = false;
@@ -331,21 +331,21 @@ function parseSomeOf<const P extends readonly AnyMultiplier[], R>(
 }
 
 // =============================================================================
-// Required parser adapter
+// Required consumer adapter
 // =============================================================================
 
-export type ValueParser<T> = (c: ComponentCursor) => T;
+export type ComponentConsumer<T> = (c: ComponentCursor) => T;
 
 export function required<T>(
-  parse: TryComponentParser<T>,
+  consume: TryComponentConsumer<T>,
   expected: string,
-): ValueParser<T> {
+): ComponentConsumer<T> {
   return (c): T => {
     const start = c.pos();
     const outerContext = c.context;
 
     try {
-      const result = parse(c);
+      const result = consume(c);
 
       if (result === null) {
         c.restore(start);
@@ -373,52 +373,52 @@ export const DEFAULT_REPEAT_LIMIT = 20;
  * CSS value default multiplicity: `a`.
  */
 export function one<T>(
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   options?: MultiplierOptions<T>,
 ): Multiplier<T, [T]> {
-  return createMultiplier<T, [T]>(parse, 1, 1, 'none', options);
+  return createMultiplier<T, [T]>(consumer, 1, 1, 'none', options);
 }
 
 /**
  * CSS value optional multiplicity: `a?`.
  */
 export function opt<T>(
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   options?: MultiplierOptions<T>,
 ): Multiplier<T, OptionalValue<T>> {
-  return createMultiplier<T, OptionalValue<T>>(parse, 0, 1, 'none', options);
+  return createMultiplier<T, OptionalValue<T>>(consumer, 0, 1, 'none', options);
 }
 
 /**
  * CSS value zero-or-more multiplicity: `a*`.
  */
 export function any<T>(
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   options?: MultiplierOptions<T>,
 ): Multiplier<T, T[]> {
-  return createMultiplier<T, T[]>(parse, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
+  return createMultiplier<T, T[]>(consumer, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
  * CSS value one-or-more multiplicity: `a+`.
  */
 export function plus<T>(
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   options?: MultiplierOptions<T>,
 ): Multiplier<T, NonEmptyArray<T>> {
-  return createMultiplier<T, NonEmptyArray<T>>(parse, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
+  return createMultiplier<T, NonEmptyArray<T>>(consumer, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
  * CSS value bounded repetition: `a{min,max}`.
  *
- * The parser is greedy. Backtracking support can later be attached here by
+ * The consumer is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function repeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function repeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
+export function repeat<T>(item: TryComponentConsumer<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function repeat<T>(item: TryComponentConsumer<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function repeat<T>(item: TryComponentConsumer<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function repeat<T, Output extends T[]>(item: TryComponentConsumer<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid repeat minimum ${min}`);
   }
@@ -433,11 +433,11 @@ export function repeat<T, Output extends T[]>(item: TryComponentParser<T>, min: 
 /**
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
-export function commaRepeat<T>(item: TryComponentParser<T>, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function commaRepeat<T>(item: TryComponentParser<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, minOrOptions: number | MultiplierOptions<T> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
+export function commaRepeat<T>(item: TryComponentConsumer<T>, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentConsumer<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
+export function commaRepeat<T>(item: TryComponentConsumer<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function commaRepeat<T>(item: TryComponentConsumer<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function commaRepeat<T, Output extends T[]>(item: TryComponentConsumer<T>, minOrOptions: number | MultiplierOptions<T> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   const min =
     typeof minOrOptions === 'number'
       ? minOrOptions
@@ -466,14 +466,14 @@ export function commaRepeat<T, Output extends T[]>(item: TryComponentParser<T>, 
 }
 
 function createMultiplier<T, Output extends T[]>(
-  base: TryComponentParser<T>,
+  base: TryComponentConsumer<T>,
   min: number,
   max: number,
   separator: 'none' | 'comma',
   options?: MultiplierOptions<T>,
 ): Multiplier<T, Output> {
-  const multiplier = ((c: ComponentCursor): TryComponentParserResult<Output> => {
-    return parseMultiplier(c, multiplier);
+  const multiplier = ((c: ComponentCursor): TryComponentConsumerResult<Output> => {
+    return consumeMultiplier(c, multiplier);
   }) as Multiplier<T, Output>;
 
   multiplier.base = base;
@@ -486,10 +486,10 @@ function createMultiplier<T, Output extends T[]>(
 }
 
 // =============================================================================
-// Parser adapters
+// Consumer adapters
 // =============================================================================
 
-export function withComponentTrivia<T>(parse: TryComponentParser<T>): TryComponentParser<T> {
+export function withComponentTrivia<T>(consume: TryComponentConsumer<T>): TryComponentConsumer<T> {
   return (c) => {
     const start = c.pos();
     const outerContext = c.context;
@@ -497,7 +497,7 @@ export function withComponentTrivia<T>(parse: TryComponentParser<T>): TryCompone
     try {
       consumeComponentTrivia(c);
 
-      const result = parse(c);
+      const result = consume(c);
 
       if (result === null) {
         c.restore(start);
@@ -515,21 +515,21 @@ export function withComponentTrivia<T>(parse: TryComponentParser<T>): TryCompone
 // Grammar execution helpers
 // =============================================================================
 
-function parseMultiplier<T, Output extends T[]>(
+function consumeMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): TryComponentParserResult<Output> {
+): TryComponentConsumerResult<Output> {
   return multiplier.separator === 'comma'
-    ? parseCommaMultiplier(c, multiplier, max)
-    : parsePlainMultiplier(c, multiplier, max);
+    ? consumeCommaMultiplier(c, multiplier, max)
+    : consumePlainMultiplier(c, multiplier, max);
 }
 
-function parsePlainMultiplier<T, Output extends T[]>(
+function consumePlainMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): TryComponentParserResult<Output> {
+): TryComponentConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
   const values: T[] = [];
@@ -552,7 +552,7 @@ function parsePlainMultiplier<T, Output extends T[]>(
 
     if (c.pos() === itemStart) {
       c.context = outerContext;
-      return c.error('Repeated parser matched without consuming input');
+      return c.error('Repeated consumer matched without consuming input');
     }
 
     values.push(result.value);
@@ -571,11 +571,11 @@ function parsePlainMultiplier<T, Output extends T[]>(
   return ok(values as Output);
 }
 
-function parseCommaMultiplier<T, Output extends T[]>(
+function consumeCommaMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
   max = multiplier.max,
-): TryComponentParserResult<Output> {
+): TryComponentConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
   const values: T[] = [];
@@ -586,7 +586,7 @@ function parseCommaMultiplier<T, Output extends T[]>(
       : null;
   }
 
-  const parseItem = (): TryComponentParserResult<T> => {
+  const consumeItem = (): TryComponentConsumerResult<T> => {
     const itemStart = c.pos();
     const itemContext = c.context;
     const result = multiplier.base(c);
@@ -614,7 +614,7 @@ function parseCommaMultiplier<T, Output extends T[]>(
     return result;
   };
 
-  const first = parseItem();
+  const first = consumeItem();
 
   if (first === null) {
     c.context = outerContext;
@@ -645,7 +645,7 @@ function parseCommaMultiplier<T, Output extends T[]>(
 
     consumeComponentTrivia(c);
 
-    const next = parseItem();
+    const next = consumeItem();
 
     if (next === null) {
       c.restore(separatorStart);
@@ -668,15 +668,19 @@ function parseCommaMultiplier<T, Output extends T[]>(
   return ok(values as Output);
 }
 
-function parseEmpty<T, Output extends T[]>(
+function consumeEmpty<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
-): TryComponentParserResult<Output> {
+): TryComponentConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
 
-  const result = parseMultiplier(c, multiplier);
+  const result = consumeMultiplier(c, multiplier);
   const end = c.pos();
+
+  if (isBad(result)) {
+    return result;
+  }
 
   c.restore(start);
   c.context = outerContext;
@@ -685,27 +689,23 @@ function parseEmpty<T, Output extends T[]>(
     return null;
   }
 
-  if (isBad(result)) {
-    return result;
-  }
-
   if (hasAnyValue(result.value)) {
-    return c.error('Parser produced a value without consuming input');
+    return c.error('Consumer produced a value without consuming input');
   }
 
   return result;
 }
 
 type UnorderedConsumeResult =
-  | ComponentParserBad
+  | ComponentConsumerBad
   | { values: unknown[]; seen: Set<number>; };
 
 function consumeUnordered<const P extends readonly AnyMultiplier[]>(
   c: ComponentCursor,
-  parsers: P,
+  consumers: P,
 ): UnorderedConsumeResult {
-  const remaining = parsers.map((parser, index) => ({ parser, index }));
-  const values: unknown[] = Array.from({ length: parsers.length });
+  const remaining = consumers.map((consumer, index) => ({ consumer, index }));
+  const values: unknown[] = Array.from({ length: consumers.length });
   const seen = new Set<number>();
 
   while (remaining.length > 0) {
@@ -716,7 +716,7 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
       const part = remaining[i]!;
       const start = c.pos();
       const outerContext = c.context;
-      const result = parseMultiplier(c, part.parser);
+      const result = consumeMultiplier(c, part.consumer);
 
       if (result === null) {
         c.restore(start);
@@ -739,7 +739,7 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
 
       if (c.pos() === start && hasAnyValue(value)) {
         c.context = outerContext;
-        return c.error('Unordered parser produced a value without consuming input');
+        return c.error('Unordered consumer produced a value without consuming input');
       }
 
       c.context = outerContext;
@@ -786,12 +786,12 @@ type SequenceFrame = {
 };
 
 type SequenceAttempt =
-  | ComponentParserBad
+  | ComponentConsumerBad
   | { matched: boolean; values: unknown[]; frames: SequenceFrame[]; };
 
-export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>(
+export function __consumeSequenceAttempt<const P extends readonly AnyMultiplier[]>(
   c: ComponentCursor,
-  parsers: P,
+  consumers: P,
   caps: readonly number[],
   context: unknown = c.context,
 ): SequenceAttempt {
@@ -800,10 +800,10 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
   const values: unknown[] = [];
   const frames: SequenceFrame[] = [];
 
-  for (let i = 0; i < parsers.length; i++) {
-    const parser = parsers[i]!;
+  for (let i = 0; i < consumers.length; i++) {
+    const consumer = consumers[i]!;
     const slotStart = c.pos();
-    const result = parseMultiplier(c, parser, caps[i]);
+    const result = consumeMultiplier(c, consumer, caps[i]);
 
     if (result === null) {
       c.restore(slotStart);
@@ -825,7 +825,7 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
 
     if (c.pos() === slotStart && hasAnyValue(value)) {
       c.context = context;
-      return c.error('Sequence parser produced a value without consuming input');
+      return c.error('Sequence consumer produced a value without consuming input');
     }
 
     values[i] = value;
@@ -843,19 +843,19 @@ export function __parseSequenceAttempt<const P extends readonly AnyMultiplier[]>
 }
 
 export function __nextSequenceCaps<const P extends readonly AnyMultiplier[]>(
-  parsers: P,
+  consumers: P,
   frames: readonly SequenceFrame[],
 ): number[] | null {
   for (let i = frames.length - 1; i >= 0; i--) {
-    const parser = parsers[i]!;
+    const consumer = consumers[i]!;
     const frame = frames[i]!;
     const nextCap = frame.values.length - 1;
 
-    if (nextCap < parser.min) {
+    if (nextCap < consumer.min) {
       continue;
     }
 
-    const caps = parsers.map((parser) => parser.max);
+    const caps = consumers.map((consumer) => consumer.max);
 
     for (let j = 0; j < i; j++) {
       caps[j] = frames[j]!.values.length;

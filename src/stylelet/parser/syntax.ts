@@ -1,6 +1,6 @@
 import { asciiLower } from '../../utils/css';
 import { ComponentCursor } from './component-cursor';
-import { isBad, type TryComponentParserResult, type TryComponentParser } from './component-try-parser';
+import { isBad, type TryComponentConsumerResult, type TryComponentConsumer } from './component-try-consumer';
 import { TokenCursor } from './token-cursor';
 import type {
   AtKeywordToken, DelimToken, DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken, StaticToken, StringToken, Token, UrlToken,
@@ -101,12 +101,12 @@ export type ParserInput = string | readonly ComponentValue[];
 // 5.3.1. Parse something according to a CSS grammar
 export function parseAsComponentGrammar<T>(
   input: ParserInput,
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   context: unknown = undefined,
-): TryComponentParserResult<T> {
+): TryComponentConsumerResult<T> {
   const components = parseListOfComponentValues(input);
   const c = new ComponentCursor(components, { context });
-  const result = parse(c);
+  const result = consumer(c);
 
   if (result === null) {
     return null;
@@ -128,16 +128,16 @@ export function parseAsComponentGrammar<T>(
 // 5.3.2. Parse a comma-separated list according to a CSS grammar
 export function parseListAsComponentGrammar<T>(
   input: ParserInput,
-  parse: TryComponentParser<T>,
+  consumer: TryComponentConsumer<T>,
   context: unknown = undefined,
-): (TryComponentParserResult<T>)[] {
+): (TryComponentConsumerResult<T>)[] {
   const lists = parseCommaSeparatedListOfComponentValues(input);
 
   if (lists.length === 1 && lists[0]!.every(isWhitespaceToken)) {
     return [];
   }
 
-  return lists.map((item) => parseAsComponentGrammar(item, parse, context));
+  return lists.map((item) => parseAsComponentGrammar(item, consumer, context));
 }
 
 // 5.3.3. Parse a stylesheet

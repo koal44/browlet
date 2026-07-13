@@ -3,15 +3,15 @@ import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import {
   ok,
-  type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 
 export type StringValue = {
   type: 'string';
   value: string;
 };
 
-export function tryParseString(c: ComponentCursor): TryComponentParserResult<StringValue> {
+export function tryConsumeString(c: ComponentCursor): TryComponentConsumerResult<StringValue> {
   const start = c.pos();
 
   consumeComponentTrivia(c);

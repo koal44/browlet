@@ -3,13 +3,13 @@ import { asciiLower } from '../../utils/css';
 import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
 import {
   ok,
-  type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 
 export function tryConsumeKeywordIn<K extends string>(
   c: ComponentCursor,
   keywords: readonly K[],
-): TryComponentParserResult<K> {
+): TryComponentConsumerResult<K> {
   const start = c.pos();
 
   consumeComponentTrivia(c);

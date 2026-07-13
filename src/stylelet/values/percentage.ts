@@ -3,8 +3,8 @@ import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import {
   ok,
-  type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 import { serializeNumber } from './number';
 
 export type PercentageValue = {
@@ -12,7 +12,7 @@ export type PercentageValue = {
   value: number;
 };
 
-export function tryParsePercentage(c: ComponentCursor): TryComponentParserResult<PercentageValue> {
+export function tryConsumePercentage(c: ComponentCursor): TryComponentConsumerResult<PercentageValue> {
   const start = c.pos();
 
   consumeComponentTrivia(c);

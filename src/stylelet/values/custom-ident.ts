@@ -7,9 +7,9 @@ import {
 } from '../parser/syntax';
 import {
   ok,
-  unwrapParseResultOrThrow,
-  type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  unwrapConsumeResultOrThrow,
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
@@ -29,7 +29,7 @@ export function parseCustomIdent(
   excluded: readonly string[] = [],
   context: unknown = undefined,
 ): CustomIdentValue | null {
-  return unwrapParseResultOrThrow(
+  return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
       withComponentTrivia((c) => tryConsumeCustomIdent(c, excluded)),
@@ -42,7 +42,7 @@ export function parseCustomIdent(
 export function tryConsumeCustomIdent(
   c: ComponentCursor,
   excluded: readonly string[] = [],
-): TryComponentParserResult<CustomIdentValue> {
+): TryComponentConsumerResult<CustomIdentValue> {
   const start = c.pos();
   const comp = c.next();
 

@@ -12,7 +12,7 @@ export type CssWideValue = {
   keyword: CssWideKeyword;
 };
 
-export function tryParseCssWideValue(components: readonly ComponentValue[]): CssWideValue | null {
+export function parseCssWideValue(components: readonly ComponentValue[]): CssWideValue | null {
   const token = singleIdentToken(components);
   if (token === null) return null;
 

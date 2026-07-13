@@ -4,8 +4,8 @@ import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import {
   ok,
-  type TryComponentParserResult,
-} from '../parser/component-try-parser';
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
 import { serializeNumber } from './number';
 
 export type LengthValue = {
@@ -23,7 +23,7 @@ export enum LengthUnit {
   Vh,
 }
 
-export function tryParseLength(c: ComponentCursor): TryComponentParserResult<LengthValue> {
+export function tryConsumeLength(c: ComponentCursor): TryComponentConsumerResult<LengthValue> {
   const start = c.pos();
 
   consumeComponentTrivia(c);
