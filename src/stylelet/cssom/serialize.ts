@@ -6,6 +6,7 @@ import { PropertyId, getPropertyName } from '../parser/types';
 import { serializeAnimationName } from '../props/animation-name';
 import { isCssWideValue, serializeCssWideValue, type CssWideValue } from '../values/css-wide';
 import { serializeLengthPercentageAuto } from '../values/length-percentage';
+import { serializeCssString } from '../values/string';
 
 export type SerializedDeclaration = {
   name: string;
@@ -139,8 +140,4 @@ export function serializeComponentValue(value: ComponentValue): string {
     case TokenKind.RightBrace:
       return '}';
   }
-}
-
-function serializeCssString(value: string): string {
-  return JSON.stringify(value);
 }

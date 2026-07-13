@@ -1,8 +1,11 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
+import {
+  consumeComponentTrivia, isTokenKind, parseAsComponentGrammar,
+  type ParserInput,
+} from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import {
-  ok,
+  ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 
@@ -10,6 +13,16 @@ export type StringValue = {
   type: 'string';
   value: string;
 };
+
+export function parseString(
+  input: ParserInput,
+  context: unknown = undefined,
+): StringValue | null {
+  return unwrapConsumeResultOrThrow(
+    parseAsComponentGrammar(input, tryConsumeString, context),
+    'string',
+  );
+}
 
 export function tryConsumeString(c: ComponentCursor): TryComponentConsumerResult<StringValue> {
   const start = c.pos();
@@ -33,37 +46,23 @@ export function serializeString(value: StringValue): string {
   return serializeCssString(value.value);
 }
 
-function serializeCssString(value: string): string {
+export function serializeCssString(value: string): string {
   let out = '"';
 
-  for (let i = 0; i < value.length; i++) {
-    const ch = value[i];
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!;
 
-    switch (ch) {
-      case '"':
-      case '\\':
-        out += `\\${ch}`;
-        break;
-
-      case '\n':
-        out += '\\a ';
-        break;
-
-      case '\r':
-        out += '\\d ';
-        break;
-
-      case '\f':
-        out += '\\c ';
-        break;
-
-      case '\0':
-        out += '\uFFFD';
-        break;
-
-      default:
-        out += ch;
-        break;
+    if (codePoint === 0) {
+      out += '\uFFFD';
+    } else if (
+      (codePoint >= 0x01 && codePoint <= 0x1f) ||
+      codePoint === 0x7f
+    ) {
+      out += `\\${codePoint.toString(16)} `;
+    } else if (character === '"' || character === '\\') {
+      out += `\\${character}`;
+    } else {
+      out += character;
     }
   }
 

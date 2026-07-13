@@ -8,6 +8,7 @@ import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
+import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
 
 describe('An+B', () => {
   it.each([
@@ -159,6 +160,74 @@ describe('ident', () => {
   ])('round-trips the semantic identifier %j', (value) => {
     expect(parseIdent(serializeIdentifier(value))).toEqual({
       type: 'ident',
+      value,
+    });
+  });
+});
+
+describe('string', () => {
+  it('parses a string token into its semantic value', () => {
+    expect(parseString('"foo"')).toEqual({
+      type: 'string',
+      value: 'foo',
+    });
+    expect(parseString(String.raw`'foo\20 bar'`)).toEqual({
+      type: 'string',
+      value: 'foo bar',
+    });
+    expect(parseString(String.raw`"foo\
+bar"`)).toEqual({
+      type: 'string',
+      value: 'foobar',
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseString(' /* before */ "foo" /* after */ ')).toEqual({
+      type: 'string',
+      value: 'foo',
+    });
+  });
+
+  it.each([
+    '',
+    'foo',
+    '"foo" "bar"',
+    '"foo\nbar"',
+  ])('rejects %j as a string production', (input) => {
+    expect(parseString(input)).toBeNull();
+  });
+
+  it.each([
+    ['', '""'],
+    ['foo', '"foo"'],
+    ['"\\', String.raw`"\"\\"`],
+    ["'", `"'"`],
+    ['\0', '"\uFFFD"'],
+    ['\x01\t\n\r\f\x1f\x7f', String.raw`"\1 \9 \a \d \c \1f \7f "`],
+    ['f\u00F6o', '"f\u00F6o"'],
+    ['\u{1F600}', '"\u{1F600}"'],
+  ])('serializes %j as %j', (value, expected) => {
+    expect(serializeCssString(value)).toBe(expected);
+  });
+
+  it('serializes a StringValue', () => {
+    expect(serializeString({ type: 'string', value: 'foo"bar' }))
+      .toBe(String.raw`"foo\"bar"`);
+  });
+
+  it.each([
+    '',
+    'foo',
+    'foo bar',
+    '"\\',
+    "'",
+    '\x01a',
+    'f\u00F6o',
+    '\u{1F600}',
+  ])('round-trips the semantic string %j', (value) => {
+    expect(parseString(serializeCssString(value))).toEqual({
+      type: 'string',
       value,
     });
   });
