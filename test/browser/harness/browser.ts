@@ -30,18 +30,20 @@ export type EngineResult = {
   classes: string[];
   value: string;
   cssom: unknown;
+  supported: boolean;
   threw: boolean;
   error: string;
 };
 
 export type CssomOutput = { kind: 'cssom'; cssom: unknown; };
-export type QueryOutput = Element[] | NodeListOf<Element> | string | CssomOutput;
+export type QueryOutput = Element[] | NodeListOf<Element> | string | boolean | CssomOutput;
 export type EngineQuery = (query: string, ctx: QueryContext) => () => QueryOutput;
 export type EngineAndQueryResult = { queryResult: QueryResult; engineResult: EngineResult; };
 export type NamedQueryResult = { name: string; result: QueryResult; };
-export type QueryResult = ElementResult | ValueResult | CssomResult;
+export type QueryResult = ElementResult | ValueResult | BooleanResult | CssomResult;
 export type ElementResult = { kind: 'elements'; elements: Element[]; error: string; };
 export type ValueResult = { kind: 'value'; value: string; error: string; };
+export type BooleanResult = { kind: 'boolean'; value: boolean; error: string; };
 export type CssomResult = { kind: 'cssom'; cssom: unknown; error: string; };
 
 export function installBrowserHelpers(): void {
@@ -132,6 +134,9 @@ export function installBrowserHelpers(): void {
       if (typeof out === 'string') {
         return { kind: 'value', value: out, error: '' };
       }
+      if (typeof out === 'boolean') {
+        return { kind: 'boolean', value: out, error: '' };
+      }
       if (isCssomOutput(out)) {
         return { kind: 'cssom', cssom: out.cssom, error: '' };
       }
@@ -167,6 +172,14 @@ export function installBrowserHelpers(): void {
         : `Value mismatch:\n` +
           `  ${a.name} = ${JSON.stringify(a.result.value)}\n` +
           `  ${b.name} = ${JSON.stringify(b.result.value)}`;
+    }
+
+    if (a.result.kind === 'boolean' && b.result.kind === 'boolean') {
+      return a.result.value === b.result.value
+        ? undefined
+        : `Boolean mismatch:\n` +
+          `  ${a.name} = ${a.result.value}\n` +
+          `  ${b.name} = ${b.result.value}`;
     }
 
     if (a.result.kind === 'cssom' && b.result.kind === 'cssom') {
@@ -279,6 +292,17 @@ export function installBrowserHelpers(): void {
         count: 0, ids: [], classes: [],
         value: res.value,
         cssom: undefined,
+        supported: false,
+        threw: !!res.error,
+        error: res.error,
+      };
+    }
+    if (res.kind === 'boolean') {
+      return {
+        count: 0, ids: [], classes: [],
+        value: '',
+        cssom: undefined,
+        supported: res.value,
         threw: !!res.error,
         error: res.error,
       };
@@ -288,6 +312,7 @@ export function installBrowserHelpers(): void {
         count: 0, ids: [], classes: [],
         value: '',
         cssom: res.cssom,
+        supported: false,
         threw: !!res.error,
         error: res.error,
       };
@@ -298,6 +323,7 @@ export function installBrowserHelpers(): void {
       classes: res.elements.map((el) => el.getAttribute('class') ?? ''),
       value: '',
       cssom: undefined,
+      supported: false,
       threw: !!res.error,
       error: res.error,
     };
@@ -476,6 +502,15 @@ export function installBrowserHelpers(): void {
         return assertNever(ng);
       }
 
+      case 'supports' in c: {
+        if (ng === 'native') {
+          return () => () => 'condition' in c.supports
+            ? CSS.supports(c.supports.condition)
+            : CSS.supports(c.supports.property, c.supports.value);
+        }
+        throw new Error(`supports cases do not support engine ${ng}`);
+      }
+
       default:
         assertNever(c);
     }
@@ -517,6 +552,9 @@ export function installBrowserHelpers(): void {
       case 'closest' in c: return c.closest;
       case 'computedStyle' in c: return c.computedStyle;
       case 'cssom' in c: return `cssom:${stringify(c.cssom)}`;
+      case 'supports' in c: return 'condition' in c.supports
+        ? c.supports.condition
+        : `${c.supports.property}: ${c.supports.value}`;
       default: assertNever(c);
     }
   }
@@ -573,6 +611,12 @@ export function installBrowserHelpers(): void {
         return engine === 'native'
           ? `native CSSOM ${stringify(c.cssom)}`
           : `stylelet CSSOM ${stringify(c.cssom)}`;
+      }
+      case 'supports' in c: {
+        if ('condition' in c.supports) {
+          return `CSS.supports(${JSON.stringify(c.supports.condition)})`;
+        }
+        return `CSS.supports(${JSON.stringify(c.supports.property)}, ${JSON.stringify(c.supports.value)})`;
       }
       default: {
         assertNever(c);

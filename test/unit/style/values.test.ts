@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseStylesheet } from '../../../src/stylelet/parser/ast';
-import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
+import { BlockKind, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
+import { BadUrlToken, RightParenToken, identToken } from '../../../src/stylelet/parser/tokens';
 import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
@@ -230,6 +231,29 @@ bar"`)).toEqual({
       type: 'string',
       value,
     });
+  });
+});
+
+describe('url', () => {
+  it('preserves substitution in src() but not in url()', () => {
+    expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
+      {
+        block: BlockKind.Function,
+        name: 'src',
+        value: [
+          {
+            block: BlockKind.Function,
+            name: 'var',
+            value: [identToken('--foo')],
+          },
+        ],
+      },
+    ]);
+
+    expect(parseListOfComponentValues('url(var(--foo))')).toEqual([
+      BadUrlToken,
+      RightParenToken,
+    ]);
   });
 });
 

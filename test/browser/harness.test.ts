@@ -144,6 +144,29 @@ runScenarios('scope', 'normal', [
   },
 
   {
+    name: 'CSS.supports property/value and condition probes',
+    engines: ['native'],
+    markup: '',
+    cases: [
+      {
+        supports: { property: 'display', value: 'block' },
+        expect: {
+          supported: true,
+          equivalentCase: { supports: { condition: '(display: block)' } },
+        },
+      },
+      {
+        supports: { property: 'display', value: 'not-a-display-value' },
+        expect: { supported: false },
+      },
+      {
+        supports: { condition: '(display: block) and (color: red)' },
+        expect: { supported: true },
+      },
+    ],
+  },
+
+  {
     name: 'xml-basic',
     markupMode: 'xml-document',
     markup: `

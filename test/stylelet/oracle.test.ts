@@ -1388,3 +1388,41 @@ runScenarios('custom-ident default reservation oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSS.supports URL modifier oracle', 'normal', [
+  {
+    name: 'native URL modifier support',
+    engines: ['native'],
+    markup: '',
+    cases: [
+      { supports: { property: 'background-image', value: 'url("x")' }, expect: { supported: true } },
+      { supports: { property: 'background-image', value: 'src("x")' }, expect: { supported: false } },
+      {
+        supports: { property: 'background-image', value: 'url("x" cross-origin(anonymous))' },
+        browsers: ['chromium', 'firefox'],
+        expect: { supported: false },
+      },
+      {
+        supports: { property: 'background-image', value: 'url("x" cross-origin(anonymous))' },
+        browsers: ['webkit'],
+        expect: { supported: true },
+      },
+      { supports: { property: 'background-image', value: 'url("x" crossorigin(anonymous))' }, expect: { supported: false } },
+      { supports: { property: 'background-image', value: 'url("x" integrity("sha256-test"))' }, expect: { supported: false } },
+      {
+        supports: { property: 'background-image', value: 'url("x" referrer-policy(no-referrer))' },
+        browsers: ['chromium', 'firefox'],
+        expect: { supported: false },
+      },
+      {
+        supports: { property: 'background-image', value: 'url("x" referrer-policy(no-referrer))' },
+        browsers: ['webkit'],
+        expect: { supported: true },
+      },
+      { supports: { property: 'background-image', value: 'url("x" referrerpolicy(no-referrer))' }, expect: { supported: false } },
+      { supports: { property: 'background-image', value: 'url("x" param(--color, red))' }, expect: { supported: false } },
+      { supports: { property: 'background-image', value: 'url("x" unknown)' }, expect: { supported: false } },
+      { supports: { property: 'background-image', value: 'url("x" unknown())' }, expect: { supported: false } },
+    ],
+  },
+]);

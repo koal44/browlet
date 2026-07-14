@@ -21,6 +21,7 @@ export type ClosestCase = { closest: string; ref:  ContextRef; } & CaseBase;
 export type ByTagNsCase = { byTagNs: { ns: string | null; local: string; }; ref?: ContextRef; } & CaseBase;
 export type ComputedStyleCase = { computedStyle: string; pseudo?: string; ref: ContextRef; } & CaseBase;
 export type CssomCase = { cssom: CssomProbe; ref?: ContextRef; } & CaseBase;
+export type SupportsCase = { supports: SupportsProbe; ref?: ContextRef; } & CaseBase;
 
 type CaseBase = {
   expect?: Expectation;
@@ -36,10 +37,14 @@ export type CssomProbe =
   | { target: 'rule.style'; sheet?: number; rule: number; }
   | { target: 'style.property'; sheet?: number; rule?: number; name: string; };
 
+export type SupportsProbe =
+  | { property: string; value: string; }
+  | { condition: string; };
+
 export type TestCase =
   | SelectCase | MatchCase | FirstCase | ClosestCase
   | ByIdCase | ByTagCase | ByClassCase | ByTagNsCase
-  | ComputedStyleCase | CssomCase;
+  | ComputedStyleCase | CssomCase | SupportsCase;
 
 export type Scenario = {
   name: string;
@@ -76,6 +81,7 @@ export type Expectation = {
   equivalentCase?: EquivalentCase;
   value?: string;
   cssom?: unknown[] | Record<string, unknown>;
+  supported?: boolean;
 };
 
 export type EquivalentCase = DistributiveOmit<TestCase, 'expect' | 'status' | 'browsers' | 'engines'>;
@@ -496,6 +502,7 @@ function runEngineChecks(
           case 'error':   return true; // errors can differ even if threw is the same, so ignore them for grouping purposes
           case 'value':   return r.value === other.value;
           case 'cssom':   return sameJson(r.cssom, other.cssom);
+          case 'supported': return r.supported === other.supported;
           default:        return assertNever(key);
         }
       })
@@ -597,6 +604,13 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
         return;
       }
       expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toMatchObject(expectation.cssom);
+    });
+  }
+
+  if (expectation.supported !== undefined) {
+    runEngineChecks(result, msg, 'supported', (r, ngLabel) => {
+      const errLabel = `Expected supported=${expectation.supported}, got ${r.supported}.`;
+      expect(r.supported, `${errLabel}\n\n${header}${ngLabel}`).toBe(expectation.supported);
     });
   }
 
