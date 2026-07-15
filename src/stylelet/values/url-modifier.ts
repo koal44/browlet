@@ -67,6 +67,12 @@ export type RequestUrlModifierValue =
   | IntegrityModifierValue
   | ReferrerPolicyModifierValue;
 
+export type RequestUrlModifiers = {
+  crossOrigin?: CrossOriginModifierValue;
+  integrity?: IntegrityModifierValue;
+  referrerPolicy?: ReferrerPolicyModifierValue;
+};
+
 function tryConsumeRequestUrlModifier(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RequestUrlModifierValue> {
@@ -101,13 +107,50 @@ export function isRequestUrlModifierValue(
 export function serializeRequestUrlModifier(
   value: RequestUrlModifierValue,
 ): string {
+  const name = requestUrlModifierName(value);
+
   switch (value.type) {
     case 'cross-origin-modifier':
-      return `cross-origin(${value.value})`;
+      return `${name}(${value.value})`;
     case 'integrity-modifier':
-      return `integrity(${serializeCssString(value.value)})`;
+      return `${name}(${serializeCssString(value.value)})`;
     case 'referrer-policy-modifier':
-      return `referrer-policy(${value.value})`;
+      return `${name}(${value.value})`;
+  }
+}
+
+export function serializeRequestUrlModifiers(
+  modifiers: RequestUrlModifiers,
+): string[] {
+  // CSS Values 4 section 9.1 serializes arguments in grammar order; CSSWG
+  // issue #12151 applies that canonical ordering to request URL modifiers.
+  const serialized: string[] = [];
+
+  if (modifiers.crossOrigin !== undefined) {
+    serialized.push(serializeRequestUrlModifier(modifiers.crossOrigin));
+  }
+
+  if (modifiers.integrity !== undefined) {
+    serialized.push(serializeRequestUrlModifier(modifiers.integrity));
+  }
+
+  if (modifiers.referrerPolicy !== undefined) {
+    serialized.push(serializeRequestUrlModifier(modifiers.referrerPolicy));
+  }
+
+  return serialized;
+}
+
+export function requestUrlModifierName(
+  value: RequestUrlModifierValue,
+): 'cross-origin' | 'integrity' | 'referrer-policy' {
+  switch (value.type) {
+    case 'cross-origin-modifier':
+      return 'cross-origin';
+    case 'integrity-modifier':
+      return 'integrity';
+    case 'referrer-policy-modifier':
+      return 'referrer-policy';
   }
 }
 

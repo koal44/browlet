@@ -9,8 +9,9 @@ import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parse
 import { TokenKind } from '../parser/tokens';
 import { serializeCssString, tryConsumeString } from './string';
 import {
-  isRequestUrlModifierValue, serializeRequestUrlModifier, tryConsumeUrlModifier,
-  type RequestUrlModifierValue, type UrlModifierValue,
+  isRequestUrlModifierValue, requestUrlModifierName,
+  serializeRequestUrlModifiers, tryConsumeUrlModifier,
+  type RequestUrlModifiers, type RequestUrlModifierValue, type UrlModifierValue,
 } from './url-modifier';
 
 /*
@@ -40,7 +41,7 @@ export type UrlValue = {
   type: 'url';
   notation: UrlNotation;
   value: string;
-  modifiers: RequestUrlModifierValue[];
+  modifiers: RequestUrlModifiers;
 };
 
 export function parseUrl(
@@ -63,28 +64,12 @@ export function tryConsumeUrl(
 }
 
 export function serializeUrl(value: UrlValue): string {
-  const arguments_ = [
+  const args = [
     serializeCssString(value.value),
     ...serializeRequestUrlModifiers(value.modifiers),
   ];
 
-  return `${value.notation}(${arguments_.join(' ')})`;
-}
-
-function serializeRequestUrlModifiers(
-  modifiers: readonly RequestUrlModifierValue[],
-): string[] {
-  // CSS Values 4 section 9.1 serializes arguments in grammar order; CSSWG
-  // issue #12151 applies that canonical ordering to request URL modifiers.
-  const order = [
-    'cross-origin-modifier',
-    'integrity-modifier',
-    'referrer-policy-modifier',
-  ] as const satisfies readonly RequestUrlModifierValue['type'][];
-
-  return order.flatMap((type) => modifiers
-    .filter((modifier) => modifier.type === type)
-    .map(serializeRequestUrlModifier));
+  return `${value.notation}(${args.join(' ')})`;
 }
 
 const consumeUrl: TryComponentConsumer<UrlValue> = oneOf(
@@ -160,7 +145,7 @@ function tryConsumeUrlToken(
     type: 'url',
     notation: 'url',
     value: component.value,
-    modifiers: [],
+    modifiers: {},
   });
 }
 
@@ -169,7 +154,7 @@ function tryConsumeUrlToken(
  */
 type UrlFunctionArguments = {
   value: string;
-  modifiers: RequestUrlModifierValue[];
+  modifiers: RequestUrlModifiers;
 };
 
 type UrlFunctionParserContext = {
@@ -196,9 +181,35 @@ const consumeUrlFunctionArguments: TryComponentConsumer<UrlFunctionArguments> =
     ],
     ([[string], modifiers]) => ok({
       value: string.value,
-      modifiers: modifiers.filter(isRequestUrlModifierValue),
+      modifiers: urlModifiersFromArray(modifiers),
     }),
   );
+
+function urlModifiersFromArray(
+  values: readonly UrlModifierValue[],
+): RequestUrlModifiers {
+  const modifiers: RequestUrlModifiers = {};
+
+  for (const value of values) {
+    if (!isRequestUrlModifierValue(value)) {
+      continue;
+    }
+
+    switch (value.type) {
+      case 'cross-origin-modifier':
+        modifiers.crossOrigin = value;
+        break;
+      case 'integrity-modifier':
+        modifiers.integrity = value;
+        break;
+      case 'referrer-policy-modifier':
+        modifiers.referrerPolicy = value;
+        break;
+    }
+  }
+
+  return modifiers;
+}
 
 function tryConsumeUrlFunctionModifier(
   c: ComponentCursor,
@@ -238,17 +249,4 @@ function contextAfterUrlFunctionModifier(
       value.type,
     ]),
   };
-}
-
-function requestUrlModifierName(
-  value: RequestUrlModifierValue,
-): 'cross-origin' | 'integrity' | 'referrer-policy' {
-  switch (value.type) {
-    case 'cross-origin-modifier':
-      return 'cross-origin';
-    case 'integrity-modifier':
-      return 'integrity';
-    case 'referrer-policy-modifier':
-      return 'referrer-policy';
-  }
 }

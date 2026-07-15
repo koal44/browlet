@@ -388,7 +388,7 @@ describe('url', () => {
       type: 'url',
       notation,
       value,
-      modifiers: [],
+      modifiers: {},
     });
   });
 
@@ -437,7 +437,7 @@ describe('url', () => {
         type: 'url',
         notation: 'src',
         value: 'image.png',
-        modifiers: [],
+        modifiers: {},
       });
   });
 
@@ -450,11 +450,11 @@ describe('url', () => {
       type: 'url',
       notation: 'url',
       value: 'image.png',
-      modifiers: [],
+      modifiers: {},
     });
   });
 
-  it('retains recognized request URL modifiers in source order', () => {
+  it('projects recognized request URL modifiers into their grammar fields', () => {
     expect(parseUrl([
       'url("image.png"',
       'referrer-policy(no-referrer)',
@@ -465,11 +465,20 @@ describe('url', () => {
       type: 'url',
       notation: 'url',
       value: 'image.png',
-      modifiers: [
-        { type: 'referrer-policy-modifier', value: 'no-referrer' },
-        { type: 'integrity-modifier', value: 'sha256-test' },
-        { type: 'cross-origin-modifier', value: 'use-credentials' },
-      ],
+      modifiers: {
+        crossOrigin: {
+          type: 'cross-origin-modifier',
+          value: 'use-credentials',
+        },
+        integrity: {
+          type: 'integrity-modifier',
+          value: 'sha256-test',
+        },
+        referrerPolicy: {
+          type: 'referrer-policy-modifier',
+          value: 'no-referrer',
+        },
+      },
     });
   });
 
