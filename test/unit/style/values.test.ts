@@ -14,8 +14,8 @@ import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/va
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
-import { parseUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
-import { parseUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
+import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
+import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 
 describe('An+B', () => {
   it.each([
@@ -274,6 +274,23 @@ describe('url-modifier', () => {
   });
 
   it.each([
+    [
+      { type: 'cross-origin-modifier', value: 'use-credentials' } as const,
+      'cross-origin(use-credentials)',
+    ],
+    [
+      { type: 'integrity-modifier', value: 'sha"256' } as const,
+      String.raw`integrity("sha\"256")`,
+    ],
+    [
+      { type: 'referrer-policy-modifier', value: 'strict-origin' } as const,
+      'referrer-policy(strict-origin)',
+    ],
+  ])('serializes the request modifier %j', (value, expected) => {
+    expect(serializeRequestUrlModifier(value)).toBe(expected);
+  });
+
+  it.each([
     'cross-origin(unknown)',
     'CROSS-ORIGIN(unknown)',
     'integrity(unknown)',
@@ -366,13 +383,52 @@ describe('url', () => {
     ['url("")', 'url', ''],
     ['src("")', 'src', ''],
     ['url(#fragment)', 'url', '#fragment'],
-  ] as const)('parses %j', (input, notation, value) => {
+  ])('parses %j', (input, notation, value) => {
     expect(parseUrl(input)).toEqual({
       type: 'url',
       notation,
       value,
       modifiers: [],
     });
+  });
+
+  it.each([
+    ['url(image.png)', 'url("image.png")'],
+    ['url("image.png")', 'url("image.png")'],
+    ['src("image.png")', 'src("image.png")'],
+    ['url()', 'url("")'],
+    ['url(#fragment)', 'url("#fragment")'],
+    [String.raw`url("a\"b\\c")`, String.raw`url("a\"b\\c")`],
+    ['url("image.png" future-modifier())', 'url("image.png")'],
+  ])('serializes %j as %j', (input, expected) => {
+    expect(serializeUrl(parseUrl(input)!)).toBe(expected);
+  });
+
+  it('serializes request URL modifiers in grammar order', () => {
+    const value = parseUrl([
+      'url("image.png"',
+      'referrer-policy(no-referrer)',
+      'integrity("sha256-test")',
+      'cross-origin(use-credentials))',
+    ].join(' '))!;
+
+    expect(serializeUrl(value)).toBe([
+      'url("image.png"',
+      'cross-origin(use-credentials)',
+      'integrity("sha256-test")',
+      'referrer-policy(no-referrer))',
+    ].join(' '));
+  });
+
+  it('is idempotent after canonical serialization', () => {
+    const value = parseUrl([
+      'src("image.png"',
+      'referrer-policy(origin)',
+      'cross-origin(anonymous))',
+    ].join(' '))!;
+    const serialized = serializeUrl(value);
+
+    expect(serializeUrl(parseUrl(serialized)!)).toBe(serialized);
   });
 
   it('accepts component trivia around and inside functional notation', () => {

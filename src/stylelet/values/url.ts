@@ -7,9 +7,9 @@ import {
 } from '../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import { tryConsumeString } from './string';
+import { serializeCssString, tryConsumeString } from './string';
 import {
-  isRequestUrlModifierValue, tryConsumeUrlModifier,
+  isRequestUrlModifierValue, serializeRequestUrlModifier, tryConsumeUrlModifier,
   type RequestUrlModifierValue, type UrlModifierValue,
 } from './url-modifier';
 
@@ -60,6 +60,31 @@ export function tryConsumeUrl(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
   return consumeUrl(c);
+}
+
+export function serializeUrl(value: UrlValue): string {
+  const arguments_ = [
+    serializeCssString(value.value),
+    ...serializeRequestUrlModifiers(value.modifiers),
+  ];
+
+  return `${value.notation}(${arguments_.join(' ')})`;
+}
+
+function serializeRequestUrlModifiers(
+  modifiers: readonly RequestUrlModifierValue[],
+): string[] {
+  // CSS Values 4 section 9.1 serializes arguments in grammar order; CSSWG
+  // issue #12151 applies that canonical ordering to request URL modifiers.
+  const order = [
+    'cross-origin-modifier',
+    'integrity-modifier',
+    'referrer-policy-modifier',
+  ] as const satisfies readonly RequestUrlModifierValue['type'][];
+
+  return order.flatMap((type) => modifiers
+    .filter((modifier) => modifier.type === type)
+    .map(serializeRequestUrlModifier));
 }
 
 const consumeUrl: TryComponentConsumer<UrlValue> = oneOf(

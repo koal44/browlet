@@ -8,7 +8,7 @@ import {
 import { parseAsComponentGrammar, type FunctionBlock, type ParserInput } from '../parser/syntax';
 import { isAnyValue } from './any-value';
 import { tryConsumeIdent, type IdentValue } from './ident';
-import { tryConsumeString } from './string';
+import { serializeCssString, tryConsumeString } from './string';
 
 /*
  * NOTE: The URL modifier grammar is a provisional synthesis, not a verbatim
@@ -96,6 +96,19 @@ export function isRequestUrlModifierValue(
       value.type === 'referrer-policy-modifier'
     )
   );
+}
+
+export function serializeRequestUrlModifier(
+  value: RequestUrlModifierValue,
+): string {
+  switch (value.type) {
+    case 'cross-origin-modifier':
+      return `cross-origin(${value.value})`;
+    case 'integrity-modifier':
+      return `integrity(${serializeCssString(value.value)})`;
+    case 'referrer-policy-modifier':
+      return `referrer-policy(${value.value})`;
+  }
 }
 
 /*
