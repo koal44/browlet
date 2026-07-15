@@ -126,10 +126,10 @@ export function sortUniqueByDocPosition(nodes: Element[]): void {
   });
 
   let j = 1;
-  let last = nodes[0];
+  let last = nodes[0]!;
 
   for (let i = 1, l = nodes.length; i < l; ++i) {
-    const cur = nodes[i];
+    const cur = nodes[i]!;
     if (cur !== last) {
       nodes[j++] = cur;
       last = cur;
@@ -151,8 +151,8 @@ export function mergeSortedUnique<T>(a: T[], b: T[], precedes: Precedes<T>): T[]
   let i = 0, j = 0, k = 0;
 
   while (i < a.length && j < b.length) {
-    const x = a[i];
-    const y = b[j];
+    const x = a[i]!;
+    const y = b[j]!;
 
     if (x === y) {
       nodes[k++] = x;
@@ -167,8 +167,17 @@ export function mergeSortedUnique<T>(a: T[], b: T[], precedes: Precedes<T>): T[]
     }
   }
 
-  while (i < a.length) nodes[k++] = a[i++];
-  while (j < b.length) nodes[k++] = b[j++];
+  while (i < a.length) {
+    const value = a[i]!;
+    nodes[k++] = value;
+    i++;
+  }
+
+  while (j < b.length) {
+    const value = b[j]!;
+    nodes[k++] = value;
+    j++;
+  }
 
   return nodes;
 }
@@ -182,12 +191,13 @@ export function mergeDocumentOrderLists(lists: Element[][]): Element[] {
 
 export function mergeSortedUniqueLists<T>(lists: T[][], precedes: Precedes<T>): T[] {
   if (lists.length === 0) return [];
-  if (lists.length === 1) return lists[0];
+  if (lists.length === 1) return lists[0]!;
 
-  let out = lists[0].slice();
+  const first = lists[0]!;
+  let out = first.slice();
 
   for (let i = 1; i < lists.length; ++i) {
-    const list = lists[i];
+    const list = lists[i]!;
     if (list.length === 0) continue;
     if (out.length === 0) {
       out = list.slice();

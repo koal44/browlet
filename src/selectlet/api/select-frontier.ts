@@ -14,7 +14,7 @@ export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectR
   const selects: ArmSelectFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
-    const arm = arms[i];
+    const arm = arms[i]!;
 
     const select = buildArmFn(arm, i, snap);
     selects[i] = select;
@@ -31,14 +31,16 @@ export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectR
 
 function runSelect(selects: ArmSelectFn[], ctx: QueryContext, rc: RuntimeCache | null): Element[] {
   if (selects.length === 1) {
-    return selects[0](ctx, rc);
+    const select = selects[0]!;
+    return select(ctx, rc);
   }
 
   const lists: Element[][] = [];
   let i = 0;
 
   for (let k = 0; k < selects.length; k++) {
-    const results = selects[k](ctx, rc);
+    const select = selects[k]!;
+    const results = select(ctx, rc);
     if (results.length) lists[i++] = results;
   }
 
@@ -71,7 +73,8 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
     frontier: null,
   };
 
-  runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, LOOKUP_COPY, rc);
+  const startStep = program.steps[program.start.to]!;
+  runBridgeMove(state, program.start, startStep.canRoot, LOOKUP_COPY, rc);
 
   if (isDebug) {
     program.start.count = state.frontier?.length ?? 0;
@@ -84,7 +87,7 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
 
   while (index < last) {
     const from = index;
-    const step = program.steps[from];
+    const step = program.steps[from]!;
 
     if (canAdvance(state)) {
       const advance = getAdvanceMove(program, from, snap);
@@ -92,7 +95,8 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
       if (advance) {
         if (isDebug) step.lookupRoot = state.root;
 
-        runAdvanceMove(state, advance, program.steps[advance.to].canRoot, rc);
+        const advanceStep = program.steps[advance.to]!;
+        runAdvanceMove(state, advance, advanceStep.canRoot, rc);
 
         if (isDebug) step.count = state.frontier.length;
 
@@ -107,7 +111,8 @@ function runFrontierProgram(program: FrontierProgram, ctx: QueryContext, rc: Run
 
     if (isDebug) step.lookupRoot = state.root;
 
-    runBridgeMove(state, bridge, program.steps[bridge.to].canRoot, LOOKUP_COPY, rc);
+    const bridgeStep = program.steps[bridge.to]!;
+    runBridgeMove(state, bridge, bridgeStep.canRoot, LOOKUP_COPY, rc);
 
     if (isDebug) step.count = state.frontier.length;
 

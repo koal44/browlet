@@ -12,7 +12,8 @@ export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstR
 
   if (snap.isDebug) {
     for (let i = 0; i < groups.length; i++) {
-      updateDebugBuild(snap, groups[i]);
+      const group = groups[i]!;
+      updateDebugBuild(snap, group);
     }
   }
 
@@ -28,7 +29,7 @@ function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: Ru
   let best: Element | null = null;
 
   if (groups.length === 1) {
-    const group = groups[0];
+    const group = groups[0]!;
     const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
     const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
 
@@ -38,7 +39,7 @@ function runFullBridgeFirst(groups: FullBridgeGroup[], ctx: QueryContext, rc: Ru
   }
 
   for (let k = 0; k < groups.length; k++) {
-    const group = groups[k];
+    const group = groups[k]!;
     const candidates = group.bridge.lookup(ctx, LOOKUP_VIEW);
     const result = findFirstBridgeCandidate(candidates, group.bridge.proof, frontier, rc, best);
 

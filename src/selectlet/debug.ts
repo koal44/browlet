@@ -12,7 +12,7 @@ export function describeComplex(complex: ComplexSelector): string {
   let out = '';
 
   for (let i = 0; i < complex.parts.length; i++) {
-    const part = complex.parts[i];
+    const part = complex.parts[i]!;
 
     if (i > 0) {
       out += part.combinator === ' ' ? ' ' : ` ${part.combinator} `;
@@ -37,12 +37,14 @@ export function describeCompound(compound: CompoundSelector): string {
 
   if (compound.classes) {
     for (let i = 0; i < compound.classes.length; i++) {
-      out += `.${cssIdentUnescape(compound.classes[i].raw)}`;
+      const cls = compound.classes[i]!;
+      out += `.${cssIdentUnescape(cls.raw)}`;
     }
   }
 
   for (let i = 0; i < compound.tests.length; i++) {
-    out += describeTest(compound.tests[i]);
+    const test = compound.tests[i]!;
+    out += describeTest(test);
   }
 
   return out || '*';
@@ -183,7 +185,8 @@ export function describeLookup(compound: CompoundSelector): string {
   if (compound.classes?.length) {
     let s = '';
     for (let i = 0; i < compound.classes.length; i++) {
-      s += `.${cssIdentUnescape(compound.classes[i].raw)}`;
+      const cls = compound.classes[i]!;
+      s += `.${cssIdentUnescape(cls.raw)}`;
     }
     return s;
   }

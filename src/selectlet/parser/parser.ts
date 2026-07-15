@@ -1253,7 +1253,7 @@ function keepCompoundArms(list: SelectorList): SelectorList {
   let usesHost = false;
 
   for (let i = 0; i < list.arms.length; i++) {
-    const arm = list.arms[i];
+    const arm = list.arms[i]!;
 
     if (arm.parts.length !== 1) continue;
 

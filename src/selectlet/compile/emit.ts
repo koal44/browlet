@@ -561,7 +561,10 @@ export function emitStatePseudoTest(raw: string): CandidateTest {
 // registered pseudo-class
 export function emitRegisteredPseudoTest(name: string): CandidateTest {
   return {
-    buildElement: (s) => (e) => s.pseudos[name](e),
+    buildElement: (s) => {
+      const predicate = s.pseudos[name]!;
+      return (e) => predicate(e);
+    },
     cost: 20,
     debug: { kind: 'registered-pseudo', name },
   };

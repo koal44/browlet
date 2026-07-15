@@ -33,7 +33,7 @@ function byId_AllFirst(id: string, context: Element): Element | null {
     return null;
   } else {  // HTMLCollection
     for (let i = 0; i < item.length; i++) {
-      const e = item[i];
+      const e = item[i]!;
       if (e !== context && sameId(e, id) && context.contains(e)) {
         return e;
       }

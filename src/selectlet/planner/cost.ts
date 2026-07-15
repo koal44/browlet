@@ -5,7 +5,8 @@ export function costComplex(parts: ComplexSelector['parts']): number {
   let cost = 0;
 
   for (let i = 0; i < parts.length; i++) {
-    cost += costPart(parts[i]);
+    const part = parts[i]!;
+    cost += costPart(part);
   }
 
   return cost;
@@ -23,12 +24,14 @@ export function costCompound(compound: CompoundSelector): number {
 
   if (compound.classes) {
     for (let i = 0; i < compound.classes.length; i++) {
-      cost += compound.classes[i].cost;
+      const cls = compound.classes[i]!;
+      cost += cls.cost;
     }
   }
 
   for (let i = 0; i < compound.tests.length; i++) {
-    cost += compound.tests[i].cost;
+    const test = compound.tests[i]!;
+    cost += test.cost;
   }
 
   return cost;

@@ -42,14 +42,15 @@ export function buildFrontierProgram(chain: Chain, snap: Snapshot): FrontierProg
 }
 
 export function getAdvanceMove(program: FrontierProgram, index: number, snap: Snapshot): AdvanceMove | null {
-  const step = program.steps[index];
+  const step = program.steps[index]!;
 
   if (step.advance !== undefined) return step.advance;
 
   const move = buildAdvanceMove(program.chain, index, snap);
 
   if (move && snap.isDebug) {
-    const compound = program.chain[move.to].right.compound;
+    const relation = program.chain[move.to]!;
+    const compound = relation.right.compound;
     move.debug =
       `${describeAdvanceMove(move)} · ${describeCombinator(move.combinator)} · test ${describeCompound(compound)}`;
   }
@@ -59,7 +60,7 @@ export function getAdvanceMove(program: FrontierProgram, index: number, snap: Sn
 }
 
 export function getBridgeMove(program: FrontierProgram, index: number, snap: Snapshot): BridgeMove | null {
-  const step = program.steps[index];
+  const step = program.steps[index]!;
 
   if (step.bridge !== undefined) return step.bridge;
 
@@ -81,7 +82,7 @@ export function getBridgeMove(program: FrontierProgram, index: number, snap: Sna
 }
 
 export function getBridgeToEndMove(program: FrontierProgram, index: number, snap: Snapshot): BridgeMove {
-  const step = program.steps[index];
+  const step = program.steps[index]!;
 
   if (step.bridgeToEnd !== undefined) {
     if (step.bridgeToEnd === null) {
@@ -113,7 +114,8 @@ function canRootAt(chain: Chain, index: number): boolean {
   const next = index + 1;
   if (next >= chain.length) return true;
 
-  const combinator = chain[next].combinator;
+  const relation = chain[next]!;
+  const combinator = relation.combinator;
 
   // A singleton frontier at step `index` may become lookup root only if the next
   // relation stays inside that frontier's subtree. Sibling relations leave the subtree.
@@ -156,7 +158,8 @@ function updateFrontierState(state: FrontierState, frontier: Element[], canRoot:
   state.frontier = frontier;
 
   if (canRoot && frontier.length === 1) {
-    state.root = frontier[0];
+    const root = frontier[0]!;
+    state.root = root;
   }
 }
 
@@ -165,11 +168,13 @@ function chooseBridgeTarget(chain: Chain, from: number): number {
   const last = chain.length - 1;
 
   for (let i = start; i <= last; i++) {
-    if (chain[i].right.compound.id) return i;
+    const relation = chain[i]!;
+    if (relation.right.compound.id) return i;
   }
 
   for (let i = start; i <= last; i++) {
-    if (chain[i].right.compound.classes?.length) return i;
+    const relation = chain[i]!;
+    if (relation.right.compound.classes?.length) return i;
   }
 
   return last;
@@ -201,7 +206,7 @@ export function describeFrontierProgram(program: FrontierProgram): DebugFrontier
   const last = program.steps.length - 1;
 
   for (let i = 0; i < last; i++) {
-    const step = program.steps[i];
+    const step = program.steps[i]!;
 
     const dbg: DebugFrontierStep = {
       index: i,
@@ -240,7 +245,8 @@ export function resetFrontierDebug(program: FrontierProgram): void {
   program.start.count = undefined;
 
   for (let i = 0; i < program.steps.length; i++) {
-    program.steps[i].count = undefined;
-    program.steps[i].lookupRoot = undefined;
+    const step = program.steps[i]!;
+    step.count = undefined;
+    step.lookupRoot = undefined;
   }
 }

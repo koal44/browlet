@@ -26,7 +26,8 @@ export type MultiBridgeMove = {
 export type LookupFn = (root: QueryContext, mode: LookupMode) => Iterable<Element>;
 
 export function buildBridgeMove(chain: Chain, from: number, to: number, snap: Snapshot): BridgeMove {
-  const compound = chain[to].right.compound;
+  const relation = chain[to]!;
+  const compound = relation.right.compound;
   const lookup = buildLookupPlan(compound, snap);
 
   applyLookupSeed(compound, lookup);
@@ -51,15 +52,18 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   const compounds: CompoundSelector[] = [];
   const lookups: LookupPlan[] = [];
 
-  const baseCompound = chains[0][chains[0].length - 1].right.compound;
+  const baseChain = chains[0]!;
+  const baseRelation = baseChain[baseChain.length - 1]!;
+  const baseCompound = baseRelation.right.compound;
   const baseLookup = buildLookupPlan(baseCompound, snap);
 
   compounds[0] = baseCompound;
   lookups[0] = baseLookup;
 
   for (let i = 1; i < chains.length; i++) {
-    const chain = chains[i];
-    const compound = chain[chain.length - 1].right.compound;
+    const chain = chains[i]!;
+    const relation = chain[chain.length - 1]!;
+    const compound = relation.right.compound;
     const lookup = buildLookupPlan(compound, snap);
 
     if (!sameLookupPlan(baseLookup, lookup)) {
@@ -74,7 +78,9 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
   }
 
   for (let i = 0; i < compounds.length; i++) {
-    applyLookupSeed(compounds[i], lookups[i]);
+    const compound = compounds[i]!;
+    const lookup = lookups[i]!;
+    applyLookupSeed(compound, lookup);
   }
 
   try {
@@ -90,7 +96,9 @@ export function buildMultiBridgeMove(chains: Chain[], snap: Snapshot): MultiBrid
     return move;
   } finally {
     for (let i = 0; i < compounds.length; i++) {
-      resetLookupSeed(compounds[i], lookups[i]);
+      const compound = compounds[i]!;
+      const lookup = lookups[i]!;
+      resetLookupSeed(compound, lookup);
     }
   }
 }
@@ -251,7 +259,8 @@ function applyLookupSeed(compound: CompoundSelector, plan: LookupPlan): void {
     case 'classes':
       if (compound.classes) {
         for (let i = 0; i < compound.classes.length; i++) {
-          compound.classes[i].seed = true;
+          const cls = compound.classes[i]!;
+          cls.seed = true;
         }
       }
       return;
@@ -274,7 +283,8 @@ function resetLookupSeed(compound: CompoundSelector, plan: LookupPlan): void {
     case 'classes':
       if (compound.classes) {
         for (let i = 0; i < compound.classes.length; i++) {
-          compound.classes[i].seed = false;
+          const cls = compound.classes[i]!;
+          cls.seed = false;
         }
       }
       return;

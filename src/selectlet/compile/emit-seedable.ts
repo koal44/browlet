@@ -63,7 +63,7 @@ export function collectCompoundTests(compound: CompoundSelector): CandidateTest[
 
   if (compound.classes) {
     for (let i = 0; i < compound.classes.length; i++) {
-      const cls = compound.classes[i];
+      const cls = compound.classes[i]!;
       if (!cls.seed) tests.push(emitClassTest(cls));
     }
   }
@@ -73,7 +73,8 @@ export function collectCompoundTests(compound: CompoundSelector): CandidateTest[
   }
 
   for (let i = 0; i < compound.tests.length; i++) {
-    tests.push(compound.tests[i]);
+    const test = compound.tests[i]!;
+    tests.push(test);
   }
 
   return tests;

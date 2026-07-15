@@ -16,7 +16,7 @@ export function buildFrontierFirst(list: SelectorList, snap: Snapshot): FirstRun
   const firsts: ArmFirstFn[] = [];
 
   for (let i = 0; i < arms.length; i++) {
-    const arm = arms[i];
+    const arm = arms[i]!;
 
     const first = buildArmFn(arm, i, snap);
     firsts[i] = first;
@@ -37,7 +37,8 @@ function runFirst(firsts: ArmFirstFn[], ctx: QueryContext, rc: RuntimeCache | nu
   let best: Element | null = null;
 
   for (let i = 0; i < firsts.length; i++) {
-    const result = firsts[i](ctx, rc, best);
+    const first = firsts[i]!;
+    const result = first(ctx, rc, best);
     if (result) best = result;
   }
 
@@ -78,7 +79,8 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
     return found;
   }
 
-  runBridgeMove(state, program.start, program.steps[program.start.to].canRoot, LOOKUP_VIEW, rc);
+  const startStep = program.steps[program.start.to]!;
+  runBridgeMove(state, program.start, startStep.canRoot, LOOKUP_VIEW, rc);
 
   if (isDebug) {
     program.start.count = state.frontier?.length ?? 0;
@@ -89,7 +91,7 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
   let index = program.start.to;
   while (index < last) {
     const from = index;
-    const step = program.steps[from];
+    const step = program.steps[from]!;
 
     if (canAdvance(state)) {
       const advance = getAdvanceMove(program, from, snap);
@@ -106,7 +108,8 @@ function runFrontierFirstProgram(program: FrontierProgram, ctx: QueryContext, rc
           return null;
         }
 
-        runAdvanceMove(state, advance, program.steps[advance.to].canRoot, rc);
+        const advanceStep = program.steps[advance.to]!;
+        runAdvanceMove(state, advance, advanceStep.canRoot, rc);
 
         if (isDebug) step.count = state.frontier.length;
 

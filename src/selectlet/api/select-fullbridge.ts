@@ -13,7 +13,8 @@ export function buildFullBridgeSelect(list: SelectorList, snap: Snapshot): Selec
 
   if (snap.isDebug) {
     for (let i = 0; i < groups.length; i++) {
-      updateDebugBuild(snap, groups[i]);
+      const group = groups[i]!;
+      updateDebugBuild(snap, group);
     }
   }
 
@@ -31,7 +32,7 @@ function runFullBridgeSelect(
   const isDebug = snap.isDebug;
 
   if (groups.length === 1) {
-    const group = groups[0];
+    const group = groups[0]!;
     const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 
@@ -44,7 +45,7 @@ function runFullBridgeSelect(
   let i = 0;
 
   for (let k = 0; k < groups.length; k++) {
-    const group = groups[k];
+    const group = groups[k]!;
     const candidates = group.bridge.lookup(ctx, LOOKUP_COPY);
     const results = filterBridgeCandidates(candidates, group.bridge.proof, null, rc);
 

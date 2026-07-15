@@ -516,7 +516,7 @@ export function extendedLangMatch(range: string, lang: string): boolean {
   let li = 1;
 
   while (ri < rangeParts.length) {
-    const r = rangeParts[ri];
+    const r = rangeParts[ri]!;
 
     if (r === '*') {
       ri++;
@@ -527,7 +527,7 @@ export function extendedLangMatch(range: string, lang: string): boolean {
       return false;
     }
 
-    const l = langParts[li];
+    const l = langParts[li]!;
 
     if (r === l) {
       ri++;

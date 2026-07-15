@@ -22,7 +22,10 @@ export class Cursor {
 
   next(): string {
     if (this.i >= this.input.length) return '';
-    return this.input[this.i++];
+
+    const ch = this.input[this.i]!;
+    this.i++;
+    return ch;
   }
 
   // trusted, no eof check!
@@ -51,7 +54,11 @@ export class Cursor {
     const start = this.i;
     let i = start;
 
-    while (i < n && p(input[i])) i++;
+    while (i < n) {
+      const ch = input[i]!;
+      if (!p(ch)) break;
+      i++;
+    }
 
     this.i = i;
     return i - start;

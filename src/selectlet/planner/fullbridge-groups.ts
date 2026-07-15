@@ -38,15 +38,16 @@ function buildFullBridgeDrafts(arms: ComplexSelector[], snap: Snapshot): FullBri
   const drafts: FullBridgeDraft[] = [];
 
   for (let i = 0; i < arms.length; i++) {
-    const arm = arms[i];
+    const arm = arms[i]!;
     const chain = buildChain(arm);
-    const last = chain[chain.length - 1].right.compound;
+    const relation = chain[chain.length - 1]!;
+    const last = relation.right.compound;
     const lookup = buildLookupPlan(last, snap);
 
     let draft: FullBridgeDraft | undefined;
 
     for (let j = 0; j < drafts.length; j++) {
-      const d = drafts[j];
+      const d = drafts[j]!;
       if (sameLookupPlan(d.lookup, lookup)) {
         draft = d;
         break;
@@ -84,13 +85,14 @@ function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], snap: Snapshot): Fu
   const groups: FullBridgeGroup[] = [];
 
   for (let i = 0; i < drafts.length; i++) {
-    const draft = drafts[i];
+    const draft = drafts[i]!;
 
     draft.chains.sort((a, b) => a.cost - b.cost);
 
     const chains: Chain[] = [];
     for (let j = 0; j < draft.chains.length; j++) {
-      chains[j] = draft.chains[j].chain;
+      const planned = draft.chains[j]!;
+      chains[j] = planned.chain;
     }
 
     groups[i] = {

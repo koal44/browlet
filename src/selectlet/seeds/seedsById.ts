@@ -91,7 +91,7 @@ function seedsById_All(id: string, context: Document | Element): Element[] {
     }
   } else {  // HTMLCollection
     for (let i = 0; i < item.length; i++) {
-      const e = item[i];
+      const e = item[i]!;
       if (sameId(e, id) && (isDoc || (e !== context && context.contains(e)))) {
         nodes.push(e);
       }

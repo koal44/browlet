@@ -53,7 +53,7 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
   const query = classes.join(' ');
 
   if (classes.length === 1) {
-    const cls = classes[0];
+    const cls = classes[0]!;
     const reCls = snap.getClassRegex(cls);
 
     for (let el = context.firstElementChild; el; el = el.nextElementSibling) {
@@ -71,7 +71,8 @@ function seedsByClassInFragment(classes: string[], context: DocumentFragment, sn
 
     let matched = true;
     for (let i = 0, l = tests.length; i < l; ++i) {
-      if (!tests[i].test(attr)) {
+      const test = tests[i]!;
+      if (!test.test(attr)) {
         matched = false;
         break;
       }
