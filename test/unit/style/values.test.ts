@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseStylesheet } from '../../../src/stylelet/parser/ast';
-import { BlockKind, parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
-import { BadUrlToken, RightParenToken, identToken } from '../../../src/stylelet/parser/tokens';
+import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
+import { BlockKind, parseListOfComponentValues, type ComponentValue } from '../../../src/stylelet/parser/syntax';
+import {
+  BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken,
+  identToken, stringToken,
+} from '../../../src/stylelet/parser/tokens';
 import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
@@ -10,6 +14,8 @@ import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/va
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
+import { parseUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
+import { parseUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 
 describe('An+B', () => {
   it.each([
@@ -234,6 +240,100 @@ bar"`)).toEqual({
   });
 });
 
+describe('url-modifier', () => {
+  it('parses an identifier modifier through its value grammar', () => {
+    expect(parseUrlModifier('cross-origin')).toEqual({
+      type: 'ident',
+      value: 'cross-origin',
+    });
+  });
+
+  it('parses unknown functional notation as a function block', () => {
+    expect(parseUrlModifier('future-modifier(value)')).toEqual({
+      block: BlockKind.Function,
+      name: 'future-modifier',
+      value: [identToken('value')],
+    });
+  });
+
+  it.each([
+    [
+      'cross-origin(anonymous)',
+      { type: 'cross-origin-modifier', value: 'anonymous' },
+    ],
+    [
+      'integrity("sha256-test")',
+      { type: 'integrity-modifier', value: 'sha256-test' },
+    ],
+    [
+      'referrer-policy(strict-origin)',
+      { type: 'referrer-policy-modifier', value: 'strict-origin' },
+    ],
+  ])('parses the recognized request modifier %j', (input, expected) => {
+    expect(parseUrlModifier(input)).toEqual(expected);
+  });
+
+  it.each([
+    'cross-origin(unknown)',
+    'CROSS-ORIGIN(unknown)',
+    'integrity(unknown)',
+    'integrity("sha256-test" extra)',
+    'referrer-policy(unknown)',
+  ])('rejects the malformed recognized request modifier %j', (input) => {
+    expect(parseUrlModifier(input)).toBeNull();
+  });
+
+  it('commits after recognizing a request modifier with invalid arguments', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('cross-origin(unknown)'),
+    );
+
+    expect(tryConsumeUrlModifier(c)).toMatchObject({
+      kind: 'bad',
+      reason: 'invalid',
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('rejects unknown functional notation containing a bad token', () => {
+    const components: ComponentValue[] = [{
+      block: BlockKind.Function,
+      name: 'future-modifier',
+      value: [BadStringToken],
+    }];
+
+    expect(parseUrlModifier(components)).toBeNull();
+
+    const c = new ComponentCursor(components);
+    expect(tryConsumeUrlModifier(c)).toMatchObject({
+      kind: 'bad',
+      reason: 'invalid',
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('consumes a URL modifier through the component grammar', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('future-modifier()'));
+
+    expect(tryConsumeUrlModifier(c)).toEqual({
+      kind: 'ok',
+      value: {
+        block: BlockKind.Function,
+        name: 'future-modifier',
+        value: [],
+      },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for anything outside the modifier syntax', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1px'));
+
+    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+});
+
 describe('url', () => {
   it('preserves substitution in src() but not in url()', () => {
     expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
@@ -254,6 +354,138 @@ describe('url', () => {
       BadUrlToken,
       RightParenToken,
     ]);
+  });
+
+  it.each([
+    ['url(image.png)', 'url', 'image.png'],
+    ['url("image.png")', 'url', 'image.png'],
+    ['src("image.png")', 'src', 'image.png'],
+    ['URL("image.png")', 'url', 'image.png'],
+    ['SrC("image.png")', 'src', 'image.png'],
+    ['url()', 'url', ''],
+    ['url("")', 'url', ''],
+    ['src("")', 'src', ''],
+    ['url(#fragment)', 'url', '#fragment'],
+  ] as const)('parses %j', (input, notation, value) => {
+    expect(parseUrl(input)).toEqual({
+      type: 'url',
+      notation,
+      value,
+      modifiers: [],
+    });
+  });
+
+  it('accepts component trivia around and inside functional notation', () => {
+    expect(parseUrl(' /* before */ src( /* inner */ "image.png" ) /* after */ '))
+      .toEqual({
+        type: 'url',
+        notation: 'src',
+        value: 'image.png',
+        modifiers: [],
+      });
+  });
+
+  it.each([
+    'url("image.png" cross-origin)',
+    'url("image.png" future-modifier())',
+    'url("image.png" unknown another-unknown())',
+  ])('ignores unrecognized URL modifiers in %j', (input) => {
+    expect(parseUrl(input)).toEqual({
+      type: 'url',
+      notation: 'url',
+      value: 'image.png',
+      modifiers: [],
+    });
+  });
+
+  it('retains recognized request URL modifiers in source order', () => {
+    expect(parseUrl([
+      'url("image.png"',
+      'referrer-policy(no-referrer)',
+      'unknown',
+      'integrity("sha256-test")',
+      'cross-origin(use-credentials))',
+    ].join(' '))).toEqual({
+      type: 'url',
+      notation: 'url',
+      value: 'image.png',
+      modifiers: [
+        { type: 'referrer-policy-modifier', value: 'no-referrer' },
+        { type: 'integrity-modifier', value: 'sha256-test' },
+        { type: 'cross-origin-modifier', value: 'use-credentials' },
+      ],
+    });
+  });
+
+  it.each([
+    'url("image.png" integrity("first") integrity("second"))',
+    [
+      'url("image.png"',
+      'cross-origin(anonymous)',
+      'unknown',
+      'referrer-policy(no-referrer)',
+      'CROSS-ORIGIN(use-credentials))',
+    ].join(' '),
+  ])('rejects the duplicate request URL modifier in %j', (input) => {
+    expect(parseUrl(input)).toBeNull();
+  });
+
+  it('commits after consuming a duplicate request URL modifier', () => {
+    const c = new ComponentCursor(parseListOfComponentValues([
+      'src("image.png"',
+      'referrer-policy(no-referrer)',
+      'unknown()',
+      'REFERRER-POLICY(origin))',
+    ].join(' ')));
+
+    expect(tryConsumeUrl(c)).toEqual({
+      kind: 'bad',
+      reason: 'invalid',
+      message: 'Duplicate referrer-policy URL modifier',
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('rejects an unknown functional modifier containing a bad token', () => {
+    expect(parseUrl([{
+      block: BlockKind.Function,
+      name: 'url',
+      value: [
+        stringToken('image.png'),
+        WhitespaceToken,
+        {
+          block: BlockKind.Function,
+          name: 'future-modifier',
+          value: [BadStringToken],
+        },
+      ],
+    }])).toBeNull();
+  });
+
+  it.each([
+    '',
+    '"image.png"',
+    'src(image.png)',
+    'src()',
+    'src(var(--image))',
+    'url(var(--image))',
+    'url("image.png" 1px)',
+    'url(foo"bar)',
+  ])('rejects %j', (input) => {
+    expect(parseUrl(input)).toBeNull();
+  });
+
+  it('commits after recognizing a function with invalid arguments', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('url("image.png" 1px)'),
+    );
+    const result = tryConsumeUrl(c);
+
+    expect(result).toMatchObject({
+      kind: 'bad',
+      reason: 'invalid',
+    });
+    expect(c.pos()).toBe(1);
   });
 });
 

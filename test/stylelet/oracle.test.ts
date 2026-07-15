@@ -191,7 +191,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
       {
         cssom: { target: 'style.property', name: 'background' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'background-color' },
@@ -393,7 +393,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
       {
         cssom: { target: 'style.property', name: 'margin-top' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'margin-left' },
@@ -472,12 +472,12 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
       {
         cssom: { target: 'style.property', name: 'font-family' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'margin-top' },
@@ -513,7 +513,7 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
       {
         cssom: { target: 'style.property', name: 'font-family' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'margin-left' },
@@ -540,7 +540,7 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
       {
         cssom: { target: 'style.property', name: 'background-image' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
       {
         cssom: { target: 'style.property', name: 'margin-left' },
@@ -649,7 +649,7 @@ runScenarios('testing pseudo elements', 'normal', [
         cssom: { target: 'style.property', rule: 0, name: 'margin-left' },
         expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
       },
-      { cssom: { target: 'sheet.cssRules.item', rule: 1 }, expect: { throws: true } },
+      { cssom: { target: 'sheet.cssRules.item', rule: 1 }, expect: { cssom: null } },
     ],
   },
 
@@ -822,7 +822,7 @@ runScenarios('pseudo-element tail CSSOM preservation and omission', 'normal', [
       {
         cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
 
       // Sanity check: following valid rule survived recovery.
@@ -852,13 +852,13 @@ runScenarios('pseudo-element tail CSSOM preservation and omission', 'normal', [
       {
         cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
         browsers: ['chromium', 'firefox'],
       },
       {
         cssom: { target: 'style.property', name: 'margin-left' },
         ref: { by: 'id', id: 'sheet' },
-        expect: { throws: true },
+        expect: { cssom: null },
         browsers: ['webkit'],
         status: 'fail',
       },
@@ -1369,7 +1369,7 @@ runScenarios('custom-ident default reservation oracle', 'normal', [
       // container-name uses <custom-ident> and drops the reserved keyword.
       {
         cssom: { target: 'style.property', rule: 0, name: 'container-name' },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
 
       // The Properties and Values API independently enforces the reservation.
@@ -1423,6 +1423,87 @@ runScenarios('CSS.supports URL modifier oracle', 'normal', [
       { supports: { property: 'background-image', value: 'url("x" param(--color, red))' }, expect: { supported: false } },
       { supports: { property: 'background-image', value: 'url("x" unknown)' }, expect: { supported: false } },
       { supports: { property: 'background-image', value: 'url("x" unknown())' }, expect: { supported: false } },
+    ],
+  },
+]);
+
+runScenarios('CSSOM URL modifier oracle', 'normal', [
+  {
+    name: 'native declaration retention and serialization',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .url             { background-image: url("x"); }
+        .src             { background-image: src("x"); }
+        .cross-origin    { background-image: url("x" cross-origin(anonymous)); }
+        .integrity       { background-image: url("x" integrity("sha256-test")); }
+        .referrer-policy { background-image: url("x" referrer-policy(no-referrer)); }
+        .param           { background-image: url("x" param(--color, red)); }
+        .unknown         { background-image: url("x" unknown()); }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: { name: 'background-image', value: 'url("x")', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 2, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        browsers: ['chromium', 'firefox'],
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 2, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        browsers: ['webkit'],
+        expect: {
+          cssom: {
+            name: 'background-image',
+            value: 'url("x" cross-origin(anonymous))',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        browsers: ['chromium', 'firefox'],
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        browsers: ['webkit'],
+        expect: {
+          cssom: {
+            name: 'background-image',
+            value: 'url("x" referrer-policy(no-referrer))',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 6, name: 'background-image' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: null },
+      },
     ],
   },
 ]);

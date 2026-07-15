@@ -642,7 +642,7 @@ export function installBrowserHelpers(): void {
         return ruleListToArray(sheet.cssRules).map((rule) => inspectObject(rule));
 
       case 'sheet.cssRules.item':
-        return inspectObject(getRule(sheet, cssom.rule));
+        return inspectObject(sheet.cssRules.item(cssom.rule));
 
       case 'rule.style':
         return inspectObject(getStyleRule(sheet, cssom.rule).style);
@@ -665,7 +665,7 @@ export function installBrowserHelpers(): void {
         }
 
         if (matches.length === 0) {
-          throw new Error(`No CSS declaration named ${JSON.stringify(cssom.name)}`);
+          return null;
         }
 
         if (matches.length > 1) {

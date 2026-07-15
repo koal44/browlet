@@ -80,7 +80,7 @@ export type Expectation = {
   throws?: boolean;
   equivalentCase?: EquivalentCase;
   value?: string;
-  cssom?: unknown[] | Record<string, unknown>;
+  cssom?: unknown[] | Record<string, unknown> | null;
   supported?: boolean;
 };
 
@@ -599,11 +599,11 @@ function checkResult(result: EvalResult, expectation: Expectation, caseInfo: Cas
       const errLabel =
         `Expected CSSOM ${JSON.stringify(expectation.cssom)}, got ${JSON.stringify(r.cssom)}.`;
 
-      if (expectation.cssom === undefined) {
-        expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toBeUndefined();
+      if (expectation.cssom === null) {
+        expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toBeNull();
         return;
       }
-      expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toMatchObject(expectation.cssom);
+      expect(r.cssom, `${errLabel}\n\n${header}${ngLabel}`).toMatchObject(expectation.cssom!);
     });
   }
 

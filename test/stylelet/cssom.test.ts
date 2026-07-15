@@ -137,7 +137,7 @@ runScenarios('style CSSOM declaration rules', 'normal', [
       },
       {
         cssom: { target: 'sheet.cssRules.item', rule: 1 },
-        expect: { throws: true },
+        expect: { cssom: null },
       },
     ],
   },
