@@ -1,11 +1,13 @@
 import type { CompoundSelector } from '../parser/parser';
 import type { Chain, ElementProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';
-import { cssIdentUnescape } from '../../utils/css';
+import { cssIdentUnescape } from '../../shared/css';
 import { buildChainProof, buildMultiChainProof } from './chain';
 import type { RuntimeCache } from '../compile/runtimeCache';
-import { precedesByDocPosition } from '../../utils/collections';
+import { precedesByDocPosition } from '../../shared/collections';
 import { type LookupMode } from '../constants';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 export type BridgeMove = {
   from: number;

@@ -1,6 +1,6 @@
 export type CharPred = (ch: string) => boolean;
 
-export class Cursor {
+export class TextCursor {
   constructor(
     public readonly input: string,
     private i = 0,
@@ -74,24 +74,17 @@ export class Cursor {
   }
 
   error(message: string): never {
-    throw new CursorError(message, this.i, this.input);
+    throw new TextCursorError(message, this.i, this.input);
   }
 }
 
-export class SelectorSyntaxError extends SyntaxError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SelectorSyntaxError';
-  }
-}
-
-export class CursorError extends SelectorSyntaxError {
+export class TextCursorError extends SyntaxError {
   constructor(message: string, public position: number, input?: string) {
     const at = `${message} at ${position}`;
     const fmt = input ? formatInput(input, position) : '';
 
     super(`${at}\n${fmt}`);
-    this.name = 'CursorError';
+    this.name = 'TextCursorError';
   }
 }
 

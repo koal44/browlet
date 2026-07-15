@@ -1,10 +1,12 @@
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { describeContext, describeElement, type QueryContextDescription } from '../debug';
-import { isElement } from '../../utils/dom';
+import { isElement } from '../../shared/dom';
 import { buildFullBridgeFirst } from './first-fullbridge';
 import { buildFrontierFirst } from './first-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 export function queryFirst(sel: string, ctx: QueryContext, snap: Snapshot): Element | null {
   snap.probe.first++;

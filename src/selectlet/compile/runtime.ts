@@ -1,12 +1,13 @@
 import {
   asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiLower, asciiStartsWith, hasCssToken,
-} from '../../utils/css';
+} from '../../shared/css';
 import {
   isFormStateElement, isHtmlButton, isValidityElement,
   isHtmlFieldSet, isHtmlForm, isHtmlInput, isHtmlLegend, isHtmlMediaElement, isHtmlOptGroup,
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
-} from '../../utils/dom';
+} from '../../shared/dom';
+import type { Snapshot } from '../snapshot';
 import type { RuntimeCache } from './runtimeCache';
 
 // export type CombinatorTest = (e: Element, rc: RuntimeCache | null) => boolean;

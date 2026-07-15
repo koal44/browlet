@@ -5,14 +5,14 @@ import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
 import type {
   CustomPseudoPredicate, ElementList, HtmlCollectionArray, QueryContext, SelectletCaps, SelectletConfig, SelectletErrorOptions,
 } from './selectlet';
-import { escapeRegExp } from '../utils/css';
-import { isDocument, isElement, isHtmlDoc, isQuirksMode } from '../utils/dom';
+import { escapeRegExp } from '../shared/css';
+import { isDocument, isElement, isHtmlDoc, isQuirksMode } from '../shared/dom';
+import { TextCursorError } from '../shared/text-cursor';
 import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
 import { describeContext, describeElement } from './debug';
-import { toNodeList } from '../utils/collections';
+import { toNodeList } from './node-list';
 import { RuntimeCache } from './compile/runtimeCache';
-import { SelectorSyntaxError } from './parser/cursor';
 
 import { querySelect, type SelectResolver, type DebugSelect } from './api/select';
 
@@ -361,9 +361,9 @@ function defaultTreeVersion(_ctx: QueryContext): number | undefined {
 
 function rethrowSelectorError(
   err: unknown,
-  syntax: (err: SelectorSyntaxError) => Error
+  syntax: (err: SyntaxError) => Error
 ): never {
-  if (err instanceof SelectorSyntaxError) {
+  if (err instanceof TextCursorError) {
     throw syntax(err);
   }
 

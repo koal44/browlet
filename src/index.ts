@@ -11,13 +11,11 @@ export type {
   SelectletErrorOptions,
   QueryContext,
   ElementList,
-  IndexedNodeList,
   CustomPseudoPredicate,
 } from './selectlet/selectlet';
 
+export type { IndexedNodeList } from './selectlet/node-list';
+
 export { createStylelet } from './stylelet/stylelet';
 
-export type {
-  Stylelet,
-  StyleletOptions,
-} from './stylelet/stylelet';
+export type { Stylelet } from './stylelet/stylelet';

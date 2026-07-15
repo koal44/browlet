@@ -2,6 +2,7 @@ import { type CandidateElementPredicate, parseSelectorList, type SelectorList } 
 import { describeContext, type QueryContextDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { buildStrictSelectorListTest } from '../planner/chain';
+import type { Snapshot } from '../snapshot';
 
 export function queryMatches(selectors: string, element: Element, snap: Snapshot): boolean {
   snap.probe.match++;

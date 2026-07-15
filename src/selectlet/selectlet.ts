@@ -1,6 +1,6 @@
 import { Snapshot } from './snapshot';
-import { toNodeList } from '../utils/collections';
-import { isElement, isNode, isText } from '../utils/dom';
+import { toNodeList, type IndexedNodeList } from './node-list';
+import { isElement, isNode, isText } from '../shared/dom';
 
 export const DEFAULT_CONFIG = {
   /**
@@ -47,7 +47,6 @@ export type Selectlet = {
 
 export type QueryContext = Document | Element | DocumentFragment;
 export type ElementList = Element[] | IndexedNodeList;
-export type IndexedNodeList = NodeListOf<Element> & { length: number; [index: number]: Element; };
 
 export type SelectletConfig = typeof DEFAULT_CONFIG;
 export type ConfigKey = keyof SelectletConfig;

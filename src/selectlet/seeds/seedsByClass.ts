@@ -1,7 +1,8 @@
-import type { LookupMode } from '../constants';
-import type { SelectletCaps } from '../selectlet';
-import { concatCollection, htmlCollectionSource } from '../../utils/collections';
-import { isDocument, isDocumentFragment, isElement } from '../../utils/dom';
+import { LOOKUP_COPY, type LookupMode } from '../constants';
+import type { QueryContext, SelectletCaps } from '../selectlet';
+import { concatCollection, htmlCollectionSource } from '../../shared/collections';
+import { isDocument, isDocumentFragment, isElement } from '../../shared/dom';
+import type { Snapshot } from '../snapshot';
 
 export type SeedClassFn = (classes: string[], context: QueryContext, lookupMode: LookupMode) => Iterable<Element>;
 type ClassCap<R> = (root: R, classes: readonly string[]) => Iterable<Element>;
@@ -20,7 +21,7 @@ function seedsByClassInDocument(classes: string[], doc: Document, lookupMode: Lo
   if (classes.length === 0) return [];
   return cap
     ? cap(doc, classes)
-    : htmlCollectionSource(doc.getElementsByClassName(classes.join(' ')), lookupMode, snap);
+    : htmlCollectionSource(doc.getElementsByClassName(classes.join(' ')), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
 }
 
 function seedsByClassInElement(classes: string[], el: Element, lookupMode: LookupMode, docCap: ClassCap<Document> | undefined, fragCap: ClassCap<DocumentFragment> | undefined, snap: Snapshot): Iterable<Element> {
@@ -36,7 +37,7 @@ function seedsByClassInElement(classes: string[], el: Element, lookupMode: Looku
     return containedClassCandidates(fragCap(root, classes), el);
   }
 
-  return htmlCollectionSource(el.getElementsByClassName(classes.join(' ')), lookupMode, snap);
+  return htmlCollectionSource(el.getElementsByClassName(classes.join(' ')), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
 }
 
 function seedsByClassInFragmentRoot(

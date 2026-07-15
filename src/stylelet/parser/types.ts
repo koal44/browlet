@@ -3,8 +3,8 @@ import type { ComponentValue } from './syntax';
 import type { ColorValue } from '../values/color';
 import type { CssWideValue } from '../values/css-wide';
 import type { LengthPercentageAuto } from '../values/length-percentage';
-import type { SelectorList } from '../../selectlet/parser/parser';
-import { asciiLower } from '../../utils/css';
+import type { SelectorList } from './selectlet';
+import { asciiLower } from '../../shared/css';
 import type { AnimationNameValue } from '../props/animation-name';
 
 // Stylesheet
@@ -25,9 +25,9 @@ export type StyleRuleAst = {
   // temporary raw syntax, still useful for future component parser/debugging
   selector: readonly ComponentValue[];
 
-  // temporary bridge result
+  // semantic selector projection
   selectorText: string;
-  selectorList: SelectorList; // existing selector parser output
+  selectorList: SelectorList;
 
   block: StyleBlockAst;
 };

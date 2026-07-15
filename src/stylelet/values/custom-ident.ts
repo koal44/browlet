@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { withComponentTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';

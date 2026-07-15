@@ -4,8 +4,8 @@
     "composite": true,
     "module": "preserve",
     "moduleResolution": "Bundler",
-    "outDir": "../../dist/.typecheck/stylelet",
-    "tsBuildInfoFile": "../../dist/.typecheck/stylelet.tsbuildinfo"
+    "outDir": "../../dist/.typecheck/selectlet",
+    "tsBuildInfoFile": "../../dist/.typecheck/selectlet.tsbuildinfo"
   },
   "include": ["./**/*.ts"],
   "references": [

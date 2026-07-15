@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { Cursor, CursorError } from '../../src/selectlet/parser/cursor';
+import { TextCursor, TextCursorError } from '../../src/shared/text-cursor';
 
-describe('Cursor status and peek', () => {
+describe('TextCursor status and peek', () => {
   it('reports position, length, remaining length, and eof', () => {
-    const c = new Cursor('abc');
+    const c = new TextCursor('abc');
 
     expect(c.pos()).toBe(0);
     expect(c.eof()).toBe(false);
@@ -12,7 +12,7 @@ describe('Cursor status and peek', () => {
   });
 
   it('peek supports relative offsets and returns empty string out of bounds', () => {
-    const c = new Cursor('xyz');
+    const c = new TextCursor('xyz');
     c.restore(1);
 
     expect(c.peek()).toBe('y');
@@ -23,9 +23,9 @@ describe('Cursor status and peek', () => {
   });
 });
 
-describe('Cursor', () => {
+describe('TextCursor', () => {
   it('match() consumes one matching character and is atomic on failure', () => {
-    const c = new Cursor('ABC');
+    const c = new TextCursor('ABC');
 
     expect(c.match('A')).toBe(true);
     expect(c.pos()).toBe(1);
@@ -38,7 +38,7 @@ describe('Cursor', () => {
   });
 
   it('expect() consumes a required character and throws on mismatch', () => {
-    const c = new Cursor('ABC');
+    const c = new TextCursor('ABC');
 
     expect(() => c.expect('A')).not.toThrow();
     expect(c.pos()).toBe(1);
@@ -49,7 +49,7 @@ describe('Cursor', () => {
   });
 
   it('empty input is stable at EOF', () => {
-    const c = new Cursor('');
+    const c = new TextCursor('');
 
     expect(c.pos()).toBe(0);
     expect(c.eof()).toBe(true);
@@ -65,7 +65,7 @@ describe('Cursor', () => {
   });
 
   it('slice returns spans without moving the cursor', () => {
-    const c = new Cursor('abcdef');
+    const c = new TextCursor('abcdef');
 
     c.consume(3);
 
@@ -75,7 +75,7 @@ describe('Cursor', () => {
   });
 
   it('next is stable at EOF', () => {
-    const c = new Cursor('a');
+    const c = new TextCursor('a');
 
     expect(c.next()).toBe('a');
     expect(c.next()).toBe('');
@@ -85,9 +85,9 @@ describe('Cursor', () => {
 
 });
 
-describe('Cursor consumeWhile', () => {
+describe('TextCursor consumeWhile', () => {
   it('consumes matching characters, returns count, and leaves the first non-match', () => {
-    const c = new Cursor('  xy z');
+    const c = new TextCursor('  xy z');
 
     expect(c.consumeWhile((ch) => ch === ' ')).toBe(2);
     expect(c.pos()).toBe(2);
@@ -103,7 +103,7 @@ describe('Cursor consumeWhile', () => {
   });
 
   it('respects limit', () => {
-    const c = new Cursor('abcdef');
+    const c = new TextCursor('abcdef');
 
     expect(c.consumeWhile((ch) => /[a-c]/.test(ch))).toBe(3);
     expect(c.pos()).toBe(3);
@@ -111,7 +111,7 @@ describe('Cursor consumeWhile', () => {
   });
 
   it('returns zero and does not advance when the first character does not match', () => {
-    const c = new Cursor('abc');
+    const c = new TextCursor('abc');
 
     expect(c.consumeWhile((ch) => ch === ' ')).toBe(0);
     expect(c.pos()).toBe(0);
@@ -119,9 +119,9 @@ describe('Cursor consumeWhile', () => {
   });
 });
 
-describe('Cursor eof', () => {
+describe('TextCursor eof', () => {
   it('eof mirrors empty peek at current position', () => {
-    const c = new Cursor('x');
+    const c = new TextCursor('x');
 
     expect(c.peek()).toBe('x');
     expect(c.eof()).toBe(false);
@@ -133,17 +133,17 @@ describe('Cursor eof', () => {
   });
 });
 
-describe('Cursor errors', () => {
-  it('throws CursorError with current position', () => {
-    const c = new Cursor('let=42');
+describe('TextCursor errors', () => {
+  it('throws TextCursorError with current position', () => {
+    const c = new TextCursor('let=42');
     c.consume(3);
 
     try {
       c.expect('x');
       expect.unreachable();
     } catch (e) {
-      expect(e).toBeInstanceOf(CursorError);
-      expect((e as CursorError).position).toBe(3);
+      expect(e).toBeInstanceOf(TextCursorError);
+      expect((e as TextCursorError).position).toBe(3);
     }
   });
 });

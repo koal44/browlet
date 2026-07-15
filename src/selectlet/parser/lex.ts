@@ -1,7 +1,7 @@
-import type { Cursor } from './cursor';
+import type { TextCursor } from '../../shared/text-cursor';
 import type { Combinator } from './parser';
 
-export function consumeTrivia(c: Cursor): boolean {
+export function consumeTrivia(c: TextCursor): boolean {
   let consumed = false;
 
   while (true) {
@@ -24,7 +24,7 @@ export function consumeTrivia(c: Cursor): boolean {
   }
 }
 
-export function consumeIdent(c: Cursor): string {
+export function consumeIdent(c: TextCursor): string {
   const start = c.pos();
   const ch = c.peek();
 
@@ -50,7 +50,7 @@ export function consumeIdent(c: Cursor): string {
   return c.slice(start);
 }
 
-export function consumeStringValue(c: Cursor): string {
+export function consumeStringValue(c: TextCursor): string {
   const quote = c.next();
   const start = c.pos();
 
@@ -68,25 +68,25 @@ export function consumeStringValue(c: Cursor): string {
   return c.slice(start);
 }
 
-export function consumeDigits(c: Cursor): string {
+export function consumeDigits(c: TextCursor): string {
   const start = c.pos();
   c.consumeWhile(isDigit);
   return c.slice(start);
 }
 
-export function consumeAsciiWord(c: Cursor): string {
+export function consumeAsciiWord(c: TextCursor): string {
   const start = c.pos();
   c.consumeWhile(isAlpha);
   return c.slice(start);
 }
 
-export function consumeEscapedChar(c: Cursor): boolean {
+export function consumeEscapedChar(c: TextCursor): boolean {
   if (!c.match('\\')) return false;
   if (!c.eof()) c.advance();
   return true;
 }
 
-function consumeCssEscape(c: Cursor): boolean {
+function consumeCssEscape(c: TextCursor): boolean {
   const start = c.pos();
 
   if (c.peek() !== '\\') return false;
@@ -123,7 +123,7 @@ function consumeCssEscape(c: Cursor): boolean {
   return false;
 }
 
-function consumeIdentHead(c: Cursor): boolean {
+function consumeIdentHead(c: TextCursor): boolean {
   const ch = c.peek();
 
   if (ch === '\x00' || isIdentHeadChar(ch)) {
@@ -134,7 +134,7 @@ function consumeIdentHead(c: Cursor): boolean {
   return consumeCssEscape(c);
 }
 
-function consumeIdentTail(c: Cursor): boolean {
+function consumeIdentTail(c: TextCursor): boolean {
   const ch = c.peek();
 
   if (ch === '\x00' || isIdentTailChar(ch)) {

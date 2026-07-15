@@ -1,15 +1,21 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2020",
+    "composite": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "strict": true,
-    "noEmit": true,
-    "lib": ["esnext", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "noUncheckedIndexedAccess": false,
+    "outDir": "../dist/.typecheck/test",
+    "tsBuildInfoFile": "../dist/.typecheck/test.tsbuildinfo"
   },
   "include": [
-    "./**/*.ts",
-    "../src/global.d.ts"
+    "./**/*.ts"
+  ],
+  "references": [
+    { "path": "../src/shared" },
+    { "path": "../src/selectlet" },
+    { "path": "../src/stylelet" },
+    { "path": "../src" }
   ]
 }

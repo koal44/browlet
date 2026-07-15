@@ -1,7 +1,7 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { FirstRunFn } from './first';
-import { precedesByDocPosition } from '../../utils/collections';
+import { precedesByDocPosition } from '../../shared/collections';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeToEndMove, resetFrontierDebug,
   runAdvanceMove, runBridgeMove, runFirstAdvanceMove, runFirstBridgeMove,
@@ -10,6 +10,8 @@ import {
 import { describeComplex, describeElement } from '../debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_VIEW } from '../constants';
+import type { Snapshot } from '../snapshot';
+import type { QueryContext } from '../selectlet';
 
 export function buildFrontierFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
   const arms = list.arms;

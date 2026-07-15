@@ -162,7 +162,7 @@ runScenarios('w3c iframes', 'normal', [
           } catch (e) {
             // assert_equals((e as Error).name, expectedError, testName, failMsg + ' threw wrong error');
             const name = (e as Error).name;
-            const normalized = name === 'CursorError' ? 'SyntaxError' : name;
+            const normalized = name === 'TextCursorError' ? 'SyntaxError' : name;
             assert_equals(normalized, expectedError, testName, failMsg + ' threw wrong error');
           }
         };
@@ -3457,7 +3457,6 @@ runScenarios('w3c iframes 3', 'normal', [
 
 
 ]);
-
 
 
 

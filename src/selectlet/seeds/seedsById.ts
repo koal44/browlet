@@ -1,7 +1,8 @@
 import type { LookupMode } from '../constants';
-import type { SelectletCaps } from '../selectlet';
-import { iterableToArray } from '../../utils/collections';
-import { isDocument, isDocumentFragment, isElement, isNamedItemAnElement } from '../../utils/dom';
+import type { QueryContext, SelectletCaps } from '../selectlet';
+import { iterableToArray } from '../../shared/collections';
+import { isDocument, isDocumentFragment, isElement, isNamedItemAnElement } from '../../shared/dom';
+import type { Snapshot } from '../snapshot';
 
 export type SeedIdFn = (id: string, context: QueryContext, lookupMode: LookupMode) => Element[];
 

@@ -2,7 +2,7 @@ import type {
   CandidateTest, IdSelector, ClassSelector, TagSelector, CandidateElementPredicate, CompoundSelector,
   BuildElementPredicate,
 } from '../parser/parser';
-import { asciiLower, cssIdentUnescape } from '../../utils/css';
+import { asciiLower, cssIdentUnescape } from '../../shared/css';
 import { checkClass, checkId, checkTag } from './runtime';
 
 const TRUE_PREDICATE: CandidateElementPredicate = () => true;

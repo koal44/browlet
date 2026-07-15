@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import {
   any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withComponentTrivia, requiredSequenceOf,
 } from './component-grammar';

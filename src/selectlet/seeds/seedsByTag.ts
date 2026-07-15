@@ -1,7 +1,9 @@
-import { type LookupMode } from '../constants';
-import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../../utils/collections';
-import { asciiLower } from '../../utils/css';
-import { isDocumentFragment } from '../../utils/dom';
+import { LOOKUP_COPY, type LookupMode } from '../constants';
+import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../../shared/collections';
+import { asciiLower } from '../../shared/css';
+import { isDocumentFragment } from '../../shared/dom';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 export function seedsByTag(tag: string, context: QueryContext, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
   if (!tag) return [];
@@ -12,12 +14,12 @@ export function seedsByTag(tag: string, context: QueryContext, lookupMode: Looku
   }
 
   if (!snap.isHtml) {
-    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode, snap);
+    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
   }
 
   const lowerTag = asciiLower(tag);
   if (tag === lowerTag) {
-    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode, snap);
+    return htmlCollectionSource(context.getElementsByTagNameNS('*', tag), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
   }
 
   return seedsByTagNsUnion(tag, lowerTag, context, snap);
@@ -70,7 +72,7 @@ function seedsByTagNsUnion(tag: string, lowerTag: string, context: Document | El
 
 function seedsByAllTag(context: QueryContext, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
   if (!isDocumentFragment(context)) {
-    return htmlCollectionSource(context.getElementsByTagName('*'), lookupMode, snap);
+    return htmlCollectionSource(context.getElementsByTagName('*'), lookupMode === LOOKUP_COPY, snap.htmlCollectionArray);
   }
 
   const nodes: Element[] = [];

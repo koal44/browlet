@@ -1,4 +1,4 @@
-import { parseStylesheet, type StyleParseContext } from '../parser/ast';
+import { parseStylesheet } from '../parser/ast';
 import { type StyleSheetAst } from '../parser/types';
 import { notImplemented } from '../util';
 import { SelectletCSSRuleList } from './rule-list';
@@ -7,11 +7,7 @@ import { SelectletCSSStyleRule } from './rules';
 export class SelectletCSSStyleSheet implements CSSStyleSheet {
   private _source = '';
   private _rules = new SelectletCSSRuleList();
-  private _ctx: StyleParseContext;
-
-  constructor(source = '', ctx: StyleParseContext = {}) {
-    this._ctx = ctx;
-
+  constructor(source = '') {
     if (source) {
       this.replaceSync(source);
     }
@@ -68,7 +64,7 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
   replaceSync(source: string): void {
     this._source = source;
 
-    const sheet = parseStylesheet(source, this._ctx);
+    const sheet = parseStylesheet(source);
     this._rules = buildCSSRuleList(sheet);
   }
 

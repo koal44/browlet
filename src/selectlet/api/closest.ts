@@ -1,4 +1,5 @@
 import type { RuntimeCache } from '../compile/runtimeCache';
+import type { Snapshot } from '../snapshot';
 import { getStrictMatchResolver } from './match';
 
 // equivalent of w3c 'closest' method

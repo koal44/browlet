@@ -1,9 +1,9 @@
-import type { Cursor } from './cursor';
+import type { TextCursor } from '../../shared/text-cursor';
 import { consumeAsciiWord, consumeDigits, consumeTrivia } from './lex';
 
 export type NthArgs = { step: number; offset: number; };
 
-export function parseNthArgs(c: Cursor): NthArgs {
+export function parseNthArgs(c: TextCursor): NthArgs {
   c.expect('(');
   consumeTrivia(c);
 
@@ -15,7 +15,7 @@ export function parseNthArgs(c: Cursor): NthArgs {
   return nth;
 }
 
-export function parseNthExpression(c: Cursor): NthArgs {
+export function parseNthExpression(c: TextCursor): NthArgs {
   const ch = c.peek();
 
   if (ch === 'o' || ch === 'O' || ch === 'e' || ch === 'E') {
@@ -66,7 +66,7 @@ export function parseNthExpression(c: Cursor): NthArgs {
   };
 }
 
-function parseOptionalSign(c: Cursor): 1 | -1 {
+function parseOptionalSign(c: TextCursor): 1 | -1 {
   const ch = c.peek();
 
   if (ch !== '+' && ch !== '-') return 1;

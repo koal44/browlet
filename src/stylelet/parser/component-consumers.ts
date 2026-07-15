@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import { isAnyValue } from '../values/any-value';
 import type { ComponentCursor } from './component-cursor';
 import { withComponentTrivia } from './component-grammar';

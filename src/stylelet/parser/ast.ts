@@ -22,52 +22,47 @@ import {
   type StyleSheetAst,
 } from './types';
 import { buildDeclarationAst } from './declaration';
-import { assertNever } from '../../utils/util';
+import { assertNever } from '../../shared/util';
 import { serializeComponentValues } from '../cssom/serialize';
-import { parseSelectorList, type SelectorList } from '../../selectlet/parser/parser';
-import type { CustomPseudoPredicate } from '../../selectlet/selectlet';
+import { parseSelectorList, type SelectorList } from './selectlet';
 
-export type StyleParseContext = {
-  pseudos?: Record<string, CustomPseudoPredicate> | undefined;
-};
-
-export function parseStylesheet(input: string, ctx: StyleParseContext = {}): StyleSheetAst {
-  return buildStyleSheetAst(parseSyntaxStylesheet(input), ctx);
+export function parseStylesheet(input: string): StyleSheetAst {
+  return buildStyleSheetAst(parseSyntaxStylesheet(input));
 }
 
-export function buildStyleSheetAst(sheet: SyntaxStyleSheet, ctx: StyleParseContext = {}): StyleSheetAst {
+export function buildStyleSheetAst(sheet: SyntaxStyleSheet): StyleSheetAst {
   const rules: CssRuleAst[] = [];
 
   for (const rule of sheet.rules) {
-    const ast = buildTopLevelRuleAst(rule, ctx);
+    const ast = buildTopLevelRuleAst(rule);
     if (ast !== null) rules.push(ast);
   }
 
   return { rules };
 }
 
-function buildTopLevelRuleAst(rule: SyntaxRule, ctx: StyleParseContext): CssRuleAst | null {
+function buildTopLevelRuleAst(rule: SyntaxRule): CssRuleAst | null {
   switch (rule.kind) {
     case RuleKindSyntax.Qualified:
-      return buildStyleRuleAst(rule, ctx);
+      return buildStyleRuleAst(rule);
 
     case RuleKindSyntax.At:
-      return buildAtRuleAst(rule, ctx);
+      return buildAtRuleAst(rule);
   }
 }
 
-function buildStyleRuleAst(rule: SyntaxQualifiedRule, ctx: StyleParseContext): StyleRuleAst | null {
+function buildStyleRuleAst(rule: SyntaxQualifiedRule): StyleRuleAst | null {
   const selectorText = serializeComponentValues(rule.prelude);
 
-  let selectorList: SelectorList;
+  let selectorList: SelectorList | null;
 
   try {
-    selectorList = parseSelectorList(selectorText, { pseudos: ctx.pseudos });
+    selectorList = parseSelectorList(rule.prelude);
   } catch {
     return null;
   }
 
-  if (selectorList.arms.length === 0) {
+  if (selectorList === null || selectorList.arms.length === 0) {
     return null;
   }
 
@@ -76,53 +71,50 @@ function buildStyleRuleAst(rule: SyntaxQualifiedRule, ctx: StyleParseContext): S
     selector: rule.prelude,
     selectorText,
     selectorList,
-    block: buildStyleBlockAst(rule.block, ctx),
+    block: buildStyleBlockAst(rule.block),
   };
 }
 
-function buildAtRuleAst(
-  _rule: SyntaxAtRule,
-  _ctx: StyleParseContext,
-): AtRuleAst | null {
+function buildAtRuleAst(_rule: SyntaxAtRule): AtRuleAst | null {
   // Strict transitional policy:
   // no at-rule grammars are implemented in the semantic AST yet.
   // Unknown, invalid, unsupported, and @charset at-rules are all dropped.
   return null;
 }
 
-function buildStyleBlockAst(block: BraceBlock, ctx: StyleParseContext): StyleBlockAst {
+function buildStyleBlockAst(block: BraceBlock): StyleBlockAst {
   const syntaxItems = parseStyleBlockContents(block.value);
   const items: StyleBlockItemAst[] = [];
 
   for (const item of syntaxItems) {
-    const ast = buildStyleBlockItemAst(item, ctx);
+    const ast = buildStyleBlockItemAst(item);
     if (ast !== null) items.push(ast);
   }
 
   return { items };
 }
 
-function buildStyleBlockItemAst(item: SyntaxStyleBlockItem, ctx: StyleParseContext): StyleBlockItemAst | null {
+function buildStyleBlockItemAst(item: SyntaxStyleBlockItem): StyleBlockItemAst | null {
   if (isSyntaxDeclaration(item)) {
     return buildDeclarationAst(item);
   }
 
   switch (item.kind) {
     case RuleKindSyntax.At:
-      return buildAtRuleAst(item, ctx);
+      return buildAtRuleAst(item);
 
     case RuleKindSyntax.Qualified:
-      return buildNestedStyleRuleAst(item, ctx);
+      return buildNestedStyleRuleAst(item);
 
     default: assertNever(item);
   }
 }
 
-function buildNestedStyleRuleAst(rule: SyntaxQualifiedRule, ctx: StyleParseContext): NestedStyleRuleAst {
+function buildNestedStyleRuleAst(rule: SyntaxQualifiedRule): NestedStyleRuleAst {
   return {
     kind: BlockItemAstKind.NestedStyle,
     selector: rule.prelude,
-    block: buildStyleBlockAst(rule.block, ctx),
+    block: buildStyleBlockAst(rule.block),
   };
 }
 

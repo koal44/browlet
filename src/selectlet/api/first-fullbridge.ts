@@ -5,6 +5,8 @@ import { describeElement, describeElements } from '../debug';
 import { findFirstBridgeCandidate } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_VIEW } from '../constants';
+import type { Snapshot } from '../snapshot';
+import type { QueryContext } from '../selectlet';
 
 export function buildFullBridgeFirst(list: SelectorList, snap: Snapshot): FirstRunFn {
   const arms = list.arms;

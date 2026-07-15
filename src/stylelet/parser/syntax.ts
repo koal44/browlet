@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import { ComponentCursor } from './component-cursor';
 import { isBad, type TryComponentConsumerResult, type TryComponentConsumer } from './component-try-consumer';
 import { TokenCursor } from './token-cursor';

@@ -1,13 +1,15 @@
 import type { ComplexSelector, SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
-import { mergeDocumentOrderLists } from '../../utils/collections';
+import { mergeDocumentOrderLists } from '../../shared/collections';
 import {
   buildFrontierProgram, canAdvance, describeFrontierProgram, getAdvanceMove, getBridgeMove, resetFrontierDebug, runAdvanceMove, runBridgeMove, type FrontierProgram, type FrontierState,
 } from '../planner/frontier';
 import { describeComplex, describeElements } from '../debug';
 import { buildChain } from '../planner/chain';
 import { LOOKUP_COPY } from '../constants';
+import type { Snapshot } from '../snapshot';
+import type { QueryContext } from '../selectlet';
 
 export function buildFrontierSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = list.arms;

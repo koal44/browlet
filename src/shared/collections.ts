@@ -1,6 +1,3 @@
-import { LOOKUP_COPY, type LookupMode } from '../selectlet/constants';
-import type { IndexedNodeList } from '../selectlet/selectlet';
-
 export type ElementCollection = {
   length: number;
   item?: (index: number) => Element | null;
@@ -72,40 +69,16 @@ export function iterableToArray<T>(items: Iterable<T>): T[] {
   return list;
 }
 
-export function htmlCollectionSource(collection: ElementCollection & Iterable<Element>, lookupMode: LookupMode, snap: Snapshot): Iterable<Element> {
-  const array = snap.htmlCollectionArray?.(collection);
+export function htmlCollectionSource(
+  collection: ElementCollection & Iterable<Element>, copy: boolean,
+  toArray?: (collection: ElementCollection & Iterable<Element>) => readonly Element[] | null,
+): Iterable<Element> {
+  const array = toArray?.(collection);
   if (array) return array;
 
-  return lookupMode === LOOKUP_COPY
+  return copy
     ? collectionToArray(collection)
     : collection;
-}
-
-// create a NodeList-like object from an element array
-let emptyNL: NodeListOf<ChildNode> | undefined;
-export function toNodeList(nodeArray: Element[], doc: Document): IndexedNodeList {
-  // create a DocumentFragment
-  emptyNL ??= doc.createDocumentFragment().childNodes;
-
-  // base an object on emptyNL
-  const fakeNL = Object.create(emptyNL, {
-    length: {
-      value: nodeArray.length,
-      enumerable: false,
-    },
-    item: {
-      value: function(this: IndexedNodeList, i: number) {
-        return this[i] ?? null;
-      },
-      enumerable: false,
-    },
-  }) as IndexedNodeList;
-
-  // copy the array elements
-  nodeArray.forEach(function(v, i) { fakeNL[i] = v; });
-
-  // return an object pretending to be a NodeList.
-  return fakeNL;
 }
 
 const DOCUMENT_POSITION_FOLLOWING = 4;

@@ -1,4 +1,3 @@
-import { type SelectletCaps, type SelectletErrorOptions } from '../selectlet/selectlet';
 import { SelectletCSSStyleSheet } from './cssom/stylesheet';
 
 export type Stylelet = {
@@ -6,12 +5,7 @@ export type Stylelet = {
   createStyleSheet(source?: string): CSSStyleSheet;
 };
 
-export type StyleletOptions = {
-  caps?: SelectletCaps;
-  errors?: SelectletErrorOptions;
-};
-
-export function createStylelet(_doc: Document, _opts: StyleletOptions = {}): Stylelet {
+export function createStylelet(_doc: Document): Stylelet {
   const api = {
     version: 'stylelet-__VERSION__',
 

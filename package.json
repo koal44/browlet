@@ -47,7 +47,8 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "lint": "eslint src test scripts",
+    "lint": "npm run typecheck && eslint src test scripts",
+    "typecheck": "tsc -b",
     "vendor": "tsx scripts/vendor.ts",
     "install:jsdom:run": "tsx scripts/install-jsdom.ts",
     "install:jsdom": "npm run build && npm run install:jsdom:run",

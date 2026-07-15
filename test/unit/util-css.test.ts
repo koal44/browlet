@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   asciiDashMatch, asciiEndsWith, asciiEquals, asciiHasCssToken, asciiIncludes, asciiStartsWith,
   cssIdentUnescape, escapeRegExp, hasCssToken,
-} from '../../src/utils/css';
+} from '../../src/shared/css';
 
 // Test-only CSS.escape() polyfill.
 //

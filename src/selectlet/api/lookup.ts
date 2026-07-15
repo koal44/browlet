@@ -1,8 +1,10 @@
 import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
-import { collectionToArray, concatCollection } from '../../utils/collections';
-import { asciiLower } from '../../utils/css';
-import { isDocumentFragment, isElement, isNamedItemAnElement } from '../../utils/dom';
+import { collectionToArray, concatCollection } from '../../shared/collections';
+import { asciiLower } from '../../shared/css';
+import { isDocumentFragment, isElement, isNamedItemAnElement } from '../../shared/dom';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 // scoped getElementById for Document, DocumentFragment, and Element contexts
 export function byId(id: string, context: QueryContext, snap: Snapshot): Element | null {

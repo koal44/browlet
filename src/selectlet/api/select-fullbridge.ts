@@ -1,11 +1,13 @@
 import type { SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectRunFn } from './select';
-import { mergeDocumentOrderLists } from '../../utils/collections';
+import { mergeDocumentOrderLists } from '../../shared/collections';
 import { describeElements } from '../debug';
 import { filterBridgeCandidates } from '../planner/bridge';
 import { buildFullBridgeGroups, type FullBridgeGroup } from '../planner/fullbridge-groups';
 import { LOOKUP_COPY } from '../constants';
+import type { Snapshot } from '../snapshot';
+import type { QueryContext } from '../selectlet';
 
 export function buildFullBridgeSelect(list: SelectorList, snap: Snapshot): SelectRunFn {
   const arms = list.arms;

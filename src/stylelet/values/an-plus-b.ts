@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import { createDelimConsumer, createIdentValueConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';

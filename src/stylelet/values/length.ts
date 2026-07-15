@@ -1,4 +1,4 @@
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { consumeComponentTrivia, isTokenKind } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';

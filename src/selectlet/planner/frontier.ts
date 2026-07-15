@@ -7,6 +7,8 @@ import {
 } from './chain';
 import { type BridgeMove, buildBridgeMove, describeBridgeMove, filterBridgeCandidates, findFirstBridgeCandidate } from './bridge';
 import { type LookupMode } from '../constants';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 export type FrontierProgram = {
   chain: Chain;

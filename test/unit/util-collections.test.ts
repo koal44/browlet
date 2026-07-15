@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeSortedUnique, mergeSortedUniqueLists } from '../../src/utils/collections';
+import { mergeSortedUnique, mergeSortedUniqueLists } from '../../src/shared/collections';
 
 const order = new Map([...`abcdefghi`].map((c, i) => [c, i]));
 

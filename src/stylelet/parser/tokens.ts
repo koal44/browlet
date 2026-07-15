@@ -1,5 +1,5 @@
-import { Cursor } from '../../selectlet/parser/cursor';
-import { asciiLower } from '../../utils/css';
+import { TextCursor } from '../../shared/text-cursor';
+import { asciiLower } from '../../shared/css';
 
 export enum TokenKind {
   Ident = 1,
@@ -270,7 +270,7 @@ type IdentLikeToken =
   | StaticToken<TokenKind.BadUrl>;
 
 export function tokenize(input: string): Token[] {
-  const c = new Cursor(filterCodePoints(input));
+  const c = new TextCursor(filterCodePoints(input));
   const tokens: Token[] = [];
 
   while (true) {
@@ -285,7 +285,7 @@ export function tokenize(input: string): Token[] {
 }
 
 // 4.3.1. Consume a token
-function consumeToken(c: Cursor): Token {
+function consumeToken(c: TextCursor): Token {
   consumeComments(c);
 
   const pos = c.pos();
@@ -433,7 +433,7 @@ function consumeToken(c: Cursor): Token {
 }
 
 // 4.3.2. Consume comments
-function consumeComments(c: Cursor): void {
+function consumeComments(c: TextCursor): void {
   while (c.peek() === '/' && c.peek(1) === '*') {
     c.advance(2);
 
@@ -449,7 +449,7 @@ function consumeComments(c: Cursor): void {
 }
 
 // 4.3.3. Consume a numeric token
-function consumeNumericToken(c: Cursor): NumericToken {
+function consumeNumericToken(c: TextCursor): NumericToken {
   const start = c.pos();
   const number = consumeNumber(c);
 
@@ -467,7 +467,7 @@ function consumeNumericToken(c: Cursor): NumericToken {
 }
 
 // 4.3.4. Consume an ident-like token
-function consumeIdentLikeToken(c: Cursor): IdentLikeToken {
+function consumeIdentLikeToken(c: TextCursor): IdentLikeToken {
   const value = consumeIdentSequenceUnchecked(c);
 
   if (asciiEquals(value, 'url') && c.peek() === '(') {
@@ -506,7 +506,7 @@ type StringLikeToken =
   | StaticToken<TokenKind.BadString>;
 
 // 4.3.5. Consume a string token
-function consumeStringToken(c: Cursor, ending: '"' | "'"): StringLikeToken {
+function consumeStringToken(c: TextCursor, ending: '"' | "'"): StringLikeToken {
   let value = '';
 
   while (true) {
@@ -545,7 +545,7 @@ function consumeStringToken(c: Cursor, ending: '"' | "'"): StringLikeToken {
 }
 
 // 4.3.6. Consume a url token
-function consumeUrlToken(c: Cursor): UrlToken | StaticToken<TokenKind.BadUrl> {
+function consumeUrlToken(c: TextCursor): UrlToken | StaticToken<TokenKind.BadUrl> {
   let value = '';
 
   consumeWhitespace(c);
@@ -601,7 +601,7 @@ function consumeUrlToken(c: Cursor): UrlToken | StaticToken<TokenKind.BadUrl> {
 }
 
 // 4.3.7. Consume an escaped code point
-function consumeEscapedCodePoint(c: Cursor): string {
+function consumeEscapedCodePoint(c: TextCursor): string {
   const first = c.next();
 
   if (first === '') {
@@ -636,7 +636,7 @@ function consumeEscapedCodePoint(c: Cursor): string {
 }
 
 // 4.3.8. Check if two code points are a valid escape
-function startsWithValidEscape(c: Cursor): boolean {
+function startsWithValidEscape(c: TextCursor): boolean {
   return isValidEscape(c.peek(), c.peek(1));
 }
 
@@ -679,7 +679,7 @@ function wouldStartNumberCodePoints(first: string, second: string, third: string
 }
 
 // 4.3.11. Consume an ident sequence
-function consumeIdentSequenceUnchecked(c: Cursor): string {
+function consumeIdentSequenceUnchecked(c: TextCursor): string {
   // Deliberately does not validate that the stream starts with an ident sequence.
   let result = '';
 
@@ -708,7 +708,7 @@ type ConsumedNumber = {
 };
 
 // 4.3.12. Consume a number
-function consumeNumber(c: Cursor): ConsumedNumber {
+function consumeNumber(c: TextCursor): ConsumedNumber {
   let flag = NumberTokenFlag.Integer;
   let repr = '';
 
@@ -811,7 +811,7 @@ function convertStringToNumber(repr: string): number {
 }
 
 // 4.3.14. Consume the remnants of a bad url
-function consumeBadUrlRemnants(c: Cursor): void {
+function consumeBadUrlRemnants(c: TextCursor): void {
   while (true) {
     const ch = c.next();
 
@@ -826,7 +826,7 @@ function consumeBadUrlRemnants(c: Cursor): void {
 }
 
 // Consume whitespace
-function consumeWhitespace(c: Cursor): void {
+function consumeWhitespace(c: TextCursor): void {
   c.consumeWhile(isCssWhitespace);
 }
 

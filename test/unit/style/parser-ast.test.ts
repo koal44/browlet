@@ -5,8 +5,8 @@ import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../
 import { LengthUnit } from '../../../src/stylelet/values/length';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 
-const cls = (raw: string) => ({ compound: { classes: [{ raw }] } });
-const id = (raw: string) => ({ compound: { id: { raw } } });
+const cls = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });
+const id = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });
 const arm = (...parts: unknown[]) => ({ parts });
 
 const ident = (value: string) => ({ kind: TokenKind.Ident, value });

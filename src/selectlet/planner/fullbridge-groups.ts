@@ -1,4 +1,5 @@
 import type { ComplexSelector } from '../parser/parser';
+import type { Snapshot } from '../snapshot';
 import { buildLookupPlan, buildMultiBridgeMove, sameLookupPlan, type LookupPlan, type MultiBridgeMove } from './bridge';
 import { buildChain, type Chain } from './chain';
 

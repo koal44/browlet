@@ -1,10 +1,12 @@
 import { parseSelectorList, type SelectorList } from '../parser/parser';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import { describeContext, type QueryContextDescription } from '../debug';
-import { isElement } from '../../utils/dom';
+import { isElement } from '../../shared/dom';
 import { buildFullBridgeSelect } from './select-fullbridge';
 import { buildFrontierSelect } from './select-frontier';
 import type { DebugFrontierProgram } from '../planner/frontier';
+import type { QueryContext } from '../selectlet';
+import type { Snapshot } from '../snapshot';
 
 export function querySelect(sel: string, ctx: QueryContext, snap: Snapshot): Element[] {
   snap.probe.select++;

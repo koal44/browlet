@@ -1,6 +1,6 @@
 import type { CustomPseudoPredicate } from '../selectlet';
-import { cssIdentUnescape } from '../../utils/css';
-import { Cursor, SelectorSyntaxError } from './cursor';
+import { cssIdentUnescape } from '../../shared/css';
+import { TextCursor } from '../../shared/text-cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,
@@ -27,6 +27,7 @@ import { combinatorCost } from '../planner/cost';
 import { emitIdTest } from '../compile/emit-seedable';
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SubjectKind } from '../constants';
+import type { Snapshot } from '../snapshot';
 
 export type SelectorList = {
   arms: ComplexSelector[];
@@ -149,11 +150,11 @@ function resetSelectorArmState(ctx: ParseContext): void {
 }
 
 export function parseSelectorList(input: string, ctx: ParseContext): SelectorList {
-  const c = new Cursor(input);
+  const c = new TextCursor(input);
   return parseSelectorListFrom(c, ctx);
 }
 
-function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
+function parseSelectorListFrom(c: TextCursor, ctx: ParseContext): SelectorList {
   const selectors: ComplexSelector[] = [];
   let usesScope = false;
   let usesCache = false;
@@ -202,7 +203,7 @@ function parseSelectorListFrom(c: Cursor, ctx: ParseContext): SelectorList {
   return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
-export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelector {
+export function parseComplexSelector(c: TextCursor, ctx: ParseContext): ComplexSelector {
   // const start = c.pos();
   const parts: ComplexPart[] = [];
 
@@ -263,7 +264,7 @@ export function parseComplexSelector(c: Cursor, ctx: ParseContext): ComplexSelec
   };
 }
 
-export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSelector {
+export function parseCompoundSelector(c: TextCursor, ctx: ParseContext): CompoundSelector {
   const compound: CompoundSelector = {
     usesScope: false,
     usesCache: false,
@@ -284,7 +285,7 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
     const next = c.peek();
     if (!next || next === ',' || next === ')') break;
 
-    assertCompoundBoundary(next);
+    assertCompoundBoundary(c, next);
   }
 
   if (count === 0) {
@@ -294,7 +295,7 @@ export function parseCompoundSelector(c: Cursor, ctx: ParseContext): CompoundSel
   return compound;
 }
 
-function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstInCompound: boolean, ctx: ParseContext): void {
+function parseSimpleSelectorInto(c: TextCursor, compound: CompoundSelector, isFirstInCompound: boolean, ctx: ParseContext): void {
   if (ctx.afterSlotted) c.error('No selectors are allowed after ::slotted()');
   const ch = c.peek();
 
@@ -358,7 +359,7 @@ function parseSimpleSelectorInto(c: Cursor, compound: CompoundSelector, isFirstI
   c.error(`Unexpected simple selector ${ch}`);
 }
 
-function assertCompoundBoundary(ch: string): void {
+function assertCompoundBoundary(c: TextCursor, ch: string): void {
   if (
     ch === '' ||
     ch === ',' ||
@@ -372,10 +373,10 @@ function assertCompoundBoundary(ch: string): void {
     return;
   }
 
-  throw new SelectorSyntaxError(`Expected simple selector boundary, got ${ch || '<eof>'}`);
+  c.error(`Expected simple selector boundary, got ${ch || '<eof>'}`);
 }
 
-function parseIdSelector(c: Cursor): IdSelector {
+function parseIdSelector(c: TextCursor): IdSelector {
   c.expect('#');
 
   return {
@@ -384,7 +385,7 @@ function parseIdSelector(c: Cursor): IdSelector {
   };
 }
 
-function parseClassSelector(c: Cursor): ClassSelector {
+function parseClassSelector(c: TextCursor): ClassSelector {
   c.expect('.');
 
   return {
@@ -393,7 +394,7 @@ function parseClassSelector(c: Cursor): ClassSelector {
   };
 }
 
-function parseTagSelector(c: Cursor): TagSelector {
+function parseTagSelector(c: TextCursor): TagSelector {
   const ch = c.peek();
 
   if (ch === '*') {
@@ -425,7 +426,7 @@ function parseTagSelector(c: Cursor): TagSelector {
   return { localRaw: first, cost: 4 };
 }
 
-function parseLocalTagName(c: Cursor): string {
+function parseLocalTagName(c: TextCursor): string {
   if (c.match('*')) return '*';
   return consumeIdent(c);
 }
@@ -441,21 +442,21 @@ export type AttributeSelector = {
   flag?: 'i' | 's';
 };
 
-function parseHostPseudoArg(c: Cursor, ctx: ParseContext): CompoundSelector | undefined {
+function parseHostPseudoArg(c: TextCursor, ctx: ParseContext): CompoundSelector | undefined {
   if (c.peek() !== '(') return undefined;
 
   const x: ParseContext = { ...ctx, forbidEls: true, inHost: true };
   return parseCompoundPseudoArg(c, x, ':host()');
 }
 
-function parseHostContextPseudoArg(c: Cursor, ctx: ParseContext): CompoundSelector {
+function parseHostContextPseudoArg(c: TextCursor, ctx: ParseContext): CompoundSelector {
   const x: ParseContext = { ...ctx, forbidEls: true, inHost: true };
   return parseCompoundPseudoArg(c, x, ':host-context()');
 }
 
 type AttrOperator = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
-export function parseAttributeSelector(c: Cursor): AttributeSelector {
+export function parseAttributeSelector(c: TextCursor): AttributeSelector {
   c.expect('[');
   consumeTrivia(c);
 
@@ -488,7 +489,7 @@ export function parseAttributeSelector(c: Cursor): AttributeSelector {
   return attr;
 }
 
-function parseAttributeName(c: Cursor): AttributeSelector {
+function parseAttributeName(c: TextCursor): AttributeSelector {
   const ch = c.peek();
 
   if (ch === '*') {
@@ -517,7 +518,7 @@ function parseAttributeName(c: Cursor): AttributeSelector {
   return { localRaw };
 }
 
-function parseAttributeOperator(c: Cursor): AttrOperator {
+function parseAttributeOperator(c: TextCursor): AttrOperator {
   const ch = c.next();
 
   if (ch === '=') {
@@ -533,7 +534,7 @@ function parseAttributeOperator(c: Cursor): AttrOperator {
   c.error(`Expected attribute operator, got ${ch || '<eof>'}`);
 }
 
-function parseAttributeValue(c: Cursor): string {
+function parseAttributeValue(c: TextCursor): string {
   const ch = c.peek();
 
   if (ch === '"' || ch === "'") {
@@ -543,7 +544,7 @@ function parseAttributeValue(c: Cursor): string {
   return consumeIdent(c);
 }
 
-function parseAttributeFlag(c: Cursor): 'i' | 's' {
+function parseAttributeFlag(c: TextCursor): 'i' | 's' {
   const raw = consumeIdent(c);
   const flag = cssIdentUnescape(raw).toLowerCase();
 
@@ -552,7 +553,7 @@ function parseAttributeFlag(c: Cursor): 'i' | 's' {
   c.error(`Invalid attribute selector flag ${JSON.stringify(raw)}`);
 }
 
-function parsePseudoIdent(c: Cursor): string {
+function parsePseudoIdent(c: TextCursor): string {
   c.expect(':');
 
   const isElement = c.match(':');
@@ -562,7 +563,7 @@ function parsePseudoIdent(c: Cursor): string {
   return isElement ? `:${lowerName}` : lowerName;
 }
 
-function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): CandidateTest {
+function parsePseudoTestSource(c: TextCursor, ctx: ParseContext, name: string): CandidateTest {
   const isElement = name.startsWith(':');
   const lowerName = isElement ? name.slice(1) : name;
 
@@ -764,7 +765,7 @@ function parsePseudoTestSource(c: Cursor, ctx: ParseContext, name: string): Cand
   }
 }
 
-export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
+export function parseStrictSelectorList(c: TextCursor, ctx: ParseContext): SelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -814,7 +815,7 @@ export function parseStrictSelectorList(c: Cursor, ctx: ParseContext): SelectorL
   return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
-export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): SelectorList {
+export function parseForgivingSelectorList(c: TextCursor, ctx: ParseContext): SelectorList {
   c.expect('(');
 
   const selectors: ComplexSelector[] = [];
@@ -879,7 +880,7 @@ export function parseForgivingSelectorList(c: Cursor, ctx: ParseContext): Select
   return { arms: selectors, usesScope, usesCache, usesHost, cost };
 }
 
-function consumeForgivingSelectorArm(c: Cursor): void {
+function consumeForgivingSelectorArm(c: TextCursor): void {
   let parenDepth = 0;
   let bracketDepth = 0;
   let quote: string | null = null;
@@ -994,7 +995,7 @@ export type RelativeCompoundSelector = {
   cost: number;
 };
 
-export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): RelativeSelectorList {
+export function parseRelativeSelectorList(c: TextCursor, ctx: ParseContext): RelativeSelectorList {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1041,7 +1042,7 @@ export function parseRelativeSelectorList(c: Cursor, ctx: ParseContext): Relativ
   return { arms, usesScope, usesCache, usesHost, cost };
 }
 
-function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeComplexSelector {
+function parseRelativeComplexSelector(c: TextCursor, ctx: ParseContext): RelativeComplexSelector {
   const steps: RelativeStep[] = [];
   let usesScope = false;
   let usesCache = false;
@@ -1101,7 +1102,7 @@ function parseRelativeComplexSelector(c: Cursor, ctx: ParseContext): RelativeCom
   return { steps, usesScope, usesCache, usesHost, cost };
 }
 
-function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
+function parseOptionalRelativeCombinator(c: TextCursor): Combinator | null {
   const ch = c.peek();
 
   if (ch === '>' || ch === '+' || ch === '~') {
@@ -1112,16 +1113,16 @@ function parseOptionalRelativeCombinator(c: Cursor): Combinator | null {
   return null;
 }
 
-function parseDirPseudoArg(c: Cursor): string { // 'ltr' | 'rtl'
+function parseDirPseudoArg(c: TextCursor): string { // 'ltr' | 'rtl'
   const arg = parsePseudoBodyIdentArg(c).toLowerCase();
   return arg;
 }
 
-function parseLangPseudoArg(c: Cursor): string {
+function parseLangPseudoArg(c: TextCursor): string {
   return parsePseudoBodyIdentArg(c).toLowerCase();
 }
 
-function parsePseudoBodyIdentArg(c: Cursor): string {
+function parsePseudoBodyIdentArg(c: TextCursor): string {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1144,7 +1145,7 @@ function parsePseudoBodyIdentArg(c: Cursor): string {
   return arg;
 }
 
-function parseCompoundPseudoArg(c: Cursor, ctx: ParseContext, label = 'pseudo'): CompoundSelector {
+function parseCompoundPseudoArg(c: TextCursor, ctx: ParseContext, label = 'pseudo'): CompoundSelector {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1171,7 +1172,7 @@ function parseCompoundPseudoArg(c: Cursor, ctx: ParseContext, label = 'pseudo'):
   return compound;
 }
 
-function parsePartNameListArg(c: Cursor): string[] {
+function parsePartNameListArg(c: TextCursor): string[] {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1206,7 +1207,7 @@ function parsePartNameListArg(c: Cursor): string[] {
   return idents;
 }
 
-function parseIdentPseudoArg(c: Cursor, label: string): string {
+function parseIdentPseudoArg(c: TextCursor, label: string): string {
   c.expect('(');
   consumeTrivia(c);
 

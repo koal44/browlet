@@ -1,5 +1,5 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { asciiLower } from '../../utils/css';
+import { asciiLower } from '../../shared/css';
 import { consumeComponentTrivia, isIdentToken } from '../parser/syntax';
 import {
   ok,

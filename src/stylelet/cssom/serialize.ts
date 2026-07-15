@@ -1,4 +1,4 @@
-import { requireDefined } from '../../utils/util';
+import { requireDefined } from '../../shared/util';
 import { BlockKind, type ComponentValue } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import type { DeclarationAst } from '../parser/types';
