@@ -12,6 +12,11 @@ import {
   ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle,
   serializeAngle, serializeCanonicalAngle, tryConsumeAngle,
 } from '../../../src/stylelet/values/angle';
+import {
+  createAnglePercentageConsumer, parseAnglePercentage,
+  serializeAnglePercentage, tryConsumeAnglePercentage,
+  tryResolveAnglePercentage,
+} from '../../../src/stylelet/values/angle-percentage';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../src/stylelet/values/auto';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
@@ -27,6 +32,11 @@ import {
   createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
   serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
 } from '../../../src/stylelet/values/frequency';
+import {
+  createFrequencyPercentageConsumer, parseFrequencyPercentage,
+  serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
+  tryResolveFrequencyPercentage,
+} from '../../../src/stylelet/values/frequency-percentage';
 import {
   createLengthConsumer, LENGTH_UNITS,
   parseLength, serializeCanonicalLength, serializeLength,
@@ -50,6 +60,11 @@ import {
   createTimeConsumer, parseTime, resolveTime,
   serializeCanonicalTime, serializeTime, TIME_UNITS, tryConsumeTime,
 } from '../../../src/stylelet/values/time';
+import {
+  createTimePercentageConsumer, parseTimePercentage,
+  serializeTimePercentage, tryConsumeTimePercentage,
+  tryResolveTimePercentage,
+} from '../../../src/stylelet/values/time-percentage';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../src/stylelet/values/zero';
@@ -1194,6 +1209,243 @@ describe('length-percentage', () => {
     [{ type: 'percentage', value: -10 }, '-10%'],
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeLengthPercentage(value)).toBe(expected);
+  });
+});
+
+describe('angle-percentage', () => {
+  it.each([
+    ['90deg', { type: 'angle', value: 90, unit: 'deg' }],
+    ['25%', { type: 'percentage', value: 25 }],
+  ] as const)('parses %j', (input, expected) => {
+    expect(parseAnglePercentage(input)).toEqual(expected);
+  });
+
+  it.each(['', '0', '1', 'auto', '1px', '1deg 25%'])(
+    'rejects %j as an angle-percentage production',
+    (input) => {
+      expect(parseAnglePercentage(input)).toBeNull();
+    },
+  );
+
+  it('consumes one angle-percentage from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('25% 90deg'));
+
+    expect(tryConsumeAnglePercentage(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value: 25 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['1deg', '150%'])(
+    'accepts the nonnegative angle-percentage %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createAnglePercentageConsumer({ min: 0 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['-1deg', '-10%'])(
+    'returns null without advancing for the negative value %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createAnglePercentageConsumer({ min: 0 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it('rejects finite nonzero range bounds until they can be deferred', () => {
+    expect(() => createAnglePercentageConsumer({ min: 10, max: 100 })).toThrow(
+      'Angle-percentage ranges with finite nonzero bounds are not yet supported',
+    );
+  });
+
+  it.each([
+    [{ type: 'angle', value: 0.25, unit: 'turn' }, {}, 90],
+    [{ type: 'percentage', value: 25 }, { percentageBasis: 360 }, 90],
+  ] as const)('resolves %j to %ddeg', (value, context, expected) => {
+    expect(tryResolveAnglePercentage(value, context)).toEqual({
+      type: 'angle',
+      value: expected,
+      unit: 'deg',
+    });
+  });
+
+  it('returns null when the percentage basis is missing', () => {
+    expect(tryResolveAnglePercentage({
+      type: 'percentage',
+      value: 25,
+    })).toBeNull();
+  });
+
+  it.each([
+    [{ type: 'angle', value: 0.5, unit: 'turn' }, '0.5turn'],
+    [{ type: 'percentage', value: -10 }, '-10%'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeAnglePercentage(value)).toBe(expected);
+  });
+});
+
+describe('frequency-percentage', () => {
+  it.each([
+    ['1khz', { type: 'frequency', value: 1, unit: 'khz' }],
+    ['25%', { type: 'percentage', value: 25 }],
+  ] as const)('parses %j', (input, expected) => {
+    expect(parseFrequencyPercentage(input)).toEqual(expected);
+  });
+
+  it.each(['', '0', '1', 'auto', '1s', '1khz 25%'])(
+    'rejects %j as a frequency-percentage production',
+    (input) => {
+      expect(parseFrequencyPercentage(input)).toBeNull();
+    },
+  );
+
+  it('consumes one frequency-percentage from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('25% 1khz'));
+
+    expect(tryConsumeFrequencyPercentage(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value: 25 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['1hz', '150%'])(
+    'accepts the nonnegative frequency-percentage %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createFrequencyPercentageConsumer({ min: 0 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['-1hz', '-10%'])(
+    'returns null without advancing for the negative value %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createFrequencyPercentageConsumer({ min: 0 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it('rejects finite nonzero range bounds until they can be deferred', () => {
+    expect(() => createFrequencyPercentageConsumer({ min: 10, max: 100 })).toThrow(
+      'Frequency-percentage ranges with finite nonzero bounds are not yet supported',
+    );
+  });
+
+  it.each([
+    [{ type: 'frequency', value: 1.5, unit: 'khz' }, {}, 1500],
+    [{ type: 'percentage', value: 25 }, { percentageBasis: 2000 }, 500],
+  ] as const)('resolves %j to %dhz', (value, context, expected) => {
+    expect(tryResolveFrequencyPercentage(value, context)).toEqual({
+      type: 'frequency',
+      value: expected,
+      unit: 'hz',
+    });
+  });
+
+  it('returns null when the percentage basis is missing', () => {
+    expect(tryResolveFrequencyPercentage({
+      type: 'percentage',
+      value: 25,
+    })).toBeNull();
+  });
+
+  it.each([
+    [{ type: 'frequency', value: 1.5, unit: 'khz' }, '1.5khz'],
+    [{ type: 'percentage', value: -10 }, '-10%'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeFrequencyPercentage(value)).toBe(expected);
+  });
+});
+
+describe('time-percentage', () => {
+  it.each([
+    ['250ms', { type: 'time', value: 250, unit: 'ms' }],
+    ['25%', { type: 'percentage', value: 25 }],
+  ] as const)('parses %j', (input, expected) => {
+    expect(parseTimePercentage(input)).toEqual(expected);
+  });
+
+  it.each(['', '0', '1', 'auto', '1deg', '1s 25%'])(
+    'rejects %j as a time-percentage production',
+    (input) => {
+      expect(parseTimePercentage(input)).toBeNull();
+    },
+  );
+
+  it('consumes one time-percentage from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('25% 1s'));
+
+    expect(tryConsumeTimePercentage(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value: 25 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['1s', '150%'])(
+    'accepts the nonnegative time-percentage %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createTimePercentageConsumer({ min: 0 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['-1s', '-10%'])(
+    'returns null without advancing for the negative value %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createTimePercentageConsumer({ min: 0 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it('rejects finite nonzero range bounds until they can be deferred', () => {
+    expect(() => createTimePercentageConsumer({ min: 10, max: 100 })).toThrow(
+      'Time-percentage ranges with finite nonzero bounds are not yet supported',
+    );
+  });
+
+  it.each([
+    [{ type: 'time', value: 250, unit: 'ms' }, {}, 0.25],
+    [{ type: 'percentage', value: 25 }, { percentageBasis: 2 }, 0.5],
+  ] as const)('resolves %j to %ds', (value, context, expected) => {
+    expect(tryResolveTimePercentage(value, context)).toEqual({
+      type: 'time',
+      value: expected,
+      unit: 's',
+    });
+  });
+
+  it('returns null when the percentage basis is missing', () => {
+    expect(tryResolveTimePercentage({
+      type: 'percentage',
+      value: 25,
+    })).toBeNull();
+  });
+
+  it.each([
+    [{ type: 'time', value: 250, unit: 'ms' }, '250ms'],
+    [{ type: 'percentage', value: -10 }, '-10%'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeTimePercentage(value)).toBe(expected);
   });
 });
 
