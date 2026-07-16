@@ -2,10 +2,10 @@
 import type { ComponentValue } from './syntax';
 import type { ColorValue } from '../values/color';
 import type { CssWideValue } from '../values/css-wide';
-import type { LengthPercentageAuto } from '../values/length-percentage';
 import type { SelectorList } from './selectlet';
 import { asciiLower } from '../../shared/css';
 import type { AnimationNameValue } from '../props/animation-name';
+import type { MarginSideValue } from '../props/margin';
 
 // Stylesheet
 
@@ -129,10 +129,10 @@ export type DisplayDeclarationAst =
   DeclarationBaseAst<PropertyId.Display, DisplayValue>;
 
 export type MarginDeclarationAst =
-  DeclarationBaseAst<PropertyId.Margin, BoxValue<LengthPercentageAuto>>;
+  DeclarationBaseAst<PropertyId.Margin, BoxValue<MarginSideValue>>;
 
 export type MarginSideDeclarationAst =
-  DeclarationBaseAst<MarginSidePropertyId, LengthPercentageAuto>;
+  DeclarationBaseAst<MarginSidePropertyId, MarginSideValue>;
 
 export type MarginSidePropertyId =
   | PropertyId.MarginTop

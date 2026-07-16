@@ -1,7 +1,6 @@
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
-  ok,
-  unwrapConsumeResultOrThrow,
+  ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import { tryConsumeKeywordIn } from './keyword';
@@ -21,4 +20,8 @@ export function tryConsumeAuto(c: ComponentCursor): TryComponentConsumerResult<A
   }
 
   return ok({ type: 'auto' });
+}
+
+export function serializeAuto(value: AutoValue): string {
+  return value.type;
 }

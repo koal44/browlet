@@ -4,8 +4,8 @@ import { TokenKind } from '../parser/tokens';
 import type { DeclarationAst } from '../parser/types';
 import { PropertyId, getPropertyName } from '../parser/types';
 import { serializeAnimationName } from '../props/animation-name';
+import { serializeMarginSideValue } from '../props/margin';
 import { isCssWideValue, serializeCssWideValue, type CssWideValue } from '../values/css-wide';
-import { serializeLengthPercentageAuto } from '../values/length-percentage';
 import { serializeCssString } from '../values/string';
 
 export type SerializedDeclaration = {
@@ -22,7 +22,7 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
     case PropertyId.MarginBottom:
       return {
         name: getName(declaration.prop),
-        value: serialize(declaration.value, serializeLengthPercentageAuto),
+        value: serialize(declaration.value, serializeMarginSideValue),
         important: declaration.important,
       };
 

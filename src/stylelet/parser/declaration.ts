@@ -6,8 +6,8 @@ import type { Declaration as SyntaxDeclaration } from './syntax';
 import { parseCssWideValue } from '../values/css-wide';
 import { parseColorValue } from '../values/color';
 import { isDeclarationValue } from '../values/declaration-value';
-import { parseLengthPercentageAuto } from '../values/length-percentage';
 import { parseAnimationNameValue } from '../props/animation-name';
+import { parseMarginSideValue } from '../props/margin';
 
 export function buildDeclarationAst(declaration: SyntaxDeclaration): DeclarationAst | null {
   if (declaration.value.length > 0 && !isDeclarationValue(declaration.value)) {
@@ -38,7 +38,7 @@ export function buildDeclarationAst(declaration: SyntaxDeclaration): Declaration
     case PropertyId.MarginBottom:
     case PropertyId.MarginLeft: {
       const value =
-        parseCssWideValue(declaration.value) ?? parseLengthPercentageAuto(declaration.value);
+        parseCssWideValue(declaration.value) ?? parseMarginSideValue(declaration.value);
 
       if (value === null) return null;
 

@@ -265,7 +265,7 @@ describe('parseStylesheet', () => {
     });
   });
 
-  it('recovers invalid margin side valuess', () => {
+  it('recovers invalid margin side values', () => {
     expect(parseStylesheet('.foo { margin-left: nonsense; margin-left: 3px; }')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
@@ -301,7 +301,7 @@ describe('parseStylesheet', () => {
     });
   });
 
-  it('parses margin side length-percentage-auto values', () => {
+  it('parses margin side values', () => {
     const cases = [
       ['px length', '.foo { margin-left: 3px; }', [marginSideDecl(PropertyId.MarginLeft, px(3))]],
       ['negative em length', '.foo { margin-top: -2em; }', [marginSideDecl(PropertyId.MarginTop, em(-2))]],

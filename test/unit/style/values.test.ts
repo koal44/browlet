@@ -13,6 +13,7 @@ import {
   serializeAngle, serializeCanonicalAngle, tryConsumeAngle,
 } from '../../../src/stylelet/values/angle';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
+import { serializeAuto } from '../../../src/stylelet/values/auto';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
 import {
   addDimensions, interpolateDimensions,
@@ -32,6 +33,11 @@ import {
   snapLengthAsLineWidth, tryConsumeLength, tryResolveLength,
   type LengthResolutionContext,
 } from '../../../src/stylelet/values/length';
+import {
+  createLengthPercentageConsumer, parseLengthPercentage,
+  serializeLengthPercentage, tryConsumeLengthPercentage,
+  tryResolveLengthPercentage,
+} from '../../../src/stylelet/values/length-percentage';
 import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
 import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
 import {
@@ -47,6 +53,14 @@ import {
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../src/stylelet/values/zero';
+
+// Keywords
+
+describe('auto', () => {
+  it('serializes the auto keyword', () => {
+    expect(serializeAuto({ type: 'auto' })).toBe('auto');
+  });
+});
 
 // Free-form productions
 
@@ -1085,6 +1099,102 @@ describe('percentage', () => {
       });
     },
   );
+});
+
+describe('length-percentage', () => {
+  it.each([
+    ['1px', { type: 'length', value: 1, unit: 'px' }],
+    ['25%', { type: 'percentage', value: 25 }],
+    ['0', { type: 'length', value: 0, unit: '' }],
+  ] as const)('parses %j', (input, expected) => {
+    expect(parseLengthPercentage(input)).toEqual(expected);
+  });
+
+  it.each(['', 'auto', '1', '1s', '1px 2px'])(
+    'rejects %j as a length-percentage production',
+    (input) => {
+      expect(parseLengthPercentage(input)).toBeNull();
+    },
+  );
+
+  it('consumes one length-percentage from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('25% 1px'));
+
+    expect(tryConsumeLengthPercentage(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value: 25 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['0', '1em', '150%'])(
+    'applies a nonnegative range to either alternative for %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createLengthPercentageConsumer({ min: 0 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['-1em', '-10%'])(
+    'returns null without advancing for the negative value %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createLengthPercentageConsumer({ min: 0 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it('rejects finite nonzero range bounds until they can be deferred', () => {
+    expect(() => createLengthPercentageConsumer({ min: 10, max: 100 })).toThrow(
+      'Length-percentage ranges with finite nonzero bounds are not yet supported',
+    );
+  });
+
+  it('resolves a percentage using its canonical length basis', () => {
+    expect(tryResolveLengthPercentage(
+      { type: 'percentage', value: 25 },
+      { percentageBasis: 200 },
+    )).toEqual({
+      type: 'length',
+      value: 50,
+      unit: 'px',
+    });
+  });
+
+  it('resolves a length using the length resolution context', () => {
+    expect(tryResolveLengthPercentage(
+      { type: 'length', value: 2, unit: 'em' },
+      { em: 16 },
+    )).toEqual({
+      type: 'length',
+      value: 32,
+      unit: 'px',
+    });
+  });
+
+  it('returns null when the required resolution input is missing', () => {
+    expect(tryResolveLengthPercentage({
+      type: 'percentage',
+      value: 25,
+    })).toBeNull();
+    expect(tryResolveLengthPercentage({
+      type: 'length',
+      value: 2,
+      unit: 'em',
+    })).toBeNull();
+  });
+
+  it.each([
+    [{ type: 'length', value: 1.5, unit: 'rem' }, '1.5rem'],
+    [{ type: 'percentage', value: -10 }, '-10%'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeLengthPercentage(value)).toBe(expected);
+  });
 });
 
 // Distance units
