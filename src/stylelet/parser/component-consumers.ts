@@ -8,7 +8,7 @@ import {
   isDelimToken, isFunctionBlock, isIdentToken, isTokenKind, parseAsComponentGrammar,
   type FunctionBlock,
 } from './syntax';
-import type { HashToken, IdentToken, NumberToken, StringToken } from './tokens';
+import type { HashToken, IdentToken, NumberToken, PercentageToken, StringToken } from './tokens';
 import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
 
 export function tryConsumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
@@ -164,6 +164,20 @@ export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerR
   const component = c.next();
 
   if (!isTokenKind(component, TokenKind.Number)) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok(component);
+}
+
+export function tryConsumePercentageToken(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PercentageToken> {
+  const start = c.pos();
+  const component = c.next();
+
+  if (!isTokenKind(component, TokenKind.Percentage)) {
     c.restore(start);
     return null;
   }

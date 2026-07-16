@@ -16,6 +16,7 @@ import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/va
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
 import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
+import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
@@ -928,6 +929,101 @@ describe('dimension', () => {
   ] as const)('round-trips the semantic dimension %j', (value) => {
     expect(parseDimension(serializeDimension(value))).toEqual(value);
   });
+});
+
+describe('percentage', () => {
+  it.each([
+    ['0%', 0],
+    ['+12%', 12],
+    ['-12%', -12],
+    ['1.5%', 1.5],
+    ['.5%', 0.5],
+    ['1e2%', 100],
+  ] as const)('parses %j as the percentage %d', (input, expected) => {
+    expect(parsePercentage(input)).toEqual({
+      type: 'percentage',
+      value: expected,
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parsePercentage(' /* before */ -12.5% /* after */ ')).toEqual({
+      type: 'percentage',
+      value: -12.5,
+    });
+  });
+
+  it.each([
+    '',
+    '1',
+    '%',
+    '1px',
+    '1 %',
+    '1% 2%',
+  ])('rejects %j as a percentage production', (input) => {
+    expect(parsePercentage(input)).toBeNull();
+  });
+
+  it('consumes one percentage from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('12.5% 25%'));
+
+    expect(tryConsumePercentage(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value: 12.5 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for a non-percentage component', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('12.5'));
+
+    expect(tryConsumePercentage(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([-10, 0, 125])('includes the numeric range boundary %d', (value) => {
+    const c = new ComponentCursor(parseListOfComponentValues(`${value}%`));
+    const consume = createPercentageConsumer({ min: -10, max: 125 });
+
+    expect(consume(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'percentage', value },
+    });
+  });
+
+  it.each([-10.1, 125.1])(
+    'returns null without advancing for out-of-range value %d',
+    (value) => {
+      const c = new ComponentCursor(parseListOfComponentValues(`${value}%`));
+      const consume = createPercentageConsumer({ min: -10, max: 125 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it.each([
+    [0, '0%'],
+    [-0, '0%'],
+    [12, '12%'],
+    [-12.5, '-12.5%'],
+    [0.1234565, '0.123457%'],
+  ] as const)('serializes %d as %j', (value, expected) => {
+    expect(serializePercentage({ type: 'percentage', value })).toBe(expected);
+  });
+
+  it.each([0, 12.5, -12.5, 0.000001])(
+    'round-trips the semantic percentage %d',
+    (value) => {
+      expect(parsePercentage(serializePercentage({
+        type: 'percentage',
+        value,
+      }))).toEqual({
+        type: 'percentage',
+        value,
+      });
+    },
+  );
 });
 
 // Distance units
