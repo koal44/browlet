@@ -6,7 +6,7 @@ import {
   ok,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
-import { serializeNumber } from './number';
+import { serializeCssNumber } from './number';
 
 export type LengthValue = {
   type: 'length';
@@ -58,7 +58,7 @@ export function tryConsumeLength(c: ComponentCursor): TryComponentConsumerResult
 }
 
 export function serializeLength(value: LengthValue): string {
-  return `${serializeNumber(value.value)}${serializeLengthUnit(value.unit)}`;
+  return `${serializeCssNumber(value.value)}${serializeLengthUnit(value.unit)}`;
 }
 
 function serializeLengthUnit(unit: LengthUnit): string {

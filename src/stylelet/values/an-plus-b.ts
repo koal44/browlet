@@ -9,7 +9,7 @@ import {
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
-import { serializeNumber } from './number';
+import { serializeCssNumber } from './number';
 
 export type AnPlusBValue = {
   a: number;
@@ -309,21 +309,21 @@ const consumeAnPlusB: TryComponentConsumer<AnPlusBValue> = oneOf(
 
 export function serializeAnPlusB(value: AnPlusBValue): string {
   if (value.a === 0) {
-    return serializeNumber(value.b);
+    return serializeCssNumber(value.b);
   }
 
   const a = value.a === 1
     ? 'n'
     : value.a === -1
       ? '-n'
-      : `${serializeNumber(value.a)}n`;
+      : `${serializeCssNumber(value.a)}n`;
 
   if (value.b > 0) {
-    return `${a}+${serializeNumber(value.b)}`;
+    return `${a}+${serializeCssNumber(value.b)}`;
   }
 
   if (value.b < 0) {
-    return `${a}${serializeNumber(value.b)}`;
+    return `${a}${serializeCssNumber(value.b)}`;
   }
 
   return a;

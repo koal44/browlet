@@ -14,9 +14,11 @@ import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/va
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
+import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
+import { parseZero, tryConsumeZero } from '../../../src/stylelet/values/zero';
 
 // Free-form productions
 
@@ -714,6 +716,138 @@ describe('integer', () => {
       type: 'integer',
       value,
     });
+  });
+});
+
+describe('number', () => {
+  it.each([
+    ['0', 0],
+    ['12', 12],
+    ['+12', 12],
+    ['-12', -12],
+    ['1.0', 1],
+    ['.5', 0.5],
+    ['-.5', -0.5],
+    ['1e0', 1],
+    ['1.5e2', 150],
+  ] as const)('parses %j as the number %d', (input, expected) => {
+    expect(parseNumber(input)).toEqual({
+      type: 'number',
+      value: expected,
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseNumber(' /* before */ -1.25 /* after */ ')).toEqual({
+      type: 'number',
+      value: -1.25,
+    });
+  });
+
+  it.each([
+    '',
+    '1%',
+    '1px',
+    '1 2',
+    'number',
+  ])('rejects %j as a number production', (input) => {
+    expect(parseNumber(input)).toBeNull();
+  });
+
+  it('consumes one number from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1.25 2'));
+
+    expect(tryConsumeNumber(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'number', value: 1.25 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each([-1.5, 0, 2.5])('includes the range boundary %d', (value) => {
+    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
+
+    expect(consume(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'number', value },
+    });
+  });
+
+  it.each([-1.6, 2.6])('returns null without advancing for out-of-range number %d', (value) => {
+    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
+
+    expect(consume(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([
+    [0, '0'],
+    [-0, '0'],
+    [12, '12'],
+    [1.25, '1.25'],
+    [0.1234564, '0.123456'],
+    [0.1234565, '0.123457'],
+    [-0.1234565, '-0.123456'],
+    [-0.1234566, '-0.123457'],
+    [0.0000004, '0'],
+    [0.0000005, '0.000001'],
+    [0.0000006, '0.000001'],
+    [123456789.1234567, '123456789.123457'],
+    [1e21, '1000000000000000000000'],
+  ] as const)('serializes %d as %j', (value, expected) => {
+    expect(serializeNumber({ type: 'number', value })).toBe(expected);
+  });
+
+  it.each([0, 1.25, -1.25, 0.000001])('round-trips the semantic number %d', (value) => {
+    expect(parseNumber(serializeNumber({ type: 'number', value }))).toEqual({
+      type: 'number',
+      value,
+    });
+  });
+});
+
+describe('zero', () => {
+  it.each([
+    '0',
+    '+0',
+    '-0',
+    '0.0',
+    '.0',
+    '0e0',
+  ])('parses the literal zero %j', (input) => {
+    expect(parseZero(input)).toEqual({
+      type: 'number',
+      value: 0,
+    });
+  });
+
+  it.each([
+    '',
+    '1',
+    '0%',
+    '0px',
+    '0 0',
+  ])('rejects %j as a zero production', (input) => {
+    expect(parseZero(input)).toBeNull();
+  });
+
+  it('consumes one literal zero from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('0.0 1'));
+
+    expect(tryConsumeZero(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'number', value: 0 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for a nonzero number', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1'));
+
+    expect(tryConsumeZero(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 });
 

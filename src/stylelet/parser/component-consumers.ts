@@ -159,6 +159,18 @@ export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumer
   return ok(component);
 }
 
+export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
+  const start = c.pos();
+  const component = c.next();
+
+  if (!isTokenKind(component, TokenKind.Number)) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok(component);
+}
+
 export function createDelimConsumer<T extends string>(expected: T): TryComponentConsumer<T> {
   return (c) => {
     const start = c.pos();

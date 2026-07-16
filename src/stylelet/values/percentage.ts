@@ -5,7 +5,7 @@ import {
   ok,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
-import { serializeNumber } from './number';
+import { serializeCssNumber } from './number';
 
 export type PercentageValue = {
   type: 'percentage';
@@ -31,5 +31,5 @@ export function tryConsumePercentage(c: ComponentCursor): TryComponentConsumerRe
 }
 
 export function serializePercentage(value: PercentageValue): string {
-  return `${serializeNumber(value.value)}%`;
+  return `${serializeCssNumber(value.value)}%`;
 }

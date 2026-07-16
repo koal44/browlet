@@ -1507,3 +1507,104 @@ runScenarios('CSSOM URL modifier oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSSOM number serialization oracle', 'normal', [
+  {
+    name: 'native number rounding and notation',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="number-serialization">
+        .below-positive { scale: 0.1234564; }
+        .half-positive  { scale: 0.1234565; }
+        .above-positive { scale: 0.1234566; }
+        .half-negative  { scale: -0.1234565; }
+        .tiny-positive  { scale: 0.0000006; }
+        .large-positive { scale: 123456789.1234567; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        expect: { cssom: { name: 'scale', value: '0.123456', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['chromium', 'webkit'],
+        expect: { cssom: { name: 'scale', value: '0.123456', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: { name: 'scale', value: '0.123457', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 2, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        expect: { cssom: { name: 'scale', value: '0.123457', important: false } },
+      },
+
+      // Applying CSS's nearest-integer tie direction at six decimal places
+      // would produce 0.123457 above and -0.123456 here. No engine produces
+      // that pair: Firefox rounds both away from zero, while Chromium and
+      // WebKit round both toward zero for these parsed values.
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['chromium', 'webkit'],
+        expect: { cssom: { name: 'scale', value: '-0.123456', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: { name: 'scale', value: '-0.123457', important: false } },
+      },
+
+      // CSSOM says scientific notation is not used. WebKit alone emits the
+      // six-decimal fixed form for this value.
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['chromium'],
+        expect: { cssom: { name: 'scale', value: '6e-07', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: { name: 'scale', value: '6e-7', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['webkit'],
+        expect: { cssom: { name: 'scale', value: '0.000001', important: false } },
+      },
+
+      // Chromium and Firefox effectively limit significant digits here;
+      // WebKit preserves six digits after the decimal point.
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['chromium'],
+        expect: { cssom: { name: 'scale', value: '1.23457e+08', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: { name: 'scale', value: '123457000', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'scale' },
+        ref: { by: 'id', id: 'number-serialization' },
+        browsers: ['webkit'],
+        expect: { cssom: { name: 'scale', value: '123456789.123457', important: false } },
+      },
+    ],
+  },
+]);
