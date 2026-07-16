@@ -1608,3 +1608,95 @@ runScenarios('CSSOM number serialization oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSS escaped dimension unit serialization oracle', 'normal', [
+  {
+    name: 'native serialization of an escaped exponent-like dimension unit',
+    // status: 'only',
+    engines: ['native'],
+    markup: `
+      <style id="escaped-dimension-unit">
+        .custom-property {
+          --e2: 1\\65 2;
+          --e2-escaped-digit: 1e\\000032;
+          --e2-six-digit-escape: 1\\0000652;
+          --e-minus-2: 1\\65 -2;
+        }
+
+        @media
+          (unknown-leading-e: 1\\65 2),
+          (unknown-uppercase-e: 1\\45 2),
+          (unknown-trailing-digit: 1e\\000032),
+          (unknown-six-digit-escape: 1\\0000652) {
+          .media { color: green; }
+        }
+
+        @supports (--probe: 1\\65 -2) {
+          .supports { color: green; }
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'sheet.cssRules' },
+        ref: { by: 'id', id: 'escaped-dimension-unit' },
+        browsers: ['chromium', 'firefox'],
+        // Both engines preserve each author-provided escape spelling rather
+        // than choosing a canonical serialization for the semantic unit.
+        expect: {
+          cssom: [
+            {
+              $type: 'CSSStyleRule',
+              style: {
+                active: [
+                  { name: '--e2', value: '1\\65 2', important: false },
+                  { name: '--e2-escaped-digit', value: '1e\\000032', important: false },
+                  { name: '--e2-six-digit-escape', value: '1\\0000652', important: false },
+                  { name: '--e-minus-2', value: '1\\65 -2', important: false },
+                ],
+              },
+            },
+            {
+              $type: 'CSSMediaRule',
+              conditionText: '(unknown-leading-e: 1\\65 2), (unknown-uppercase-e: 1\\45 2), (unknown-trailing-digit: 1e\\000032), (unknown-six-digit-escape: 1\\0000652)',
+            },
+            {
+              $type: 'CSSSupportsRule',
+              conditionText: '(--probe: 1\\65 -2)',
+            },
+          ],
+        },
+      },
+      {
+        cssom: { target: 'sheet.cssRules' },
+        ref: { by: 'id', id: 'escaped-dimension-unit' },
+        browsers: ['webkit'],
+        // WebKit drops the escape, so the serialized text reparses as a
+        // number token rather than the original dimension token.
+        expect: {
+          cssom: [
+            {
+              $type: 'CSSStyleRule',
+              style: {
+                active: [
+                  { name: '--e2', value: '1e2', important: false },
+                  { name: '--e2-escaped-digit', value: '1e2', important: false },
+                  { name: '--e2-six-digit-escape', value: '1e2', important: false },
+                  { name: '--e-minus-2', value: '1e-2', important: false },
+                ],
+              },
+            },
+            {
+              $type: 'CSSMediaRule',
+              conditionText: '(unknown-leading-e: 1e2), (unknown-uppercase-e: 1E2), (unknown-trailing-digit: 1e2), (unknown-six-digit-escape: 1e2)',
+            },
+            {
+              $type: 'CSSSupportsRule',
+              conditionText: '(--probe: 1e-2)',
+            },
+          ],
+        },
+      },
+    ],
+  },
+]);

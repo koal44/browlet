@@ -16,10 +16,13 @@ import { serializeCssNumber } from './number';
  * <dimension> = <dimension-token>
  */
 
-export type DimensionValue = {
-  type: 'dimension';
+export type DimensionValue<
+  Type extends string = 'dimension',
+  Unit extends string = string,
+> = {
+  type: Type;
   value: number;
-  unit: string;
+  unit: Unit;
 };
 
 export function parseDimension(
@@ -54,7 +57,9 @@ export function tryConsumeDimension(
   });
 }
 
-export function serializeDimension(value: DimensionValue): string {
+export function serializeDimension(
+  value: DimensionValue<string, string>,
+): string {
   return `${serializeCssNumber(value.value)}${serializeDimensionUnit(value.unit)}`;
 }
 
@@ -68,4 +73,41 @@ function serializeDimensionUnit(unit: string): string {
   }
 
   return serialized;
+}
+
+// CSS Values, "Combination of Dimensions".
+export function addDimensions<Type extends string, Unit extends string>(
+  a: DimensionValue<Type, Unit>,
+  b: DimensionValue<Type, Unit>,
+): DimensionValue<Type, Unit> {
+  assertSameDimensionUnit(a, b);
+
+  return {
+    type: a.type,
+    value: a.value + b.value,
+    unit: a.unit,
+  };
+}
+
+export function interpolateDimensions<Type extends string, Unit extends string>(
+  a: DimensionValue<Type, Unit>,
+  b: DimensionValue<Type, Unit>,
+  p: number,
+): DimensionValue<Type, Unit> {
+  assertSameDimensionUnit(a, b);
+
+  return {
+    type: a.type,
+    value: (1 - p) * a.value + p * b.value,
+    unit: a.unit,
+  };
+}
+
+function assertSameDimensionUnit(
+  a: DimensionValue<string, string>,
+  b: DimensionValue<string, string>,
+): void {
+  if (a.unit !== b.unit) {
+    throw new TypeError(`Dimension units must match: ${a.unit} and ${b.unit}`);
+  }
 }

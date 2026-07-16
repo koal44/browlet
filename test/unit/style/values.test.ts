@@ -10,7 +10,10 @@ import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parse
 import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
-import { parseDimension, serializeDimension, tryConsumeDimension } from '../../../src/stylelet/values/dimension';
+import {
+  addDimensions, interpolateDimensions,
+  parseDimension, serializeDimension, tryConsumeDimension,
+} from '../../../src/stylelet/values/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
@@ -905,6 +908,41 @@ describe('dimension', () => {
 
     expect(tryConsumeDimension(c)).toBeNull();
     expect(c.pos()).toBe(0);
+  });
+
+  it('adds dimensions with exactly the same unit', () => {
+    expect(addDimensions(
+      { type: 'angle', value: 90, unit: 'deg' },
+      { type: 'angle', value: 45, unit: 'deg' },
+    )).toEqual({ type: 'angle', value: 135, unit: 'deg' });
+  });
+
+  it.each([
+    [0, 10],
+    [0.25, 15],
+    [1, 30],
+    [2, 50],
+  ])('interpolates dimensions at p = %d', (p, expected) => {
+    expect(interpolateDimensions(
+      { type: 'angle', value: 10, unit: 'deg' },
+      { type: 'angle', value: 30, unit: 'deg' },
+      p,
+    )).toEqual({ type: 'angle', value: expected, unit: 'deg' });
+  });
+
+  it('rejects addition when units differ by case', () => {
+    expect(() => addDimensions(
+      { type: 'dimension', value: 1, unit: 'px' },
+      { type: 'dimension', value: 2, unit: 'PX' },
+    )).toThrow('Dimension units must match: px and PX');
+  });
+
+  it('rejects interpolation when units differ', () => {
+    expect(() => interpolateDimensions(
+      { type: 'dimension', value: 1, unit: 'px' },
+      { type: 'dimension', value: 2, unit: 'em' },
+      0.5,
+    )).toThrow('Dimension units must match: px and em');
   });
 
   it.each([
