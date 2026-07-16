@@ -8,6 +8,10 @@ import {
 } from '../../../src/stylelet/parser/tokens';
 import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
+import {
+  ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle,
+  serializeAngle, serializeCanonicalAngle, tryConsumeAngle,
+} from '../../../src/stylelet/values/angle';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
 import {
@@ -19,6 +23,10 @@ import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/va
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
 import {
+  createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
+  serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
+} from '../../../src/stylelet/values/frequency';
+import {
   createLengthConsumer, LENGTH_UNITS,
   parseLength, serializeCanonicalLength, serializeLength,
   snapLengthAsLineWidth, tryConsumeLength, tryResolveLength,
@@ -26,7 +34,16 @@ import {
 } from '../../../src/stylelet/values/length';
 import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
 import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
+import {
+  createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
+  resolveResolution, serializeCanonicalResolution, serializeResolution,
+  tryConsumeResolution,
+} from '../../../src/stylelet/values/resolution';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
+import {
+  createTimeConsumer, parseTime, resolveTime,
+  serializeCanonicalTime, serializeTime, TIME_UNITS, tryConsumeTime,
+} from '../../../src/stylelet/values/time';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../src/stylelet/values/zero';
@@ -1349,6 +1366,421 @@ describe('length', () => {
 });
 
 // Other quantities
+
+describe('angle', () => {
+  it.each(ANGLE_UNITS)('parses the %s angle unit', (unit) => {
+    expect(parseAngle(`1${unit}`)).toEqual({
+      type: 'angle',
+      value: 1,
+      unit,
+    });
+  });
+
+  it('normalizes angle units to ASCII lowercase', () => {
+    expect(parseAngle('-1.25TuRn')).toEqual({
+      type: 'angle',
+      value: -1.25,
+      unit: 'turn',
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseAngle(' /* before */ 100grad /* after */ ')).toEqual({
+      type: 'angle',
+      value: 100,
+      unit: 'grad',
+    });
+  });
+
+  it.each([
+    '',
+    '0',
+    '1',
+    '1%',
+    '1px',
+    '1deg 2deg',
+  ])('rejects %j as an angle production', (input) => {
+    expect(parseAngle(input)).toBeNull();
+  });
+
+  it('consumes one angle from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('0.25turn 90deg'));
+
+    expect(tryConsumeAngle(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'angle', value: 0.25, unit: 'turn' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for a non-angle dimension', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1px'));
+
+    expect(tryConsumeAngle(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([
+    '100grad',
+    `${Math.PI}rad`,
+    '0.5turn',
+  ])('accepts the angle %j within a canonical range', (input) => {
+    const c = new ComponentCursor(parseListOfComponentValues(input));
+    const consume = createAngleConsumer({ min: 90, max: 180 });
+
+    expect(consume(c)).not.toBeNull();
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['0.2turn', '4rad'])(
+    'returns null without advancing for the out-of-range angle %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createAngleConsumer({ min: 90, max: 180 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it.each([
+    [{ type: 'angle', value: 90, unit: 'deg' }, 90],
+    [{ type: 'angle', value: 100, unit: 'grad' }, 90],
+    [{ type: 'angle', value: Math.PI, unit: 'rad' }, 180],
+    [{ type: 'angle', value: 0.5, unit: 'turn' }, 180],
+  ] as const)('resolves %j to %ddeg', (value, expected) => {
+    expect(resolveAngle(value)).toEqual({
+      type: 'angle',
+      value: expected,
+      unit: 'deg',
+    });
+  });
+
+  it.each([
+    [{ type: 'angle', value: 0, unit: 'deg' }, '0deg'],
+    [{ type: 'angle', value: -1.25, unit: 'rad' }, '-1.25rad'],
+    [{ type: 'angle', value: 0.5, unit: 'turn' }, '0.5turn'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeAngle(value)).toBe(expected);
+  });
+
+  it('serializes a canonical angle in degrees', () => {
+    expect(serializeCanonicalAngle({
+      type: 'angle',
+      value: 90,
+      unit: 'deg',
+    })).toBe('90deg');
+  });
+
+  it.each([
+    { type: 'angle', value: 90, unit: 'deg' },
+    { type: 'angle', value: -100, unit: 'grad' },
+    { type: 'angle', value: 0.5, unit: 'turn' },
+  ] as const)('round-trips the semantic angle %j', (value) => {
+    expect(parseAngle(serializeAngle(value))).toEqual(value);
+  });
+});
+
+describe('time', () => {
+  it.each(TIME_UNITS)('parses the %s time unit', (unit) => {
+    expect(parseTime(`1${unit}`)).toEqual({
+      type: 'time',
+      value: 1,
+      unit,
+    });
+  });
+
+  it('normalizes time units to ASCII lowercase', () => {
+    expect(parseTime('-250MS')).toEqual({
+      type: 'time',
+      value: -250,
+      unit: 'ms',
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseTime(' /* before */ 1.5s /* after */ ')).toEqual({
+      type: 'time',
+      value: 1.5,
+      unit: 's',
+    });
+  });
+
+  it.each(['', '0', '1', '1%', '1deg', '1s 2s'])(
+    'rejects %j as a time production',
+    (input) => {
+      expect(parseTime(input)).toBeNull();
+    },
+  );
+
+  it('consumes one time from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('250ms 1s'));
+
+    expect(tryConsumeTime(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'time', value: 250, unit: 'ms' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for a non-time dimension', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1deg'));
+
+    expect(tryConsumeTime(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each(['500ms', '2s'])(
+    'accepts the time %j within a canonical range',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createTimeConsumer({ min: 0.5, max: 2 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['499ms', '2.001s'])(
+    'returns null without advancing for the out-of-range time %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createTimeConsumer({ min: 0.5, max: 2 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it.each([
+    [{ type: 'time', value: 2, unit: 's' }, 2],
+    [{ type: 'time', value: 250, unit: 'ms' }, 0.25],
+  ] as const)('resolves %j to %ds', (value, expected) => {
+    expect(resolveTime(value)).toEqual({
+      type: 'time',
+      value: expected,
+      unit: 's',
+    });
+  });
+
+  it.each([
+    [{ type: 'time', value: 0, unit: 's' }, '0s'],
+    [{ type: 'time', value: -250, unit: 'ms' }, '-250ms'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeTime(value)).toBe(expected);
+  });
+
+  it('serializes a canonical time in seconds', () => {
+    expect(serializeCanonicalTime({
+      type: 'time',
+      value: 1.5,
+      unit: 's',
+    })).toBe('1.5s');
+  });
+
+  it.each([
+    { type: 'time', value: 1.5, unit: 's' },
+    { type: 'time', value: -250, unit: 'ms' },
+  ] as const)('round-trips the semantic time %j', (value) => {
+    expect(parseTime(serializeTime(value))).toEqual(value);
+  });
+});
+
+describe('frequency', () => {
+  it.each(FREQUENCY_UNITS)('parses the %s frequency unit', (unit) => {
+    expect(parseFrequency(`1${unit}`)).toEqual({
+      type: 'frequency',
+      value: 1,
+      unit,
+    });
+  });
+
+  it('normalizes frequency units to ASCII lowercase', () => {
+    expect(parseFrequency('6kHz')).toEqual({
+      type: 'frequency',
+      value: 6,
+      unit: 'khz',
+    });
+  });
+
+  it.each(['', '0', '1', '1%', '1s', '1hz 2hz'])(
+    'rejects %j as a frequency production',
+    (input) => {
+      expect(parseFrequency(input)).toBeNull();
+    },
+  );
+
+  it('consumes one frequency from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1khz 500hz'));
+
+    expect(tryConsumeFrequency(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'frequency', value: 1, unit: 'khz' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['1000hz', '2khz'])(
+    'accepts the frequency %j within a canonical range',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createFrequencyConsumer({ min: 1000, max: 2000 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it('returns null without advancing for an out-of-range frequency', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('0.5khz'));
+    const consume = createFrequencyConsumer({ min: 1000 });
+
+    expect(consume(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([
+    [{ type: 'frequency', value: 500, unit: 'hz' }, 500],
+    [{ type: 'frequency', value: 1.5, unit: 'khz' }, 1500],
+  ] as const)('resolves %j to %dhz', (value, expected) => {
+    expect(resolveFrequency(value)).toEqual({
+      type: 'frequency',
+      value: expected,
+      unit: 'hz',
+    });
+  });
+
+  it.each([
+    [{ type: 'frequency', value: 200, unit: 'hz' }, '200hz'],
+    [{ type: 'frequency', value: 6, unit: 'khz' }, '6khz'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeFrequency(value)).toBe(expected);
+  });
+
+  it('serializes a canonical frequency in hertz', () => {
+    expect(serializeCanonicalFrequency({
+      type: 'frequency',
+      value: 500,
+      unit: 'hz',
+    })).toBe('500hz');
+  });
+
+  it.each([
+    { type: 'frequency', value: 200, unit: 'hz' },
+    { type: 'frequency', value: 6, unit: 'khz' },
+  ] as const)('round-trips the semantic frequency %j', (value) => {
+    expect(parseFrequency(serializeFrequency(value))).toEqual(value);
+  });
+});
+
+describe('resolution', () => {
+  it.each(RESOLUTION_UNITS)('parses the %s resolution unit', (unit) => {
+    expect(parseResolution(`1${unit}`)).toEqual({
+      type: 'resolution',
+      value: 1,
+      unit,
+    });
+  });
+
+  it('normalizes resolution units to ASCII lowercase', () => {
+    expect(parseResolution('96DPI')).toEqual({
+      type: 'resolution',
+      value: 96,
+      unit: 'dpi',
+    });
+  });
+
+  it('accepts zero resolution with a unit', () => {
+    expect(parseResolution('0x')).toEqual({
+      type: 'resolution',
+      value: 0,
+      unit: 'x',
+    });
+  });
+
+  it.each(['', '0', '1', '1%', '1hz', '1dpi 2dpi'])(
+    'rejects %j as a resolution production',
+    (input) => {
+      expect(parseResolution(input)).toBeNull();
+    },
+  );
+
+  it.each(['-1dpi', '-1dpcm', '-1dppx', '-1x'])(
+    'rejects the negative resolution %j',
+    (input) => {
+      expect(parseResolution(input)).toBeNull();
+    },
+  );
+
+  it('consumes one resolution from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('2dppx 96dpi'));
+
+    expect(tryConsumeResolution(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'resolution', value: 2, unit: 'dppx' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['96dpi', '1dppx', '2x'])(
+    'accepts the resolution %j within a canonical range',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createResolutionConsumer({ min: 1, max: 2 });
+
+      expect(consume(c)).not.toBeNull();
+      expect(c.pos()).toBe(1);
+    },
+  );
+
+  it.each(['95dpi', '2.1x'])(
+    'returns null without advancing for the out-of-range resolution %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createResolutionConsumer({ min: 1, max: 2 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it.each([
+    [{ type: 'resolution', value: 96, unit: 'dpi' }, 1],
+    [{ type: 'resolution', value: 96 / 2.54, unit: 'dpcm' }, 1],
+    [{ type: 'resolution', value: 2, unit: 'dppx' }, 2],
+    [{ type: 'resolution', value: 2, unit: 'x' }, 2],
+  ] as const)('resolves %j to %ddppx', (value, expected) => {
+    expect(resolveResolution(value)).toEqual({
+      type: 'resolution',
+      value: expected,
+      unit: 'dppx',
+    });
+  });
+
+  it.each([
+    [{ type: 'resolution', value: 96, unit: 'dpi' }, '96dpi'],
+    [{ type: 'resolution', value: 2, unit: 'x' }, '2x'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeResolution(value)).toBe(expected);
+  });
+
+  it('serializes a canonical resolution in dots per CSS pixel', () => {
+    expect(serializeCanonicalResolution({
+      type: 'resolution',
+      value: 2,
+      unit: 'dppx',
+    })).toBe('2dppx');
+  });
+
+  it.each([
+    { type: 'resolution', value: 96, unit: 'dpi' },
+    { type: 'resolution', value: 37.5, unit: 'dpcm' },
+    { type: 'resolution', value: 2, unit: 'dppx' },
+    { type: 'resolution', value: 2, unit: 'x' },
+  ] as const)('round-trips the semantic resolution %j', (value) => {
+    expect(parseResolution(serializeResolution(value))).toEqual(value);
+  });
+});
 
 // Data types defined elsewhere
 
