@@ -10,6 +10,7 @@ import { BlockItemAstKind, type StyleRuleAst } from '../../../src/stylelet/parse
 import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
+import { parseDimension, serializeDimension, tryConsumeDimension } from '../../../src/stylelet/values/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
@@ -848,6 +849,84 @@ describe('zero', () => {
 
     expect(tryConsumeZero(c)).toBeNull();
     expect(c.pos()).toBe(0);
+  });
+});
+
+describe('dimension', () => {
+  it.each([
+    ['0px', 0, 'px'],
+    ['+12em', 12, 'em'],
+    ['-1.5s', -1.5, 's'],
+    ['1e2Hz', 100, 'Hz'],
+    ['2furlong', 2, 'furlong'],
+    ['1\\70 x', 1, 'px'],
+    ['1\\65 2', 1, 'e2'],
+    ['1.2--fem', 1.2, '--fem'],
+  ] as const)('parses %j as the dimension %d%s', (input, value, unit) => {
+    expect(parseDimension(input)).toEqual({
+      type: 'dimension',
+      value,
+      unit,
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseDimension(' /* before */ -1.25rem /* after */ ')).toEqual({
+      type: 'dimension',
+      value: -1.25,
+      unit: 'rem',
+    });
+  });
+
+  it.each([
+    '',
+    '1',
+    '1%',
+    'px',
+    '1 px',
+    '1px 2px',
+  ])('rejects %j as a dimension production', (input) => {
+    expect(parseDimension(input)).toBeNull();
+  });
+
+  it('consumes one dimension from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1.25em 2s'));
+
+    expect(tryConsumeDimension(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'dimension', value: 1.25, unit: 'em' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it('returns null without advancing for a non-dimension component', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1%'));
+
+    expect(tryConsumeDimension(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([
+    [{ type: 'dimension', value: 0, unit: 'px' }, '0px'],
+    [{ type: 'dimension', value: -0, unit: 'px' }, '0px'],
+    [{ type: 'dimension', value: 1.25, unit: 'em' }, '1.25em'],
+    [{ type: 'dimension', value: 100, unit: 'Hz' }, '100Hz'],
+    [{ type: 'dimension', value: 1, unit: '123' }, '1\\31 23'],
+    [{ type: 'dimension', value: 1, unit: 'e2' }, '1\\65 2'],
+    [{ type: 'dimension', value: 1, unit: 'E-2' }, '1\\45 -2'],
+    [{ type: 'dimension', value: 1.2, unit: '--fem' }, '1.2--fem'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeDimension(value)).toBe(expected);
+  });
+
+  it.each([
+    { type: 'dimension', value: 0, unit: 'px' },
+    { type: 'dimension', value: 1.25, unit: 'em' },
+    { type: 'dimension', value: -2.5, unit: 's' },
+    { type: 'dimension', value: 1, unit: 'e2' },
+    { type: 'dimension', value: 1.2, unit: '--fem' },
+  ] as const)('round-trips the semantic dimension %j', (value) => {
+    expect(parseDimension(serializeDimension(value))).toEqual(value);
   });
 });
 
