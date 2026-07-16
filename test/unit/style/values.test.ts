@@ -51,6 +51,10 @@ import {
 import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
 import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
 import {
+  interpolateRatios, isDegenerateRatio, parseRatio,
+  serializeRatio, tryConsumeRatio,
+} from '../../../src/stylelet/values/ratio';
+import {
   createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
   resolveResolution, serializeCanonicalResolution, serializeResolution,
   tryConsumeResolution,
@@ -1446,6 +1450,112 @@ describe('time-percentage', () => {
     [{ type: 'percentage', value: -10 }, '-10%'],
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeTimePercentage(value)).toBe(expected);
+  });
+});
+
+describe('ratio', () => {
+  it.each([
+    ['3 / 2', { type: 'ratio', numerator: 3, denominator: 2 }],
+    ['3/2', { type: 'ratio', numerator: 3, denominator: 2 }],
+    ['1.5 / 2.5', { type: 'ratio', numerator: 1.5, denominator: 2.5 }],
+    ['3', { type: 'ratio', numerator: 3, denominator: 1 }],
+    ['0 / 0', { type: 'ratio', numerator: 0, denominator: 0 }],
+  ] as const)('parses %j', (input, expected) => {
+    expect(parseRatio(input)).toEqual(expected);
+  });
+
+  it('accepts surrounding and component trivia', () => {
+    expect(parseRatio(' /* before */ 3 /* middle */ / 2 /* after */ ')).toEqual({
+      type: 'ratio',
+      numerator: 3,
+      denominator: 2,
+    });
+  });
+
+  it.each([
+    '',
+    '-1',
+    '1 / -2',
+    '/ 2',
+    '1 /',
+    '1 / 2 / 3',
+    '1 2',
+    '1px / 2',
+  ])('rejects %j as a ratio production', (input) => {
+    expect(parseRatio(input)).toBeNull();
+  });
+
+  it('consumes one ratio from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('3/2 4'));
+
+    expect(tryConsumeRatio(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'ratio', numerator: 3, denominator: 2 },
+    });
+    expect(c.pos()).toBe(3);
+  });
+
+  it('defaults an omitted denominator while leaving the next component', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('3 4'));
+
+    expect(tryConsumeRatio(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'ratio', numerator: 3, denominator: 1 },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each([
+    [{ type: 'ratio', numerator: 0, denominator: 1 }, true],
+    [{ type: 'ratio', numerator: 1, denominator: 0 }, true],
+    [{ type: 'ratio', numerator: Infinity, denominator: 1 }, true],
+    [{ type: 'ratio', numerator: 1, denominator: Infinity }, true],
+    [{ type: 'ratio', numerator: 16, denominator: 9 }, false],
+  ] as const)('identifies whether %j is degenerate', (value, expected) => {
+    expect(isDegenerateRatio(value)).toBe(expected);
+  });
+
+  it.each([
+    [{ type: 'ratio', numerator: 3, denominator: 2 }, '3 / 2'],
+    [{ type: 'ratio', numerator: 3, denominator: 1 }, '3 / 1'],
+    [{ type: 'ratio', numerator: 1.5, denominator: 2.25 }, '1.5 / 2.25'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeRatio(value)).toBe(expected);
+  });
+
+  it('interpolates the logarithms of the resolved ratios', () => {
+    const result = interpolateRatios(
+      { type: 'ratio', numerator: 5, denominator: 1 },
+      { type: 'ratio', numerator: 3, denominator: 2 },
+      0.5,
+    );
+
+    expect(result.type).toBe('ratio');
+    expect(result.numerator).toBeCloseTo(Math.sqrt(7.5));
+    expect(result.denominator).toBe(1);
+  });
+
+  it.each([
+    [
+      { type: 'ratio', numerator: 0, denominator: 1 },
+      { type: 'ratio', numerator: 1, denominator: 1 },
+    ],
+    [
+      { type: 'ratio', numerator: 1, denominator: 1 },
+      { type: 'ratio', numerator: 1, denominator: Infinity },
+    ],
+  ] as const)('does not interpolate a degenerate ratio', (a, b) => {
+    expect(() => interpolateRatios(a, b, 0.5)).toThrow(
+      'Degenerate ratios cannot be interpolated',
+    );
+  });
+
+  it.each([
+    { type: 'ratio', numerator: 3, denominator: 2 },
+    { type: 'ratio', numerator: 1.5, denominator: 1 },
+    { type: 'ratio', numerator: 0, denominator: 4 },
+  ] as const)('round-trips the semantic ratio %j', (value) => {
+    expect(parseRatio(serializeRatio(value))).toEqual(value);
   });
 });
 
