@@ -18,6 +18,12 @@ import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/va
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
+import {
+  createLengthConsumer, LENGTH_UNITS,
+  parseLength, serializeCanonicalLength, serializeLength,
+  snapLengthAsLineWidth, tryConsumeLength, tryResolveLength,
+  type LengthResolutionContext,
+} from '../../../src/stylelet/values/length';
 import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
 import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
@@ -1065,6 +1071,282 @@ describe('percentage', () => {
 });
 
 // Distance units
+
+describe('length', () => {
+  const resolve = (
+    input: string,
+    context: LengthResolutionContext = {},
+  ) => {
+    const value = parseLength(input);
+
+    if (value === null) {
+      throw new Error(`Invalid length test input: ${input}`);
+    }
+
+    return tryResolveLength(value, context);
+  };
+
+  it.each(LENGTH_UNITS)('parses the %s length unit', (unit) => {
+    expect(parseLength(`1${unit}`)).toEqual({
+      type: 'length',
+      value: 1,
+      unit,
+    });
+  });
+
+  it.each([
+    ['+1.25PX', 1.25, 'px'],
+    ['-2Q', -2, 'q'],
+    ['1\\72 cap', 1, 'rcap'],
+    ['1CQMAX', 1, 'cqmax'],
+  ] as const)('normalizes the unit in %j to %j', (input, value, unit) => {
+    expect(parseLength(input)).toEqual({
+      type: 'length',
+      value,
+      unit,
+    });
+  });
+
+  it.each([
+    '0',
+    '+0',
+    '-0',
+    '0.0',
+    '.0',
+    '0e0',
+  ])('parses unitless zero %j as a length', (input) => {
+    expect(parseLength(input)).toEqual({
+      type: 'length',
+      value: 0,
+      unit: '',
+    });
+  });
+
+  it('accepts surrounding trivia', () => {
+    expect(parseLength(' /* before */ -1.25rem /* after */ ')).toEqual({
+      type: 'length',
+      value: -1.25,
+      unit: 'rem',
+    });
+  });
+
+  it.each([
+    '',
+    '1',
+    '1%',
+    '1s',
+    '1fr',
+    '1furlong',
+    '1 px',
+    '1px 2px',
+  ])('rejects %j as a length production', (input) => {
+    expect(parseLength(input)).toBeNull();
+  });
+
+  it('consumes one length from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1.25em 2px'));
+
+    expect(tryConsumeLength(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'length', value: 1.25, unit: 'em' },
+    });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each(['1s', '1', '1%'])(
+    'returns null without advancing for %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+
+      expect(tryConsumeLength(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it.each([
+    ['0', 0, ''],
+    ['1em', 1, 'em'],
+    ['1vw', 1, 'vw'],
+  ] as const)(
+    'accepts the nonnegative length %j without resolving it',
+    (input, value, unit) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createLengthConsumer({ min: 0 });
+
+      expect(consume(c)).toEqual({
+        kind: 'ok',
+        value: { type: 'length', value, unit },
+      });
+    },
+  );
+
+  it.each(['-1px', '-1em', '-1vw'])(
+    'returns null without advancing for the negative length %j',
+    (input) => {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const consume = createLengthConsumer({ min: 0 });
+
+      expect(consume(c)).toBeNull();
+      expect(c.pos()).toBe(0);
+    },
+  );
+
+  it('rejects finite nonzero range bounds until they can be deferred', () => {
+    expect(() => createLengthConsumer({ min: 96, max: 192 })).toThrow(
+      'Length ranges with finite nonzero bounds are not yet supported',
+    );
+  });
+
+  it.each([
+    [{ type: 'length', value: 0, unit: '' }, '0'],
+    [{ type: 'length', value: 0, unit: 'px' }, '0px'],
+    [{ type: 'length', value: -0, unit: 'em' }, '0em'],
+    [{ type: 'length', value: 1.25, unit: 'rem' }, '1.25rem'],
+    [{ type: 'length', value: -2, unit: 'q' }, '-2q'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeLength(value)).toBe(expected);
+  });
+
+  it.each([
+    [{ type: 'length', value: 0, unit: '' }, 0],
+    [{ type: 'length', value: 1, unit: 'px' }, 1],
+    [{ type: 'length', value: 1, unit: 'in' }, 96],
+    [{ type: 'length', value: 2.54, unit: 'cm' }, 96],
+    [{ type: 'length', value: 25.4, unit: 'mm' }, 96],
+    [{ type: 'length', value: 101.6, unit: 'q' }, 96],
+    [{ type: 'length', value: 72, unit: 'pt' }, 96],
+    [{ type: 'length', value: 6, unit: 'pc' }, 96],
+  ] as const)('resolves the absolute length %j to %dpx', (value, expected) => {
+    expect(tryResolveLength(value)).toEqual({
+      type: 'length',
+      value: expected,
+      unit: 'px',
+    });
+  });
+
+  it('resolves font-relative lengths from their effective reference lengths', () => {
+    const context = {
+      em: 10,
+      rem: 11,
+      ex: 12,
+      rex: 13,
+      cap: 14,
+      rcap: 15,
+      ch: 16,
+      rch: 17,
+      ic: 18,
+      ric: 19,
+      lh: 20,
+      rlh: 21,
+    } satisfies LengthResolutionContext;
+
+    for (const [unit, pixelsPerUnit] of Object.entries(context)) {
+      expect(resolve(`2${unit}`, context)).toEqual({
+        type: 'length',
+        value: 2 * pixelsPerUnit,
+        unit: 'px',
+      });
+    }
+  });
+
+  it('resolves physical and logical viewport-relative lengths', () => {
+    const context = {
+      smallViewportWidth: 300,
+      smallViewportHeight: 600,
+      largeViewportWidth: 400,
+      largeViewportHeight: 800,
+      dynamicViewportWidth: 350,
+      dynamicViewportHeight: 700,
+      viewportInlineAxis: 'vertical',
+    } satisfies LengthResolutionContext;
+    const expected = {
+      '2vw': 8,
+      '2lvh': 16,
+      '2svmin': 6,
+      '2svmax': 12,
+      '2dvi': 14,
+      '2dvb': 7,
+    };
+
+    for (const [input, value] of Object.entries(expected)) {
+      expect(resolve(input, context)).toEqual({
+        type: 'length',
+        value,
+        unit: 'px',
+      });
+    }
+  });
+
+  it('resolves physical and logical container-relative lengths', () => {
+    const context = {
+      containerWidth: 500,
+      containerHeight: 200,
+      containerInlineSize: 300,
+      containerBlockSize: 700,
+    } satisfies LengthResolutionContext;
+    const expected = {
+      '2cqw': 10,
+      '2cqh': 4,
+      '2cqi': 6,
+      '2cqb': 14,
+      '2cqmin': 6,
+      '2cqmax': 14,
+    };
+
+    for (const [input, value] of Object.entries(expected)) {
+      expect(resolve(input, context)).toEqual({
+        type: 'length',
+        value,
+        unit: 'px',
+      });
+    }
+  });
+
+  it('returns null when contextual resolution data is missing', () => {
+    expect(resolve('1em')).toBeNull();
+    expect(resolve('1vi', {
+      largeViewportWidth: 400,
+      largeViewportHeight: 800,
+    })).toBeNull();
+    expect(resolve('1cqw')).toBeNull();
+  });
+
+  it('serializes a canonical length in pixels', () => {
+    expect(serializeCanonicalLength({
+      type: 'length',
+      value: 12.5,
+      unit: 'px',
+    })).toBe('12.5px');
+  });
+
+  it.each([
+    [0, 0],
+    [0.5, 0.5],
+    [0.25, 0.5],
+    [-0.25, -0.5],
+    [0.75, 0.5],
+    [-0.75, -0.5],
+    [1.25, 1],
+  ])('snaps %dpx as a line width to %dpx', (input, expected) => {
+    expect(snapLengthAsLineWidth(
+      { type: 'length', value: input, unit: 'px' },
+      2,
+    )).toEqual({
+      type: 'length',
+      value: expected,
+      unit: 'px',
+    });
+  });
+
+  it.each([
+    { type: 'length', value: 0, unit: '' },
+    { type: 'length', value: 0, unit: 'px' },
+    { type: 'length', value: 1.25, unit: 'em' },
+    { type: 'length', value: -2.5, unit: 'cqmax' },
+  ] as const)('round-trips the semantic length %j', (value) => {
+    expect(parseLength(serializeLength(value))).toEqual(value);
+  });
+});
 
 // Other quantities
 

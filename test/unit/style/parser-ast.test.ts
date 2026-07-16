@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ColorName, ColorSourceKind } from '../../../src/stylelet/values/color';
 import { parseStylesheet } from '../../../src/stylelet/parser/ast';
 import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../../src/stylelet/parser/types';
-import { LengthUnit } from '../../../src/stylelet/values/length';
+import type { LengthUnit } from '../../../src/stylelet/values/length';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 
 const cls = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });
@@ -39,12 +39,12 @@ const namedColorDecl = (prop: PropertyId.Color | PropertyId.BackgroundColor, nam
 });
 
 const length = (value: number, unit: LengthUnit) => ({ type: 'length', value, unit });
-const px = (value: number) => length(value, LengthUnit.Px);
-const em = (value: number) => length(value, LengthUnit.Em);
-const rem = (value: number) => length(value, LengthUnit.Rem);
-const vw = (value: number) => length(value, LengthUnit.Vw);
-const vh = (value: number) => length(value, LengthUnit.Vh);
-const zero = () => length(0, LengthUnit.None);
+const px = (value: number) => length(value, 'px');
+const em = (value: number) => length(value, 'em');
+const rem = (value: number) => length(value, 'rem');
+const vw = (value: number) => length(value, 'vw');
+const vh = (value: number) => length(value, 'vh');
+const zero = () => ({ type: 'length', value: 0, unit: '' });
 const auto = () => ({ type: 'auto' });
 const percent = (value: number) => ({ type: 'percentage', value });
 

@@ -1700,3 +1700,221 @@ runScenarios('CSS escaped dimension unit serialization oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSS calc dimension unit oracle', 'normal', [
+  {
+    name: 'native calc simplification normalizes recognized unit case',
+    // Playwright's default browser context has a 1280 x 720 viewport.
+    // The viewport-relative computed-value expectations below rely on it.
+    engines: ['native'],
+    markup: `
+      <style id="calc-dimension-units">
+        #calc-dimension-target {
+          width: calc(1PX + 2px);
+          margin-left: calc(1IN + 96px);
+          margin-right: 1vw;
+          margin-top: 1vh;
+          padding-left: calc(1EM + 2px);
+          padding-right: calc(1VW + 1vh);
+          font-size: 10px;
+          rotate: calc(1TURN + 90deg);
+          transition-duration: calc(1S + 500ms);
+          height: calc(1foo + 2FOO);
+          --same-arbitrary: calc(1foo + 2foo);
+          --mixed-arbitrary: calc(1foo + 2FOO);
+        }
+      </style>
+      <div id="calc-dimension-target"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const styleElement = document.getElementById('calc-dimension-units') as HTMLStyleElement;
+        const rule = styleElement.sheet!.cssRules[0] as CSSStyleRule;
+
+        const parseNumericValue = (css: string): string => {
+          if (typeof CSSNumericValue === 'undefined') return 'unsupported';
+
+          try {
+            return CSSNumericValue.parse(css).toString();
+          } catch (error) {
+            return error instanceof DOMException ? error.name : 'Error';
+          }
+        };
+
+        rule.style.setProperty('--typed-known', parseNumericValue('calc(1PX + 2px)'));
+        rule.style.setProperty('--typed-same-arbitrary', parseNumericValue('calc(1foo + 2foo)'));
+        rule.style.setProperty('--typed-mixed-arbitrary', parseNumericValue('calc(1foo + 2FOO)'));
+      });
+    },
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'width' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'width', value: 'calc(3px)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'rotate' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'rotate', value: 'calc(450deg)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'margin-left' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'margin-left', value: 'calc(192px)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'padding-left' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'padding-left', value: 'calc(1em + 2px)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'padding-right' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'padding-right', value: 'calc(1vh + 1vw)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'transition-duration' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: { name: 'transition-duration', value: 'calc(1.5s)', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'height' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--same-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: {
+          cssom: {
+            name: '--same-arbitrary',
+            value: 'calc(1foo + 2foo)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--mixed-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        expect: {
+          cssom: {
+            name: '--mixed-arbitrary',
+            value: 'calc(1foo + 2FOO)',
+            important: false,
+          },
+        },
+      },
+      {
+        computedStyle: 'width',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '3px' },
+      },
+      {
+        computedStyle: 'rotate',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '450deg' },
+      },
+      {
+        computedStyle: 'margin-left',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '192px' },
+      },
+      {
+        computedStyle: 'margin-right',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '12.8px' },
+      },
+      {
+        computedStyle: 'margin-top',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        browsers: ['chromium', 'firefox'],
+        expect: { value: '7.2px' },
+      },
+      {
+        computedStyle: 'margin-top',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        browsers: ['webkit'],
+        expect: { value: '7.1875px' },
+      },
+      {
+        computedStyle: 'padding-left',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '12px' },
+      },
+      {
+        computedStyle: 'padding-right',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '20px' },
+      },
+      {
+        computedStyle: 'transition-duration',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: '1.5s' },
+      },
+      {
+        computedStyle: '--same-arbitrary',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: 'calc(1foo + 2foo)' },
+      },
+      {
+        computedStyle: '--mixed-arbitrary',
+        ref: { by: 'id', id: 'calc-dimension-target' },
+        expect: { value: 'calc(1foo + 2FOO)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-known' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['chromium'],
+        expect: { cssom: { value: 'calc(3px)' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-known' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['firefox'],
+        expect: { cssom: { value: 'unsupported' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-known' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['webkit'],
+        expect: { cssom: { value: '3px' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-same-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['chromium'],
+        expect: { cssom: { value: 'SyntaxError' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-same-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['firefox'],
+        expect: { cssom: { value: 'unsupported' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-same-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['webkit'],
+        expect: { cssom: { value: 'SyntaxError' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-mixed-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['chromium'],
+        expect: { cssom: { value: 'SyntaxError' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-mixed-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['firefox'],
+        expect: { cssom: { value: 'unsupported' } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--typed-mixed-arbitrary' },
+        ref: { by: 'id', id: 'calc-dimension-units' },
+        browsers: ['webkit'],
+        expect: { cssom: { value: 'SyntaxError' } },
+      },
+    ],
+  },
+]);
