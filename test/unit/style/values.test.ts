@@ -13,22 +13,12 @@ import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
+import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 
-describe('An+B', () => {
-  it.each([
-    [{ a: 0, b: 3 }, '3'],
-    [{ a: 1, b: 0 }, 'n'],
-    [{ a: -1, b: 3 }, '-n+3'],
-    [{ a: 2, b: -1 }, '2n-1'],
-    [{ a: -2, b: 0 }, '-2n'],
-    [{ a: 0, b: -0 }, '0'],
-  ] as const)('serializes %j as %s', (value, expected) => {
-    expect(serializeAnPlusB(value)).toBe(expected);
-  });
-});
+// Free-form productions
 
 describe('any-value', () => {
   it('parses a nonempty sequence of arbitrary component values', () => {
@@ -96,6 +86,8 @@ describe('declaration-value', () => {
     expect(parseDeclarationValue('[)]')).toBeNull();
   });
 });
+
+// Textual data types
 
 describe('ident', () => {
   it('parses an ident token into its semantic value', () => {
@@ -169,6 +161,86 @@ describe('ident', () => {
       type: 'ident',
       value,
     });
+  });
+});
+
+describe('custom-ident', () => {
+  it('parses an author-defined identifier case-sensitively', () => {
+    expect(parseCustomIdent('MyName')).toEqual({
+      type: 'custom-ident',
+      value: 'MyName',
+    });
+    expect(parseCustomIdent(String.raw`my\ name`)).toEqual({
+      type: 'custom-ident',
+      value: 'my name',
+    });
+  });
+
+  it.each([
+    'inherit',
+    'INITIAL',
+    'UnSeT',
+    'revert',
+    'REVERT-LAYER',
+    'default',
+    'DeFaUlT',
+    String.raw`\64 efault`,
+  ])('rejects the globally reserved keyword %j', (input) => {
+    expect(parseCustomIdent(input)).toBeNull();
+  });
+
+  it('rejects caller-supplied keywords ASCII case-insensitively', () => {
+    expect(parseCustomIdent('none', ['none'])).toBeNull();
+    expect(parseCustomIdent('NoNe', ['none'])).toBeNull();
+    expect(parseCustomIdent(String.raw`\6e one`, ['none'])).toBeNull();
+  });
+
+  it('does not exclude property-specific keywords unless requested', () => {
+    expect(parseCustomIdent('none')).toEqual({
+      type: 'custom-ident',
+      value: 'none',
+    });
+  });
+
+  it('serializes through the generic identifier algorithm', () => {
+    expect(serializeCustomIdent({ type: 'custom-ident', value: 'foo bar' }))
+      .toBe(String.raw`foo\ bar`);
+  });
+});
+
+describe('dashed-ident', () => {
+  it.each([
+    ['--name', '--name'],
+    ['--', '--'],
+    [String.raw`\2d -escaped`, '--escaped'],
+  ])('parses %j as the semantic value %j', (input, value) => {
+    expect(parseDashedIdent(input)).toEqual({
+      type: 'dashed-ident',
+      value,
+    });
+  });
+
+  it.each([
+    '',
+    'name',
+    '-name',
+    'default',
+    'inherit',
+    '"--name"',
+  ])('rejects %j', (input) => {
+    expect(parseDashedIdent(input)).toBeNull();
+  });
+
+  it('serializes through the generic identifier algorithm', () => {
+    expect(serializeDashedIdent({
+      type: 'dashed-ident',
+      value: '--foo bar',
+    })).toBe(String.raw`--foo\ bar`);
+  });
+
+  it('round-trips a semantic dashed identifier', () => {
+    const value = { type: 'dashed-ident', value: '--foo bar' } as const;
+    expect(parseDashedIdent(serializeDashedIdent(value))).toEqual(value);
   });
 });
 
@@ -554,85 +626,123 @@ describe('url', () => {
   });
 });
 
-describe('custom-ident', () => {
-  it('parses an author-defined identifier case-sensitively', () => {
-    expect(parseCustomIdent('MyName')).toEqual({
-      type: 'custom-ident',
-      value: 'MyName',
-    });
-    expect(parseCustomIdent(String.raw`my\ name`)).toEqual({
-      type: 'custom-ident',
-      value: 'my name',
-    });
-  });
+// Numeric data types
 
+describe('integer', () => {
   it.each([
-    'inherit',
-    'INITIAL',
-    'UnSeT',
-    'revert',
-    'REVERT-LAYER',
-    'default',
-    'DeFaUlT',
-    String.raw`\64 efault`,
-  ])('rejects the globally reserved keyword %j', (input) => {
-    expect(parseCustomIdent(input)).toBeNull();
-  });
-
-  it('rejects caller-supplied keywords ASCII case-insensitively', () => {
-    expect(parseCustomIdent('none', ['none'])).toBeNull();
-    expect(parseCustomIdent('NoNe', ['none'])).toBeNull();
-    expect(parseCustomIdent(String.raw`\6e one`, ['none'])).toBeNull();
-  });
-
-  it('does not exclude property-specific keywords unless requested', () => {
-    expect(parseCustomIdent('none')).toEqual({
-      type: 'custom-ident',
-      value: 'none',
+    ['0', 0],
+    ['12', 12],
+    ['+12', 12],
+    ['-12', -12],
+    ['0012', 12],
+  ] as const)('parses %j as the integer %d', (input, expected) => {
+    expect(parseInteger(input)).toEqual({
+      type: 'integer',
+      value: expected,
     });
   });
 
-  it('serializes through the generic identifier algorithm', () => {
-    expect(serializeCustomIdent({ type: 'custom-ident', value: 'foo bar' }))
-      .toBe(String.raw`foo\ bar`);
-  });
-});
-
-describe('dashed-ident', () => {
-  it.each([
-    ['--name', '--name'],
-    ['--', '--'],
-    [String.raw`\2d -escaped`, '--escaped'],
-  ])('parses %j as the semantic value %j', (input, value) => {
-    expect(parseDashedIdent(input)).toEqual({
-      type: 'dashed-ident',
-      value,
+  it('accepts surrounding trivia', () => {
+    expect(parseInteger(' /* before */ -12 /* after */ ')).toEqual({
+      type: 'integer',
+      value: -12,
     });
   });
 
   it.each([
     '',
-    'name',
-    '-name',
-    'default',
-    'inherit',
-    '"--name"',
-  ])('rejects %j', (input) => {
-    expect(parseDashedIdent(input)).toBeNull();
+    '1.0',
+    '1e0',
+    '.0',
+    '1%',
+    '1px',
+    '1 2',
+    'integer',
+  ])('rejects %j as an integer production', (input) => {
+    expect(parseInteger(input)).toBeNull();
   });
 
-  it('serializes through the generic identifier algorithm', () => {
-    expect(serializeDashedIdent({
-      type: 'dashed-ident',
-      value: '--foo bar',
-    })).toBe(String.raw`--foo\ bar`);
+  it('consumes one integer from the current cursor position', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('12 13'));
+
+    expect(tryConsumeInteger(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'integer', value: 12 },
+    });
+    expect(c.pos()).toBe(1);
   });
 
-  it('round-trips a semantic dashed identifier', () => {
-    const value = { type: 'dashed-ident', value: '--foo bar' } as const;
-    expect(parseDashedIdent(serializeDashedIdent(value))).toEqual(value);
+  it('returns null without advancing for a non-integer number token', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('1.0'));
+
+    expect(tryConsumeInteger(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([-2, 0, 3])('includes the range boundary %d', (value) => {
+    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const consume = createIntegerConsumer({ min: -2, max: 3 });
+
+    expect(consume(c)).toEqual({
+      kind: 'ok',
+      value: { type: 'integer', value },
+    });
+  });
+
+  it.each([-3, 4])('returns null without advancing for out-of-range integer %d', (value) => {
+    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const consume = createIntegerConsumer({ min: -2, max: 3 });
+
+    expect(consume(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+
+  it.each([
+    [{ type: 'integer', value: 0 }, '0'],
+    [{ type: 'integer', value: -0 }, '0'],
+    [{ type: 'integer', value: 12 }, '12'],
+    [{ type: 'integer', value: -12 }, '-12'],
+    [{ type: 'integer', value: 1000000000000000128 }, '1000000000000000128'],
+    [{ type: 'integer', value: 1e21 }, '1000000000000000000000'],
+    [{ type: 'integer', value: -1e21 }, '-1000000000000000000000'],
+  ] as const)('serializes %j as %j', (value, expected) => {
+    expect(serializeInteger(value)).toBe(expected);
+  });
+
+  it.each([0, 12, -12, 1_000_000])('round-trips the semantic integer %d', (value) => {
+    expect(parseInteger(serializeInteger({ type: 'integer', value }))).toEqual({
+      type: 'integer',
+      value,
+    });
   });
 });
+
+// Distance units
+
+// Other quantities
+
+// Data types defined elsewhere
+
+// Functional notations
+
+// Mathematical expressions
+
+// Selector microsyntaxes
+
+describe('An+B', () => {
+  it.each([
+    [{ a: 0, b: 3 }, '3'],
+    [{ a: 1, b: 0 }, 'n'],
+    [{ a: -1, b: 3 }, '-n+3'],
+    [{ a: 2, b: -1 }, '2n-1'],
+    [{ a: -2, b: 0 }, '-2n'],
+    [{ a: 0, b: -0 }, '0'],
+  ] as const)('serializes %j as %s', (value, expected) => {
+    expect(serializeAnPlusB(value)).toBe(expected);
+  });
+});
+
+// Property values
 
 // This is unfinished!! we'll come back to it later. promise.
 describe.skip('animation-name', () => {
