@@ -67,3 +67,25 @@ export const tryConsumePercentage = createPercentageConsumer();
 export function serializePercentage(value: PercentageValue): string {
   return `${serializeCssNumber(value.value)}%`;
 }
+
+// CSS Values, "Computation and Combination of <percentage>".
+export function addPercentages(
+  a: PercentageValue,
+  b: PercentageValue,
+): PercentageValue {
+  return {
+    type: 'percentage',
+    value: a.value + b.value,
+  };
+}
+
+export function interpolatePercentages(
+  a: PercentageValue,
+  b: PercentageValue,
+  p: number,
+): PercentageValue {
+  return {
+    type: 'percentage',
+    value: (1 - p) * a.value + p * b.value,
+  };
+}

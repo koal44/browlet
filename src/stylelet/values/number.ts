@@ -79,3 +79,22 @@ export function serializeCssNumber(value: number): string {
 
   return Object.is(rounded, -0) ? '0' : String(rounded);
 }
+
+// CSS Values, "Computation and Combination of <number>".
+export function addNumbers(a: NumberValue, b: NumberValue): NumberValue {
+  return {
+    type: 'number',
+    value: a.value + b.value,
+  };
+}
+
+export function interpolateNumbers(
+  a: NumberValue,
+  b: NumberValue,
+  p: number,
+): NumberValue {
+  return {
+    type: 'number',
+    value: (1 - p) * a.value + p * b.value,
+  };
+}

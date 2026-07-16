@@ -1918,3 +1918,117 @@ runScenarios('CSS calc dimension unit oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
+  {
+    name: 'distinguishes literal zero and simplifies mixed zero components',
+    engines: ['native'],
+    markup: '<div id="zero-mix-oracle"></div>',
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const target = document.getElementById('zero-mix-oracle') as HTMLElement;
+        const results: Record<string, unknown> = {
+          supports: {
+            widthZero: CSS.supports('width', '0'),
+            widthCalcZero: CSS.supports('width', 'calc(0)'),
+            widthCalcLengthPlusZero: CSS.supports('width', 'calc(10px + 0)'),
+            timeZero: CSS.supports('transition-duration', '0'),
+            timeZeroSeconds: CSS.supports('transition-duration', '0s'),
+            rotateZero: CSS.supports('rotate', '0'),
+            rotateZeroDegrees: CSS.supports('rotate', '0deg'),
+            rotateCalcAnglePlusZero: CSS.supports('rotate', 'calc(10deg + 0)'),
+          },
+        };
+
+        if (typeof CSS.registerProperty !== 'function') {
+          results.registeredLengthPercentage = 'unsupported';
+          target.style.setProperty('--oracle', JSON.stringify(results));
+          return;
+        }
+
+        CSS.registerProperty({
+          name: '--oracle-length-percentage',
+          syntax: '<length-percentage>',
+          inherits: false,
+          initialValue: '0px',
+        });
+
+        const computedValue = (value: string): string => {
+          const element = document.createElement('div');
+          element.style.setProperty('--oracle-length-percentage', value);
+          document.body.append(element);
+          const computed = getComputedStyle(element)
+            .getPropertyValue('--oracle-length-percentage');
+          element.remove();
+          return computed;
+        };
+
+        const interpolatedValue = (progress: number): string => {
+          const element = document.createElement('div');
+          document.body.append(element);
+          const animation = element.animate(
+            [
+              { '--oracle-length-percentage': '10px' },
+              { '--oracle-length-percentage': '20%' },
+            ],
+            { duration: 1000, fill: 'both' },
+          );
+          animation.pause();
+          animation.currentTime = progress * 1000;
+          const computed = getComputedStyle(element)
+            .getPropertyValue('--oracle-length-percentage');
+          animation.cancel();
+          element.remove();
+          return computed;
+        };
+
+        results.computed = {
+          lengthPlusZeroPercentage: computedValue('calc(10px + 0%)'),
+          zeroLengthPlusPercentage: computedValue('calc(0px + 20%)'),
+          zeroEmPlusPercentage: computedValue('calc(0em + 20%)'),
+          mixedNonzero: computedValue('calc(10px + 20%)'),
+          lengthPlusZeroEm: computedValue('calc(10px + 0em)'),
+        };
+        results.interpolated = {
+          start: interpolatedValue(0),
+          midpoint: interpolatedValue(0.5),
+          end: interpolatedValue(1),
+        };
+
+        target.style.setProperty('--oracle', JSON.stringify(results));
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'zero-mix-oracle' },
+        expect: {
+          value: JSON.stringify({
+            supports: {
+              widthZero: true,
+              widthCalcZero: false,
+              widthCalcLengthPlusZero: false,
+              timeZero: false,
+              timeZeroSeconds: true,
+              rotateZero: false,
+              rotateZeroDegrees: true,
+              rotateCalcAnglePlusZero: false,
+            },
+            computed: {
+              lengthPlusZeroPercentage: 'calc(0% + 10px)',
+              zeroLengthPlusPercentage: '20%',
+              zeroEmPlusPercentage: '20%',
+              mixedNonzero: 'calc(20% + 10px)',
+              lengthPlusZeroEm: '10px',
+            },
+            interpolated: {
+              start: 'calc(0% + 10px)',
+              midpoint: 'calc(10% + 5px)',
+              end: '20%',
+            },
+          }),
+        },
+      },
+    ],
+  },
+]);

@@ -27,7 +27,10 @@ import {
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
-import { createIntegerConsumer, parseInteger, serializeInteger, tryConsumeInteger } from '../../../src/stylelet/values/integer';
+import {
+  addIntegers, createIntegerConsumer, interpolateIntegers,
+  parseInteger, serializeInteger, tryConsumeInteger,
+} from '../../../src/stylelet/values/integer';
 import {
   createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
   serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
@@ -48,8 +51,14 @@ import {
   serializeLengthPercentage, tryConsumeLengthPercentage,
   tryResolveLengthPercentage,
 } from '../../../src/stylelet/values/length-percentage';
-import { createNumberConsumer, parseNumber, serializeNumber, tryConsumeNumber } from '../../../src/stylelet/values/number';
-import { createPercentageConsumer, parsePercentage, serializePercentage, tryConsumePercentage } from '../../../src/stylelet/values/percentage';
+import {
+  addNumbers, createNumberConsumer, interpolateNumbers,
+  parseNumber, serializeNumber, tryConsumeNumber,
+} from '../../../src/stylelet/values/number';
+import {
+  addPercentages, createPercentageConsumer, interpolatePercentages,
+  parsePercentage, serializePercentage, tryConsumePercentage,
+} from '../../../src/stylelet/values/percentage';
 import {
   interpolateRatios, isDegenerateRatio, parseRatio,
   serializeRatio, tryConsumeRatio,
@@ -760,6 +769,40 @@ describe('integer', () => {
     expect(c.pos()).toBe(0);
   });
 
+  it('adds integers', () => {
+    expect(addIntegers(
+      { type: 'integer', value: -2 },
+      { type: 'integer', value: 5 },
+    )).toEqual({ type: 'integer', value: 3 });
+  });
+
+  it.each([
+    [-1, 2, 0, -1],
+    [-1, 2, 0.5, 1],
+    [-2, -1, 0.5, -1],
+    [10, 20, 2, 30],
+  ])(
+    'interpolates %d and %d at p = %d to %d',
+    (a, b, p, expected) => {
+      expect(interpolateIntegers(
+        { type: 'integer', value: a },
+        { type: 'integer', value: b },
+        p,
+      )).toEqual({ type: 'integer', value: expected });
+    },
+  );
+
+  it('normalizes negative zero after interpolation', () => {
+    const result = interpolateIntegers(
+      { type: 'integer', value: -1 },
+      { type: 'integer', value: 0 },
+      0.5,
+    );
+
+    expect(result.value).toBe(0);
+    expect(Object.is(result.value, -0)).toBe(false);
+  });
+
   it.each([
     [{ type: 'integer', value: 0 }, '0'],
     [{ type: 'integer', value: -0 }, '0'],
@@ -843,6 +886,26 @@ describe('number', () => {
     expect(c.pos()).toBe(0);
   });
 
+  it('adds numbers', () => {
+    expect(addNumbers(
+      { type: 'number', value: -1.5 },
+      { type: 'number', value: 2.25 },
+    )).toEqual({ type: 'number', value: 0.75 });
+  });
+
+  it.each([
+    [0, 10],
+    [0.25, 15],
+    [1, 30],
+    [2, 50],
+  ])('interpolates numbers at p = %d', (p, expected) => {
+    expect(interpolateNumbers(
+      { type: 'number', value: 10 },
+      { type: 'number', value: 30 },
+      p,
+    )).toEqual({ type: 'number', value: expected });
+  });
+
   it.each([
     [0, '0'],
     [-0, '0'],
@@ -909,6 +972,16 @@ describe('zero', () => {
 
     expect(tryConsumeZero(c)).toBeNull();
     expect(c.pos()).toBe(0);
+  });
+
+  it('participates in number operations without a zero-specific operation', () => {
+    const zero = parseZero('0');
+
+    expect(zero).not.toBeNull();
+    expect(addNumbers(
+      zero!,
+      { type: 'number', value: 2.5 },
+    )).toEqual({ type: 'number', value: 2.5 });
   });
 });
 
@@ -1095,6 +1168,26 @@ describe('percentage', () => {
       expect(c.pos()).toBe(0);
     },
   );
+
+  it('adds percentages', () => {
+    expect(addPercentages(
+      { type: 'percentage', value: 25 },
+      { type: 'percentage', value: -10 },
+    )).toEqual({ type: 'percentage', value: 15 });
+  });
+
+  it.each([
+    [0, 10],
+    [0.25, 15],
+    [1, 30],
+    [2, 50],
+  ])('interpolates percentages at p = %d', (p, expected) => {
+    expect(interpolatePercentages(
+      { type: 'percentage', value: 10 },
+      { type: 'percentage', value: 30 },
+      p,
+    )).toEqual({ type: 'percentage', value: expected });
+  });
 
   it.each([
     [0, '0%'],

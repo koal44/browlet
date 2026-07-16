@@ -71,3 +71,23 @@ export function serializeInteger(value: IntegerValue): string {
 
   return BigInt(value.value).toString();
 }
+
+// CSS Values, "Computation and Combination of <integer>".
+export function addIntegers(a: IntegerValue, b: IntegerValue): IntegerValue {
+  return integerResult(a.value + b.value);
+}
+
+export function interpolateIntegers(
+  a: IntegerValue,
+  b: IntegerValue,
+  p: number,
+): IntegerValue {
+  return integerResult(Math.round((1 - p) * a.value + p * b.value));
+}
+
+function integerResult(value: number): IntegerValue {
+  return {
+    type: 'integer',
+    value: value === 0 ? 0 : value,
+  };
+}
