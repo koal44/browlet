@@ -1,10 +1,12 @@
 import { asciiLower } from '../../shared/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
-  createDelimConsumer, createFunctionalNotationConsumer,
+  createDelimConsumer, createFunctionalNotationConsumer, createIdentValueConsumer,
   tryConsumeIdentToken,
 } from '../parser/component-consumers';
-import { one, oneOf, repeat, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
+import {
+  commaRepeat, one, oneOf, opt, repeat, sequenceOf, withComponentTrivia,
+} from '../parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
@@ -28,20 +30,44 @@ import { TIME_UNITS, resolveTime } from './time';
 
 const CALC_TERM_LIMIT = 32;
 
+export type ExpectedCalculationType =
+  | 'number'
+  | 'integer'
+  | 'percentage'
+  | 'length'
+  | 'angle'
+  | 'time'
+  | 'frequency'
+  | 'resolution'
+  | 'flex'
+  | 'length-percentage'
+  | 'angle-percentage'
+  | 'time-percentage'
+  | 'frequency-percentage';
+
 export type CalculationContext = CalculationSimplificationContext & {
   /** Whether the current grammar is nested inside another calculation. */
   insideCalculation?: boolean;
 
   /** Number of calculation terms consumed by the current calculation. */
   termCount?: number;
+
+  /** Numeric production the outermost calculation must match. */
+  expectedType?: ExpectedCalculationType;
 };
 
 export type CalculationSimplificationContext = {
   /** Context used to reduce lengths to the canonical px unit. */
   length?: LengthResolutionContext;
 
-  /** Reserved for context-dependent percentage typing and resolution. */
-  percentage?: never;
+  /**
+   * Dimensional type against which percentages resolve. Percentages retain
+   * their percentage type when this is omitted.
+   */
+  percentageType?: DimensionalBaseType;
+
+  /** Numeric value against which percentages can be resolved. */
+  percentageReferenceValue?: NumberValue | DimensionValue;
 
   /**
    * ASCII-lowercase numeric variable names and their values and types.
@@ -65,6 +91,88 @@ export type CalcValue = {
   dimensionalType: DimensionalType;
 };
 
+export const ROUNDING_STRATEGIES = [
+  'nearest',
+  'up',
+  'down',
+  'to-zero',
+  'line-width',
+] as const;
+
+export type RoundingStrategy =
+  (typeof ROUNDING_STRATEGIES)[number];
+
+type VariadicMathFunctionName = 'min' | 'max' | 'hypot';
+type BinaryMathFunctionName = 'mod' | 'rem' | 'atan2' | 'pow';
+type UnaryMathFunctionName =
+  | 'sin'
+  | 'cos'
+  | 'tan'
+  | 'asin'
+  | 'acos'
+  | 'atan'
+  | 'sqrt'
+  | 'exp'
+  | 'abs'
+  | 'sign';
+
+export type CalcVariadicFunctionNode<
+  Name extends VariadicMathFunctionName = VariadicMathFunctionName,
+> = {
+  type: Name;
+  children: [CalculationTree, ...CalculationTree[]];
+  dimensionalType: DimensionalType;
+};
+
+export type CalcClampNode = {
+  type: 'clamp';
+  children: [
+    minimum: CalculationTree | null,
+    value: CalculationTree,
+    maximum: CalculationTree | null,
+  ];
+  dimensionalType: DimensionalType;
+};
+
+export type CalcRoundNode = {
+  type: 'round';
+  strategy: RoundingStrategy;
+  children: [value: CalculationTree, step?: CalculationTree];
+  dimensionalType: DimensionalType;
+};
+
+export type CalcBinaryFunctionNode<
+  Name extends BinaryMathFunctionName = BinaryMathFunctionName,
+> = {
+  type: Name;
+  children: [CalculationTree, CalculationTree];
+  dimensionalType: DimensionalType;
+};
+
+export type CalcUnaryFunctionNode<
+  Name extends UnaryMathFunctionName = UnaryMathFunctionName,
+> = {
+  type: Name;
+  children: [CalculationTree];
+  dimensionalType: DimensionalType;
+};
+
+export type CalcLogNode = {
+  type: 'log';
+  children: [value: CalculationTree, base?: CalculationTree];
+  dimensionalType: DimensionalType;
+};
+
+export type MathFunctionNode =
+  | CalcVariadicFunctionNode
+  | CalcClampNode
+  | CalcRoundNode
+  | CalcBinaryFunctionNode
+  | CalcUnaryFunctionNode
+  | CalcLogNode;
+
+export type MathFunctionValue = CalcValue | MathFunctionNode;
+
 export type CalculationTree =
   | NumberValue
   | DimensionValue
@@ -73,7 +181,22 @@ export type CalculationTree =
   | CalcSumNode
   | CalcProductNode
   | CalcNegateNode
-  | CalcInvertNode;
+  | CalcInvertNode
+  | MathFunctionNode;
+
+export function parseMathFunction(
+  input: ParserInput,
+  context: CalculationContext = {},
+): MathFunctionValue | null {
+  return unwrapConsumeResultOrThrow(
+    parseAsComponentGrammar(
+      input,
+      withComponentTrivia(tryConsumeMathFunction),
+      context,
+    ),
+    'math function',
+  );
+}
 
 export function parseCalc(
   input: ParserInput,
@@ -105,7 +228,7 @@ export function tryConsumeCalc(
     dimensionalType === null ||
     (
       !context.insideCalculation &&
-      resolvedDimensionalCategory(dimensionalType) === null
+      !matchesCalculationContext(dimensionalType, context)
     )
   ) {
     return bad(
@@ -129,6 +252,490 @@ const consumeCalcCalculation = createFunctionalNotationConsumer(
     contextForArguments: enterCalculationContext,
   },
 );
+
+/*
+ * <min()>   = min( <calc-sum># )
+ * <max()>   = max( <calc-sum># )
+ * <clamp()> = clamp( [ <calc-sum> | none ], <calc-sum>,
+ *                    [ <calc-sum> | none ] )
+ * <round()> = round( <rounding-strategy>?, <calc-sum>, <calc-sum>? )
+ * <mod()>   = mod( <calc-sum>, <calc-sum> )
+ * <rem()>   = rem( <calc-sum>, <calc-sum> )
+ * <sin()>   = sin( <calc-sum> )
+ * <cos()>   = cos( <calc-sum> )
+ * <tan()>   = tan( <calc-sum> )
+ * <asin()>  = asin( <calc-sum> )
+ * <acos()>  = acos( <calc-sum> )
+ * <atan()>  = atan( <calc-sum> )
+ * <atan2()> = atan2( <calc-sum>, <calc-sum> )
+ * <pow()>   = pow( <calc-sum>, <calc-sum> )
+ * <sqrt()>  = sqrt( <calc-sum> )
+ * <hypot()> = hypot( <calc-sum># )
+ * <log()>   = log( <calc-sum>, <calc-sum>? )
+ * <exp()>   = exp( <calc-sum> )
+ * <abs()>   = abs( <calc-sum> )
+ * <sign()>  = sign( <calc-sum> )
+ */
+
+export const tryConsumeMin = createVariadicMathFunctionConsumer('min');
+export const tryConsumeMax = createVariadicMathFunctionConsumer('max');
+export const tryConsumeClamp = createClampConsumer();
+export const tryConsumeRound = createRoundConsumer();
+export const tryConsumeMod = createBinaryMathFunctionConsumer(
+  'mod',
+  'consistent',
+  undefined,
+  true,
+);
+export const tryConsumeRem = createBinaryMathFunctionConsumer(
+  'rem',
+  'consistent',
+  undefined,
+  true,
+);
+export const tryConsumeSin = createUnaryMathFunctionConsumer(
+  'sin',
+  'number',
+  ['number', 'angle'],
+);
+export const tryConsumeCos = createUnaryMathFunctionConsumer(
+  'cos',
+  'number',
+  ['number', 'angle'],
+);
+export const tryConsumeTan = createUnaryMathFunctionConsumer(
+  'tan',
+  'number',
+  ['number', 'angle'],
+);
+export const tryConsumeAsin = createUnaryMathFunctionConsumer(
+  'asin',
+  'angle',
+  ['number'],
+);
+export const tryConsumeAcos = createUnaryMathFunctionConsumer(
+  'acos',
+  'angle',
+  ['number'],
+);
+export const tryConsumeAtan = createUnaryMathFunctionConsumer(
+  'atan',
+  'angle',
+  ['number'],
+);
+export const tryConsumeAtan2 = createBinaryMathFunctionConsumer(
+  'atan2',
+  'angle',
+);
+export const tryConsumePow = createBinaryMathFunctionConsumer(
+  'pow',
+  'number',
+  ['number'],
+);
+export const tryConsumeSqrt = createUnaryMathFunctionConsumer(
+  'sqrt',
+  'number',
+  ['number'],
+);
+export const tryConsumeHypot = createVariadicMathFunctionConsumer('hypot');
+export const tryConsumeLog = createLogConsumer();
+export const tryConsumeExp = createUnaryMathFunctionConsumer(
+  'exp',
+  'number',
+  ['number'],
+);
+export const tryConsumeAbs = createUnaryMathFunctionConsumer(
+  'abs',
+  'consistent',
+);
+export const tryConsumeSign = createUnaryMathFunctionConsumer(
+  'sign',
+  'number',
+);
+
+const tryConsumeNonCalcMathFunction: TryComponentConsumer<MathFunctionNode> =
+  oneOf(
+    [
+      one(tryConsumeMin), one(tryConsumeMax), one(tryConsumeClamp),
+      one(tryConsumeRound), one(tryConsumeMod), one(tryConsumeRem),
+      one(tryConsumeSin), one(tryConsumeCos), one(tryConsumeTan),
+      one(tryConsumeAsin), one(tryConsumeAcos), one(tryConsumeAtan),
+      one(tryConsumeAtan2), one(tryConsumePow), one(tryConsumeSqrt),
+      one(tryConsumeHypot), one(tryConsumeLog), one(tryConsumeExp),
+      one(tryConsumeAbs), one(tryConsumeSign),
+    ],
+    ([value]) => ok(value),
+  );
+
+export const tryConsumeMathFunction: TryComponentConsumer<MathFunctionValue> =
+  oneOf(
+    [
+      one(tryConsumeCalc),
+      one(tryConsumeNonCalcMathFunction),
+    ],
+    ([value]) => ok(value),
+  );
+
+type FunctionResultType = 'consistent' | 'number' | 'angle';
+
+function createVariadicMathFunctionConsumer<
+  Name extends VariadicMathFunctionName,
+>(
+  name: Name,
+): TryComponentConsumer<CalcVariadicFunctionNode<Name>> {
+  const consumeArguments = sequenceOf(
+    [commaRepeat(tryConsumeCalcSum, 1, CALC_TERM_LIMIT)],
+    ([children], context) => createMathFunctionNode<
+      CalcVariadicFunctionNode<Name>
+    >(
+      name,
+      children,
+      'consistent',
+      calculationContextFor(context),
+    ),
+  );
+
+  return createMathFunctionConsumer(name, consumeArguments);
+}
+
+function createBinaryMathFunctionConsumer<
+  Name extends BinaryMathFunctionName,
+>(
+  name: Name,
+  resultType: FunctionResultType,
+  allowedCategories?: readonly ResolvedDimensionalCategory[],
+  requireSameType = false,
+): TryComponentConsumer<CalcBinaryFunctionNode<Name>> {
+  const consumeArguments = sequenceOf(
+    [commaRepeat(tryConsumeCalcSum, 2, 2)],
+    ([children], context) => {
+      const [first, second] = children;
+
+      if (first === undefined || second === undefined) {
+        return bad(
+          ComponentConsumerBadReason.Invalid,
+          `Invalid ${name}() arguments`,
+        );
+      }
+
+      return createMathFunctionNode<CalcBinaryFunctionNode<Name>>(
+        name,
+        [first, second],
+        resultType,
+        calculationContextFor(context),
+        allowedCategories,
+        requireSameType,
+      );
+    },
+  );
+
+  return createMathFunctionConsumer(name, consumeArguments);
+}
+
+function createUnaryMathFunctionConsumer<
+  Name extends UnaryMathFunctionName,
+>(
+  name: Name,
+  resultType: FunctionResultType,
+  allowedCategories?: readonly ResolvedDimensionalCategory[],
+): TryComponentConsumer<CalcUnaryFunctionNode<Name>> {
+  const consumeArguments = sequenceOf(
+    [one(tryConsumeCalcSum)],
+    ([[child]], context) => createMathFunctionNode<
+      CalcUnaryFunctionNode<Name>
+    >(
+      name,
+      [child],
+      resultType,
+      calculationContextFor(context),
+      allowedCategories,
+    ),
+  );
+
+  return createMathFunctionConsumer(name, consumeArguments);
+}
+
+function createClampConsumer(): TryComponentConsumer<CalcClampNode> {
+  const consumeArgument: TryComponentConsumer<CalculationTree | null> = oneOf(
+    [
+      one(tryConsumeCalcSum),
+      one(createIdentValueConsumer('none')),
+    ],
+    ([value]) => ok(value === 'none' ? null : value),
+  );
+  const consumeArguments = sequenceOf(
+    [commaRepeat(consumeArgument, 3, 3)],
+    ([children], context) => {
+      const [minimum, value, maximum] = children;
+
+      if (
+        minimum === undefined ||
+        value === undefined ||
+        value === null ||
+        maximum === undefined
+      ) {
+        return bad(
+          ComponentConsumerBadReason.Invalid,
+          'Invalid clamp() arguments',
+        );
+      }
+
+      const result = createMathFunctionNode<CalcClampNode>(
+        'clamp',
+        [minimum, value, maximum],
+        'consistent',
+        calculationContextFor(context),
+      );
+
+      return result;
+    },
+  );
+
+  return createMathFunctionConsumer('clamp', consumeArguments);
+}
+
+function createRoundConsumer(): TryComponentConsumer<CalcRoundNode> {
+  const consumeArguments = sequenceOf(
+    [
+      opt(tryConsumeRoundingStrategyPrefix),
+      commaRepeat(tryConsumeCalcSum, 1, 2),
+    ],
+    ([[explicitStrategy], children], context) => {
+      const [value, step] = children;
+
+      const strategy = explicitStrategy ?? 'nearest';
+      const calculationContext = calculationContextFor(context);
+      const valueType = dimensionalTypeOf(value, calculationContext);
+      const valueCategory = valueType === null
+        ? null
+        : resolvedDimensionalCategory(valueType);
+
+      if (
+        valueCategory === null ||
+        (strategy === 'line-width' && valueCategory !== 'length') ||
+        (
+          step === undefined &&
+          valueCategory !== 'number' &&
+          strategy !== 'line-width'
+        )
+      ) {
+        return bad(
+          ComponentConsumerBadReason.Invalid,
+          'Invalid round() argument type',
+        );
+      }
+
+      return createMathFunctionNode<CalcRoundNode>(
+        'round',
+        step === undefined ? [value] : [value, step],
+        'consistent',
+        calculationContext,
+        undefined,
+        false,
+        { strategy },
+      );
+    },
+  );
+
+  return createMathFunctionConsumer('round', consumeArguments);
+}
+
+function createLogConsumer(): TryComponentConsumer<CalcLogNode> {
+  const consumeArguments = sequenceOf(
+    [commaRepeat(tryConsumeCalcSum, 1, 2)],
+    ([children], context) => {
+      const [value, base] = children;
+
+      return createMathFunctionNode<CalcLogNode>(
+        'log',
+        base === undefined ? [value] : [value, base],
+        'number',
+        calculationContextFor(context),
+        ['number'],
+      );
+    },
+  );
+
+  return createMathFunctionConsumer('log', consumeArguments);
+}
+
+function createMathFunctionConsumer<Node extends MathFunctionNode>(
+  name: string,
+  consumeArguments: TryComponentConsumer<Node>,
+): TryComponentConsumer<Node> {
+  const consume = createFunctionalNotationConsumer(
+    name,
+    consumeArguments,
+    (node) => node,
+    {
+      contextForArguments: enterCalculationContext,
+    },
+  );
+
+  return (c) => {
+    const result = consume(c);
+
+    if (result === null || isBad(result)) {
+      return result;
+    }
+
+    const context = calculationContextFor(c.context);
+
+    if (
+      !context.insideCalculation &&
+      !matchesCalculationContext(result.value.dimensionalType, context)
+    ) {
+      return bad(
+        ComponentConsumerBadReason.Invalid,
+        'Invalid calculation type',
+      );
+    }
+
+    return ok(simplifyCalculationTree(
+      result.value,
+      context,
+    ) as Node);
+  };
+}
+
+function createMathFunctionNode<
+  Node extends MathFunctionNode,
+>(
+  type: Node['type'],
+  children: Node['children'],
+  resultType: FunctionResultType,
+  context: CalculationContext,
+  allowedCategories?: readonly ResolvedDimensionalCategory[],
+  requireSameType = false,
+  extra?: Omit<Node, 'type' | 'children' | 'dimensionalType'>,
+): TryComponentConsumerResult<Node> {
+  const calculations = children.filter(
+    (child): child is CalculationTree => child !== null,
+  );
+  const argumentTypes = calculations.map((child) => (
+    dimensionalTypeOf(child, context)
+  ));
+
+  if (argumentTypes.some((argumentType) => argumentType === null)) {
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      `Invalid ${type}() argument type`,
+    );
+  }
+
+  const types = argumentTypes as DimensionalType[];
+  const categories = types.map(resolvedDimensionalCategory);
+
+  if (
+    categories.some((category) => category === null) ||
+    (
+      allowedCategories !== undefined &&
+      categories.some((category) => (
+        !allowedCategories.includes(category!)
+      ))
+    ) ||
+    (
+      requireSameType &&
+      !types.every((argumentType) => (
+        haveSameDimensionalType(argumentType, types[0]!)
+      ))
+    )
+  ) {
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      `Invalid ${type}() argument type`,
+    );
+  }
+
+  const consistentType = addDimensionalTypes(types);
+
+  if (consistentType === null) {
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      `Inconsistent ${type}() argument types`,
+    );
+  }
+
+  let dimensionalType: DimensionalType;
+
+  switch (resultType) {
+    case 'consistent':
+      dimensionalType = consistentType;
+      break;
+    case 'number':
+      dimensionalType = createDimensionalType(
+        [],
+        consistentType.percentHint,
+      );
+      break;
+    case 'angle':
+      dimensionalType = createDimensionalType(
+        [['angle', 1]],
+        consistentType.percentHint,
+      );
+      break;
+  }
+
+  if (resolvedDimensionalCategory(dimensionalType) === null) {
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      `Invalid ${type}() result type`,
+    );
+  }
+
+  return ok({
+    type,
+    children,
+    dimensionalType,
+    ...extra,
+  } as Node);
+}
+
+export const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
+  oneOf(
+    [
+      one(createIdentValueConsumer('nearest')),
+      one(createIdentValueConsumer('up')),
+      one(createIdentValueConsumer('down')),
+      one(createIdentValueConsumer('to-zero')),
+      one(createIdentValueConsumer('line-width')),
+    ],
+    ([strategy]) => ok(strategy),
+  );
+
+function tryConsumeRoundingStrategyPrefix(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RoundingStrategy> {
+  const start = c.pos();
+  const strategy = tryConsumeRoundingStrategy(c);
+
+  if (strategy === null || isBad(strategy)) {
+    return strategy;
+  }
+
+  consumeComponentTrivia(c);
+
+  if (!c.match(TokenKind.Comma)) {
+    c.restore(start);
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      'Expected a comma after the round() strategy',
+    );
+  }
+
+  consumeComponentTrivia(c);
+  return strategy;
+}
+
+function haveSameDimensionalType(
+  a: DimensionalType,
+  b: DimensionalType,
+): boolean {
+  return (
+    a.percentHint === b.percentHint &&
+    haveEqualExponents(a, b)
+  );
+}
 
 /*
  * <calc-sum> = <calc-product> [ [ '+' | '-' ] <calc-product> ]*
@@ -408,6 +1015,15 @@ export function tryConsumeCalcValue(
   return result;
 }
 
+const tryConsumeCalculationMathFunction: TryComponentConsumer<CalculationTree> =
+  oneOf(
+    [
+      one(tryConsumeNestedCalc),
+      one(tryConsumeNonCalcMathFunction),
+    ],
+    ([value]) => ok(value),
+  );
+
 const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
   [
     one(tryConsumeNumber),
@@ -415,7 +1031,7 @@ const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
     one(tryConsumePercentage),
     one(tryConsumeCalcKeyword),
     one(tryConsumeParenthesizedCalcSum),
-    one(tryConsumeNestedCalc),
+    one(tryConsumeCalculationMathFunction),
   ],
   ([value]) => ok(value),
 );
@@ -574,6 +1190,28 @@ export function determineDimensionalType(
     case 'variable':
       return cloneDimensionalType(calculation.dimensionalType);
 
+    case 'min':
+    case 'max':
+    case 'clamp':
+    case 'round':
+    case 'mod':
+    case 'rem':
+    case 'sin':
+    case 'cos':
+    case 'tan':
+    case 'asin':
+    case 'acos':
+    case 'atan':
+    case 'atan2':
+    case 'pow':
+    case 'sqrt':
+    case 'hypot':
+    case 'log':
+    case 'exp':
+    case 'abs':
+    case 'sign':
+      return cloneDimensionalType(calculation.dimensionalType);
+
     case 'sum':
       return addDimensionalTypes(
         calculation.children.map((child) => (
@@ -680,6 +1318,113 @@ export function resolvedDimensionalCategory(
   return power === 1
     ? base
     : null;
+}
+
+function matchesCalculationContext(
+  type: DimensionalType,
+  context: CalculationContext,
+): boolean {
+  const expectedType = context.expectedType;
+
+  if (expectedType === undefined) {
+    return resolvedDimensionalCategory(type) !== null;
+  }
+
+  switch (expectedType) {
+    case 'number':
+    case 'integer':
+      return matchesNumberType(type, context.percentageType);
+
+    case 'percentage':
+      return matchesPercentageType(type);
+
+    case 'length':
+    case 'angle':
+    case 'time':
+    case 'frequency':
+    case 'resolution':
+    case 'flex':
+      return matchesDimensionType(
+        type,
+        expectedType,
+        context.percentageType === expectedType
+          ? expectedType
+          : null,
+      );
+
+    case 'length-percentage':
+      return matchesMixedType(type, 'length');
+
+    case 'angle-percentage':
+      return matchesMixedType(type, 'angle');
+
+    case 'time-percentage':
+      return matchesMixedType(type, 'time');
+
+    case 'frequency-percentage':
+      return matchesMixedType(type, 'frequency');
+  }
+}
+
+function matchesNumberType(
+  type: DimensionalType,
+  percentageType: DimensionalBaseType | undefined,
+): boolean {
+  return (
+    type.exponents.length === 0 &&
+    (
+      type.percentHint === null ||
+      (
+        percentageType !== undefined &&
+        type.percentHint === percentageType
+      )
+    )
+  );
+}
+
+function matchesPercentageType(type: DimensionalType): boolean {
+  return (
+    hasSingleExponent(type, 'percent') &&
+    (
+      type.percentHint === null ||
+      type.percentHint === 'percent'
+    )
+  );
+}
+
+function matchesDimensionType(
+  type: DimensionalType,
+  base: Exclude<DimensionalBaseType, 'percent'>,
+  percentageType: DimensionalBaseType | null,
+): boolean {
+  return (
+    hasSingleExponent(type, base) &&
+    (
+      type.percentHint === null ||
+      type.percentHint === percentageType
+    )
+  );
+}
+
+function matchesMixedType(
+  type: DimensionalType,
+  base: 'length' | 'angle' | 'time' | 'frequency',
+): boolean {
+  return (
+    matchesDimensionType(type, base, base) ||
+    matchesPercentageType(type)
+  );
+}
+
+function hasSingleExponent(
+  type: DimensionalType,
+  base: DimensionalBaseType,
+): boolean {
+  return (
+    type.exponents.length === 1 &&
+    type.exponents[0]![0] === base &&
+    type.exponents[0]![1] === 1
+  );
 }
 
 function addTwoDimensionalTypes(
@@ -818,9 +1563,10 @@ function dimensionalTypeForUnit(unit: string): DimensionalType | null {
 }
 
 function percentageDimensionalType(
-  _context: CalculationContext,
+  context: CalculationContext,
 ): DimensionalType {
-  return createDimensionalType([['percent', 1]], 'percent');
+  const hint = context.percentageType ?? 'percent';
+  return createDimensionalType([[hint, 1]], hint);
 }
 
 function numberDimensionalType(): DimensionalType {
@@ -923,8 +1669,10 @@ export function simplifyCalculationTree(
 ): CalculationTree {
   switch (root.type) {
     case 'number':
-    case 'percentage':
       return root;
+
+    case 'percentage':
+      return resolvePercentage(root, context);
 
     case 'dimension':
       return canonicalizeDimension(root, context);
@@ -947,7 +1695,44 @@ export function simplifyCalculationTree(
 
     case 'product':
       return simplifyProduct(root, context);
+
+    case 'min':
+    case 'max':
+    case 'clamp':
+    case 'round':
+    case 'mod':
+    case 'rem':
+    case 'sin':
+    case 'cos':
+    case 'tan':
+    case 'asin':
+    case 'acos':
+    case 'atan':
+    case 'atan2':
+    case 'pow':
+    case 'sqrt':
+    case 'hypot':
+    case 'log':
+    case 'exp':
+    case 'abs':
+    case 'sign':
+      return simplifyMathFunctionNode(root, context);
   }
+}
+
+function simplifyMathFunctionNode<Node extends MathFunctionNode>(
+  root: Node,
+  context: CalculationSimplificationContext,
+): Node {
+  return {
+    ...root,
+    children: root.children.map((child) => (
+      child === null || child === undefined
+        ? child
+        : simplifyCalculationTree(child, context)
+    )),
+    dimensionalType: cloneDimensionalType(root.dimensionalType),
+  };
 }
 
 function simplifyNegate(
@@ -1020,7 +1805,9 @@ function simplifySum(
   const flattened = simplified.flatMap((child) => (
     child.type === 'sum' ? child.children : [child]
   ));
-  const children = combineLikeNumericValues(flattened);
+  const children = sortCalculationChildren(
+    combineLikeNumericValues(flattened),
+  );
 
   if (children.length === 1) {
     return children[0]!;
@@ -1043,7 +1830,9 @@ function simplifyProduct(
   const flattened = simplified.flatMap((child) => (
     child.type === 'product' ? child.children : [child]
   ));
-  const children = combineProductNumbers(flattened);
+  const children = sortCalculationChildren(
+    combineProductNumbers(flattened),
+  );
 
   if (children.length === 2) {
     const number = children.find((child) => child.type === 'number');
@@ -1208,6 +1997,50 @@ function combineProductNumbers(
   return combined;
 }
 
+function sortCalculationChildren(
+  children: readonly CalculationTree[],
+): CalculationTree[] {
+  return children
+    .map((child, index) => ({ child, index }))
+    .sort((a, b) => {
+      const rank = calculationChildSortRank(a.child) -
+        calculationChildSortRank(b.child);
+
+      if (rank !== 0) {
+        return rank;
+      }
+
+      if (a.child.type === 'dimension' && b.child.type === 'dimension') {
+        const aUnit = asciiLower(a.child.unit);
+        const bUnit = asciiLower(b.child.unit);
+
+        if (aUnit < bUnit) {
+          return -1;
+        }
+
+        if (aUnit > bUnit) {
+          return 1;
+        }
+      }
+
+      return a.index - b.index;
+    })
+    .map(({ child }) => child);
+}
+
+function calculationChildSortRank(value: CalculationTree): number {
+  switch (value.type) {
+    case 'number':
+      return 0;
+    case 'percentage':
+      return 1;
+    case 'dimension':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
 function evaluateNumericProduct(
   children: readonly CalculationTree[],
   dimensionalType: DimensionalType,
@@ -1332,6 +2165,26 @@ function canonicalizeDimension(
       value: resolved.value,
       unit: resolved.unit,
     };
+}
+
+function resolvePercentage(
+  value: PercentageValue,
+  context: CalculationSimplificationContext,
+): NumberValue | DimensionValue | PercentageValue {
+  const reference = context.percentageReferenceValue;
+
+  if (reference === undefined) {
+    return value;
+  }
+
+  const resolved = {
+    ...reference,
+    value: reference.value * value.value / 100,
+  };
+
+  return resolved.type === 'dimension'
+    ? canonicalizeDimension(resolved, context)
+    : resolved;
 }
 
 function isUnit<Unit extends string>(

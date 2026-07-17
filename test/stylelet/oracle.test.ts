@@ -1937,6 +1937,15 @@ runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
             rotateZero: CSS.supports('rotate', '0'),
             rotateZeroDegrees: CSS.supports('rotate', '0deg'),
             rotateCalcAnglePlusZero: CSS.supports('rotate', 'calc(10deg + 0)'),
+            borderWidthPercentage: CSS.supports('border-width', '25%'),
+            borderWidthCalcPercentage: CSS.supports('border-width', 'calc(25%)'),
+            borderWidthCalcLength: CSS.supports('border-width', 'calc(10px)'),
+            borderWidthCalcMixed: CSS.supports(
+              'border-width',
+              'calc(10px + 25%)',
+            ),
+            widthCalcPercentage: CSS.supports('width', 'calc(25%)'),
+            widthCalcMixed: CSS.supports('width', 'calc(10px + 25%)'),
           },
         };
 
@@ -2013,6 +2022,12 @@ runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
               rotateZero: false,
               rotateZeroDegrees: true,
               rotateCalcAnglePlusZero: false,
+              borderWidthPercentage: false,
+              borderWidthCalcPercentage: false,
+              borderWidthCalcLength: true,
+              borderWidthCalcMixed: false,
+              widthCalcPercentage: true,
+              widthCalcMixed: true,
             },
             computed: {
               lengthPlusZeroPercentage: 'calc(0% + 10px)',
@@ -2028,6 +2043,38 @@ runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
             },
           }),
         },
+      },
+    ],
+  },
+  {
+    name: 'checks cancelled percentages in a length-only property',
+    engines: ['native'],
+    markup: '<div id="cancelled-percentage-oracle"></div>',
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const target = document
+          .getElementById('cancelled-percentage-oracle') as HTMLElement;
+        target.style.setProperty(
+          '--oracle',
+          String(CSS.supports(
+            'border-width',
+            'calc(1% / 1% * 10px)',
+          )),
+        );
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'cancelled-percentage-oracle' },
+        browsers: ['chromium', 'webkit'],
+        expect: { value: 'true' },
+      },
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'cancelled-percentage-oracle' },
+        browsers: ['firefox'],
+        expect: { value: 'false' },
       },
     ],
   },
