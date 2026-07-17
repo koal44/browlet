@@ -1,25 +1,21 @@
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+import { withComponentTrivia } from '../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   resolveTime, serializeTime, tryConsumeTime,
   type CanonicalTimeValue, type TimeValue,
 } from './time';
 import {
-  serializePercentage, tryConsumePercentage,
-  type PercentageValue,
-} from './percentage';
+  createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+} from './dimension-percentage';
 
 /*
  * <time-percentage> = [ <time> | <percentage> ]
  */
 
-export type TimePercentageValue =
-  | TimeValue
-  | PercentageValue;
+export type TimePercentageValue = DimensionPercentageValue<TimeValue>;
 
 export type TimePercentageResolutionContext = {
   /** Percentage basis in canonical seconds. */
@@ -40,69 +36,23 @@ export function parseTimePercentage(
   );
 }
 
-export type TimePercentageConsumerOptions = {
-  /** Inclusive lower bound on the resolved time-percentage quantity. */
-  min?: number;
-
-  /** Inclusive upper bound on the resolved time-percentage quantity. */
-  max?: number;
-};
+export type TimePercentageConsumerOptions =
+  DimensionPercentageConsumerOptions;
 
 export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
 ): TryComponentConsumer<TimePercentageValue> {
-  const min = options.min ?? -Infinity;
-  const max = options.max ?? Infinity;
-
-  if (!canCheckRangeWithoutResolution(min, max)) {
-    throw new Error(
-      'Time-percentage ranges with finite nonzero bounds are not yet supported',
-    );
-  }
-
-  return (c): TryComponentConsumerResult<TimePercentageValue> => {
-    const start = c.pos();
-    const result = tryConsumeUnrestrictedTimePercentage(c);
-
-    if (result === null || isBad(result)) {
-      return result;
-    }
-
-    if (result.value.value < min || result.value.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
-}
-
-const tryConsumeUnrestrictedTimePercentage: TryComponentConsumer<TimePercentageValue> = oneOf(
-  [
-    one(tryConsumeTime),
-    one(tryConsumePercentage),
-  ],
-  ([value]) => ok(value),
-);
-
-export const tryConsumeTimePercentage = createTimePercentageConsumer();
-
-function canCheckRangeWithoutResolution(min: number, max: number): boolean {
-  // All time and percentage resolutions preserve sign, so zero and infinite
-  // bounds do not require a percentage basis.
-  return (
-    (min === -Infinity || min === 0) &&
-    (max === 0 || max === Infinity)
+  return createDimensionPercentageConsumer(
+    tryConsumeTime,
+    'Time-percentage',
+    options,
   );
 }
 
+export const tryConsumeTimePercentage = createTimePercentageConsumer();
+
 export function serializeTimePercentage(value: TimePercentageValue): string {
-  switch (value.type) {
-    case 'time':
-      return serializeTime(value);
-    case 'percentage':
-      return serializePercentage(value);
-  }
+  return serializeDimensionPercentage(value, serializeTime);
 }
 
 export function tryResolveTimePercentage(
@@ -122,4 +72,19 @@ export function tryResolveTimePercentage(
     value: context.percentageBasis * value.value / 100,
     unit: 's',
   };
+}
+
+export function tryAddTimePercentages(
+  a: TimePercentageValue,
+  b: TimePercentageValue,
+): TimePercentageValue | null {
+  return tryAddDimensionPercentages(a, b);
+}
+
+export function tryInterpolateTimePercentages(
+  a: TimePercentageValue,
+  b: TimePercentageValue,
+  p: number,
+): TimePercentageValue | null {
+  return tryInterpolateDimensionPercentages(a, b, p);
 }

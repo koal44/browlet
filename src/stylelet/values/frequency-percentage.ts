@@ -1,25 +1,22 @@
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+import { withComponentTrivia } from '../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   resolveFrequency, serializeFrequency, tryConsumeFrequency,
   type CanonicalFrequencyValue, type FrequencyValue,
 } from './frequency';
 import {
-  serializePercentage, tryConsumePercentage,
-  type PercentageValue,
-} from './percentage';
+  createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+} from './dimension-percentage';
 
 /*
  * <frequency-percentage> = [ <frequency> | <percentage> ]
  */
 
 export type FrequencyPercentageValue =
-  | FrequencyValue
-  | PercentageValue;
+  DimensionPercentageValue<FrequencyValue>;
 
 export type FrequencyPercentageResolutionContext = {
   /** Percentage basis in canonical hertz. */
@@ -40,71 +37,25 @@ export function parseFrequencyPercentage(
   );
 }
 
-export type FrequencyPercentageConsumerOptions = {
-  /** Inclusive lower bound on the resolved frequency-percentage quantity. */
-  min?: number;
-
-  /** Inclusive upper bound on the resolved frequency-percentage quantity. */
-  max?: number;
-};
+export type FrequencyPercentageConsumerOptions =
+  DimensionPercentageConsumerOptions;
 
 export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
 ): TryComponentConsumer<FrequencyPercentageValue> {
-  const min = options.min ?? -Infinity;
-  const max = options.max ?? Infinity;
-
-  if (!canCheckRangeWithoutResolution(min, max)) {
-    throw new Error(
-      'Frequency-percentage ranges with finite nonzero bounds are not yet supported',
-    );
-  }
-
-  return (c): TryComponentConsumerResult<FrequencyPercentageValue> => {
-    const start = c.pos();
-    const result = tryConsumeUnrestrictedFrequencyPercentage(c);
-
-    if (result === null || isBad(result)) {
-      return result;
-    }
-
-    if (result.value.value < min || result.value.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
-}
-
-const tryConsumeUnrestrictedFrequencyPercentage: TryComponentConsumer<FrequencyPercentageValue> = oneOf(
-  [
-    one(tryConsumeFrequency),
-    one(tryConsumePercentage),
-  ],
-  ([value]) => ok(value),
-);
-
-export const tryConsumeFrequencyPercentage = createFrequencyPercentageConsumer();
-
-function canCheckRangeWithoutResolution(min: number, max: number): boolean {
-  // All frequency and percentage resolutions preserve sign, so zero and
-  // infinite bounds do not require a percentage basis.
-  return (
-    (min === -Infinity || min === 0) &&
-    (max === 0 || max === Infinity)
+  return createDimensionPercentageConsumer(
+    tryConsumeFrequency,
+    'Frequency-percentage',
+    options,
   );
 }
+
+export const tryConsumeFrequencyPercentage = createFrequencyPercentageConsumer();
 
 export function serializeFrequencyPercentage(
   value: FrequencyPercentageValue,
 ): string {
-  switch (value.type) {
-    case 'frequency':
-      return serializeFrequency(value);
-    case 'percentage':
-      return serializePercentage(value);
-  }
+  return serializeDimensionPercentage(value, serializeFrequency);
 }
 
 export function tryResolveFrequencyPercentage(
@@ -124,4 +75,19 @@ export function tryResolveFrequencyPercentage(
     value: context.percentageBasis * value.value / 100,
     unit: 'hz',
   };
+}
+
+export function tryAddFrequencyPercentages(
+  a: FrequencyPercentageValue,
+  b: FrequencyPercentageValue,
+): FrequencyPercentageValue | null {
+  return tryAddDimensionPercentages(a, b);
+}
+
+export function tryInterpolateFrequencyPercentages(
+  a: FrequencyPercentageValue,
+  b: FrequencyPercentageValue,
+  p: number,
+): FrequencyPercentageValue | null {
+  return tryInterpolateDimensionPercentages(a, b, p);
 }

@@ -15,6 +15,7 @@ import {
 import {
   createAnglePercentageConsumer, parseAnglePercentage,
   serializeAnglePercentage, tryConsumeAnglePercentage,
+  tryAddAnglePercentages, tryInterpolateAnglePercentages,
   tryResolveAnglePercentage,
 } from '../../../src/stylelet/values/angle-percentage';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
@@ -38,6 +39,7 @@ import {
 import {
   createFrequencyPercentageConsumer, parseFrequencyPercentage,
   serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
+  tryAddFrequencyPercentages, tryInterpolateFrequencyPercentages,
   tryResolveFrequencyPercentage,
 } from '../../../src/stylelet/values/frequency-percentage';
 import {
@@ -49,6 +51,7 @@ import {
 import {
   createLengthPercentageConsumer, parseLengthPercentage,
   serializeLengthPercentage, tryConsumeLengthPercentage,
+  tryAddLengthPercentages, tryInterpolateLengthPercentages,
   tryResolveLengthPercentage,
 } from '../../../src/stylelet/values/length-percentage';
 import {
@@ -76,6 +79,7 @@ import {
 import {
   createTimePercentageConsumer, parseTimePercentage,
   serializeTimePercentage, tryConsumeTimePercentage,
+  tryAddTimePercentages, tryInterpolateTimePercentages,
   tryResolveTimePercentage,
 } from '../../../src/stylelet/values/time-percentage';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
@@ -1307,6 +1311,34 @@ describe('length-percentage', () => {
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeLengthPercentage(value)).toBe(expected);
   });
+
+  it('combines values from matching alternatives', () => {
+    expect(tryAddLengthPercentages(
+      { type: 'length', value: 10, unit: 'px' },
+      { type: 'length', value: 5, unit: 'px' },
+    )).toEqual({ type: 'length', value: 15, unit: 'px' });
+    expect(tryInterpolateLengthPercentages(
+      { type: 'percentage', value: 10 },
+      { type: 'percentage', value: 30 },
+      0.25,
+    )).toEqual({ type: 'percentage', value: 15 });
+  });
+
+  it('does not combine different alternatives or dimension units', () => {
+    expect(tryAddLengthPercentages(
+      { type: 'length', value: 10, unit: 'px' },
+      { type: 'percentage', value: 0 },
+    )).toBeNull();
+    expect(tryAddLengthPercentages(
+      { type: 'length', value: 0, unit: 'px' },
+      { type: 'percentage', value: 20 },
+    )).toBeNull();
+    expect(tryInterpolateLengthPercentages(
+      { type: 'length', value: 1, unit: 'em' },
+      { type: 'length', value: 16, unit: 'px' },
+      0.5,
+    )).toBeNull();
+  });
 });
 
 describe('angle-percentage', () => {
@@ -1385,6 +1417,22 @@ describe('angle-percentage', () => {
     [{ type: 'percentage', value: -10 }, '-10%'],
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeAnglePercentage(value)).toBe(expected);
+  });
+
+  it('combines matching alternatives and rejects mismatches', () => {
+    expect(tryAddAnglePercentages(
+      { type: 'angle', value: 10, unit: 'deg' },
+      { type: 'angle', value: 20, unit: 'deg' },
+    )).toEqual({ type: 'angle', value: 30, unit: 'deg' });
+    expect(tryInterpolateAnglePercentages(
+      { type: 'percentage', value: 20 },
+      { type: 'percentage', value: 60 },
+      0.5,
+    )).toEqual({ type: 'percentage', value: 40 });
+    expect(tryAddAnglePercentages(
+      { type: 'angle', value: 10, unit: 'deg' },
+      { type: 'percentage', value: 20 },
+    )).toBeNull();
   });
 });
 
@@ -1465,6 +1513,22 @@ describe('frequency-percentage', () => {
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeFrequencyPercentage(value)).toBe(expected);
   });
+
+  it('combines matching alternatives and rejects mismatches', () => {
+    expect(tryAddFrequencyPercentages(
+      { type: 'percentage', value: 10 },
+      { type: 'percentage', value: 15 },
+    )).toEqual({ type: 'percentage', value: 25 });
+    expect(tryInterpolateFrequencyPercentages(
+      { type: 'frequency', value: 100, unit: 'hz' },
+      { type: 'frequency', value: 300, unit: 'hz' },
+      0.5,
+    )).toEqual({ type: 'frequency', value: 200, unit: 'hz' });
+    expect(tryAddFrequencyPercentages(
+      { type: 'frequency', value: 1, unit: 'khz' },
+      { type: 'frequency', value: 100, unit: 'hz' },
+    )).toBeNull();
+  });
 });
 
 describe('time-percentage', () => {
@@ -1543,6 +1607,23 @@ describe('time-percentage', () => {
     [{ type: 'percentage', value: -10 }, '-10%'],
   ] as const)('serializes %j as %j', (value, expected) => {
     expect(serializeTimePercentage(value)).toBe(expected);
+  });
+
+  it('combines matching alternatives and rejects mismatches', () => {
+    expect(tryAddTimePercentages(
+      { type: 'time', value: 1, unit: 's' },
+      { type: 'time', value: 2, unit: 's' },
+    )).toEqual({ type: 'time', value: 3, unit: 's' });
+    expect(tryInterpolateTimePercentages(
+      { type: 'percentage', value: 25 },
+      { type: 'percentage', value: 75 },
+      0.5,
+    )).toEqual({ type: 'percentage', value: 50 });
+    expect(tryInterpolateTimePercentages(
+      { type: 'time', value: 1, unit: 's' },
+      { type: 'percentage', value: 100 },
+      0.5,
+    )).toBeNull();
   });
 });
 
