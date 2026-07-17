@@ -4,6 +4,7 @@ import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
   parseCalc, parseMathFunction, simplifyCalculationTree,
+  serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
   type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
   type DimensionalBaseType, type DimensionalExponent, type DimensionalType,
@@ -94,6 +95,72 @@ describe('calc', () => {
       'min',
       'max',
     ]);
+  });
+
+  it.each([
+    [
+      'calc(1vh + 2em + 3% + 4px)',
+      'calc(3% + 2em + 4px + 1vh)',
+    ],
+    ['calc(1vh - 7px)', 'calc(-7px + 1vh)'],
+    ['calc(min(1px, 2%))', 'min(1px, 2%)'],
+    ['calc(1px - min(2px, 3%))', 'calc(1px - min(2px, 3%))'],
+    ['calc(1px / min(2, 3))', 'calc(1px / min(2, 3))'],
+  ] as const)('serializes the specified calculation %s', (input, expected) => {
+    const context = input.includes('%')
+      ? {
+        expectedType: 'length-percentage',
+        percentageType: 'length',
+      } as const satisfies CalculationContext
+      : {};
+
+    expect(serializeMathFunction(parseCalc(input, context)!)).toBe(expected);
+  });
+
+  it.each([
+    [
+      'round(up, calc(5px + 1%), 2px)',
+      'round(up, 1% + 5px, 2px)',
+    ],
+    [
+      'round(calc(5px + 1%), 2px)',
+      'round(1% + 5px, 2px)',
+    ],
+    [
+      'clamp(none, calc(1px + 1%), 20%)',
+      'clamp(none, 1% + 1px, 20%)',
+    ],
+  ] as const)(
+    'serializes the specified math function %s',
+    (input, expected) => {
+      const value = parseMathFunction(input, {
+        expectedType: 'length-percentage',
+        percentageType: 'length',
+      })!;
+
+      expect(serializeMathFunction(value)).toBe(expected);
+    },
+  );
+
+  it.each([
+    ['calc(infinity)', 'calc(infinity)'],
+    ['calc(-infinity * 1em)', 'calc(-infinity * 1px)'],
+    ['calc(NaN * 1s)', 'calc(NaN * 1s)'],
+  ] as const)(
+    'serializes the special numeric calculation %s',
+    (input, expected) => {
+      expect(serializeMathFunction(parseCalc(input)!)).toBe(expected);
+    },
+  );
+
+  it('serializes a calculation tree with its grouping parentheses', () => {
+    const calculation = parseCalc('calc(1px - min(2px, 3%))', {
+      expectedType: 'length-percentage',
+      percentageType: 'length',
+    })!.calculation;
+
+    expect(serializeCalcTree(calculation))
+      .toBe('(1px - min(2px, 3%))');
   });
 
   it.each([

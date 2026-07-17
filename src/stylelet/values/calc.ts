@@ -17,14 +17,24 @@ import {
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { ANGLE_UNITS, resolveAngle } from './angle';
-import { tryConsumeDimension, type DimensionValue } from './dimension';
+import {
+  serializeDimension, tryConsumeDimension,
+  type DimensionValue,
+} from './dimension';
 import { FREQUENCY_UNITS, resolveFrequency } from './frequency';
+import { serializeIdentifier } from './ident';
 import {
   LENGTH_UNITS, tryResolveLength,
   type LengthResolutionContext,
 } from './length';
-import { tryConsumeNumber, type NumberValue } from './number';
-import { tryConsumePercentage, type PercentageValue } from './percentage';
+import {
+  serializeNumber, tryConsumeNumber,
+  type NumberValue,
+} from './number';
+import {
+  serializePercentage, tryConsumePercentage,
+  type PercentageValue,
+} from './percentage';
 import { RESOLUTION_UNITS, resolveResolution } from './resolution';
 import { TIME_UNITS, resolveTime } from './time';
 
@@ -1190,26 +1200,11 @@ export function determineDimensionalType(
     case 'variable':
       return cloneDimensionalType(calculation.dimensionalType);
 
-    case 'min':
-    case 'max':
-    case 'clamp':
-    case 'round':
-    case 'mod':
-    case 'rem':
-    case 'sin':
-    case 'cos':
-    case 'tan':
-    case 'asin':
-    case 'acos':
-    case 'atan':
-    case 'atan2':
-    case 'pow':
-    case 'sqrt':
-    case 'hypot':
-    case 'log':
-    case 'exp':
-    case 'abs':
-    case 'sign':
+    case 'min': case 'max': case 'clamp':
+    case 'round': case 'mod': case 'rem':
+    case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
+    case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
+    case 'abs': case 'sign': // Sign-related functions
       return cloneDimensionalType(calculation.dimensionalType);
 
     case 'sum':
@@ -1696,26 +1691,11 @@ export function simplifyCalculationTree(
     case 'product':
       return simplifyProduct(root, context);
 
-    case 'min':
-    case 'max':
-    case 'clamp':
-    case 'round':
-    case 'mod':
-    case 'rem':
-    case 'sin':
-    case 'cos':
-    case 'tan':
-    case 'asin':
-    case 'acos':
-    case 'atan':
-    case 'atan2':
-    case 'pow':
-    case 'sqrt':
-    case 'hypot':
-    case 'log':
-    case 'exp':
-    case 'abs':
-    case 'sign':
+    case 'min': case 'max': case 'clamp':
+    case 'round': case 'mod': case 'rem':
+    case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
+    case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
+    case 'abs': case 'sign':
       return simplifyMathFunctionNode(root, context);
   }
 }
@@ -2192,4 +2172,199 @@ function isUnit<Unit extends string>(
   value: string,
 ): value is Unit {
   return units.some((unit) => unit === value);
+}
+
+//  ███▌  █████▌ ████▌  ████  ███▌  █▌
+// █▌  █▌ █▌     █▌  █▌  ▐▌  ▐█ ▐█  █▌
+// █▌     █▌     █▌  █▌  ▐▌  █▌  █▌ █▌
+//  ███▌  ████   ████▌   ▐▌  █▌  █▌ █▌
+//     █▌ █▌     █▌▐█    ▐▌  █████▌ █▌
+// █▌  █▌ █▌     █▌ ▐█   ▐▌  █▌  █▌ █▌
+//  ███▌  █████▌ █▌  █▌ ████ █▌  █▌ █████
+
+export function serializeMathFunction(value: MathFunctionValue): string {
+  if (value.type === 'calc') {
+    if (isMathFunctionNode(value.calculation)) {
+      return serializeMathFunction(value.calculation);
+    }
+
+    return `calc(${unwrapParens(
+      serializeCalcTree(value.calculation),
+    )})`;
+  }
+
+  const serializedChildren = value.children.flatMap((child) => {
+    if (child === undefined) {
+      return [];
+    }
+
+    return child === null
+      ? ['none']
+      : [unwrapParens(serializeCalcTree(child))];
+  });
+
+  if (value.type === 'round' && value.strategy !== 'nearest') {
+    serializedChildren.unshift(value.strategy);
+  }
+
+  return `${value.type}(${serializedChildren.join(', ')})`;
+}
+
+function isMathFunctionNode(
+  value: CalculationTree,
+): value is MathFunctionNode {
+  switch (value.type) {
+    case 'min': case 'max': case 'clamp':
+    case 'round': case 'mod': case 'rem':
+    case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
+    case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
+    case 'abs': case 'sign':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function serializeCalcTree(root: CalculationTree): string {
+  switch (root.type) {
+    case 'number':
+    case 'percentage':
+    case 'dimension':
+      return serializeCalculationNumericValue(root);
+
+    case 'variable':
+      return serializeIdentifier(root.name);
+
+    case 'negate':
+      return `(-1 * ${serializeCalcTree(root.child)})`;
+
+    case 'invert':
+      return `(1 / ${serializeCalcTree(root.child)})`;
+
+    case 'sum':
+      return serializeCalcSum(root);
+
+    case 'product':
+      return serializeCalcProduct(root);
+
+    case 'min': case 'max': case 'clamp':
+    case 'round': case 'mod': case 'rem':
+    case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
+    case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
+    case 'abs': case 'sign':
+      return serializeMathFunction(root);
+  }
+}
+
+function serializeCalcSum(root: CalcSumNode): string {
+  const [first, ...rest] = sortCalculationChildren(root.children);
+  let serialized = `(${serializeCalcTree(first!)}`;
+
+  for (const child of rest) {
+    if (child.type === 'negate') {
+      serialized += ` - ${serializeCalcTree(child.child)}`;
+    } else if (isNegativeNumericValue(child)) {
+      serialized += ` - ${serializeCalculationNumericValue(
+        negateNumericValue(child),
+      )}`;
+    } else {
+      serialized += ` + ${serializeCalcTree(child)}`;
+    }
+  }
+
+  return `${serialized})`;
+}
+
+function serializeCalcProduct(root: CalcProductNode): string {
+  const [first, ...rest] = sortCalculationChildren(root.children);
+  let serialized = `(${serializeCalcTree(first!)}`;
+
+  for (const child of rest) {
+    if (child.type === 'invert') {
+      serialized += ` / ${serializeCalcTree(child.child)}`;
+    } else {
+      serialized += ` * ${serializeCalcTree(child)}`;
+    }
+  }
+
+  return `${serialized})`;
+}
+
+function unwrapParens(value: string): string {
+  return value.startsWith('(') && value.endsWith(')')
+    ? value.slice(1, -1)
+    : value;
+}
+
+
+function isNegativeNumericValue(
+  value: CalculationTree,
+): value is CalculationNumericValue {
+  return (
+    isCalculationNumericValue(value) &&
+    (value.value < 0 || Object.is(value.value, -0))
+  );
+}
+
+function serializeCalculationNumericValue(
+  value: CalculationNumericValue,
+): string {
+  if (Number.isFinite(value.value)) {
+    switch (value.type) {
+      case 'number':
+        return serializeNumber(value);
+      case 'percentage':
+        return serializePercentage(value);
+      case 'dimension':
+        return serializeDimension(value);
+    }
+  }
+
+  const keyword = Number.isNaN(value.value)
+    ? 'NaN'
+    : value.value < 0
+      ? '-infinity'
+      : 'infinity';
+
+  switch (value.type) {
+    case 'number':
+      return keyword;
+    case 'percentage':
+      return `${keyword} * ${serializePercentage({
+        type: 'percentage',
+        value: 1,
+      })}`;
+    case 'dimension':
+      return `${keyword} * ${serializeDimension({
+        type: 'dimension',
+        value: 1,
+        unit: canonicalUnitForDimension(value.unit),
+      })}`;
+  }
+}
+
+function canonicalUnitForDimension(unit: string): string {
+  const type = dimensionalTypeForUnit(unit);
+  const category = type === null
+    ? null
+    : resolvedDimensionalCategory(type);
+
+  switch (category) {
+    case 'length':
+      return 'px';
+    case 'angle':
+      return 'deg';
+    case 'time':
+      return 's';
+    case 'frequency':
+      return 'hz';
+    case 'resolution':
+      return 'dppx';
+    case 'flex':
+      return 'fr';
+    case 'number':
+    case 'percent':
+    case null:
+      throw new TypeError(`Cannot serialize unknown dimension unit: ${unit}`);
+  }
 }
