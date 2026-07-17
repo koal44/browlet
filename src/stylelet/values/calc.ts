@@ -14,23 +14,31 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import { ANGLE_UNITS } from './angle';
+import { ANGLE_UNITS, resolveAngle } from './angle';
 import { tryConsumeDimension, type DimensionValue } from './dimension';
-import { FREQUENCY_UNITS } from './frequency';
-import { LENGTH_UNITS } from './length';
+import { FREQUENCY_UNITS, resolveFrequency } from './frequency';
+import {
+  LENGTH_UNITS, tryResolveLength,
+  type LengthResolutionContext,
+} from './length';
 import { tryConsumeNumber, type NumberValue } from './number';
 import { tryConsumePercentage, type PercentageValue } from './percentage';
-import { RESOLUTION_UNITS } from './resolution';
-import { TIME_UNITS } from './time';
+import { RESOLUTION_UNITS, resolveResolution } from './resolution';
+import { TIME_UNITS, resolveTime } from './time';
 
 const CALC_TERM_LIMIT = 32;
 
-export type CalculationContext = {
+export type CalculationContext = CalculationSimplificationContext & {
   /** Whether the current grammar is nested inside another calculation. */
   insideCalculation?: boolean;
 
   /** Number of calculation terms consumed by the current calculation. */
   termCount?: number;
+};
+
+export type CalculationSimplificationContext = {
+  /** Context used to reduce lengths to the canonical px unit. */
+  length?: LengthResolutionContext;
 
   /** Reserved for context-dependent percentage typing and resolution. */
   percentage?: never;
@@ -108,7 +116,7 @@ export function tryConsumeCalc(
 
   return ok({
     type: 'calc',
-    calculation: result.value,
+    calculation: simplifyCalculationTree(result.value, context),
     dimensionalType,
   });
 }
@@ -505,9 +513,15 @@ export function tryConsumeCalcKeyword(
   });
 }
 
-/*
- * Dimensional analysis
- */
+// █████▌ █   ▐▌ ████▌  █████▌  ███▌
+//   █▌   ▐▌  █  █▌  █▌ █▌     █▌  █▌
+//   █▌    █ ▐▌  █▌  █▌ █▌     █▌
+//   █▌    ▐▌█   ████▌  ████    ███▌
+//   █▌     █▌   █▌     █▌         █▌
+//   █▌     █▌   █▌     █▌     █▌  █▌
+//   █▌     █▌   █▌     █████▌  ███▌
+//
+// Dimensional Analysis
 
 export const DIMENSIONAL_BASE_TYPES = [
   'length',
@@ -893,4 +907,436 @@ function enterCalculationContext(
   }
 
   return { ...calculationContext, insideCalculation: true, termCount: 0 };
+}
+
+//  ███▌  ████ █     █ ████▌  █▌
+// █▌  █▌  ▐▌  ██   ██ █▌  █▌ █▌
+// █▌      ▐▌  █▌█ █▐█ █▌  █▌ █▌
+//  ███▌   ▐▌  █▌ █ ▐█ ████▌  █▌
+//     █▌  ▐▌  █▌   ▐█ █▌     █▌
+// █▌  █▌  ▐▌  █▌   ▐█ █▌     █▌
+//  ███▌  ████ █▌   ▐█ █▌     █████
+
+export function simplifyCalculationTree(
+  root: CalculationTree,
+  context: CalculationSimplificationContext = {},
+): CalculationTree {
+  switch (root.type) {
+    case 'number':
+    case 'percentage':
+      return root;
+
+    case 'dimension':
+      return canonicalizeDimension(root, context);
+
+    case 'variable': {
+      const value = context.numericVariables?.get(root.name)?.value;
+      return value === null || value === undefined
+        ? root
+        : simplifyCalculationTree(value, context);
+    }
+
+    case 'negate':
+      return simplifyNegate(root, context);
+
+    case 'invert':
+      return simplifyInvert(root, context);
+
+    case 'sum':
+      return simplifySum(root, context);
+
+    case 'product':
+      return simplifyProduct(root, context);
+  }
+}
+
+function simplifyNegate(
+  root: CalcNegateNode,
+  context: CalculationSimplificationContext,
+): CalculationTree {
+  const child = simplifyCalculationTree(root.child, context);
+
+  if (isCalculationNumericValue(child)) {
+    return negateNumericValue(child);
+  }
+
+  if (child.type === 'negate') {
+    return child.child;
+  }
+
+  if (child.type === 'sum') {
+    return {
+      type: 'sum',
+      children: child.children.map((grandchild) => {
+        if (isCalculationNumericValue(grandchild)) {
+          return negateNumericValue(grandchild);
+        }
+
+        if (grandchild.type === 'negate') {
+          return grandchild.child;
+        }
+
+        return createNegateNode(grandchild, context);
+      }) as CalcSumNode['children'],
+      dimensionalType: cloneDimensionalType(root.dimensionalType),
+    };
+  }
+
+  return {
+    ...root,
+    child,
+    dimensionalType: cloneDimensionalType(root.dimensionalType),
+  };
+}
+
+function simplifyInvert(
+  root: CalcInvertNode,
+  context: CalculationSimplificationContext,
+): CalculationTree {
+  const child = simplifyCalculationTree(root.child, context);
+
+  if (child.type === 'number') {
+    return { type: 'number', value: 1 / child.value };
+  }
+
+  if (child.type === 'invert') {
+    return child.child;
+  }
+
+  return {
+    ...root,
+    child,
+    dimensionalType: cloneDimensionalType(root.dimensionalType),
+  };
+}
+
+function simplifySum(
+  root: CalcSumNode,
+  context: CalculationSimplificationContext,
+): CalculationTree {
+  const simplified = root.children.map((child) => (
+    simplifyCalculationTree(child, context)
+  ));
+  const flattened = simplified.flatMap((child) => (
+    child.type === 'sum' ? child.children : [child]
+  ));
+  const children = combineLikeNumericValues(flattened);
+
+  if (children.length === 1) {
+    return children[0]!;
+  }
+
+  return {
+    ...root,
+    children: children as CalcSumNode['children'],
+    dimensionalType: cloneDimensionalType(root.dimensionalType),
+  };
+}
+
+function simplifyProduct(
+  root: CalcProductNode,
+  context: CalculationSimplificationContext,
+): CalculationTree {
+  const simplified = root.children.map((child) => (
+    simplifyCalculationTree(child, context)
+  ));
+  const flattened = simplified.flatMap((child) => (
+    child.type === 'product' ? child.children : [child]
+  ));
+  const children = combineProductNumbers(flattened);
+
+  if (children.length === 2) {
+    const number = children.find((child) => child.type === 'number');
+    const sum = children.find((child) => child.type === 'sum');
+
+    if (
+      number?.type === 'number' &&
+      sum?.type === 'sum' &&
+      sum.children.every(isCalculationNumericValue)
+    ) {
+      return {
+        type: 'sum',
+        children: sum.children.map((child) => (
+          multiplyNumericValue(
+            child as CalculationNumericValue,
+            number.value,
+          )
+        )) as CalcSumNode['children'],
+        dimensionalType: cloneDimensionalType(root.dimensionalType),
+      };
+    }
+  }
+
+  const product = evaluateNumericProduct(
+    children,
+    root.dimensionalType,
+  );
+
+  if (product !== null) {
+    return product;
+  }
+
+  return {
+    ...root,
+    children: children as CalcProductNode['children'],
+    dimensionalType: cloneDimensionalType(root.dimensionalType),
+  };
+}
+
+type CalculationNumericValue =
+  | NumberValue
+  | DimensionValue
+  | PercentageValue;
+
+function isCalculationNumericValue(
+  value: CalculationTree,
+): value is CalculationNumericValue {
+  return (
+    value.type === 'number' ||
+    value.type === 'dimension' ||
+    value.type === 'percentage'
+  );
+}
+
+function multiplyNumericValue(
+  value: CalculationNumericValue,
+  multiplier: number,
+): CalculationNumericValue {
+  return { ...value, value: value.value * multiplier };
+}
+
+function negateNumericValue(
+  value: CalculationNumericValue,
+): CalculationNumericValue {
+  return { ...value, value: 0 - value.value };
+}
+
+function createNegateNode(
+  child: CalculationTree,
+  context: CalculationSimplificationContext,
+): CalcNegateNode {
+  const dimensionalType = dimensionalTypeOf(child, context);
+
+  if (dimensionalType === null) {
+    throw new TypeError('Cannot negate an invalid calculation type');
+  }
+
+  return {
+    type: 'negate',
+    child,
+    dimensionalType,
+  };
+}
+
+function combineLikeNumericValues(
+  children: readonly CalculationTree[],
+): CalculationTree[] {
+  const totals = new Map<string, number>();
+
+  for (const child of children) {
+    if (isCalculationNumericValue(child)) {
+      const key = numericUnitKey(child);
+      totals.set(
+        key,
+        totals.has(key) ? totals.get(key)! + child.value : child.value,
+      );
+    }
+  }
+
+  const emitted = new Set<string>();
+  const combined: CalculationTree[] = [];
+
+  for (const child of children) {
+    if (!isCalculationNumericValue(child)) {
+      combined.push(child);
+      continue;
+    }
+
+    const key = numericUnitKey(child);
+
+    if (!emitted.has(key)) {
+      combined.push({
+        ...child,
+        value: totals.get(key)!,
+      });
+      emitted.add(key);
+    }
+  }
+
+  return combined;
+}
+
+function numericUnitKey(value: CalculationNumericValue): string {
+  switch (value.type) {
+    case 'number':
+      return 'number';
+    case 'percentage':
+      return 'percentage';
+    case 'dimension':
+      return `dimension:${value.unit}`;
+  }
+}
+
+function combineProductNumbers(
+  children: readonly CalculationTree[],
+): CalculationTree[] {
+  const numbers = children.filter((child) => child.type === 'number');
+
+  if (numbers.length < 2) {
+    return [...children];
+  }
+
+  const product = numbers.reduce(
+    (value, number) => value * number.value,
+    1,
+  );
+  const combined: CalculationTree[] = [];
+  let emitted = false;
+
+  for (const child of children) {
+    if (child.type !== 'number') {
+      combined.push(child);
+      continue;
+    }
+
+    if (!emitted) {
+      combined.push({ type: 'number', value: product });
+      emitted = true;
+    }
+  }
+
+  return combined;
+}
+
+function evaluateNumericProduct(
+  children: readonly CalculationTree[],
+  dimensionalType: DimensionalType,
+): CalculationNumericValue | null {
+  if (!children.every(isNumericProductFactor)) {
+    return null;
+  }
+
+  const units = new Map<string, number>();
+  let value = 1;
+
+  for (const child of children) {
+    const inverted = child.type === 'invert';
+    const factor = inverted ? child.child : child;
+    const exponent = inverted ? -1 : 1;
+    value = inverted
+      ? value / factor.value
+      : value * factor.value;
+
+    if (factor.type === 'percentage') {
+      units.set('%', (units.get('%') ?? 0) + exponent);
+    } else if (factor.type === 'dimension') {
+      const unit = asciiLower(factor.unit);
+      units.set(unit, (units.get(unit) ?? 0) + exponent);
+    }
+  }
+
+  const remaining = [...units].filter(([, power]) => power !== 0);
+  const category = resolvedDimensionalCategory(dimensionalType);
+
+  if (remaining.length === 0) {
+    return category === 'number'
+      ? { type: 'number', value }
+      : null;
+  }
+
+  if (remaining.length !== 1 || remaining[0]![1] !== 1) {
+    return null;
+  }
+
+  const unit = remaining[0]![0];
+
+  if (unit === '%') {
+    return category === 'percent'
+      ? { type: 'percentage', value }
+      : null;
+  }
+
+  const unitType = dimensionalTypeForUnit(unit);
+
+  if (
+    unitType === null ||
+    resolvedDimensionalCategory(unitType) !== category
+  ) {
+    return null;
+  }
+
+  return { type: 'dimension', value, unit };
+}
+
+function isNumericProductFactor(
+  value: CalculationTree,
+): value is CalculationNumericValue | (
+  CalcInvertNode & { child: CalculationNumericValue; }
+) {
+  return (
+    isCalculationNumericValue(value) ||
+    (value.type === 'invert' && isCalculationNumericValue(value.child))
+  );
+}
+
+function canonicalizeDimension(
+  value: DimensionValue,
+  context: CalculationSimplificationContext,
+): DimensionValue {
+  const unit = asciiLower(value.unit);
+  let resolved: DimensionValue<string, string> | null;
+
+  if (isUnit(LENGTH_UNITS, unit)) {
+    resolved = tryResolveLength(
+      {
+        type: 'length',
+        value: value.value,
+        unit,
+      },
+      context.length,
+    );
+  } else if (isUnit(ANGLE_UNITS, unit)) {
+    resolved = resolveAngle({
+      type: 'angle',
+      value: value.value,
+      unit,
+    });
+  } else if (isUnit(TIME_UNITS, unit)) {
+    resolved = resolveTime({
+      type: 'time',
+      value: value.value,
+      unit,
+    });
+  } else if (isUnit(FREQUENCY_UNITS, unit)) {
+    resolved = resolveFrequency({
+      type: 'frequency',
+      value: value.value,
+      unit,
+    });
+  } else if (isUnit(RESOLUTION_UNITS, unit)) {
+    resolved = resolveResolution({
+      type: 'resolution',
+      value: value.value,
+      unit,
+    });
+  } else if (unit === 'fr') {
+    resolved = { type: 'dimension', value: value.value, unit };
+  } else {
+    return value;
+  }
+
+  return resolved === null
+    ? { ...value, unit }
+    : {
+      type: 'dimension',
+      value: resolved.value,
+      unit: resolved.unit,
+    };
+}
+
+function isUnit<Unit extends string>(
+  units: readonly Unit[],
+  value: string,
+): value is Unit {
+  return units.some((unit) => unit === value);
 }

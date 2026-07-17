@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
+import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
-  parseCalc, tryConsumeCalc,
+  parseCalc, simplifyCalculationTree, tryConsumeCalc, tryConsumeCalcSum,
   type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
   type DimensionalBaseType, type DimensionalExponent, type DimensionalType,
 } from '../../../src/stylelet/values/calc';
@@ -28,63 +29,97 @@ describe('calc', () => {
     });
   });
 
-  it('builds a calculation tree with operator precedence', () => {
+  it('respects operator precedence while simplifying', () => {
     expect(parseCalc('calc(1px + 2 * 3px - 4px / 2)')).toEqual({
       type: 'calc',
       dimensionalType: dimensionalType(['length', 1]),
-      calculation: {
-        type: 'sum',
-        dimensionalType: dimensionalType(['length', 1]),
-        children: [
-          { type: 'dimension', value: 1, unit: 'px' },
-          {
-            type: 'product',
-            dimensionalType: dimensionalType(['length', 1]),
-            children: [
-              { type: 'number', value: 2 },
-              { type: 'dimension', value: 3, unit: 'px' },
-            ],
-          },
-          {
-            type: 'negate',
-            dimensionalType: dimensionalType(['length', 1]),
-            child: {
-              type: 'product',
-              dimensionalType: dimensionalType(['length', 1]),
-              children: [
-                { type: 'dimension', value: 4, unit: 'px' },
-                {
-                  type: 'invert',
-                  dimensionalType: dimensionalType(),
-                  child: { type: 'number', value: 2 },
-                },
-              ],
-            },
-          },
-        ],
-      },
+      calculation: { type: 'dimension', value: 5, unit: 'px' },
     });
   });
 
-  it('uses parenthesized calculations for grouping', () => {
+  it('uses parenthesized calculations for grouping while simplifying', () => {
     expect(parseCalc('calc((1 + 2) * 3)')).toEqual({
       type: 'calc',
       dimensionalType: dimensionalType(),
-      calculation: {
-        type: 'product',
-        dimensionalType: dimensionalType(),
-        children: [
-          {
-            type: 'sum',
-            dimensionalType: dimensionalType(),
-            children: [
-              { type: 'number', value: 1 },
-              { type: 'number', value: 2 },
-            ],
-          },
-          { type: 'number', value: 3 },
-        ],
-      },
+      calculation: { type: 'number', value: 9 },
+    });
+  });
+
+  it.each([
+    ['calc(1in + 96px)', 192, 'px'],
+    ['calc(1turn + 180deg)', 540, 'deg'],
+    ['calc(1000ms + 1s)', 2, 's'],
+    ['calc(1khz + 500hz)', 1500, 'hz'],
+    ['calc(96dpi + 1dppx)', 2, 'dppx'],
+  ] as const)(
+    'combines compatible dimensions in their canonical unit for %s',
+    (input, value, unit) => {
+      expect(parseCalc(input)?.calculation).toEqual({
+        type: 'dimension',
+        value,
+        unit,
+      });
+    },
+  );
+
+  it('simplifies again when later length context becomes available', () => {
+    const parsed = parseCalc('calc(1em + 2px)')!;
+
+    expect(parsed.calculation.type).toBe('sum');
+    expect(simplifyCalculationTree(parsed.calculation, {
+      length: { em: 16 },
+    })).toEqual({
+      type: 'dimension',
+      value: 18,
+      unit: 'px',
+    });
+  });
+
+  it('combines unresolved dimensions using ASCII-insensitive units', () => {
+    expect(parseCalc('calc(1EM + 2em)')?.calculation).toEqual({
+      type: 'dimension',
+      value: 3,
+      unit: 'em',
+    });
+  });
+
+  it('distributes a number over a sum of numeric values', () => {
+    expect(parseCalc('calc(2 * (1px + 2em))')?.calculation).toEqual({
+      type: 'sum',
+      dimensionalType: dimensionalType(['length', 1]),
+      children: [
+        { type: 'dimension', value: 2, unit: 'px' },
+        { type: 'dimension', value: 4, unit: 'em' },
+      ],
+    });
+  });
+
+  it('retains zero-valued terms with a distinct unit', () => {
+    expect(parseCalc('calc(0px + 1em)')?.calculation).toEqual({
+      type: 'sum',
+      dimensionalType: dimensionalType(['length', 1]),
+      children: [
+        { type: 'dimension', value: 0, unit: 'px' },
+        { type: 'dimension', value: 1, unit: 'em' },
+      ],
+    });
+  });
+
+  it('negates positive zero using CSS addition semantics', () => {
+    const simplified = simplifyCalculationTree({
+      type: 'negate',
+      child: { type: 'number', value: 0 },
+      dimensionalType: dimensionalType(),
+    });
+
+    expect(simplified.type).toBe('number');
+    expect(Object.is(calculationValue(simplified), 0)).toBe(true);
+  });
+
+  it('cancels canonical units in a numeric product', () => {
+    expect(parseCalc('calc(1in / 96px)')?.calculation).toEqual({
+      type: 'number',
+      value: 1,
     });
   });
 
@@ -125,8 +160,7 @@ describe('calc', () => {
   });
 
   it('records compound dimensional types on nested subexpressions', () => {
-    const parsed = parseCalc('calc((1px / 1s) * 1s)');
-    const outer = parsed?.calculation as CalcProductNode;
+    const outer = parseRawCalculation('(1px / 1s) * 1s') as CalcProductNode;
     const inner = outer.children[0] as CalcProductNode;
 
     expect(inner.dimensionalType).toEqual(dimensionalType(
@@ -136,14 +170,10 @@ describe('calc', () => {
     expect(outer.dimensionalType).toEqual(
       dimensionalType(['length', 1]),
     );
-    expect(parsed?.dimensionalType).toEqual(
-      dimensionalType(['length', 1]),
-    );
   });
 
   it('records squared dimensions before a later inverse cancels them', () => {
-    const parsed = parseCalc('calc((1px * 1em) / 1px)');
-    const outer = parsed?.calculation as CalcProductNode;
+    const outer = parseRawCalculation('(1px * 1em) / 1px') as CalcProductNode;
     const inner = outer.children[0] as CalcProductNode;
 
     expect(inner.dimensionalType).toEqual(
@@ -189,22 +219,17 @@ describe('calc', () => {
     expect(sum.dimensionalType).toEqual(dimensionalType());
   });
 
-  it('preserves an available numeric variable for simplification', () => {
+  it('simplifies an available numeric variable', () => {
     const context: CalculationContext = {
       numericVariables: new Map([['h', {
         value: { type: 'number', value: 177 },
         dimensionalType: dimensionalType(),
       }]]),
     };
-    const sum = parseCalc('calc(h + 180)', context)
-      ?.calculation as CalcSumNode;
-
-    expect(sum.children[0]).toEqual({
-      type: 'variable',
-      name: 'h',
-      dimensionalType: dimensionalType(),
+    expect(parseCalc('calc(h + 180)', context)?.calculation).toEqual({
+      type: 'number',
+      value: 357,
     });
-    expect(sum.dimensionalType).toEqual(dimensionalType());
   });
 
   it('types an unresolved dimensional numeric variable', () => {
@@ -226,7 +251,7 @@ describe('calc', () => {
     expect(sum.dimensionalType).toEqual(lengthType);
   });
 
-  it('preserves an available dimensional variable for simplification', () => {
+  it('simplifies an available dimensional variable', () => {
     const lengthType = dimensionalType(['length', 1]);
     const context: CalculationContext = {
       numericVariables: new Map([['x', {
@@ -234,15 +259,11 @@ describe('calc', () => {
         dimensionalType: lengthType,
       }]]),
     };
-    const sum = parseCalc('calc(x + 1px)', context)
-      ?.calculation as CalcSumNode;
-
-    expect(sum.children[0]).toEqual({
-      type: 'variable',
-      name: 'x',
-      dimensionalType: lengthType,
+    expect(parseCalc('calc(x + 1px)', context)?.calculation).toEqual({
+      type: 'dimension',
+      value: 3,
+      unit: 'px',
     });
-    expect(sum.dimensionalType).toEqual(lengthType);
   });
 
   it('rejects a numeric variable outside its defining context', () => {
@@ -288,12 +309,11 @@ describe('calc', () => {
 
   it('supports at least 32 calculation terms', () => {
     const input = Array.from({ length: 32 }, (_, index) => index + 1).join(' + ');
-    const calculation = parseCalc(`calc(${input})`)?.calculation as
-      | CalcSumNode
-      | undefined;
 
-    expect(calculation?.type).toBe('sum');
-    expect(calculation?.children).toHaveLength(32);
+    expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
+      type: 'number',
+      value: 528,
+    });
   });
 
   it('limits calculation terms across nested groups', () => {
@@ -332,6 +352,30 @@ function expectBadCalc(input: string): void {
 
   expect(result).toMatchObject({ kind: 'bad' });
   expect(c.pos()).toBe(1);
+}
+
+function parseRawCalculation(
+  input: string,
+  context: CalculationContext = {},
+): CalculationTree {
+  const values = parseListOfComponentValues(input);
+  const c = new ComponentCursor(values, {
+    context: {
+      ...context,
+      insideCalculation: true,
+      termCount: 0,
+    } satisfies CalculationContext,
+  });
+  const result = tryConsumeCalcSum(c);
+
+  expect(isOk(result)).toBe(true);
+  expect(c.pos()).toBe(values.length);
+
+  if (!isOk(result)) {
+    throw new Error('Expected a valid raw calculation');
+  }
+
+  return result.value;
 }
 
 function calculationValue(calculation: CalculationTree): number | undefined {
