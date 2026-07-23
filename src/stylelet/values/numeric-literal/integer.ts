@@ -1,17 +1,17 @@
-import { tryConsumeIntegerToken } from '../parser/component-consumers';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { tryConsumeIntegerToken } from '../../parser/component-consumers';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+} from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 
 /*
  * <integer> = <integer-number-token>
  * <integer-number-token> = a <number-token> whose type flag is "integer"
  */
 
-export type IntegerValue = {
+export type IntegerLiteral = {
   type: 'integer';
   value: number;
 };
@@ -19,7 +19,7 @@ export type IntegerValue = {
 export function parseInteger(
   input: ParserInput,
   context: unknown = undefined,
-): IntegerValue | null {
+): IntegerLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -37,11 +37,11 @@ export type IntegerConsumerOptions = {
 
 export function createIntegerConsumer(
   options: IntegerConsumerOptions = {},
-): TryComponentConsumer<IntegerValue> {
+): TryComponentConsumer<IntegerLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<IntegerValue> => {
+  return (c): TryComponentConsumerResult<IntegerLiteral> => {
     const start = c.pos();
     const token = tryConsumeIntegerToken(c);
 
@@ -64,7 +64,7 @@ export function createIntegerConsumer(
 export const tryConsumeInteger = createIntegerConsumer();
 
 // CSSOM, "To serialize a CSS component value", <integer>.
-export function serializeInteger(value: IntegerValue): string {
+export function serializeInteger(value: IntegerLiteral): string {
   if (Number.isSafeInteger(value.value)) {
     return Object.is(value.value, -0) ? '0' : String(value.value);
   }
@@ -73,26 +73,26 @@ export function serializeInteger(value: IntegerValue): string {
 }
 
 // CSS Values, "Computation and Combination of <integer>".
-export function addIntegers(a: IntegerValue, b: IntegerValue): IntegerValue {
+export function addIntegers(a: IntegerLiteral, b: IntegerLiteral): IntegerLiteral {
   return integerResult(a.value + b.value);
 }
 
 export function interpolateIntegers(
-  a: IntegerValue,
-  b: IntegerValue,
+  a: IntegerLiteral,
+  b: IntegerLiteral,
   p: number,
-): IntegerValue {
+): IntegerLiteral {
   return integerResult(Math.round((1 - p) * a.value + p * b.value));
 }
 
 export function accumulateIntegers(
-  a: IntegerValue,
-  b: IntegerValue,
-): IntegerValue {
+  a: IntegerLiteral,
+  b: IntegerLiteral,
+): IntegerLiteral {
   return addIntegers(a, b);
 }
 
-function integerResult(value: number): IntegerValue {
+function integerResult(value: number): IntegerLiteral {
   return {
     type: 'integer',
     value: value === 0 ? 0 : value,

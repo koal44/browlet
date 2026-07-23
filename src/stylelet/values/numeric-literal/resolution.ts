@@ -1,26 +1,26 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { asciiLower } from '../../../shared/css';
+import { assertNever } from '../../../shared/util';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeDimension, type DimensionValue } from './dimension';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <resolution> = <nonnegative dimension-token with a resolution unit>
  */
 
-export type ResolutionValue = DimensionValue<'resolution', ResolutionUnit>;
+export type ResolutionLiteral = DimensionLiteral<'resolution', ResolutionUnit>;
 
-export type CanonicalResolutionValue =
-  DimensionValue<'resolution', 'dppx'>;
+export type CanonicalResolutionLiteral =
+  DimensionLiteral<'resolution', 'dppx'>;
 
 export const RESOLUTION_UNITS = ['dpi', 'dpcm', 'dppx', 'x'] as const;
 
@@ -29,7 +29,7 @@ export type ResolutionUnit = (typeof RESOLUTION_UNITS)[number];
 export function parseResolution(
   input: ParserInput,
   context: unknown = undefined,
-): ResolutionValue | null {
+): ResolutionLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -50,11 +50,11 @@ export type ResolutionConsumerOptions = {
 
 export function createResolutionConsumer(
   options: ResolutionConsumerOptions = {},
-): TryComponentConsumer<ResolutionValue> {
+): TryComponentConsumer<ResolutionLiteral> {
   const min = Math.max(0, options.min ?? -Infinity);
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<ResolutionValue> => {
+  return (c): TryComponentConsumerResult<ResolutionLiteral> => {
     const start = c.pos();
     const result = tryConsumeUnrestrictedResolution(c);
 
@@ -77,7 +77,7 @@ export const tryConsumeResolution = createResolutionConsumer();
 
 function tryConsumeUnrestrictedResolution(
   c: ComponentCursor,
-): TryComponentConsumerResult<ResolutionValue> {
+): TryComponentConsumerResult<ResolutionLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -109,19 +109,19 @@ function isResolutionUnit(value: string): value is ResolutionUnit {
   return RESOLUTION_UNITS.some((unit) => unit === value);
 }
 
-export function serializeResolution(value: ResolutionValue): string {
+export function serializeResolution(value: ResolutionLiteral): string {
   return serializeDimension(value);
 }
 
 export function serializeCanonicalResolution(
-  value: CanonicalResolutionValue,
+  value: CanonicalResolutionLiteral,
 ): string {
   return serializeDimension(value);
 }
 
 export function resolveResolution(
-  value: ResolutionValue,
-): CanonicalResolutionValue {
+  value: ResolutionLiteral,
+): CanonicalResolutionLiteral {
   let dotsPerPixel: number;
 
   switch (value.unit) {

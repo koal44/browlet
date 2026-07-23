@@ -1,17 +1,17 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { asciiLower } from '../../../shared/css';
+import { assertNever } from '../../../shared/util';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeDimension, type DimensionValue } from './dimension';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <angle> = <dimension-token with an angle unit>
@@ -19,9 +19,9 @@ import { serializeDimension, type DimensionValue } from './dimension';
  * Legacy grammars that accept a bare zero must explicitly include <zero>.
  */
 
-export type AngleValue = DimensionValue<'angle', AngleUnit>;
+export type AngleLiteral = DimensionLiteral<'angle', AngleUnit>;
 
-export type CanonicalAngleValue = DimensionValue<'angle', 'deg'>;
+export type CanonicalAngleLiteral = DimensionLiteral<'angle', 'deg'>;
 
 export const ANGLE_UNITS = ['deg', 'grad', 'rad', 'turn'] as const;
 
@@ -30,7 +30,7 @@ export type AngleUnit = (typeof ANGLE_UNITS)[number];
 export function parseAngle(
   input: ParserInput,
   context: unknown = undefined,
-): AngleValue | null {
+): AngleLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -51,11 +51,11 @@ export type AngleConsumerOptions = {
 
 export function createAngleConsumer(
   options: AngleConsumerOptions = {},
-): TryComponentConsumer<AngleValue> {
+): TryComponentConsumer<AngleLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<AngleValue> => {
+  return (c): TryComponentConsumerResult<AngleLiteral> => {
     const start = c.pos();
     const result = tryConsumeUnrestrictedAngle(c);
 
@@ -78,7 +78,7 @@ export const tryConsumeAngle = createAngleConsumer();
 
 function tryConsumeUnrestrictedAngle(
   c: ComponentCursor,
-): TryComponentConsumerResult<AngleValue> {
+): TryComponentConsumerResult<AngleLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -110,15 +110,15 @@ function isAngleUnit(value: string): value is AngleUnit {
   return ANGLE_UNITS.some((unit) => unit === value);
 }
 
-export function serializeAngle(value: AngleValue): string {
+export function serializeAngle(value: AngleLiteral): string {
   return serializeDimension(value);
 }
 
-export function serializeCanonicalAngle(value: CanonicalAngleValue): string {
+export function serializeCanonicalAngle(value: CanonicalAngleLiteral): string {
   return serializeDimension(value);
 }
 
-export function resolveAngle(value: AngleValue): CanonicalAngleValue {
+export function resolveAngle(value: AngleLiteral): CanonicalAngleLiteral {
   let degrees: number;
 
   switch (value.unit) {

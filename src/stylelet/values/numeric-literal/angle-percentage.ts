@@ -1,22 +1,22 @@
-import { withComponentTrivia } from '../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { withComponentTrivia } from '../../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   resolveAngle, serializeAngle, tryConsumeAngle,
-  type AngleValue, type CanonicalAngleValue,
+  type AngleLiteral, type CanonicalAngleLiteral,
 } from './angle';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
   tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 
 /*
  * <angle-percentage> = [ <angle> | <percentage> ]
  */
 
-export type AnglePercentageValue = DimensionPercentageValue<AngleValue>;
+export type AnglePercentageLiteral = DimensionPercentageLiteral<AngleLiteral>;
 
 export type AnglePercentageResolutionContext = {
   /** Percentage basis in canonical degrees. */
@@ -26,7 +26,7 @@ export type AnglePercentageResolutionContext = {
 export function parseAnglePercentage(
   input: ParserInput,
   context: unknown = undefined,
-): AnglePercentageValue | null {
+): AnglePercentageLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -42,7 +42,7 @@ export type AnglePercentageConsumerOptions =
 
 export function createAnglePercentageConsumer(
   options: AnglePercentageConsumerOptions = {},
-): TryComponentConsumer<AnglePercentageValue> {
+): TryComponentConsumer<AnglePercentageLiteral> {
   return createDimensionPercentageConsumer(
     tryConsumeAngle,
     'Angle-percentage',
@@ -52,14 +52,14 @@ export function createAnglePercentageConsumer(
 
 export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
 
-export function serializeAnglePercentage(value: AnglePercentageValue): string {
+export function serializeAnglePercentage(value: AnglePercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeAngle);
 }
 
 export function tryResolveAnglePercentage(
-  value: AnglePercentageValue,
+  value: AnglePercentageLiteral,
   context: AnglePercentageResolutionContext = {},
-): CanonicalAngleValue | null {
+): CanonicalAngleLiteral | null {
   if (value.type === 'angle') {
     return resolveAngle(value);
   }
@@ -76,23 +76,23 @@ export function tryResolveAnglePercentage(
 }
 
 export function tryAddAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
-): AnglePercentageValue | null {
+  a: AnglePercentageLiteral,
+  b: AnglePercentageLiteral,
+): AnglePercentageLiteral | null {
   return tryAddDimensionPercentages(a, b);
 }
 
 export function tryInterpolateAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
+  a: AnglePercentageLiteral,
+  b: AnglePercentageLiteral,
   p: number,
-): AnglePercentageValue | null {
+): AnglePercentageLiteral | null {
   return tryInterpolateDimensionPercentages(a, b, p);
 }
 
 export function tryAccumulateAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
-): AnglePercentageValue | null {
+  a: AnglePercentageLiteral,
+  b: AnglePercentageLiteral,
+): AnglePercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }

@@ -1,22 +1,22 @@
-import { withComponentTrivia } from '../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { withComponentTrivia } from '../../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   resolveTime, serializeTime, tryConsumeTime,
-  type CanonicalTimeValue, type TimeValue,
+  type CanonicalTimeLiteral, type TimeLiteral,
 } from './time';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
   tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 
 /*
  * <time-percentage> = [ <time> | <percentage> ]
  */
 
-export type TimePercentageValue = DimensionPercentageValue<TimeValue>;
+export type TimePercentageLiteral = DimensionPercentageLiteral<TimeLiteral>;
 
 export type TimePercentageResolutionContext = {
   /** Percentage basis in canonical seconds. */
@@ -26,7 +26,7 @@ export type TimePercentageResolutionContext = {
 export function parseTimePercentage(
   input: ParserInput,
   context: unknown = undefined,
-): TimePercentageValue | null {
+): TimePercentageLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -42,7 +42,7 @@ export type TimePercentageConsumerOptions =
 
 export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
-): TryComponentConsumer<TimePercentageValue> {
+): TryComponentConsumer<TimePercentageLiteral> {
   return createDimensionPercentageConsumer(
     tryConsumeTime,
     'Time-percentage',
@@ -52,14 +52,14 @@ export function createTimePercentageConsumer(
 
 export const tryConsumeTimePercentage = createTimePercentageConsumer();
 
-export function serializeTimePercentage(value: TimePercentageValue): string {
+export function serializeTimePercentage(value: TimePercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeTime);
 }
 
 export function tryResolveTimePercentage(
-  value: TimePercentageValue,
+  value: TimePercentageLiteral,
   context: TimePercentageResolutionContext = {},
-): CanonicalTimeValue | null {
+): CanonicalTimeLiteral | null {
   if (value.type === 'time') {
     return resolveTime(value);
   }
@@ -76,23 +76,23 @@ export function tryResolveTimePercentage(
 }
 
 export function tryAddTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
-): TimePercentageValue | null {
+  a: TimePercentageLiteral,
+  b: TimePercentageLiteral,
+): TimePercentageLiteral | null {
   return tryAddDimensionPercentages(a, b);
 }
 
 export function tryInterpolateTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
+  a: TimePercentageLiteral,
+  b: TimePercentageLiteral,
   p: number,
-): TimePercentageValue | null {
+): TimePercentageLiteral | null {
   return tryInterpolateDimensionPercentages(a, b, p);
 }
 
 export function tryAccumulateTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
-): TimePercentageValue | null {
+  a: TimePercentageLiteral,
+  b: TimePercentageLiteral,
+): TimePercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }

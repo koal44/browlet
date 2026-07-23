@@ -1,15 +1,15 @@
-import { one, oneOf } from '../parser/component-grammar';
+import { one, oneOf } from '../../parser/component-grammar';
 import {
   isBad, ok,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   addDimensions, interpolateDimensions,
-  type DimensionValue,
+  type DimensionLiteral,
 } from './dimension';
 import {
   addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
-  type PercentageValue,
+  type PercentageLiteral,
 } from './percentage';
 
 /*
@@ -17,9 +17,9 @@ import {
  * not itself a CSS value production.
  */
 
-export type DimensionPercentageValue<
-  Dimension extends DimensionValue<string, string>,
-> = Dimension | PercentageValue;
+export type DimensionPercentageLiteral<
+  Dimension extends DimensionLiteral<string, string>,
+> = Dimension | PercentageLiteral;
 
 export type DimensionPercentageConsumerOptions = {
   /** Inclusive lower bound on the resolved mixed quantity. */
@@ -30,12 +30,12 @@ export type DimensionPercentageConsumerOptions = {
 };
 
 export function createDimensionPercentageConsumer<
-  Dimension extends DimensionValue<string, string>,
+  Dimension extends DimensionLiteral<string, string>,
 >(
   tryConsumeDimension: TryComponentConsumer<Dimension>,
   productionName: string,
   options: DimensionPercentageConsumerOptions = {},
-): TryComponentConsumer<DimensionPercentageValue<Dimension>> {
+): TryComponentConsumer<DimensionPercentageLiteral<Dimension>> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
@@ -46,7 +46,7 @@ export function createDimensionPercentageConsumer<
   }
 
   const tryConsumeUnrestricted: TryComponentConsumer<
-    DimensionPercentageValue<Dimension>
+    DimensionPercentageLiteral<Dimension>
   > = oneOf(
     [
       one(tryConsumeDimension),
@@ -56,7 +56,7 @@ export function createDimensionPercentageConsumer<
   );
 
   return (c): TryComponentConsumerResult<
-    DimensionPercentageValue<Dimension>
+    DimensionPercentageLiteral<Dimension>
   > => {
     const start = c.pos();
     const result = tryConsumeUnrestricted(c);
@@ -84,9 +84,9 @@ function canCheckRangeWithoutResolution(min: number, max: number): boolean {
 }
 
 export function serializeDimensionPercentage<
-  Dimension extends DimensionValue<string, string>,
+  Dimension extends DimensionLiteral<string, string>,
 >(
-  value: DimensionPercentageValue<Dimension>,
+  value: DimensionPercentageLiteral<Dimension>,
   serializeDimension: (value: Dimension) => string,
 ): string {
   return 'unit' in value
@@ -96,11 +96,11 @@ export function serializeDimensionPercentage<
 
 // CSS Values, "Combination of Percentages and Dimensions".
 export function tryAddDimensionPercentages<
-  Dimension extends DimensionValue<string, string>,
+  Dimension extends DimensionLiteral<string, string>,
 >(
-  a: DimensionPercentageValue<Dimension>,
-  b: DimensionPercentageValue<Dimension>,
-): DimensionPercentageValue<Dimension> | null {
+  a: DimensionPercentageLiteral<Dimension>,
+  b: DimensionPercentageLiteral<Dimension>,
+): DimensionPercentageLiteral<Dimension> | null {
   if (!('unit' in a) && !('unit' in b)) {
     return addPercentages(a, b);
   }
@@ -113,12 +113,12 @@ export function tryAddDimensionPercentages<
 }
 
 export function tryInterpolateDimensionPercentages<
-  Dimension extends DimensionValue<string, string>,
+  Dimension extends DimensionLiteral<string, string>,
 >(
-  a: DimensionPercentageValue<Dimension>,
-  b: DimensionPercentageValue<Dimension>,
+  a: DimensionPercentageLiteral<Dimension>,
+  b: DimensionPercentageLiteral<Dimension>,
   p: number,
-): DimensionPercentageValue<Dimension> | null {
+): DimensionPercentageLiteral<Dimension> | null {
   if (!('unit' in a) && !('unit' in b)) {
     return interpolatePercentages(a, b, p);
   }
@@ -131,10 +131,10 @@ export function tryInterpolateDimensionPercentages<
 }
 
 export function tryAccumulateDimensionPercentages<
-  Dimension extends DimensionValue<string, string>,
+  Dimension extends DimensionLiteral<string, string>,
 >(
-  a: DimensionPercentageValue<Dimension>,
-  b: DimensionPercentageValue<Dimension>,
-): DimensionPercentageValue<Dimension> | null {
+  a: DimensionPercentageLiteral<Dimension>,
+  b: DimensionPercentageLiteral<Dimension>,
+): DimensionPercentageLiteral<Dimension> | null {
   return tryAddDimensionPercentages(a, b);
 }

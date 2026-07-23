@@ -1,22 +1,22 @@
-import { withComponentTrivia } from '../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { withComponentTrivia } from '../../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   serializeLength, tryConsumeLength, tryResolveLength,
-  type CanonicalLengthValue, type LengthResolutionContext, type LengthValue,
+  type CanonicalLengthLiteral, type LengthResolutionContext, type LengthLiteral,
 } from './length';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
   tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 
 /*
  * <length-percentage> = [ <length> | <percentage> ]
  */
 
-export type LengthPercentageValue = DimensionPercentageValue<LengthValue>;
+export type LengthPercentageLiteral = DimensionPercentageLiteral<LengthLiteral>;
 
 export type LengthPercentageResolutionContext = LengthResolutionContext & {
   /** Percentage basis in canonical CSS pixels. */
@@ -26,7 +26,7 @@ export type LengthPercentageResolutionContext = LengthResolutionContext & {
 export function parseLengthPercentage(
   input: ParserInput,
   context: unknown = undefined,
-): LengthPercentageValue | null {
+): LengthPercentageLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -42,7 +42,7 @@ export type LengthPercentageConsumerOptions =
 
 export function createLengthPercentageConsumer(
   options: LengthPercentageConsumerOptions = {},
-): TryComponentConsumer<LengthPercentageValue> {
+): TryComponentConsumer<LengthPercentageLiteral> {
   return createDimensionPercentageConsumer(
     tryConsumeLength,
     'Length-percentage',
@@ -52,14 +52,14 @@ export function createLengthPercentageConsumer(
 
 export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
 
-export function serializeLengthPercentage(value: LengthPercentageValue): string {
+export function serializeLengthPercentage(value: LengthPercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeLength);
 }
 
 export function tryResolveLengthPercentage(
-  value: LengthPercentageValue,
+  value: LengthPercentageLiteral,
   context: LengthPercentageResolutionContext = {},
-): CanonicalLengthValue | null {
+): CanonicalLengthLiteral | null {
   if (value.type === 'length') {
     return tryResolveLength(value, context);
   }
@@ -76,23 +76,23 @@ export function tryResolveLengthPercentage(
 }
 
 export function tryAddLengthPercentages(
-  a: LengthPercentageValue,
-  b: LengthPercentageValue,
-): LengthPercentageValue | null {
+  a: LengthPercentageLiteral,
+  b: LengthPercentageLiteral,
+): LengthPercentageLiteral | null {
   return tryAddDimensionPercentages(a, b);
 }
 
 export function tryInterpolateLengthPercentages(
-  a: LengthPercentageValue,
-  b: LengthPercentageValue,
+  a: LengthPercentageLiteral,
+  b: LengthPercentageLiteral,
   p: number,
-): LengthPercentageValue | null {
+): LengthPercentageLiteral | null {
   return tryInterpolateDimensionPercentages(a, b, p);
 }
 
 export function tryAccumulateLengthPercentages(
-  a: LengthPercentageValue,
-  b: LengthPercentageValue,
-): LengthPercentageValue | null {
+  a: LengthPercentageLiteral,
+  b: LengthPercentageLiteral,
+): LengthPercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }

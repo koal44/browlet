@@ -1,25 +1,25 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { asciiLower } from '../../../shared/css';
+import { assertNever } from '../../../shared/util';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeDimension, type DimensionValue } from './dimension';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <time> = <dimension-token with a time unit>
  */
 
-export type TimeValue = DimensionValue<'time', TimeUnit>;
+export type TimeLiteral = DimensionLiteral<'time', TimeUnit>;
 
-export type CanonicalTimeValue = DimensionValue<'time', 's'>;
+export type CanonicalTimeLiteral = DimensionLiteral<'time', 's'>;
 
 export const TIME_UNITS = ['s', 'ms'] as const;
 
@@ -28,7 +28,7 @@ export type TimeUnit = (typeof TIME_UNITS)[number];
 export function parseTime(
   input: ParserInput,
   context: unknown = undefined,
-): TimeValue | null {
+): TimeLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -49,11 +49,11 @@ export type TimeConsumerOptions = {
 
 export function createTimeConsumer(
   options: TimeConsumerOptions = {},
-): TryComponentConsumer<TimeValue> {
+): TryComponentConsumer<TimeLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<TimeValue> => {
+  return (c): TryComponentConsumerResult<TimeLiteral> => {
     const start = c.pos();
     const result = tryConsumeUnrestrictedTime(c);
 
@@ -76,7 +76,7 @@ export const tryConsumeTime = createTimeConsumer();
 
 function tryConsumeUnrestrictedTime(
   c: ComponentCursor,
-): TryComponentConsumerResult<TimeValue> {
+): TryComponentConsumerResult<TimeLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -108,15 +108,15 @@ function isTimeUnit(value: string): value is TimeUnit {
   return TIME_UNITS.some((unit) => unit === value);
 }
 
-export function serializeTime(value: TimeValue): string {
+export function serializeTime(value: TimeLiteral): string {
   return serializeDimension(value);
 }
 
-export function serializeCanonicalTime(value: CanonicalTimeValue): string {
+export function serializeCanonicalTime(value: CanonicalTimeLiteral): string {
   return serializeDimension(value);
 }
 
-export function resolveTime(value: TimeValue): CanonicalTimeValue {
+export function resolveTime(value: TimeLiteral): CanonicalTimeLiteral {
   let seconds: number;
 
   switch (value.unit) {

@@ -1,25 +1,25 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { asciiLower } from '../../../shared/css';
+import { assertNever } from '../../../shared/util';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeDimension, type DimensionValue } from './dimension';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <frequency> = <dimension-token with a frequency unit>
  */
 
-export type FrequencyValue = DimensionValue<'frequency', FrequencyUnit>;
+export type FrequencyLiteral = DimensionLiteral<'frequency', FrequencyUnit>;
 
-export type CanonicalFrequencyValue = DimensionValue<'frequency', 'hz'>;
+export type CanonicalFrequencyLiteral = DimensionLiteral<'frequency', 'hz'>;
 
 export const FREQUENCY_UNITS = ['hz', 'khz'] as const;
 
@@ -28,7 +28,7 @@ export type FrequencyUnit = (typeof FREQUENCY_UNITS)[number];
 export function parseFrequency(
   input: ParserInput,
   context: unknown = undefined,
-): FrequencyValue | null {
+): FrequencyLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -49,11 +49,11 @@ export type FrequencyConsumerOptions = {
 
 export function createFrequencyConsumer(
   options: FrequencyConsumerOptions = {},
-): TryComponentConsumer<FrequencyValue> {
+): TryComponentConsumer<FrequencyLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<FrequencyValue> => {
+  return (c): TryComponentConsumerResult<FrequencyLiteral> => {
     const start = c.pos();
     const result = tryConsumeUnrestrictedFrequency(c);
 
@@ -76,7 +76,7 @@ export const tryConsumeFrequency = createFrequencyConsumer();
 
 function tryConsumeUnrestrictedFrequency(
   c: ComponentCursor,
-): TryComponentConsumerResult<FrequencyValue> {
+): TryComponentConsumerResult<FrequencyLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -108,19 +108,19 @@ function isFrequencyUnit(value: string): value is FrequencyUnit {
   return FREQUENCY_UNITS.some((unit) => unit === value);
 }
 
-export function serializeFrequency(value: FrequencyValue): string {
+export function serializeFrequency(value: FrequencyLiteral): string {
   return serializeDimension(value);
 }
 
 export function serializeCanonicalFrequency(
-  value: CanonicalFrequencyValue,
+  value: CanonicalFrequencyLiteral,
 ): string {
   return serializeDimension(value);
 }
 
 export function resolveFrequency(
-  value: FrequencyValue,
-): CanonicalFrequencyValue {
+  value: FrequencyLiteral,
+): CanonicalFrequencyLiteral {
   let hertz: number;
 
   switch (value.unit) {

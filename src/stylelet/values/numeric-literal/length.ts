@@ -1,17 +1,17 @@
-import { asciiLower } from '../../shared/css';
-import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { asciiLower } from '../../../shared/css';
+import { assertNever } from '../../../shared/util';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeDimension, type DimensionValue } from './dimension';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <length> = <dimension-token with a length unit> | <zero>
@@ -20,11 +20,11 @@ import { serializeDimension, type DimensionValue } from './dimension';
  * unitless zero is parsed as a number, as required by CSS Values.
  */
 
-export type LengthValue =
-  | DimensionValue<'length', LengthUnit>
-  | (DimensionValue<'length', ''> & { value: 0; });
+export type LengthLiteral =
+  | DimensionLiteral<'length', LengthUnit>
+  | (DimensionLiteral<'length', ''> & { value: 0; });
 
-export type CanonicalLengthValue = DimensionValue<'length', 'px'>;
+export type CanonicalLengthLiteral = DimensionLiteral<'length', 'px'>;
 
 export type LengthResolutionContext = {
   // Effective font-relative reference lengths, in CSS pixels per unit.
@@ -91,7 +91,7 @@ export type LengthUnit = (typeof LENGTH_UNITS)[number];
 export function parseLength(
   input: ParserInput,
   context: unknown = undefined,
-): LengthValue | null {
+): LengthLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -112,7 +112,7 @@ export type LengthConsumerOptions = {
 
 export function createLengthConsumer(
   options: LengthConsumerOptions = {},
-): TryComponentConsumer<LengthValue> {
+): TryComponentConsumer<LengthLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
@@ -122,7 +122,7 @@ export function createLengthConsumer(
     );
   }
 
-  return (c): TryComponentConsumerResult<LengthValue> => {
+  return (c): TryComponentConsumerResult<LengthLiteral> => {
     const start = c.pos();
     const result = tryConsumeUnrestrictedLength(c);
 
@@ -145,7 +145,7 @@ export const tryConsumeLength = createLengthConsumer();
 
 function tryConsumeUnrestrictedLength(
   c: ComponentCursor,
-): TryComponentConsumerResult<LengthValue> {
+): TryComponentConsumerResult<LengthLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -192,18 +192,18 @@ function isLengthUnit(value: string): value is LengthUnit {
   return LENGTH_UNITS.some((unit) => unit === value);
 }
 
-export function serializeLength(value: LengthValue): string {
+export function serializeLength(value: LengthLiteral): string {
   return value.unit === '' ? '0' : serializeDimension(value);
 }
 
-export function serializeCanonicalLength(value: CanonicalLengthValue): string {
+export function serializeCanonicalLength(value: CanonicalLengthLiteral): string {
   return serializeDimension(value);
 }
 
 export function snapLengthAsLineWidth(
-  value: CanonicalLengthValue,
+  value: CanonicalLengthLiteral,
   devicePixelRatio: number,
-): CanonicalLengthValue {
+): CanonicalLengthLiteral {
   const devicePixels = value.value * devicePixelRatio;
 
   if (Number.isInteger(devicePixels)) {
@@ -230,9 +230,9 @@ export function snapLengthAsLineWidth(
 }
 
 export function tryResolveLength(
-  value: LengthValue,
+  value: LengthLiteral,
   context: LengthResolutionContext = {},
-): CanonicalLengthValue | null {
+): CanonicalLengthLiteral | null {
   let pixelsPerUnit: number | undefined;
   const unit = value.unit;
 

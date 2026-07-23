@@ -1,22 +1,22 @@
-import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import type { ComponentCursor } from '../../parser/component-cursor';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+} from '../../parser/component-try-consumer';
 import {
   isTokenKind, parseAsComponentGrammar,
   type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
-import { serializeIdentifier } from './ident';
+} from '../../parser/syntax';
+import { TokenKind } from '../../parser/tokens';
+import { serializeIdentifier } from '../ident';
 import { serializeCssNumber } from './number';
 
 /*
  * <dimension> = <dimension-token>
  */
 
-export type DimensionValue<
+export type DimensionLiteral<
   Type extends string = 'dimension',
   Unit extends string = string,
 > = {
@@ -28,7 +28,7 @@ export type DimensionValue<
 export function parseDimension(
   input: ParserInput,
   context: unknown = undefined,
-): DimensionValue | null {
+): DimensionLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -41,7 +41,7 @@ export function parseDimension(
 
 export function tryConsumeDimension(
   c: ComponentCursor,
-): TryComponentConsumerResult<DimensionValue> {
+): TryComponentConsumerResult<DimensionLiteral> {
   const start = c.pos();
   const component = c.next();
 
@@ -58,7 +58,7 @@ export function tryConsumeDimension(
 }
 
 export function serializeDimension(
-  value: DimensionValue<string, string>,
+  value: DimensionLiteral<string, string>,
 ): string {
   return `${serializeCssNumber(value.value)}${serializeDimensionUnit(value.unit)}`;
 }
@@ -77,9 +77,9 @@ function serializeDimensionUnit(unit: string): string {
 
 // CSS Values, "Combination of Dimensions".
 export function addDimensions<Type extends string, Unit extends string>(
-  a: DimensionValue<Type, Unit>,
-  b: DimensionValue<Type, Unit>,
-): DimensionValue<Type, Unit> {
+  a: DimensionLiteral<Type, Unit>,
+  b: DimensionLiteral<Type, Unit>,
+): DimensionLiteral<Type, Unit> {
   assertSameDimensionUnit(a, b);
 
   return {
@@ -90,10 +90,10 @@ export function addDimensions<Type extends string, Unit extends string>(
 }
 
 export function interpolateDimensions<Type extends string, Unit extends string>(
-  a: DimensionValue<Type, Unit>,
-  b: DimensionValue<Type, Unit>,
+  a: DimensionLiteral<Type, Unit>,
+  b: DimensionLiteral<Type, Unit>,
   p: number,
-): DimensionValue<Type, Unit> {
+): DimensionLiteral<Type, Unit> {
   assertSameDimensionUnit(a, b);
 
   return {
@@ -104,15 +104,15 @@ export function interpolateDimensions<Type extends string, Unit extends string>(
 }
 
 export function accumulateDimensions<Type extends string, Unit extends string>(
-  a: DimensionValue<Type, Unit>,
-  b: DimensionValue<Type, Unit>,
-): DimensionValue<Type, Unit> {
+  a: DimensionLiteral<Type, Unit>,
+  b: DimensionLiteral<Type, Unit>,
+): DimensionLiteral<Type, Unit> {
   return addDimensions(a, b);
 }
 
 function assertSameDimensionUnit(
-  a: DimensionValue<string, string>,
-  b: DimensionValue<string, string>,
+  a: DimensionLiteral<string, string>,
+  b: DimensionLiteral<string, string>,
 ): void {
   if (a.unit !== b.unit) {
     throw new TypeError(`Dimension units must match: ${a.unit} and ${b.unit}`);

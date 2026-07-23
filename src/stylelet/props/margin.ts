@@ -7,8 +7,8 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { serializeAuto, tryConsumeAuto, type AutoValue } from '../values/auto';
 import {
   serializeLengthPercentage, tryConsumeLengthPercentage,
-  type LengthPercentageValue,
-} from '../values/length-percentage';
+  type LengthPercentageLiteral,
+} from '../values/numeric-literal/length-percentage';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =
@@ -16,7 +16,7 @@ import {
  */
 
 export type MarginSideValue =
-  | LengthPercentageValue
+  | LengthPercentageLiteral
   | AutoValue;
 
 export function parseMarginSideValue(

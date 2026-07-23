@@ -9,7 +9,7 @@ import {
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
-import { serializeCssNumber } from './number';
+import { serializeCssNumber } from './numeric-literal/number';
 
 export type AnPlusBValue = {
   a: number;

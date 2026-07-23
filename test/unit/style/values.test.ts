@@ -11,61 +11,61 @@ import { serializeAnPlusB } from '../../../src/stylelet/values/an-plus-b';
 import {
   ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle,
   serializeAngle, serializeCanonicalAngle, tryConsumeAngle,
-} from '../../../src/stylelet/values/angle';
+} from '../../../src/stylelet/values/numeric-literal/angle';
 import {
   createAnglePercentageConsumer, parseAnglePercentage,
   serializeAnglePercentage, tryConsumeAnglePercentage,
   tryAccumulateAnglePercentages,
   tryAddAnglePercentages, tryInterpolateAnglePercentages,
   tryResolveAnglePercentage,
-} from '../../../src/stylelet/values/angle-percentage';
+} from '../../../src/stylelet/values/numeric-literal/angle-percentage';
 import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../src/stylelet/values/auto';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions,
   parseDimension, serializeDimension, tryConsumeDimension,
-} from '../../../src/stylelet/values/dimension';
+} from '../../../src/stylelet/values/numeric-literal/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
   parseInteger, serializeInteger, tryConsumeInteger,
-} from '../../../src/stylelet/values/integer';
+} from '../../../src/stylelet/values/numeric-literal/integer';
 import {
   createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
   serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
-} from '../../../src/stylelet/values/frequency';
+} from '../../../src/stylelet/values/numeric-literal/frequency';
 import {
   createFrequencyPercentageConsumer, parseFrequencyPercentage,
   serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
   tryAccumulateFrequencyPercentages,
   tryAddFrequencyPercentages, tryInterpolateFrequencyPercentages,
   tryResolveFrequencyPercentage,
-} from '../../../src/stylelet/values/frequency-percentage';
+} from '../../../src/stylelet/values/numeric-literal/frequency-percentage';
 import {
   createLengthConsumer, LENGTH_UNITS,
   parseLength, serializeCanonicalLength, serializeLength,
   snapLengthAsLineWidth, tryConsumeLength, tryResolveLength,
   type LengthResolutionContext,
-} from '../../../src/stylelet/values/length';
+} from '../../../src/stylelet/values/numeric-literal/length';
 import {
   createLengthPercentageConsumer, parseLengthPercentage,
   serializeLengthPercentage, tryConsumeLengthPercentage,
   tryAccumulateLengthPercentages,
   tryAddLengthPercentages, tryInterpolateLengthPercentages,
   tryResolveLengthPercentage,
-} from '../../../src/stylelet/values/length-percentage';
+} from '../../../src/stylelet/values/numeric-literal/length-percentage';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
   parseNumber, serializeNumber, tryConsumeNumber,
-} from '../../../src/stylelet/values/number';
+} from '../../../src/stylelet/values/numeric-literal/number';
 import {
   accumulatePercentages, addPercentages,
   createPercentageConsumer, interpolatePercentages,
   parsePercentage, serializePercentage, tryConsumePercentage,
-} from '../../../src/stylelet/values/percentage';
+} from '../../../src/stylelet/values/numeric-literal/percentage';
 import {
   interpolateRatios, isDegenerateRatio, parseRatio,
   serializeRatio, tryConsumeRatio,
@@ -74,19 +74,19 @@ import {
   createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
   resolveResolution, serializeCanonicalResolution, serializeResolution,
   tryConsumeResolution,
-} from '../../../src/stylelet/values/resolution';
+} from '../../../src/stylelet/values/numeric-literal/resolution';
 import { parseString, serializeCssString, serializeString } from '../../../src/stylelet/values/string';
 import {
   createTimeConsumer, parseTime, resolveTime,
   serializeCanonicalTime, serializeTime, TIME_UNITS, tryConsumeTime,
-} from '../../../src/stylelet/values/time';
+} from '../../../src/stylelet/values/numeric-literal/time';
 import {
   createTimePercentageConsumer, parseTimePercentage,
   serializeTimePercentage, tryConsumeTimePercentage,
   tryAccumulateTimePercentages,
   tryAddTimePercentages, tryInterpolateTimePercentages,
   tryResolveTimePercentage,
-} from '../../../src/stylelet/values/time-percentage';
+} from '../../../src/stylelet/values/numeric-literal/time-percentage';
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../src/stylelet/values/zero';

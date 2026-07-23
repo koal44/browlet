@@ -17,27 +17,27 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import { ANGLE_UNITS, resolveAngle } from './angle';
+import { ANGLE_UNITS, resolveAngle } from './numeric-literal/angle';
 import {
   serializeDimension, tryConsumeDimension,
-  type DimensionValue,
-} from './dimension';
-import { FREQUENCY_UNITS, resolveFrequency } from './frequency';
+  type DimensionLiteral,
+} from './numeric-literal/dimension';
+import { FREQUENCY_UNITS, resolveFrequency } from './numeric-literal/frequency';
 import { serializeIdentifier } from './ident';
 import {
   LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength,
   type LengthResolutionContext,
-} from './length';
+} from './numeric-literal/length';
 import {
   serializeNumber, tryConsumeNumber,
-  type NumberValue,
-} from './number';
+  type NumberLiteral,
+} from './numeric-literal/number';
 import {
   serializePercentage, tryConsumePercentage,
-  type PercentageValue,
-} from './percentage';
-import { RESOLUTION_UNITS, resolveResolution } from './resolution';
-import { TIME_UNITS, resolveTime } from './time';
+  type PercentageLiteral,
+} from './numeric-literal/percentage';
+import { RESOLUTION_UNITS, resolveResolution } from './numeric-literal/resolution';
+import { TIME_UNITS, resolveTime } from './numeric-literal/time';
 
 const CALC_TERM_LIMIT = 32;
 const CALC_COMPLEXITY_LIMIT = 64;
@@ -93,7 +93,7 @@ export type CalculationContext = {
   percentageType?: NumericBaseType;
 
   /** Numeric value against which percentages can be resolved. */
-  percentageReferenceValue?: NumberValue | DimensionValue;
+  percentageReferenceValue?: NumberLiteral | DimensionLiteral;
 
   /**
    * ASCII-lowercase numeric variable names and their values and types.
@@ -108,7 +108,7 @@ type CalculationParserContext = CalculationContext & {
 };
 
 export type NumericVariable = {
-  value: NumericValue | null;
+  value: NumericLiteral | null;
   numericType: NumericType;
 };
 
@@ -132,18 +132,18 @@ export type CalculationTree =
   | CalcInvertNode
   | MathFunctionNode;
 
-type NumericValue =
-  | NumberValue
-  | DimensionValue
-  | PercentageValue;
+type NumericLiteral =
+  | NumberLiteral
+  | DimensionLiteral
+  | PercentageLiteral;
 
-type NumericLeaf = NumericValue & {
+type NumericLeaf = NumericLiteral & {
   numericType: NumericType;
 };
 
-type NumberLeaf = NumberValue & { numericType: NumericType; };
-type DimensionLeaf = DimensionValue & { numericType: NumericType; };
-type PercentageLeaf = PercentageValue & { numericType: NumericType; };
+type NumberLeaf = NumberLiteral & { numericType: NumericType; };
+type DimensionLeaf = DimensionLiteral & { numericType: NumericType; };
+type PercentageLeaf = PercentageLiteral & { numericType: NumericType; };
 
 type VariableLeaf = {
   type: 'variable';
@@ -1191,7 +1191,7 @@ function numericTypeOf(calculation: CalculationTree): NumericType {
 }
 
 function numericTypeFromValue(
-  value: NumericValue,
+  value: NumericLiteral,
   context: CalculationContext,
 ): NumericType | null {
   switch (value.type) {
@@ -1204,7 +1204,7 @@ function numericTypeFromValue(
   }
 }
 
-function createNumericLeaf<Value extends NumericValue>(
+function createNumericLeaf<Value extends NumericLiteral>(
   value: Value,
   numericType: NumericType,
 ): Value & { numericType: NumericType; } {
@@ -2253,7 +2253,7 @@ function snapPixelDimension(
   value: number,
   devicePixelRatio: number,
   numericType: NumericType,
-): DimensionValue<'dimension', 'px'> & { numericType: NumericType; } {
+): DimensionLiteral<'dimension', 'px'> & { numericType: NumericType; } {
   const snapped = snapLengthAsLineWidth(
     { type: 'length', value, unit: 'px' },
     devicePixelRatio,
@@ -2614,7 +2614,7 @@ function combineProductNumbers(
   children: readonly CalculationTree[],
 ): CalculationTree[] {
   const numbers = children.filter(
-    (child): child is NumericLeaf & NumberValue => child.type === 'number',
+    (child): child is NumericLeaf & NumberLiteral => child.type === 'number',
   );
 
   if (numbers.length < 2) {
@@ -2780,7 +2780,7 @@ function canonicalizeDimension(
   context: CalculationContext,
 ): DimensionLeaf {
   const unit = asciiLower(value.unit);
-  let resolved: DimensionValue<string, string> | null;
+  let resolved: DimensionLiteral<string, string> | null;
 
   if (isUnit(LENGTH_UNITS, unit)) {
     resolved = tryResolveLength(

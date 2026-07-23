@@ -5,7 +5,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { createNumberConsumer, serializeCssNumber } from './number';
+import { createNumberConsumer, serializeCssNumber } from './numeric-literal/number';
 
 /*
  * <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?

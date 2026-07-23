@@ -1,23 +1,23 @@
-import { withComponentTrivia } from '../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { withComponentTrivia } from '../../parser/component-grammar';
+import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   resolveFrequency, serializeFrequency, tryConsumeFrequency,
-  type CanonicalFrequencyValue, type FrequencyValue,
+  type CanonicalFrequencyLiteral, type FrequencyLiteral,
 } from './frequency';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
   tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
+  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 
 /*
  * <frequency-percentage> = [ <frequency> | <percentage> ]
  */
 
-export type FrequencyPercentageValue =
-  DimensionPercentageValue<FrequencyValue>;
+export type FrequencyPercentageLiteral =
+  DimensionPercentageLiteral<FrequencyLiteral>;
 
 export type FrequencyPercentageResolutionContext = {
   /** Percentage basis in canonical hertz. */
@@ -27,7 +27,7 @@ export type FrequencyPercentageResolutionContext = {
 export function parseFrequencyPercentage(
   input: ParserInput,
   context: unknown = undefined,
-): FrequencyPercentageValue | null {
+): FrequencyPercentageLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -43,7 +43,7 @@ export type FrequencyPercentageConsumerOptions =
 
 export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
-): TryComponentConsumer<FrequencyPercentageValue> {
+): TryComponentConsumer<FrequencyPercentageLiteral> {
   return createDimensionPercentageConsumer(
     tryConsumeFrequency,
     'Frequency-percentage',
@@ -54,15 +54,15 @@ export function createFrequencyPercentageConsumer(
 export const tryConsumeFrequencyPercentage = createFrequencyPercentageConsumer();
 
 export function serializeFrequencyPercentage(
-  value: FrequencyPercentageValue,
+  value: FrequencyPercentageLiteral,
 ): string {
   return serializeDimensionPercentage(value, serializeFrequency);
 }
 
 export function tryResolveFrequencyPercentage(
-  value: FrequencyPercentageValue,
+  value: FrequencyPercentageLiteral,
   context: FrequencyPercentageResolutionContext = {},
-): CanonicalFrequencyValue | null {
+): CanonicalFrequencyLiteral | null {
   if (value.type === 'frequency') {
     return resolveFrequency(value);
   }
@@ -79,23 +79,23 @@ export function tryResolveFrequencyPercentage(
 }
 
 export function tryAddFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
-): FrequencyPercentageValue | null {
+  a: FrequencyPercentageLiteral,
+  b: FrequencyPercentageLiteral,
+): FrequencyPercentageLiteral | null {
   return tryAddDimensionPercentages(a, b);
 }
 
 export function tryInterpolateFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
+  a: FrequencyPercentageLiteral,
+  b: FrequencyPercentageLiteral,
   p: number,
-): FrequencyPercentageValue | null {
+): FrequencyPercentageLiteral | null {
   return tryInterpolateDimensionPercentages(a, b, p);
 }
 
 export function tryAccumulateFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
-): FrequencyPercentageValue | null {
+  a: FrequencyPercentageLiteral,
+  b: FrequencyPercentageLiteral,
+): FrequencyPercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }

@@ -1,17 +1,17 @@
-import { tryConsumeNumberToken } from '../parser/component-consumers';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { tryConsumeNumberToken } from '../../parser/component-consumers';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+} from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { serializeInteger } from './integer';
 
 /*
  * <number> = <number-token>
  */
 
-export type NumberValue = {
+export type NumberLiteral = {
   type: 'number';
   value: number;
 };
@@ -19,7 +19,7 @@ export type NumberValue = {
 export function parseNumber(
   input: ParserInput,
   context: unknown = undefined,
-): NumberValue | null {
+): NumberLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -37,11 +37,11 @@ export type NumberConsumerOptions = {
 
 export function createNumberConsumer(
   options: NumberConsumerOptions = {},
-): TryComponentConsumer<NumberValue> {
+): TryComponentConsumer<NumberLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<NumberValue> => {
+  return (c): TryComponentConsumerResult<NumberLiteral> => {
     const start = c.pos();
     const token = tryConsumeNumberToken(c);
 
@@ -63,7 +63,7 @@ export function createNumberConsumer(
 
 export const tryConsumeNumber = createNumberConsumer();
 
-export function serializeNumber(value: NumberValue): string {
+export function serializeNumber(value: NumberLiteral): string {
   return serializeCssNumber(value.value);
 }
 
@@ -81,7 +81,7 @@ export function serializeCssNumber(value: number): string {
 }
 
 // CSS Values, "Computation and Combination of <number>".
-export function addNumbers(a: NumberValue, b: NumberValue): NumberValue {
+export function addNumbers(a: NumberLiteral, b: NumberLiteral): NumberLiteral {
   return {
     type: 'number',
     value: a.value + b.value,
@@ -89,10 +89,10 @@ export function addNumbers(a: NumberValue, b: NumberValue): NumberValue {
 }
 
 export function interpolateNumbers(
-  a: NumberValue,
-  b: NumberValue,
+  a: NumberLiteral,
+  b: NumberLiteral,
   p: number,
-): NumberValue {
+): NumberLiteral {
   return {
     type: 'number',
     value: (1 - p) * a.value + p * b.value,
@@ -100,8 +100,8 @@ export function interpolateNumbers(
 }
 
 export function accumulateNumbers(
-  a: NumberValue,
-  b: NumberValue,
-): NumberValue {
+  a: NumberLiteral,
+  b: NumberLiteral,
+): NumberLiteral {
   return addNumbers(a, b);
 }

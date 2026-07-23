@@ -1,17 +1,17 @@
-import { tryConsumePercentageToken } from '../parser/component-consumers';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { tryConsumePercentageToken } from '../../parser/component-consumers';
+import { withComponentTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+} from '../../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { serializeCssNumber } from './number';
 
 /*
  * <percentage> = <percentage-token>
  */
 
-export type PercentageValue = {
+export type PercentageLiteral = {
   type: 'percentage';
   value: number;
 };
@@ -19,7 +19,7 @@ export type PercentageValue = {
 export function parsePercentage(
   input: ParserInput,
   context: unknown = undefined,
-): PercentageValue | null {
+): PercentageLiteral | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -37,11 +37,11 @@ export type PercentageConsumerOptions = {
 
 export function createPercentageConsumer(
   options: PercentageConsumerOptions = {},
-): TryComponentConsumer<PercentageValue> {
+): TryComponentConsumer<PercentageLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<PercentageValue> => {
+  return (c): TryComponentConsumerResult<PercentageLiteral> => {
     const start = c.pos();
     const token = tryConsumePercentageToken(c);
 
@@ -64,15 +64,15 @@ export function createPercentageConsumer(
 export const tryConsumePercentage = createPercentageConsumer();
 
 // CSSOM, "To serialize a CSS component value", <percentage>.
-export function serializePercentage(value: PercentageValue): string {
+export function serializePercentage(value: PercentageLiteral): string {
   return `${serializeCssNumber(value.value)}%`;
 }
 
 // CSS Values, "Computation and Combination of <percentage>".
 export function addPercentages(
-  a: PercentageValue,
-  b: PercentageValue,
-): PercentageValue {
+  a: PercentageLiteral,
+  b: PercentageLiteral,
+): PercentageLiteral {
   return {
     type: 'percentage',
     value: a.value + b.value,
@@ -80,10 +80,10 @@ export function addPercentages(
 }
 
 export function interpolatePercentages(
-  a: PercentageValue,
-  b: PercentageValue,
+  a: PercentageLiteral,
+  b: PercentageLiteral,
   p: number,
-): PercentageValue {
+): PercentageLiteral {
   return {
     type: 'percentage',
     value: (1 - p) * a.value + p * b.value,
@@ -91,8 +91,8 @@ export function interpolatePercentages(
 }
 
 export function accumulatePercentages(
-  a: PercentageValue,
-  b: PercentageValue,
-): PercentageValue {
+  a: PercentageLiteral,
+  b: PercentageLiteral,
+): PercentageLiteral {
   return addPercentages(a, b);
 }

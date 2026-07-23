@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ColorName, ColorSourceKind } from '../../../src/stylelet/values/color';
 import { parseStylesheet } from '../../../src/stylelet/parser/ast';
 import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../../src/stylelet/parser/types';
-import type { LengthUnit } from '../../../src/stylelet/values/length';
+import type { LengthUnit } from '../../../src/stylelet/values/numeric-literal/length';
 import { TokenKind } from '../../../src/stylelet/parser/tokens';
 
 const cls = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });

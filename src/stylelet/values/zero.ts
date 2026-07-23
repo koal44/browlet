@@ -5,13 +5,13 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { NumberValue } from './number';
+import type { NumberLiteral } from './numeric-literal/number';
 
 /*
  * <zero> = <number-token with a value of 0>
  */
 
-export type ZeroValue = NumberValue & {
+export type ZeroValue = NumberLiteral & {
   value: 0;
 };
 
