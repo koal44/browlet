@@ -3,7 +3,8 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
-  addNumericTypes, multiplyNumericTypes,
+  addMathFunctions, addNumericTypes, interpolateMathFunctions,
+  multiplyNumericTypes,
   parseCalc, parseMathFunction, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
@@ -292,11 +293,13 @@ describe('calc', () => {
       const rounded = parseMathFunction(
         'round(to-zero, -1, 2)',
       )!;
+      const infiniteStep = parseMathFunction('round(-1, infinity)')!;
       const modulo = parseMathFunction('mod(-6, 3)')!;
       const remainder = parseMathFunction('rem(-6, 3)')!;
 
       if (
         rounded.type === 'calc' ||
+        infiniteStep.type === 'calc' ||
         modulo.type === 'calc' ||
         remainder.type === 'calc'
       ) {
@@ -304,6 +307,7 @@ describe('calc', () => {
       }
 
       expect(Object.is(calculationValue(rounded), -0)).toBe(true);
+      expect(Object.is(calculationValue(infiniteStep), -0)).toBe(true);
       expect(Object.is(calculationValue(modulo), 0)).toBe(true);
       expect(Object.is(calculationValue(remainder), -0)).toBe(true);
     });
@@ -520,6 +524,7 @@ describe('calc', () => {
     it.each([
       ['sqrt(calc(-1 * 0))', -0],
       ['pow(calc(-1 * 0), -3)', -Infinity],
+      ['pow(0, -1)', Infinity],
       ['pow(-infinity, -3)', -0],
       ['log(0, .5)', -Infinity],
       ['log(1, .5)', 0],
@@ -638,6 +643,176 @@ describe('calc', () => {
     });
   });
 
+  describe('internal calculation IEEE-754 semantics', () => {
+    it.each([
+      ['0', 0],
+      ['+0', 0],
+      ['-0', 0],
+      ['-5 * 0', -0],
+      ['1 / -infinity', -0],
+      ['(-5 * 0) + (-5 * 0)', -0],
+      ['(-5 * 0) - 0', -0],
+      ['0 + 0', 0],
+      ['0 + (-5 * 0)', 0],
+      ['(-5 * 0) + 0', 0],
+      ['0 - 0', 0],
+      ['0 - (-5 * 0)', 0],
+      ['(-5 * 0) - (-5 * 0)', 0],
+      ['(-5 * 0) * 0', -0],
+      ['(-5 * 0) * 2', -0],
+      ['(-5 * 0) * -2', 0],
+      ['(-5 * 0) / 2', -0],
+      ['(-5 * 0) / -2', 0],
+      ['1 / 0', Infinity],
+      ['-1 / 0', -Infinity],
+      ['1 / (-5 * 0)', -Infinity],
+      ['1 / infinity', 0],
+      ['-1 / infinity', -0],
+      ['-1 / -infinity', 0],
+      ['infinity + 1', Infinity],
+      ['1 + -infinity', -Infinity],
+      ['1 - infinity', -Infinity],
+      ['1 - -infinity', Infinity],
+      ['-infinity - 1', -Infinity],
+      ['1 * -infinity', -Infinity],
+      ['-1 * infinity', -Infinity],
+      ['-1 * -infinity', Infinity],
+    ] as const)('evaluates %s as %s', (input, expected) => {
+      const result = simplifyInternalCalculation(input);
+
+      expect(result.type).toBe('number');
+      expect(Object.is(calculationValue(result), expected)).toBe(true);
+    });
+
+    it.each([
+      '0 / 0',
+      '(-5 * 0) / 0',
+      'infinity / infinity',
+      '0 * infinity',
+      'infinity + -infinity',
+      'infinity - infinity',
+      'NaN + 1',
+      'NaN - 1',
+      'NaN * 1',
+      'NaN / 1',
+    ])('evaluates %s as NaN', (input) => {
+      const result = simplifyInternalCalculation(input);
+
+      expect(result.type).toBe('number');
+      expect(Number.isNaN(calculationValue(result))).toBe(true);
+    });
+  });
+
+  describe('top-level calculation IEEE-754 censoring', () => {
+    it('preserves special values at specified-value time', () => {
+      const negativeZero = parseCalc('calc(-5 * 0)')!.calculation;
+      const notANumber = parseCalc('calc(NaN)')!.calculation;
+      const infinity = parseCalc('calc(infinity)')!.calculation;
+
+      expect(Object.is(calculationValue(negativeZero), -0)).toBe(true);
+      expect(Number.isNaN(calculationValue(notANumber))).toBe(true);
+      expect(calculationValue(infinity)).toBe(Infinity);
+    });
+
+    it('censors a negative zero into an unsigned zero', () => {
+      const result = parseCalc('calc(-5 * 0)', {
+        stage: 'computed',
+      })!.calculation;
+
+      expect(result.type).toBe('number');
+      expect(Object.is(calculationValue(result), 0)).toBe(true);
+    });
+
+    it.each([
+      ['calc(NaN)', 'number'],
+      ['calc(NaN * 1px)', 'dimension'],
+      ['sqrt(-1)', 'number'],
+    ] as const)(
+      'censors a top-level NaN into a zero value in %s',
+      (input, type) => {
+        const result = input.startsWith('calc(')
+          ? parseCalc(input, { stage: 'computed' })!.calculation
+          : parseMathFunction(input, { stage: 'computed' })!;
+        const value = 'value' in result
+          ? result.value
+          : undefined;
+
+        expect(result.type).toBe(type);
+        expect(value).toBe(0);
+      },
+    );
+
+    it('retains signed zero inside a nested math function', () => {
+      expect(parseMathFunction('atan2(0, calc(-5 * 0))')).toMatchObject({
+        type: 'dimension',
+        value: 180,
+        unit: 'deg',
+      });
+    });
+
+    it('retains an inner signed zero until the outer calculation uses it', () => {
+      const specified = parseCalc(
+        'calc(1 / calc(-5 * 0))',
+      )!.calculation;
+      const computed = parseCalc(
+        'calc(1 / calc(-5 * 0))',
+        {
+          stage: 'computed',
+          range: [-100, 100],
+        },
+      )!.calculation;
+
+      expect(calculationValue(specified)).toBe(-Infinity);
+      expect(calculationValue(computed)).toBe(-100);
+    });
+
+    it.each([
+      ['calc(-infinity)', 0],
+      ['calc(infinity)', 100],
+      ['calc(-5)', 0],
+      ['calc(105)', 100],
+    ] as const)('clamps %s to the target-context range', (input, expected) => {
+      const result = parseCalc(input, {
+        stage: 'computed',
+        range: [0, 100],
+      })!.calculation;
+
+      expect(calculationValue(result)).toBe(expected);
+    });
+
+    it('clamps conceptual infinities to the finite host range', () => {
+      const result = parseCalc('calc(infinity)', {
+        stage: 'used',
+      })!.calculation;
+
+      expect(calculationValue(result)).toBe(Number.MAX_VALUE);
+    });
+
+    it.each([
+      ['calc(1.5)', 2],
+      ['calc(-1.5)', -1],
+    ] as const)('rounds %s when an integer result is required', (
+      input,
+      expected,
+    ) => {
+      const result = parseCalc(input, {
+        stage: 'computed',
+        expectedType: 'integer',
+      })!.calculation;
+
+      expect(calculationValue(result)).toBe(expected);
+    });
+
+    it('does not clamp or round specified values', () => {
+      const result = parseCalc('calc(105.5)', {
+        expectedType: 'integer',
+        range: [0, 100],
+      })!.calculation;
+
+      expect(calculationValue(result)).toBe(105.5);
+    });
+  });
+
   it('retains math functions as calculation-tree operator nodes', () => {
     const calculation = parseCalc(
       'calc(min(1em, 2rem) + max(3vw, 4vh))',
@@ -696,6 +871,33 @@ describe('calc', () => {
   );
 
   it.each([
+    ['min(3, 1, 2)', 'calc(1)'],
+    ['sqrt(-1)', 'calc(NaN)'],
+  ] as const)(
+    'wraps the simplified specified math function %s in calc()',
+    (input, expected) => {
+      expect(serializeMathFunction(parseMathFunction(input)!))
+        .toBe(expected);
+    },
+  );
+
+  it.each([
+    ['calc(20px + 30px)', '50px'],
+    ['min(3, 1, 2)', '1'],
+    ['sqrt(-1)', '0'],
+  ] as const)(
+    'serializes the computed math function %s without calc()',
+    (input, expected) => {
+      const context = { stage: 'computed' } as const;
+      const value = input.startsWith('calc(')
+        ? parseCalc(input, context)!
+        : parseMathFunction(input, context)!;
+
+      expect(serializeMathFunction(value, context)).toBe(expected);
+    },
+  );
+
+  it.each([
     ['calc(infinity)', 'calc(infinity)'],
     ['calc(-infinity * 1em)', 'calc(-infinity * 1px)'],
     ['calc(NaN * 1s)', 'calc(NaN * 1s)'],
@@ -714,6 +916,47 @@ describe('calc', () => {
 
     expect(serializeCalcTree(calculation))
       .toBe('(1px - min(2px, 3%))');
+  });
+
+  it('adds math functions into a simplified calc function', () => {
+    const result = addMathFunctions(
+      parseCalc('calc(10px)')!,
+      parseMathFunction('min(20px, 30px)')!,
+    );
+
+    expect(serializeMathFunction(result)).toBe('calc(30px)');
+  });
+
+  it.each([
+    [0, 'calc(0% + 10px)'],
+    [0.25, 'calc(5% + 7.5px)'],
+    [1, 'calc(20% + 0px)'],
+  ] as const)(
+    'interpolates math functions at p = %s',
+    (p, expected) => {
+      const context = {
+        expectedType: 'length-percentage',
+        percentageType: 'length',
+      } as const satisfies CalculationContext;
+      const result = interpolateMathFunctions(
+        parseCalc('calc(10px)', context)!,
+        parseCalc('calc(20%)', context)!,
+        p,
+        context,
+      );
+
+      expect(serializeMathFunction(result)).toBe(expected);
+    },
+  );
+
+  it('rejects addition and interpolation of inconsistent math functions', () => {
+    const length = parseCalc('calc(1px)')!;
+    const time = parseCalc('calc(1s)')!;
+
+    expect(() => addMathFunctions(length, time))
+      .toThrow('Math function types must be consistent');
+    expect(() => interpolateMathFunctions(length, time, 0.5))
+      .toThrow('Math function types must be consistent');
   });
 
   it.each([
@@ -803,6 +1046,16 @@ describe('calc', () => {
       numericType: numericType([['length', 1]]),
     });
     expect(parseCalc('calc(calc(10px + 25%))', context)).toEqual(parsed);
+  });
+
+  it('inherits percentage typing through nested math functions', () => {
+    const context = {
+      expectedType: 'length-percentage',
+      percentageType: 'length',
+    } as const satisfies CalculationContext;
+
+    expect(parseCalc('calc(min(25%, 50px))', context)?.numericType)
+      .toEqual(numericType([['length', 1]], 'length'));
   });
 
   it.each([
@@ -1167,15 +1420,34 @@ describe('calc', () => {
     expect(parsed?.numericType).toEqual(numericType());
   });
 
-  it.each([
-    'calc(1px + 1s)',
-    'calc(5px - 5px + 10s)',
-    'calc(0 * 5px + 10s)',
-    'calc(1px / 1s)',
-    'calc(1px * 1em)',
-    'calc(1unknown)',
-  ])('rejects the invalid numeric typing in %j', (input) => {
-    expectBadCalc(input);
+  describe('calculation type-checking examples', () => {
+    it.each([
+      ['calc(5px + 1em)', {}],
+      [
+        'calc(100% / 3)',
+        {
+          expectedType: 'percentage',
+          percentageType: 'percent',
+        },
+      ],
+      ['calc(1.5)', { expectedType: 'integer' }],
+    ] as const)('accepts the valid calculation %j', (input, context) => {
+      expect(parseCalc(input, context)).not.toBeNull();
+    });
+
+    it.each([
+      'calc(.25 + 25%)',
+      'calc(0 + 5px)',
+      'calc(1 + 5px)',
+      'calc(1px + 1s)',
+      'calc(5px - 5px + 10s)',
+      'calc(0 * 5px + 10s)',
+      'calc(1px / 1s)',
+      'calc(1px * 1em)',
+      'calc(1unknown)',
+    ])('rejects the invalid calculation %j', (input) => {
+      expectBadCalc(input);
+    });
   });
 
   it('passes unresolved numeric variables through nested calculations', () => {
@@ -1402,6 +1674,11 @@ function parseRawCalculation(
   }
 
   return result.value;
+}
+
+function simplifyInternalCalculation(input: string): CalculationTree {
+  const context: CalculationContext = { insideCalculation: true };
+  return simplifyCalculationTree(parseRawCalculation(input, context), context);
 }
 
 function calculationValue(calculation: CalculationTree): number | undefined {
