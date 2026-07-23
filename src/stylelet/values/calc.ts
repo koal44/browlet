@@ -275,6 +275,22 @@ export function parseCalc(
   );
 }
 
+export function createMathValueFromLiteral(
+  literal: NumberLiteral | DimensionLiteral | PercentageLiteral,
+  context: CalculationContext = {},
+): MathValue {
+  const normalized = literal.value === 0
+    ? { ...literal, value: 0 }
+    : literal;
+  const numericType = numericTypeFromValue(normalized, context);
+
+  if (numericType === null) {
+    throw new TypeError('Cannot create a math value from an unknown dimension');
+  }
+
+  return createMathValue(createNumericLeaf(normalized, numericType));
+}
+
 export function tryConsumeCalc(
   c: ComponentCursor,
 ): TryComponentConsumerResult<MathValue> {
