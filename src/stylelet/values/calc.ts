@@ -282,12 +282,22 @@ export function parseCalc(
 }
 
 export function createMathValueFromLiteral(
-  literal: NumberLiteral | DimensionLiteral | PercentageLiteral,
+  literal:
+    | NumberLiteral
+    | DimensionLiteral<string, string>
+    | PercentageLiteral,
   context: CalculationContext = {},
 ): MathValue {
-  const normalized = literal.value === 0
-    ? { ...literal, value: 0 }
+  const calculationLiteral: NumericLiteral = 'unit' in literal
+    ? {
+      type: 'dimension',
+      value: literal.value,
+      unit: literal.unit,
+    }
     : literal;
+  const normalized = calculationLiteral.value === 0
+    ? { ...calculationLiteral, value: 0 }
+    : calculationLiteral;
   const numericType = numericTypeFromValue(normalized, context);
 
   if (numericType === null) {

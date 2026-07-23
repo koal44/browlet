@@ -9,6 +9,26 @@ import {
   accumulateDimensions, addDimensions, interpolateDimensions,
   parseDimension, serializeDimension, tryConsumeDimension,
 } from '../../../src/stylelet/values/dimension';
+import {
+  accumulateAngles, addAngles, interpolateAngles,
+  parseAngle, serializeAngle, tryConsumeAngle,
+} from '../../../src/stylelet/values/angle';
+import {
+  accumulateFrequencies, addFrequencies, interpolateFrequencies,
+  parseFrequency, serializeFrequency, tryConsumeFrequency,
+} from '../../../src/stylelet/values/frequency';
+import {
+  accumulateLengths, addLengths, createLengthConsumer, interpolateLengths,
+  parseLength, serializeLength, tryConsumeLength,
+} from '../../../src/stylelet/values/length';
+import {
+  accumulateResolutions, addResolutions, interpolateResolutions,
+  parseResolution, serializeResolution, tryConsumeResolution,
+} from '../../../src/stylelet/values/resolution';
+import {
+  accumulateTimes, addTimes, interpolateTimes,
+  parseTime, serializeTime, tryConsumeTime,
+} from '../../../src/stylelet/values/time';
 
 describe('number values', () => {
   it('parses a number literal', () => {
@@ -190,5 +210,169 @@ describe('dimension values', () => {
     expect(serializeDimension(added)).toBe('calc(6px)');
     expect(serializeDimension(interpolated)).toBe('calc(2.5px)');
     expect(serializeDimension(accumulated)).toBe('calc(6px)');
+  });
+});
+
+describe('angle values', () => {
+  it('accepts angle-valued math and rejects other categories', () => {
+    const value = parseAngle('min(1deg, 2deg)');
+    const other = new ComponentCursor(
+      parseListOfComponentValues('calc(1s)'),
+    );
+
+    expect(serializeAngle(value!)).toBe('calc(1deg)');
+    expect(tryConsumeAngle(other)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseAngle('1deg')!;
+    const b = parseAngle('2deg')!;
+    const math = parseAngle('calc(2deg)')!;
+
+    expect(addAngles(a, b))
+      .toEqual({ type: 'angle', value: 3, unit: 'deg' });
+    expect(serializeAngle(addAngles(a, math))).toBe('calc(3deg)');
+    expect(serializeAngle(interpolateAngles(a, math, 0.5)))
+      .toBe('calc(1.5deg)');
+    expect(serializeAngle(accumulateAngles(a, math))).toBe('calc(3deg)');
+  });
+});
+
+describe('frequency values', () => {
+  it('accepts frequency-valued math and rejects other categories', () => {
+    const value = parseFrequency('min(1hz, 2hz)');
+    const other = new ComponentCursor(
+      parseListOfComponentValues('calc(1s)'),
+    );
+
+    expect(serializeFrequency(value!)).toBe('calc(1hz)');
+    expect(tryConsumeFrequency(other)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseFrequency('1hz')!;
+    const b = parseFrequency('2hz')!;
+    const math = parseFrequency('calc(2hz)')!;
+
+    expect(addFrequencies(a, b))
+      .toEqual({ type: 'frequency', value: 3, unit: 'hz' });
+    expect(serializeFrequency(addFrequencies(a, math))).toBe('calc(3hz)');
+    expect(serializeFrequency(interpolateFrequencies(a, math, 0.5)))
+      .toBe('calc(1.5hz)');
+    expect(serializeFrequency(accumulateFrequencies(a, math)))
+      .toBe('calc(3hz)');
+  });
+});
+
+describe('length values', () => {
+  it('accepts length-valued math and rejects other categories', () => {
+    const value = parseLength('min(1px, 2px)');
+    const other = new ComponentCursor(
+      parseListOfComponentValues('calc(1deg)'),
+    );
+
+    expect(serializeLength(value!)).toBe('calc(1px)');
+    expect(tryConsumeLength(other)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseLength('1px')!;
+    const b = parseLength('2px')!;
+    const math = parseLength('calc(2px)')!;
+
+    expect(addLengths(a, b))
+      .toEqual({ type: 'length', value: 3, unit: 'px' });
+    expect(serializeLength(addLengths(a, math))).toBe('calc(3px)');
+    expect(serializeLength(interpolateLengths(a, math, 0.5)))
+      .toBe('calc(1.5px)');
+    expect(serializeLength(accumulateLengths(a, math))).toBe('calc(3px)');
+  });
+
+  it('applies ranges to math at the computed-value stage', () => {
+    const consume = createLengthConsumer({ min: 0 });
+    const specified = new ComponentCursor(
+      parseListOfComponentValues('calc(-1px)'),
+    );
+    const computed = new ComponentCursor(
+      parseListOfComponentValues('calc(-1px)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(computed)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'dimension',
+          value: 0,
+          unit: 'px',
+        },
+      },
+    });
+  });
+});
+
+describe('resolution values', () => {
+  it('accepts resolution-valued math and rejects other categories', () => {
+    const value = parseResolution('min(1dppx, 2dppx)');
+    const other = new ComponentCursor(
+      parseListOfComponentValues('calc(1hz)'),
+    );
+
+    expect(serializeResolution(value!)).toBe('calc(1dppx)');
+    expect(tryConsumeResolution(other)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseResolution('1dppx')!;
+    const b = parseResolution('2dppx')!;
+    const math = parseResolution('calc(2dppx)')!;
+
+    expect(addResolutions(a, b))
+      .toEqual({ type: 'resolution', value: 3, unit: 'dppx' });
+    expect(serializeResolution(addResolutions(a, math)))
+      .toBe('calc(3dppx)');
+    expect(serializeResolution(interpolateResolutions(a, math, 0.5)))
+      .toBe('calc(1.5dppx)');
+    expect(serializeResolution(accumulateResolutions(a, math)))
+      .toBe('calc(3dppx)');
+  });
+
+  it('clamps math results to the nonnegative resolution range', () => {
+    const value = parseResolution('calc(-1dppx)', { stage: 'computed' });
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'dimension',
+        value: 0,
+        unit: 'dppx',
+      },
+    });
+  });
+});
+
+describe('time values', () => {
+  it('accepts time-valued math and rejects other categories', () => {
+    const value = parseTime('min(1s, 2s)');
+    const other = new ComponentCursor(
+      parseListOfComponentValues('calc(1hz)'),
+    );
+
+    expect(serializeTime(value!)).toBe('calc(1s)');
+    expect(tryConsumeTime(other)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseTime('1s')!;
+    const b = parseTime('2s')!;
+    const math = parseTime('calc(2s)')!;
+
+    expect(addTimes(a, b))
+      .toEqual({ type: 'time', value: 3, unit: 's' });
+    expect(serializeTime(addTimes(a, math))).toBe('calc(3s)');
+    expect(serializeTime(interpolateTimes(a, math, 0.5)))
+      .toBe('calc(1.5s)');
+    expect(serializeTime(accumulateTimes(a, math))).toBe('calc(3s)');
   });
 });
