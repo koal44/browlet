@@ -24,6 +24,7 @@ import {
 } from './numeric-literal/dimension';
 import { FREQUENCY_UNITS, resolveFrequency } from './numeric-literal/frequency';
 import { serializeIdentifier } from './ident';
+import type { IntegerLiteral } from './numeric-literal/integer';
 import {
   LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength,
   type LengthResolutionContext,
@@ -283,6 +284,7 @@ export function parseCalc(
 
 export function createMathValueFromLiteral(
   literal:
+    | IntegerLiteral
     | NumberLiteral
     | DimensionLiteral<string, string>
     | PercentageLiteral,
@@ -294,7 +296,9 @@ export function createMathValueFromLiteral(
       value: literal.value,
       unit: literal.unit,
     }
-    : literal;
+    : literal.type === 'integer'
+      ? { type: 'number', value: literal.value }
+      : literal;
   const normalized = calculationLiteral.value === 0
     ? { ...calculationLiteral, value: 0 }
     : calculationLiteral;

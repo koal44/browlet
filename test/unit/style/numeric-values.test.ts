@@ -29,6 +29,15 @@ import {
   accumulateTimes, addTimes, interpolateTimes,
   parseTime, serializeTime, tryConsumeTime,
 } from '../../../src/stylelet/values/time';
+import {
+  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
+  parseInteger, serializeInteger, tryConsumeInteger,
+} from '../../../src/stylelet/values/integer';
+import {
+  accumulatePercentages, addPercentages, createPercentageConsumer,
+  interpolatePercentages, parsePercentage, serializePercentage,
+  tryConsumePercentage,
+} from '../../../src/stylelet/values/percentage';
 
 describe('number values', () => {
   it('parses a number literal', () => {
@@ -374,5 +383,184 @@ describe('time values', () => {
     expect(serializeTime(interpolateTimes(a, math, 0.5)))
       .toBe('calc(1.5s)');
     expect(serializeTime(accumulateTimes(a, math))).toBe('calc(3s)');
+  });
+});
+
+describe('integer values', () => {
+  it('parses integer literals and number-valued math functions', () => {
+    expect(parseInteger('2')).toEqual({
+      type: 'integer',
+      value: 2,
+    });
+
+    const value = parseInteger('calc(1.5)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'number',
+        value: 1.5,
+      },
+    });
+    expect(serializeInteger(value!)).toBe('calc(1.5)');
+  });
+
+  it('rounds math results at the computed-value stage', () => {
+    const value = parseInteger('calc(1.5)', { stage: 'computed' });
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'number',
+        value: 2,
+      },
+    });
+    expect(serializeInteger(value!, { stage: 'computed' })).toBe('2');
+  });
+
+  it('rejects non-number math results', () => {
+    for (const input of ['calc(1px)', 'calc(1%)']) {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+
+      expect(tryConsumeInteger(c)).toMatchObject({ kind: 'bad' });
+    }
+  });
+
+  it('applies ranges to literals and math functions at their stages', () => {
+    const consume = createIntegerConsumer({ min: 0, max: 2 });
+    const literal = new ComponentCursor(parseListOfComponentValues('3'));
+    const specifiedMath = new ComponentCursor(
+      parseListOfComponentValues('calc(3)'),
+    );
+    const computedMath = new ComponentCursor(
+      parseListOfComponentValues('calc(3)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(literal)).toBeNull();
+    expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
+    expect(consume(computedMath)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'number',
+          value: 2,
+        },
+      },
+    });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parseInteger('1')!;
+    const b = parseInteger('2')!;
+    const math = parseInteger('calc(2)')!;
+
+    expect(addIntegers(a, b)).toEqual({ type: 'integer', value: 3 });
+    expect(interpolateIntegers(a, b, 0.5))
+      .toEqual({ type: 'integer', value: 2 });
+    expect(accumulateIntegers(a, b))
+      .toEqual({ type: 'integer', value: 3 });
+
+    expect(serializeInteger(addIntegers(a, math))).toBe('calc(3)');
+    expect(serializeInteger(interpolateIntegers(
+      a,
+      math,
+      0.5,
+      { stage: 'computed' },
+    ), { stage: 'computed' })).toBe('2');
+    expect(serializeInteger(accumulateIntegers(a, math))).toBe('calc(3)');
+  });
+});
+
+describe('percentage values', () => {
+  it('parses and serializes percentage literals and math functions', () => {
+    expect(parsePercentage('25%')).toEqual({
+      type: 'percentage',
+      value: 25,
+    });
+
+    const value = parsePercentage('calc(10% + 20%)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'percentage',
+        value: 30,
+      },
+    });
+    expect(serializePercentage(value!)).toBe('calc(30%)');
+    expect(serializePercentage(value!, { stage: 'computed' })).toBe('30%');
+  });
+
+  it('rejects non-percentage math results', () => {
+    for (const input of ['calc(1)', 'calc(1px)']) {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+
+      expect(tryConsumePercentage(c)).toMatchObject({ kind: 'bad' });
+    }
+  });
+
+  it('keeps its percentage type in another percentage context', () => {
+    const context = {
+      percentageType: 'length',
+    } as const;
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(25%)'),
+      { context },
+    );
+
+    expect(tryConsumePercentage(c)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'percentage',
+          value: 25,
+        },
+      },
+    });
+    expect(c.context).toBe(context);
+  });
+
+  it('applies ranges to literals and math functions at their stages', () => {
+    const consume = createPercentageConsumer({ min: 0, max: 100 });
+    const literal = new ComponentCursor(parseListOfComponentValues('125%'));
+    const specifiedMath = new ComponentCursor(
+      parseListOfComponentValues('calc(125%)'),
+    );
+    const computedMath = new ComponentCursor(
+      parseListOfComponentValues('calc(125%)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(literal)).toBeNull();
+    expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
+    expect(consume(computedMath)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'percentage',
+          value: 100,
+        },
+      },
+    });
+  });
+
+  it('combines literals directly and promotes mixed representations', () => {
+    const a = parsePercentage('10%')!;
+    const b = parsePercentage('20%')!;
+    const math = parsePercentage('calc(20%)')!;
+
+    expect(addPercentages(a, b))
+      .toEqual({ type: 'percentage', value: 30 });
+    expect(interpolatePercentages(a, b, 0.5))
+      .toEqual({ type: 'percentage', value: 15 });
+    expect(accumulatePercentages(a, b))
+      .toEqual({ type: 'percentage', value: 30 });
+
+    expect(serializePercentage(addPercentages(a, math))).toBe('calc(30%)');
+    expect(serializePercentage(interpolatePercentages(a, math, 0.5)))
+      .toBe('calc(15%)');
+    expect(serializePercentage(accumulatePercentages(a, math)))
+      .toBe('calc(30%)');
   });
 });
