@@ -1,4 +1,5 @@
 import { asciiLower } from '../../shared/css';
+import { assertNever } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
   createDelimConsumer, createFunctionalNotationConsumer, createIdentValueConsumer,
@@ -24,7 +25,7 @@ import {
 import { FREQUENCY_UNITS, resolveFrequency } from './frequency';
 import { serializeIdentifier } from './ident';
 import {
-  LENGTH_UNITS, tryResolveLength,
+  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength,
   type LengthResolutionContext,
 } from './length';
 import {
@@ -39,6 +40,7 @@ import { RESOLUTION_UNITS, resolveResolution } from './resolution';
 import { TIME_UNITS, resolveTime } from './time';
 
 const CALC_TERM_LIMIT = 32;
+const CALC_COMPLEXITY_LIMIT = 64;
 
 export type ExpectedCalculationType =
   | 'number'
@@ -59,7 +61,7 @@ export type CalculationContext = CalculationSimplificationContext & {
   /** Whether the current grammar is nested inside another calculation. */
   insideCalculation?: boolean;
 
-  /** Number of calculation terms consumed by the current calculation. */
+  /** Shared complexity consumed by the current calculation and its children. */
   termCount?: number;
 
   /** Numeric production the outermost calculation must match. */
@@ -69,6 +71,9 @@ export type CalculationContext = CalculationSimplificationContext & {
 export type CalculationSimplificationContext = {
   /** Context used to reduce lengths to the canonical px unit. */
   length?: LengthResolutionContext;
+
+  /** Number of device pixels in one CSS pixel. */
+  devicePixelRatio?: number;
 
   /**
    * Dimensional type against which percentages resolve. Percentages retain
@@ -87,44 +92,48 @@ export type CalculationSimplificationContext = {
 };
 
 export type NumericVariable = {
-  value: NumberValue | DimensionValue | PercentageValue | null;
+  value: NumericLeaf | null;
   dimensionalType: DimensionalType;
 };
 
-/*
- * <calc()> = calc( <calc-sum> )
- */
+type MathFunctionResult =
+  | CalcFunctionValue
+  | MathFunctionNode
+  | NumericLeaf;
 
-export type CalcValue = {
+export type CalcFunctionValue = {
   type: 'calc';
   calculation: CalculationTree;
   dimensionalType: DimensionalType;
 };
 
-export const ROUNDING_STRATEGIES = [
-  'nearest',
-  'up',
-  'down',
-  'to-zero',
-  'line-width',
-] as const;
+export type CalculationTree =
+  | NumericLeaf
+  | VariableLeaf
+  | CalcSumNode
+  | CalcProductNode
+  | CalcNegateNode
+  | CalcInvertNode
+  | MathFunctionNode;
 
-export type RoundingStrategy =
-  (typeof ROUNDING_STRATEGIES)[number];
+type NumericLeaf =
+  | NumberValue
+  | DimensionValue
+  | PercentageValue;
 
-type VariadicMathFunctionName = 'min' | 'max' | 'hypot';
-type BinaryMathFunctionName = 'mod' | 'rem' | 'atan2' | 'pow';
-type UnaryMathFunctionName =
-  | 'sin'
-  | 'cos'
-  | 'tan'
-  | 'asin'
-  | 'acos'
-  | 'atan'
-  | 'sqrt'
-  | 'exp'
-  | 'abs'
-  | 'sign';
+type VariableLeaf = {
+  type: 'variable';
+  name: string;
+  dimensionalType: DimensionalType;
+};
+
+export type MathFunctionNode =
+  | CalcVariadicFunctionNode
+  | CalcClampNode
+  | CalcRoundNode
+  | CalcBinaryFunctionNode
+  | CalcUnaryFunctionNode
+  | CalcLogNode;
 
 export type CalcVariadicFunctionNode<
   Name extends VariadicMathFunctionName = VariadicMathFunctionName,
@@ -173,31 +182,35 @@ export type CalcLogNode = {
   dimensionalType: DimensionalType;
 };
 
-export type MathFunctionNode =
-  | CalcVariadicFunctionNode
-  | CalcClampNode
-  | CalcRoundNode
-  | CalcBinaryFunctionNode
-  | CalcUnaryFunctionNode
-  | CalcLogNode;
+export const ROUNDING_STRATEGIES = [
+  'nearest',
+  'up',
+  'down',
+  'to-zero',
+  'line-width',
+] as const;
 
-export type MathFunctionValue = CalcValue | MathFunctionNode;
+export type RoundingStrategy =
+  (typeof ROUNDING_STRATEGIES)[number];
 
-export type CalculationTree =
-  | NumberValue
-  | DimensionValue
-  | PercentageValue
-  | CalcVariableNode
-  | CalcSumNode
-  | CalcProductNode
-  | CalcNegateNode
-  | CalcInvertNode
-  | MathFunctionNode;
+type VariadicMathFunctionName = 'min' | 'max' | 'hypot';
+type BinaryMathFunctionName = 'mod' | 'rem' | 'atan2' | 'pow';
+type UnaryMathFunctionName =
+  | 'sin'
+  | 'cos'
+  | 'tan'
+  | 'asin'
+  | 'acos'
+  | 'atan'
+  | 'sqrt'
+  | 'exp'
+  | 'abs'
+  | 'sign';
 
 export function parseMathFunction(
   input: ParserInput,
   context: CalculationContext = {},
-): MathFunctionValue | null {
+): MathFunctionResult | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -211,7 +224,7 @@ export function parseMathFunction(
 export function parseCalc(
   input: ParserInput,
   context: CalculationContext = {},
-): CalcValue | null {
+): CalcFunctionValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -224,7 +237,7 @@ export function parseCalc(
 
 export function tryConsumeCalc(
   c: ComponentCursor,
-): TryComponentConsumerResult<CalcValue> {
+): TryComponentConsumerResult<CalcFunctionValue> {
   const result = consumeCalcCalculation(c);
 
   if (result === null || isBad(result)) {
@@ -238,7 +251,7 @@ export function tryConsumeCalc(
     dimensionalType === null ||
     (
       !context.insideCalculation &&
-      !matchesCalculationContext(dimensionalType, context)
+      !matchesExpectedCalculationType(dimensionalType, context)
     )
   ) {
     return bad(
@@ -253,6 +266,10 @@ export function tryConsumeCalc(
     dimensionalType,
   });
 }
+
+/*
+ * <calc()> = calc( <calc-sum> )
+ */
 
 const consumeCalcCalculation = createFunctionalNotationConsumer(
   'calc',
@@ -363,7 +380,9 @@ export const tryConsumeSign = createUnaryMathFunctionConsumer(
   'number',
 );
 
-const tryConsumeNonCalcMathFunction: TryComponentConsumer<MathFunctionNode> =
+const tryConsumeNonCalcMathFunction: TryComponentConsumer<
+  MathFunctionNode | NumericLeaf
+> =
   oneOf(
     [
       one(tryConsumeMin), one(tryConsumeMax), one(tryConsumeClamp),
@@ -377,7 +396,7 @@ const tryConsumeNonCalcMathFunction: TryComponentConsumer<MathFunctionNode> =
     ([value]) => ok(value),
   );
 
-export const tryConsumeMathFunction: TryComponentConsumer<MathFunctionValue> =
+export const tryConsumeMathFunction: TryComponentConsumer<MathFunctionResult> =
   oneOf(
     [
       one(tryConsumeCalc),
@@ -392,7 +411,9 @@ function createVariadicMathFunctionConsumer<
   Name extends VariadicMathFunctionName,
 >(
   name: Name,
-): TryComponentConsumer<CalcVariadicFunctionNode<Name>> {
+): TryComponentConsumer<
+  CalcVariadicFunctionNode<Name> | NumericLeaf
+> {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 1, CALC_TERM_LIMIT)],
     ([children], context) => createMathFunctionNode<
@@ -415,7 +436,9 @@ function createBinaryMathFunctionConsumer<
   resultType: FunctionResultType,
   allowedCategories?: readonly ResolvedDimensionalCategory[],
   requireSameType = false,
-): TryComponentConsumer<CalcBinaryFunctionNode<Name>> {
+): TryComponentConsumer<
+  CalcBinaryFunctionNode<Name> | NumericLeaf
+> {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 2, 2)],
     ([children], context) => {
@@ -448,7 +471,9 @@ function createUnaryMathFunctionConsumer<
   name: Name,
   resultType: FunctionResultType,
   allowedCategories?: readonly ResolvedDimensionalCategory[],
-): TryComponentConsumer<CalcUnaryFunctionNode<Name>> {
+): TryComponentConsumer<
+  CalcUnaryFunctionNode<Name> | NumericLeaf
+> {
   const consumeArguments = sequenceOf(
     [one(tryConsumeCalcSum)],
     ([[child]], context) => createMathFunctionNode<
@@ -465,7 +490,9 @@ function createUnaryMathFunctionConsumer<
   return createMathFunctionConsumer(name, consumeArguments);
 }
 
-function createClampConsumer(): TryComponentConsumer<CalcClampNode> {
+function createClampConsumer(): TryComponentConsumer<
+  CalcClampNode | NumericLeaf
+> {
   const consumeArgument: TryComponentConsumer<CalculationTree | null> = oneOf(
     [
       one(tryConsumeCalcSum),
@@ -504,7 +531,9 @@ function createClampConsumer(): TryComponentConsumer<CalcClampNode> {
   return createMathFunctionConsumer('clamp', consumeArguments);
 }
 
-function createRoundConsumer(): TryComponentConsumer<CalcRoundNode> {
+function createRoundConsumer(): TryComponentConsumer<
+  CalcRoundNode | NumericLeaf
+> {
   const consumeArguments = sequenceOf(
     [
       opt(tryConsumeRoundingStrategyPrefix),
@@ -550,7 +579,9 @@ function createRoundConsumer(): TryComponentConsumer<CalcRoundNode> {
   return createMathFunctionConsumer('round', consumeArguments);
 }
 
-function createLogConsumer(): TryComponentConsumer<CalcLogNode> {
+function createLogConsumer(): TryComponentConsumer<
+  CalcLogNode | NumericLeaf
+> {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 1, 2)],
     ([children], context) => {
@@ -572,7 +603,7 @@ function createLogConsumer(): TryComponentConsumer<CalcLogNode> {
 function createMathFunctionConsumer<Node extends MathFunctionNode>(
   name: string,
   consumeArguments: TryComponentConsumer<Node>,
-): TryComponentConsumer<Node> {
+): TryComponentConsumer<Node | NumericLeaf> {
   const consume = createFunctionalNotationConsumer(
     name,
     consumeArguments,
@@ -593,7 +624,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     if (
       !context.insideCalculation &&
-      !matchesCalculationContext(result.value.dimensionalType, context)
+      !matchesExpectedCalculationType(result.value.dimensionalType, context)
     ) {
       return bad(
         ComponentConsumerBadReason.Invalid,
@@ -604,7 +635,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
     return ok(simplifyCalculationTree(
       result.value,
       context,
-    ) as Node);
+    ) as Node | NumericLeaf);
   };
 }
 
@@ -1014,11 +1045,11 @@ export function tryConsumeCalcValue(
 
   if (
     context.termCount !== undefined
-    && ++context.termCount > CALC_TERM_LIMIT
+    && ++context.termCount > CALC_COMPLEXITY_LIMIT
   ) {
     return bad(
       ComponentConsumerBadReason.Invalid,
-      `Calculation exceeds ${CALC_TERM_LIMIT} terms`,
+      `Calculation exceeds the complexity limit of ${CALC_COMPLEXITY_LIMIT}`,
     );
   }
 
@@ -1091,15 +1122,9 @@ function tryConsumeNestedCalc(
  * A calculation context can define additional numeric variables.
  */
 
-export type CalcVariableNode = {
-  type: 'variable';
-  name: string;
-  dimensionalType: DimensionalType;
-};
-
 export function tryConsumeCalcKeyword(
   c: ComponentCursor,
-): TryComponentConsumerResult<NumberValue | CalcVariableNode> {
+): TryComponentConsumerResult<NumberValue | VariableLeaf> {
   const start = c.pos();
   const token = tryConsumeIdentToken(c);
 
@@ -1195,7 +1220,7 @@ export function determineDimensionalType(
       return percentageDimensionalType(context);
 
     case 'dimension':
-      return dimensionalTypeForUnit(calculation.unit);
+      return createDimensionalTypeFromUnit(calculation.unit);
 
     case 'variable':
       return cloneDimensionalType(calculation.dimensionalType);
@@ -1242,13 +1267,15 @@ export function addDimensionalTypes(
 ): DimensionalType | null {
   const [first, ...rest] = types;
 
+  if (first === undefined) {
+    throw new RangeError('Dimensional type addition requires an operand');
+  }
+
   if (first === null) {
     return null;
   }
 
-  let result = first === undefined
-    ? numberDimensionalType()
-    : cloneDimensionalType(first);
+  let result = cloneDimensionalType(first);
 
   for (const type of rest) {
     if (type === null) {
@@ -1315,7 +1342,7 @@ export function resolvedDimensionalCategory(
     : null;
 }
 
-function matchesCalculationContext(
+function matchesExpectedCalculationType(
   type: DimensionalType,
   context: CalculationContext,
 ): boolean {
@@ -1534,7 +1561,7 @@ function applyPercentHint(
   return dimensionalTypeFromMap(exponents, hint);
 }
 
-function dimensionalTypeForUnit(unit: string): DimensionalType | null {
+function createDimensionalTypeFromUnit(unit: string): DimensionalType | null {
   const normalized = asciiLower(unit);
   let base: DimensionalBaseType;
 
@@ -1700,11 +1727,11 @@ export function simplifyCalculationTree(
   }
 }
 
-function simplifyMathFunctionNode<Node extends MathFunctionNode>(
-  root: Node,
+function simplifyMathFunctionNode(
+  root: MathFunctionNode,
   context: CalculationSimplificationContext,
-): Node {
-  return {
+): CalculationTree {
+  const mathNode = {
     ...root,
     children: root.children.map((child) => (
       child === null || child === undefined
@@ -1712,7 +1739,503 @@ function simplifyMathFunctionNode<Node extends MathFunctionNode>(
         : simplifyCalculationTree(child, context)
     )),
     dimensionalType: cloneDimensionalType(root.dimensionalType),
-  };
+  } as MathFunctionNode;
+
+  switch (mathNode.type) {
+    case 'min':
+    case 'max': {
+      const args = combineComparableNumericArguments(
+        mathNode.children,
+        mathNode.type,
+        context,
+      );
+
+      if (args.length === 1) {
+        return args[0]!;
+      }
+
+      return {
+        ...mathNode,
+        children: args,
+      } as CalcVariadicFunctionNode;
+    }
+
+    case 'clamp': {
+      const [minimum, value, maximum] = mathNode.children;
+
+      if (
+        !isNumericLeaf(value) ||
+        (minimum !== null && !isNumericLeaf(minimum)) ||
+        (maximum !== null && !isNumericLeaf(maximum))
+      ) {
+        return mathNode;
+      }
+
+      if (
+        (
+          minimum !== null &&
+          !canCompareNumericValues(value, minimum, context)
+        ) ||
+        (
+          maximum !== null &&
+          !canCompareNumericValues(value, maximum, context)
+        )
+      ) {
+        return mathNode;
+      }
+
+      let result = maximum === null
+        ? value.value
+        : Math.min(value.value, maximum.value);
+
+      if (minimum !== null) {
+        result = Math.max(minimum.value, result);
+      }
+
+      return { ...value, value: result };
+    }
+
+    case 'round': {
+      const [input, stepArg] = mathNode.children;
+
+      if (
+        !isNumericLeaf(input) ||
+        (stepArg !== undefined && !isNumericLeaf(stepArg))
+      ) {
+        return mathNode;
+      }
+
+      const step = stepArg ?? { type: 'number', value: 1 } as const;
+
+      switch (mathNode.strategy) {
+        case 'nearest': {
+          if (!haveSameNumericTypeAndUnit(input, step)) {
+            return mathNode;
+          }
+
+          const [lower, upper] = roundingBounds(input.value, step.value);
+          const result = input.value - lower < upper - input.value
+            ? lower
+            : upper;
+
+          return { ...input, value: result };
+        }
+
+        case 'up': {
+          if (!haveSameNumericTypeAndUnit(input, step)) {
+            return mathNode;
+          }
+
+          const [, upper] = roundingBounds(input.value, step.value);
+          return { ...input, value: upper };
+        }
+
+        case 'down': {
+          if (!haveSameNumericTypeAndUnit(input, step)) {
+            return mathNode;
+          }
+
+          const [lower] = roundingBounds(input.value, step.value);
+          return { ...input, value: lower };
+        }
+
+        case 'to-zero': {
+          if (!haveSameNumericTypeAndUnit(input, step)) {
+            return mathNode;
+          }
+
+          const [lower, upper] = roundingBounds(input.value, step.value);
+          const result = input.value < 0 || Object.is(input.value, -0)
+            ? upper
+            : lower;
+
+          return { ...input, value: result };
+        }
+
+        case 'line-width': {
+          const devicePixelRatio = context.devicePixelRatio;
+
+          if (!isPixelDimension(input) || devicePixelRatio === undefined) {
+            return mathNode;
+          }
+
+          if (stepArg === undefined) {
+            return snapPixelDimension(input.value, devicePixelRatio);
+          }
+
+          if (!haveSameNumericTypeAndUnit(input, step)) {
+            return mathNode;
+          }
+
+          const [lower, upper] = roundingBounds(input.value, step.value);
+          let result: number;
+
+          if (lower === 0 && upper !== 0) {
+            result = upper;
+          } else if (upper === 0 && lower !== 0) {
+            result = lower;
+          } else {
+            result = input.value - lower < upper - input.value
+              ? lower
+              : upper;
+          }
+
+          return snapPixelDimension(result, devicePixelRatio);
+        }
+
+        default:
+          return assertNever(mathNode.strategy);
+      }
+    }
+
+    case 'mod':
+    case 'rem': {
+      const [value, step] = mathNode.children;
+
+      if (!isNumericLeaf(value) || !isNumericLeaf(step)) {
+        return mathNode;
+      }
+
+      if (!haveSameNumericTypeAndUnit(value, step)) {
+        return mathNode;
+      }
+
+      const inputValue = value.value;
+      const stepValue = step.value;
+      const inputIsNegative = inputValue < 0 || Object.is(inputValue, -0);
+      const stepIsNegative = stepValue < 0 || Object.is(stepValue, -0);
+      let result: number;
+
+      if (
+        Number.isNaN(inputValue) ||
+        Number.isNaN(stepValue) ||
+        stepValue === 0 ||
+        !Number.isFinite(inputValue)
+      ) {
+        result = NaN;
+      } else if (!Number.isFinite(stepValue)) {
+        result = mathNode.type === 'mod' && inputIsNegative !== stepIsNegative
+          ? NaN
+          : inputValue;
+      } else if (mathNode.type === 'rem') {
+        result = inputValue % stepValue;
+      } else {
+        result = inputValue % stepValue;
+
+        if (result === 0) {
+          result = stepIsNegative ? -0 : 0;
+        } else if ((result < 0) !== stepIsNegative) {
+          result += stepValue;
+        }
+      }
+
+      return { ...value, value: result };
+    }
+
+    case 'sin':
+    case 'cos':
+    case 'tan': {
+      const [input] = mathNode.children;
+      let radians: number;
+
+      if (input.type === 'number') {
+        radians = input.value;
+      } else if (input.type === 'dimension' && input.unit === 'deg') {
+        radians = input.value * Math.PI / 180;
+      } else {
+        return mathNode;
+      }
+
+      return {
+        type: 'number',
+        value: Math[mathNode.type](radians),
+      };
+    }
+
+    case 'asin':
+    case 'acos':
+    case 'atan': {
+      const [input] = mathNode.children;
+
+      if (input.type !== 'number') {
+        return mathNode;
+      }
+
+      return {
+        type: 'dimension',
+        value: Math[mathNode.type](input.value) * 180 / Math.PI,
+        unit: 'deg',
+      };
+    }
+
+    case 'atan2': {
+      const [y, x] = mathNode.children;
+
+      if (!isNumericLeaf(y) || !isNumericLeaf(x)) {
+        return mathNode;
+      }
+
+      if (!canCompareNumericValues(y, x, context)) {
+        return mathNode;
+      }
+
+      return {
+        type: 'dimension',
+        value: Math.atan2(y.value, x.value) * 180 / Math.PI,
+        unit: 'deg',
+      };
+    }
+
+    case 'pow': {
+      const [base, exponent] = mathNode.children;
+
+      if (base.type !== 'number' || exponent.type !== 'number') {
+        return mathNode;
+      }
+
+      const result = Number.isNaN(base.value) || Number.isNaN(exponent.value)
+        ? NaN
+        : Math.pow(base.value, exponent.value);
+
+      return { type: 'number', value: result };
+    }
+
+    case 'sqrt': {
+      const [input] = mathNode.children;
+
+      if (input.type !== 'number') {
+        return mathNode;
+      }
+
+      return { type: 'number', value: Math.sqrt(input.value) };
+    }
+
+    case 'hypot': {
+      const args = mathNode.children;
+
+      if (!areResolvedNumericArguments(args)) {
+        return mathNode;
+      }
+
+      const first = args[0];
+
+      if (
+        !hasResolvedNumericMagnitude(first, context) ||
+        !haveSameNumericTypeAndUnit(first, ...args.slice(1))
+      ) {
+        return mathNode;
+      }
+
+      const result = args.some((argument) => Number.isNaN(argument.value))
+        ? NaN
+        : Math.hypot(...args.map((argument) => argument.value));
+
+      return { ...first, value: result };
+    }
+
+    case 'log': {
+      const [value, base] = mathNode.children;
+
+      if (
+        value.type !== 'number' ||
+        (base !== undefined && base.type !== 'number')
+      ) {
+        return mathNode;
+      }
+
+      let result: number;
+
+      if (
+        Number.isNaN(value.value) ||
+        (base !== undefined && (
+          Number.isNaN(base.value) ||
+          base.value <= 0 ||
+          base.value === 1
+        ))
+      ) {
+        result = NaN;
+      } else if (value.value === 0) {
+        result = -Infinity;
+      } else if (value.value === 1) {
+        result = 0;
+      } else if (value.value === Infinity) {
+        result = Infinity;
+      } else if (base === undefined) {
+        result = Math.log(value.value);
+      } else {
+        result = Math.log(value.value) / Math.log(base.value);
+      }
+
+      return { type: 'number', value: result };
+    }
+
+    case 'exp': {
+      const [input] = mathNode.children;
+
+      if (input.type !== 'number') {
+        return mathNode;
+      }
+
+      return { type: 'number', value: Math.exp(input.value) };
+    }
+
+    case 'abs':
+    case 'sign': {
+      const [input] = mathNode.children;
+
+      if (
+        !isNumericLeaf(input) ||
+        !hasResolvedNumericMagnitude(input, context)
+      ) {
+        return mathNode;
+      }
+
+      return mathNode.type === 'abs'
+        ? { ...input, value: Math.abs(input.value) }
+        : { type: 'number', value: Math.sign(input.value) };
+    }
+
+    default:
+      return mathNode;
+  }
+}
+
+function areResolvedNumericArguments(
+  args: [CalculationTree, ...CalculationTree[]],
+): args is [NumericLeaf, ...NumericLeaf[]] {
+  return args.every(isNumericLeaf);
+}
+
+function combineComparableNumericArguments(
+  args: readonly CalculationTree[],
+  operation: 'min' | 'max',
+  context: CalculationSimplificationContext,
+): CalculationTree[] {
+  const compare = operation === 'min' ? Math.min : Math.max;
+  const groups = new Map<string, { index: number; value: NumericLeaf; }>();
+  const combinedArgs: CalculationTree[] = [];
+
+  for (const argument of args) {
+    if (
+      !isNumericLeaf(argument) ||
+      !hasResolvedNumericMagnitude(argument, context)
+    ) {
+      combinedArgs.push(argument);
+      continue;
+    }
+
+    const key = numericUnitKey(argument);
+    const group = groups.get(key);
+
+    if (group === undefined) {
+      groups.set(key, { index: combinedArgs.length, value: argument });
+      combinedArgs.push(argument);
+      continue;
+    }
+
+    group.value = {
+      ...group.value,
+      value: compare(group.value.value, argument.value),
+    };
+    combinedArgs[group.index] = group.value;
+  }
+
+  return combinedArgs;
+}
+
+function canCompareNumericValues(
+  first: NumericLeaf,
+  second: NumericLeaf,
+  context: CalculationSimplificationContext,
+): boolean {
+  return (
+    haveSameNumericTypeAndUnit(first, second) &&
+    hasResolvedNumericMagnitude(first, context)
+  );
+}
+
+function hasResolvedNumericMagnitude(
+  value: NumericLeaf,
+  context: CalculationSimplificationContext,
+): boolean {
+  return (
+    value.type !== 'percentage' ||
+    context.percentageType === 'percent'
+  );
+}
+
+function snapPixelDimension(
+  value: number,
+  devicePixelRatio: number,
+): DimensionValue<'dimension', 'px'> {
+  const snapped = snapLengthAsLineWidth(
+    { type: 'length', value, unit: 'px' },
+    devicePixelRatio,
+  );
+
+  return { ...snapped, type: 'dimension' };
+}
+
+function isPixelDimension(
+  value: NumericLeaf,
+): value is DimensionValue<'dimension', 'px'> {
+  return value.type === 'dimension' && value.unit === 'px';
+}
+
+function haveSameNumericTypeAndUnit(
+  first: NumericLeaf,
+  ...rest: readonly NumericLeaf[]
+): boolean {
+  return rest.every((value) => (
+    first.type === value.type &&
+    (
+      first.type !== 'dimension' ||
+      (value.type === 'dimension' && first.unit === value.unit)
+    )
+  ));
+}
+
+function roundingBounds(
+  input: number,
+  step: number,
+): readonly [lower: number, upper: number] {
+  if (
+    Number.isNaN(input) ||
+    Number.isNaN(step) ||
+    step === 0 ||
+    (!Number.isFinite(input) && !Number.isFinite(step))
+  ) {
+    return [NaN, NaN];
+  }
+
+  if (!Number.isFinite(input)) {
+    return [input, input];
+  }
+
+  if (!Number.isFinite(step)) {
+    if (input === 0) {
+      return [input, input];
+    }
+
+    return input < 0
+      ? [-Infinity, -0]
+      : [0, Infinity];
+  }
+
+  const magnitude = Math.abs(step);
+  const quotient = input / magnitude;
+
+  if (Number.isInteger(quotient)) {
+    return [input, input];
+  }
+
+  const lower = Math.floor(quotient) * magnitude;
+  const upper = Math.ceil(quotient) * magnitude;
+
+  return [
+    lower === 0 ? 0 : lower,
+    upper === 0 ? -0 : upper,
+  ];
 }
 
 function simplifyNegate(
@@ -1721,7 +2244,7 @@ function simplifyNegate(
 ): CalculationTree {
   const child = simplifyCalculationTree(root.child, context);
 
-  if (isCalculationNumericValue(child)) {
+  if (isNumericLeaf(child)) {
     return negateNumericValue(child);
   }
 
@@ -1733,7 +2256,7 @@ function simplifyNegate(
     return {
       type: 'sum',
       children: child.children.map((grandchild) => {
-        if (isCalculationNumericValue(grandchild)) {
+        if (isNumericLeaf(grandchild)) {
           return negateNumericValue(grandchild);
         }
 
@@ -1821,13 +2344,13 @@ function simplifyProduct(
     if (
       number?.type === 'number' &&
       sum?.type === 'sum' &&
-      sum.children.every(isCalculationNumericValue)
+      sum.children.every(isNumericLeaf)
     ) {
       return {
         type: 'sum',
         children: sum.children.map((child) => (
           multiplyNumericValue(
-            child as CalculationNumericValue,
+            child as NumericLeaf,
             number.value,
           )
         )) as CalcSumNode['children'],
@@ -1852,31 +2375,30 @@ function simplifyProduct(
   };
 }
 
-type CalculationNumericValue =
-  | NumberValue
-  | DimensionValue
-  | PercentageValue;
-
-function isCalculationNumericValue(
-  value: CalculationTree,
-): value is CalculationNumericValue {
+function isNumericLeaf(
+  value: CalculationTree | MathFunctionResult | null | undefined,
+): value is NumericLeaf {
   return (
-    value.type === 'number' ||
-    value.type === 'dimension' ||
-    value.type === 'percentage'
+    value !== null &&
+    value !== undefined &&
+    (
+      value.type === 'number' ||
+      value.type === 'dimension' ||
+      value.type === 'percentage'
+    )
   );
 }
 
 function multiplyNumericValue(
-  value: CalculationNumericValue,
+  value: NumericLeaf,
   multiplier: number,
-): CalculationNumericValue {
+): NumericLeaf {
   return { ...value, value: value.value * multiplier };
 }
 
 function negateNumericValue(
-  value: CalculationNumericValue,
-): CalculationNumericValue {
+  value: NumericLeaf,
+): NumericLeaf {
   return { ...value, value: 0 - value.value };
 }
 
@@ -1903,7 +2425,7 @@ function combineLikeNumericValues(
   const totals = new Map<string, number>();
 
   for (const child of children) {
-    if (isCalculationNumericValue(child)) {
+    if (isNumericLeaf(child)) {
       const key = numericUnitKey(child);
       totals.set(
         key,
@@ -1916,7 +2438,7 @@ function combineLikeNumericValues(
   const combined: CalculationTree[] = [];
 
   for (const child of children) {
-    if (!isCalculationNumericValue(child)) {
+    if (!isNumericLeaf(child)) {
       combined.push(child);
       continue;
     }
@@ -1935,7 +2457,7 @@ function combineLikeNumericValues(
   return combined;
 }
 
-function numericUnitKey(value: CalculationNumericValue): string {
+function numericUnitKey(value: NumericLeaf): string {
   switch (value.type) {
     case 'number':
       return 'number';
@@ -2024,7 +2546,7 @@ function calculationChildSortRank(value: CalculationTree): number {
 function evaluateNumericProduct(
   children: readonly CalculationTree[],
   dimensionalType: DimensionalType,
-): CalculationNumericValue | null {
+): NumericLeaf | null {
   if (!children.every(isNumericProductFactor)) {
     return null;
   }
@@ -2069,7 +2591,7 @@ function evaluateNumericProduct(
       : null;
   }
 
-  const unitType = dimensionalTypeForUnit(unit);
+  const unitType = createDimensionalTypeFromUnit(unit);
 
   if (
     unitType === null ||
@@ -2083,12 +2605,12 @@ function evaluateNumericProduct(
 
 function isNumericProductFactor(
   value: CalculationTree,
-): value is CalculationNumericValue | (
-  CalcInvertNode & { child: CalculationNumericValue; }
+): value is NumericLeaf | (
+  CalcInvertNode & { child: NumericLeaf; }
 ) {
   return (
-    isCalculationNumericValue(value) ||
-    (value.type === 'invert' && isCalculationNumericValue(value.child))
+    isNumericLeaf(value) ||
+    (value.type === 'invert' && isNumericLeaf(value.child))
   );
 }
 
@@ -2182,7 +2704,11 @@ function isUnit<Unit extends string>(
 // █▌  █▌ █▌     █▌ ▐█   ▐▌  █▌  █▌ █▌
 //  ███▌  █████▌ █▌  █▌ ████ █▌  █▌ █████
 
-export function serializeMathFunction(value: MathFunctionValue): string {
+export function serializeMathFunction(value: MathFunctionResult): string {
+  if (isNumericLeaf(value)) {
+    return serializeCalcTree(value);
+  }
+
   if (value.type === 'calc') {
     if (isMathFunctionNode(value.calculation)) {
       return serializeMathFunction(value.calculation);
@@ -2230,7 +2756,7 @@ export function serializeCalcTree(root: CalculationTree): string {
     case 'number':
     case 'percentage':
     case 'dimension':
-      return serializeCalculationNumericValue(root);
+      return serializeNumericLeaf(root);
 
     case 'variable':
       return serializeIdentifier(root.name);
@@ -2263,8 +2789,8 @@ function serializeCalcSum(root: CalcSumNode): string {
   for (const child of rest) {
     if (child.type === 'negate') {
       serialized += ` - ${serializeCalcTree(child.child)}`;
-    } else if (isNegativeNumericValue(child)) {
-      serialized += ` - ${serializeCalculationNumericValue(
+    } else if (isNegativeNumericLeaf(child)) {
+      serialized += ` - ${serializeNumericLeaf(
         negateNumericValue(child),
       )}`;
     } else {
@@ -2297,17 +2823,17 @@ function unwrapParens(value: string): string {
 }
 
 
-function isNegativeNumericValue(
+function isNegativeNumericLeaf(
   value: CalculationTree,
-): value is CalculationNumericValue {
+): value is NumericLeaf {
   return (
-    isCalculationNumericValue(value) &&
+    isNumericLeaf(value) &&
     (value.value < 0 || Object.is(value.value, -0))
   );
 }
 
-function serializeCalculationNumericValue(
-  value: CalculationNumericValue,
+function serializeNumericLeaf(
+  value: NumericLeaf,
 ): string {
   if (Number.isFinite(value.value)) {
     switch (value.type) {
@@ -2344,7 +2870,7 @@ function serializeCalculationNumericValue(
 }
 
 function canonicalUnitForDimension(unit: string): string {
-  const type = dimensionalTypeForUnit(unit);
+  const type = createDimensionalTypeFromUnit(unit);
   const category = type === null
     ? null
     : resolvedDimensionalCategory(type);

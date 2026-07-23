@@ -25,8 +25,33 @@ const serializations: CalcSerializationCase[] = [
   // Comparison functions
   { prop: 'width', decl: 'min(10px, 20px)', expect: 'calc(10px)' },
   { prop: 'width', decl: 'max(10px, 20px)', expect: 'calc(20px)' },
+
+  // Chromium and Firefox currently preserve the unsimplified specified value.
+  { prop: 'width', decl: 'min(2em, 1em, 3rem)', expect: 'min(1em, 3rem)', browsers: ['chromium'], status: 'fail' },
+  { prop: 'width', decl: 'min(2em, 1em, 3rem)', expect: 'min(1em, 3rem)', browsers: ['firefox'], status: 'fail' },
+  { prop: 'width', decl: 'min(2em, 1em, 3rem)', expect: 'min(1em, 3rem)', browsers: ['webkit'] },
+  { prop: 'width', decl: 'max(2vw, 1vh, 3vw)', expect: 'max(3vw, 1vh)', browsers: ['chromium'], status: 'fail' },
+  { prop: 'width', decl: 'max(2vw, 1vh, 3vw)', expect: 'max(3vw, 1vh)', browsers: ['firefox'], status: 'fail' },
+  { prop: 'width', decl: 'max(2vw, 1vh, 3vw)', expect: 'max(3vw, 1vh)', browsers: ['webkit'] },
+  { prop: 'width', decl: 'min(4rem, 2px, 3rem, 1px)', expect: 'min(3rem, 1px)', browsers: ['chromium'], status: 'fail' },
+  { prop: 'width', decl: 'min(4rem, 2px, 3rem, 1px)', expect: 'min(3rem, 1px)', browsers: ['firefox'], status: 'fail' },
+  { prop: 'width', decl: 'min(4rem, 2px, 3rem, 1px)', expect: 'min(3rem, 1px)', browsers: ['webkit'] },
   { prop: 'width', decl: 'clamp(5px, 10px, 20px)', expect: 'calc(10px)' },
   { prop: 'width', decl: 'clamp(none, 10px, 20px)', expect: 'calc(10px)' },
+  { prop: 'width', decl: 'clamp(100px, 0px, 50px)', expect: 'calc(100px)' },
+
+  // Chromium preserves raw percentage comparisons; Firefox converts their
+  // results to numbers rather than preserving their percentage type.
+  { prop: 'opacity', decl: 'min(10%, 20%)', expect: 'calc(10%)', browsers: ['chromium'], status: 'fail' },
+  { prop: 'opacity', decl: 'min(10%, 20%)', expect: 'calc(10%)', browsers: ['firefox'], status: 'fail' },
+  { prop: 'opacity', decl: 'min(10%, 20%)', expect: 'calc(10%)', browsers: ['webkit'] },
+  { prop: 'opacity', decl: 'clamp(10%, 20%, 30%)', expect: 'calc(20%)', browsers: ['chromium'], status: 'fail' },
+  { prop: 'opacity', decl: 'clamp(10%, 20%, 30%)', expect: 'calc(20%)', browsers: ['firefox'], status: 'fail' },
+  { prop: 'opacity', decl: 'clamp(10%, 20%, 30%)', expect: 'calc(20%)', browsers: ['webkit'] },
+
+  // Width percentages require a containing-block reference and remain unresolved.
+  { prop: 'width', decl: 'min(10%, 20%)', expect: 'min(10%, 20%)' },
+  { prop: 'width', decl: 'clamp(10%, 20%, 30%)', expect: 'clamp(10%, 20%, 30%)' },
 
   // Stepped value functions
   { prop: 'width', decl: 'round(nearest, 5.5px, 2px)', expect: 'calc(6px)' },

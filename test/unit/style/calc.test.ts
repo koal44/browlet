@@ -3,6 +3,7 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
+  addDimensionalTypes, multiplyDimensionalTypes,
   parseCalc, parseMathFunction, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
@@ -11,6 +12,11 @@ import {
 } from '../../../src/stylelet/values/calc';
 
 describe('calc', () => {
+  it('distinguishes empty dimensional sums from products', () => {
+    expect(() => addDimensionalTypes([])).toThrow(RangeError);
+    expect(multiplyDimensionalTypes([])).toEqual(dimensionalType());
+  });
+
   it.each([
     ['calc(1)', { type: 'number', value: 1 }, dimensionalType()],
     [
@@ -48,26 +54,9 @@ describe('calc', () => {
   });
 
   it.each([
-    ['min(1, 2)', 'min', 2, dimensionalType()],
-    ['max(1px, 2px)', 'max', 2, dimensionalType(['length', 1])],
-    ['clamp(none, 1px, 2px)', 'clamp', 3, dimensionalType(['length', 1])],
-    ['round(up, 5px, 2px)', 'round', 2, dimensionalType(['length', 1])],
-    ['mod(5px, 2px)', 'mod', 2, dimensionalType(['length', 1])],
-    ['rem(5, 2)', 'rem', 2, dimensionalType()],
-    ['sin(1rad)', 'sin', 1, dimensionalType()],
-    ['cos(1)', 'cos', 1, dimensionalType()],
-    ['tan(1deg)', 'tan', 1, dimensionalType()],
-    ['asin(1)', 'asin', 1, dimensionalType(['angle', 1])],
-    ['acos(1)', 'acos', 1, dimensionalType(['angle', 1])],
-    ['atan(1)', 'atan', 1, dimensionalType(['angle', 1])],
-    ['atan2(1px, 2px)', 'atan2', 2, dimensionalType(['angle', 1])],
-    ['pow(2, 3)', 'pow', 2, dimensionalType()],
-    ['sqrt(4)', 'sqrt', 1, dimensionalType()],
-    ['hypot(3px, 4px)', 'hypot', 2, dimensionalType(['length', 1])],
-    ['log(8, 2)', 'log', 2, dimensionalType()],
-    ['exp(1)', 'exp', 1, dimensionalType()],
-    ['abs(-1px)', 'abs', 1, dimensionalType(['length', 1])],
-    ['sign(-1px)', 'sign', 1, dimensionalType()],
+    ['min(1em, 2rem)', 'min', 2, dimensionalType(['length', 1])],
+    ['max(1vw, 2vh)', 'max', 2, dimensionalType(['length', 1])],
+    ['clamp(1em, 2rem, 3em)', 'clamp', 3, dimensionalType(['length', 1])],
   ] as const)(
     'parses the math function %s',
     (input, type, childCount, expectedType) => {
@@ -75,20 +64,558 @@ describe('calc', () => {
 
       expect(parsed?.type).toBe(type);
       expect('children' in parsed! && parsed.children).toHaveLength(childCount);
-      expect(parsed?.dimensionalType).toEqual(expectedType);
+      expect(
+        'dimensionalType' in parsed! && parsed.dimensionalType,
+      ).toEqual(expectedType);
     },
   );
 
-  it('uses the default round() strategy and optional numeric step', () => {
-    expect(parseMathFunction('round(1)')).toMatchObject({
-      type: 'round',
-      strategy: 'nearest',
-      children: [{ type: 'number', value: 1 }],
+  describe('math comparison functions', () => {
+    it.each([
+      ['min(3, 1, 2)', 1],
+      ['max(3px, 1px, 2px)', 3],
+      ['min(1in, 100px)', 96],
+      ['clamp(0px, 20px, 10px)', 10],
+      ['clamp(100px, 0px, 50px)', 100],
+      ['clamp(none, 20px, 10px)', 10],
+      ['clamp(10px, 5px, none)', 10],
+      ['clamp(none, 5px, none)', 5],
+    ] as const)('simplifies the comparison function %s', (input, expected) => {
+      expect(parseMathFunction(input)).toMatchObject({
+        value: expected,
+      });
+    });
+
+    it('partially simplifies comparable min() and max() arguments', () => {
+      expect(parseMathFunction('min(2em, 1em, 3rem)')).toMatchObject({
+        type: 'min',
+        children: [
+          { type: 'dimension', value: 1, unit: 'em' },
+          { type: 'dimension', value: 3, unit: 'rem' },
+        ],
+      });
+      expect(parseMathFunction('max(2vw, 1vh, 3vw)')).toMatchObject({
+        type: 'max',
+        children: [
+          { type: 'dimension', value: 3, unit: 'vw' },
+          { type: 'dimension', value: 1, unit: 'vh' },
+        ],
+      });
+      expect(parseMathFunction('min(4rem, 2px, 3rem, 1px)'))
+        .toMatchObject({
+          type: 'min',
+          children: [
+            { type: 'dimension', value: 3, unit: 'rem' },
+            { type: 'dimension', value: 1, unit: 'px' },
+          ],
+        });
+    });
+
+    it('retains percentage comparisons without sufficient context', () => {
+      expect(parseMathFunction('min(10%, 20%)')).toMatchObject({
+        type: 'min',
+      });
+      expect(parseMathFunction('clamp(10%, 20%, 30%)')).toMatchObject({
+        type: 'clamp',
+      });
+      expect(parseMathFunction('min(10%, 20%)', {
+        percentageType: 'length',
+      })).toMatchObject({
+        type: 'min',
+        children: [
+          { type: 'percentage', value: 10 },
+          { type: 'percentage', value: 20 },
+        ],
+      });
+      expect(parseMathFunction('clamp(10%, 20%, 30%)', {
+        percentageType: 'length',
+      })).toMatchObject({ type: 'clamp' });
+    });
+
+    it('compares raw or resolved percentages', () => {
+      expect(parseMathFunction('min(10%, 20%)', {
+        percentageType: 'percent',
+      })).toEqual({
+        type: 'percentage',
+        value: 10,
+      });
+      expect(parseMathFunction('max(10%, 20%)', {
+        percentageType: 'length',
+        percentageReferenceValue: {
+          type: 'dimension',
+          value: 200,
+          unit: 'px',
+        },
+      })).toEqual({
+        type: 'dimension',
+        value: 40,
+        unit: 'px',
+      });
+    });
+
+    it('unwraps a boundless clamp without comparing its percentage', () => {
+      expect(parseMathFunction('clamp(none, 20%, none)')).toEqual({
+        type: 'percentage',
+        value: 20,
+      });
+    });
+
+    it('orders negative zero below positive zero', () => {
+      const minimum = parseMathFunction('min(0, calc(-1 * 0))')!;
+      const maximum = parseMathFunction('max(0, calc(-1 * 0))')!;
+      const clamped = parseMathFunction('clamp(0, calc(-1 * 0), 1)')!;
+
+      expect('value' in minimum && Object.is(minimum.value, -0)).toBe(true);
+      expect('value' in maximum && Object.is(maximum.value, 0)).toBe(true);
+      expect('value' in clamped && Object.is(clamped.value, 0)).toBe(true);
+    });
+
+    it('retains clamp() when unresolved units cannot be compared', () => {
+      expect(parseMathFunction('clamp(1em, 2rem, 3em)')).toMatchObject({
+        type: 'clamp',
+      });
+    });
+  });
+
+  describe('math stepped-value functions', () => {
+    it('uses the default round() strategy and optional numeric step', () => {
+      expect(parseMathFunction('round(1)')).toEqual({
+        type: 'number',
+        value: 1,
+      });
+    });
+
+    it.each([
+      ['round(5, 2)', 6],
+      ['round(-5, 2)', -4],
+      ['round(up, 5, 2)', 6],
+      ['round(down, 5, 2)', 4],
+      ['round(to-zero, -5, 2)', -4],
+    ] as const)('simplifies the stepped function %s', (input, expected) => {
+      expect(parseMathFunction(input)).toEqual({
+        type: 'number',
+        value: expected,
+      });
+    });
+
+    it.each([
+      ['mod(-5, 3)', 1],
+      ['mod(5, -3)', -1],
+      ['rem(-5, 3)', -2],
+      ['rem(5, -3)', 2],
+    ] as const)('simplifies the modulus function %s', (input, expected) => {
+      expect(parseMathFunction(input)).toEqual({
+        type: 'number',
+        value: expected,
+      });
+    });
+
+    it('simplifies stepped dimensions with canonical or identical units', () => {
+      expect(parseMathFunction('round(down, 1.3in, 10px)')).toEqual({
+        type: 'dimension',
+        value: 120,
+        unit: 'px',
+      });
+      expect(parseMathFunction('mod(25rem, 10rem)')).toEqual({
+        type: 'dimension',
+        value: 5,
+        unit: 'rem',
+      });
+    });
+
+    it('retains stepped functions whose unresolved units differ', () => {
+      expect(parseMathFunction('round(10rem, 1em)')).toMatchObject({
+        type: 'round',
+        children: [
+          { type: 'dimension', value: 10, unit: 'rem' },
+          { type: 'dimension', value: 1, unit: 'em' },
+        ],
+      });
+    });
+
+    it('snaps the line-width rounding strategy with device context', () => {
+      expect(parseMathFunction('round(line-width, .25px)', {
+        devicePixelRatio: 2,
+      })).toEqual({
+        type: 'dimension',
+        value: 0.5,
+        unit: 'px',
+      });
+    });
+
+    it('chooses the nonzero multiple for line-width rounding', () => {
+      expect(parseMathFunction(
+        'round(line-width, 1px, calc(infinity * 1px))',
+        { devicePixelRatio: 2 },
+      )).toEqual({
+        type: 'dimension',
+        value: Infinity,
+        unit: 'px',
+      });
+    });
+
+    it.each([
+      'round(1, 0)',
+      'round(infinity, infinity)',
+      'mod(infinity, 1)',
+      'rem(1, 0)',
+      'mod(-1, infinity)',
+    ])('produces NaN for the out-of-range function %s', (input) => {
+      const value = parseMathFunction(input)!;
+
+      expect(value.type).toBe('number');
+
+      if (value.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(Number.isNaN(calculationValue(value))).toBe(true);
+    });
+
+    it('preserves the required signed zeros in stepped functions', () => {
+      const rounded = parseMathFunction(
+        'round(to-zero, -1, 2)',
+      )!;
+      const modulo = parseMathFunction('mod(-6, 3)')!;
+      const remainder = parseMathFunction('rem(-6, 3)')!;
+
+      if (
+        rounded.type === 'calc' ||
+        modulo.type === 'calc' ||
+        remainder.type === 'calc'
+      ) {
+        throw new Error('Expected simplified calculations');
+      }
+
+      expect(Object.is(calculationValue(rounded), -0)).toBe(true);
+      expect(Object.is(calculationValue(modulo), 0)).toBe(true);
+      expect(Object.is(calculationValue(remainder), -0)).toBe(true);
+    });
+  });
+
+  describe('math trigonometric functions', () => {
+    it.each([
+      ['sin(30deg)', 0.5],
+      ['sin(.5)', Math.sin(0.5)],
+      ['cos(.25turn)', 0],
+      ['tan(50grad)', 1],
+    ] as const)('simplifies the trigonometric function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(result.value).toBeCloseTo(expected, 10);
+    });
+
+    it.each([
+      ['asin(.5)', 30],
+      ['acos(-1)', 180],
+      ['atan(1)', 45],
+      ['atan(infinity)', 90],
+    ] as const)('simplifies the inverse function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'dimension') {
+        throw new Error('Expected an angle');
+      }
+
+      expect(result.unit).toBe('deg');
+      expect(result.value).toBeCloseTo(expected, 10);
+    });
+
+    it.each([
+      ['atan2(1, -1)', 135],
+      ['atan2(-1, 1)', -45],
+      ['atan2(1in, 96px)', 45],
+      ['atan2(1rem, 2rem)', 26.565051177],
+    ] as const)('simplifies the two-argument function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'dimension') {
+        throw new Error('Expected an angle');
+      }
+
+      expect(result.unit).toBe('deg');
+      expect(result.value).toBeCloseTo(expected, 8);
+    });
+
+    it('retains atan2() until its operands can be compared', () => {
+      expect(parseMathFunction('atan2(1em, 1rem)')).toMatchObject({
+        type: 'atan2',
+      });
+      expect(parseMathFunction('atan2(10%, 20%)')).toMatchObject({
+        type: 'atan2',
+      });
+      expect(parseMathFunction('atan2(10%, 20%)', {
+        percentageType: 'length',
+      })).toMatchObject({ type: 'atan2' });
+    });
+
+    it('simplifies raw or resolved percentage coordinates', () => {
+      const raw = parseMathFunction('atan2(10%, 20%)', {
+        percentageType: 'percent',
+      });
+      const resolved = parseMathFunction('atan2(10%, 20%)', {
+        percentageType: 'length',
+        percentageReferenceValue: {
+          type: 'dimension',
+          value: -100,
+          unit: 'px',
+        },
+      });
+
+      if (raw?.type !== 'dimension' || resolved?.type !== 'dimension') {
+        throw new Error('Expected angles');
+      }
+
+      expect(raw.value).toBeCloseTo(26.565051177, 8);
+      expect(resolved.value).toBeCloseTo(-153.434948823, 8);
+    });
+
+    it('uses JavaScript infinity, NaN, and signed-zero behavior', () => {
+      const sine = parseMathFunction('sin(calc(-1 * 0))');
+      const tangent = parseMathFunction('tan(calc(-1 * 0))');
+      const invalidSine = parseMathFunction('sin(infinity)');
+      const invalidAsin = parseMathFunction('asin(2)');
+      const negativePi = parseMathFunction('atan2(calc(-1 * 0), -1)');
+      const positivePi = parseMathFunction('atan2(0, -1)');
+
+      if (
+        sine?.type !== 'number' ||
+        tangent?.type !== 'number' ||
+        invalidSine?.type !== 'number' ||
+        invalidAsin?.type !== 'dimension' ||
+        negativePi?.type !== 'dimension' ||
+        positivePi?.type !== 'dimension'
+      ) {
+        throw new Error('Expected simplified trigonometric values');
+      }
+
+      expect(Object.is(sine.value, -0)).toBe(true);
+      expect(Object.is(tangent.value, -0)).toBe(true);
+      expect(Number.isNaN(invalidSine.value)).toBe(true);
+      expect(Number.isNaN(invalidAsin.value)).toBe(true);
+      expect(negativePi.value).toBe(-180);
+      expect(positivePi.value).toBe(180);
+    });
+  });
+
+  describe('math exponential functions', () => {
+    it.each([
+      ['pow(2, 3)', 8],
+      ['pow(2, -3)', 0.125],
+      ['sqrt(9)', 3],
+      ['log(e)', 1],
+      ['log(8, 2)', 3],
+      ['exp(1)', Math.E],
+    ] as const)('simplifies the exponential function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(result.value).toBeCloseTo(expected, 10);
+    });
+
+    it.each([
+      ['hypot(3px, 4px)', 5, 'px'],
+      ['hypot(-2rem)', 2, 'rem'],
+      ['hypot(3in, 384px)', 480, 'px'],
+    ] as const)('simplifies the dimensional function %s', (
+      input,
+      expected,
+      unit,
+    ) => {
+      expect(parseMathFunction(input)).toEqual({
+        type: 'dimension',
+        value: expected,
+        unit,
+      });
+    });
+
+    it('retains hypot() until its operands can be compared', () => {
+      expect(parseMathFunction('hypot(3em, 4rem)')).toMatchObject({
+        type: 'hypot',
+      });
+      expect(parseMathFunction('hypot(3%, 4%)')).toMatchObject({
+        type: 'hypot',
+      });
+      expect(parseMathFunction('hypot(3%, 4%)', {
+        percentageType: 'length',
+      })).toMatchObject({ type: 'hypot' });
+    });
+
+    it('simplifies raw or resolved percentage components', () => {
+      expect(parseMathFunction('hypot(3%, 4%)', {
+        percentageType: 'percent',
+      })).toEqual({
+        type: 'percentage',
+        value: 5,
+      });
+      expect(parseMathFunction('hypot(3%, 4%)', {
+        percentageType: 'length',
+        percentageReferenceValue: {
+          type: 'dimension',
+          value: -100,
+          unit: 'px',
+        },
+      })).toEqual({
+        type: 'dimension',
+        value: 5,
+        unit: 'px',
+      });
+    });
+
+    it('makes NaN infectious in every exponential function', () => {
+      const power = parseMathFunction('pow(NaN, 0)');
+      const hypotenuse = parseMathFunction('hypot(infinity, NaN)');
+
+      if (power?.type !== 'number' || hypotenuse?.type !== 'number') {
+        throw new Error('Expected numbers');
+      }
+
+      expect(Number.isNaN(power.value)).toBe(true);
+      expect(Number.isNaN(hypotenuse.value)).toBe(true);
+    });
+
+    it.each([
+      'pow(-2, .5)',
+      'sqrt(-1)',
+      'log(-1)',
+      'log(10, 0)',
+      'log(10, -2)',
+      'log(10, 1)',
+    ])('produces NaN for the out-of-range function %s', (input) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(Number.isNaN(result.value)).toBe(true);
+    });
+
+    it.each([
+      ['sqrt(calc(-1 * 0))', -0],
+      ['pow(calc(-1 * 0), -3)', -Infinity],
+      ['pow(-infinity, -3)', -0],
+      ['log(0, .5)', -Infinity],
+      ['log(1, .5)', 0],
+      ['log(infinity, .5)', Infinity],
+      ['exp(-infinity)', 0],
+    ] as const)('handles the boundary function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(Object.is(result.value, expected)).toBe(true);
+    });
+  });
+
+  describe('math sign-related functions', () => {
+    it.each([
+      ['abs(-10px)', 'dimension', 10, 'px'],
+      ['abs(5rem)', 'dimension', 5, 'rem'],
+      ['sign(-10px)', 'number', -1, undefined],
+      ['sign(10px)', 'number', 1, undefined],
+    ] as const)('simplifies the sign-related function %s', (
+      input,
+      type,
+      value,
+      unit,
+    ) => {
+      expect(parseMathFunction(input)).toEqual({
+        type,
+        value,
+        ...(unit === undefined ? {} : { unit }),
+      });
+    });
+
+    it('retains percentages whose numeric sign is unresolved', () => {
+      expect(parseMathFunction('abs(-10%)')).toMatchObject({ type: 'abs' });
+      expect(parseMathFunction('sign(10%)')).toMatchObject({ type: 'sign' });
+      expect(parseMathFunction('sign(10%)', {
+        percentageType: 'length',
+      })).toMatchObject({ type: 'sign' });
+    });
+
+    it('simplifies raw or resolved percentages', () => {
+      expect(parseMathFunction('abs(-10%)', {
+        percentageType: 'percent',
+      })).toEqual({
+        type: 'percentage',
+        value: 10,
+      });
+      expect(parseMathFunction('sign(-10%)', {
+        percentageType: 'percent',
+      })).toEqual({
+        type: 'number',
+        value: -1,
+      });
+      expect(parseMathFunction('abs(10%)', {
+        percentageType: 'length',
+        percentageReferenceValue: {
+          type: 'dimension',
+          value: -200,
+          unit: 'px',
+        },
+      })).toEqual({
+        type: 'dimension',
+        value: 20,
+        unit: 'px',
+      });
+      expect(parseMathFunction('sign(10%)', {
+        percentageType: 'length',
+        percentageReferenceValue: {
+          type: 'dimension',
+          value: -200,
+          unit: 'px',
+        },
+      })).toEqual({
+        type: 'number',
+        value: -1,
+      });
+    });
+
+    it.each([
+      ['abs(calc(-1 * 0))', 0],
+      ['sign(calc(-1 * 0))', -0],
+      ['sign(0)', 0],
+      ['abs(-infinity)', Infinity],
+      ['sign(infinity)', 1],
+      ['sign(-infinity)', -1],
+    ] as const)('handles the boundary function %s', (input, expected) => {
+      const result = parseMathFunction(input);
+
+      if (result?.type !== 'number') {
+        throw new Error('Expected a number');
+      }
+
+      expect(Object.is(result.value, expected)).toBe(true);
+    });
+
+    it('makes NaN infectious', () => {
+      const absolute = parseMathFunction('abs(NaN)');
+      const sign = parseMathFunction('sign(NaN)');
+
+      if (absolute?.type !== 'number' || sign?.type !== 'number') {
+        throw new Error('Expected numbers');
+      }
+
+      expect(Number.isNaN(absolute.value)).toBe(true);
+      expect(Number.isNaN(sign.value)).toBe(true);
     });
   });
 
   it('retains math functions as calculation-tree operator nodes', () => {
-    const calculation = parseCalc('calc(min(1, 2) + max(3, 4))')
+    const calculation = parseCalc(
+      'calc(min(1em, 2rem) + max(3vw, 4vh))',
+    )
       ?.calculation as CalcSumNode;
 
     expect(calculation.children.map((child) => child.type)).toEqual([
@@ -105,7 +632,7 @@ describe('calc', () => {
     ['calc(1vh - 7px)', 'calc(-7px + 1vh)'],
     ['calc(min(1px, 2%))', 'min(1px, 2%)'],
     ['calc(1px - min(2px, 3%))', 'calc(1px - min(2px, 3%))'],
-    ['calc(1px / min(2, 3))', 'calc(1px / min(2, 3))'],
+    ['calc(1px / min(2, 3))', 'calc(0.5px)'],
   ] as const)('serializes the specified calculation %s', (input, expected) => {
     const context = input.includes('%')
       ? {
@@ -165,7 +692,9 @@ describe('calc', () => {
 
   it.each([
     'min()',
+    'min(1px, 1s)',
     'clamp(1px, none, 2px)',
+    'clamp(1px, 2px, 3s)',
     'round(1px)',
     'mod(1px, 1s)',
     'sin(1px)',
@@ -395,7 +924,7 @@ describe('calc', () => {
       ],
     });
 
-    expect(parseCalc('calc(min(1px, 2px) * 2)')?.calculation)
+    expect(parseCalc('calc(min(1em, 2rem) * 2)')?.calculation)
       .toMatchObject({
         type: 'product',
         children: [
@@ -644,11 +1173,19 @@ describe('calc', () => {
     });
   });
 
-  it('limits calculation terms across nested groups', () => {
-    const left = Array.from({ length: 16 }, () => 1).join(' + ');
-    const right = Array.from({ length: 15 }, () => 1).join(' + ');
+  it('supports at least 32 nested calculation levels', () => {
+    const input = `${'('.repeat(32)}1${')'.repeat(32)}`;
 
-    expectBadCalc(`calc((${left}) + (${right}))`);
+    expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
+      type: 'number',
+      value: 1,
+    });
+  });
+
+  it('bounds aggregate calculation complexity', () => {
+    const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
+
+    expectBadCalc(`calc(${input})`);
   });
 
   it('returns null without advancing for another functional notation', () => {
