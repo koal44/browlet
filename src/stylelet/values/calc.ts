@@ -112,20 +112,20 @@ export type NumericVariable = {
   numericType: NumericType;
 };
 
-type MathFunctionResult =
-  | CalcFunctionValue
-  | MathFunctionNode
-  | NumericLeaf;
-
-export type CalcFunctionValue = {
-  type: 'calc';
+export type MathValue = {
+  type: 'math';
   calculation: CalculationTree;
-  numericType: NumericType;
 };
 
 export type CalculationTree =
+  | CalculationLeaf
+  | CalculationNode;
+
+type CalculationLeaf =
   | NumericLeaf
-  | VariableLeaf
+  | VariableLeaf;
+
+export type CalculationNode =
   | CalcSumNode
   | CalcProductNode
   | CalcNegateNode
@@ -151,60 +151,73 @@ type VariableLeaf = {
   numericType: NumericType;
 };
 
+// Interfaces are required to break the recursive CalculationTree alias.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+interface CalculationNodeWithChildren<
+  Type extends string,
+  Children extends readonly CalculationTree[],
+> {
+  type: Type;
+  children: Children;
+  numericType: NumericType;
+}
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+interface MathFunctionNodeWithArguments<
+  Type extends string,
+  Arguments extends readonly CalculationTree[],
+> {
+  type: Type;
+  arguments: Arguments;
+  numericType: NumericType;
+}
+
 export type MathFunctionNode =
-  | CalcVariadicFunctionNode
-  | CalcClampNode
-  | CalcRoundNode
-  | CalcBinaryFunctionNode
-  | CalcUnaryFunctionNode
-  | CalcLogNode;
+  | MathVariadicFunctionNode
+  | MathClampNode
+  | MathRoundNode
+  | MathBinaryFunctionNode
+  | MathUnaryFunctionNode
+  | MathLogNode;
 
-export type CalcVariadicFunctionNode<
+export type MathVariadicFunctionNode<
   Name extends VariadicMathFunctionName = VariadicMathFunctionName,
-> = {
-  type: Name;
-  children: [CalculationTree, ...CalculationTree[]];
-  numericType: NumericType;
-};
+> = MathFunctionNodeWithArguments<
+  Name,
+  [CalculationTree, ...CalculationTree[]]
+>;
 
-export type CalcClampNode = {
+export type MathClampNode = {
   type: 'clamp';
-  children: [
-    minimum: CalculationTree | null,
-    value: CalculationTree,
-    maximum: CalculationTree | null,
-  ];
+  minimum?: CalculationTree;
+  value: CalculationTree;
+  maximum?: CalculationTree;
   numericType: NumericType;
 };
 
-export type CalcRoundNode = {
+export type MathRoundNode = {
   type: 'round';
   strategy: RoundingStrategy;
-  children: [value: CalculationTree, step?: CalculationTree];
+  value: CalculationTree;
+  step?: CalculationTree;
   numericType: NumericType;
 };
 
-export type CalcBinaryFunctionNode<
+export type MathBinaryFunctionNode<
   Name extends BinaryMathFunctionName = BinaryMathFunctionName,
-> = {
-  type: Name;
-  children: [CalculationTree, CalculationTree];
-  numericType: NumericType;
-};
+> = MathFunctionNodeWithArguments<
+  Name,
+  [CalculationTree, CalculationTree]
+>;
 
-export type CalcUnaryFunctionNode<
+export type MathUnaryFunctionNode<
   Name extends UnaryMathFunctionName = UnaryMathFunctionName,
-> = {
-  type: Name;
-  children: [CalculationTree];
-  numericType: NumericType;
-};
+> = MathFunctionNodeWithArguments<Name, [CalculationTree]>;
 
-export type CalcLogNode = {
-  type: 'log';
-  children: [value: CalculationTree, base?: CalculationTree];
-  numericType: NumericType;
-};
+export type MathLogNode = MathFunctionNodeWithArguments<
+  'log',
+  [value: CalculationTree] | [value: CalculationTree, base: CalculationTree]
+>;
 
 export type RoundingStrategy =
   | 'nearest'
@@ -230,7 +243,7 @@ type UnaryMathFunctionName =
 export function parseMathFunction(
   input: ParserInput,
   context: CalculationContext = {},
-): MathFunctionResult | null {
+): MathValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -241,10 +254,17 @@ export function parseMathFunction(
   );
 }
 
+export function parseMathValue(
+  input: ParserInput,
+  context: CalculationContext = {},
+): MathValue | null {
+  return parseMathFunction(input, context);
+}
+
 export function parseCalc(
   input: ParserInput,
   context: CalculationContext = {},
-): CalcFunctionValue | null {
+): MathValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -257,7 +277,7 @@ export function parseCalc(
 
 export function tryConsumeCalc(
   c: ComponentCursor,
-): TryComponentConsumerResult<CalcFunctionValue> {
+): TryComponentConsumerResult<MathValue> {
   const result = consumeCalcCalculation(c);
 
   if (result === null || isBad(result)) {
@@ -277,11 +297,9 @@ export function tryConsumeCalc(
     );
   }
 
-  return ok({
-    type: 'calc',
-    calculation: simplifyCalculationTree(result.value, context),
-    numericType,
-  });
+  return ok(createMathValue(
+    simplifyCalculationTree(result.value, context),
+  ));
 }
 
 /*
@@ -327,15 +345,11 @@ const tryConsumeClamp = createClampConsumer();
 const tryConsumeRound = createRoundConsumer();
 const tryConsumeMod = createBinaryMathFunctionConsumer(
   'mod',
-  'consistent',
-  undefined,
-  true,
+  'same',
 );
 const tryConsumeRem = createBinaryMathFunctionConsumer(
   'rem',
-  'consistent',
-  undefined,
-  true,
+  'same',
 );
 const tryConsumeSin = createUnaryMathFunctionConsumer(
   'sin',
@@ -413,33 +427,46 @@ const tryConsumeNonCalcMathFunction: TryComponentConsumer<
     ([value]) => ok(value),
   );
 
-export const tryConsumeMathFunction: TryComponentConsumer<MathFunctionResult> =
-  oneOf(
-    [
-      one(tryConsumeCalc),
-      one(tryConsumeNonCalcMathFunction),
-    ],
-    ([value]) => ok(value),
-  );
+export const tryConsumeMathFunction: TryComponentConsumer<MathValue> = (c) => {
+  const result = tryConsumeMathFunctionCalculation(c);
 
-type FunctionResultType = 'consistent' | 'number' | 'angle';
+  return result === null || isBad(result)
+    ? result
+    : ok(createMathValue(result.value));
+};
+
+export const tryConsumeMathValue = tryConsumeMathFunction;
+
+function createMathValue(
+  calculation: CalculationTree,
+): MathValue {
+  return {
+    type: 'math',
+    calculation,
+  };
+}
+
+type FunctionResultType =
+  | 'consistent'
+  | 'same'
+  | 'number'
+  | 'angle';
 
 function createVariadicMathFunctionConsumer<
   Name extends VariadicMathFunctionName,
 >(
   name: Name,
 ): TryComponentConsumer<
-  CalcVariadicFunctionNode<Name> | NumericLeaf
+  MathVariadicFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 1, CALC_TERM_LIMIT)],
-    ([children], context) => createMathFunctionNode<
-      CalcVariadicFunctionNode<Name>
+    ([args]) => createMathFunctionNode<
+      MathVariadicFunctionNode<Name>
     >(
-      name,
-      children,
+      { type: name, arguments: args },
+      args,
       'consistent',
-      calculationContextFor(context),
     ),
   );
 
@@ -452,14 +479,13 @@ function createBinaryMathFunctionConsumer<
   name: Name,
   resultType: FunctionResultType,
   allowedCategories?: readonly ResolvedNumericCategory[],
-  requireSameType = false,
 ): TryComponentConsumer<
-  CalcBinaryFunctionNode<Name> | NumericLeaf
+  MathBinaryFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 2, 2)],
-    ([children], context) => {
-      const [first, second] = children;
+    ([args]) => {
+      const [first, second] = args;
 
       if (first === undefined || second === undefined) {
         return bad(
@@ -468,13 +494,11 @@ function createBinaryMathFunctionConsumer<
         );
       }
 
-      return createMathFunctionNode<CalcBinaryFunctionNode<Name>>(
-        name,
-        [first, second],
+      return createMathFunctionNode<MathBinaryFunctionNode<Name>>(
+        { type: name, arguments: [first, second] },
+        args,
         resultType,
-        calculationContextFor(context),
         allowedCategories,
-        requireSameType,
       );
     },
   );
@@ -489,17 +513,16 @@ function createUnaryMathFunctionConsumer<
   resultType: FunctionResultType,
   allowedCategories?: readonly ResolvedNumericCategory[],
 ): TryComponentConsumer<
-  CalcUnaryFunctionNode<Name> | NumericLeaf
+  MathUnaryFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
     [one(tryConsumeCalcSum)],
-    ([[child]], context) => createMathFunctionNode<
-      CalcUnaryFunctionNode<Name>
+    ([[child]]) => createMathFunctionNode<
+      MathUnaryFunctionNode<Name>
     >(
-      name,
+      { type: name, arguments: [child] },
       [child],
       resultType,
-      calculationContextFor(context),
       allowedCategories,
     ),
   );
@@ -508,25 +531,25 @@ function createUnaryMathFunctionConsumer<
 }
 
 function createClampConsumer(): TryComponentConsumer<
-  CalcClampNode | NumericLeaf
+  MathClampNode | NumericLeaf
 > {
-  const consumeArgument: TryComponentConsumer<CalculationTree | null> = oneOf(
+  const consumeArgument: TryComponentConsumer<CalculationTree | 'none'> = oneOf(
     [
       one(tryConsumeCalcSum),
       one(createIdentValueConsumer('none')),
     ],
-    ([value]) => ok(value === 'none' ? null : value),
+    ([value]) => ok(value),
   );
   const consumeArguments = sequenceOf(
     [commaRepeat(consumeArgument, 3, 3)],
-    ([children], context) => {
-      const [minimum, value, maximum] = children;
+    ([args]) => {
+      const [minimumArgument, value, maximumArgument] = args;
 
       if (
-        minimum === undefined ||
+        minimumArgument === undefined ||
         value === undefined ||
-        value === null ||
-        maximum === undefined
+        value === 'none' ||
+        maximumArgument === undefined
       ) {
         return bad(
           ComponentConsumerBadReason.Invalid,
@@ -534,11 +557,21 @@ function createClampConsumer(): TryComponentConsumer<
         );
       }
 
-      const result = createMathFunctionNode<CalcClampNode>(
-        'clamp',
-        [minimum, value, maximum],
+      const minimum = minimumArgument === 'none'
+        ? undefined
+        : minimumArgument;
+      const maximum = maximumArgument === 'none'
+        ? undefined
+        : maximumArgument;
+      const calculations = [
+        ...(minimum === undefined ? [] : [minimum]),
+        value,
+        ...(maximum === undefined ? [] : [maximum]),
+      ];
+      const result = createMathFunctionNode<MathClampNode>(
+        { type: 'clamp', minimum, value, maximum },
+        calculations,
         'consistent',
-        calculationContextFor(context),
       );
 
       return result;
@@ -549,18 +582,17 @@ function createClampConsumer(): TryComponentConsumer<
 }
 
 function createRoundConsumer(): TryComponentConsumer<
-  CalcRoundNode | NumericLeaf
+  MathRoundNode | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
     [
       opt(tryConsumeRoundingStrategyPrefix),
       commaRepeat(tryConsumeCalcSum, 1, 2),
     ],
-    ([[explicitStrategy], children], context) => {
+    ([[explicitStrategy], children]) => {
       const [value, step] = children;
 
       const strategy = explicitStrategy ?? 'nearest';
-      const calculationContext = calculationContextFor(context);
       const valueType = numericTypeOf(value);
       const valueCategory = resolvedNumericCategory(valueType);
 
@@ -579,14 +611,10 @@ function createRoundConsumer(): TryComponentConsumer<
         );
       }
 
-      return createMathFunctionNode<CalcRoundNode>(
-        'round',
+      return createMathFunctionNode<MathRoundNode>(
+        { type: 'round', strategy, value, step },
         step === undefined ? [value] : [value, step],
         'consistent',
-        calculationContext,
-        undefined,
-        false,
-        { strategy },
       );
     },
   );
@@ -595,18 +623,20 @@ function createRoundConsumer(): TryComponentConsumer<
 }
 
 function createLogConsumer(): TryComponentConsumer<
-  CalcLogNode | NumericLeaf
+  MathLogNode | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
     [commaRepeat(tryConsumeCalcSum, 1, 2)],
-    ([children], context) => {
-      const [value, base] = children;
+    ([args]) => {
+      const [value, base] = args;
 
-      return createMathFunctionNode<CalcLogNode>(
-        'log',
-        base === undefined ? [value] : [value, base],
+      return createMathFunctionNode<MathLogNode>(
+        {
+          type: 'log',
+          arguments: base === undefined ? [value] : [value, base],
+        },
+        args,
         'number',
-        calculationContextFor(context),
         ['number'],
       );
     },
@@ -657,17 +687,11 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 function createMathFunctionNode<
   Node extends MathFunctionNode,
 >(
-  type: Node['type'],
-  children: Node['children'],
+  node: Omit<Node, 'numericType'>,
+  calculations: readonly CalculationTree[],
   resultType: FunctionResultType,
-  context: CalculationContext,
   allowedCategories?: readonly ResolvedNumericCategory[],
-  requireSameType = false,
-  extra?: Omit<Node, 'type' | 'children' | 'numericType'>,
 ): TryComponentConsumerResult<Node> {
-  const calculations = children.filter(
-    (child): child is CalculationTree => child !== null,
-  );
   const types = calculations.map(numericTypeOf);
   const categories = types.map(resolvedNumericCategory);
 
@@ -680,7 +704,7 @@ function createMathFunctionNode<
       ))
     ) ||
     (
-      requireSameType &&
+      resultType === 'same' &&
       !types.every((argumentType) => (
         haveSameNumericType(argumentType, types[0]!)
       ))
@@ -688,7 +712,7 @@ function createMathFunctionNode<
   ) {
     return bad(
       ComponentConsumerBadReason.Invalid,
-      `Invalid ${type}() argument type`,
+      `Invalid ${node.type}() argument type`,
     );
   }
 
@@ -697,7 +721,7 @@ function createMathFunctionNode<
   if (consistentType === null) {
     return bad(
       ComponentConsumerBadReason.Invalid,
-      `Inconsistent ${type}() argument types`,
+      `Inconsistent ${node.type}() argument types`,
     );
   }
 
@@ -705,6 +729,7 @@ function createMathFunctionNode<
 
   switch (resultType) {
     case 'consistent':
+    case 'same':
       numericType = consistentType;
       break;
     case 'number':
@@ -724,15 +749,13 @@ function createMathFunctionNode<
   if (resolvedNumericCategory(numericType) === null) {
     return bad(
       ComponentConsumerBadReason.Invalid,
-      `Invalid ${type}() result type`,
+      `Invalid ${node.type}() result type`,
     );
   }
 
   return ok({
-    type,
-    children,
+    ...node,
     numericType,
-    ...extra,
   } as Node);
 }
 
@@ -786,11 +809,10 @@ function haveSameNumericType(
  * <calc-sum> = <calc-product> [ [ '+' | '-' ] <calc-product> ]*
  */
 
-export type CalcSumNode = {
-  type: 'sum';
-  children: [CalculationTree, CalculationTree, ...CalculationTree[]];
-  numericType: NumericType;
-};
+export type CalcSumNode = CalculationNodeWithChildren<
+  'sum',
+  [CalculationTree, CalculationTree, ...CalculationTree[]]
+>;
 
 type CalcSumTail = {
   operator: '+' | '-';
@@ -889,11 +911,10 @@ function tryConsumeCalcSumOperator(
  * <calc-product> = <calc-value> [ [ '*' | '/' ] <calc-value> ]*
  */
 
-export type CalcProductNode = {
-  type: 'product';
-  children: [CalculationTree, CalculationTree, ...CalculationTree[]];
-  numericType: NumericType;
-};
+export type CalcProductNode = CalculationNodeWithChildren<
+  'product',
+  [CalculationTree, CalculationTree, ...CalculationTree[]]
+>;
 
 export type CalcNegateNode = {
   type: 'negate';
@@ -1018,10 +1039,10 @@ function tryConsumeCalcValue(
   return result;
 }
 
-const tryConsumeCalculationMathFunction: TryComponentConsumer<CalculationTree> =
+const tryConsumeMathFunctionCalculation: TryComponentConsumer<CalculationTree> =
   oneOf(
     [
-      one(tryConsumeNestedCalc),
+      one(tryConsumeCalcCalculation),
       one(tryConsumeNonCalcMathFunction),
     ],
     ([value]) => ok(value),
@@ -1056,7 +1077,7 @@ const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
     one(tryConsumeCalcNumericLeaf),
     one(tryConsumeCalcKeyword),
     one(tryConsumeParenthesizedCalcSum),
-    one(tryConsumeCalculationMathFunction),
+    one(tryConsumeMathFunctionCalculation),
   ],
   ([value]) => ok(value),
 );
@@ -1088,7 +1109,7 @@ function tryConsumeParenthesizedCalcSum(
   return result;
 }
 
-function tryConsumeNestedCalc(
+function tryConsumeCalcCalculation(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
   const result = tryConsumeCalc(c);
@@ -1757,21 +1778,13 @@ function simplifyMathFunctionNode(
   root: MathFunctionNode,
   context: CalculationContext,
 ): CalculationTree {
-  const mathNode = {
-    ...root,
-    children: root.children.map((child) => (
-      child === null || child === undefined
-        ? child
-        : simplifyCalculationNode(child, context)
-    )),
-    numericType: cloneNumericType(root.numericType),
-  } as MathFunctionNode;
+  const mathNode = simplifyMathFunctionArguments(root, context);
 
   switch (mathNode.type) {
     case 'min':
     case 'max': {
       const args = combineComparableNumericArguments(
-        mathNode.children,
+        mathNode.arguments,
         mathNode.type,
         context,
       );
@@ -1782,39 +1795,39 @@ function simplifyMathFunctionNode(
 
       return {
         ...mathNode,
-        children: args,
-      } as CalcVariadicFunctionNode;
+        arguments: args,
+      } as MathVariadicFunctionNode;
     }
 
     case 'clamp': {
-      const [minimum, value, maximum] = mathNode.children;
+      const { minimum, value, maximum } = mathNode;
 
       if (
         !isNumericLeaf(value) ||
-        (minimum !== null && !isNumericLeaf(minimum)) ||
-        (maximum !== null && !isNumericLeaf(maximum))
+        (minimum !== undefined && !isNumericLeaf(minimum)) ||
+        (maximum !== undefined && !isNumericLeaf(maximum))
       ) {
         return mathNode;
       }
 
       if (
         (
-          minimum !== null &&
+          minimum !== undefined &&
           !canCompareNumericLeaves(value, minimum, context)
         ) ||
         (
-          maximum !== null &&
+          maximum !== undefined &&
           !canCompareNumericLeaves(value, maximum, context)
         )
       ) {
         return mathNode;
       }
 
-      let result = maximum === null
+      let result = maximum === undefined
         ? value.value
         : Math.min(value.value, maximum.value);
 
-      if (minimum !== null) {
+      if (minimum !== undefined) {
         result = Math.max(minimum.value, result);
       }
 
@@ -1825,7 +1838,11 @@ function simplifyMathFunctionNode(
     }
 
     case 'round': {
-      const [input, stepArg] = mathNode.children;
+      const {
+        strategy,
+        value: input,
+        step: stepArg,
+      } = mathNode;
 
       if (
         !isNumericLeaf(input) ||
@@ -1839,7 +1856,7 @@ function simplifyMathFunctionNode(
         numberNumericType(),
       );
 
-      switch (mathNode.strategy) {
+      switch (strategy) {
         case 'nearest': {
           if (!haveSameNumericTypeAndUnit(input, step)) {
             return mathNode;
@@ -1936,13 +1953,13 @@ function simplifyMathFunctionNode(
         }
 
         default:
-          return assertNever(mathNode.strategy);
+          return assertNever(strategy);
       }
     }
 
     case 'mod':
     case 'rem': {
-      const [value, step] = mathNode.children;
+      const [value, step] = mathNode.arguments;
 
       if (!isNumericLeaf(value) || !isNumericLeaf(step)) {
         return mathNode;
@@ -1990,7 +2007,7 @@ function simplifyMathFunctionNode(
     case 'sin':
     case 'cos':
     case 'tan': {
-      const [input] = mathNode.children;
+      const [input] = mathNode.arguments;
       let radians: number;
 
       if (input.type === 'number') {
@@ -2013,7 +2030,7 @@ function simplifyMathFunctionNode(
     case 'asin':
     case 'acos':
     case 'atan': {
-      const [input] = mathNode.children;
+      const [input] = mathNode.arguments;
 
       if (input.type !== 'number') {
         return mathNode;
@@ -2030,7 +2047,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'atan2': {
-      const [y, x] = mathNode.children;
+      const [y, x] = mathNode.arguments;
 
       if (!isNumericLeaf(y) || !isNumericLeaf(x)) {
         return mathNode;
@@ -2051,7 +2068,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'pow': {
-      const [base, exponent] = mathNode.children;
+      const [base, exponent] = mathNode.arguments;
 
       if (base.type !== 'number' || exponent.type !== 'number') {
         return mathNode;
@@ -2068,7 +2085,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'sqrt': {
-      const [input] = mathNode.children;
+      const [input] = mathNode.arguments;
 
       if (input.type !== 'number') {
         return mathNode;
@@ -2081,7 +2098,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'hypot': {
-      const args = mathNode.children;
+      const args = mathNode.arguments;
 
       if (!areResolvedNumericArguments(args)) {
         return mathNode;
@@ -2107,7 +2124,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'log': {
-      const [value, base] = mathNode.children;
+      const [value, base] = mathNode.arguments;
 
       if (
         value.type !== 'number' ||
@@ -2146,7 +2163,7 @@ function simplifyMathFunctionNode(
     }
 
     case 'exp': {
-      const [input] = mathNode.children;
+      const [input] = mathNode.arguments;
 
       if (input.type !== 'number') {
         return mathNode;
@@ -2160,7 +2177,7 @@ function simplifyMathFunctionNode(
 
     case 'abs':
     case 'sign': {
-      const [input] = mathNode.children;
+      const [input] = mathNode.arguments;
 
       if (
         !isNumericLeaf(input) ||
@@ -2182,6 +2199,48 @@ function simplifyMathFunctionNode(
 
     default:
       return mathNode;
+  }
+}
+
+function simplifyMathFunctionArguments(
+  root: MathFunctionNode,
+  context: CalculationContext,
+): MathFunctionNode {
+  const simplify = (calculation: CalculationTree): CalculationTree => (
+    simplifyCalculationNode(calculation, context)
+  );
+  const numericType = cloneNumericType(root.numericType);
+
+  switch (root.type) {
+    case 'clamp':
+      return {
+        ...root,
+        minimum: root.minimum === undefined
+          ? undefined
+          : simplify(root.minimum),
+        value: simplify(root.value),
+        maximum: root.maximum === undefined
+          ? undefined
+          : simplify(root.maximum),
+        numericType,
+      };
+
+    case 'round':
+      return {
+        ...root,
+        value: simplify(root.value),
+        step: root.step === undefined
+          ? undefined
+          : simplify(root.step),
+        numericType,
+      };
+
+    default:
+      return {
+        ...root,
+        arguments: root.arguments.map(simplify),
+        numericType,
+      } as MathFunctionNode;
   }
 }
 
@@ -2479,7 +2538,7 @@ function simplifyProduct(
 }
 
 function isNumericLeaf(
-  value: CalculationTree | MathFunctionResult | null | undefined,
+  value: CalculationTree | null | undefined,
 ): value is NumericLeaf {
   return (
     value !== null &&
@@ -2872,48 +2931,86 @@ function isUnit<Unit extends string>(
 //  ███▌  █████▌ █▌  █▌ ████ █▌  █▌ █████
 
 export function serializeMathFunction(
-  value: MathFunctionResult,
+  value: MathValue,
+  context: CalculationSerializationContext = {},
+): string {
+  return serializeMathValue(value, context);
+}
+
+export function serializeMathValue(
+  value: MathValue,
   context: CalculationSerializationContext = {},
 ): string {
   const stage = context.stage ?? 'specified';
+  const { calculation } = value;
 
-  if (isNumericLeaf(value)) {
-    const serialized = serializeCalcTree(value);
+  if (isNumericLeaf(calculation)) {
+    const serialized = serializeCalcTree(calculation);
 
     return stage === 'specified'
       ? `calc(${serialized})`
       : serialized;
   }
 
-  if (value.type === 'calc') {
-    if (isNumericLeaf(value.calculation) && stage !== 'specified') {
-      return serializeCalcTree(value.calculation);
-    }
-
-    if (isMathFunctionNode(value.calculation)) {
-      return serializeMathFunction(value.calculation, context);
-    }
-
-    return `calc(${unwrapParens(
-      serializeCalcTree(value.calculation),
-    )})`;
+  if (isMathFunctionNode(calculation)) {
+    return serializeMathFunctionNode(calculation);
   }
 
-  const serializedChildren = value.children.flatMap((child) => {
-    if (child === undefined) {
-      return [];
-    }
+  return `calc(${unwrapParens(serializeCalcTree(calculation))})`;
+}
 
-    return child === null
-      ? ['none']
-      : [unwrapParens(serializeCalcTree(child))];
-  });
+function serializeMathFunctionNode(
+  value: MathFunctionNode,
+): string {
+  switch (value.type) {
+    case 'clamp':
+      return `clamp(${[
+        value.minimum === undefined
+          ? 'none'
+          : serializeMathFunctionArgument(value.minimum),
+        serializeMathFunctionArgument(value.value),
+        value.maximum === undefined
+          ? 'none'
+          : serializeMathFunctionArgument(value.maximum),
+      ].join(', ')})`;
 
-  if (value.type === 'round' && value.strategy !== 'nearest') {
-    serializedChildren.unshift(value.strategy);
+    case 'round':
+      return `round(${[
+        ...(value.strategy === 'nearest' ? [] : [value.strategy]),
+        serializeMathFunctionArgument(value.value),
+        ...(value.step === undefined
+          ? []
+          : [serializeMathFunctionArgument(value.step)]),
+      ].join(', ')})`;
+
+    case 'min':
+    case 'max':
+    case 'hypot':
+    case 'mod':
+    case 'rem':
+    case 'atan2':
+    case 'pow':
+    case 'sin':
+    case 'cos':
+    case 'tan':
+    case 'asin':
+    case 'acos':
+    case 'atan':
+    case 'sqrt':
+    case 'exp':
+    case 'abs':
+    case 'sign':
+    case 'log':
+      return `${value.type}(${value.arguments
+        .map(serializeMathFunctionArgument)
+        .join(', ')})`;
   }
+}
 
-  return `${value.type}(${serializedChildren.join(', ')})`;
+function serializeMathFunctionArgument(
+  value: CalculationTree,
+): string {
+  return unwrapParens(serializeCalcTree(value));
 }
 
 function isMathFunctionNode(
@@ -2958,7 +3055,7 @@ export function serializeCalcTree(root: CalculationTree): string {
     case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
     case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
     case 'abs': case 'sign':
-      return serializeMathFunction(root);
+      return serializeMathFunctionNode(root);
   }
 }
 
@@ -3077,30 +3174,30 @@ function canonicalUnitForDimension(unit: string): string {
 
 // CSS Values, "Combination of Math Functions".
 export function addMathFunctions(
-  a: MathFunctionResult,
-  b: MathFunctionResult,
+  a: MathValue,
+  b: MathValue,
   context: CalculationContext = {},
-): CalcFunctionValue {
+): MathValue {
   return combineMathFunctionCalculations(
-    calculationTreeFromMathFunction(a),
-    calculationTreeFromMathFunction(b),
+    a.calculation,
+    b.calculation,
     context,
   );
 }
 
 export function interpolateMathFunctions(
-  a: MathFunctionResult,
-  b: MathFunctionResult,
+  a: MathValue,
+  b: MathValue,
   p: number,
   context: CalculationContext = {},
-): CalcFunctionValue {
+): MathValue {
   return combineMathFunctionCalculations(
     scaleCalculationTree(
-      calculationTreeFromMathFunction(a),
+      a.calculation,
       1 - p,
     ),
     scaleCalculationTree(
-      calculationTreeFromMathFunction(b),
+      b.calculation,
       p,
     ),
     context,
@@ -3108,26 +3205,18 @@ export function interpolateMathFunctions(
 }
 
 export function accumulateMathFunctions(
-  a: MathFunctionResult,
-  b: MathFunctionResult,
+  a: MathValue,
+  b: MathValue,
   context: CalculationContext = {},
-): CalcFunctionValue {
+): MathValue {
   return addMathFunctions(a, b, context);
-}
-
-function calculationTreeFromMathFunction(
-  value: MathFunctionResult,
-): CalculationTree {
-  return value.type === 'calc'
-    ? value.calculation
-    : value;
 }
 
 function combineMathFunctionCalculations(
   a: CalculationTree,
   b: CalculationTree,
   context: CalculationContext,
-): CalcFunctionValue {
+): MathValue {
   const numericType = addNumericTypes([
     numericTypeOf(a),
     numericTypeOf(b),
@@ -3137,15 +3226,13 @@ function combineMathFunctionCalculations(
     throw new TypeError('Math function types must be consistent');
   }
 
-  return {
-    type: 'calc',
-    calculation: simplifyCalculationTree({
+  return createMathValue(
+    simplifyCalculationTree({
       type: 'sum',
       children: [a, b],
       numericType,
     }, context),
-    numericType,
-  };
+  );
 }
 
 function scaleCalculationTree(
