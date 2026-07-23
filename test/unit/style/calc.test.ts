@@ -3,60 +3,66 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
-  addDimensionalTypes, multiplyDimensionalTypes,
+  addNumericTypes, multiplyNumericTypes,
   parseCalc, parseMathFunction, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
   type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
-  type DimensionalBaseType, type DimensionalExponent, type DimensionalType,
+  type NumericBaseType, type NumericExponent, type NumericType,
 } from '../../../src/stylelet/values/calc';
 
 describe('calc', () => {
-  it('distinguishes empty dimensional sums from products', () => {
-    expect(() => addDimensionalTypes([])).toThrow(RangeError);
-    expect(multiplyDimensionalTypes([])).toEqual(dimensionalType());
+  it('distinguishes empty numeric type sums from products', () => {
+    expect(() => addNumericTypes([])).toThrow(RangeError);
+    expect(multiplyNumericTypes([])).toEqual(numericType());
   });
 
   it.each([
-    ['calc(1)', { type: 'number', value: 1 }, dimensionalType()],
+    ['calc(1)', { type: 'number', value: 1 }, numericType()],
     [
       'calc(1px)',
       { type: 'dimension', value: 1, unit: 'px' },
-      dimensionalType(['length', 1]),
+      numericType([['length', 1]]),
     ],
     [
       'calc(25%)',
       { type: 'percentage', value: 25 },
-      dimensionalType(['percent', 1], 'percent'),
+      numericType([['percent', 1]], 'percent'),
     ],
   ] as const)('parses the terminal calculation %j', (input, expected, type) => {
     expect(parseCalc(input)).toEqual({
       type: 'calc',
-      calculation: expected,
-      dimensionalType: type,
+      calculation: numericLeaf(expected, type),
+      numericType: type,
     });
   });
 
   it('respects operator precedence while simplifying', () => {
     expect(parseCalc('calc(1px + 2 * 3px - 4px / 2)')).toEqual({
       type: 'calc',
-      dimensionalType: dimensionalType(['length', 1]),
-      calculation: { type: 'dimension', value: 5, unit: 'px' },
+      numericType: numericType([['length', 1]]),
+      calculation: numericLeaf(
+        { type: 'dimension', value: 5, unit: 'px' },
+        numericType([['length', 1]]),
+      ),
     });
   });
 
   it('uses parenthesized calculations for grouping while simplifying', () => {
     expect(parseCalc('calc((1 + 2) * 3)')).toEqual({
       type: 'calc',
-      dimensionalType: dimensionalType(),
-      calculation: { type: 'number', value: 9 },
+      numericType: numericType(),
+      calculation: numericLeaf(
+        { type: 'number', value: 9 },
+        numericType(),
+      ),
     });
   });
 
   it.each([
-    ['min(1em, 2rem)', 'min', 2, dimensionalType(['length', 1])],
-    ['max(1vw, 2vh)', 'max', 2, dimensionalType(['length', 1])],
-    ['clamp(1em, 2rem, 3em)', 'clamp', 3, dimensionalType(['length', 1])],
+    ['min(1em, 2rem)', 'min', 2, numericType([['length', 1]])],
+    ['max(1vw, 2vh)', 'max', 2, numericType([['length', 1]])],
+    ['clamp(1em, 2rem, 3em)', 'clamp', 3, numericType([['length', 1]])],
   ] as const)(
     'parses the math function %s',
     (input, type, childCount, expectedType) => {
@@ -65,7 +71,7 @@ describe('calc', () => {
       expect(parsed?.type).toBe(type);
       expect('children' in parsed! && parsed.children).toHaveLength(childCount);
       expect(
-        'dimensionalType' in parsed! && parsed.dimensionalType,
+        'numericType' in parsed! && parsed.numericType,
       ).toEqual(expectedType);
     },
   );
@@ -138,6 +144,7 @@ describe('calc', () => {
       })).toEqual({
         type: 'percentage',
         value: 10,
+        numericType: numericType([['percent', 1]], 'percent'),
       });
       expect(parseMathFunction('max(10%, 20%)', {
         percentageType: 'length',
@@ -150,6 +157,7 @@ describe('calc', () => {
         type: 'dimension',
         value: 40,
         unit: 'px',
+        numericType: numericType([['length', 1]], 'length'),
       });
     });
 
@@ -157,6 +165,7 @@ describe('calc', () => {
       expect(parseMathFunction('clamp(none, 20%, none)')).toEqual({
         type: 'percentage',
         value: 20,
+        numericType: numericType([['percent', 1]], 'percent'),
       });
     });
 
@@ -182,6 +191,7 @@ describe('calc', () => {
       expect(parseMathFunction('round(1)')).toEqual({
         type: 'number',
         value: 1,
+        numericType: numericType(),
       });
     });
 
@@ -195,6 +205,7 @@ describe('calc', () => {
       expect(parseMathFunction(input)).toEqual({
         type: 'number',
         value: expected,
+        numericType: numericType(),
       });
     });
 
@@ -207,6 +218,7 @@ describe('calc', () => {
       expect(parseMathFunction(input)).toEqual({
         type: 'number',
         value: expected,
+        numericType: numericType(),
       });
     });
 
@@ -215,11 +227,13 @@ describe('calc', () => {
         type: 'dimension',
         value: 120,
         unit: 'px',
+        numericType: numericType([['length', 1]]),
       });
       expect(parseMathFunction('mod(25rem, 10rem)')).toEqual({
         type: 'dimension',
         value: 5,
         unit: 'rem',
+        numericType: numericType([['length', 1]]),
       });
     });
 
@@ -240,6 +254,7 @@ describe('calc', () => {
         type: 'dimension',
         value: 0.5,
         unit: 'px',
+        numericType: numericType([['length', 1]]),
       });
     });
 
@@ -251,6 +266,7 @@ describe('calc', () => {
         type: 'dimension',
         value: Infinity,
         unit: 'px',
+        numericType: numericType([['length', 1]]),
       });
     });
 
@@ -433,6 +449,7 @@ describe('calc', () => {
         type: 'dimension',
         value: expected,
         unit,
+        numericType: numericType([['length', 1]]),
       });
     });
 
@@ -454,6 +471,7 @@ describe('calc', () => {
       })).toEqual({
         type: 'percentage',
         value: 5,
+        numericType: numericType([['percent', 1]], 'percent'),
       });
       expect(parseMathFunction('hypot(3%, 4%)', {
         percentageType: 'length',
@@ -466,6 +484,7 @@ describe('calc', () => {
         type: 'dimension',
         value: 5,
         unit: 'px',
+        numericType: numericType([['length', 1]], 'length'),
       });
     });
 
@@ -533,6 +552,9 @@ describe('calc', () => {
         type,
         value,
         ...(unit === undefined ? {} : { unit }),
+        numericType: type === 'number'
+          ? numericType()
+          : numericType([['length', 1]]),
       });
     });
 
@@ -550,12 +572,14 @@ describe('calc', () => {
       })).toEqual({
         type: 'percentage',
         value: 10,
+        numericType: numericType([['percent', 1]], 'percent'),
       });
       expect(parseMathFunction('sign(-10%)', {
         percentageType: 'percent',
       })).toEqual({
         type: 'number',
         value: -1,
+        numericType: numericType([], 'percent'),
       });
       expect(parseMathFunction('abs(10%)', {
         percentageType: 'length',
@@ -568,6 +592,7 @@ describe('calc', () => {
         type: 'dimension',
         value: 20,
         unit: 'px',
+        numericType: numericType([['length', 1]], 'length'),
       });
       expect(parseMathFunction('sign(10%)', {
         percentageType: 'length',
@@ -579,6 +604,7 @@ describe('calc', () => {
       })).toEqual({
         type: 'number',
         value: -1,
+        numericType: numericType([], 'length'),
       });
     });
 
@@ -706,18 +732,19 @@ describe('calc', () => {
   });
 
   it.each([
-    ['calc(1in + 96px)', 192, 'px'],
-    ['calc(1turn + 180deg)', 540, 'deg'],
-    ['calc(1000ms + 1s)', 2, 's'],
-    ['calc(1khz + 500hz)', 1500, 'hz'],
-    ['calc(96dpi + 1dppx)', 2, 'dppx'],
+    ['calc(1in + 96px)', 192, 'px', 'length'],
+    ['calc(1turn + 180deg)', 540, 'deg', 'angle'],
+    ['calc(1000ms + 1s)', 2, 's', 'time'],
+    ['calc(1khz + 500hz)', 1500, 'hz', 'frequency'],
+    ['calc(96dpi + 1dppx)', 2, 'dppx', 'resolution'],
   ] as const)(
     'combines compatible dimensions in their canonical unit for %s',
-    (input, value, unit) => {
+    (input, value, unit, category) => {
       expect(parseCalc(input)?.calculation).toEqual({
         type: 'dimension',
         value,
         unit,
+        numericType: numericType([[category, 1]]),
       });
     },
   );
@@ -732,6 +759,7 @@ describe('calc', () => {
       type: 'dimension',
       value: 18,
       unit: 'px',
+      numericType: numericType([['length', 1]]),
     });
   });
 
@@ -746,13 +774,19 @@ describe('calc', () => {
 
     expect(parsed).toEqual({
       type: 'calc',
-      dimensionalType: dimensionalType(['length', 1], 'length'),
+      numericType: numericType([['length', 1]], 'length'),
       calculation: {
         type: 'sum',
-        dimensionalType: dimensionalType(['length', 1], 'length'),
+        numericType: numericType([['length', 1]], 'length'),
         children: [
-          { type: 'percentage', value: 25 },
-          { type: 'dimension', value: 10, unit: 'px' },
+          numericLeaf(
+            { type: 'percentage', value: 25 },
+            numericType([['length', 1]], 'length'),
+          ),
+          numericLeaf(
+            { type: 'dimension', value: 10, unit: 'px' },
+            numericType([['length', 1]]),
+          ),
         ],
       },
     });
@@ -760,11 +794,13 @@ describe('calc', () => {
     expect(parseCalc('calc(25%)', context)?.calculation).toEqual({
       type: 'percentage',
       value: 25,
+      numericType: numericType([['length', 1]], 'length'),
     });
     expect(parseCalc('calc(10px)', context)?.calculation).toEqual({
       type: 'dimension',
       value: 10,
       unit: 'px',
+      numericType: numericType([['length', 1]]),
     });
     expect(parseCalc('calc(calc(10px + 25%))', context)).toEqual(parsed);
   });
@@ -780,10 +816,16 @@ describe('calc', () => {
         percentageType: 'length',
       })?.calculation).toEqual({
         type: 'sum',
-        dimensionalType: dimensionalType(['length', 1], 'length'),
+        numericType: numericType([['length', 1]], 'length'),
         children: [
-          { type: 'percentage', value: percentage },
-          { type: 'dimension', value: dimension, unit },
+          numericLeaf(
+            { type: 'percentage', value: percentage },
+            numericType([['length', 1]], 'length'),
+          ),
+          numericLeaf(
+            { type: 'dimension', value: dimension, unit },
+            numericType([['length', 1]]),
+          ),
         ],
       });
     },
@@ -845,22 +887,31 @@ describe('calc', () => {
     expect(quotient).toEqual({
       type: 'product',
       children: [
-        { type: 'percentage', value: 1 },
+        numericLeaf(
+          { type: 'percentage', value: 1 },
+          numericType([['percent', 1]], 'percent'),
+        ),
         {
           type: 'invert',
-          child: { type: 'percentage', value: 1 },
-          dimensionalType: dimensionalType(
-            ['percent', -1],
+          child: numericLeaf(
+            { type: 'percentage', value: 1 },
+            numericType([['percent', 1]], 'percent'),
+          ),
+          numericType: numericType(
+            [['percent', -1]],
             'percent',
           ),
         },
       ],
-      dimensionalType: dimensionalType('percent'),
+      numericType: numericType([], 'percent'),
     });
     expect(parseCalc('calc(1% / 1%)')).toEqual({
       type: 'calc',
-      calculation: { type: 'number', value: 1 },
-      dimensionalType: dimensionalType('percent'),
+      calculation: numericLeaf(
+        { type: 'number', value: 1 },
+        numericType([], 'percent'),
+      ),
+      numericType: numericType([], 'percent'),
     });
 
     const input = 'calc(1% / 1% * 10px)';
@@ -868,8 +919,8 @@ describe('calc', () => {
       '1% / 1% * 10px',
     ) as CalcProductNode;
 
-    expect(calculation.dimensionalType).toEqual(
-      dimensionalType(['length', 1], 'percent'),
+    expect(calculation.numericType).toEqual(
+      numericType([['length', 1]], 'percent'),
     );
     expectBadCalc(input, { expectedType: 'length' });
     expect(parseCalc(input)).not.toBeNull();
@@ -877,6 +928,41 @@ describe('calc', () => {
       expectedType: 'length-percentage',
       percentageType: 'length',
     })).not.toBeNull();
+  });
+
+  it('preserves a percent hint through a nested calc function', () => {
+    expectBadCalc('calc(calc(1% / 1%) * 10px)', {
+      expectedType: 'length',
+    });
+  });
+
+  it('preserves a percent hint through deeply nested calculations', () => {
+    expectBadCalc('calc(calc(calc(calc(1% / 1%))) * 10px)', {
+      expectedType: 'length',
+    });
+  });
+
+  it.each([
+    ['contained-type', 'calc(abs(1% / 1%) * 10px)'],
+    ['consistent-type', 'calc(min(1% / 1%, 2% / 2%) * 10px)'],
+    ['fixed-result', 'calc(sign(1% / 1%) * 10px)'],
+  ] as const)(
+    'preserves a percent hint through a nested %s math function',
+    (_type, input) => {
+      expectBadCalc(input, { expectedType: 'length' });
+      expect(parseCalc(input, {
+        expectedType: 'length-percentage',
+        percentageType: 'length',
+      })).not.toBeNull();
+    },
+  );
+
+  it('makes a fixed angle result consistent with its percentage inputs', () => {
+    expect(parseCalc('calc(atan2(1%, 2%))', {
+      percentageType: 'percent',
+    })?.numericType).toEqual(
+      numericType([['angle', 1]], 'percent'),
+    );
   });
 
   it('resolves percentages against an available reference value', () => {
@@ -890,16 +976,26 @@ describe('calc', () => {
       },
     })).toEqual({
       type: 'calc',
-      dimensionalType: dimensionalType(['length', 1], 'length'),
-      calculation: { type: 'dimension', value: 60, unit: 'px' },
+      numericType: numericType([['length', 1]], 'length'),
+      calculation: numericLeaf(
+        { type: 'dimension', value: 60, unit: 'px' },
+        numericType([['length', 1]], 'length'),
+      ),
     });
 
     expect(simplifyCalculationTree(
-      { type: 'percentage', value: 25 },
+      {
+        type: 'percentage',
+        value: 25,
+        numericType: numericType([['percent', 1]], 'percent'),
+      },
       {
         percentageReferenceValue: { type: 'number', value: 200 },
       },
-    )).toEqual({ type: 'number', value: 50 });
+    )).toEqual(numericLeaf(
+      { type: 'number', value: 50 },
+      numericType([['percent', 1]], 'percent'),
+    ));
   });
 
   it('combines unresolved dimensions using ASCII-insensitive units', () => {
@@ -907,6 +1003,7 @@ describe('calc', () => {
       type: 'dimension',
       value: 3,
       unit: 'em',
+      numericType: numericType([['length', 1]]),
     });
   });
 
@@ -915,12 +1012,24 @@ describe('calc', () => {
       percentageType: 'length',
     })?.calculation).toEqual({
       type: 'sum',
-      dimensionalType: dimensionalType(['length', 1], 'length'),
+      numericType: numericType([['length', 1]], 'length'),
       children: [
-        { type: 'percentage', value: 3 },
-        { type: 'dimension', value: 2, unit: 'em' },
-        { type: 'dimension', value: 4, unit: 'px' },
-        { type: 'dimension', value: 1, unit: 'vh' },
+        numericLeaf(
+          { type: 'percentage', value: 3 },
+          numericType([['length', 1]], 'length'),
+        ),
+        numericLeaf(
+          { type: 'dimension', value: 2, unit: 'em' },
+          numericType([['length', 1]]),
+        ),
+        numericLeaf(
+          { type: 'dimension', value: 4, unit: 'px' },
+          numericType([['length', 1]]),
+        ),
+        numericLeaf(
+          { type: 'dimension', value: 1, unit: 'vh' },
+          numericType([['length', 1]]),
+        ),
       ],
     });
 
@@ -937,10 +1046,16 @@ describe('calc', () => {
   it('distributes a number over a sum of numeric values', () => {
     expect(parseCalc('calc(2 * (1px + 2em))')?.calculation).toEqual({
       type: 'sum',
-      dimensionalType: dimensionalType(['length', 1]),
+      numericType: numericType([['length', 1]]),
       children: [
-        { type: 'dimension', value: 4, unit: 'em' },
-        { type: 'dimension', value: 2, unit: 'px' },
+        numericLeaf(
+          { type: 'dimension', value: 4, unit: 'em' },
+          numericType([['length', 1]]),
+        ),
+        numericLeaf(
+          { type: 'dimension', value: 2, unit: 'px' },
+          numericType([['length', 1]]),
+        ),
       ],
     });
   });
@@ -948,10 +1063,16 @@ describe('calc', () => {
   it('retains zero-valued terms with a distinct unit', () => {
     expect(parseCalc('calc(0px + 1em)')?.calculation).toEqual({
       type: 'sum',
-      dimensionalType: dimensionalType(['length', 1]),
+      numericType: numericType([['length', 1]]),
       children: [
-        { type: 'dimension', value: 1, unit: 'em' },
-        { type: 'dimension', value: 0, unit: 'px' },
+        numericLeaf(
+          { type: 'dimension', value: 1, unit: 'em' },
+          numericType([['length', 1]]),
+        ),
+        numericLeaf(
+          { type: 'dimension', value: 0, unit: 'px' },
+          numericType([['length', 1]]),
+        ),
       ],
     });
   });
@@ -959,8 +1080,12 @@ describe('calc', () => {
   it('negates positive zero using CSS addition semantics', () => {
     const simplified = simplifyCalculationTree({
       type: 'negate',
-      child: { type: 'number', value: 0 },
-      dimensionalType: dimensionalType(),
+      child: {
+        type: 'number',
+        value: 0,
+        numericType: numericType(),
+      },
+      numericType: numericType(),
     });
 
     expect(simplified.type).toBe('number');
@@ -971,6 +1096,7 @@ describe('calc', () => {
     expect(parseCalc('calc(1in / 96px)')?.calculation).toEqual({
       type: 'number',
       value: 1,
+      numericType: numericType(),
     });
   });
 
@@ -1000,26 +1126,26 @@ describe('calc', () => {
   });
 
   it.each([
-    ['1px', dimensionalType(['length', 1])],
-    ['1deg', dimensionalType(['angle', 1])],
-    ['1s', dimensionalType(['time', 1])],
-    ['1Hz', dimensionalType(['frequency', 1])],
-    ['1dppx', dimensionalType(['resolution', 1])],
-    ['1fr', dimensionalType(['flex', 1])],
+    ['1px', numericType([['length', 1]])],
+    ['1deg', numericType([['angle', 1]])],
+    ['1s', numericType([['time', 1]])],
+    ['1Hz', numericType([['frequency', 1]])],
+    ['1dppx', numericType([['resolution', 1]])],
+    ['1fr', numericType([['flex', 1]])],
   ] as const)('classifies the dimensional terminal %s', (input, expected) => {
-    expect(parseCalc(`calc(${input})`)?.dimensionalType).toEqual(expected);
+    expect(parseCalc(`calc(${input})`)?.numericType).toEqual(expected);
   });
 
-  it('records compound dimensional types on nested subexpressions', () => {
+  it('records compound numeric types on nested subexpressions', () => {
     const outer = parseRawCalculation('(1px / 1s) * 1s') as CalcProductNode;
     const inner = outer.children[0] as CalcProductNode;
 
-    expect(inner.dimensionalType).toEqual(dimensionalType(
+    expect(inner.numericType).toEqual(numericType([
       ['length', 1],
       ['time', -1],
-    ));
-    expect(outer.dimensionalType).toEqual(
-      dimensionalType(['length', 1]),
+    ]));
+    expect(outer.numericType).toEqual(
+      numericType([['length', 1]]),
     );
   });
 
@@ -1027,18 +1153,18 @@ describe('calc', () => {
     const outer = parseRawCalculation('(1px * 1em) / 1px') as CalcProductNode;
     const inner = outer.children[0] as CalcProductNode;
 
-    expect(inner.dimensionalType).toEqual(
-      dimensionalType(['length', 2]),
+    expect(inner.numericType).toEqual(
+      numericType([['length', 2]]),
     );
-    expect(outer.dimensionalType).toEqual(
-      dimensionalType(['length', 1]),
+    expect(outer.numericType).toEqual(
+      numericType([['length', 1]]),
     );
   });
 
   it('represents a dimensionless quotient with an empty exponent map', () => {
     const parsed = parseCalc('calc(1px / 1px)');
 
-    expect(parsed?.dimensionalType).toEqual(dimensionalType());
+    expect(parsed?.numericType).toEqual(numericType());
   });
 
   it.each([
@@ -1048,7 +1174,7 @@ describe('calc', () => {
     'calc(1px / 1s)',
     'calc(1px * 1em)',
     'calc(1unknown)',
-  ])('rejects the invalid dimensional analysis in %j', (input) => {
+  ])('rejects the invalid numeric typing in %j', (input) => {
     expectBadCalc(input);
   });
 
@@ -1056,70 +1182,78 @@ describe('calc', () => {
     const context: CalculationContext = {
       numericVariables: new Map([['h', {
         value: null,
-        dimensionalType: dimensionalType(),
+        numericType: numericType(),
       }]]),
     };
     const parsed = parseCalc('calc(calc(h + 180))', context);
     const sum = parsed?.calculation as CalcSumNode;
 
     expect(sum.children).toEqual([
-      { type: 'number', value: 180 },
+      numericLeaf(
+        { type: 'number', value: 180 },
+        numericType(),
+      ),
       {
         type: 'variable',
         name: 'h',
-        dimensionalType: dimensionalType(),
+        numericType: numericType(),
       },
     ]);
-    expect(sum.dimensionalType).toEqual(dimensionalType());
+    expect(sum.numericType).toEqual(numericType());
   });
 
   it('simplifies an available numeric variable', () => {
     const context: CalculationContext = {
       numericVariables: new Map([['h', {
         value: { type: 'number', value: 177 },
-        dimensionalType: dimensionalType(),
+        numericType: numericType(),
       }]]),
     };
     expect(parseCalc('calc(h + 180)', context)?.calculation).toEqual({
       type: 'number',
       value: 357,
+      numericType: numericType(),
     });
   });
 
   it('types an unresolved dimensional numeric variable', () => {
-    const lengthType = dimensionalType(['length', 1]);
+    const lengthType = numericType([['length', 1]]);
     const context: CalculationContext = {
       numericVariables: new Map([['x', {
         value: null,
-        dimensionalType: lengthType,
+        numericType: lengthType,
       }]]),
     };
     const sum = parseCalc('calc(x + 1px)', context)
       ?.calculation as CalcSumNode;
 
     expect(sum.children).toEqual([
-      { type: 'dimension', value: 1, unit: 'px' },
+      numericLeaf(
+        { type: 'dimension', value: 1, unit: 'px' },
+        lengthType,
+      ),
       {
         type: 'variable',
         name: 'x',
-        dimensionalType: lengthType,
+        numericType: lengthType,
       },
     ]);
-    expect(sum.dimensionalType).toEqual(lengthType);
+    expect(sum.numericType).toEqual(lengthType);
   });
 
   it('simplifies an available dimensional variable', () => {
-    const lengthType = dimensionalType(['length', 1]);
+    const lengthType = numericType([['length', 1]]);
     const context: CalculationContext = {
       numericVariables: new Map([['x', {
         value: { type: 'dimension', value: 2, unit: 'px' },
-        dimensionalType: lengthType,
+        numericType: lengthType,
       }]]),
     };
     expect(parseCalc('calc(x + 1px)', context)?.calculation).toEqual({
       type: 'dimension',
       value: 3,
       unit: 'px',
+      numericType: lengthType,
     });
   });
 
@@ -1170,6 +1304,7 @@ describe('calc', () => {
     expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
       type: 'number',
       value: 528,
+      numericType: numericType(),
     });
   });
 
@@ -1179,6 +1314,7 @@ describe('calc', () => {
     expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
       type: 'number',
       value: 1,
+      numericType: numericType(),
     });
   });
 
@@ -1196,19 +1332,26 @@ describe('calc', () => {
   });
 });
 
-function dimensionalType(
-  ...entries: (DimensionalExponent | DimensionalBaseType)[]
-): DimensionalType {
-  const last = entries.at(-1);
-  const hasPercentHint = typeof last === 'string';
-  const exponents = hasPercentHint
-    ? entries.slice(0, -1)
-    : entries;
-
+function numericType(
+  exponents: readonly NumericExponent[] = [],
+  percentHint: NumericBaseType | null = null,
+): NumericType {
   return {
-    exponents: exponents as DimensionalType['exponents'],
-    percentHint: hasPercentHint ? last : null,
+    exponents,
+    percentHint,
   };
+}
+
+function numericLeaf<
+  Value extends {
+    type: 'number' | 'dimension' | 'percentage';
+    value: number;
+  },
+>(
+  value: Value,
+  type: NumericType,
+): Value & { numericType: NumericType; } {
+  return { ...value, numericType: type };
 }
 
 function expectBadCalc(

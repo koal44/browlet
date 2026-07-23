@@ -76,10 +76,10 @@ export type CalculationSimplificationContext = {
   devicePixelRatio?: number;
 
   /**
-   * Dimensional type against which percentages resolve. Percentages retain
+   * Numeric base type against which percentages resolve. Percentages retain
    * their percentage type when this is omitted.
    */
-  percentageType?: DimensionalBaseType;
+  percentageType?: NumericBaseType;
 
   /** Numeric value against which percentages can be resolved. */
   percentageReferenceValue?: NumberValue | DimensionValue;
@@ -92,8 +92,8 @@ export type CalculationSimplificationContext = {
 };
 
 export type NumericVariable = {
-  value: NumericLeaf | null;
-  dimensionalType: DimensionalType;
+  value: NumericValue | null;
+  numericType: NumericType;
 };
 
 type MathFunctionResult =
@@ -104,7 +104,7 @@ type MathFunctionResult =
 export type CalcFunctionValue = {
   type: 'calc';
   calculation: CalculationTree;
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalculationTree =
@@ -116,15 +116,22 @@ export type CalculationTree =
   | CalcInvertNode
   | MathFunctionNode;
 
-type NumericLeaf =
+type NumericValue =
   | NumberValue
   | DimensionValue
   | PercentageValue;
 
+type NumericLeaf = NumericValue & {
+  numericType: NumericType;
+};
+
+type DimensionLeaf = DimensionValue & { numericType: NumericType; };
+type PercentageLeaf = PercentageValue & { numericType: NumericType; };
+
 type VariableLeaf = {
   type: 'variable';
   name: string;
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type MathFunctionNode =
@@ -140,7 +147,7 @@ export type CalcVariadicFunctionNode<
 > = {
   type: Name;
   children: [CalculationTree, ...CalculationTree[]];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcClampNode = {
@@ -150,14 +157,14 @@ export type CalcClampNode = {
     value: CalculationTree,
     maximum: CalculationTree | null,
   ];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcRoundNode = {
   type: 'round';
   strategy: RoundingStrategy;
   children: [value: CalculationTree, step?: CalculationTree];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcBinaryFunctionNode<
@@ -165,7 +172,7 @@ export type CalcBinaryFunctionNode<
 > = {
   type: Name;
   children: [CalculationTree, CalculationTree];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcUnaryFunctionNode<
@@ -173,13 +180,13 @@ export type CalcUnaryFunctionNode<
 > = {
   type: Name;
   children: [CalculationTree];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcLogNode = {
   type: 'log';
   children: [value: CalculationTree, base?: CalculationTree];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export const ROUNDING_STRATEGIES = [
@@ -245,14 +252,11 @@ export function tryConsumeCalc(
   }
 
   const context = calculationContextFor(c.context);
-  const dimensionalType = dimensionalTypeOf(result.value, context);
+  const numericType = numericTypeOf(result.value);
 
   if (
-    dimensionalType === null ||
-    (
-      !context.insideCalculation &&
-      !matchesExpectedCalculationType(dimensionalType, context)
-    )
+    !context.insideCalculation &&
+    !matchesExpectedCalculationType(numericType, context)
   ) {
     return bad(
       ComponentConsumerBadReason.Invalid,
@@ -263,7 +267,7 @@ export function tryConsumeCalc(
   return ok({
     type: 'calc',
     calculation: simplifyCalculationTree(result.value, context),
-    dimensionalType,
+    numericType,
   });
 }
 
@@ -434,7 +438,7 @@ function createBinaryMathFunctionConsumer<
 >(
   name: Name,
   resultType: FunctionResultType,
-  allowedCategories?: readonly ResolvedDimensionalCategory[],
+  allowedCategories?: readonly ResolvedNumericCategory[],
   requireSameType = false,
 ): TryComponentConsumer<
   CalcBinaryFunctionNode<Name> | NumericLeaf
@@ -470,7 +474,7 @@ function createUnaryMathFunctionConsumer<
 >(
   name: Name,
   resultType: FunctionResultType,
-  allowedCategories?: readonly ResolvedDimensionalCategory[],
+  allowedCategories?: readonly ResolvedNumericCategory[],
 ): TryComponentConsumer<
   CalcUnaryFunctionNode<Name> | NumericLeaf
 > {
@@ -544,10 +548,8 @@ function createRoundConsumer(): TryComponentConsumer<
 
       const strategy = explicitStrategy ?? 'nearest';
       const calculationContext = calculationContextFor(context);
-      const valueType = dimensionalTypeOf(value, calculationContext);
-      const valueCategory = valueType === null
-        ? null
-        : resolvedDimensionalCategory(valueType);
+      const valueType = numericTypeOf(value);
+      const valueCategory = resolvedNumericCategory(valueType);
 
       if (
         valueCategory === null ||
@@ -624,7 +626,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     if (
       !context.insideCalculation &&
-      !matchesExpectedCalculationType(result.value.dimensionalType, context)
+      !matchesExpectedCalculationType(result.value.numericType, context)
     ) {
       return bad(
         ComponentConsumerBadReason.Invalid,
@@ -646,26 +648,15 @@ function createMathFunctionNode<
   children: Node['children'],
   resultType: FunctionResultType,
   context: CalculationContext,
-  allowedCategories?: readonly ResolvedDimensionalCategory[],
+  allowedCategories?: readonly ResolvedNumericCategory[],
   requireSameType = false,
-  extra?: Omit<Node, 'type' | 'children' | 'dimensionalType'>,
+  extra?: Omit<Node, 'type' | 'children' | 'numericType'>,
 ): TryComponentConsumerResult<Node> {
   const calculations = children.filter(
     (child): child is CalculationTree => child !== null,
   );
-  const argumentTypes = calculations.map((child) => (
-    dimensionalTypeOf(child, context)
-  ));
-
-  if (argumentTypes.some((argumentType) => argumentType === null)) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Invalid ${type}() argument type`,
-    );
-  }
-
-  const types = argumentTypes as DimensionalType[];
-  const categories = types.map(resolvedDimensionalCategory);
+  const types = calculations.map(numericTypeOf);
+  const categories = types.map(resolvedNumericCategory);
 
   if (
     categories.some((category) => category === null) ||
@@ -678,7 +669,7 @@ function createMathFunctionNode<
     (
       requireSameType &&
       !types.every((argumentType) => (
-        haveSameDimensionalType(argumentType, types[0]!)
+        haveSameNumericType(argumentType, types[0]!)
       ))
     )
   ) {
@@ -688,7 +679,7 @@ function createMathFunctionNode<
     );
   }
 
-  const consistentType = addDimensionalTypes(types);
+  const consistentType = addNumericTypes(types);
 
   if (consistentType === null) {
     return bad(
@@ -697,27 +688,27 @@ function createMathFunctionNode<
     );
   }
 
-  let dimensionalType: DimensionalType;
+  let numericType: NumericType;
 
   switch (resultType) {
     case 'consistent':
-      dimensionalType = consistentType;
+      numericType = consistentType;
       break;
     case 'number':
-      dimensionalType = createDimensionalType(
+      numericType = createNumericType(
         [],
         consistentType.percentHint,
       );
       break;
     case 'angle':
-      dimensionalType = createDimensionalType(
+      numericType = createNumericType(
         [['angle', 1]],
         consistentType.percentHint,
       );
       break;
   }
 
-  if (resolvedDimensionalCategory(dimensionalType) === null) {
+  if (resolvedNumericCategory(numericType) === null) {
     return bad(
       ComponentConsumerBadReason.Invalid,
       `Invalid ${type}() result type`,
@@ -727,7 +718,7 @@ function createMathFunctionNode<
   return ok({
     type,
     children,
-    dimensionalType,
+    numericType,
     ...extra,
   } as Node);
 }
@@ -768,9 +759,9 @@ function tryConsumeRoundingStrategyPrefix(
   return strategy;
 }
 
-function haveSameDimensionalType(
-  a: DimensionalType,
-  b: DimensionalType,
+function haveSameNumericType(
+  a: NumericType,
+  b: NumericType,
 ): boolean {
   return (
     a.percentHint === b.percentHint &&
@@ -785,7 +776,7 @@ function haveSameDimensionalType(
 export type CalcSumNode = {
   type: 'sum';
   children: [CalculationTree, CalculationTree, ...CalculationTree[]];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 type CalcSumTail = {
@@ -812,37 +803,16 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
     one(tryConsumeCalcProduct),
     repeat(consumeCalcSumTail, 0, CALC_TERM_LIMIT - 1),
   ],
-  ([[first], tail], context) => {
+  ([[first], tail]) => {
     if (tail.length === 0) {
       return ok(first);
     }
 
-    const calculationContext = calculationContextFor(context);
     const children: CalculationTree[] = [first];
-    let dimensionalType = dimensionalTypeOf(
-      first,
-      calculationContext,
-    );
-
-    if (dimensionalType === null) {
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        'Invalid calculation sum type',
-      );
-    }
+    let numericType = numericTypeOf(first);
 
     for (const { operator, value } of tail) {
-      const valueType = dimensionalTypeOf(
-        value,
-        calculationContext,
-      );
-
-      if (valueType === null) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Invalid calculation sum type',
-        );
-      }
+      const valueType = numericTypeOf(value);
 
       if (operator === '+') {
         children.push(value);
@@ -850,12 +820,12 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
         children.push({
           type: 'negate',
           child: value,
-          dimensionalType: valueType,
+          numericType: valueType,
         });
       }
 
-      const sumType = addDimensionalTypes(
-        [dimensionalType, valueType],
+      const sumType = addNumericTypes(
+        [numericType, valueType],
       );
 
       if (sumType === null) {
@@ -865,13 +835,13 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
         );
       }
 
-      dimensionalType = sumType;
+      numericType = sumType;
     }
 
     return ok({
       type: 'sum',
       children: children as CalcSumNode['children'],
-      dimensionalType,
+      numericType,
     });
   },
 );
@@ -909,19 +879,19 @@ function tryConsumeCalcSumOperator(
 export type CalcProductNode = {
   type: 'product';
   children: [CalculationTree, CalculationTree, ...CalculationTree[]];
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcNegateNode = {
   type: 'negate';
   child: CalculationTree;
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 export type CalcInvertNode = {
   type: 'invert';
   child: CalculationTree;
-  dimensionalType: DimensionalType;
+  numericType: NumericType;
 };
 
 type CalcProductTail = {
@@ -959,51 +929,30 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
     one(tryConsumeCalcValue),
     repeat(consumeCalcProductTail, 0, CALC_TERM_LIMIT - 1),
   ],
-  ([[first], tail], context) => {
+  ([[first], tail]) => {
     if (tail.length === 0) {
       return ok(first);
     }
 
-    const calculationContext = calculationContextFor(context);
     const children: CalculationTree[] = [first];
-    let dimensionalType = dimensionalTypeOf(
-      first,
-      calculationContext,
-    );
-
-    if (dimensionalType === null) {
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        'Invalid calculation product type',
-      );
-    }
+    let numericType = numericTypeOf(first);
 
     for (const { operator, value } of tail) {
-      const valueType = dimensionalTypeOf(
-        value,
-        calculationContext,
-      );
-
-      if (valueType === null) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Invalid calculation product type',
-        );
-      }
+      const valueType = numericTypeOf(value);
 
       const childType = operator === '*'
         ? valueType
-        : invertDimensionalType(valueType);
+        : invertNumericType(valueType);
 
       children.push(operator === '*'
         ? value
         : {
           type: 'invert',
           child: value,
-          dimensionalType: childType,
+          numericType: childType,
         });
-      const productType = multiplyDimensionalTypes(
-        [dimensionalType, childType],
+      const productType = multiplyNumericTypes(
+        [numericType, childType],
       );
 
       if (productType === null) {
@@ -1013,13 +962,13 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
         );
       }
 
-      dimensionalType = productType;
+      numericType = productType;
     }
 
     return ok({
       type: 'product',
       children: children as CalcProductNode['children'],
-      dimensionalType,
+      numericType,
     });
   },
 );
@@ -1065,11 +1014,30 @@ const tryConsumeCalculationMathFunction: TryComponentConsumer<CalculationTree> =
     ([value]) => ok(value),
   );
 
-const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
+const tryConsumeCalcNumericLeaf: TryComponentConsumer<NumericLeaf> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumeDimension),
     one(tryConsumePercentage),
+  ],
+  ([value], context) => {
+    const numericType = numericTypeFromValue(
+      value,
+      calculationContextFor(context),
+    );
+
+    return numericType === null
+      ? bad(
+        ComponentConsumerBadReason.Invalid,
+        'Invalid calculation value type',
+      )
+      : ok(createNumericLeaf(value, numericType));
+  },
+);
+
+const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
+  [
+    one(tryConsumeCalcNumericLeaf),
     one(tryConsumeCalcKeyword),
     one(tryConsumeParenthesizedCalcSum),
     one(tryConsumeCalculationMathFunction),
@@ -1124,7 +1092,7 @@ function tryConsumeNestedCalc(
 
 export function tryConsumeCalcKeyword(
   c: ComponentCursor,
-): TryComponentConsumerResult<NumberValue | VariableLeaf> {
+): TryComponentConsumerResult<NumericLeaf | VariableLeaf> {
   const start = c.pos();
   const token = tryConsumeIdentToken(c);
 
@@ -1146,7 +1114,10 @@ export function tryConsumeCalcKeyword(
   }
 
   if (value !== undefined) {
-    return ok({ type: 'number', value });
+    return ok(createNumericLeaf(
+      { type: 'number', value },
+      numberNumericType(),
+    ));
   }
 
   const variable = calculationContextFor(c.context)
@@ -1160,7 +1131,7 @@ export function tryConsumeCalcKeyword(
   return ok({
     type: 'variable',
     name,
-    dimensionalType: cloneDimensionalType(variable.dimensionalType),
+    numericType: cloneNumericType(variable.numericType),
   });
 }
 
@@ -1172,9 +1143,9 @@ export function tryConsumeCalcKeyword(
 //   █▌     █▌   █▌     █▌     █▌  █▌
 //   █▌     █▌   █▌     █████▌  ███▌
 //
-// Dimensional Analysis
+// Numeric Types
 
-export const DIMENSIONAL_BASE_TYPES = [
+export const NUMERIC_BASE_TYPES = [
   'length',
   'angle',
   'time',
@@ -1184,105 +1155,86 @@ export const DIMENSIONAL_BASE_TYPES = [
   'percent',
 ] as const;
 
-export type DimensionalBaseType =
-  (typeof DIMENSIONAL_BASE_TYPES)[number];
+export type NumericBaseType =
+  (typeof NUMERIC_BASE_TYPES)[number];
 
-export type DimensionalExponent =
-  readonly [base: DimensionalBaseType, power: number];
+export type NumericExponent =
+  readonly [base: NumericBaseType, power: number];
 
-export type DimensionalType = {
-  exponents: readonly DimensionalExponent[];
-  percentHint: DimensionalBaseType | null;
+export type NumericType = {
+  exponents: readonly NumericExponent[];
+  percentHint: NumericBaseType | null;
 };
 
-export type ResolvedDimensionalCategory =
+export type ResolvedNumericCategory =
   | 'number'
-  | DimensionalBaseType;
+  | NumericBaseType;
 
-function dimensionalTypeOf(
-  calculation: CalculationTree,
-  context: CalculationContext,
-): DimensionalType | null {
-  return 'dimensionalType' in calculation
-    ? cloneDimensionalType(calculation.dimensionalType)
-    : determineDimensionalType(calculation, context);
+function numericTypeOf(calculation: CalculationTree): NumericType {
+  return cloneNumericType(calculation.numericType);
 }
 
-export function determineDimensionalType(
+export function determineNumericType(
   calculation: CalculationTree,
-  context: CalculationContext = {},
-): DimensionalType | null {
-  switch (calculation.type) {
+): NumericType {
+  return cloneNumericType(calculation.numericType);
+}
+
+function numericTypeFromValue(
+  value: NumericValue,
+  context: CalculationContext,
+): NumericType | null {
+  switch (value.type) {
     case 'number':
-      return numberDimensionalType();
-
+      return numberNumericType();
     case 'percentage':
-      return percentageDimensionalType(context);
-
+      return percentageNumericType(context);
     case 'dimension':
-      return createDimensionalTypeFromUnit(calculation.unit);
-
-    case 'variable':
-      return cloneDimensionalType(calculation.dimensionalType);
-
-    case 'min': case 'max': case 'clamp':
-    case 'round': case 'mod': case 'rem':
-    case 'sin': case 'cos': case 'tan': case 'asin': case 'acos': case 'atan': case 'atan2':
-    case 'pow': case 'sqrt': case 'hypot': case 'log': case 'exp':
-    case 'abs': case 'sign': // Sign-related functions
-      return cloneDimensionalType(calculation.dimensionalType);
-
-    case 'sum':
-      return addDimensionalTypes(
-        calculation.children.map((child) => (
-          determineDimensionalType(child, context)
-        )),
-      );
-
-    case 'product':
-      return multiplyDimensionalTypes(
-        calculation.children.map((child) => (
-          determineDimensionalType(child, context)
-        )),
-      );
-
-    case 'negate':
-      return determineDimensionalType(calculation.child, context);
-
-    case 'invert': {
-      const childType = determineDimensionalType(
-        calculation.child,
-        context,
-      );
-
-      return childType === null
-        ? null
-        : invertDimensionalType(childType);
-    }
+      return createNumericTypeFromUnit(value.unit);
   }
 }
 
-export function addDimensionalTypes(
-  types: readonly (DimensionalType | null)[],
-): DimensionalType | null {
+function createNumericLeaf<Value extends NumericValue>(
+  value: Value,
+  numericType: NumericType,
+): Value & { numericType: NumericType; } {
+  return {
+    ...value,
+    numericType: cloneNumericType(numericType),
+  };
+}
+
+function withNumericType<Calculation extends CalculationTree>(
+  calculation: Calculation,
+  numericType: NumericType,
+): Calculation {
+  return {
+    ...calculation,
+    numericType: cloneNumericType(numericType),
+  };
+}
+
+export function addNumericTypes(
+  types: readonly (NumericType | null)[],
+): NumericType | null {
   const [first, ...rest] = types;
 
   if (first === undefined) {
-    throw new RangeError('Dimensional type addition requires an operand');
+    throw new RangeError('Numeric type addition requires an operand');
   }
 
   if (first === null) {
     return null;
   }
 
-  let result = cloneDimensionalType(first);
+  let result = cloneNumericType(first);
 
   for (const type of rest) {
     if (type === null) {
       return null;
     }
 
-    const sum = addTwoDimensionalTypes(result, type);
+    const sum = addTwoNumericTypes(result, type);
 
     if (sum === null) {
       return null;
@@ -1294,17 +1246,17 @@ export function addDimensionalTypes(
   return result;
 }
 
-export function multiplyDimensionalTypes(
-  types: readonly (DimensionalType | null)[],
-): DimensionalType | null {
-  let result = numberDimensionalType();
+export function multiplyNumericTypes(
+  types: readonly (NumericType | null)[],
+): NumericType | null {
+  let result = numberNumericType();
 
   for (const type of types) {
     if (type === null) {
       return null;
     }
 
-    const product = multiplyTwoDimensionalTypes(result, type);
+    const product = multiplyTwoNumericTypes(result, type);
 
     if (product === null) {
       return null;
@@ -1316,18 +1268,18 @@ export function multiplyDimensionalTypes(
   return result;
 }
 
-export function invertDimensionalType(
-  type: DimensionalType,
-): DimensionalType {
-  return createDimensionalType(
+export function invertNumericType(
+  type: NumericType,
+): NumericType {
+  return createNumericType(
     type.exponents.map(([base, power]) => [base, -power]),
     type.percentHint,
   );
 }
 
-export function resolvedDimensionalCategory(
-  type: DimensionalType,
-): ResolvedDimensionalCategory | null {
+export function resolvedNumericCategory(
+  type: NumericType,
+): ResolvedNumericCategory | null {
   if (type.exponents.length === 0) {
     return 'number';
   }
@@ -1343,13 +1295,13 @@ export function resolvedDimensionalCategory(
 }
 
 function matchesExpectedCalculationType(
-  type: DimensionalType,
+  type: NumericType,
   context: CalculationContext,
 ): boolean {
   const expectedType = context.expectedType;
 
   if (expectedType === undefined) {
-    return resolvedDimensionalCategory(type) !== null;
+    return resolvedNumericCategory(type) !== null;
   }
 
   switch (expectedType) {
@@ -1389,8 +1341,8 @@ function matchesExpectedCalculationType(
 }
 
 function matchesNumberType(
-  type: DimensionalType,
-  percentageType: DimensionalBaseType | undefined,
+  type: NumericType,
+  percentageType: NumericBaseType | undefined,
 ): boolean {
   return (
     type.exponents.length === 0 &&
@@ -1404,7 +1356,7 @@ function matchesNumberType(
   );
 }
 
-function matchesPercentageType(type: DimensionalType): boolean {
+function matchesPercentageType(type: NumericType): boolean {
   return (
     hasSingleExponent(type, 'percent') &&
     (
@@ -1415,9 +1367,9 @@ function matchesPercentageType(type: DimensionalType): boolean {
 }
 
 function matchesDimensionType(
-  type: DimensionalType,
-  base: Exclude<DimensionalBaseType, 'percent'>,
-  percentageType: DimensionalBaseType | null,
+  type: NumericType,
+  base: Exclude<NumericBaseType, 'percent'>,
+  percentageType: NumericBaseType | null,
 ): boolean {
   return (
     hasSingleExponent(type, base) &&
@@ -1429,7 +1381,7 @@ function matchesDimensionType(
 }
 
 function matchesMixedType(
-  type: DimensionalType,
+  type: NumericType,
   base: 'length' | 'angle' | 'time' | 'frequency',
 ): boolean {
   return (
@@ -1439,8 +1391,8 @@ function matchesMixedType(
 }
 
 function hasSingleExponent(
-  type: DimensionalType,
-  base: DimensionalBaseType,
+  type: NumericType,
+  base: NumericBaseType,
 ): boolean {
   return (
     type.exponents.length === 1 &&
@@ -1449,12 +1401,12 @@ function hasSingleExponent(
   );
 }
 
-function addTwoDimensionalTypes(
-  a: DimensionalType,
-  b: DimensionalType,
-): DimensionalType | null {
-  let left = cloneDimensionalType(a);
-  let right = cloneDimensionalType(b);
+function addTwoNumericTypes(
+  a: NumericType,
+  b: NumericType,
+): NumericType | null {
+  let left = cloneNumericType(a);
+  let right = cloneNumericType(b);
 
   if (
     left.percentHint !== null &&
@@ -1471,7 +1423,7 @@ function addTwoDimensionalTypes(
   }
 
   if (haveEqualExponents(left, right)) {
-    return createDimensionalType(
+    return createNumericType(
       left.exponents,
       left.percentHint,
     );
@@ -1481,8 +1433,8 @@ function addTwoDimensionalTypes(
     return null;
   }
 
-  const unhintedLeft = cloneDimensionalType(left);
-  const unhintedRight = cloneDimensionalType(right);
+  const unhintedLeft = cloneNumericType(left);
+  const unhintedRight = cloneNumericType(right);
 
   if (
     unhintedLeft.percentHint !== null ||
@@ -1491,7 +1443,7 @@ function addTwoDimensionalTypes(
     return null;
   }
 
-  for (const hint of DIMENSIONAL_BASE_TYPES) {
+  for (const hint of NUMERIC_BASE_TYPES) {
     if (hint === 'percent') {
       continue;
     }
@@ -1500,7 +1452,7 @@ function addTwoDimensionalTypes(
     const hintedRight = applyPercentHint(unhintedRight, hint);
 
     if (haveEqualExponents(hintedLeft, hintedRight)) {
-      return createDimensionalType(
+      return createNumericType(
         hintedLeft.exponents,
         hint,
       );
@@ -1510,12 +1462,12 @@ function addTwoDimensionalTypes(
   return null;
 }
 
-function multiplyTwoDimensionalTypes(
-  a: DimensionalType,
-  b: DimensionalType,
-): DimensionalType | null {
-  let left = cloneDimensionalType(a);
-  let right = cloneDimensionalType(b);
+function multiplyTwoNumericTypes(
+  a: NumericType,
+  b: NumericType,
+): NumericType | null {
+  let left = cloneNumericType(a);
+  let right = cloneNumericType(b);
 
   if (
     left.percentHint !== null &&
@@ -1537,13 +1489,13 @@ function multiplyTwoDimensionalTypes(
     exponents.set(base, (exponents.get(base) ?? 0) + power);
   }
 
-  return dimensionalTypeFromMap(exponents, left.percentHint);
+  return numericTypeFromMap(exponents, left.percentHint);
 }
 
 function applyPercentHint(
-  type: DimensionalType,
-  hint: DimensionalBaseType,
-): DimensionalType {
+  type: NumericType,
+  hint: NumericBaseType,
+): NumericType {
   const exponents = exponentMap(type);
 
   if (!exponents.has(hint)) {
@@ -1558,12 +1510,12 @@ function applyPercentHint(
     exponents.set('percent', 0);
   }
 
-  return dimensionalTypeFromMap(exponents, hint);
+  return numericTypeFromMap(exponents, hint);
 }
 
-function createDimensionalTypeFromUnit(unit: string): DimensionalType | null {
+function createNumericTypeFromUnit(unit: string): NumericType | null {
   const normalized = asciiLower(unit);
-  let base: DimensionalBaseType;
+  let base: NumericBaseType;
 
   if (LENGTH_UNITS.some((candidate) => candidate === normalized)) {
     base = 'length';
@@ -1581,35 +1533,35 @@ function createDimensionalTypeFromUnit(unit: string): DimensionalType | null {
     return null;
   }
 
-  return createDimensionalType([[base, 1]], null);
+  return createNumericType([[base, 1]], null);
 }
 
-function percentageDimensionalType(
+function percentageNumericType(
   context: CalculationContext,
-): DimensionalType {
+): NumericType {
   const hint = context.percentageType ?? 'percent';
-  return createDimensionalType([[hint, 1]], hint);
+  return createNumericType([[hint, 1]], hint);
 }
 
-function numberDimensionalType(): DimensionalType {
-  return createDimensionalType([], null);
+function numberNumericType(): NumericType {
+  return createNumericType([], null);
 }
 
-function createDimensionalType(
-  exponents: readonly DimensionalExponent[],
-  percentHint: DimensionalBaseType | null,
-): DimensionalType {
-  const powers = new Map<DimensionalBaseType, number>(exponents);
-  return dimensionalTypeFromMap(powers, percentHint);
+function createNumericType(
+  exponents: readonly NumericExponent[],
+  percentHint: NumericBaseType | null,
+): NumericType {
+  const powers = new Map<NumericBaseType, number>(exponents);
+  return numericTypeFromMap(powers, percentHint);
 }
 
-function dimensionalTypeFromMap(
-  powers: ReadonlyMap<DimensionalBaseType, number>,
-  percentHint: DimensionalBaseType | null,
-): DimensionalType {
-  const exponents: DimensionalExponent[] = [];
+function numericTypeFromMap(
+  powers: ReadonlyMap<NumericBaseType, number>,
+  percentHint: NumericBaseType | null,
+): NumericType {
+  const exponents: NumericExponent[] = [];
 
-  for (const base of DIMENSIONAL_BASE_TYPES) {
+  for (const base of NUMERIC_BASE_TYPES) {
     const power = powers.get(base) ?? 0;
 
     if (power !== 0) {
@@ -1620,19 +1572,19 @@ function dimensionalTypeFromMap(
   return { exponents, percentHint };
 }
 
-function cloneDimensionalType(type: DimensionalType): DimensionalType {
-  return createDimensionalType(type.exponents, type.percentHint);
+function cloneNumericType(type: NumericType): NumericType {
+  return createNumericType(type.exponents, type.percentHint);
 }
 
 function exponentMap(
-  type: DimensionalType,
-): Map<DimensionalBaseType, number> {
+  type: NumericType,
+): Map<NumericBaseType, number> {
   return new Map(type.exponents);
 }
 
 function haveEqualExponents(
-  a: DimensionalType,
-  b: DimensionalType,
+  a: NumericType,
+  b: NumericType,
 ): boolean {
   if (a.exponents.length !== b.exponents.length) {
     return false;
@@ -1645,8 +1597,8 @@ function haveEqualExponents(
 }
 
 function containMixedPercentAndDimension(
-  a: DimensionalType,
-  b: DimensionalType,
+  a: NumericType,
+  b: NumericType,
 ): boolean {
   const combined = [...a.exponents, ...b.exponents];
   return combined.some(([base, power]) => (
@@ -1703,7 +1655,10 @@ export function simplifyCalculationTree(
       const value = context.numericVariables?.get(root.name)?.value;
       return value === null || value === undefined
         ? root
-        : simplifyCalculationTree(value, context);
+        : simplifyCalculationTree(
+          createNumericLeaf(value, root.numericType),
+          context,
+        );
     }
 
     case 'negate':
@@ -1738,7 +1693,7 @@ function simplifyMathFunctionNode(
         ? child
         : simplifyCalculationTree(child, context)
     )),
-    dimensionalType: cloneDimensionalType(root.dimensionalType),
+    numericType: cloneNumericType(root.numericType),
   } as MathFunctionNode;
 
   switch (mathNode.type) {
@@ -1751,7 +1706,7 @@ function simplifyMathFunctionNode(
       );
 
       if (args.length === 1) {
-        return args[0]!;
+        return withNumericType(args[0]!, mathNode.numericType);
       }
 
       return {
@@ -1792,7 +1747,10 @@ function simplifyMathFunctionNode(
         result = Math.max(minimum.value, result);
       }
 
-      return { ...value, value: result };
+      return createNumericLeaf(
+        { ...value, value: result },
+        mathNode.numericType,
+      );
     }
 
     case 'round': {
@@ -1805,7 +1763,10 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      const step = stepArg ?? { type: 'number', value: 1 } as const;
+      const step = stepArg ?? createNumericLeaf(
+        { type: 'number', value: 1 },
+        numberNumericType(),
+      );
 
       switch (mathNode.strategy) {
         case 'nearest': {
@@ -1818,7 +1779,10 @@ function simplifyMathFunctionNode(
             ? lower
             : upper;
 
-          return { ...input, value: result };
+          return createNumericLeaf(
+            { ...input, value: result },
+            mathNode.numericType,
+          );
         }
 
         case 'up': {
@@ -1827,7 +1791,10 @@ function simplifyMathFunctionNode(
           }
 
           const [, upper] = roundingBounds(input.value, step.value);
-          return { ...input, value: upper };
+          return createNumericLeaf(
+            { ...input, value: upper },
+            mathNode.numericType,
+          );
         }
 
         case 'down': {
@@ -1836,7 +1803,10 @@ function simplifyMathFunctionNode(
           }
 
           const [lower] = roundingBounds(input.value, step.value);
-          return { ...input, value: lower };
+          return createNumericLeaf(
+            { ...input, value: lower },
+            mathNode.numericType,
+          );
         }
 
         case 'to-zero': {
@@ -1849,7 +1819,10 @@ function simplifyMathFunctionNode(
             ? upper
             : lower;
 
-          return { ...input, value: result };
+          return createNumericLeaf(
+            { ...input, value: result },
+            mathNode.numericType,
+          );
         }
 
         case 'line-width': {
@@ -1860,7 +1833,11 @@ function simplifyMathFunctionNode(
           }
 
           if (stepArg === undefined) {
-            return snapPixelDimension(input.value, devicePixelRatio);
+            return snapPixelDimension(
+              input.value,
+              devicePixelRatio,
+              mathNode.numericType,
+            );
           }
 
           if (!haveSameNumericTypeAndUnit(input, step)) {
@@ -1880,7 +1857,11 @@ function simplifyMathFunctionNode(
               : upper;
           }
 
-          return snapPixelDimension(result, devicePixelRatio);
+          return snapPixelDimension(
+            result,
+            devicePixelRatio,
+            mathNode.numericType,
+          );
         }
 
         default:
@@ -1929,7 +1910,10 @@ function simplifyMathFunctionNode(
         }
       }
 
-      return { ...value, value: result };
+      return createNumericLeaf(
+        { ...value, value: result },
+        mathNode.numericType,
+      );
     }
 
     case 'sin':
@@ -1946,10 +1930,13 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      return {
-        type: 'number',
-        value: Math[mathNode.type](radians),
-      };
+      return createNumericLeaf(
+        {
+          type: 'number',
+          value: Math[mathNode.type](radians),
+        },
+        mathNode.numericType,
+      );
     }
 
     case 'asin':
@@ -1961,11 +1948,14 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      return {
-        type: 'dimension',
-        value: Math[mathNode.type](input.value) * 180 / Math.PI,
-        unit: 'deg',
-      };
+      return createNumericLeaf(
+        {
+          type: 'dimension',
+          value: Math[mathNode.type](input.value) * 180 / Math.PI,
+          unit: 'deg',
+        },
+        mathNode.numericType,
+      );
     }
 
     case 'atan2': {
@@ -1979,11 +1969,14 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      return {
-        type: 'dimension',
-        value: Math.atan2(y.value, x.value) * 180 / Math.PI,
-        unit: 'deg',
-      };
+      return createNumericLeaf(
+        {
+          type: 'dimension',
+          value: Math.atan2(y.value, x.value) * 180 / Math.PI,
+          unit: 'deg',
+        },
+        mathNode.numericType,
+      );
     }
 
     case 'pow': {
@@ -1997,7 +1990,10 @@ function simplifyMathFunctionNode(
         ? NaN
         : Math.pow(base.value, exponent.value);
 
-      return { type: 'number', value: result };
+      return createNumericLeaf(
+        { type: 'number', value: result },
+        mathNode.numericType,
+      );
     }
 
     case 'sqrt': {
@@ -2007,7 +2003,10 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      return { type: 'number', value: Math.sqrt(input.value) };
+      return createNumericLeaf(
+        { type: 'number', value: Math.sqrt(input.value) },
+        mathNode.numericType,
+      );
     }
 
     case 'hypot': {
@@ -2030,7 +2029,10 @@ function simplifyMathFunctionNode(
         ? NaN
         : Math.hypot(...args.map((argument) => argument.value));
 
-      return { ...first, value: result };
+      return createNumericLeaf(
+        { ...first, value: result },
+        mathNode.numericType,
+      );
     }
 
     case 'log': {
@@ -2066,7 +2068,10 @@ function simplifyMathFunctionNode(
         result = Math.log(value.value) / Math.log(base.value);
       }
 
-      return { type: 'number', value: result };
+      return createNumericLeaf(
+        { type: 'number', value: result },
+        mathNode.numericType,
+      );
     }
 
     case 'exp': {
@@ -2076,7 +2081,10 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      return { type: 'number', value: Math.exp(input.value) };
+      return createNumericLeaf(
+        { type: 'number', value: Math.exp(input.value) },
+        mathNode.numericType,
+      );
     }
 
     case 'abs':
@@ -2091,8 +2099,14 @@ function simplifyMathFunctionNode(
       }
 
       return mathNode.type === 'abs'
-        ? { ...input, value: Math.abs(input.value) }
-        : { type: 'number', value: Math.sign(input.value) };
+        ? createNumericLeaf(
+          { ...input, value: Math.abs(input.value) },
+          mathNode.numericType,
+        )
+        : createNumericLeaf(
+          { type: 'number', value: Math.sign(input.value) },
+          mathNode.numericType,
+        );
     }
 
     default:
@@ -2167,18 +2181,22 @@ function hasResolvedNumericMagnitude(
 function snapPixelDimension(
   value: number,
   devicePixelRatio: number,
-): DimensionValue<'dimension', 'px'> {
+  numericType: NumericType,
+): DimensionValue<'dimension', 'px'> & { numericType: NumericType; } {
   const snapped = snapLengthAsLineWidth(
     { type: 'length', value, unit: 'px' },
     devicePixelRatio,
   );
 
-  return { ...snapped, type: 'dimension' };
+  return createNumericLeaf(
+    { ...snapped, type: 'dimension' },
+    numericType,
+  );
 }
 
 function isPixelDimension(
   value: NumericLeaf,
-): value is DimensionValue<'dimension', 'px'> {
+): value is DimensionLeaf & { unit: 'px'; } {
   return value.type === 'dimension' && value.unit === 'px';
 }
 
@@ -2245,11 +2263,14 @@ function simplifyNegate(
   const child = simplifyCalculationTree(root.child, context);
 
   if (isNumericLeaf(child)) {
-    return negateNumericValue(child);
+    return createNumericLeaf(
+      negateNumericValue(child),
+      root.numericType,
+    );
   }
 
   if (child.type === 'negate') {
-    return child.child;
+    return withNumericType(child.child, root.numericType);
   }
 
   if (child.type === 'sum') {
@@ -2264,16 +2285,16 @@ function simplifyNegate(
           return grandchild.child;
         }
 
-        return createNegateNode(grandchild, context);
+        return createNegateNode(grandchild);
       }) as CalcSumNode['children'],
-      dimensionalType: cloneDimensionalType(root.dimensionalType),
+      numericType: cloneNumericType(root.numericType),
     };
   }
 
   return {
     ...root,
     child,
-    dimensionalType: cloneDimensionalType(root.dimensionalType),
+    numericType: cloneNumericType(root.numericType),
   };
 }
 
@@ -2284,17 +2305,20 @@ function simplifyInvert(
   const child = simplifyCalculationTree(root.child, context);
 
   if (child.type === 'number') {
-    return { type: 'number', value: 1 / child.value };
+    return createNumericLeaf(
+      { type: 'number', value: 1 / child.value },
+      root.numericType,
+    );
   }
 
   if (child.type === 'invert') {
-    return child.child;
+    return withNumericType(child.child, root.numericType);
   }
 
   return {
     ...root,
     child,
-    dimensionalType: cloneDimensionalType(root.dimensionalType),
+    numericType: cloneNumericType(root.numericType),
   };
 }
 
@@ -2313,13 +2337,13 @@ function simplifySum(
   );
 
   if (children.length === 1) {
-    return children[0]!;
+    return withNumericType(children[0]!, root.numericType);
   }
 
   return {
     ...root,
     children: children as CalcSumNode['children'],
-    dimensionalType: cloneDimensionalType(root.dimensionalType),
+    numericType: cloneNumericType(root.numericType),
   };
 }
 
@@ -2351,17 +2375,17 @@ function simplifyProduct(
         children: sum.children.map((child) => (
           multiplyNumericValue(
             child as NumericLeaf,
-            number.value,
+            number,
           )
         )) as CalcSumNode['children'],
-        dimensionalType: cloneDimensionalType(root.dimensionalType),
+        numericType: cloneNumericType(root.numericType),
       };
     }
   }
 
   const product = evaluateNumericProduct(
     children,
-    root.dimensionalType,
+    root.numericType,
   );
 
   if (product !== null) {
@@ -2371,7 +2395,7 @@ function simplifyProduct(
   return {
     ...root,
     children: children as CalcProductNode['children'],
-    dimensionalType: cloneDimensionalType(root.dimensionalType),
+    numericType: cloneNumericType(root.numericType),
   };
 }
 
@@ -2391,9 +2415,21 @@ function isNumericLeaf(
 
 function multiplyNumericValue(
   value: NumericLeaf,
-  multiplier: number,
+  multiplier: NumericLeaf,
 ): NumericLeaf {
-  return { ...value, value: value.value * multiplier };
+  const numericType = multiplyNumericTypes([
+    value.numericType,
+    multiplier.numericType,
+  ]);
+
+  if (numericType === null) {
+    throw new TypeError('Cannot multiply inconsistent numeric types');
+  }
+
+  return createNumericLeaf(
+    { ...value, value: value.value * multiplier.value },
+    numericType,
+  );
 }
 
 function negateNumericValue(
@@ -2404,18 +2440,11 @@ function negateNumericValue(
 
 function createNegateNode(
   child: CalculationTree,
-  context: CalculationSimplificationContext,
 ): CalcNegateNode {
-  const dimensionalType = dimensionalTypeOf(child, context);
-
-  if (dimensionalType === null) {
-    throw new TypeError('Cannot negate an invalid calculation type');
-  }
-
   return {
     type: 'negate',
     child,
-    dimensionalType,
+    numericType: numericTypeOf(child),
   };
 }
 
@@ -2471,7 +2500,9 @@ function numericUnitKey(value: NumericLeaf): string {
 function combineProductNumbers(
   children: readonly CalculationTree[],
 ): CalculationTree[] {
-  const numbers = children.filter((child) => child.type === 'number');
+  const numbers = children.filter(
+    (child): child is NumericLeaf & NumberValue => child.type === 'number',
+  );
 
   if (numbers.length < 2) {
     return [...children];
@@ -2481,6 +2512,13 @@ function combineProductNumbers(
     (value, number) => value * number.value,
     1,
   );
+  const numericType = multiplyNumericTypes(
+    numbers.map((number) => number.numericType),
+  );
+
+  if (numericType === null) {
+    throw new TypeError('Cannot combine inconsistent number types');
+  }
   const combined: CalculationTree[] = [];
   let emitted = false;
 
@@ -2491,7 +2529,10 @@ function combineProductNumbers(
     }
 
     if (!emitted) {
-      combined.push({ type: 'number', value: product });
+      combined.push(createNumericLeaf(
+        { type: 'number', value: product },
+        numericType,
+      ));
       emitted = true;
     }
   }
@@ -2545,7 +2586,7 @@ function calculationChildSortRank(value: CalculationTree): number {
 
 function evaluateNumericProduct(
   children: readonly CalculationTree[],
-  dimensionalType: DimensionalType,
+  numericType: NumericType,
 ): NumericLeaf | null {
   if (!children.every(isNumericProductFactor)) {
     return null;
@@ -2571,11 +2612,14 @@ function evaluateNumericProduct(
   }
 
   const remaining = [...units].filter(([, power]) => power !== 0);
-  const category = resolvedDimensionalCategory(dimensionalType);
+  const category = resolvedNumericCategory(numericType);
 
   if (remaining.length === 0) {
     return category === 'number'
-      ? { type: 'number', value }
+      ? createNumericLeaf(
+        { type: 'number', value },
+        numericType,
+      )
       : null;
   }
 
@@ -2587,20 +2631,26 @@ function evaluateNumericProduct(
 
   if (unit === '%') {
     return category === 'percent'
-      ? { type: 'percentage', value }
+      ? createNumericLeaf(
+        { type: 'percentage', value },
+        numericType,
+      )
       : null;
   }
 
-  const unitType = createDimensionalTypeFromUnit(unit);
+  const unitType = createNumericTypeFromUnit(unit);
 
   if (
     unitType === null ||
-    resolvedDimensionalCategory(unitType) !== category
+    resolvedNumericCategory(unitType) !== category
   ) {
     return null;
   }
 
-  return { type: 'dimension', value, unit };
+  return createNumericLeaf(
+    { type: 'dimension', value, unit },
+    numericType,
+  );
 }
 
 function isNumericProductFactor(
@@ -2615,9 +2665,9 @@ function isNumericProductFactor(
 }
 
 function canonicalizeDimension(
-  value: DimensionValue,
+  value: DimensionLeaf,
   context: CalculationSimplificationContext,
-): DimensionValue {
+): DimensionLeaf {
   const unit = asciiLower(value.unit);
   let resolved: DimensionValue<string, string> | null;
 
@@ -2662,27 +2712,33 @@ function canonicalizeDimension(
 
   return resolved === null
     ? { ...value, unit }
-    : {
-      type: 'dimension',
-      value: resolved.value,
-      unit: resolved.unit,
-    };
+    : createNumericLeaf(
+      {
+        type: 'dimension',
+        value: resolved.value,
+        unit: resolved.unit,
+      },
+      value.numericType,
+    );
 }
 
 function resolvePercentage(
-  value: PercentageValue,
+  value: PercentageLeaf,
   context: CalculationSimplificationContext,
-): NumberValue | DimensionValue | PercentageValue {
+): NumericLeaf {
   const reference = context.percentageReferenceValue;
 
   if (reference === undefined) {
     return value;
   }
 
-  const resolved = {
-    ...reference,
-    value: reference.value * value.value / 100,
-  };
+  const resolved = createNumericLeaf(
+    {
+      ...reference,
+      value: reference.value * value.value / 100,
+    },
+    value.numericType,
+  );
 
   return resolved.type === 'dimension'
     ? canonicalizeDimension(resolved, context)
@@ -2870,10 +2926,10 @@ function serializeNumericLeaf(
 }
 
 function canonicalUnitForDimension(unit: string): string {
-  const type = createDimensionalTypeFromUnit(unit);
+  const type = createNumericTypeFromUnit(unit);
   const category = type === null
     ? null
-    : resolvedDimensionalCategory(type);
+    : resolvedNumericCategory(type);
 
   switch (category) {
     case 'length':
