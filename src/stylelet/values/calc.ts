@@ -67,12 +67,7 @@ export type CalculationSerializationContext = {
   stage?: CalculationValueStage;
 };
 
-export type CalculationContext = CalculationSimplificationContext & {
-  /** Shared complexity consumed by the current calculation and its children. */
-  termCount?: number;
-};
-
-export type CalculationSimplificationContext = {
+export type CalculationContext = {
   /** Value-processing stage whose available information is being applied. */
   stage?: CalculationValueStage;
 
@@ -105,6 +100,11 @@ export type CalculationSimplificationContext = {
    * A null value represents a variable that has not resolved yet.
    */
   numericVariables?: ReadonlyMap<string, NumericVariable>;
+};
+
+type CalculationParserContext = CalculationContext & {
+  /** Shared complexity consumed by the current calculation and its children. */
+  termCount?: number;
 };
 
 export type NumericVariable = {
@@ -206,16 +206,12 @@ export type CalcLogNode = {
   numericType: NumericType;
 };
 
-export const ROUNDING_STRATEGIES = [
-  'nearest',
-  'up',
-  'down',
-  'to-zero',
-  'line-width',
-] as const;
-
 export type RoundingStrategy =
-  (typeof ROUNDING_STRATEGIES)[number];
+  | 'nearest'
+  | 'up'
+  | 'down'
+  | 'to-zero'
+  | 'line-width';
 
 type VariadicMathFunctionName = 'min' | 'max' | 'hypot';
 type BinaryMathFunctionName = 'mod' | 'rem' | 'atan2' | 'pow';
@@ -325,78 +321,78 @@ const consumeCalcCalculation = createFunctionalNotationConsumer(
  * <sign()>  = sign( <calc-sum> )
  */
 
-export const tryConsumeMin = createVariadicMathFunctionConsumer('min');
-export const tryConsumeMax = createVariadicMathFunctionConsumer('max');
-export const tryConsumeClamp = createClampConsumer();
-export const tryConsumeRound = createRoundConsumer();
-export const tryConsumeMod = createBinaryMathFunctionConsumer(
+const tryConsumeMin = createVariadicMathFunctionConsumer('min');
+const tryConsumeMax = createVariadicMathFunctionConsumer('max');
+const tryConsumeClamp = createClampConsumer();
+const tryConsumeRound = createRoundConsumer();
+const tryConsumeMod = createBinaryMathFunctionConsumer(
   'mod',
   'consistent',
   undefined,
   true,
 );
-export const tryConsumeRem = createBinaryMathFunctionConsumer(
+const tryConsumeRem = createBinaryMathFunctionConsumer(
   'rem',
   'consistent',
   undefined,
   true,
 );
-export const tryConsumeSin = createUnaryMathFunctionConsumer(
+const tryConsumeSin = createUnaryMathFunctionConsumer(
   'sin',
   'number',
   ['number', 'angle'],
 );
-export const tryConsumeCos = createUnaryMathFunctionConsumer(
+const tryConsumeCos = createUnaryMathFunctionConsumer(
   'cos',
   'number',
   ['number', 'angle'],
 );
-export const tryConsumeTan = createUnaryMathFunctionConsumer(
+const tryConsumeTan = createUnaryMathFunctionConsumer(
   'tan',
   'number',
   ['number', 'angle'],
 );
-export const tryConsumeAsin = createUnaryMathFunctionConsumer(
+const tryConsumeAsin = createUnaryMathFunctionConsumer(
   'asin',
   'angle',
   ['number'],
 );
-export const tryConsumeAcos = createUnaryMathFunctionConsumer(
+const tryConsumeAcos = createUnaryMathFunctionConsumer(
   'acos',
   'angle',
   ['number'],
 );
-export const tryConsumeAtan = createUnaryMathFunctionConsumer(
+const tryConsumeAtan = createUnaryMathFunctionConsumer(
   'atan',
   'angle',
   ['number'],
 );
-export const tryConsumeAtan2 = createBinaryMathFunctionConsumer(
+const tryConsumeAtan2 = createBinaryMathFunctionConsumer(
   'atan2',
   'angle',
 );
-export const tryConsumePow = createBinaryMathFunctionConsumer(
+const tryConsumePow = createBinaryMathFunctionConsumer(
   'pow',
   'number',
   ['number'],
 );
-export const tryConsumeSqrt = createUnaryMathFunctionConsumer(
+const tryConsumeSqrt = createUnaryMathFunctionConsumer(
   'sqrt',
   'number',
   ['number'],
 );
-export const tryConsumeHypot = createVariadicMathFunctionConsumer('hypot');
-export const tryConsumeLog = createLogConsumer();
-export const tryConsumeExp = createUnaryMathFunctionConsumer(
+const tryConsumeHypot = createVariadicMathFunctionConsumer('hypot');
+const tryConsumeLog = createLogConsumer();
+const tryConsumeExp = createUnaryMathFunctionConsumer(
   'exp',
   'number',
   ['number'],
 );
-export const tryConsumeAbs = createUnaryMathFunctionConsumer(
+const tryConsumeAbs = createUnaryMathFunctionConsumer(
   'abs',
   'consistent',
 );
-export const tryConsumeSign = createUnaryMathFunctionConsumer(
+const tryConsumeSign = createUnaryMathFunctionConsumer(
   'sign',
   'number',
 );
@@ -740,7 +736,7 @@ function createMathFunctionNode<
   } as Node);
 }
 
-export const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
+const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
   oneOf(
     [
       one(createIdentValueConsumer('nearest')),
@@ -916,7 +912,7 @@ type CalcProductTail = {
   value: CalculationTree;
 };
 
-export function tryConsumeCalcProduct(
+function tryConsumeCalcProduct(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
   return consumeCalcProduct(c);
@@ -998,7 +994,7 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
  * are unwrapped because their parentheses provide equivalent grouping.
  */
 
-export function tryConsumeCalcValue(
+function tryConsumeCalcValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
   const result = consumeCalcValue(c);
@@ -1110,7 +1106,7 @@ function tryConsumeNestedCalc(
  * A calculation context can define additional numeric variables.
  */
 
-export function tryConsumeCalcKeyword(
+function tryConsumeCalcKeyword(
   c: ComponentCursor,
 ): TryComponentConsumerResult<NumericLeaf | VariableLeaf> {
   const start = c.pos();
@@ -1165,7 +1161,7 @@ export function tryConsumeCalcKeyword(
 //
 // Numeric Types
 
-export const NUMERIC_BASE_TYPES = [
+const NUMERIC_BASE_TYPES = [
   'length',
   'angle',
   'time',
@@ -1186,17 +1182,11 @@ export type NumericType = {
   percentHint: NumericBaseType | null;
 };
 
-export type ResolvedNumericCategory =
+type ResolvedNumericCategory =
   | 'number'
   | NumericBaseType;
 
 function numericTypeOf(calculation: CalculationTree): NumericType {
-  return cloneNumericType(calculation.numericType);
-}
-
-export function determineNumericType(
-  calculation: CalculationTree,
-): NumericType {
   return cloneNumericType(calculation.numericType);
 }
 
@@ -1234,7 +1224,7 @@ function withNumericType<Calculation extends CalculationTree>(
   };
 }
 
-export function addNumericTypes(
+function addNumericTypes(
   types: readonly (NumericType | null)[],
 ): NumericType | null {
   const [first, ...rest] = types;
@@ -1266,7 +1256,7 @@ export function addNumericTypes(
   return result;
 }
 
-export function multiplyNumericTypes(
+function multiplyNumericTypes(
   types: readonly (NumericType | null)[],
 ): NumericType | null {
   let result = numberNumericType();
@@ -1288,7 +1278,7 @@ export function multiplyNumericTypes(
   return result;
 }
 
-export function invertNumericType(
+function invertNumericType(
   type: NumericType,
 ): NumericType {
   return createNumericType(
@@ -1297,7 +1287,7 @@ export function invertNumericType(
   );
 }
 
-export function resolvedNumericCategory(
+function resolvedNumericCategory(
   type: NumericType,
 ): ResolvedNumericCategory | null {
   if (type.exponents.length === 0) {
@@ -1630,7 +1620,7 @@ function containMixedPercentAndDimension(
 
 function calculationContextFor(
   context: unknown,
-): CalculationContext {
+): CalculationParserContext {
   return context === null || context === undefined
     ? {}
     : context;
@@ -1638,15 +1628,21 @@ function calculationContextFor(
 
 function enterCalculationContext(
   context: unknown,
-): CalculationContext {
+): CalculationParserContext {
   const calculationContext = calculationContextFor(context);
 
-  if (calculationContext.insideCalculation) {
-    calculationContext.termCount ??= 0;
+  if (
+    calculationContext.insideCalculation &&
+    calculationContext.termCount !== undefined
+  ) {
     return calculationContext;
   }
 
-  return { ...calculationContext, insideCalculation: true, termCount: 0 };
+  return {
+    ...calculationContext,
+    insideCalculation: true,
+    termCount: 0,
+  };
 }
 
 //  ███▌  ████ █     █ ████▌  █▌
@@ -1659,7 +1655,7 @@ function enterCalculationContext(
 
 export function simplifyCalculationTree(
   root: CalculationTree,
-  context: CalculationSimplificationContext = {},
+  context: CalculationContext = {},
 ): CalculationTree {
   const simplified = simplifyCalculationNode(root, context);
   const stage = context.stage ?? 'specified';
@@ -1677,7 +1673,7 @@ export function simplifyCalculationTree(
 
 function simplifyCalculationNode(
   root: CalculationTree,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   switch (root.type) {
     case 'number':
@@ -1722,7 +1718,7 @@ function simplifyCalculationNode(
 
 function finalizeNumericLeaf(
   root: NumericLeaf,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): NumericLeaf {
   const [rangeMinimum, rangeMaximum] =
     context.range ?? [-Infinity, Infinity];
@@ -1759,7 +1755,7 @@ function censorNumericLeaf(
 
 function simplifyMathFunctionNode(
   root: MathFunctionNode,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   const mathNode = {
     ...root,
@@ -2198,7 +2194,7 @@ function areResolvedNumericArguments(
 function combineComparableNumericArguments(
   args: readonly CalculationTree[],
   operation: 'min' | 'max',
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree[] {
   const compare = operation === 'min' ? Math.min : Math.max;
   const groups = new Map<string, { index: number; value: NumericLeaf; }>();
@@ -2235,7 +2231,7 @@ function combineComparableNumericArguments(
 function canCompareNumericLeaves(
   first: NumericLeaf,
   second: NumericLeaf,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): boolean {
   return (
     haveSameNumericTypeAndUnit(first, second) &&
@@ -2245,7 +2241,7 @@ function canCompareNumericLeaves(
 
 function hasResolvedNumericMagnitude(
   value: NumericLeaf,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): boolean {
   return (
     value.type !== 'percentage' ||
@@ -2333,7 +2329,7 @@ function roundingBounds(
 
 function simplifyNegate(
   root: CalcNegateNode,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   const child = simplifyCalculationNode(root.child, context);
 
@@ -2375,7 +2371,7 @@ function simplifyNegate(
 
 function simplifyInvert(
   root: CalcInvertNode,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   const child = simplifyCalculationNode(root.child, context);
 
@@ -2399,7 +2395,7 @@ function simplifyInvert(
 
 function simplifySum(
   root: CalcSumNode,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   const simplified = root.children.map((child) => {
     if (child.type !== 'negate') {
@@ -2432,7 +2428,7 @@ function simplifySum(
 
 function simplifyProduct(
   root: CalcProductNode,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalculationTree {
   const simplified = root.children.map((child) => (
     simplifyCalculationNode(child, context)
@@ -2781,7 +2777,7 @@ function isNumericProductFactor(
 
 function canonicalizeDimension(
   value: DimensionLeaf,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): DimensionLeaf {
   const unit = asciiLower(value.unit);
   let resolved: DimensionValue<string, string> | null;
@@ -2839,7 +2835,7 @@ function canonicalizeDimension(
 
 function resolvePercentage(
   value: PercentageLeaf,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): NumericLeaf {
   const reference = context.percentageReferenceValue;
 
@@ -3083,7 +3079,7 @@ function canonicalUnitForDimension(unit: string): string {
 export function addMathFunctions(
   a: MathFunctionResult,
   b: MathFunctionResult,
-  context: CalculationSimplificationContext = {},
+  context: CalculationContext = {},
 ): CalcFunctionValue {
   return combineMathFunctionCalculations(
     calculationTreeFromMathFunction(a),
@@ -3096,7 +3092,7 @@ export function interpolateMathFunctions(
   a: MathFunctionResult,
   b: MathFunctionResult,
   p: number,
-  context: CalculationSimplificationContext = {},
+  context: CalculationContext = {},
 ): CalcFunctionValue {
   return combineMathFunctionCalculations(
     scaleCalculationTree(
@@ -3114,7 +3110,7 @@ export function interpolateMathFunctions(
 export function accumulateMathFunctions(
   a: MathFunctionResult,
   b: MathFunctionResult,
-  context: CalculationSimplificationContext = {},
+  context: CalculationContext = {},
 ): CalcFunctionValue {
   return addMathFunctions(a, b, context);
 }
@@ -3130,7 +3126,7 @@ function calculationTreeFromMathFunction(
 function combineMathFunctionCalculations(
   a: CalculationTree,
   b: CalculationTree,
-  context: CalculationSimplificationContext,
+  context: CalculationContext,
 ): CalcFunctionValue {
   const numericType = addNumericTypes([
     numericTypeOf(a),

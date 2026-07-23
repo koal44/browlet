@@ -3,8 +3,7 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions, addNumericTypes,
-  interpolateMathFunctions, multiplyNumericTypes,
+  accumulateMathFunctions, addMathFunctions, interpolateMathFunctions,
   parseCalc, parseMathFunction, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
@@ -13,11 +12,6 @@ import {
 } from '../../../src/stylelet/values/calc';
 
 describe('calc', () => {
-  it('distinguishes empty numeric type sums from products', () => {
-    expect(() => addNumericTypes([])).toThrow(RangeError);
-    expect(multiplyNumericTypes([])).toEqual(numericType());
-  });
-
   it.each([
     ['calc(1)', { type: 'number', value: 1 }, numericType()],
     [
@@ -1607,6 +1601,13 @@ describe('calc', () => {
     expectBadCalc(`calc(${input})`);
   });
 
+  it('keeps parser bookkeeping out of the supplied context', () => {
+    const context = { insideCalculation: true } as const;
+
+    expect(parseCalc('calc(1)', context)).not.toBeNull();
+    expect(context).toEqual({ insideCalculation: true });
+  });
+
   it('returns null without advancing for another functional notation', () => {
     const c = new ComponentCursor(parseListOfComponentValues('min(1) calc(2)'));
 
@@ -1672,7 +1673,6 @@ function parseRawCalculation(
     context: {
       ...context,
       insideCalculation: true,
-      termCount: 0,
     } satisfies CalculationContext,
   });
   const result = tryConsumeCalcSum(c);
