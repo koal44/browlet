@@ -5,10 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue, tryConsumeMathValue,
+  accumulateMathFunctions, addMathFunctions,
+  createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathFunctions, serializeMathValue,
   type CalculationContext, type CalculationSerializationContext,
-  type MathValue,
+  type CalculationRange, type MathValue,
 } from './calc';
 import {
   accumulateNumbers as accumulateNumberLiterals,
@@ -51,7 +52,10 @@ export function createNumberConsumer(
   return oneOf(
     [
       one(tryConsumeLiteral),
-      one(createMathNumberConsumer(range)),
+      one(createMathValueConsumer({
+        expectedType: 'number',
+        ...(range === undefined ? {} : { range }),
+      })),
     ],
     ([value]) => ok(value),
   );
@@ -127,32 +131,9 @@ function asMathValue(
     : createMathValueFromLiteral(value, context);
 }
 
-function createMathNumberConsumer(
-  range: CalculationContext['range'],
-): TryComponentConsumer<MathValue> {
-  return (c) => {
-    const outerContext = c.context;
-    const calculationContext = outerContext === null || outerContext === undefined
-      ? {}
-      : outerContext as CalculationContext;
-
-    try {
-      c.context = {
-        ...calculationContext,
-        expectedType: 'number',
-        ...(range === undefined ? {} : { range }),
-      };
-
-      return tryConsumeMathValue(c);
-    } finally {
-      c.context = outerContext;
-    }
-  };
-}
-
 function numberRange(
   options: NumberConsumerOptions,
-): CalculationContext['range'] {
+): CalculationRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

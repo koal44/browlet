@@ -5,6 +5,10 @@ import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
   parseNumber, serializeNumber, tryConsumeNumber,
 } from '../../../src/stylelet/values/number';
+import {
+  accumulateDimensions, addDimensions, interpolateDimensions,
+  parseDimension, serializeDimension, tryConsumeDimension,
+} from '../../../src/stylelet/values/dimension';
 
 describe('number values', () => {
   it('parses a number literal', () => {
@@ -26,6 +30,16 @@ describe('number values', () => {
     });
     expect(serializeNumber(value!)).toBe('calc(3)');
     expect(serializeNumber(value!, { stage: 'computed' })).toBe('3');
+  });
+
+  it('accepts math functions other than calc()', () => {
+    expect(parseNumber('min(1, 2)')).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'number',
+        value: 1,
+      },
+    });
   });
 
   it('rejects a math function with a non-number result', () => {
@@ -105,5 +119,76 @@ describe('number values', () => {
     expect(accumulated.type).toBe('math');
     expect(serializeNumber(interpolated)).toBe('calc(2.5)');
     expect(serializeNumber(accumulated)).toBe('calc(6)');
+  });
+});
+
+describe('dimension values', () => {
+  it('parses a dimension literal', () => {
+    expect(parseDimension('1.25px')).toEqual({
+      type: 'dimension',
+      value: 1.25,
+      unit: 'px',
+    });
+  });
+
+  it('parses and serializes a dimension-valued math function', () => {
+    const value = parseDimension('calc(1px + 2px)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'dimension',
+        value: 3,
+        unit: 'px',
+      },
+    });
+    expect(serializeDimension(value!)).toBe('calc(3px)');
+    expect(serializeDimension(value!, { stage: 'computed' })).toBe('3px');
+  });
+
+  it('accepts any pure dimension category', () => {
+    expect(parseDimension('min(1deg, 2deg)')).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'dimension',
+        value: 1,
+        unit: 'deg',
+      },
+    });
+  });
+
+  it('rejects number, percentage, and mixed dimension-percentage results', () => {
+    for (const input of ['calc(1)', 'calc(1%)', 'calc(1px + 1%)']) {
+      const c = new ComponentCursor(parseListOfComponentValues(input));
+
+      expect(tryConsumeDimension(c)).toMatchObject({ kind: 'bad' });
+    }
+  });
+
+  it('combines two literals without creating a math value', () => {
+    const a = parseDimension('2px')!;
+    const b = parseDimension('4px')!;
+
+    expect(addDimensions(a, b))
+      .toEqual({ type: 'dimension', value: 6, unit: 'px' });
+    expect(interpolateDimensions(a, b, 0.25))
+      .toEqual({ type: 'dimension', value: 2.5, unit: 'px' });
+    expect(accumulateDimensions(a, b))
+      .toEqual({ type: 'dimension', value: 6, unit: 'px' });
+  });
+
+  it('promotes literals when combining them with math values', () => {
+    const literal = parseDimension('2px')!;
+    const math = parseDimension('calc(4px)')!;
+    const added = addDimensions(literal, math);
+    const interpolated = interpolateDimensions(literal, math, 0.25);
+    const accumulated = accumulateDimensions(literal, math);
+
+    expect(added.type).toBe('math');
+    expect(interpolated.type).toBe('math');
+    expect(accumulated.type).toBe('math');
+    expect(serializeDimension(added)).toBe('calc(6px)');
+    expect(serializeDimension(interpolated)).toBe('calc(2.5px)');
+    expect(serializeDimension(accumulated)).toBe('calc(6px)');
   });
 });

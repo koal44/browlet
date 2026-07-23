@@ -46,6 +46,7 @@ export type ExpectedCalculationType =
   | 'number'
   | 'integer'
   | 'percentage'
+  | 'dimension'
   | 'length'
   | 'angle'
   | 'time'
@@ -61,6 +62,11 @@ export type CalculationValueStage =
   | 'specified'
   | 'computed'
   | 'used';
+
+export type CalculationRange = readonly [
+  minimum: number,
+  maximum: number,
+];
 
 export type CalculationSerializationContext = {
   /** Value-processing stage whose representation is being serialized. */
@@ -78,7 +84,7 @@ export type CalculationContext = {
   expectedType?: ExpectedCalculationType;
 
   /** Inclusive range allowed for the outermost calculation. */
-  range?: readonly [minimum: number, maximum: number];
+  range?: CalculationRange;
 
   /** Context used to reduce lengths to the canonical px unit. */
   length?: LengthResolutionContext;
@@ -289,6 +295,38 @@ export function createMathValueFromLiteral(
   }
 
   return createMathValue(createNumericLeaf(normalized, numericType));
+}
+
+export type MathValueConsumerOptions = {
+  expectedType: ExpectedCalculationType;
+  range?: CalculationRange;
+  percentageType?: NumericBaseType;
+};
+
+export function createMathValueConsumer(
+  options: MathValueConsumerOptions,
+): TryComponentConsumer<MathValue> {
+  return (c) => {
+    const outerContext = c.context;
+    const calculationContext = outerContext === null || outerContext === undefined
+      ? {}
+      : outerContext as CalculationContext;
+
+    try {
+      c.context = {
+        ...calculationContext,
+        expectedType: options.expectedType,
+        ...(options.range === undefined ? {} : { range: options.range }),
+        ...(options.percentageType === undefined
+          ? {}
+          : { percentageType: options.percentageType }),
+      };
+
+      return tryConsumeMathValue(c);
+    } finally {
+      c.context = outerContext;
+    }
+  };
 }
 
 export function tryConsumeCalc(
@@ -1359,6 +1397,9 @@ function matchesExpectedCalculationType(
     case 'percentage':
       return matchesPercentageType(type);
 
+    case 'dimension':
+      return matchesDimensionCategory(type);
+
     case 'length':
     case 'angle':
     case 'time':
@@ -1384,6 +1425,27 @@ function matchesExpectedCalculationType(
 
     case 'frequency-percentage':
       return matchesMixedType(type, 'frequency');
+  }
+}
+
+function matchesDimensionCategory(type: NumericType): boolean {
+  if (type.percentHint !== null) {
+    return false;
+  }
+
+  switch (resolvedNumericCategory(type)) {
+    case 'length':
+    case 'angle':
+    case 'time':
+    case 'frequency':
+    case 'resolution':
+    case 'flex':
+      return true;
+
+    case 'number':
+    case 'percent':
+    case null:
+      return false;
   }
 }
 
