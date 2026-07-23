@@ -3111,6 +3111,14 @@ export function interpolateMathFunctions(
   );
 }
 
+export function accumulateMathFunctions(
+  a: MathFunctionResult,
+  b: MathFunctionResult,
+  context: CalculationSimplificationContext = {},
+): CalcFunctionValue {
+  return addMathFunctions(a, b, context);
+}
+
 function calculationTreeFromMathFunction(
   value: MathFunctionResult,
 ): CalculationTree {

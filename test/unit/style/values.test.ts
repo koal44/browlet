@@ -15,6 +15,7 @@ import {
 import {
   createAnglePercentageConsumer, parseAnglePercentage,
   serializeAnglePercentage, tryConsumeAnglePercentage,
+  tryAccumulateAnglePercentages,
   tryAddAnglePercentages, tryInterpolateAnglePercentages,
   tryResolveAnglePercentage,
 } from '../../../src/stylelet/values/angle-percentage';
@@ -22,14 +23,14 @@ import { parseAnyValue } from '../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../src/stylelet/values/auto';
 import { parseDeclarationValue } from '../../../src/stylelet/values/declaration-value';
 import {
-  addDimensions, interpolateDimensions,
+  accumulateDimensions, addDimensions, interpolateDimensions,
   parseDimension, serializeDimension, tryConsumeDimension,
 } from '../../../src/stylelet/values/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../src/stylelet/values/ident';
 import {
-  addIntegers, createIntegerConsumer, interpolateIntegers,
+  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
   parseInteger, serializeInteger, tryConsumeInteger,
 } from '../../../src/stylelet/values/integer';
 import {
@@ -39,6 +40,7 @@ import {
 import {
   createFrequencyPercentageConsumer, parseFrequencyPercentage,
   serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
+  tryAccumulateFrequencyPercentages,
   tryAddFrequencyPercentages, tryInterpolateFrequencyPercentages,
   tryResolveFrequencyPercentage,
 } from '../../../src/stylelet/values/frequency-percentage';
@@ -51,15 +53,17 @@ import {
 import {
   createLengthPercentageConsumer, parseLengthPercentage,
   serializeLengthPercentage, tryConsumeLengthPercentage,
+  tryAccumulateLengthPercentages,
   tryAddLengthPercentages, tryInterpolateLengthPercentages,
   tryResolveLengthPercentage,
 } from '../../../src/stylelet/values/length-percentage';
 import {
-  addNumbers, createNumberConsumer, interpolateNumbers,
+  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
   parseNumber, serializeNumber, tryConsumeNumber,
 } from '../../../src/stylelet/values/number';
 import {
-  addPercentages, createPercentageConsumer, interpolatePercentages,
+  accumulatePercentages, addPercentages,
+  createPercentageConsumer, interpolatePercentages,
   parsePercentage, serializePercentage, tryConsumePercentage,
 } from '../../../src/stylelet/values/percentage';
 import {
@@ -79,6 +83,7 @@ import {
 import {
   createTimePercentageConsumer, parseTimePercentage,
   serializeTimePercentage, tryConsumeTimePercentage,
+  tryAccumulateTimePercentages,
   tryAddTimePercentages, tryInterpolateTimePercentages,
   tryResolveTimePercentage,
 } from '../../../src/stylelet/values/time-percentage';
@@ -796,6 +801,13 @@ describe('integer', () => {
     },
   );
 
+  it('accumulates integers using addition', () => {
+    expect(accumulateIntegers(
+      { type: 'integer', value: -2 },
+      { type: 'integer', value: 5 },
+    )).toEqual({ type: 'integer', value: 3 });
+  });
+
   it('normalizes negative zero after interpolation', () => {
     const result = interpolateIntegers(
       { type: 'integer', value: -1 },
@@ -908,6 +920,13 @@ describe('number', () => {
       { type: 'number', value: 30 },
       p,
     )).toEqual({ type: 'number', value: expected });
+  });
+
+  it('accumulates numbers using addition', () => {
+    expect(accumulateNumbers(
+      { type: 'number', value: -1.5 },
+      { type: 'number', value: 2.25 },
+    )).toEqual({ type: 'number', value: 0.75 });
   });
 
   it.each([
@@ -1063,6 +1082,13 @@ describe('dimension', () => {
     )).toEqual({ type: 'angle', value: expected, unit: 'deg' });
   });
 
+  it('accumulates dimensions using addition', () => {
+    expect(accumulateDimensions(
+      { type: 'angle', value: 90, unit: 'deg' },
+      { type: 'angle', value: 45, unit: 'deg' },
+    )).toEqual({ type: 'angle', value: 135, unit: 'deg' });
+  });
+
   it('rejects addition when units differ by case', () => {
     expect(() => addDimensions(
       { type: 'dimension', value: 1, unit: 'px' },
@@ -1191,6 +1217,13 @@ describe('percentage', () => {
       { type: 'percentage', value: 30 },
       p,
     )).toEqual({ type: 'percentage', value: expected });
+  });
+
+  it('accumulates percentages using addition', () => {
+    expect(accumulatePercentages(
+      { type: 'percentage', value: 25 },
+      { type: 'percentage', value: -10 },
+    )).toEqual({ type: 'percentage', value: 15 });
   });
 
   it.each([
@@ -1322,6 +1355,10 @@ describe('length-percentage', () => {
       { type: 'percentage', value: 30 },
       0.25,
     )).toEqual({ type: 'percentage', value: 15 });
+    expect(tryAccumulateLengthPercentages(
+      { type: 'length', value: 10, unit: 'px' },
+      { type: 'length', value: 5, unit: 'px' },
+    )).toEqual({ type: 'length', value: 15, unit: 'px' });
   });
 
   it('does not combine different alternatives or dimension units', () => {
@@ -1429,6 +1466,10 @@ describe('angle-percentage', () => {
       { type: 'percentage', value: 60 },
       0.5,
     )).toEqual({ type: 'percentage', value: 40 });
+    expect(tryAccumulateAnglePercentages(
+      { type: 'angle', value: 10, unit: 'deg' },
+      { type: 'angle', value: 20, unit: 'deg' },
+    )).toEqual({ type: 'angle', value: 30, unit: 'deg' });
     expect(tryAddAnglePercentages(
       { type: 'angle', value: 10, unit: 'deg' },
       { type: 'percentage', value: 20 },
@@ -1524,6 +1565,10 @@ describe('frequency-percentage', () => {
       { type: 'frequency', value: 300, unit: 'hz' },
       0.5,
     )).toEqual({ type: 'frequency', value: 200, unit: 'hz' });
+    expect(tryAccumulateFrequencyPercentages(
+      { type: 'percentage', value: 10 },
+      { type: 'percentage', value: 15 },
+    )).toEqual({ type: 'percentage', value: 25 });
     expect(tryAddFrequencyPercentages(
       { type: 'frequency', value: 1, unit: 'khz' },
       { type: 'frequency', value: 100, unit: 'hz' },
@@ -1619,6 +1664,10 @@ describe('time-percentage', () => {
       { type: 'percentage', value: 75 },
       0.5,
     )).toEqual({ type: 'percentage', value: 50 });
+    expect(tryAccumulateTimePercentages(
+      { type: 'time', value: 1, unit: 's' },
+      { type: 'time', value: 2, unit: 's' },
+    )).toEqual({ type: 'time', value: 3, unit: 's' });
     expect(tryInterpolateTimePercentages(
       { type: 'time', value: 1, unit: 's' },
       { type: 'percentage', value: 100 },

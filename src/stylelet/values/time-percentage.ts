@@ -7,6 +7,7 @@ import {
 } from './time';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
 } from './dimension-percentage';
@@ -87,4 +88,11 @@ export function tryInterpolateTimePercentages(
   p: number,
 ): TimePercentageValue | null {
   return tryInterpolateDimensionPercentages(a, b, p);
+}
+
+export function tryAccumulateTimePercentages(
+  a: TimePercentageValue,
+  b: TimePercentageValue,
+): TimePercentageValue | null {
+  return tryAccumulateDimensionPercentages(a, b);
 }

@@ -103,6 +103,13 @@ export function interpolateDimensions<Type extends string, Unit extends string>(
   };
 }
 
+export function accumulateDimensions<Type extends string, Unit extends string>(
+  a: DimensionValue<Type, Unit>,
+  b: DimensionValue<Type, Unit>,
+): DimensionValue<Type, Unit> {
+  return addDimensions(a, b);
+}
+
 function assertSameDimensionUnit(
   a: DimensionValue<string, string>,
   b: DimensionValue<string, string>,

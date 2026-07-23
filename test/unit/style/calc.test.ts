@@ -3,8 +3,8 @@ import { ComponentCursor } from '../../../src/stylelet/parser/component-cursor';
 import { isOk } from '../../../src/stylelet/parser/component-try-consumer';
 import { parseListOfComponentValues } from '../../../src/stylelet/parser/syntax';
 import {
-  addMathFunctions, addNumericTypes, interpolateMathFunctions,
-  multiplyNumericTypes,
+  accumulateMathFunctions, addMathFunctions, addNumericTypes,
+  interpolateMathFunctions, multiplyNumericTypes,
   parseCalc, parseMathFunction, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
@@ -927,6 +927,15 @@ describe('calc', () => {
     expect(serializeMathFunction(result)).toBe('calc(30px)');
   });
 
+  it('accumulates math functions using addition', () => {
+    const result = accumulateMathFunctions(
+      parseCalc('calc(10px)')!,
+      parseMathFunction('min(20px, 30px)')!,
+    );
+
+    expect(serializeMathFunction(result)).toBe('calc(30px)');
+  });
+
   it.each([
     [0, 'calc(0% + 10px)'],
     [0.25, 'calc(5% + 7.5px)'],
@@ -949,13 +958,15 @@ describe('calc', () => {
     },
   );
 
-  it('rejects addition and interpolation of inconsistent math functions', () => {
+  it('rejects combination of inconsistent math functions', () => {
     const length = parseCalc('calc(1px)')!;
     const time = parseCalc('calc(1s)')!;
 
     expect(() => addMathFunctions(length, time))
       .toThrow('Math function types must be consistent');
     expect(() => interpolateMathFunctions(length, time, 0.5))
+      .toThrow('Math function types must be consistent');
+    expect(() => accumulateMathFunctions(length, time))
       .toThrow('Math function types must be consistent');
   });
 

@@ -7,6 +7,7 @@ import {
 } from './length';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
 } from './dimension-percentage';
@@ -87,4 +88,11 @@ export function tryInterpolateLengthPercentages(
   p: number,
 ): LengthPercentageValue | null {
   return tryInterpolateDimensionPercentages(a, b, p);
+}
+
+export function tryAccumulateLengthPercentages(
+  a: LengthPercentageValue,
+  b: LengthPercentageValue,
+): LengthPercentageValue | null {
+  return tryAccumulateDimensionPercentages(a, b);
 }

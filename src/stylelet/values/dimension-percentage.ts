@@ -129,3 +129,12 @@ export function tryInterpolateDimensionPercentages<
 
   return null;
 }
+
+export function tryAccumulateDimensionPercentages<
+  Dimension extends DimensionValue<string, string>,
+>(
+  a: DimensionPercentageValue<Dimension>,
+  b: DimensionPercentageValue<Dimension>,
+): DimensionPercentageValue<Dimension> | null {
+  return tryAddDimensionPercentages(a, b);
+}

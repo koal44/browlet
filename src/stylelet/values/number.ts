@@ -98,3 +98,10 @@ export function interpolateNumbers(
     value: (1 - p) * a.value + p * b.value,
   };
 }
+
+export function accumulateNumbers(
+  a: NumberValue,
+  b: NumberValue,
+): NumberValue {
+  return addNumbers(a, b);
+}

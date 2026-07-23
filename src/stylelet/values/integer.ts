@@ -85,6 +85,13 @@ export function interpolateIntegers(
   return integerResult(Math.round((1 - p) * a.value + p * b.value));
 }
 
+export function accumulateIntegers(
+  a: IntegerValue,
+  b: IntegerValue,
+): IntegerValue {
+  return addIntegers(a, b);
+}
+
 function integerResult(value: number): IntegerValue {
   return {
     type: 'integer',

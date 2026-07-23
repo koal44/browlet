@@ -89,3 +89,10 @@ export function interpolatePercentages(
     value: (1 - p) * a.value + p * b.value,
   };
 }
+
+export function accumulatePercentages(
+  a: PercentageValue,
+  b: PercentageValue,
+): PercentageValue {
+  return addPercentages(a, b);
+}

@@ -7,6 +7,7 @@ import {
 } from './frequency';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
 } from './dimension-percentage';
@@ -90,4 +91,11 @@ export function tryInterpolateFrequencyPercentages(
   p: number,
 ): FrequencyPercentageValue | null {
   return tryInterpolateDimensionPercentages(a, b, p);
+}
+
+export function tryAccumulateFrequencyPercentages(
+  a: FrequencyPercentageValue,
+  b: FrequencyPercentageValue,
+): FrequencyPercentageValue | null {
+  return tryAccumulateDimensionPercentages(a, b);
 }

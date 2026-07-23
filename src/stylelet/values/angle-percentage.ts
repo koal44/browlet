@@ -7,6 +7,7 @@ import {
 } from './angle';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
+  tryAccumulateDimensionPercentages,
   tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageValue,
 } from './dimension-percentage';
@@ -87,4 +88,11 @@ export function tryInterpolateAnglePercentages(
   p: number,
 ): AnglePercentageValue | null {
   return tryInterpolateDimensionPercentages(a, b, p);
+}
+
+export function tryAccumulateAnglePercentages(
+  a: AnglePercentageValue,
+  b: AnglePercentageValue,
+): AnglePercentageValue | null {
+  return tryAccumulateDimensionPercentages(a, b);
 }
