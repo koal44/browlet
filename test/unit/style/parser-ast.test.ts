@@ -301,6 +301,24 @@ describe('parseStylesheet', () => {
     });
   });
 
+  it('parses margin side math functions', () => {
+    expect(parseStylesheet('.foo { margin-left: calc(1px + 2px); }'))
+      .toMatchObject({
+        rules: [{
+          block: {
+            items: [marginSideDecl(PropertyId.MarginLeft, {
+              type: 'math',
+              calculation: {
+                type: 'dimension',
+                value: 3,
+                unit: 'px',
+              },
+            })],
+          },
+        }],
+      });
+  });
+
   it('parses margin side values', () => {
     const cases = [
       ['px length', '.foo { margin-left: 3px; }', [marginSideDecl(PropertyId.MarginLeft, px(3))]],
@@ -334,7 +352,6 @@ describe('parseStylesheet', () => {
       ['unknown ident', '.foo { margin-top: nonsense; margin-top: 3px; }', 'margin-top: nonsense;', PropertyId.MarginTop],
       ['unsupported unit', '.foo { margin-right: 3foo; margin-right: 3px; }', 'margin-right: 3foo;', PropertyId.MarginRight],
       ['nonzero unitless number', '.foo { margin-bottom: 3; margin-bottom: 3px; }', 'margin-bottom: 3;', PropertyId.MarginBottom],
-      ['deferred calc function', '.foo { margin-left: calc(1px + 2px); margin-left: 3px; }', 'margin-left: calc(1px + 2px);', PropertyId.MarginLeft],
       ['deferred var function', '.foo { margin-right: var(--gap); margin-right: 3px; }', 'margin-right: var(--gap);', PropertyId.MarginRight],
       ['adjacent lengths are one invalid dimension token', '.foo { margin-left: 1em2em; margin-left: 3px; }', 'margin-left: 1em2em;', PropertyId.MarginLeft],
     ] as const;

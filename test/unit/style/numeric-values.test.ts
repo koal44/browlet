@@ -38,6 +38,30 @@ import {
   interpolatePercentages, parsePercentage, serializePercentage,
   tryConsumePercentage,
 } from '../../../src/stylelet/values/percentage';
+import {
+  accumulateAnglePercentages, addAnglePercentages,
+  createAnglePercentageConsumer, interpolateAnglePercentages,
+  parseAnglePercentage, serializeAnglePercentage,
+  tryConsumeAnglePercentage,
+} from '../../../src/stylelet/values/angle-percentage';
+import {
+  accumulateLengthPercentages, addLengthPercentages,
+  createLengthPercentageConsumer, interpolateLengthPercentages,
+  parseLengthPercentage, serializeLengthPercentage,
+  tryConsumeLengthPercentage,
+} from '../../../src/stylelet/values/length-percentage';
+import {
+  accumulateFrequencyPercentages, addFrequencyPercentages,
+  createFrequencyPercentageConsumer, interpolateFrequencyPercentages,
+  parseFrequencyPercentage, serializeFrequencyPercentage,
+  tryConsumeFrequencyPercentage,
+} from '../../../src/stylelet/values/frequency-percentage';
+import {
+  accumulateTimePercentages, addTimePercentages,
+  createTimePercentageConsumer, interpolateTimePercentages,
+  parseTimePercentage, serializeTimePercentage,
+  tryConsumeTimePercentage,
+} from '../../../src/stylelet/values/time-percentage';
 
 describe('number values', () => {
   it('parses a number literal', () => {
@@ -562,5 +586,427 @@ describe('percentage values', () => {
       .toBe('calc(15%)');
     expect(serializePercentage(accumulatePercentages(a, math)))
       .toBe('calc(30%)');
+  });
+});
+
+describe('angle-percentage values', () => {
+  it('parses literal alternatives without promoting them', () => {
+    expect(parseAnglePercentage('10deg')).toEqual({
+      type: 'angle',
+      value: 10,
+      unit: 'deg',
+    });
+    expect(parseAnglePercentage('25%')).toEqual({
+      type: 'percentage',
+      value: 25,
+    });
+  });
+
+  it('parses and serializes mixed math functions', () => {
+    const value = parseAnglePercentage('calc(10deg + 25%)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'sum',
+      },
+    });
+    expect(serializeAnglePercentage(value!)).toBe('calc(25% + 10deg)');
+  });
+
+  it('rejects calculations from another dimensional category', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10px + 25%)'),
+    );
+
+    expect(tryConsumeAnglePercentage(c)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('uses the angle percentage type and restores outer context', () => {
+    const context = {
+      percentageType: 'length',
+    } as const;
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10deg + 25%)'),
+      { context },
+    );
+
+    expect(tryConsumeAnglePercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(c.context).toBe(context);
+  });
+
+  it('keeps directly compatible literal combinations literal', () => {
+    const angleA = parseAnglePercentage('10deg')!;
+    const angleB = parseAnglePercentage('20deg')!;
+    const percentageA = parseAnglePercentage('10%')!;
+    const percentageB = parseAnglePercentage('20%')!;
+
+    expect(addAnglePercentages(angleA, angleB))
+      .toEqual({ type: 'angle', value: 30, unit: 'deg' });
+    expect(interpolateAnglePercentages(
+      percentageA,
+      percentageB,
+      0.5,
+    )).toEqual({ type: 'percentage', value: 15 });
+    expect(accumulateAnglePercentages(percentageA, percentageB))
+      .toEqual({ type: 'percentage', value: 30 });
+  });
+
+  it('promotes incompatible literal alternatives into math', () => {
+    const angle = parseAnglePercentage('10deg')!;
+    const percentage = parseAnglePercentage('20%')!;
+
+    expect(serializeAnglePercentage(addAnglePercentages(angle, percentage)))
+      .toBe('calc(20% + 10deg)');
+    expect(serializeAnglePercentage(interpolateAnglePercentages(
+      angle,
+      percentage,
+      0.5,
+    ))).toBe('calc(10% + 5deg)');
+    expect(serializeAnglePercentage(accumulateAnglePercentages(
+      angle,
+      percentage,
+    ))).toBe('calc(20% + 10deg)');
+  });
+
+  it('applies ranges to math at the computed-value stage', () => {
+    const consume = createAnglePercentageConsumer({ min: 0 });
+    const specified = new ComponentCursor(
+      parseListOfComponentValues('calc(-10deg)'),
+    );
+    const computed = new ComponentCursor(
+      parseListOfComponentValues('calc(-10deg)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(computed)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'dimension',
+          value: 0,
+          unit: 'deg',
+        },
+      },
+    });
+  });
+});
+
+describe('length-percentage values', () => {
+  it('parses literal alternatives without promoting them', () => {
+    expect(parseLengthPercentage('10px')).toEqual({
+      type: 'length',
+      value: 10,
+      unit: 'px',
+    });
+    expect(parseLengthPercentage('25%')).toEqual({
+      type: 'percentage',
+      value: 25,
+    });
+  });
+
+  it('parses and serializes mixed math functions', () => {
+    const value = parseLengthPercentage('calc(10px + 25%)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'sum',
+      },
+    });
+    expect(serializeLengthPercentage(value!)).toBe('calc(25% + 10px)');
+  });
+
+  it('rejects calculations from another dimensional category', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10deg + 25%)'),
+    );
+
+    expect(tryConsumeLengthPercentage(c)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('uses the length percentage type and restores outer context', () => {
+    const context = {
+      percentageType: 'angle',
+    } as const;
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10px + 25%)'),
+      { context },
+    );
+
+    expect(tryConsumeLengthPercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(c.context).toBe(context);
+  });
+
+  it('keeps directly compatible literal combinations literal', () => {
+    const lengthA = parseLengthPercentage('10px')!;
+    const lengthB = parseLengthPercentage('20px')!;
+    const percentageA = parseLengthPercentage('10%')!;
+    const percentageB = parseLengthPercentage('20%')!;
+
+    expect(addLengthPercentages(lengthA, lengthB))
+      .toEqual({ type: 'length', value: 30, unit: 'px' });
+    expect(interpolateLengthPercentages(
+      percentageA,
+      percentageB,
+      0.5,
+    )).toEqual({ type: 'percentage', value: 15 });
+    expect(accumulateLengthPercentages(percentageA, percentageB))
+      .toEqual({ type: 'percentage', value: 30 });
+  });
+
+  it('promotes incompatible literal alternatives into math', () => {
+    const length = parseLengthPercentage('10px')!;
+    const percentage = parseLengthPercentage('20%')!;
+
+    expect(serializeLengthPercentage(addLengthPercentages(
+      length,
+      percentage,
+    ))).toBe('calc(20% + 10px)');
+    expect(serializeLengthPercentage(interpolateLengthPercentages(
+      length,
+      percentage,
+      0.5,
+    ))).toBe('calc(10% + 5px)');
+    expect(serializeLengthPercentage(accumulateLengthPercentages(
+      length,
+      percentage,
+    ))).toBe('calc(20% + 10px)');
+  });
+
+  it('applies ranges to math at the computed-value stage', () => {
+    const consume = createLengthPercentageConsumer({ min: 0 });
+    const specified = new ComponentCursor(
+      parseListOfComponentValues('calc(-10px)'),
+    );
+    const computed = new ComponentCursor(
+      parseListOfComponentValues('calc(-10px)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(computed)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'dimension',
+          value: 0,
+          unit: 'px',
+        },
+      },
+    });
+  });
+});
+
+describe('frequency-percentage values', () => {
+  it('parses literal alternatives without promoting them', () => {
+    expect(parseFrequencyPercentage('10hz')).toEqual({
+      type: 'frequency',
+      value: 10,
+      unit: 'hz',
+    });
+    expect(parseFrequencyPercentage('25%')).toEqual({
+      type: 'percentage',
+      value: 25,
+    });
+  });
+
+  it('parses and serializes mixed math functions', () => {
+    const value = parseFrequencyPercentage('calc(10hz + 25%)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'sum',
+      },
+    });
+    expect(serializeFrequencyPercentage(value!)).toBe('calc(25% + 10hz)');
+  });
+
+  it('rejects calculations from another dimensional category', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10s + 25%)'),
+    );
+
+    expect(tryConsumeFrequencyPercentage(c)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('uses the frequency percentage type and restores outer context', () => {
+    const context = {
+      percentageType: 'length',
+    } as const;
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10hz + 25%)'),
+      { context },
+    );
+
+    expect(tryConsumeFrequencyPercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(c.context).toBe(context);
+  });
+
+  it('keeps directly compatible literal combinations literal', () => {
+    const frequencyA = parseFrequencyPercentage('10hz')!;
+    const frequencyB = parseFrequencyPercentage('20hz')!;
+    const percentageA = parseFrequencyPercentage('10%')!;
+    const percentageB = parseFrequencyPercentage('20%')!;
+
+    expect(addFrequencyPercentages(frequencyA, frequencyB))
+      .toEqual({ type: 'frequency', value: 30, unit: 'hz' });
+    expect(interpolateFrequencyPercentages(
+      percentageA,
+      percentageB,
+      0.5,
+    )).toEqual({ type: 'percentage', value: 15 });
+    expect(accumulateFrequencyPercentages(percentageA, percentageB))
+      .toEqual({ type: 'percentage', value: 30 });
+  });
+
+  it('promotes incompatible literal alternatives into math', () => {
+    const frequency = parseFrequencyPercentage('10hz')!;
+    const percentage = parseFrequencyPercentage('20%')!;
+
+    expect(serializeFrequencyPercentage(addFrequencyPercentages(
+      frequency,
+      percentage,
+    ))).toBe('calc(20% + 10hz)');
+    expect(serializeFrequencyPercentage(interpolateFrequencyPercentages(
+      frequency,
+      percentage,
+      0.5,
+    ))).toBe('calc(10% + 5hz)');
+    expect(serializeFrequencyPercentage(accumulateFrequencyPercentages(
+      frequency,
+      percentage,
+    ))).toBe('calc(20% + 10hz)');
+  });
+
+  it('applies ranges to math at the computed-value stage', () => {
+    const consume = createFrequencyPercentageConsumer({ min: 0 });
+    const specified = new ComponentCursor(
+      parseListOfComponentValues('calc(-10hz)'),
+    );
+    const computed = new ComponentCursor(
+      parseListOfComponentValues('calc(-10hz)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(computed)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'dimension',
+          value: 0,
+          unit: 'hz',
+        },
+      },
+    });
+  });
+});
+
+describe('time-percentage values', () => {
+  it('parses literal alternatives without promoting them', () => {
+    expect(parseTimePercentage('10s')).toEqual({
+      type: 'time',
+      value: 10,
+      unit: 's',
+    });
+    expect(parseTimePercentage('25%')).toEqual({
+      type: 'percentage',
+      value: 25,
+    });
+  });
+
+  it('parses and serializes mixed math functions', () => {
+    const value = parseTimePercentage('calc(10s + 25%)');
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'sum',
+      },
+    });
+    expect(serializeTimePercentage(value!)).toBe('calc(25% + 10s)');
+  });
+
+  it('rejects calculations from another dimensional category', () => {
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10hz + 25%)'),
+    );
+
+    expect(tryConsumeTimePercentage(c)).toMatchObject({ kind: 'bad' });
+  });
+
+  it('uses the time percentage type and restores outer context', () => {
+    const context = {
+      percentageType: 'length',
+    } as const;
+    const c = new ComponentCursor(
+      parseListOfComponentValues('calc(10s + 25%)'),
+      { context },
+    );
+
+    expect(tryConsumeTimePercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(c.context).toBe(context);
+  });
+
+  it('keeps directly compatible literal combinations literal', () => {
+    const timeA = parseTimePercentage('10s')!;
+    const timeB = parseTimePercentage('20s')!;
+    const percentageA = parseTimePercentage('10%')!;
+    const percentageB = parseTimePercentage('20%')!;
+
+    expect(addTimePercentages(timeA, timeB))
+      .toEqual({ type: 'time', value: 30, unit: 's' });
+    expect(interpolateTimePercentages(
+      percentageA,
+      percentageB,
+      0.5,
+    )).toEqual({ type: 'percentage', value: 15 });
+    expect(accumulateTimePercentages(percentageA, percentageB))
+      .toEqual({ type: 'percentage', value: 30 });
+  });
+
+  it('promotes incompatible literal alternatives into math', () => {
+    const time = parseTimePercentage('10s')!;
+    const percentage = parseTimePercentage('20%')!;
+
+    expect(serializeTimePercentage(addTimePercentages(
+      time,
+      percentage,
+    ))).toBe('calc(20% + 10s)');
+    expect(serializeTimePercentage(interpolateTimePercentages(
+      time,
+      percentage,
+      0.5,
+    ))).toBe('calc(10% + 5s)');
+    expect(serializeTimePercentage(accumulateTimePercentages(
+      time,
+      percentage,
+    ))).toBe('calc(20% + 10s)');
+  });
+
+  it('applies ranges to math at the computed-value stage', () => {
+    const consume = createTimePercentageConsumer({ min: 0 });
+    const specified = new ComponentCursor(
+      parseListOfComponentValues('calc(-10s)'),
+    );
+    const computed = new ComponentCursor(
+      parseListOfComponentValues('calc(-10s)'),
+      { context: { stage: 'computed' } },
+    );
+
+    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(computed)).toMatchObject({
+      kind: 'ok',
+      value: {
+        calculation: {
+          type: 'dimension',
+          value: 0,
+          unit: 's',
+        },
+      },
+    });
   });
 });

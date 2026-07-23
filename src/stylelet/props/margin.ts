@@ -5,10 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { serializeAuto, tryConsumeAuto, type AutoValue } from '../values/auto';
+import type { CalculationContext } from '../values/calc';
 import {
   serializeLengthPercentage, tryConsumeLengthPercentage,
-  type LengthPercentageLiteral,
-} from '../values/numeric-literal/length-percentage';
+  type LengthPercentageValue,
+} from '../values/length-percentage';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =
@@ -16,12 +17,12 @@ import {
  */
 
 export type MarginSideValue =
-  | LengthPercentageLiteral
+  | LengthPercentageValue
   | AutoValue;
 
 export function parseMarginSideValue(
   input: ParserInput,
-  context: unknown = undefined,
+  context: CalculationContext = {},
 ): MarginSideValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(

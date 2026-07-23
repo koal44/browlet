@@ -1919,6 +1919,126 @@ runScenarios('CSS calc dimension unit oracle', 'normal', [
   },
 ]);
 
+runScenarios('CSS angle-percentage combination oracle', 'normal', [
+  {
+    name: 'serializes an angle-percentage sum in a conic gradient',
+    engines: ['native'],
+    markup: `
+      <style id="angle-percentage-cssom">
+        #angle-percentage-target {
+          background-image: conic-gradient(red calc(10deg + 20%), blue);
+        }
+      </style>
+      <div id="angle-percentage-target"></div>
+    `,
+    cases: [
+      {
+        cssom: {
+          target: 'style.property',
+          rule: 0,
+          name: 'background-image',
+        },
+        ref: { by: 'id', id: 'angle-percentage-cssom' },
+        browsers: ['chromium', 'webkit'],
+        expect: {
+          cssom: {
+            value: 'conic-gradient(red calc(20% + 10deg), blue)',
+          },
+        },
+      },
+      // Firefox currently rejects the declaration rather than preserving the
+      // consistent <angle-percentage> calculation.
+      {
+        cssom: {
+          target: 'style.property',
+          rule: 0,
+          name: 'background-image',
+        },
+        ref: { by: 'id', id: 'angle-percentage-cssom' },
+        browsers: ['firefox'],
+        status: 'fail',
+        expect: {
+          cssom: {
+            value: 'conic-gradient(red calc(20% + 10deg), blue)',
+          },
+        },
+      },
+    ],
+  },
+  {
+    name: 'promotes mixed angle and percentage operations to math sums',
+    engines: ['native'],
+    markup: '<div id="angle-percentage-typed-om"></div>',
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        type NumericValue = {
+          add(value: NumericValue): NumericValue;
+          mul(value: number): NumericValue;
+          toString(): string;
+        };
+
+        const css = CSS as unknown as {
+          deg(value: number): NumericValue;
+          percent(value: number): NumericValue;
+        };
+        const target = document.getElementById(
+          'angle-percentage-typed-om',
+        ) as HTMLElement;
+        const evaluate = (operation: () => string): string => {
+          try {
+            return operation();
+          } catch (error) {
+            return error instanceof Error ? error.name : String(error);
+          }
+        };
+
+        target.style.setProperty(
+          '--addition',
+          evaluate(() => css.deg(10).add(css.percent(20)).toString()),
+        );
+        target.style.setProperty(
+          '--scaled-addition',
+          evaluate(() =>
+            css
+              .deg(10)
+              .mul(0.5)
+              .add(css.percent(20).mul(0.5))
+              .toString(),
+          ),
+        );
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--addition',
+        ref: { by: 'id', id: 'angle-percentage-typed-om' },
+        browsers: ['chromium', 'webkit'],
+        expect: { value: 'calc(10deg + 20%)' },
+      },
+      {
+        computedStyle: '--addition',
+        ref: { by: 'id', id: 'angle-percentage-typed-om' },
+        browsers: ['firefox'],
+        status: 'fail',
+        expect: { value: 'calc(10deg + 20%)' },
+      },
+      {
+        computedStyle: '--scaled-addition',
+        ref: { by: 'id', id: 'angle-percentage-typed-om' },
+        browsers: ['chromium', 'webkit'],
+        expect: { value: 'calc(5deg + 10%)' },
+      },
+      {
+        computedStyle: '--scaled-addition',
+        ref: { by: 'id', id: 'angle-percentage-typed-om' },
+        browsers: ['firefox'],
+        status: 'fail',
+        expect: { value: 'calc(5deg + 10%)' },
+      },
+    ],
+  },
+]);
+
 runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
   {
     name: 'distinguishes literal zero and simplifies mixed zero components',
