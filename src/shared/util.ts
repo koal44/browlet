@@ -1,3 +1,9 @@
+export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+export type Permutations<T, K = T> =
+  [T] extends [never] ? [] :
+  T extends K ? [T, ...Permutations<Exclude<K, T>>] : never;
+
 export function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
 }

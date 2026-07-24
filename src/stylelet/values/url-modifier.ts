@@ -16,7 +16,7 @@ import { serializeCssString, tryConsumeString } from './string';
  * request-modifier grammar, while issue #1603 requires unknown modifiers to be
  * ignored. The explicit <unknown-url-modifier> arm lets the URL grammar consume
  * and later discard those unknown values. The oracle scenarios in
- * test/stylelet/oracle.test.ts currently record only partial WebKit support, so
+ * test/stylelet/browser/oracle.test.ts currently record only partial WebKit support, so
  * revisit this grammar as the specifications and implementations converge.
  *
  * https://github.com/w3c/csswg-drafts/issues/12151

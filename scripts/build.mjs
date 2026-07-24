@@ -120,7 +120,7 @@ console.log('synced built artifacts\n');
 function syncBuiltArtifacts() {
   syncFile(
     'dist/index.cjs',
-    'test/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
+    'test/selectlet/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
   );
 
   syncSelectletPackageDist('vendor/jsdom/node_modules/selectlet/dist');

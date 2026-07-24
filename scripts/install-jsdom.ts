@@ -91,7 +91,7 @@ const engines: EngineConfig[] = [
   },
 ];
 
-const ENGINES_DIR = 'test/jsdom/engines';
+const ENGINES_DIR = 'test/selectlet/jsdom/engines';
 
 type EngineName = 'nwsapi' | 'dom-selector' | 'selectlet';
 

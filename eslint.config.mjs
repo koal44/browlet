@@ -8,8 +8,8 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'scratch/**',
-      'test/browser/fixtures/**',
-      'test/perf/engines/**',
+      'test/selectlet/browser/fixtures/**',
+      'test/selectlet/perf/engines/**',
       'eslint.config.mjs',
     ],
   },

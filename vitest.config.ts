@@ -8,23 +8,30 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['test/unit/**/*.test.ts'],
+          include: [
+            'test/selectlet/unit/**/*.test.ts',
+            'test/shared/unit/**/*.test.ts',
+            'test/stylelet/unit/**/*.test.ts',
+          ],
         },
       },
       {
         test: {
           name: 'jsdom',
           environment: 'node',
-          include: ['test/jsdom/**/*.test.ts', 'test/browser/**/*.test.ts'],
-          exclude: ['test/jsdom/perf/**/*.test.ts'],
-          setupFiles: ['./test/jsdom/harness/setup.ts'],
+          include: [
+            'test/selectlet/jsdom/**/*.test.ts',
+            'test/selectlet/browser/**/*.test.ts',
+          ],
+          exclude: ['test/selectlet/jsdom/perf/**/*.test.ts'],
+          setupFiles: ['./test/selectlet/jsdom/harness/setup.ts'],
         },
       },
       {
         test: {
           name: 'jsdom-perf',
           environment: 'node',
-          include: ['test/jsdom/perf/**/*.test.ts'],
+          include: ['test/selectlet/jsdom/perf/**/*.test.ts'],
           testTimeout: 120_000,
         },
       },
