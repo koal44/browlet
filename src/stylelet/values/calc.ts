@@ -1,10 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
-import {
-  createDelimConsumer, createFunctionalNotationConsumer, createIdentValueConsumer,
-  tryConsumeIdentToken,
-} from '../parser/component-consumers';
+import { createDelimConsumer, createFunctionalNotationConsumer, tryConsumeIdentToken } from '../parser/component-consumers';
 import {
   commaRepeat, one, oneOf, opt, repeat, sequenceOf, withComponentTrivia,
 } from '../parser/component-grammar';
@@ -17,6 +14,7 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
+import { createKeywordConsumer } from './keyword';
 import { ANGLE_UNITS, resolveAngle } from './numeric-literal/angle';
 import {
   serializeDimension, tryConsumeDimension,
@@ -604,7 +602,7 @@ function createClampConsumer(): TryComponentConsumer<
   const consumeArgument: TryComponentConsumer<CalculationTree | 'none'> = oneOf(
     [
       one(tryConsumeCalcSum),
-      one(createIdentValueConsumer('none')),
+      one(createKeywordConsumer('none')),
     ],
     ([value]) => ok(value),
   );
@@ -828,16 +826,7 @@ function createMathFunctionNode<
 }
 
 const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
-  oneOf(
-    [
-      one(createIdentValueConsumer('nearest')),
-      one(createIdentValueConsumer('up')),
-      one(createIdentValueConsumer('down')),
-      one(createIdentValueConsumer('to-zero')),
-      one(createIdentValueConsumer('line-width')),
-    ],
-    ([strategy]) => ok(strategy),
-  );
+  createKeywordConsumer('nearest', 'up', 'down', 'to-zero', 'line-width');
 
 function tryConsumeRoundingStrategyPrefix(
   c: ComponentCursor,

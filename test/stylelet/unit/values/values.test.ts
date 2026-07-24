@@ -29,6 +29,7 @@ import {
 import { parseCustomIdent, serializeCustomIdent } from '../../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../../src/stylelet/values/dashed-ident';
 import { parseIdent, serializeIdent, serializeIdentifier } from '../../../../src/stylelet/values/ident';
+import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
   parseInteger, serializeInteger, tryConsumeInteger,
@@ -92,6 +93,25 @@ import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../../src/stylelet/
 import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/zero';
 
 // Keywords
+
+describe('keyword', () => {
+  it('creates case-insensitive singleton and grouped keyword consumers', () => {
+    const consumeAuto = createKeywordConsumer('auto');
+    const consumeStrategy = createKeywordConsumer('nearest', 'up', 'to-zero');
+
+    expect(consumeAuto(new ComponentCursor(parseListOfComponentValues('AUTO'))))
+      .toEqual({ kind: 'ok', value: 'auto' });
+    expect(consumeStrategy(new ComponentCursor(parseListOfComponentValues('To-ZeRo'))))
+      .toEqual({ kind: 'ok', value: 'to-zero' });
+  });
+
+  it('leaves component trivia to the caller', () => {
+    const cursor = new ComponentCursor(parseListOfComponentValues(' auto'));
+
+    expect(createKeywordConsumer('auto')(cursor)).toBeNull();
+    expect(cursor.pos()).toBe(0);
+  });
+});
 
 describe('auto', () => {
   it('serializes the auto keyword', () => {

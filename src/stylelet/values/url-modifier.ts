@@ -1,5 +1,5 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer, createIdentValueConsumer, tryConsumeFunctionBlock } from '../parser/component-consumers';
+import { createFunctionalNotationConsumer, tryConsumeFunctionBlock } from '../parser/component-consumers';
 import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok,
@@ -8,6 +8,7 @@ import {
 import { parseAsComponentGrammar, type FunctionBlock, type ParserInput } from '../parser/syntax';
 import { isAnyValue } from './any-value';
 import { tryConsumeIdent, type IdentValue } from './ident';
+import { createKeywordConsumer } from './keyword';
 import { serializeCssString, tryConsumeString } from './string';
 
 /*
@@ -221,13 +222,8 @@ function tryConsumeCrossOriginArgument(
   return consumeCrossOriginArgument(c);
 }
 
-const consumeCrossOriginArgument = oneOf(
-  [
-    one(createIdentValueConsumer('anonymous')),
-    one(createIdentValueConsumer('use-credentials')),
-  ],
-  ([value]) => ok(value),
-);
+const consumeCrossOriginArgument =
+  createKeywordConsumer('anonymous', 'use-credentials');
 
 /*
  * <integrity-modifier> = integrity(<string>)
@@ -312,7 +308,4 @@ const REFERRER_POLICIES = [
 ] as const satisfies readonly ReferrerPolicy[];
 
 const consumeReferrerPolicyArgument: TryComponentConsumer<ReferrerPolicy> =
-  oneOf(
-    REFERRER_POLICIES.map((policy) => one(createIdentValueConsumer(policy))),
-    ([value]) => ok(value),
-  );
+  createKeywordConsumer(...REFERRER_POLICIES);

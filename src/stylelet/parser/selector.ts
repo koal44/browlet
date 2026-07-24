@@ -4,8 +4,7 @@ import {
 } from './component-grammar';
 import type { ComponentCursor } from './component-cursor';
 import {
-  createDelimConsumer, createIdentValueConsumer,
-  tryConsumeColon, tryConsumeFunctionBlock, tryConsumeIdentToken,
+  createDelimConsumer, tryConsumeColon, tryConsumeFunctionBlock, tryConsumeIdentToken,
   tryConsumeIdHashToken, tryConsumeIntegerToken, tryConsumeStringToken,
 } from './component-consumers';
 import type { ComponentValue, ParserInput } from './syntax';
@@ -20,6 +19,7 @@ import {
 } from './selector-specificity';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 import { tryConsumeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
+import { createKeywordConsumer } from '../values/keyword';
 import {
   bad, ComponentConsumerBadReason, isBad, isOk, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer, type TryComponentConsumerResult,
@@ -2389,7 +2389,7 @@ function tryConsumeNthChildArgument(c: ComponentCursor): TryComponentConsumerRes
   });
 }
 
-const tryConsumeOfIdent = createIdentValueConsumer('of');
+const tryConsumeOfIdent = createKeywordConsumer('of');
 
 function tryConsumeNthChildOfClause(c: ComponentCursor): TryComponentConsumerResult<ComplexRealSelectorList | null> {
   const start = c.pos();

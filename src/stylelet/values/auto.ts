@@ -3,7 +3,7 @@ import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
-import { tryConsumeKeywordIn } from './keyword';
+import { createKeywordConsumer } from './keyword';
 
 export type AutoValue = {
   type: 'auto';
@@ -11,7 +11,7 @@ export type AutoValue = {
 
 export function tryConsumeAuto(c: ComponentCursor): TryComponentConsumerResult<AutoValue> {
   const keyword = unwrapConsumeResultOrThrow(
-    tryConsumeKeywordIn(c, ['auto'] as const),
+    tryConsumeAutoKeyword(c),
     'auto keyword',
   );
 
@@ -21,6 +21,8 @@ export function tryConsumeAuto(c: ComponentCursor): TryComponentConsumerResult<A
 
   return ok({ type: 'auto' });
 }
+
+const tryConsumeAutoKeyword = createKeywordConsumer('auto');
 
 export function serializeAuto(value: AutoValue): string {
   return value.type;

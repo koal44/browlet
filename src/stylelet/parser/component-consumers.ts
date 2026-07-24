@@ -198,22 +198,3 @@ export function createDelimConsumer<T extends string>(expected: T): TryComponent
     return ok(expected);
   };
 }
-
-export function createIdentValueConsumer<T extends string>(
-  expected: T,
-): TryComponentConsumer<T> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (
-      !isIdentToken(component) ||
-      asciiLower(component.value) !== expected
-    ) {
-      c.restore(start);
-      return null;
-    }
-
-    return ok(expected);
-  };
-}

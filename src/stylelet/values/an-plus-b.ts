@@ -1,5 +1,5 @@
 import { asciiLower } from '../../shared/css';
-import { createDelimConsumer, createIdentValueConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
+import { createDelimConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
 import {
@@ -9,6 +9,7 @@ import {
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
+import { createKeywordConsumer } from './keyword';
 import { serializeCssNumber } from './numeric-literal/number';
 
 export type AnPlusBValue = {
@@ -130,12 +131,12 @@ const tryConsumeSignlessInteger = createIntegerConsumer('signless');
 
 const tryConsumePlus = createDelimConsumer('+');
 const tryConsumeMinus = createDelimConsumer('-');
-const tryConsumeOdd = createIdentValueConsumer('odd');
-const tryConsumeEven = createIdentValueConsumer('even');
-const tryConsumeN = createIdentValueConsumer('n');
-const tryConsumeDashN = createIdentValueConsumer('-n');
-const tryConsumeNDash = createIdentValueConsumer('n-');
-const tryConsumeDashNDash = createIdentValueConsumer('-n-');
+const tryConsumeOdd = createKeywordConsumer('odd');
+const tryConsumeEven = createKeywordConsumer('even');
+const tryConsumeN = createKeywordConsumer('n');
+const tryConsumeDashN = createKeywordConsumer('-n');
+const tryConsumeNDash = createKeywordConsumer('n-');
+const tryConsumeDashNDash = createKeywordConsumer('-n-');
 
 const consumePositiveN: TryComponentConsumer<number> = sequenceOf(
   [

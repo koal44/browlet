@@ -1,5 +1,5 @@
 import { commaRepeat, one, oneOf, withComponentTrivia } from '../parser/component-grammar';
-import { tryConsumeKeywordIn } from '../values/keyword';
+import { createKeywordConsumer } from '../values/keyword';
 import {
   serializeCustomIdent, tryConsumeCustomIdent,
   type CustomIdentValue,
@@ -70,7 +70,7 @@ export function tryConsumeAnimationName(c: ComponentCursor): TryComponentConsume
 
 const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
   const value = unwrapConsumeResultOrThrow(
-    tryConsumeKeywordIn(c, ['none'] as const),
+    tryConsumeNoneKeyword(c),
     'animation-name none',
   );
 
@@ -80,6 +80,8 @@ const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
 
   return ok({ type: 'none' });
 };
+
+const tryConsumeNoneKeyword = createKeywordConsumer('none');
 
 const tryConsumeKeyframesName: TryComponentConsumer<KeyframesNameValue> = oneOf(
   [

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { createFunctionalNotationConsumer, createIdentValueConsumer } from '../../../../src/stylelet/parser/component-consumers';
+import { createDelimConsumer, createFunctionalNotationConsumer } from '../../../../src/stylelet/parser/component-consumers';
 import { ok } from '../../../../src/stylelet/parser/component-try-consumer';
 import { BlockKind, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { BadStringToken } from '../../../../src/stylelet/parser/tokens';
@@ -43,7 +43,7 @@ describe('createFunctionalNotationConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
     const consume = createFunctionalNotationConsumer(
       'fn',
-      createIdentValueConsumer('expected'),
+      createDelimConsumer('/'),
       (value) => value,
     );
 
@@ -55,7 +55,7 @@ describe('createFunctionalNotationConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
     const consume = createFunctionalNotationConsumer(
       'fn',
-      createIdentValueConsumer('expected'),
+      createDelimConsumer('/'),
       (value) => value,
       { argumentGrammarMismatch: 'delegate' },
     );
