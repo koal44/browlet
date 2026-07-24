@@ -4,13 +4,28 @@ import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 
 // =============================================================================
-// Public consumer and multiplier types
+// Consumer and multiplier types
 // =============================================================================
 
-export type OptionalValue<T> = [] | [T];
-export type NonEmptyArray<T> = [T, ...T[]];
+type OptionalValue<T> = [] | [T];
+type NonEmptyArray<T> = [T, ...T[]];
 
-export type Multiplier<T, Output extends T[] = T[]> = TryComponentConsumer<Output> & {
+type Tuple<T, Length extends number, Result extends T[] = []> =
+  number extends Length
+    ? T[]
+    : Result['length'] extends Length
+      ? Result
+      : Tuple<T, Length, [...Result, T]>;
+
+type AtLeast<T, Minimum extends number> =
+  Minimum extends 0 ? T[] :
+  Minimum extends 1 ? [T, ...T[]] :
+  Minimum extends 2 ? [T, T, ...T[]] :
+  Minimum extends 3 ? [T, T, T, ...T[]] :
+  Minimum extends 4 ? [T, T, T, T, ...T[]] :
+  T[];
+
+type Multiplier<T, Output extends T[] = T[]> = TryComponentConsumer<Output> & {
   base: TryComponentConsumer<T>;
   min: number;
   max: number;
@@ -415,9 +430,8 @@ export function plus<T>(
  * The consumer is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T>(item: TryComponentConsumer<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function repeat<T>(item: TryComponentConsumer<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function repeat<T>(item: TryComponentConsumer<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function repeat<T, const Count extends number>(item: TryComponentConsumer<T>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T>): Multiplier<T, Tuple<T, Count>>;
+export function repeat<T, const Minimum extends number>(item: TryComponentConsumer<T>, min: Minimum, max?: number, options?: MultiplierOptions<T>): Multiplier<T, AtLeast<T, Minimum>>;
 export function repeat<T, Output extends T[]>(item: TryComponentConsumer<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   if (!Number.isInteger(min) || min < 0) {
     throw new Error(`Invalid repeat minimum ${min}`);
@@ -434,9 +448,8 @@ export function repeat<T, Output extends T[]>(item: TryComponentConsumer<T>, min
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
 export function commaRepeat<T>(item: TryComponentConsumer<T>, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentConsumer<T>, min: 1, max?: number, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T>(item: TryComponentConsumer<T>, min: 0, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
-export function commaRepeat<T>(item: TryComponentConsumer<T>, min: number, max?: number, options?: MultiplierOptions<T>): Multiplier<T, T[]>;
+export function commaRepeat<T, const Count extends number>(item: TryComponentConsumer<T>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T>): Multiplier<T, Tuple<T, Count>>;
+export function commaRepeat<T, const Minimum extends number>(item: TryComponentConsumer<T>, min: Minimum, max?: number, options?: MultiplierOptions<T>): Multiplier<T, AtLeast<T, Minimum>>;
 export function commaRepeat<T, Output extends T[]>(item: TryComponentConsumer<T>, minOrOptions: number | MultiplierOptions<T> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
   const min =
     typeof minOrOptions === 'number'

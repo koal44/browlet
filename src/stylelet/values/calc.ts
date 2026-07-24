@@ -553,13 +553,6 @@ function createBinaryMathFunctionConsumer<
     ([args]) => {
       const [first, second] = args;
 
-      if (first === undefined || second === undefined) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          `Invalid ${name}() arguments`,
-        );
-      }
-
       return createMathFunctionNode<MathBinaryFunctionNode<Name>>(
         { type: name, arguments: [first, second] },
         args,
@@ -611,12 +604,7 @@ function createClampConsumer(): TryComponentConsumer<
     ([args]) => {
       const [minimumArgument, value, maximumArgument] = args;
 
-      if (
-        minimumArgument === undefined ||
-        value === undefined ||
-        value === 'none' ||
-        maximumArgument === undefined
-      ) {
+      if (value === 'none') {
         return bad(
           ComponentConsumerBadReason.Invalid,
           'Invalid clamp() arguments',

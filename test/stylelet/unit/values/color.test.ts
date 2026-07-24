@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ColorKind,
-  packRgba, parseColorValue, resolveColorToRgba,
-} from '../../../../src/stylelet/values/color';
+import { ColorKind, parseColorValue } from '../../../../src/stylelet/values/color';
 import { ColorName, colorNameFromText, namedColorRgba, SystemColorName } from '../../../../src/stylelet/values/color-keywords';
 
 describe('color values', () => {
@@ -137,12 +134,7 @@ describe('color values', () => {
     });
   });
 
-  it.fails('uses zero for missing rgb components outside interpolation', () => {
-    const color = parseColorValue('rgb(none 0 100% / none)');
-
-    expect(color).not.toBeNull();
-    expect(resolveColorToRgba(color!)).toBe(packRgba(0, 0, 255, 0));
-  });
+  it.todo('uses zero for missing rgb components outside interpolation');
 
   it('parses legacy hsl and hsla functions', () => {
     expect(parseColorValue('hsl(120, 100%, 50%)')).toEqual({
@@ -232,19 +224,9 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it.fails('resolves hwb colors and normalizes excessive white and black', () => {
-    const color = parseColorValue('hwb(45 40% 80%)');
+  it.todo('normalizes excessive white and black when computing hwb colors');
 
-    expect(color).not.toBeNull();
-    expect(resolveColorToRgba(color!)).toBe(packRgba(85, 85, 85, 255));
-  });
-
-  it.fails('uses zero for missing hwb components outside interpolation', () => {
-    const color = parseColorValue('hwb(none 0 100% / none)');
-
-    expect(color).not.toBeNull();
-    expect(resolveColorToRgba(color!)).toBe(packRgba(0, 0, 0, 0));
-  });
+  it.todo('uses zero for missing hwb components outside interpolation');
 
   it('parses lab and oklab functions', () => {
     expect(parseColorValue('lab(50% 20 -30% / 0.4)')).toEqual({
@@ -400,132 +382,11 @@ describe('color values', () => {
     expect(colorNameFromText('notacolor')).toBeUndefined();
   });
 
-  it('resolves named colors to packed rgba', () => {
-    expect(namedColorRgba(ColorName.red)).toBe(packRgba(255, 0, 0, 255));
-    expect(namedColorRgba(ColorName.black)).toBe(packRgba(0, 0, 0, 255));
-    expect(namedColorRgba(ColorName.white)).toBe(packRgba(255, 255, 255, 255));
-    expect(namedColorRgba(ColorName.transparent)).toBe(packRgba(0, 0, 0, 0));
-  });
-
   it('keeps equivalent color names equivalent', () => {
     expect(namedColorRgba(ColorName.aqua)).toBe(namedColorRgba(ColorName.cyan));
     expect(namedColorRgba(ColorName.fuchsia)).toBe(namedColorRgba(ColorName.magenta));
     expect(namedColorRgba(ColorName.gray)).toBe(namedColorRgba(ColorName.grey));
     expect(namedColorRgba(ColorName.darkgray)).toBe(namedColorRgba(ColorName.darkgrey));
     expect(namedColorRgba(ColorName.slategray)).toBe(namedColorRgba(ColorName.slategrey));
-  });
-
-  it('resolves hex colors', () => {
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#f00' }))
-      .toBe(packRgba(255, 0, 0, 255));
-
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#0f08' }))
-      .toBe(packRgba(0, 255, 0, 136));
-
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#0000ff' }))
-      .toBe(packRgba(0, 0, 255, 255));
-
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#ff000080' }))
-      .toBe(packRgba(255, 0, 0, 128));
-  });
-
-  it('rejects malformed hex colors', () => {
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#ff' })).toBeNull();
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#fffff' })).toBeNull();
-    expect(resolveColorToRgba({ kind: ColorKind.Hex, text: '#ggg' })).toBeNull();
-  });
-
-  it('resolves rgb colors', () => {
-    expect(resolveColorToRgba({
-      kind: ColorKind.Rgb,
-      syntax: 'modern',
-      components: [
-        { type: 'number', value: 255 },
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0 },
-      ],
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(255, 0, 0, 255));
-
-    expect(resolveColorToRgba({
-      kind: ColorKind.Rgb,
-      syntax: 'legacy',
-      components: [
-        { type: 'percentage', value: 0 },
-        { type: 'percentage', value: 100 },
-        { type: 'percentage', value: 0 },
-      ],
-      alpha: { type: 'number', value: 0.5 },
-    })).toBe(packRgba(0, 255, 0, 128));
-  });
-
-  it('clamps rgb channels and alpha', () => {
-    expect(resolveColorToRgba({
-      kind: ColorKind.Rgb,
-      syntax: 'modern',
-      components: [
-        { type: 'number', value: 300 },
-        { type: 'number', value: -10 },
-        { type: 'number', value: 12.4 },
-      ],
-      alpha: { type: 'number', value: 2 },
-    })).toBe(packRgba(255, 0, 12, 255));
-  });
-
-  it('resolves hsl colors', () => {
-    expect(resolveColorToRgba({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'number', value: 0 },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'percentage', value: 50 },
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(255, 0, 0, 255));
-
-    expect(resolveColorToRgba({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'number', value: 120 },
-      saturation: { type: 'number', value: 100 },
-      lightness: { type: 'number', value: 50 },
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(0, 255, 0, 255));
-
-    expect(resolveColorToRgba({
-      kind: ColorKind.Hsl,
-      syntax: 'legacy',
-      hue: { type: 'angle', value: 2 / 3, unit: 'turn' },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'percentage', value: 50 },
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(0, 0, 255, 255));
-  });
-
-  it('normalizes hsl hue', () => {
-    expect(resolveColorToRgba({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'number', value: 360 },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'percentage', value: 50 },
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(255, 0, 0, 255));
-
-    expect(resolveColorToRgba({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'number', value: -120 },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'percentage', value: 50 },
-      alpha: { type: 'number', value: 1 },
-    })).toBe(packRgba(0, 0, 255, 255));
-  });
-
-  it('returns null for unresolved color values', () => {
-    expect(resolveColorToRgba({ kind: ColorKind.CurrentColor })).toBeNull();
-    expect(resolveColorToRgba({
-      kind: ColorKind.System,
-      name: SystemColorName.CanvasText,
-    })).toBeNull();
   });
 });

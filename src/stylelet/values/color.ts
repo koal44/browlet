@@ -12,12 +12,11 @@ import { TokenKind } from '../parser/tokens';
 import { tryConsumeAngle, type AngleValue } from './angle';
 import type { CalculationContext } from './calc';
 import {
-  ColorName, colorNameFromText, namedColorRgba,
-  systemColorNameFromText, type SystemColorName,
+  ColorName, colorNameFromText, systemColorNameFromText,
+  type SystemColorName,
 } from './color-keywords';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { resolveAngle } from './numeric-literal/angle';
 import { tryConsumeNumber, type NumberValue } from './number';
 import { tryConsumePercentage, type PercentageValue } from './percentage';
 
@@ -237,7 +236,7 @@ function createLegacyRgbArgumentsConsumer<
     ([components, alpha]) => ok({
       kind: ColorKind.Rgb,
       syntax: 'legacy',
-      components: rgbComponents(components),
+      components,
       alpha: alpha[0],
     }),
   );
@@ -271,7 +270,7 @@ const consumeModernRgbArguments: TryComponentConsumer<RgbColor> = sequenceOf(
   ([components, alpha]) => ok({
     kind: ColorKind.Rgb,
     syntax: 'modern',
-    components: rgbComponents(components),
+    components,
     alpha: alpha[0],
   }),
 );
@@ -353,12 +352,6 @@ function tryConsumeComma(
   c: ComponentCursor,
 ): TryComponentConsumerResult<','> {
   return c.match(TokenKind.Comma) ? ok(',') : null;
-}
-
-function rgbComponents(
-  components: readonly RgbComponent[],
-): [RgbComponent, RgbComponent, RgbComponent] {
-  return [components[0]!, components[1]!, components[2]!];
 }
 
 /*
@@ -1085,7 +1078,7 @@ const consumePredefinedRgbParams: TryComponentConsumer<ColorSpaceParams> =
     ],
     ([[space], components]) => ok({
       space,
-      components: colorFunctionComponents(components),
+      components,
     }),
   );
 
@@ -1118,7 +1111,7 @@ const consumeXyzParams: TryComponentConsumer<ColorSpaceParams> = sequenceOf(
   ],
   ([[space], components]) => ok({
     space,
-    components: colorFunctionComponents(components),
+    components,
   }),
 );
 
@@ -1144,234 +1137,3 @@ const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent
   ],
   ([component]) => ok(component),
 );
-
-function colorFunctionComponents(
-  components: readonly ColorFunctionComponent[],
-): ColorFunctionComponents {
-  return [components[0]!, components[1]!, components[2]!];
-}
-
-export function resolveColorToRgba(color: ColorValue): number | null {
-  switch (color.kind) {
-    case ColorKind.Named:
-      return namedColorRgba(color.name) ?? null;
-
-    case ColorKind.Hex:
-      return resolveHexColorToRgba(color.text);
-
-    case ColorKind.Rgb:
-      return resolveRgbColorToRgba(color);
-
-    case ColorKind.Hsl:
-      return resolveHslColorToRgba(color);
-
-    case ColorKind.CurrentColor:
-    case ColorKind.System:
-    case ColorKind.Hwb:
-    case ColorKind.Lab:
-    case ColorKind.Lch:
-    case ColorKind.Oklab:
-    case ColorKind.Oklch:
-    case ColorKind.Color:
-      return null;
-  }
-}
-
-export function packRgba(r: number, g: number, b: number, a: number): number {
-  return ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
-}
-
-function byte(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  if (value >= 255) return 255;
-  return Math.round(value);
-}
-
-function alphaByte(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  if (value >= 1) return 255;
-  return Math.round(value * 255);
-}
-
-function resolveRgbColorToRgba(color: RgbColor): number | null {
-  const r = resolveRgbComponent(color.components[0]);
-  const g = resolveRgbComponent(color.components[1]);
-  const b = resolveRgbComponent(color.components[2]);
-  const alpha = resolveAlphaValue(color.alpha);
-
-  if (r === null || g === null || b === null || alpha === null) {
-    return null;
-  }
-
-  return packRgba(byte(r), byte(g), byte(b), alphaByte(alpha));
-}
-
-function resolveRgbComponent(component: RgbComponent): number | null {
-  if (component === 'none' || component.type === 'math') {
-    return null;
-  }
-
-  return component.type === 'percentage'
-    ? component.value * 2.55
-    : component.value;
-}
-
-function resolveAlphaValue(alpha: AlphaValue | 'none' | undefined): number | null {
-  if (alpha === undefined) {
-    return 1;
-  }
-
-  if (alpha === 'none' || alpha.type === 'math') {
-    return null;
-  }
-
-  return alpha.type === 'percentage'
-    ? alpha.value / 100
-    : alpha.value;
-}
-
-function resolveHexColorToRgba(text: string): number | null {
-  const hex = text[0] === '#' ? text.slice(1) : text;
-
-  if (hex.length === 3) {
-    const r = parseHexNibble(hex.charCodeAt(0));
-    const g = parseHexNibble(hex.charCodeAt(1));
-    const b = parseHexNibble(hex.charCodeAt(2));
-
-    if (r < 0 || g < 0 || b < 0) return null;
-
-    return packRgba(r * 17, g * 17, b * 17, 255);
-  }
-
-  if (hex.length === 4) {
-    const r = parseHexNibble(hex.charCodeAt(0));
-    const g = parseHexNibble(hex.charCodeAt(1));
-    const b = parseHexNibble(hex.charCodeAt(2));
-    const a = parseHexNibble(hex.charCodeAt(3));
-
-    if (r < 0 || g < 0 || b < 0 || a < 0) return null;
-
-    return packRgba(r * 17, g * 17, b * 17, a * 17);
-  }
-
-  if (hex.length === 6) {
-    const rgb = parseHexInt(hex);
-    if (rgb < 0) return null;
-
-    return ((rgb << 8) | 0xff) >>> 0;
-  }
-
-  if (hex.length === 8) {
-    const rgba = parseHexInt(hex);
-    if (rgba < 0) return null;
-
-    return rgba >>> 0;
-  }
-
-  return null;
-}
-
-function parseHexNibble(code: number): number {
-  // 0-9
-  if (code >= 48 && code <= 57) return code - 48;
-
-  // A-F
-  if (code >= 65 && code <= 70) return code - 55;
-
-  // a-f
-  if (code >= 97 && code <= 102) return code - 87;
-
-  return -1;
-}
-
-function parseHexInt(hex: string): number {
-  let value = 0;
-
-  for (let i = 0; i < hex.length; i++) {
-    const n = parseHexNibble(hex.charCodeAt(i));
-    if (n < 0) return -1;
-
-    value = (value * 16) + n;
-  }
-
-  return value >>> 0;
-}
-
-function resolveHslColorToRgba(color: HslColor): number | null {
-  let h = resolveHue(color.hue);
-  let s = resolveHslComponent(color.saturation);
-  let l = resolveHslComponent(color.lightness);
-  const a = resolveAlphaValue(color.alpha);
-
-  if (h === null || s === null || l === null || a === null) {
-    return null;
-  }
-
-  h = normalizeHue(h);
-  s = unit(s);
-  l = unit(l);
-
-  const c = (1 - Math.abs((2 * l) - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - (c / 2);
-
-  let r1 = 0;
-  let g1 = 0;
-  let b1 = 0;
-
-  if (h < 60) {
-    r1 = c;
-    g1 = x;
-  } else if (h < 120) {
-    r1 = x;
-    g1 = c;
-  } else if (h < 180) {
-    g1 = c;
-    b1 = x;
-  } else if (h < 240) {
-    g1 = x;
-    b1 = c;
-  } else if (h < 300) {
-    r1 = x;
-    b1 = c;
-  } else {
-    r1 = c;
-    b1 = x;
-  }
-
-  return packRgba(
-    byte((r1 + m) * 255),
-    byte((g1 + m) * 255),
-    byte((b1 + m) * 255),
-    alphaByte(a),
-  );
-}
-
-function resolveHue(hue: HueValue | 'none'): number | null {
-  if (hue === 'none' || hue.type === 'math') {
-    return null;
-  }
-
-  return hue.type === 'number'
-    ? hue.value
-    : resolveAngle(hue).value;
-}
-
-function resolveHslComponent(component: HslComponent): number | null {
-  if (component === 'none' || component.type === 'math') {
-    return null;
-  }
-
-  return component.value / 100;
-}
-
-function normalizeHue(h: number): number {
-  h = h % 360;
-  return h < 0 ? h + 360 : h;
-}
-
-function unit(value: number): number {
-  if (value <= 0) return 0;
-  if (value >= 1) return 1;
-  return value;
-}
