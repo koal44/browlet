@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ColorName, ColorSourceKind } from '../../../../src/stylelet/values/color';
+import { ColorKind } from '../../../../src/stylelet/values/color';
+import { ColorName } from '../../../../src/stylelet/values/color-keywords';
 import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
 import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../../../src/stylelet/parser/types';
 import type { LengthUnit } from '../../../../src/stylelet/values/numeric-literal/length';
@@ -30,10 +31,8 @@ const namedColorDecl = (prop: PropertyId.Color | PropertyId.BackgroundColor, nam
   kind: BlockItemAstKind.Declaration,
   prop,
   value: {
-    source: {
-      kind: ColorSourceKind.Named,
-      name,
-    },
+    kind: ColorKind.Named,
+    name,
   },
   important,
 });

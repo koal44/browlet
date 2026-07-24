@@ -39,19 +39,32 @@ export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerR
   return ok(component);
 }
 
-export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
+export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
   const start = c.pos();
   const component = c.next();
 
-  if (
-    !isTokenKind(component, TokenKind.Hash) ||
-    component.flag !== HashTokenFlag.Id
-  ) {
+  if (!isTokenKind(component, TokenKind.Hash)) {
     c.restore(start);
     return null;
   }
 
   return ok(component);
+}
+
+export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
+  const start = c.pos();
+  const result = tryConsumeHashToken(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  if (result.value.flag !== HashTokenFlag.Id) {
+    c.restore(start);
+    return null;
+  }
+
+  return result;
 }
 
 export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {

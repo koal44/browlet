@@ -1,11 +1,59 @@
-import { singleIdentToken, type ComponentValue } from '../parser/syntax';
+import type { ComponentCursor } from '../parser/component-cursor';
+import { createDelimConsumer, createFunctionalNotationConsumer, tryConsumeHashToken } from '../parser/component-consumers';
+import {
+  commaRepeat, one, oneOf, opt, repeat, sequenceOf, withComponentTrivia,
+} from '../parser/component-grammar';
+import {
+  isBad, ok,
+  type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { TokenKind } from '../parser/tokens';
+import { tryConsumeAngle, type AngleValue } from './angle';
+import type { CalculationContext } from './calc';
+import {
+  ColorName, colorNameFromText, namedColorRgba,
+  systemColorNameFromText, type SystemColorName,
+} from './color-keywords';
+import { tryConsumeIdent } from './ident';
+import { createKeywordConsumer } from './keyword';
+import { resolveAngle } from './numeric-literal/angle';
+import { tryConsumeNumber, type NumberValue } from './number';
+import { tryConsumePercentage, type PercentageValue } from './percentage';
 
-export type ColorValue = {
-  source: ColorSource;
-  rgba?: number;
-};
+/*
+ * <color> = <color-base> | currentColor | <system-color>
+ *
+ * <color-base> = <hex-color> | <color-function> | <named-color> | transparent
+ *
+ * <color-function> = <rgb()> | <rgba()> |
+ *                    <hsl()> | <hsla()> | <hwb()> |
+ *                    <lab()> | <lch()> | <oklab()> | <oklch()> |
+ *                    <color()>
+ *
+ * <alpha-value> = <number> | <percentage>
+ * <hue> = <number> | <angle>
+ */
 
-export enum ColorSourceKind {
+export type ColorValue = ColorBase | CurrentColor | SystemColor;
+
+export type ColorBase =
+  | HexColor
+  | ColorFunction
+  | NamedColor
+  | TransparentColor;
+
+export type ColorFunction =
+  | RgbColor
+  | HslColor
+  | HwbColor
+  | LabColor
+  | LchColor
+  | OklabColor
+  | OklchColor
+  | PredefinedColor;
+
+export enum ColorKind {
   Named = 1,
   CurrentColor,
   System,
@@ -18,664 +66,1113 @@ export enum ColorSourceKind {
   Oklab,
   Oklch,
   Color,
-  Raw,
 }
 
-export enum ColorName {
-  none = 0,
-  transparent,
-  aliceblue,
-  antiquewhite,
-  aqua,
-  aquamarine,
-  azure,
-  beige,
-  bisque,
-  black,
-  blanchedalmond,
-  blue,
-  blueviolet,
-  brown,
-  burlywood,
-  cadetblue,
-  chartreuse,
-  chocolate,
-  coral,
-  cornflowerblue,
-  cornsilk,
-  crimson,
-  cyan,
-  darkblue,
-  darkcyan,
-  darkgoldenrod,
-  darkgray,
-  darkgreen,
-  darkgrey,
-  darkkhaki,
-  darkmagenta,
-  darkolivegreen,
-  darkorange,
-  darkorchid,
-  darkred,
-  darksalmon,
-  darkseagreen,
-  darkslateblue,
-  darkslategray,
-  darkslategrey,
-  darkturquoise,
-  darkviolet,
-  deeppink,
-  deepskyblue,
-  dimgray,
-  dimgrey,
-  dodgerblue,
-  firebrick,
-  floralwhite,
-  forestgreen,
-  fuchsia,
-  gainsboro,
-  ghostwhite,
-  gold,
-  goldenrod,
-  gray,
-  green,
-  greenyellow,
-  grey,
-  honeydew,
-  hotpink,
-  indianred,
-  indigo,
-  ivory,
-  khaki,
-  lavender,
-  lavenderblush,
-  lawngreen,
-  lemonchiffon,
-  lightblue,
-  lightcoral,
-  lightcyan,
-  lightgoldenrodyellow,
-  lightgray,
-  lightgreen,
-  lightgrey,
-  lightpink,
-  lightsalmon,
-  lightseagreen,
-  lightskyblue,
-  lightslategray,
-  lightslategrey,
-  lightsteelblue,
-  lightyellow,
-  lime,
-  limegreen,
-  linen,
-  magenta,
-  maroon,
-  mediumaquamarine,
-  mediumblue,
-  mediumorchid,
-  mediumpurple,
-  mediumseagreen,
-  mediumslateblue,
-  mediumspringgreen,
-  mediumturquoise,
-  mediumvioletred,
-  midnightblue,
-  mintcream,
-  mistyrose,
-  moccasin,
-  navajowhite,
-  navy,
-  oldlace,
-  olive,
-  olivedrab,
-  orange,
-  orangered,
-  orchid,
-  palegoldenrod,
-  palegreen,
-  paleturquoise,
-  palevioletred,
-  papayawhip,
-  peachpuff,
-  peru,
-  pink,
-  plum,
-  powderblue,
-  purple,
-  rebeccapurple,
-  red,
-  rosybrown,
-  royalblue,
-  saddlebrown,
-  salmon,
-  sandybrown,
-  seagreen,
-  seashell,
-  sienna,
-  silver,
-  skyblue,
-  slateblue,
-  slategray,
-  slategrey,
-  snow,
-  springgreen,
-  steelblue,
-  tan,
-  teal,
-  thistle,
-  tomato,
-  turquoise,
-  violet,
-  wheat,
-  white,
-  whitesmoke,
-  yellow,
-  yellowgreen,
+type AlphaValue = NumberValue | PercentageValue;
+type HueValue = NumberValue | AngleValue;
+
+export function parseColorValue(
+  input: ParserInput,
+  context: CalculationContext = {},
+): ColorValue | null {
+  const result = parseAsComponentGrammar(
+    input,
+    withComponentTrivia(tryConsumeColor),
+    context,
+  );
+
+  return result === null || isBad(result)
+    ? null
+    : result.value;
 }
 
-export const ColorNameByText: { [name: string]: ColorName | undefined; } = {
-  transparent: ColorName.transparent,
-  aliceblue: ColorName.aliceblue,
-  antiquewhite: ColorName.antiquewhite,
-  aqua: ColorName.aqua,
-  aquamarine: ColorName.aquamarine,
-  azure: ColorName.azure,
-  beige: ColorName.beige,
-  bisque: ColorName.bisque,
-  black: ColorName.black,
-  blanchedalmond: ColorName.blanchedalmond,
-  blue: ColorName.blue,
-  blueviolet: ColorName.blueviolet,
-  brown: ColorName.brown,
-  burlywood: ColorName.burlywood,
-  cadetblue: ColorName.cadetblue,
-  chartreuse: ColorName.chartreuse,
-  chocolate: ColorName.chocolate,
-  coral: ColorName.coral,
-  cornflowerblue: ColorName.cornflowerblue,
-  cornsilk: ColorName.cornsilk,
-  crimson: ColorName.crimson,
-  cyan: ColorName.cyan,
-  darkblue: ColorName.darkblue,
-  darkcyan: ColorName.darkcyan,
-  darkgoldenrod: ColorName.darkgoldenrod,
-  darkgray: ColorName.darkgray,
-  darkgreen: ColorName.darkgreen,
-  darkgrey: ColorName.darkgrey,
-  darkkhaki: ColorName.darkkhaki,
-  darkmagenta: ColorName.darkmagenta,
-  darkolivegreen: ColorName.darkolivegreen,
-  darkorange: ColorName.darkorange,
-  darkorchid: ColorName.darkorchid,
-  darkred: ColorName.darkred,
-  darksalmon: ColorName.darksalmon,
-  darkseagreen: ColorName.darkseagreen,
-  darkslateblue: ColorName.darkslateblue,
-  darkslategray: ColorName.darkslategray,
-  darkslategrey: ColorName.darkslategrey,
-  darkturquoise: ColorName.darkturquoise,
-  darkviolet: ColorName.darkviolet,
-  deeppink: ColorName.deeppink,
-  deepskyblue: ColorName.deepskyblue,
-  dimgray: ColorName.dimgray,
-  dimgrey: ColorName.dimgrey,
-  dodgerblue: ColorName.dodgerblue,
-  firebrick: ColorName.firebrick,
-  floralwhite: ColorName.floralwhite,
-  forestgreen: ColorName.forestgreen,
-  fuchsia: ColorName.fuchsia,
-  gainsboro: ColorName.gainsboro,
-  ghostwhite: ColorName.ghostwhite,
-  gold: ColorName.gold,
-  goldenrod: ColorName.goldenrod,
-  gray: ColorName.gray,
-  green: ColorName.green,
-  greenyellow: ColorName.greenyellow,
-  grey: ColorName.grey,
-  honeydew: ColorName.honeydew,
-  hotpink: ColorName.hotpink,
-  indianred: ColorName.indianred,
-  indigo: ColorName.indigo,
-  ivory: ColorName.ivory,
-  khaki: ColorName.khaki,
-  lavender: ColorName.lavender,
-  lavenderblush: ColorName.lavenderblush,
-  lawngreen: ColorName.lawngreen,
-  lemonchiffon: ColorName.lemonchiffon,
-  lightblue: ColorName.lightblue,
-  lightcoral: ColorName.lightcoral,
-  lightcyan: ColorName.lightcyan,
-  lightgoldenrodyellow: ColorName.lightgoldenrodyellow,
-  lightgray: ColorName.lightgray,
-  lightgreen: ColorName.lightgreen,
-  lightgrey: ColorName.lightgrey,
-  lightpink: ColorName.lightpink,
-  lightsalmon: ColorName.lightsalmon,
-  lightseagreen: ColorName.lightseagreen,
-  lightskyblue: ColorName.lightskyblue,
-  lightslategray: ColorName.lightslategray,
-  lightslategrey: ColorName.lightslategrey,
-  lightsteelblue: ColorName.lightsteelblue,
-  lightyellow: ColorName.lightyellow,
-  lime: ColorName.lime,
-  limegreen: ColorName.limegreen,
-  linen: ColorName.linen,
-  magenta: ColorName.magenta,
-  maroon: ColorName.maroon,
-  mediumaquamarine: ColorName.mediumaquamarine,
-  mediumblue: ColorName.mediumblue,
-  mediumorchid: ColorName.mediumorchid,
-  mediumpurple: ColorName.mediumpurple,
-  mediumseagreen: ColorName.mediumseagreen,
-  mediumslateblue: ColorName.mediumslateblue,
-  mediumspringgreen: ColorName.mediumspringgreen,
-  mediumturquoise: ColorName.mediumturquoise,
-  mediumvioletred: ColorName.mediumvioletred,
-  midnightblue: ColorName.midnightblue,
-  mintcream: ColorName.mintcream,
-  mistyrose: ColorName.mistyrose,
-  moccasin: ColorName.moccasin,
-  navajowhite: ColorName.navajowhite,
-  navy: ColorName.navy,
-  oldlace: ColorName.oldlace,
-  olive: ColorName.olive,
-  olivedrab: ColorName.olivedrab,
-  orange: ColorName.orange,
-  orangered: ColorName.orangered,
-  orchid: ColorName.orchid,
-  palegoldenrod: ColorName.palegoldenrod,
-  palegreen: ColorName.palegreen,
-  paleturquoise: ColorName.paleturquoise,
-  palevioletred: ColorName.palevioletred,
-  papayawhip: ColorName.papayawhip,
-  peachpuff: ColorName.peachpuff,
-  peru: ColorName.peru,
-  pink: ColorName.pink,
-  plum: ColorName.plum,
-  powderblue: ColorName.powderblue,
-  purple: ColorName.purple,
-  rebeccapurple: ColorName.rebeccapurple,
-  red: ColorName.red,
-  rosybrown: ColorName.rosybrown,
-  royalblue: ColorName.royalblue,
-  saddlebrown: ColorName.saddlebrown,
-  salmon: ColorName.salmon,
-  sandybrown: ColorName.sandybrown,
-  seagreen: ColorName.seagreen,
-  seashell: ColorName.seashell,
-  sienna: ColorName.sienna,
-  silver: ColorName.silver,
-  skyblue: ColorName.skyblue,
-  slateblue: ColorName.slateblue,
-  slategray: ColorName.slategray,
-  slategrey: ColorName.slategrey,
-  snow: ColorName.snow,
-  springgreen: ColorName.springgreen,
-  steelblue: ColorName.steelblue,
-  tan: ColorName.tan,
-  teal: ColorName.teal,
-  thistle: ColorName.thistle,
-  tomato: ColorName.tomato,
-  turquoise: ColorName.turquoise,
-  violet: ColorName.violet,
-  wheat: ColorName.wheat,
-  white: ColorName.white,
-  whitesmoke: ColorName.whitesmoke,
-  yellow: ColorName.yellow,
-  yellowgreen: ColorName.yellowgreen,
-};
-
-export const ColorRgba: Partial<Record<ColorName, number>> = {
-  [ColorName.transparent]: 0x00000000,
-  [ColorName.aliceblue]: opaque(0xf0f8ff),
-  [ColorName.antiquewhite]: opaque(0xfaebd7),
-  [ColorName.aqua]: opaque(0x00ffff),
-  [ColorName.aquamarine]: opaque(0x7fffd4),
-  [ColorName.azure]: opaque(0xf0ffff),
-  [ColorName.beige]: opaque(0xf5f5dc),
-  [ColorName.bisque]: opaque(0xffe4c4),
-  [ColorName.black]: opaque(0x000000),
-  [ColorName.blanchedalmond]: opaque(0xffebcd),
-  [ColorName.blue]: opaque(0x0000ff),
-  [ColorName.blueviolet]: opaque(0x8a2be2),
-  [ColorName.brown]: opaque(0xa52a2a),
-  [ColorName.burlywood]: opaque(0xdeb887),
-  [ColorName.cadetblue]: opaque(0x5f9ea0),
-  [ColorName.chartreuse]: opaque(0x7fff00),
-  [ColorName.chocolate]: opaque(0xd2691e),
-  [ColorName.coral]: opaque(0xff7f50),
-  [ColorName.cornflowerblue]: opaque(0x6495ed),
-  [ColorName.cornsilk]: opaque(0xfff8dc),
-  [ColorName.crimson]: opaque(0xdc143c),
-  [ColorName.cyan]: opaque(0x00ffff),
-  [ColorName.darkblue]: opaque(0x00008b),
-  [ColorName.darkcyan]: opaque(0x008b8b),
-  [ColorName.darkgoldenrod]: opaque(0xb8860b),
-  [ColorName.darkgray]: opaque(0xa9a9a9),
-  [ColorName.darkgreen]: opaque(0x006400),
-  [ColorName.darkgrey]: opaque(0xa9a9a9),
-  [ColorName.darkkhaki]: opaque(0xbdb76b),
-  [ColorName.darkmagenta]: opaque(0x8b008b),
-  [ColorName.darkolivegreen]: opaque(0x556b2f),
-  [ColorName.darkorange]: opaque(0xff8c00),
-  [ColorName.darkorchid]: opaque(0x9932cc),
-  [ColorName.darkred]: opaque(0x8b0000),
-  [ColorName.darksalmon]: opaque(0xe9967a),
-  [ColorName.darkseagreen]: opaque(0x8fbc8f),
-  [ColorName.darkslateblue]: opaque(0x483d8b),
-  [ColorName.darkslategray]: opaque(0x2f4f4f),
-  [ColorName.darkslategrey]: opaque(0x2f4f4f),
-  [ColorName.darkturquoise]: opaque(0x00ced1),
-  [ColorName.darkviolet]: opaque(0x9400d3),
-  [ColorName.deeppink]: opaque(0xff1493),
-  [ColorName.deepskyblue]: opaque(0x00bfff),
-  [ColorName.dimgray]: opaque(0x696969),
-  [ColorName.dimgrey]: opaque(0x696969),
-  [ColorName.dodgerblue]: opaque(0x1e90ff),
-  [ColorName.firebrick]: opaque(0xb22222),
-  [ColorName.floralwhite]: opaque(0xfffaf0),
-  [ColorName.forestgreen]: opaque(0x228b22),
-  [ColorName.fuchsia]: opaque(0xff00ff),
-  [ColorName.gainsboro]: opaque(0xdcdcdc),
-  [ColorName.ghostwhite]: opaque(0xf8f8ff),
-  [ColorName.gold]: opaque(0xffd700),
-  [ColorName.goldenrod]: opaque(0xdaa520),
-  [ColorName.gray]: opaque(0x808080),
-  [ColorName.green]: opaque(0x008000),
-  [ColorName.greenyellow]: opaque(0xadff2f),
-  [ColorName.grey]: opaque(0x808080),
-  [ColorName.honeydew]: opaque(0xf0fff0),
-  [ColorName.hotpink]: opaque(0xff69b4),
-  [ColorName.indianred]: opaque(0xcd5c5c),
-  [ColorName.indigo]: opaque(0x4b0082),
-  [ColorName.ivory]: opaque(0xfffff0),
-  [ColorName.khaki]: opaque(0xf0e68c),
-  [ColorName.lavender]: opaque(0xe6e6fa),
-  [ColorName.lavenderblush]: opaque(0xfff0f5),
-  [ColorName.lawngreen]: opaque(0x7cfc00),
-  [ColorName.lemonchiffon]: opaque(0xfffacd),
-  [ColorName.lightblue]: opaque(0xadd8e6),
-  [ColorName.lightcoral]: opaque(0xf08080),
-  [ColorName.lightcyan]: opaque(0xe0ffff),
-  [ColorName.lightgoldenrodyellow]: opaque(0xfafad2),
-  [ColorName.lightgray]: opaque(0xd3d3d3),
-  [ColorName.lightgreen]: opaque(0x90ee90),
-  [ColorName.lightgrey]: opaque(0xd3d3d3),
-  [ColorName.lightpink]: opaque(0xffb6c1),
-  [ColorName.lightsalmon]: opaque(0xffa07a),
-  [ColorName.lightseagreen]: opaque(0x20b2aa),
-  [ColorName.lightskyblue]: opaque(0x87cefa),
-  [ColorName.lightslategray]: opaque(0x778899),
-  [ColorName.lightslategrey]: opaque(0x778899),
-  [ColorName.lightsteelblue]: opaque(0xb0c4de),
-  [ColorName.lightyellow]: opaque(0xffffe0),
-  [ColorName.lime]: opaque(0x00ff00),
-  [ColorName.limegreen]: opaque(0x32cd32),
-  [ColorName.linen]: opaque(0xfaf0e6),
-  [ColorName.magenta]: opaque(0xff00ff),
-  [ColorName.maroon]: opaque(0x800000),
-  [ColorName.mediumaquamarine]: opaque(0x66cdaa),
-  [ColorName.mediumblue]: opaque(0x0000cd),
-  [ColorName.mediumorchid]: opaque(0xba55d3),
-  [ColorName.mediumpurple]: opaque(0x9370db),
-  [ColorName.mediumseagreen]: opaque(0x3cb371),
-  [ColorName.mediumslateblue]: opaque(0x7b68ee),
-  [ColorName.mediumspringgreen]: opaque(0x00fa9a),
-  [ColorName.mediumturquoise]: opaque(0x48d1cc),
-  [ColorName.mediumvioletred]: opaque(0xc71585),
-  [ColorName.midnightblue]: opaque(0x191970),
-  [ColorName.mintcream]: opaque(0xf5fffa),
-  [ColorName.mistyrose]: opaque(0xffe4e1),
-  [ColorName.moccasin]: opaque(0xffe4b5),
-  [ColorName.navajowhite]: opaque(0xffdead),
-  [ColorName.navy]: opaque(0x000080),
-  [ColorName.oldlace]: opaque(0xfdf5e6),
-  [ColorName.olive]: opaque(0x808000),
-  [ColorName.olivedrab]: opaque(0x6b8e23),
-  [ColorName.orange]: opaque(0xffa500),
-  [ColorName.orangered]: opaque(0xff4500),
-  [ColorName.orchid]: opaque(0xda70d6),
-  [ColorName.palegoldenrod]: opaque(0xeee8aa),
-  [ColorName.palegreen]: opaque(0x98fb98),
-  [ColorName.paleturquoise]: opaque(0xafeeee),
-  [ColorName.palevioletred]: opaque(0xdb7093),
-  [ColorName.papayawhip]: opaque(0xffefd5),
-  [ColorName.peachpuff]: opaque(0xffdab9),
-  [ColorName.peru]: opaque(0xcd853f),
-  [ColorName.pink]: opaque(0xffc0cb),
-  [ColorName.plum]: opaque(0xdda0dd),
-  [ColorName.powderblue]: opaque(0xb0e0e6),
-  [ColorName.purple]: opaque(0x800080),
-  [ColorName.rebeccapurple]: opaque(0x663399),
-  [ColorName.red]: opaque(0xff0000),
-  [ColorName.rosybrown]: opaque(0xbc8f8f),
-  [ColorName.royalblue]: opaque(0x4169e1),
-  [ColorName.saddlebrown]: opaque(0x8b4513),
-  [ColorName.salmon]: opaque(0xfa8072),
-  [ColorName.sandybrown]: opaque(0xf4a460),
-  [ColorName.seagreen]: opaque(0x2e8b57),
-  [ColorName.seashell]: opaque(0xfff5ee),
-  [ColorName.sienna]: opaque(0xa0522d),
-  [ColorName.silver]: opaque(0xc0c0c0),
-  [ColorName.skyblue]: opaque(0x87ceeb),
-  [ColorName.slateblue]: opaque(0x6a5acd),
-  [ColorName.slategray]: opaque(0x708090),
-  [ColorName.slategrey]: opaque(0x708090),
-  [ColorName.snow]: opaque(0xfffafa),
-  [ColorName.springgreen]: opaque(0x00ff7f),
-  [ColorName.steelblue]: opaque(0x4682b4),
-  [ColorName.tan]: opaque(0xd2b48c),
-  [ColorName.teal]: opaque(0x008080),
-  [ColorName.thistle]: opaque(0xd8bfd8),
-  [ColorName.tomato]: opaque(0xff6347),
-  [ColorName.turquoise]: opaque(0x40e0d0),
-  [ColorName.violet]: opaque(0xee82ee),
-  [ColorName.wheat]: opaque(0xf5deb3),
-  [ColorName.white]: opaque(0xffffff),
-  [ColorName.whitesmoke]: opaque(0xf5f5f5),
-  [ColorName.yellow]: opaque(0xffff00),
-  [ColorName.yellowgreen]: opaque(0x9acd32),
-};
-
-export type ColorSource =
-  | NamedColorSource
-  | CurrentColorSource
-  | SystemColorSource
-  | HexColorSource
-  | RgbColorSource
-  | HslColorSource
-  | HwbColorSource
-  | LabColorSource
-  | LchColorSource
-  | OklabColorSource
-  | OklchColorSource
-  | ColorFunctionSource
-  | RawColorSource;
-
-export enum SystemColorName {
-  AccentColor = 1,
-  AccentColorText,
-  ActiveText,
-  ButtonBorder,
-  ButtonFace,
-  ButtonText,
-  Canvas,
-  CanvasText,
-  Field,
-  FieldText,
-  GrayText,
-  Highlight,
-  HighlightText,
-  LinkText,
-  Mark,
-  MarkText,
-  SelectedItem,
-  SelectedItemText,
-  VisitedText,
+export function tryConsumeColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorValue> {
+  return consumeColor(c);
 }
 
-export const SystemColorNameByText: { [name: string]: SystemColorName | undefined; } = {
-  accentcolor: SystemColorName.AccentColor,
-  accentcolortext: SystemColorName.AccentColorText,
-  activetext: SystemColorName.ActiveText,
-  buttonborder: SystemColorName.ButtonBorder,
-  buttonface: SystemColorName.ButtonFace,
-  buttontext: SystemColorName.ButtonText,
-  canvas: SystemColorName.Canvas,
-  canvastext: SystemColorName.CanvasText,
-  field: SystemColorName.Field,
-  fieldtext: SystemColorName.FieldText,
-  graytext: SystemColorName.GrayText,
-  highlight: SystemColorName.Highlight,
-  highlighttext: SystemColorName.HighlightText,
-  linktext: SystemColorName.LinkText,
-  mark: SystemColorName.Mark,
-  marktext: SystemColorName.MarkText,
-  selecteditem: SystemColorName.SelectedItem,
-  selecteditemtext: SystemColorName.SelectedItemText,
-  visitedtext: SystemColorName.VisitedText,
+const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
+  [
+    one(tryConsumeColorBase),
+    one(tryConsumeCurrentColor),
+    one(tryConsumeSystemColor),
+  ],
+  ([value]) => ok(value),
+);
+
+function tryConsumeColorBase(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorBase> {
+  return consumeColorBase(c);
+}
+
+const consumeColorBase: TryComponentConsumer<ColorBase> = oneOf(
+  [
+    one(tryConsumeHexColor),
+    one(tryConsumeColorFunction),
+    one(tryConsumeNamedColor),
+    one(tryConsumeTransparent),
+  ],
+  ([value]) => ok(value),
+);
+
+function tryConsumeColorFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorFunction> {
+  return consumeColorFunction(c);
+}
+
+const consumeColorFunction: TryComponentConsumer<ColorFunction> = oneOf(
+  [
+    one(tryConsumeRgbFunction),
+    one(tryConsumeRgbaFunction),
+    one(tryConsumeHslFunction),
+    one(tryConsumeHslaFunction),
+    one(tryConsumeHwbFunction),
+    one(tryConsumeLabFunction),
+    one(tryConsumeLchFunction),
+    one(tryConsumeOklabFunction),
+    one(tryConsumeOklchFunction),
+    one(tryConsumeColorFunctionNotation),
+  ],
+  ([value]) => ok(value),
+);
+
+/*
+ * <rgb()> = [ <legacy-rgb-syntax> | <modern-rgb-syntax> ]
+ * <rgba()> = [ <legacy-rgba-syntax> | <modern-rgba-syntax> ]
+ *
+ * <legacy-rgb-syntax> = rgb( <percentage>#{3} , <alpha-value>? ) |
+ *                       rgb( <number>#{3} , <alpha-value>? )
+ * <legacy-rgba-syntax> = rgba( <percentage>#{3} , <alpha-value>? ) |
+ *                        rgba( <number>#{3} , <alpha-value>? )
+ *
+ * <modern-rgb-syntax> = rgb(
+ *   [ <number> | <percentage> | none ]{3}
+ *   [ / [ <alpha-value> | none ] ]? )
+ * <modern-rgba-syntax> = rgba(
+ *   [ <number> | <percentage> | none ]{3}
+ *   [ / [ <alpha-value> | none ] ]? )
+ */
+
+export type RgbColor = {
+  kind: ColorKind.Rgb;
+  syntax: 'legacy' | 'modern';
+  components: [RgbComponent, RgbComponent, RgbComponent];
+  alpha?: AlphaValue | 'none';
 };
 
-export type NamedColorSource = {
-  kind: ColorSourceKind.Named;
-  name: ColorName;
+type RgbComponent = NumberValue | PercentageValue | 'none';
+
+function tryConsumeRgbFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeRgbFunction(c);
+}
+
+const consumeRgbFunction = createRgbFunctionConsumer('rgb');
+
+function tryConsumeRgbaFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeRgbaFunction(c);
+}
+
+const consumeRgbaFunction = createRgbFunctionConsumer('rgba');
+
+function createRgbFunctionConsumer(
+  name: 'rgb' | 'rgba',
+): TryComponentConsumer<RgbColor> {
+  return createFunctionalNotationConsumer(
+    name,
+    tryConsumeRgbArguments,
+    (color) => color,
+  );
+}
+
+function tryConsumeRgbArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeRgbArguments(c);
+}
+
+const consumeRgbArguments: TryComponentConsumer<RgbColor> = oneOf(
+  [
+    one(tryConsumeLegacyPercentageRgbArguments),
+    one(tryConsumeLegacyNumberRgbArguments),
+    one(tryConsumeModernRgbArguments),
+  ],
+  ([source]) => ok(source),
+);
+
+function tryConsumeLegacyPercentageRgbArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeLegacyPercentageRgbArguments(c);
+}
+
+const consumeLegacyPercentageRgbArguments =
+  createLegacyRgbArgumentsConsumer(tryConsumePercentage);
+
+function tryConsumeLegacyNumberRgbArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeLegacyNumberRgbArguments(c);
+}
+
+const consumeLegacyNumberRgbArguments =
+  createLegacyRgbArgumentsConsumer(tryConsumeNumber);
+
+function createLegacyRgbArgumentsConsumer<
+  Component extends NumberValue | PercentageValue,
+>(
+  tryConsumeComponent: TryComponentConsumer<Component>,
+): TryComponentConsumer<RgbColor> {
+  return sequenceOf(
+    [
+      commaRepeat(tryConsumeComponent, 3, 3),
+      opt(tryConsumeLegacyAlpha),
+    ],
+    ([components, alpha]) => ok({
+      kind: ColorKind.Rgb,
+      syntax: 'legacy',
+      components: rgbComponents(components),
+      alpha: alpha[0],
+    }),
+  );
+}
+
+function tryConsumeLegacyAlpha(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AlphaValue> {
+  return consumeLegacyAlpha(c);
+}
+
+const consumeLegacyAlpha: TryComponentConsumer<AlphaValue> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeComma)),
+    one(withComponentTrivia(tryConsumeAlphaValue)),
+  ],
+  ([, [alpha]]) => ok(alpha),
+);
+
+function tryConsumeModernRgbArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbColor> {
+  return consumeModernRgbArguments(c);
+}
+
+const consumeModernRgbArguments: TryComponentConsumer<RgbColor> = sequenceOf(
+  [
+    repeat(withComponentTrivia(tryConsumeRgbComponent), 3, 3),
+    opt(tryConsumeModernAlpha),
+  ],
+  ([components, alpha]) => ok({
+    kind: ColorKind.Rgb,
+    syntax: 'modern',
+    components: rgbComponents(components),
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeModernAlpha(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AlphaValue | 'none'> {
+  return consumeModernAlpha(c);
+}
+
+const consumeModernAlpha: TryComponentConsumer<AlphaValue | 'none'> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeSlash)),
+    one(withComponentTrivia(tryConsumeAlphaOrNone)),
+  ],
+  ([, [alpha]]) => ok(alpha),
+);
+
+function tryConsumeRgbComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RgbComponent> {
+  return consumeRgbComponent(c);
+}
+
+const consumeRgbComponent: TryComponentConsumer<RgbComponent> = oneOf(
+  [
+    one(tryConsumeNumber),
+    one(tryConsumePercentage),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+function tryConsumeAlphaOrNone(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AlphaValue | 'none'> {
+  return consumeAlphaOrNone(c);
+}
+
+const consumeAlphaOrNone: TryComponentConsumer<AlphaValue | 'none'> = oneOf(
+  [
+    one(tryConsumeAlphaValue),
+    one(tryConsumeNone),
+  ],
+  ([alpha]) => ok(alpha),
+);
+
+function tryConsumeAlphaValue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AlphaValue> {
+  return consumeAlphaValue(c);
+}
+
+const consumeAlphaValue: TryComponentConsumer<AlphaValue> = oneOf(
+  [
+    one(tryConsumeNumber),
+    one(tryConsumePercentage),
+  ],
+  ([alpha]) => ok(alpha),
+);
+
+function tryConsumeNone(
+  c: ComponentCursor,
+): TryComponentConsumerResult<'none'> {
+  return consumeNone(c);
+}
+
+const consumeNone = createKeywordConsumer('none');
+
+function tryConsumeSlash(
+  c: ComponentCursor,
+): TryComponentConsumerResult<'/'> {
+  return consumeSlash(c);
+}
+
+const consumeSlash = createDelimConsumer('/');
+
+function tryConsumeComma(
+  c: ComponentCursor,
+): TryComponentConsumerResult<','> {
+  return c.match(TokenKind.Comma) ? ok(',') : null;
+}
+
+function rgbComponents(
+  components: readonly RgbComponent[],
+): [RgbComponent, RgbComponent, RgbComponent] {
+  return [components[0]!, components[1]!, components[2]!];
+}
+
+/*
+ * <hex-color> = <hash-token> whose value consists of
+ *               3, 4, 6, or 8 hexadecimal digits
+ */
+
+export type HexColor = {
+  kind: ColorKind.Hex;
+  text: string;
 };
 
-export type CurrentColorSource = {
-  kind: ColorSourceKind.CurrentColor;
+function tryConsumeHexColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HexColor> {
+  const start = c.pos();
+  const result = tryConsumeHashToken(c);
+
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  const token = result.value;
+
+  if (!isHexColorValue(token.value)) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok({
+    kind: ColorKind.Hex,
+    text: `#${token.value}`,
+  });
+}
+
+function isHexColorValue(value: string): boolean {
+  return (
+    [3, 4, 6, 8].includes(value.length) &&
+    /^[\da-f]+$/i.test(value)
+  );
+}
+
+/*
+ * <named-color>
+ *
+ * Named colors are CSS identifiers recognized by colorNameFromText.
+ */
+
+export type NamedColor = {
+  kind: ColorKind.Named;
+  name: Exclude<ColorName, ColorName.transparent>;
 };
 
-export type SystemColorSource = {
-  kind: ColorSourceKind.System;
+export type TransparentColor = {
+  kind: ColorKind.Named;
+  name: ColorName.transparent;
+};
+
+function tryConsumeNamedColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<NamedColor> {
+  const start = c.pos();
+  const ident = tryConsumeIdent(c);
+
+  if (ident === null || isBad(ident)) {
+    return ident;
+  }
+
+  const name = colorNameFromText(ident.value.value);
+
+  if (name === undefined || name === ColorName.transparent) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok({
+    kind: ColorKind.Named,
+    name,
+  });
+}
+
+/*
+ * <system-color>
+ *
+ * System colors are CSS identifiers recognized by systemColorNameFromText.
+ */
+
+export type SystemColor = {
+  kind: ColorKind.System;
   name: SystemColorName;
 };
 
-export type HexColorSource = {
-  kind: ColorSourceKind.Hex;
-  text: string;
-};
+function tryConsumeSystemColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<SystemColor> {
+  const start = c.pos();
+  const ident = tryConsumeIdent(c);
 
-export type RgbColorSource = {
-  kind: ColorSourceKind.Rgb;
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-};
+  if (ident === null || isBad(ident)) {
+    return ident;
+  }
 
-export type HslColorSource = {
-  kind: ColorSourceKind.Hsl;
-  h: number;
-  s: number;
-  l: number;
-  a: number;
-};
+  const name = systemColorNameFromText(ident.value.value);
 
-export type HwbColorSource = {
-  kind: ColorSourceKind.Hwb;
-  h: number;
-  w: number;
-  b: number;
-  a: number;
-};
+  if (name === undefined) {
+    c.restore(start);
+    return null;
+  }
 
-export type LabColorSource = {
-  kind: ColorSourceKind.Lab;
-  l: number;
-  a: number;
-  b: number;
-  alpha: number;
-};
-
-export type LchColorSource = {
-  kind: ColorSourceKind.Lch;
-  l: number;
-  c: number;
-  h: number;
-  alpha: number;
-};
-
-export type OklabColorSource = {
-  kind: ColorSourceKind.Oklab;
-  l: number;
-  a: number;
-  b: number;
-  alpha: number;
-};
-
-export type OklchColorSource = {
-  kind: ColorSourceKind.Oklch;
-  l: number;
-  c: number;
-  h: number;
-  alpha: number;
-};
-
-export type ColorFunctionSource = {
-  kind: ColorSourceKind.Color;
-  space: string;
-  channels: number[];
-  alpha: number;
-};
-
-export type RawColorSource = {
-  kind: ColorSourceKind.Raw;
-  text: string;
-  reason?: string;
-};
-
-export function opaque(rgb: number): number {
-  return (((rgb & 0xffffff) << 8) | 0xff) >>> 0;
+  return ok({
+    kind: ColorKind.System,
+    name,
+  });
 }
 
-export function namedColorSource(text: string): NamedColorSource | null {
-  const name = ColorNameByText[text.toLowerCase()];
-  return name === undefined ? null : { kind: ColorSourceKind.Named, name };
+/*
+ * transparent
+ */
+
+function tryConsumeTransparent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<TransparentColor> {
+  const keyword = tryConsumeTransparentKeyword(c);
+
+  if (keyword === null || isBad(keyword)) {
+    return keyword;
+  }
+
+  return ok({
+    kind: ColorKind.Named,
+    name: ColorName.transparent,
+  });
 }
 
-export function namedColorRgba(name: ColorName): number | undefined {
-  return ColorRgba[name];
+const tryConsumeTransparentKeyword = createKeywordConsumer('transparent');
+
+/*
+ * currentcolor
+ */
+
+export type CurrentColor = {
+  kind: ColorKind.CurrentColor;
+};
+
+function tryConsumeCurrentColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<CurrentColor> {
+  const keyword = tryConsumeCurrentColorKeyword(c);
+
+  if (keyword === null || isBad(keyword)) {
+    return keyword;
+  }
+
+  return ok({
+    kind: ColorKind.CurrentColor,
+  });
+}
+
+const tryConsumeCurrentColorKeyword = createKeywordConsumer('currentcolor');
+
+/*
+ * <hsl()> = [ <legacy-hsl-syntax> | <modern-hsl-syntax> ]
+ * <hsla()> = [ <legacy-hsla-syntax> | <modern-hsla-syntax> ]
+ *
+ * <modern-hsl-syntax> = hsl(
+ *   [ <hue> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ * <modern-hsla-syntax> = hsla(
+ *   [ <hue> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ *
+ * <legacy-hsl-syntax> =
+ *   hsl( <hue>, <percentage>, <percentage>, <alpha-value>? )
+ * <legacy-hsla-syntax> =
+ *   hsla( <hue>, <percentage>, <percentage>, <alpha-value>? )
+ */
+
+export type HslColor = {
+  kind: ColorKind.Hsl;
+  syntax: 'legacy' | 'modern';
+  hue: HueValue | 'none';
+  saturation: HslComponent;
+  lightness: HslComponent;
+  alpha?: AlphaValue | 'none';
+};
+
+type HslComponent = NumberValue | PercentageValue | 'none';
+
+function tryConsumeHslFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslColor> {
+  return consumeHslFunction(c);
+}
+
+const consumeHslFunction = createHslFunctionConsumer('hsl');
+
+function tryConsumeHslaFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslColor> {
+  return consumeHslaFunction(c);
+}
+
+const consumeHslaFunction = createHslFunctionConsumer('hsla');
+
+function createHslFunctionConsumer(
+  name: 'hsl' | 'hsla',
+): TryComponentConsumer<HslColor> {
+  return createFunctionalNotationConsumer(
+    name,
+    tryConsumeHslArguments,
+    (color) => color,
+  );
+}
+
+function tryConsumeHslArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslColor> {
+  return consumeHslArguments(c);
+}
+
+const consumeHslArguments: TryComponentConsumer<HslColor> = oneOf(
+  [
+    one(tryConsumeLegacyHslArguments),
+    one(tryConsumeModernHslArguments),
+  ],
+  ([source]) => ok(source),
+);
+
+function tryConsumeLegacyHslArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslColor> {
+  return consumeLegacyHslArguments(c);
+}
+
+const consumeLegacyHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeHue)),
+    one(tryConsumeLegacyHslPercentage),
+    one(tryConsumeLegacyHslPercentage),
+    opt(tryConsumeLegacyAlpha),
+  ],
+  ([[hue], [saturation], [lightness], alpha]) => ok({
+    kind: ColorKind.Hsl,
+    syntax: 'legacy',
+    hue,
+    saturation,
+    lightness,
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeLegacyHslPercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PercentageValue> {
+  return consumeLegacyHslPercentage(c);
+}
+
+const consumeLegacyHslPercentage: TryComponentConsumer<PercentageValue> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeComma)),
+    one(withComponentTrivia(tryConsumePercentage)),
+  ],
+  ([, [percentage]]) => ok(percentage),
+);
+
+function tryConsumeModernHslArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslColor> {
+  return consumeModernHslArguments(c);
+}
+
+const consumeModernHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeHueOrNone)),
+    one(withComponentTrivia(tryConsumeHslComponent)),
+    one(withComponentTrivia(tryConsumeHslComponent)),
+    opt(tryConsumeModernAlpha),
+  ],
+  ([[hue], [saturation], [lightness], alpha]) => ok({
+    kind: ColorKind.Hsl,
+    syntax: 'modern',
+    hue,
+    saturation,
+    lightness,
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeHueOrNone(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HueValue | 'none'> {
+  return consumeHueOrNone(c);
+}
+
+const consumeHueOrNone: TryComponentConsumer<HueValue | 'none'> = oneOf(
+  [
+    one(tryConsumeHue),
+    one(tryConsumeNone),
+  ],
+  ([hue]) => ok(hue),
+);
+
+function tryConsumeHue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HueValue> {
+  return consumeHue(c);
+}
+
+const consumeHue: TryComponentConsumer<HueValue> = oneOf(
+  [
+    one(tryConsumeNumber),
+    one(tryConsumeAngle),
+  ],
+  ([hue]) => ok(hue),
+);
+
+function tryConsumeHslComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HslComponent> {
+  return consumeHslComponent(c);
+}
+
+const consumeHslComponent: TryComponentConsumer<HslComponent> = oneOf(
+  [
+    one(tryConsumePercentage),
+    one(tryConsumeNumber),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+/*
+ * <hwb()> = hwb(
+ *   [ <hue> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ */
+
+export type HwbColor = {
+  kind: ColorKind.Hwb;
+  hue: HueValue | 'none';
+  whiteness: HwbComponent;
+  blackness: HwbComponent;
+  alpha?: AlphaValue | 'none';
+};
+
+type HwbComponent = NumberValue | PercentageValue | 'none';
+
+function tryConsumeHwbFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HwbColor> {
+  return consumeHwbFunction(c);
+}
+
+const consumeHwbFunction = createFunctionalNotationConsumer(
+  'hwb',
+  tryConsumeHwbArguments,
+  (color) => color,
+);
+
+function tryConsumeHwbArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HwbColor> {
+  return consumeHwbArguments(c);
+}
+
+const consumeHwbArguments: TryComponentConsumer<HwbColor> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeHueOrNone)),
+    one(withComponentTrivia(tryConsumeHwbComponent)),
+    one(withComponentTrivia(tryConsumeHwbComponent)),
+    opt(tryConsumeModernAlpha),
+  ],
+  ([[hue], [whiteness], [blackness], alpha]) => ok({
+    kind: ColorKind.Hwb,
+    hue,
+    whiteness,
+    blackness,
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeHwbComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HwbComponent> {
+  return consumeHwbComponent(c);
+}
+
+const consumeHwbComponent: TryComponentConsumer<HwbComponent> = oneOf(
+  [
+    one(tryConsumePercentage),
+    one(tryConsumeNumber),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+/*
+ * <lab()> = lab(
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ *
+ * <oklab()> = oklab(
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ */
+
+export type LabColor = {
+  kind: ColorKind.Lab;
+  lightness: LabComponent;
+  a: LabComponent;
+  b: LabComponent;
+  alpha?: AlphaValue | 'none';
+};
+
+export type OklabColor = {
+  kind: ColorKind.Oklab;
+  lightness: LabComponent;
+  a: LabComponent;
+  b: LabComponent;
+  alpha?: AlphaValue | 'none';
+};
+
+type LabComponent = NumberValue | PercentageValue | 'none';
+
+type LabArguments = {
+  lightness: LabComponent;
+  a: LabComponent;
+  b: LabComponent;
+  alpha?: AlphaValue | 'none';
+};
+
+function tryConsumeLabFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LabColor> {
+  return consumeLabFunction(c);
+}
+
+const consumeLabFunction: TryComponentConsumer<LabColor> =
+  createFunctionalNotationConsumer(
+    'lab',
+    tryConsumeLabArguments,
+    (arguments_) => ({
+      kind: ColorKind.Lab,
+      ...arguments_,
+    }),
+  );
+
+function tryConsumeOklabFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<OklabColor> {
+  return consumeOklabFunction(c);
+}
+
+const consumeOklabFunction: TryComponentConsumer<OklabColor> =
+  createFunctionalNotationConsumer(
+    'oklab',
+    tryConsumeLabArguments,
+    (arguments_) => ({
+      kind: ColorKind.Oklab,
+      ...arguments_,
+    }),
+  );
+
+function tryConsumeLabArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LabArguments> {
+  return consumeLabArguments(c);
+}
+
+const consumeLabArguments: TryComponentConsumer<LabArguments> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeLabComponent)),
+    one(withComponentTrivia(tryConsumeLabComponent)),
+    one(withComponentTrivia(tryConsumeLabComponent)),
+    opt(tryConsumeModernAlpha),
+  ],
+  ([[lightness], [a], [b], alpha]) => ok({
+    lightness,
+    a,
+    b,
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeLabComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LabComponent> {
+  return consumeLabComponent(c);
+}
+
+const consumeLabComponent: TryComponentConsumer<LabComponent> = oneOf(
+  [
+    one(tryConsumePercentage),
+    one(tryConsumeNumber),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+/*
+ * <lch()> = lch(
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <hue> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ *
+ * <oklch()> = oklch(
+ *   [ <percentage> | <number> | none ]
+ *   [ <percentage> | <number> | none ]
+ *   [ <hue> | none ]
+ *   [ / [ <alpha-value> | none ] ]? )
+ */
+
+export type LchColor = {
+  kind: ColorKind.Lch;
+  lightness: LchComponent;
+  chroma: LchComponent;
+  hue: HueValue | 'none';
+  alpha?: AlphaValue | 'none';
+};
+
+export type OklchColor = {
+  kind: ColorKind.Oklch;
+  lightness: LchComponent;
+  chroma: LchComponent;
+  hue: HueValue | 'none';
+  alpha?: AlphaValue | 'none';
+};
+
+type LchComponent = NumberValue | PercentageValue | 'none';
+
+type LchArguments = {
+  lightness: LchComponent;
+  chroma: LchComponent;
+  hue: HueValue | 'none';
+  alpha?: AlphaValue | 'none';
+};
+
+function tryConsumeLchFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LchColor> {
+  return consumeLchFunction(c);
+}
+
+const consumeLchFunction: TryComponentConsumer<LchColor> =
+  createFunctionalNotationConsumer(
+    'lch',
+    tryConsumeLchArguments,
+    (arguments_) => ({
+      kind: ColorKind.Lch,
+      ...arguments_,
+    }),
+  );
+
+function tryConsumeOklchFunction(
+  c: ComponentCursor,
+): TryComponentConsumerResult<OklchColor> {
+  return consumeOklchFunction(c);
+}
+
+const consumeOklchFunction: TryComponentConsumer<OklchColor> =
+  createFunctionalNotationConsumer(
+    'oklch',
+    tryConsumeLchArguments,
+    (arguments_) => ({
+      kind: ColorKind.Oklch,
+      ...arguments_,
+    }),
+  );
+
+function tryConsumeLchArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LchArguments> {
+  return consumeLchArguments(c);
+}
+
+const consumeLchArguments: TryComponentConsumer<LchArguments> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeLchComponent)),
+    one(withComponentTrivia(tryConsumeLchComponent)),
+    one(withComponentTrivia(tryConsumeHueOrNone)),
+    opt(tryConsumeModernAlpha),
+  ],
+  ([[lightness], [chroma], [hue], alpha]) => ok({
+    lightness,
+    chroma,
+    hue,
+    alpha: alpha[0],
+  }),
+);
+
+function tryConsumeLchComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LchComponent> {
+  return consumeLchComponent(c);
+}
+
+const consumeLchComponent: TryComponentConsumer<LchComponent> = oneOf(
+  [
+    one(tryConsumePercentage),
+    one(tryConsumeNumber),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+/*
+ * <color()> = color( <colorspace-params>
+ *                    [ / [ <alpha-value> | none ] ]? )
+ *
+ * <colorspace-params> = [ <predefined-rgb-params> | <xyz-params> ]
+ *
+ * <predefined-rgb-params> =
+ *   <predefined-rgb> [ <number> | <percentage> | none ]{3}
+ *
+ * <predefined-rgb> = srgb | srgb-linear |
+ *                    display-p3 | display-p3-linear |
+ *                    a98-rgb | prophoto-rgb | rec2020
+ *
+ * <xyz-params> = <xyz-space> [ <number> | <percentage> | none ]{3}
+ * <xyz-space> = xyz | xyz-d50 | xyz-d65
+ */
+
+export type PredefinedColor = {
+  kind: ColorKind.Color;
+  space: PredefinedColorSpace;
+  components: ColorFunctionComponents;
+  alpha?: AlphaValue | 'none';
+};
+
+type PredefinedColorSpace = PredefinedRgb | XyzSpace;
+
+type PredefinedRgb =
+  | 'srgb'
+  | 'srgb-linear'
+  | 'display-p3'
+  | 'display-p3-linear'
+  | 'a98-rgb'
+  | 'prophoto-rgb'
+  | 'rec2020';
+
+type XyzSpace = 'xyz' | 'xyz-d50' | 'xyz-d65';
+
+type ColorFunctionComponent = NumberValue | PercentageValue | 'none';
+
+type ColorFunctionComponents = [
+  ColorFunctionComponent,
+  ColorFunctionComponent,
+  ColorFunctionComponent,
+];
+
+type ColorSpaceParams = {
+  space: PredefinedColorSpace;
+  components: ColorFunctionComponents;
+};
+
+function tryConsumeColorFunctionNotation(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PredefinedColor> {
+  return consumeColorFunctionNotation(c);
+}
+
+const consumeColorFunctionNotation: TryComponentConsumer<PredefinedColor> =
+  createFunctionalNotationConsumer(
+    'color',
+    tryConsumeColorFunctionArguments,
+    (color) => color,
+  );
+
+function tryConsumeColorFunctionArguments(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PredefinedColor> {
+  return consumeColorFunctionArguments(c);
+}
+
+const consumeColorFunctionArguments: TryComponentConsumer<PredefinedColor> =
+  sequenceOf(
+    [
+      one(tryConsumeColorSpaceParams),
+      opt(tryConsumeModernAlpha),
+    ],
+    ([[params], alpha]) => ok({
+      kind: ColorKind.Color,
+      ...params,
+      alpha: alpha[0],
+    }),
+  );
+
+function tryConsumeColorSpaceParams(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorSpaceParams> {
+  return consumeColorSpaceParams(c);
+}
+
+const consumeColorSpaceParams: TryComponentConsumer<ColorSpaceParams> = oneOf(
+  [
+    one(tryConsumePredefinedRgbParams),
+    one(tryConsumeXyzParams),
+  ],
+  ([params]) => ok(params),
+);
+
+function tryConsumePredefinedRgbParams(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorSpaceParams> {
+  return consumePredefinedRgbParams(c);
+}
+
+const consumePredefinedRgbParams: TryComponentConsumer<ColorSpaceParams> =
+  sequenceOf(
+    [
+      one(withComponentTrivia(tryConsumePredefinedRgb)),
+      repeat(withComponentTrivia(tryConsumeColorFunctionComponent), 3, 3),
+    ],
+    ([[space], components]) => ok({
+      space,
+      components: colorFunctionComponents(components),
+    }),
+  );
+
+function tryConsumePredefinedRgb(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PredefinedRgb> {
+  return consumePredefinedRgb(c);
+}
+
+const consumePredefinedRgb = createKeywordConsumer(
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'display-p3-linear',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+);
+
+function tryConsumeXyzParams(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorSpaceParams> {
+  return consumeXyzParams(c);
+}
+
+const consumeXyzParams: TryComponentConsumer<ColorSpaceParams> = sequenceOf(
+  [
+    one(withComponentTrivia(tryConsumeXyzSpace)),
+    repeat(withComponentTrivia(tryConsumeColorFunctionComponent), 3, 3),
+  ],
+  ([[space], components]) => ok({
+    space,
+    components: colorFunctionComponents(components),
+  }),
+);
+
+function tryConsumeXyzSpace(
+  c: ComponentCursor,
+): TryComponentConsumerResult<XyzSpace> {
+  return consumeXyzSpace(c);
+}
+
+const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
+
+function tryConsumeColorFunctionComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorFunctionComponent> {
+  return consumeColorFunctionComponent(c);
+}
+
+const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent> = oneOf(
+  [
+    one(tryConsumeNumber),
+    one(tryConsumePercentage),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
+
+function colorFunctionComponents(
+  components: readonly ColorFunctionComponent[],
+): ColorFunctionComponents {
+  return [components[0]!, components[1]!, components[2]!];
 }
 
 export function resolveColorToRgba(color: ColorValue): number | null {
-  if (color.rgba !== undefined) return color.rgba;
+  switch (color.kind) {
+    case ColorKind.Named:
+      return namedColorRgba(color.name) ?? null;
 
-  const rgba = resolveColorSourceToRgba(color.source);
-  if (rgba === null) return null;
+    case ColorKind.Hex:
+      return resolveHexColorToRgba(color.text);
 
-  color.rgba = rgba;
-  return rgba;
-}
+    case ColorKind.Rgb:
+      return resolveRgbColorToRgba(color);
 
-export function resolveColorSourceToRgba(source: ColorSource): number | null {
-  switch (source.kind) {
-    case ColorSourceKind.Named:
-      return ColorRgba[source.name] ?? null;
+    case ColorKind.Hsl:
+      return resolveHslColorToRgba(color);
 
-    case ColorSourceKind.Hex:
-      return resolveHexColorToRgba(source.text);
-
-    case ColorSourceKind.Rgb:
-      return packRgba(
-        byte(source.r),
-        byte(source.g),
-        byte(source.b),
-        alphaByte(source.a),
-      );
-
-    case ColorSourceKind.Hsl:
-      return resolveHslColorToRgba(source.h, source.s, source.l, source.a);
-
-    case ColorSourceKind.CurrentColor:
-    case ColorSourceKind.System:
-    case ColorSourceKind.Hwb:
-    case ColorSourceKind.Lab:
-    case ColorSourceKind.Lch:
-    case ColorSourceKind.Oklab:
-    case ColorSourceKind.Oklch:
-    case ColorSourceKind.Color:
-    case ColorSourceKind.Raw:
+    case ColorKind.CurrentColor:
+    case ColorKind.System:
+    case ColorKind.Hwb:
+    case ColorKind.Lab:
+    case ColorKind.Lch:
+    case ColorKind.Oklab:
+    case ColorKind.Oklch:
+    case ColorKind.Color:
       return null;
   }
 }
@@ -694,6 +1191,43 @@ function alphaByte(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
   if (value >= 1) return 255;
   return Math.round(value * 255);
+}
+
+function resolveRgbColorToRgba(color: RgbColor): number | null {
+  const r = resolveRgbComponent(color.components[0]);
+  const g = resolveRgbComponent(color.components[1]);
+  const b = resolveRgbComponent(color.components[2]);
+  const alpha = resolveAlphaValue(color.alpha);
+
+  if (r === null || g === null || b === null || alpha === null) {
+    return null;
+  }
+
+  return packRgba(byte(r), byte(g), byte(b), alphaByte(alpha));
+}
+
+function resolveRgbComponent(component: RgbComponent): number | null {
+  if (component === 'none' || component.type === 'math') {
+    return null;
+  }
+
+  return component.type === 'percentage'
+    ? component.value * 2.55
+    : component.value;
+}
+
+function resolveAlphaValue(alpha: AlphaValue | 'none' | undefined): number | null {
+  if (alpha === undefined) {
+    return 1;
+  }
+
+  if (alpha === 'none' || alpha.type === 'math') {
+    return null;
+  }
+
+  return alpha.type === 'percentage'
+    ? alpha.value / 100
+    : alpha.value;
 }
 
 function resolveHexColorToRgba(text: string): number | null {
@@ -724,7 +1258,7 @@ function resolveHexColorToRgba(text: string): number | null {
     const rgb = parseHexInt(hex);
     if (rgb < 0) return null;
 
-    return opaque(rgb);
+    return ((rgb << 8) | 0xff) >>> 0;
   }
 
   if (hex.length === 8) {
@@ -763,7 +1297,16 @@ function parseHexInt(hex: string): number {
   return value >>> 0;
 }
 
-function resolveHslColorToRgba(h: number, s: number, l: number, a: number): number {
+function resolveHslColorToRgba(color: HslColor): number | null {
+  let h = resolveHue(color.hue);
+  let s = resolveHslComponent(color.saturation);
+  let l = resolveHslComponent(color.lightness);
+  const a = resolveAlphaValue(color.alpha);
+
+  if (h === null || s === null || l === null || a === null) {
+    return null;
+  }
+
   h = normalizeHue(h);
   s = unit(s);
   l = unit(l);
@@ -804,6 +1347,24 @@ function resolveHslColorToRgba(h: number, s: number, l: number, a: number): numb
   );
 }
 
+function resolveHue(hue: HueValue | 'none'): number | null {
+  if (hue === 'none' || hue.type === 'math') {
+    return null;
+  }
+
+  return hue.type === 'number'
+    ? hue.value
+    : resolveAngle(hue).value;
+}
+
+function resolveHslComponent(component: HslComponent): number | null {
+  if (component === 'none' || component.type === 'math') {
+    return null;
+  }
+
+  return component.value / 100;
+}
+
 function normalizeHue(h: number): number {
   h = h % 360;
   return h < 0 ? h + 360 : h;
@@ -813,30 +1374,4 @@ function unit(value: number): number {
   if (value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
-}
-
-export function parseColorValue(components: readonly ComponentValue[]): ColorValue | null {
-  const token = singleIdentToken(components);
-  if (token === null) return null;
-
-  const text = token.value.toLowerCase();
-
-  if (text === 'currentcolor') {
-    return {
-      source: {
-        kind: ColorSourceKind.CurrentColor,
-      },
-    };
-  }
-
-  const name = ColorNameByText[text];
-  if (name === undefined) return null;
-
-  const source: ColorSource = {
-    kind: ColorSourceKind.Named,
-    name,
-  };
-
-  const rgba = namedColorRgba(name);
-  return rgba === undefined ? { source } : { source, rgba };
 }
