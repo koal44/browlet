@@ -2465,3 +2465,182 @@ function transformColorVector(
     ([a, b, c]) => a * x + b * y + c * z,
   ) as ColorVector;
 }
+
+//  ██████      ███    ██     ██ ██     ██    ███
+// ██    ██    ██ ██   ███   ███ ███   ███   ██ ██
+// ██         ██   ██  ████ ████ ████ ████  ██   ██
+// ██   ████ ██     ██ ██ ███ ██ ██ ███ ██ ██     ██
+// ██    ██  █████████ ██     ██ ██     ██ █████████
+// ██    ██  ██     ██ ██     ██ ██     ██ ██     ██
+//  ██████   ██     ██ ██     ██ ██     ██ ██     ██
+
+const GAMUT_MAPPING_JND = 0.02;
+const GAMUT_MAPPING_EPSILON = 0.0001;
+
+export function gamutMapNumericColor(
+  origin: NumericColor,
+  destination: ColorSpace,
+): NumericColor {
+  if (!hasGamutLimits(destination)) {
+    return convertNumericColor(origin, destination);
+  }
+
+  const originOklch = convertNumericColorToOklch(origin);
+  const [lightness, originChroma, hue] =
+    componentsForConversion(originOklch);
+
+  if (lightness >= 1) {
+    return convertNumericColor({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [1, 0, 0],
+      alpha: origin.alpha,
+    }, destination);
+  }
+
+  if (lightness <= 0) {
+    return convertNumericColor({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0, 0, 0],
+      alpha: origin.alpha,
+    }, destination);
+  }
+
+  if (isNumericColorInGamut(originOklch, destination)) {
+    return convertNumericColor(originOklch, destination);
+  }
+
+  let current: NumericColor = {
+    ...originOklch,
+    components: [lightness, originChroma, hue],
+  };
+  let clipped = clipNumericColorToGamut(current, destination);
+  let difference = deltaEOK(clipped, current);
+
+  if (difference < GAMUT_MAPPING_JND) {
+    return clipped;
+  }
+
+  let min = 0;
+  let max = originChroma;
+  let minInGamut = true;
+
+  while (max - min > GAMUT_MAPPING_EPSILON) {
+    const chroma = (min + max) / 2;
+
+    current = {
+      ...current,
+      components: [lightness, chroma, hue],
+    };
+
+    if (minInGamut && isNumericColorInGamut(current, destination)) {
+      min = chroma;
+      continue;
+    }
+
+    clipped = clipNumericColorToGamut(current, destination);
+    difference = deltaEOK(clipped, current);
+
+    if (difference < GAMUT_MAPPING_JND) {
+      if (GAMUT_MAPPING_JND - difference < GAMUT_MAPPING_EPSILON) {
+        return clipped;
+      }
+
+      minInGamut = false;
+      min = chroma;
+    } else {
+      max = chroma;
+    }
+  }
+
+  return clipped;
+}
+
+function hasGamutLimits(space: ColorSpace): boolean {
+  switch (space) {
+    case 'lab':
+    case 'lch':
+    case 'oklab':
+    case 'oklch':
+    case 'xyz-d50':
+    case 'xyz-d65':
+      return false;
+    default:
+      return true;
+  }
+}
+
+function convertNumericColorToOklch(value: NumericColor): NumericColor {
+  const prepared = replaceMissingColorComponents(
+    prepareNumericColorForConversion(value),
+  );
+
+  return prepared.space === 'oklab'
+    ? convertOklabToOklch(prepared)
+    : convertNumericColor(prepared, 'oklch');
+}
+
+function isNumericColorInGamut(
+  value: NumericColor,
+  destination: ColorSpace,
+): boolean {
+  const gamutSpace = destination === 'hsl' || destination === 'hwb'
+    ? 'srgb'
+    : destination;
+  const converted = convertNumericColor(value, gamutSpace);
+
+  return converted.components.every(
+    (component) =>
+      component !== undefined
+      && component >= 0
+      && component <= 1,
+  );
+}
+
+function clipNumericColorToGamut(
+  value: NumericColor,
+  destination: ColorSpace,
+): NumericColor {
+  const converted = convertNumericColor(value, destination);
+  const [first, second, third] = converted.components;
+
+  switch (destination) {
+    case 'hsl':
+    case 'hwb':
+      return {
+        ...converted,
+        components: [
+          first,
+          clamp(second ?? 0, 0, 100),
+          clamp(third ?? 0, 0, 100),
+        ],
+      };
+    default:
+      return {
+        ...converted,
+        components: mapColorVector(
+          componentsForConversion(converted),
+          (component) => clamp(component, 0, 1),
+        ),
+      };
+  }
+}
+
+export function deltaEOK(one: NumericColor, two: NumericColor): number {
+  const [lightness1, a1, b1] = componentsForConversion(
+    convertNumericColor(one, 'oklab'),
+  );
+  const [lightness2, a2, b2] = componentsForConversion(
+    convertNumericColor(two, 'oklab'),
+  );
+  const deltaLightness = lightness1 - lightness2;
+  const deltaA = a1 - a2;
+  const deltaB = b1 - b2;
+
+  return Math.sqrt(
+    deltaLightness ** 2
+    + deltaA ** 2
+    + deltaB ** 2,
+  );
+}
