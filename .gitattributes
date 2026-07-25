@@ -1,6 +1,5 @@
 * text=auto eol=lf
 
 dist/** linguist-generated=true
-test/browser/fixtures/** linguist-vendored=true
-test/perf/engines/** linguist-vendored=true
-examples/** linguist-documentation=true
+test/selectlet/browser/fixtures/** linguist-vendored=true
+test/selectlet/perf/engines/** linguist-vendored=true
