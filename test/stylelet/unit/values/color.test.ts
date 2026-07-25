@@ -1,9 +1,68 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, parseColorValue, serializeColorValue,
+  ColorKind, convertNumericColor, parseColorValue, serializeColorValue,
   type NumericColor,
 } from '../../../../src/stylelet/values/color';
 import { ColorName, colorNameFromText, namedColorRgba, SystemColorName } from '../../../../src/stylelet/values/color-keywords';
+
+type ColorVector = readonly [number, number, number];
+type ColorConversionReference = readonly [
+  rgb: ColorVector,
+  srgbLch: ColorVector,
+  srgbXyz: ColorVector,
+  displayP3Lch: ColorVector,
+  displayP3Xyz: ColorVector,
+];
+
+// csswg-drafts/css-color-4/tests.js
+const colorConversionReferences = [
+  [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+  [[0, 0, 0.5], [11.257649830405711, 78.4855230871109, 301.36852485669147], [0.038621048285762835, 0.015448419314305135, 0.20340417336894157], [12.125050622409844, 80.98311488018534, 301.3685234204596], [0.04242665379485494, 0.016970661517941975, 0.2234470433195694]],
+  [[0, 0, 1], [29.5675825705695, 131.20704008299427, 301.36852485669147], [0.1804375, 0.072175, 0.9503041], [31.017647321468736, 135.3823531039849, 301.3685234204596], [0.1982172852343625, 0.079286914093745, 1.043944368900976]],
+  [[0, 0.5, 0], [46.10200487720031, 67.79764688120514, 134.39124629270788], [0.07653599625318884, 0.15307199250637768, 0.025511991616358264], [45.382094598457606, 88.59863623716036, 136.00886646919355], [0.0568638160351965, 0.14806050212937955, 0.00965611970408998]],
+  [[0, 0.5, 0.5], [47.805245436929056, 31.600981799674866, 196.45241125035645], [0.11515704453895168, 0.1685204118206828, 0.22891616498529982], [47.29038116180345, 42.30133919358886, 194.47526369092208], [0.09929046983005144, 0.1650311636473215, 0.23310316302365938]],
+  [[0, 0.5, 1], [53.390836258164114, 73.33499428844263, 277.0144049848567], [0.2569734962531888, 0.2252469925063777, 0.9758160916163583], [53.46621809897093, 77.86398465185749, 274.3831905635118], [0.255081101269559, 0.22734741622312454, 1.053600488605066]],
+  [[0, 1, 0], [87.81813005327668, 113.33973734241219, 134.3912462927079], [0.3575761, 0.7151522, 0.119192], [86.61463043852204, 148.1134909831133, 136.00886646919355], [0.26566769316909306, 0.6917385218365064, 0.04511338185890264]],
+  [[0, 1, 0.5], [88.44071092427411, 85.6929438417646, 147.73052605574094], [0.39619714828576286, 0.7306006193143052, 0.3225961733689416], [87.31412287701264, 109.91612392701252, 152.10424733448326], [0.308094346963948, 0.7087091833544484, 0.26856042517847206]],
+  [[0, 1, 1], [90.66549786839941, 52.82848508316594, 196.45241125035645], [0.5380136, 0.7873272, 1.0694961], [89.80478094983177, 70.7166530696031, 194.47526369092208], [0.46388497840345555, 0.7710254359302514, 1.0890577507598787]],
+  [[0.5, 0, 0], [26.047161670467766, 62.28793882063699, 39.09692484182021], [0.0882826382551959, 0.04552075006566379, 0.004138250005969436], [27.191500659719573, 73.69635368760655, 39.93345411121776], [0.104146200774186, 0.04900997683491106, 0]],
+  [[0.5, 0, 0.5], [29.563247268933154, 66.64193335495227, 327.1093519251607], [0.12690368654095874, 0.06096916937996893, 0.207542423374911], [30.848376103967077, 73.20545387928618, 329.8103804861144], [0.14657285456904096, 0.06598063835285303, 0.2234470433195694]],
+  [[0.5, 0, 1], [39.28279656389248, 121.2547640439368, 308.00468721507167], [0.2687201382551959, 0.1176957500656638, 0.9544423500059694], [40.930250649478054, 127.31433110210455, 309.3255378668548], [0.3023634860085485, 0.12829689092865607, 1.043944368900976]],
+  [[0.5, 0.5, 0], [51.957594419557566, 56.65236969828312, 99.57459669758012], [0.16481863450838474, 0.19859274257204146, 0.0296502416223277], [51.8131467040147, 73.73887377501569, 98.13571529011948], [0.1610100168093825, 0.1970704789642906, 0.00965611970408998]],
+  [[0.5, 0.5, 0.5], [53.38896687883651, 0.000017583257676680256, 157.37860193127446], [0.2034396827941476, 0.2140411618863466, 0.23305441499126928], [53.3888651604252, 0.008755270717235005, 254.8841151658154], [0.20343667060423745, 0.21404114048223258, 0.23310316302365938]],
+  [[0.5, 0.5, 1], [58.19651042992987, 69.76315231291977, 291.8303324780847], [0.34525613450838477, 0.27076774257204145, 0.9799543416223276], [58.637484950362335, 74.18813521931754, 292.1733198003908], [0.359227302043745, 0.27635739305803564, 1.053600488605066]],
+  [[0.5, 1, 0], [90.068036829637, 103.92399790206163, 126.18719683920217], [0.4458587382551959, 0.7606729500656638, 0.12333025000596945], [89.10440611727756, 133.51195139098468, 126.51982278628302], [0.36981389394327907, 0.7407484986714175, 0.04511338185890264]],
+  [[0.5, 1, 0.5], [90.66470674310524, 74.1904047582473, 138.60917527085977], [0.48447978654095875, 0.776121369379969, 0.326734423374911], [89.77146389413845, 91.18473102158605, 142.3429556503696], [0.412240547738134, 0.7577191601893595, 0.26856042517847206]],
+  [[0.5, 1, 1], [92.80039769160194, 38.81312541835366, 197.27291249073542], [0.6262962382551959, 0.8328479500656638, 1.0736343500059695], [92.15152655660088, 51.01305777173378, 195.47622379141126], [0.5680311791776416, 0.8200354127651625, 1.0890577507598787]],
+  [[1, 0, 0], [54.29173546502365, 106.83900393835908, 40.85263489758937], [0.4124564, 0.2126729, 0.0193339], [56.20476764886537, 136.7568948664298, 46.30795018347639], [0.4865709486482162, 0.2289745640697488, 0]],
+  [[1, 0, 0.5], [55.6322739970431, 84.04016736731634, 4.1833907823003695], [0.45107744828576285, 0.22812131931430513, 0.22273807336894158], [57.6000486421556, 97.56633503099316, 5.590189197210951], [0.5289976024430711, 0.24594522558769077, 0.2234470433195694]],
+  [[1, 0, 1], [60.1697008006315, 111.40768994055931, 327.10935192516075], [0.5928939, 0.2848479, 0.969638], [62.318096376500435, 122.380160616024, 329.8103804861144], [0.6847882338825787, 0.3082614781634938, 1.043944368900976]],
+  [[1, 0.5, 0], [67.72075953447306, 87.65882387386596, 58.557095621037966], [0.48899239625318885, 0.36574489250637765, 0.04484589161635827], [68.703219054922, 117.8986875235393, 61.43138053688231], [0.5434347646834127, 0.37703506619912835, 0.00965611970408998]],
+  [[1, 0.5, 0.5], [68.67300154466754, 54.958026775352145, 25.810960732929495], [0.5276134445389516, 0.3811933118206828, 0.24825006498529983], [69.72447161538403, 66.36489541902458, 25.282022609563732], [0.5858614184782676, 0.3940057277170703, 0.23310316302365938]],
+  [[1, 0.5, 1], [71.99816641415508, 74.5865173880577, 325.81024490310034], [0.6694298962531888, 0.43791989250637764, 0.9951499916163582], [73.28046439269039, 83.94353995709928, 328.8783770719978], [0.7416520499177752, 0.45632198029287335, 1.053600488605066]],
+  [[1, 1, 0], [97.60712733040384, 94.707781122248, 99.57459669758006], [0.7700325, 0.9278251, 0.1385259], [97.36564894741473, 123.27189762543868, 98.13571529011946], [0.7522386418173093, 0.9207130859062552, 0.04511338185890264]],
+  [[1, 1, 0.5], [98.1277751014117, 61.22609652360603, 101.47173621025149], [0.8086535482857629, 0.9432735193143051, 0.34193007336894155], [97.93976302926873, 71.24063681412848, 100.89159287690555], [0.7946652956121643, 0.9376837474241972, 0.26856042517847206]],
+  [[1, 1, 1], [100.00000357370622, 0.00002939455720908227, 157.3786019654702], [0.95047, 1.0000001, 1.08883], [99.99983352742068, 0.014636497416960078, 254.8841151652981], [0.9504559270516717, 1.0000000000000002, 1.0890577507598787]],
+] as const satisfies readonly ColorConversionReference[];
+
+function expectColorVectorCloseTo(
+  actual: NumericColor['components'],
+  expected: ColorVector,
+  precision: number,
+): void {
+  for (const index of [0, 1, 2] as const) {
+    const component = actual[index];
+
+    if (component === undefined) {
+      // The reference table predates powerless hues and retains numerical
+      // noise for neutral colors.
+      expect(index).toBe(2);
+      expect(expected[1]).toBeLessThan(0.02);
+    } else {
+      expect(component).toBeCloseTo(expected[index], precision);
+    }
+  }
+}
 
 describe('color values', () => {
   it('parses named colors case-insensitively', () => {
@@ -572,6 +631,376 @@ describe('color values', () => {
     for (const [color, serialized] of cases) {
       expect(serializeColorValue(color)).toBe(serialized);
     }
+  });
+
+  it.each(colorConversionReferences)(
+    'matches the CSS Working Group conversion references for RGB %j',
+    (rgb, srgbLch, srgbXyz, displayP3Lch, displayP3Xyz) => {
+      const srgb: NumericColor = {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [...rgb],
+        alpha: 1,
+      };
+      const displayP3: NumericColor = {
+        ...srgb,
+        space: 'display-p3',
+      };
+
+      expectColorVectorCloseTo(
+        convertNumericColor(srgb, 'xyz-d65').components,
+        srgbXyz,
+        3,
+      );
+      expectColorVectorCloseTo(
+        convertNumericColor(srgb, 'lch').components,
+        srgbLch,
+        1,
+      );
+      expectColorVectorCloseTo(
+        convertNumericColor(displayP3, 'xyz-d65').components,
+        displayP3Xyz,
+        3,
+      );
+      expectColorVectorCloseTo(
+        convertNumericColor(displayP3, 'lch').components,
+        displayP3Lch,
+        1,
+      );
+    },
+  );
+
+  it('converts numerical HSL and HWB colors to sRGB', () => {
+    const hsl: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [120, 100, 50],
+      alpha: 0.5,
+    };
+    const hwb: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'hwb',
+      components: [120, 0, 0],
+      alpha: 0.5,
+    };
+
+    expect(convertNumericColor(hsl, 'srgb')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0, 1, 0],
+      alpha: 0.5,
+    });
+    expect(convertNumericColor(hwb, 'srgb')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0, 1, 0],
+      alpha: 0.5,
+    });
+  });
+
+  it('converts numerical sRGB colors to HSL and HWB', () => {
+    const rgb: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0, 1, 0],
+      alpha: 0.5,
+    };
+
+    expect(convertNumericColor(rgb, 'hsl')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [120, 100, 50],
+      alpha: 0.5,
+    });
+    expect(convertNumericColor(rgb, 'hwb')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'hwb',
+      components: [120, 0, 0],
+      alpha: 0.5,
+    });
+  });
+
+  it('replaces missing components with zero during color conversion', () => {
+    const hsl: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [undefined, 100, 50],
+      alpha: undefined,
+    };
+    const gray: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0.5, 0.5, 0.5],
+      alpha: 1,
+    };
+
+    expect(convertNumericColor(hsl, 'srgb').components).toEqual([1, 0, 0]);
+    expect(convertNumericColor(gray, 'hsl').components[0]).toBeUndefined();
+    expect(convertNumericColor(gray, 'hwb').components[0]).toBeUndefined();
+  });
+
+  it('routes numerical color conversion through sRGB', () => {
+    const hsl: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [120, 100, 50],
+      alpha: 0.5,
+    };
+
+    expect(convertNumericColor(hsl, 'hwb')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'hwb',
+      components: [120, 0, 0],
+      alpha: 0.5,
+    });
+    expect(convertNumericColor(hsl, 'srgb-legacy')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 1, 0],
+      alpha: 0.5,
+    });
+  });
+
+  it('converts Lab and Oklab between rectangular and polar forms', () => {
+    const lab: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'lab',
+      components: [50, 0, 40],
+      alpha: 0.5,
+    };
+    const oklab: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.5, 0.1, 0],
+      alpha: 0.25,
+    };
+
+    expect(convertNumericColor(lab, 'lch')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'lch',
+      components: [50, 40, 90],
+      alpha: 0.5,
+    });
+    const labRoundTrip = convertNumericColor(
+      convertNumericColor(lab, 'lch'),
+      'lab',
+    );
+
+    expect(labRoundTrip.space).toBe('lab');
+    expect(labRoundTrip.alpha).toBe(lab.alpha);
+    expect(labRoundTrip.components[0]).toBeCloseTo(50, 12);
+    expect(labRoundTrip.components[1]).toBeCloseTo(0, 12);
+    expect(labRoundTrip.components[2]).toBeCloseTo(40, 12);
+    expect(convertNumericColor(oklab, 'oklch')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'oklch',
+      components: [0.5, 0.1, 0],
+      alpha: 0.25,
+    });
+    const oklabRoundTrip = convertNumericColor(
+      convertNumericColor(oklab, 'oklch'),
+      'oklab',
+    );
+
+    expect(oklabRoundTrip.space).toBe('oklab');
+    expect(oklabRoundTrip.alpha).toBe(oklab.alpha);
+    expect(oklabRoundTrip.components[0]).toBeCloseTo(0.5, 12);
+    expect(oklabRoundTrip.components[1]).toBeCloseTo(0.1, 12);
+    expect(oklabRoundTrip.components[2]).toBeCloseTo(0, 12);
+  });
+
+  it('replaces a missing polar hue with zero rectangular components', () => {
+    const lch: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'lch',
+      components: [50, 40, undefined],
+      alpha: 0.5,
+    };
+    const oklch: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklch',
+      components: [0.5, 0.1, undefined],
+      alpha: 0.25,
+    };
+
+    expect(convertNumericColor(lch, 'lab')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'lab',
+      components: [50, 0, 0],
+      alpha: 0.5,
+    });
+    expect(convertNumericColor(oklch, 'oklab')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.5, 0, 0],
+      alpha: 0.25,
+    });
+  });
+
+  it('converts known sRGB and Display P3 primaries to XYZ D65', () => {
+    const red: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [1, 0, 0],
+      alpha: 1,
+    };
+    const p3Red: NumericColor = {
+      ...red,
+      space: 'display-p3',
+    };
+    const srgbXyz = convertNumericColor(red, 'xyz-d65').components;
+    const p3Xyz = convertNumericColor(p3Red, 'xyz-d65').components;
+
+    expect(srgbXyz[0]).toBeCloseTo(0.4123907993, 9);
+    expect(srgbXyz[1]).toBeCloseTo(0.2126390059, 9);
+    expect(srgbXyz[2]).toBeCloseTo(0.0193308187, 9);
+    expect(p3Xyz[0]).toBeCloseTo(0.4865709486, 9);
+    expect(p3Xyz[1]).toBeCloseTo(0.2289745641, 9);
+    expect(p3Xyz[2]).toBe(0);
+  });
+
+  it('converts colors across D50 and D65 spaces', () => {
+    const labWhite: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'lab',
+      components: [100, 0, 0],
+      alpha: 0.75,
+    };
+    const srgb = convertNumericColor(labWhite, 'srgb');
+
+    expect(srgb.alpha).toBe(0.75);
+
+    for (const component of srgb.components) {
+      expect(component).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('round-trips every numerical color space through XYZ', () => {
+    const colors: NumericColor[] = [
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-linear',
+        components: [0.1, 0.3, 0.5],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'hsl',
+        components: [210, 50, 40],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'hwb',
+        components: [210, 20, 30],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'lab',
+        components: [50, 20, -30],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'lch',
+        components: [50, 36.0555127546, 303.690067526],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.5, 0.1, -0.1],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.5, 0.1414213562, 315],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'display-p3',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'display-p3-linear',
+        components: [0.1, 0.3, 0.5],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'a98-rgb',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'prophoto-rgb',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'rec2020',
+        components: [0.2, 0.4, 0.6],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'xyz-d50',
+        components: [0.3, 0.4, 0.2],
+        alpha: 0.7,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'xyz-d65',
+        components: [0.3, 0.4, 0.2],
+        alpha: 0.7,
+      },
+    ];
+
+    for (const color of colors) {
+      const intermediate = color.space === 'xyz-d50'
+        ? 'xyz-d65'
+        : 'xyz-d50';
+      const converted = convertNumericColor(color, intermediate);
+      const roundTrip = convertNumericColor(converted, color.space);
+
+      expect(roundTrip.space).toBe(color.space);
+      expect(roundTrip.alpha).toBe(color.alpha);
+
+      for (let index = 0; index < 3; index++) {
+        expect(roundTrip.components[index])
+          .toBeCloseTo(color.components[index]!, 7);
+      }
+    }
+  });
+
+  it('returns an unchanged numerical color conversion by identity', () => {
+    const color: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'display-p3',
+      components: [1, 0, 0],
+      alpha: 1,
+    };
+
+    expect(convertNumericColor(color, 'display-p3')).toBe(color);
   });
 
   it('looks up named colors by text', () => {

@@ -1182,6 +1182,16 @@ const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent
   ([component]) => ok(component),
 );
 
+// ████████  ████████  ██████   ███████  ██       ██     ██ ████████
+// ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██
+// ██     ██ ██       ██       ██     ██ ██       ██     ██ ██
+// ████████  ██████    ██████  ██     ██ ██       ██     ██ ██████
+// ██   ██   ██             ██ ██     ██ ██        ██   ██  ██
+// ██    ██  ██       ██    ██ ██     ██ ██         ██ ██   ██
+// ██     ██ ████████  ██████   ███████  ████████    ███    ████████
+
+
+
 //  ██████  ████████ ████████  ████    ███    ██
 // ██    ██ ██       ██     ██  ██    ██ ██   ██
 // ██       ██       ██     ██  ██   ██   ██  ██
@@ -1547,3 +1557,911 @@ function serializeNumericAlpha(value: number | undefined): string | null {
 // ██       ██     ██ ██  ████  ██   ██  ██       ██   ██      ██
 // ██    ██ ██     ██ ██   ███   ██ ██   ██       ██    ██     ██
 //  ██████   ███████  ██    ██    ███    ████████ ██     ██    ██
+
+type WhitePoint = 'd50' | 'd65';
+
+type ColorVector = [number, number, number];
+
+type ColorMatrix = readonly [
+  readonly [number, number, number],
+  readonly [number, number, number],
+  readonly [number, number, number],
+];
+
+export function convertNumericColor(
+  value: NumericColor,
+  target: ColorSpace,
+): NumericColor {
+  if (value.space === target) {
+    return value;
+  }
+
+  const source = replaceMissingColorComponents(
+    prepareNumericColorForConversion(value),
+  );
+  const rectangularTarget = rectangularColorSpace(target);
+  let converted: NumericColor;
+
+  if (source.space === rectangularTarget) {
+    converted = source;
+  } else {
+    let xyz = convertNumericColorToXyz(source);
+    const targetWhitePoint = colorSpaceWhitePoint(rectangularTarget);
+
+    if (colorSpaceWhitePoint(source.space) !== targetWhitePoint) {
+      xyz = targetWhitePoint === 'd50'
+        ? adaptD65ToD50(xyz)
+        : adaptD50ToD65(xyz);
+    }
+
+    converted = convertXyzToNumericColor(xyz, rectangularTarget);
+  }
+
+  return convertRectangularNumericColor(converted, target);
+}
+
+function prepareNumericColorForConversion(
+  value: NumericColor,
+): NumericColor {
+  const prepared = replacePowerlessColorComponents(value);
+
+  switch (prepared.space) {
+    case 'srgb-legacy':
+      return { ...prepared, space: 'srgb' };
+    case 'hsl':
+      return convertHslToRgb(prepared);
+    case 'hwb':
+      return convertHwbToRgb(prepared);
+    case 'lch':
+      return convertLchToLab(prepared);
+    case 'oklch':
+      return convertOklchToOklab(prepared);
+    default:
+      return prepared;
+  }
+}
+
+function replacePowerlessColorComponents(value: NumericColor): NumericColor {
+  const [firstComp, secondComp, thirdComp] = value.components;
+  const second = secondComp ?? 0;
+  const third = thirdComp ?? 0;
+
+  switch (value.space) {
+    case 'hsl':
+      return second === 0 && firstComp !== undefined
+        ? { ...value, components: [undefined, second, third] }
+        : value;
+    case 'hwb':
+      return second + third >= 100 && firstComp !== undefined
+        ? { ...value, components: [undefined, second, third] }
+        : value;
+    case 'lch':
+      return second <= 0.0015 && thirdComp !== undefined
+        ? { ...value, components: [firstComp, second, undefined] }
+        : value;
+    case 'oklch':
+      return second <= 0.000004 && thirdComp !== undefined
+        ? { ...value, components: [firstComp, second, undefined] }
+        : value;
+    default:
+      return value;
+  }
+}
+
+function replaceMissingColorComponents(value: NumericColor): NumericColor {
+  return {
+    ...value,
+    components: componentsForConversion(value),
+  };
+}
+
+function rectangularColorSpace(value: ColorSpace): ColorSpace {
+  switch (value) {
+    case 'srgb-legacy':
+    case 'hsl':
+    case 'hwb':
+      return 'srgb';
+    case 'lch':
+      return 'lab';
+    case 'oklch':
+      return 'oklab';
+    default:
+      return value;
+  }
+}
+
+function colorSpaceWhitePoint(value: ColorSpace): WhitePoint {
+  switch (rectangularColorSpace(value)) {
+    case 'lab':
+    case 'prophoto-rgb':
+    case 'xyz-d50':
+      return 'd50';
+    default:
+      return 'd65';
+  }
+}
+
+function convertNumericColorToXyz(value: NumericColor): NumericColor {
+  const components = componentsForConversion(value);
+  let xyz: ColorVector;
+  let space: 'xyz-d50' | 'xyz-d65';
+
+  switch (value.space) {
+    case 'srgb':
+      xyz = linearSrgbToXyz(linearizeSrgb(components));
+      space = 'xyz-d65';
+      break;
+    case 'srgb-linear':
+      xyz = linearSrgbToXyz(components);
+      space = 'xyz-d65';
+      break;
+    case 'display-p3':
+      xyz = linearDisplayP3ToXyz(linearizeDisplayP3(components));
+      space = 'xyz-d65';
+      break;
+    case 'display-p3-linear':
+      xyz = linearDisplayP3ToXyz(components);
+      space = 'xyz-d65';
+      break;
+    case 'a98-rgb':
+      xyz = linearA98RgbToXyz(linearizeA98Rgb(components));
+      space = 'xyz-d65';
+      break;
+    case 'prophoto-rgb':
+      xyz = linearProphotoRgbToXyz(linearizeProphotoRgb(components));
+      space = 'xyz-d50';
+      break;
+    case 'rec2020':
+      xyz = linearRec2020ToXyz(linearizeRec2020(components));
+      space = 'xyz-d65';
+      break;
+    case 'lab':
+      xyz = labToXyz(components);
+      space = 'xyz-d50';
+      break;
+    case 'oklab':
+      xyz = oklabToXyz(components);
+      space = 'xyz-d65';
+      break;
+    case 'xyz-d50':
+    case 'xyz-d65':
+      return value;
+    default:
+      throw new Error(`Cannot convert ${value.space} directly to XYZ`);
+  }
+
+  return {
+    kind: ColorKind.Numeric,
+    space,
+    components: xyz,
+    alpha: value.alpha,
+  };
+}
+
+function convertXyzToNumericColor(
+  value: NumericColor,
+  target: ColorSpace,
+): NumericColor {
+  const xyz = componentsForConversion(value);
+  let components: ColorVector;
+
+  switch (target) {
+    case 'srgb':
+      components = encodeSrgb(xyzToLinearSrgb(xyz));
+      break;
+    case 'srgb-linear':
+      components = xyzToLinearSrgb(xyz);
+      break;
+    case 'display-p3':
+      components = encodeDisplayP3(xyzToLinearDisplayP3(xyz));
+      break;
+    case 'display-p3-linear':
+      components = xyzToLinearDisplayP3(xyz);
+      break;
+    case 'a98-rgb':
+      components = encodeA98Rgb(xyzToLinearA98Rgb(xyz));
+      break;
+    case 'prophoto-rgb':
+      components = encodeProphotoRgb(xyzToLinearProphotoRgb(xyz));
+      break;
+    case 'rec2020':
+      components = encodeRec2020(xyzToLinearRec2020(xyz));
+      break;
+    case 'lab':
+      components = xyzToLab(xyz);
+      break;
+    case 'oklab':
+      components = xyzToOklab(xyz);
+      break;
+    case 'xyz-d50':
+    case 'xyz-d65':
+      components = xyz;
+      break;
+    default:
+      throw new Error(`Cannot convert XYZ directly to ${target}`);
+  }
+
+  return {
+    kind: ColorKind.Numeric,
+    space: target,
+    components,
+    alpha: value.alpha,
+  };
+}
+
+function convertRectangularNumericColor(
+  value: NumericColor,
+  target: ColorSpace,
+): NumericColor {
+  switch (target) {
+    case 'srgb-legacy':
+      return { ...value, space: target };
+    case 'hsl':
+      return convertRgbToHsl(value);
+    case 'hwb':
+      return convertRgbToHwb(value);
+    case 'lch':
+      return convertLabToLch(value);
+    case 'oklch':
+      return convertOklabToOklch(value);
+    default:
+      return value;
+  }
+}
+
+function convertHslToRgb(value: NumericColor): NumericColor {
+  const components = componentsForConversion(value);
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'srgb',
+    components: hslToRgb(...components),
+    alpha: value.alpha,
+  };
+}
+
+function convertRgbToHsl(value: NumericColor): NumericColor {
+  const [red, green, blue] = componentsForConversion(value);
+  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'hsl',
+    components: [
+      Number.isNaN(hue) ? undefined : hue,
+      saturation,
+      lightness,
+    ],
+    alpha: value.alpha,
+  };
+}
+
+function convertHwbToRgb(value: NumericColor): NumericColor {
+  const components = componentsForConversion(value);
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'srgb',
+    components: hwbToRgb(...components),
+    alpha: value.alpha,
+  };
+}
+
+function convertRgbToHwb(value: NumericColor): NumericColor {
+  const [red, green, blue] = componentsForConversion(value);
+  const [hue, whiteness, blackness] = rgbToHwb(red, green, blue);
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'hwb',
+    components: [
+      Number.isNaN(hue) ? undefined : hue,
+      whiteness,
+      blackness,
+    ],
+    alpha: value.alpha,
+  };
+}
+
+function convertLabToLch(value: NumericColor): NumericColor {
+  const [lightness, chroma, hue] = labToLch(
+    componentsForConversion(value),
+  );
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'lch',
+    components: [
+      lightness,
+      chroma,
+      Number.isNaN(hue) ? undefined : hue,
+    ],
+    alpha: value.alpha,
+  };
+}
+
+function convertLchToLab(value: NumericColor): NumericColor {
+  const [lightness = 0, chroma = 0, hue] = value.components;
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'lab',
+    components: hue === undefined
+      ? [lightness, 0, 0]
+      : lchToLab([lightness, chroma, hue]),
+    alpha: value.alpha,
+  };
+}
+
+function convertOklabToOklch(value: NumericColor): NumericColor {
+  const [lightness, chroma, hue] = oklabToOklch(
+    componentsForConversion(value),
+  );
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'oklch',
+    components: [
+      lightness,
+      chroma,
+      Number.isNaN(hue) ? undefined : hue,
+    ],
+    alpha: value.alpha,
+  };
+}
+
+function convertOklchToOklab(value: NumericColor): NumericColor {
+  const [lightness = 0, chroma = 0, hue] = value.components;
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'oklab',
+    components: hue === undefined
+      ? [lightness, 0, 0]
+      : oklchToOklab([lightness, chroma, hue]),
+    alpha: value.alpha,
+  };
+}
+
+function componentsForConversion(
+  value: NumericColor,
+): [number, number, number] {
+  const [first = 0, second = 0, third = 0] = value.components;
+
+  return [first, second, third];
+}
+
+function hslToRgb(
+  hue: number,
+  sat: number,
+  light: number,
+): [number, number, number] {
+  sat /= 100;
+  light /= 100;
+
+  function f(n: number): number {
+    const k = (n + hue / 30) % 12;
+    const a = sat * Math.min(light, 1 - light);
+
+    return light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  }
+
+  return [f(0), f(8), f(4)];
+}
+
+function rgbToHsl(
+  red: number,
+  green: number,
+  blue: number,
+): [number, number, number] {
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  let hue = Number.NaN;
+  let sat = 0;
+  const light = (min + max) / 2;
+  const d = max - min;
+  const epsilon = 1 / 100000;
+
+  if (d !== 0) {
+    sat = light === 0 || light === 1
+      ? 0
+      : (max - light) / Math.min(light, 1 - light);
+
+    switch (max) {
+      case red:
+        hue = (green - blue) / d + (green < blue ? 6 : 0);
+        break;
+      case green:
+        hue = (blue - red) / d + 2;
+        break;
+      case blue:
+        hue = (red - green) / d + 4;
+        break;
+    }
+
+    hue *= 60;
+  }
+
+  // Very out-of-gamut colors can produce negative saturation. If so, rotate
+  // the hue by 180 degrees and use a positive saturation.
+  if (sat < 0) {
+    hue += 180;
+    sat = Math.abs(sat);
+  }
+
+  if (hue >= 360) {
+    hue -= 360;
+  }
+
+  if (sat <= epsilon) {
+    hue = Number.NaN;
+  }
+
+  return [hue, sat * 100, light * 100];
+}
+
+function hwbToRgb(
+  hue: number,
+  white: number,
+  black: number,
+): [number, number, number] {
+  white /= 100;
+  black /= 100;
+
+  if (white + black >= 1) {
+    const gray = white / (white + black);
+
+    return [gray, gray, gray];
+  }
+
+  const rgb = hslToRgb(hue, 100, 50);
+
+  for (let i = 0; i < 3; i++) {
+    rgb[i]! *= 1 - white - black;
+    rgb[i]! += white;
+  }
+
+  return rgb;
+}
+
+function rgbToHue(red: number, green: number, blue: number): number {
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  let hue = Number.NaN;
+  const d = max - min;
+
+  if (d !== 0) {
+    switch (max) {
+      case red:
+        hue = (green - blue) / d + (green < blue ? 6 : 0);
+        break;
+      case green:
+        hue = (blue - red) / d + 2;
+        break;
+      case blue:
+        hue = (red - green) / d + 4;
+        break;
+    }
+
+    hue *= 60;
+  }
+
+  if (hue >= 360) {
+    hue -= 360;
+  }
+
+  return hue;
+}
+
+function rgbToHwb(
+  red: number,
+  green: number,
+  blue: number,
+): [number, number, number] {
+  const epsilon = 1 / 100000;
+  let hue = rgbToHue(red, green, blue);
+  const white = Math.min(red, green, blue);
+  const black = 1 - Math.max(red, green, blue);
+
+  if (white + black >= 1 - epsilon) {
+    hue = Number.NaN;
+  }
+
+  return [hue, white * 100, black * 100];
+}
+
+function linearizeSrgb(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+    const absolute = Math.abs(component);
+
+    if (absolute <= 0.04045) {
+      return component / 12.92;
+    }
+
+    return sign * ((absolute + 0.055) / 1.055) ** 2.4;
+  });
+}
+
+function encodeSrgb(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+    const absolute = Math.abs(component);
+
+    if (absolute > 0.0031308) {
+      return sign * (1.055 * absolute ** (1 / 2.4) - 0.055);
+    }
+
+    return 12.92 * component;
+  });
+}
+
+const LINEAR_SRGB_TO_XYZ: ColorMatrix = [
+  [506752 / 1228815, 87881 / 245763, 12673 / 70218],
+  [87098 / 409605, 175762 / 245763, 12673 / 175545],
+  [7918 / 409605, 87881 / 737289, 1001167 / 1053270],
+];
+
+function linearSrgbToXyz(value: ColorVector): ColorVector {
+  return transformColorVector(LINEAR_SRGB_TO_XYZ, value);
+}
+
+const XYZ_TO_LINEAR_SRGB: ColorMatrix = [
+  [12831 / 3959, -329 / 214, -1974 / 3959],
+  [-851781 / 878810, 1648619 / 878810, 36519 / 878810],
+  [705 / 12673, -2585 / 12673, 705 / 667],
+];
+
+function xyzToLinearSrgb(value: ColorVector): ColorVector {
+  return transformColorVector(XYZ_TO_LINEAR_SRGB, value);
+}
+
+function linearizeDisplayP3(value: ColorVector): ColorVector {
+  return linearizeSrgb(value);
+}
+
+function encodeDisplayP3(value: ColorVector): ColorVector {
+  return encodeSrgb(value);
+}
+
+const LINEAR_DISPLAY_P3_TO_XYZ: ColorMatrix = [
+  [608311 / 1250200, 189793 / 714400, 198249 / 1000160],
+  [35783 / 156275, 247089 / 357200, 198249 / 2500400],
+  [0, 32229 / 714400, 5220557 / 5000800],
+];
+
+function linearDisplayP3ToXyz(value: ColorVector): ColorVector {
+  return transformColorVector(LINEAR_DISPLAY_P3_TO_XYZ, value);
+}
+
+const XYZ_TO_LINEAR_DISPLAY_P3: ColorMatrix = [
+  [446124 / 178915, -333277 / 357830, -72051 / 178915],
+  [-14852 / 17905, 63121 / 35810, 423 / 17905],
+  [11844 / 330415, -50337 / 660830, 316169 / 330415],
+];
+
+function xyzToLinearDisplayP3(value: ColorVector): ColorVector {
+  return transformColorVector(XYZ_TO_LINEAR_DISPLAY_P3, value);
+}
+
+function linearizeProphotoRgb(value: ColorVector): ColorVector {
+  const threshold = 16 / 512;
+
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+    const absolute = Math.abs(component);
+
+    if (absolute <= threshold) {
+      return component / 16;
+    }
+
+    return sign * absolute ** 1.8;
+  });
+}
+
+function encodeProphotoRgb(value: ColorVector): ColorVector {
+  const threshold = 1 / 512;
+
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+    const absolute = Math.abs(component);
+
+    if (absolute >= threshold) {
+      return sign * absolute ** (1 / 1.8);
+    }
+
+    return 16 * component;
+  });
+}
+
+const LINEAR_PROPHOTO_RGB_TO_XYZ: ColorMatrix = [
+  [0.7977666449006423, 0.13518129740053308, 0.0313477341283922],
+  [0.2880748288194013, 0.711835234241873, 0.00008993693872564],
+  [0, 0, 0.8251046025104602],
+];
+
+function linearProphotoRgbToXyz(value: ColorVector): ColorVector {
+  return transformColorVector(LINEAR_PROPHOTO_RGB_TO_XYZ, value);
+}
+
+const XYZ_TO_LINEAR_PROPHOTO_RGB: ColorMatrix = [
+  [1.3457868816471583, -0.25557208737979464, -0.05110186497554526],
+  [-0.5446307051249019, 1.5082477428451468, 0.02052744743642139],
+  [0, 0, 1.2119675456389452],
+];
+
+function xyzToLinearProphotoRgb(value: ColorVector): ColorVector {
+  return transformColorVector(XYZ_TO_LINEAR_PROPHOTO_RGB, value);
+}
+
+function linearizeA98Rgb(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+
+    return sign * Math.abs(component) ** (563 / 256);
+  });
+}
+
+function encodeA98Rgb(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+
+    return sign * Math.abs(component) ** (256 / 563);
+  });
+}
+
+const LINEAR_A98_RGB_TO_XYZ: ColorMatrix = [
+  [573536 / 994567, 263643 / 1420810, 187206 / 994567],
+  [591459 / 1989134, 6239551 / 9945670, 374412 / 4972835],
+  [53769 / 1989134, 351524 / 4972835, 4929758 / 4972835],
+];
+
+function linearA98RgbToXyz(value: ColorVector): ColorVector {
+  return transformColorVector(LINEAR_A98_RGB_TO_XYZ, value);
+}
+
+const XYZ_TO_LINEAR_A98_RGB: ColorMatrix = [
+  [1829569 / 896150, -506331 / 896150, -308931 / 896150],
+  [-851781 / 878810, 1648619 / 878810, 36519 / 878810],
+  [16779 / 1248040, -147721 / 1248040, 1266979 / 1248040],
+];
+
+function xyzToLinearA98Rgb(value: ColorVector): ColorVector {
+  return transformColorVector(XYZ_TO_LINEAR_A98_RGB, value);
+}
+
+function linearizeRec2020(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+
+    return sign * Math.abs(component) ** 2.4;
+  });
+}
+
+function encodeRec2020(value: ColorVector): ColorVector {
+  return mapColorVector(value, (component) => {
+    const sign = component < 0 ? -1 : 1;
+
+    return sign * Math.abs(component) ** (1 / 2.4);
+  });
+}
+
+const LINEAR_REC2020_TO_XYZ: ColorMatrix = [
+  [63426534 / 99577255, 20160776 / 139408157, 47086771 / 278816314],
+  [26158966 / 99577255, 472592308 / 697040785, 8267143 / 139408157],
+  [0, 19567812 / 697040785, 295819943 / 278816314],
+];
+
+function linearRec2020ToXyz(value: ColorVector): ColorVector {
+  return transformColorVector(LINEAR_REC2020_TO_XYZ, value);
+}
+
+const XYZ_TO_LINEAR_REC2020: ColorMatrix = [
+  [30757411 / 17917100, -6372589 / 17917100, -4539589 / 17917100],
+  [-19765991 / 29648200, 47925759 / 29648200, 467509 / 29648200],
+  [792561 / 44930125, -1921689 / 44930125, 42328811 / 44930125],
+];
+
+function xyzToLinearRec2020(value: ColorVector): ColorVector {
+  return transformColorVector(XYZ_TO_LINEAR_REC2020, value);
+}
+
+const D65_TO_D50: ColorMatrix = [
+  [1.0479297925449969, 0.022946870601609652, -0.05019226628920524],
+  [0.02962780877005599, 0.9904344267538799, -0.017073799063418826],
+  [-0.009243040646204504, 0.015055191490298152, 0.7518742814281371],
+];
+
+function adaptD65ToD50(value: NumericColor): NumericColor {
+  return {
+    ...value,
+    space: 'xyz-d50',
+    components: transformColorVector(
+      D65_TO_D50,
+      componentsForConversion(value),
+    ),
+  };
+}
+
+const D50_TO_D65: ColorMatrix = [
+  [0.955473421488075, -0.02309845494876471, 0.06325924320057072],
+  [-0.0283697093338637, 1.0099953980813041, 0.021041441191917323],
+  [0.012314014864481998, -0.020507649298898964, 1.330365926242124],
+];
+
+function adaptD50ToD65(value: NumericColor): NumericColor {
+  return {
+    ...value,
+    space: 'xyz-d65',
+    components: transformColorVector(
+      D50_TO_D65,
+      componentsForConversion(value),
+    ),
+  };
+}
+
+function xyzToLab(value: ColorVector): ColorVector {
+  const epsilon = 216 / 24389;
+  const kappa = 24389 / 27;
+  const d50: ColorVector = [
+    0.3457 / 0.3585,
+    1,
+    (1 - 0.3457 - 0.3585) / 0.3585,
+  ];
+  const xyz = mapColorVector(
+    value,
+    (component, index) => component / d50[index],
+  );
+  const f = mapColorVector(
+    xyz,
+    (component) => component > epsilon
+      ? Math.cbrt(component)
+      : (kappa * component + 16) / 116,
+  );
+
+  return [
+    116 * f[1] - 16,
+    500 * (f[0] - f[1]),
+    200 * (f[1] - f[2]),
+  ];
+}
+
+function labToXyz(value: ColorVector): ColorVector {
+  const kappa = 24389 / 27;
+  const epsilon = 216 / 24389;
+  const f1 = (value[0] + 16) / 116;
+  const f: ColorVector = [
+    value[1] / 500 + f1,
+    f1,
+    f1 - value[2] / 200,
+  ];
+  const xyz: ColorVector = [
+    f[0] ** 3 > epsilon ? f[0] ** 3 : (116 * f[0] - 16) / kappa,
+    value[0] > kappa * epsilon
+      ? ((value[0] + 16) / 116) ** 3
+      : value[0] / kappa,
+    f[2] ** 3 > epsilon ? f[2] ** 3 : (116 * f[2] - 16) / kappa,
+  ];
+  const d50: ColorVector = [
+    0.3457 / 0.3585,
+    1,
+    (1 - 0.3457 - 0.3585) / 0.3585,
+  ];
+
+  return mapColorVector(
+    xyz,
+    (component, index) => component * d50[index],
+  );
+}
+
+function labToLch(value: ColorVector): ColorVector {
+  const epsilon = 0.0015;
+  const chroma = Math.sqrt(value[1] ** 2 + value[2] ** 2);
+  let hue = Math.atan2(value[2], value[1]) * 180 / Math.PI;
+
+  if (hue < 0) {
+    hue += 360;
+  }
+
+  if (chroma <= epsilon) {
+    hue = Number.NaN;
+  }
+
+  return [value[0], chroma, hue];
+}
+
+function lchToLab(value: ColorVector): ColorVector {
+  return [
+    value[0],
+    value[1] * Math.cos(value[2] * Math.PI / 180),
+    value[1] * Math.sin(value[2] * Math.PI / 180),
+  ];
+}
+
+const XYZ_TO_LMS: ColorMatrix = [
+  [0.819022437996703, 0.3619062600528904, -0.1288737815209879],
+  [0.0329836539323885, 0.9292868615863434, 0.0361446663506424],
+  [0.0481771893596242, 0.2642395317527308, 0.6335478284694309],
+];
+
+const LMS_TO_OKLAB: ColorMatrix = [
+  [0.210454268309314, 0.7936177747023054, -0.0040720430116193],
+  [1.9779985324311684, -2.42859224204858, 0.450593709617411],
+  [0.0259040424655478, 0.7827717124575296, -0.8086757549230774],
+];
+
+function xyzToOklab(value: ColorVector): ColorVector {
+  const lms = transformColorVector(XYZ_TO_LMS, value);
+
+  return transformColorVector(
+    LMS_TO_OKLAB,
+    mapColorVector(lms, (component) => Math.cbrt(component)),
+  );
+}
+
+const LMS_TO_XYZ: ColorMatrix = [
+  [1.2268798758459243, -0.5578149944602171, 0.2813910456659647],
+  [-0.0405757452148008, 1.112286803280317, -0.0717110580655164],
+  [-0.0763729366746601, -0.4214933324022432, 1.5869240198367816],
+];
+
+const OKLAB_TO_LMS: ColorMatrix = [
+  [1, 0.3963377773761749, 0.2158037573099136],
+  [1, -0.1055613458156586, -0.0638541728258133],
+  [1, -0.0894841775298119, -1.2914855480194092],
+];
+
+function oklabToXyz(value: ColorVector): ColorVector {
+  const nonlinearLms = transformColorVector(OKLAB_TO_LMS, value);
+
+  return transformColorVector(
+    LMS_TO_XYZ,
+    mapColorVector(nonlinearLms, (component) => component ** 3),
+  );
+}
+
+function oklabToOklch(value: ColorVector): ColorVector {
+  const epsilon = 0.000004;
+  const chroma = Math.sqrt(value[1] ** 2 + value[2] ** 2);
+  let hue = Math.atan2(value[2], value[1]) * 180 / Math.PI;
+
+  if (hue < 0) {
+    hue += 360;
+  }
+
+  if (chroma <= epsilon) {
+    hue = Number.NaN;
+  }
+
+  return [value[0], chroma, hue];
+}
+
+function oklchToOklab(value: ColorVector): ColorVector {
+  return [
+    value[0],
+    value[1] * Math.cos(value[2] * Math.PI / 180),
+    value[1] * Math.sin(value[2] * Math.PI / 180),
+  ];
+}
+
+function mapColorVector(
+  value: ColorVector,
+  transform: (component: number, index: 0 | 1 | 2) => number,
+): ColorVector {
+  return [
+    transform(value[0], 0),
+    transform(value[1], 1),
+    transform(value[2], 2),
+  ];
+}
+
+function transformColorVector(
+  matrix: ColorMatrix,
+  value: ColorVector,
+): ColorVector {
+  const [x, y, z] = value;
+
+  return matrix.map(
+    ([a, b, c]) => a * x + b * y + c * z,
+  ) as ColorVector;
+}
