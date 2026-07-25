@@ -2339,6 +2339,76 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
     ],
   },
   {
+    name: 'clamps calculated alpha only in computed colors',
+    engines: ['native'],
+    markup: `
+      <style id="calculated-alpha-lifecycle">
+        #rgb-alpha {
+          color: rgb(0 0 0 / calc(1.2));
+        }
+        #p3-alpha {
+          color: color(display-p3 0 1 0 / calc(1.2));
+        }
+      </style>
+
+      <div id="rgb-alpha"></div>
+      <div id="p3-alpha"></div>
+    `,
+    cases: [
+      // CSS Color 4 preserves calculated alpha in declared serialization.
+      // All three engines currently clamp this sRGB alpha immediately.
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'color' },
+        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'rgb(0 0 0 / calc(1.2))',
+            important: false,
+          },
+        },
+        status: 'fail',
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'rgb-alpha' },
+        expect: { value: 'rgb(0, 0, 0)' },
+      },
+      // WebKit preserves the calculated alpha here; Chromium and Firefox
+      // currently clamp it in the declared serialization.
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'color' },
+        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
+        browsers: ['chromium', 'firefox'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 0 1 0 / calc(1.2))',
+            important: false,
+          },
+        },
+        status: 'fail',
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'color' },
+        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
+        browsers: ['webkit'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 0 1 0 / calc(1.2))',
+            important: false,
+          },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'p3-alpha' },
+        expect: { value: 'color(display-p3 0 1 0)' },
+      },
+    ],
+  },
+  {
     name: 'distinguishes declared colors from resolved colors',
     engines: ['native'],
     markup: `

@@ -1,3 +1,4 @@
+import { asciiLower } from '../../shared/css';
 import { assertNever, clamp } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { createDelimConsumer, createFunctionalNotationConsumer, tryConsumeHashToken } from '../parser/component-consumers';
@@ -12,22 +13,22 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { tryConsumeAngle, type AngleValue } from './angle';
 import {
-  serializeMathValue,
+  serializeMathValue, simplifyCalculationTree,
   type CalculationContext, type CalculationSerializationContext,
-  type CalculationValueStage,
+  type ValueStage,
 } from './calc';
-import { ColorName, colorNameFromText, SystemColorName, systemColorNameFromText } from './color-keywords';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { resolveAngle } from './numeric-literal/angle';
-import { serializeCssNumber } from './numeric-literal/number';
+import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
+import type { PercentageLiteral } from './numeric-literal/percentage';
 import { serializeNumber, tryConsumeNumber, type NumberValue } from './number';
 import { tryConsumePercentage, type PercentageValue } from './percentage';
 
 /*
  * <color> = <color-base> | currentColor | <system-color>
  *
- * <color-base> = <hex-color> | <color-function> | <named-color> | transparent
+ * <color-base> = <hex-color> | <color-function> | <named-color>
  *
  * <color-function> = <rgb()> | <rgba()> |
  *                    <hsl()> | <hsla()> | <hwb()> |
@@ -42,7 +43,8 @@ export type ColorValue =
   | NumericColor
   | ColorBase
   | CurrentColor
-  | SystemColor;
+  | SystemColor
+  | DeprecatedColor;
 
 // Not a grammar production. This numerical form is inferred by the color
 // resolution, conversion, interpolation, and serialization algorithms.
@@ -83,8 +85,7 @@ type ColorComponents = [
 export type ColorBase =
   | HexColor
   | ColorFunction
-  | NamedColor
-  | TransparentColor;
+  | NamedColor;
 
 export type ColorFunction =
   | RgbColor
@@ -100,6 +101,7 @@ export enum ColorKind {
   Named = 1,
   CurrentColor,
   System,
+  Deprecated,
   Hex,
   Rgb,
   Hsl,
@@ -117,7 +119,7 @@ type HueValue = NumberValue | AngleValue;
 
 export function parseColorValue(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: ColorResolutionContext = {},
 ): ColorValue | null {
   const result = parseAsComponentGrammar(
     input,
@@ -133,7 +135,14 @@ export function parseColorValue(
 export function tryConsumeColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorValue> {
-  return consumeColor(c);
+  const result = consumeColor(c);
+
+  return result === null || isBad(result)
+    ? result
+    : ok(resolveColorValue(
+      result.value,
+      colorResolutionContextFor(c.context),
+    ));
 }
 
 const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
@@ -141,6 +150,7 @@ const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeColorBase),
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
+    one(tryConsumeDeprecatedColor),
   ],
   ([value]) => ok(value),
 );
@@ -156,7 +166,6 @@ const consumeColorBase: TryComponentConsumer<ColorBase> = oneOf(
     one(tryConsumeHexColor),
     one(tryConsumeColorFunction),
     one(tryConsumeNamedColor),
-    one(tryConsumeTransparent),
   ],
   ([value]) => ok(value),
 );
@@ -442,18 +451,15 @@ function isHexColorValue(value: string): boolean {
 /*
  * <named-color>
  *
- * Named colors are CSS identifiers recognized by colorNameFromText.
+ * Named colors are CSS identifiers with entries in ColorRgba.
  */
 
 export type NamedColor = {
   kind: ColorKind.Named;
-  name: Exclude<ColorName, ColorName.transparent>;
+  name: ColorName;
 };
 
-export type TransparentColor = {
-  kind: ColorKind.Named;
-  name: ColorName.transparent;
-};
+export type ColorName = keyof typeof ColorRgba;
 
 function tryConsumeNamedColor(
   c: ComponentCursor,
@@ -465,29 +471,191 @@ function tryConsumeNamedColor(
     return ident;
   }
 
-  const name = colorNameFromText(ident.value.value);
+  const name = asciiLower(ident.value.value);
+  const rgba = Object.hasOwn(ColorRgba, name)
+    ? ColorRgba[name as keyof typeof ColorRgba]
+    : undefined;
 
-  if (name === undefined || name === ColorName.transparent) {
+  if (rgba === undefined) {
     c.restore(start);
     return null;
   }
 
   return ok({
     kind: ColorKind.Named,
-    name,
+    name: name as ColorName,
   });
+}
+
+export const ColorRgba = {
+  transparent: 0x00000000,
+  aliceblue: opaque(0xf0f8ff),
+  antiquewhite: opaque(0xfaebd7),
+  aqua: opaque(0x00ffff),
+  aquamarine: opaque(0x7fffd4),
+  azure: opaque(0xf0ffff),
+  beige: opaque(0xf5f5dc),
+  bisque: opaque(0xffe4c4),
+  black: opaque(0x000000),
+  blanchedalmond: opaque(0xffebcd),
+  blue: opaque(0x0000ff),
+  blueviolet: opaque(0x8a2be2),
+  brown: opaque(0xa52a2a),
+  burlywood: opaque(0xdeb887),
+  cadetblue: opaque(0x5f9ea0),
+  chartreuse: opaque(0x7fff00),
+  chocolate: opaque(0xd2691e),
+  coral: opaque(0xff7f50),
+  cornflowerblue: opaque(0x6495ed),
+  cornsilk: opaque(0xfff8dc),
+  crimson: opaque(0xdc143c),
+  cyan: opaque(0x00ffff),
+  darkblue: opaque(0x00008b),
+  darkcyan: opaque(0x008b8b),
+  darkgoldenrod: opaque(0xb8860b),
+  darkgray: opaque(0xa9a9a9),
+  darkgreen: opaque(0x006400),
+  darkgrey: opaque(0xa9a9a9),
+  darkkhaki: opaque(0xbdb76b),
+  darkmagenta: opaque(0x8b008b),
+  darkolivegreen: opaque(0x556b2f),
+  darkorange: opaque(0xff8c00),
+  darkorchid: opaque(0x9932cc),
+  darkred: opaque(0x8b0000),
+  darksalmon: opaque(0xe9967a),
+  darkseagreen: opaque(0x8fbc8f),
+  darkslateblue: opaque(0x483d8b),
+  darkslategray: opaque(0x2f4f4f),
+  darkslategrey: opaque(0x2f4f4f),
+  darkturquoise: opaque(0x00ced1),
+  darkviolet: opaque(0x9400d3),
+  deeppink: opaque(0xff1493),
+  deepskyblue: opaque(0x00bfff),
+  dimgray: opaque(0x696969),
+  dimgrey: opaque(0x696969),
+  dodgerblue: opaque(0x1e90ff),
+  firebrick: opaque(0xb22222),
+  floralwhite: opaque(0xfffaf0),
+  forestgreen: opaque(0x228b22),
+  fuchsia: opaque(0xff00ff),
+  gainsboro: opaque(0xdcdcdc),
+  ghostwhite: opaque(0xf8f8ff),
+  gold: opaque(0xffd700),
+  goldenrod: opaque(0xdaa520),
+  gray: opaque(0x808080),
+  green: opaque(0x008000),
+  greenyellow: opaque(0xadff2f),
+  grey: opaque(0x808080),
+  honeydew: opaque(0xf0fff0),
+  hotpink: opaque(0xff69b4),
+  indianred: opaque(0xcd5c5c),
+  indigo: opaque(0x4b0082),
+  ivory: opaque(0xfffff0),
+  khaki: opaque(0xf0e68c),
+  lavender: opaque(0xe6e6fa),
+  lavenderblush: opaque(0xfff0f5),
+  lawngreen: opaque(0x7cfc00),
+  lemonchiffon: opaque(0xfffacd),
+  lightblue: opaque(0xadd8e6),
+  lightcoral: opaque(0xf08080),
+  lightcyan: opaque(0xe0ffff),
+  lightgoldenrodyellow: opaque(0xfafad2),
+  lightgray: opaque(0xd3d3d3),
+  lightgreen: opaque(0x90ee90),
+  lightgrey: opaque(0xd3d3d3),
+  lightpink: opaque(0xffb6c1),
+  lightsalmon: opaque(0xffa07a),
+  lightseagreen: opaque(0x20b2aa),
+  lightskyblue: opaque(0x87cefa),
+  lightslategray: opaque(0x778899),
+  lightslategrey: opaque(0x778899),
+  lightsteelblue: opaque(0xb0c4de),
+  lightyellow: opaque(0xffffe0),
+  lime: opaque(0x00ff00),
+  limegreen: opaque(0x32cd32),
+  linen: opaque(0xfaf0e6),
+  magenta: opaque(0xff00ff),
+  maroon: opaque(0x800000),
+  mediumaquamarine: opaque(0x66cdaa),
+  mediumblue: opaque(0x0000cd),
+  mediumorchid: opaque(0xba55d3),
+  mediumpurple: opaque(0x9370db),
+  mediumseagreen: opaque(0x3cb371),
+  mediumslateblue: opaque(0x7b68ee),
+  mediumspringgreen: opaque(0x00fa9a),
+  mediumturquoise: opaque(0x48d1cc),
+  mediumvioletred: opaque(0xc71585),
+  midnightblue: opaque(0x191970),
+  mintcream: opaque(0xf5fffa),
+  mistyrose: opaque(0xffe4e1),
+  moccasin: opaque(0xffe4b5),
+  navajowhite: opaque(0xffdead),
+  navy: opaque(0x000080),
+  oldlace: opaque(0xfdf5e6),
+  olive: opaque(0x808000),
+  olivedrab: opaque(0x6b8e23),
+  orange: opaque(0xffa500),
+  orangered: opaque(0xff4500),
+  orchid: opaque(0xda70d6),
+  palegoldenrod: opaque(0xeee8aa),
+  palegreen: opaque(0x98fb98),
+  paleturquoise: opaque(0xafeeee),
+  palevioletred: opaque(0xdb7093),
+  papayawhip: opaque(0xffefd5),
+  peachpuff: opaque(0xffdab9),
+  peru: opaque(0xcd853f),
+  pink: opaque(0xffc0cb),
+  plum: opaque(0xdda0dd),
+  powderblue: opaque(0xb0e0e6),
+  purple: opaque(0x800080),
+  rebeccapurple: opaque(0x663399),
+  red: opaque(0xff0000),
+  rosybrown: opaque(0xbc8f8f),
+  royalblue: opaque(0x4169e1),
+  saddlebrown: opaque(0x8b4513),
+  salmon: opaque(0xfa8072),
+  sandybrown: opaque(0xf4a460),
+  seagreen: opaque(0x2e8b57),
+  seashell: opaque(0xfff5ee),
+  sienna: opaque(0xa0522d),
+  silver: opaque(0xc0c0c0),
+  skyblue: opaque(0x87ceeb),
+  slateblue: opaque(0x6a5acd),
+  slategray: opaque(0x708090),
+  slategrey: opaque(0x708090),
+  snow: opaque(0xfffafa),
+  springgreen: opaque(0x00ff7f),
+  steelblue: opaque(0x4682b4),
+  tan: opaque(0xd2b48c),
+  teal: opaque(0x008080),
+  thistle: opaque(0xd8bfd8),
+  tomato: opaque(0xff6347),
+  turquoise: opaque(0x40e0d0),
+  violet: opaque(0xee82ee),
+  wheat: opaque(0xf5deb3),
+  white: opaque(0xffffff),
+  whitesmoke: opaque(0xf5f5f5),
+  yellow: opaque(0xffff00),
+  yellowgreen: opaque(0x9acd32),
+} as const satisfies Record<string, number>;
+
+function opaque(rgb: number): number {
+  return (((rgb & 0xffffff) << 8) | 0xff) >>> 0;
 }
 
 /*
  * <system-color>
  *
- * System colors are CSS identifiers recognized by systemColorNameFromText.
+ * System colors are CSS identifiers listed in SystemColorNames.
+ * This type includes the <deprecated-color> subtype defined separately below.
  */
 
 export type SystemColor = {
   kind: ColorKind.System;
   name: SystemColorName;
 };
+
+export type SystemColorName = typeof SystemColorNames[number];
 
 function tryConsumeSystemColor(
   c: ComponentCursor,
@@ -499,39 +667,95 @@ function tryConsumeSystemColor(
     return ident;
   }
 
-  const name = systemColorNameFromText(ident.value.value);
+  const name = asciiLower(ident.value.value);
 
-  if (name === undefined) {
+  if (!SystemColorNameSet.has(name)) {
     c.restore(start);
     return null;
   }
 
   return ok({
     kind: ColorKind.System,
-    name,
+    name: name as SystemColorName,
   });
 }
 
+const SystemColorNames = [
+  'accentcolor', 'accentcolortext', 'activetext',
+  'buttonborder', 'buttonface', 'buttontext',
+  'canvas', 'canvastext',
+  'field', 'fieldtext',
+  'graytext',
+  'highlight', 'highlighttext',
+  'linktext',
+  'mark', 'marktext',
+  'selecteditem', 'selecteditemtext',
+  'visitedtext',
+] as const;
+
+const SystemColorNameSet: ReadonlySet<string> = new Set(SystemColorNames);
+
 /*
- * transparent
+ * <deprecated-color>
+ *
+ * Deprecated system colors map to modern system colors at computed-value time.
  */
 
-function tryConsumeTransparent(
-  c: ComponentCursor,
-): TryComponentConsumerResult<TransparentColor> {
-  const keyword = tryConsumeTransparentKeyword(c);
+export type DeprecatedColor = {
+  kind: ColorKind.Deprecated;
+  name: DeprecatedColorName;
+};
 
-  if (keyword === null || isBad(keyword)) {
-    return keyword;
+export type DeprecatedColorName = keyof typeof DeprecatedColorSystemName;
+
+function tryConsumeDeprecatedColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DeprecatedColor> {
+  const start = c.pos();
+  const ident = tryConsumeIdent(c);
+
+  if (ident === null || isBad(ident)) {
+    return ident;
+  }
+
+  const name = asciiLower(ident.value.value);
+
+  if (!Object.hasOwn(DeprecatedColorSystemName, name)) {
+    c.restore(start);
+    return null;
   }
 
   return ok({
-    kind: ColorKind.Named,
-    name: ColorName.transparent,
+    kind: ColorKind.Deprecated,
+    name: name as DeprecatedColorName,
   });
 }
 
-const tryConsumeTransparentKeyword = createKeywordConsumer('transparent');
+const DeprecatedColorSystemName = {
+  activeborder: 'buttonborder',
+  activecaption: 'canvas',
+  appworkspace: 'canvas',
+  background: 'canvas',
+  buttonhighlight: 'buttonface',
+  buttonshadow: 'buttonface',
+  captiontext: 'canvastext',
+  inactiveborder: 'buttonborder',
+  inactivecaption: 'canvas',
+  inactivecaptiontext: 'graytext',
+  infobackground: 'canvas',
+  infotext: 'canvastext',
+  menu: 'canvas',
+  menutext: 'canvastext',
+  scrollbar: 'canvas',
+  threedarkshadow: 'buttonborder',
+  threedface: 'buttonface',
+  threedhighlight: 'buttonborder',
+  threedlightshadow: 'buttonborder',
+  threedshadow: 'buttonborder',
+  window: 'canvas',
+  windowframe: 'buttonborder',
+  windowtext: 'canvastext',
+} as const satisfies Record<string, SystemColorName>;
 
 /*
  * currentcolor
@@ -1197,26 +1421,502 @@ export function resolveColorValue(
   value: ColorValue,
   context: ColorResolutionContext = {},
 ): ColorValue {
-  throw new Error(
-    `${ColorKind[value.kind]} color resolution is not implemented`
-    + ` at the ${context.stage ?? 'declared'} value stage`,
-  );
+  const stage = context.stage ?? 'declared';
+
+  switch (value.kind) {
+    case ColorKind.Numeric:
+      return resolveNumericColor(value, stage);
+    case ColorKind.Named:
+      return isComputedColorStage(stage)
+        ? resolveNamedColor(value)
+        : value;
+    case ColorKind.CurrentColor:
+      return isUsedColorStage(stage)
+        ? context.currentColor ?? value
+        : value;
+    case ColorKind.System:
+      return isComputedColorStage(stage)
+        ? context.systemColors?.get(value.name) ?? value
+        : value;
+    case ColorKind.Deprecated: {
+      if (!isComputedColorStage(stage)) {
+        return value;
+      }
+
+      const system: SystemColor = {
+        kind: ColorKind.System,
+        name: DeprecatedColorSystemName[value.name],
+      };
+
+      return context.systemColors?.get(system.name) ?? system;
+    }
+    case ColorKind.Hex:
+      return resolveHexColor(value);
+    case ColorKind.Rgb:
+    case ColorKind.Hsl:
+    case ColorKind.Hwb:
+    case ColorKind.Lab:
+    case ColorKind.Lch:
+    case ColorKind.Oklab:
+    case ColorKind.Oklch:
+    case ColorKind.Color:
+      return resolveColorFunction(value, context);
+    default:
+      return assertNever(value);
+  }
 }
 
-export type ColorResolutionContext =
-  & Omit<CalculationContext, 'stage'>
-  & {
-    /**
-     * Value-processing stage whose available information is being applied.
-     * Parsing produces a declared value before cascade and defaulting produce
-     * its specified value.
-     */
-    stage?: ColorResolutionStage;
+export type ColorResolutionContext = CalculationContext & {
+  currentColor?: NumericColor;
+  systemColors?: ReadonlyMap<SystemColorName, NumericColor>;
+};
+
+function isComputedColorStage(stage: ValueStage): boolean {
+  return stage === 'computed' || stage === 'used' || stage === 'actual';
+}
+
+function isUsedColorStage(stage: ValueStage): boolean {
+  return stage === 'used' || stage === 'actual';
+}
+
+function resolveNamedColor(value: NamedColor): NumericColor {
+  return numericColorFromRgba(ColorRgba[value.name]);
+}
+
+function resolveHexColor(value: HexColor): NumericColor {
+  const text = value.text.slice(1);
+  const expanded = text.length <= 4
+    ? [...text].map((digit) => digit.repeat(2)).join('')
+    : text;
+  const rgba = expanded.length === 6
+    ? ((Number.parseInt(expanded, 16) << 8) | 0xff) >>> 0
+    : Number.parseInt(expanded, 16) >>> 0;
+
+  return numericColorFromRgba(rgba);
+}
+
+function resolveColorFunction(
+  value: ColorFunction,
+  context: ColorResolutionContext,
+): ColorValue {
+  const alpha = resolveColorAlpha(value.alpha, context);
+
+  if (alpha === null) {
+    return value;
+  }
+
+  let numeric: NumericColor | null;
+
+  switch (value.kind) {
+    case ColorKind.Rgb:
+      numeric = resolveRgbColor(value, alpha, context);
+      break;
+    case ColorKind.Hsl:
+      numeric = resolveHslColor(value, alpha, context);
+      break;
+    case ColorKind.Hwb:
+      numeric = resolveHwbColor(value, alpha, context);
+      break;
+    case ColorKind.Lab:
+      numeric = resolveLabColor(value, alpha, context, false);
+      break;
+    case ColorKind.Oklab:
+      numeric = resolveLabColor(value, alpha, context, true);
+      break;
+    case ColorKind.Lch:
+      numeric = resolveLchColor(value, alpha, context, false);
+      break;
+    case ColorKind.Oklch:
+      numeric = resolveLchColor(value, alpha, context, true);
+      break;
+    case ColorKind.Color:
+      numeric = resolvePredefinedColor(value, alpha, context);
+      break;
+    default:
+      return assertNever(value);
+  }
+
+  return numeric === null
+    ? value
+    : resolveNumericColor(numeric, context.stage ?? 'declared');
+}
+
+function resolveNumericColor(
+  value: NumericColor,
+  stage: ValueStage,
+): NumericColor {
+  if (
+    value.space === 'srgb-legacy' &&
+    isComputedColorStage(stage) &&
+    (
+      value.alpha === undefined ||
+      value.components.some((component) => component === undefined)
+    )
+  ) {
+    return {
+      ...value,
+      components: value.components.map(
+        (component) => component ?? 0,
+      ) as ColorComponents,
+      alpha: value.alpha ?? 0,
+    };
+  }
+
+  return value;
+}
+
+function resolveRgbColor(
+  value: RgbColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+): NumericColor | null {
+  const components = resolveColorComponents(
+    value.components,
+    1 / 0xff,
+    1 / 100,
+    context,
+  );
+
+  if (components === null) {
+    return null;
+  }
+
+  return {
+    kind: ColorKind.Numeric,
+    space: 'srgb-legacy',
+    components: components.map(
+      (component) => component === undefined
+        ? component
+        : clampColorComponent(component, 0, 1),
+    ) as ColorComponents,
+    alpha,
+  };
+}
+
+function resolveHslColor(
+  value: HslColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+): NumericColor | null {
+  const hue = resolveHue(value.hue, context);
+  const components = resolveColorComponents(
+    [value.saturation, value.lightness],
+    1,
+    1,
+    context,
+  );
+
+  if (hue === null || components === null) {
+    return null;
+  }
+
+  const [saturation, lightness] = components;
+  const numeric: NumericColor = {
+    kind: ColorKind.Numeric,
+    space: 'hsl',
+    components: [
+      hue,
+      saturation === undefined
+        ? saturation
+        : Math.max(0, saturation),
+      lightness,
+    ],
+    alpha: alpha ?? 0,
   };
 
-export type ColorResolutionStage =
-  | 'declared'
-  | CalculationValueStage;
+  return convertNumericColor(numeric, 'srgb-legacy');
+}
+
+function resolveHwbColor(
+  value: HwbColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+): NumericColor | null {
+  const hue = resolveHue(value.hue, context);
+  const components = resolveColorComponents(
+    [value.whiteness, value.blackness],
+    1,
+    1,
+    context,
+  );
+
+  if (hue === null || components === null) {
+    return null;
+  }
+
+  return convertNumericColor({
+    kind: ColorKind.Numeric,
+    space: 'hwb',
+    components: [hue, ...components],
+    alpha: alpha ?? 0,
+  }, 'srgb-legacy');
+}
+
+function resolveLabColor(
+  value: LabColor | OklabColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+  ok: boolean,
+): NumericColor | null {
+  const components = resolveColorComponents(
+    [value.lightness, value.a, value.b],
+    1,
+    ok ? [1 / 100, 0.4 / 100, 0.4 / 100] : [1, 1.25, 1.25],
+    context,
+  );
+
+  if (components === null) {
+    return null;
+  }
+
+  const [lightness, a, b] = components;
+
+  return {
+    kind: ColorKind.Numeric,
+    space: ok ? 'oklab' : 'lab',
+    components: [
+      lightness === undefined
+        ? lightness
+        : clampColorComponent(lightness, 0, ok ? 1 : 100),
+      a,
+      b,
+    ],
+    alpha,
+  };
+}
+
+function resolveLchColor(
+  value: LchColor | OklchColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+  ok: boolean,
+): NumericColor | null {
+  const components = resolveColorComponents(
+    [value.lightness, value.chroma],
+    1,
+    ok ? [1 / 100, 0.4 / 100] : [1, 1.5],
+    context,
+  );
+  const hue = resolveHue(value.hue, context);
+
+  if (components === null || hue === null) {
+    return null;
+  }
+
+  const [lightness, chroma] = components;
+
+  return {
+    kind: ColorKind.Numeric,
+    space: ok ? 'oklch' : 'lch',
+    components: [
+      lightness === undefined
+        ? lightness
+        : clampColorComponent(lightness, 0, ok ? 1 : 100),
+      chroma === undefined ? chroma : Math.max(0, chroma),
+      hue,
+    ],
+    alpha,
+  };
+}
+
+function resolvePredefinedColor(
+  value: PredefinedColor,
+  alpha: number | undefined,
+  context: CalculationContext,
+): NumericColor | null {
+  const components = resolveColorComponents(
+    value.components,
+    1,
+    1 / 100,
+    context,
+  );
+
+  return components === null
+    ? null
+    : {
+      kind: ColorKind.Numeric,
+      space: value.space === 'xyz' ? 'xyz-d65' : value.space,
+      components,
+      alpha,
+    };
+}
+
+function resolveColorComponents<
+  const Values extends readonly (NumberValue | PercentageValue | 'none')[],
+>(
+  values: Values,
+  numberScale: number | readonly number[],
+  percentageScale: number | readonly number[],
+  context: CalculationContext,
+): { [Index in keyof Values]: ColorComponent } | null {
+  const components: ColorComponent[] = [];
+
+  for (const [index, value] of values.entries()) {
+    const component = resolveColorComponent(
+      value,
+      scaleAt(numberScale, index),
+      scaleAt(percentageScale, index),
+      context,
+    );
+
+    if (component === null) {
+      return null;
+    }
+
+    components.push(component);
+  }
+
+  return components as { [Index in keyof Values]: ColorComponent };
+}
+
+function resolveColorComponent(
+  value: NumberValue | PercentageValue | 'none',
+  numberScale: number,
+  percentageScale: number,
+  context: CalculationContext,
+): ColorComponent | null {
+  if (value === 'none') {
+    return undefined;
+  }
+
+  const resolved = resolveColorNumericValue(value, context);
+
+  if (resolved === null) {
+    return null;
+  }
+
+  return resolved.type === 'percentage'
+    ? resolved.value * percentageScale
+    : resolved.value * numberScale;
+}
+
+function resolveColorAlpha(
+  value: AlphaValue | 'none' | undefined,
+  context: ColorResolutionContext,
+): number | undefined | null {
+  if (value === undefined) {
+    return 1;
+  }
+
+  if (value === 'none') {
+    return undefined;
+  }
+
+  if (value.type === 'math' && !isComputedColorStage(
+    context.stage ?? 'declared',
+  )) {
+    return null;
+  }
+
+  const resolved = resolveColorNumericValue(value, context);
+
+  if (resolved === null) {
+    return null;
+  }
+
+  const alpha = resolved.type === 'percentage'
+    ? resolved.value / 100
+    : resolved.value;
+
+  return clampColorComponent(alpha, 0, 1);
+}
+
+function resolveHue(
+  value: HueValue | 'none',
+  context: CalculationContext,
+): ColorComponent | null {
+  if (value === 'none') {
+    return undefined;
+  }
+
+  if (value.type === 'angle') {
+    return normalizeHue(resolveAngle(value).value);
+  }
+
+  if (value.type === 'number') {
+    return normalizeHue(value.value);
+  }
+
+  const calculation = simplifyCalculationTree(
+    value.calculation,
+    context,
+    value.restrictions,
+  );
+
+  switch (calculation.type) {
+    case 'number':
+      return normalizeHue(calculation.value);
+    case 'dimension':
+      return calculation.unit === 'deg'
+        ? normalizeHue(calculation.value)
+        : null;
+    default:
+      return null;
+  }
+}
+
+function resolveColorNumericValue(
+  value: NumberValue | PercentageValue,
+  context: CalculationContext,
+): NumberLiteral | PercentageLiteral | null {
+  if (value.type !== 'math') {
+    return value;
+  }
+
+  const calculation = simplifyCalculationTree(
+    value.calculation,
+    context,
+    value.restrictions,
+  );
+
+  switch (calculation.type) {
+    case 'number':
+    case 'percentage':
+      return calculation;
+    default:
+      return null;
+  }
+}
+
+function normalizeHue(value: number): number {
+  return Number.isFinite(value)
+    ? ((value % 360) + 360) % 360
+    : 0;
+}
+
+function clampColorComponent(
+  value: number,
+  minimum: number,
+  maximum: number,
+): number {
+  return Number.isNaN(value) ? minimum : clamp(value, minimum, maximum);
+}
+
+function scaleAt(
+  scale: number | readonly number[],
+  index: number,
+): number {
+  return typeof scale === 'number' ? scale : scale[index]!;
+}
+
+function numericColorFromRgba(rgba: number): NumericColor {
+  return {
+    kind: ColorKind.Numeric,
+    space: 'srgb-legacy',
+    components: [
+      (rgba >>> 24) / 0xff,
+      ((rgba >>> 16) & 0xff) / 0xff,
+      ((rgba >>> 8) & 0xff) / 0xff,
+    ],
+    alpha: (rgba & 0xff) / 0xff,
+  };
+}
+
+function colorResolutionContextFor(context: unknown): ColorResolutionContext {
+  return context === null || context === undefined
+    ? {}
+    : context;
+}
 
 
 
@@ -1247,11 +1947,12 @@ export function serializeColorValue(
     case ColorKind.Color:
       return serializeColorFunction(value, context);
     case ColorKind.Named:
-      return ColorName[value.name];
+      return value.name;
     case ColorKind.CurrentColor:
       return 'currentcolor';
     case ColorKind.System:
-      return SystemColorName[value.name].toLowerCase();
+    case ColorKind.Deprecated:
+      return value.name;
     default:
       return assertNever(value);
   }

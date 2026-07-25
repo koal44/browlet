@@ -1,16 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, convertNumericColor, deltaEOK, gamutMapNumericColor,
-  parseColorValue, serializeColorValue, type NumericColor,
+  ColorKind, ColorRgba, convertNumericColor, deltaEOK, gamutMapNumericColor,
+  parseColorValue, resolveColorValue, serializeColorValue,
+  type NumericColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
-import { ColorName, colorNameFromText, namedColorRgba, SystemColorName } from '../../../../src/stylelet/values/color-keywords';
 
-type ColorVector = readonly [number, number, number];
+type ColorVector3 = readonly [number, number, number];
+type ColorVector4 = readonly [number, number, number, number];
+type ColorVector = ColorVector3 | ColorVector4;
 
-function expectColorEquivalent(
+function isColorVector(value: unknown): value is ColorVector {
+  return (
+    Array.isArray(value) &&
+    (value.length === 3 || value.length === 4) &&
+    value.every((component) => typeof component === 'number')
+  );
+}
+
+function expectColorCloseTo(
   actual: NumericColor,
-  expected: NumericColor,
+  expected: NumericColor | ColorVector,
 ): void {
+  if (isColorVector(expected)) {
+    const [first, second, third, alpha] = expected;
+
+    if (expected.length === 4) {
+      expect(actual.alpha).toBe(alpha);
+    }
+
+    expect(deltaEOK(actual, {
+      ...actual,
+      components: [first, second, third],
+    })).toBeLessThan(0.001);
+    return;
+  }
+
   expect(actual.alpha).toBe(expected.alpha);
   expect(deltaEOK(actual, expected)).toBeLessThan(0.001);
 }
@@ -19,48 +43,109 @@ describe('color values', () => {
   it('parses named colors case-insensitively', () => {
     expect(parseColorValue('ReD')).toMatchObject({
       kind: ColorKind.Named,
-      name: ColorName.red,
+      name: 'red',
     });
+    expect(parseColorValue('notacolor')).toBeNull();
+    expect(parseColorValue('constructor')).toBeNull();
   });
 
   it('parses system colors case-insensitively', () => {
     expect(parseColorValue('CanvasText')).toEqual({
       kind: ColorKind.System,
-      name: SystemColorName.CanvasText,
+      name: 'canvastext',
     });
     expect(parseColorValue('ACCENTcolortext')).toEqual({
       kind: ColorKind.System,
-      name: SystemColorName.AccentColorText,
+      name: 'accentcolortext',
     });
+  });
+
+  it.each([
+    ['activeborder', 'buttonborder'], ['activecaption', 'canvas'],
+    ['appworkspace', 'canvas'], ['background', 'canvas'],
+    ['buttonhighlight', 'buttonface'], ['buttonshadow', 'buttonface'],
+    ['captiontext', 'canvastext'], ['inactiveborder', 'buttonborder'],
+    ['inactivecaption', 'canvas'], ['inactivecaptiontext', 'graytext'],
+    ['infobackground', 'canvas'], ['infotext', 'canvastext'],
+    ['menu', 'canvas'], ['menutext', 'canvastext'],
+    ['scrollbar', 'canvas'], ['threedarkshadow', 'buttonborder'],
+    ['threedface', 'buttonface'], ['threedhighlight', 'buttonborder'],
+    ['threedlightshadow', 'buttonborder'], ['threedshadow', 'buttonborder'],
+    ['window', 'canvas'], ['windowframe', 'buttonborder'],
+    ['windowtext', 'canvastext'],
+  ] as const)(
+    'parses and resolves the deprecated color %s',
+    (name, systemName) => {
+      const color = parseColorValue(name.toUpperCase())!;
+
+      expect(color).toEqual({
+        kind: ColorKind.Deprecated,
+        name,
+      });
+      expect(serializeColorValue(color)).toBe(name);
+      expect(resolveColorValue(color, { stage: 'specified' })).toBe(color);
+      expect(resolveColorValue(color, { stage: 'computed' })).toEqual({
+        kind: ColorKind.System,
+        name: systemName,
+      });
+    },
+  );
+
+  it('resolves deprecated colors through the modern system color', () => {
+    const numeric: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0.1, 0.2, 0.3],
+      alpha: 1,
+    };
+
+    expect(resolveColorValue(parseColorValue('ActiveCaption')!, {
+      stage: 'computed',
+      systemColors: new Map<SystemColorName, NumericColor>([['canvas', numeric]]),
+    })).toBe(numeric);
   });
 
   it('parses transparent and currentcolor', () => {
     expect(parseColorValue('transparent')).toEqual({
       kind: ColorKind.Named,
-      name: ColorName.transparent,
+      name: 'transparent',
     });
     expect(parseColorValue('CURRENTcolor')).toEqual({
       kind: ColorKind.CurrentColor,
     });
   });
 
-  it('parses three-, four-, six-, and eight-digit hex colors', () => {
-    for (const text of ['#0f8', '#0f8c', '#00ff88', '#00ff88cc']) {
-      expect(parseColorValue(text)).toEqual({
-        kind: ColorKind.Hex,
-        text,
-      });
-    }
+  it('resolves transparent to transparent black at computed-value time', () => {
+    const transparent = parseColorValue('transparent')!;
 
-    expect(parseColorValue('#AbC')).toEqual({
-      kind: ColorKind.Hex,
-      text: '#AbC',
-    });
-    expect(parseColorValue('#\\66 00')).toEqual({
-      kind: ColorKind.Hex,
-      text: '#f00',
+    expect(resolveColorValue(transparent, { stage: 'specified' }))
+      .toBe(transparent);
+    expect(resolveColorValue(transparent, { stage: 'computed' })).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 0, 0],
+      alpha: 0,
     });
   });
+
+  it.each([
+    ['#0f8', [0, 1, 136 / 255], 1],
+    ['#0f8c', [0, 1, 136 / 255], 204 / 255],
+    ['#00ff88', [0, 1, 136 / 255], 1],
+    ['#00ff88cc', [0, 1, 136 / 255], 204 / 255],
+    ['#AbC', [170 / 255, 187 / 255, 204 / 255], 1],
+    ['#\\66 00', [1, 0, 0], 1],
+  ] as const)(
+    'resolves the declared hex color %s',
+    (text, components, alpha) => {
+      expect(parseColorValue(text)).toEqual({
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components,
+        alpha,
+      });
+    },
+  );
 
   it('rejects invalid hex color syntax', () => {
     for (const text of [
@@ -77,48 +162,76 @@ describe('color values', () => {
     }
   });
 
-  it('parses legacy rgb and rgba functions', () => {
-    expect(parseColorValue('rgb(255, 0, 127)')).toEqual({
-      kind: ColorKind.Rgb,
-      syntax: 'legacy',
-      components: [
-        { type: 'number', value: 255 },
-        { type: 'number', value: 0 },
-        { type: 'number', value: 127 },
-      ],
-    });
-    expect(parseColorValue('rgba(100%, 0%, 50%, 25%)')).toEqual({
-      kind: ColorKind.Rgb,
-      syntax: 'legacy',
-      components: [
-        { type: 'percentage', value: 100 },
-        { type: 'percentage', value: 0 },
-        { type: 'percentage', value: 50 },
-      ],
-      alpha: { type: 'percentage', value: 25 },
+  it('resolves named colors at computed-value time', () => {
+    const red = parseColorValue('red')!;
+
+    expect(resolveColorValue(red, { stage: 'specified' })).toBe(red);
+    expect(resolveColorValue(red, { stage: 'computed' })).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0, 0],
+      alpha: 1,
     });
   });
 
-  it('parses modern rgb and rgba functions', () => {
+  it('resolves contextual colors when their dependencies are available', () => {
+    const numeric: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0.1, 0.2, 0.3],
+      alpha: 1,
+    };
+    const current = parseColorValue('currentcolor')!;
+    const system = parseColorValue('CanvasText')!;
+    const systemColors = new Map<SystemColorName, NumericColor>([
+      ['canvastext', numeric],
+    ]);
+
+    expect(resolveColorValue(current, {
+      stage: 'computed',
+      currentColor: numeric,
+    })).toBe(current);
+    expect(resolveColorValue(current, {
+      stage: 'used',
+      currentColor: numeric,
+    })).toBe(numeric);
+    expect(resolveColorValue(system, {
+      stage: 'specified',
+      systemColors,
+    })).toBe(system);
+    expect(resolveColorValue(system, {
+      stage: 'computed',
+      systemColors,
+    })).toBe(numeric);
+  });
+
+  it('resolves legacy rgb and rgba functions to numerical sRGB', () => {
+    expect(parseColorValue('rgb(255, 0, 127)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0, 127 / 255],
+      alpha: 1,
+    });
+    expect(parseColorValue('rgba(100%, 0%, 50%, 25%)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0, 0.5],
+      alpha: 0.25,
+    });
+  });
+
+  it('resolves modern rgb and rgba functions to numerical sRGB', () => {
     expect(parseColorValue('rgb(255 20% none / 0.5)')).toEqual({
-      kind: ColorKind.Rgb,
-      syntax: 'modern',
-      components: [
-        { type: 'number', value: 255 },
-        { type: 'percentage', value: 20 },
-        'none',
-      ],
-      alpha: { type: 'number', value: 0.5 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0.2, undefined],
+      alpha: 0.5,
     });
     expect(parseColorValue('rgba(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Rgb,
-      syntax: 'modern',
-      components: [
-        'none',
-        { type: 'number', value: 0 },
-        { type: 'percentage', value: 100 },
-      ],
-      alpha: 'none',
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [undefined, 0, 1],
+      alpha: undefined,
     });
   });
 
@@ -134,57 +247,144 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it.fails('clamps rgb components at parsed-value time', () => {
-    expect(parseColorValue('rgb(300 -10 0 / 2)')).toEqual({
+  it('resolves color calculations as their value stage permits', () => {
+    expect(parseColorValue('rgb(calc(255 / 2) 0 0)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.5, 0, 0],
+      alpha: 1,
+    });
+
+    const declared = parseColorValue(
+      'rgb(calc(255 / 2) 0 0 / calc(.25 + .25))',
+    )!;
+
+    expect(declared).toMatchObject({
       kind: ColorKind.Rgb,
-      syntax: 'modern',
-      components: [
-        { type: 'number', value: 255 },
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0 },
-      ],
-      alpha: { type: 'number', value: 1 },
+    });
+    expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.5, 0, 0],
+      alpha: 0.5,
     });
   });
 
-  it.todo('uses zero for missing rgb components outside interpolation');
+  it('matches the section 15.1 sRGB calculation examples', () => {
+    expect(serializeColorValue(
+      parseColorValue('rgb(calc(64 * 2) 127 255)')!,
+    )).toBe('rgb(128, 127, 255)');
+    expect(serializeColorValue(
+      parseColorValue('rgb(calc(100 * 4) 127 calc(20 - 35))')!,
+    )).toBe('rgb(255, 127, 0)');
 
-  it('parses legacy hsl and hsla functions', () => {
+    const hsl = parseColorValue(
+      'hsl(38.82 calc(2 * 50%) 50%)',
+    ) as NumericColor;
+
+    expect(hsl.space).toBe('srgb-legacy');
+    expectColorCloseTo(hsl, [1, 0.647, 0, 1]);
+  });
+
+  it('clamps rgb components at parsed-value time', () => {
+    expect(parseColorValue('rgb(300 -10 0 / 2)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0, 0],
+      alpha: 1,
+    });
+  });
+
+  // Adapted from WPT css/css-color/parsing/color-computed-rgb.html.
+  it.each([
+    ['rgb(calc(infinity) 0 0)', [1, 0, 0], 1],
+    ['rgb(0 calc(-infinity) 0)', [0, 0, 0], 1],
+    ['rgb(0 0 calc(NaN))', [0, 0, 0], 1],
+    ['rgb(calc(0 / 0) 0 0)', [0, 0, 0], 1],
+    ['rgb(0 0 0 / calc(infinity))', [0, 0, 0], 1],
+    ['rgb(0 0 0 / calc(-infinity))', [0, 0, 0], 0],
+    ['rgb(0 0 0 / calc(NaN))', [0, 0, 0], 0],
+  ] as const)(
+    'clamps special calculations in the computed color %s',
+    (input, components, alpha) => {
+      const declared = parseColorValue(input)!;
+
+      expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components,
+        alpha,
+      });
+    },
+  );
+
+  // Adapted from WPT css/css-color/parsing/color-computed-rgb.html.
+  it.each([
+    ['rgb(none none none)', [0, 0, 0], 1],
+    ['rgb(none none none / none)', [0, 0, 0], 0],
+    ['rgb(128 none none / none)', [128 / 255, 0, 0], 0],
+    ['rgb(20% none none)', [0.2, 0, 0], 1],
+  ] as const)(
+    'uses zero for missing components in the computed color %s',
+    (input, components, alpha) => {
+      const declared = parseColorValue(input)!;
+
+      expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components,
+        alpha,
+      });
+    },
+  );
+
+  it('resolves legacy hsl and hsla functions to numerical sRGB', () => {
     expect(parseColorValue('hsl(120, 100%, 50%)')).toEqual({
-      kind: ColorKind.Hsl,
-      syntax: 'legacy',
-      hue: { type: 'number', value: 120 },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'percentage', value: 50 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 1, 0],
+      alpha: 1,
     });
     expect(parseColorValue('hsla(0.5turn, 25%, 75%, 20%)')).toEqual({
-      kind: ColorKind.Hsl,
-      syntax: 'legacy',
-      hue: { type: 'angle', value: 0.5, unit: 'turn' },
-      saturation: { type: 'percentage', value: 25 },
-      lightness: { type: 'percentage', value: 75 },
-      alpha: { type: 'percentage', value: 20 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.6875, 0.8125, 0.8125],
+      alpha: 0.2,
     });
   });
 
-  it('parses modern hsl and hsla functions', () => {
+  it('resolves modern hsl and hsla functions to numerical sRGB', () => {
     expect(parseColorValue('hsl(120deg 100% 50 / 0.5)')).toEqual({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'angle', value: 120, unit: 'deg' },
-      saturation: { type: 'percentage', value: 100 },
-      lightness: { type: 'number', value: 50 },
-      alpha: { type: 'number', value: 0.5 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 1, 0],
+      alpha: 0.5,
     });
     expect(parseColorValue('hsla(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: 'none',
-      saturation: { type: 'number', value: 0 },
-      lightness: { type: 'percentage', value: 100 },
-      alpha: 'none',
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 1, 1],
+      alpha: 0,
     });
   });
+
+  // Adapted from WPT css/css-color/parsing/color-computed-hsl.html.
+  it.each([
+    ['hsl(none none none)', [0, 0, 0], 1],
+    ['hsl(none none none / none)', [0, 0, 0], 0],
+    ['hsl(120 none 50%)', [0.5, 0.5, 0.5], 1],
+    ['hsl(none 100% 50%)', [1, 0, 0], 1],
+  ] as const)(
+    'uses zero for missing HSL components in %s',
+    (input, components, alpha) => {
+      expect(parseColorValue(input)).toEqual({
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components,
+        alpha,
+      });
+    },
+  );
 
   it('rejects invalid mixtures of legacy and modern hsl syntax', () => {
     expect(parseColorValue('hsl(120, 100, 50%)')).toBeNull();
@@ -198,30 +398,27 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it.fails('clamps negative hsl saturation at parsed-value time', () => {
+  it('clamps negative hsl saturation at parsed-value time', () => {
     expect(parseColorValue('hsl(120 -10% 50%)')).toEqual({
-      kind: ColorKind.Hsl,
-      syntax: 'modern',
-      hue: { type: 'number', value: 120 },
-      saturation: { type: 'percentage', value: 0 },
-      lightness: { type: 'percentage', value: 50 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.5, 0.5, 0.5],
+      alpha: 1,
     });
   });
 
-  it('parses hwb functions', () => {
+  it('resolves hwb functions to numerical sRGB', () => {
     expect(parseColorValue('hwb(120deg 20% 30 / 0.5)')).toEqual({
-      kind: ColorKind.Hwb,
-      hue: { type: 'angle', value: 120, unit: 'deg' },
-      whiteness: { type: 'percentage', value: 20 },
-      blackness: { type: 'number', value: 30 },
-      alpha: { type: 'number', value: 0.5 },
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.2, 0.7, 0.2],
+      alpha: 0.5,
     });
     expect(parseColorValue('hwb(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Hwb,
-      hue: 'none',
-      whiteness: { type: 'number', value: 0 },
-      blackness: { type: 'percentage', value: 100 },
-      alpha: 'none',
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 0, 0],
+      alpha: 0,
     });
   });
 
@@ -237,40 +434,70 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it.todo('normalizes excessive white and black when computing hwb colors');
-
-  it.todo('uses zero for missing hwb components outside interpolation');
-
-  it('parses lab and oklab functions', () => {
-    expect(parseColorValue('lab(50% 20 -30% / 0.4)')).toEqual({
-      kind: ColorKind.Lab,
-      lightness: { type: 'percentage', value: 50 },
-      a: { type: 'number', value: 20 },
-      b: { type: 'percentage', value: -30 },
-      alpha: { type: 'number', value: 0.4 },
-    });
-    expect(parseColorValue('oklab(none 0.1 -20% / none)')).toEqual({
-      kind: ColorKind.Oklab,
-      lightness: 'none',
-      a: { type: 'number', value: 0.1 },
-      b: { type: 'percentage', value: -20 },
-      alpha: 'none',
+  it('normalizes excessive white and black when resolving hwb colors', () => {
+    expect(parseColorValue('hwb(45 40% 80%)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1 / 3, 1 / 3, 1 / 3],
+      alpha: 1,
     });
   });
 
-  it('parses lch and oklch functions', () => {
+  it('uses zero for missing hwb components outside interpolation', () => {
+    expect(parseColorValue('hwb(none none 100%)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0, 0, 0],
+      alpha: 1,
+    });
+  });
+
+  // Adapted from WPT css/css-color/parsing/color-computed-hwb.html.
+  it.each([
+    ['hwb(none none none)', [1, 0, 0], 1],
+    ['hwb(none none none / none)', [1, 0, 0], 0],
+    ['hwb(120 80% none)', [0.8, 1, 0.8], 1],
+    ['hwb(120 none 50%)', [0, 0.5, 0], 1],
+    ['hwb(none 100% 50% / none)', [2 / 3, 2 / 3, 2 / 3], 0],
+  ] as const)(
+    'uses zero for missing HWB components in %s',
+    (input, components, alpha) => {
+      expect(parseColorValue(input)).toEqual({
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components,
+        alpha,
+      });
+    },
+  );
+
+  it('resolves lab and oklab functions to numerical colors', () => {
+    expect(parseColorValue('lab(50% 20 -30% / 0.4)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'lab',
+      components: [50, 20, -37.5],
+      alpha: 0.4,
+    });
+    expect(parseColorValue('oklab(none 0.1 -20% / none)')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [undefined, 0.1, -0.08],
+      alpha: undefined,
+    });
+  });
+
+  it('resolves lch and oklch functions to numerical colors', () => {
     expect(parseColorValue('lch(50 40% 270deg / 25%)')).toEqual({
-      kind: ColorKind.Lch,
-      lightness: { type: 'number', value: 50 },
-      chroma: { type: 'percentage', value: 40 },
-      hue: { type: 'angle', value: 270, unit: 'deg' },
-      alpha: { type: 'percentage', value: 25 },
+      kind: ColorKind.Numeric,
+      space: 'lch',
+      components: [50, 60, 270],
+      alpha: 0.25,
     });
     expect(parseColorValue('oklch(none 0.2 none)')).toEqual({
-      kind: ColorKind.Oklch,
-      lightness: 'none',
-      chroma: { type: 'number', value: 0.2 },
-      hue: 'none',
+      kind: ColorKind.Numeric,
+      space: 'oklch',
+      components: [undefined, 0.2, undefined],
+      alpha: 1,
     });
   });
 
@@ -292,25 +519,70 @@ describe('color values', () => {
     expect(colors).not.toContain(null);
   });
 
-  it.fails('clamps Lab lightness at parsed-value time', () => {
-    expect(parseColorValue('lab(-10 0 0)')).toMatchObject({
-      lightness: { type: 'number', value: 0 },
-    });
-  });
+  // Adapted from WPT css/css-color/parsing/color-computed-lab.html.
+  it.each([
+    ['lab(400 -200 200 / 50%)', 'lab', [100, -200, 200], 0.5],
+    ['lch(-40 -20 -700deg / 110%)', 'lch', [0, 0, 20], 1],
+    ['oklab(4 -2 2 / none)', 'oklab', [1, -2, 2], undefined],
+    ['oklch(-0.4 -0.2 740deg / 50%)', 'oklch', [0, 0, 20], 0.5],
+  ] as const)(
+    'resolves the bounded components of %s',
+    (input, space, components, alpha) => {
+      expect(parseColorValue(input)).toEqual({
+        kind: ColorKind.Numeric,
+        space,
+        components,
+        alpha,
+      });
+    },
+  );
 
-  it.fails('clamps Oklab lightness at parsed-value time', () => {
-    expect(parseColorValue('oklab(2 0 0)')).toMatchObject({
-      lightness: { type: 'number', value: 1 },
-    });
-  });
+  // Adapted from WPT css/css-color/parsing/color-computed-lab.html.
+  it.each([
+    [
+      'lab(calc(50 * 3) calc(0.5 - 1) calc(1.5)'
+        + ' / calc(-0.5 + 1))',
+      'lab',
+      [100, -0.5, 1.5],
+      0.5,
+    ],
+    [
+      'lch(calc(-50 * 3) calc(0.5 + 1) calc(-20deg * 2)'
+        + ' / calc(-0.5 * 2))',
+      'lch',
+      [0, 1.5, 320],
+      0,
+    ],
+    [
+      'oklab(calc(0.5 * 3) calc(0.5 - 1) calc(1.5)'
+        + ' / calc(-0.5 + 1))',
+      'oklab',
+      [1, -0.5, 1.5],
+      0.5,
+    ],
+    [
+      'oklch(calc(-0.5 * 3) calc(0.5 + 1) calc(-20deg * 2)'
+        + ' / calc(-0.5 * 2))',
+      'oklch',
+      [0, 1.5, 320],
+      0,
+    ],
+  ] as const)(
+    'resolves calculated components in the computed color %s',
+    (input, space, components, alpha) => {
+      expect(resolveColorValue(
+        parseColorValue(input)!,
+        { stage: 'computed' },
+      )).toEqual({
+        kind: ColorKind.Numeric,
+        space,
+        components,
+        alpha,
+      });
+    },
+  );
 
-  it.fails('clamps negative LCH chroma at parsed-value time', () => {
-    expect(parseColorValue('lch(50 -10 30)')).toMatchObject({
-      chroma: { type: 'number', value: 0 },
-    });
-  });
-
-  it('parses every predefined color space', () => {
+  it('resolves every predefined color space', () => {
     const spaces = [
       'srgb',
       'srgb-linear',
@@ -326,8 +598,8 @@ describe('color values', () => {
 
     for (const space of spaces) {
       expect(parseColorValue(`color(${space} 0 0 0)`)).toMatchObject({
-        kind: ColorKind.Color,
-        space,
+        kind: ColorKind.Numeric,
+        space: space === 'xyz' ? 'xyz-d65' : space,
       });
     }
 
@@ -336,41 +608,29 @@ describe('color values', () => {
     });
   });
 
-  it('parses color function components and alpha', () => {
+  it('resolves color function components and alpha', () => {
     expect(parseColorValue('color(display-p3 1 50% none / 25%)')).toEqual({
-      kind: ColorKind.Color,
+      kind: ColorKind.Numeric,
       space: 'display-p3',
-      components: [
-        { type: 'number', value: 1 },
-        { type: 'percentage', value: 50 },
-        'none',
-      ],
-      alpha: { type: 'percentage', value: 25 },
+      components: [1, 0.5, undefined],
+      alpha: 0.25,
     });
 
     expect(parseColorValue('color(xyz-d50 none 0.5 120% / none)')).toEqual({
-      kind: ColorKind.Color,
+      kind: ColorKind.Numeric,
       space: 'xyz-d50',
-      components: [
-        'none',
-        { type: 'number', value: 0.5 },
-        { type: 'percentage', value: 120 },
-      ],
-      alpha: 'none',
+      components: [undefined, 0.5, 1.2],
+      alpha: undefined,
     });
   });
 
   it('retains out-of-range color function components', () => {
     expect(parseColorValue('color(prophoto-rgb -0.2 1.4 120% / 2)'))
       .toEqual({
-        kind: ColorKind.Color,
+        kind: ColorKind.Numeric,
         space: 'prophoto-rgb',
-        components: [
-          { type: 'number', value: -0.2 },
-          { type: 'number', value: 1.4 },
-          { type: 'percentage', value: 120 },
-        ],
-        alpha: { type: 'number', value: 2 },
+        components: [-0.2, 1.4, 1.2],
+        alpha: 1,
       });
   });
 
@@ -396,11 +656,11 @@ describe('color values', () => {
       ],
       [
         ' HSLa( .5turn , 25% , 75% , 20% ) ',
-        'hsla(180, 25, 75, 0.2)',
+        'rgba(175.3125, 207.1875, 207.1875, 0.2)',
       ],
       [
         ' HWB( .5turn   20%  30% / 50% ) ',
-        'hwb(180 20 30 / 0.5)',
+        'rgba(51, 178.5, 178.5, 0.5)',
       ],
       [
         ' LAB( 50%  20  -30% / 40% ) ',
@@ -458,19 +718,53 @@ describe('color values', () => {
       .toBe('color(display-p3 0.3 0 0 / 0.5)');
   });
 
+  const calculatedAlphaSerializationCases = [
+    [
+      'rgb(0 0 0 / calc(2 * 60%))',
+      'rgb(0 0 0 / calc(1.2))',
+      'rgb(0, 0, 0)',
+    ],
+    [
+      'color(display-p3 0 1 0 / calc(2 * 60%))',
+      'color(display-p3 0 1 0 / calc(1.2))',
+      'color(display-p3 0 1 0)',
+    ],
+  ] as const;
+
+  it.todo.each(calculatedAlphaSerializationCases)(
+    'normalizes calculated alpha in the declared color %s',
+    (input, declared) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(declared);
+    },
+  );
+
+  it.todo.each(calculatedAlphaSerializationCases)(
+    'clamps calculated alpha in the computed color %s',
+    (input, _declared, computed) => {
+      expect(serializeColorValue(
+        parseColorValue(input)!,
+        { stage: 'computed' },
+      )).toBe(computed);
+    },
+  );
+
   it('serializes keyword colors in lowercase', () => {
     expect(serializeColorValue({
       kind: ColorKind.Named,
-      name: ColorName.rebeccapurple,
+      name: 'rebeccapurple',
     })).toBe('rebeccapurple');
     expect(serializeColorValue({
       kind: ColorKind.Named,
-      name: ColorName.transparent,
+      name: 'transparent',
     })).toBe('transparent');
     expect(serializeColorValue({
       kind: ColorKind.System,
-      name: SystemColorName.CanvasText,
+      name: 'canvastext',
     })).toBe('canvastext');
+    expect(serializeColorValue({
+      kind: ColorKind.Deprecated,
+      name: 'windowtext',
+    })).toBe('windowtext');
     expect(serializeColorValue({
       kind: ColorKind.CurrentColor,
     })).toBe('currentcolor');
@@ -585,11 +879,11 @@ describe('color values', () => {
   });
 
   type ColorConversionReference = readonly [
-    rgb: ColorVector,
-    srgbLch: ColorVector,
-    srgbXyz: ColorVector,
-    displayP3Lch: ColorVector,
-    displayP3Xyz: ColorVector,
+    rgb: ColorVector3,
+    srgbLch: ColorVector3,
+    srgbXyz: ColorVector3,
+    displayP3Lch: ColorVector3,
+    displayP3Xyz: ColorVector3,
   ];
 
   // csswg-drafts/css-color-4/tests.js
@@ -642,28 +936,28 @@ describe('color values', () => {
       const actualDisplayP3Lch = convertNumericColor(displayP3, 'lch');
 
       expect(actualSrgbXyz.space).toBe('xyz-d65');
-      expectColorEquivalent(actualSrgbXyz, {
+      expectColorCloseTo(actualSrgbXyz, {
         kind: ColorKind.Numeric,
         space: 'xyz-d65',
         components: [...srgbXyz],
         alpha: 1,
       });
       expect(actualSrgbLch.space).toBe('lch');
-      expectColorEquivalent(actualSrgbLch, {
+      expectColorCloseTo(actualSrgbLch, {
         kind: ColorKind.Numeric,
         space: 'lch',
         components: [...srgbLch],
         alpha: 1,
       });
       expect(actualDisplayP3Xyz.space).toBe('xyz-d65');
-      expectColorEquivalent(actualDisplayP3Xyz, {
+      expectColorCloseTo(actualDisplayP3Xyz, {
         kind: ColorKind.Numeric,
         space: 'xyz-d65',
         components: [...displayP3Xyz],
         alpha: 1,
       });
       expect(actualDisplayP3Lch.space).toBe('lch');
-      expectColorEquivalent(actualDisplayP3Lch, {
+      expectColorCloseTo(actualDisplayP3Lch, {
         kind: ColorKind.Numeric,
         space: 'lch',
         components: [...displayP3Lch],
@@ -1029,8 +1323,8 @@ describe('color values', () => {
     [[0.99, 0.8, 328], [1, 0.9567, 1]],
     [[0.99, 0.8, 110], [1, 1, 0.3386]],
   ] as const satisfies readonly (readonly [
-    oklch: ColorVector,
-    srgb: ColorVector,
+    oklch: ColorVector3,
+    srgb: ColorVector3,
   ])[];
 
   it.each(binarySearchGamutMappingReferences)(
@@ -1044,7 +1338,7 @@ describe('color values', () => {
       }, 'srgb');
 
       expect(mapped.space).toBe('srgb');
-      expectColorEquivalent(mapped, {
+      expectColorCloseTo(mapped, {
         kind: ColorKind.Numeric,
         space: 'srgb',
         components: [...srgb],
@@ -1061,7 +1355,7 @@ describe('color values', () => {
       alpha: 0.5,
     }, 'srgb');
 
-    expectColorEquivalent(mapped, {
+    expectColorCloseTo(mapped, {
       kind: ColorKind.Numeric,
       space: 'srgb',
       components: [1, 0.38019885544225046, 0.3010433350997795],
@@ -1076,8 +1370,8 @@ describe('color values', () => {
       [[1, 110, 60], [1, 1, 1]],
       [[1.1, 110, 60], [1, 1, 1]],
     ] as const satisfies readonly (readonly [
-      oklch: ColorVector,
-      srgb: ColorVector,
+      oklch: ColorVector3,
+      srgb: ColorVector3,
     ])[];
 
     for (const [oklch, srgb] of cases) {
@@ -1088,7 +1382,7 @@ describe('color values', () => {
         alpha: 0.4,
       }, 'srgb');
 
-      expectColorEquivalent(mapped, {
+      expectColorCloseTo(mapped, {
         kind: ColorKind.Numeric,
         space: 'srgb',
         components: [...srgb],
@@ -1107,7 +1401,7 @@ describe('color values', () => {
     const mapped = gamutMapNumericColor(origin, 'srgb');
 
     expect(mapped.space).toBe('srgb');
-    expectColorEquivalent(mapped, origin);
+    expectColorCloseTo(mapped, origin);
   });
 
   it('converts without mapping when the destination has no gamut limits', () => {
@@ -1139,18 +1433,11 @@ describe('color values', () => {
     }
   });
 
-  it('looks up named colors by text', () => {
-    expect(colorNameFromText('red')).toBe(ColorName.red);
-    expect(colorNameFromText('RebeccaPurple')).toBe(ColorName.rebeccapurple);
-    expect(colorNameFromText('transparent')).toBe(ColorName.transparent);
-    expect(colorNameFromText('notacolor')).toBeUndefined();
-  });
-
   it('keeps equivalent color names equivalent', () => {
-    expect(namedColorRgba(ColorName.aqua)).toBe(namedColorRgba(ColorName.cyan));
-    expect(namedColorRgba(ColorName.fuchsia)).toBe(namedColorRgba(ColorName.magenta));
-    expect(namedColorRgba(ColorName.gray)).toBe(namedColorRgba(ColorName.grey));
-    expect(namedColorRgba(ColorName.darkgray)).toBe(namedColorRgba(ColorName.darkgrey));
-    expect(namedColorRgba(ColorName.slategray)).toBe(namedColorRgba(ColorName.slategrey));
+    expect(ColorRgba.aqua).toBe(ColorRgba.cyan);
+    expect(ColorRgba.fuchsia).toBe(ColorRgba.magenta);
+    expect(ColorRgba.gray).toBe(ColorRgba.grey);
+    expect(ColorRgba.darkgray).toBe(ColorRgba.darkgrey);
+    expect(ColorRgba.slategray).toBe(ColorRgba.slategrey);
   });
 });

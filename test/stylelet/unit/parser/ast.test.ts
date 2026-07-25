@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ColorKind } from '../../../../src/stylelet/values/color';
-import { ColorName } from '../../../../src/stylelet/values/color-keywords';
+import { ColorKind, type ColorName } from '../../../../src/stylelet/values/color';
 import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
 import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../../../src/stylelet/parser/types';
 import type { LengthUnit } from '../../../../src/stylelet/values/numeric-literal/length';
@@ -88,7 +87,7 @@ describe('parseStylesheet', () => {
       rules: [{
         kind: RuleKindAst.Style,
         selectorList: { arms: [arm(cls('foo'))] },
-        block: { items: [namedColorDecl(PropertyId.Color, ColorName.red)] },
+        block: { items: [namedColorDecl(PropertyId.Color, 'red')] },
       }],
     });
   });
@@ -98,7 +97,7 @@ describe('parseStylesheet', () => {
       rules: [{
         kind: RuleKindAst.Style,
         selectorList: { arms: [arm(cls('foo')), arm(id('bar'))] },
-        block: { items: [namedColorDecl(PropertyId.Color, ColorName.red)] },
+        block: { items: [namedColorDecl(PropertyId.Color, 'red')] },
       }],
     });
   });
@@ -151,7 +150,7 @@ describe('parseStylesheet', () => {
   //       block: {
   //         items: [
   //           rawDecl(PropertyId.BackgroundImage, 'background-image', 'url("x;y")'),
-  //           namedColorDecl(PropertyId.Color, ColorName.red),
+  //           namedColorDecl(PropertyId.Color, 'red'),
   //         ],
   //       },
   //     }],
@@ -221,7 +220,7 @@ describe('parseStylesheet', () => {
     expect(parseStylesheet('.foo { color: red;')).toMatchObject({
       rules: [{
         kind: RuleKindAst.Style,
-        block: { items: [namedColorDecl(PropertyId.Color, ColorName.red)] },
+        block: { items: [namedColorDecl(PropertyId.Color, 'red')] },
       }],
     });
   });

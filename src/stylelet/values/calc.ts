@@ -57,10 +57,13 @@ export type ExpectedCalculationType =
   | 'time-percentage'
   | 'frequency-percentage';
 
-export type CalculationValueStage =
+export type ValueStage =
+  | 'declared'
+  | 'cascaded'
   | 'specified'
   | 'computed'
-  | 'used';
+  | 'used'
+  | 'actual';
 
 export type CalculationRange = readonly [
   minimum: number,
@@ -69,12 +72,12 @@ export type CalculationRange = readonly [
 
 export type CalculationSerializationContext = {
   /** Value-processing stage whose representation is being serialized. */
-  stage?: CalculationValueStage;
+  stage?: ValueStage;
 };
 
 export type CalculationContext = {
   /** Value-processing stage whose available information is being applied. */
-  stage?: CalculationValueStage;
+  stage?: ValueStage;
 
   /** Whether the current math function is nested inside another math function. */
   insideCalculation?: boolean;
@@ -1813,6 +1816,8 @@ export function simplifyCalculationTree(
   const stage = context.stage ?? 'specified';
 
   if (
+    stage === 'declared' ||
+    stage === 'cascaded' ||
     stage === 'specified' ||
     context.insideCalculation ||
     !isNumericLeaf(simplified)
@@ -3079,7 +3084,7 @@ export function serializeMathValue(
   if (isNumericLeaf(calculation)) {
     const serialized = serializeCalcTree(calculation);
 
-    return stage === 'specified'
+    return stage === 'declared' || stage === 'cascaded' || stage === 'specified'
       ? `calc(${serialized})`
       : serialized;
   }
