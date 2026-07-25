@@ -2199,3 +2199,260 @@ runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
     ],
   },
 ]);
+
+runScenarios('CSS declared color serialization oracle', 'normal', [
+  {
+    name: 'canonicalizes reducible and contextual color math',
+    engines: ['native'],
+    markup: `
+      <style id="color-declared-serialization">
+        #p3-reducible {
+          color: COLOR( DISPLAY-P3  calc( .1 + .2 )  0  0 );
+        }
+        #p3-contextual {
+          color: COLOR(
+            DISPLAY-P3  calc( sign( 1em - 1px ) )  0  0
+            / calc( .25 + .25 )
+          );
+        }
+        #hsl-reducible {
+          color: HSL( calc( 60deg + 60deg )  100%  50% );
+        }
+        #hsl-contextual {
+          color: HSL( calc( sign( 1em - 1px ) * 120deg )  100%  50% );
+        }
+        #sign-length {
+          width: calc( sign( 1em - 1px ) * 1px );
+        }
+        #sign-color-constant {
+          color: color( display-p3  sign( -1 )  0  0 );
+        }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['chromium', 'firefox'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 0.3 0 0)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['webkit'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 calc(0.3) 0 0)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['chromium', 'webkit'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 sign(1em - 1px) 0 0 / calc(0.5))',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 2, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'rgb(0, 255, 0)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['chromium', 'webkit'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'hsl(calc(120deg * sign(1em - 1px)) 100 50)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['firefox'],
+        expect: { cssom: null },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'width' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        expect: {
+          cssom: {
+            name: 'width',
+            value: 'calc(1px * sign(1em - 1px))',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['chromium', 'firefox'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 -1 0 0)',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'color' },
+        ref: { by: 'id', id: 'color-declared-serialization' },
+        browsers: ['webkit'],
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 calc(-1) 0 0)',
+            important: false,
+          },
+        },
+      },
+    ],
+  },
+  {
+    name: 'distinguishes declared colors from resolved colors',
+    engines: ['native'],
+    markup: `
+      <style id="color-lifecycle">
+        #named       { color: ReD; }
+        #transparent { color: transparent; }
+        #hsl         { color: hsl(120 100% 50%); }
+        #lab         { color: lab(50% 40 30); }
+        #wide        { color: color(display-p3 1 0 0); }
+        #current     { color: currentColor; }
+        #border      { color: red; border-color: currentColor; }
+      </style>
+
+      <div id="named"></div>
+      <div id="transparent"></div>
+      <div id="hsl"></div>
+      <div id="lab"></div>
+      <div id="wide"></div>
+      <div style="color: blue"><div id="current"></div></div>
+      <div id="border"></div>
+    `,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: { name: 'color', value: 'red', important: false },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'named' },
+        expect: { value: 'rgb(255, 0, 0)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: { name: 'color', value: 'transparent', important: false },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'transparent' },
+        expect: { value: 'rgba(0, 0, 0, 0)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 2, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: { name: 'color', value: 'rgb(0, 255, 0)', important: false },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'hsl' },
+        expect: { value: 'rgb(0, 255, 0)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 3, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: { name: 'color', value: 'lab(50 40 30)', important: false },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'lab' },
+        expect: { value: 'lab(50 40 30)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 4, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: {
+            name: 'color',
+            value: 'color(display-p3 1 0 0)',
+            important: false,
+          },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'wide' },
+        expect: { value: 'color(display-p3 1 0 0)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 5, name: 'color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: { name: 'color', value: 'currentcolor', important: false },
+        },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'current' },
+        expect: { value: 'rgb(0, 0, 255)' },
+      },
+      {
+        cssom: { target: 'style.property', rule: 6, name: 'border-top-color' },
+        ref: { by: 'id', id: 'color-lifecycle' },
+        expect: {
+          cssom: {
+            name: 'border-top-color',
+            value: 'currentcolor',
+            important: false,
+          },
+        },
+      },
+      {
+        computedStyle: 'border-top-color',
+        ref: { by: 'id', id: 'border' },
+        expect: { value: 'rgb(255, 0, 0)' },
+      },
+    ],
+  },
+]);

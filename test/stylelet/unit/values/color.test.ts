@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ColorKind, parseColorValue } from '../../../../src/stylelet/values/color';
+import {
+  ColorKind, parseColorValue, serializeColorValue,
+  type NumericColor,
+} from '../../../../src/stylelet/values/color';
 import { ColorName, colorNameFromText, namedColorRgba, SystemColorName } from '../../../../src/stylelet/values/color-keywords';
 
 describe('color values', () => {
@@ -373,6 +376,202 @@ describe('color values', () => {
     expect(parseColorValue(
       'color(display-p3 calc(0.5) calc(25%) none / calc(40%))',
     )).not.toBeNull();
+  });
+
+  it('serializes parsed color functions with canonical spelling and spacing', () => {
+    const cases = [
+      [
+        ' RGBa( 1 ,  2, 3 , 50% ) ',
+        'rgba(1, 2, 3, 0.5)',
+      ],
+      [
+        ' HSLa( .5turn , 25% , 75% , 20% ) ',
+        'hsla(180, 25, 75, 0.2)',
+      ],
+      [
+        ' HWB( .5turn   20%  30% / 50% ) ',
+        'hwb(180 20 30 / 0.5)',
+      ],
+      [
+        ' LAB( 50%  20  -30% / 40% ) ',
+        'lab(50 20 -37.5 / 0.4)',
+      ],
+      [
+        ' OKLAB( 50%  20%  -30% / 40% ) ',
+        'oklab(0.5 0.08 -0.12 / 0.4)',
+      ],
+      [
+        ' LCH( 50%  40%  270deg / 25% ) ',
+        'lch(50 60 270 / 0.25)',
+      ],
+      [
+        ' OKLCH( .5  20%  .25turn / 25% ) ',
+        'oklch(0.5 0.08 90 / 0.25)',
+      ],
+      [
+        ' COLOR( DISPLAY-P3  .1  20%  none / 25% ) ',
+        'color(display-p3 0.1 0.2 none / 0.25)',
+      ],
+      [
+        ' COLOR( XYZ  0  0  0 ) ',
+        'color(xyz-d65 0 0 0)',
+      ],
+    ];
+
+    for (const [input, serialized] of cases) {
+      const color = parseColorValue(input);
+
+      expect(color).not.toBeNull();
+      expect(serializeColorValue(color!)).toBe(serialized);
+    }
+  });
+
+  it('serializes context-dependent calc color components', () => {
+    const contextual = parseColorValue(
+      ' color( display-p3  calc(sign(1em - 1px))  20%  0'
+      + ' / calc(.25 + .25) ) ',
+    );
+
+    expect(contextual).not.toBeNull();
+    expect(serializeColorValue(contextual!))
+      .toBe('color(display-p3 sign(1em - 1px) 0.2 0 / calc(0.5))');
+  });
+
+  it('uses the value stage to serialize reducible calc color components', () => {
+    const color = parseColorValue(
+      'color(display-p3 calc(.1 + .2) 0 0 / calc(.25 + .25))',
+    )!;
+
+    expect(serializeColorValue(color))
+      .toBe('color(display-p3 calc(0.3) 0 0 / calc(0.5))');
+    expect(serializeColorValue(color, { stage: 'computed' }))
+      .toBe('color(display-p3 0.3 0 0 / 0.5)');
+  });
+
+  it('serializes keyword colors in lowercase', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Named,
+      name: ColorName.rebeccapurple,
+    })).toBe('rebeccapurple');
+    expect(serializeColorValue({
+      kind: ColorKind.Named,
+      name: ColorName.transparent,
+    })).toBe('transparent');
+    expect(serializeColorValue({
+      kind: ColorKind.System,
+      name: SystemColorName.CanvasText,
+    })).toBe('canvastext');
+    expect(serializeColorValue({
+      kind: ColorKind.CurrentColor,
+    })).toBe('currentcolor');
+  });
+
+  it('serializes numerical sRGB colors in legacy rgb form', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1, 0.5, 0],
+      alpha: 1,
+    })).toBe('rgb(255, 127.5, 0)');
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [1.2, -0.1, 0],
+      alpha: 0.5,
+    })).toBe('rgba(255, 0, 0, 0.5)');
+  });
+
+  it('preserves missing numerical sRGB components through color()', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [undefined, 0.5, 0],
+      alpha: undefined,
+    })).toBe('color(srgb none 0.5 0 / none)');
+  });
+
+  it('keeps color(srgb) distinct from rgb()', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [1, 0, 0],
+      alpha: 1,
+    })).toBe('color(srgb 1 0 0)');
+  });
+
+  it('clamps and rounds numerical alpha values', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'display-p3',
+      components: [1, 0, 0],
+      alpha: 2,
+    })).toBe('color(display-p3 1 0 0)');
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'display-p3',
+      components: [1, 0, 0],
+      alpha: 0.123456789,
+    })).toBe('color(display-p3 1 0 0 / 0.123457)');
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'display-p3',
+      components: [1, 0, 0],
+      alpha: Number.NaN,
+    })).toBe('color(display-p3 1 0 0 / 0)');
+  });
+
+  it('serializes numerical HSL and HWB colors with missing components', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [20, undefined, 30],
+      alpha: undefined,
+    })).toBe('hsl(20 none 30% / none)');
+    expect(serializeColorValue({
+      kind: ColorKind.Numeric,
+      space: 'hwb',
+      components: [20, undefined, 30],
+      alpha: 1,
+    })).toBe('hwb(20 none 30%)');
+  });
+
+  it('serializes numerical wide-gamut colors in their notation', () => {
+    const cases: [NumericColor, string][] = [
+      [{
+        kind: ColorKind.Numeric,
+        space: 'lab',
+        components: [56.2, 0, 83.6],
+        alpha: 1,
+      }, 'lab(56.2 0 83.6)'],
+      [{
+        kind: ColorKind.Numeric,
+        space: 'lch',
+        components: [56.2, 83.6, 357.4],
+        alpha: 0.93,
+      }, 'lch(56.2 83.6 357.4 / 0.93)'],
+      [{
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.54, -0.1, -0.02],
+        alpha: 1,
+      }, 'oklab(0.54 -0.1 -0.02)'],
+      [{
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.5385, 0.1725, 320.67],
+        alpha: 0.7,
+      }, 'oklch(0.5385 0.1725 320.67 / 0.7)'],
+      [{
+        kind: ColorKind.Numeric,
+        space: 'display-p3',
+        components: [0.28, 0.403, 0.423],
+        alpha: 0.85,
+      }, 'color(display-p3 0.28 0.403 0.423 / 0.85)'],
+    ];
+
+    for (const [color, serialized] of cases) {
+      expect(serializeColorValue(color)).toBe(serialized);
+    }
   });
 
   it('looks up named colors by text', () => {
