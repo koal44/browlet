@@ -100,7 +100,8 @@ describe('number values', () => {
       parseListOfComponentValues('calc(1px)'),
     );
 
-    expect(tryConsumeNumber(c)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeNumber(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('applies consumer ranges to literals and math functions at their stages', () => {
@@ -211,11 +212,18 @@ describe('dimension values', () => {
   });
 
   it('rejects number, percentage, and mixed dimension-percentage results', () => {
-    for (const input of ['calc(1)', 'calc(1%)', 'calc(1px + 1%)']) {
+    for (const input of ['calc(1)', 'calc(1%)']) {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumeDimension(c)).toMatchObject({ kind: 'bad' });
+      expect(tryConsumeDimension(c)).toBeNull();
+      expect(c.pos()).toBe(0);
     }
+
+    const mixed = new ComponentCursor(
+      parseListOfComponentValues('calc(1px + 1%)'),
+    );
+
+    expect(tryConsumeDimension(mixed)).toMatchObject({ kind: 'bad' });
   });
 
   it('combines two literals without creating a math value', () => {
@@ -254,7 +262,8 @@ describe('angle values', () => {
     );
 
     expect(serializeAngle(value!)).toBe('calc(1deg)');
-    expect(tryConsumeAngle(other)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeAngle(other)).toBeNull();
+    expect(other.pos()).toBe(0);
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -279,7 +288,8 @@ describe('frequency values', () => {
     );
 
     expect(serializeFrequency(value!)).toBe('calc(1hz)');
-    expect(tryConsumeFrequency(other)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeFrequency(other)).toBeNull();
+    expect(other.pos()).toBe(0);
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -305,7 +315,8 @@ describe('length values', () => {
     );
 
     expect(serializeLength(value!)).toBe('calc(1px)');
-    expect(tryConsumeLength(other)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeLength(other)).toBeNull();
+    expect(other.pos()).toBe(0);
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -353,7 +364,8 @@ describe('resolution values', () => {
     );
 
     expect(serializeResolution(value!)).toBe('calc(1dppx)');
-    expect(tryConsumeResolution(other)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeResolution(other)).toBeNull();
+    expect(other.pos()).toBe(0);
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -393,7 +405,8 @@ describe('time values', () => {
     );
 
     expect(serializeTime(value!)).toBe('calc(1s)');
-    expect(tryConsumeTime(other)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeTime(other)).toBeNull();
+    expect(other.pos()).toBe(0);
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -446,7 +459,8 @@ describe('integer values', () => {
     for (const input of ['calc(1px)', 'calc(1%)']) {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumeInteger(c)).toMatchObject({ kind: 'bad' });
+      expect(tryConsumeInteger(c)).toBeNull();
+      expect(c.pos()).toBe(0);
     }
   });
 
@@ -520,7 +534,8 @@ describe('percentage values', () => {
     for (const input of ['calc(1)', 'calc(1px)']) {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumePercentage(c)).toMatchObject({ kind: 'bad' });
+      expect(tryConsumePercentage(c)).toBeNull();
+      expect(c.pos()).toBe(0);
     }
   });
 

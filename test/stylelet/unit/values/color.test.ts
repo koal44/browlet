@@ -129,7 +129,7 @@ describe('color values', () => {
     expect(parseColorValue('rgb(1 2 3, 0.5)')).toBeNull();
   });
 
-  it.fails('accepts math functions wherever rgb accepts a numeric value', () => {
+  it('accepts math functions wherever rgb accepts a numeric value', () => {
     expect(parseColorValue('rgb(calc(50%) 0 calc(255 / 2) / calc(25%))'))
       .not.toBeNull();
   });
@@ -193,7 +193,7 @@ describe('color values', () => {
     expect(parseColorValue('hsl(120 100% 50%, 0.5)')).toBeNull();
   });
 
-  it.fails('accepts math functions wherever hsl accepts a numeric value', () => {
+  it('accepts math functions wherever hsl accepts a numeric value', () => {
     expect(parseColorValue('hsl(calc(0.5turn) calc(50%) calc(25) / calc(20%))'))
       .not.toBeNull();
   });
@@ -232,7 +232,7 @@ describe('color values', () => {
     expect(parseColorValue('hwb(120 20% 30% /)')).toBeNull();
   });
 
-  it.fails('accepts math functions wherever hwb accepts a numeric value', () => {
+  it('accepts math functions wherever hwb accepts a numeric value', () => {
     expect(parseColorValue('hwb(calc(0.5turn) calc(20%) calc(30) / calc(50%))'))
       .not.toBeNull();
   });
@@ -281,7 +281,7 @@ describe('color values', () => {
     expect(parseColorValue('oklch(0.5 0.2 30 /)')).toBeNull();
   });
 
-  it.fails('accepts math functions throughout Lab-family colors', () => {
+  it('accepts math functions throughout Lab-family colors', () => {
     const colors = [
       'lab(calc(50%) calc(0.1) calc(-20%) / calc(40%))',
       'oklab(calc(0.5) calc(10%) calc(-0.1))',
@@ -382,7 +382,7 @@ describe('color values', () => {
     expect(parseColorValue('color(srgb 0 0 0 /)')).toBeNull();
   });
 
-  it.fails('accepts math functions throughout color()', () => {
+  it('accepts math functions throughout color()', () => {
     expect(parseColorValue(
       'color(display-p3 calc(0.5) calc(25%) none / calc(40%))',
     )).not.toBeNull();

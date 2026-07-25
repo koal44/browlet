@@ -1144,7 +1144,7 @@ describe('calc', () => {
   ] as const)(
     'rejects %s against the expected %s type',
     (input, expectedType) => {
-      expectBadCalc(input, { expectedType });
+      expectNoCalc(input, { expectedType });
     },
   );
 
@@ -1152,7 +1152,7 @@ describe('calc', () => {
     expect(parseMathFunctionCalculation('min(1px, 2px)', {
       expectedType: 'length',
     })).not.toBeNull();
-    expectBadMathFunction('min(1px, 2px)', {
+    expectNoMathFunction('min(1px, 2px)', {
       expectedType: 'time',
     });
   });
@@ -1212,7 +1212,7 @@ describe('calc', () => {
     expect(calculation.numericType).toEqual(
       numericType([['length', 1]], 'percent'),
     );
-    expectBadCalc(input, { expectedType: 'length' });
+    expectNoCalc(input, { expectedType: 'length' });
     expect(parseCalc(input)).not.toBeNull();
     expect(parseCalc(input, {
       expectedType: 'length-percentage',
@@ -1221,13 +1221,13 @@ describe('calc', () => {
   });
 
   it('preserves a percent hint through a nested calc function', () => {
-    expectBadCalc('calc(calc(1% / 1%) * 10px)', {
+    expectNoCalc('calc(calc(1% / 1%) * 10px)', {
       expectedType: 'length',
     });
   });
 
   it('preserves a percent hint through deeply nested calculations', () => {
-    expectBadCalc('calc(calc(calc(calc(1% / 1%))) * 10px)', {
+    expectNoCalc('calc(calc(calc(calc(1% / 1%))) * 10px)', {
       expectedType: 'length',
     });
   });
@@ -1239,7 +1239,7 @@ describe('calc', () => {
   ] as const)(
     'preserves a percent hint through a nested %s math function',
     (_type, input) => {
-      expectBadCalc(input, { expectedType: 'length' });
+      expectNoCalc(input, { expectedType: 'length' });
       expect(parseCalc(input, {
         expectedType: 'length-percentage',
         percentageType: 'length',
@@ -1690,6 +1690,19 @@ function expectBadCalc(
   expect(c.pos()).toBe(1);
 }
 
+function expectNoCalc(
+  input: string,
+  context: CalculationContext = {},
+): void {
+  const c = new ComponentCursor(parseListOfComponentValues(input), {
+    context,
+  });
+
+  expect(tryConsumeCalc(c)).toBeNull();
+  expect(c.pos()).toBe(0);
+  expect(c.context).toBe(context);
+}
+
 function expectBadMathFunction(
   input: string,
   context: CalculationContext = {},
@@ -1701,6 +1714,19 @@ function expectBadMathFunction(
 
   expect(result).toMatchObject({ kind: 'bad' });
   expect(c.pos()).toBe(1);
+}
+
+function expectNoMathFunction(
+  input: string,
+  context: CalculationContext = {},
+): void {
+  const c = new ComponentCursor(parseListOfComponentValues(input), {
+    context,
+  });
+
+  expect(tryConsumeMathFunction(c)).toBeNull();
+  expect(c.pos()).toBe(0);
+  expect(c.context).toBe(context);
 }
 
 function parseRawCalculation(

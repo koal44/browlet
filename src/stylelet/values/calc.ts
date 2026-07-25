@@ -344,6 +344,8 @@ export function createMathValueConsumer(
 export function tryConsumeCalc(
   c: ComponentCursor,
 ): TryComponentConsumerResult<MathValue> {
+  const start = c.pos();
+  const outerContext = c.context;
   const result = consumeCalcCalculation(c);
 
   if (result === null || isBad(result)) {
@@ -357,10 +359,16 @@ export function tryConsumeCalc(
     !context.insideCalculation &&
     !matchesExpectedCalculationType(numericType, context)
   ) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      'Invalid calculation type',
-    );
+    if (context.expectedType === undefined) {
+      return bad(
+        ComponentConsumerBadReason.Invalid,
+        'Invalid calculation type',
+      );
+    }
+
+    c.restore(start);
+    c.context = outerContext;
+    return null;
   }
 
   return ok(createMathValue(
@@ -713,6 +721,8 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
   );
 
   return (c) => {
+    const start = c.pos();
+    const outerContext = c.context;
     const result = consume(c);
 
     if (result === null || isBad(result)) {
@@ -725,10 +735,16 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
       !context.insideCalculation &&
       !matchesExpectedCalculationType(result.value.numericType, context)
     ) {
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        'Invalid calculation type',
-      );
+      if (context.expectedType === undefined) {
+        return bad(
+          ComponentConsumerBadReason.Invalid,
+          'Invalid calculation type',
+        );
+      }
+
+      c.restore(start);
+      c.context = outerContext;
+      return null;
     }
 
     return ok(simplifyCalculationTree(

@@ -14,6 +14,7 @@ import { tryConsumeAngle, type AngleValue } from './angle';
 import {
   serializeMathValue,
   type CalculationContext, type CalculationSerializationContext,
+  type CalculationValueStage,
 } from './calc';
 import { ColorName, colorNameFromText, SystemColorName, systemColorNameFromText } from './color-keywords';
 import { tryConsumeIdent } from './ident';
@@ -1182,6 +1183,8 @@ const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent
   ([component]) => ok(component),
 );
 
+
+
 // ████████  ████████  ██████   ███████  ██       ██     ██ ████████
 // ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██
 // ██     ██ ██       ██       ██     ██ ██       ██     ██ ██
@@ -1189,6 +1192,31 @@ const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent
 // ██   ██   ██             ██ ██     ██ ██        ██   ██  ██
 // ██    ██  ██       ██    ██ ██     ██ ██         ██ ██   ██
 // ██     ██ ████████  ██████   ███████  ████████    ███    ████████
+
+export function resolveColorValue(
+  value: ColorValue,
+  context: ColorResolutionContext = {},
+): ColorValue {
+  throw new Error(
+    `${ColorKind[value.kind]} color resolution is not implemented`
+    + ` at the ${context.stage ?? 'declared'} value stage`,
+  );
+}
+
+export type ColorResolutionContext =
+  & Omit<CalculationContext, 'stage'>
+  & {
+    /**
+     * Value-processing stage whose available information is being applied.
+     * Parsing produces a declared value before cascade and defaulting produce
+     * its specified value.
+     */
+    stage?: ColorResolutionStage;
+  };
+
+export type ColorResolutionStage =
+  | 'declared'
+  | CalculationValueStage;
 
 
 
@@ -1549,6 +1577,8 @@ function serializeNumericAlpha(value: number | undefined): string | null {
     ? null
     : serializeCssNumber(alpha);
 }
+
+
 
 //  ██████   ███████  ██    ██ ██     ██ ████████ ████████  ████████
 // ██    ██ ██     ██ ███   ██ ██     ██ ██       ██     ██    ██
@@ -2465,6 +2495,8 @@ function transformColorVector(
     ([a, b, c]) => a * x + b * y + c * z,
   ) as ColorVector;
 }
+
+
 
 //  ██████      ███    ██     ██ ██     ██    ███
 // ██    ██    ██ ██   ███   ███ ███   ███   ██ ██
