@@ -144,7 +144,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
+    : createMathValueFromLiteral(value, 'angle-percentage', context);
 }
 
 function anglePercentageCalculationContext(
@@ -152,7 +152,6 @@ function anglePercentageCalculationContext(
 ): CalculationContext {
   return {
     ...context,
-    expectedType: 'angle-percentage',
     percentageType: 'angle',
   };
 }

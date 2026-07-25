@@ -144,7 +144,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
+    : createMathValueFromLiteral(value, 'time-percentage', context);
 }
 
 function timePercentageCalculationContext(
@@ -152,7 +152,6 @@ function timePercentageCalculationContext(
 ): CalculationContext {
   return {
     ...context,
-    expectedType: 'time-percentage',
     percentageType: 'time',
   };
 }

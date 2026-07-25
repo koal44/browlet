@@ -132,7 +132,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
+    : createMathValueFromLiteral(value, 'percentage', context);
 }
 
 function percentageCalculationContext(
@@ -140,7 +140,6 @@ function percentageCalculationContext(
 ): CalculationContext {
   return {
     ...context,
-    expectedType: 'percentage',
     percentageType: 'percent',
   };
 }

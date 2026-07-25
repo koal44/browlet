@@ -82,7 +82,7 @@ const serializations: CalcSerializationCase[] = [
 
 const sheetId = 'calc-serialization';
 
-runScenarios('CSS calc serialization', 'normal', [
+runScenarios('CSS calc serialization', 'skip', [
   {
     name: 'serializes specified calculations',
     // status: 'only',

@@ -78,12 +78,10 @@ export function addIntegers(
     return addIntegerLiterals(a, b);
   }
 
-  const calculationContext = integerCalculationContext(context);
-
   return addMathFunctions(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, context),
+    asMathValue(b, context),
+    context,
   );
 }
 
@@ -97,13 +95,11 @@ export function interpolateIntegers(
     return interpolateIntegerLiterals(a, b, p);
   }
 
-  const calculationContext = integerCalculationContext(context);
-
   return interpolateMathFunctions(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
+    asMathValue(a, context),
+    asMathValue(b, context),
     p,
-    calculationContext,
+    context,
   );
 }
 
@@ -116,12 +112,10 @@ export function accumulateIntegers(
     return accumulateIntegerLiterals(a, b);
   }
 
-  const calculationContext = integerCalculationContext(context);
-
   return accumulateMathFunctions(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, context),
+    asMathValue(b, context),
+    context,
   );
 }
 
@@ -131,16 +125,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
-}
-
-function integerCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
-  return {
-    ...context,
-    expectedType: 'integer',
-  };
+    : createMathValueFromLiteral(value, 'integer', context);
 }
 
 function integerRange(

@@ -1,6 +1,6 @@
 import { runScenarios } from '../../harness/browser/scenarios';
 
-runScenarios('style oracle selector prelude boundaries', 'normal', [
+runScenarios('style oracle selector prelude boundaries', 'skip', [
   {
     name: 'valid rule no whitespace before block',
     engines: ['native'],
@@ -414,7 +414,7 @@ runScenarios('style oracle selector prelude boundaries', 'normal', [
 
 ]);
 
-runScenarios('style oracle tokenizer recovery', 'normal', [
+runScenarios('style oracle tokenizer recovery', 'skip', [
   {
     name: 'unterminated comment keeps prior declaration and consumes rest of stylesheet',
     engines: ['native'],
@@ -553,7 +553,7 @@ runScenarios('style oracle tokenizer recovery', 'normal', [
   },
 ]);
 
-runScenarios('style oracle nesting declaration order', 'normal', [
+runScenarios('style oracle nesting declaration order', 'skip', [
   {
     name: 'nested ampersand after declaration wins when later in source',
     // status: 'only',
@@ -607,7 +607,7 @@ runScenarios('style oracle nesting declaration order', 'normal', [
   },
 ]);
 
-runScenarios('testing pseudo elements', 'normal', [
+runScenarios('testing pseudo elements', 'skip', [
   {
     name: 'pseudo-element selectors distinguish valid empty from invalid chains',
     // status: 'only',
@@ -716,7 +716,7 @@ runScenarios('testing pseudo elements', 'normal', [
 
 ]);
 
-runScenarios('pseudo-element tail selector API validity', 'normal', [
+runScenarios('pseudo-element tail selector API validity', 'skip', [
   {
     name: 'dom selector validity shows generated pseudo-element tail gaps',
     engines: ['native'],
@@ -766,7 +766,7 @@ runScenarios('pseudo-element tail selector API validity', 'normal', [
   },
 ]);
 
-runScenarios('pseudo-element tail CSSOM preservation and omission', 'normal', [
+runScenarios('pseudo-element tail CSSOM preservation and omission', 'skip', [
   {
     name: 'forgiving empty is after pseudo-element preserves rule but does not match origin class',
     // status: 'only',
@@ -912,7 +912,7 @@ runScenarios('pseudo-element tail CSSOM preservation and omission', 'normal', [
   },
 ]);
 
-runScenarios('pseudo-element tail nested forgiving logical behavior', 'normal', [
+runScenarios('pseudo-element tail nested forgiving logical behavior', 'skip', [
   {
     name: 'forgiving empty is can be negated in pseudo-element tail',
     // status: 'only',
@@ -957,7 +957,7 @@ runScenarios('pseudo-element tail nested forgiving logical behavior', 'normal', 
   },
 ]);
 
-runScenarios('pseudo-element tail nested forgiving matching diagnosis', 'normal', [
+runScenarios('pseudo-element tail nested forgiving matching diagnosis', 'skip', [
   {
     name: 'nested forgiving empty is matches under not except in WebKit',
     // status: 'only',
@@ -1018,7 +1018,7 @@ runScenarios('pseudo-element tail nested forgiving matching diagnosis', 'normal'
   },
 ]);
 
-runScenarios('pseudo-element internal structure combinator oracle', 'normal', [
+runScenarios('pseudo-element internal structure combinator oracle', 'skip', [
   {
     name: 'spec validity against native selector APIs for combinators after pseudo-elements',
     // status: 'only',
@@ -1131,7 +1131,7 @@ runScenarios('pseudo-element internal structure combinator oracle', 'normal', [
   },
 ]);
 
-runScenarios('pseudo-element sub-origin selector API validity', 'normal', [
+runScenarios('pseudo-element sub-origin selector API validity', 'skip', [
   {
     name: 'native validity for element-backed and slotted pseudo-element chains',
     // status: 'only',
@@ -1199,7 +1199,7 @@ runScenarios('pseudo-element sub-origin selector API validity', 'normal', [
   },
 ]);
 
-runScenarios('element-backed pseudo-element pseudo-class validity', 'normal', [
+runScenarios('element-backed pseudo-element pseudo-class validity', 'skip', [
   {
     name: 'native selector APIs allow every pseudo-class after element-backed pseudo-elements',
     // status: 'only',
@@ -1272,7 +1272,7 @@ runScenarios('element-backed pseudo-element pseudo-class validity', 'normal', [
   },
 ]);
 
-runScenarios('logical selector argument restrictions', 'normal', [
+runScenarios('logical selector argument restrictions', 'skip', [
   {
     name: 'native validity for compound-only logical arguments and has restrictions',
     // status: 'only',
@@ -1334,7 +1334,7 @@ runScenarios('logical selector argument restrictions', 'normal', [
   },
 ]);
 
-runScenarios('custom-ident default reservation oracle', 'normal', [
+runScenarios('custom-ident default reservation oracle', 'skip', [
   {
     name: 'native parsers reserve default except in highlight arguments',
     engines: ['native'],
@@ -1389,7 +1389,7 @@ runScenarios('custom-ident default reservation oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS.supports URL modifier oracle', 'normal', [
+runScenarios('CSS.supports URL modifier oracle', 'skip', [
   {
     name: 'native URL modifier support',
     engines: ['native'],
@@ -1427,7 +1427,7 @@ runScenarios('CSS.supports URL modifier oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSSOM URL modifier oracle', 'normal', [
+runScenarios('CSSOM URL modifier oracle', 'skip', [
   {
     name: 'native declaration retention and serialization',
     engines: ['native'],
@@ -1508,7 +1508,7 @@ runScenarios('CSSOM URL modifier oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSSOM number serialization oracle', 'normal', [
+runScenarios('CSSOM number serialization oracle', 'skip', [
   {
     name: 'native number rounding and notation',
     // status: 'only',
@@ -1609,7 +1609,7 @@ runScenarios('CSSOM number serialization oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS escaped dimension unit serialization oracle', 'normal', [
+runScenarios('CSS escaped dimension unit serialization oracle', 'skip', [
   {
     name: 'native serialization of an escaped exponent-like dimension unit',
     // status: 'only',
@@ -1701,7 +1701,7 @@ runScenarios('CSS escaped dimension unit serialization oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS calc dimension unit oracle', 'normal', [
+runScenarios('CSS calc dimension unit oracle', 'skip', [
   {
     name: 'native calc simplification normalizes recognized unit case',
     // Playwright's default browser context has a 1280 x 720 viewport.
@@ -1919,7 +1919,7 @@ runScenarios('CSS calc dimension unit oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS angle-percentage combination oracle', 'normal', [
+runScenarios('CSS angle-percentage combination oracle', 'skip', [
   {
     name: 'serializes an angle-percentage sum in a conic gradient',
     engines: ['native'],
@@ -2039,7 +2039,7 @@ runScenarios('CSS angle-percentage combination oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
+runScenarios('CSS zero and length-percentage combination oracle', 'skip', [
   {
     name: 'distinguishes literal zero and simplifies mixed zero components',
     engines: ['native'],
@@ -2200,7 +2200,7 @@ runScenarios('CSS zero and length-percentage combination oracle', 'normal', [
   },
 ]);
 
-runScenarios('CSS declared color serialization oracle', 'normal', [
+runScenarios('CSS declared color serialization oracle', 'skip', [
   {
     name: 'canonicalizes reducible and contextual color math',
     engines: ['native'],

@@ -145,7 +145,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
+    : createMathValueFromLiteral(value, 'frequency-percentage', context);
 }
 
 function frequencyPercentageCalculationContext(
@@ -153,7 +153,6 @@ function frequencyPercentageCalculationContext(
 ): CalculationContext {
   return {
     ...context,
-    expectedType: 'frequency-percentage',
     percentageType: 'frequency',
   };
 }

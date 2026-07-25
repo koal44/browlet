@@ -124,7 +124,7 @@ function asMathValue(
 ): MathValue {
   return value.type === 'math'
     ? value
-    : createMathValueFromLiteral(value, context);
+    : createMathValueFromLiteral(value, 'length', context);
 }
 
 function normalizeUnitlessZero(

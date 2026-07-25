@@ -79,9 +79,6 @@ export type CalculationContext = {
   /** Whether the current math function is nested inside another math function. */
   insideCalculation?: boolean;
 
-  /** Numeric production the outermost calculation must match. */
-  expectedType?: ExpectedCalculationType;
-
   /** Inclusive range allowed for the outermost calculation. */
   range?: CalculationRange;
 
@@ -107,11 +104,6 @@ export type CalculationContext = {
   numericVariables?: ReadonlyMap<string, NumericVariable>;
 };
 
-type CalculationParserContext = CalculationContext & {
-  /** Shared complexity consumed by the current calculation and its children. */
-  termCount?: number;
-};
-
 export type NumericVariable = {
   value: NumericLiteral | null;
   numericType: NumericType;
@@ -120,6 +112,16 @@ export type NumericVariable = {
 export type MathValue = {
   type: 'math';
   calculation: CalculationTree;
+  restrictions: MathValueRestrictions;
+};
+
+type MathValueRestrictions = {
+  expectedType: ExpectedCalculationType;
+};
+
+type MathValueParsingContext = {
+  expectedType?: ExpectedCalculationType;
+  termCount?: number;
 };
 
 export type CalculationTree =
@@ -247,13 +249,14 @@ type UnaryMathFunctionName =
 
 export function parseMathFunction(
   input: ParserInput,
+  expectedType: ExpectedCalculationType,
   context: CalculationContext = {},
 ): MathValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
       withComponentTrivia(tryConsumeMathFunction),
-      context,
+      { ...context, expectedType },
     ),
     'math function',
   );
@@ -261,20 +264,22 @@ export function parseMathFunction(
 
 export function parseMathValue(
   input: ParserInput,
+  expectedType: ExpectedCalculationType,
   context: CalculationContext = {},
 ): MathValue | null {
-  return parseMathFunction(input, context);
+  return parseMathFunction(input, expectedType, context);
 }
 
 export function parseCalc(
   input: ParserInput,
+  expectedType: ExpectedCalculationType,
   context: CalculationContext = {},
 ): MathValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
       withComponentTrivia(tryConsumeCalc),
-      context,
+      { ...context, expectedType },
     ),
     'calc',
   );
@@ -286,6 +291,7 @@ export function createMathValueFromLiteral(
     | NumberLiteral
     | DimensionLiteral<string, string>
     | PercentageLiteral,
+  expectedType: ExpectedCalculationType,
   context: CalculationContext = {},
 ): MathValue {
   const calculationLiteral: NumericLiteral = 'unit' in literal
@@ -306,7 +312,10 @@ export function createMathValueFromLiteral(
     throw new TypeError('Cannot create a math value from an unknown dimension');
   }
 
-  return createMathValue(createNumericLeaf(normalized, numericType));
+  return createMathValue(
+    createNumericLeaf(normalized, numericType),
+    expectedType,
+  );
 }
 
 export type MathValueConsumerOptions = {
@@ -329,9 +338,7 @@ export function createMathValueConsumer(
         ...calculationContext,
         expectedType: options.expectedType,
         ...(options.range === undefined ? {} : { range: options.range }),
-        ...(options.percentageType === undefined
-          ? {}
-          : { percentageType: options.percentageType }),
+        ...(options.percentageType === undefined ? {} : { percentageType: options.percentageType }),
       };
 
       return tryConsumeMathValue(c);
@@ -355,24 +362,30 @@ export function tryConsumeCalc(
   const context = calculationContextFor(c.context);
   const numericType = numericTypeOf(result.value);
 
-  if (
-    !context.insideCalculation &&
-    !matchesExpectedCalculationType(numericType, context)
-  ) {
-    if (context.expectedType === undefined) {
+  if (!context.insideCalculation) {
+    if (resolvedNumericCategory(numericType) === null) {
       return bad(
         ComponentConsumerBadReason.Invalid,
         'Invalid calculation type',
       );
     }
+  }
 
-    c.restore(start);
-    c.context = outerContext;
-    return null;
+  const expectedType = requiredExpectedType(
+    c.context as MathValueParsingContext,
+  );
+
+  if (!context.insideCalculation) {
+    if (!matchesExpectedCalculationType(numericType, expectedType, context)) {
+      c.restore(start);
+      c.context = outerContext;
+      return null;
+    }
   }
 
   return ok(createMathValue(
-    simplifyCalculationTree(result.value, context),
+    simplifyCalculationTree(result.value, context, { expectedType }),
+    expectedType,
   ));
 }
 
@@ -504,19 +517,26 @@ const tryConsumeNonCalcMathFunction: TryComponentConsumer<
 export const tryConsumeMathFunction: TryComponentConsumer<MathValue> = (c) => {
   const result = tryConsumeMathFunctionCalculation(c);
 
-  return result === null || isBad(result)
-    ? result
-    : ok(createMathValue(result.value));
+  if (result === null || isBad(result)) {
+    return result;
+  }
+
+  return ok(createMathValue(
+    result.value,
+    requiredExpectedType(c.context as MathValueParsingContext),
+  ));
 };
 
 export const tryConsumeMathValue = tryConsumeMathFunction;
 
 function createMathValue(
   calculation: CalculationTree,
+  expectedType: ExpectedCalculationType,
 ): MathValue {
   return {
     type: 'math',
     calculation,
+    restrictions: { expectedType },
   };
 }
 
@@ -731,25 +751,35 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     const context = calculationContextFor(c.context);
 
-    if (
-      !context.insideCalculation &&
-      !matchesExpectedCalculationType(result.value.numericType, context)
-    ) {
-      if (context.expectedType === undefined) {
+    if (!context.insideCalculation) {
+      if (resolvedNumericCategory(result.value.numericType) === null) {
         return bad(
           ComponentConsumerBadReason.Invalid,
           'Invalid calculation type',
         );
       }
+    }
 
-      c.restore(start);
-      c.context = outerContext;
-      return null;
+    const restrictions = context.insideCalculation
+      ? undefined
+      : { expectedType: requiredExpectedType(c.context as MathValueParsingContext) };
+
+    if (restrictions !== undefined) {
+      if (!matchesExpectedCalculationType(
+        result.value.numericType,
+        restrictions.expectedType,
+        context,
+      )) {
+        c.restore(start);
+        c.context = outerContext;
+        return null;
+      }
     }
 
     return ok(simplifyCalculationTree(
       result.value,
       context,
+      restrictions,
     ) as Node | NumericLeaf);
   };
 }
@@ -1085,7 +1115,7 @@ function tryConsumeCalcValue(
     return result;
   }
 
-  const context = calculationContextFor(c.context);
+  const context = c.context as MathValueParsingContext;
 
   if (
     context.termCount !== undefined
@@ -1173,13 +1203,24 @@ function tryConsumeParenthesizedCalcSum(
 function tryConsumeCalcCalculation(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
-  const result = tryConsumeCalc(c);
+  if (!calculationContextFor(c.context).insideCalculation) {
+    const result = tryConsumeCalc(c);
+
+    return result === null || isBad(result)
+      ? result
+      : ok(result.value.calculation);
+  }
+
+  const result = consumeCalcCalculation(c);
 
   if (result === null || isBad(result)) {
     return result;
   }
 
-  return ok(result.value.calculation);
+  return ok(simplifyCalculationTree(
+    result.value,
+    calculationContextFor(c.context),
+  ));
 }
 
 /*
@@ -1388,14 +1429,9 @@ function resolvedNumericCategory(
 
 function matchesExpectedCalculationType(
   type: NumericType,
+  expectedType: ExpectedCalculationType,
   context: CalculationContext,
 ): boolean {
-  const expectedType = context.expectedType;
-
-  if (expectedType === undefined) {
-    return resolvedNumericCategory(type) !== null;
-  }
-
   switch (expectedType) {
     case 'number':
     case 'integer':
@@ -1416,9 +1452,7 @@ function matchesExpectedCalculationType(
       return matchesDimensionType(
         type,
         expectedType,
-        context.percentageType === expectedType
-          ? expectedType
-          : null,
+        context.percentageType ?? null,
       );
 
     case 'length-percentage':
@@ -1726,22 +1760,33 @@ function containMixedPercentAndDimension(
 
 function calculationContextFor(
   context: unknown,
-): CalculationParserContext {
+): CalculationContext {
   return context === null || context === undefined
     ? {}
     : context;
 }
 
+function requiredExpectedType(
+  context?: MathValueParsingContext,
+): ExpectedCalculationType {
+  if (context?.expectedType === undefined) {
+    throw new TypeError('Math value expected type is required');
+  }
+
+  return context.expectedType;
+}
+
 function enterCalculationContext(
   context: unknown,
-): CalculationParserContext {
+): unknown {
   const calculationContext = calculationContextFor(context);
+  const parserContext = context as MathValueParsingContext;
 
   if (
     calculationContext.insideCalculation &&
-    calculationContext.termCount !== undefined
+    parserContext.termCount !== undefined
   ) {
-    return calculationContext;
+    return context;
   }
 
   return {
@@ -1762,6 +1807,7 @@ function enterCalculationContext(
 export function simplifyCalculationTree(
   root: CalculationTree,
   context: CalculationContext = {},
+  restrictions?: MathValueRestrictions,
 ): CalculationTree {
   const simplified = simplifyCalculationNode(root, context);
   const stage = context.stage ?? 'specified';
@@ -1774,7 +1820,7 @@ export function simplifyCalculationTree(
     return simplified;
   }
 
-  return finalizeNumericLeaf(simplified, context);
+  return finalizeNumericLeaf(simplified, context, restrictions);
 }
 
 function simplifyCalculationNode(
@@ -1825,6 +1871,7 @@ function simplifyCalculationNode(
 function finalizeNumericLeaf(
   root: NumericLeaf,
   context: CalculationContext,
+  restrictions: MathValueRestrictions | undefined,
 ): NumericLeaf {
   const [rangeMinimum, rangeMaximum] =
     context.range ?? [-Infinity, Infinity];
@@ -1835,7 +1882,7 @@ function finalizeNumericLeaf(
 
   return {
     ...censored,
-    value: context.expectedType === 'integer'
+    value: restrictions?.expectedType === 'integer'
       ? Math.round(clamped)
       : clamped,
   };
@@ -3264,8 +3311,8 @@ export function addMathFunctions(
   context: CalculationContext = {},
 ): MathValue {
   return combineMathFunctionCalculations(
-    a.calculation,
-    b.calculation,
+    a,
+    b,
     context,
   );
 }
@@ -3277,14 +3324,20 @@ export function interpolateMathFunctions(
   context: CalculationContext = {},
 ): MathValue {
   return combineMathFunctionCalculations(
-    scaleCalculationTree(
-      a.calculation,
-      1 - p,
-    ),
-    scaleCalculationTree(
-      b.calculation,
-      p,
-    ),
+    {
+      ...a,
+      calculation: scaleCalculationTree(
+        a.calculation,
+        1 - p,
+      ),
+    },
+    {
+      ...b,
+      calculation: scaleCalculationTree(
+        b.calculation,
+        p,
+      ),
+    },
     context,
   );
 }
@@ -3298,13 +3351,14 @@ export function accumulateMathFunctions(
 }
 
 function combineMathFunctionCalculations(
-  a: CalculationTree,
-  b: CalculationTree,
+  a: MathValue,
+  b: MathValue,
   context: CalculationContext,
 ): MathValue {
+  const expectedType = commonExpectedType(a, b);
   const numericType = addNumericTypes([
-    numericTypeOf(a),
-    numericTypeOf(b),
+    numericTypeOf(a.calculation),
+    numericTypeOf(b.calculation),
   ]);
 
   if (numericType === null) {
@@ -3314,10 +3368,24 @@ function combineMathFunctionCalculations(
   return createMathValue(
     simplifyCalculationTree({
       type: 'sum',
-      children: [a, b],
+      children: [a.calculation, b.calculation],
       numericType,
-    }, context),
+    }, context, { expectedType }),
+    expectedType,
   );
+}
+
+function commonExpectedType(
+  a: MathValue,
+  b: MathValue,
+): ExpectedCalculationType {
+  const expectedType = a.restrictions.expectedType;
+
+  if (b.restrictions.expectedType !== expectedType) {
+    throw new TypeError('Math value restrictions must be consistent');
+  }
+
+  return expectedType;
 }
 
 function scaleCalculationTree(
