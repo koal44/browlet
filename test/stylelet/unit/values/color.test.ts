@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ColorKind, ColorRgba, areColorsEquivalent, convertNumericColor, deltaEOK,
-  gamutMapNumericColor, parseColorValue, resolveColorValue, serializeColorValue,
+  gamutMapNumericColor, interpolateColors,
+  parseColorInterpolationMethod, parseColorValue, resolveColorValue,
+  serializeColorValue,
   type NumericColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
 
@@ -720,6 +722,54 @@ describe('color values', () => {
     expect(parseColorValue(
       'color(display-p3 calc(0.5) calc(25%) none / calc(40%))',
     )).not.toBeNull();
+  });
+
+  it.each([
+    ['in srgb', { space: 'srgb' }],
+    ['in srgb-linear', { space: 'srgb-linear' }],
+    ['in display-p3', { space: 'display-p3' }],
+    ['in display-p3-linear', { space: 'display-p3-linear' }],
+    ['in a98-rgb', { space: 'a98-rgb' }],
+    ['in prophoto-rgb', { space: 'prophoto-rgb' }],
+    ['in rec2020', { space: 'rec2020' }],
+    ['in lab', { space: 'lab' }],
+    ['in oklab', { space: 'oklab' }],
+    ['in xyz', { space: 'xyz-d65' }],
+    ['in xyz-d50', { space: 'xyz-d50' }],
+    ['in xyz-d65', { space: 'xyz-d65' }],
+    ['in hsl', { space: 'hsl' }],
+    ['in hwb', { space: 'hwb' }],
+    ['in lch', { space: 'lch' }],
+    ['in oklch', { space: 'oklch' }],
+  ])('parses the color interpolation method %s', (input, expected) => {
+    expect(parseColorInterpolationMethod(input)).toEqual(expected);
+  });
+
+  it.each([
+    ['in oklch shorter hue', 'shorter'],
+    ['in oklch longer hue', 'longer'],
+    ['in oklch increasing hue', 'increasing'],
+    ['in oklch decreasing hue', 'decreasing'],
+  ])('parses the hue interpolation method in %s', (input, hue) => {
+    expect(parseColorInterpolationMethod(input)).toEqual({
+      space: 'oklch',
+      hue,
+    });
+  });
+
+  it('parses color interpolation methods case-insensitively', () => {
+    expect(parseColorInterpolationMethod('IN OkLcH LoNgEr HuE')).toEqual({
+      space: 'oklch',
+      hue: 'longer',
+    });
+  });
+
+  it.each([
+    '', 'in', 'srgb', 'in unknown', 'in srgb shorter hue',
+    'in oklch shorter', 'in oklch hue', 'in oklch shorter hue extra',
+    'in srgb-legacy',
+  ])('rejects the invalid color interpolation method %j', (input) => {
+    expect(parseColorInterpolationMethod(input)).toBeNull();
   });
 
   it('serializes parsed color functions with canonical spelling and spacing', () => {
@@ -1682,6 +1732,505 @@ describe('color values', () => {
       components: [1, 128 / 255, 0],
       alpha: 128 / 255,
     })).toBe(true);
+  });
+
+  it('carries an analogous missing component into the interpolation space', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [undefined, 0.2, 0.4],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'xyz-d65',
+        components: [0.8, 0.3, 0.2],
+        alpha: 1,
+      },
+      0.5,
+      'xyz-d65',
+    );
+
+    expect(result.space).toBe('xyz-d65');
+    expect(result.components[0]).toBe(0.8);
+  });
+
+  it('carries a wholly missing analogous set into the interpolation space', () => {
+    const expected: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.7, 0.1, -0.1],
+      alpha: 0.6,
+    };
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [undefined, undefined, undefined],
+        alpha: 0.4,
+      },
+      {
+        ...expected,
+        alpha: 0.8,
+      },
+      0.5,
+      'oklab',
+    );
+
+    expect(result.alpha).toBeCloseTo(expected.alpha!, 12);
+    expect(deltaEOK(result, expected)).toBeLessThan(0.001);
+  });
+
+  it('keeps a component missing when both analogous sets are missing', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [undefined, undefined, undefined],
+        alpha: 0.4,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'display-p3',
+        components: [undefined, undefined, undefined],
+        alpha: 0.8,
+      },
+      0.5,
+      'oklab',
+    );
+
+    expect(result).toMatchObject({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [undefined, undefined, undefined],
+    });
+    expect(result.alpha).toBeCloseTo(0.6, 12);
+  });
+
+  it('uses the other color value for a missing alpha component', () => {
+    const color: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.5, 0.1, -0.1],
+      alpha: 0.6,
+    };
+
+    expect(interpolateColors(
+      { ...color, alpha: undefined },
+      color,
+      0.5,
+      'oklab',
+    )).toEqual(color);
+  });
+
+  it('converts an uncarried missing component as zero', () => {
+    const source: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [undefined, 0.2, 0.4],
+      alpha: 1,
+    };
+    const expected = convertNumericColor({
+      ...source,
+      components: [0, 0.2, 0.4],
+    }, 'oklab');
+    const result = interpolateColors(
+      source,
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.8, 0.1, 0.1],
+        alpha: 1,
+      },
+      0,
+      'oklab',
+    );
+
+    expectColorCloseTo(result, expected);
+  });
+
+  // Section 13.3, "Interpolating with Alpha."
+  it('matches the premultiplied sRGB interpolation example', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [0.24, 0.12, 0.98],
+        alpha: 0.4,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [0.62, 0.26, 0.64],
+        alpha: 0.6,
+      },
+      0.5,
+      'srgb',
+    );
+
+    expect(result.alpha).toBeCloseTo(0.5, 12);
+    expect(result.components[0]).toBeCloseTo(0.468, 12);
+    expect(result.components[1]).toBeCloseTo(0.204, 12);
+    expect(result.components[2]).toBeCloseTo(0.776, 12);
+  });
+
+  it('matches the premultiplied Lab interpolation example', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'lab',
+        components: [66.927, 4.873, 68.622],
+        alpha: 0.4,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'lab',
+        components: [53.503, 82.672, -33.901],
+        alpha: 0.6,
+      },
+      0.5,
+      'lab',
+    );
+
+    expect(result.alpha).toBeCloseTo(0.5, 12);
+    expect(result.components[0]).toBeCloseTo(58.873, 3);
+    expect(result.components[1]).toBeCloseTo(51.552, 3);
+    expect(result.components[2]).toBeCloseTo(7.108, 3);
+  });
+
+  it('matches the premultiplied LCH interpolation example', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'lch',
+        components: [66.93, 68.79, 85.94],
+        alpha: 0.4,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'lch',
+        components: [53.5, 89.35, 337.7],
+        alpha: 0.6,
+      },
+      0.5,
+      'lch',
+    );
+
+    expect(result.alpha).toBeCloseTo(0.5, 12);
+    expect(result.components[0]).toBeCloseTo(58.873, 2);
+    expect(result.components[1]).toBeCloseTo(81.126, 3);
+    expect(result.components[2]).toBeCloseTo(31.82, 12);
+  });
+
+  it('does not premultiply when alpha is missing', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.2, 0.1, -0.1],
+        alpha: undefined,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.6, 0.3, 0.1],
+        alpha: undefined,
+      },
+      0.5,
+      'oklab',
+    );
+
+    expect(result).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.4, 0.2, 0],
+      alpha: undefined,
+    });
+  });
+
+  it('does not unpremultiply a zero-alpha result', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.2, 0.1, -0.1],
+        alpha: 0,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklab',
+        components: [0.6, 0.3, 0.1],
+        alpha: 0,
+      },
+      0.5,
+      'oklab',
+    );
+
+    expect(result).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0, 0, 0],
+      alpha: 0,
+    });
+  });
+
+  // Section 13.4, "Hue Interpolation."
+  it.each([
+    ['shorter', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 60]],
+    ['longer', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 240]],
+    ['increasing', [0.5, 0.1, 30], [0.7, 0.1, 190], [0.6, 0.1, 110]],
+    ['decreasing', [0.5, 0.1, 30], [0.7, 0.1, 190], [0.6, 0.1, 290]],
+  ] as const)(
+    'matches the %s hue interpolation example',
+    (method, a, b, expected) => {
+      const result = interpolateColors(
+        {
+          kind: ColorKind.Numeric,
+          space: 'oklch',
+          components: [...a],
+          alpha: 1,
+        },
+        {
+          kind: ColorKind.Numeric,
+          space: 'oklch',
+          components: [...b],
+          alpha: 1,
+        },
+        0.5,
+        'oklch',
+        method,
+      );
+
+      expect(result.alpha).toBe(1);
+
+      for (let index = 0; index < 3; index++) {
+        expect(result.components[index]).toBeCloseTo(expected[index], 12);
+      }
+    },
+  );
+
+  it('takes a full circle for longer interpolation between equal hues', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.4, 0.1, 30],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.8, 0.1, 30],
+        alpha: 1,
+      },
+      0.5,
+      'oklch',
+      'longer',
+    );
+
+    expect(result.components[2]).toBe(210);
+  });
+
+  it('borrows the other hue when one hue is missing', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.2, 0.1, undefined],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.8, 0.4, 180],
+        alpha: 1,
+      },
+      0.5,
+      'oklch',
+    );
+
+    expect(result.components).toEqual([0.5, 0.25, 180]);
+  });
+
+  it('keeps the hue missing when both hues are missing', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.2, 0.1, undefined],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.8, 0.4, undefined],
+        alpha: 1,
+      },
+      0.5,
+      'oklch',
+    );
+
+    expect(result.components).toEqual([0.5, 0.25, undefined]);
+  });
+
+  it.each([
+    ['hsl', [350, 100, 50], [10, 100, 50], [0, 100, 50]],
+    ['hwb', [350, 20, 30], [10, 20, 30], [0, 20, 30]],
+  ] as const)('uses the first component as the %s hue', (space, a, b, expected) => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space,
+        components: [...a],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space,
+        components: [...b],
+        alpha: 1,
+      },
+      0.5,
+      space,
+    );
+
+    expect(result.components).toEqual(expected);
+  });
+
+  it('defaults two legacy colors to sRGB interpolation', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components: [0.2, 0.4, 0.6],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components: [0.8, 0.6, 0.4],
+        alpha: 1,
+      },
+      0.5,
+    );
+
+    expect(result).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0.5, 0.5, 0.5],
+      alpha: 1,
+    });
+  });
+
+  it('defaults to Oklab when either color is not legacy', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components: [0, 0, 0],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [1, 1, 1],
+        alpha: 1,
+      },
+      0.5,
+    );
+
+    expect(result.space).toBe('oklab');
+    expect(result.components[0]).toBeCloseTo(0.5, 7);
+    expect(result.components[1]).toBeCloseTo(0, 7);
+    expect(result.components[2]).toBeCloseTo(0, 7);
+  });
+
+  it('takes an individual missing component from the other color', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [0.5, 0, 0],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [undefined, 0.5, 0.5],
+        alpha: 1,
+      },
+      0.5,
+      'srgb',
+    );
+
+    expect(result.components).toEqual([0.5, 0.25, 0.25]);
+  });
+
+  it('carries the Lab opponent set into LCH', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'lab',
+        components: [50, undefined, undefined],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'lch',
+        components: [70, undefined, undefined],
+        alpha: 1,
+      },
+      0.5,
+      'lch',
+    );
+
+    expect(result.components).toEqual([60, undefined, undefined]);
+  });
+
+  it('treats a hue that becomes powerless during conversion as missing', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb-legacy',
+        components: [0, 0, 0],
+        alpha: 0,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'oklch',
+        components: [0.8, 0.2, 120],
+        alpha: 1,
+      },
+      0.5,
+      'oklch',
+    );
+
+    expect(result.alpha).toBe(0.5);
+    expect(result.components[0]).toBeCloseTo(0.8, 7);
+    expect(result.components[1]).toBeCloseTo(0.2, 7);
+    expect(result.components[2]).toBe(120);
+  });
+
+  it('does not clip out-of-range values during interpolation', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [-1, 2, 3],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Numeric,
+        space: 'srgb',
+        components: [3, 4, -1],
+        alpha: 1,
+      },
+      0.5,
+      'srgb',
+    );
+
+    expect(result.components).toEqual([1, 3, 1]);
   });
 
   // testing/web-platform/tests/css/css-color/gamut-mapping

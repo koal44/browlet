@@ -83,6 +83,22 @@ type PolarColorSpace =
   | 'lch'
   | 'oklch';
 
+export type HueInterpolationMethod =
+  | 'shorter'
+  | 'longer'
+  | 'increasing'
+  | 'decreasing';
+
+export type ColorInterpolationMethod =
+  | {
+    space: RectangularColorSpace;
+    hue?: never;
+  }
+  | {
+    space: PolarColorSpace;
+    hue?: HueInterpolationMethod;
+  };
+
 type ColorComponent = number | undefined;
 
 type ColorComponents = [
@@ -1416,6 +1432,139 @@ const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent
   ([component]) => ok(component),
 );
 
+/*
+ * <color-space> = <rectangular-color-space> | <polar-color-space>
+ *
+ * <rectangular-color-space> = srgb | srgb-linear |
+ *                             display-p3 | display-p3-linear |
+ *                             a98-rgb | prophoto-rgb | rec2020 |
+ *                             lab | oklab | <xyz-space>
+ *
+ * <polar-color-space> = hsl | hwb | lch | oklch
+ *
+ * <hue-interpolation-method> =
+ *   [ shorter | longer | increasing | decreasing ] hue
+ *
+ * <color-interpolation-method> =
+ *   in [ <rectangular-color-space> |
+ *        <polar-color-space> <hue-interpolation-method>? ]
+ */
+
+export function parseColorInterpolationMethod(
+  input: ParserInput,
+  context: unknown = undefined,
+): ColorInterpolationMethod | null {
+  const result = parseAsComponentGrammar(
+    input,
+    withComponentTrivia(tryConsumeColorInterpolationMethod),
+    context,
+  );
+
+  return result === null || isBad(result) ? null : result.value;
+}
+
+export function tryConsumeColorInterpolationMethod(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorInterpolationMethod> {
+  return consumeColorInterpolationMethod(c);
+}
+
+const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMethod> =
+  sequenceOf(
+    [
+      one(createKeywordConsumer('in')),
+      one(withComponentTrivia(tryConsumeColorInterpolationSpace)),
+    ],
+    ([, [method]]) => ok(method),
+  );
+
+function tryConsumeColorInterpolationSpace(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorInterpolationMethod> {
+  return consumeColorInterpolationSpace(c);
+}
+
+const consumeColorInterpolationSpace: TryComponentConsumer<ColorInterpolationMethod> =
+  oneOf(
+    [
+      one(tryConsumeRectangularColorSpace),
+      one(tryConsumePolarColorInterpolation),
+    ],
+    ([value]) => ok(typeof value === 'string' ? { space: value } : value),
+  );
+
+function tryConsumeRectangularColorSpace(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RectangularColorSpace> {
+  const result = consumeRectangularColorSpace(c);
+
+  return result === null || isBad(result)
+    ? result
+    : ok(result.value === 'xyz' ? 'xyz-d65' : result.value);
+}
+
+const consumeRectangularColorSpace = createKeywordConsumer(
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'display-p3-linear',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+  'lab',
+  'oklab',
+  'xyz',
+  'xyz-d50',
+  'xyz-d65',
+);
+
+function tryConsumePolarColorInterpolation(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorInterpolationMethod> {
+  return consumePolarColorInterpolation(c);
+}
+
+const consumePolarColorInterpolation: TryComponentConsumer<ColorInterpolationMethod> =
+  sequenceOf(
+    [
+      one(tryConsumePolarColorSpace),
+      opt(withComponentTrivia(tryConsumeHueInterpolationMethod)),
+    ],
+    ([[space], hue]) => ok({
+      space,
+      hue: hue[0],
+    }),
+  );
+
+function tryConsumePolarColorSpace(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PolarColorSpace> {
+  return consumePolarColorSpace(c);
+}
+
+const consumePolarColorSpace =
+  createKeywordConsumer('hsl', 'hwb', 'lch', 'oklch');
+
+function tryConsumeHueInterpolationMethod(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HueInterpolationMethod> {
+  return consumeHueInterpolationMethod(c);
+}
+
+const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod> =
+  sequenceOf(
+    [
+      one(createKeywordConsumer(
+        'shorter',
+        'longer',
+        'increasing',
+        'decreasing',
+      )),
+      one(withComponentTrivia(createKeywordConsumer('hue'))),
+    ],
+    ([[method]]) => ok(method),
+  );
+
 
 
 // ████████  ████████  ██████   ███████  ██       ██     ██ ████████
@@ -2352,7 +2501,7 @@ function serializeNumericRgb(
     value.alpha === undefined
   ) {
     return `color(srgb ${serializeNumericComponentsBody(
-      normalizeNumericColorEncoding(value),
+      normalizeColorEncoding(value),
     )})`;
   }
 
@@ -2523,7 +2672,7 @@ export function convertNumericColor(
     return value;
   }
 
-  const source = replaceMissingColorComponents(
+  const source = replaceMissingComponents(
     prepareNumericColorForConversion(value),
   );
   const rectangularTarget = rectangularColorSpace(target);
@@ -2551,7 +2700,7 @@ function prepareNumericColorForConversion(
   value: NumericColor,
 ): NumericColor {
   const prepared = replacePowerlessColorComponents(
-    normalizeNumericColorEncoding(value),
+    normalizeColorEncoding(value),
   );
 
   switch (prepared.space) {
@@ -2570,7 +2719,7 @@ function prepareNumericColorForConversion(
   }
 }
 
-function normalizeNumericColorEncoding(value: NumericColor): NumericColor {
+function normalizeColorEncoding(value: NumericColor): NumericColor {
   if (!value.is8Bit) {
     return value;
   }
@@ -2616,7 +2765,7 @@ function replacePowerlessColorComponents(value: NumericColor): NumericColor {
   }
 }
 
-function replaceMissingColorComponents(value: NumericColor): NumericColor {
+function replaceMissingComponents(value: NumericColor): NumericColor {
   return {
     ...value,
     components: componentsForConversion(value),
@@ -3544,7 +3693,7 @@ function hasGamutLimits(space: ColorSpace): boolean {
 }
 
 function convertNumericColorToOklch(value: NumericColor): NumericColor {
-  const prepared = replaceMissingColorComponents(
+  const prepared = replaceMissingComponents(
     prepareNumericColorForConversion(value),
   );
 
@@ -3645,7 +3794,7 @@ function prepareNumericColorForComparison(
   value: NumericColor,
 ): NumericColor {
   const prepared = replacePowerlessColorComponents(
-    normalizeNumericColorEncoding(value),
+    normalizeColorEncoding(value),
   );
 
   return prepared.space === 'srgb-legacy'
@@ -3687,3 +3836,392 @@ function areColorComponentValuesEquivalent(
 //  ██  ██  ████    ██    ██       ██   ██   ██        ██     ██ ██       █████████    ██    ██
 //  ██  ██   ███    ██    ██       ██    ██  ██        ██     ██ ██       ██     ██    ██    ██
 // ████ ██    ██    ██    ████████ ██     ██ ██         ███████  ████████ ██     ██    ██    ████████
+
+export function interpolateColors(
+  a: NumericColor,
+  b: NumericColor,
+  progress: number,
+  space?: ColorSpace,
+  hue: HueInterpolationMethod = 'shorter',
+): NumericColor {
+  space ??= (a.space === 'srgb-legacy' && b.space === 'srgb-legacy'
+    ? 'srgb'
+    : 'oklab');
+
+  const carriedA = findCarriedForwardComponents(a, space);
+  const carriedB = findCarriedForwardComponents(b, space);
+
+  const preparedA = replacePowerlessColorComponents(normalizeColorEncoding(a));
+  const convertedA = convertNumericColor(replaceMissingComponents(preparedA), space);
+
+  const preparedB = replacePowerlessColorComponents(normalizeColorEncoding(b));
+  const convertedB = convertNumericColor(replaceMissingComponents(preparedB), space);
+
+  const [restoredA, restoredB] = restoreCarriedForwardComponents(
+    convertedA, convertedB, carriedA, carriedB,
+  );
+
+  const [fixedA, fixedB] = fixupColorHues(restoredA, restoredB, hue);
+
+  const premultipliedA = premultiplyColor(fixedA);
+  const premultipliedB = premultiplyColor(fixedB);
+
+  const interpolated = interpolatePremultipliedColors(
+    premultipliedA,
+    premultipliedB,
+    progress,
+  );
+
+  return unpremultiplyColor(interpolated);
+}
+
+type CarriedColorComponents = {
+  components: [boolean, boolean, boolean];
+  alpha: boolean;
+};
+
+type ColorComponentCategory =
+  | 'red'
+  | 'green'
+  | 'blue'
+  | 'lightness'
+  | 'colorfulness'
+  | 'hue'
+  | 'opponent-a'
+  | 'opponent-b';
+
+// Section 13.2, "Interpolating with Missing Components."
+function findCarriedForwardComponents(
+  value: NumericColor,
+  space: ColorSpace,
+): CarriedColorComponents {
+  const sourceCategories = componentCategories(value.space);
+  const targetCategories = componentCategories(space);
+  const carriedComps = targetCategories.map((category) => {
+    if (category === undefined) {
+      return false;
+    }
+
+    const sourceIndex = sourceCategories.indexOf(category);
+
+    return sourceIndex !== -1 && value.components[sourceIndex] === undefined;
+  }) as [boolean, boolean, boolean];
+
+  const sourceSet = sourceCategories
+    .map((category, index) =>
+      category === undefined || !targetCategories.includes(category)
+        ? index
+        : undefined,
+    )
+    .filter((index) => index !== undefined);
+
+  const targetSet = targetCategories
+    .map((category, index) =>
+      category === undefined || !sourceCategories.includes(category)
+        ? index
+        : undefined,
+    )
+    .filter((index) => index !== undefined);
+
+  if (
+    sourceSet.length > 0
+    && sourceSet.every((index) => value.components[index] === undefined)
+  ) {
+    for (const index of targetSet) {
+      carriedComps[index] = true;
+    }
+  }
+
+  return {
+    components: carriedComps,
+    alpha: value.alpha === undefined,
+  };
+}
+
+// Section 13.2, "Interpolating with Missing Components."
+function restoreCarriedForwardComponents(
+  a: NumericColor,
+  b: NumericColor,
+  carriedA: CarriedColorComponents,
+  carriedB: CarriedColorComponents,
+): [NumericColor, NumericColor] {
+  const componentsA = a.components.map((component, index) =>
+    carriedA.components[index]
+      ? carriedB.components[index]
+        ? undefined
+        : b.components[index]
+      : component,
+  ) as ColorComponents;
+  const componentsB = b.components.map((component, index) =>
+    carriedB.components[index]
+      ? carriedA.components[index]
+        ? undefined
+        : a.components[index]
+      : component,
+  ) as ColorComponents;
+
+  return [
+    {
+      ...a,
+      components: componentsA,
+      alpha: carriedA.alpha
+        ? carriedB.alpha ? undefined : b.alpha
+        : a.alpha,
+    },
+    {
+      ...b,
+      components: componentsB,
+      alpha: carriedB.alpha
+        ? carriedA.alpha ? undefined : a.alpha
+        : b.alpha,
+    },
+  ];
+}
+
+function componentCategories(space: NumericColorSpace): [
+  ColorComponentCategory | undefined,
+  ColorComponentCategory | undefined,
+  ColorComponentCategory | undefined,
+] {
+  switch (space) {
+    case 'srgb-legacy':
+    case 'srgb':
+    case 'srgb-linear':
+    case 'display-p3':
+    case 'display-p3-linear':
+    case 'a98-rgb':
+    case 'prophoto-rgb':
+    case 'rec2020':
+    case 'xyz-d50':
+    case 'xyz-d65':
+      return ['red', 'green', 'blue'];
+    case 'hsl':
+      return ['hue', 'colorfulness', 'lightness'];
+    case 'hwb':
+      return ['hue', undefined, undefined];
+    case 'lab':
+    case 'oklab':
+      return ['lightness', 'opponent-a', 'opponent-b'];
+    case 'lch':
+    case 'oklch':
+      return ['lightness', 'colorfulness', 'hue'];
+    default:
+      return assertNever(space);
+  }
+}
+
+// Section 13.4, "Hue Interpolation."
+function fixupColorHues(
+  a: NumericColor,
+  b: NumericColor,
+  method: HueInterpolationMethod,
+): [NumericColor, NumericColor] {
+  const hueIndex = colorHueIndex(a.space);
+
+  if (hueIndex === undefined) {
+    return [a, b];
+  }
+
+  let hueA = a.components[hueIndex];
+  let hueB = b.components[hueIndex];
+
+  if (hueA === undefined) {
+    if (hueB === undefined) {
+      return [a, b];
+    }
+
+    hueA = hueB;
+  } else if (hueB === undefined) {
+    hueB = hueA;
+  }
+
+  const difference = hueB - hueA;
+
+  switch (method) {
+    case 'shorter':
+      if (difference > 180) {
+        hueA += 360;
+      } else if (difference < -180) {
+        hueB += 360;
+      }
+      break;
+    case 'longer':
+      if (difference > 0 && difference < 180) {
+        hueA += 360;
+      } else if (difference > -180 && difference <= 0) {
+        hueB += 360;
+      }
+      break;
+    case 'increasing':
+      if (hueB < hueA) {
+        hueB += 360;
+      }
+      break;
+    case 'decreasing':
+      if (hueA < hueB) {
+        hueA += 360;
+      }
+      break;
+    default:
+      assertNever(method);
+  }
+
+  const componentsA: ColorComponents = [...a.components];
+  const componentsB: ColorComponents = [...b.components];
+  componentsA[hueIndex] = hueA;
+  componentsB[hueIndex] = hueB;
+
+  return [
+    { ...a, components: componentsA },
+    { ...b, components: componentsB },
+  ];
+}
+
+function premultiplyColor(value: NumericColor): NumericColor {
+  if (value.alpha === undefined) {
+    return value;
+  }
+
+  const alpha = value.alpha;
+  const hueIndex = colorHueIndex(value.space);
+  const components = componentsForConversion(value);
+  const premultiplied = value.space === 'hsl'
+    ? hslPremultiply(components, alpha)
+    : hueIndex === undefined
+      ? rectangularPremultiply(components, alpha)
+      : polarPremultiply(components, alpha, hueIndex);
+
+  return {
+    ...value,
+    components: restoreMissingComponents(value, premultiplied),
+  };
+}
+
+function interpolatePremultipliedColors(
+  a: NumericColor,
+  b: NumericColor,
+  progress: number,
+): NumericColor {
+  const components: ColorComponents = [
+    interpolateComponent(a.components[0], b.components[0], progress),
+    interpolateComponent(a.components[1], b.components[1], progress),
+    interpolateComponent(a.components[2], b.components[2], progress),
+  ];
+  const hueIndex = colorHueIndex(a.space);
+
+  if (hueIndex !== undefined && components[hueIndex] !== undefined) {
+    components[hueIndex] = normalizeHue(components[hueIndex]);
+  }
+
+  return {
+    kind: ColorKind.Numeric,
+    space: a.space,
+    components,
+    alpha: interpolateComponent(a.alpha, b.alpha, progress),
+  };
+}
+
+function interpolateComponent(
+  a: ColorComponent,
+  b: ColorComponent,
+  progress: number,
+): ColorComponent {
+  return a === undefined || b === undefined
+    ? undefined
+    : (1 - progress) * a + progress * b;
+}
+
+function unpremultiplyColor(value: NumericColor): NumericColor {
+  if (value.alpha === undefined || value.alpha === 0) {
+    return value;
+  }
+
+  const alpha = value.alpha;
+  const hueIndex = colorHueIndex(value.space);
+  const components = componentsForConversion(value);
+  const unpremultiplied = hueIndex === undefined
+    ? rectangularUnPremultiply(components, alpha)
+    : polarUnPremultiply(components, alpha, hueIndex);
+
+  return {
+    ...value,
+    components: restoreMissingComponents(value, unpremultiplied),
+  };
+}
+
+function restoreMissingComponents(
+  value: NumericColor,
+  components: ColorVector,
+): ColorComponents {
+  return [
+    value.components[0] === undefined ? undefined : components[0],
+    value.components[1] === undefined ? undefined : components[1],
+    value.components[2] === undefined ? undefined : components[2],
+  ];
+}
+
+function colorHueIndex(space: NumericColorSpace): 0 | 2 | undefined {
+  switch (space) {
+    case 'hsl':
+    case 'hwb':
+      return 0;
+    case 'lch':
+    case 'oklch':
+      return 2;
+    default:
+      return undefined;
+  }
+}
+
+// Pre-multiplication and unpremultiplication functions
+
+function rectangularPremultiply(
+  color: ColorVector,
+  alpha: number,
+): ColorVector {
+  return mapColorVector(color, (component) => component * alpha);
+}
+
+function rectangularUnPremultiply(
+  color: ColorVector,
+  alpha: number,
+): ColorVector {
+  if (alpha === 0) {
+    return color;
+  }
+
+  return mapColorVector(color, (component) => component / alpha);
+}
+
+function polarPremultiply(
+  color: ColorVector,
+  alpha: number,
+  hueIndex: 0 | 1 | 2,
+): ColorVector {
+  return mapColorVector(
+    color,
+    (component, index) => component * (hueIndex === index ? 1 : alpha),
+  );
+}
+
+function polarUnPremultiply(
+  color: ColorVector,
+  alpha: number,
+  hueIndex: 0 | 1 | 2,
+): ColorVector {
+  if (alpha === 0) {
+    return color;
+  }
+
+  return mapColorVector(
+    color,
+    (component, index) => component / (hueIndex === index ? 1 : alpha),
+  );
+}
+
+function hslPremultiply(
+  color: ColorVector,
+  alpha: number,
+): ColorVector {
+  return polarPremultiply(color, alpha, 0);
+}
