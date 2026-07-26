@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, ColorRgba, convertNumericColor, deltaEOK, gamutMapNumericColor,
-  parseColorValue, resolveColorValue, serializeColorValue,
+  ColorKind, ColorRgba, areColorsEquivalent, convertNumericColor, deltaEOK,
+  gamutMapNumericColor, parseColorValue, resolveColorValue, serializeColorValue,
   type NumericColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
 
@@ -1578,6 +1578,110 @@ describe('color values', () => {
     };
 
     expect(deltaEOK(reference, sample)).toBeCloseTo(0.3, 12);
+  });
+
+  it('compares same-space color components and alpha within epsilon', () => {
+    const color: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklab',
+      components: [0.5, 0.1, -0.2],
+      alpha: 0.4,
+    };
+
+    expect(areColorsEquivalent(color, {
+      ...color,
+      components: [0.500009, 0.099991, -0.2],
+      alpha: 0.400009,
+    })).toBe(true);
+    expect(areColorsEquivalent(color, {
+      ...color,
+      alpha: 0.40002,
+    })).toBe(false);
+  });
+
+  it('only considers missing components equal to missing components', () => {
+    const color: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'oklch',
+      components: [0.5, 0.2, undefined],
+      alpha: undefined,
+    };
+
+    expect(areColorsEquivalent(color, { ...color })).toBe(true);
+    expect(areColorsEquivalent(color, {
+      ...color,
+      components: [0.5, 0.2, 0],
+    })).toBe(false);
+    expect(areColorsEquivalent(color, {
+      ...color,
+      alpha: 0,
+    })).toBe(false);
+  });
+
+  it('converts powerless components to missing before comparison', () => {
+    const gray: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'hsl',
+      components: [120, 0, 50],
+      alpha: 1,
+    };
+
+    expect(areColorsEquivalent(gray, {
+      ...gray,
+      components: [undefined, 0, 50],
+    })).toBe(true);
+  });
+
+  it('compares colors from different spaces in Oklab', () => {
+    const srgb: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [0.8, 0.2, 0.4],
+      alpha: 0.6,
+    };
+
+    expect(areColorsEquivalent(
+      srgb,
+      convertNumericColor(srgb, 'display-p3'),
+    )).toBe(true);
+    expect(areColorsEquivalent(
+      srgb,
+      {
+        ...convertNumericColor(srgb, 'display-p3'),
+        alpha: 0.7,
+      },
+    )).toBe(false);
+  });
+
+  it('rejects different-space colors with missing components', () => {
+    const missing: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [undefined, 0.2, 0.4],
+      alpha: 1,
+    };
+
+    expect(areColorsEquivalent(missing, {
+      ...missing,
+      space: 'display-p3',
+    })).toBe(false);
+  });
+
+  it('compares legacy and 8-bit sRGB colors as sRGB', () => {
+    const legacy: NumericColor = {
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [255, 128, 0],
+      alpha: 128,
+      is8Bit: true,
+    };
+
+    expect(areColorsEquivalent(legacy, {
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [1, 128 / 255, 0],
+      alpha: 128 / 255,
+    })).toBe(true);
   });
 
   // testing/web-platform/tests/css/css-color/gamut-mapping

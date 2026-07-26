@@ -2352,7 +2352,7 @@ function serializeNumericRgb(
     value.alpha === undefined
   ) {
     return `color(srgb ${serializeNumericComponentsBody(
-      normalize8BitNumericColor(value),
+      normalizeNumericColorEncoding(value),
     )})`;
   }
 
@@ -2551,7 +2551,7 @@ function prepareNumericColorForConversion(
   value: NumericColor,
 ): NumericColor {
   const prepared = replacePowerlessColorComponents(
-    normalize8BitNumericColor(value),
+    normalizeNumericColorEncoding(value),
   );
 
   switch (prepared.space) {
@@ -2570,7 +2570,7 @@ function prepareNumericColorForConversion(
   }
 }
 
-function normalize8BitNumericColor(value: NumericColor): NumericColor {
+function normalizeNumericColorEncoding(value: NumericColor): NumericColor {
   if (!value.is8Bit) {
     return value;
   }
@@ -3616,3 +3616,74 @@ export function deltaEOK(one: NumericColor, two: NumericColor): number {
     + deltaB ** 2,
   );
 }
+
+export function areColorsEquivalent(
+  a: NumericColor,
+  b: NumericColor,
+): boolean {
+  const preparedA = prepareNumericColorForComparison(a);
+  const preparedB = prepareNumericColorForComparison(b);
+
+  if (preparedA.space === preparedB.space) {
+    return areColorComponentsEquivalent(preparedA, preparedB);
+  }
+
+  if (
+    hasMissingColorComponent(preparedA)
+    || hasMissingColorComponent(preparedB)
+  ) {
+    return false;
+  }
+
+  return areColorComponentsEquivalent(
+    convertNumericColor(preparedA, 'oklab'),
+    convertNumericColor(preparedB, 'oklab'),
+  );
+}
+
+function prepareNumericColorForComparison(
+  value: NumericColor,
+): NumericColor {
+  const prepared = replacePowerlessColorComponents(
+    normalizeNumericColorEncoding(value),
+  );
+
+  return prepared.space === 'srgb-legacy'
+    ? { ...prepared, space: 'srgb' }
+    : prepared;
+}
+
+function areColorComponentsEquivalent(
+  a: NumericColor,
+  b: NumericColor,
+): boolean {
+  return (
+    a.components.every(
+      (component, index) =>
+        areColorComponentValuesEquivalent(component, b.components[index]),
+    )
+    && areColorComponentValuesEquivalent(a.alpha, b.alpha)
+  );
+}
+
+function areColorComponentValuesEquivalent(
+  a: ColorComponent,
+  b: ColorComponent,
+  epsilon = 0.00001,
+): boolean {
+  if (a === undefined || b === undefined) {
+    return a === b;
+  }
+
+  return Math.abs(a - b) <= epsilon;
+}
+
+
+
+// ████ ██    ██ ████████ ████████ ████████  ████████   ███████  ██          ███    ████████ ████████
+//  ██  ███   ██    ██    ██       ██     ██ ██     ██ ██     ██ ██         ██ ██      ██    ██
+//  ██  ████  ██    ██    ██       ██     ██ ██     ██ ██     ██ ██        ██   ██     ██    ██
+//  ██  ██ ██ ██    ██    ██████   ████████  ████████  ██     ██ ██       ██     ██    ██    ██████
+//  ██  ██  ████    ██    ██       ██   ██   ██        ██     ██ ██       █████████    ██    ██
+//  ██  ██   ███    ██    ██       ██    ██  ██        ██     ██ ██       ██     ██    ██    ██
+// ████ ██    ██    ██    ████████ ██     ██ ██         ███████  ████████ ██     ██    ██    ████████
