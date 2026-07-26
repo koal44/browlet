@@ -8,8 +8,7 @@ import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange,
-  type CalculationSerializationContext, type MathValue,
+  type CalculationContext, type CalculationRange, type MathValue,
 } from './calc';
 import {
   createAnglePercentageConsumer as createAnglePercentageLiteralConsumer,
@@ -73,10 +72,9 @@ export function resolveAnglePercentage(
 
 export function serializeAnglePercentage(
   value: AnglePercentageValue,
-  context: CalculationSerializationContext = {},
 ): string {
   return value.type === 'math'
-    ? serializeMathValue(value, context)
+    ? serializeMathValue(value)
     : serializeAnglePercentageLiteral(value);
 }
 

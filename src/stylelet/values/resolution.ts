@@ -8,8 +8,7 @@ import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange,
-  type CalculationSerializationContext, type MathValue,
+  type CalculationContext, type CalculationRange, type MathValue,
 } from './calc';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
@@ -69,10 +68,9 @@ export function resolveResolution(
 
 export function serializeResolution(
   value: ResolutionValue,
-  context: CalculationSerializationContext = {},
 ): string {
   return value.type === 'math'
-    ? serializeMathValue(value, context)
+    ? serializeMathValue(value)
     : serializeResolutionLiteral(value);
 }
 

@@ -2408,6 +2408,17 @@ const colorSerializations: ColorSerializationCase[] = [
     expect: 'color(display-p3 0 1 0 / calc(1.2))',
     browsers: ['webkit'],
   },
+  // CSS Color 4 also converts calculated percentage alpha to number form
+  // without clamping it. All three engines currently clamp these immediately;
+  // WebKit instead preserves calc(120%) for display-p3.
+  ...failingColorSerialization(
+    'rgb(0 0 0 / calc(2 * 60%))',
+    'rgb(0 0 0 / calc(1.2))',
+  ),
+  ...failingColorSerialization(
+    'color(display-p3 0 1 0 / calc(2 * 60%))',
+    'color(display-p3 0 1 0 / calc(1.2))',
+  ),
 ];
 
 const colorSerializationSheetId = 'color-declared-serialization';
@@ -2470,15 +2481,15 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
     })),
   },
   {
-    name: 'clamps calculated alpha only in computed colors',
+    name: 'normalizes and clamps calculated percentage alpha when computed',
     engines: ['native'],
     markup: `
       <style id="calculated-alpha-lifecycle">
         #rgb-alpha {
-          color: rgb(0 0 0 / calc(1.2));
+          color: rgb(0 0 0 / calc(2 * 60%));
         }
         #p3-alpha {
-          color: color(display-p3 0 1 0 / calc(1.2));
+          color: color(display-p3 0 1 0 / calc(2 * 60%));
         }
       </style>
 

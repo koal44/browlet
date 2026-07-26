@@ -83,7 +83,9 @@ describe('number values', () => {
       },
     });
     expect(serializeNumber(value!)).toBe('calc(3)');
-    expect(serializeNumber(value!, { stage: 'computed' })).toBe('3');
+    expect(serializeNumber(
+      resolveNumber(value!, { stage: 'computed' }),
+    )).toBe('3');
   });
 
   it('resolves a math value to a number at computed-value time', () => {
@@ -212,7 +214,9 @@ describe('dimension values', () => {
       },
     });
     expect(serializeDimension(value!)).toBe('calc(3px)');
-    expect(serializeDimension(value!, { stage: 'computed' })).toBe('3px');
+    expect(serializeDimension(
+      resolveDimension(value!, { stage: 'computed' }),
+    )).toBe('3px');
   });
 
   it('resolves math values as dimensions at the computed-value stage', () => {
@@ -533,7 +537,9 @@ describe('integer values', () => {
         value: 2,
       },
     });
-    expect(serializeInteger(value!, { stage: 'computed' })).toBe('2');
+    expect(serializeInteger(
+      resolveInteger(value!, { stage: 'computed' }),
+    )).toBe('2');
   });
 
   it('resolves math values as integers at the computed-value stage', () => {
@@ -591,12 +597,16 @@ describe('integer values', () => {
       .toEqual({ type: 'integer', value: 3 });
 
     expect(serializeInteger(addIntegers(a, math))).toBe('calc(3)');
-    expect(serializeInteger(interpolateIntegers(
+    const interpolated = interpolateIntegers(
       a,
       math,
       0.5,
       { stage: 'computed' },
-    ), { stage: 'computed' })).toBe('2');
+    );
+
+    expect(serializeInteger(
+      resolveInteger(interpolated, { stage: 'computed' }),
+    )).toBe('2');
     expect(serializeInteger(accumulateIntegers(a, math))).toBe('calc(3)');
   });
 });
@@ -618,7 +628,9 @@ describe('percentage values', () => {
       },
     });
     expect(serializePercentage(value!)).toBe('calc(30%)');
-    expect(serializePercentage(value!, { stage: 'computed' })).toBe('30%');
+    expect(serializePercentage(
+      resolvePercentage(value!, { stage: 'computed' }),
+    )).toBe('30%');
   });
 
   it('resolves math values as percentages at the computed-value stage', () => {

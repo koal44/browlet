@@ -408,7 +408,7 @@ describe('color values', () => {
       const computed = resolveColorValue(declared, context);
 
       expect(serializeColorValue(declared)).toBe(declaredSerialization);
-      expect(serializeColorValue(computed, context))
+      expect(serializeColorValue(computed))
         .toBe(computedSerialization);
     },
   );
@@ -828,7 +828,7 @@ describe('color values', () => {
   it('serializes opaque 8-bit sRGB colors in hexadecimal notation', () => {
     const color = parseColorValue('#ff00ff')!;
 
-    expect(serializeColorValue(color, { htmlCompatible: true }))
+    expect(serializeColorValue(color, true))
       .toBe('#ff00ff');
     expect(serializeColorValue(color)).toBe('rgb(255, 0, 255)');
   });
@@ -845,7 +845,7 @@ describe('color values', () => {
     (input, serialized) => {
       expect(serializeColorValue(
         parseColorValue(input)!,
-        { htmlCompatible: true },
+        true,
       )).toBe(serialized);
     },
   );
@@ -866,7 +866,7 @@ describe('color values', () => {
       const context = { stage: 'computed' } as const;
       const color = resolveColorValue(parseColorValue(input)!, context);
 
-      expect(serializeColorValue(color, context)).toBe(serialized);
+      expect(serializeColorValue(color)).toBe(serialized);
     },
   );
 
@@ -895,7 +895,7 @@ describe('color values', () => {
       const context = { stage: 'computed' } as const;
       const color = resolveColorValue(parseColorValue(input)!, context);
 
-      expect(serializeColorValue(color, context)).toBe(serialized);
+      expect(serializeColorValue(color)).toBe(serialized);
     },
   );
 
@@ -924,7 +924,7 @@ describe('color values', () => {
       const context = { stage: 'computed' } as const;
       const color = resolveColorValue(parseColorValue(input)!, context);
 
-      expect(serializeColorValue(color, context)).toBe(serialized);
+      expect(serializeColorValue(color)).toBe(serialized);
     },
   );
 
@@ -965,7 +965,7 @@ describe('color values', () => {
       const context = { stage: 'computed' } as const;
       const color = resolveColorValue(parseColorValue(input)!, context);
 
-      expect(serializeColorValue(color, context)).toBe(serialized);
+      expect(serializeColorValue(color)).toBe(serialized);
     },
   );
 
@@ -974,7 +974,7 @@ describe('color values', () => {
     const context = { stage: 'computed' } as const;
     const color = resolveColorValue(parseColorValue('currentColor')!, context);
 
-    expect(serializeColorValue(color, context)).toBe('currentcolor');
+    expect(serializeColorValue(color)).toBe('currentcolor');
   });
 
   it('serializes context-dependent calc color components', () => {
@@ -989,13 +989,14 @@ describe('color values', () => {
   });
 
   it('uses the value stage to serialize reducible calc color components', () => {
-    const color = parseColorValue(
+    const declared = parseColorValue(
       'color(display-p3 calc(.1 + .2) 0 0 / calc(.25 + .25))',
     )!;
+    const computed = resolveColorValue(declared, { stage: 'computed' });
 
-    expect(serializeColorValue(color))
+    expect(serializeColorValue(declared))
       .toBe('color(display-p3 calc(0.3) 0 0 / calc(0.5))');
-    expect(serializeColorValue(color, { stage: 'computed' }))
+    expect(serializeColorValue(computed))
       .toBe('color(display-p3 0.3 0 0 / 0.5)');
   });
 
@@ -1026,10 +1027,19 @@ describe('color values', () => {
 
       expect(serializeColorValue(
         resolveColorValue(parseColorValue(input)!, context),
-        context,
       )).toBe(computed);
     },
   );
+
+  it('preserves unresolved calculated percentage alpha', () => {
+    const color = parseColorValue(
+      'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))',
+    )!;
+
+    expect(serializeColorValue(color)).toBe(
+      'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))',
+    );
+  });
 
   it('serializes keyword colors in lowercase', () => {
     expect(serializeColorValue({

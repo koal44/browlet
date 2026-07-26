@@ -9,6 +9,7 @@ import {
   parseMathValue as parseMathValueWithContext,
   resolveMathValue, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction, serializeMathValue,
+  tryCoercePercentageMathValueToNumber,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
   type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
   type ExpectedCalculationType, type MathValue,
@@ -56,6 +57,40 @@ describe('calc', () => {
     expect(resolveMathValue(value)).toEqual(value);
     expect(resolveMathValue(value, { stage: 'computed' })).toEqual(expected);
     expect(resolveMathValue(value, { unwrapMathAt: 'declared' })).toEqual(expected);
+  });
+
+  it('coerces a percentage math leaf to number math', () => {
+    const percentage = parseCalcWithContext(
+      'calc(2 * 60%)',
+      'percentage',
+    )!;
+    const number = tryCoercePercentageMathValueToNumber(percentage);
+
+    if (number === null) {
+      throw new Error('Expected percentage math to be coercible');
+    }
+
+    expect(serializeMathValue(number)).toBe('calc(1.2)');
+    expect(resolveMathValue(number, { stage: 'computed' })).toEqual({
+      type: 'number',
+      value: 1.2,
+    });
+  });
+
+  it('does not coerce unresolved percentage math', () => {
+    const percentageType = numericType([['percent', 1]], 'percent');
+    const percentage = parseCalcWithContext(
+      'calc(p)',
+      'percentage',
+      {
+        numericVariables: new Map([['p', {
+          value: null,
+          numericType: percentageType,
+        }]]),
+      },
+    )!;
+
+    expect(tryCoercePercentageMathValueToNumber(percentage)).toBeNull();
   });
 
   it('rejects a resolved literal that violates its expected type', () => {
@@ -953,18 +988,18 @@ describe('calc', () => {
   );
 
   it.each([
-    ['calc(20px + 30px)', '50px'],
-    ['min(3, 1, 2)', '1'],
-    ['sqrt(-1)', '0'],
+    ['calc(20px + 30px)', { type: 'length', value: 50, unit: 'px' }],
+    ['min(3, 1, 2)', { type: 'number', value: 1 }],
+    ['sqrt(-1)', { type: 'number', value: 0 }],
   ] as const)(
-    'serializes the computed math function %s without calc()',
+    'resolves the computed math function %s to a literal',
     (input, expected) => {
       const context = { stage: 'computed' } as const;
       const value = input.startsWith('calc(')
-        ? parseCalc(input, context)!
-        : parseMathFunction(input, context)!;
+        ? parseCalc(input)!
+        : parseMathFunction(input)!;
 
-      expect(serializeMathFunction(value, context)).toBe(expected);
+      expect(resolveMathValue(value, context)).toEqual(expected);
     },
   );
 

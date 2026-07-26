@@ -78,11 +78,6 @@ export type CalculationRange = readonly [
   maximum: number,
 ];
 
-export type CalculationSerializationContext = {
-  /** Value-processing stage whose representation is being serialized. */
-  stage?: ValueStage;
-};
-
 export type CalculationContext = ValueStageContext & {
   /** Value-processing stage at which math values should become literals. */
   unwrapMathAt?: ValueStage;
@@ -1869,6 +1864,26 @@ export function resolveMathValue<Type extends ExpectedCalculationType>(
     : { ...value, calculation };
 }
 
+export function tryCoercePercentageMathValueToNumber(
+  value: MathValue<'percentage'>,
+): MathValue<'number'> | null {
+  if (value.calculation.type !== 'percentage') {
+    return null;
+  }
+
+  return {
+    type: 'math',
+    calculation: createNumericLeaf(
+      {
+        type: 'number',
+        value: value.calculation.value / 100,
+      },
+      numberNumericType(),
+    ),
+    restrictions: { expectedType: 'number' },
+  };
+}
+
 type ResolvedMathLiteral<Type extends ExpectedCalculationType> =
   Type extends 'number' ? NumberLiteral
   : Type extends 'integer' ? IntegerLiteral
@@ -3268,24 +3283,17 @@ function isUnit<Unit extends string>(
 
 export function serializeMathFunction(
   value: MathValue,
-  context: CalculationSerializationContext = {},
 ): string {
-  return serializeMathValue(value, context);
+  return serializeMathValue(value);
 }
 
 export function serializeMathValue(
   value: MathValue,
-  context: CalculationSerializationContext = {},
 ): string {
-  const stage = context.stage ?? 'specified';
   const { calculation } = value;
 
   if (isNumericLeaf(calculation)) {
-    const serialized = serializeCalcTree(calculation);
-
-    return stage === 'declared' || stage === 'cascaded' || stage === 'specified'
-      ? `calc(${serialized})`
-      : serialized;
+    return `calc(${serializeCalcTree(calculation)})`;
   }
 
   if (isMathFunctionNode(calculation)) {

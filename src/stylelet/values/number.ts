@@ -8,8 +8,7 @@ import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationSerializationContext,
-  type CalculationRange, type MathValue,
+  type CalculationContext, type CalculationRange, type MathValue,
 } from './calc';
 import {
   accumulateNumbers as accumulateNumberLiterals,
@@ -76,10 +75,9 @@ export function resolveNumber(
 
 export function serializeNumber(
   value: NumberValue,
-  context: CalculationSerializationContext = {},
 ): string {
   return value.type === 'math'
-    ? serializeMathValue(value, context)
+    ? serializeMathValue(value)
     : serializeNumberLiteral(value);
 }
 

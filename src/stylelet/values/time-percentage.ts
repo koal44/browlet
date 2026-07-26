@@ -8,8 +8,7 @@ import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange,
-  type CalculationSerializationContext, type MathValue,
+  type CalculationContext, type CalculationRange, type MathValue,
 } from './calc';
 import {
   createTimePercentageConsumer as createTimePercentageLiteralConsumer,
@@ -73,10 +72,9 @@ export function resolveTimePercentage(
 
 export function serializeTimePercentage(
   value: TimePercentageValue,
-  context: CalculationSerializationContext = {},
 ): string {
   return value.type === 'math'
-    ? serializeMathValue(value, context)
+    ? serializeMathValue(value)
     : serializeTimePercentageLiteral(value);
 }
 

@@ -8,8 +8,7 @@ import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationSerializationContext,
-  type MathValue,
+  type CalculationContext, type MathValue,
 } from './calc';
 import {
   accumulateDimensions as accumulateDimensionLiterals,
@@ -59,10 +58,9 @@ export function resolveDimension(
 
 export function serializeDimension(
   value: DimensionValue,
-  context: CalculationSerializationContext = {},
 ): string {
   return value.type === 'math'
-    ? serializeMathValue(value, context)
+    ? serializeMathValue(value)
     : serializeDimensionLiteral(value);
 }
 

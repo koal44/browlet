@@ -19,7 +19,10 @@ import {
   resolveAngle, serializeAngle, tryConsumeAngle,
   type AngleValue,
 } from './angle';
-import type { CalculationContext, CalculationSerializationContext } from './calc';
+import {
+  tryCoercePercentageMathValueToNumber,
+  type CalculationContext,
+} from './calc';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';
@@ -1661,10 +1664,13 @@ function resolveColorFunction(
   value: ColorFunction,
   context: ColorResolutionContext,
 ): ColorValue {
-  const alpha = resolveColorAlpha(value.alpha, context);
+  const resolvedAlpha = resolveColorAlphaValue(value.alpha, context);
+  const alpha = numericColorAlpha(resolvedAlpha);
 
   if (alpha === null) {
-    return value;
+    return resolvedAlpha === value.alpha
+      ? value
+      : { ...value, alpha: resolvedAlpha };
   }
 
   let numeric: NumericColor | null;
@@ -2021,9 +2027,29 @@ function resolveColorComponent(
     : resolved.value * numberScale;
 }
 
-function resolveColorAlpha(
+function resolveColorAlphaValue(
   value: AlphaValue | 'none' | undefined,
   context: ColorResolutionContext,
+): AlphaValue | 'none' | undefined {
+  if (value === undefined || value === 'none') {
+    return value;
+  }
+
+  const calculationContext = colorCalculationContext(context, 'computed');
+
+  if (isNumberValue(value)) {
+    return resolveNumber(value, calculationContext);
+  }
+
+  const resolved = resolvePercentage(value, calculationContext);
+
+  return resolved.type === 'math'
+    ? tryCoercePercentageMathValueToNumber(resolved) ?? resolved
+    : resolved;
+}
+
+function numericColorAlpha(
+  value: AlphaValue | 'none' | undefined,
 ): number | undefined | null {
   if (value === undefined) {
     return 1;
@@ -2033,15 +2059,13 @@ function resolveColorAlpha(
     return undefined;
   }
 
-  const resolved = resolveColorNumericValue(value, context, 'computed');
-
-  if (resolved.type === 'math') {
+  if (value.type === 'math') {
     return null;
   }
 
-  const alpha = resolved.type === 'percentage'
-    ? resolved.value / 100
-    : resolved.value;
+  const alpha = value.type === 'percentage'
+    ? value.value / 100
+    : value.value;
   const clampableAlpha = Number.isNaN(alpha) || Object.is(alpha, -0)
     ? 0
     : alpha;
@@ -2198,17 +2222,13 @@ function colorResolutionContextFor(context: unknown): ColorResolutionContext {
 // ██    ██ ██       ██    ██   ██  ██     ██ ██
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
-export type ColorSerializationContext = CalculationSerializationContext & {
-  htmlCompatible?: boolean;
-};
-
 export function serializeColorValue(
   value: ColorValue,
-  context: ColorSerializationContext = {},
+  htmlCompatible = false,
 ): string {
   switch (value.kind) {
     case ColorKind.Numeric:
-      return serializeNumericColor(value, context);
+      return serializeNumericColor(value, htmlCompatible);
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
     case ColorKind.Rgb:
@@ -2219,7 +2239,7 @@ export function serializeColorValue(
     case ColorKind.Oklab:
     case ColorKind.Oklch:
     case ColorKind.Color:
-      return serializeColorFunction(value, context);
+      return serializeColorFunction(value);
     case ColorKind.Named:
       return value.name;
     case ColorKind.CurrentColor:
@@ -2234,23 +2254,21 @@ export function serializeColorValue(
 
 function serializeColorFunction(
   value: ColorFunction,
-  context: CalculationSerializationContext,
 ): string {
   switch (value.kind) {
     case ColorKind.Rgb:
-      return serializeRgbColor(value, context);
+      return serializeRgbColor(value);
     case ColorKind.Hsl:
-      return serializeHslColor(value, context);
+      return serializeHslColor(value);
     case ColorKind.Hwb:
       return serializeModernColorFunction(
         'hwb',
         [
-          serializeHue(value.hue, context),
-          serializeColorComponent(value.whiteness, 100, context),
-          serializeColorComponent(value.blackness, 100, context),
+          serializeHue(value.hue),
+          serializeColorComponent(value.whiteness, 100),
+          serializeColorComponent(value.blackness, 100),
         ],
         value.alpha,
-        context,
       );
     case ColorKind.Lab:
     case ColorKind.Oklab: {
@@ -2259,12 +2277,11 @@ function serializeColorFunction(
       return serializeModernColorFunction(
         oklab ? 'oklab' : 'lab',
         [
-          serializeColorComponent(value.lightness, oklab ? 1 : 100, context),
-          serializeColorComponent(value.a, oklab ? 0.4 : 125, context),
-          serializeColorComponent(value.b, oklab ? 0.4 : 125, context),
+          serializeColorComponent(value.lightness, oklab ? 1 : 100),
+          serializeColorComponent(value.a, oklab ? 0.4 : 125),
+          serializeColorComponent(value.b, oklab ? 0.4 : 125),
         ],
         value.alpha,
-        context,
       );
     }
     case ColorKind.Lch:
@@ -2274,12 +2291,11 @@ function serializeColorFunction(
       return serializeModernColorFunction(
         oklch ? 'oklch' : 'lch',
         [
-          serializeColorComponent(value.lightness, oklch ? 1 : 100, context),
-          serializeColorComponent(value.chroma, oklch ? 0.4 : 150, context),
-          serializeHue(value.hue, context),
+          serializeColorComponent(value.lightness, oklch ? 1 : 100),
+          serializeColorComponent(value.chroma, oklch ? 0.4 : 150),
+          serializeHue(value.hue),
         ],
         value.alpha,
-        context,
       );
     }
     case ColorKind.Color:
@@ -2288,11 +2304,10 @@ function serializeColorFunction(
         [
           value.space === 'xyz' ? 'xyz-d65' : value.space,
           ...value.components.map(
-            (component) => serializeColorComponent(component, 1, context),
+            (component) => serializeColorComponent(component, 1),
           ),
         ],
         value.alpha,
-        context,
       );
     default:
       return assertNever(value);
@@ -2301,39 +2316,36 @@ function serializeColorFunction(
 
 function serializeRgbColor(
   value: RgbColor,
-  context: CalculationSerializationContext,
 ): string {
   const components = value.components.map(
-    (component) => serializeColorComponent(component, 255, context),
+    (component) => serializeColorComponent(component, 255),
   );
 
   return value.syntax === 'legacy'
-    ? serializeLegacyColorFunction('rgb', components, value.alpha, context)
-    : serializeModernColorFunction('rgb', components, value.alpha, context);
+    ? serializeLegacyColorFunction('rgb', components, value.alpha)
+    : serializeModernColorFunction('rgb', components, value.alpha);
 }
 
 function serializeHslColor(
   value: HslColor,
-  context: CalculationSerializationContext,
 ): string {
   const components = [
-    serializeHue(value.hue, context),
-    serializeColorComponent(value.saturation, 100, context),
-    serializeColorComponent(value.lightness, 100, context),
+    serializeHue(value.hue),
+    serializeColorComponent(value.saturation, 100),
+    serializeColorComponent(value.lightness, 100),
   ];
 
   return value.syntax === 'legacy'
-    ? serializeLegacyColorFunction('hsl', components, value.alpha, context)
-    : serializeModernColorFunction('hsl', components, value.alpha, context);
+    ? serializeLegacyColorFunction('hsl', components, value.alpha)
+    : serializeModernColorFunction('hsl', components, value.alpha);
 }
 
 function serializeLegacyColorFunction(
   name: 'rgb' | 'hsl',
   components: string[],
   alphaValue: AlphaValue | 'none' | undefined,
-  context: CalculationSerializationContext,
 ): string {
-  const alpha = serializeColorAlpha(alphaValue, context);
+  const alpha = serializeColorAlpha(alphaValue);
 
   return alpha === null
     ? `${name}(${components.join(', ')})`
@@ -2344,9 +2356,8 @@ function serializeModernColorFunction(
   name: string,
   components: string[],
   alphaValue: AlphaValue | 'none' | undefined,
-  context: CalculationSerializationContext,
 ): string {
-  const alpha = serializeColorAlpha(alphaValue, context);
+  const alpha = serializeColorAlpha(alphaValue);
 
   return alpha === null
     ? `${name}(${components.join(' ')})`
@@ -2355,7 +2366,6 @@ function serializeModernColorFunction(
 
 function serializeHue(
   value: HueValue | 'none',
-  context: CalculationSerializationContext,
 ): string {
   if (value === 'none') {
     return value;
@@ -2363,21 +2373,20 @@ function serializeHue(
 
   if (value.type === 'math') {
     return isNumberValue(value)
-      ? serializeNumber(value, context)
-      : serializeAngle(value, context);
+      ? serializeNumber(value)
+      : serializeAngle(value);
   }
 
   if (value.type === 'angle') {
     return serializeCssNumber(resolveAngleLiteral(value).value);
   }
 
-  return serializeColorComponent(value, 1, context);
+  return serializeColorComponent(value, 1);
 }
 
 function serializeColorComponent(
   value: NumberValue | PercentageValue | 'none',
   percentageReference: number,
-  context: CalculationSerializationContext,
 ): string {
   if (value === 'none') {
     return value;
@@ -2390,13 +2399,12 @@ function serializeColorComponent(
   }
 
   return isNumberValue(value)
-    ? serializeNumber(value, context)
-    : serializePercentage(value, context);
+    ? serializeNumber(value)
+    : serializePercentage(value);
 }
 
 function serializeColorAlpha(
   value: AlphaValue | 'none' | undefined,
-  context: CalculationSerializationContext,
 ): string | null {
   if (value === undefined) {
     return null;
@@ -2406,49 +2414,28 @@ function serializeColorAlpha(
     return value;
   }
 
-  const stage = context.stage ?? 'declared';
-  const resolved = isNumberValue(value)
-    ? resolveNumber(value, {
-      stage,
-      range: [0, 1],
-      unwrapMathAt: 'computed',
-    })
-    : resolvePercentage(
-      value,
-      isComputedColorStage(stage)
-        ? { stage, unwrapMathAt: 'computed' }
-        : {
-          stage,
-          unwrapMathAt: 'actual',
-          percentageReferenceValue: { type: 'number', value: 1 },
-        },
-    );
-
-  if (resolved.type === 'math') {
-    return isNumberValue(resolved)
-      ? serializeNumber(resolved, { ...context, stage })
-      : serializePercentage(resolved, { ...context, stage });
+  if (value.type === 'math') {
+    return isNumberValue(value)
+      ? serializeNumber(value)
+      : serializePercentage(value);
   }
 
-  const alpha = resolved.type === 'percentage'
-    ? resolved.value / 100
-    : resolved.value;
-  const clamped = Number.isNaN(alpha)
-    ? 0
-    : clamp(alpha, 0, 1);
+  const alpha = value.type === 'percentage'
+    ? value.value / 100
+    : value.value;
 
-  return clamped === 1
+  return alpha === 1
     ? null
-    : serializeCssNumber(clamped);
+    : serializeCssNumber(alpha);
 }
 
 function serializeNumericColor(
   value: NumericColor,
-  context: ColorSerializationContext,
+  htmlCompatible: boolean,
 ): string {
   switch (value.space) {
     case 'srgb-legacy':
-      return serializeNumericRgb(value, context);
+      return serializeNumericRgb(value, htmlCompatible);
     case 'hsl':
       return serializeNumericHsl(value);
     case 'hwb':
@@ -2475,13 +2462,13 @@ function serializeNumericColor(
 
 function serializeNumericRgb(
   value: NumericColor,
-  context: ColorSerializationContext,
+  htmlCompatible: boolean,
 ): string {
-  if (context.htmlCompatible) {
-    const htmlCompatible = serializeHtmlCompatibleRgb(value);
+  if (htmlCompatible) {
+    const serialized = serializeHtmlCompatibleRgb(value);
 
-    if (htmlCompatible !== null) {
-      return htmlCompatible;
+    if (serialized !== null) {
+      return serialized;
     }
   }
 
