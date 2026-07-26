@@ -91,6 +91,10 @@ import {
 import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/zero';
+import {
+  accumulateOpacities, addOpacities, interpolateOpacities,
+  parseOpacityValue, resolveOpacityValue, serializeOpacityValue,
+} from '../../../../src/stylelet/values/opacity-value';
 
 // Keywords
 
@@ -2585,5 +2589,177 @@ describe.skip('animation-name', () => {
     for (const css of cases) {
       expect(valueOf(css)).toBeUndefined();
     }
+  });
+});
+
+describe('opacity values', () => {
+  it.each([
+    ['0.5', { type: 'number', value: 0.5 }],
+    ['50%', { type: 'percentage', value: 50 }],
+  ] as const)('parses the literal opacity value %s', (input, expected) => {
+    expect(parseOpacityValue(input)).toEqual(expected);
+  });
+
+  it.each([
+    ['calc(0.25 + 0.25)', 'number'],
+    ['calc(25% + 25%)', 'percentage'],
+  ] as const)('parses the calculated opacity value %s', (input, expectedType) => {
+    expect(parseOpacityValue(input)).toMatchObject({
+      type: 'math',
+      restrictions: { expectedType },
+    });
+  });
+
+  it.each([
+    'auto',
+    '1px',
+    'calc(1px)',
+    '0.5 1',
+  ])('rejects the invalid opacity value %s', (input) => {
+    expect(parseOpacityValue(input)).toBeNull();
+  });
+
+  it('preserves literal opacity values through specified value', () => {
+    const number = parseOpacityValue('2')!;
+    const percentage = parseOpacityValue('200%')!;
+
+    expect(resolveOpacityValue(number, { stage: 'specified' }))
+      .toEqual(number);
+    expect(resolveOpacityValue(percentage, { stage: 'specified' }))
+      .toEqual(percentage);
+  });
+
+  it.each([
+    ['-1', 0],
+    ['0.5', 0.5],
+    ['2', 1],
+    ['-100%', 0],
+    ['50%', 0.5],
+    ['200%', 1],
+  ] as const)(
+    'converts and clamps the computed opacity value %s',
+    (input, expected) => {
+      expect(resolveOpacityValue(
+        parseOpacityValue(input)!,
+        { stage: 'computed' },
+      )).toEqual({
+        type: 'number',
+        value: expected,
+      });
+    },
+  );
+
+  it.each([
+    ['calc(-1)', 0],
+    ['calc(0.25 + 0.25)', 0.5],
+    ['calc(2)', 1],
+    ['calc(-100%)', 0],
+    ['calc(25% + 25%)', 0.5],
+    ['calc(200%)', 1],
+    ['clamp(50%, 60%, 70%)', 0.6],
+    ['max(0, 0.5)', 0.5],
+  ] as const)(
+    'resolves and clamps the computed opacity value %s',
+    (input, expected) => {
+      expect(resolveOpacityValue(
+        parseOpacityValue(input)!,
+        { stage: 'computed' },
+      )).toEqual({
+        type: 'number',
+        value: expected,
+      });
+    },
+  );
+
+  it('uses the caller math-unwrapping policy', () => {
+    const value = parseOpacityValue('calc(0.25 + 0.25)')!;
+
+    expect(resolveOpacityValue(value, {
+      stage: 'computed',
+      unwrapMathAt: 'used',
+    })).toMatchObject({
+      type: 'math',
+    });
+    expect(resolveOpacityValue(value, {
+      stage: 'computed',
+      unwrapMathAt: 'computed',
+    })).toEqual({
+      type: 'number',
+      value: 0.5,
+    });
+  });
+
+  it.each([
+    ['0', '0'],
+    ['0.5', '0.5'],
+    ['-1', '-1'],
+    ['2', '2'],
+    ['0%', '0'],
+    ['1%', '0.01'],
+    ['50%', '0.5'],
+    ['100%', '1'],
+    ['-100%', '-1'],
+    ['200%', '2'],
+    ['0.00005%', '0.000001'],
+    ['-0.00005%', '0'],
+  ] as const)('serializes the specified opacity value %s as %s', (
+    input,
+    expected,
+  ) => {
+    expect(serializeOpacityValue(parseOpacityValue(input)!))
+      .toBe(expected);
+  });
+
+  it.each([
+    ['calc(0.25 + 0.25)', 'calc(0.5)'],
+    ['calc(25% + 25%)', 'calc(50%)'],
+  ] as const)('serializes the calculated opacity value %s as %s', (
+    input,
+    expected,
+  ) => {
+    expect(serializeOpacityValue(parseOpacityValue(input)!))
+      .toBe(expected);
+  });
+
+  it.each([
+    ['200%', '2', '1'],
+    ['calc(200%)', 'calc(200%)', '1'],
+  ] as const)(
+    'serializes %s according to its resolved stage',
+    (input, specified, computed) => {
+      const value = parseOpacityValue(input)!;
+
+      expect(serializeOpacityValue(value)).toBe(specified);
+      expect(serializeOpacityValue(resolveOpacityValue(value, {
+        stage: 'computed',
+      }))).toBe(computed);
+    },
+  );
+
+  it.each([
+    ['addition', addOpacities, 0.8, 0.8, 1.6],
+    ['accumulation', accumulateOpacities, 0.8, 0.8, 1.6],
+  ] as const)(
+    'combines computed opacity values by numeric %s without clamping',
+    (_name, combine, a, b, expected) => {
+      expect(combine(
+        { type: 'number', value: a },
+        { type: 'number', value: b },
+      )).toEqual({
+        type: 'number',
+        value: expected,
+      });
+    },
+  );
+
+  it('interpolates opacity values without clamping', () => {
+    expect(interpolateOpacities(
+      { type: 'number', value: 0 },
+      { type: 'number', value: 1 },
+      -0.25,
+    )).toEqual({
+      type: 'number',
+      value: -0.25,
+    });
   });
 });
