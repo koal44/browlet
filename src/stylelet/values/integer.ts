@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   accumulateIntegers as accumulateIntegerLiterals,
   addIntegers as addIntegerLiterals,
@@ -27,7 +27,7 @@ export type IntegerValue = IntegerLiteral | MathValue<'integer'>;
 
 export function parseInteger(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): IntegerValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -61,7 +61,7 @@ export const tryConsumeInteger = createIntegerConsumer();
 
 export function resolveInteger(
   value: IntegerValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): IntegerValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -79,13 +79,13 @@ export function serializeInteger(
 export function addIntegers(
   a: IntegerValue,
   b: IntegerValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): IntegerValue {
   if (a.type === 'integer' && b.type === 'integer') {
     return addIntegerLiterals(a, b);
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -96,13 +96,13 @@ export function interpolateIntegers(
   a: IntegerValue,
   b: IntegerValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): IntegerValue {
   if (a.type === 'integer' && b.type === 'integer') {
     return interpolateIntegerLiterals(a, b, p);
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -113,13 +113,13 @@ export function interpolateIntegers(
 export function accumulateIntegers(
   a: IntegerValue,
   b: IntegerValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): IntegerValue {
   if (a.type === 'integer' && b.type === 'integer') {
     return accumulateIntegerLiterals(a, b);
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -128,7 +128,7 @@ export function accumulateIntegers(
 
 function asMathValue(
   value: IntegerValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'integer'> {
   return value.type === 'math'
     ? value
@@ -137,7 +137,7 @@ function asMathValue(
 
 function integerRange(
   options: IntegerConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

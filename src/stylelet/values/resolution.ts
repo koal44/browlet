@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
   createResolutionConsumer as createResolutionLiteralConsumer,
@@ -26,7 +26,7 @@ export type ResolutionValue = ResolutionLiteral | MathValue<'resolution'>;
 
 export function parseResolution(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): ResolutionValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -59,7 +59,7 @@ export const tryConsumeResolution = createResolutionConsumer();
 
 export function resolveResolution(
   value: ResolutionValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): ResolutionValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -77,13 +77,13 @@ export function serializeResolution(
 export function addResolutions(
   a: ResolutionValue,
   b: ResolutionValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): ResolutionValue {
   if (a.type === 'resolution' && b.type === 'resolution') {
     return addDimensions(a, b);
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -94,13 +94,13 @@ export function interpolateResolutions(
   a: ResolutionValue,
   b: ResolutionValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): ResolutionValue {
   if (a.type === 'resolution' && b.type === 'resolution') {
     return interpolateDimensions(a, b, p);
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -111,13 +111,13 @@ export function interpolateResolutions(
 export function accumulateResolutions(
   a: ResolutionValue,
   b: ResolutionValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): ResolutionValue {
   if (a.type === 'resolution' && b.type === 'resolution') {
     return accumulateDimensions(a, b);
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -126,7 +126,7 @@ export function accumulateResolutions(
 
 function asMathValue(
   value: ResolutionValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'resolution'> {
   return value.type === 'math'
     ? value
@@ -135,7 +135,7 @@ function asMathValue(
 
 function resolutionRange(
   options: ResolutionConsumerOptions,
-): CalculationRange {
+): MathRange {
   return [
     Math.max(0, options.min ?? -Infinity),
     options.max ?? Infinity,

@@ -6,7 +6,7 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { isAtOrBeyondValueStage } from '../value-processing';
-import type { CalculationContext } from './calc';
+import type { MathContext } from './math-value';
 import {
   accumulateNumbers, addNumbers, interpolateNumbers,
   resolveNumber, serializeNumber, tryConsumeNumber,
@@ -25,7 +25,7 @@ export type OpacityValue = NumberValue | PercentageValue;
 
 export function parseOpacityValue(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): OpacityValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -47,10 +47,10 @@ export const tryConsumeOpacityValue: TryComponentConsumer<OpacityValue> = oneOf(
 
 export function resolveOpacityValue(
   value: OpacityValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): OpacityValue {
   const stage = context.stage ?? 'declared';
-  const calculationContext: CalculationContext = {
+  const calculationContext: MathContext = {
     ...context,
     unwrapMathAt: context.unwrapMathAt ?? 'computed',
   };
@@ -91,7 +91,7 @@ export function serializeOpacityValue(value: OpacityValue): string {
 export function addOpacities(
   a: NumberValue,
   b: NumberValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): NumberValue {
   return addNumbers(a, b, context);
 }
@@ -100,7 +100,7 @@ export function interpolateOpacities(
   a: NumberValue,
   b: NumberValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): NumberValue {
   return interpolateNumbers(a, b, p, context);
 }
@@ -108,7 +108,7 @@ export function interpolateOpacities(
 export function accumulateOpacities(
   a: NumberValue,
   b: NumberValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): NumberValue {
   return accumulateNumbers(a, b, context);
 }
@@ -118,6 +118,6 @@ function isNumberOpacityValue(
 ): value is NumberValue {
   return value.type === 'number' || (
     value.type === 'math' &&
-    value.restrictions.expectedType === 'number'
+    value.valueType === 'number'
   );
 }

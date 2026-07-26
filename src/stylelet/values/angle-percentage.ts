@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   createAnglePercentageConsumer as createAnglePercentageLiteralConsumer,
   serializeAnglePercentage as serializeAnglePercentageLiteral,
@@ -28,7 +28,7 @@ export type AnglePercentageValue =
 
 export function parseAnglePercentage(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AnglePercentageValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -51,7 +51,7 @@ export function createAnglePercentageConsumer(
       one(tryConsumeLiteral),
       one(createMathValueConsumer({
         expectedType: 'angle-percentage',
-        percentageType: 'angle',
+        percentHint: 'angle',
         ...(range === undefined ? {} : { range }),
       })),
     ],
@@ -63,7 +63,7 @@ export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
 
 export function resolveAnglePercentage(
   value: AnglePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AnglePercentageValue {
   return value.type === 'math'
     ? resolveMathValue(value, anglePercentageCalculationContext(context))
@@ -81,7 +81,7 @@ export function serializeAnglePercentage(
 export function addAnglePercentages(
   a: AnglePercentageValue,
   b: AnglePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AnglePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAddAnglePercentageLiterals(a, b);
@@ -93,7 +93,7 @@ export function addAnglePercentages(
 
   const calculationContext = anglePercentageCalculationContext(context);
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -104,7 +104,7 @@ export function interpolateAnglePercentages(
   a: AnglePercentageValue,
   b: AnglePercentageValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AnglePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryInterpolateAnglePercentageLiterals(a, b, p);
@@ -116,7 +116,7 @@ export function interpolateAnglePercentages(
 
   const calculationContext = anglePercentageCalculationContext(context);
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     p,
@@ -127,7 +127,7 @@ export function interpolateAnglePercentages(
 export function accumulateAnglePercentages(
   a: AnglePercentageValue,
   b: AnglePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AnglePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAccumulateAnglePercentageLiterals(a, b);
@@ -139,7 +139,7 @@ export function accumulateAnglePercentages(
 
   const calculationContext = anglePercentageCalculationContext(context);
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -148,7 +148,7 @@ export function accumulateAnglePercentages(
 
 function asMathValue(
   value: AnglePercentageValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'angle-percentage'> {
   return value.type === 'math'
     ? value
@@ -156,17 +156,17 @@ function asMathValue(
 }
 
 function anglePercentageCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
+  context: MathContext,
+): MathContext {
   return {
     ...context,
-    percentageType: 'angle',
+    percentHint: 'angle',
   };
 }
 
 function anglePercentageRange(
   options: AnglePercentageConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

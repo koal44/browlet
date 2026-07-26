@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   createFrequencyPercentageConsumer as createFrequencyPercentageLiteralConsumer,
   serializeFrequencyPercentage as serializeFrequencyPercentageLiteral,
@@ -28,7 +28,7 @@ export type FrequencyPercentageValue =
 
 export function parseFrequencyPercentage(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyPercentageValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -51,7 +51,7 @@ export function createFrequencyPercentageConsumer(
       one(tryConsumeLiteral),
       one(createMathValueConsumer({
         expectedType: 'frequency-percentage',
-        percentageType: 'frequency',
+        percentHint: 'frequency',
         ...(range === undefined ? {} : { range }),
       })),
     ],
@@ -64,7 +64,7 @@ export const tryConsumeFrequencyPercentage =
 
 export function resolveFrequencyPercentage(
   value: FrequencyPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyPercentageValue {
   return value.type === 'math'
     ? resolveMathValue(value, frequencyPercentageCalculationContext(context))
@@ -82,7 +82,7 @@ export function serializeFrequencyPercentage(
 export function addFrequencyPercentages(
   a: FrequencyPercentageValue,
   b: FrequencyPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAddFrequencyPercentageLiterals(a, b);
@@ -94,7 +94,7 @@ export function addFrequencyPercentages(
 
   const calculationContext = frequencyPercentageCalculationContext(context);
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -105,7 +105,7 @@ export function interpolateFrequencyPercentages(
   a: FrequencyPercentageValue,
   b: FrequencyPercentageValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryInterpolateFrequencyPercentageLiterals(a, b, p);
@@ -117,7 +117,7 @@ export function interpolateFrequencyPercentages(
 
   const calculationContext = frequencyPercentageCalculationContext(context);
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     p,
@@ -128,7 +128,7 @@ export function interpolateFrequencyPercentages(
 export function accumulateFrequencyPercentages(
   a: FrequencyPercentageValue,
   b: FrequencyPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAccumulateFrequencyPercentageLiterals(a, b);
@@ -140,7 +140,7 @@ export function accumulateFrequencyPercentages(
 
   const calculationContext = frequencyPercentageCalculationContext(context);
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -149,7 +149,7 @@ export function accumulateFrequencyPercentages(
 
 function asMathValue(
   value: FrequencyPercentageValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'frequency-percentage'> {
   return value.type === 'math'
     ? value
@@ -157,17 +157,17 @@ function asMathValue(
 }
 
 function frequencyPercentageCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
+  context: MathContext,
+): MathContext {
   return {
     ...context,
-    percentageType: 'frequency',
+    percentHint: 'frequency',
   };
 }
 
 function frequencyPercentageRange(
   options: FrequencyPercentageConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

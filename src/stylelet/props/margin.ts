@@ -5,7 +5,7 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { serializeAuto, tryConsumeAuto, type AutoValue } from '../values/auto';
-import type { CalculationContext } from '../values/calc';
+import type { MathContext } from '../values/math-value';
 import {
   serializeLengthPercentage, tryConsumeLengthPercentage,
   type LengthPercentageValue,
@@ -22,7 +22,7 @@ export type MarginSideValue =
 
 export function parseMarginSideValue(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): MarginSideValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(

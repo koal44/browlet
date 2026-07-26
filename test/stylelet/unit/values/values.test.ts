@@ -2606,7 +2606,7 @@ describe('opacity values', () => {
   ] as const)('parses the calculated opacity value %s', (input, expectedType) => {
     expect(parseOpacityValue(input)).toMatchObject({
       type: 'math',
-      restrictions: { expectedType },
+      valueType: expectedType,
     });
   });
 

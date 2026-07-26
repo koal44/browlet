@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   accumulatePercentages as accumulatePercentageLiterals,
   addPercentages as addPercentageLiterals,
@@ -27,7 +27,7 @@ export type PercentageValue = PercentageLiteral | MathValue<'percentage'>;
 
 export function parsePercentage(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): PercentageValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -50,7 +50,7 @@ export function createPercentageConsumer(
       one(tryConsumeLiteral),
       one(createMathValueConsumer({
         expectedType: 'percentage',
-        percentageType: 'percent',
+        percentHint: 'percent',
         ...(range === undefined ? {} : { range }),
       })),
     ],
@@ -62,7 +62,7 @@ export const tryConsumePercentage = createPercentageConsumer();
 
 export function resolvePercentage(
   value: PercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): PercentageValue {
   return value.type === 'math'
     ? resolveMathValue(value, percentageCalculationContext(context))
@@ -80,7 +80,7 @@ export function serializePercentage(
 export function addPercentages(
   a: PercentageValue,
   b: PercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): PercentageValue {
   if (a.type === 'percentage' && b.type === 'percentage') {
     return addPercentageLiterals(a, b);
@@ -88,7 +88,7 @@ export function addPercentages(
 
   const calculationContext = percentageCalculationContext(context);
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -99,7 +99,7 @@ export function interpolatePercentages(
   a: PercentageValue,
   b: PercentageValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): PercentageValue {
   if (a.type === 'percentage' && b.type === 'percentage') {
     return interpolatePercentageLiterals(a, b, p);
@@ -107,7 +107,7 @@ export function interpolatePercentages(
 
   const calculationContext = percentageCalculationContext(context);
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     p,
@@ -118,7 +118,7 @@ export function interpolatePercentages(
 export function accumulatePercentages(
   a: PercentageValue,
   b: PercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): PercentageValue {
   if (a.type === 'percentage' && b.type === 'percentage') {
     return accumulatePercentageLiterals(a, b);
@@ -126,7 +126,7 @@ export function accumulatePercentages(
 
   const calculationContext = percentageCalculationContext(context);
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -135,7 +135,7 @@ export function accumulatePercentages(
 
 function asMathValue(
   value: PercentageValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'percentage'> {
   return value.type === 'math'
     ? value
@@ -143,17 +143,17 @@ function asMathValue(
 }
 
 function percentageCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
+  context: MathContext,
+): MathContext {
   return {
     ...context,
-    percentageType: 'percent',
+    percentHint: 'percent',
   };
 }
 
 function percentageRange(
   options: PercentageConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

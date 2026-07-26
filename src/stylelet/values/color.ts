@@ -20,9 +20,9 @@ import {
   type AngleValue,
 } from './angle';
 import {
-  tryCoercePercentageMathValueToNumber,
-  type CalculationContext,
-} from './calc';
+  tryCoercePercentageToNumber,
+  type MathContext,
+} from './math-value';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';
@@ -1631,7 +1631,7 @@ export function resolveColorValue(
   }
 }
 
-export type ColorResolutionContext = CalculationContext & {
+export type ColorResolutionContext = MathContext & {
   currentColor?: NumericColor;
   systemColors?: ReadonlyMap<SystemColorName, NumericColor>;
 };
@@ -1712,7 +1712,7 @@ function resolveColorFunction(
 function resolveRgbColor(
   value: RgbColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
 ): NumericColor | null {
   const { components: values } = value;
 
@@ -1779,7 +1779,7 @@ function is8BitRgbComponent(
 function resolveHslColor(
   value: HslColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
 ): NumericColor | null {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
@@ -1824,7 +1824,7 @@ function resolveHslColor(
 function resolveHwbColor(
   value: HwbColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
 ): NumericColor | null {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
@@ -1869,7 +1869,7 @@ function resolveHwbColor(
 function resolveLabColor(
   value: LabColor | OklabColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
   ok: boolean,
 ): NumericColor | null {
   const components = resolveColorComponents(
@@ -1904,7 +1904,7 @@ function resolveLabColor(
 function resolveLchColor(
   value: LchColor | OklchColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
   ok: boolean,
 ): NumericColor | null {
   const components = resolveColorComponents(
@@ -1947,7 +1947,7 @@ function resolveLchColor(
 function resolvePredefinedColor(
   value: PredefinedColor,
   alpha: number | undefined,
-  context: CalculationContext,
+  context: MathContext,
 ): NumericColor | null {
   const components = resolveColorComponents(
     value.components,
@@ -1984,7 +1984,7 @@ function resolveColorComponents<
   values: Values,
   numberScale: number | readonly number[],
   percentageScale: number | readonly number[],
-  context: CalculationContext,
+  context: MathContext,
 ): { [Index in keyof Values]: ColorComponent } | null {
   const components: ColorComponent[] = [];
 
@@ -2010,7 +2010,7 @@ function resolveColorComponent(
   value: NumberValue | PercentageValue | 'none',
   numberScale: number,
   percentageScale: number,
-  context: CalculationContext,
+  context: MathContext,
 ): ColorComponent | null {
   if (value === 'none') {
     return undefined;
@@ -2044,7 +2044,7 @@ function resolveColorAlphaValue(
   const resolved = resolvePercentage(value, calculationContext);
 
   return resolved.type === 'math'
-    ? tryCoercePercentageMathValueToNumber(resolved) ?? resolved
+    ? tryCoercePercentageToNumber(resolved) ?? resolved
     : resolved;
 }
 
@@ -2075,7 +2075,7 @@ function numericColorAlpha(
 
 function resolveHue(
   value: HueValue | 'none',
-  context: CalculationContext,
+  context: MathContext,
 ): ColorComponent | null {
   if (value === 'none') {
     return undefined;
@@ -2097,7 +2097,7 @@ function resolveHue(
 
 function resolveColorNumericValue(
   value: NumberValue | PercentageValue,
-  context: CalculationContext,
+  context: MathContext,
   unwrapMathAt: ValueStage,
 ): NumberValue | PercentageValue {
   const calculationContext = colorCalculationContext(
@@ -2111,9 +2111,9 @@ function resolveColorNumericValue(
 }
 
 function colorCalculationContext(
-  context: CalculationContext,
+  context: MathContext,
   unwrapMathAt: ValueStage,
-): CalculationContext {
+): MathContext {
   return {
     ...context,
     unwrapMathAt: context.unwrapMathAt ?? unwrapMathAt,
@@ -2124,7 +2124,7 @@ function isNumberValue(
   value: NumberValue | PercentageValue | AngleValue,
 ): value is NumberValue {
   return value.type === 'number' ||
-    (value.type === 'math' && value.restrictions.expectedType === 'number');
+    (value.type === 'math' && value.valueType === 'number');
 }
 
 type ColorComponentRange = [
@@ -2141,7 +2141,7 @@ type ColorComponentRanges = [
 function clampColorComponents(
   components: ColorComponents,
   ranges: ColorComponentRanges,
-  context: CalculationContext,
+  context: MathContext,
   nonFiniteClampStage: ValueStage = 'computed',
 ): ColorComponents | null {
   if (

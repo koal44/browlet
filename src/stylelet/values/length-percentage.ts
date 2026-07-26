@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   createLengthPercentageConsumer as createLengthPercentageLiteralConsumer,
   serializeLengthPercentage as serializeLengthPercentageLiteral,
@@ -28,7 +28,7 @@ export type LengthPercentageValue =
 
 export function parseLengthPercentage(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthPercentageValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -51,7 +51,7 @@ export function createLengthPercentageConsumer(
       one(tryConsumeLiteral),
       one(createMathValueConsumer({
         expectedType: 'length-percentage',
-        percentageType: 'length',
+        percentHint: 'length',
         ...(range === undefined ? {} : { range }),
       })),
     ],
@@ -63,7 +63,7 @@ export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
 
 export function resolveLengthPercentage(
   value: LengthPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthPercentageValue {
   return value.type === 'math'
     ? resolveMathValue(value, lengthPercentageCalculationContext(context))
@@ -81,7 +81,7 @@ export function serializeLengthPercentage(
 export function addLengthPercentages(
   a: LengthPercentageValue,
   b: LengthPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAddLengthPercentageLiterals(a, b);
@@ -93,7 +93,7 @@ export function addLengthPercentages(
 
   const calculationContext = lengthPercentageCalculationContext(context);
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -104,7 +104,7 @@ export function interpolateLengthPercentages(
   a: LengthPercentageValue,
   b: LengthPercentageValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryInterpolateLengthPercentageLiterals(a, b, p);
@@ -116,7 +116,7 @@ export function interpolateLengthPercentages(
 
   const calculationContext = lengthPercentageCalculationContext(context);
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     p,
@@ -127,7 +127,7 @@ export function interpolateLengthPercentages(
 export function accumulateLengthPercentages(
   a: LengthPercentageValue,
   b: LengthPercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthPercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAccumulateLengthPercentageLiterals(a, b);
@@ -139,7 +139,7 @@ export function accumulateLengthPercentages(
 
   const calculationContext = lengthPercentageCalculationContext(context);
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -148,7 +148,7 @@ export function accumulateLengthPercentages(
 
 function asMathValue(
   value: LengthPercentageValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'length-percentage'> {
   return value.type === 'math'
     ? value
@@ -156,17 +156,17 @@ function asMathValue(
 }
 
 function lengthPercentageCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
+  context: MathContext,
+): MathContext {
   return {
     ...context,
-    percentageType: 'length',
+    percentHint: 'length',
   };
 }
 
 function lengthPercentageRange(
   options: LengthPercentageConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

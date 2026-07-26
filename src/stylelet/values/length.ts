@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
   createLengthConsumer as createLengthLiteralConsumer,
@@ -26,7 +26,7 @@ export type LengthValue = LengthLiteral | MathValue<'length'>;
 
 export function parseLength(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -60,7 +60,7 @@ export const tryConsumeLength = createLengthConsumer();
 
 export function resolveLength(
   value: LengthValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -78,13 +78,13 @@ export function serializeLength(
 export function addLengths(
   a: LengthValue,
   b: LengthValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
     return normalizeUnitlessZero(addDimensions(a, b));
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -95,13 +95,13 @@ export function interpolateLengths(
   a: LengthValue,
   b: LengthValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
     return normalizeUnitlessZero(interpolateDimensions(a, b, p));
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -112,13 +112,13 @@ export function interpolateLengths(
 export function accumulateLengths(
   a: LengthValue,
   b: LengthValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
     return normalizeUnitlessZero(accumulateDimensions(a, b));
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -127,7 +127,7 @@ export function accumulateLengths(
 
 function asMathValue(
   value: LengthValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'length'> {
   return value.type === 'math'
     ? value
@@ -146,7 +146,7 @@ function normalizeUnitlessZero(
 
 function lengthRange(
   options: LengthConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

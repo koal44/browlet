@@ -54,39 +54,41 @@ import {
   type TimeLiteral,
 } from './numeric-literal/time';
 
-const CALC_TERM_LIMIT = 32;
-const CALC_COMPLEXITY_LIMIT = 64;
+export type MathValue<Type extends MathValueType = MathValueType> = {
+  type: 'math';
+  calculation: CalculationTree;
+  valueType: Type;
+};
 
-export type ExpectedCalculationType =
-  | 'number'
-  | 'integer'
-  | 'percentage'
-  | 'dimension'
-  | 'length'
-  | 'angle'
-  | 'time'
-  | 'frequency'
-  | 'resolution'
-  | 'flex'
-  | 'length-percentage'
-  | 'angle-percentage'
-  | 'time-percentage'
-  | 'frequency-percentage';
+export type MathValueType = keyof MathLiteralByType;
 
-export type CalculationRange = readonly [
+type MathLiteralByType = {
+  number: NumberLiteral;
+  integer: IntegerLiteral;
+  percentage: PercentageLiteral;
+  length: LengthLiteral;
+  angle: AngleLiteral;
+  time: TimeLiteral;
+  frequency: FrequencyLiteral;
+  resolution: ResolutionLiteral;
+  flex: DimensionLiteral;
+  'length-percentage': LengthLiteral | PercentageLiteral;
+  'angle-percentage': AngleLiteral | PercentageLiteral;
+  'time-percentage': TimeLiteral | PercentageLiteral;
+  'frequency-percentage': FrequencyLiteral | PercentageLiteral;
+};
+
+export type MathRange = readonly [
   minimum: number,
   maximum: number,
 ];
 
-export type CalculationContext = ValueStageContext & {
+export type MathContext = ValueStageContext & {
   /** Value-processing stage at which math values should become literals. */
   unwrapMathAt?: ValueStage;
 
-  /** Whether the current math function is nested inside another math function. */
-  insideCalculation?: boolean;
-
   /** Inclusive range allowed for the outermost calculation. */
-  range?: CalculationRange;
+  range?: MathRange;
 
   /** Context used to reduce lengths to the canonical px unit. */
   length?: LengthResolutionContext;
@@ -95,46 +97,282 @@ export type CalculationContext = ValueStageContext & {
   devicePixelRatio?: number;
 
   /**
-   * Numeric base type against which percentages resolve. Percentages retain
-   * their percentage type when this is omitted.
+   * Percent hint assigned to percentages in this context. Defaults to
+   * "percent", preserving percentages as percentages.
    */
-  percentageType?: NumericBaseType;
+  percentHint?: MathBase;
 
   /** Numeric value against which percentages can be resolved. */
   percentageReferenceValue?: NumberLiteral | DimensionLiteral;
 
   /**
-   * ASCII-lowercase numeric variable names and their values and types.
+   * ASCII-lowercase numeric variable names, values, and types.
    * A null value represents a variable that has not resolved yet.
    */
   numericVariables?: ReadonlyMap<string, NumericVariable>;
 };
 
-export type NumericVariable = {
-  value: NumericLiteral | null;
-  numericType: NumericType;
-};
-
-export type MathValue<
-  Type extends ExpectedCalculationType = ExpectedCalculationType,
-> = {
-  type: 'math';
-  calculation: CalculationTree;
-  restrictions: MathValueRestrictions<Type>;
-};
-
-type MathValueRestrictions<
-  Type extends ExpectedCalculationType = ExpectedCalculationType,
-> = {
-  expectedType: Type;
-};
-
-type MathValueParsingContext = {
-  expectedType?: ExpectedCalculationType;
+type InternalMathContext = MathContext & {
+  expectedType?: MathValueType;
+  insideCalculation?: boolean;
   termCount?: number;
 };
 
-export type CalculationTree =
+export type NumericVariable = {
+  value: NumericLiteral | null;
+  valueType: MathValueType;
+};
+
+export function parseMathValue<Type extends MathValueType>(
+  input: ParserInput,
+  expectedType: Type,
+  context: MathContext = {},
+): MathValue<Type> | null {
+  return unwrapConsumeResultOrThrow(
+    parseAsComponentGrammar(
+      input,
+      withComponentTrivia(tryConsumeMathValue),
+      { ...context, expectedType },
+    ),
+    'math value',
+  ) as MathValue<Type> | null;
+}
+
+export function createMathValueFromLiteral<Type extends MathValueType>(
+  literal: MathLiteralByType[Type],
+  valueType: Type,
+  context: MathContext = {},
+): MathValue<Type> {
+  const calculationLiteral: NumericLiteral = 'unit' in literal
+    ? {
+      type: 'dimension',
+      value: literal.value,
+      unit: literal.unit,
+    }
+    : literal.type === 'integer'
+      ? { type: 'number', value: literal.value }
+      : literal;
+  const normalized = calculationLiteral.value === 0
+    ? { ...calculationLiteral, value: 0 }
+    : calculationLiteral;
+  const mathHints = mathHintsFromValue(normalized, context);
+
+  if (mathHints === null) {
+    throw new TypeError('Cannot create a math value from an unknown dimension');
+  }
+
+  return createMathValue(
+    createNumericLeaf(normalized, mathHints),
+    valueType,
+  );
+}
+
+type MathValueConsumerOptions<Type extends MathValueType = MathValueType> = {
+  expectedType: Type;
+  range?: MathRange;
+  percentHint?: MathBase;
+};
+
+export function createMathValueConsumer<Type extends MathValueType>(
+  options: MathValueConsumerOptions<Type>,
+): TryComponentConsumer<MathValue<Type>> {
+  return (c) => {
+    const outerContext = c.context;
+    const mathContext = outerContext === null || outerContext === undefined
+      ? {}
+      : outerContext as InternalMathContext;
+
+    try {
+      c.context = {
+        ...mathContext,
+        expectedType: options.expectedType,
+        ...(options.range === undefined ? {} : { range: options.range }),
+        ...(options.percentHint === undefined ? {} : { percentHint: options.percentHint }),
+      };
+
+      return tryConsumeMathValue(c) as TryComponentConsumerResult<
+        MathValue<Type>
+      >;
+    } finally {
+      c.context = outerContext;
+    }
+  };
+}
+
+export function resolveMathValue<Type extends MathValueType>(
+  value: MathValue<Type>,
+  context: MathContext = {},
+): MathValue<Type> | MathLiteralByType[Type] {
+  const calculation = simplifyCalculationTree(value.calculation, context, value.valueType);
+  const stage = context.stage ?? 'declared';
+  const unwrapMathAt = context.unwrapMathAt ?? 'computed';
+
+  if (
+    isAtOrBeyondValueStage(stage, unwrapMathAt) &&
+    isNumericLeaf(calculation)
+  ) {
+    return resolvedMathLiteralFromLeaf(
+      calculation,
+      value.valueType,
+    );
+  }
+
+  return calculation === value.calculation
+    ? value
+    : { ...value, calculation };
+}
+
+export function tryCoercePercentageToNumber(
+  value: MathValue<'percentage'>,
+): MathValue<'number'> | null {
+  if (value.calculation.type !== 'percentage') {
+    return null;
+  }
+
+  return {
+    type: 'math',
+    calculation: createNumericLeaf(
+      {
+        type: 'number',
+        value: value.calculation.value / 100,
+      },
+      numberMathHints(),
+    ),
+    valueType: 'number',
+  };
+}
+
+export function serializeMathValue(
+  value: MathValue,
+): string {
+  const { calculation } = value;
+
+  if (isNumericLeaf(calculation)) {
+    return `calc(${serializeCalcTree(calculation)})`;
+  }
+
+  if (isMathFunctionNode(calculation)) {
+    return serializeMathFunctionNode(calculation);
+  }
+
+  return `calc(${unwrapParens(serializeCalcTree(calculation))})`;
+}
+
+// CSS Values, "Combination of Math Functions".
+export function addMathValues<Type extends MathValueType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+  context: MathContext = {},
+): MathValue<Type> {
+  return combineMathValues(
+    a,
+    b,
+    context,
+  );
+}
+
+export function interpolateMathValues<Type extends MathValueType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+  p: number,
+  context: MathContext = {},
+): MathValue<Type> {
+  return combineMathValues(
+    {
+      ...a,
+      calculation: scaleCalculationTree(
+        a.calculation,
+        1 - p,
+      ),
+    },
+    {
+      ...b,
+      calculation: scaleCalculationTree(
+        b.calculation,
+        p,
+      ),
+    },
+    context,
+  );
+}
+
+export function accumulateMathValues<Type extends MathValueType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+  context: MathContext = {},
+): MathValue<Type> {
+  return addMathValues(a, b, context);
+}
+
+function combineMathValues<Type extends MathValueType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+  context: MathContext,
+): MathValue<Type> {
+  const valueType = commonValueType(a, b);
+  const mathHints = addMathHints([
+    mathHintsOf(a.calculation),
+    mathHintsOf(b.calculation),
+  ]);
+
+  if (mathHints === null) {
+    throw new TypeError('Math function types must be consistent');
+  }
+
+  return createMathValue(
+    simplifyCalculationTree({
+      type: 'sum',
+      children: [a.calculation, b.calculation],
+      hints: mathHints,
+    }, context, valueType),
+    valueType,
+  );
+}
+
+function commonValueType<Type extends MathValueType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+): Type {
+  const valueType = a.valueType;
+
+  if (b.valueType !== valueType) {
+    throw new TypeError('Math value types must be consistent');
+  }
+
+  return valueType;
+}
+
+function scaleCalculationTree(
+  calculation: CalculationTree,
+  factor: number,
+): CalcProductNode {
+  const mathHints = mathHintsOf(calculation);
+
+  return {
+    type: 'product',
+    children: [
+      createNumericLeaf(
+        { type: 'number', value: factor },
+        numberMathHints(),
+      ),
+      calculation,
+    ],
+    hints: mathHints,
+  };
+}
+
+// █     █  ███▌  █████▌ █▌  █▌
+// ██   ██ ▐█ ▐█    █▌   █▌  █▌
+// █▌█ █▐█ █▌  █▌   █▌   █▌  █▌
+// █▌ █ ▐█ █▌  █▌   █▌   █████▌
+// █▌   ▐█ █████▌   █▌   █▌  █▌
+// █▌   ▐█ █▌  █▌   █▌   █▌  █▌
+// █▌   ▐█ █▌  █▌   █▌   █▌  █▌
+
+const CALC_TERM_LIMIT = 32;
+const CALC_COMPLEXITY_LIMIT = 64;
+
+type CalculationTree =
   | CalculationLeaf
   | CalculationNode;
 
@@ -142,7 +380,7 @@ type CalculationLeaf =
   | NumericLeaf
   | VariableLeaf;
 
-export type CalculationNode =
+type CalculationNode =
   | CalcSumNode
   | CalcProductNode
   | CalcNegateNode
@@ -155,17 +393,17 @@ type NumericLiteral =
   | PercentageLiteral;
 
 type NumericLeaf = NumericLiteral & {
-  numericType: NumericType;
+  hints: MathHints;
 };
 
-type NumberLeaf = NumberLiteral & { numericType: NumericType; };
-type DimensionLeaf = DimensionLiteral & { numericType: NumericType; };
-type PercentageLeaf = PercentageLiteral & { numericType: NumericType; };
+type NumberLeaf = NumberLiteral & { hints: MathHints; };
+type DimensionLeaf = DimensionLiteral & { hints: MathHints; };
+type PercentageLeaf = PercentageLiteral & { hints: MathHints; };
 
 type VariableLeaf = {
   type: 'variable';
   name: string;
-  numericType: NumericType;
+  hints: MathHints;
 };
 
 // Interfaces are required to break the recursive CalculationTree alias.
@@ -176,7 +414,7 @@ interface CalculationNodeWithChildren<
 > {
   type: Type;
   children: Children;
-  numericType: NumericType;
+  hints: MathHints;
 }
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
@@ -186,10 +424,10 @@ interface MathFunctionNodeWithArguments<
 > {
   type: Type;
   arguments: Arguments;
-  numericType: NumericType;
+  hints: MathHints;
 }
 
-export type MathFunctionNode =
+type MathFunctionNode =
   | MathVariadicFunctionNode
   | MathClampNode
   | MathRoundNode
@@ -197,46 +435,46 @@ export type MathFunctionNode =
   | MathUnaryFunctionNode
   | MathLogNode;
 
-export type MathVariadicFunctionNode<
+type MathVariadicFunctionNode<
   Name extends VariadicMathFunctionName = VariadicMathFunctionName,
 > = MathFunctionNodeWithArguments<
   Name,
   [CalculationTree, ...CalculationTree[]]
 >;
 
-export type MathClampNode = {
+type MathClampNode = {
   type: 'clamp';
   minimum?: CalculationTree;
   value: CalculationTree;
   maximum?: CalculationTree;
-  numericType: NumericType;
+  hints: MathHints;
 };
 
-export type MathRoundNode = {
+type MathRoundNode = {
   type: 'round';
   strategy: RoundingStrategy;
   value: CalculationTree;
   step?: CalculationTree;
-  numericType: NumericType;
+  hints: MathHints;
 };
 
-export type MathBinaryFunctionNode<
+type MathBinaryFunctionNode<
   Name extends BinaryMathFunctionName = BinaryMathFunctionName,
 > = MathFunctionNodeWithArguments<
   Name,
   [CalculationTree, CalculationTree]
 >;
 
-export type MathUnaryFunctionNode<
+type MathUnaryFunctionNode<
   Name extends UnaryMathFunctionName = UnaryMathFunctionName,
 > = MathFunctionNodeWithArguments<Name, [CalculationTree]>;
 
-export type MathLogNode = MathFunctionNodeWithArguments<
+type MathLogNode = MathFunctionNodeWithArguments<
   'log',
   [value: CalculationTree] | [value: CalculationTree, base: CalculationTree]
 >;
 
-export type RoundingStrategy =
+type RoundingStrategy =
   | 'nearest'
   | 'up'
   | 'down'
@@ -257,114 +495,7 @@ type UnaryMathFunctionName =
   | 'abs'
   | 'sign';
 
-export function parseMathFunction<Type extends ExpectedCalculationType>(
-  input: ParserInput,
-  expectedType: Type,
-  context: CalculationContext = {},
-): MathValue<Type> | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withComponentTrivia(tryConsumeMathFunction),
-      { ...context, expectedType },
-    ),
-    'math function',
-  ) as MathValue<Type> | null;
-}
-
-export function parseMathValue<Type extends ExpectedCalculationType>(
-  input: ParserInput,
-  expectedType: Type,
-  context: CalculationContext = {},
-): MathValue<Type> | null {
-  return parseMathFunction(input, expectedType, context);
-}
-
-export function parseCalc<Type extends ExpectedCalculationType>(
-  input: ParserInput,
-  expectedType: Type,
-  context: CalculationContext = {},
-): MathValue<Type> | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withComponentTrivia(tryConsumeCalc),
-      { ...context, expectedType },
-    ),
-    'calc',
-  ) as MathValue<Type> | null;
-}
-
-export function createMathValueFromLiteral<
-  Type extends ExpectedCalculationType,
->(
-  literal:
-    | IntegerLiteral
-    | NumberLiteral
-    | DimensionLiteral<string, string>
-    | PercentageLiteral,
-  expectedType: Type,
-  context: CalculationContext = {},
-): MathValue<Type> {
-  const calculationLiteral: NumericLiteral = 'unit' in literal
-    ? {
-      type: 'dimension',
-      value: literal.value,
-      unit: literal.unit,
-    }
-    : literal.type === 'integer'
-      ? { type: 'number', value: literal.value }
-      : literal;
-  const normalized = calculationLiteral.value === 0
-    ? { ...calculationLiteral, value: 0 }
-    : calculationLiteral;
-  const numericType = numericTypeFromValue(normalized, context);
-
-  if (numericType === null) {
-    throw new TypeError('Cannot create a math value from an unknown dimension');
-  }
-
-  return createMathValue(
-    createNumericLeaf(normalized, numericType),
-    expectedType,
-  );
-}
-
-export type MathValueConsumerOptions<
-  Type extends ExpectedCalculationType = ExpectedCalculationType,
-> = {
-  expectedType: Type;
-  range?: CalculationRange;
-  percentageType?: NumericBaseType;
-};
-
-export function createMathValueConsumer<Type extends ExpectedCalculationType>(
-  options: MathValueConsumerOptions<Type>,
-): TryComponentConsumer<MathValue<Type>> {
-  return (c) => {
-    const outerContext = c.context;
-    const calculationContext = outerContext === null || outerContext === undefined
-      ? {}
-      : outerContext as CalculationContext;
-
-    try {
-      c.context = {
-        ...calculationContext,
-        expectedType: options.expectedType,
-        ...(options.range === undefined ? {} : { range: options.range }),
-        ...(options.percentageType === undefined ? {} : { percentageType: options.percentageType }),
-      };
-
-      return tryConsumeMathValue(c) as TryComponentConsumerResult<
-        MathValue<Type>
-      >;
-    } finally {
-      c.context = outerContext;
-    }
-  };
-}
-
-export function tryConsumeCalc(
+function tryConsumeCalc(
   c: ComponentCursor,
 ): TryComponentConsumerResult<MathValue> {
   const start = c.pos();
@@ -375,11 +506,11 @@ export function tryConsumeCalc(
     return result;
   }
 
-  const context = calculationContextFor(c.context);
-  const numericType = numericTypeOf(result.value);
+  const context = mathContextFor(c.context);
+  const mathHints = mathHintsOf(result.value);
 
   if (!context.insideCalculation) {
-    if (resolvedNumericCategory(numericType) === null) {
+    if (mathCategory(mathHints) === null) {
       return bad(
         ComponentConsumerBadReason.Invalid,
         'Invalid calculation type',
@@ -388,11 +519,11 @@ export function tryConsumeCalc(
   }
 
   const expectedType = requiredExpectedType(
-    c.context as MathValueParsingContext,
+    c.context as InternalMathContext,
   );
 
   if (!context.insideCalculation) {
-    if (!matchesExpectedCalculationType(numericType, expectedType, context)) {
+    if (!matchesExpectedCalculationType(mathHints, expectedType, context)) {
       c.restore(start);
       c.context = outerContext;
       return null;
@@ -400,7 +531,7 @@ export function tryConsumeCalc(
   }
 
   return ok(createMathValue(
-    simplifyCalculationTree(result.value, context, { expectedType }),
+    simplifyCalculationTree(result.value, context, expectedType),
     expectedType,
   ));
 }
@@ -530,7 +661,7 @@ const tryConsumeNonCalcMathFunction: TryComponentConsumer<
     ([value]) => ok(value),
   );
 
-export const tryConsumeMathFunction: TryComponentConsumer<MathValue> = (c) => {
+const tryConsumeMathValue: TryComponentConsumer<MathValue> = (c) => {
   const result = tryConsumeMathFunctionCalculation(c);
 
   if (result === null || isBad(result)) {
@@ -539,24 +670,22 @@ export const tryConsumeMathFunction: TryComponentConsumer<MathValue> = (c) => {
 
   return ok(createMathValue(
     result.value,
-    requiredExpectedType(c.context as MathValueParsingContext),
+    requiredExpectedType(c.context as InternalMathContext),
   ));
 };
 
-export const tryConsumeMathValue = tryConsumeMathFunction;
-
-function createMathValue<Type extends ExpectedCalculationType>(
+function createMathValue<Type extends MathValueType>(
   calculation: CalculationTree,
-  expectedType: Type,
+  valueType: Type,
 ): MathValue<Type> {
   return {
     type: 'math',
     calculation,
-    restrictions: { expectedType },
+    valueType,
   };
 }
 
-type FunctionResultType =
+type MathFunctionTypeRule =
   | 'consistent'
   | 'same'
   | 'number'
@@ -587,8 +716,8 @@ function createBinaryMathFunctionConsumer<
   Name extends BinaryMathFunctionName,
 >(
   name: Name,
-  resultType: FunctionResultType,
-  allowedCategories?: readonly ResolvedNumericCategory[],
+  typeRule: MathFunctionTypeRule,
+  argumentCategories?: readonly MathCategory[],
 ): TryComponentConsumer<
   MathBinaryFunctionNode<Name> | NumericLeaf
 > {
@@ -600,8 +729,8 @@ function createBinaryMathFunctionConsumer<
       return createMathFunctionNode<MathBinaryFunctionNode<Name>>(
         { type: name, arguments: [first, second] },
         args,
-        resultType,
-        allowedCategories,
+        typeRule,
+        argumentCategories,
       );
     },
   );
@@ -613,8 +742,8 @@ function createUnaryMathFunctionConsumer<
   Name extends UnaryMathFunctionName,
 >(
   name: Name,
-  resultType: FunctionResultType,
-  allowedCategories?: readonly ResolvedNumericCategory[],
+  typeRule: MathFunctionTypeRule,
+  argumentCategories?: readonly MathCategory[],
 ): TryComponentConsumer<
   MathUnaryFunctionNode<Name> | NumericLeaf
 > {
@@ -625,8 +754,8 @@ function createUnaryMathFunctionConsumer<
     >(
       { type: name, arguments: [child] },
       [child],
-      resultType,
-      allowedCategories,
+      typeRule,
+      argumentCategories,
     ),
   );
 
@@ -691,8 +820,8 @@ function createRoundConsumer(): TryComponentConsumer<
       const [value, step] = children;
 
       const strategy = explicitStrategy ?? 'nearest';
-      const valueType = numericTypeOf(value);
-      const valueCategory = resolvedNumericCategory(valueType);
+      const valueHints = mathHintsOf(value);
+      const valueCategory = mathCategory(valueHints);
 
       if (
         valueCategory === null ||
@@ -765,10 +894,10 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
       return result;
     }
 
-    const context = calculationContextFor(c.context);
+    const context = mathContextFor(c.context);
 
     if (!context.insideCalculation) {
-      if (resolvedNumericCategory(result.value.numericType) === null) {
+      if (mathCategory(result.value.hints) === null) {
         return bad(
           ComponentConsumerBadReason.Invalid,
           'Invalid calculation type',
@@ -776,14 +905,14 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
       }
     }
 
-    const restrictions = context.insideCalculation
+    const valueType = context.insideCalculation
       ? undefined
-      : { expectedType: requiredExpectedType(c.context as MathValueParsingContext) };
+      : requiredExpectedType(c.context as InternalMathContext);
 
-    if (restrictions !== undefined) {
+    if (valueType !== undefined) {
       if (!matchesExpectedCalculationType(
-        result.value.numericType,
-        restrictions.expectedType,
+        result.value.hints,
+        valueType,
         context,
       )) {
         c.restore(start);
@@ -795,7 +924,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
     return ok(simplifyCalculationTree(
       result.value,
       context,
-      restrictions,
+      valueType,
     ) as Node | NumericLeaf);
   };
 }
@@ -803,26 +932,26 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 function createMathFunctionNode<
   Node extends MathFunctionNode,
 >(
-  node: Omit<Node, 'numericType'>,
+  node: Omit<Node, 'hints'>,
   calculations: readonly CalculationTree[],
-  resultType: FunctionResultType,
-  allowedCategories?: readonly ResolvedNumericCategory[],
+  typeRule: MathFunctionTypeRule,
+  argumentCategories?: readonly MathCategory[],
 ): TryComponentConsumerResult<Node> {
-  const types = calculations.map(numericTypeOf);
-  const categories = types.map(resolvedNumericCategory);
+  const hints = calculations.map(mathHintsOf);
+  const categories = hints.map(mathCategory);
 
   if (
     categories.some((category) => category === null) ||
     (
-      allowedCategories !== undefined &&
+      argumentCategories !== undefined &&
       categories.some((category) => (
-        !allowedCategories.includes(category!)
+        !argumentCategories.includes(category!)
       ))
     ) ||
     (
-      resultType === 'same' &&
-      !types.every((argumentType) => (
-        haveSameNumericType(argumentType, types[0]!)
+      typeRule === 'same' &&
+      !hints.every((argumentHints) => (
+        haveSameMathHints(argumentHints, hints[0]!)
       ))
     )
   ) {
@@ -832,37 +961,37 @@ function createMathFunctionNode<
     );
   }
 
-  const consistentType = addNumericTypes(types);
+  const consistentHints = addMathHints(hints);
 
-  if (consistentType === null) {
+  if (consistentHints === null) {
     return bad(
       ComponentConsumerBadReason.Invalid,
       `Inconsistent ${node.type}() argument types`,
     );
   }
 
-  let numericType: NumericType;
+  let mathHints: MathHints;
 
-  switch (resultType) {
+  switch (typeRule) {
     case 'consistent':
     case 'same':
-      numericType = consistentType;
+      mathHints = consistentHints;
       break;
     case 'number':
-      numericType = createNumericType(
+      mathHints = createMathHints(
         [],
-        consistentType.percentHint,
+        consistentHints.percentHint,
       );
       break;
     case 'angle':
-      numericType = createNumericType(
+      mathHints = createMathHints(
         [['angle', 1]],
-        consistentType.percentHint,
+        consistentHints.percentHint,
       );
       break;
   }
 
-  if (resolvedNumericCategory(numericType) === null) {
+  if (mathCategory(mathHints) === null) {
     return bad(
       ComponentConsumerBadReason.Invalid,
       `Invalid ${node.type}() result type`,
@@ -871,7 +1000,7 @@ function createMathFunctionNode<
 
   return ok({
     ...node,
-    numericType,
+    hints: mathHints,
   } as Node);
 }
 
@@ -902,9 +1031,9 @@ function tryConsumeRoundingStrategyPrefix(
   return strategy;
 }
 
-function haveSameNumericType(
-  a: NumericType,
-  b: NumericType,
+function haveSameMathHints(
+  a: MathHints,
+  b: MathHints,
 ): boolean {
   return (
     a.percentHint === b.percentHint &&
@@ -916,7 +1045,7 @@ function haveSameNumericType(
  * <calc-sum> = <calc-product> [ [ '+' | '-' ] <calc-product> ]*
  */
 
-export type CalcSumNode = CalculationNodeWithChildren<
+type CalcSumNode = CalculationNodeWithChildren<
   'sum',
   [CalculationTree, CalculationTree, ...CalculationTree[]]
 >;
@@ -926,7 +1055,7 @@ type CalcSumTail = {
   value: CalculationTree;
 };
 
-export function tryConsumeCalcSum(
+function tryConsumeCalcSum(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
   return consumeCalcSum(c);
@@ -951,10 +1080,10 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
     }
 
     const children: CalculationTree[] = [first];
-    let numericType = numericTypeOf(first);
+    let mathHints = mathHintsOf(first);
 
     for (const { operator, value } of tail) {
-      const valueType = numericTypeOf(value);
+      const valueHints = mathHintsOf(value);
 
       if (operator === '+') {
         children.push(value);
@@ -962,28 +1091,28 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
         children.push({
           type: 'negate',
           child: value,
-          numericType: valueType,
+          hints: valueHints,
         });
       }
 
-      const sumType = addNumericTypes(
-        [numericType, valueType],
+      const sumHints = addMathHints(
+        [mathHints, valueHints],
       );
 
-      if (sumType === null) {
+      if (sumHints === null) {
         return bad(
           ComponentConsumerBadReason.Invalid,
           'Inconsistent calculation sum types',
         );
       }
 
-      numericType = sumType;
+      mathHints = sumHints;
     }
 
     return ok({
       type: 'sum',
       children: children as CalcSumNode['children'],
-      numericType,
+      hints: mathHints,
     });
   },
 );
@@ -1018,21 +1147,21 @@ function tryConsumeCalcSumOperator(
  * <calc-product> = <calc-value> [ [ '*' | '/' ] <calc-value> ]*
  */
 
-export type CalcProductNode = CalculationNodeWithChildren<
+type CalcProductNode = CalculationNodeWithChildren<
   'product',
   [CalculationTree, CalculationTree, ...CalculationTree[]]
 >;
 
-export type CalcNegateNode = {
+type CalcNegateNode = {
   type: 'negate';
   child: CalculationTree;
-  numericType: NumericType;
+  hints: MathHints;
 };
 
-export type CalcInvertNode = {
+type CalcInvertNode = {
   type: 'invert';
   child: CalculationTree;
-  numericType: NumericType;
+  hints: MathHints;
 };
 
 type CalcProductTail = {
@@ -1076,40 +1205,40 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
     }
 
     const children: CalculationTree[] = [first];
-    let numericType = numericTypeOf(first);
+    let mathHints = mathHintsOf(first);
 
     for (const { operator, value } of tail) {
-      const valueType = numericTypeOf(value);
+      const valueHints = mathHintsOf(value);
 
-      const childType = operator === '*'
-        ? valueType
-        : invertNumericType(valueType);
+      const childHints = operator === '*'
+        ? valueHints
+        : invertMathHints(valueHints);
 
       children.push(operator === '*'
         ? value
         : {
           type: 'invert',
           child: value,
-          numericType: childType,
+          hints: childHints,
         });
-      const productType = multiplyNumericTypes(
-        [numericType, childType],
+      const productHints = multiplyMathHints(
+        [mathHints, childHints],
       );
 
-      if (productType === null) {
+      if (productHints === null) {
         return bad(
           ComponentConsumerBadReason.Invalid,
           'Inconsistent calculation product types',
         );
       }
 
-      numericType = productType;
+      mathHints = productHints;
     }
 
     return ok({
       type: 'product',
       children: children as CalcProductNode['children'],
-      numericType,
+      hints: mathHints,
     });
   },
 );
@@ -1131,7 +1260,7 @@ function tryConsumeCalcValue(
     return result;
   }
 
-  const context = c.context as MathValueParsingContext;
+  const context = c.context as InternalMathContext;
 
   if (
     context.termCount !== undefined
@@ -1165,17 +1294,17 @@ const tryConsumeCalcNumericLeaf: TryComponentConsumer<NumericLeaf> = oneOf(
     const normalized = value.value === 0
       ? { ...value, value: 0 }
       : value;
-    const numericType = numericTypeFromValue(
+    const mathHints = mathHintsFromValue(
       normalized,
-      calculationContextFor(context),
+      mathContextFor(context),
     );
 
-    return numericType === null
+    return mathHints === null
       ? bad(
         ComponentConsumerBadReason.Invalid,
         'Invalid calculation value type',
       )
-      : ok(createNumericLeaf(normalized, numericType));
+      : ok(createNumericLeaf(normalized, mathHints));
   },
 );
 
@@ -1219,7 +1348,7 @@ function tryConsumeParenthesizedCalcSum(
 function tryConsumeCalcCalculation(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
-  if (!calculationContextFor(c.context).insideCalculation) {
+  if (!mathContextFor(c.context).insideCalculation) {
     const result = tryConsumeCalc(c);
 
     return result === null || isBad(result)
@@ -1235,7 +1364,7 @@ function tryConsumeCalcCalculation(
 
   return ok(simplifyCalculationTree(
     result.value,
-    calculationContextFor(c.context),
+    mathContextFor(c.context),
   ));
 }
 
@@ -1271,11 +1400,11 @@ function tryConsumeCalcKeyword(
   if (value !== undefined) {
     return ok(createNumericLeaf(
       { type: 'number', value },
-      numberNumericType(),
+      numberMathHints(),
     ));
   }
 
-  const variable = calculationContextFor(c.context)
+  const variable = mathContextFor(c.context)
     .numericVariables?.get(name);
 
   if (variable === undefined) {
@@ -1286,7 +1415,10 @@ function tryConsumeCalcKeyword(
   return ok({
     type: 'variable',
     name,
-    numericType: cloneNumericType(variable.numericType),
+    hints: mathHintsFromNumericVariable(
+      variable,
+      mathContextFor(c.context),
+    ),
   });
 }
 
@@ -1298,9 +1430,12 @@ function tryConsumeCalcKeyword(
 //   █▌     █▌   █▌     █▌     █▌  █▌
 //   █▌     █▌   █▌     █████▌  ███▌
 //
-// Numeric Types
+// Math Hints
+//
+// CSS Typed OM calls this structure a numeric type. It records the
+// dimensional-analysis exponents and the authoritative percent hint.
 
-const NUMERIC_BASE_TYPES = [
+const MATH_BASES = [
   'length',
   'angle',
   'time',
@@ -1310,80 +1445,132 @@ const NUMERIC_BASE_TYPES = [
   'percent',
 ] as const;
 
-export type NumericBaseType =
-  (typeof NUMERIC_BASE_TYPES)[number];
+export type MathBase =
+  (typeof MATH_BASES)[number];
 
-export type NumericExponent =
-  readonly [base: NumericBaseType, power: number];
+type MathExponent =
+  readonly [base: MathBase, power: number];
 
-export type NumericType = {
-  exponents: readonly NumericExponent[];
-  percentHint: NumericBaseType | null;
+type MathHints = {
+  exponents: readonly MathExponent[];
+  percentHint: MathBase | null;
 };
 
-type ResolvedNumericCategory =
+type MathCategory =
   | 'number'
-  | NumericBaseType;
+  | MathBase;
 
-function numericTypeOf(calculation: CalculationTree): NumericType {
-  return cloneNumericType(calculation.numericType);
+function mathHintsOf(calculation: CalculationTree): MathHints {
+  return cloneMathHints(calculation.hints);
 }
 
-function numericTypeFromValue(
+function mathHintsFromValue(
   value: NumericLiteral,
-  context: CalculationContext,
-): NumericType | null {
+  context: MathContext,
+): MathHints | null {
   switch (value.type) {
     case 'number':
-      return numberNumericType();
+      return numberMathHints();
     case 'percentage':
-      return percentageNumericType(context);
+      return percentageMathHints(context);
     case 'dimension':
-      return createNumericTypeFromUnit(value.unit);
+      return createMathHintsFromUnit(value.unit);
+  }
+}
+
+function mathHintsFromNumericVariable(
+  variable: NumericVariable,
+  context: MathContext,
+): MathHints {
+  const hints = mathHintsFromValueType(variable.valueType, context);
+
+  if (variable.value !== null) {
+    const valueHints = mathHintsFromValue(variable.value, context);
+
+    if (
+      valueHints === null ||
+      !matchesExpectedCalculationType(
+        valueHints,
+        variable.valueType,
+        context,
+      )
+    ) {
+      throw new TypeError('Numeric variable value does not match its value type');
+    }
+  }
+
+  return hints;
+}
+
+function mathHintsFromValueType(
+  valueType: MathValueType,
+  context: MathContext,
+): MathHints {
+  switch (valueType) {
+    case 'number':
+    case 'integer':
+      return numberMathHints();
+    case 'percentage':
+      return percentageMathHints(context);
+    case 'length':
+    case 'angle':
+    case 'time':
+    case 'frequency':
+    case 'resolution':
+    case 'flex':
+      return createMathHints([[valueType, 1]], null);
+    case 'length-percentage':
+      return createMathHints([['length', 1]], 'length');
+    case 'angle-percentage':
+      return createMathHints([['angle', 1]], 'angle');
+    case 'time-percentage':
+      return createMathHints([['time', 1]], 'time');
+    case 'frequency-percentage':
+      return createMathHints([['frequency', 1]], 'frequency');
   }
 }
 
 function createNumericLeaf<Value extends NumericLiteral>(
   value: Value,
-  numericType: NumericType,
-): Value & { numericType: NumericType; } {
+  hints: MathHints,
+): Value & { hints: MathHints; } {
   return {
     ...value,
-    numericType: cloneNumericType(numericType),
+    hints: cloneMathHints(hints),
   };
 }
 
-function withNumericType<Calculation extends CalculationTree>(
+function withMathHints<Calculation extends CalculationTree>(
   calculation: Calculation,
-  numericType: NumericType,
+  hints: MathHints,
 ): Calculation {
   return {
     ...calculation,
-    numericType: cloneNumericType(numericType),
+    hints: cloneMathHints(hints),
   };
 }
 
-function addNumericTypes(
-  types: readonly (NumericType | null)[],
-): NumericType | null {
-  const [first, ...rest] = types;
+function addMathHints(
+  hints: readonly (MathHints | null)[],
+): MathHints | null {
+  const [first, ...rest] = hints;
 
   if (first === undefined) {
-    throw new RangeError('Numeric type addition requires an operand');
+    throw new RangeError('Math hint addition requires an operand');
   }
 
   if (first === null) {
     return null;
   }
 
-  let result = cloneNumericType(first);
+  let result = cloneMathHints(first);
 
-  for (const type of rest) {
-    if (type === null) {
+  for (const nextHints of rest) {
+    if (nextHints === null) {
       return null;
     }
 
-    const sum = addTwoNumericTypes(result, type);
+    const sum = addTwoMathHints(result, nextHints);
 
     if (sum === null) {
       return null;
@@ -1395,17 +1582,17 @@ function addNumericTypes(
   return result;
 }
 
-function multiplyNumericTypes(
-  types: readonly (NumericType | null)[],
-): NumericType | null {
-  let result = numberNumericType();
+function multiplyMathHints(
+  hints: readonly (MathHints | null)[],
+): MathHints | null {
+  let result = numberMathHints();
 
-  for (const type of types) {
-    if (type === null) {
+  for (const nextHints of hints) {
+    if (nextHints === null) {
       return null;
     }
 
-    const product = multiplyTwoNumericTypes(result, type);
+    const product = multiplyTwoMathHints(result, nextHints);
 
     if (product === null) {
       return null;
@@ -1417,47 +1604,44 @@ function multiplyNumericTypes(
   return result;
 }
 
-function invertNumericType(
-  type: NumericType,
-): NumericType {
-  return createNumericType(
-    type.exponents.map(([base, power]) => [base, -power]),
-    type.percentHint,
+function invertMathHints(
+  hints: MathHints,
+): MathHints {
+  return createMathHints(
+    hints.exponents.map(([base, power]) => [base, -power]),
+    hints.percentHint,
   );
 }
 
-function resolvedNumericCategory(
-  type: NumericType,
-): ResolvedNumericCategory | null {
-  if (type.exponents.length === 0) {
+function mathCategory(
+  hints: MathHints,
+): MathCategory | null {
+  if (hints.exponents.length === 0) {
     return 'number';
   }
 
-  if (type.exponents.length !== 1) {
+  if (hints.exponents.length !== 1) {
     return null;
   }
 
-  const [base, power] = type.exponents[0]!;
+  const [base, power] = hints.exponents[0]!;
   return power === 1
     ? base
     : null;
 }
 
 function matchesExpectedCalculationType(
-  type: NumericType,
-  expectedType: ExpectedCalculationType,
-  context: CalculationContext,
+  hints: MathHints,
+  expectedType: MathValueType,
+  context: MathContext,
 ): boolean {
   switch (expectedType) {
     case 'number':
     case 'integer':
-      return matchesNumberType(type, context.percentageType);
+      return matchesNumberType(hints, context.percentHint);
 
     case 'percentage':
-      return matchesPercentageType(type);
-
-    case 'dimension':
-      return matchesDimensionCategory(type);
+      return matchesPercentageType(hints);
 
     case 'length':
     case 'angle':
@@ -1466,113 +1650,92 @@ function matchesExpectedCalculationType(
     case 'resolution':
     case 'flex':
       return matchesDimensionType(
-        type,
+        hints,
         expectedType,
-        context.percentageType ?? null,
+        context.percentHint ?? null,
       );
 
     case 'length-percentage':
-      return matchesMixedType(type, 'length');
+      return matchesMixedType(hints, 'length');
 
     case 'angle-percentage':
-      return matchesMixedType(type, 'angle');
+      return matchesMixedType(hints, 'angle');
 
     case 'time-percentage':
-      return matchesMixedType(type, 'time');
+      return matchesMixedType(hints, 'time');
 
     case 'frequency-percentage':
-      return matchesMixedType(type, 'frequency');
-  }
-}
-
-function matchesDimensionCategory(type: NumericType): boolean {
-  if (type.percentHint !== null) {
-    return false;
-  }
-
-  switch (resolvedNumericCategory(type)) {
-    case 'length':
-    case 'angle':
-    case 'time':
-    case 'frequency':
-    case 'resolution':
-    case 'flex':
-      return true;
-
-    case 'number':
-    case 'percent':
-    case null:
-      return false;
+      return matchesMixedType(hints, 'frequency');
   }
 }
 
 function matchesNumberType(
-  type: NumericType,
-  percentageType: NumericBaseType | undefined,
+  hints: MathHints,
+  percentHint: MathBase | undefined,
 ): boolean {
   return (
-    type.exponents.length === 0 &&
+    hints.exponents.length === 0 &&
     (
-      type.percentHint === null ||
+      hints.percentHint === null ||
       (
-        percentageType !== undefined &&
-        type.percentHint === percentageType
+        percentHint !== undefined &&
+        hints.percentHint === percentHint
       )
     )
   );
 }
 
-function matchesPercentageType(type: NumericType): boolean {
+function matchesPercentageType(hints: MathHints): boolean {
   return (
-    hasSingleExponent(type, 'percent') &&
+    hasSingleExponent(hints, 'percent') &&
     (
-      type.percentHint === null ||
-      type.percentHint === 'percent'
+      hints.percentHint === null ||
+      hints.percentHint === 'percent'
     )
   );
 }
 
 function matchesDimensionType(
-  type: NumericType,
-  base: Exclude<NumericBaseType, 'percent'>,
-  percentageType: NumericBaseType | null,
+  hints: MathHints,
+  base: Exclude<MathBase, 'percent'>,
+  percentHint: MathBase | null,
 ): boolean {
   return (
-    hasSingleExponent(type, base) &&
+    hasSingleExponent(hints, base) &&
     (
-      type.percentHint === null ||
-      type.percentHint === percentageType
+      hints.percentHint === null ||
+      hints.percentHint === percentHint
     )
   );
 }
 
 function matchesMixedType(
-  type: NumericType,
+  hints: MathHints,
   base: 'length' | 'angle' | 'time' | 'frequency',
 ): boolean {
   return (
-    matchesDimensionType(type, base, base) ||
-    matchesPercentageType(type)
+    matchesDimensionType(hints, base, base) ||
+    matchesPercentageType(hints)
   );
 }
 
 function hasSingleExponent(
-  type: NumericType,
-  base: NumericBaseType,
+  hints: MathHints,
+  base: MathBase,
 ): boolean {
   return (
-    type.exponents.length === 1 &&
-    type.exponents[0]![0] === base &&
-    type.exponents[0]![1] === 1
+    hints.exponents.length === 1 &&
+    hints.exponents[0]![0] === base &&
+    hints.exponents[0]![1] === 1
   );
 }
 
-function addTwoNumericTypes(
-  a: NumericType,
-  b: NumericType,
-): NumericType | null {
-  let left = cloneNumericType(a);
-  let right = cloneNumericType(b);
+function addTwoMathHints(
+  a: MathHints,
+  b: MathHints,
+): MathHints | null {
+  let left = cloneMathHints(a);
+  let right = cloneMathHints(b);
 
   if (
     left.percentHint !== null &&
@@ -1589,7 +1752,7 @@ function addTwoNumericTypes(
   }
 
   if (haveEqualExponents(left, right)) {
-    return createNumericType(
+    return createMathHints(
       left.exponents,
       left.percentHint,
     );
@@ -1599,8 +1762,8 @@ function addTwoNumericTypes(
     return null;
   }
 
-  const unhintedLeft = cloneNumericType(left);
-  const unhintedRight = cloneNumericType(right);
+  const unhintedLeft = cloneMathHints(left);
+  const unhintedRight = cloneMathHints(right);
 
   if (
     unhintedLeft.percentHint !== null ||
@@ -1609,7 +1772,7 @@ function addTwoNumericTypes(
     return null;
   }
 
-  for (const hint of NUMERIC_BASE_TYPES) {
+  for (const hint of MATH_BASES) {
     if (hint === 'percent') {
       continue;
     }
@@ -1618,7 +1781,7 @@ function addTwoNumericTypes(
     const hintedRight = applyPercentHint(unhintedRight, hint);
 
     if (haveEqualExponents(hintedLeft, hintedRight)) {
-      return createNumericType(
+      return createMathHints(
         hintedLeft.exponents,
         hint,
       );
@@ -1628,12 +1791,12 @@ function addTwoNumericTypes(
   return null;
 }
 
-function multiplyTwoNumericTypes(
-  a: NumericType,
-  b: NumericType,
-): NumericType | null {
-  let left = cloneNumericType(a);
-  let right = cloneNumericType(b);
+function multiplyTwoMathHints(
+  a: MathHints,
+  b: MathHints,
+): MathHints | null {
+  let left = cloneMathHints(a);
+  let right = cloneMathHints(b);
 
   if (
     left.percentHint !== null &&
@@ -1655,14 +1818,14 @@ function multiplyTwoNumericTypes(
     exponents.set(base, (exponents.get(base) ?? 0) + power);
   }
 
-  return numericTypeFromMap(exponents, left.percentHint);
+  return mathHintsFromMap(exponents, left.percentHint);
 }
 
 function applyPercentHint(
-  type: NumericType,
-  hint: NumericBaseType,
-): NumericType {
-  const exponents = exponentMap(type);
+  hints: MathHints,
+  hint: MathBase,
+): MathHints {
+  const exponents = exponentMap(hints);
 
   if (!exponents.has(hint)) {
     exponents.set(hint, 0);
@@ -1676,12 +1839,12 @@ function applyPercentHint(
     exponents.set('percent', 0);
   }
 
-  return numericTypeFromMap(exponents, hint);
+  return mathHintsFromMap(exponents, hint);
 }
 
-function createNumericTypeFromUnit(unit: string): NumericType | null {
+function createMathHintsFromUnit(unit: string): MathHints | null {
   const normalized = asciiLower(unit);
-  let base: NumericBaseType;
+  let base: MathBase;
 
   if (LENGTH_UNITS.some((candidate) => candidate === normalized)) {
     base = 'length';
@@ -1699,35 +1862,35 @@ function createNumericTypeFromUnit(unit: string): NumericType | null {
     return null;
   }
 
-  return createNumericType([[base, 1]], null);
+  return createMathHints([[base, 1]], null);
 }
 
-function percentageNumericType(
-  context: CalculationContext,
-): NumericType {
-  const hint = context.percentageType ?? 'percent';
-  return createNumericType([[hint, 1]], hint);
+function percentageMathHints(
+  context: MathContext,
+): MathHints {
+  const hint = context.percentHint ?? 'percent';
+  return createMathHints([[hint, 1]], hint);
 }
 
-function numberNumericType(): NumericType {
-  return createNumericType([], null);
+function numberMathHints(): MathHints {
+  return createMathHints([], null);
 }
 
-function createNumericType(
-  exponents: readonly NumericExponent[],
-  percentHint: NumericBaseType | null,
-): NumericType {
-  const powers = new Map<NumericBaseType, number>(exponents);
-  return numericTypeFromMap(powers, percentHint);
+function createMathHints(
+  exponents: readonly MathExponent[],
+  percentHint: MathBase | null,
+): MathHints {
+  const powers = new Map<MathBase, number>(exponents);
+  return mathHintsFromMap(powers, percentHint);
 }
 
-function numericTypeFromMap(
-  powers: ReadonlyMap<NumericBaseType, number>,
-  percentHint: NumericBaseType | null,
-): NumericType {
-  const exponents: NumericExponent[] = [];
+function mathHintsFromMap(
+  powers: ReadonlyMap<MathBase, number>,
+  percentHint: MathBase | null,
+): MathHints {
+  const exponents: MathExponent[] = [];
 
-  for (const base of NUMERIC_BASE_TYPES) {
+  for (const base of MATH_BASES) {
     const power = powers.get(base) ?? 0;
 
     if (power !== 0) {
@@ -1738,19 +1901,19 @@ function numericTypeFromMap(
   return { exponents, percentHint };
 }
 
-function cloneNumericType(type: NumericType): NumericType {
-  return createNumericType(type.exponents, type.percentHint);
+function cloneMathHints(hints: MathHints): MathHints {
+  return createMathHints(hints.exponents, hints.percentHint);
 }
 
 function exponentMap(
-  type: NumericType,
-): Map<NumericBaseType, number> {
-  return new Map(type.exponents);
+  hints: MathHints,
+): Map<MathBase, number> {
+  return new Map(hints.exponents);
 }
 
 function haveEqualExponents(
-  a: NumericType,
-  b: NumericType,
+  a: MathHints,
+  b: MathHints,
 ): boolean {
   if (a.exponents.length !== b.exponents.length) {
     return false;
@@ -1763,8 +1926,8 @@ function haveEqualExponents(
 }
 
 function containMixedPercentAndDimension(
-  a: NumericType,
-  b: NumericType,
+  a: MathHints,
+  b: MathHints,
 ): boolean {
   const combined = [...a.exponents, ...b.exponents];
   return combined.some(([base, power]) => (
@@ -1774,17 +1937,17 @@ function containMixedPercentAndDimension(
   ));
 }
 
-function calculationContextFor(
+function mathContextFor(
   context: unknown,
-): CalculationContext {
+): InternalMathContext {
   return context === null || context === undefined
     ? {}
     : context;
 }
 
 function requiredExpectedType(
-  context?: MathValueParsingContext,
-): ExpectedCalculationType {
+  context?: InternalMathContext,
+): MathValueType {
   if (context?.expectedType === undefined) {
     throw new TypeError('Math value expected type is required');
   }
@@ -1795,18 +1958,18 @@ function requiredExpectedType(
 function enterCalculationContext(
   context: unknown,
 ): unknown {
-  const calculationContext = calculationContextFor(context);
-  const parserContext = context as MathValueParsingContext;
+  const mathContext = mathContextFor(context);
+  const parserContext = context as InternalMathContext;
 
   if (
-    calculationContext.insideCalculation &&
+    mathContext.insideCalculation &&
     parserContext.termCount !== undefined
   ) {
     return context;
   }
 
   return {
-    ...calculationContext,
+    ...mathContext,
     insideCalculation: true,
     termCount: 0,
   };
@@ -1820,13 +1983,13 @@ function enterCalculationContext(
 // █▌  █▌  ▐▌  █▌   ▐█ █▌     █▌
 //  ███▌  ████ █▌   ▐█ █▌     █████
 
-export function simplifyCalculationTree(
+function simplifyCalculationTree(
   root: CalculationTree,
-  context: CalculationContext = {},
-  restrictions?: MathValueRestrictions,
+  context: InternalMathContext = {},
+  valueType?: MathValueType,
 ): CalculationTree {
   const simplified = simplifyCalculationNode(root, context);
-  const stage = context.stage ?? 'specified';
+  const stage = context.stage ?? 'declared';
 
   if (
     stage === 'declared' ||
@@ -1838,113 +2001,43 @@ export function simplifyCalculationTree(
     return simplified;
   }
 
-  return finalizeNumericLeaf(simplified, context, restrictions);
+  return finalizeNumericLeaf(simplified, context, valueType);
 }
 
-export function resolveMathValue<Type extends ExpectedCalculationType>(
-  value: MathValue<Type>,
-  context: CalculationContext = {},
-): MathValue<Type> | ResolvedMathLiteral<Type> {
-  const calculation = simplifyCalculationTree(value.calculation, context, value.restrictions);
-  const stage = context.stage ?? 'declared';
-  const unwrapMathAt = context.unwrapMathAt ?? 'computed';
-
-  if (
-    isAtOrBeyondValueStage(stage, unwrapMathAt) &&
-    isNumericLeaf(calculation)
-  ) {
-    return resolvedMathLiteralFromLeaf(
-      calculation,
-      value.restrictions.expectedType,
-    );
-  }
-
-  return calculation === value.calculation
-    ? value
-    : { ...value, calculation };
-}
-
-export function tryCoercePercentageMathValueToNumber(
-  value: MathValue<'percentage'>,
-): MathValue<'number'> | null {
-  if (value.calculation.type !== 'percentage') {
-    return null;
-  }
-
-  return {
-    type: 'math',
-    calculation: createNumericLeaf(
-      {
-        type: 'number',
-        value: value.calculation.value / 100,
-      },
-      numberNumericType(),
-    ),
-    restrictions: { expectedType: 'number' },
-  };
-}
-
-type ResolvedMathLiteral<Type extends ExpectedCalculationType> =
-  Type extends 'number' ? NumberLiteral
-  : Type extends 'integer' ? IntegerLiteral
-  : Type extends 'percentage' ? PercentageLiteral
-  : Type extends 'dimension' ? DimensionLiteral
-  : Type extends 'angle' ? AngleLiteral
-  : Type extends 'frequency' ? FrequencyLiteral
-  : Type extends 'length' ? LengthLiteral
-  : Type extends 'resolution' ? ResolutionLiteral
-  : Type extends 'time' ? TimeLiteral
-  : Type extends 'angle-percentage' ? AngleLiteral | PercentageLiteral
-  : Type extends 'frequency-percentage' ? FrequencyLiteral | PercentageLiteral
-  : Type extends 'length-percentage' ? LengthLiteral | PercentageLiteral
-  : Type extends 'time-percentage' ? TimeLiteral | PercentageLiteral
-  : NumericLiteral;
-
-function resolvedMathLiteralFromLeaf<
-  Type extends ExpectedCalculationType,
->(
+function resolvedMathLiteralFromLeaf<Type extends MathValueType>(
   value: NumericLeaf,
-  expectedType: Type,
-): ResolvedMathLiteral<Type> {
-  const literal = reifyNumericLiteral(value, expectedType);
+  valueType: Type,
+): MathLiteralByType[Type] {
+  const literal = reifyNumericLiteral(value, valueType);
 
-  if (!matchesResolvedMathLiteral(literal, expectedType)) {
+  if (!matchesResolvedMathLiteral(literal, valueType)) {
     throw new TypeError(
-      'Resolved math value does not match its expected calculation type',
+      'Resolved math value does not match its value type',
     );
   }
 
   return literal;
 }
 
-type ReifiedNumericLiteral =
-  | NumericLiteral
-  | IntegerLiteral
-  | AngleLiteral
-  | FrequencyLiteral
-  | LengthLiteral
-  | ResolutionLiteral
-  | TimeLiteral;
-
 function reifyNumericLiteral(
   value: NumericLeaf,
-  expectedType: ExpectedCalculationType,
-): ReifiedNumericLiteral {
-  if (expectedType === 'integer' && value.type === 'number') {
+  valueType: MathValueType,
+): MathLiteralByType[MathValueType] {
+  if (valueType === 'integer' && value.type === 'number') {
     return { type: 'integer', value: value.value };
   }
 
   if (value.type === 'dimension') {
-    switch (expectedType) {
+    switch (valueType) {
       case 'angle':
       case 'angle-percentage':
-        if (hasUnit(value, ANGLE_UNITS)) {
+        if (isUnit(ANGLE_UNITS, value.unit)) {
           return { type: 'angle', value: value.value, unit: value.unit };
         }
         break;
       case 'frequency':
       case 'frequency-percentage':
-        if (hasUnit(value, FREQUENCY_UNITS)) {
+        if (isUnit(FREQUENCY_UNITS, value.unit)) {
           return { type: 'frequency', value: value.value, unit: value.unit };
         }
         break;
@@ -1953,18 +2046,18 @@ function reifyNumericLiteral(
         if (value.unit === '' && value.value === 0) {
           return { type: 'length', value: 0, unit: '' };
         }
-        if (hasUnit(value, LENGTH_UNITS)) {
+        if (isUnit(LENGTH_UNITS, value.unit)) {
           return { type: 'length', value: value.value, unit: value.unit };
         }
         break;
       case 'resolution':
-        if (hasUnit(value, RESOLUTION_UNITS)) {
+        if (isUnit(RESOLUTION_UNITS, value.unit)) {
           return { type: 'resolution', value: value.value, unit: value.unit };
         }
         break;
       case 'time':
       case 'time-percentage':
-        if (hasUnit(value, TIME_UNITS)) {
+        if (isUnit(TIME_UNITS, value.unit)) {
           return { type: 'time', value: value.value, unit: value.unit };
         }
         break;
@@ -1974,28 +2067,17 @@ function reifyNumericLiteral(
   return numericLiteralFromLeaf(value);
 }
 
-function hasUnit<Unit extends string>(
-  value: DimensionLiteral,
-  units: readonly Unit[],
-): value is DimensionLiteral<'dimension', Unit> {
-  return units.some((unit) => unit === value.unit);
-}
-
-function matchesResolvedMathLiteral<
-  Type extends ExpectedCalculationType,
->(
-  value: ReifiedNumericLiteral,
-  expectedType: Type,
-): value is ResolvedMathLiteral<Type> {
-  switch (expectedType) {
+function matchesResolvedMathLiteral<Type extends MathValueType>(
+  value: MathLiteralByType[MathValueType],
+  valueType: Type,
+): value is MathLiteralByType[Type] {
+  switch (valueType) {
     case 'number':
       return value.type === 'number';
     case 'integer':
       return value.type === 'integer';
     case 'percentage':
       return value.type === 'percentage';
-    case 'dimension':
-      return value.type === 'dimension';
     case 'angle':
       return value.type === 'angle';
     case 'frequency':
@@ -2014,10 +2096,8 @@ function matchesResolvedMathLiteral<
       return value.type === 'length' || value.type === 'percentage';
     case 'time-percentage':
       return value.type === 'time' || value.type === 'percentage';
-    default:
-      return value.type === 'number' ||
-        value.type === 'percentage' ||
-        value.type === 'dimension';
+    case 'flex':
+      return value.type === 'dimension';
   }
 }
 
@@ -2044,7 +2124,7 @@ function numericLiteralFromLeaf(value: NumericLeaf): NumericLiteral {
 
 function simplifyCalculationNode(
   root: CalculationTree,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   switch (root.type) {
     case 'number':
@@ -2057,13 +2137,22 @@ function simplifyCalculationNode(
       return canonicalizeDimension(root, context);
 
     case 'variable': {
-      const value = context.numericVariables?.get(root.name)?.value;
-      return value === null || value === undefined
-        ? root
-        : simplifyCalculationNode(
-          createNumericLeaf(value, root.numericType),
-          context,
-        );
+      const variable = context.numericVariables?.get(root.name);
+
+      if (variable?.value === null || variable === undefined) {
+        return root;
+      }
+
+      const hints = mathHintsFromNumericVariable(variable, context);
+
+      if (!haveSameMathHints(root.hints, hints)) {
+        throw new TypeError('Numeric variable value type changed during resolution');
+      }
+
+      return simplifyCalculationNode(
+        createNumericLeaf(variable.value, hints),
+        context,
+      );
     }
 
     case 'negate':
@@ -2089,8 +2178,8 @@ function simplifyCalculationNode(
 
 function finalizeNumericLeaf(
   root: NumericLeaf,
-  context: CalculationContext,
-  restrictions: MathValueRestrictions | undefined,
+  context: MathContext,
+  valueType?: MathValueType,
 ): NumericLeaf {
   const [rangeMinimum, rangeMaximum] =
     context.range ?? [-Infinity, Infinity];
@@ -2101,7 +2190,7 @@ function finalizeNumericLeaf(
 
   return {
     ...censored,
-    value: restrictions?.expectedType === 'integer'
+    value: valueType === 'integer'
       ? Math.round(clamped)
       : clamped,
   };
@@ -2127,7 +2216,7 @@ function censorNumericLeaf(
 
 function simplifyMathFunctionNode(
   root: MathFunctionNode,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   const mathNode = simplifyMathFunctionArguments(root, context);
 
@@ -2141,7 +2230,7 @@ function simplifyMathFunctionNode(
       );
 
       if (args.length === 1) {
-        return withNumericType(args[0]!, mathNode.numericType);
+        return withMathHints(args[0]!, mathNode.hints);
       }
 
       return {
@@ -2184,7 +2273,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { ...value, value: result },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2204,12 +2293,12 @@ function simplifyMathFunctionNode(
 
       const step = stepArg ?? createNumericLeaf(
         { type: 'number', value: 1 },
-        numberNumericType(),
+        numberMathHints(),
       );
 
       switch (strategy) {
         case 'nearest': {
-          if (!haveSameNumericTypeAndUnit(input, step)) {
+          if (!haveSameMathHintsAndUnit(input, step)) {
             return mathNode;
           }
 
@@ -2220,36 +2309,36 @@ function simplifyMathFunctionNode(
 
           return createNumericLeaf(
             { ...input, value: result },
-            mathNode.numericType,
+            mathNode.hints,
           );
         }
 
         case 'up': {
-          if (!haveSameNumericTypeAndUnit(input, step)) {
+          if (!haveSameMathHintsAndUnit(input, step)) {
             return mathNode;
           }
 
           const [, upper] = roundingBounds(input.value, step.value);
           return createNumericLeaf(
             { ...input, value: upper },
-            mathNode.numericType,
+            mathNode.hints,
           );
         }
 
         case 'down': {
-          if (!haveSameNumericTypeAndUnit(input, step)) {
+          if (!haveSameMathHintsAndUnit(input, step)) {
             return mathNode;
           }
 
           const [lower] = roundingBounds(input.value, step.value);
           return createNumericLeaf(
             { ...input, value: lower },
-            mathNode.numericType,
+            mathNode.hints,
           );
         }
 
         case 'to-zero': {
-          if (!haveSameNumericTypeAndUnit(input, step)) {
+          if (!haveSameMathHintsAndUnit(input, step)) {
             return mathNode;
           }
 
@@ -2260,7 +2349,7 @@ function simplifyMathFunctionNode(
 
           return createNumericLeaf(
             { ...input, value: result },
-            mathNode.numericType,
+            mathNode.hints,
           );
         }
 
@@ -2275,11 +2364,11 @@ function simplifyMathFunctionNode(
             return snapPixelDimension(
               input.value,
               devicePixelRatio,
-              mathNode.numericType,
+              mathNode.hints,
             );
           }
 
-          if (!haveSameNumericTypeAndUnit(input, step)) {
+          if (!haveSameMathHintsAndUnit(input, step)) {
             return mathNode;
           }
 
@@ -2299,7 +2388,7 @@ function simplifyMathFunctionNode(
           return snapPixelDimension(
             result,
             devicePixelRatio,
-            mathNode.numericType,
+            mathNode.hints,
           );
         }
 
@@ -2316,7 +2405,7 @@ function simplifyMathFunctionNode(
         return mathNode;
       }
 
-      if (!haveSameNumericTypeAndUnit(value, step)) {
+      if (!haveSameMathHintsAndUnit(value, step)) {
         return mathNode;
       }
 
@@ -2351,7 +2440,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { ...value, value: result },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2374,7 +2463,7 @@ function simplifyMathFunctionNode(
           type: 'number',
           value: Math[mathNode.type](radians),
         },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2393,7 +2482,7 @@ function simplifyMathFunctionNode(
           value: Math[mathNode.type](input.value) * 180 / Math.PI,
           unit: 'deg',
         },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2414,7 +2503,7 @@ function simplifyMathFunctionNode(
           value: Math.atan2(y.value, x.value) * 180 / Math.PI,
           unit: 'deg',
         },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2431,7 +2520,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { type: 'number', value: result },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2444,7 +2533,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { type: 'number', value: Math.sqrt(input.value) },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2459,7 +2548,7 @@ function simplifyMathFunctionNode(
 
       if (
         !hasResolvedNumericMagnitude(first, context) ||
-        !haveSameNumericTypeAndUnit(first, ...args.slice(1))
+        !haveSameMathHintsAndUnit(first, ...args.slice(1))
       ) {
         return mathNode;
       }
@@ -2470,7 +2559,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { ...first, value: result },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2509,7 +2598,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { type: 'number', value: result },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2522,7 +2611,7 @@ function simplifyMathFunctionNode(
 
       return createNumericLeaf(
         { type: 'number', value: Math.exp(input.value) },
-        mathNode.numericType,
+        mathNode.hints,
       );
     }
 
@@ -2540,11 +2629,11 @@ function simplifyMathFunctionNode(
       return mathNode.type === 'abs'
         ? createNumericLeaf(
           { ...input, value: Math.abs(input.value) },
-          mathNode.numericType,
+          mathNode.hints,
         )
         : createNumericLeaf(
           { type: 'number', value: Math.sign(input.value) },
-          mathNode.numericType,
+          mathNode.hints,
         );
     }
 
@@ -2555,12 +2644,12 @@ function simplifyMathFunctionNode(
 
 function simplifyMathFunctionArguments(
   root: MathFunctionNode,
-  context: CalculationContext,
+  context: MathContext,
 ): MathFunctionNode {
   const simplify = (calculation: CalculationTree): CalculationTree => (
     simplifyCalculationNode(calculation, context)
   );
-  const numericType = cloneNumericType(root.numericType);
+  const mathHints = cloneMathHints(root.hints);
 
   switch (root.type) {
     case 'clamp':
@@ -2573,7 +2662,7 @@ function simplifyMathFunctionArguments(
         maximum: root.maximum === undefined
           ? undefined
           : simplify(root.maximum),
-        numericType,
+        hints: mathHints,
       };
 
     case 'round':
@@ -2583,14 +2672,14 @@ function simplifyMathFunctionArguments(
         step: root.step === undefined
           ? undefined
           : simplify(root.step),
-        numericType,
+        hints: mathHints,
       };
 
     default:
       return {
         ...root,
         arguments: root.arguments.map(simplify),
-        numericType,
+        hints: mathHints,
       } as MathFunctionNode;
   }
 }
@@ -2604,7 +2693,7 @@ function areResolvedNumericArguments(
 function combineComparableNumericArguments(
   args: readonly CalculationTree[],
   operation: 'min' | 'max',
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree[] {
   const compare = operation === 'min' ? Math.min : Math.max;
   const groups = new Map<string, { index: number; value: NumericLeaf; }>();
@@ -2641,29 +2730,29 @@ function combineComparableNumericArguments(
 function canCompareNumericLeaves(
   first: NumericLeaf,
   second: NumericLeaf,
-  context: CalculationContext,
+  context: MathContext,
 ): boolean {
   return (
-    haveSameNumericTypeAndUnit(first, second) &&
+    haveSameMathHintsAndUnit(first, second) &&
     hasResolvedNumericMagnitude(first, context)
   );
 }
 
 function hasResolvedNumericMagnitude(
   value: NumericLeaf,
-  context: CalculationContext,
+  context: MathContext,
 ): boolean {
   return (
     value.type !== 'percentage' ||
-    context.percentageType === 'percent'
+    context.percentHint === 'percent'
   );
 }
 
 function snapPixelDimension(
   value: number,
   devicePixelRatio: number,
-  numericType: NumericType,
-): DimensionLiteral<'dimension', 'px'> & { numericType: NumericType; } {
+  hints: MathHints,
+): DimensionLiteral<'dimension', 'px'> & { hints: MathHints; } {
   const snapped = snapLengthAsLineWidth(
     { type: 'length', value, unit: 'px' },
     devicePixelRatio,
@@ -2671,7 +2760,7 @@ function snapPixelDimension(
 
   return createNumericLeaf(
     { ...snapped, type: 'dimension' },
-    numericType,
+    hints,
   );
 }
 
@@ -2681,7 +2770,7 @@ function isPixelDimension(
   return value.type === 'dimension' && value.unit === 'px';
 }
 
-function haveSameNumericTypeAndUnit(
+function haveSameMathHintsAndUnit(
   first: NumericLeaf,
   ...rest: readonly NumericLeaf[]
 ): boolean {
@@ -2739,19 +2828,19 @@ function roundingBounds(
 
 function simplifyNegate(
   root: CalcNegateNode,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   const child = simplifyCalculationNode(root.child, context);
 
   if (isNumericLeaf(child)) {
     return createNumericLeaf(
       negateNumericLeaf(child),
-      root.numericType,
+      root.hints,
     );
   }
 
   if (child.type === 'negate') {
-    return withNumericType(child.child, root.numericType);
+    return withMathHints(child.child, root.hints);
   }
 
   if (child.type === 'sum') {
@@ -2768,44 +2857,44 @@ function simplifyNegate(
 
         return createNegateNode(grandchild);
       }) as CalcSumNode['children'],
-      numericType: cloneNumericType(root.numericType),
+      hints: cloneMathHints(root.hints),
     };
   }
 
   return {
     ...root,
     child,
-    numericType: cloneNumericType(root.numericType),
+    hints: cloneMathHints(root.hints),
   };
 }
 
 function simplifyInvert(
   root: CalcInvertNode,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   const child = simplifyCalculationNode(root.child, context);
 
   if (child.type === 'number') {
     return createNumericLeaf(
       { type: 'number', value: 1 / child.value },
-      root.numericType,
+      root.hints,
     );
   }
 
   if (child.type === 'invert') {
-    return withNumericType(child.child, root.numericType);
+    return withMathHints(child.child, root.hints);
   }
 
   return {
     ...root,
     child,
-    numericType: cloneNumericType(root.numericType),
+    hints: cloneMathHints(root.hints),
   };
 }
 
 function simplifySum(
   root: CalcSumNode,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   const simplified = root.children.map((child) => {
     if (child.type !== 'negate') {
@@ -2826,19 +2915,19 @@ function simplifySum(
   );
 
   if (children.length === 1) {
-    return withNumericType(children[0]!, root.numericType);
+    return withMathHints(children[0]!, root.hints);
   }
 
   return {
     ...root,
     children: children as CalcSumNode['children'],
-    numericType: cloneNumericType(root.numericType),
+    hints: cloneMathHints(root.hints),
   };
 }
 
 function simplifyProduct(
   root: CalcProductNode,
-  context: CalculationContext,
+  context: MathContext,
 ): CalculationTree {
   const simplified = root.children.map((child) => (
     simplifyCalculationNode(child, context)
@@ -2867,14 +2956,14 @@ function simplifyProduct(
             number,
           )
         )) as CalcSumNode['children'],
-        numericType: cloneNumericType(root.numericType),
+        hints: cloneMathHints(root.hints),
       };
     }
   }
 
   const product = evaluateNumericProduct(
     children,
-    root.numericType,
+    root.hints,
   );
 
   if (product !== null) {
@@ -2884,7 +2973,7 @@ function simplifyProduct(
   return {
     ...root,
     children: children as CalcProductNode['children'],
-    numericType: cloneNumericType(root.numericType),
+    hints: cloneMathHints(root.hints),
   };
 }
 
@@ -2906,18 +2995,18 @@ function scaleNumericLeaf(
   leaf: NumericLeaf,
   factor: NumberLeaf,
 ): NumericLeaf {
-  const numericType = multiplyNumericTypes([
-    leaf.numericType,
-    factor.numericType,
+  const mathHints = multiplyMathHints([
+    leaf.hints,
+    factor.hints,
   ]);
 
-  if (numericType === null) {
-    throw new TypeError('Cannot multiply inconsistent numeric types');
+  if (mathHints === null) {
+    throw new TypeError('Cannot multiply inconsistent math hints');
   }
 
   return createNumericLeaf(
     { ...leaf, value: leaf.value * factor.value },
-    numericType,
+    mathHints,
   );
 }
 
@@ -2933,7 +3022,7 @@ function createNegateNode(
   return {
     type: 'negate',
     child,
-    numericType: numericTypeOf(child),
+    hints: mathHintsOf(child),
   };
 }
 
@@ -2943,7 +3032,7 @@ function combineLikeNumericLeaves(
   const totals = new Map<string, {
     value: number;
     leaf: NumericLeaf;
-    numericType: NumericType;
+    mathHints: MathHints;
   }>();
 
   for (const child of children) {
@@ -2967,7 +3056,7 @@ function combineLikeNumericLeaves(
     totals.set(key, {
       value,
       leaf: total?.leaf ?? leaf,
-      numericType: total?.numericType ?? child.numericType,
+      mathHints: total?.mathHints ?? child.hints,
     });
   }
 
@@ -2988,7 +3077,7 @@ function combineLikeNumericLeaves(
       const total = totals.get(key)!;
       combined.push(createNumericLeaf(
         { ...total.leaf, value: total.value },
-        total.numericType,
+        total.mathHints,
       ));
       emitted.add(key);
     }
@@ -3035,12 +3124,12 @@ function combineProductNumbers(
     (value, number) => value * number.value,
     1,
   );
-  const numericType = multiplyNumericTypes(
-    numbers.map((number) => number.numericType),
+  const mathHints = multiplyMathHints(
+    numbers.map((number) => number.hints),
   );
 
-  if (numericType === null) {
-    throw new TypeError('Cannot combine inconsistent number types');
+  if (mathHints === null) {
+    throw new TypeError('Cannot combine inconsistent number math hints');
   }
   const combined: CalculationTree[] = [];
   let emitted = false;
@@ -3054,7 +3143,7 @@ function combineProductNumbers(
     if (!emitted) {
       combined.push(createNumericLeaf(
         { type: 'number', value: product },
-        numericType,
+        mathHints,
       ));
       emitted = true;
     }
@@ -3109,7 +3198,7 @@ function calculationChildSortRank(value: CalculationTree): number {
 
 function evaluateNumericProduct(
   children: readonly CalculationTree[],
-  numericType: NumericType,
+  mathHints: MathHints,
 ): NumericLeaf | null {
   if (!children.every(isNumericProductFactor)) {
     return null;
@@ -3135,13 +3224,13 @@ function evaluateNumericProduct(
   }
 
   const remaining = [...units].filter(([, power]) => power !== 0);
-  const category = resolvedNumericCategory(numericType);
+  const category = mathCategory(mathHints);
 
   if (remaining.length === 0) {
     return category === 'number'
       ? createNumericLeaf(
         { type: 'number', value },
-        numericType,
+        mathHints,
       )
       : null;
   }
@@ -3155,22 +3244,22 @@ function evaluateNumericProduct(
   if (unit === '%') {
     return createNumericLeaf(
       { type: 'percentage', value },
-      numericType,
+      mathHints,
     );
   }
 
-  const unitType = createNumericTypeFromUnit(unit);
+  const unitHints = createMathHintsFromUnit(unit);
 
   if (
-    unitType === null ||
-    resolvedNumericCategory(unitType) !== category
+    unitHints === null ||
+    mathCategory(unitHints) !== category
   ) {
     return null;
   }
 
   return createNumericLeaf(
     { type: 'dimension', value, unit },
-    numericType,
+    mathHints,
   );
 }
 
@@ -3187,7 +3276,7 @@ function isNumericProductFactor(
 
 function canonicalizeDimension(
   value: DimensionLeaf,
-  context: CalculationContext,
+  context: MathContext,
 ): DimensionLeaf {
   const unit = asciiLower(value.unit);
   let resolved: DimensionLiteral<string, string> | null;
@@ -3239,13 +3328,13 @@ function canonicalizeDimension(
         value: resolved.value,
         unit: resolved.unit,
       },
-      value.numericType,
+      value.hints,
     );
 }
 
 function resolvePercentage(
   value: PercentageLeaf,
-  context: CalculationContext,
+  context: MathContext,
 ): NumericLeaf {
   const reference = context.percentageReferenceValue;
 
@@ -3258,7 +3347,7 @@ function resolvePercentage(
       ...reference,
       value: reference.value * value.value / 100,
     },
-    value.numericType,
+    value.hints,
   );
 
   return resolved.type === 'dimension'
@@ -3280,28 +3369,6 @@ function isUnit<Unit extends string>(
 //     █▌ █▌     █▌▐█    ▐▌  █████▌ █▌
 // █▌  █▌ █▌     █▌ ▐█   ▐▌  █▌  █▌ █▌
 //  ███▌  █████▌ █▌  █▌ ████ █▌  █▌ █████
-
-export function serializeMathFunction(
-  value: MathValue,
-): string {
-  return serializeMathValue(value);
-}
-
-export function serializeMathValue(
-  value: MathValue,
-): string {
-  const { calculation } = value;
-
-  if (isNumericLeaf(calculation)) {
-    return `calc(${serializeCalcTree(calculation)})`;
-  }
-
-  if (isMathFunctionNode(calculation)) {
-    return serializeMathFunctionNode(calculation);
-  }
-
-  return `calc(${unwrapParens(serializeCalcTree(calculation))})`;
-}
 
 function serializeMathFunctionNode(
   value: MathFunctionNode,
@@ -3372,7 +3439,7 @@ function isMathFunctionNode(
   }
 }
 
-export function serializeCalcTree(root: CalculationTree): string {
+function serializeCalcTree(root: CalculationTree): string {
   switch (root.type) {
     case 'number':
     case 'percentage':
@@ -3491,10 +3558,10 @@ function serializeNumericLeaf(
 }
 
 function canonicalUnitForDimension(unit: string): string {
-  const type = createNumericTypeFromUnit(unit);
-  const category = type === null
+  const hints = createMathHintsFromUnit(unit);
+  const category = hints === null
     ? null
-    : resolvedNumericCategory(type);
+    : mathCategory(hints);
 
   switch (category) {
     case 'length':
@@ -3514,107 +3581,4 @@ function canonicalUnitForDimension(unit: string): string {
     case null:
       throw new TypeError(`Cannot serialize unknown dimension unit: ${unit}`);
   }
-}
-
-// CSS Values, "Combination of Math Functions".
-export function addMathFunctions<Type extends ExpectedCalculationType>(
-  a: MathValue<Type>,
-  b: MathValue<Type>,
-  context: CalculationContext = {},
-): MathValue<Type> {
-  return combineMathFunctionCalculations(
-    a,
-    b,
-    context,
-  );
-}
-
-export function interpolateMathFunctions<Type extends ExpectedCalculationType>(
-  a: MathValue<Type>,
-  b: MathValue<Type>,
-  p: number,
-  context: CalculationContext = {},
-): MathValue<Type> {
-  return combineMathFunctionCalculations(
-    {
-      ...a,
-      calculation: scaleCalculationTree(
-        a.calculation,
-        1 - p,
-      ),
-    },
-    {
-      ...b,
-      calculation: scaleCalculationTree(
-        b.calculation,
-        p,
-      ),
-    },
-    context,
-  );
-}
-
-export function accumulateMathFunctions<Type extends ExpectedCalculationType>(
-  a: MathValue<Type>,
-  b: MathValue<Type>,
-  context: CalculationContext = {},
-): MathValue<Type> {
-  return addMathFunctions(a, b, context);
-}
-
-function combineMathFunctionCalculations<Type extends ExpectedCalculationType>(
-  a: MathValue<Type>,
-  b: MathValue<Type>,
-  context: CalculationContext,
-): MathValue<Type> {
-  const expectedType = commonExpectedType(a, b);
-  const numericType = addNumericTypes([
-    numericTypeOf(a.calculation),
-    numericTypeOf(b.calculation),
-  ]);
-
-  if (numericType === null) {
-    throw new TypeError('Math function types must be consistent');
-  }
-
-  return createMathValue(
-    simplifyCalculationTree({
-      type: 'sum',
-      children: [a.calculation, b.calculation],
-      numericType,
-    }, context, { expectedType }),
-    expectedType,
-  );
-}
-
-function commonExpectedType<Type extends ExpectedCalculationType>(
-  a: MathValue<Type>,
-  b: MathValue<Type>,
-): Type {
-  const expectedType = a.restrictions.expectedType;
-
-  if (b.restrictions.expectedType !== expectedType) {
-    throw new TypeError('Math value restrictions must be consistent');
-  }
-
-  return expectedType;
-}
-
-function scaleCalculationTree(
-  calculation: CalculationTree,
-  factor: number,
-): CalcProductNode {
-  const numericType = numericTypeOf(calculation);
-
-  return {
-    type: 'product',
-    children: [
-      createNumericLeaf(
-        { type: 'number', value: factor },
-        numberNumericType(),
-      ),
-      calculation,
-    ],
-    numericType,
-  };
 }

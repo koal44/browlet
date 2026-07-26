@@ -6,10 +6,6 @@ import {
   parseNumber, resolveNumber, serializeNumber, tryConsumeNumber,
 } from '../../../../src/stylelet/values/number';
 import {
-  accumulateDimensions, addDimensions, interpolateDimensions,
-  parseDimension, resolveDimension, serializeDimension, tryConsumeDimension,
-} from '../../../../src/stylelet/values/dimension';
-import {
   accumulateAngles, addAngles, interpolateAngles,
   parseAngle, resolveAngle, serializeAngle, tryConsumeAngle,
 } from '../../../../src/stylelet/values/angle';
@@ -190,97 +186,6 @@ describe('number values', () => {
     expect(accumulated.type).toBe('math');
     expect(serializeNumber(interpolated)).toBe('calc(2.5)');
     expect(serializeNumber(accumulated)).toBe('calc(6)');
-  });
-});
-
-describe('dimension values', () => {
-  it('parses a dimension literal', () => {
-    expect(parseDimension('1.25px')).toEqual({
-      type: 'dimension',
-      value: 1.25,
-      unit: 'px',
-    });
-  });
-
-  it('parses and serializes a dimension-valued math function', () => {
-    const value = parseDimension('calc(1px + 2px)');
-
-    expect(value).toMatchObject({
-      type: 'math',
-      calculation: {
-        type: 'dimension',
-        value: 3,
-        unit: 'px',
-      },
-    });
-    expect(serializeDimension(value!)).toBe('calc(3px)');
-    expect(serializeDimension(
-      resolveDimension(value!, { stage: 'computed' }),
-    )).toBe('3px');
-  });
-
-  it('resolves math values as dimensions at the computed-value stage', () => {
-    const value = parseDimension('calc(1px + 2px)')!;
-
-    expect(resolveDimension(value)).toEqual(value);
-    expect(resolveDimension(value, { stage: 'computed' })).toEqual({
-      type: 'dimension',
-      value: 3,
-      unit: 'px',
-    });
-  });
-
-  it('accepts any pure dimension category', () => {
-    expect(parseDimension('min(1deg, 2deg)')).toMatchObject({
-      type: 'math',
-      calculation: {
-        type: 'dimension',
-        value: 1,
-        unit: 'deg',
-      },
-    });
-  });
-
-  it('rejects number, percentage, and mixed dimension-percentage results', () => {
-    for (const input of ['calc(1)', 'calc(1%)']) {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
-
-      expect(tryConsumeDimension(c)).toBeNull();
-      expect(c.pos()).toBe(0);
-    }
-
-    const mixed = new ComponentCursor(
-      parseListOfComponentValues('calc(1px + 1%)'),
-    );
-
-    expect(tryConsumeDimension(mixed)).toMatchObject({ kind: 'bad' });
-  });
-
-  it('combines two literals without creating a math value', () => {
-    const a = parseDimension('2px')!;
-    const b = parseDimension('4px')!;
-
-    expect(addDimensions(a, b))
-      .toEqual({ type: 'dimension', value: 6, unit: 'px' });
-    expect(interpolateDimensions(a, b, 0.25))
-      .toEqual({ type: 'dimension', value: 2.5, unit: 'px' });
-    expect(accumulateDimensions(a, b))
-      .toEqual({ type: 'dimension', value: 6, unit: 'px' });
-  });
-
-  it('promotes literals when combining them with math values', () => {
-    const literal = parseDimension('2px')!;
-    const math = parseDimension('calc(4px)')!;
-    const added = addDimensions(literal, math);
-    const interpolated = interpolateDimensions(literal, math, 0.25);
-    const accumulated = accumulateDimensions(literal, math);
-
-    expect(added.type).toBe('math');
-    expect(interpolated.type).toBe('math');
-    expect(accumulated.type).toBe('math');
-    expect(serializeDimension(added)).toBe('calc(6px)');
-    expect(serializeDimension(interpolated)).toBe('calc(2.5px)');
-    expect(serializeDimension(accumulated)).toBe('calc(6px)');
   });
 });
 
@@ -639,7 +544,7 @@ describe('percentage values', () => {
     expect(resolvePercentage(value)).toEqual(value);
     expect(resolvePercentage(value, {
       stage: 'computed',
-      percentageType: 'length',
+      percentHint: 'length',
     })).toEqual({
       type: 'percentage',
       value: 30,
@@ -657,7 +562,7 @@ describe('percentage values', () => {
 
   it('keeps its percentage type in another percentage context', () => {
     const context = {
-      percentageType: 'length',
+      percentHint: 'length',
     } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(25%)'),
@@ -768,7 +673,7 @@ describe('angle-percentage values', () => {
 
   it('uses the angle percentage type and restores outer context', () => {
     const context = {
-      percentageType: 'length',
+      percentHint: 'length',
     } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10deg + 25%)'),
@@ -885,7 +790,7 @@ describe('length-percentage values', () => {
 
   it('uses the length percentage type and restores outer context', () => {
     const context = {
-      percentageType: 'angle',
+      percentHint: 'angle',
     } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10px + 25%)'),
@@ -1005,7 +910,7 @@ describe('frequency-percentage values', () => {
 
   it('uses the frequency percentage type and restores outer context', () => {
     const context = {
-      percentageType: 'length',
+      percentHint: 'length',
     } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10hz + 25%)'),
@@ -1124,7 +1029,7 @@ describe('time-percentage values', () => {
 
   it('uses the time percentage type and restores outer context', () => {
     const context = {
-      percentageType: 'length',
+      percentHint: 'length',
     } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10s + 25%)'),

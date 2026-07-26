@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
   createAngleConsumer as createAngleLiteralConsumer,
@@ -25,7 +25,7 @@ export type AngleValue = AngleLiteral | MathValue<'angle'>;
 
 export function parseAngle(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AngleValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -59,7 +59,7 @@ export const tryConsumeAngle = createAngleConsumer();
 
 export function resolveAngle(
   value: AngleValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AngleValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -77,13 +77,13 @@ export function serializeAngle(
 export function addAngles(
   a: AngleValue,
   b: AngleValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AngleValue {
   if (a.type === 'angle' && b.type === 'angle') {
     return addDimensions(a, b);
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -94,13 +94,13 @@ export function interpolateAngles(
   a: AngleValue,
   b: AngleValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AngleValue {
   if (a.type === 'angle' && b.type === 'angle') {
     return interpolateDimensions(a, b, p);
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -111,13 +111,13 @@ export function interpolateAngles(
 export function accumulateAngles(
   a: AngleValue,
   b: AngleValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): AngleValue {
   if (a.type === 'angle' && b.type === 'angle') {
     return accumulateDimensions(a, b);
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -126,7 +126,7 @@ export function accumulateAngles(
 
 function asMathValue(
   value: AngleValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'angle'> {
   return value.type === 'math'
     ? value
@@ -135,7 +135,7 @@ function asMathValue(
 
 function angleRange(
   options: AngleConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

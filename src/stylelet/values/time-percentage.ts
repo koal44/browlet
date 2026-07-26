@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import {
   createTimePercentageConsumer as createTimePercentageLiteralConsumer,
   serializeTimePercentage as serializeTimePercentageLiteral,
@@ -28,7 +28,7 @@ export type TimePercentageValue =
 
 export function parseTimePercentage(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimePercentageValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -51,7 +51,7 @@ export function createTimePercentageConsumer(
       one(tryConsumeLiteral),
       one(createMathValueConsumer({
         expectedType: 'time-percentage',
-        percentageType: 'time',
+        percentHint: 'time',
         ...(range === undefined ? {} : { range }),
       })),
     ],
@@ -63,7 +63,7 @@ export const tryConsumeTimePercentage = createTimePercentageConsumer();
 
 export function resolveTimePercentage(
   value: TimePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimePercentageValue {
   return value.type === 'math'
     ? resolveMathValue(value, timePercentageCalculationContext(context))
@@ -81,7 +81,7 @@ export function serializeTimePercentage(
 export function addTimePercentages(
   a: TimePercentageValue,
   b: TimePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAddTimePercentageLiterals(a, b);
@@ -93,7 +93,7 @@ export function addTimePercentages(
 
   const calculationContext = timePercentageCalculationContext(context);
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -104,7 +104,7 @@ export function interpolateTimePercentages(
   a: TimePercentageValue,
   b: TimePercentageValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryInterpolateTimePercentageLiterals(a, b, p);
@@ -116,7 +116,7 @@ export function interpolateTimePercentages(
 
   const calculationContext = timePercentageCalculationContext(context);
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     p,
@@ -127,7 +127,7 @@ export function interpolateTimePercentages(
 export function accumulateTimePercentages(
   a: TimePercentageValue,
   b: TimePercentageValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimePercentageValue {
   if (a.type !== 'math' && b.type !== 'math') {
     const result = tryAccumulateTimePercentageLiterals(a, b);
@@ -139,7 +139,7 @@ export function accumulateTimePercentages(
 
   const calculationContext = timePercentageCalculationContext(context);
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, calculationContext),
     asMathValue(b, calculationContext),
     calculationContext,
@@ -148,7 +148,7 @@ export function accumulateTimePercentages(
 
 function asMathValue(
   value: TimePercentageValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'time-percentage'> {
   return value.type === 'math'
     ? value
@@ -156,17 +156,17 @@ function asMathValue(
 }
 
 function timePercentageCalculationContext(
-  context: CalculationContext,
-): CalculationContext {
+  context: MathContext,
+): MathContext {
   return {
     ...context,
-    percentageType: 'time',
+    percentHint: 'time',
   };
 }
 
 function timePercentageRange(
   options: TimePercentageConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

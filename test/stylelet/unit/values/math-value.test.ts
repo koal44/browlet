@@ -1,53 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { isOk } from '../../../../src/stylelet/parser/component-try-consumer';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions, interpolateMathFunctions,
-  parseCalc as parseCalcWithContext,
-  parseMathFunction as parseMathFunctionWithContext,
-  parseMathValue as parseMathValueWithContext,
-  resolveMathValue, simplifyCalculationTree,
-  serializeCalcTree, serializeMathFunction, serializeMathValue,
-  tryCoercePercentageMathValueToNumber,
-  tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
-  type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
-  type ExpectedCalculationType, type MathValue,
-  type NumericBaseType, type NumericExponent, type NumericType,
-} from '../../../../src/stylelet/values/calc';
+  accumulateMathValues, addMathValues, interpolateMathValues,
+  parseMathValue, resolveMathValue, serializeMathValue,
+  tryCoercePercentageToNumber,
+  type MathContext, type MathValueType, type MathValue,
+  type MathBase,
+} from '../../../../src/stylelet/values/math-value';
 
 describe('calc', () => {
   it.each([
-    ['calc(1)', { type: 'number', value: 1 }, numericType(), 'number'],
+    ['calc(1)', { type: 'number', value: 1 }, mathHints(), 'number'],
     [
       'calc(1px)',
       { type: 'dimension', value: 1, unit: 'px' },
-      numericType([['length', 1]]),
+      mathHints([['length', 1]]),
       'length',
     ],
     [
       'calc(25%)',
       { type: 'percentage', value: 25 },
-      numericType([['percent', 1]], 'percent'),
+      mathHints([['percent', 1]], 'percent'),
       'percentage',
     ],
   ] as const)(
     'parses the terminal calculation %j',
     (input, expected, type, expectedType) => {
-      expect(parseCalc(input)).toEqual({
+      expect(parseMathValue(input, expectedType)).toEqual({
         type: 'math',
         calculation: numericLeaf(expected, type),
-        restrictions: { expectedType },
+        valueType: expectedType,
       });
     },
   );
 
   it.each([
-    ['calc(1 + 2)', { type: 'number', value: 3 }],
-    ['calc(25%)', { type: 'percentage', value: 25 }],
-    ['calc(1px)', { type: 'length', value: 1, unit: 'px' }],
-  ] as const)('resolves and unwraps the math value %j', (input, expected) => {
-    const value = parseCalc(input);
+    ['calc(1 + 2)', 'number', { type: 'number', value: 3 }],
+    ['calc(25%)', 'percentage', { type: 'percentage', value: 25 }],
+    ['calc(1px)', 'length', { type: 'length', value: 1, unit: 'px' }],
+  ] as const)('resolves and unwraps the math value %j', (input, valueType, expected) => {
+    const value = parseMathValue(input, valueType);
 
     expect(value).not.toBeNull();
     if (value === null) {
@@ -60,11 +51,11 @@ describe('calc', () => {
   });
 
   it('coerces a percentage math leaf to number math', () => {
-    const percentage = parseCalcWithContext(
+    const percentage = parseMathValue(
       'calc(2 * 60%)',
       'percentage',
     )!;
-    const number = tryCoercePercentageMathValueToNumber(percentage);
+    const number = tryCoercePercentageToNumber(percentage);
 
     if (number === null) {
       throw new Error('Expected percentage math to be coercible');
@@ -78,65 +69,67 @@ describe('calc', () => {
   });
 
   it('does not coerce unresolved percentage math', () => {
-    const percentageType = numericType([['percent', 1]], 'percent');
-    const percentage = parseCalcWithContext(
+    const percentage = parseMathValue(
       'calc(p)',
       'percentage',
       {
         numericVariables: new Map([['p', {
           value: null,
-          numericType: percentageType,
+          valueType: 'percentage',
         }]]),
       },
     )!;
 
-    expect(tryCoercePercentageMathValueToNumber(percentage)).toBeNull();
+    expect(tryCoercePercentageToNumber(percentage)).toBeNull();
   });
 
-  it('rejects a resolved literal that violates its expected type', () => {
+  it('rejects a resolved literal that violates its value type', () => {
     const value: MathValue<'number'> = {
       type: 'math',
       calculation: numericLeaf(
         { type: 'percentage', value: 25 },
-        numericType([['percent', 1]], 'percent'),
+        mathHints([['percent', 1]], 'percent'),
       ),
-      restrictions: { expectedType: 'number' },
+      valueType: 'number',
     };
 
     expect(() => resolveMathValue(value, { stage: 'computed' }))
-      .toThrow('Resolved math value does not match its expected calculation type');
+      .toThrow('Resolved math value does not match its value type');
   });
 
   it('respects operator precedence while simplifying', () => {
-    expect(parseCalc('calc(1px + 2 * 3px - 4px / 2)')).toEqual({
+    expect(parseMathValue(
+      'calc(1px + 2 * 3px - 4px / 2)',
+      'length',
+    )).toEqual({
       type: 'math',
       calculation: numericLeaf(
         { type: 'dimension', value: 5, unit: 'px' },
-        numericType([['length', 1]]),
+        mathHints([['length', 1]]),
       ),
-      restrictions: { expectedType: 'length' },
+      valueType: 'length',
     });
   });
 
   it('uses parenthesized calculations for grouping while simplifying', () => {
-    expect(parseCalc('calc((1 + 2) * 3)')).toEqual({
+    expect(parseMathValue('calc((1 + 2) * 3)', 'number')).toEqual({
       type: 'math',
       calculation: numericLeaf(
         { type: 'number', value: 9 },
-        numericType(),
+        mathHints(),
       ),
-      restrictions: { expectedType: 'number' },
+      valueType: 'number',
     });
   });
 
   it.each([
-    ['min(1em, 2rem)', 'min', 2, numericType([['length', 1]])],
-    ['max(1vw, 2vh)', 'max', 2, numericType([['length', 1]])],
-    ['clamp(1em, 2rem, 3em)', 'clamp', 3, numericType([['length', 1]])],
+    ['min(1em, 2rem)', 'min', 2, mathHints([['length', 1]])],
+    ['max(1vw, 2vh)', 'max', 2, mathHints([['length', 1]])],
+    ['clamp(1em, 2rem, 3em)', 'clamp', 3, mathHints([['length', 1]])],
   ] as const)(
     'parses the math function %s',
     (input, type, expectedArgumentCount, expectedType) => {
-      const parsed = parseMathFunctionCalculation(input);
+      const parsed = parseMathValue(input, 'length')?.calculation ?? null;
 
       expect(parsed?.type).toBe(type);
       if (parsed === null) {
@@ -151,21 +144,21 @@ describe('calc', () => {
 
       expect(argumentCount).toBe(expectedArgumentCount);
       expect(
-        parsed.numericType,
+        parsed.hints,
       ).toEqual(expectedType);
     },
   );
 
   it('wraps every math function in the same public value shape', () => {
-    expect(parseMathFunction('calc(1 + 2)')).toEqual({
+    expect(parseMathValue('calc(1 + 2)', 'number')).toEqual({
       type: 'math',
       calculation: numericLeaf(
         { type: 'number', value: 3 },
-        numericType(),
+        mathHints(),
       ),
-      restrictions: { expectedType: 'number' },
+      valueType: 'number',
     });
-    expect(parseMathValue('min(1em, 2rem)')).toMatchObject({
+    expect(parseMathValue('min(1em, 2rem)', 'length')).toMatchObject({
       type: 'math',
       calculation: {
         type: 'min',
@@ -174,42 +167,51 @@ describe('calc', () => {
           { type: 'dimension', value: 2, unit: 'rem' },
         ],
       },
-      restrictions: { expectedType: 'length' },
+      valueType: 'length',
     });
   });
 
   describe('math comparison functions', () => {
     it.each([
-      ['min(3, 1, 2)', 1],
-      ['max(3px, 1px, 2px)', 3],
-      ['min(1in, 100px)', 96],
-      ['clamp(0px, 20px, 10px)', 10],
-      ['clamp(100px, 0px, 50px)', 100],
-      ['clamp(none, 20px, 10px)', 10],
-      ['clamp(10px, 5px, none)', 10],
-      ['clamp(none, 5px, none)', 5],
-    ] as const)('simplifies the comparison function %s', (input, expected) => {
-      expect(parseMathFunctionCalculation(input)).toMatchObject({
+      ['min(3, 1, 2)', 'number', 1],
+      ['max(3px, 1px, 2px)', 'length', 3],
+      ['min(1in, 100px)', 'length', 96],
+      ['clamp(0px, 20px, 10px)', 'length', 10],
+      ['clamp(100px, 0px, 50px)', 'length', 100],
+      ['clamp(none, 20px, 10px)', 'length', 10],
+      ['clamp(10px, 5px, none)', 'length', 10],
+      ['clamp(none, 5px, none)', 'length', 5],
+    ] as const)('simplifies the comparison function %s', (input, valueType, expected) => {
+      expect(parseMathValue(input, valueType)?.calculation).toMatchObject({
         value: expected,
       });
     });
 
     it('partially simplifies comparable min() and max() arguments', () => {
-      expect(parseMathFunctionCalculation('min(2em, 1em, 3rem)')).toMatchObject({
+      expect(parseMathValue(
+        'min(2em, 1em, 3rem)',
+        'length',
+      )?.calculation).toMatchObject({
         type: 'min',
         arguments: [
           { type: 'dimension', value: 1, unit: 'em' },
           { type: 'dimension', value: 3, unit: 'rem' },
         ],
       });
-      expect(parseMathFunctionCalculation('max(2vw, 1vh, 3vw)')).toMatchObject({
+      expect(parseMathValue(
+        'max(2vw, 1vh, 3vw)',
+        'length',
+      )?.calculation).toMatchObject({
         type: 'max',
         arguments: [
           { type: 'dimension', value: 3, unit: 'vw' },
           { type: 'dimension', value: 1, unit: 'vh' },
         ],
       });
-      expect(parseMathFunctionCalculation('min(4rem, 2px, 3rem, 1px)'))
+      expect(parseMathValue(
+        'min(4rem, 2px, 3rem, 1px)',
+        'length',
+      )?.calculation)
         .toMatchObject({
           type: 'min',
           arguments: [
@@ -220,61 +222,79 @@ describe('calc', () => {
     });
 
     it('retains percentage comparisons without sufficient context', () => {
-      expect(parseMathFunctionCalculation('min(10%, 20%)')).toMatchObject({
+      expect(parseMathValue(
+        'min(10%, 20%)',
+        'percentage',
+      )?.calculation).toMatchObject({
         type: 'min',
       });
-      expect(parseMathFunctionCalculation('clamp(10%, 20%, 30%)')).toMatchObject({
+      expect(parseMathValue(
+        'clamp(10%, 20%, 30%)',
+        'percentage',
+      )?.calculation).toMatchObject({
         type: 'clamp',
       });
-      expect(parseMathFunctionCalculation('min(10%, 20%)', {
-        percentageType: 'length',
-      })).toMatchObject({
+      expect(parseMathValue('min(10%, 20%)', 'length-percentage', {
+        percentHint: 'length',
+      })?.calculation).toMatchObject({
         type: 'min',
         arguments: [
           { type: 'percentage', value: 10 },
           { type: 'percentage', value: 20 },
         ],
       });
-      expect(parseMathFunctionCalculation('clamp(10%, 20%, 30%)', {
-        percentageType: 'length',
-      })).toMatchObject({ type: 'clamp' });
+      expect(parseMathValue('clamp(10%, 20%, 30%)', 'length-percentage', {
+        percentHint: 'length',
+      })?.calculation).toMatchObject({ type: 'clamp' });
     });
 
     it('compares raw or resolved percentages', () => {
-      expect(parseMathFunctionCalculation('min(10%, 20%)', {
-        percentageType: 'percent',
-      })).toEqual({
+      expect(parseMathValue('min(10%, 20%)', 'percentage', {
+        percentHint: 'percent',
+      })?.calculation).toEqual({
         type: 'percentage',
         value: 10,
-        numericType: numericType([['percent', 1]], 'percent'),
+        hints: mathHints([['percent', 1]], 'percent'),
       });
-      expect(parseMathFunctionCalculation('max(10%, 20%)', {
-        percentageType: 'length',
+      expect(parseMathValue('max(10%, 20%)', 'length-percentage', {
+        percentHint: 'length',
         percentageReferenceValue: {
           type: 'dimension',
           value: 200,
           unit: 'px',
         },
-      })).toEqual({
+      })?.calculation).toEqual({
         type: 'dimension',
         value: 40,
         unit: 'px',
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
       });
     });
 
     it('unwraps a boundless clamp without comparing its percentage', () => {
-      expect(parseMathFunctionCalculation('clamp(none, 20%, none)')).toEqual({
+      expect(parseMathValue(
+        'clamp(none, 20%, none)',
+        'percentage',
+      )?.calculation).toEqual({
         type: 'percentage',
         value: 20,
-        numericType: numericType([['percent', 1]], 'percent'),
+        hints: mathHints([['percent', 1]], 'percent'),
       });
     });
 
     it('orders negative zero below positive zero', () => {
-      const minimum = parseMathFunctionCalculation('min(0, calc(-1 * 0))')!;
-      const maximum = parseMathFunctionCalculation('max(0, calc(-1 * 0))')!;
-      const clamped = parseMathFunctionCalculation('clamp(0, calc(-1 * 0), 1)')!;
+      const minimum = parseMathValue(
+        'min(0, calc(-1 * 0))',
+        'number',
+      )!.calculation;
+      const maximum = parseMathValue(
+        'max(0, calc(-1 * 0))',
+        'number',
+      )!.calculation;
+      const clamped = parseMathValue(
+        'clamp(0, calc(-1 * 0), 1)',
+        'number',
+      )!.calculation;
 
       expect('value' in minimum && Object.is(minimum.value, -0)).toBe(true);
       expect('value' in maximum && Object.is(maximum.value, 0)).toBe(true);
@@ -282,20 +302,29 @@ describe('calc', () => {
     });
 
     it('retains clamp() when unresolved units cannot be compared', () => {
-      expect(parseMathFunctionCalculation('clamp(1em, 2rem, 3em)')).toMatchObject({
+      expect(parseMathValue(
+        'clamp(1em, 2rem, 3em)',
+        'length',
+      )?.calculation).toMatchObject({
         type: 'clamp',
         minimum: { type: 'dimension', value: 1, unit: 'em' },
         value: { type: 'dimension', value: 2, unit: 'rem' },
         maximum: { type: 'dimension', value: 3, unit: 'em' },
       });
-      expect(parseMathFunctionCalculation('clamp(none, 2rem, 3em)'))
+      expect(parseMathValue(
+        'clamp(none, 2rem, 3em)',
+        'length',
+      )?.calculation)
         .toMatchObject({
           type: 'clamp',
           minimum: undefined,
           value: { type: 'dimension', value: 2, unit: 'rem' },
           maximum: { type: 'dimension', value: 3, unit: 'em' },
         });
-      expect(parseMathFunctionCalculation('clamp(1em, 2rem, none)'))
+      expect(parseMathValue(
+        'clamp(1em, 2rem, none)',
+        'length',
+      )?.calculation)
         .toMatchObject({
           type: 'clamp',
           minimum: { type: 'dimension', value: 1, unit: 'em' },
@@ -307,10 +336,10 @@ describe('calc', () => {
 
   describe('math stepped-value functions', () => {
     it('uses the default round() strategy and optional numeric step', () => {
-      expect(parseMathFunctionCalculation('round(1)')).toEqual({
+      expect(parseMathValue('round(1)', 'number')?.calculation).toEqual({
         type: 'number',
         value: 1,
-        numericType: numericType(),
+        hints: mathHints(),
       });
     });
 
@@ -321,10 +350,10 @@ describe('calc', () => {
       ['round(down, 5, 2)', 4],
       ['round(to-zero, -5, 2)', -4],
     ] as const)('simplifies the stepped function %s', (input, expected) => {
-      expect(parseMathFunctionCalculation(input)).toEqual({
+      expect(parseMathValue(input, 'number')?.calculation).toEqual({
         type: 'number',
         value: expected,
-        numericType: numericType(),
+        hints: mathHints(),
       });
     });
 
@@ -334,30 +363,39 @@ describe('calc', () => {
       ['rem(-5, 3)', -2],
       ['rem(5, -3)', 2],
     ] as const)('simplifies the modulus function %s', (input, expected) => {
-      expect(parseMathFunctionCalculation(input)).toEqual({
+      expect(parseMathValue(input, 'number')?.calculation).toEqual({
         type: 'number',
         value: expected,
-        numericType: numericType(),
+        hints: mathHints(),
       });
     });
 
     it('simplifies stepped dimensions with canonical or identical units', () => {
-      expect(parseMathFunctionCalculation('round(down, 1.3in, 10px)')).toEqual({
+      expect(parseMathValue(
+        'round(down, 1.3in, 10px)',
+        'length',
+      )?.calculation).toEqual({
         type: 'dimension',
         value: 120,
         unit: 'px',
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
-      expect(parseMathFunctionCalculation('mod(25rem, 10rem)')).toEqual({
+      expect(parseMathValue(
+        'mod(25rem, 10rem)',
+        'length',
+      )?.calculation).toEqual({
         type: 'dimension',
         value: 5,
         unit: 'rem',
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
     });
 
     it('retains stepped functions whose unresolved units differ', () => {
-      expect(parseMathFunctionCalculation('round(10rem, 1em)')).toMatchObject({
+      expect(parseMathValue(
+        'round(10rem, 1em)',
+        'length',
+      )?.calculation).toMatchObject({
         type: 'round',
         strategy: 'nearest',
         value: { type: 'dimension', value: 10, unit: 'rem' },
@@ -366,25 +404,26 @@ describe('calc', () => {
     });
 
     it('snaps the line-width rounding strategy with device context', () => {
-      expect(parseMathFunctionCalculation('round(line-width, .25px)', {
+      expect(parseMathValue('round(line-width, .25px)', 'length', {
         devicePixelRatio: 2,
-      })).toEqual({
+      })?.calculation).toEqual({
         type: 'dimension',
         value: 0.5,
         unit: 'px',
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
     });
 
     it('chooses the nonzero multiple for line-width rounding', () => {
-      expect(parseMathFunctionCalculation(
+      expect(parseMathValue(
         'round(line-width, 1px, calc(infinity * 1px))',
+        'length',
         { devicePixelRatio: 2 },
-      )).toEqual({
+      )?.calculation).toEqual({
         type: 'dimension',
         value: Infinity,
         unit: 'px',
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
     });
 
@@ -395,29 +434,28 @@ describe('calc', () => {
       'rem(1, 0)',
       'mod(-1, infinity)',
     ])('produces NaN for the out-of-range function %s', (input) => {
-      const value = parseMathFunctionCalculation(input)!;
+      const value = parseMathValue(input, 'number')!;
 
-      expect(value.type).toBe('number');
-
-      if (value.type !== 'number') {
-        throw new Error('Expected a number');
-      }
-
-      expect(Number.isNaN(calculationValue(value))).toBe(true);
+      expect(value.calculation.type).toBe('number');
+      expect(Number.isNaN(mathValueNumber(value))).toBe(true);
     });
 
     it('preserves the required signed zeros in stepped functions', () => {
-      const rounded = parseMathFunctionCalculation(
+      const rounded = parseMathValue(
         'round(to-zero, -1, 2)',
+        'number',
       )!;
-      const infiniteStep = parseMathFunctionCalculation('round(-1, infinity)')!;
-      const modulo = parseMathFunctionCalculation('mod(-6, 3)')!;
-      const remainder = parseMathFunctionCalculation('rem(-6, 3)')!;
+      const infiniteStep = parseMathValue(
+        'round(-1, infinity)',
+        'number',
+      )!;
+      const modulo = parseMathValue('mod(-6, 3)', 'number')!;
+      const remainder = parseMathValue('rem(-6, 3)', 'number')!;
 
-      expect(Object.is(calculationValue(rounded), -0)).toBe(true);
-      expect(Object.is(calculationValue(infiniteStep), -0)).toBe(true);
-      expect(Object.is(calculationValue(modulo), 0)).toBe(true);
-      expect(Object.is(calculationValue(remainder), -0)).toBe(true);
+      expect(Object.is(mathValueNumber(rounded), -0)).toBe(true);
+      expect(Object.is(mathValueNumber(infiniteStep), -0)).toBe(true);
+      expect(Object.is(mathValueNumber(modulo), 0)).toBe(true);
+      expect(Object.is(mathValueNumber(remainder), -0)).toBe(true);
     });
   });
 
@@ -428,7 +466,7 @@ describe('calc', () => {
       ['cos(.25turn)', 0],
       ['tan(50grad)', 1],
     ] as const)('simplifies the trigonometric function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'number')?.calculation;
 
       if (result?.type !== 'number') {
         throw new Error('Expected a number');
@@ -443,7 +481,7 @@ describe('calc', () => {
       ['atan(1)', 45],
       ['atan(infinity)', 90],
     ] as const)('simplifies the inverse function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'angle')?.calculation;
 
       if (result?.type !== 'dimension') {
         throw new Error('Expected an angle');
@@ -459,7 +497,7 @@ describe('calc', () => {
       ['atan2(1in, 96px)', 45],
       ['atan2(1rem, 2rem)', 26.565051177],
     ] as const)('simplifies the two-argument function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'angle')?.calculation;
 
       if (result?.type !== 'dimension') {
         throw new Error('Expected an angle');
@@ -470,29 +508,29 @@ describe('calc', () => {
     });
 
     it('retains atan2() until its operands can be compared', () => {
-      expect(parseMathFunctionCalculation('atan2(1em, 1rem)')).toMatchObject({
+      expect(parseMathValue(
+        'atan2(1em, 1rem)',
+        'angle',
+      )?.calculation).toMatchObject({
         type: 'atan2',
       });
-      expect(parseRawCalculation('atan2(10%, 20%)')).toMatchObject({
-        type: 'atan2',
-      });
-      expect(parseMathFunctionCalculation('atan2(10%, 20%)', {
-        percentageType: 'length',
-      })).toMatchObject({ type: 'atan2' });
+      expect(parseMathValue('atan2(10%, 20%)', 'angle', {
+        percentHint: 'length',
+      })?.calculation).toMatchObject({ type: 'atan2' });
     });
 
     it('simplifies raw or resolved percentage coordinates', () => {
-      const raw = parseMathFunctionCalculation('atan2(10%, 20%)', {
-        percentageType: 'percent',
-      });
-      const resolved = parseMathFunctionCalculation('atan2(10%, 20%)', {
-        percentageType: 'length',
+      const raw = parseMathValue('atan2(10%, 20%)', 'angle', {
+        percentHint: 'percent',
+      })?.calculation;
+      const resolved = parseMathValue('atan2(10%, 20%)', 'angle', {
+        percentHint: 'length',
         percentageReferenceValue: {
           type: 'dimension',
           value: -100,
           unit: 'px',
         },
-      });
+      })?.calculation;
 
       if (raw?.type !== 'dimension' || resolved?.type !== 'dimension') {
         throw new Error('Expected angles');
@@ -503,12 +541,27 @@ describe('calc', () => {
     });
 
     it('uses JavaScript infinity, NaN, and signed-zero behavior', () => {
-      const sine = parseMathFunctionCalculation('sin(calc(-1 * 0))');
-      const tangent = parseMathFunctionCalculation('tan(calc(-1 * 0))');
-      const invalidSine = parseMathFunctionCalculation('sin(infinity)');
-      const invalidAsin = parseMathFunctionCalculation('asin(2)');
-      const negativePi = parseMathFunctionCalculation('atan2(calc(-1 * 0), -1)');
-      const positivePi = parseMathFunctionCalculation('atan2(0, -1)');
+      const sine = parseMathValue(
+        'sin(calc(-1 * 0))',
+        'number',
+      )?.calculation;
+      const tangent = parseMathValue(
+        'tan(calc(-1 * 0))',
+        'number',
+      )?.calculation;
+      const invalidSine = parseMathValue(
+        'sin(infinity)',
+        'number',
+      )?.calculation;
+      const invalidAsin = parseMathValue('asin(2)', 'angle')?.calculation;
+      const negativePi = parseMathValue(
+        'atan2(calc(-1 * 0), -1)',
+        'angle',
+      )?.calculation;
+      const positivePi = parseMathValue(
+        'atan2(0, -1)',
+        'angle',
+      )?.calculation;
 
       if (
         sine?.type !== 'number' ||
@@ -539,7 +592,7 @@ describe('calc', () => {
       ['log(8, 2)', 3],
       ['exp(1)', Math.E],
     ] as const)('simplifies the exponential function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'number')?.calculation;
 
       if (result?.type !== 'number') {
         throw new Error('Expected a number');
@@ -557,52 +610,61 @@ describe('calc', () => {
       expected,
       unit,
     ) => {
-      expect(parseMathFunctionCalculation(input)).toEqual({
+      expect(parseMathValue(input, 'length')?.calculation).toEqual({
         type: 'dimension',
         value: expected,
         unit,
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
     });
 
     it('retains hypot() until its operands can be compared', () => {
-      expect(parseMathFunctionCalculation('hypot(3em, 4rem)')).toMatchObject({
+      expect(parseMathValue(
+        'hypot(3em, 4rem)',
+        'length',
+      )?.calculation).toMatchObject({
         type: 'hypot',
       });
-      expect(parseMathFunctionCalculation('hypot(3%, 4%)')).toMatchObject({
+      expect(parseMathValue(
+        'hypot(3%, 4%)',
+        'percentage',
+      )?.calculation).toMatchObject({
         type: 'hypot',
       });
-      expect(parseMathFunctionCalculation('hypot(3%, 4%)', {
-        percentageType: 'length',
-      })).toMatchObject({ type: 'hypot' });
+      expect(parseMathValue('hypot(3%, 4%)', 'length-percentage', {
+        percentHint: 'length',
+      })?.calculation).toMatchObject({ type: 'hypot' });
     });
 
     it('simplifies raw or resolved percentage components', () => {
-      expect(parseMathFunctionCalculation('hypot(3%, 4%)', {
-        percentageType: 'percent',
-      })).toEqual({
+      expect(parseMathValue('hypot(3%, 4%)', 'percentage', {
+        percentHint: 'percent',
+      })?.calculation).toEqual({
         type: 'percentage',
         value: 5,
-        numericType: numericType([['percent', 1]], 'percent'),
+        hints: mathHints([['percent', 1]], 'percent'),
       });
-      expect(parseMathFunctionCalculation('hypot(3%, 4%)', {
-        percentageType: 'length',
+      expect(parseMathValue('hypot(3%, 4%)', 'length-percentage', {
+        percentHint: 'length',
         percentageReferenceValue: {
           type: 'dimension',
           value: -100,
           unit: 'px',
         },
-      })).toEqual({
+      })?.calculation).toEqual({
         type: 'dimension',
         value: 5,
         unit: 'px',
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
       });
     });
 
     it('makes NaN infectious in every exponential function', () => {
-      const power = parseMathFunctionCalculation('pow(NaN, 0)');
-      const hypotenuse = parseMathFunctionCalculation('hypot(infinity, NaN)');
+      const power = parseMathValue('pow(NaN, 0)', 'number')?.calculation;
+      const hypotenuse = parseMathValue(
+        'hypot(infinity, NaN)',
+        'number',
+      )?.calculation;
 
       if (power?.type !== 'number' || hypotenuse?.type !== 'number') {
         throw new Error('Expected numbers');
@@ -620,7 +682,7 @@ describe('calc', () => {
       'log(10, -2)',
       'log(10, 1)',
     ])('produces NaN for the out-of-range function %s', (input) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'number')?.calculation;
 
       if (result?.type !== 'number') {
         throw new Error('Expected a number');
@@ -639,7 +701,7 @@ describe('calc', () => {
       ['log(infinity, .5)', Infinity],
       ['exp(-infinity)', 0],
     ] as const)('handles the boundary function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'number')?.calculation;
 
       if (result?.type !== 'number') {
         throw new Error('Expected a number');
@@ -661,63 +723,67 @@ describe('calc', () => {
       value,
       unit,
     ) => {
-      expect(parseMathFunctionCalculation(input)).toEqual({
+      const valueType = type === 'number' ? 'number' : 'length';
+
+      expect(parseMathValue(input, valueType)?.calculation).toEqual({
         type,
         value,
         ...(unit === undefined ? {} : { unit }),
-        numericType: type === 'number'
-          ? numericType()
-          : numericType([['length', 1]]),
+        hints: type === 'number'
+          ? mathHints()
+          : mathHints([['length', 1]]),
       });
     });
 
     it('retains percentages whose numeric sign is unresolved', () => {
-      expect(parseMathFunctionCalculation('abs(-10%)')).toMatchObject({ type: 'abs' });
-      expect(parseRawCalculation('sign(10%)')).toMatchObject({ type: 'sign' });
-      expect(parseMathFunctionCalculation('sign(10%)', {
-        percentageType: 'length',
-      })).toMatchObject({ type: 'sign' });
+      expect(parseMathValue(
+        'abs(-10%)',
+        'percentage',
+      )?.calculation).toMatchObject({ type: 'abs' });
+      expect(parseMathValue('sign(10%)', 'number', {
+        percentHint: 'length',
+      })?.calculation).toMatchObject({ type: 'sign' });
     });
 
     it('simplifies raw or resolved percentages', () => {
-      expect(parseMathFunctionCalculation('abs(-10%)', {
-        percentageType: 'percent',
-      })).toEqual({
+      expect(parseMathValue('abs(-10%)', 'percentage', {
+        percentHint: 'percent',
+      })?.calculation).toEqual({
         type: 'percentage',
         value: 10,
-        numericType: numericType([['percent', 1]], 'percent'),
+        hints: mathHints([['percent', 1]], 'percent'),
       });
-      expect(parseMathFunctionCalculation('sign(-10%)', {
-        percentageType: 'percent',
-      })).toEqual({
+      expect(parseMathValue('sign(-10%)', 'number', {
+        percentHint: 'percent',
+      })?.calculation).toEqual({
         type: 'number',
         value: -1,
-        numericType: numericType([], 'percent'),
+        hints: mathHints([], 'percent'),
       });
-      expect(parseMathFunctionCalculation('abs(10%)', {
-        percentageType: 'length',
+      expect(parseMathValue('abs(10%)', 'length-percentage', {
+        percentHint: 'length',
         percentageReferenceValue: {
           type: 'dimension',
           value: -200,
           unit: 'px',
         },
-      })).toEqual({
+      })?.calculation).toEqual({
         type: 'dimension',
         value: 20,
         unit: 'px',
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
       });
-      expect(parseMathFunctionCalculation('sign(10%)', {
-        percentageType: 'length',
+      expect(parseMathValue('sign(10%)', 'number', {
+        percentHint: 'length',
         percentageReferenceValue: {
           type: 'dimension',
           value: -200,
           unit: 'px',
         },
-      })).toEqual({
+      })?.calculation).toEqual({
         type: 'number',
         value: -1,
-        numericType: numericType([], 'length'),
+        hints: mathHints([], 'length'),
       });
     });
 
@@ -729,7 +795,7 @@ describe('calc', () => {
       ['sign(infinity)', 1],
       ['sign(-infinity)', -1],
     ] as const)('handles the boundary function %s', (input, expected) => {
-      const result = parseMathFunctionCalculation(input);
+      const result = parseMathValue(input, 'number')?.calculation;
 
       if (result?.type !== 'number') {
         throw new Error('Expected a number');
@@ -739,8 +805,8 @@ describe('calc', () => {
     });
 
     it('makes NaN infectious', () => {
-      const absolute = parseMathFunctionCalculation('abs(NaN)');
-      const sign = parseMathFunctionCalculation('sign(NaN)');
+      const absolute = parseMathValue('abs(NaN)', 'number')?.calculation;
+      const sign = parseMathValue('sign(NaN)', 'number')?.calculation;
 
       if (absolute?.type !== 'number' || sign?.type !== 'number') {
         throw new Error('Expected numbers');
@@ -786,10 +852,13 @@ describe('calc', () => {
       ['-1 * infinity', -Infinity],
       ['-1 * -infinity', Infinity],
     ] as const)('evaluates %s as %s', (input, expected) => {
-      const result = simplifyInternalCalculation(input);
+      const result = parseMathValue(
+        `calc(${input})`,
+        'number',
+      )!;
 
-      expect(result.type).toBe('number');
-      expect(Object.is(calculationValue(result), expected)).toBe(true);
+      expect(result.calculation.type).toBe('number');
+      expect(Object.is(mathValueNumber(result), expected)).toBe(true);
     });
 
     it.each([
@@ -804,43 +873,49 @@ describe('calc', () => {
       'NaN * 1',
       'NaN / 1',
     ])('evaluates %s as NaN', (input) => {
-      const result = simplifyInternalCalculation(input);
+      const result = parseMathValue(
+        `calc(${input})`,
+        'number',
+      )!;
 
-      expect(result.type).toBe('number');
-      expect(Number.isNaN(calculationValue(result))).toBe(true);
+      expect(result.calculation.type).toBe('number');
+      expect(Number.isNaN(mathValueNumber(result))).toBe(true);
     });
   });
 
   describe('top-level calculation IEEE-754 censoring', () => {
     it('preserves special values at specified-value time', () => {
-      const negativeZero = parseCalc('calc(-5 * 0)')!.calculation;
-      const notANumber = parseCalc('calc(NaN)')!.calculation;
-      const infinity = parseCalc('calc(infinity)')!.calculation;
+      const negativeZero = parseMathValue(
+        'calc(-5 * 0)',
+        'number',
+      )!;
+      const notANumber = parseMathValue('calc(NaN)', 'number')!;
+      const infinity = parseMathValue('calc(infinity)', 'number')!;
 
-      expect(Object.is(calculationValue(negativeZero), -0)).toBe(true);
-      expect(Number.isNaN(calculationValue(notANumber))).toBe(true);
-      expect(calculationValue(infinity)).toBe(Infinity);
+      expect(Object.is(mathValueNumber(negativeZero), -0)).toBe(true);
+      expect(Number.isNaN(mathValueNumber(notANumber))).toBe(true);
+      expect(mathValueNumber(infinity)).toBe(Infinity);
     });
 
     it('censors a negative zero into an unsigned zero', () => {
-      const result = parseCalc('calc(-5 * 0)', {
+      const result = parseMathValue('calc(-5 * 0)', 'number', {
         stage: 'computed',
-      })!.calculation;
+      })!;
 
-      expect(result.type).toBe('number');
-      expect(Object.is(calculationValue(result), 0)).toBe(true);
+      expect(result.calculation.type).toBe('number');
+      expect(Object.is(mathValueNumber(result), 0)).toBe(true);
     });
 
     it.each([
-      ['calc(NaN)', 'number'],
-      ['calc(NaN * 1px)', 'dimension'],
-      ['sqrt(-1)', 'number'],
+      ['calc(NaN)', 'number', 'number'],
+      ['calc(NaN * 1px)', 'length', 'dimension'],
+      ['sqrt(-1)', 'number', 'number'],
     ] as const)(
       'censors a top-level NaN into a zero value in %s',
-      (input, type) => {
-        const result = input.startsWith('calc(')
-          ? parseCalc(input, { stage: 'computed' })!.calculation
-          : parseMathFunctionCalculation(input, { stage: 'computed' })!;
+      (input, valueType, type) => {
+        const result = parseMathValue(input, valueType, {
+          stage: 'computed',
+        })!.calculation;
         const value = 'value' in result
           ? result.value
           : undefined;
@@ -851,7 +926,10 @@ describe('calc', () => {
     );
 
     it('retains signed zero inside a nested math function', () => {
-      expect(parseMathFunctionCalculation('atan2(0, calc(-5 * 0))')).toMatchObject({
+      expect(parseMathValue(
+        'atan2(0, calc(-5 * 0))',
+        'angle',
+      )?.calculation).toMatchObject({
         type: 'dimension',
         value: 180,
         unit: 'deg',
@@ -859,19 +937,21 @@ describe('calc', () => {
     });
 
     it('retains an inner signed zero until the outer calculation uses it', () => {
-      const specified = parseCalc(
+      const specified = parseMathValue(
         'calc(1 / calc(-5 * 0))',
-      )!.calculation;
-      const computed = parseCalc(
+        'number',
+      )!;
+      const computed = parseMathValue(
         'calc(1 / calc(-5 * 0))',
+        'number',
         {
           stage: 'computed',
           range: [-100, 100],
         },
-      )!.calculation;
+      )!;
 
-      expect(calculationValue(specified)).toBe(-Infinity);
-      expect(calculationValue(computed)).toBe(-100);
+      expect(mathValueNumber(specified)).toBe(-Infinity);
+      expect(mathValueNumber(computed)).toBe(-100);
     });
 
     it.each([
@@ -880,20 +960,20 @@ describe('calc', () => {
       ['calc(-5)', 0],
       ['calc(105)', 100],
     ] as const)('clamps %s to the target-context range', (input, expected) => {
-      const result = parseCalc(input, {
+      const result = parseMathValue(input, 'number', {
         stage: 'computed',
         range: [0, 100],
-      })!.calculation;
+      })!;
 
-      expect(calculationValue(result)).toBe(expected);
+      expect(mathValueNumber(result)).toBe(expected);
     });
 
     it('clamps conceptual infinities to the finite host range', () => {
-      const result = parseCalc('calc(infinity)', {
+      const result = parseMathValue('calc(infinity)', 'number', {
         stage: 'used',
-      })!.calculation;
+      })!;
 
-      expect(calculationValue(result)).toBe(Number.MAX_VALUE);
+      expect(mathValueNumber(result)).toBe(Number.MAX_VALUE);
     });
 
     it.each([
@@ -903,27 +983,31 @@ describe('calc', () => {
       input,
       expected,
     ) => {
-      const result = parseCalc(input, {
+      const result = parseMathValue(input, 'integer', {
         stage: 'computed',
-      }, 'integer')!.calculation;
+      })!;
 
-      expect(calculationValue(result)).toBe(expected);
+      expect(mathValueNumber(result)).toBe(expected);
     });
 
     it('does not clamp or round specified values', () => {
-      const result = parseCalc('calc(105.5)', {
+      const result = parseMathValue('calc(105.5)', 'integer', {
         range: [0, 100],
-      }, 'integer')!.calculation;
+      })!;
 
-      expect(calculationValue(result)).toBe(105.5);
+      expect(mathValueNumber(result)).toBe(105.5);
     });
   });
 
   it('retains math functions as calculation-tree operator nodes', () => {
-    const calculation = parseCalc(
+    const calculation = parseMathValue(
       'calc(min(1em, 2rem) + max(3vw, 4vh))',
-    )
-      ?.calculation as CalcSumNode;
+      'length',
+    )?.calculation;
+
+    if (calculation?.type !== 'sum') {
+      throw new Error('Expected a sum node');
+    }
 
     expect(calculation.children.map((child) => child.type)).toEqual([
       'min',
@@ -943,12 +1027,12 @@ describe('calc', () => {
   ] as const)('serializes the specified calculation %s', (input, expected) => {
     const hasPercentage = input.includes('%');
     const context = hasPercentage
-      ? { percentageType: 'length' } as const
+      ? { percentHint: 'length' } as const
       : {};
 
-    const expectedType = hasPercentage ? 'length-percentage' : undefined;
+    const valueType = hasPercentage ? 'length-percentage' : 'length';
 
-    expect(serializeMathFunction(parseCalc(input, context, expectedType)!))
+    expect(serializeMathValue(parseMathValue(input, valueType, context)!))
       .toBe(expected);
   });
 
@@ -968,11 +1052,11 @@ describe('calc', () => {
   ] as const)(
     'serializes the specified math function %s',
     (input, expected) => {
-      const value = parseMathFunction(input, {
-        percentageType: 'length',
-      }, 'length-percentage')!;
+      const value = parseMathValue(input, 'length-percentage', {
+        percentHint: 'length',
+      })!;
 
-      expect(serializeMathFunction(value)).toBe(expected);
+      expect(serializeMathValue(value)).toBe(expected);
     },
   );
 
@@ -982,60 +1066,50 @@ describe('calc', () => {
   ] as const)(
     'wraps the simplified specified math function %s in calc()',
     (input, expected) => {
-      expect(serializeMathFunction(parseMathFunction(input)!))
+      expect(serializeMathValue(parseMathValue(input, 'number')!))
         .toBe(expected);
     },
   );
 
   it.each([
-    ['calc(20px + 30px)', { type: 'length', value: 50, unit: 'px' }],
-    ['min(3, 1, 2)', { type: 'number', value: 1 }],
-    ['sqrt(-1)', { type: 'number', value: 0 }],
+    ['calc(20px + 30px)', 'length', { type: 'length', value: 50, unit: 'px' }],
+    ['min(3, 1, 2)', 'number', { type: 'number', value: 1 }],
+    ['sqrt(-1)', 'number', { type: 'number', value: 0 }],
   ] as const)(
     'resolves the computed math function %s to a literal',
-    (input, expected) => {
+    (input, valueType, expected) => {
       const context = { stage: 'computed' } as const;
-      const value = input.startsWith('calc(')
-        ? parseCalc(input)!
-        : parseMathFunction(input)!;
+      const value = parseMathValue(input, valueType)!;
 
       expect(resolveMathValue(value, context)).toEqual(expected);
     },
   );
 
   it.each([
-    ['calc(infinity)', 'calc(infinity)'],
-    ['calc(-infinity * 1em)', 'calc(-infinity * 1px)'],
-    ['calc(NaN * 1s)', 'calc(NaN * 1s)'],
+    ['calc(infinity)', 'number', 'calc(infinity)'],
+    ['calc(-infinity * 1em)', 'length', 'calc(-infinity * 1px)'],
+    ['calc(NaN * 1s)', 'time', 'calc(NaN * 1s)'],
   ] as const)(
     'serializes the special numeric calculation %s',
-    (input, expected) => {
-      expect(serializeMathFunction(parseCalc(input)!)).toBe(expected);
+    (input, valueType, expected) => {
+      expect(serializeMathValue(parseMathValue(input, valueType)!))
+        .toBe(expected);
     },
   );
 
-  it('serializes a calculation tree with its grouping parentheses', () => {
-    const calculation = parseCalc('calc(1px - min(2px, 3%))', {
-      percentageType: 'length',
-    }, 'length-percentage')!.calculation;
-
-    expect(serializeCalcTree(calculation))
-      .toBe('(1px - min(2px, 3%))');
-  });
-
   it('adds math functions into a simplified calc function', () => {
-    const result = addMathFunctions(
-      parseMathValue('calc(10px)')!,
-      parseMathValue('min(20px, 30px)')!,
+    const result = addMathValues(
+      parseMathValue('calc(10px)', 'length')!,
+      parseMathValue('min(20px, 30px)', 'length')!,
     );
 
     expect(serializeMathValue(result)).toBe('calc(30px)');
   });
 
   it('accumulates math functions using addition', () => {
-    const result = accumulateMathFunctions(
-      parseMathValue('calc(10px)')!,
-      parseMathValue('min(20px, 30px)')!,
+    const result = accumulateMathValues(
+      parseMathValue('calc(10px)', 'length')!,
+      parseMathValue('min(20px, 30px)', 'length')!,
     );
 
     expect(serializeMathValue(result)).toBe('calc(30px)');
@@ -1049,11 +1123,11 @@ describe('calc', () => {
     'interpolates math functions at p = %s',
     (p, expected) => {
       const context = {
-        percentageType: 'length',
-      } as const satisfies CalculationContext;
-      const result = interpolateMathFunctions(
-        parseMathValue('calc(10px)', context, 'length-percentage')!,
-        parseMathValue('calc(20%)', context, 'length-percentage')!,
+        percentHint: 'length',
+      } as const satisfies MathContext;
+      const result = interpolateMathValues(
+        parseMathValue('calc(10px)', 'length-percentage', context)!,
+        parseMathValue('calc(20%)', 'length-percentage', context)!,
         p,
         context,
       );
@@ -1063,15 +1137,15 @@ describe('calc', () => {
   );
 
   it('rejects combination of inconsistent math functions', () => {
-    const length = parseMathValue('calc(1px)')!;
-    const time = parseMathValue('calc(1s)')!;
+    const length = parseMathValue('calc(1px)', 'length')!;
+    const time = parseMathValue('calc(1s)', 'time')!;
 
-    expect(() => addMathFunctions(length, time))
-      .toThrow('Math value restrictions must be consistent');
-    expect(() => interpolateMathFunctions(length, time, 0.5))
-      .toThrow('Math value restrictions must be consistent');
-    expect(() => accumulateMathFunctions(length, time))
-      .toThrow('Math value restrictions must be consistent');
+    expect(() => addMathValues(length, time))
+      .toThrow('Math value types must be consistent');
+    expect(() => interpolateMathValues(length, time, 0.5))
+      .toThrow('Math value types must be consistent');
+    expect(() => accumulateMathValues(length, time))
+      .toThrow('Math value types must be consistent');
   });
 
   it.each([
@@ -1086,7 +1160,7 @@ describe('calc', () => {
     'log(1, 2, 3)',
     'abs(1, 2)',
   ])('rejects invalid math-function arguments in %s', (input) => {
-    expectBadMathFunction(input);
+    expectBadMath(input);
   });
 
   it.each([
@@ -1098,84 +1172,104 @@ describe('calc', () => {
   ] as const)(
     'combines compatible dimensions in their canonical unit for %s',
     (input, value, unit, category) => {
-      expect(parseCalc(input)?.calculation).toEqual({
+      expect(parseMathValue(input, category)?.calculation).toEqual({
         type: 'dimension',
         value,
         unit,
-        numericType: numericType([[category, 1]]),
+        hints: mathHints([[category, 1]]),
       });
     },
   );
 
   it('simplifies again when later length context becomes available', () => {
-    const parsed = parseCalc('calc(1em + 2px)')!;
+    const parsed = parseMathValue('calc(1em + 2px)', 'length')!;
 
     expect(parsed.calculation.type).toBe('sum');
-    expect(simplifyCalculationTree(parsed.calculation, {
+    expect(resolveMathValue(parsed, {
       length: { em: 16 },
     })).toEqual({
-      type: 'dimension',
-      value: 18,
-      unit: 'px',
-      numericType: numericType([['length', 1]]),
+      type: 'math',
+      calculation: {
+        type: 'dimension',
+        value: 18,
+        unit: 'px',
+        hints: mathHints([['length', 1]]),
+      },
+      valueType: 'length',
     });
   });
 
   it('types percentages in their supplied calculation context', () => {
-    expectBadCalc('calc(10px + 25%)');
+    expectBadMath('calc(10px + 25%)');
 
     const context = {
-      percentageType: 'length',
-    } as const satisfies CalculationContext;
-    const parsed = parseCalc('calc(10px + 25%)', context, 'length-percentage');
+      percentHint: 'length',
+    } as const satisfies MathContext;
+    const parsed = parseMathValue(
+      'calc(10px + 25%)',
+      'length-percentage',
+      context,
+    );
 
     expect(parsed).toEqual({
       type: 'math',
       calculation: {
         type: 'sum',
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
         children: [
           numericLeaf(
             { type: 'percentage', value: 25 },
-            numericType([['length', 1]], 'length'),
+            mathHints([['length', 1]], 'length'),
           ),
           numericLeaf(
             { type: 'dimension', value: 10, unit: 'px' },
-            numericType([['length', 1]]),
+            mathHints([['length', 1]]),
           ),
         ],
       },
-      restrictions: { expectedType: 'length-percentage' },
+      valueType: 'length-percentage',
     });
 
-    expect(parseCalc('calc(25%)', context, 'length-percentage')?.calculation)
+    expect(parseMathValue(
+      'calc(25%)',
+      'length-percentage',
+      context,
+    )?.calculation)
       .toEqual({
         type: 'percentage',
         value: 25,
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
       });
-    expect(parseCalc('calc(10px)', context, 'length-percentage')?.calculation)
+    expect(parseMathValue(
+      'calc(10px)',
+      'length-percentage',
+      context,
+    )?.calculation)
       .toEqual({
         type: 'dimension',
         value: 10,
         unit: 'px',
-        numericType: numericType([['length', 1]]),
+        hints: mathHints([['length', 1]]),
       });
-    expect(parseCalc(
+    expect(parseMathValue(
       'calc(calc(10px + 25%))',
-      context,
       'length-percentage',
+      context,
     )).toEqual(parsed);
   });
 
   it('inherits percentage typing through nested math functions', () => {
     const context = {
-      percentageType: 'length',
-    } as const satisfies CalculationContext;
+      percentHint: 'length',
+    } as const satisfies MathContext;
 
-    expect(parseCalc('calc(min(25%, 50px))', context, 'length-percentage')
-      ?.calculation.numericType)
-      .toEqual(numericType([['length', 1]], 'length'));
+    expect(parseMathValue(
+      'calc(min(25%, 50px))',
+      'length-percentage',
+      context,
+    )
+      ?.calculation.hints)
+      .toEqual(mathHints([['length', 1]], 'length'));
   });
 
   it.each([
@@ -1184,19 +1278,19 @@ describe('calc', () => {
   ] as const)(
     'retains distinct zero terms in the mixed calculation %s',
     (input, percentage, dimension, unit) => {
-      expect(parseCalc(input, {
-        percentageType: 'length',
-      }, 'length-percentage')?.calculation).toEqual({
+      expect(parseMathValue(input, 'length-percentage', {
+        percentHint: 'length',
+      })?.calculation).toEqual({
         type: 'sum',
-        numericType: numericType([['length', 1]], 'length'),
+        hints: mathHints([['length', 1]], 'length'),
         children: [
           numericLeaf(
             { type: 'percentage', value: percentage },
-            numericType([['length', 1]], 'length'),
+            mathHints([['length', 1]], 'length'),
           ),
           numericLeaf(
             { type: 'dimension', value: dimension, unit },
-            numericType([['length', 1]]),
+            mathHints([['length', 1]]),
           ),
         ],
       });
@@ -1214,14 +1308,7 @@ describe('calc', () => {
     ['calc(1dppx)', 'resolution'],
     ['calc(1fr)', 'flex'],
   ] as const)('matches %s against the expected %s type', (input, expectedType) => {
-    expect(parseCalc(input, {}, expectedType)).not.toBeNull();
-  });
-
-  it('requires an expected type for a public math value', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('calc(1)'));
-
-    expect(() => tryConsumeCalc(c))
-      .toThrow('Math value expected type is required');
+    expect(parseMathValue(input, expectedType)).not.toBeNull();
   });
 
   it.each([
@@ -1232,17 +1319,16 @@ describe('calc', () => {
   ] as const)(
     'rejects %s against the expected %s type',
     (input, expectedType) => {
-      expectNoCalc(input, expectedType);
+      expectNoMath(input, expectedType);
     },
   );
 
   it('matches the expected type of another outer math function', () => {
-    expect(parseMathFunctionCalculation(
+    expect(parseMathValue(
       'min(1px, 2px)',
-      {},
       'length',
-    )).not.toBeNull();
-    expectNoMathFunction('min(1px, 2px)', 'time');
+    )?.calculation).not.toBeNull();
+    expectNoMath('min(1px, 2px)', 'time');
   });
 
   it.each([
@@ -1252,68 +1338,38 @@ describe('calc', () => {
     ['frequency-percentage', 'frequency', 'calc(10hz + 25%)'],
   ] as const)(
     'matches the mixed %s production',
-    (expectedType, percentageType, input) => {
-      expect(parseCalc(input, {
-        percentageType,
-      }, expectedType)).not.toBeNull();
+    (expectedType, percentHint, input) => {
+      expect(parseMathValue(input, expectedType, {
+        percentHint,
+      })).not.toBeNull();
     },
   );
 
   it('preserves a percent hint after percentage dimensions cancel', () => {
-    const quotient = parseRawCalculation('1% / 1%') as CalcProductNode;
-
-    expect(quotient).toEqual({
-      type: 'product',
-      children: [
-        numericLeaf(
-          { type: 'percentage', value: 1 },
-          numericType([['percent', 1]], 'percent'),
-        ),
-        {
-          type: 'invert',
-          child: numericLeaf(
-            { type: 'percentage', value: 1 },
-            numericType([['percent', 1]], 'percent'),
-          ),
-          numericType: numericType(
-            [['percent', -1]],
-            'percent',
-          ),
-        },
-      ],
-      numericType: numericType([], 'percent'),
-    });
-    expect(parseCalc('calc(1% / 1%)', {
-      percentageType: 'percent',
-    }, 'number')).toEqual({
+    expect(parseMathValue('calc(1% / 1%)', 'number', {
+      percentHint: 'percent',
+    })).toEqual({
       type: 'math',
       calculation: numericLeaf(
         { type: 'number', value: 1 },
-        numericType([], 'percent'),
+        mathHints([], 'percent'),
       ),
-      restrictions: { expectedType: 'number' },
+      valueType: 'number',
     });
 
     const input = 'calc(1% / 1% * 10px)';
-    const calculation = parseRawCalculation(
-      '1% / 1% * 10px',
-    ) as CalcProductNode;
-
-    expect(calculation.numericType).toEqual(
-      numericType([['length', 1]], 'percent'),
-    );
-    expectNoCalc(input, 'length');
-    expect(parseCalc(input, {
-      percentageType: 'length',
-    }, 'length-percentage')).not.toBeNull();
+    expectNoMath(input, 'length');
+    expect(parseMathValue(input, 'length-percentage', {
+      percentHint: 'length',
+    })).not.toBeNull();
   });
 
   it('preserves a percent hint through a nested calc function', () => {
-    expectNoCalc('calc(calc(1% / 1%) * 10px)', 'length');
+    expectNoMath('calc(calc(1% / 1%) * 10px)', 'length');
   });
 
   it('preserves a percent hint through deeply nested calculations', () => {
-    expectNoCalc('calc(calc(calc(calc(1% / 1%))) * 10px)', 'length');
+    expectNoMath('calc(calc(calc(calc(1% / 1%))) * 10px)', 'length');
   });
 
   it.each([
@@ -1323,89 +1379,91 @@ describe('calc', () => {
   ] as const)(
     'preserves a percent hint through a nested %s math function',
     (_type, input) => {
-      expectNoCalc(input, 'length');
-      expect(parseCalc(input, {
-        percentageType: 'length',
-      }, 'length-percentage')).not.toBeNull();
+      expectNoMath(input, 'length');
+      expect(parseMathValue(input, 'length-percentage', {
+        percentHint: 'length',
+      })).not.toBeNull();
     },
   );
 
   it('makes a fixed angle result consistent with its percentage inputs', () => {
-    expect(parseCalc('calc(atan2(1%, 2%))', {
-      percentageType: 'percent',
-    })?.calculation.numericType).toEqual(
-      numericType([['angle', 1]], 'percent'),
+    expect(parseMathValue('calc(atan2(1%, 2%))', 'angle', {
+      percentHint: 'percent',
+    })?.calculation.hints).toEqual(
+      mathHints([['angle', 1]], 'percent'),
     );
   });
 
   it('resolves percentages against an available reference value', () => {
-    expect(parseCalc('calc(10px + 25%)', {
-      percentageType: 'length',
+    expect(parseMathValue('calc(10px + 25%)', 'length-percentage', {
+      percentHint: 'length',
       percentageReferenceValue: {
         type: 'dimension',
         value: 200,
         unit: 'px',
       },
-    }, 'length-percentage')).toEqual({
+    })).toEqual({
       type: 'math',
       calculation: numericLeaf(
         { type: 'dimension', value: 60, unit: 'px' },
-        numericType([['length', 1]], 'length'),
+        mathHints([['length', 1]], 'length'),
       ),
-      restrictions: { expectedType: 'length-percentage' },
+      valueType: 'length-percentage',
     });
 
-    expect(simplifyCalculationTree(
-      {
-        type: 'percentage',
-        value: 25,
-        numericType: numericType([['percent', 1]], 'percent'),
-      },
-      {
-        percentageReferenceValue: { type: 'number', value: 200 },
-      },
-    )).toEqual(numericLeaf(
-      { type: 'number', value: 50 },
-      numericType([['percent', 1]], 'percent'),
-    ));
+    const percentage = parseMathValue('calc(25%)', 'percentage')!;
+
+    expect(resolveMathValue(percentage, {
+      percentageReferenceValue: { type: 'number', value: 200 },
+    })).toEqual({
+      type: 'math',
+      calculation: numericLeaf(
+        { type: 'number', value: 50 },
+        mathHints([['percent', 1]], 'percent'),
+      ),
+      valueType: 'percentage',
+    });
   });
 
   it('combines unresolved dimensions using ASCII-insensitive units', () => {
-    expect(parseCalc('calc(1EM + 2em)')?.calculation).toEqual({
+    expect(parseMathValue('calc(1EM + 2em)', 'length')?.calculation).toEqual({
       type: 'dimension',
       value: 3,
       unit: 'em',
-      numericType: numericType([['length', 1]]),
+      hints: mathHints([['length', 1]]),
     });
   });
 
   it('stores sum and product children in calculation serialization order', () => {
-    expect(parseCalc('calc(1vh + 2em + 3% + 4px)', {
-      percentageType: 'length',
+    expect(parseMathValue('calc(1vh + 2em + 3% + 4px)', 'length-percentage', {
+      percentHint: 'length',
     })?.calculation).toEqual({
       type: 'sum',
-      numericType: numericType([['length', 1]], 'length'),
+      hints: mathHints([['length', 1]], 'length'),
       children: [
         numericLeaf(
           { type: 'percentage', value: 3 },
-          numericType([['length', 1]], 'length'),
+          mathHints([['length', 1]], 'length'),
         ),
         numericLeaf(
           { type: 'dimension', value: 2, unit: 'em' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
         numericLeaf(
           { type: 'dimension', value: 4, unit: 'px' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
         numericLeaf(
           { type: 'dimension', value: 1, unit: 'vh' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
       ],
     });
 
-    expect(parseCalc('calc(min(1em, 2rem) * 2)')?.calculation)
+    expect(parseMathValue(
+      'calc(min(1em, 2rem) * 2)',
+      'length',
+    )?.calculation)
       .toMatchObject({
         type: 'product',
         children: [
@@ -1416,71 +1474,81 @@ describe('calc', () => {
   });
 
   it('distributes a number over a sum of numeric values', () => {
-    expect(parseCalc('calc(2 * (1px + 2em))')?.calculation).toEqual({
+    expect(parseMathValue(
+      'calc(2 * (1px + 2em))',
+      'length',
+    )?.calculation).toEqual({
       type: 'sum',
-      numericType: numericType([['length', 1]]),
+      hints: mathHints([['length', 1]]),
       children: [
         numericLeaf(
           { type: 'dimension', value: 4, unit: 'em' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
         numericLeaf(
           { type: 'dimension', value: 2, unit: 'px' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
       ],
     });
   });
 
   it('retains zero-valued terms with a distinct unit', () => {
-    expect(parseCalc('calc(0px + 1em)')?.calculation).toEqual({
+    expect(parseMathValue(
+      'calc(0px + 1em)',
+      'length',
+    )?.calculation).toEqual({
       type: 'sum',
-      numericType: numericType([['length', 1]]),
+      hints: mathHints([['length', 1]]),
       children: [
         numericLeaf(
           { type: 'dimension', value: 1, unit: 'em' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
         numericLeaf(
           { type: 'dimension', value: 0, unit: 'px' },
-          numericType([['length', 1]]),
+          mathHints([['length', 1]]),
         ),
       ],
     });
   });
 
   it('negates positive zero using CSS addition semantics', () => {
-    const simplified = simplifyCalculationTree({
-      type: 'negate',
-      child: {
-        type: 'number',
-        value: 0,
-        numericType: numericType(),
-      },
-      numericType: numericType(),
-    });
+    const resolved = resolveMathValue(
+      parseMathValue('calc(0 - 0)', 'number')!,
+      { stage: 'computed' },
+    );
 
-    expect(simplified.type).toBe('number');
-    expect(Object.is(calculationValue(simplified), 0)).toBe(true);
+    if (resolved.type !== 'number') {
+      throw new Error('Expected a number');
+    }
+
+    expect(Object.is(resolved.value, 0)).toBe(true);
   });
 
   it('cancels canonical units in a numeric product', () => {
-    expect(parseCalc('calc(1in / 96px)')?.calculation).toEqual({
+    expect(parseMathValue(
+      'calc(1in / 96px)',
+      'number',
+    )?.calculation).toEqual({
       type: 'number',
       value: 1,
-      numericType: numericType(),
+      hints: mathHints(),
     });
   });
 
   it('unwraps nested calc functions as equivalent grouping', () => {
-    expect(parseCalc('calc(calc(1 + 2))')).toEqual(
-      parseCalc('calc((1 + 2))'),
+    expect(parseMathValue('calc(calc(1 + 2))', 'number')).toEqual(
+      parseMathValue('calc((1 + 2))', 'number'),
     );
   });
 
   it('defers final type validation for nested calc functions', () => {
-    expect(parseCalc('calc(calc(1px / 1s) * 1s)')).toEqual(
-      parseCalc('calc((1px / 1s) * 1s)'),
+    expect(parseMathValue(
+      'calc(calc(1px / 1s) * 1s)',
+      'length',
+    )).toEqual(
+      parseMathValue('calc((1px / 1s) * 1s)', 'length'),
     );
   });
 
@@ -1491,68 +1559,71 @@ describe('calc', () => {
     ['-INFINITY', -Infinity],
     ['NaN', NaN],
   ] as const)('resolves the calc keyword %j at parse time', (keyword, value) => {
-    const parsed = parseCalc(`calc(${keyword})`);
+    const parsed = parseMathValue(`calc(${keyword})`, 'number');
 
     expect(parsed?.calculation.type).toBe('number');
-    expect(Object.is(calculationValue(parsed!.calculation), value)).toBe(true);
+    expect(Object.is(mathValueNumber(parsed!), value)).toBe(true);
   });
 
   it.each([
-    ['1px', numericType([['length', 1]])],
-    ['1deg', numericType([['angle', 1]])],
-    ['1s', numericType([['time', 1]])],
-    ['1Hz', numericType([['frequency', 1]])],
-    ['1dppx', numericType([['resolution', 1]])],
-    ['1fr', numericType([['flex', 1]])],
-  ] as const)('classifies the dimensional terminal %s', (input, expected) => {
-    expect(parseCalc(`calc(${input})`)?.calculation.numericType)
+    ['1px', 'length', mathHints([['length', 1]])],
+    ['1deg', 'angle', mathHints([['angle', 1]])],
+    ['1s', 'time', mathHints([['time', 1]])],
+    ['1Hz', 'frequency', mathHints([['frequency', 1]])],
+    ['1dppx', 'resolution', mathHints([['resolution', 1]])],
+    ['1fr', 'flex', mathHints([['flex', 1]])],
+  ] as const)('classifies the dimensional terminal %s', (
+    input,
+    valueType,
+    expected,
+  ) => {
+    expect(parseMathValue(`calc(${input})`, valueType)?.calculation.hints)
       .toEqual(expected);
   });
 
-  it('records compound numeric types on nested subexpressions', () => {
-    const outer = parseRawCalculation('(1px / 1s) * 1s') as CalcProductNode;
-    const inner = outer.children[0] as CalcProductNode;
-
-    expect(inner.numericType).toEqual(numericType([
-      ['length', 1],
-      ['time', -1],
-    ]));
-    expect(outer.numericType).toEqual(
-      numericType([['length', 1]]),
-    );
+  it('reduces a compound intermediate type to its final length', () => {
+    expect(parseMathValue(
+      'calc((1px / 1s) * 1s)',
+      'length',
+    )?.calculation).toEqual({
+      type: 'dimension',
+      value: 1,
+      unit: 'px',
+      hints: mathHints([['length', 1]]),
+    });
   });
 
-  it('records squared dimensions before a later inverse cancels them', () => {
-    const outer = parseRawCalculation('(1px * 1em) / 1px') as CalcProductNode;
-    const inner = outer.children[0] as CalcProductNode;
-
-    expect(inner.numericType).toEqual(
-      numericType([['length', 2]]),
-    );
-    expect(outer.numericType).toEqual(
-      numericType([['length', 1]]),
-    );
+  it('reduces a squared intermediate type to its final length', () => {
+    expect(parseMathValue(
+      'calc((1px * 1em) / 1px)',
+      'length',
+    )?.calculation).toEqual({
+      type: 'dimension',
+      value: 1,
+      unit: 'em',
+      hints: mathHints([['length', 1]]),
+    });
   });
 
   it('represents a dimensionless quotient with an empty exponent map', () => {
-    const parsed = parseCalc('calc(1px / 1px)');
+    const parsed = parseMathValue('calc(1px / 1px)', 'number');
 
-    expect(parsed?.calculation.numericType).toEqual(numericType());
+    expect(parsed?.calculation.hints).toEqual(mathHints());
   });
 
   describe('calculation type-checking examples', () => {
     it.each([
-      ['calc(5px + 1em)', {}, undefined],
+      ['calc(5px + 1em)', 'length', {}],
       [
         'calc(100% / 3)',
-        { percentageType: 'percent' },
         'percentage',
+        { percentHint: 'percent' },
       ],
-      ['calc(1.5)', {}, 'integer'],
+      ['calc(1.5)', 'integer', {}],
     ] as const)(
       'accepts the valid calculation %j',
-      (input, context, expectedType) => {
-        expect(parseCalc(input, context, expectedType)).not.toBeNull();
+      (input, valueType, context) => {
+        expect(parseMathValue(input, valueType, context)).not.toBeNull();
       },
     );
 
@@ -1567,91 +1638,145 @@ describe('calc', () => {
       'calc(1px * 1em)',
       'calc(1unknown)',
     ])('rejects the invalid calculation %j', (input) => {
-      expectBadCalc(input);
+      expectBadMath(input);
     });
   });
 
   it('passes unresolved numeric variables through nested calculations', () => {
-    const context: CalculationContext = {
+    const context: MathContext = {
       numericVariables: new Map([['h', {
         value: null,
-        numericType: numericType(),
+        valueType: 'number',
       }]]),
     };
-    const parsed = parseCalc('calc(calc(h + 180))', context);
-    const sum = parsed?.calculation as CalcSumNode;
+    const parsed = parseMathValue('calc(calc(h + 180))', 'number', context);
+    const sum = parsed?.calculation;
+
+    if (sum?.type !== 'sum') {
+      throw new Error('Expected a sum node');
+    }
 
     expect(sum.children).toEqual([
       numericLeaf(
         { type: 'number', value: 180 },
-        numericType(),
+        mathHints(),
       ),
       {
         type: 'variable',
         name: 'h',
-        numericType: numericType(),
+        hints: mathHints(),
       },
     ]);
-    expect(sum.numericType).toEqual(numericType());
+    expect(sum.hints).toEqual(mathHints());
+  });
+
+  it('retains an unresolved numeric variable in a product', () => {
+    const value = parseMathValue('calc(c * 0.9)', 'number', {
+      numericVariables: new Map([['c', {
+        value: null,
+        valueType: 'number',
+      }]]),
+    });
+
+    expect(value).toEqual({
+      type: 'math',
+      calculation: {
+        type: 'product',
+        children: [
+          numericLeaf(
+            { type: 'number', value: 0.9 },
+            mathHints(),
+          ),
+          {
+            type: 'variable',
+            name: 'c',
+            hints: mathHints(),
+          },
+        ],
+        hints: mathHints(),
+      },
+      valueType: 'number',
+    });
+    expect(serializeMathValue(value!)).toBe('calc(0.9 * c)');
   });
 
   it('simplifies an available numeric variable', () => {
-    const context: CalculationContext = {
+    const context: MathContext = {
       numericVariables: new Map([['h', {
         value: { type: 'number', value: 177 },
-        numericType: numericType(),
+        valueType: 'number',
       }]]),
     };
-    expect(parseCalc('calc(h + 180)', context)?.calculation).toEqual({
+    expect(parseMathValue(
+      'calc(h + 180)',
+      'number',
+      context,
+    )?.calculation).toEqual({
       type: 'number',
       value: 357,
-      numericType: numericType(),
+      hints: mathHints(),
     });
   });
 
   it('types an unresolved dimensional numeric variable', () => {
-    const lengthType = numericType([['length', 1]]);
-    const context: CalculationContext = {
+    const lengthHints = mathHints([['length', 1]]);
+    const context: MathContext = {
       numericVariables: new Map([['x', {
         value: null,
-        numericType: lengthType,
+        valueType: 'length',
       }]]),
     };
-    const sum = parseCalc('calc(x + 1px)', context)
-      ?.calculation as CalcSumNode;
+    const sum = parseMathValue('calc(x + 1px)', 'length', context)?.calculation;
+
+    if (sum?.type !== 'sum') {
+      throw new Error('Expected a sum node');
+    }
 
     expect(sum.children).toEqual([
       numericLeaf(
         { type: 'dimension', value: 1, unit: 'px' },
-        lengthType,
+        lengthHints,
       ),
       {
         type: 'variable',
         name: 'x',
-        numericType: lengthType,
+        hints: lengthHints,
       },
     ]);
-    expect(sum.numericType).toEqual(lengthType);
+    expect(sum.hints).toEqual(lengthHints);
   });
 
   it('simplifies an available dimensional variable', () => {
-    const lengthType = numericType([['length', 1]]);
-    const context: CalculationContext = {
+    const lengthHints = mathHints([['length', 1]]);
+    const context: MathContext = {
       numericVariables: new Map([['x', {
         value: { type: 'dimension', value: 2, unit: 'px' },
-        numericType: lengthType,
+        valueType: 'length',
       }]]),
     };
-    expect(parseCalc('calc(x + 1px)', context)?.calculation).toEqual({
+    expect(parseMathValue(
+      'calc(x + 1px)',
+      'length',
+      context,
+    )?.calculation).toEqual({
       type: 'dimension',
       value: 3,
       unit: 'px',
-      numericType: lengthType,
+      hints: lengthHints,
     });
   });
 
+  it('rejects a numeric variable value that does not match its type', () => {
+    expect(() => parseMathValue('calc(x)', 'length', {
+      numericVariables: new Map([['x', {
+        value: { type: 'number', value: 2 },
+        valueType: 'length',
+      }]]),
+    })).toThrow('Numeric variable value does not match its value type');
+  });
+
   it('rejects a numeric variable outside its defining context', () => {
-    expectBadCalc('calc(h + 180)');
+    expectBadMath('calc(h + 180)');
   });
 
   it.each([
@@ -1659,7 +1784,7 @@ describe('calc', () => {
     'calc(1\n+\t2)',
     'calc(1 /* before */ + /* after */ 2)',
   ])('accepts required whitespace around an additive operator in %j', (input) => {
-    expect(parseCalc(input)).not.toBeNull();
+    expect(parseMathValue(input, 'number')).not.toBeNull();
   });
 
   it.each([
@@ -1669,7 +1794,7 @@ describe('calc', () => {
     'calc(1/**/+ 2)',
     'calc(1 +/**/2)',
   ])('rejects an additive operator without required whitespace in %j', (input) => {
-    expectBadCalc(input);
+    expectBadMath(input);
   });
 
   it.each([
@@ -1678,7 +1803,7 @@ describe('calc', () => {
     'calc(2* 3)',
     'calc(2 * 3)',
   ])('allows optional whitespace around a multiplicative operator in %j', (input) => {
-    expect(parseCalc(input)).not.toBeNull();
+    expect(parseMathValue(input, 'number')).not.toBeNull();
   });
 
   it.each([
@@ -1688,138 +1813,52 @@ describe('calc', () => {
     'calc(1 2)',
     'calc(())',
   ])('commits after recognizing the malformed calculation %j', (input) => {
-    expectBadCalc(input);
+    expectBadMath(input);
   });
 
   it('supports at least 32 calculation terms', () => {
     const input = Array.from({ length: 32 }, (_, index) => index + 1).join(' + ');
 
-    expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
+    expect(parseMathValue(`calc(${input})`, 'number')?.calculation).toEqual({
       type: 'number',
       value: 528,
-      numericType: numericType(),
+      hints: mathHints(),
     });
   });
 
   it('supports at least 32 nested calculation levels', () => {
     const input = `${'('.repeat(32)}1${')'.repeat(32)}`;
 
-    expect(parseCalc(`calc(${input})`)?.calculation).toEqual({
+    expect(parseMathValue(`calc(${input})`, 'number')?.calculation).toEqual({
       type: 'number',
       value: 1,
-      numericType: numericType(),
+      hints: mathHints(),
     });
   });
 
   it('bounds aggregate calculation complexity', () => {
     const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
 
-    expectBadCalc(`calc(${input})`);
+    expectBadMath(`calc(${input})`);
   });
 
   it('keeps parser bookkeeping out of the supplied context', () => {
-    const context = { insideCalculation: true } as const;
+    const context = {};
 
-    expect(parseCalc('calc(1)', context)).not.toBeNull();
-    expect(context).toEqual({ insideCalculation: true });
-  });
-
-  it('returns null without advancing for another functional notation', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('min(1) calc(2)'));
-
-    expect(tryConsumeCalc(c)).toBeNull();
-    expect(c.pos()).toBe(0);
+    expect(parseMathValue('calc(1)', 'number', context)).not.toBeNull();
+    expect(context).toEqual({});
   });
 });
 
-function parseCalc(
-  input: string,
-  context: CalculationContext = {},
-  expectedType?: ExpectedCalculationType,
-): MathValue | null {
-  return parseWithExpectedType(parseCalcWithContext, input, context, expectedType);
-}
+type ExpectedMathHints = {
+  exponents: readonly (readonly [base: MathBase, power: number])[];
+  percentHint: MathBase | null;
+};
 
-function parseMathFunction(
-  input: string,
-  context: CalculationContext = {},
-  expectedType?: ExpectedCalculationType,
-): MathValue | null {
-  return parseWithExpectedType(
-    parseMathFunctionWithContext, input, context, expectedType,
-  );
-}
-
-function parseMathValue(
-  input: string,
-  context: CalculationContext = {},
-  expectedType?: ExpectedCalculationType,
-): MathValue | null {
-  return parseWithExpectedType(parseMathValueWithContext, input, context, expectedType);
-}
-
-function parseWithExpectedType(
-  parse: (
-    input: string,
-    expectedType: ExpectedCalculationType,
-    context?: CalculationContext,
-  ) => MathValue | null,
-  input: string,
-  context: CalculationContext,
-  expectedType?: ExpectedCalculationType,
-): MathValue | null {
-  const expectedTypes = expectedType === undefined
-    ? inferredExpectedTypes(context)
-    : [expectedType];
-
-  for (const candidate of expectedTypes) {
-    const result = parse(input, candidate, context);
-
-    if (result !== null) {
-      return result;
-    }
-  }
-
-  return null;
-}
-
-function inferredExpectedTypes(
-  context: CalculationContext,
-): readonly ExpectedCalculationType[] {
-  switch (context.percentageType) {
-    case 'length':
-      return ['length-percentage', ...EXPECTED_CALCULATION_TYPES];
-    case 'angle':
-      return ['angle-percentage', ...EXPECTED_CALCULATION_TYPES];
-    case 'time':
-      return ['time-percentage', ...EXPECTED_CALCULATION_TYPES];
-    case 'frequency':
-      return ['frequency-percentage', ...EXPECTED_CALCULATION_TYPES];
-    case 'percent':
-      return ['percentage', ...EXPECTED_CALCULATION_TYPES];
-    case 'resolution':
-    case 'flex':
-    case undefined:
-      return EXPECTED_CALCULATION_TYPES;
-  }
-}
-
-const EXPECTED_CALCULATION_TYPES = [
-  'number',
-  'percentage',
-  'length',
-  'angle',
-  'time',
-  'frequency',
-  'resolution',
-  'flex',
-  'dimension',
-] as const satisfies readonly ExpectedCalculationType[];
-
-function numericType(
-  exponents: readonly NumericExponent[] = [],
-  percentHint: NumericBaseType | null = null,
-): NumericType {
+function mathHints(
+  exponents: ExpectedMathHints['exponents'] = [],
+  percentHint: MathBase | null = null,
+): ExpectedMathHints {
   return {
     exponents,
     percentHint,
@@ -1833,104 +1872,30 @@ function numericLeaf<
   },
 >(
   value: Value,
-  type: NumericType,
-): Value & { numericType: NumericType; } {
-  return { ...value, numericType: type };
+  hints: ExpectedMathHints,
+): Value & { hints: ExpectedMathHints; } {
+  return { ...value, hints: hints };
 }
 
-function parseMathFunctionCalculation(
+function expectBadMath(
   input: string,
-  context: CalculationContext = {},
-  expectedType?: ExpectedCalculationType,
-): CalculationTree | null {
-  return parseMathFunction(input, context, expectedType)?.calculation ?? null;
-}
-
-function expectBadCalc(
-  input: string,
-  context: CalculationContext = {},
+  expectedType: MathValueType = 'number',
+  context: MathContext = {},
 ): void {
-  const c = new ComponentCursor(parseListOfComponentValues(input), {
-    context,
-  });
-  const result = tryConsumeCalc(c);
-
-  expect(result).toMatchObject({ kind: 'bad' });
-  expect(c.pos()).toBe(1);
+  expect(() => parseMathValue(input, expectedType, context)).toThrow();
 }
 
-function expectNoCalc(
+function expectNoMath(
   input: string,
-  expectedType: ExpectedCalculationType,
-  context: CalculationContext = {},
+  expectedType: MathValueType,
+  context: MathContext = {},
 ): void {
-  const parserContext = { ...context, expectedType };
-  const c = new ComponentCursor(parseListOfComponentValues(input), {
-    context: parserContext,
-  });
-
-  expect(tryConsumeCalc(c)).toBeNull();
-  expect(c.pos()).toBe(0);
-  expect(c.context).toBe(parserContext);
+  expect(parseMathValue(input, expectedType, context)).toBeNull();
 }
 
-function expectBadMathFunction(
-  input: string,
-  context: CalculationContext = {},
-): void {
-  const c = new ComponentCursor(parseListOfComponentValues(input), {
-    context,
-  });
-  const result = tryConsumeMathFunction(c);
+function mathValueNumber(value: MathValue): number | undefined {
+  const { calculation } = value;
 
-  expect(result).toMatchObject({ kind: 'bad' });
-  expect(c.pos()).toBe(1);
-}
-
-function expectNoMathFunction(
-  input: string,
-  expectedType: ExpectedCalculationType,
-  context: CalculationContext = {},
-): void {
-  const parserContext = { ...context, expectedType };
-  const c = new ComponentCursor(parseListOfComponentValues(input), {
-    context: parserContext,
-  });
-
-  expect(tryConsumeMathFunction(c)).toBeNull();
-  expect(c.pos()).toBe(0);
-  expect(c.context).toBe(parserContext);
-}
-
-function parseRawCalculation(
-  input: string,
-  context: CalculationContext = {},
-): CalculationTree {
-  const values = parseListOfComponentValues(input);
-  const c = new ComponentCursor(values, {
-    context: {
-      ...context,
-      insideCalculation: true,
-    } satisfies CalculationContext,
-  });
-  const result = tryConsumeCalcSum(c);
-
-  expect(isOk(result)).toBe(true);
-  expect(c.pos()).toBe(values.length);
-
-  if (!isOk(result)) {
-    throw new Error('Expected a valid raw calculation');
-  }
-
-  return result.value;
-}
-
-function simplifyInternalCalculation(input: string): CalculationTree {
-  const context: CalculationContext = { insideCalculation: true };
-  return simplifyCalculationTree(parseRawCalculation(input, context), context);
-}
-
-function calculationValue(calculation: CalculationTree): number | undefined {
   return 'value' in calculation && typeof calculation.value === 'number'
     ? calculation.value
     : undefined;

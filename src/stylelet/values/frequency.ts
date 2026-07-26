@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
   createFrequencyConsumer as createFrequencyLiteralConsumer,
@@ -25,7 +25,7 @@ export type FrequencyValue = FrequencyLiteral | MathValue<'frequency'>;
 
 export function parseFrequency(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -59,7 +59,7 @@ export const tryConsumeFrequency = createFrequencyConsumer();
 
 export function resolveFrequency(
   value: FrequencyValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -77,13 +77,13 @@ export function serializeFrequency(
 export function addFrequencies(
   a: FrequencyValue,
   b: FrequencyValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyValue {
   if (a.type === 'frequency' && b.type === 'frequency') {
     return addDimensions(a, b);
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -94,13 +94,13 @@ export function interpolateFrequencies(
   a: FrequencyValue,
   b: FrequencyValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyValue {
   if (a.type === 'frequency' && b.type === 'frequency') {
     return interpolateDimensions(a, b, p);
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -111,13 +111,13 @@ export function interpolateFrequencies(
 export function accumulateFrequencies(
   a: FrequencyValue,
   b: FrequencyValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): FrequencyValue {
   if (a.type === 'frequency' && b.type === 'frequency') {
     return accumulateDimensions(a, b);
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -126,7 +126,7 @@ export function accumulateFrequencies(
 
 function asMathValue(
   value: FrequencyValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'frequency'> {
   return value.type === 'math'
     ? value
@@ -135,7 +135,7 @@ function asMathValue(
 
 function frequencyRange(
   options: FrequencyConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }

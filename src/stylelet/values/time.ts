@@ -5,11 +5,11 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathFunctions, addMathFunctions,
+  accumulateMathValues, addMathValues,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, resolveMathValue, serializeMathValue,
-  type CalculationContext, type CalculationRange, type MathValue,
-} from './calc';
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
 import {
   createTimeConsumer as createTimeLiteralConsumer,
@@ -25,7 +25,7 @@ export type TimeValue = TimeLiteral | MathValue<'time'>;
 
 export function parseTime(
   input: ParserInput,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimeValue | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
@@ -59,7 +59,7 @@ export const tryConsumeTime = createTimeConsumer();
 
 export function resolveTime(
   value: TimeValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimeValue {
   return value.type === 'math'
     ? resolveMathValue(value, context)
@@ -77,13 +77,13 @@ export function serializeTime(
 export function addTimes(
   a: TimeValue,
   b: TimeValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimeValue {
   if (a.type === 'time' && b.type === 'time') {
     return addDimensions(a, b);
   }
 
-  return addMathFunctions(
+  return addMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -94,13 +94,13 @@ export function interpolateTimes(
   a: TimeValue,
   b: TimeValue,
   p: number,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimeValue {
   if (a.type === 'time' && b.type === 'time') {
     return interpolateDimensions(a, b, p);
   }
 
-  return interpolateMathFunctions(
+  return interpolateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     p,
@@ -111,13 +111,13 @@ export function interpolateTimes(
 export function accumulateTimes(
   a: TimeValue,
   b: TimeValue,
-  context: CalculationContext = {},
+  context: MathContext = {},
 ): TimeValue {
   if (a.type === 'time' && b.type === 'time') {
     return accumulateDimensions(a, b);
   }
 
-  return accumulateMathFunctions(
+  return accumulateMathValues(
     asMathValue(a, context),
     asMathValue(b, context),
     context,
@@ -126,7 +126,7 @@ export function accumulateTimes(
 
 function asMathValue(
   value: TimeValue,
-  context: CalculationContext,
+  context: MathContext,
 ): MathValue<'time'> {
   return value.type === 'math'
     ? value
@@ -135,7 +135,7 @@ function asMathValue(
 
 function timeRange(
   options: TimeConsumerOptions,
-): CalculationRange | undefined {
+): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
   }
