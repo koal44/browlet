@@ -212,8 +212,9 @@ describe('color values', () => {
     expect(parseColorValue('rgb(255, 0, 127)')).toEqual({
       kind: ColorKind.Numeric,
       space: 'srgb-legacy',
-      components: [1, 0, 127 / 255],
-      alpha: 1,
+      components: [255, 0, 127],
+      alpha: 255,
+      is8Bit: true,
     });
     expect(parseColorValue('rgba(100%, 0%, 50%, 25%)')).toEqual({
       kind: ColorKind.Numeric,
@@ -300,23 +301,22 @@ describe('color values', () => {
 
   // Adapted from WPT css/css-color/parsing/color-computed-rgb.html.
   it.each([
-    ['rgb(calc(infinity) 0 0)', [1, 0, 0], 1],
-    ['rgb(0 calc(-infinity) 0)', [0, 0, 0], 1],
-    ['rgb(0 0 calc(NaN))', [0, 0, 0], 1],
-    ['rgb(calc(0 / 0) 0 0)', [0, 0, 0], 1],
-    ['rgb(0 0 0 / calc(infinity))', [0, 0, 0], 1],
-    ['rgb(0 0 0 / calc(-infinity))', [0, 0, 0], 0],
-    ['rgb(0 0 0 / calc(NaN))', [0, 0, 0], 0],
+    ['rgb(calc(infinity) 0 0)', { components: [1, 0, 0], alpha: 1 }],
+    ['rgb(0 calc(-infinity) 0)', { components: [0, 0, 0], alpha: 1 }],
+    ['rgb(0 0 calc(NaN))', { components: [0, 0, 0], alpha: 1 }],
+    ['rgb(calc(0 / 0) 0 0)', { components: [0, 0, 0], alpha: 1 }],
+    ['rgb(0 0 0 / calc(infinity))', { components: [0, 0, 0], alpha: 255, is8Bit: true }],
+    ['rgb(0 0 0 / calc(-infinity))', { components: [0, 0, 0], alpha: 0 }],
+    ['rgb(0 0 0 / calc(NaN))', { components: [0, 0, 0], alpha: 0 }],
   ] as const)(
     'clamps special calculations in the computed color %s',
-    (input, components, alpha) => {
+    (input, expected) => {
       const declared = parseColorValue(input)!;
 
       expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
         kind: ColorKind.Numeric,
         space: 'srgb-legacy',
-        components,
-        alpha,
+        ...expected,
       });
     },
   );
@@ -744,6 +744,32 @@ describe('color values', () => {
       expect(serializeColorValue(color!)).toBe(serialized);
     }
   });
+
+  // Section 16.2.1 HTML-compatible serialization of sRGB values.
+  it('serializes opaque 8-bit sRGB colors in hexadecimal notation', () => {
+    const color = parseColorValue('#ff00ff')!;
+
+    expect(serializeColorValue(color, { htmlCompatible: true }))
+      .toBe('#ff00ff');
+    expect(serializeColorValue(color)).toBe('rgb(255, 0, 255)');
+  });
+
+  it.each([
+    ['#ff00ffed', 'rgba(255, 0, 255, 0.93)'],
+    ['rgb(255, 0, 255)', '#ff00ff'],
+    ['rgb(254.5, 0, 255)', 'rgb(254.5, 0, 255)'],
+    ['rgb(100%, 0%, 100%)', 'rgb(255, 0, 255)'],
+    ['hsl(300 100% 50%)', 'rgb(255, 0, 255)'],
+    ['color(display-p3 1 0 1)', 'color(display-p3 1 0 1)'],
+  ] as const)(
+    'serializes %s as %s in HTML-compatible mode',
+    (input, serialized) => {
+      expect(serializeColorValue(
+        parseColorValue(input)!,
+        { htmlCompatible: true },
+      )).toBe(serialized);
+    },
+  );
 
   // Section 16.2.2 serialization examples
   it.each([

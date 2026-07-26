@@ -1562,8 +1562,22 @@ function resolveRgbColor(
   alpha: number | undefined,
   context: CalculationContext,
 ): NumericColor | null {
+  const { components: values } = value;
+
+  if (alpha === 1 && is8BitRgbComponents(values)) {
+    return {
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: values.map(
+        (component) => component.value,
+      ) as ColorComponents,
+      alpha: 0xff,
+      is8Bit: true,
+    };
+  }
+
   const components = resolveColorComponents(
-    value.components,
+    values,
     1 / 0xff,
     1 / 100,
     context,
@@ -1590,6 +1604,24 @@ function resolveRgbColor(
     components: clamped,
     alpha,
   };
+}
+
+function is8BitRgbComponents(
+  values: RgbColor['components'],
+): values is [NumberLiteral, NumberLiteral, NumberLiteral] {
+  return values.every(is8BitRgbComponent);
+}
+
+function is8BitRgbComponent(
+  value: RgbComponent,
+): value is NumberLiteral {
+  return (
+    value !== 'none' &&
+    value.type === 'number' &&
+    Number.isInteger(value.value) &&
+    value.value >= 0 &&
+    value.value <= 0xff
+  );
 }
 
 function resolveHslColor(
@@ -2029,13 +2061,17 @@ function colorResolutionContextFor(context: unknown): ColorResolutionContext {
 // ██    ██ ██       ██    ██   ██  ██     ██ ██
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
+export type ColorSerializationContext = CalculationSerializationContext & {
+  htmlCompatible?: boolean;
+};
+
 export function serializeColorValue(
   value: ColorValue,
-  context: CalculationSerializationContext = {},
+  context: ColorSerializationContext = {},
 ): string {
   switch (value.kind) {
     case ColorKind.Numeric:
-      return serializeNumericColor(value);
+      return serializeNumericColor(value, context);
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
     case ColorKind.Rgb:
@@ -2268,10 +2304,13 @@ function serializeColorAlpha(
     : serializeCssNumber(clamped);
 }
 
-function serializeNumericColor(value: NumericColor): string {
+function serializeNumericColor(
+  value: NumericColor,
+  context: ColorSerializationContext,
+): string {
   switch (value.space) {
     case 'srgb-legacy':
-      return serializeNumericRgb(value);
+      return serializeNumericRgb(value, context);
     case 'hsl':
       return serializeNumericHsl(value);
     case 'hwb':
@@ -2298,7 +2337,16 @@ function serializeNumericColor(value: NumericColor): string {
 
 function serializeNumericRgb(
   value: NumericColor,
+  context: ColorSerializationContext,
 ): string {
+  if (context.htmlCompatible) {
+    const htmlCompatible = serializeHtmlCompatibleRgb(value);
+
+    if (htmlCompatible !== null) {
+      return htmlCompatible;
+    }
+  }
+
   if (
     value.components.some((component) => component === undefined) ||
     value.alpha === undefined
@@ -2320,6 +2368,29 @@ function serializeNumericRgb(
   return alpha === null
     ? `rgb(${components.join(', ')})`
     : `rgba(${components.join(', ')}, ${alpha})`;
+}
+
+function serializeHtmlCompatibleRgb(value: NumericColor): string | null {
+  if (!value.is8Bit || value.alpha !== 0xff) {
+    return null;
+  }
+
+  let serialized = '#';
+
+  for (const component of value.components) {
+    if (
+      component === undefined ||
+      !Number.isInteger(component) ||
+      component < 0 ||
+      component > 0xff
+    ) {
+      return null;
+    }
+
+    serialized += component.toString(16).padStart(2, '0');
+  }
+
+  return serialized;
 }
 
 function serialize8BitAlpha(value: number): string | null {

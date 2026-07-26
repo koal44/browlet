@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 import {
   runScenarios,
   type BrowserName, type CaseStatus,
@@ -2412,6 +2413,40 @@ const colorSerializations: ColorSerializationCase[] = [
 const colorSerializationSheetId = 'color-declared-serialization';
 
 runScenarios('CSS declared color serialization oracle', 'skip', [
+  {
+    name: 'compares HTML-compatible and CSS sRGB serialization',
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const result = await page.evaluate(() => {
+        const values = [
+          'rgb(255, 0, 255)', 'rgb(254.5, 0, 255)',
+          'rgb(99.8%, 0%, 100%)', '#ff00ffed',
+        ];
+        const canvas = document.createElement('canvas').getContext('2d')!;
+        const style = document.createElement('div').style;
+
+        return {
+          html: values.map((value) => {
+            canvas.fillStyle = value;
+            return canvas.fillStyle;
+          }),
+          css: values.map((value) => {
+            style.color = value;
+            return style.color;
+          }),
+        };
+      });
+
+      expect(result).toEqual({
+        html: ['#ff00ff', '#ff00ff', '#fe00ff', 'rgba(255, 0, 255, 0.93)'],
+        css: [
+          'rgb(255, 0, 255)', 'rgb(255, 0, 255)',
+          'rgb(254, 0, 255)', 'rgba(255, 0, 255, 0.93)',
+        ],
+      });
+    },
+  },
   {
     name: 'serializes declared colors',
     engines: ['native'],
