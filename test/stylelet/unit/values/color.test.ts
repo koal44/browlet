@@ -125,16 +125,17 @@ describe('color values', () => {
       space: 'srgb-legacy',
       components: [0, 0, 0],
       alpha: 0,
+      is8Bit: true,
     });
   });
 
   it.each([
-    ['#0f8', [0, 1, 136 / 255], 1],
-    ['#0f8c', [0, 1, 136 / 255], 204 / 255],
-    ['#00ff88', [0, 1, 136 / 255], 1],
-    ['#00ff88cc', [0, 1, 136 / 255], 204 / 255],
-    ['#AbC', [170 / 255, 187 / 255, 204 / 255], 1],
-    ['#\\66 00', [1, 0, 0], 1],
+    ['#0f8', [0, 255, 136], 255],
+    ['#0f8c', [0, 255, 136], 204],
+    ['#00ff88', [0, 255, 136], 255],
+    ['#00ff88cc', [0, 255, 136], 204],
+    ['#AbC', [170, 187, 204], 255],
+    ['#\\66 00', [255, 0, 0], 255],
   ] as const)(
     'resolves the declared hex color %s',
     (text, components, alpha) => {
@@ -143,6 +144,7 @@ describe('color values', () => {
         space: 'srgb-legacy',
         components,
         alpha,
+        is8Bit: true,
       });
     },
   );
@@ -169,8 +171,9 @@ describe('color values', () => {
     expect(resolveColorValue(red, { stage: 'computed' })).toEqual({
       kind: ColorKind.Numeric,
       space: 'srgb-legacy',
-      components: [1, 0, 0],
-      alpha: 1,
+      components: [255, 0, 0],
+      alpha: 255,
+      is8Bit: true,
     });
   });
 
@@ -318,14 +321,78 @@ describe('color values', () => {
     },
   );
 
-  // Adapted from WPT css/css-color/parsing/color-computed-rgb.html.
+  // Computed cases adapted from WPT color-computed-color-function.html and
+  // color-computed-lab.html; declared cases document the value lifecycle.
   it.each([
-    ['rgb(none none none)', [0, 0, 0], 1],
-    ['rgb(none none none / none)', [0, 0, 0], 0],
-    ['rgb(128 none none / none)', [128 / 255, 0, 0], 0],
-    ['rgb(20% none none)', [0.2, 0, 0], 1],
+    [
+      'rgb(calc(NaN) 0 0)',
+      'rgb(0, 0, 0)',
+      'rgb(0, 0, 0)',
+    ],
+    [
+      'hsl(calc(NaN) 100% 50%)',
+      'rgb(255, 0, 0)',
+      'rgb(255, 0, 0)',
+    ],
+    [
+      'hsl(0 calc(NaN) 50%)',
+      'rgb(127.5, 127.5, 127.5)',
+      'rgb(127.5, 127.5, 127.5)',
+    ],
+    [
+      'hsl(0 100% calc(NaN))',
+      'rgb(0, 0, 0)',
+      'rgb(0, 0, 0)',
+    ],
+    [
+      'hwb(0 calc(NaN) 0)',
+      'rgb(255, 0, 0)',
+      'rgb(255, 0, 0)',
+    ],
+    [
+      'hwb(0 0 calc(NaN))',
+      'rgb(255, 0, 0)',
+      'rgb(255, 0, 0)',
+    ],
+    [
+      'lab(50 calc(NaN) 0)',
+      'lab(50 calc(NaN) 0)',
+      'lab(50 0 0)',
+    ],
+    [
+      'lch(50 calc(NaN) 20)',
+      'lch(50 calc(NaN) 20)',
+      'lch(50 0 20)',
+    ],
+    [
+      'color(display-p3 calc(NaN) 0 0)',
+      'color(display-p3 calc(NaN) 0 0)',
+      'color(display-p3 0 0 0)',
+    ],
   ] as const)(
-    'uses zero for missing components in the computed color %s',
+    'clamps special color calculations at the correct stage for %s',
+    (input, declaredSerialization, computedSerialization) => {
+      const declared = parseColorValue(input)!;
+      const context = { stage: 'computed' } as const;
+      const computed = resolveColorValue(declared, context);
+
+      expect(serializeColorValue(declared)).toBe(declaredSerialization);
+      expect(serializeColorValue(computed, context))
+        .toBe(computedSerialization);
+    },
+  );
+
+  it.each([
+    ['rgb(none none none)', [undefined, undefined, undefined], 1],
+    [
+      'rgb(none none none / none)',
+      [undefined, undefined, undefined],
+      undefined,
+    ],
+    ['rgb(128 none none / none)', [128 / 255, undefined, undefined], undefined],
+    ['rgb(20% none none)', [0.2, undefined, undefined], 1],
+  ] as const)(
+    'preserves missing components in the computed color %s',
     (input, components, alpha) => {
       const declared = parseColorValue(input)!;
 
@@ -353,7 +420,7 @@ describe('color values', () => {
     });
   });
 
-  it('resolves modern hsl and hsla functions to numerical sRGB', () => {
+  it('resolves modern HSL without missing components to numerical sRGB', () => {
     expect(parseColorValue('hsl(120deg 100% 50 / 0.5)')).toEqual({
       kind: ColorKind.Numeric,
       space: 'srgb-legacy',
@@ -362,24 +429,27 @@ describe('color values', () => {
     });
     expect(parseColorValue('hsla(none 0 100% / none)')).toEqual({
       kind: ColorKind.Numeric,
-      space: 'srgb-legacy',
-      components: [1, 1, 1],
-      alpha: 0,
+      space: 'hsl',
+      components: [undefined, 0, 100],
+      alpha: undefined,
     });
   });
 
-  // Adapted from WPT css/css-color/parsing/color-computed-hsl.html.
   it.each([
-    ['hsl(none none none)', [0, 0, 0], 1],
-    ['hsl(none none none / none)', [0, 0, 0], 0],
-    ['hsl(120 none 50%)', [0.5, 0.5, 0.5], 1],
-    ['hsl(none 100% 50%)', [1, 0, 0], 1],
+    ['hsl(none none none)', [undefined, undefined, undefined], 1],
+    [
+      'hsl(none none none / none)',
+      [undefined, undefined, undefined],
+      undefined,
+    ],
+    ['hsl(120 none 50%)', [120, undefined, 50], 1],
+    ['hsl(none 100% 50%)', [undefined, 100, 50], 1],
   ] as const)(
-    'uses zero for missing HSL components in %s',
+    'preserves missing HSL components in %s',
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
         kind: ColorKind.Numeric,
-        space: 'srgb-legacy',
+        space: 'hsl',
         components,
         alpha,
       });
@@ -407,7 +477,7 @@ describe('color values', () => {
     });
   });
 
-  it('resolves hwb functions to numerical sRGB', () => {
+  it('resolves HWB without missing components to numerical sRGB', () => {
     expect(parseColorValue('hwb(120deg 20% 30 / 0.5)')).toEqual({
       kind: ColorKind.Numeric,
       space: 'srgb-legacy',
@@ -416,9 +486,9 @@ describe('color values', () => {
     });
     expect(parseColorValue('hwb(none 0 100% / none)')).toEqual({
       kind: ColorKind.Numeric,
-      space: 'srgb-legacy',
-      components: [0, 0, 0],
-      alpha: 0,
+      space: 'hwb',
+      components: [undefined, 0, 100],
+      alpha: undefined,
     });
   });
 
@@ -443,28 +513,31 @@ describe('color values', () => {
     });
   });
 
-  it('uses zero for missing hwb components outside interpolation', () => {
+  it('preserves missing HWB components outside interpolation', () => {
     expect(parseColorValue('hwb(none none 100%)')).toEqual({
       kind: ColorKind.Numeric,
-      space: 'srgb-legacy',
-      components: [0, 0, 0],
+      space: 'hwb',
+      components: [undefined, undefined, 100],
       alpha: 1,
     });
   });
 
-  // Adapted from WPT css/css-color/parsing/color-computed-hwb.html.
   it.each([
-    ['hwb(none none none)', [1, 0, 0], 1],
-    ['hwb(none none none / none)', [1, 0, 0], 0],
-    ['hwb(120 80% none)', [0.8, 1, 0.8], 1],
-    ['hwb(120 none 50%)', [0, 0.5, 0], 1],
-    ['hwb(none 100% 50% / none)', [2 / 3, 2 / 3, 2 / 3], 0],
+    ['hwb(none none none)', [undefined, undefined, undefined], 1],
+    [
+      'hwb(none none none / none)',
+      [undefined, undefined, undefined],
+      undefined,
+    ],
+    ['hwb(120 80% none)', [120, 80, undefined], 1],
+    ['hwb(120 none 50%)', [120, undefined, 50], 1],
+    ['hwb(none 100% 50% / none)', [undefined, 100, 50], undefined],
   ] as const)(
-    'uses zero for missing HWB components in %s',
+    'preserves missing HWB components in %s',
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
         kind: ColorKind.Numeric,
-        space: 'srgb-legacy',
+        space: 'hwb',
         components,
         alpha,
       });
@@ -523,6 +596,7 @@ describe('color values', () => {
   it.each([
     ['lab(400 -200 200 / 50%)', 'lab', [100, -200, 200], 0.5],
     ['lch(-40 -20 -700deg / 110%)', 'lch', [0, 0, 20], 1],
+    ['lch(50 -20 -20deg)', 'lch', [50, 0, 340], 1],
     ['oklab(4 -2 2 / none)', 'oklab', [1, -2, 2], undefined],
     ['oklch(-0.4 -0.2 740deg / 50%)', 'oklch', [0, 0, 20], 0.5],
   ] as const)(
@@ -650,42 +724,17 @@ describe('color values', () => {
 
   it('serializes parsed color functions with canonical spelling and spacing', () => {
     const cases = [
-      [
-        ' RGBa( 1 ,  2, 3 , 50% ) ',
-        'rgba(1, 2, 3, 0.5)',
-      ],
-      [
-        ' HSLa( .5turn , 25% , 75% , 20% ) ',
-        'rgba(175.3125, 207.1875, 207.1875, 0.2)',
-      ],
-      [
-        ' HWB( .5turn   20%  30% / 50% ) ',
-        'rgba(51, 178.5, 178.5, 0.5)',
-      ],
-      [
-        ' LAB( 50%  20  -30% / 40% ) ',
-        'lab(50 20 -37.5 / 0.4)',
-      ],
-      [
-        ' OKLAB( 50%  20%  -30% / 40% ) ',
-        'oklab(0.5 0.08 -0.12 / 0.4)',
-      ],
-      [
-        ' LCH( 50%  40%  270deg / 25% ) ',
-        'lch(50 60 270 / 0.25)',
-      ],
-      [
-        ' OKLCH( .5  20%  .25turn / 25% ) ',
-        'oklch(0.5 0.08 90 / 0.25)',
-      ],
-      [
-        ' COLOR( DISPLAY-P3  .1  20%  none / 25% ) ',
-        'color(display-p3 0.1 0.2 none / 0.25)',
-      ],
-      [
-        ' COLOR( XYZ  0  0  0 ) ',
-        'color(xyz-d65 0 0 0)',
-      ],
+      [' RGBa( 1 ,  2, 3 , 50% ) ', 'rgba(1, 2, 3, 0.5)'],
+      [' HSLa( .5turn , 25% , 75% , 20% ) ', 'rgba(175.3125, 207.1875, 207.1875, 0.2)'],
+      [' HWB( .5turn   20%  30% / 50% ) ', 'rgba(51, 178.5, 178.5, 0.5)'],
+      ['rgb(29 164 192 / 95%)', 'rgba(29, 164, 192, 0.95)'],
+      ['hwb(740deg 20% 30% / 50%)', 'rgba(178.5, 93.5, 51, 0.5)'],
+      [' LAB( 50%  20  -30% / 40% ) ', 'lab(50 20 -37.5 / 0.4)'],
+      [' OKLAB( 50%  20%  -30% / 40% ) ', 'oklab(0.5 0.08 -0.12 / 0.4)'],
+      [' LCH( 50%  40%  270deg / 25% ) ', 'lch(50 60 270 / 0.25)'],
+      [' OKLCH( .5  20%  .25turn / 25% ) ', 'oklch(0.5 0.08 90 / 0.25)'],
+      [' COLOR( DISPLAY-P3  .1  20%  NoNe / 25% ) ', 'color(display-p3 0.1 0.2 none / 0.25)'],
+      [' COLOR( XYZ  0  0  0 ) ', 'color(xyz-d65 0 0 0)'],
     ];
 
     for (const [input, serialized] of cases) {
@@ -694,6 +743,133 @@ describe('color values', () => {
       expect(color).not.toBeNull();
       expect(serializeColorValue(color!)).toBe(serialized);
     }
+  });
+
+  // Section 16.2.2 serialization examples
+  it.each([
+    ['rgb(29 164 192 / 95%)', 'rgba(29, 164, 192, 0.95)'],
+    ['hwb(740deg 20% 30% / 50%)', 'rgba(178.5, 93.5, 51, 0.5)'],
+    ['hwb(20 20% 30% / 50%)', 'rgba(178.5, 93.5, 51, 0.5)'],
+    ['hwb(20 none 30% / none)', 'hwb(20 none 30% / none)'],
+    ['rgb(none 0 0)', 'color(srgb none 0 0)'],
+    ['rgb(146.064 107.457 131.223)', 'rgb(146.064, 107.457, 131.223)'],
+    ['rgb(57.28% 42.14% 51.46%)', 'rgb(146.064, 107.457, 131.223)'],
+    ['goldenrod', 'rgb(218, 165, 32)'],
+  ] as const)(
+    'matches the section 16.2.2 serialization example %s',
+    (input, serialized) => {
+      const context = { stage: 'computed' } as const;
+      const color = resolveColorValue(parseColorValue(input)!, context);
+
+      expect(serializeColorValue(color, context)).toBe(serialized);
+    },
+  );
+
+  // Section 16.3 serialization examples
+  it.each([
+    ['lab(56.200% 0.000 83.600)', 'lab(56.2 0 83.6)'],
+    ['lab(56.200% 0.000 66.88%)', 'lab(56.2 0 83.6)'],
+    ['lch(37% 105.0 305.00)', 'lch(37 105 305)'],
+    ['lch(56.2% 83.6 357.4 / 93%)', 'lch(56.2 83.6 357.4 / 0.93)'],
+  ] as const)(
+    'matches the section 16.3 serialization example %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  // Adapted from WPT css/css-color/parsing/color-computed-lab.html.
+  it.each([
+    ['lab(none none none / none)', 'lab(none none none / none)'],
+    ['lab(20% -50% 90% / 0.5)', 'lab(20 -62.5 112.5 / 0.5)'],
+    ['lch(10 20 740deg)', 'lch(10 20 20)'],
+    ['lch(calc(NaN) 0 0)', 'lch(0 0 0)'],
+  ] as const)(
+    'matches section 16.3 WPT serialization coverage for %s',
+    (input, serialized) => {
+      const context = { stage: 'computed' } as const;
+      const color = resolveColorValue(parseColorValue(input)!, context);
+
+      expect(serializeColorValue(color, context)).toBe(serialized);
+    },
+  );
+
+  // Section 16.4 serialization examples
+  // The first input corrects the specification's omitted "%" after 54.0.
+  it.each([
+    ['oklab(54.0% -25% -5%)', 'oklab(0.54 -0.1 -0.02)'],
+    ['oklch(56.43% 0.0900 123.40)', 'oklch(0.5643 0.09 123.4)'],
+    ['oklch(53.85% 0.1725 320.67 / 70%)', 'oklch(0.5385 0.1725 320.67 / 0.7)'],
+  ] as const)(
+    'matches the section 16.4 serialization example %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  // Adapted from WPT css/css-color/parsing/color-computed-lab.html.
+  it.each([
+    ['oklab(none none none / none)', 'oklab(none none none / none)'],
+    ['oklab(20% 70% -80% / 0.5)', 'oklab(0.2 0.28 -0.32 / 0.5)'],
+    ['oklch(0.1 0.2 -700deg)', 'oklch(0.1 0.2 20)'],
+    ['oklch(calc(NaN) 0 0)', 'oklch(0 0 0)'],
+  ] as const)(
+    'matches section 16.4 WPT serialization coverage for %s',
+    (input, serialized) => {
+      const context = { stage: 'computed' } as const;
+      const color = resolveColorValue(parseColorValue(input)!, context);
+
+      expect(serializeColorValue(color, context)).toBe(serialized);
+    },
+  );
+
+  // Section 16.5 serialization examples. The specification's first and third
+  // results conditionally retain two and three decimal places, respectively;
+  // retaining the additional authored precision is also conforming.
+  it.each([
+    [
+      'color(dIsPlAy-P3  0.964  0.763  0.787)',
+      'color(display-p3 0.964 0.763 0.787)',
+    ],
+    [
+      'color(rec2020 0.400 0.660 0.340)',
+      'color(rec2020 0.4 0.66 0.34)',
+    ],
+    [
+      'color(prophoto-rgb 0.2804 0.40283 0.42259/85%)',
+      'color(prophoto-rgb 0.2804 0.40283 0.42259 / 0.85)',
+    ],
+  ] as const)(
+    'matches the section 16.5 serialization example %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  // Adapted from WPT css/css-color/parsing/color-computed-color-function.html.
+  it.each([
+    [
+      'color(srgb 100% none 20% / 23.7%)',
+      'color(srgb 1 none 0.2 / 0.237)',
+    ],
+    ['color(srgb 400% 0 10 / 50%)', 'color(srgb 4 0 10 / 0.5)'],
+    ['color(xyz 0.2 none 25% / none)', 'color(xyz-d65 0.2 none 0.25 / none)'],
+  ] as const)(
+    'matches section 16.5 WPT serialization coverage for %s',
+    (input, serialized) => {
+      const context = { stage: 'computed' } as const;
+      const color = resolveColorValue(parseColorValue(input)!, context);
+
+      expect(serializeColorValue(color, context)).toBe(serialized);
+    },
+  );
+
+  // Section 16.6 serialization of currentcolor.
+  it('serializes computed currentcolor in ASCII lowercase', () => {
+    const context = { stage: 'computed' } as const;
+    const color = resolveColorValue(parseColorValue('currentColor')!, context);
+
+    expect(serializeColorValue(color, context)).toBe('currentcolor');
   });
 
   it('serializes context-dependent calc color components', () => {
@@ -731,19 +907,21 @@ describe('color values', () => {
     ],
   ] as const;
 
-  it.todo.each(calculatedAlphaSerializationCases)(
+  it.each(calculatedAlphaSerializationCases)(
     'normalizes calculated alpha in the declared color %s',
     (input, declared) => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(declared);
     },
   );
 
-  it.todo.each(calculatedAlphaSerializationCases)(
+  it.each(calculatedAlphaSerializationCases)(
     'clamps calculated alpha in the computed color %s',
     (input, _declared, computed) => {
+      const context = { stage: 'computed' } as const;
+
       expect(serializeColorValue(
-        parseColorValue(input)!,
-        { stage: 'computed' },
+        resolveColorValue(parseColorValue(input)!, context),
+        context,
       )).toBe(computed);
     },
   );
@@ -770,6 +948,19 @@ describe('color values', () => {
     })).toBe('currentcolor');
   });
 
+  it('serializes computed sRGB keywords numerically', () => {
+    const context = { stage: 'computed' } as const;
+
+    expect(serializeColorValue(resolveColorValue(
+      parseColorValue('goldenrod')!,
+      context,
+    ))).toBe('rgb(218, 165, 32)');
+    expect(serializeColorValue(resolveColorValue(
+      parseColorValue('transparent')!,
+      context,
+    ))).toBe('rgba(0, 0, 0, 0)');
+  });
+
   it('serializes numerical sRGB colors in legacy rgb form', () => {
     expect(serializeColorValue({
       kind: ColorKind.Numeric,
@@ -793,6 +984,18 @@ describe('color values', () => {
       alpha: undefined,
     })).toBe('color(srgb none 0.5 0 / none)');
   });
+
+  it.each([
+    ['rgb(none 0 0)', 'color(srgb none 0 0)'],
+    ['rgb(none 0 0 / none)', 'color(srgb none 0 0 / none)'],
+    ['hsl(none 0% 100% / none)', 'hsl(none 0% 100% / none)'],
+    ['hwb(20 none 30% / none)', 'hwb(20 none 30% / none)'],
+  ] as const)(
+    'preserves missing components while serializing %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
 
   it('keeps color(srgb) distinct from rgb()', () => {
     expect(serializeColorValue({
@@ -823,6 +1026,32 @@ describe('color values', () => {
       alpha: Number.NaN,
     })).toBe('color(display-p3 1 0 0 / 0)');
   });
+
+  it.each([
+    // CSS Color 4 examples 6 and 7.
+    ['rgb(100% 0% 0% / 50%)', 'rgba(255, 0, 0, 0.5)'],
+    ['rgba(100%, 0%, 0%, 0.5)', 'rgba(255, 0, 0, 0.5)'],
+    ['rgba(0, 0, 0, 12.3456789%)', 'rgba(0, 0, 0, 0.123457)'],
+    ['rgb(0 0 0 / 12.3456789%)', 'rgba(0, 0, 0, 0.123457)'],
+    ['color(display-p3 0 0 0 / 70%)', 'color(display-p3 0 0 0 / 0.7)'],
+    ['color(display-p3 0 0 0 / 120%)', 'color(display-p3 0 0 0)'],
+  ] as const)(
+    'serializes the alpha value in %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  it.each([
+    ['#ff000080', 'rgba(255, 0, 0, 0.5)'],
+    ['#ff0000ed', 'rgba(255, 0, 0, 0.93)'],
+    ['#ff0000ec', 'rgba(255, 0, 0, 0.925)'],
+  ] as const)(
+    'serializes the 8-bit alpha value in %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
 
   it('serializes numerical HSL and HWB colors with missing components', () => {
     expect(serializeColorValue({
@@ -991,6 +1220,17 @@ describe('color values', () => {
       space: 'srgb',
       components: [0, 1, 0],
       alpha: 0.5,
+    });
+  });
+
+  it('normalizes 8-bit sRGB values before color conversion', () => {
+    const color = parseColorValue('#ff0080cc') as NumericColor;
+
+    expect(convertNumericColor(color, 'srgb')).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb',
+      components: [1, 0, 128 / 255],
+      alpha: 0.8,
     });
   });
 

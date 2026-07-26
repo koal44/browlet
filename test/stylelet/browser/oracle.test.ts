@@ -1,4 +1,7 @@
-import { runScenarios } from '../../harness/browser/scenarios';
+import {
+  runScenarios,
+  type BrowserName, type CaseStatus,
+} from '../../harness/browser/scenarios';
 
 runScenarios('style oracle selector prelude boundaries', 'skip', [
   {
@@ -2200,143 +2203,236 @@ runScenarios('CSS zero and length-percentage combination oracle', 'skip', [
   },
 ]);
 
+type ColorSerializationCase = {
+  prop?: string;
+  decl: string;
+  expect: string | null;
+  browsers?: BrowserName[];
+  status?: CaseStatus;
+};
+
+function failingColorSerialization(
+  decl: string,
+  expect: string,
+  browsers: BrowserName[] = ['chromium', 'firefox', 'webkit'],
+): ColorSerializationCase[] {
+  return browsers.map((browser) => ({
+    decl,
+    expect,
+    browsers: [browser],
+    status: 'fail',
+  }));
+}
+
+const colorSerializations: ColorSerializationCase[] = [
+  // CSS Color 4 examples 6 and 7.
+  { decl: 'rgb(100% 0% 0% / 50%)', expect: 'rgba(255, 0, 0, 0.5)' },
+  { decl: 'rgba(100%, 0%, 0%, 0.5)', expect: 'rgba(255, 0, 0, 0.5)' },
+
+  // CSS Color 4 requires declared missing components to survive
+  // serialization. Current WPTs and engines still replace them with zero.
+  // All three engines currently return "rgb(0, 0, 0)".
+  ...failingColorSerialization(
+    'rgb(none 0 0)',
+    'color(srgb none 0 0)',
+  ),
+  // All three engines currently return "rgba(0, 0, 0, 0)".
+  ...failingColorSerialization(
+    'rgb(none 0 0 / none)',
+    'color(srgb none 0 0 / none)',
+  ),
+  // All three engines currently return "rgba(255, 255, 255, 0)".
+  ...failingColorSerialization(
+    'hsl(none 0% 100% / none)',
+    'hsl(none 0% 100% / none)',
+  ),
+  // All three engines currently return "rgba(179, 60, 0, 0)".
+  ...failingColorSerialization(
+    'hwb(20 none 30% / none)',
+    'hwb(20 none 30% / none)',
+  ),
+
+  // Other sRGB declared values.
+  { decl: 'ReD', expect: 'red' },
+  { decl: 'transparent', expect: 'transparent' },
+  { decl: '#FF000080', expect: 'rgba(255, 0, 0, 0.5)' },
+  { decl: '#FF0000ED', expect: 'rgba(255, 0, 0, 0.93)' },
+  { decl: '#FF0000EC', expect: 'rgba(255, 0, 0, 0.925)' },
+  { decl: 'CanvasText', expect: 'canvastext' },
+  { decl: 'WindowText', expect: 'windowtext' },
+  { decl: 'hsl(120 100% 50%)', expect: 'rgb(0, 255, 0)' },
+
+  // Other color spaces and contextual colors.
+  { decl: 'lab(50% 40 30)', expect: 'lab(50 40 30)' },
+  { decl: 'color(display-p3 1 0 0)', expect: 'color(display-p3 1 0 0)' },
+  { decl: 'currentColor', expect: 'currentcolor' },
+
+  // Reducible and contextual color calculations.
+  {
+    decl: 'COLOR(DISPLAY-P3 calc(.1 + .2) 0 0)',
+    expect: 'color(display-p3 0.3 0 0)',
+    browsers: ['chromium', 'firefox'],
+  },
+  {
+    decl: 'COLOR(DISPLAY-P3 calc(.1 + .2) 0 0)',
+    expect: 'color(display-p3 calc(0.3) 0 0)',
+    browsers: ['webkit'],
+  },
+  {
+    decl: 'COLOR(DISPLAY-P3 calc(sign(1em - 1px)) 0 0 / calc(.25 + .25))',
+    expect: 'color(display-p3 sign(1em - 1px) 0 0 / calc(0.5))',
+    browsers: ['chromium', 'webkit'],
+  },
+  {
+    decl: 'COLOR(DISPLAY-P3 calc(sign(1em - 1px)) 0 0 / calc(.25 + .25))',
+    expect: null,
+    browsers: ['firefox'],
+  },
+  {
+    decl: 'HSL(calc(60deg + 60deg) 100% 50%)',
+    expect: 'rgb(0, 255, 0)',
+  },
+  {
+    decl: 'HSL(calc(sign(1em - 1px) * 120deg) 100% 50%)',
+    expect: 'hsl(calc(120deg * sign(1em - 1px)) 100 50)',
+    browsers: ['chromium', 'webkit'],
+  },
+  {
+    decl: 'HSL(calc(sign(1em - 1px) * 120deg) 100% 50%)',
+    expect: null,
+    browsers: ['firefox'],
+  },
+  {
+    prop: 'width',
+    decl: 'calc(sign(1em - 1px) * 1px)',
+    expect: 'calc(1px * sign(1em - 1px))',
+  },
+  {
+    decl: 'color(display-p3 sign(-1) 0 0)',
+    expect: 'color(display-p3 -1 0 0)',
+    browsers: ['chromium', 'firefox'],
+  },
+  {
+    decl: 'color(display-p3 sign(-1) 0 0)',
+    expect: 'color(display-p3 calc(-1) 0 0)',
+    browsers: ['webkit'],
+  },
+
+  // Top-level special calculations are clamped at computed-value time.
+  // The sRGB family is the historical exception and clamps them immediately.
+  { decl: 'rgb(calc(NaN) 0 0)', expect: 'rgb(0, 0, 0)' },
+  { decl: 'hsl(calc(NaN) 100% 50%)', expect: 'rgb(255, 0, 0)' },
+  { decl: 'lab(50 calc(NaN) 0)', expect: 'lab(50 calc(NaN) 0)' },
+  {
+    decl: 'lch(50 calc(NaN) 20)',
+    expect: 'lch(50 calc(NaN) 20)',
+    browsers: ['chromium', 'webkit'],
+  },
+  // Firefox currently clamps calculated chroma in the declared value.
+  {
+    decl: 'lch(50 calc(NaN) 20)',
+    expect: 'lch(50 calc(NaN) 20)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'color(display-p3 calc(NaN) 0 0)',
+    expect: 'color(display-p3 calc(NaN) 0 0)',
+  },
+
+  // CSS Color 4 does not explicitly bound HSL lightness here and leaves
+  // negative HWB white/black components unspecified. These cases document
+  // current engine behavior only. Implementations diverge for indeterminate
+  // infinity arithmetic, so we do not infer additional clamping rules from it.
+  { decl: 'hsl(0 calc(infinity) 50%)', expect: 'rgb(255, 0, 0)' },
+  { decl: 'hsl(0 calc(-infinity) 50%)', expect: 'rgb(128, 128, 128)' },
+  { decl: 'hsl(0 100% calc(-infinity))', expect: 'rgb(0, 0, 0)' },
+  {
+    decl: 'hsl(0 100% calc(infinity))',
+    expect: 'rgb(NaN, 255, 255)',
+    browsers: ['chromium'],
+  },
+  {
+    decl: 'hsl(0 100% calc(infinity))',
+    expect: 'rgb(255, 255, 255)',
+    browsers: ['firefox'],
+  },
+  {
+    decl: 'hsl(0 100% calc(infinity))',
+    expect: 'rgb(0, 255, 255)',
+    browsers: ['webkit'],
+  },
+  { decl: 'hwb(0 0 calc(infinity))', expect: 'rgb(0, 0, 0)' },
+  { decl: 'hwb(0 0 calc(-infinity))', expect: 'rgb(255, 0, 0)' },
+  {
+    decl: 'hwb(0 calc(infinity) 0)',
+    expect: 'rgb(NaN, NaN, NaN)',
+    browsers: ['chromium'],
+  },
+  {
+    decl: 'hwb(0 calc(infinity) 0)',
+    expect: 'rgb(255, 255, 255)',
+    browsers: ['firefox'],
+  },
+  {
+    decl: 'hwb(0 calc(infinity) 0)',
+    expect: 'rgb(0, 0, 0)',
+    browsers: ['webkit'],
+  },
+  {
+    decl: 'hwb(0 calc(-infinity) 0)',
+    expect: 'rgb(255, 0, 0)',
+    browsers: ['chromium', 'firefox'],
+  },
+  {
+    decl: 'hwb(0 calc(-infinity) 0)',
+    expect: 'rgb(0, 0, 0)',
+    browsers: ['webkit'],
+  },
+
+  // CSS Color 4 preserves calculated alpha in declared serialization.
+  // All three engines currently clamp this sRGB alpha immediately.
+  ...failingColorSerialization(
+    'rgb(0 0 0 / calc(1.2))',
+    'rgb(0 0 0 / calc(1.2))',
+  ),
+  // WebKit preserves this calculated alpha; Chromium and Firefox clamp it.
+  ...failingColorSerialization(
+    'color(display-p3 0 1 0 / calc(1.2))',
+    'color(display-p3 0 1 0 / calc(1.2))',
+    ['chromium', 'firefox'],
+  ),
+  {
+    decl: 'color(display-p3 0 1 0 / calc(1.2))',
+    expect: 'color(display-p3 0 1 0 / calc(1.2))',
+    browsers: ['webkit'],
+  },
+];
+
+const colorSerializationSheetId = 'color-declared-serialization';
+
 runScenarios('CSS declared color serialization oracle', 'skip', [
   {
-    name: 'canonicalizes reducible and contextual color math',
+    name: 'serializes declared colors',
     engines: ['native'],
     markup: `
-      <style id="color-declared-serialization">
-        #p3-reducible {
-          color: COLOR( DISPLAY-P3  calc( .1 + .2 )  0  0 );
-        }
-        #p3-contextual {
-          color: COLOR(
-            DISPLAY-P3  calc( sign( 1em - 1px ) )  0  0
-            / calc( .25 + .25 )
-          );
-        }
-        #hsl-reducible {
-          color: HSL( calc( 60deg + 60deg )  100%  50% );
-        }
-        #hsl-contextual {
-          color: HSL( calc( sign( 1em - 1px ) * 120deg )  100%  50% );
-        }
-        #sign-length {
-          width: calc( sign( 1em - 1px ) * 1px );
-        }
-        #sign-color-constant {
-          color: color( display-p3  sign( -1 )  0  0 );
-        }
+      <style id="${colorSerializationSheetId}">
+        ${colorSerializations.map(({ prop = 'color', decl }, index) => (
+          `#color-${index} { ${prop}: ${decl}; }`
+        )).join('\n')}
       </style>
     `,
-    cases: [
-      {
-        cssom: { target: 'style.property', rule: 0, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['chromium', 'firefox'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 0.3 0 0)',
-            important: false,
-          },
-        },
+    cases: colorSerializations.map(({
+      prop = 'color', expect, browsers, status,
+    }, rule) => ({
+      cssom: { target: 'style.property', rule, name: prop },
+      ref: { by: 'id', id: colorSerializationSheetId },
+      browsers,
+      status,
+      expect: {
+        cssom: expect === null ? null : { value: expect },
       },
-      {
-        cssom: { target: 'style.property', rule: 0, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['webkit'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 calc(0.3) 0 0)',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 1, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['chromium', 'webkit'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 sign(1em - 1px) 0 0 / calc(0.5))',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 1, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['firefox'],
-        expect: { cssom: null },
-      },
-      {
-        cssom: { target: 'style.property', rule: 2, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'rgb(0, 255, 0)',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 3, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['chromium', 'webkit'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'hsl(calc(120deg * sign(1em - 1px)) 100 50)',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 3, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['firefox'],
-        expect: { cssom: null },
-      },
-      {
-        cssom: { target: 'style.property', rule: 4, name: 'width' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        expect: {
-          cssom: {
-            name: 'width',
-            value: 'calc(1px * sign(1em - 1px))',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 5, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['chromium', 'firefox'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 -1 0 0)',
-            important: false,
-          },
-        },
-      },
-      {
-        cssom: { target: 'style.property', rule: 5, name: 'color' },
-        ref: { by: 'id', id: 'color-declared-serialization' },
-        browsers: ['webkit'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 calc(-1) 0 0)',
-            important: false,
-          },
-        },
-      },
-    ],
+    })),
   },
   {
     name: 'clamps calculated alpha only in computed colors',
@@ -2355,51 +2451,10 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
       <div id="p3-alpha"></div>
     `,
     cases: [
-      // CSS Color 4 preserves calculated alpha in declared serialization.
-      // All three engines currently clamp this sRGB alpha immediately.
-      {
-        cssom: { target: 'style.property', rule: 0, name: 'color' },
-        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'rgb(0 0 0 / calc(1.2))',
-            important: false,
-          },
-        },
-        status: 'fail',
-      },
       {
         computedStyle: 'color',
         ref: { by: 'id', id: 'rgb-alpha' },
         expect: { value: 'rgb(0, 0, 0)' },
-      },
-      // WebKit preserves the calculated alpha here; Chromium and Firefox
-      // currently clamp it in the declared serialization.
-      {
-        cssom: { target: 'style.property', rule: 1, name: 'color' },
-        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
-        browsers: ['chromium', 'firefox'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 0 1 0 / calc(1.2))',
-            important: false,
-          },
-        },
-        status: 'fail',
-      },
-      {
-        cssom: { target: 'style.property', rule: 1, name: 'color' },
-        ref: { by: 'id', id: 'calculated-alpha-lifecycle' },
-        browsers: ['webkit'],
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 0 1 0 / calc(1.2))',
-            important: false,
-          },
-        },
       },
       {
         computedStyle: 'color',
@@ -2409,7 +2464,55 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
     ],
   },
   {
-    name: 'distinguishes declared colors from resolved colors',
+    name: 'clamps top-level special color calculations when computed',
+    engines: ['native'],
+    markup: `
+      <style>
+        #special-rgb   { color: rgb(calc(NaN) 0 0); }
+        #special-lab   { color: lab(50 calc(NaN) 0); }
+        #special-lch   { color: lch(50 calc(NaN) 20); }
+        #special-color { color: color(display-p3 calc(NaN) 0 0); }
+      </style>
+
+      <div id="special-rgb"></div>
+      <div id="special-lab"></div>
+      <div id="special-lch"></div>
+      <div id="special-color"></div>
+    `,
+    cases: [
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'special-rgb' },
+        expect: { value: 'rgb(0, 0, 0)' },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'special-lab' },
+        browsers: ['chromium', 'webkit'],
+        expect: { value: 'lab(50 0 0)' },
+      },
+      // Firefox currently lets calc(NaN) escape the computed Lab value.
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'special-lab' },
+        browsers: ['firefox'],
+        status: 'fail',
+        expect: { value: 'lab(50 0 0)' },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'special-lch' },
+        expect: { value: 'lch(50 0 20)' },
+      },
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'special-color' },
+        expect: { value: 'color(display-p3 0 0 0)' },
+      },
+    ],
+  },
+  {
+    name: 'resolves computed colors',
     engines: ['native'],
     markup: `
       <style id="color-lifecycle">
@@ -2432,23 +2535,9 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
     `,
     cases: [
       {
-        cssom: { target: 'style.property', rule: 0, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: { name: 'color', value: 'red', important: false },
-        },
-      },
-      {
         computedStyle: 'color',
         ref: { by: 'id', id: 'named' },
         expect: { value: 'rgb(255, 0, 0)' },
-      },
-      {
-        cssom: { target: 'style.property', rule: 1, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: { name: 'color', value: 'transparent', important: false },
-        },
       },
       {
         computedStyle: 'color',
@@ -2456,23 +2545,9 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
         expect: { value: 'rgba(0, 0, 0, 0)' },
       },
       {
-        cssom: { target: 'style.property', rule: 2, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: { name: 'color', value: 'rgb(0, 255, 0)', important: false },
-        },
-      },
-      {
         computedStyle: 'color',
         ref: { by: 'id', id: 'hsl' },
         expect: { value: 'rgb(0, 255, 0)' },
-      },
-      {
-        cssom: { target: 'style.property', rule: 3, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: { name: 'color', value: 'lab(50 40 30)', important: false },
-        },
       },
       {
         computedStyle: 'color',
@@ -2480,43 +2555,14 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
         expect: { value: 'lab(50 40 30)' },
       },
       {
-        cssom: { target: 'style.property', rule: 4, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: {
-            name: 'color',
-            value: 'color(display-p3 1 0 0)',
-            important: false,
-          },
-        },
-      },
-      {
         computedStyle: 'color',
         ref: { by: 'id', id: 'wide' },
         expect: { value: 'color(display-p3 1 0 0)' },
       },
       {
-        cssom: { target: 'style.property', rule: 5, name: 'color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: { name: 'color', value: 'currentcolor', important: false },
-        },
-      },
-      {
         computedStyle: 'color',
         ref: { by: 'id', id: 'current' },
         expect: { value: 'rgb(0, 0, 255)' },
-      },
-      {
-        cssom: { target: 'style.property', rule: 6, name: 'border-top-color' },
-        ref: { by: 'id', id: 'color-lifecycle' },
-        expect: {
-          cssom: {
-            name: 'border-top-color',
-            value: 'currentcolor',
-            important: false,
-          },
-        },
       },
       {
         computedStyle: 'border-top-color',

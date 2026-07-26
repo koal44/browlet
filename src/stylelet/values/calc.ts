@@ -57,13 +57,16 @@ export type ExpectedCalculationType =
   | 'time-percentage'
   | 'frequency-percentage';
 
-export type ValueStage =
-  | 'declared'
-  | 'cascaded'
-  | 'specified'
-  | 'computed'
-  | 'used'
-  | 'actual';
+export enum ValueStageOrder {
+  declared,
+  cascaded,
+  specified,
+  computed,
+  used,
+  actual,
+}
+
+export type ValueStage = keyof typeof ValueStageOrder;
 
 export type CalculationRange = readonly [
   minimum: number,
