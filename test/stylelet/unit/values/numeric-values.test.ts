@@ -3,63 +3,64 @@ import { ComponentCursor } from '../../../../src/stylelet/parser/component-curso
 import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
-  parseNumber, serializeNumber, tryConsumeNumber,
+  parseNumber, resolveNumber, serializeNumber, tryConsumeNumber,
 } from '../../../../src/stylelet/values/number';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions,
-  parseDimension, serializeDimension, tryConsumeDimension,
+  parseDimension, resolveDimension, serializeDimension, tryConsumeDimension,
 } from '../../../../src/stylelet/values/dimension';
 import {
   accumulateAngles, addAngles, interpolateAngles,
-  parseAngle, serializeAngle, tryConsumeAngle,
+  parseAngle, resolveAngle, serializeAngle, tryConsumeAngle,
 } from '../../../../src/stylelet/values/angle';
 import {
   accumulateFrequencies, addFrequencies, interpolateFrequencies,
-  parseFrequency, serializeFrequency, tryConsumeFrequency,
+  parseFrequency, resolveFrequency, serializeFrequency, tryConsumeFrequency,
 } from '../../../../src/stylelet/values/frequency';
 import {
   accumulateLengths, addLengths, createLengthConsumer, interpolateLengths,
-  parseLength, serializeLength, tryConsumeLength,
+  parseLength, resolveLength, serializeLength, tryConsumeLength,
 } from '../../../../src/stylelet/values/length';
 import {
   accumulateResolutions, addResolutions, interpolateResolutions,
-  parseResolution, serializeResolution, tryConsumeResolution,
+  parseResolution, resolveResolution, serializeResolution, tryConsumeResolution,
 } from '../../../../src/stylelet/values/resolution';
 import {
   accumulateTimes, addTimes, interpolateTimes,
-  parseTime, serializeTime, tryConsumeTime,
+  parseTime, resolveTime, serializeTime, tryConsumeTime,
 } from '../../../../src/stylelet/values/time';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
-  parseInteger, serializeInteger, tryConsumeInteger,
+  parseInteger, resolveInteger, serializeInteger, tryConsumeInteger,
 } from '../../../../src/stylelet/values/integer';
 import {
   accumulatePercentages, addPercentages, createPercentageConsumer,
-  interpolatePercentages, parsePercentage, serializePercentage,
+  interpolatePercentages, parsePercentage, resolvePercentage, serializePercentage,
   tryConsumePercentage,
 } from '../../../../src/stylelet/values/percentage';
 import {
   accumulateAnglePercentages, addAnglePercentages,
   createAnglePercentageConsumer, interpolateAnglePercentages,
-  parseAnglePercentage, serializeAnglePercentage,
+  parseAnglePercentage, resolveAnglePercentage, serializeAnglePercentage,
   tryConsumeAnglePercentage,
 } from '../../../../src/stylelet/values/angle-percentage';
 import {
   accumulateLengthPercentages, addLengthPercentages,
   createLengthPercentageConsumer, interpolateLengthPercentages,
-  parseLengthPercentage, serializeLengthPercentage,
+  parseLengthPercentage, resolveLengthPercentage, serializeLengthPercentage,
   tryConsumeLengthPercentage,
 } from '../../../../src/stylelet/values/length-percentage';
 import {
   accumulateFrequencyPercentages, addFrequencyPercentages,
   createFrequencyPercentageConsumer, interpolateFrequencyPercentages,
-  parseFrequencyPercentage, serializeFrequencyPercentage,
+  parseFrequencyPercentage, resolveFrequencyPercentage,
+  serializeFrequencyPercentage,
   tryConsumeFrequencyPercentage,
 } from '../../../../src/stylelet/values/frequency-percentage';
 import {
   accumulateTimePercentages, addTimePercentages,
   createTimePercentageConsumer, interpolateTimePercentages,
-  parseTimePercentage, serializeTimePercentage,
+  parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
   tryConsumeTimePercentage,
 } from '../../../../src/stylelet/values/time-percentage';
 
@@ -83,6 +84,20 @@ describe('number values', () => {
     });
     expect(serializeNumber(value!)).toBe('calc(3)');
     expect(serializeNumber(value!, { stage: 'computed' })).toBe('3');
+  });
+
+  it('resolves a math value to a number at computed-value time', () => {
+    const value = parseNumber('calc(1 + 2)')!;
+
+    expect(resolveNumber(value)).toEqual(value);
+    expect(resolveNumber(value, { unwrapMathAt: 'declared' })).toEqual({
+      type: 'number',
+      value: 3,
+    });
+    expect(resolveNumber(value, { stage: 'computed' })).toEqual({
+      type: 'number',
+      value: 3,
+    });
   });
 
   it('accepts math functions other than calc()', () => {
@@ -200,6 +215,17 @@ describe('dimension values', () => {
     expect(serializeDimension(value!, { stage: 'computed' })).toBe('3px');
   });
 
+  it('resolves math values as dimensions at the computed-value stage', () => {
+    const value = parseDimension('calc(1px + 2px)')!;
+
+    expect(resolveDimension(value)).toEqual(value);
+    expect(resolveDimension(value, { stage: 'computed' })).toEqual({
+      type: 'dimension',
+      value: 3,
+      unit: 'px',
+    });
+  });
+
   it('accepts any pure dimension category', () => {
     expect(parseDimension('min(1deg, 2deg)')).toMatchObject({
       type: 'math',
@@ -266,6 +292,17 @@ describe('angle values', () => {
     expect(other.pos()).toBe(0);
   });
 
+  it('resolves math values as canonical angles at the computed-value stage', () => {
+    const value = parseAngle('calc(.5turn + 180deg)')!;
+
+    expect(resolveAngle(value)).toEqual(value);
+    expect(resolveAngle(value, { stage: 'computed' })).toEqual({
+      type: 'angle',
+      value: 360,
+      unit: 'deg',
+    });
+  });
+
   it('combines literals directly and promotes mixed representations', () => {
     const a = parseAngle('1deg')!;
     const b = parseAngle('2deg')!;
@@ -290,6 +327,17 @@ describe('frequency values', () => {
     expect(serializeFrequency(value!)).toBe('calc(1hz)');
     expect(tryConsumeFrequency(other)).toBeNull();
     expect(other.pos()).toBe(0);
+  });
+
+  it('resolves math values as canonical frequencies at the computed-value stage', () => {
+    const value = parseFrequency('calc(1khz + 500hz)')!;
+
+    expect(resolveFrequency(value)).toEqual(value);
+    expect(resolveFrequency(value, { stage: 'computed' })).toEqual({
+      type: 'frequency',
+      value: 1500,
+      unit: 'hz',
+    });
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -317,6 +365,17 @@ describe('length values', () => {
     expect(serializeLength(value!)).toBe('calc(1px)');
     expect(tryConsumeLength(other)).toBeNull();
     expect(other.pos()).toBe(0);
+  });
+
+  it('resolves math values as canonical lengths at the computed-value stage', () => {
+    const value = parseLength('calc(1in + 96px)')!;
+
+    expect(resolveLength(value)).toEqual(value);
+    expect(resolveLength(value, { stage: 'computed' })).toEqual({
+      type: 'length',
+      value: 192,
+      unit: 'px',
+    });
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -368,6 +427,17 @@ describe('resolution values', () => {
     expect(other.pos()).toBe(0);
   });
 
+  it('resolves math values as canonical resolutions at the computed-value stage', () => {
+    const value = parseResolution('calc(96dpi + 1dppx)')!;
+
+    expect(resolveResolution(value)).toEqual(value);
+    expect(resolveResolution(value, { stage: 'computed' })).toEqual({
+      type: 'resolution',
+      value: 2,
+      unit: 'dppx',
+    });
+  });
+
   it('combines literals directly and promotes mixed representations', () => {
     const a = parseResolution('1dppx')!;
     const b = parseResolution('2dppx')!;
@@ -407,6 +477,17 @@ describe('time values', () => {
     expect(serializeTime(value!)).toBe('calc(1s)');
     expect(tryConsumeTime(other)).toBeNull();
     expect(other.pos()).toBe(0);
+  });
+
+  it('resolves math values as canonical times at the computed-value stage', () => {
+    const value = parseTime('calc(1000ms + 1s)')!;
+
+    expect(resolveTime(value)).toEqual(value);
+    expect(resolveTime(value, { stage: 'computed' })).toEqual({
+      type: 'time',
+      value: 2,
+      unit: 's',
+    });
   });
 
   it('combines literals directly and promotes mixed representations', () => {
@@ -453,6 +534,16 @@ describe('integer values', () => {
       },
     });
     expect(serializeInteger(value!, { stage: 'computed' })).toBe('2');
+  });
+
+  it('resolves math values as integers at the computed-value stage', () => {
+    const value = parseInteger('calc(1.5)')!;
+
+    expect(resolveInteger(value)).toEqual(value);
+    expect(resolveInteger(value, { stage: 'computed' })).toEqual({
+      type: 'integer',
+      value: 2,
+    });
   });
 
   it('rejects non-number math results', () => {
@@ -528,6 +619,19 @@ describe('percentage values', () => {
     });
     expect(serializePercentage(value!)).toBe('calc(30%)');
     expect(serializePercentage(value!, { stage: 'computed' })).toBe('30%');
+  });
+
+  it('resolves math values as percentages at the computed-value stage', () => {
+    const value = parsePercentage('calc(10% + 20%)')!;
+
+    expect(resolvePercentage(value)).toEqual(value);
+    expect(resolvePercentage(value, {
+      stage: 'computed',
+      percentageType: 'length',
+    })).toEqual({
+      type: 'percentage',
+      value: 30,
+    });
   });
 
   it('rejects non-percentage math results', () => {
@@ -627,6 +731,19 @@ describe('angle-percentage values', () => {
       },
     });
     expect(serializeAnglePercentage(value!)).toBe('calc(25% + 10deg)');
+  });
+
+  it('resolves mixed math when its percentage reference is available', () => {
+    const mixed = parseAnglePercentage('calc(10deg + 25%)')!;
+    const percentage = parseAnglePercentage('calc(25%)')!;
+
+    expect(resolveAnglePercentage(mixed, { stage: 'computed' })).toEqual(mixed);
+    expect(resolveAnglePercentage(mixed, {
+      stage: 'computed',
+      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'deg' },
+    })).toEqual({ type: 'angle', value: 60, unit: 'deg' });
+    expect(resolveAnglePercentage(percentage, { stage: 'computed' }))
+      .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('rejects calculations from another dimensional category', () => {
@@ -731,6 +848,19 @@ describe('length-percentage values', () => {
       },
     });
     expect(serializeLengthPercentage(value!)).toBe('calc(25% + 10px)');
+  });
+
+  it('resolves mixed math when its percentage reference is available', () => {
+    const mixed = parseLengthPercentage('calc(10px + 25%)')!;
+    const percentage = parseLengthPercentage('calc(25%)')!;
+
+    expect(resolveLengthPercentage(mixed, { stage: 'computed' })).toEqual(mixed);
+    expect(resolveLengthPercentage(mixed, {
+      stage: 'computed',
+      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
+    })).toEqual({ type: 'length', value: 60, unit: 'px' });
+    expect(resolveLengthPercentage(percentage, { stage: 'computed' }))
+      .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('rejects calculations from another dimensional category', () => {
@@ -839,6 +969,20 @@ describe('frequency-percentage values', () => {
     expect(serializeFrequencyPercentage(value!)).toBe('calc(25% + 10hz)');
   });
 
+  it('resolves mixed math when its percentage reference is available', () => {
+    const mixed = parseFrequencyPercentage('calc(10hz + 25%)')!;
+    const percentage = parseFrequencyPercentage('calc(25%)')!;
+
+    expect(resolveFrequencyPercentage(mixed, { stage: 'computed' }))
+      .toEqual(mixed);
+    expect(resolveFrequencyPercentage(mixed, {
+      stage: 'computed',
+      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'hz' },
+    })).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
+    expect(resolveFrequencyPercentage(percentage, { stage: 'computed' }))
+      .toEqual({ type: 'percentage', value: 25 });
+  });
+
   it('rejects calculations from another dimensional category', () => {
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10s + 25%)'),
@@ -943,6 +1087,19 @@ describe('time-percentage values', () => {
       },
     });
     expect(serializeTimePercentage(value!)).toBe('calc(25% + 10s)');
+  });
+
+  it('resolves mixed math when its percentage reference is available', () => {
+    const mixed = parseTimePercentage('calc(10s + 25%)')!;
+    const percentage = parseTimePercentage('calc(25%)')!;
+
+    expect(resolveTimePercentage(mixed, { stage: 'computed' })).toEqual(mixed);
+    expect(resolveTimePercentage(mixed, {
+      stage: 'computed',
+      percentageReferenceValue: { type: 'dimension', value: 200, unit: 's' },
+    })).toEqual({ type: 'time', value: 60, unit: 's' });
+    expect(resolveTimePercentage(percentage, { stage: 'computed' }))
+      .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('rejects calculations from another dimensional category', () => {

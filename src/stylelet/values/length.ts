@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -23,7 +23,7 @@ import {
  *   <dimension-token with a length unit> | <zero> | <math-function>
  */
 
-export type LengthValue = LengthLiteral | MathValue;
+export type LengthValue = LengthLiteral | MathValue<'length'>;
 
 export function parseLength(
   input: ParserInput,
@@ -58,6 +58,15 @@ export function createLengthConsumer(
 }
 
 export const tryConsumeLength = createLengthConsumer();
+
+export function resolveLength(
+  value: LengthValue,
+  context: CalculationContext = {},
+): LengthValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeLength(
   value: LengthValue,
@@ -121,7 +130,7 @@ export function accumulateLengths(
 function asMathValue(
   value: LengthValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'length'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'length', context);

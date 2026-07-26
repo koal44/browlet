@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,8 @@ import {
  * <angle-percentage> = <angle> | <percentage> | <math-function>
  */
 
-export type AnglePercentageValue = AnglePercentageLiteral | MathValue;
+export type AnglePercentageValue =
+  AnglePercentageLiteral | MathValue<'angle-percentage'>;
 
 export function parseAnglePercentage(
   input: ParserInput,
@@ -60,6 +61,15 @@ export function createAnglePercentageConsumer(
 }
 
 export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
+
+export function resolveAnglePercentage(
+  value: AnglePercentageValue,
+  context: CalculationContext = {},
+): AnglePercentageValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, anglePercentageCalculationContext(context))
+    : value;
+}
 
 export function serializeAnglePercentage(
   value: AnglePercentageValue,
@@ -141,7 +151,7 @@ export function accumulateAnglePercentages(
 function asMathValue(
   value: AnglePercentageValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'angle-percentage'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'angle-percentage', context);

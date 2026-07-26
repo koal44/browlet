@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,8 @@ import {
  * <length-percentage> = <length> | <percentage> | <math-function>
  */
 
-export type LengthPercentageValue = LengthPercentageLiteral | MathValue;
+export type LengthPercentageValue =
+  LengthPercentageLiteral | MathValue<'length-percentage'>;
 
 export function parseLengthPercentage(
   input: ParserInput,
@@ -60,6 +61,15 @@ export function createLengthPercentageConsumer(
 }
 
 export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
+
+export function resolveLengthPercentage(
+  value: LengthPercentageValue,
+  context: CalculationContext = {},
+): LengthPercentageValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, lengthPercentageCalculationContext(context))
+    : value;
+}
 
 export function serializeLengthPercentage(
   value: LengthPercentageValue,
@@ -141,7 +151,7 @@ export function accumulateLengthPercentages(
 function asMathValue(
   value: LengthPercentageValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'length-percentage'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'length-percentage', context);

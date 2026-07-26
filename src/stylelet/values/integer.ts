@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,7 @@ import {
  * <integer> = <integer-number-token> | <math-function>
  */
 
-export type IntegerValue = IntegerLiteral | MathValue;
+export type IntegerValue = IntegerLiteral | MathValue<'integer'>;
 
 export function parseInteger(
   input: ParserInput,
@@ -59,6 +59,15 @@ export function createIntegerConsumer(
 }
 
 export const tryConsumeInteger = createIntegerConsumer();
+
+export function resolveInteger(
+  value: IntegerValue,
+  context: CalculationContext = {},
+): IntegerValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeInteger(
   value: IntegerValue,
@@ -122,7 +131,7 @@ export function accumulateIntegers(
 function asMathValue(
   value: IntegerValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'integer'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'integer', context);

@@ -14,18 +14,28 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
+import {
+  isAtOrBeyondValueStage,
+  type ValueStage, type ValueStageContext,
+} from '../value-processing';
 import { createKeywordConsumer } from './keyword';
-import { ANGLE_UNITS, resolveAngle } from './numeric-literal/angle';
+import {
+  ANGLE_UNITS, resolveAngle,
+  type AngleLiteral,
+} from './numeric-literal/angle';
 import {
   serializeDimension, tryConsumeDimension,
   type DimensionLiteral,
 } from './numeric-literal/dimension';
-import { FREQUENCY_UNITS, resolveFrequency } from './numeric-literal/frequency';
+import {
+  FREQUENCY_UNITS, resolveFrequency,
+  type FrequencyLiteral,
+} from './numeric-literal/frequency';
 import { serializeIdentifier } from './ident';
 import type { IntegerLiteral } from './numeric-literal/integer';
 import {
   LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength,
-  type LengthResolutionContext,
+  type LengthLiteral, type LengthResolutionContext,
 } from './numeric-literal/length';
 import {
   serializeNumber, tryConsumeNumber,
@@ -35,8 +45,14 @@ import {
   serializePercentage, tryConsumePercentage,
   type PercentageLiteral,
 } from './numeric-literal/percentage';
-import { RESOLUTION_UNITS, resolveResolution } from './numeric-literal/resolution';
-import { TIME_UNITS, resolveTime } from './numeric-literal/time';
+import {
+  RESOLUTION_UNITS, resolveResolution,
+  type ResolutionLiteral,
+} from './numeric-literal/resolution';
+import {
+  TIME_UNITS, resolveTime,
+  type TimeLiteral,
+} from './numeric-literal/time';
 
 const CALC_TERM_LIMIT = 32;
 const CALC_COMPLEXITY_LIMIT = 64;
@@ -57,17 +73,6 @@ export type ExpectedCalculationType =
   | 'time-percentage'
   | 'frequency-percentage';
 
-export enum ValueStageOrder {
-  declared,
-  cascaded,
-  specified,
-  computed,
-  used,
-  actual,
-}
-
-export type ValueStage = keyof typeof ValueStageOrder;
-
 export type CalculationRange = readonly [
   minimum: number,
   maximum: number,
@@ -78,9 +83,9 @@ export type CalculationSerializationContext = {
   stage?: ValueStage;
 };
 
-export type CalculationContext = {
-  /** Value-processing stage whose available information is being applied. */
-  stage?: ValueStage;
+export type CalculationContext = ValueStageContext & {
+  /** Value-processing stage at which math values should become literals. */
+  unwrapMathAt?: ValueStage;
 
   /** Whether the current math function is nested inside another math function. */
   insideCalculation?: boolean;
@@ -115,14 +120,18 @@ export type NumericVariable = {
   numericType: NumericType;
 };
 
-export type MathValue = {
+export type MathValue<
+  Type extends ExpectedCalculationType = ExpectedCalculationType,
+> = {
   type: 'math';
   calculation: CalculationTree;
-  restrictions: MathValueRestrictions;
+  restrictions: MathValueRestrictions<Type>;
 };
 
-type MathValueRestrictions = {
-  expectedType: ExpectedCalculationType;
+type MathValueRestrictions<
+  Type extends ExpectedCalculationType = ExpectedCalculationType,
+> = {
+  expectedType: Type;
 };
 
 type MathValueParsingContext = {
@@ -253,11 +262,11 @@ type UnaryMathFunctionName =
   | 'abs'
   | 'sign';
 
-export function parseMathFunction(
+export function parseMathFunction<Type extends ExpectedCalculationType>(
   input: ParserInput,
-  expectedType: ExpectedCalculationType,
+  expectedType: Type,
   context: CalculationContext = {},
-): MathValue | null {
+): MathValue<Type> | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -265,22 +274,22 @@ export function parseMathFunction(
       { ...context, expectedType },
     ),
     'math function',
-  );
+  ) as MathValue<Type> | null;
 }
 
-export function parseMathValue(
+export function parseMathValue<Type extends ExpectedCalculationType>(
   input: ParserInput,
-  expectedType: ExpectedCalculationType,
+  expectedType: Type,
   context: CalculationContext = {},
-): MathValue | null {
+): MathValue<Type> | null {
   return parseMathFunction(input, expectedType, context);
 }
 
-export function parseCalc(
+export function parseCalc<Type extends ExpectedCalculationType>(
   input: ParserInput,
-  expectedType: ExpectedCalculationType,
+  expectedType: Type,
   context: CalculationContext = {},
-): MathValue | null {
+): MathValue<Type> | null {
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
@@ -288,18 +297,20 @@ export function parseCalc(
       { ...context, expectedType },
     ),
     'calc',
-  );
+  ) as MathValue<Type> | null;
 }
 
-export function createMathValueFromLiteral(
+export function createMathValueFromLiteral<
+  Type extends ExpectedCalculationType,
+>(
   literal:
     | IntegerLiteral
     | NumberLiteral
     | DimensionLiteral<string, string>
     | PercentageLiteral,
-  expectedType: ExpectedCalculationType,
+  expectedType: Type,
   context: CalculationContext = {},
-): MathValue {
+): MathValue<Type> {
   const calculationLiteral: NumericLiteral = 'unit' in literal
     ? {
       type: 'dimension',
@@ -324,15 +335,17 @@ export function createMathValueFromLiteral(
   );
 }
 
-export type MathValueConsumerOptions = {
-  expectedType: ExpectedCalculationType;
+export type MathValueConsumerOptions<
+  Type extends ExpectedCalculationType = ExpectedCalculationType,
+> = {
+  expectedType: Type;
   range?: CalculationRange;
   percentageType?: NumericBaseType;
 };
 
-export function createMathValueConsumer(
-  options: MathValueConsumerOptions,
-): TryComponentConsumer<MathValue> {
+export function createMathValueConsumer<Type extends ExpectedCalculationType>(
+  options: MathValueConsumerOptions<Type>,
+): TryComponentConsumer<MathValue<Type>> {
   return (c) => {
     const outerContext = c.context;
     const calculationContext = outerContext === null || outerContext === undefined
@@ -347,7 +360,9 @@ export function createMathValueConsumer(
         ...(options.percentageType === undefined ? {} : { percentageType: options.percentageType }),
       };
 
-      return tryConsumeMathValue(c);
+      return tryConsumeMathValue(c) as TryComponentConsumerResult<
+        MathValue<Type>
+      >;
     } finally {
       c.context = outerContext;
     }
@@ -535,10 +550,10 @@ export const tryConsumeMathFunction: TryComponentConsumer<MathValue> = (c) => {
 
 export const tryConsumeMathValue = tryConsumeMathFunction;
 
-function createMathValue(
+function createMathValue<Type extends ExpectedCalculationType>(
   calculation: CalculationTree,
-  expectedType: ExpectedCalculationType,
-): MathValue {
+  expectedType: Type,
+): MathValue<Type> {
   return {
     type: 'math',
     calculation,
@@ -1829,6 +1844,187 @@ export function simplifyCalculationTree(
   }
 
   return finalizeNumericLeaf(simplified, context, restrictions);
+}
+
+export function resolveMathValue<Type extends ExpectedCalculationType>(
+  value: MathValue<Type>,
+  context: CalculationContext = {},
+): MathValue<Type> | ResolvedMathLiteral<Type> {
+  const calculation = simplifyCalculationTree(value.calculation, context, value.restrictions);
+  const stage = context.stage ?? 'declared';
+  const unwrapMathAt = context.unwrapMathAt ?? 'computed';
+
+  if (
+    isAtOrBeyondValueStage(stage, unwrapMathAt) &&
+    isNumericLeaf(calculation)
+  ) {
+    return resolvedMathLiteralFromLeaf(
+      calculation,
+      value.restrictions.expectedType,
+    );
+  }
+
+  return calculation === value.calculation
+    ? value
+    : { ...value, calculation };
+}
+
+type ResolvedMathLiteral<Type extends ExpectedCalculationType> =
+  Type extends 'number' ? NumberLiteral
+  : Type extends 'integer' ? IntegerLiteral
+  : Type extends 'percentage' ? PercentageLiteral
+  : Type extends 'dimension' ? DimensionLiteral
+  : Type extends 'angle' ? AngleLiteral
+  : Type extends 'frequency' ? FrequencyLiteral
+  : Type extends 'length' ? LengthLiteral
+  : Type extends 'resolution' ? ResolutionLiteral
+  : Type extends 'time' ? TimeLiteral
+  : Type extends 'angle-percentage' ? AngleLiteral | PercentageLiteral
+  : Type extends 'frequency-percentage' ? FrequencyLiteral | PercentageLiteral
+  : Type extends 'length-percentage' ? LengthLiteral | PercentageLiteral
+  : Type extends 'time-percentage' ? TimeLiteral | PercentageLiteral
+  : NumericLiteral;
+
+function resolvedMathLiteralFromLeaf<
+  Type extends ExpectedCalculationType,
+>(
+  value: NumericLeaf,
+  expectedType: Type,
+): ResolvedMathLiteral<Type> {
+  const literal = reifyNumericLiteral(value, expectedType);
+
+  if (!matchesResolvedMathLiteral(literal, expectedType)) {
+    throw new TypeError(
+      'Resolved math value does not match its expected calculation type',
+    );
+  }
+
+  return literal;
+}
+
+type ReifiedNumericLiteral =
+  | NumericLiteral
+  | IntegerLiteral
+  | AngleLiteral
+  | FrequencyLiteral
+  | LengthLiteral
+  | ResolutionLiteral
+  | TimeLiteral;
+
+function reifyNumericLiteral(
+  value: NumericLeaf,
+  expectedType: ExpectedCalculationType,
+): ReifiedNumericLiteral {
+  if (expectedType === 'integer' && value.type === 'number') {
+    return { type: 'integer', value: value.value };
+  }
+
+  if (value.type === 'dimension') {
+    switch (expectedType) {
+      case 'angle':
+      case 'angle-percentage':
+        if (hasUnit(value, ANGLE_UNITS)) {
+          return { type: 'angle', value: value.value, unit: value.unit };
+        }
+        break;
+      case 'frequency':
+      case 'frequency-percentage':
+        if (hasUnit(value, FREQUENCY_UNITS)) {
+          return { type: 'frequency', value: value.value, unit: value.unit };
+        }
+        break;
+      case 'length':
+      case 'length-percentage':
+        if (value.unit === '' && value.value === 0) {
+          return { type: 'length', value: 0, unit: '' };
+        }
+        if (hasUnit(value, LENGTH_UNITS)) {
+          return { type: 'length', value: value.value, unit: value.unit };
+        }
+        break;
+      case 'resolution':
+        if (hasUnit(value, RESOLUTION_UNITS)) {
+          return { type: 'resolution', value: value.value, unit: value.unit };
+        }
+        break;
+      case 'time':
+      case 'time-percentage':
+        if (hasUnit(value, TIME_UNITS)) {
+          return { type: 'time', value: value.value, unit: value.unit };
+        }
+        break;
+    }
+  }
+
+  return numericLiteralFromLeaf(value);
+}
+
+function hasUnit<Unit extends string>(
+  value: DimensionLiteral,
+  units: readonly Unit[],
+): value is DimensionLiteral<'dimension', Unit> {
+  return units.some((unit) => unit === value.unit);
+}
+
+function matchesResolvedMathLiteral<
+  Type extends ExpectedCalculationType,
+>(
+  value: ReifiedNumericLiteral,
+  expectedType: Type,
+): value is ResolvedMathLiteral<Type> {
+  switch (expectedType) {
+    case 'number':
+      return value.type === 'number';
+    case 'integer':
+      return value.type === 'integer';
+    case 'percentage':
+      return value.type === 'percentage';
+    case 'dimension':
+      return value.type === 'dimension';
+    case 'angle':
+      return value.type === 'angle';
+    case 'frequency':
+      return value.type === 'frequency';
+    case 'length':
+      return value.type === 'length';
+    case 'resolution':
+      return value.type === 'resolution';
+    case 'time':
+      return value.type === 'time';
+    case 'angle-percentage':
+      return value.type === 'angle' || value.type === 'percentage';
+    case 'frequency-percentage':
+      return value.type === 'frequency' || value.type === 'percentage';
+    case 'length-percentage':
+      return value.type === 'length' || value.type === 'percentage';
+    case 'time-percentage':
+      return value.type === 'time' || value.type === 'percentage';
+    default:
+      return value.type === 'number' ||
+        value.type === 'percentage' ||
+        value.type === 'dimension';
+  }
+}
+
+function numericLiteralFromLeaf(value: NumericLeaf): NumericLiteral {
+  switch (value.type) {
+    case 'number':
+      return {
+        type: 'number',
+        value: value.value,
+      };
+    case 'percentage':
+      return {
+        type: 'percentage',
+        value: value.value,
+      };
+    case 'dimension':
+      return {
+        type: 'dimension',
+        value: value.value,
+        unit: value.unit,
+      };
+  }
 }
 
 function simplifyCalculationNode(
@@ -3313,11 +3509,11 @@ function canonicalUnitForDimension(unit: string): string {
 }
 
 // CSS Values, "Combination of Math Functions".
-export function addMathFunctions(
-  a: MathValue,
-  b: MathValue,
+export function addMathFunctions<Type extends ExpectedCalculationType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
   context: CalculationContext = {},
-): MathValue {
+): MathValue<Type> {
   return combineMathFunctionCalculations(
     a,
     b,
@@ -3325,12 +3521,12 @@ export function addMathFunctions(
   );
 }
 
-export function interpolateMathFunctions(
-  a: MathValue,
-  b: MathValue,
+export function interpolateMathFunctions<Type extends ExpectedCalculationType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
   p: number,
   context: CalculationContext = {},
-): MathValue {
+): MathValue<Type> {
   return combineMathFunctionCalculations(
     {
       ...a,
@@ -3350,19 +3546,19 @@ export function interpolateMathFunctions(
   );
 }
 
-export function accumulateMathFunctions(
-  a: MathValue,
-  b: MathValue,
+export function accumulateMathFunctions<Type extends ExpectedCalculationType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
   context: CalculationContext = {},
-): MathValue {
+): MathValue<Type> {
   return addMathFunctions(a, b, context);
 }
 
-function combineMathFunctionCalculations(
-  a: MathValue,
-  b: MathValue,
+function combineMathFunctionCalculations<Type extends ExpectedCalculationType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
   context: CalculationContext,
-): MathValue {
+): MathValue<Type> {
   const expectedType = commonExpectedType(a, b);
   const numericType = addNumericTypes([
     numericTypeOf(a.calculation),
@@ -3383,10 +3579,10 @@ function combineMathFunctionCalculations(
   );
 }
 
-function commonExpectedType(
-  a: MathValue,
-  b: MathValue,
-): ExpectedCalculationType {
+function commonExpectedType<Type extends ExpectedCalculationType>(
+  a: MathValue<Type>,
+  b: MathValue<Type>,
+): Type {
   const expectedType = a.restrictions.expectedType;
 
   if (b.restrictions.expectedType !== expectedType) {

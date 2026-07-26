@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationSerializationContext,
   type MathValue,
 } from './calc';
@@ -24,7 +24,7 @@ import {
  * <dimension> = <dimension-token> | <math-function>
  */
 
-export type DimensionValue = DimensionLiteral | MathValue;
+export type DimensionValue = DimensionLiteral | MathValue<'dimension'>;
 
 export function parseDimension(
   input: ParserInput,
@@ -47,6 +47,15 @@ export const tryConsumeDimension: TryComponentConsumer<DimensionValue> = oneOf(
   ],
   ([value]) => ok(value),
 );
+
+export function resolveDimension(
+  value: DimensionValue,
+  context: CalculationContext = {},
+): DimensionValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeDimension(
   value: DimensionValue,
@@ -110,7 +119,7 @@ export function accumulateDimensions(
 function asMathValue(
   value: DimensionValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'dimension'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'dimension', context);

@@ -254,10 +254,30 @@ describe('color values', () => {
   });
 
   it('resolves color calculations as their value stage permits', () => {
-    expect(parseColorValue('rgb(calc(255 / 2) 0 0)')).toEqual({
+    const input = 'rgb(calc(255 / 2) calc(50%) 0)';
+
+    expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Numeric,
       space: 'srgb-legacy',
-      components: [0.5, 0, 0],
+      components: [0.5, 0.5, 0],
+      alpha: 1,
+    });
+
+    const deferred = parseColorValue(input, {
+      stage: 'declared',
+      unwrapMathAt: 'computed',
+    })!;
+
+    expect(deferred).toMatchObject({
+      kind: ColorKind.Rgb,
+    });
+    expect(resolveColorValue(deferred, {
+      stage: 'declared',
+      unwrapMathAt: 'declared',
+    })).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.5, 0.5, 0],
       alpha: 1,
     });
 
@@ -267,6 +287,15 @@ describe('color values', () => {
 
     expect(declared).toMatchObject({
       kind: ColorKind.Rgb,
+    });
+    expect(resolveColorValue(declared, {
+      stage: 'declared',
+      unwrapMathAt: 'declared',
+    })).toEqual({
+      kind: ColorKind.Numeric,
+      space: 'srgb-legacy',
+      components: [0.5, 0, 0],
+      alpha: 0.5,
     });
     expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
       kind: ColorKind.Numeric,

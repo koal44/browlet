@@ -7,7 +7,7 @@ import {
   parseCalc as parseCalcWithContext,
   parseMathFunction as parseMathFunctionWithContext,
   parseMathValue as parseMathValueWithContext,
-  simplifyCalculationTree,
+  resolveMathValue, simplifyCalculationTree,
   serializeCalcTree, serializeMathFunction, serializeMathValue,
   tryConsumeCalc, tryConsumeCalcSum, tryConsumeMathFunction,
   type CalculationContext, type CalculationTree, type CalcProductNode, type CalcSumNode,
@@ -40,6 +40,37 @@ describe('calc', () => {
       });
     },
   );
+
+  it.each([
+    ['calc(1 + 2)', { type: 'number', value: 3 }],
+    ['calc(25%)', { type: 'percentage', value: 25 }],
+    ['calc(1px)', { type: 'length', value: 1, unit: 'px' }],
+  ] as const)('resolves and unwraps the math value %j', (input, expected) => {
+    const value = parseCalc(input);
+
+    expect(value).not.toBeNull();
+    if (value === null) {
+      throw new Error('Expected a math value');
+    }
+
+    expect(resolveMathValue(value)).toEqual(value);
+    expect(resolveMathValue(value, { stage: 'computed' })).toEqual(expected);
+    expect(resolveMathValue(value, { unwrapMathAt: 'declared' })).toEqual(expected);
+  });
+
+  it('rejects a resolved literal that violates its expected type', () => {
+    const value: MathValue<'number'> = {
+      type: 'math',
+      calculation: numericLeaf(
+        { type: 'percentage', value: 25 },
+        numericType([['percent', 1]], 'percent'),
+      ),
+      restrictions: { expectedType: 'number' },
+    };
+
+    expect(() => resolveMathValue(value, { stage: 'computed' }))
+      .toThrow('Resolved math value does not match its expected calculation type');
+  });
 
   it('respects operator precedence while simplifying', () => {
     expect(parseCalc('calc(1px + 2 * 3px - 4px / 2)')).toEqual({

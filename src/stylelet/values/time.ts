@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -22,7 +22,7 @@ import {
  * <time> = <dimension-token with a time unit> | <math-function>
  */
 
-export type TimeValue = TimeLiteral | MathValue;
+export type TimeValue = TimeLiteral | MathValue<'time'>;
 
 export function parseTime(
   input: ParserInput,
@@ -57,6 +57,15 @@ export function createTimeConsumer(
 }
 
 export const tryConsumeTime = createTimeConsumer();
+
+export function resolveTime(
+  value: TimeValue,
+  context: CalculationContext = {},
+): TimeValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeTime(
   value: TimeValue,
@@ -120,7 +129,7 @@ export function accumulateTimes(
 function asMathValue(
   value: TimeValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'time'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'time', context);

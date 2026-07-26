@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,7 @@ import {
  * <percentage> = <percentage-token> | <math-function>
  */
 
-export type PercentageValue = PercentageLiteral | MathValue;
+export type PercentageValue = PercentageLiteral | MathValue<'percentage'>;
 
 export function parsePercentage(
   input: ParserInput,
@@ -60,6 +60,15 @@ export function createPercentageConsumer(
 }
 
 export const tryConsumePercentage = createPercentageConsumer();
+
+export function resolvePercentage(
+  value: PercentageValue,
+  context: CalculationContext = {},
+): PercentageValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, percentageCalculationContext(context))
+    : value;
+}
 
 export function serializePercentage(
   value: PercentageValue,
@@ -129,7 +138,7 @@ export function accumulatePercentages(
 function asMathValue(
   value: PercentageValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'percentage'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'percentage', context);

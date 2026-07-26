@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -22,7 +22,7 @@ import {
  * <angle> = <dimension-token with an angle unit> | <math-function>
  */
 
-export type AngleValue = AngleLiteral | MathValue;
+export type AngleValue = AngleLiteral | MathValue<'angle'>;
 
 export function parseAngle(
   input: ParserInput,
@@ -57,6 +57,15 @@ export function createAngleConsumer(
 }
 
 export const tryConsumeAngle = createAngleConsumer();
+
+export function resolveAngle(
+  value: AngleValue,
+  context: CalculationContext = {},
+): AngleValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeAngle(
   value: AngleValue,
@@ -120,7 +129,7 @@ export function accumulateAngles(
 function asMathValue(
   value: AngleValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'angle'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'angle', context);

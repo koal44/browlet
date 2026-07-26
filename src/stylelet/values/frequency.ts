@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -22,7 +22,7 @@ import {
  * <frequency> = <dimension-token with a frequency unit> | <math-function>
  */
 
-export type FrequencyValue = FrequencyLiteral | MathValue;
+export type FrequencyValue = FrequencyLiteral | MathValue<'frequency'>;
 
 export function parseFrequency(
   input: ParserInput,
@@ -57,6 +57,15 @@ export function createFrequencyConsumer(
 }
 
 export const tryConsumeFrequency = createFrequencyConsumer();
+
+export function resolveFrequency(
+  value: FrequencyValue,
+  context: CalculationContext = {},
+): FrequencyValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeFrequency(
   value: FrequencyValue,
@@ -120,7 +129,7 @@ export function accumulateFrequencies(
 function asMathValue(
   value: FrequencyValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'frequency'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'frequency', context);

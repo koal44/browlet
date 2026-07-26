@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -23,7 +23,7 @@ import {
  *   <nonnegative dimension-token with a resolution unit> | <math-function>
  */
 
-export type ResolutionValue = ResolutionLiteral | MathValue;
+export type ResolutionValue = ResolutionLiteral | MathValue<'resolution'>;
 
 export function parseResolution(
   input: ParserInput,
@@ -57,6 +57,15 @@ export function createResolutionConsumer(
 }
 
 export const tryConsumeResolution = createResolutionConsumer();
+
+export function resolveResolution(
+  value: ResolutionValue,
+  context: CalculationContext = {},
+): ResolutionValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, context)
+    : value;
+}
 
 export function serializeResolution(
   value: ResolutionValue,
@@ -120,7 +129,7 @@ export function accumulateResolutions(
 function asMathValue(
   value: ResolutionValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'resolution'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'resolution', context);

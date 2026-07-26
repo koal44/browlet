@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,8 @@ import {
  * <frequency-percentage> = <frequency> | <percentage> | <math-function>
  */
 
-export type FrequencyPercentageValue = FrequencyPercentageLiteral | MathValue;
+export type FrequencyPercentageValue =
+  FrequencyPercentageLiteral | MathValue<'frequency-percentage'>;
 
 export function parseFrequencyPercentage(
   input: ParserInput,
@@ -61,6 +62,15 @@ export function createFrequencyPercentageConsumer(
 
 export const tryConsumeFrequencyPercentage =
   createFrequencyPercentageConsumer();
+
+export function resolveFrequencyPercentage(
+  value: FrequencyPercentageValue,
+  context: CalculationContext = {},
+): FrequencyPercentageValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, frequencyPercentageCalculationContext(context))
+    : value;
+}
 
 export function serializeFrequencyPercentage(
   value: FrequencyPercentageValue,
@@ -142,7 +152,7 @@ export function accumulateFrequencyPercentages(
 function asMathValue(
   value: FrequencyPercentageValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'frequency-percentage'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'frequency-percentage', context);

@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationSerializationContext,
   type CalculationRange, type MathValue,
 } from './calc';
@@ -25,7 +25,7 @@ import {
  * <number> = <number-token> | <math-function>
  */
 
-export type NumberValue = NumberLiteral | MathValue;
+export type NumberValue = NumberLiteral | MathValue<'number'>;
 
 export function parseNumber(
   input: ParserInput,
@@ -62,6 +62,17 @@ export function createNumberConsumer(
 }
 
 export const tryConsumeNumber = createNumberConsumer();
+
+export function resolveNumber(
+  value: NumberValue,
+  context: CalculationContext = {},
+): NumberValue {
+  if (value.type !== 'math') {
+    return value;
+  }
+
+  return resolveMathValue(value, context);
+}
 
 export function serializeNumber(
   value: NumberValue,
@@ -125,7 +136,7 @@ export function accumulateNumbers(
 function asMathValue(
   value: NumberValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'number'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'number', context);

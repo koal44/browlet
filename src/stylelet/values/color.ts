@@ -11,20 +11,24 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import { tryConsumeAngle, type AngleValue } from './angle';
 import {
-  serializeMathValue, simplifyCalculationTree,
-  ValueStageOrder,
-  type CalculationContext, type CalculationSerializationContext,
+  isAtOrBeyondValueStage,
   type ValueStage,
-} from './calc';
+} from '../value-processing';
+import {
+  resolveAngle, serializeAngle, tryConsumeAngle,
+  type AngleValue,
+} from './angle';
+import type { CalculationContext, CalculationSerializationContext } from './calc';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { resolveAngle } from './numeric-literal/angle';
+import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';
 import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
-import type { PercentageLiteral } from './numeric-literal/percentage';
-import { serializeNumber, tryConsumeNumber, type NumberValue } from './number';
-import { tryConsumePercentage, type PercentageValue } from './percentage';
+import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
+import {
+  resolvePercentage, serializePercentage, tryConsumePercentage,
+  type PercentageValue,
+} from './percentage';
 
 /*
  * <color> = <color-base> | currentColor | <system-color>
@@ -1637,13 +1641,6 @@ function isUsedColorStage(stage: ValueStage): boolean {
   return isAtOrBeyondValueStage(stage, 'used');
 }
 
-function isAtOrBeyondValueStage(
-  stage: ValueStage,
-  minimum: ValueStage,
-): boolean {
-  return ValueStageOrder[stage] >= ValueStageOrder[minimum];
-}
-
 function resolveNamedColor(value: NamedColor): NumericColor {
   return numericColorFromRgba(ColorRgba[value.name]);
 }
@@ -2013,9 +2010,9 @@ function resolveColorComponent(
     return undefined;
   }
 
-  const resolved = resolveColorNumericValue(value, context);
+  const resolved = resolveColorNumericValue(value, context, 'declared');
 
-  if (resolved === null) {
+  if (resolved.type === 'math') {
     return null;
   }
 
@@ -2036,15 +2033,9 @@ function resolveColorAlpha(
     return undefined;
   }
 
-  if (value.type === 'math' && !isComputedColorStage(
-    context.stage ?? 'declared',
-  )) {
-    return null;
-  }
+  const resolved = resolveColorNumericValue(value, context, 'computed');
 
-  const resolved = resolveColorNumericValue(value, context);
-
-  if (resolved === null) {
+  if (resolved.type === 'math') {
     return null;
   }
 
@@ -2066,53 +2057,50 @@ function resolveHue(
     return undefined;
   }
 
-  if (value.type === 'angle') {
-    return resolveAngle(value).value;
+  const calculationContext = colorCalculationContext(context, 'declared');
+  const resolved = isNumberValue(value)
+    ? resolveNumber(value, calculationContext)
+    : resolveAngle(value, calculationContext);
+
+  if (resolved.type === 'math') {
+    return null;
   }
 
-  if (value.type === 'number') {
-    return value.value;
-  }
-
-  const calculation = simplifyCalculationTree(
-    value.calculation,
-    context,
-    value.restrictions,
-  );
-
-  switch (calculation.type) {
-    case 'number':
-      return calculation.value;
-    case 'dimension':
-      return calculation.unit === 'deg'
-        ? calculation.value
-        : null;
-    default:
-      return null;
-  }
+  return resolved.type === 'angle'
+    ? resolveAngleLiteral(resolved).value
+    : resolved.value;
 }
 
 function resolveColorNumericValue(
   value: NumberValue | PercentageValue,
   context: CalculationContext,
-): NumberLiteral | PercentageLiteral | null {
-  if (value.type !== 'math') {
-    return value;
-  }
-
-  const calculation = simplifyCalculationTree(
-    value.calculation,
+  unwrapMathAt: ValueStage,
+): NumberValue | PercentageValue {
+  const calculationContext = colorCalculationContext(
     context,
-    value.restrictions,
+    unwrapMathAt,
   );
 
-  switch (calculation.type) {
-    case 'number':
-    case 'percentage':
-      return calculation;
-    default:
-      return null;
-  }
+  return isNumberValue(value)
+    ? resolveNumber(value, calculationContext)
+    : resolvePercentage(value, calculationContext);
+}
+
+function colorCalculationContext(
+  context: CalculationContext,
+  unwrapMathAt: ValueStage,
+): CalculationContext {
+  return {
+    ...context,
+    unwrapMathAt: context.unwrapMathAt ?? unwrapMathAt,
+  };
+}
+
+function isNumberValue(
+  value: NumberValue | PercentageValue | AngleValue,
+): value is NumberValue {
+  return value.type === 'number' ||
+    (value.type === 'math' && value.restrictions.expectedType === 'number');
 }
 
 type ColorComponentRange = [
@@ -2373,8 +2361,14 @@ function serializeHue(
     return value;
   }
 
+  if (value.type === 'math') {
+    return isNumberValue(value)
+      ? serializeNumber(value, context)
+      : serializeAngle(value, context);
+  }
+
   if (value.type === 'angle') {
-    return serializeCssNumber(resolveAngle(value).value);
+    return serializeCssNumber(resolveAngleLiteral(value).value);
   }
 
   return serializeColorComponent(value, 1, context);
@@ -2389,18 +2383,15 @@ function serializeColorComponent(
     return value;
   }
 
-  switch (value.type) {
-    case 'number':
-      return serializeNumber(value);
-    case 'percentage':
-      return serializeCssNumber(
-        value.value * percentageReference / 100,
-      );
-    case 'math':
-      return serializeMathValue(value, context);
-    default:
-      return assertNever(value);
+  if (value.type === 'percentage') {
+    return serializeCssNumber(
+      value.value * percentageReference / 100,
+    );
   }
+
+  return isNumberValue(value)
+    ? serializeNumber(value, context)
+    : serializePercentage(value, context);
 }
 
 function serializeColorAlpha(
@@ -2415,35 +2406,33 @@ function serializeColorAlpha(
     return value;
   }
 
-  if (value.type === 'math') {
-    const stage = context.stage ?? 'declared';
-    const calculation = simplifyCalculationTree(
-      value.calculation,
-      {
-        stage,
-        range: [0, 1],
-        percentageReferenceValue: { type: 'number', value: 1 },
-      },
-      value.restrictions,
+  const stage = context.stage ?? 'declared';
+  const resolved = isNumberValue(value)
+    ? resolveNumber(value, {
+      stage,
+      range: [0, 1],
+      unwrapMathAt: 'computed',
+    })
+    : resolvePercentage(
+      value,
+      isComputedColorStage(stage)
+        ? { stage, unwrapMathAt: 'computed' }
+        : {
+          stage,
+          unwrapMathAt: 'actual',
+          percentageReferenceValue: { type: 'number', value: 1 },
+        },
     );
 
-    if (
-      isComputedColorStage(stage) &&
-      calculation.type === 'number' &&
-      calculation.value === 1
-    ) {
-      return null;
-    }
-
-    return serializeMathValue(
-      { ...value, calculation },
-      { ...context, stage },
-    );
+  if (resolved.type === 'math') {
+    return isNumberValue(resolved)
+      ? serializeNumber(resolved, { ...context, stage })
+      : serializePercentage(resolved, { ...context, stage });
   }
 
-  const alpha = value.type === 'percentage'
-    ? value.value / 100
-    : value.value;
+  const alpha = resolved.type === 'percentage'
+    ? resolved.value / 100
+    : resolved.value;
   const clamped = Number.isNaN(alpha)
     ? 0
     : clamp(alpha, 0, 1);

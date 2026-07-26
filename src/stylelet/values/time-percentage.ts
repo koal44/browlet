@@ -7,7 +7,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
   accumulateMathFunctions, addMathFunctions,
   createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathFunctions, serializeMathValue,
+  interpolateMathFunctions, resolveMathValue, serializeMathValue,
   type CalculationContext, type CalculationRange,
   type CalculationSerializationContext, type MathValue,
 } from './calc';
@@ -24,7 +24,8 @@ import {
  * <time-percentage> = <time> | <percentage> | <math-function>
  */
 
-export type TimePercentageValue = TimePercentageLiteral | MathValue;
+export type TimePercentageValue =
+  TimePercentageLiteral | MathValue<'time-percentage'>;
 
 export function parseTimePercentage(
   input: ParserInput,
@@ -60,6 +61,15 @@ export function createTimePercentageConsumer(
 }
 
 export const tryConsumeTimePercentage = createTimePercentageConsumer();
+
+export function resolveTimePercentage(
+  value: TimePercentageValue,
+  context: CalculationContext = {},
+): TimePercentageValue {
+  return value.type === 'math'
+    ? resolveMathValue(value, timePercentageCalculationContext(context))
+    : value;
+}
 
 export function serializeTimePercentage(
   value: TimePercentageValue,
@@ -141,7 +151,7 @@ export function accumulateTimePercentages(
 function asMathValue(
   value: TimePercentageValue,
   context: CalculationContext,
-): MathValue {
+): MathValue<'time-percentage'> {
   return value.type === 'math'
     ? value
     : createMathValueFromLiteral(value, 'time-percentage', context);
