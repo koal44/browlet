@@ -2408,6 +2408,30 @@ const colorSerializations: ColorSerializationCase[] = [
     browsers: ['firefox'],
   },
   {
+    decl: 'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)',
+    expect: 'rgb(calc(50% + (10% * sign(1em - 10px))) 0 0 / 0.5)',
+    browsers: ['chromium', 'webkit'],
+  },
+  // Firefox currently drops this otherwise valid declaration.
+  {
+    decl: 'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)',
+    expect: 'rgb(calc(50% + (10% * sign(1em - 10px))) 0 0 / 0.5)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'hsl(calc(50deg + (sign(1em - 10px) * 10deg)), 0%, 0%, 50%)',
+    expect: 'hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 0 / 0.5)',
+    browsers: ['chromium', 'webkit'],
+  },
+  // Firefox currently drops this otherwise valid declaration.
+  {
+    decl: 'hsl(calc(50deg + (sign(1em - 10px) * 10deg)), 0%, 0%, 50%)',
+    expect: 'hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 0 / 0.5)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
     prop: 'width',
     decl: 'calc(sign(1em - 1px) * 1px)',
     expect: 'calc(1px * sign(1em - 1px))',
@@ -2449,6 +2473,29 @@ const colorSerializations: ColorSerializationCase[] = [
   // negative HWB white/black components unspecified. These cases document
   // current engine behavior only. Implementations diverge for indeterminate
   // infinity arithmetic, so we do not infer additional clamping rules from it.
+  // Stylelet preserves finite negative HWB components and follows the sample
+  // conversion algorithm, matching WebKit rather than imposing the
+  // Chromium/Firefox zero clamp that the specification does not require.
+  {
+    decl: 'hwb(30 -10% 20%)',
+    expect: 'rgb(204, 102, 0)',
+    browsers: ['chromium', 'firefox'],
+  },
+  {
+    decl: 'hwb(30 -10% 20%)',
+    expect: 'rgb(204, 89, 0)',
+    browsers: ['webkit'],
+  },
+  {
+    decl: 'hwb(30 20% -10%)',
+    expect: 'rgb(255, 153, 51)',
+    browsers: ['chromium', 'firefox'],
+  },
+  {
+    decl: 'hwb(30 20% -10%)',
+    expect: 'rgb(255, 166, 51)',
+    browsers: ['webkit'],
+  },
   { decl: 'hsl(0 calc(infinity) 50%)', expect: 'rgb(255, 0, 0)' },
   { decl: 'hsl(0 calc(-infinity) 50%)', expect: 'rgb(128, 128, 128)' },
   { decl: 'hsl(0 100% calc(-infinity))', expect: 'rgb(0, 0, 0)' },

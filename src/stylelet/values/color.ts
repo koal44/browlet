@@ -2317,6 +2317,7 @@ function serializeRgbColor(
   );
 
   return value.syntax === 'legacy'
+      && canUseLegacyColorSerialization([...value.components, value.alpha])
     ? serializeLegacyColorFunction('rgb', components, value.alpha)
     : serializeModernColorFunction('rgb', components, value.alpha);
 }
@@ -2331,8 +2332,26 @@ function serializeHslColor(
   ];
 
   return value.syntax === 'legacy'
+      && canUseLegacyColorSerialization([
+        value.hue,
+        value.saturation,
+        value.lightness,
+        value.alpha,
+      ])
     ? serializeLegacyColorFunction('hsl', components, value.alpha)
     : serializeModernColorFunction('hsl', components, value.alpha);
+}
+
+function canUseLegacyColorSerialization(
+  values: readonly (
+    HueValue | PercentageValue | 'none' | undefined
+  )[],
+): boolean {
+  // Missing components and deferred math values require modern syntax.
+  return values.every(
+    (value) => value === undefined
+      || (value !== 'none' && value.type !== 'math'),
+  );
 }
 
 function serializeLegacyColorFunction(

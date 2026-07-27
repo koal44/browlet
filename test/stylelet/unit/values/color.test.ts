@@ -270,6 +270,23 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
+  // Adapted from WPT css/css-color/parsing/color-valid-rgb.html.
+  it.each([
+    [
+      'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)',
+      'rgb(calc(50% + (10% * sign(1em - 10px))) 0 0 / 0.5)',
+    ],
+    [
+      'rgb(0%, 0%, 0%, calc(50% + (sign(1em - 10px) * 10%)))',
+      'rgb(0 0 0 / calc(50% + (10% * sign(1em - 10px))))',
+    ],
+  ] as const)(
+    'serializes the deferred legacy RGB calculation %s in modern syntax',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
   it('resolves color calculations as their value stage permits', () => {
     const input = 'rgb(calc(255 / 2) calc(50%) 0)';
 
@@ -516,13 +533,45 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it('clamps negative hsl saturation at parsed-value time', () => {
-    expect(parseColorValue('hsl(120 -10% 50%)')).toEqual({
+  // Adapted from WPT css/css-color/parsing/color-valid-hsl.html.
+  it.each([
+    [
+      'hsl(calc(50deg + (sign(1em - 10px) * 10deg)), 0%, 0%, 50%)',
+      'hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 0 / 0.5)',
+    ],
+    [
+      'hsl(0deg, 0%, 0%, calc(50% + (sign(1em - 10px) * 10%)))',
+      'hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))',
+    ],
+  ] as const)(
+    'serializes the deferred legacy HSL calculation %s in modern syntax',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  it.each([
+    'hsl(120 -10% 50%)',
+    'hsl(120 -10 50)',
+  ])('clamps negative hsl saturation at parsed-value time for %s', (input) => {
+    expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0.5, 0.5],
       alpha: 1,
     });
+  });
+
+  it.each([
+    ['hsl(0 100% 37.5%)', [0.75, 0, 0]],
+    ['hsl(360 100% 37.5%)', [0.75, 0, 0]],
+    ['hsl(720 100% 37.5%)', [0.75, 0, 0]],
+    ['hsl(-300 100% 37.5%)', [0.75, 0.75, 0]],
+  ] as const)('normalizes the hue in %s', (input, expected) => {
+    expectColorCloseTo(
+      parseColorValue(input) as AbsoluteColor,
+      expected,
+    );
   });
 
   it('resolves HWB without missing components to absolute sRGB', () => {
@@ -541,6 +590,7 @@ describe('color values', () => {
   });
 
   it('rejects invalid hwb syntax', () => {
+    expect(parseColorValue('hwba(120 20% 30%)')).toBeNull();
     expect(parseColorValue('hwb(120, 20%, 30%)')).toBeNull();
     expect(parseColorValue('hwb(120 20%)')).toBeNull();
     expect(parseColorValue('hwb(120 20% 30% 0.5)')).toBeNull();
@@ -552,13 +602,37 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
-  it('normalizes excessive white and black when resolving hwb colors', () => {
-    expect(parseColorValue('hwb(45 40% 80%)')).toEqual({
+  it.each([
+    ['hwb(45 40% 60%)', 0.4],
+    ['hwb(45 40% 80%)', 1 / 3],
+  ])('normalizes achromatic white and black in %s', (input, gray) => {
+    expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Absolute,
       space: 'srgb-legacy',
-      components: [1 / 3, 1 / 3, 1 / 3],
+      components: [gray, gray, gray],
       alpha: 1,
     });
+  });
+
+  // CSS Color 4 leaves finite negative whiteness and blackness unspecified.
+  // Preserve them through its unbounded sample conversion until it says otherwise.
+  it.each([
+    ['hwb(30 -10% 20%)', [0.8, 0.35, -0.1]],
+    ['hwb(30 20% -10%)', [1.1, 0.65, 0.2]],
+  ] as const)('preserves finite negative components in %s', (input, components) => {
+    const color = parseColorValue(input);
+
+    expect(color).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: 'srgb-legacy',
+      alpha: 1,
+    });
+
+    if (color?.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute color');
+    }
+
+    expectComponentsCloseTo(color.components, components, 12);
   });
 
   it('preserves missing HWB components outside interpolation', () => {
@@ -1387,6 +1461,19 @@ describe('color values', () => {
       components: [120, 0, 0],
       alpha: 0.5,
     });
+  });
+
+  it('corrects negative saturation when converting out-of-gamut sRGB to HSL', () => {
+    const rgb: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [2, 1.5, 1.5],
+      alpha: 0.5,
+    };
+    const hsl = convertAbsoluteColor(rgb, 'hsl');
+
+    expectComponentsCloseTo(hsl.components, [180, 100 / 3, 175], 12);
+    expectColorCloseTo(convertAbsoluteColor(hsl, 'srgb'), rgb);
   });
 
   it('replaces missing components with zero during color conversion', () => {
