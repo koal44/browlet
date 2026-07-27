@@ -1,6 +1,6 @@
 import {
-  parseListOfComponentValues,
-  type BlockKind, type ComponentValue, type ParserInput, type PreservedToken, type SimpleBlockKind,
+  parseListOfComponentValues, type BlockKind, type ComponentValue, type ParserInput,
+  type PreservedToken, type SimpleBlockKind,
 } from '../parser/syntax';
 import { TokenKind, type StaticToken } from '../parser/tokens';
 

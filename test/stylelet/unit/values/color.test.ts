@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, ColorRgba, areColorsEquivalent, convertNumericColor, deltaEOK,
-  gamutMapNumericColor, interpolateColors,
-  parseColorInterpolationMethod, parseColorValue, resolveColorValue,
-  serializeColorValue,
-  type NumericColor, type SystemColorName,
+  ColorKind, ColorRgba, areColorsEquivalent, convertNumericColor, deltaEOK, gamutMapNumericColor,
+  interpolateColors, parseColorInterpolationMethod, parseColorValue, resolveColorValue,
+  serializeColorValue, type NumericColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
 
 type ColorVector3 = readonly [number, number, number];

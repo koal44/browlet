@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ColorKind, type ColorName } from '../../../../src/stylelet/values/color';
 import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
-import { AtRuleKindAst, BlockItemAstKind, PropertyId, RuleKindAst } from '../../../../src/stylelet/parser/types';
+import {
+  AtRuleKindAst, BlockItemAstKind, PropertyId,
+  RuleKindAst,
+} from '../../../../src/stylelet/parser/types';
 import type { LengthUnit } from '../../../../src/stylelet/values/numeric-literal/length';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 

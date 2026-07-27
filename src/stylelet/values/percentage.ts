@@ -5,18 +5,16 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathValues, addMathValues,
-  createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue,
-  type MathContext, type MathRange, type MathValue,
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
 } from './math-value';
 import {
-  accumulatePercentages as accumulatePercentageLiterals,
-  addPercentages as addPercentageLiterals,
+  accumulatePercentages as accumulatePercentageLiterals, addPercentages as addPercentageLiterals,
   createPercentageConsumer as createPercentageLiteralConsumer,
   interpolatePercentages as interpolatePercentageLiterals,
-  serializePercentage as serializePercentageLiteral,
-  type PercentageConsumerOptions, type PercentageLiteral,
+  serializePercentage as serializePercentageLiteral, type PercentageConsumerOptions,
+  type PercentageLiteral,
 } from './numeric-literal/percentage';
 
 /*

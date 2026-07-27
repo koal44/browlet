@@ -1,13 +1,17 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { createDelimConsumer, createFunctionalNotationConsumer, tryConsumeIdentToken } from '../parser/component-consumers';
 import {
-  commaRepeat, one, oneOf, opt, repeat, sequenceOf, withComponentTrivia,
+  createDelimConsumer, createFunctionalNotationConsumer,
+  tryConsumeIdentToken,
+} from '../parser/component-consumers';
+import {
+  commaRepeat, one, oneOf, opt, repeat, sequenceOf,
+  withComponentTrivia,
 } from '../parser/component-grammar';
 import {
-  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import {
   consumeComponentTrivia, isDelimToken, isParensBlock, parseAsComponentGrammar,
@@ -15,14 +19,11 @@ import {
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import {
-  isAtOrBeyondValueStage,
-  type ValueStage, type ValueStageContext,
+  isAtOrBeyondValueStage, type ValueStage,
+  type ValueStageContext,
 } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
-import {
-  ANGLE_UNITS, resolveAngle,
-  type AngleLiteral,
-} from './numeric-literal/angle';
+import { ANGLE_UNITS, resolveAngle, type AngleLiteral } from './numeric-literal/angle';
 import {
   serializeDimension, tryConsumeDimension,
   type DimensionLiteral,
@@ -34,13 +35,10 @@ import {
 import { serializeIdentifier } from './ident';
 import type { IntegerLiteral } from './numeric-literal/integer';
 import {
-  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength,
-  type LengthLiteral, type LengthResolutionContext,
+  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type LengthLiteral,
+  type LengthResolutionContext,
 } from './numeric-literal/length';
-import {
-  serializeNumber, tryConsumeNumber,
-  type NumberLiteral,
-} from './numeric-literal/number';
+import { serializeNumber, tryConsumeNumber, type NumberLiteral } from './numeric-literal/number';
 import {
   serializePercentage, tryConsumePercentage,
   type PercentageLiteral,
@@ -49,10 +47,7 @@ import {
   RESOLUTION_UNITS, resolveResolution,
   type ResolutionLiteral,
 } from './numeric-literal/resolution';
-import {
-  TIME_UNITS, resolveTime,
-  type TimeLiteral,
-} from './numeric-literal/time';
+import { TIME_UNITS, resolveTime, type TimeLiteral } from './numeric-literal/time';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';

@@ -4,10 +4,7 @@ import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
 } from '../../parser/component-try-consumer';
-import {
-  isTokenKind, parseAsComponentGrammar,
-  type ParserInput,
-} from '../../parser/syntax';
+import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { serializeIdentifier } from '../ident';
 import { serializeCssNumber } from './number';

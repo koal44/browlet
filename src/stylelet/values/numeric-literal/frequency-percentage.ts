@@ -1,14 +1,16 @@
 import { withComponentTrivia } from '../../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import {
+  unwrapConsumeResultOrThrow,
+  type TryComponentConsumer,
+} from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
-  resolveFrequency, serializeFrequency, tryConsumeFrequency,
-  type CanonicalFrequencyLiteral, type FrequencyLiteral,
+  resolveFrequency, serializeFrequency, tryConsumeFrequency, type CanonicalFrequencyLiteral,
+  type FrequencyLiteral,
 } from './frequency';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
-  tryAccumulateDimensionPercentages,
-  tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
+  tryAccumulateDimensionPercentages, tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 

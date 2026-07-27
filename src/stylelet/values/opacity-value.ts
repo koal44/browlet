@@ -8,9 +8,8 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { isAtOrBeyondValueStage } from '../value-processing';
 import type { MathContext } from './math-value';
 import {
-  accumulateNumbers, addNumbers, interpolateNumbers,
-  resolveNumber, serializeNumber, tryConsumeNumber,
-  type NumberValue,
+  accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,
+  tryConsumeNumber, type NumberValue,
 } from './number';
 import {
   resolvePercentage, serializePercentage, tryConsumePercentage,

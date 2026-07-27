@@ -1,9 +1,12 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer, tryConsumeFunctionBlock } from '../parser/component-consumers';
+import {
+  createFunctionalNotationConsumer,
+  tryConsumeFunctionBlock,
+} from '../parser/component-consumers';
 import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
 import {
-  bad, ComponentConsumerBadReason, isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  bad, ComponentConsumerBadReason, isBad, ok, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type FunctionBlock, type ParserInput } from '../parser/syntax';
 import { isAnyValue } from './any-value';

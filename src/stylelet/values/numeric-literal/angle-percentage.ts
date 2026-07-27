@@ -1,14 +1,16 @@
 import { withComponentTrivia } from '../../parser/component-grammar';
-import { unwrapConsumeResultOrThrow, type TryComponentConsumer } from '../../parser/component-try-consumer';
+import {
+  unwrapConsumeResultOrThrow,
+  type TryComponentConsumer,
+} from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
-  resolveAngle, serializeAngle, tryConsumeAngle,
-  type AngleLiteral, type CanonicalAngleLiteral,
+  resolveAngle, serializeAngle, tryConsumeAngle, type AngleLiteral,
+  type CanonicalAngleLiteral,
 } from './angle';
 import {
   createDimensionPercentageConsumer, serializeDimensionPercentage,
-  tryAccumulateDimensionPercentages,
-  tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
+  tryAccumulateDimensionPercentages, tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
   type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
 } from './dimension-percentage';
 

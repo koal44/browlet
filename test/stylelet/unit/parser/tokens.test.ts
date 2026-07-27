@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { filterCodePoints, NumberTokenFlag, TokenKind, tokenize, HashTokenFlag } from '../../../../src/stylelet/parser/tokens';
+import {
+  filterCodePoints, NumberTokenFlag, TokenKind, tokenize,
+  HashTokenFlag,
+} from '../../../../src/stylelet/parser/tokens';
 
 describe('filterCodePoints', () => {
   it('should filter code points correctly', () => {

@@ -1,8 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  runScenarios,
-  type BrowserName, type CaseStatus,
-} from '../../harness/browser/scenarios';
+import { runScenarios, type BrowserName, type CaseStatus } from '../../harness/browser/scenarios';
 
 runScenarios('style oracle selector prelude boundaries', 'skip', [
   {

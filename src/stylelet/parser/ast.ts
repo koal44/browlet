@@ -1,25 +1,12 @@
 import {
-  parseStyleBlockContents,
-  parseStylesheet as parseSyntaxStylesheet,
-  RuleKind as RuleKindSyntax,
-  type AtRule as SyntaxAtRule,
-  type BraceBlock,
-  type QualifiedRule as SyntaxQualifiedRule,
-  type Rule as SyntaxRule,
-  type StyleBlockItem as SyntaxStyleBlockItem,
-  type StyleSheet as SyntaxStyleSheet,
-  type Declaration as SyntaxDeclaration,
+  parseStyleBlockContents, parseStylesheet as parseSyntaxStylesheet, RuleKind as RuleKindSyntax,
+  type AtRule as SyntaxAtRule, type BraceBlock, type Declaration as SyntaxDeclaration,
+  type QualifiedRule as SyntaxQualifiedRule, type Rule as SyntaxRule,
+  type StyleBlockItem as SyntaxStyleBlockItem, type StyleSheet as SyntaxStyleSheet,
 } from './syntax';
 import {
-  RuleKindAst,
-  BlockItemAstKind,
-  type AtRuleAst,
-  type CssRuleAst,
-  type NestedStyleRuleAst,
-  type StyleBlockAst,
-  type StyleBlockItemAst,
-  type StyleRuleAst,
-  type StyleSheetAst,
+  BlockItemAstKind, RuleKindAst, type AtRuleAst, type CssRuleAst, type NestedStyleRuleAst,
+  type StyleBlockAst, type StyleBlockItemAst, type StyleRuleAst, type StyleSheetAst,
 } from './types';
 import { buildDeclarationAst } from './declaration';
 import { assertNever } from '../../shared/util';

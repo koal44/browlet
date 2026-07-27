@@ -2,61 +2,55 @@ import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
-  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
-  parseNumber, resolveNumber, serializeNumber, tryConsumeNumber,
+  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
+  resolveNumber, serializeNumber, tryConsumeNumber,
 } from '../../../../src/stylelet/values/number';
 import {
-  accumulateAngles, addAngles, interpolateAngles,
-  parseAngle, resolveAngle, serializeAngle, tryConsumeAngle,
+  accumulateAngles, addAngles, interpolateAngles, parseAngle, resolveAngle, serializeAngle,
+  tryConsumeAngle,
 } from '../../../../src/stylelet/values/angle';
 import {
-  accumulateFrequencies, addFrequencies, interpolateFrequencies,
-  parseFrequency, resolveFrequency, serializeFrequency, tryConsumeFrequency,
+  accumulateFrequencies, addFrequencies, interpolateFrequencies, parseFrequency, resolveFrequency,
+  serializeFrequency, tryConsumeFrequency,
 } from '../../../../src/stylelet/values/frequency';
 import {
-  accumulateLengths, addLengths, createLengthConsumer, interpolateLengths,
-  parseLength, resolveLength, serializeLength, tryConsumeLength,
+  accumulateLengths, addLengths, createLengthConsumer, interpolateLengths, parseLength,
+  resolveLength, serializeLength, tryConsumeLength,
 } from '../../../../src/stylelet/values/length';
 import {
-  accumulateResolutions, addResolutions, interpolateResolutions,
-  parseResolution, resolveResolution, serializeResolution, tryConsumeResolution,
+  accumulateResolutions, addResolutions, interpolateResolutions, parseResolution, resolveResolution,
+  serializeResolution, tryConsumeResolution,
 } from '../../../../src/stylelet/values/resolution';
 import {
-  accumulateTimes, addTimes, interpolateTimes,
-  parseTime, resolveTime, serializeTime, tryConsumeTime,
+  accumulateTimes, addTimes, interpolateTimes, parseTime, resolveTime, serializeTime,
+  tryConsumeTime,
 } from '../../../../src/stylelet/values/time';
 import {
-  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
-  parseInteger, resolveInteger, serializeInteger, tryConsumeInteger,
+  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
+  resolveInteger, serializeInteger, tryConsumeInteger,
 } from '../../../../src/stylelet/values/integer';
 import {
-  accumulatePercentages, addPercentages, createPercentageConsumer,
-  interpolatePercentages, parsePercentage, resolvePercentage, serializePercentage,
-  tryConsumePercentage,
+  accumulatePercentages, addPercentages, createPercentageConsumer, interpolatePercentages,
+  parsePercentage, resolvePercentage, serializePercentage, tryConsumePercentage,
 } from '../../../../src/stylelet/values/percentage';
 import {
-  accumulateAnglePercentages, addAnglePercentages,
-  createAnglePercentageConsumer, interpolateAnglePercentages,
-  parseAnglePercentage, resolveAnglePercentage, serializeAnglePercentage,
-  tryConsumeAnglePercentage,
+  accumulateAnglePercentages, addAnglePercentages, createAnglePercentageConsumer,
+  interpolateAnglePercentages, parseAnglePercentage, resolveAnglePercentage,
+  serializeAnglePercentage, tryConsumeAnglePercentage,
 } from '../../../../src/stylelet/values/angle-percentage';
 import {
-  accumulateLengthPercentages, addLengthPercentages,
-  createLengthPercentageConsumer, interpolateLengthPercentages,
-  parseLengthPercentage, resolveLengthPercentage, serializeLengthPercentage,
-  tryConsumeLengthPercentage,
+  accumulateLengthPercentages, addLengthPercentages, createLengthPercentageConsumer,
+  interpolateLengthPercentages, parseLengthPercentage, resolveLengthPercentage,
+  serializeLengthPercentage, tryConsumeLengthPercentage,
 } from '../../../../src/stylelet/values/length-percentage';
 import {
-  accumulateFrequencyPercentages, addFrequencyPercentages,
-  createFrequencyPercentageConsumer, interpolateFrequencyPercentages,
-  parseFrequencyPercentage, resolveFrequencyPercentage,
-  serializeFrequencyPercentage,
-  tryConsumeFrequencyPercentage,
+  accumulateFrequencyPercentages, addFrequencyPercentages, createFrequencyPercentageConsumer,
+  interpolateFrequencyPercentages, parseFrequencyPercentage, resolveFrequencyPercentage,
+  serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
 } from '../../../../src/stylelet/values/frequency-percentage';
 import {
-  accumulateTimePercentages, addTimePercentages,
-  createTimePercentageConsumer, interpolateTimePercentages,
-  parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
+  accumulateTimePercentages, addTimePercentages, createTimePercentageConsumer,
+  interpolateTimePercentages, parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
   tryConsumeTimePercentage,
 } from '../../../../src/stylelet/values/time-percentage';
 

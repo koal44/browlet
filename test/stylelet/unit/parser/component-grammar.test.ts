@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { consumeComponentTrivia, isIdentToken, parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import {
+  consumeComponentTrivia, isIdentToken, parseAsComponentGrammar, parseListAsComponentGrammar,
+  parseListOfComponentValues,
+} from '../../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 import {
-  __nextSequenceCaps, __consumeSequenceAttempt,
-  allOf, any, commaRepeat, one, oneOf, opt, plus, repeat, required, requiredAllOf, requiredSequenceOf,
-  requiredSomeOf, sequenceOf, someOf, withComponentTrivia,
+  __nextSequenceCaps, __consumeSequenceAttempt, allOf, any, commaRepeat, one, oneOf, opt, plus,
+  repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf, sequenceOf, someOf,
+  withComponentTrivia,
 } from '../../../../src/stylelet/parser/component-grammar';
 import {
-  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow,
-  type ComponentConsumerBad, type TryComponentConsumer, type TryComponentConsumerResult,
+  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow, type ComponentConsumerBad,
+  type TryComponentConsumer, type TryComponentConsumerResult,
 } from '../../../../src/stylelet/parser/component-try-consumer';
 
 const cursor = (css: string, context: unknown = undefined): ComponentCursor =>

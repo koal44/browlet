@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  accumulateMathValues, addMathValues, interpolateMathValues,
-  parseMathValue, resolveMathValue, serializeMathValue,
-  tryCoercePercentageToNumber,
-  type MathContext, type MathValueType, type MathValue,
-  type MathBase,
+  accumulateMathValues, addMathValues, interpolateMathValues, parseMathValue, resolveMathValue,
+  serializeMathValue, tryCoercePercentageToNumber, type MathContext, type MathValueType,
+  type MathValue, type MathBase,
 } from '../../../../src/stylelet/values/math-value';
 
 describe('calc', () => {

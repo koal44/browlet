@@ -1,7 +1,4 @@
-import {
-  runScenarios,
-  type BrowserName, type CaseStatus,
-} from '../../harness/browser/scenarios';
+import { runScenarios, type BrowserName, type CaseStatus } from '../../harness/browser/scenarios';
 
 type CalcSerializationCase = {
   prop: string;

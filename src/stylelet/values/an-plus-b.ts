@@ -3,8 +3,8 @@ import { createDelimConsumer, tryConsumeIntegerToken } from '../parser/component
 import type { ComponentCursor } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
 import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
@@ -83,7 +83,7 @@ function createIdentPatternConsumer(
   };
 }
 
-/**
+/*
  * The spec's expanded alternatives factor into three token-disjoint forms:
  *
  * <an+b> = <an+b-atomic> | <n-expression> | <ndash-expression>

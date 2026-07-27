@@ -1,6 +1,6 @@
 import {
-  isDelimToken, isTokenKind, parseListOfComponentValues,
-  type ComponentValue, type ParserInput,
+  isDelimToken, isTokenKind, parseListOfComponentValues, type ComponentValue,
+  type ParserInput,
 } from '../parser/syntax';
 import { TokenKind, type StaticToken } from '../parser/tokens';
 import { isAnyValue, type AnyValueComponent } from './any-value';

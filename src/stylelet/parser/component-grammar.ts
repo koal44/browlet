@@ -1,5 +1,8 @@
 import type { ComponentCursor } from './component-cursor';
-import { isBad, ok, type TryComponentConsumerResult, type ComponentConsumerBad, type TryComponentConsumer } from './component-try-consumer';
+import {
+  isBad, ok, type ComponentConsumerBad, type TryComponentConsumer,
+  type TryComponentConsumerResult,
+} from './component-try-consumer';
 import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 

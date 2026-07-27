@@ -1,12 +1,9 @@
 import { one, oneOf } from '../../parser/component-grammar';
 import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../../parser/component-try-consumer';
-import {
-  addDimensions, interpolateDimensions,
-  type DimensionLiteral,
-} from './dimension';
+import { addDimensions, interpolateDimensions, type DimensionLiteral } from './dimension';
 import {
   addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
   type PercentageLiteral,

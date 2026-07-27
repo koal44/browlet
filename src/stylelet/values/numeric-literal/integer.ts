@@ -1,8 +1,8 @@
 import { tryConsumeIntegerToken } from '../../parser/component-consumers';
 import { withComponentTrivia } from '../../parser/component-grammar';
 import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 

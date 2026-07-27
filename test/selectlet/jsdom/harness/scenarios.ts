@@ -1,7 +1,7 @@
 import { describe, test } from 'vitest';
 import type {
-  Scenario, ScenariosStatus, TestCase, RunScenariosOptions, ContextRef, ScenarioStep,
-  ContextHome, Expectation, MarkupMode,
+  Scenario, ScenariosStatus, TestCase, RunScenariosOptions, ContextRef, ScenarioStep, ContextHome,
+  Expectation, MarkupMode,
 } from '../../../harness/browser/scenarios';
 export type {
   Scenario, ScenariosStatus, TestCase, RunScenariosOptions, ContextRef, ScenarioStep,
@@ -12,7 +12,10 @@ import type { JSDOM as JsdomInst } from 'jsdom';
 export type { JSDOM as JsdomInst } from 'jsdom';
 import type * as JsdomMod from 'jsdom';
 export type * as JsdomMod from 'jsdom';
-import { hydrateDeclarativeShadowRoots, hydrateIframeSrcdocs, installSelectletShim, patchComputedStyleForWindow, patchIframeSrcdoc } from './patches';
+import {
+  hydrateDeclarativeShadowRoots, hydrateIframeSrcdocs, installSelectletShim,
+  patchComputedStyleForWindow, patchIframeSrcdoc,
+} from './patches';
 import { createJsdomPage } from './page';
 import { formatCaseHeader, runCase, thrownMessage, type CaseInfo } from './case';
 

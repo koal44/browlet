@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { createDelimConsumer, createFunctionalNotationConsumer } from '../../../../src/stylelet/parser/component-consumers';
+import {
+  createDelimConsumer,
+  createFunctionalNotationConsumer,
+} from '../../../../src/stylelet/parser/component-consumers';
 import { ok } from '../../../../src/stylelet/parser/component-try-consumer';
 import { BlockKind, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { BadStringToken } from '../../../../src/stylelet/parser/tokens';

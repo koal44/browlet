@@ -1,28 +1,23 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever, clamp } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { createDelimConsumer, createFunctionalNotationConsumer, tryConsumeHashToken } from '../parser/component-consumers';
 import {
-  commaRepeat, one, oneOf, opt, repeat, sequenceOf, withComponentTrivia,
+  createDelimConsumer, createFunctionalNotationConsumer,
+  tryConsumeHashToken,
+} from '../parser/component-consumers';
+import {
+  commaRepeat, one, oneOf, opt, repeat, sequenceOf,
+  withComponentTrivia,
 } from '../parser/component-grammar';
 import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import {
-  isAtOrBeyondValueStage,
-  type ValueStage,
-} from '../value-processing';
-import {
-  resolveAngle, serializeAngle, tryConsumeAngle,
-  type AngleValue,
-} from './angle';
-import {
-  tryCoercePercentageToNumber,
-  type MathContext,
-} from './math-value';
+import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
+import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
+import { tryCoercePercentageToNumber, type MathContext } from './math-value';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';

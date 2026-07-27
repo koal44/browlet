@@ -2,8 +2,8 @@ import { asciiLower } from '../../shared/css';
 import type { ComponentCursor } from '../parser/component-cursor';
 import { tryConsumeIdentToken } from '../parser/component-consumers';
 import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 
 export function createKeywordConsumer<

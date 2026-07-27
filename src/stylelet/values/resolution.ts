@@ -5,16 +5,18 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathValues, addMathValues,
-  createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue,
-  type MathContext, type MathRange, type MathValue,
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
 } from './math-value';
-import { accumulateDimensions, addDimensions, interpolateDimensions } from './numeric-literal/dimension';
+import {
+  accumulateDimensions, addDimensions,
+  interpolateDimensions,
+} from './numeric-literal/dimension';
 import {
   createResolutionConsumer as createResolutionLiteralConsumer,
-  serializeResolution as serializeResolutionLiteral,
-  type ResolutionConsumerOptions, type ResolutionLiteral,
+  serializeResolution as serializeResolutionLiteral, type ResolutionConsumerOptions,
+  type ResolutionLiteral,
 } from './numeric-literal/resolution';
 
 /*

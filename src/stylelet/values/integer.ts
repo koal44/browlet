@@ -5,17 +5,14 @@ import {
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import {
-  accumulateMathValues, addMathValues,
-  createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue,
-  type MathContext, type MathRange, type MathValue,
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
 } from './math-value';
 import {
-  accumulateIntegers as accumulateIntegerLiterals,
-  addIntegers as addIntegerLiterals,
+  accumulateIntegers as accumulateIntegerLiterals, addIntegers as addIntegerLiterals,
   createIntegerConsumer as createIntegerLiteralConsumer,
-  interpolateIntegers as interpolateIntegerLiterals,
-  serializeInteger as serializeIntegerLiteral,
+  interpolateIntegers as interpolateIntegerLiterals, serializeInteger as serializeIntegerLiteral,
   type IntegerConsumerOptions, type IntegerLiteral,
 } from './numeric-literal/integer';
 

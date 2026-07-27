@@ -3,13 +3,10 @@ import { assertNever } from '../../../shared/util';
 import type { ComponentCursor } from '../../parser/component-cursor';
 import { withComponentTrivia } from '../../parser/component-grammar';
 import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../../parser/component-try-consumer';
-import {
-  isTokenKind, parseAsComponentGrammar,
-  type ParserInput,
-} from '../../parser/syntax';
+import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { serializeDimension, type DimensionLiteral } from './dimension';
 

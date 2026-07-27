@@ -1,7 +1,8 @@
 import { isHTMLElement, isIFrame } from '../../util';
 import type { SelectletShimWindow } from './patches';
 import {
-  hydrateDeclarativeShadowRoots, hydrateIframeSrcdocs, installSelectletShim, normalizeIframeSrcdoc, patchComputedStyleForWindow, patchIframeSrcdoc,
+  hydrateDeclarativeShadowRoots, hydrateIframeSrcdocs, installSelectletShim, normalizeIframeSrcdoc,
+  patchComputedStyleForWindow, patchIframeSrcdoc,
 } from './patches';
 import type { JsdomInst } from './scenarios';
 

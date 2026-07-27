@@ -1,6 +1,6 @@
 import {
-  BlockItemAstKind, PropertyId, getPropertyId,
-  type CustomPropertyDeclarationAst, type DeclarationAst,
+  BlockItemAstKind, PropertyId, getPropertyId, type CustomPropertyDeclarationAst,
+  type DeclarationAst,
 } from './types';
 import type { Declaration as SyntaxDeclaration } from './syntax';
 import { parseCssWideValue } from '../values/css-wide';

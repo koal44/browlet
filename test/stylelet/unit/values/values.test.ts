@@ -1,99 +1,99 @@
 import { describe, expect, it } from 'vitest';
 import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { BlockKind, parseListOfComponentValues, type ComponentValue } from '../../../../src/stylelet/parser/syntax';
 import {
-  BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken,
-  identToken, stringToken,
+  BlockKind, parseListOfComponentValues,
+  type ComponentValue,
+} from '../../../../src/stylelet/parser/syntax';
+import {
+  BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
+  stringToken,
 } from '../../../../src/stylelet/parser/tokens';
 import { BlockItemAstKind, type StyleRuleAst } from '../../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
 import {
-  ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle,
-  serializeAngle, serializeCanonicalAngle, tryConsumeAngle,
+  ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle, serializeAngle,
+  serializeCanonicalAngle, tryConsumeAngle,
 } from '../../../../src/stylelet/values/numeric-literal/angle';
 import {
-  createAnglePercentageConsumer, parseAnglePercentage,
-  serializeAnglePercentage, tryConsumeAnglePercentage,
-  tryAccumulateAnglePercentages,
-  tryAddAnglePercentages, tryInterpolateAnglePercentages,
-  tryResolveAnglePercentage,
+  createAnglePercentageConsumer, parseAnglePercentage, serializeAnglePercentage,
+  tryConsumeAnglePercentage, tryAccumulateAnglePercentages, tryAddAnglePercentages,
+  tryInterpolateAnglePercentages, tryResolveAnglePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/angle-percentage';
 import { parseAnyValue } from '../../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../../src/stylelet/values/auto';
 import { parseDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import {
-  accumulateDimensions, addDimensions, interpolateDimensions,
-  parseDimension, serializeDimension, tryConsumeDimension,
+  accumulateDimensions, addDimensions, interpolateDimensions, parseDimension, serializeDimension,
+  tryConsumeDimension,
 } from '../../../../src/stylelet/values/numeric-literal/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../../src/stylelet/values/dashed-ident';
-import { parseIdent, serializeIdent, serializeIdentifier } from '../../../../src/stylelet/values/ident';
+import {
+  parseIdent, serializeIdent,
+  serializeIdentifier,
+} from '../../../../src/stylelet/values/ident';
 import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 import {
-  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers,
-  parseInteger, serializeInteger, tryConsumeInteger,
+  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
+  serializeInteger, tryConsumeInteger,
 } from '../../../../src/stylelet/values/numeric-literal/integer';
 import {
   createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
   serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
 } from '../../../../src/stylelet/values/numeric-literal/frequency';
 import {
-  createFrequencyPercentageConsumer, parseFrequencyPercentage,
-  serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
-  tryAccumulateFrequencyPercentages,
-  tryAddFrequencyPercentages, tryInterpolateFrequencyPercentages,
-  tryResolveFrequencyPercentage,
+  createFrequencyPercentageConsumer, parseFrequencyPercentage, serializeFrequencyPercentage,
+  tryConsumeFrequencyPercentage, tryAccumulateFrequencyPercentages, tryAddFrequencyPercentages,
+  tryInterpolateFrequencyPercentages, tryResolveFrequencyPercentage,
 } from '../../../../src/stylelet/values/numeric-literal/frequency-percentage';
 import {
-  createLengthConsumer, LENGTH_UNITS,
-  parseLength, serializeCanonicalLength, serializeLength,
-  snapLengthAsLineWidth, tryConsumeLength, tryResolveLength,
-  type LengthResolutionContext,
+  createLengthConsumer, LENGTH_UNITS, parseLength, serializeCanonicalLength, serializeLength,
+  snapLengthAsLineWidth, tryConsumeLength, tryResolveLength, type LengthResolutionContext,
 } from '../../../../src/stylelet/values/numeric-literal/length';
 import {
-  createLengthPercentageConsumer, parseLengthPercentage,
-  serializeLengthPercentage, tryConsumeLengthPercentage,
-  tryAccumulateLengthPercentages,
-  tryAddLengthPercentages, tryInterpolateLengthPercentages,
-  tryResolveLengthPercentage,
+  createLengthPercentageConsumer, parseLengthPercentage, serializeLengthPercentage,
+  tryConsumeLengthPercentage, tryAccumulateLengthPercentages, tryAddLengthPercentages,
+  tryInterpolateLengthPercentages, tryResolveLengthPercentage,
 } from '../../../../src/stylelet/values/numeric-literal/length-percentage';
 import {
-  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers,
-  parseNumber, serializeNumber, tryConsumeNumber,
+  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
+  serializeNumber, tryConsumeNumber,
 } from '../../../../src/stylelet/values/numeric-literal/number';
 import {
-  accumulatePercentages, addPercentages,
-  createPercentageConsumer, interpolatePercentages,
+  accumulatePercentages, addPercentages, createPercentageConsumer, interpolatePercentages,
   parsePercentage, serializePercentage, tryConsumePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/percentage';
 import {
-  interpolateRatios, isDegenerateRatio, parseRatio,
-  serializeRatio, tryConsumeRatio,
+  interpolateRatios, isDegenerateRatio, parseRatio, serializeRatio,
+  tryConsumeRatio,
 } from '../../../../src/stylelet/values/ratio';
 import {
-  createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
-  resolveResolution, serializeCanonicalResolution, serializeResolution,
-  tryConsumeResolution,
+  createResolutionConsumer, parseResolution, RESOLUTION_UNITS, resolveResolution,
+  serializeCanonicalResolution, serializeResolution, tryConsumeResolution,
 } from '../../../../src/stylelet/values/numeric-literal/resolution';
-import { parseString, serializeCssString, serializeString } from '../../../../src/stylelet/values/string';
 import {
-  createTimeConsumer, parseTime, resolveTime,
-  serializeCanonicalTime, serializeTime, TIME_UNITS, tryConsumeTime,
+  parseString, serializeCssString,
+  serializeString,
+} from '../../../../src/stylelet/values/string';
+import {
+  createTimeConsumer, parseTime, resolveTime, serializeCanonicalTime, serializeTime, TIME_UNITS,
+  tryConsumeTime,
 } from '../../../../src/stylelet/values/numeric-literal/time';
 import {
-  createTimePercentageConsumer, parseTimePercentage,
-  serializeTimePercentage, tryConsumeTimePercentage,
-  tryAccumulateTimePercentages,
-  tryAddTimePercentages, tryInterpolateTimePercentages,
-  tryResolveTimePercentage,
+  createTimePercentageConsumer, parseTimePercentage, serializeTimePercentage,
+  tryConsumeTimePercentage, tryAccumulateTimePercentages, tryAddTimePercentages,
+  tryInterpolateTimePercentages, tryResolveTimePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/time-percentage';
-import { parseUrlModifier, serializeRequestUrlModifier, tryConsumeUrlModifier } from '../../../../src/stylelet/values/url-modifier';
+import {
+  parseUrlModifier, serializeRequestUrlModifier,
+  tryConsumeUrlModifier,
+} from '../../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../../src/stylelet/values/url';
 import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/zero';
 import {
-  accumulateOpacities, addOpacities, interpolateOpacities,
-  parseOpacityValue, resolveOpacityValue, serializeOpacityValue,
+  accumulateOpacities, addOpacities, interpolateOpacities, parseOpacityValue, resolveOpacityValue,
+  serializeOpacityValue,
 } from '../../../../src/stylelet/values/opacity-value';
 
 // Keywords

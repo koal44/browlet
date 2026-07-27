@@ -1,6 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import {
-  any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withComponentTrivia, requiredSequenceOf,
+  any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withComponentTrivia,
+  requiredSequenceOf,
 } from './component-grammar';
 import type { ComponentCursor } from './component-cursor';
 import {
@@ -14,8 +15,8 @@ import {
 } from './syntax';
 import { TokenKind } from './tokens';
 import {
-  addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0, sumSpecificity,
-  type Specificity,
+  addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0,
+  sumSpecificity, type Specificity,
 } from './selector-specificity';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 import { tryConsumeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
@@ -99,7 +100,7 @@ function narrowSelectorRestriction(
   return 'complex-real';
 }
 
-/**
+/*
  * 17.1. Parse a selector
  *
  * Spec hook. Despite the singular name, this parses as <selector-list>
@@ -112,7 +113,7 @@ export function parseSelector(
   return parseSelectorList(input, context);
 }
 
-/**
+/*
  * 17.2. Parse a relative selector
  *
  * Spec hook. Despite the singular name, this parses as <relative-selector-list>.
@@ -124,7 +125,7 @@ export function parseRelativeSelector(
   return parseRelativeSelectorList(input, context);
 }
 
-/**
+/*
  * <selector-list> = <complex-selector-list>
  */
 export type SelectorList = ComplexSelectorList;
@@ -146,7 +147,7 @@ function tryConsumeSelectorList(c: ComponentCursor): TryComponentConsumerResult<
 const consumeSelectorList: TryComponentConsumer<SelectorList> =
   tryConsumeComplexSelectorList;
 
-/**
+/*
  * <complex-selector-list> = <complex-selector>#
  */
 export type ComplexSelectorList = {
@@ -191,7 +192,7 @@ function tryConsumeComplexSelectorList(c: ComponentCursor): TryComponentConsumer
 const consumeComplexSelectorListArms: TryComponentConsumer<ComplexSelector[]> =
   commaRepeat(tryConsumeComplexSelector);
 
-/**
+/*
  * <complex-real-selector-list> = <complex-real-selector>#
  */
 export type ComplexRealSelectorList = {
@@ -226,7 +227,7 @@ function tryConsumeComplexRealSelectorList(c: ComponentCursor): TryComponentCons
 const consumeComplexRealSelectorListArms: TryComponentConsumer<ComplexRealSelector[]> =
   commaRepeat(tryConsumeComplexRealSelector);
 
-/**
+/*
  * <compound-selector-list> = <compound-selector>#
  */
 export type CompoundSelectorList = {
@@ -263,7 +264,7 @@ function tryConsumeCompoundSelectorList(c: ComponentCursor): TryComponentConsume
 const consumeCompoundSelectorListArms: TryComponentConsumer<CompoundSelector[]> =
   commaRepeat(tryConsumeCompoundSelector);
 
-/**
+/*
  * <simple-selector-list> = <simple-selector>#
  */
 export type SimpleSelectorList = {
@@ -300,7 +301,7 @@ function tryConsumeSimpleSelectorList(c: ComponentCursor): TryComponentConsumerR
 const consumeSimpleSelectorListArms: TryComponentConsumer<SimpleSelector[]> =
   commaRepeat(tryConsumeSimpleSelector);
 
-/**
+/*
  * <relative-selector-list> = <relative-selector>#
  */
 export type RelativeSelectorList = {
@@ -337,7 +338,7 @@ function tryConsumeRelativeSelectorList(c: ComponentCursor): TryComponentConsume
 const consumeRelativeSelectorListArms: TryComponentConsumer<RelativeSelector[]> =
   commaRepeat(tryConsumeRelativeSelector);
 
-/**
+/*
  * <relative-real-selector-list> = <relative-real-selector>#
  */
 export type RelativeRealSelectorList = {
@@ -374,7 +375,7 @@ function tryConsumeRelativeRealSelectorList(c: ComponentCursor): TryComponentCon
 const consumeRelativeRealSelectorListArms: TryComponentConsumer<RelativeRealSelector[]> =
   commaRepeat(tryConsumeRelativeRealSelector);
 
-/**
+/*
  * <complex-selector> =
  *   <complex-selector-unit> [ <combinator>? <complex-selector-unit> ]*
  *
@@ -454,7 +455,7 @@ function contextAfterComplexSelectorUnit(
   };
 }
 
-/**
+/*
  * <complex-selector-unit> =
  *   [ <compound-selector>? <pseudo-compound-selector>* ]!
  */
@@ -497,7 +498,7 @@ const consumeComplexSelectorUnit: TryComponentConsumer<ComplexSelectorUnit> =
     }),
   );
 
-/**
+/*
  * <complex-real-selector> =
  *   <compound-selector> [ <combinator>? <compound-selector> ]*
  */
@@ -553,7 +554,7 @@ const consumeComplexRealSelector: TryComponentConsumer<ComplexRealSelector> = se
   }),
 );
 
-/**
+/*
  * <relative-selector> = <combinator>? <complex-selector>
  */
 export type RelativeSelector = {
@@ -581,7 +582,7 @@ const consumeRelativeSelector: TryComponentConsumer<RelativeSelector> = sequence
   }),
 );
 
-/**
+/*
  * <relative-real-selector> = <combinator>? <complex-real-selector>
  */
 export type RelativeRealSelector = {
@@ -609,7 +610,7 @@ const consumeRelativeRealSelector: TryComponentConsumer<RelativeRealSelector> = 
   }),
 );
 
-/**
+/*
  * <compound-selector> = [ <type-selector>? <subclass-selector>* ]!
  */
 export type CompoundSelector = {
@@ -650,7 +651,7 @@ const consumeCompoundSelector: TryComponentConsumer<CompoundSelector> = required
   }),
 );
 
-/**
+/*
  * <pseudo-compound-selector> =
  *   <pseudo-element-selector> <pseudo-class-selector>*
  */
@@ -719,7 +720,7 @@ const consumePseudoCompoundSelector: TryComponentConsumer<PseudoCompoundSelector
   }),
 );
 
-/**
+/*
  * <simple-selector> = <type-selector> | <subclass-selector>
  */
 export type SimpleSelector = TypeSelector | SubclassSelector;
@@ -747,7 +748,7 @@ const consumeSimpleSelector: TryComponentConsumer<SimpleSelector> = oneOf(
   ([selector]) => ok(selector),
 );
 
-/**
+/*
  * Parser-level selector combinator.
  *
  * The spec's <combinator> production is only:
@@ -821,7 +822,7 @@ const consumeCombinator: TryComponentConsumer<Combinator> = (c) => {
   return null;
 };
 
-/**
+/*
  * <wq-name> = <ns-prefix>? <ident-token>
  */
 export type WqName = {
@@ -845,7 +846,7 @@ const consumeWqName: TryComponentConsumer<WqName> = sequenceOf(
   }),
 );
 
-/**
+/*
  * <ns-prefix> = [ <ident-token> | '*' ]? '|'
  */
 function tryConsumeNsPrefix(c: ComponentCursor): TryComponentConsumerResult<string> {
@@ -896,7 +897,7 @@ const consumeNsPrefix: TryComponentConsumer<string> = sequenceOf(
   ([prefix]) => ok(prefix[0] ?? ''),
 );
 
-/**
+/*
  * <type-selector> = <wq-name> | <ns-prefix>? '*'
  *
  * Since:
@@ -955,7 +956,7 @@ const consumeTypeSelector: TryComponentConsumer<TypeSelector> = sequenceOf(
   }),
 );
 
-/**
+/*
  * <subclass-selector> =
  *   <id-selector> | <class-selector> |
  *   <attribute-selector> | <pseudo-class-selector>
@@ -980,7 +981,7 @@ const consumeSubclassSelector: TryComponentConsumer<SubclassSelector> = oneOf(
   ([selector]) => ok(selector),
 );
 
-/**
+/*
  * <id-selector> = <hash-token>
  *
  * Additional rule:
@@ -1014,7 +1015,7 @@ const consumeIdSelector: TryComponentConsumer<IdSelector> = sequenceOf(
   }),
 );
 
-/**
+/*
  * <class-selector> = '.' <ident-token>
  */
 export type ClassSelector = {
@@ -1048,7 +1049,7 @@ const consumeClassSelector: TryComponentConsumer<ClassSelector> = sequenceOf(
   }),
 );
 
-/**
+/*
  * <attribute-selector> =
  *   '[' <wq-name> ']' |
  *   '[' <wq-name> <attr-matcher>
@@ -1146,7 +1147,7 @@ const consumeAttributeSelector: TryComponentConsumer<AttributeSelector> = (c) =>
   return ok(selector);
 };
 
-/**
+/*
  * <attr-matcher> = [ '~' | '|' | '^' | '$' | '*' ]? '='
  */
 export type AttrMatcher = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
@@ -1180,7 +1181,7 @@ const consumeAttrMatcher: TryComponentConsumer<AttrMatcher> = (c) => {
   return null;
 };
 
-/**
+/*
  * <attr-value> = [ <string-token> | <ident-token> ]
  */
 function tryConsumeAttrValue(c: ComponentCursor): TryComponentConsumerResult<string> {
@@ -1195,7 +1196,7 @@ const consumeAttrValue: TryComponentConsumer<string> = oneOf(
   ([token]) => ok(token.value),
 );
 
-/**
+/*
  * <attr-modifier> = i | s
  */
 export type AttrModifier = 'i' | 's';
@@ -1226,7 +1227,7 @@ const consumeAttrModifier: TryComponentConsumer<AttrModifier> = (c) => {
   return null;
 };
 
-/**
+/*
  * <pseudo-class-selector> =
  *   : <ident-token> |
  *   : <function-token> <any-value> )
@@ -1275,7 +1276,7 @@ const consumePseudoClassSelector: TryComponentConsumer<PseudoClassSelector> = on
   ([selector]) => ok(selector),
 );
 
-/**
+/*
  * <pseudo-element-selector> =
  *   : <pseudo-class-selector> | <legacy-pseudo-element-selector>
  *
@@ -1335,7 +1336,7 @@ const consumePseudoElementSelector: TryComponentConsumer<PseudoElementSelector> 
   ([selector]) => ok(selector),
 );
 
-/**
+/*
  * <legacy-pseudo-element-selector> =
  *   : [before | after | first-line | first-letter]
  */
@@ -2673,7 +2674,7 @@ function parsePartNameListArgument(
   };
 }
 
-/**
+/*
  * <part-name-list> = <ident-token>+
  */
 function tryConsumePartNameList(c: ComponentCursor): TryComponentConsumerResult<string[]> {

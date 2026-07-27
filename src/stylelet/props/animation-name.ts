@@ -4,18 +4,12 @@ import {
   serializeCustomIdent, tryConsumeCustomIdent,
   type CustomIdentValue,
 } from '../values/custom-ident';
-import {
-  serializeString, tryConsumeString,
-  type StringValue,
-} from '../values/string';
-import {
-  parseAsComponentGrammar,
-  type ParserInput,
-} from '../parser/syntax';
+import { serializeString, tryConsumeString, type StringValue } from '../values/string';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer, type TryComponentConsumerResult,
+  ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
+  type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 
 export type AnimationNameValue = {
