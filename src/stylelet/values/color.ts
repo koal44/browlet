@@ -1703,7 +1703,11 @@ function resolveRgbFn(
   if (hasDeferredColorComponents(clamped)) {
     return {
       ...value,
-      components: clamped,
+      components: canonicalizeColorComponents(
+        clamped,
+        1,
+        0xff / 100,
+      ),
     };
   }
 
@@ -1889,6 +1893,11 @@ function resolveLabFn(
       : COLOR_COMPONENT_CLAMPING.lab,
     context,
   );
+  const canonical = canonicalizeColorComponents(
+    clamped,
+    1,
+    ok ? [1 / 100, 0.4 / 100, 0.4 / 100] : [1, 1.25, 1.25],
+  );
 
   if (
     hasDeferredColorComponents(clamped) ||
@@ -1896,9 +1905,9 @@ function resolveLabFn(
   ) {
     return {
       ...value,
-      lightness: clamped[0],
-      a: clamped[1],
-      b: clamped[2],
+      lightness: canonical[0],
+      a: canonical[1],
+      b: canonical[2],
     };
   }
 
@@ -1936,6 +1945,11 @@ function resolveLchFn(
     context,
   );
   const hueValue = normalizeHueValue(clamped[2]);
+  const canonical = canonicalizeColorComponents(
+    [clamped[0], clamped[1]],
+    1,
+    ok ? [1 / 100, 0.4 / 100] : [1, 1.5],
+  );
 
   if (
     hasDeferredColorComponents(clamped) ||
@@ -1943,8 +1957,8 @@ function resolveLchFn(
   ) {
     return {
       ...value,
-      lightness: clamped[0],
-      chroma: clamped[1],
+      lightness: canonical[0],
+      chroma: canonical[1],
       hue: hueValue,
     };
   }
@@ -1981,6 +1995,11 @@ function resolveColorFn(
     COLOR_COMPONENT_CLAMPING.colorFn,
     context,
   );
+  const canonical = canonicalizeColorComponents(
+    clamped,
+    1,
+    1 / 100,
+  );
 
   if (
     hasDeferredColorComponents(clamped) ||
@@ -1989,7 +2008,7 @@ function resolveColorFn(
     return {
       ...value,
       space,
-      components: clamped,
+      components: canonical,
     };
   }
 
@@ -2039,9 +2058,30 @@ function hasDeferredColorComponents(
   );
 }
 
-function scaleColorComponents<
-  const Values extends SyntaxColorComponent[],
->(
+function canonicalizeColorComponents<const Values extends SyntaxColorComponent[]>(
+  values: Values,
+  numberScale: number | readonly number[],
+  percentageScale: number | readonly number[],
+): { [Index in keyof Values]: SyntaxColorComponent } {
+  return values.map(
+    (value, index) => {
+      if (value === 'none' || value.type === 'math') {
+        return value;
+      }
+
+      return {
+        type: 'number',
+        value: value.value * (
+          value.type === 'percentage'
+            ? scaleAt(percentageScale, index)
+            : scaleAt(numberScale, index)
+        ),
+      };
+    },
+  ) as { [Index in keyof Values]: SyntaxColorComponent };
+}
+
+function scaleColorComponents<const Values extends SyntaxColorComponent[]>(
   values: Values,
   numberScale: number | readonly number[],
   percentageScale: number | readonly number[],
@@ -2407,9 +2447,9 @@ function serializeColorFunction(
       return serializeModernColorFunction(
         oklab ? 'oklab' : 'lab',
         [
-          serializeColorComponent(value.lightness, oklab ? 1 : 100),
-          serializeColorComponent(value.a, oklab ? 0.4 : 125),
-          serializeColorComponent(value.b, oklab ? 0.4 : 125),
+          serializeColorComponent(value.lightness, null),
+          serializeColorComponent(value.a, null),
+          serializeColorComponent(value.b, null),
         ],
         value.alpha,
       );
@@ -2421,8 +2461,8 @@ function serializeColorFunction(
       return serializeModernColorFunction(
         oklch ? 'oklch' : 'lch',
         [
-          serializeColorComponent(value.lightness, oklch ? 1 : 100),
-          serializeColorComponent(value.chroma, oklch ? 0.4 : 150),
+          serializeColorComponent(value.lightness, null),
+          serializeColorComponent(value.chroma, null),
           serializeHue(value.hue),
         ],
         value.alpha,
@@ -2434,7 +2474,7 @@ function serializeColorFunction(
         [
           value.space,
           ...value.components.map(
-            (component) => serializeColorComponent(component, 1),
+            (component) => serializeColorComponent(component, null),
           ),
         ],
         value.alpha,
@@ -2448,7 +2488,7 @@ function serializeRgbFn(
   value: RgbFn,
 ): string {
   const components = value.components.map(
-    (component) => serializeColorComponent(component, 255),
+    (component) => serializeColorComponent(component, null),
   );
 
   return value.syntax === 'legacy'
@@ -2530,21 +2570,27 @@ function serializeHue(
     return serializeCssNumber(resolveAngleLiteral(value).value);
   }
 
-  return serializeColorComponent(value, 1);
+  return serializeColorComponent(value, null);
 }
 
 function serializeColorComponent(
   value: SyntaxColorComponent,
-  percentageReference: number,
+  percentageReference: number | null, // null means canonical repr is a number, not a percentage
 ): string {
   if (value === 'none') {
     return value;
   }
 
-  if (value.type === 'percentage') {
-    return serializeCssNumber(
-      value.value * percentageReference / 100,
-    );
+  if (value.type !== 'math' && percentageReference !== null) {
+    if (value.value === 0) {
+      return '0';
+    }
+
+    const percentage = value.type === 'percentage'
+      ? value.value
+      : value.value / percentageReference * 100;
+
+    return serializeCssNumber(percentage) + '%';
   }
 
   return isNumberValue(value)

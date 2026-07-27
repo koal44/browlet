@@ -2528,6 +2528,17 @@ const colorSerializations: ColorSerializationCase[] = [
     'hwb(20 none 30% / none)',
     'hwb(20 none 30% / none)',
   ),
+  // Section 16.2.2 requires percentage serialization when an HSL or HWB
+  // component is missing. Chromium and WebKit currently emit a bare 50;
+  // Firefox rejects these otherwise valid declarations.
+  ...failingColorSerialization(
+    'hsl(calc(50deg + (sign(1em - 10px) * 10deg)) none 50%)',
+    'hsl(calc(50deg + (10deg * sign(1em - 10px))) none 50%)',
+  ),
+  ...failingColorSerialization(
+    'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) none 50%)',
+    'hwb(calc(110deg + (10deg * sign(1em - 10px))) none 50%)',
+  ),
 
   // Other sRGB declared values.
   { decl: 'ReD', expect: 'red' },

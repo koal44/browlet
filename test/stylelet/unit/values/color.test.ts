@@ -690,11 +690,11 @@ describe('color values', () => {
   it.each([
     [
       'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)',
-      'hwb(calc(110deg + (10deg * sign(1em - 10px))) 30 50 / 0.5)',
+      'hwb(calc(110deg + (10deg * sign(1em - 10px))) 30% 50% / 0.5)',
     ],
     [
       'hwb(120deg 30% 50% / calc(50% + (sign(1em - 10px) * 10%)))',
-      'hwb(120 30 50 / calc(50% + (10% * sign(1em - 10px))))',
+      'hwb(120 30% 50% / calc(50% + (10% * sign(1em - 10px))))',
     ],
   ] as const)(
     'serializes the deferred HWB calculation %s',
@@ -1220,6 +1220,22 @@ describe('color values', () => {
       .toBe('color(display-p3 sign(1em - 1px) 0.2 0 / calc(0.5))');
   });
 
+  it.each([
+    [
+      'lch(calc(sign(1em - 1px)) 40% 270deg)',
+      'lch(sign(1em - 1px) 60 270)',
+    ],
+    [
+      'oklch(calc(sign(1em - 1px)) 20% 270deg)',
+      'oklch(sign(1em - 1px) 0.08 270)',
+    ],
+  ] as const)(
+    'canonicalizes resolved components around deferred math in %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
   it('uses the value stage to serialize reducible calc color components', () => {
     const declared = parseColorValue(
       'color(display-p3 calc(.1 + .2) 0 0 / calc(.25 + .25))',
@@ -1390,6 +1406,32 @@ describe('color values', () => {
     ['hwb(20 none 30% / none)', 'hwb(20 none 30% / none)'],
   ] as const)(
     'preserves missing components while serializing %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  // Section 16.2.2 requires HSL and HWB components to remain percentages
+  // when missing components select their modern functional serialization.
+  it.each([
+    [
+      'hsl(calc(50deg + (sign(1em - 10px) * 10deg)) none 50%)',
+      'hsl(calc(50deg + (10deg * sign(1em - 10px))) none 50%)',
+    ],
+    [
+      'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) none 50%)',
+      'hwb(calc(110deg + (10deg * sign(1em - 10px))) none 50%)',
+    ],
+    [
+      'hsl(calc(50deg + (sign(1em - 10px) * 10deg)) none 50)',
+      'hsl(calc(50deg + (10deg * sign(1em - 10px))) none 50%)',
+    ],
+    [
+      'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) none 50)',
+      'hwb(calc(110deg + (10deg * sign(1em - 10px))) none 50%)',
+    ],
+  ] as const)(
+    'preserves percentage serialization with a missing component in %s',
     (input, serialized) => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
