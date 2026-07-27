@@ -2308,6 +2308,178 @@ runScenarios('CSS powerless hue epsilon oracle', 'skip', [
   },
 ]);
 
+runScenarios('CSS color equivalence oracle', 'skip', [
+  {
+    name: 'compares powerless Oklch with sRGB black',
+    engines: ['native'],
+    markup: `
+      <style>
+        @property --color {
+          syntax: "<color>";
+          initial-value: transparent;
+          inherits: true;
+        }
+        #black-target, #oklch-target { --oracle: false; }
+        @container style(--color: black) {
+          #black-target, #oklch-target { --oracle: true; }
+        }
+      </style>
+      <div style="--color: black">
+        <div id="black-target"></div>
+      </div>
+      <div style="--color: oklch(0 0 0)">
+        <div id="oklch-target"></div>
+      </div>
+    `,
+    // Section 12 first makes the zero-chroma Oklch hue missing, then requires
+    // different-space colors with a missing component to compare unequal.
+    // The linked WPT still lists this color among those equivalent to black.
+    // Firefox agrees with the WPT; Chromium and WebKit follow the algorithm.
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'black-target' },
+        expect: { value: 'true' },
+      },
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'oklch-target' },
+        expect: { value: 'false' },
+        browsers: ['chromium'],
+      },
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'oklch-target' },
+        expect: { value: 'false' },
+        browsers: ['firefox'],
+        status: 'fail',
+      },
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'oklch-target' },
+        expect: { value: 'false' },
+        browsers: ['webkit'],
+      },
+    ],
+  },
+]);
+
+runScenarios('CSS Rec.2020 transfer oracle', 'skip', [
+  {
+    name: 'compares current and former Rec.2020 transfer functions',
+    engines: ['native'],
+    markup: '<div id="rec2020-transfer"></div>',
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+        const pixel = (color: string): string => {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data].join(' ');
+        };
+        const target = document.getElementById('rec2020-transfer')!;
+        const green = pixel('rgb(0 128 0)');
+        const former = pixel(
+          'color(rec2020 0.235202 0.431704 0.085432)',
+        );
+        const current = pixel(
+          'color(rec2020 0.332322228416 0.509792368312 0.19177881661)',
+        );
+
+        target.setAttribute('style', [
+          `--former-matches-green: ${former === green}`,
+          `--current-matches-green: ${current === green}`,
+        ].join(';'));
+      });
+    },
+    // Current CSS Color 4 specifies the BT.1886 gamma-2.4 EOTF. The linked
+    // WPT and all three engines still use the former piecewise Rec.2020 curve:
+    // each reports that the former value is green and the current value is not.
+    cases: (['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => [
+      {
+        computedStyle: '--former-matches-green' as const,
+        ref: { by: 'id' as const, id: 'rec2020-transfer' },
+        expect: { value: 'false' },
+        browsers: [browser],
+        status: 'fail' as const,
+      },
+      {
+        computedStyle: '--current-matches-green' as const,
+        ref: { by: 'id' as const, id: 'rec2020-transfer' },
+        expect: { value: 'true' },
+        browsers: [browser],
+        status: 'fail' as const,
+      },
+    ]),
+  },
+]);
+
+runScenarios('CSS Oklab endpoint rendering oracle', 'skip', [
+  {
+    name: 'compares exact and near Oklab lightness endpoints',
+    engines: ['native'],
+    markup: '<div id="oklab-gamut-endpoints"></div>',
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+        const pixel = (color: string): string => {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data].join(' ');
+        };
+        const target = document.getElementById('oklab-gamut-endpoints')!;
+        const exactHigh = pixel('oklab(1 0.15 0.15)');
+        const nearHigh = pixel('oklab(99.9999% 0.15 0.15)');
+        const exactLow = pixel('oklab(0 0.15 0.15)');
+        const nearLow = pixel('oklab(0.0001% 0.15 0.15)');
+
+        target.setAttribute('style', [
+          `--exact-high: ${exactHigh}`,
+          `--exact-low: ${exactLow}`,
+          `--same-high: ${exactHigh === nearHigh}`,
+          `--same-low: ${exactLow === nearLow}`,
+        ].join(';'));
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--same-high',
+        ref: { by: 'id', id: 'oklab-gamut-endpoints' },
+        expect: { value: 'true' },
+      },
+      {
+        computedStyle: '--same-low',
+        ref: { by: 'id', id: 'oklab-gamut-endpoints' },
+        expect: { value: 'true' },
+      },
+      // All three engines currently clip and quantize the converted RGB value,
+      // producing 255 203 122 255 and 4 7 0 255 respectively. CSS gamut
+      // mapping instead requires exact Oklab lightness endpoints to become
+      // white or black.
+      ...(['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => [
+        {
+          computedStyle: '--exact-high' as const,
+          ref: { by: 'id' as const, id: 'oklab-gamut-endpoints' },
+          expect: { value: '255 255 255 255' },
+          browsers: [browser],
+          status: 'fail' as const,
+        },
+        {
+          computedStyle: '--exact-low' as const,
+          ref: { by: 'id' as const, id: 'oklab-gamut-endpoints' },
+          expect: { value: '0 0 0 255' },
+          browsers: [browser],
+          status: 'fail' as const,
+        },
+      ]),
+    ],
+  },
+]);
+
 type ColorSerializationCase = {
   prop?: string;
   decl: string;

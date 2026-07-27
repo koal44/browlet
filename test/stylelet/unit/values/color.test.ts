@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, ColorRgba, areColorsEquivalent, convertAbsoluteColor, deltaEOK, gamutMapAbsoluteColor,
+  ColorKind, ColorRgba, areColorsEquivalent, convertAbsoluteColor, deltaEOK, gamutMapColor,
   interpolateColors, parseColorInterpolationMethod, parseColorValue, resolveColorValue,
   serializeColorValue, type AbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
@@ -363,6 +363,61 @@ describe('color values', () => {
     expect(hsl.space).toBe('srgb-legacy');
     expectColorCloseTo(hsl, [1, 0.647, 0, 1]);
   });
+
+  it.each([
+    'srgb',
+    'srgb-linear',
+  ] as const)(
+    'does not apply legacy sRGB clamping to color(%s)',
+    (space) => {
+      expect(parseColorValue(`color(${space} -0.25 1.5 0.75)`)).toEqual({
+        kind: ColorKind.Absolute,
+        space,
+        components: [-0.25, 1.5, 0.75],
+        alpha: 1,
+      });
+    },
+  );
+
+  it.each([
+    [
+      'lch(52.2345% 72.2 56.2 / 1)',
+      'lch',
+      [52.2345, 72.2, 56.2],
+    ],
+    [
+      'oklch(42.1% 0.192 328.6 / 1)',
+      'oklch',
+      [0.421, 0.192, 328.6],
+    ],
+    [
+      'color(display-p3 0.823 0.6554 0.2537 / 1)',
+      'display-p3',
+      [0.823, 0.6554, 0.2537],
+    ],
+    [
+      'color(xyz 0.472 0.372 0.131)',
+      'xyz-d65',
+      [0.472, 0.372, 0.131],
+    ],
+  ] as const)(
+    'matches the section 15 resolved color example %s',
+    (input, space, components) => {
+      const color = parseColorValue(input);
+
+      expect(color).toMatchObject({
+        kind: ColorKind.Absolute,
+        space,
+        alpha: 1,
+      });
+
+      if (color?.kind !== ColorKind.Absolute) {
+        throw new TypeError('Expected an absolute color');
+      }
+
+      expectComponentsCloseTo(color.components, components, 12);
+    },
+  );
 
   it('clamps rgb components at parsed-value time', () => {
     expect(parseColorValue('rgb(300 -10 0 / 2)')).toEqual({
@@ -1364,6 +1419,97 @@ describe('color values', () => {
     }
   });
 
+  // CSS Color 4 section 10 examples.
+  it.each([
+    [
+      'sRGB and linear-light sRGB',
+      'color(srgb 0.691 0.139 0.259)',
+      'color(srgb-linear 0.435 0.017 0.055)',
+    ],
+    [
+      'Display P3 and linear-light Display P3',
+      'color(display-p3 0.591 0.123 0.264)',
+      'color(display-p3-linear 0.3081 0.014 0.0567)',
+    ],
+    [
+      'D50 and D65 XYZ',
+      'color(xyz-d50 0.2005 0.14089 0.4472)',
+      'color(xyz-d65 0.21661 0.14602 0.59452)',
+    ],
+    [
+      'D50 and D65 white',
+      'color(xyz-d50 0.9643 1 0.8251)',
+      'color(xyz-d65 0.9505 1 1.089)',
+    ],
+  ])('matches the equivalent %s example', (_, first, second) => {
+    const firstColor = parseColorValue(first) as AbsoluteColor;
+    const secondColor = parseColorValue(second) as AbsoluteColor;
+
+    expectColorCloseTo(firstColor, secondColor);
+  });
+
+  it('matches the Rec.2020 out-of-gamut conversion example', () => {
+    const rec2020 = parseColorValue(
+      'color(rec2020 0.42053 0.979780 0.00579)',
+    ) as AbsoluteColor;
+    const lch = convertAbsoluteColor(rec2020, 'lch');
+    const displayP3 = convertAbsoluteColor(rec2020, 'display-p3');
+
+    expectComponentsCloseTo(lch.components, [85.9017, 166.116, 138.207], 3);
+    expectComponentsCloseTo(
+      displayP3.components,
+      [-0.350289, 1.00707, -0.144209],
+      5,
+    );
+  });
+
+  // The linked Rec.2020 WPT still uses the former piecewise transfer function;
+  // the current gamma-2.4 conversion is covered by the example above.
+  it.each([
+    ['srgb-linear', [0, 0.21586, 0]],
+    ['display-p3', [0.21604, 0.49418, 0.13151]],
+    ['display-p3-linear', [0.0383, 0.2087, 0.0156]],
+    ['a98-rgb', [0.281363, 0.498012, 0.116746]],
+    ['prophoto-rgb', [0.230479, 0.395789, 0.129968]],
+    ['xyz-d50', [0.08312, 0.154746, 0.020961]],
+    ['xyz-d65', [0.07719, 0.15438, 0.02573]],
+  ] as const)(
+    'matches the %s green WPT conversion reference',
+    (space, components) => {
+      const converted = convertAbsoluteColor({
+        kind: ColorKind.Absolute,
+        space,
+        components: [...components],
+        alpha: 1,
+      }, 'srgb');
+
+      expectColorCloseTo(converted, [0, 128 / 255, 0]);
+    },
+  );
+
+  it.each([
+    'srgb',
+    'display-p3',
+    'a98-rgb',
+    'prophoto-rgb',
+    'rec2020',
+  ] as const)('extends the %s transfer function out of gamut', (space) => {
+    const color: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space,
+      components: [-0.25, 0.5, 1.25],
+      alpha: 1,
+    };
+    const xyz = convertAbsoluteColor(
+      color,
+      space === 'prophoto-rgb' ? 'xyz-d50' : 'xyz-d65',
+    );
+    const roundTrip = convertAbsoluteColor(xyz, space);
+
+    expect(xyz.components.every(Number.isFinite)).toBe(true);
+    expectComponentsCloseTo(roundTrip.components, color.components, 12);
+  });
+
   type ColorConversionReference = readonly [
     rgb: ColorVector3,
     srgbLch: ColorVector3,
@@ -1564,6 +1710,36 @@ describe('color values', () => {
       );
 
       expect(converted.components[hueIndex]).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['LCH', 'lch', 'lab', 0.0015],
+    ['OKLCH', 'oklch', 'oklab', 0.000004],
+  ] as const)(
+    'applies the %s powerless-hue epsilon inclusively',
+    (_, target, source, epsilon) => {
+      const atBoundary = convertAbsoluteColor(
+        {
+          kind: ColorKind.Absolute,
+          space: source,
+          components: [0.5, epsilon, 0],
+          alpha: 1,
+        },
+        target,
+      );
+      const aboveBoundary = convertAbsoluteColor(
+        {
+          kind: ColorKind.Absolute,
+          space: source,
+          components: [0.5, epsilon * 1.0001, 0],
+          alpha: 1,
+        },
+        target,
+      );
+
+      expect(atBoundary.components[2]).toBeUndefined();
+      expect(aboveBoundary.components[2]).toBe(0);
     },
   );
 
@@ -1861,6 +2037,102 @@ describe('color values', () => {
     })).toBe(false);
   });
 
+  it.each([
+    'black',
+    '#000',
+    '#000f',
+    'rgb(0 0 0)',
+    'rgb(calc(5 - 5) 0 0)',
+    'rgba(0, 0, 0, 1)',
+    'rgb(-10 0 0)',
+    'hwb(0 0 100)',
+    'hsl(0 0 0)',
+    'color(srgb 0 0 0)',
+    'color(srgb-linear 0 0 0)',
+    'color(display-p3 0 0 0)',
+    'color(xyz-d65 0 0 0)',
+    'lab(0 0 0)',
+  ])('matches the section 12 equivalent-black WPT case %s', (input) => {
+    const black = resolveColorValue(
+      parseColorValue('black')!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+    const color = resolveColorValue(
+      parseColorValue(input)!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+
+    expect(areColorsEquivalent(color, black)).toBe(true);
+  });
+
+  it.each([
+    'hwb(none 0 100)',
+    'hsl(none 0 0)',
+    'color(srgb none 0 0)',
+    'color(srgb-linear 0 none 0)',
+    'oklch(0 0 none)',
+    'oklab(0 none none)',
+  ])('matches the section 12 non-equivalent-black WPT case %s', (input) => {
+    const black = resolveColorValue(
+      parseColorValue('black')!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+    const color = resolveColorValue(
+      parseColorValue(input)!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+
+    expect(areColorsEquivalent(color, black)).toBe(false);
+  });
+
+  it('makes a powerless Oklch hue missing before comparison', () => {
+    const black = resolveColorValue(
+      parseColorValue('black')!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+    const oklch = resolveColorValue(
+      parseColorValue('oklch(0 0 0)')!,
+      { stage: 'computed' },
+    ) as AbsoluteColor;
+
+    expect(areColorsEquivalent(oklch, black)).toBe(false);
+  });
+
+  it('uses the standardized epsilon for different color spaces', () => {
+    const srgb: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.2, 0.4, 0.6],
+      alpha: 0.8,
+    };
+    const oklab = convertAbsoluteColor(srgb, 'oklab');
+
+    expect(areColorsEquivalent(srgb, {
+      ...oklab,
+      components: [
+        oklab.components[0]! + 0.000009,
+        oklab.components[1],
+        oklab.components[2],
+      ],
+    })).toBe(true);
+    expect(areColorsEquivalent(srgb, {
+      ...oklab,
+      components: [
+        oklab.components[0]! + 0.00002,
+        oklab.components[1],
+        oklab.components[2],
+      ],
+    })).toBe(false);
+    expect(areColorsEquivalent(srgb, {
+      ...oklab,
+      alpha: oklab.alpha! + 0.000009,
+    })).toBe(true);
+    expect(areColorsEquivalent(srgb, {
+      ...oklab,
+      alpha: oklab.alpha! + 0.00002,
+    })).toBe(false);
+  });
+
   it('only considers missing components equal to missing components', () => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
@@ -2070,6 +2342,54 @@ describe('color values', () => {
     expect(result.components[0]).toBe(0.8);
   });
 
+  it('carries an analogous hue between polar color spaces', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Absolute,
+        space: 'lch',
+        components: [50, 0.02, undefined],
+        alpha: 1,
+      },
+      {
+        kind: ColorKind.Absolute,
+        space: 'oklch',
+        components: [0.7, 0.2, 80],
+        alpha: 1,
+      },
+      0.5,
+      'oklch',
+    );
+
+    expect(result.components[2]).toBe(80);
+  });
+
+  it.each([
+    [[120, undefined, undefined], [75, 30, 40]],
+    [[120, 10, undefined], [75, 20, 20]],
+  ] as const)(
+    'treats HWB whiteness and blackness as an analogous set',
+    (components, expected) => {
+      const result = interpolateColors(
+        {
+          kind: ColorKind.Absolute,
+          space: 'hwb',
+          components: [...components],
+          alpha: 1,
+        },
+        {
+          kind: ColorKind.Absolute,
+          space: 'hwb',
+          components: [30, 30, 40],
+          alpha: 1,
+        },
+        0.5,
+        'hwb',
+      );
+
+      expect(result.components).toEqual(expected);
+    },
+  );
+
   it('carries a wholly missing analogous set into the interpolation space', () => {
     const expected: AbsoluteColor = {
       kind: ColorKind.Absolute,
@@ -2135,6 +2455,28 @@ describe('color values', () => {
       0.5,
       'oklab',
     )).toEqual(color);
+  });
+
+  it('restores a missing alpha before premultiplication', () => {
+    const result = interpolateColors(
+      {
+        kind: ColorKind.Absolute,
+        space: 'oklch',
+        components: [0.783, 0.108, 326.5],
+        alpha: 0.5,
+      },
+      {
+        kind: ColorKind.Absolute,
+        space: 'oklch',
+        components: [0.392, 0.4, 0],
+        alpha: undefined,
+      },
+      0.5,
+      'oklch',
+    );
+
+    expect(result.alpha).toBe(0.5);
+    expectComponentsCloseTo(result.components, [0.5875, 0.254, 343.25], 12);
   });
 
   it('converts an uncarried missing component as zero', () => {
@@ -2341,6 +2683,38 @@ describe('color values', () => {
       expect(result.alpha).toBe(1);
 
       expectComponentsCloseTo(result.components, expected, 12);
+    },
+  );
+
+  it.each([
+    ['shorter', 0, 180, 90],
+    ['shorter', 180, 0, 90],
+    ['longer', 0, 180, 90],
+    ['longer', 180, 0, 90],
+    ['increasing', 180, 0, 270],
+    ['decreasing', 0, 180, 270],
+  ] as const)(
+    'handles the 180-degree boundary for %s hue interpolation',
+    (method, hueA, hueB, expected) => {
+      const result = interpolateColors(
+        {
+          kind: ColorKind.Absolute,
+          space: 'oklch',
+          components: [0.5, 0.1, hueA],
+          alpha: 1,
+        },
+        {
+          kind: ColorKind.Absolute,
+          space: 'oklch',
+          components: [0.5, 0.1, hueB],
+          alpha: 1,
+        },
+        0.5,
+        'oklch',
+        method,
+      );
+
+      expect(result.components[2]).toBe(expected);
     },
   );
 
@@ -2580,7 +2954,7 @@ describe('color values', () => {
   it.each(binarySearchGamutMappingReferences)(
     'matches the WPT binary-search gamut mapping reference %j',
     (oklch, srgb) => {
-      const mapped = gamutMapAbsoluteColor({
+      const mapped = gamutMapColor({
         kind: ColorKind.Absolute,
         space: 'oklch',
         components: [...oklch],
@@ -2598,7 +2972,7 @@ describe('color values', () => {
   );
 
   it('returns the clipped color below the just-noticeable difference', () => {
-    const mapped = gamutMapAbsoluteColor({
+    const mapped = gamutMapColor({
       kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.7, 0.2, 30],
@@ -2610,6 +2984,22 @@ describe('color values', () => {
       space: 'srgb',
       components: [1, 0.38019885544225046, 0.3010433350997795],
       alpha: 0.5,
+    });
+  });
+
+  it('supports clipping as an explicit gamut-mapping method', () => {
+    const mapped = gamutMapColor({
+      kind: ColorKind.Absolute,
+      space: 'srgb-linear',
+      components: [0.5, 1, 3],
+      alpha: 0.4,
+    }, 'srgb-linear', 'clip');
+
+    expect(mapped).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb-linear',
+      components: [0.5, 1, 1],
+      alpha: 0.4,
     });
   });
 
@@ -2625,7 +3015,7 @@ describe('color values', () => {
     ])[];
 
     for (const [oklch, srgb] of cases) {
-      const mapped = gamutMapAbsoluteColor({
+      const mapped = gamutMapColor({
         kind: ColorKind.Absolute,
         space: 'oklch',
         components: [...oklch],
@@ -2648,7 +3038,7 @@ describe('color values', () => {
       components: [0.2, 0.4, 0.6],
       alpha: 0.35,
     };
-    const mapped = gamutMapAbsoluteColor(origin, 'srgb');
+    const mapped = gamutMapColor(origin, 'srgb');
 
     expect(mapped.space).toBe('srgb');
     expectColorCloseTo(mapped, origin);
@@ -2662,19 +3052,27 @@ describe('color values', () => {
       alpha: 0.6,
     };
 
-    expect(gamutMapAbsoluteColor(origin, 'xyz-d65'))
+    expect(gamutMapColor(origin, 'xyz-d65'))
       .toEqual(convertAbsoluteColor(origin, 'xyz-d65'));
   });
 
-  it('returns an in-gamut color in the requested RGB destination', () => {
-    const mapped = gamutMapAbsoluteColor({
+  it.each([
+    'srgb',
+    'srgb-linear',
+    'display-p3',
+    'display-p3-linear',
+    'a98-rgb',
+    'prophoto-rgb',
+    'rec2020',
+  ] as const)('returns an in-gamut color in %s', (destination) => {
+    const mapped = gamutMapColor({
       kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.7, 0.8, 40],
       alpha: 0.25,
-    }, 'display-p3');
+    }, destination);
 
-    expect(mapped.space).toBe('display-p3');
+    expect(mapped.space).toBe(destination);
     expect(mapped.alpha).toBe(0.25);
 
     for (const component of mapped.components) {

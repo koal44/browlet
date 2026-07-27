@@ -3669,12 +3669,19 @@ function transformColorVector(
 const GAMUT_MAPPING_JND = 0.02;
 const GAMUT_MAPPING_EPSILON = 0.0001;
 
-export function gamutMapAbsoluteColor(
+export type GamutMappingMethod = 'binary-search' | 'clip';
+
+export function gamutMapColor(
   origin: AbsoluteColor,
   destination: ColorSpace,
+  method: GamutMappingMethod = 'binary-search',
 ): AbsoluteColor {
   if (!hasGamutLimits(destination)) {
     return convertAbsoluteColor(origin, destination);
+  }
+
+  if (method === 'clip') {
+    return clipColorToGamut(origin, destination);
   }
 
   const originOklch = convertAbsoluteColorToOklch(origin);
@@ -3699,7 +3706,7 @@ export function gamutMapAbsoluteColor(
     }, destination);
   }
 
-  if (isAbsoluteColorInGamut(originOklch, destination)) {
+  if (isColorInGamut(originOklch, destination)) {
     return convertAbsoluteColor(originOklch, destination);
   }
 
@@ -3707,7 +3714,7 @@ export function gamutMapAbsoluteColor(
     ...originOklch,
     components: [lightness, originChroma, hue],
   };
-  let clipped = clipAbsoluteColorToGamut(current, destination);
+  let clipped = clipColorToGamut(current, destination);
   let difference = deltaEOK(clipped, current);
 
   if (difference < GAMUT_MAPPING_JND) {
@@ -3726,12 +3733,12 @@ export function gamutMapAbsoluteColor(
       components: [lightness, chroma, hue],
     };
 
-    if (minInGamut && isAbsoluteColorInGamut(current, destination)) {
+    if (minInGamut && isColorInGamut(current, destination)) {
       min = chroma;
       continue;
     }
 
-    clipped = clipAbsoluteColorToGamut(current, destination);
+    clipped = clipColorToGamut(current, destination);
     difference = deltaEOK(clipped, current);
 
     if (difference < GAMUT_MAPPING_JND) {
@@ -3773,7 +3780,7 @@ function convertAbsoluteColorToOklch(value: AbsoluteColor): AbsoluteColor {
     : convertAbsoluteColor(prepared, 'oklch');
 }
 
-function isAbsoluteColorInGamut(
+function isColorInGamut(
   value: AbsoluteColor,
   destination: ColorSpace,
 ): boolean {
@@ -3790,7 +3797,7 @@ function isAbsoluteColorInGamut(
   );
 }
 
-function clipAbsoluteColorToGamut(
+function clipColorToGamut(
   value: AbsoluteColor,
   destination: ColorSpace,
 ): AbsoluteColor {
