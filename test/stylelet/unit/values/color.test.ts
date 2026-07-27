@@ -287,6 +287,15 @@ describe('color values', () => {
     },
   );
 
+  it('clamps independent RGB components while preserving deferred math', () => {
+    const color = parseColorValue(
+      'rgb(128 300 calc(sign(1em - 10px)))',
+    )!;
+
+    expect(serializeColorValue(color))
+      .toBe('rgb(128 255 sign(1em - 10px))');
+  });
+
   it('resolves color calculations as their value stage permits', () => {
     const input = 'rgb(calc(255 / 2) calc(50%) 0)';
 
@@ -602,6 +611,23 @@ describe('color values', () => {
       .not.toBeNull();
   });
 
+  // Adapted from WPT css/css-color/parsing/color-valid-hwb.html.
+  it.each([
+    [
+      'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)',
+      'hwb(calc(110deg + (10deg * sign(1em - 10px))) 30 50 / 0.5)',
+    ],
+    [
+      'hwb(120deg 30% 50% / calc(50% + (sign(1em - 10px) * 10%)))',
+      'hwb(120 30 50 / calc(50% + (10% * sign(1em - 10px))))',
+    ],
+  ] as const)(
+    'serializes the deferred HWB calculation %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
   it.each([
     ['hwb(45 40% 60%)', 0.4],
     ['hwb(45 40% 80%)', 1 / 3],
@@ -730,6 +756,30 @@ describe('color values', () => {
         components,
         alpha,
       });
+    },
+  );
+
+  it.each([
+    [
+      'lab(200 calc(sign(1em - 10px)) 0)',
+      'lab(100 sign(1em - 10px) 0)',
+    ],
+    [
+      'oklab(-2 calc(sign(1em - 10px)) 0)',
+      'oklab(0 sign(1em - 10px) 0)',
+    ],
+    [
+      'lch(calc(sign(1em - 10px)) -20 -20deg)',
+      'lch(sign(1em - 10px) 0 340)',
+    ],
+    [
+      'oklch(calc(sign(1em - 10px)) -0.2 740deg)',
+      'oklch(sign(1em - 10px) 0 20)',
+    ],
+  ])(
+    'resolves independent Lab-family components while preserving math in %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
   );
 

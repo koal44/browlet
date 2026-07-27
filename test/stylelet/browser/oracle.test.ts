@@ -2420,6 +2420,17 @@ const colorSerializations: ColorSerializationCase[] = [
     status: 'fail',
   },
   {
+    decl: 'rgb(128 300 calc(sign(1em - 10px)))',
+    expect: 'rgb(128 255 sign(1em - 10px))',
+    browsers: ['chromium', 'webkit'],
+  },
+  {
+    decl: 'rgb(128 300 calc(sign(1em - 10px)))',
+    expect: 'rgb(128 255 sign(1em - 10px))',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
     decl: 'hsl(calc(50deg + (sign(1em - 10px) * 10deg)), 0%, 0%, 50%)',
     expect: 'hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 0 / 0.5)',
     browsers: ['chromium', 'webkit'],
@@ -2428,6 +2439,77 @@ const colorSerializations: ColorSerializationCase[] = [
   {
     decl: 'hsl(calc(50deg + (sign(1em - 10px) * 10deg)), 0%, 0%, 50%)',
     expect: 'hsl(calc(50deg + (10deg * sign(1em - 10px))) 0 0 / 0.5)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)',
+    expect: 'hwb(calc(110deg + (10deg * sign(1em - 10px))) 30 50 / 0.5)',
+    browsers: ['chromium', 'webkit'],
+  },
+  // Firefox currently drops this otherwise valid declaration.
+  {
+    decl: 'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)',
+    expect: 'hwb(calc(110deg + (10deg * sign(1em - 10px))) 30 50 / 0.5)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'lab(200 calc(sign(1em - 10px)) 0)',
+    expect: 'lab(100 sign(1em - 10px) 0)',
+    browsers: ['chromium', 'webkit'],
+  },
+  // Firefox currently drops these otherwise valid declarations.
+  {
+    decl: 'lab(200 calc(sign(1em - 10px)) 0)',
+    expect: 'lab(100 sign(1em - 10px) 0)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'oklab(-2 calc(sign(1em - 10px)) 0)',
+    expect: 'oklab(0 sign(1em - 10px) 0)',
+    browsers: ['chromium', 'webkit'],
+  },
+  {
+    decl: 'oklab(-2 calc(sign(1em - 10px)) 0)',
+    expect: 'oklab(0 sign(1em - 10px) 0)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'lch(calc(sign(1em - 10px)) -20 -20deg)',
+    expect: 'lch(sign(1em - 10px) 0 340)',
+    browsers: ['webkit'],
+  },
+  // Chromium clamps chroma but currently retains the unnormalized -20 hue.
+  {
+    decl: 'lch(calc(sign(1em - 10px)) -20 -20deg)',
+    expect: 'lch(sign(1em - 10px) 0 340)',
+    browsers: ['chromium'],
+    status: 'fail',
+  },
+  {
+    decl: 'lch(calc(sign(1em - 10px)) -20 -20deg)',
+    expect: 'lch(sign(1em - 10px) 0 340)',
+    browsers: ['firefox'],
+    status: 'fail',
+  },
+  {
+    decl: 'oklch(calc(sign(1em - 10px)) -0.2 740deg)',
+    expect: 'oklch(sign(1em - 10px) 0 20)',
+    browsers: ['webkit'],
+  },
+  // Chromium clamps chroma but currently retains the unnormalized 740 hue.
+  {
+    decl: 'oklch(calc(sign(1em - 10px)) -0.2 740deg)',
+    expect: 'oklch(sign(1em - 10px) 0 20)',
+    browsers: ['chromium'],
+    status: 'fail',
+  },
+  {
+    decl: 'oklch(calc(sign(1em - 10px)) -0.2 740deg)',
+    expect: 'oklch(sign(1em - 10px) 0 20)',
     browsers: ['firefox'],
     status: 'fail',
   },
@@ -2446,6 +2528,16 @@ const colorSerializations: ColorSerializationCase[] = [
     expect: 'color(display-p3 calc(-1) 0 0)',
     browsers: ['webkit'],
   },
+
+  // CSS Color 4 section 16.2.2 preserves the calculated half-channel
+  // precision in this example. All three engines currently quantize it:
+  // Chromium and Firefox return rgba(179, 94, 51, 0.5), while WebKit returns
+  // the same result here but rounds a nominal 127.5 downward in hwb(320deg
+  // 30% 40%). color-valid-hwb.html still expects 8-bit quantization.
+  ...failingColorSerialization(
+    'hwb(740deg 20% 30% / 50%)',
+    'rgba(178.5, 93.5, 51, 0.5)',
+  ),
 
   // Top-level special calculations are clamped at computed-value time.
   // The sRGB family is the historical exception and clamps them immediately.

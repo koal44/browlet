@@ -54,7 +54,7 @@ export type ColorValue =
 export type AbsoluteColor = {
   kind: ColorKind.Absolute;
   space: AbsoluteColorSpace;
-  components: ColorComponents;
+  components: AbsoluteTriplet;
   alpha: number | undefined;
   is8Bit?: true;
 };
@@ -101,13 +101,13 @@ export type ColorInterpolationMethod =
     hue?: HueInterpolationMethod;
   };
 
-type ColorComponent = number | undefined;
+type ColorTriplet<Value> = [Value, Value, Value];
 
-type ColorComponents = [
-  ColorComponent,
-  ColorComponent,
-  ColorComponent,
-];
+type AbsoluteComponent = number | undefined;
+type AbsoluteTriplet = ColorTriplet<AbsoluteComponent>;
+
+type SyntaxComponent = NumberValue | PercentageValue | 'none';
+type SyntaxTriplet = ColorTriplet<SyntaxComponent>;
 
 export type ColorBase =
   | HexColor
@@ -239,11 +239,9 @@ const consumeColorFunction: TryComponentConsumer<ColorFunction> = oneOf(
 export type RgbColor = {
   kind: ColorKind.Rgb;
   syntax: 'legacy' | 'modern';
-  components: [RgbComponent, RgbComponent, RgbComponent];
+  components: SyntaxTriplet;
   alpha?: AlphaValue | 'none';
 };
-
-type RgbComponent = NumberValue | PercentageValue | 'none';
 
 function tryConsumeRgbFunction(
   c: ComponentCursor,
@@ -372,11 +370,11 @@ const consumeModernAlpha: TryComponentConsumer<AlphaValue | 'none'> = sequenceOf
 
 function tryConsumeRgbComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeRgbComponent(c);
 }
 
-const consumeRgbComponent: TryComponentConsumer<RgbComponent> = oneOf(
+const consumeRgbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumePercentage),
@@ -833,12 +831,10 @@ export type HslColor = {
   kind: ColorKind.Hsl;
   syntax: 'legacy' | 'modern';
   hue: HueValue | 'none';
-  saturation: HslComponent;
-  lightness: HslComponent;
+  saturation: SyntaxComponent;
+  lightness: SyntaxComponent;
   alpha?: AlphaValue | 'none';
 };
-
-type HslComponent = NumberValue | PercentageValue | 'none';
 
 function tryConsumeHslFunction(
   c: ComponentCursor,
@@ -970,11 +966,11 @@ const consumeHue: TryComponentConsumer<HueValue> = oneOf(
 
 function tryConsumeHslComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeHslComponent(c);
 }
 
-const consumeHslComponent: TryComponentConsumer<HslComponent> = oneOf(
+const consumeHslComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -994,12 +990,10 @@ const consumeHslComponent: TryComponentConsumer<HslComponent> = oneOf(
 export type HwbColor = {
   kind: ColorKind.Hwb;
   hue: HueValue | 'none';
-  whiteness: HwbComponent;
-  blackness: HwbComponent;
+  whiteness: SyntaxComponent;
+  blackness: SyntaxComponent;
   alpha?: AlphaValue | 'none';
 };
-
-type HwbComponent = NumberValue | PercentageValue | 'none';
 
 function tryConsumeHwbFunction(
   c: ComponentCursor,
@@ -1037,11 +1031,11 @@ const consumeHwbArguments: TryComponentConsumer<HwbColor> = sequenceOf(
 
 function tryConsumeHwbComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<HwbComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeHwbComponent(c);
 }
 
-const consumeHwbComponent: TryComponentConsumer<HwbComponent> = oneOf(
+const consumeHwbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1066,26 +1060,24 @@ const consumeHwbComponent: TryComponentConsumer<HwbComponent> = oneOf(
 
 export type LabColor = {
   kind: ColorKind.Lab;
-  lightness: LabComponent;
-  a: LabComponent;
-  b: LabComponent;
+  lightness: SyntaxComponent;
+  a: SyntaxComponent;
+  b: SyntaxComponent;
   alpha?: AlphaValue | 'none';
 };
 
 export type OklabColor = {
   kind: ColorKind.Oklab;
-  lightness: LabComponent;
-  a: LabComponent;
-  b: LabComponent;
+  lightness: SyntaxComponent;
+  a: SyntaxComponent;
+  b: SyntaxComponent;
   alpha?: AlphaValue | 'none';
 };
 
-type LabComponent = NumberValue | PercentageValue | 'none';
-
 type LabArguments = {
-  lightness: LabComponent;
-  a: LabComponent;
-  b: LabComponent;
+  lightness: SyntaxComponent;
+  a: SyntaxComponent;
+  b: SyntaxComponent;
   alpha?: AlphaValue | 'none';
 };
 
@@ -1144,11 +1136,11 @@ const consumeLabArguments: TryComponentConsumer<LabArguments> = sequenceOf(
 
 function tryConsumeLabComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<LabComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeLabComponent(c);
 }
 
-const consumeLabComponent: TryComponentConsumer<LabComponent> = oneOf(
+const consumeLabComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1173,25 +1165,23 @@ const consumeLabComponent: TryComponentConsumer<LabComponent> = oneOf(
 
 export type LchColor = {
   kind: ColorKind.Lch;
-  lightness: LchComponent;
-  chroma: LchComponent;
+  lightness: SyntaxComponent;
+  chroma: SyntaxComponent;
   hue: HueValue | 'none';
   alpha?: AlphaValue | 'none';
 };
 
 export type OklchColor = {
   kind: ColorKind.Oklch;
-  lightness: LchComponent;
-  chroma: LchComponent;
+  lightness: SyntaxComponent;
+  chroma: SyntaxComponent;
   hue: HueValue | 'none';
   alpha?: AlphaValue | 'none';
 };
 
-type LchComponent = NumberValue | PercentageValue | 'none';
-
 type LchArguments = {
-  lightness: LchComponent;
-  chroma: LchComponent;
+  lightness: SyntaxComponent;
+  chroma: SyntaxComponent;
   hue: HueValue | 'none';
   alpha?: AlphaValue | 'none';
 };
@@ -1251,11 +1241,11 @@ const consumeLchArguments: TryComponentConsumer<LchArguments> = sequenceOf(
 
 function tryConsumeLchComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<LchComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeLchComponent(c);
 }
 
-const consumeLchComponent: TryComponentConsumer<LchComponent> = oneOf(
+const consumeLchComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1284,7 +1274,7 @@ const consumeLchComponent: TryComponentConsumer<LchComponent> = oneOf(
 export type PredefinedColor = {
   kind: ColorKind.Color;
   space: PredefinedColorSpace;
-  components: ColorFunctionComponents;
+  components: SyntaxTriplet;
   alpha?: AlphaValue | 'none';
 };
 
@@ -1301,17 +1291,9 @@ type PredefinedRgb =
 
 type XyzSpace = 'xyz' | 'xyz-d50' | 'xyz-d65';
 
-type ColorFunctionComponent = NumberValue | PercentageValue | 'none';
-
-type ColorFunctionComponents = [
-  ColorFunctionComponent,
-  ColorFunctionComponent,
-  ColorFunctionComponent,
-];
-
 type ColorSpaceParams = {
   space: PredefinedColorSpace;
-  components: ColorFunctionComponents;
+  components: SyntaxTriplet;
 };
 
 function tryConsumeColorFunctionNotation(
@@ -1421,11 +1403,11 @@ const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
 
 function tryConsumeColorFunctionComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<ColorFunctionComponent> {
+): TryComponentConsumerResult<SyntaxComponent> {
   return consumeColorFunctionComponent(c);
 }
 
-const consumeColorFunctionComponent: TryComponentConsumer<ColorFunctionComponent> = oneOf(
+const consumeColorFunctionComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumePercentage),
@@ -1660,55 +1642,42 @@ function resolveColorFunction(
   context: ColorResolutionContext,
 ): ColorValue {
   const resolvedAlpha = resolveColorAlphaValue(value.alpha, context);
+  const resolvedValue = resolvedAlpha === value.alpha
+    ? value
+    : { ...value, alpha: resolvedAlpha };
   const alpha = absoluteColorAlpha(resolvedAlpha);
 
   if (alpha === null) {
-    return resolvedAlpha === value.alpha
-      ? value
-      : { ...value, alpha: resolvedAlpha };
+    return resolvedValue;
   }
 
-  let absolute: AbsoluteColor | null;
-
-  switch (value.kind) {
+  switch (resolvedValue.kind) {
     case ColorKind.Rgb:
-      absolute = resolveRgbColor(value, alpha, context);
-      break;
+      return resolveRgbColor(resolvedValue, alpha, context);
     case ColorKind.Hsl:
-      absolute = resolveHslColor(value, alpha, context);
-      break;
+      return resolveHslColor(resolvedValue, alpha, context);
     case ColorKind.Hwb:
-      absolute = resolveHwbColor(value, alpha, context);
-      break;
+      return resolveHwbColor(resolvedValue, alpha, context);
     case ColorKind.Lab:
-      absolute = resolveLabColor(value, alpha, context, false);
-      break;
+      return resolveLabColor(resolvedValue, alpha, context, false);
     case ColorKind.Oklab:
-      absolute = resolveLabColor(value, alpha, context, true);
-      break;
+      return resolveLabColor(resolvedValue, alpha, context, true);
     case ColorKind.Lch:
-      absolute = resolveLchColor(value, alpha, context, false);
-      break;
+      return resolveLchColor(resolvedValue, alpha, context, false);
     case ColorKind.Oklch:
-      absolute = resolveLchColor(value, alpha, context, true);
-      break;
+      return resolveLchColor(resolvedValue, alpha, context, true);
     case ColorKind.Color:
-      absolute = resolvePredefinedColor(value, alpha, context);
-      break;
+      return resolvePredefinedColor(resolvedValue, alpha, context);
     default:
-      return assertNever(value);
+      return assertNever(resolvedValue);
   }
-
-  return absolute === null
-    ? value
-    : absolute;
 }
 
 function resolveRgbColor(
   value: RgbColor,
   alpha: number | undefined,
   context: MathContext,
-): AbsoluteColor | null {
+): AbsoluteColor | RgbColor {
   const { components: values } = value;
 
   if (alpha === 1 && is8BitRgbComponents(values)) {
@@ -1717,7 +1686,7 @@ function resolveRgbColor(
       space: 'srgb-legacy',
       components: values.map(
         (component) => component.value,
-      ) as ColorComponents,
+      ) as AbsoluteTriplet,
       alpha: 0xff,
       is8Bit: true,
     };
@@ -1725,30 +1694,31 @@ function resolveRgbColor(
 
   const components = resolveColorComponents(
     values,
-    1 / 0xff,
-    1 / 100,
     context,
   );
-
-  if (components === null) {
-    return null;
-  }
-
   const clamped = clampColorComponents(
     components,
-    [[0, 1], [0, 1], [0, 1]],
+    COLOR_COMPONENT_CLAMPING.rgb,
     context,
-    'declared',
   );
 
-  if (clamped === null) {
-    return null;
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      components: clamped,
+    };
   }
+
+  const scaled = scaleColorComponents(
+    clamped,
+    1 / 0xff,
+    1 / 100,
+  );
 
   return {
     kind: ColorKind.Absolute,
     space: 'srgb-legacy',
-    components: clamped,
+    components: scaled,
     alpha,
   };
 }
@@ -1760,7 +1730,7 @@ function is8BitRgbComponents(
 }
 
 function is8BitRgbComponent(
-  value: RgbComponent,
+  value: SyntaxComponent,
 ): value is NumberLiteral {
   return (
     value !== 'none' &&
@@ -1775,39 +1745,39 @@ function resolveHslColor(
   value: HslColor,
   alpha: number | undefined,
   context: MathContext,
-): AbsoluteColor | null {
+): AbsoluteColor | HslColor {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.saturation, value.lightness],
-    1,
-    1,
     context,
   );
-
-  if (hue === null || components === null) {
-    return null;
-  }
-
   const clamped = clampColorComponents(
     [hue, ...components],
-    [null, [0, Infinity], null],
+    COLOR_COMPONENT_CLAMPING.hsl,
     context,
-    'declared',
   );
+  const hueValue = normalizeHueValue(clamped[0]);
 
-  if (clamped === null) {
-    return null;
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      hue: hueValue,
+      saturation: clamped[1],
+      lightness: clamped[2],
+    };
   }
 
-  const [rawHue, saturation, lightness] = clamped;
+  const [, ...resolvedComponents] = clamped;
+  const [saturation, lightness] = scaleColorComponents(
+    resolvedComponents,
+    1,
+    1,
+  );
+  const absoluteHue = scaleHue(hueValue);
   const absolute: AbsoluteColor = {
     kind: ColorKind.Absolute,
     space: 'hsl',
-    components: [
-      rawHue === undefined ? rawHue : normalizeHue(rawHue),
-      saturation,
-      lightness,
-    ],
+    components: [absoluteHue, saturation, lightness],
     alpha,
   };
 
@@ -1820,39 +1790,39 @@ function resolveHwbColor(
   value: HwbColor,
   alpha: number | undefined,
   context: MathContext,
-): AbsoluteColor | null {
+): AbsoluteColor | HwbColor {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.whiteness, value.blackness],
-    1,
-    1,
     context,
   );
-
-  if (hue === null || components === null) {
-    return null;
-  }
-
   const clamped = clampColorComponents(
     [hue, ...components],
-    [null, null, null],
+    COLOR_COMPONENT_CLAMPING.hwb,
     context,
-    'declared',
   );
+  const hueValue = normalizeHueValue(clamped[0]);
 
-  if (clamped === null) {
-    return null;
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      hue: hueValue,
+      whiteness: clamped[1],
+      blackness: clamped[2],
+    };
   }
 
-  const [rawHue, whiteness, blackness] = clamped;
+  const [, ...resolvedComponents] = clamped;
+  const [whiteness, blackness] = scaleColorComponents(
+    resolvedComponents,
+    1,
+    1,
+  );
+  const absoluteHue = scaleHue(hueValue);
   const absolute: AbsoluteColor = {
     kind: ColorKind.Absolute,
     space: 'hwb',
-    components: [
-      rawHue === undefined ? rawHue : normalizeHue(rawHue),
-      whiteness,
-      blackness,
-    ],
+    components: [absoluteHue, whiteness, blackness],
     alpha,
   };
 
@@ -1866,32 +1836,39 @@ function resolveLabColor(
   alpha: number | undefined,
   context: MathContext,
   ok: boolean,
-): AbsoluteColor | null {
+): AbsoluteColor | LabColor | OklabColor {
   const components = resolveColorComponents(
     [value.lightness, value.a, value.b],
-    1,
-    ok ? [1 / 100, 0.4 / 100, 0.4 / 100] : [1, 1.25, 1.25],
     context,
+    'computed',
   );
-
-  if (components === null) {
-    return null;
-  }
-
   const clamped = clampColorComponents(
     components,
-    [[0, ok ? 1 : 100], null, null],
+    ok
+      ? COLOR_COMPONENT_CLAMPING.oklab
+      : COLOR_COMPONENT_CLAMPING.lab,
     context,
   );
 
-  if (clamped === null) {
-    return null;
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      lightness: clamped[0],
+      a: clamped[1],
+      b: clamped[2],
+    };
   }
+
+  const scaled = scaleColorComponents(
+    clamped,
+    1,
+    ok ? [1 / 100, 0.4 / 100, 0.4 / 100] : [1, 1.25, 1.25],
+  );
 
   return {
     kind: ColorKind.Absolute,
     space: ok ? 'oklab' : 'lab',
-    components: clamped,
+    components: scaled,
     alpha,
   };
 }
@@ -1901,40 +1878,43 @@ function resolveLchColor(
   alpha: number | undefined,
   context: MathContext,
   ok: boolean,
-): AbsoluteColor | null {
+): AbsoluteColor | LchColor | OklchColor {
   const components = resolveColorComponents(
     [value.lightness, value.chroma],
+    context,
+    'computed',
+  );
+  const hue = resolveHue(value.hue, context, 'computed');
+  const clamped = clampColorComponents(
+    [...components, hue],
+    ok
+      ? COLOR_COMPONENT_CLAMPING.oklch
+      : COLOR_COMPONENT_CLAMPING.lch,
+    context,
+  );
+  const hueValue = normalizeHueValue(clamped[2]);
+
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      lightness: clamped[0],
+      chroma: clamped[1],
+      hue: hueValue,
+    };
+  }
+
+  const [lightnessValue, chromaValue] = clamped;
+  const [lightness, chroma] = scaleColorComponents(
+    [lightnessValue, chromaValue],
     1,
     ok ? [1 / 100, 0.4 / 100] : [1, 1.5],
-    context,
   );
-  const hue = resolveHue(value.hue, context);
-
-  if (components === null || hue === null) {
-    return null;
-  }
-
-  const resolved: ColorComponents = [...components, hue];
-  const clamped = clampColorComponents(
-    resolved,
-    [[0, ok ? 1 : 100], [0, Infinity], null],
-    context,
-  );
-
-  if (clamped === null) {
-    return null;
-  }
-
-  const [lightness, chroma, rawHue] = clamped;
+  const absoluteHue = scaleHue(hueValue);
 
   return {
     kind: ColorKind.Absolute,
     space: ok ? 'oklch' : 'lch',
-    components: [
-      lightness,
-      chroma,
-      rawHue === undefined ? rawHue : normalizeHue(rawHue),
-    ],
+    components: [lightness, chroma, absoluteHue],
     alpha,
   };
 }
@@ -1943,83 +1923,95 @@ function resolvePredefinedColor(
   value: PredefinedColor,
   alpha: number | undefined,
   context: MathContext,
-): AbsoluteColor | null {
+): AbsoluteColor | PredefinedColor {
   const components = resolveColorComponents(
     value.components,
-    1,
-    1 / 100,
     context,
+    'computed',
   );
-
-  if (components === null) {
-    return null;
-  }
-
   const clamped = clampColorComponents(
     components,
-    [null, null, null],
+    COLOR_COMPONENT_CLAMPING.predefined,
     context,
   );
 
-  if (clamped === null) {
-    return null;
+  if (hasDeferredColorComponents(clamped)) {
+    return {
+      ...value,
+      components: clamped,
+    };
   }
+
+  const scaled = scaleColorComponents(clamped, 1, 1 / 100);
 
   return {
     kind: ColorKind.Absolute,
     space: value.space === 'xyz' ? 'xyz-d65' : value.space,
-    components: clamped,
+    components: scaled,
     alpha,
   };
 }
 
 function resolveColorComponents<
-  const Values extends (NumberValue | PercentageValue | 'none')[],
+  const Values extends SyntaxComponent[],
+>(
+  values: Values,
+  context: MathContext,
+  unwrapMathAt: ValueStage = 'declared',
+): { [Index in keyof Values]: SyntaxComponent } {
+  return values.map(
+    (value) => resolveColorComponent(
+      value,
+      context,
+      unwrapMathAt,
+    ),
+  ) as { [Index in keyof Values]: SyntaxComponent };
+}
+
+function resolveColorComponent(
+  value: SyntaxComponent,
+  context: MathContext,
+  unwrapMathAt: ValueStage,
+): SyntaxComponent {
+  if (value === 'none') {
+    return value;
+  }
+
+  return resolveColorNumericValue(value, context, unwrapMathAt);
+}
+
+function hasDeferredColorComponents(
+  values: readonly ClampableColorComponentValue[],
+): boolean {
+  return values.some(
+    (value) => value !== 'none' && value.type === 'math',
+  );
+}
+
+function scaleColorComponents<
+  const Values extends SyntaxComponent[],
 >(
   values: Values,
   numberScale: number | readonly number[],
   percentageScale: number | readonly number[],
-  context: MathContext,
-): { [Index in keyof Values]: ColorComponent } | null {
-  const components: ColorComponent[] = [];
+): { [Index in keyof Values]: AbsoluteComponent } {
+  return values.map(
+    (value, index) => {
+      if (value === 'none') {
+        return undefined;
+      }
 
-  for (const [index, value] of values.entries()) {
-    const component = resolveColorComponent(
-      value,
-      scaleAt(numberScale, index),
-      scaleAt(percentageScale, index),
-      context,
-    );
+      if (value.type === 'math') {
+        throw new Error('Deferred color components cannot be scaled');
+      }
 
-    if (component === null) {
-      return null;
-    }
-
-    components.push(component);
-  }
-
-  return components as { [Index in keyof Values]: ColorComponent };
-}
-
-function resolveColorComponent(
-  value: NumberValue | PercentageValue | 'none',
-  numberScale: number,
-  percentageScale: number,
-  context: MathContext,
-): ColorComponent | null {
-  if (value === 'none') {
-    return undefined;
-  }
-
-  const resolved = resolveColorNumericValue(value, context, 'declared');
-
-  if (resolved.type === 'math') {
-    return null;
-  }
-
-  return resolved.type === 'percentage'
-    ? resolved.value * percentageScale
-    : resolved.value * numberScale;
+      return value.value * (
+        value.type === 'percentage'
+          ? scaleAt(percentageScale, index)
+          : scaleAt(numberScale, index)
+      );
+    },
+  ) as { [Index in keyof Values]: AbsoluteComponent };
 }
 
 function resolveColorAlphaValue(
@@ -2061,9 +2053,7 @@ function absoluteColorAlpha(
   const alpha = value.type === 'percentage'
     ? value.value / 100
     : value.value;
-  const clampableAlpha = Number.isNaN(alpha) || Object.is(alpha, -0)
-    ? 0
-    : alpha;
+  const clampableAlpha = normalizeForClamping(alpha);
 
   return clamp(clampableAlpha, 0, 1);
 }
@@ -2071,23 +2061,49 @@ function absoluteColorAlpha(
 function resolveHue(
   value: HueValue | 'none',
   context: MathContext,
-): ColorComponent | null {
+  unwrapMathAt: ValueStage = 'declared',
+): HueValue | 'none' {
+  if (value === 'none') {
+    return value;
+  }
+
+  const calculationContext = colorCalculationContext(context, unwrapMathAt);
+  return isNumberValue(value)
+    ? resolveNumber(value, calculationContext)
+    : resolveAngle(value, calculationContext);
+}
+
+function scaleHue(
+  value: HueValue | 'none',
+): AbsoluteComponent {
   if (value === 'none') {
     return undefined;
   }
 
-  const calculationContext = colorCalculationContext(context, 'declared');
-  const resolved = isNumberValue(value)
-    ? resolveNumber(value, calculationContext)
-    : resolveAngle(value, calculationContext);
-
-  if (resolved.type === 'math') {
-    return null;
+  if (value.type === 'math') {
+    throw new Error('A deferred hue cannot be scaled');
   }
 
-  return resolved.type === 'angle'
-    ? resolveAngleLiteral(resolved).value
-    : resolved.value;
+  return value.type === 'angle'
+    ? resolveAngleLiteral(value).value
+    : value.value;
+}
+
+function normalizeHueValue(
+  value: HueValue | 'none',
+): HueValue | 'none' {
+  if (value === 'none' || value.type === 'math') {
+    return value;
+  }
+
+  const number = value.type === 'angle'
+    ? resolveAngleLiteral(value)
+    : value;
+  const normalized = normalizeHue(number.value);
+
+  return Object.is(normalized, number.value)
+    ? number
+    : { ...number, value: normalized };
 }
 
 function resolveColorNumericValue(
@@ -2127,46 +2143,109 @@ type ColorComponentRange = [
   maximum: number,
 ];
 
-type ColorComponentRanges = [
+type ClampableColorComponentValue = SyntaxComponent | AngleValue;
+
+type ClampableColorComponentValues =
+  ColorTriplet<ClampableColorComponentValue>;
+
+type ColorComponentRanges = readonly [
   ColorComponentRange | null,
   ColorComponentRange | null,
   ColorComponentRange | null,
 ];
 
-function clampColorComponents(
-  components: ColorComponents,
-  ranges: ColorComponentRanges,
+type ColorComponentClamping = {
+  numbers: ColorComponentRanges;
+  percentages: ColorComponentRanges;
+  nonFiniteAt: ValueStage;
+};
+
+const COLOR_COMPONENT_CLAMPING = {
+  rgb: {
+    numbers: [[0, 0xff], [0, 0xff], [0, 0xff]],
+    percentages: [[0, 100], [0, 100], [0, 100]],
+    nonFiniteAt: 'declared',
+  },
+  hsl: {
+    numbers: [null, [0, Infinity], null],
+    percentages: [null, [0, Infinity], null],
+    nonFiniteAt: 'declared',
+  },
+  hwb: {
+    numbers: [null, null, null],
+    percentages: [null, null, null],
+    nonFiniteAt: 'declared',
+  },
+  lab: {
+    numbers: [[0, 100], null, null],
+    percentages: [[0, 100], null, null],
+    nonFiniteAt: 'computed',
+  },
+  oklab: {
+    numbers: [[0, 1], null, null],
+    percentages: [[0, 100], null, null],
+    nonFiniteAt: 'computed',
+  },
+  lch: {
+    numbers: [[0, 100], [0, Infinity], null],
+    percentages: [[0, 100], [0, Infinity], null],
+    nonFiniteAt: 'computed',
+  },
+  oklch: {
+    numbers: [[0, 1], [0, Infinity], null],
+    percentages: [[0, 100], [0, Infinity], null],
+    nonFiniteAt: 'computed',
+  },
+  predefined: {
+    numbers: [null, null, null],
+    percentages: [null, null, null],
+    nonFiniteAt: 'computed',
+  },
+} as const satisfies Record<string, ColorComponentClamping>;
+
+function clampColorComponents<
+  const Values extends ClampableColorComponentValues,
+>(
+  components: Values,
+  rules: ColorComponentClamping,
   context: MathContext,
-  nonFiniteClampStage: ValueStage = 'computed',
-): ColorComponents | null {
-  if (
-    !isAtOrBeyondValueStage(
-      context.stage ?? 'declared',
-      nonFiniteClampStage,
-    ) &&
-    components.some(
-      (component) => component !== undefined && !Number.isFinite(component),
-    )
-  ) {
-    return null;
-  }
+): { [Index in keyof Values]: Values[Index] } {
+  const clampNonFinite = isAtOrBeyondValueStage(
+    context.stage ?? 'declared',
+    rules.nonFiniteAt,
+  );
 
   return components.map(
     (component, index) => {
-      if (component === undefined) {
+      if (component === 'none' || component.type === 'math') {
         return component;
       }
 
-      const clampable = Number.isNaN(component) || Object.is(component, -0)
-        ? 0
-        : component;
+      if (!clampNonFinite && !Number.isFinite(component.value)) {
+        return component;
+      }
+
+      const clampable = normalizeForClamping(component.value);
+      const ranges = component.type === 'percentage'
+        ? rules.percentages
+        : rules.numbers;
       const range = ranges[index] ?? null;
 
-      return range === null
+      const value = range === null
         ? clampable
         : clamp(clampable, ...range);
+
+      return Object.is(value, component.value)
+        ? component
+        : { ...component, value };
     },
-  ) as ColorComponents;
+  ) as { [Index in keyof Values]: Values[Index] };
+}
+
+function normalizeForClamping(value: number): number {
+  return Number.isNaN(value) || Object.is(value, -0)
+    ? 0
+    : value;
 }
 
 function normalizeHue(value: number): number {
@@ -2608,13 +2687,13 @@ function serializeAbsoluteColorFunction(
     : `${name}(${components.join(' ')} / ${alpha})`;
 }
 
-function serializeAbsoluteColorComponent(value: ColorComponent): string {
+function serializeAbsoluteColorComponent(value: AbsoluteComponent): string {
   return value === undefined
     ? 'none'
     : serializeCssNumber(value);
 }
 
-function serializeAbsoluteColorPercentage(value: ColorComponent): string {
+function serializeAbsoluteColorPercentage(value: AbsoluteComponent): string {
   return value === undefined
     ? 'none'
     : `${serializeCssNumber(value)}%`;
@@ -2719,7 +2798,7 @@ function normalizeColorEncoding(value: AbsoluteColor): AbsoluteColor {
       (component) => component === undefined
         ? component
         : component / 0xff,
-    ) as ColorComponents,
+    ) as AbsoluteTriplet,
     alpha: value.alpha === undefined
       ? value.alpha
       : value.alpha / 0xff,
@@ -3808,8 +3887,8 @@ function areColorComponentsEquivalent(
 }
 
 function areColorComponentValuesEquivalent(
-  a: ColorComponent,
-  b: ColorComponent,
+  a: AbsoluteComponent,
+  b: AbsoluteComponent,
   epsilon = 0.00001,
 ): boolean {
   if (a === undefined || b === undefined) {
@@ -3943,14 +4022,14 @@ function restoreCarriedForwardComponents(
         ? undefined
         : b.components[index]
       : component,
-  ) as ColorComponents;
+  ) as AbsoluteTriplet;
   const componentsB = b.components.map((component, index) =>
     carriedB.components[index]
       ? carriedA.components[index]
         ? undefined
         : a.components[index]
       : component,
-  ) as ColorComponents;
+  ) as AbsoluteTriplet;
 
   return [
     {
@@ -4058,8 +4137,8 @@ function fixupColorHues(
       assertNever(method);
   }
 
-  const componentsA: ColorComponents = [...a.components];
-  const componentsB: ColorComponents = [...b.components];
+  const componentsA: AbsoluteTriplet = [...a.components];
+  const componentsB: AbsoluteTriplet = [...b.components];
   componentsA[hueIndex] = hueA;
   componentsB[hueIndex] = hueB;
 
@@ -4094,7 +4173,7 @@ function interpolatePremultipliedColors(
   b: AbsoluteColor,
   progress: number,
 ): AbsoluteColor {
-  const components: ColorComponents = [
+  const components: AbsoluteTriplet = [
     interpolateComponent(a.components[0], b.components[0], progress),
     interpolateComponent(a.components[1], b.components[1], progress),
     interpolateComponent(a.components[2], b.components[2], progress),
@@ -4114,10 +4193,10 @@ function interpolatePremultipliedColors(
 }
 
 function interpolateComponent(
-  a: ColorComponent,
-  b: ColorComponent,
+  a: AbsoluteComponent,
+  b: AbsoluteComponent,
   progress: number,
-): ColorComponent {
+): AbsoluteComponent {
   return a === undefined || b === undefined
     ? undefined
     : (1 - progress) * a + progress * b;
@@ -4144,7 +4223,7 @@ function unpremultiplyColor(value: AbsoluteColor): AbsoluteColor {
 function restoreMissingComponents(
   value: AbsoluteColor,
   components: ColorVector,
-): ColorComponents {
+): AbsoluteTriplet {
   return [
     value.components[0] === undefined ? undefined : components[0],
     value.components[1] === undefined ? undefined : components[1],
