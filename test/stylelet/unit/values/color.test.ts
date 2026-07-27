@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, ColorRgba, areColorsEquivalent, convertNumericColor, deltaEOK, gamutMapNumericColor,
+  ColorKind, ColorRgba, areColorsEquivalent, convertAbsoluteColor, deltaEOK, gamutMapAbsoluteColor,
   interpolateColors, parseColorInterpolationMethod, parseColorValue, resolveColorValue,
-  serializeColorValue, type NumericColor, type SystemColorName,
+  serializeColorValue, type AbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
 
 type ColorVector3 = readonly [number, number, number];
@@ -18,8 +18,8 @@ function isColorVector(value: unknown): value is ColorVector {
 }
 
 function expectColorCloseTo(
-  actual: NumericColor,
-  expected: NumericColor | ColorVector,
+  actual: AbsoluteColor,
+  expected: AbsoluteColor | ColorVector,
 ): void {
   if (isColorVector(expected)) {
     const [first, second, third, alpha] = expected;
@@ -92,8 +92,8 @@ describe('color values', () => {
   );
 
   it('resolves deprecated colors through the modern system color', () => {
-    const numeric: NumericColor = {
-      kind: ColorKind.Numeric,
+    const absolute: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.1, 0.2, 0.3],
       alpha: 1,
@@ -101,8 +101,8 @@ describe('color values', () => {
 
     expect(resolveColorValue(parseColorValue('ActiveCaption')!, {
       stage: 'computed',
-      systemColors: new Map<SystemColorName, NumericColor>([['canvas', numeric]]),
-    })).toBe(numeric);
+      systemColors: new Map<SystemColorName, AbsoluteColor>([['canvas', absolute]]),
+    })).toBe(absolute);
   });
 
   it('parses transparent and currentcolor', () => {
@@ -121,7 +121,7 @@ describe('color values', () => {
     expect(resolveColorValue(transparent, { stage: 'specified' }))
       .toBe(transparent);
     expect(resolveColorValue(transparent, { stage: 'computed' })).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0, 0, 0],
       alpha: 0,
@@ -140,7 +140,7 @@ describe('color values', () => {
     'resolves the declared hex color %s',
     (text, components, alpha) => {
       expect(parseColorValue(text)).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components,
         alpha,
@@ -169,7 +169,7 @@ describe('color values', () => {
 
     expect(resolveColorValue(red, { stage: 'specified' })).toBe(red);
     expect(resolveColorValue(red, { stage: 'computed' })).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [255, 0, 0],
       alpha: 255,
@@ -178,26 +178,26 @@ describe('color values', () => {
   });
 
   it('resolves contextual colors when their dependencies are available', () => {
-    const numeric: NumericColor = {
-      kind: ColorKind.Numeric,
+    const absolute: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.1, 0.2, 0.3],
       alpha: 1,
     };
     const current = parseColorValue('currentcolor')!;
     const system = parseColorValue('CanvasText')!;
-    const systemColors = new Map<SystemColorName, NumericColor>([
-      ['canvastext', numeric],
+    const systemColors = new Map<SystemColorName, AbsoluteColor>([
+      ['canvastext', absolute],
     ]);
 
     expect(resolveColorValue(current, {
       stage: 'computed',
-      currentColor: numeric,
+      currentColor: absolute,
     })).toBe(current);
     expect(resolveColorValue(current, {
       stage: 'used',
-      currentColor: numeric,
-    })).toBe(numeric);
+      currentColor: absolute,
+    })).toBe(absolute);
     expect(resolveColorValue(system, {
       stage: 'specified',
       systemColors,
@@ -205,34 +205,34 @@ describe('color values', () => {
     expect(resolveColorValue(system, {
       stage: 'computed',
       systemColors,
-    })).toBe(numeric);
+    })).toBe(absolute);
   });
 
-  it('resolves legacy rgb and rgba functions to numerical sRGB', () => {
+  it('resolves legacy rgb and rgba functions to absolute sRGB', () => {
     expect(parseColorValue('rgb(255, 0, 127)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [255, 0, 127],
       alpha: 255,
       is8Bit: true,
     });
     expect(parseColorValue('rgba(100%, 0%, 50%, 25%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1, 0, 0.5],
       alpha: 0.25,
     });
   });
 
-  it('resolves modern rgb and rgba functions to numerical sRGB', () => {
+  it('resolves modern rgb and rgba functions to absolute sRGB', () => {
     expect(parseColorValue('rgb(255 20% none / 0.5)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1, 0.2, undefined],
       alpha: 0.5,
     });
     expect(parseColorValue('rgba(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [undefined, 0, 1],
       alpha: undefined,
@@ -255,7 +255,7 @@ describe('color values', () => {
     const input = 'rgb(calc(255 / 2) calc(50%) 0)';
 
     expect(parseColorValue(input)).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0.5, 0],
       alpha: 1,
@@ -273,7 +273,7 @@ describe('color values', () => {
       stage: 'declared',
       unwrapMathAt: 'declared',
     })).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0.5, 0],
       alpha: 1,
@@ -290,13 +290,13 @@ describe('color values', () => {
       stage: 'declared',
       unwrapMathAt: 'declared',
     })).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0, 0],
       alpha: 0.5,
     });
     expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0, 0],
       alpha: 0.5,
@@ -313,7 +313,7 @@ describe('color values', () => {
 
     const hsl = parseColorValue(
       'hsl(38.82 calc(2 * 50%) 50%)',
-    ) as NumericColor;
+    ) as AbsoluteColor;
 
     expect(hsl.space).toBe('srgb-legacy');
     expectColorCloseTo(hsl, [1, 0.647, 0, 1]);
@@ -321,7 +321,7 @@ describe('color values', () => {
 
   it('clamps rgb components at parsed-value time', () => {
     expect(parseColorValue('rgb(300 -10 0 / 2)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1, 0, 0],
       alpha: 1,
@@ -343,7 +343,7 @@ describe('color values', () => {
       const declared = parseColorValue(input)!;
 
       expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         ...expected,
       });
@@ -426,7 +426,7 @@ describe('color values', () => {
       const declared = parseColorValue(input)!;
 
       expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components,
         alpha,
@@ -434,30 +434,30 @@ describe('color values', () => {
     },
   );
 
-  it('resolves legacy hsl and hsla functions to numerical sRGB', () => {
+  it('resolves legacy hsl and hsla functions to absolute sRGB', () => {
     expect(parseColorValue('hsl(120, 100%, 50%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0, 1, 0],
       alpha: 1,
     });
     expect(parseColorValue('hsla(0.5turn, 25%, 75%, 20%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.6875, 0.8125, 0.8125],
       alpha: 0.2,
     });
   });
 
-  it('resolves modern HSL without missing components to numerical sRGB', () => {
+  it('resolves modern HSL without missing components to absolute sRGB', () => {
     expect(parseColorValue('hsl(120deg 100% 50 / 0.5)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0, 1, 0],
       alpha: 0.5,
     });
     expect(parseColorValue('hsla(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [undefined, 0, 100],
       alpha: undefined,
@@ -477,7 +477,7 @@ describe('color values', () => {
     'preserves missing HSL components in %s',
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'hsl',
         components,
         alpha,
@@ -499,22 +499,22 @@ describe('color values', () => {
 
   it('clamps negative hsl saturation at parsed-value time', () => {
     expect(parseColorValue('hsl(120 -10% 50%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.5, 0.5, 0.5],
       alpha: 1,
     });
   });
 
-  it('resolves HWB without missing components to numerical sRGB', () => {
+  it('resolves HWB without missing components to absolute sRGB', () => {
     expect(parseColorValue('hwb(120deg 20% 30 / 0.5)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0.2, 0.7, 0.2],
       alpha: 0.5,
     });
     expect(parseColorValue('hwb(none 0 100% / none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [undefined, 0, 100],
       alpha: undefined,
@@ -535,7 +535,7 @@ describe('color values', () => {
 
   it('normalizes excessive white and black when resolving hwb colors', () => {
     expect(parseColorValue('hwb(45 40% 80%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1 / 3, 1 / 3, 1 / 3],
       alpha: 1,
@@ -544,7 +544,7 @@ describe('color values', () => {
 
   it('preserves missing HWB components outside interpolation', () => {
     expect(parseColorValue('hwb(none none 100%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [undefined, undefined, 100],
       alpha: 1,
@@ -565,7 +565,7 @@ describe('color values', () => {
     'preserves missing HWB components in %s',
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'hwb',
         components,
         alpha,
@@ -573,30 +573,30 @@ describe('color values', () => {
     },
   );
 
-  it('resolves lab and oklab functions to numerical colors', () => {
+  it('resolves lab and oklab functions to absolute colors', () => {
     expect(parseColorValue('lab(50% 20 -30% / 0.4)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'lab',
       components: [50, 20, -37.5],
       alpha: 0.4,
     });
     expect(parseColorValue('oklab(none 0.1 -20% / none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [undefined, 0.1, -0.08],
       alpha: undefined,
     });
   });
 
-  it('resolves lch and oklch functions to numerical colors', () => {
+  it('resolves lch and oklch functions to absolute colors', () => {
     expect(parseColorValue('lch(50 40% 270deg / 25%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'lch',
       components: [50, 60, 270],
       alpha: 0.25,
     });
     expect(parseColorValue('oklch(none 0.2 none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [undefined, 0.2, undefined],
       alpha: 1,
@@ -632,7 +632,7 @@ describe('color values', () => {
     'resolves the bounded components of %s',
     (input, space, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space,
         components,
         alpha,
@@ -677,7 +677,7 @@ describe('color values', () => {
         parseColorValue(input)!,
         { stage: 'computed' },
       )).toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space,
         components,
         alpha,
@@ -701,7 +701,7 @@ describe('color values', () => {
 
     for (const space of spaces) {
       expect(parseColorValue(`color(${space} 0 0 0)`)).toMatchObject({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: space === 'xyz' ? 'xyz-d65' : space,
       });
     }
@@ -713,14 +713,14 @@ describe('color values', () => {
 
   it('resolves color function components and alpha', () => {
     expect(parseColorValue('color(display-p3 1 50% none / 25%)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'display-p3',
       components: [1, 0.5, undefined],
       alpha: 0.25,
     });
 
     expect(parseColorValue('color(xyz-d50 none 0.5 120% / none)')).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'xyz-d50',
       components: [undefined, 0.5, 1.2],
       alpha: undefined,
@@ -730,7 +730,7 @@ describe('color values', () => {
   it('retains out-of-range color function components', () => {
     expect(parseColorValue('color(prophoto-rgb -0.2 1.4 120% / 2)'))
       .toEqual({
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'prophoto-rgb',
         components: [-0.2, 1.4, 1.2],
         alpha: 1,
@@ -1074,24 +1074,24 @@ describe('color values', () => {
     ))).toBe('rgba(0, 0, 0, 0)');
   });
 
-  it('serializes numerical sRGB colors in legacy rgb form', () => {
+  it('serializes absolute sRGB colors in legacy rgb form', () => {
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1, 0.5, 0],
       alpha: 1,
     })).toBe('rgb(255, 127.5, 0)');
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [1.2, -0.1, 0],
       alpha: 0.5,
     })).toBe('rgba(255, 0, 0, 0.5)');
   });
 
-  it('preserves missing numerical sRGB components through color()', () => {
+  it('preserves missing absolute sRGB components through color()', () => {
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [undefined, 0.5, 0],
       alpha: undefined,
@@ -1112,7 +1112,7 @@ describe('color values', () => {
 
   it('keeps color(srgb) distinct from rgb()', () => {
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [1, 0, 0],
       alpha: 1,
@@ -1121,19 +1121,19 @@ describe('color values', () => {
 
   it('clamps and rounds numerical alpha values', () => {
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'display-p3',
       components: [1, 0, 0],
       alpha: 2,
     })).toBe('color(display-p3 1 0 0)');
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'display-p3',
       components: [1, 0, 0],
       alpha: 0.123456789,
     })).toBe('color(display-p3 1 0 0 / 0.123457)');
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'display-p3',
       components: [1, 0, 0],
       alpha: Number.NaN,
@@ -1166,49 +1166,49 @@ describe('color values', () => {
     },
   );
 
-  it('serializes numerical HSL and HWB colors with missing components', () => {
+  it('serializes absolute HSL and HWB colors with missing components', () => {
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [20, undefined, 30],
       alpha: undefined,
     })).toBe('hsl(20 none 30% / none)');
     expect(serializeColorValue({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [20, undefined, 30],
       alpha: 1,
     })).toBe('hwb(20 none 30%)');
   });
 
-  it('serializes numerical wide-gamut colors in their notation', () => {
-    const cases: [NumericColor, string][] = [
+  it('serializes absolute wide-gamut colors in their notation', () => {
+    const cases: [AbsoluteColor, string][] = [
       [{
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lab',
         components: [56.2, 0, 83.6],
         alpha: 1,
       }, 'lab(56.2 0 83.6)'],
       [{
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [56.2, 83.6, 357.4],
         alpha: 0.93,
       }, 'lch(56.2 83.6 357.4 / 0.93)'],
       [{
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.54, -0.1, -0.02],
         alpha: 1,
       }, 'oklab(0.54 -0.1 -0.02)'],
       [{
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.5385, 0.1725, 320.67],
         alpha: 0.7,
       }, 'oklch(0.5385 0.1725 320.67 / 0.7)'],
       [{
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'display-p3',
         components: [0.28, 0.403, 0.423],
         alpha: 0.85,
@@ -1262,45 +1262,45 @@ describe('color values', () => {
   it.each(colorConversionReferences)(
     'matches the CSS Working Group conversion references for RGB %j',
     (rgb, srgbLch, srgbXyz, displayP3Lch, displayP3Xyz) => {
-      const srgb: NumericColor = {
-        kind: ColorKind.Numeric,
+      const srgb: AbsoluteColor = {
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [...rgb],
         alpha: 1,
       };
-      const displayP3: NumericColor = {
+      const displayP3: AbsoluteColor = {
         ...srgb,
         space: 'display-p3',
       };
-      const actualSrgbXyz = convertNumericColor(srgb, 'xyz-d65');
-      const actualSrgbLch = convertNumericColor(srgb, 'lch');
-      const actualDisplayP3Xyz = convertNumericColor(displayP3, 'xyz-d65');
-      const actualDisplayP3Lch = convertNumericColor(displayP3, 'lch');
+      const actualSrgbXyz = convertAbsoluteColor(srgb, 'xyz-d65');
+      const actualSrgbLch = convertAbsoluteColor(srgb, 'lch');
+      const actualDisplayP3Xyz = convertAbsoluteColor(displayP3, 'xyz-d65');
+      const actualDisplayP3Lch = convertAbsoluteColor(displayP3, 'lch');
 
       expect(actualSrgbXyz.space).toBe('xyz-d65');
       expectColorCloseTo(actualSrgbXyz, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'xyz-d65',
         components: [...srgbXyz],
         alpha: 1,
       });
       expect(actualSrgbLch.space).toBe('lch');
       expectColorCloseTo(actualSrgbLch, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [...srgbLch],
         alpha: 1,
       });
       expect(actualDisplayP3Xyz.space).toBe('xyz-d65');
       expectColorCloseTo(actualDisplayP3Xyz, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'xyz-d65',
         components: [...displayP3Xyz],
         alpha: 1,
       });
       expect(actualDisplayP3Lch.space).toBe('lch');
       expectColorCloseTo(actualDisplayP3Lch, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [...displayP3Lch],
         alpha: 1,
@@ -1308,28 +1308,28 @@ describe('color values', () => {
     },
   );
 
-  it('converts numerical HSL and HWB colors to sRGB', () => {
-    const hsl: NumericColor = {
-      kind: ColorKind.Numeric,
+  it('converts absolute HSL and HWB colors to sRGB', () => {
+    const hsl: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [120, 100, 50],
       alpha: 0.5,
     };
-    const hwb: NumericColor = {
-      kind: ColorKind.Numeric,
+    const hwb: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [120, 0, 0],
       alpha: 0.5,
     };
 
-    expect(convertNumericColor(hsl, 'srgb')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0, 1, 0],
       alpha: 0.5,
     });
-    expect(convertNumericColor(hwb, 'srgb')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(hwb, 'srgb')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0, 1, 0],
       alpha: 0.5,
@@ -1337,32 +1337,32 @@ describe('color values', () => {
   });
 
   it('normalizes 8-bit sRGB values before color conversion', () => {
-    const color = parseColorValue('#ff0080cc') as NumericColor;
+    const color = parseColorValue('#ff0080cc') as AbsoluteColor;
 
-    expect(convertNumericColor(color, 'srgb')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(color, 'srgb')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [1, 0, 128 / 255],
       alpha: 0.8,
     });
   });
 
-  it('converts numerical sRGB colors to HSL and HWB', () => {
-    const rgb: NumericColor = {
-      kind: ColorKind.Numeric,
+  it('converts absolute sRGB colors to HSL and HWB', () => {
+    const rgb: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0, 1, 0],
       alpha: 0.5,
     };
 
-    expect(convertNumericColor(rgb, 'hsl')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(rgb, 'hsl')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [120, 100, 50],
       alpha: 0.5,
     });
-    expect(convertNumericColor(rgb, 'hwb')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(rgb, 'hwb')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [120, 0, 0],
       alpha: 0.5,
@@ -1370,40 +1370,40 @@ describe('color values', () => {
   });
 
   it('replaces missing components with zero during color conversion', () => {
-    const hsl: NumericColor = {
-      kind: ColorKind.Numeric,
+    const hsl: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [undefined, 100, 50],
       alpha: undefined,
     };
-    const gray: NumericColor = {
-      kind: ColorKind.Numeric,
+    const gray: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.5, 0.5, 0.5],
       alpha: 1,
     };
 
-    expect(convertNumericColor(hsl, 'srgb').components).toEqual([1, 0, 0]);
-    expect(convertNumericColor(gray, 'hsl').components[0]).toBeUndefined();
-    expect(convertNumericColor(gray, 'hwb').components[0]).toBeUndefined();
+    expect(convertAbsoluteColor(hsl, 'srgb').components).toEqual([1, 0, 0]);
+    expect(convertAbsoluteColor(gray, 'hsl').components[0]).toBeUndefined();
+    expect(convertAbsoluteColor(gray, 'hwb').components[0]).toBeUndefined();
   });
 
-  it('routes numerical color conversion through sRGB', () => {
-    const hsl: NumericColor = {
-      kind: ColorKind.Numeric,
+  it('routes absolute color conversion through sRGB', () => {
+    const hsl: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [120, 100, 50],
       alpha: 0.5,
     };
 
-    expect(convertNumericColor(hsl, 'hwb')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(hsl, 'hwb')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'hwb',
       components: [120, 0, 0],
       alpha: 0.5,
     });
-    expect(convertNumericColor(hsl, 'srgb-legacy')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(hsl, 'srgb-legacy')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [0, 1, 0],
       alpha: 0.5,
@@ -1411,27 +1411,27 @@ describe('color values', () => {
   });
 
   it('converts Lab and Oklab between rectangular and polar forms', () => {
-    const lab: NumericColor = {
-      kind: ColorKind.Numeric,
+    const lab: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'lab',
       components: [50, 0, 40],
       alpha: 0.5,
     };
-    const oklab: NumericColor = {
-      kind: ColorKind.Numeric,
+    const oklab: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.5, 0.1, 0],
       alpha: 0.25,
     };
 
-    expect(convertNumericColor(lab, 'lch')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(lab, 'lch')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'lch',
       components: [50, 40, 90],
       alpha: 0.5,
     });
-    const labRoundTrip = convertNumericColor(
-      convertNumericColor(lab, 'lch'),
+    const labRoundTrip = convertAbsoluteColor(
+      convertAbsoluteColor(lab, 'lch'),
       'lab',
     );
 
@@ -1440,14 +1440,14 @@ describe('color values', () => {
     expect(labRoundTrip.components[0]).toBeCloseTo(50, 12);
     expect(labRoundTrip.components[1]).toBeCloseTo(0, 12);
     expect(labRoundTrip.components[2]).toBeCloseTo(40, 12);
-    expect(convertNumericColor(oklab, 'oklch')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(oklab, 'oklch')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.5, 0.1, 0],
       alpha: 0.25,
     });
-    const oklabRoundTrip = convertNumericColor(
-      convertNumericColor(oklab, 'oklch'),
+    const oklabRoundTrip = convertAbsoluteColor(
+      convertAbsoluteColor(oklab, 'oklch'),
       'oklab',
     );
 
@@ -1459,27 +1459,27 @@ describe('color values', () => {
   });
 
   it('replaces a missing polar hue with zero rectangular components', () => {
-    const lch: NumericColor = {
-      kind: ColorKind.Numeric,
+    const lch: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'lch',
       components: [50, 40, undefined],
       alpha: 0.5,
     };
-    const oklch: NumericColor = {
-      kind: ColorKind.Numeric,
+    const oklch: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.5, 0.1, undefined],
       alpha: 0.25,
     };
 
-    expect(convertNumericColor(lch, 'lab')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(lch, 'lab')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'lab',
       components: [50, 0, 0],
       alpha: 0.5,
     });
-    expect(convertNumericColor(oklch, 'oklab')).toEqual({
-      kind: ColorKind.Numeric,
+    expect(convertAbsoluteColor(oklch, 'oklab')).toEqual({
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.5, 0, 0],
       alpha: 0.25,
@@ -1487,18 +1487,18 @@ describe('color values', () => {
   });
 
   it('converts known sRGB and Display P3 primaries to XYZ D65', () => {
-    const red: NumericColor = {
-      kind: ColorKind.Numeric,
+    const red: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [1, 0, 0],
       alpha: 1,
     };
-    const p3Red: NumericColor = {
+    const p3Red: AbsoluteColor = {
       ...red,
       space: 'display-p3',
     };
-    const srgbXyz = convertNumericColor(red, 'xyz-d65').components;
-    const p3Xyz = convertNumericColor(p3Red, 'xyz-d65').components;
+    const srgbXyz = convertAbsoluteColor(red, 'xyz-d65').components;
+    const p3Xyz = convertAbsoluteColor(p3Red, 'xyz-d65').components;
 
     expect(srgbXyz[0]).toBeCloseTo(0.4123907993, 9);
     expect(srgbXyz[1]).toBeCloseTo(0.2126390059, 9);
@@ -1509,13 +1509,13 @@ describe('color values', () => {
   });
 
   it('converts colors across D50 and D65 spaces', () => {
-    const labWhite: NumericColor = {
-      kind: ColorKind.Numeric,
+    const labWhite: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'lab',
       components: [100, 0, 0],
       alpha: 0.75,
     };
-    const srgb = convertNumericColor(labWhite, 'srgb');
+    const srgb = convertAbsoluteColor(labWhite, 'srgb');
 
     expect(srgb.alpha).toBe(0.75);
 
@@ -1524,100 +1524,100 @@ describe('color values', () => {
     }
   });
 
-  it('round-trips every numerical color space through XYZ', () => {
-    const colors: NumericColor[] = [
+  it('round-trips absolute colors in every color space through XYZ', () => {
+    const colors: AbsoluteColor[] = [
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-linear',
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'hsl',
         components: [210, 50, 40],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'hwb',
         components: [210, 20, 30],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lab',
         components: [50, 20, -30],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [50, 36.0555127546, 303.690067526],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.5, 0.1, -0.1],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.5, 0.1414213562, 315],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'display-p3',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'display-p3-linear',
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'a98-rgb',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'prophoto-rgb',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'rec2020',
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'xyz-d50',
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'xyz-d65',
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
@@ -1628,8 +1628,8 @@ describe('color values', () => {
       const intermediate = color.space === 'xyz-d50'
         ? 'xyz-d65'
         : 'xyz-d50';
-      const converted = convertNumericColor(color, intermediate);
-      const roundTrip = convertNumericColor(converted, color.space);
+      const converted = convertAbsoluteColor(color, intermediate);
+      const roundTrip = convertAbsoluteColor(converted, color.space);
 
       expect(roundTrip.space).toBe(color.space);
       expect(roundTrip.alpha).toBe(color.alpha);
@@ -1641,25 +1641,25 @@ describe('color values', () => {
     }
   });
 
-  it('returns an unchanged numerical color conversion by identity', () => {
-    const color: NumericColor = {
-      kind: ColorKind.Numeric,
+  it('returns an unchanged absolute color conversion by identity', () => {
+    const color: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'display-p3',
       components: [1, 0, 0],
       alpha: 1,
     };
 
-    expect(convertNumericColor(color, 'display-p3')).toBe(color);
+    expect(convertAbsoluteColor(color, 'display-p3')).toBe(color);
   });
 
   it('calculates color difference as Euclidean distance in Oklab', () => {
-    const reference: NumericColor = {
-      kind: ColorKind.Numeric,
+    const reference: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.5, 0.1, -0.2],
       alpha: 1,
     };
-    const sample: NumericColor = {
+    const sample: AbsoluteColor = {
       ...reference,
       components: [0.6, 0.3, -0.4],
     };
@@ -1668,8 +1668,8 @@ describe('color values', () => {
   });
 
   it('compares same-space color components and alpha within epsilon', () => {
-    const color: NumericColor = {
-      kind: ColorKind.Numeric,
+    const color: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.5, 0.1, -0.2],
       alpha: 0.4,
@@ -1687,8 +1687,8 @@ describe('color values', () => {
   });
 
   it('only considers missing components equal to missing components', () => {
-    const color: NumericColor = {
-      kind: ColorKind.Numeric,
+    const color: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.5, 0.2, undefined],
       alpha: undefined,
@@ -1706,8 +1706,8 @@ describe('color values', () => {
   });
 
   it('converts powerless components to missing before comparison', () => {
-    const gray: NumericColor = {
-      kind: ColorKind.Numeric,
+    const gray: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'hsl',
       components: [120, 0, 50],
       alpha: 1,
@@ -1720,8 +1720,8 @@ describe('color values', () => {
   });
 
   it('compares colors from different spaces in Oklab', () => {
-    const srgb: NumericColor = {
-      kind: ColorKind.Numeric,
+    const srgb: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.8, 0.2, 0.4],
       alpha: 0.6,
@@ -1729,20 +1729,20 @@ describe('color values', () => {
 
     expect(areColorsEquivalent(
       srgb,
-      convertNumericColor(srgb, 'display-p3'),
+      convertAbsoluteColor(srgb, 'display-p3'),
     )).toBe(true);
     expect(areColorsEquivalent(
       srgb,
       {
-        ...convertNumericColor(srgb, 'display-p3'),
+        ...convertAbsoluteColor(srgb, 'display-p3'),
         alpha: 0.7,
       },
     )).toBe(false);
   });
 
   it('rejects different-space colors with missing components', () => {
-    const missing: NumericColor = {
-      kind: ColorKind.Numeric,
+    const missing: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [undefined, 0.2, 0.4],
       alpha: 1,
@@ -1755,8 +1755,8 @@ describe('color values', () => {
   });
 
   it('compares legacy and 8-bit sRGB colors as sRGB', () => {
-    const legacy: NumericColor = {
-      kind: ColorKind.Numeric,
+    const legacy: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: [255, 128, 0],
       alpha: 128,
@@ -1764,7 +1764,7 @@ describe('color values', () => {
     };
 
     expect(areColorsEquivalent(legacy, {
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [1, 128 / 255, 0],
       alpha: 128 / 255,
@@ -1774,13 +1774,13 @@ describe('color values', () => {
   it('carries an analogous missing component into the interpolation space', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [undefined, 0.2, 0.4],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'xyz-d65',
         components: [0.8, 0.3, 0.2],
         alpha: 1,
@@ -1794,15 +1794,15 @@ describe('color values', () => {
   });
 
   it('carries a wholly missing analogous set into the interpolation space', () => {
-    const expected: NumericColor = {
-      kind: ColorKind.Numeric,
+    const expected: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.7, 0.1, -0.1],
       alpha: 0.6,
     };
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [undefined, undefined, undefined],
         alpha: 0.4,
@@ -1822,13 +1822,13 @@ describe('color values', () => {
   it('keeps a component missing when both analogous sets are missing', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [undefined, undefined, undefined],
         alpha: 0.4,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'display-p3',
         components: [undefined, undefined, undefined],
         alpha: 0.8,
@@ -1838,7 +1838,7 @@ describe('color values', () => {
     );
 
     expect(result).toMatchObject({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [undefined, undefined, undefined],
     });
@@ -1846,8 +1846,8 @@ describe('color values', () => {
   });
 
   it('uses the other color value for a missing alpha component', () => {
-    const color: NumericColor = {
-      kind: ColorKind.Numeric,
+    const color: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.5, 0.1, -0.1],
       alpha: 0.6,
@@ -1862,20 +1862,20 @@ describe('color values', () => {
   });
 
   it('converts an uncarried missing component as zero', () => {
-    const source: NumericColor = {
-      kind: ColorKind.Numeric,
+    const source: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [undefined, 0.2, 0.4],
       alpha: 1,
     };
-    const expected = convertNumericColor({
+    const expected = convertAbsoluteColor({
       ...source,
       components: [0, 0.2, 0.4],
     }, 'oklab');
     const result = interpolateColors(
       source,
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.8, 0.1, 0.1],
         alpha: 1,
@@ -1891,13 +1891,13 @@ describe('color values', () => {
   it('matches the premultiplied sRGB interpolation example', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [0.24, 0.12, 0.98],
         alpha: 0.4,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [0.62, 0.26, 0.64],
         alpha: 0.6,
@@ -1915,13 +1915,13 @@ describe('color values', () => {
   it('matches the premultiplied Lab interpolation example', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lab',
         components: [66.927, 4.873, 68.622],
         alpha: 0.4,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lab',
         components: [53.503, 82.672, -33.901],
         alpha: 0.6,
@@ -1939,13 +1939,13 @@ describe('color values', () => {
   it('matches the premultiplied LCH interpolation example', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [66.93, 68.79, 85.94],
         alpha: 0.4,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [53.5, 89.35, 337.7],
         alpha: 0.6,
@@ -1963,13 +1963,13 @@ describe('color values', () => {
   it('does not premultiply when alpha is missing', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.2, 0.1, -0.1],
         alpha: undefined,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.6, 0.3, 0.1],
         alpha: undefined,
@@ -1979,7 +1979,7 @@ describe('color values', () => {
     );
 
     expect(result).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0.4, 0.2, 0],
       alpha: undefined,
@@ -1989,13 +1989,13 @@ describe('color values', () => {
   it('does not unpremultiply a zero-alpha result', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.2, 0.1, -0.1],
         alpha: 0,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklab',
         components: [0.6, 0.3, 0.1],
         alpha: 0,
@@ -2005,7 +2005,7 @@ describe('color values', () => {
     );
 
     expect(result).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0, 0, 0],
       alpha: 0,
@@ -2023,13 +2023,13 @@ describe('color values', () => {
     (method, a, b, expected) => {
       const result = interpolateColors(
         {
-          kind: ColorKind.Numeric,
+          kind: ColorKind.Absolute,
           space: 'oklch',
           components: [...a],
           alpha: 1,
         },
         {
-          kind: ColorKind.Numeric,
+          kind: ColorKind.Absolute,
           space: 'oklch',
           components: [...b],
           alpha: 1,
@@ -2050,13 +2050,13 @@ describe('color values', () => {
   it('takes a full circle for longer interpolation between equal hues', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.4, 0.1, 30],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.8, 0.1, 30],
         alpha: 1,
@@ -2072,13 +2072,13 @@ describe('color values', () => {
   it('borrows the other hue when one hue is missing', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.2, 0.1, undefined],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.8, 0.4, 180],
         alpha: 1,
@@ -2093,13 +2093,13 @@ describe('color values', () => {
   it('keeps the hue missing when both hues are missing', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.2, 0.1, undefined],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.8, 0.4, undefined],
         alpha: 1,
@@ -2117,13 +2117,13 @@ describe('color values', () => {
   ] as const)('uses the first component as the %s hue', (space, a, b, expected) => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space,
         components: [...a],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space,
         components: [...b],
         alpha: 1,
@@ -2138,13 +2138,13 @@ describe('color values', () => {
   it('defaults two legacy colors to sRGB interpolation', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components: [0.2, 0.4, 0.6],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components: [0.8, 0.6, 0.4],
         alpha: 1,
@@ -2153,7 +2153,7 @@ describe('color values', () => {
     );
 
     expect(result).toEqual({
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.5, 0.5, 0.5],
       alpha: 1,
@@ -2163,13 +2163,13 @@ describe('color values', () => {
   it('defaults to Oklab when either color is not legacy', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components: [0, 0, 0],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [1, 1, 1],
         alpha: 1,
@@ -2186,13 +2186,13 @@ describe('color values', () => {
   it('takes an individual missing component from the other color', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [0.5, 0, 0],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [undefined, 0.5, 0.5],
         alpha: 1,
@@ -2207,13 +2207,13 @@ describe('color values', () => {
   it('carries the Lab opponent set into LCH', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lab',
         components: [50, undefined, undefined],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'lch',
         components: [70, undefined, undefined],
         alpha: 1,
@@ -2228,13 +2228,13 @@ describe('color values', () => {
   it('treats a hue that becomes powerless during conversion as missing', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb-legacy',
         components: [0, 0, 0],
         alpha: 0,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [0.8, 0.2, 120],
         alpha: 1,
@@ -2252,13 +2252,13 @@ describe('color values', () => {
   it('does not clip out-of-range values during interpolation', () => {
     const result = interpolateColors(
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [-1, 2, 3],
         alpha: 1,
       },
       {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [3, 4, -1],
         alpha: 1,
@@ -2286,8 +2286,8 @@ describe('color values', () => {
   it.each(binarySearchGamutMappingReferences)(
     'matches the WPT binary-search gamut mapping reference %j',
     (oklch, srgb) => {
-      const mapped = gamutMapNumericColor({
-        kind: ColorKind.Numeric,
+      const mapped = gamutMapAbsoluteColor({
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [...oklch],
         alpha: 1,
@@ -2295,7 +2295,7 @@ describe('color values', () => {
 
       expect(mapped.space).toBe('srgb');
       expectColorCloseTo(mapped, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [...srgb],
         alpha: 1,
@@ -2304,15 +2304,15 @@ describe('color values', () => {
   );
 
   it('returns the clipped color below the just-noticeable difference', () => {
-    const mapped = gamutMapNumericColor({
-      kind: ColorKind.Numeric,
+    const mapped = gamutMapAbsoluteColor({
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.7, 0.2, 30],
       alpha: 0.5,
     }, 'srgb');
 
     expectColorCloseTo(mapped, {
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [1, 0.38019885544225046, 0.3010433350997795],
       alpha: 0.5,
@@ -2331,15 +2331,15 @@ describe('color values', () => {
     ])[];
 
     for (const [oklch, srgb] of cases) {
-      const mapped = gamutMapNumericColor({
-        kind: ColorKind.Numeric,
+      const mapped = gamutMapAbsoluteColor({
+        kind: ColorKind.Absolute,
         space: 'oklch',
         components: [...oklch],
         alpha: 0.4,
       }, 'srgb');
 
       expectColorCloseTo(mapped, {
-        kind: ColorKind.Numeric,
+        kind: ColorKind.Absolute,
         space: 'srgb',
         components: [...srgb],
         alpha: 0.4,
@@ -2348,33 +2348,33 @@ describe('color values', () => {
   });
 
   it('leaves in-gamut colors colorimetrically unchanged', () => {
-    const origin: NumericColor = {
-      kind: ColorKind.Numeric,
+    const origin: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'srgb',
       components: [0.2, 0.4, 0.6],
       alpha: 0.35,
     };
-    const mapped = gamutMapNumericColor(origin, 'srgb');
+    const mapped = gamutMapAbsoluteColor(origin, 'srgb');
 
     expect(mapped.space).toBe('srgb');
     expectColorCloseTo(mapped, origin);
   });
 
   it('converts without mapping when the destination has no gamut limits', () => {
-    const origin: NumericColor = {
-      kind: ColorKind.Numeric,
+    const origin: AbsoluteColor = {
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.7, 0.8, 40],
       alpha: 0.6,
     };
 
-    expect(gamutMapNumericColor(origin, 'xyz-d65'))
-      .toEqual(convertNumericColor(origin, 'xyz-d65'));
+    expect(gamutMapAbsoluteColor(origin, 'xyz-d65'))
+      .toEqual(convertAbsoluteColor(origin, 'xyz-d65'));
   });
 
   it('returns an in-gamut color in the requested RGB destination', () => {
-    const mapped = gamutMapNumericColor({
-      kind: ColorKind.Numeric,
+    const mapped = gamutMapAbsoluteColor({
+      kind: ColorKind.Absolute,
       space: 'oklch',
       components: [0.7, 0.8, 40],
       alpha: 0.25,

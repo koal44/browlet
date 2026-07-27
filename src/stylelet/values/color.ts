@@ -43,23 +43,23 @@ import {
  */
 
 export type ColorValue =
-  | NumericColor
+  | AbsoluteColor
   | ColorBase
   | CurrentColor
   | SystemColor
   | DeprecatedColor;
 
-// Not a grammar production. This numerical form is inferred by the color
-// resolution, conversion, interpolation, and serialization algorithms.
-export type NumericColor = {
-  kind: ColorKind.Numeric;
-  space: NumericColorSpace;
+// Canonical representation of an absolute color. Undefined components
+// represent the `none` keyword.
+export type AbsoluteColor = {
+  kind: ColorKind.Absolute;
+  space: AbsoluteColorSpace;
   components: ColorComponents;
   alpha: number | undefined;
   is8Bit?: true;
 };
 
-type NumericColorSpace =
+type AbsoluteColorSpace =
   // Internal variant for colors serialized with rgb() or rgba().
   | 'srgb-legacy'
   | ColorSpace;
@@ -138,7 +138,7 @@ export enum ColorKind {
   Oklab,
   Oklch,
   Color,
-  Numeric,
+  Absolute,
 }
 
 type AlphaValue = NumberValue | PercentageValue;
@@ -1584,7 +1584,7 @@ export function resolveColorValue(
   const stage = context.stage ?? 'declared';
 
   switch (value.kind) {
-    case ColorKind.Numeric:
+    case ColorKind.Absolute:
       return value;
     case ColorKind.Named:
       return isComputedColorStage(stage)
@@ -1627,8 +1627,8 @@ export function resolveColorValue(
 }
 
 export type ColorResolutionContext = MathContext & {
-  currentColor?: NumericColor;
-  systemColors?: ReadonlyMap<SystemColorName, NumericColor>;
+  currentColor?: AbsoluteColor;
+  systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
 };
 
 function isComputedColorStage(stage: ValueStage): boolean {
@@ -1639,11 +1639,11 @@ function isUsedColorStage(stage: ValueStage): boolean {
   return isAtOrBeyondValueStage(stage, 'used');
 }
 
-function resolveNamedColor(value: NamedColor): NumericColor {
-  return numericColorFromRgba(ColorRgba[value.name]);
+function resolveNamedColor(value: NamedColor): AbsoluteColor {
+  return absoluteColorFromRgba(ColorRgba[value.name]);
 }
 
-function resolveHexColor(value: HexColor): NumericColor {
+function resolveHexColor(value: HexColor): AbsoluteColor {
   const text = value.text.slice(1);
   const expanded = text.length <= 4
     ? [...text].map((digit) => digit.repeat(2)).join('')
@@ -1652,7 +1652,7 @@ function resolveHexColor(value: HexColor): NumericColor {
     ? ((Number.parseInt(expanded, 16) << 8) | 0xff) >>> 0
     : Number.parseInt(expanded, 16) >>> 0;
 
-  return numericColorFromRgba(rgba);
+  return absoluteColorFromRgba(rgba);
 }
 
 function resolveColorFunction(
@@ -1660,7 +1660,7 @@ function resolveColorFunction(
   context: ColorResolutionContext,
 ): ColorValue {
   const resolvedAlpha = resolveColorAlphaValue(value.alpha, context);
-  const alpha = numericColorAlpha(resolvedAlpha);
+  const alpha = absoluteColorAlpha(resolvedAlpha);
 
   if (alpha === null) {
     return resolvedAlpha === value.alpha
@@ -1668,52 +1668,52 @@ function resolveColorFunction(
       : { ...value, alpha: resolvedAlpha };
   }
 
-  let numeric: NumericColor | null;
+  let absolute: AbsoluteColor | null;
 
   switch (value.kind) {
     case ColorKind.Rgb:
-      numeric = resolveRgbColor(value, alpha, context);
+      absolute = resolveRgbColor(value, alpha, context);
       break;
     case ColorKind.Hsl:
-      numeric = resolveHslColor(value, alpha, context);
+      absolute = resolveHslColor(value, alpha, context);
       break;
     case ColorKind.Hwb:
-      numeric = resolveHwbColor(value, alpha, context);
+      absolute = resolveHwbColor(value, alpha, context);
       break;
     case ColorKind.Lab:
-      numeric = resolveLabColor(value, alpha, context, false);
+      absolute = resolveLabColor(value, alpha, context, false);
       break;
     case ColorKind.Oklab:
-      numeric = resolveLabColor(value, alpha, context, true);
+      absolute = resolveLabColor(value, alpha, context, true);
       break;
     case ColorKind.Lch:
-      numeric = resolveLchColor(value, alpha, context, false);
+      absolute = resolveLchColor(value, alpha, context, false);
       break;
     case ColorKind.Oklch:
-      numeric = resolveLchColor(value, alpha, context, true);
+      absolute = resolveLchColor(value, alpha, context, true);
       break;
     case ColorKind.Color:
-      numeric = resolvePredefinedColor(value, alpha, context);
+      absolute = resolvePredefinedColor(value, alpha, context);
       break;
     default:
       return assertNever(value);
   }
 
-  return numeric === null
+  return absolute === null
     ? value
-    : numeric;
+    : absolute;
 }
 
 function resolveRgbColor(
   value: RgbColor,
   alpha: number | undefined,
   context: MathContext,
-): NumericColor | null {
+): AbsoluteColor | null {
   const { components: values } = value;
 
   if (alpha === 1 && is8BitRgbComponents(values)) {
     return {
-      kind: ColorKind.Numeric,
+      kind: ColorKind.Absolute,
       space: 'srgb-legacy',
       components: values.map(
         (component) => component.value,
@@ -1746,7 +1746,7 @@ function resolveRgbColor(
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'srgb-legacy',
     components: clamped,
     alpha,
@@ -1775,7 +1775,7 @@ function resolveHslColor(
   value: HslColor,
   alpha: number | undefined,
   context: MathContext,
-): NumericColor | null {
+): AbsoluteColor | null {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.saturation, value.lightness],
@@ -1800,8 +1800,8 @@ function resolveHslColor(
   }
 
   const [rawHue, saturation, lightness] = clamped;
-  const numeric: NumericColor = {
-    kind: ColorKind.Numeric,
+  const absolute: AbsoluteColor = {
+    kind: ColorKind.Absolute,
     space: 'hsl',
     components: [
       rawHue === undefined ? rawHue : normalizeHue(rawHue),
@@ -1811,16 +1811,16 @@ function resolveHslColor(
     alpha,
   };
 
-  return hasMissingColorComponent(numeric)
-    ? numeric
-    : convertNumericColor(numeric, 'srgb-legacy');
+  return hasMissingColorComponent(absolute)
+    ? absolute
+    : convertAbsoluteColor(absolute, 'srgb-legacy');
 }
 
 function resolveHwbColor(
   value: HwbColor,
   alpha: number | undefined,
   context: MathContext,
-): NumericColor | null {
+): AbsoluteColor | null {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.whiteness, value.blackness],
@@ -1845,8 +1845,8 @@ function resolveHwbColor(
   }
 
   const [rawHue, whiteness, blackness] = clamped;
-  const numeric: NumericColor = {
-    kind: ColorKind.Numeric,
+  const absolute: AbsoluteColor = {
+    kind: ColorKind.Absolute,
     space: 'hwb',
     components: [
       rawHue === undefined ? rawHue : normalizeHue(rawHue),
@@ -1856,9 +1856,9 @@ function resolveHwbColor(
     alpha,
   };
 
-  return hasMissingColorComponent(numeric)
-    ? numeric
-    : convertNumericColor(numeric, 'srgb-legacy');
+  return hasMissingColorComponent(absolute)
+    ? absolute
+    : convertAbsoluteColor(absolute, 'srgb-legacy');
 }
 
 function resolveLabColor(
@@ -1866,7 +1866,7 @@ function resolveLabColor(
   alpha: number | undefined,
   context: MathContext,
   ok: boolean,
-): NumericColor | null {
+): AbsoluteColor | null {
   const components = resolveColorComponents(
     [value.lightness, value.a, value.b],
     1,
@@ -1889,7 +1889,7 @@ function resolveLabColor(
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: ok ? 'oklab' : 'lab',
     components: clamped,
     alpha,
@@ -1901,7 +1901,7 @@ function resolveLchColor(
   alpha: number | undefined,
   context: MathContext,
   ok: boolean,
-): NumericColor | null {
+): AbsoluteColor | null {
   const components = resolveColorComponents(
     [value.lightness, value.chroma],
     1,
@@ -1928,7 +1928,7 @@ function resolveLchColor(
   const [lightness, chroma, rawHue] = clamped;
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: ok ? 'oklch' : 'lch',
     components: [
       lightness,
@@ -1943,7 +1943,7 @@ function resolvePredefinedColor(
   value: PredefinedColor,
   alpha: number | undefined,
   context: MathContext,
-): NumericColor | null {
+): AbsoluteColor | null {
   const components = resolveColorComponents(
     value.components,
     1,
@@ -1966,7 +1966,7 @@ function resolvePredefinedColor(
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: value.space === 'xyz' ? 'xyz-d65' : value.space,
     components: clamped,
     alpha,
@@ -2043,7 +2043,7 @@ function resolveColorAlphaValue(
     : resolved;
 }
 
-function numericColorAlpha(
+function absoluteColorAlpha(
   value: AlphaValue | 'none' | undefined,
 ): number | undefined | null {
   if (value === undefined) {
@@ -2175,7 +2175,7 @@ function normalizeHue(value: number): number {
     : 0;
 }
 
-function hasMissingColorComponent(value: NumericColor): boolean {
+function hasMissingColorComponent(value: AbsoluteColor): boolean {
   return value.alpha === undefined ||
     value.components.some((component) => component === undefined);
 }
@@ -2187,9 +2187,9 @@ function scaleAt(
   return typeof scale === 'number' ? scale : scale[index]!;
 }
 
-function numericColorFromRgba(rgba: number): NumericColor {
+function absoluteColorFromRgba(rgba: number): AbsoluteColor {
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'srgb-legacy',
     components: [
       rgba >>> 24,
@@ -2222,8 +2222,8 @@ export function serializeColorValue(
   htmlCompatible = false,
 ): string {
   switch (value.kind) {
-    case ColorKind.Numeric:
-      return serializeNumericColor(value, htmlCompatible);
+    case ColorKind.Absolute:
+      return serializeAbsoluteColor(value, htmlCompatible);
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
     case ColorKind.Rgb:
@@ -2424,22 +2424,22 @@ function serializeColorAlpha(
     : serializeCssNumber(alpha);
 }
 
-function serializeNumericColor(
-  value: NumericColor,
+function serializeAbsoluteColor(
+  value: AbsoluteColor,
   htmlCompatible: boolean,
 ): string {
   switch (value.space) {
     case 'srgb-legacy':
-      return serializeNumericRgb(value, htmlCompatible);
+      return serializeAbsoluteRgb(value, htmlCompatible);
     case 'hsl':
-      return serializeNumericHsl(value);
+      return serializeAbsoluteHsl(value);
     case 'hwb':
-      return serializeNumericHwb(value);
+      return serializeAbsoluteHwb(value);
     case 'lab':
     case 'lch':
     case 'oklab':
     case 'oklch':
-      return serializeNumericComponents(value.space, value);
+      return serializeAbsoluteColorComponents(value.space, value);
     case 'srgb':
     case 'srgb-linear':
     case 'display-p3':
@@ -2449,14 +2449,14 @@ function serializeNumericColor(
     case 'rec2020':
     case 'xyz-d50':
     case 'xyz-d65':
-      return `color(${value.space} ${serializeNumericComponentsBody(value)})`;
+      return `color(${value.space} ${serializeAbsoluteColorComponentsBody(value)})`;
     default:
       return assertNever(value.space);
   }
 }
 
-function serializeNumericRgb(
-  value: NumericColor,
+function serializeAbsoluteRgb(
+  value: AbsoluteColor,
   htmlCompatible: boolean,
 ): string {
   if (htmlCompatible) {
@@ -2471,7 +2471,7 @@ function serializeNumericRgb(
     value.components.some((component) => component === undefined) ||
     value.alpha === undefined
   ) {
-    return `color(srgb ${serializeNumericComponentsBody(
+    return `color(srgb ${serializeAbsoluteColorComponentsBody(
       normalizeColorEncoding(value),
     )})`;
   }
@@ -2483,14 +2483,14 @@ function serializeNumericRgb(
   );
   const alpha = value.is8Bit
     ? serialize8BitAlpha(value.alpha)
-    : serializeNumericAlpha(value.alpha);
+    : serializeAbsoluteColorAlpha(value.alpha);
 
   return alpha === null
     ? `rgb(${components.join(', ')})`
     : `rgba(${components.join(', ')}, ${alpha})`;
 }
 
-function serializeHtmlCompatibleRgb(value: NumericColor): string | null {
+function serializeHtmlCompatibleRgb(value: AbsoluteColor): string | null {
   if (!value.is8Bit || value.alpha !== 0xff) {
     return null;
   }
@@ -2529,79 +2529,79 @@ function serialize8BitAlpha(value: number): string | null {
   return serializeCssNumber(Math.round(alpha / 0.255) / 1000);
 }
 
-function serializeNumericHsl(
-  value: NumericColor,
+function serializeAbsoluteHsl(
+  value: AbsoluteColor,
 ): string {
   const [hue, saturation, lightness] = value.components;
   const components = [
-    serializeNumericComponent(hue),
-    serializeNumericPercentage(saturation),
-    serializeNumericPercentage(lightness),
+    serializeAbsoluteColorComponent(hue),
+    serializeAbsoluteColorPercentage(saturation),
+    serializeAbsoluteColorPercentage(lightness),
   ];
 
-  return serializeNumericFunction('hsl', components, value.alpha);
+  return serializeAbsoluteColorFunction('hsl', components, value.alpha);
 }
 
-function serializeNumericHwb(
-  value: NumericColor,
+function serializeAbsoluteHwb(
+  value: AbsoluteColor,
 ): string {
   const [hue, whiteness, blackness] = value.components;
   const components = [
-    serializeNumericComponent(hue),
-    serializeNumericPercentage(whiteness),
-    serializeNumericPercentage(blackness),
+    serializeAbsoluteColorComponent(hue),
+    serializeAbsoluteColorPercentage(whiteness),
+    serializeAbsoluteColorPercentage(blackness),
   ];
 
-  return serializeNumericFunction('hwb', components, value.alpha);
+  return serializeAbsoluteColorFunction('hwb', components, value.alpha);
 }
 
-function serializeNumericComponents(
+function serializeAbsoluteColorComponents(
   name: 'lab' | 'lch' | 'oklab' | 'oklch',
-  value: NumericColor,
+  value: AbsoluteColor,
 ): string {
-  return serializeNumericFunction(
+  return serializeAbsoluteColorFunction(
     name,
-    value.components.map(serializeNumericComponent),
+    value.components.map(serializeAbsoluteColorComponent),
     value.alpha,
   );
 }
 
-function serializeNumericComponentsBody(value: NumericColor): string {
+function serializeAbsoluteColorComponentsBody(value: AbsoluteColor): string {
   const components = value.components
-    .map(serializeNumericComponent)
+    .map(serializeAbsoluteColorComponent)
     .join(' ');
-  const alpha = serializeNumericAlpha(value.alpha);
+  const alpha = serializeAbsoluteColorAlpha(value.alpha);
 
   return alpha === null
     ? components
     : `${components} / ${alpha}`;
 }
 
-function serializeNumericFunction(
+function serializeAbsoluteColorFunction(
   name: string,
   components: string[],
   alphaValue: number | undefined,
 ): string {
-  const alpha = serializeNumericAlpha(alphaValue);
+  const alpha = serializeAbsoluteColorAlpha(alphaValue);
 
   return alpha === null
     ? `${name}(${components.join(' ')})`
     : `${name}(${components.join(' ')} / ${alpha})`;
 }
 
-function serializeNumericComponent(value: ColorComponent): string {
+function serializeAbsoluteColorComponent(value: ColorComponent): string {
   return value === undefined
     ? 'none'
     : serializeCssNumber(value);
 }
 
-function serializeNumericPercentage(value: ColorComponent): string {
+function serializeAbsoluteColorPercentage(value: ColorComponent): string {
   return value === undefined
     ? 'none'
     : `${serializeCssNumber(value)}%`;
 }
 
-function serializeNumericAlpha(value: number | undefined): string | null {
+function serializeAbsoluteColorAlpha(value: number | undefined): string | null {
   if (value === undefined) {
     return 'none';
   }
@@ -2635,24 +2635,24 @@ type ColorMatrix = readonly [
   readonly [number, number, number],
 ];
 
-export function convertNumericColor(
-  value: NumericColor,
-  target: NumericColorSpace,
-): NumericColor {
+export function convertAbsoluteColor(
+  value: AbsoluteColor,
+  target: AbsoluteColorSpace,
+): AbsoluteColor {
   if (value.space === target) {
     return value;
   }
 
   const source = replaceMissingComponents(
-    prepareNumericColorForConversion(value),
+    prepareAbsoluteColorForConversion(value),
   );
   const rectangularTarget = rectangularColorSpace(target);
-  let converted: NumericColor;
+  let converted: AbsoluteColor;
 
   if (source.space === rectangularTarget) {
     converted = source;
   } else {
-    let xyz = convertNumericColorToXyz(source);
+    let xyz = convertAbsoluteColorToXyz(source);
     const targetWhitePoint = colorSpaceWhitePoint(rectangularTarget);
 
     if (colorSpaceWhitePoint(source.space) !== targetWhitePoint) {
@@ -2661,15 +2661,15 @@ export function convertNumericColor(
         : adaptD50ToD65(xyz);
     }
 
-    converted = convertXyzToNumericColor(xyz, rectangularTarget);
+    converted = convertXyzToAbsoluteColor(xyz, rectangularTarget);
   }
 
-  return convertRectangularNumericColor(converted, target);
+  return convertRectangularAbsoluteColor(converted, target);
 }
 
-function prepareNumericColorForConversion(
-  value: NumericColor,
-): NumericColor {
+function prepareAbsoluteColorForConversion(
+  value: AbsoluteColor,
+): AbsoluteColor {
   const prepared = replacePowerlessColorComponents(
     normalizeColorEncoding(value),
   );
@@ -2690,13 +2690,13 @@ function prepareNumericColorForConversion(
   }
 }
 
-function normalizeColorEncoding(value: NumericColor): NumericColor {
+function normalizeColorEncoding(value: AbsoluteColor): AbsoluteColor {
   if (!value.is8Bit) {
     return value;
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: value.space,
     components: value.components.map(
       (component) => component === undefined
@@ -2709,7 +2709,7 @@ function normalizeColorEncoding(value: NumericColor): NumericColor {
   };
 }
 
-function replacePowerlessColorComponents(value: NumericColor): NumericColor {
+function replacePowerlessColorComponents(value: AbsoluteColor): AbsoluteColor {
   const [firstComp, secondComp, thirdComp] = value.components;
   const second = secondComp ?? 0;
   const third = thirdComp ?? 0;
@@ -2736,7 +2736,7 @@ function replacePowerlessColorComponents(value: NumericColor): NumericColor {
   }
 }
 
-function replaceMissingComponents(value: NumericColor): NumericColor {
+function replaceMissingComponents(value: AbsoluteColor): AbsoluteColor {
   return {
     ...value,
     components: componentsForConversion(value),
@@ -2744,7 +2744,7 @@ function replaceMissingComponents(value: NumericColor): NumericColor {
 }
 
 function rectangularColorSpace(
-  value: NumericColorSpace,
+  value: AbsoluteColorSpace,
 ): RectangularColorSpace {
   switch (value) {
     case 'srgb-legacy':
@@ -2760,7 +2760,7 @@ function rectangularColorSpace(
   }
 }
 
-function colorSpaceWhitePoint(value: NumericColorSpace): WhitePoint {
+function colorSpaceWhitePoint(value: AbsoluteColorSpace): WhitePoint {
   switch (rectangularColorSpace(value)) {
     case 'lab':
     case 'prophoto-rgb':
@@ -2771,7 +2771,7 @@ function colorSpaceWhitePoint(value: NumericColorSpace): WhitePoint {
   }
 }
 
-function convertNumericColorToXyz(value: NumericColor): NumericColor {
+function convertAbsoluteColorToXyz(value: AbsoluteColor): AbsoluteColor {
   const components = componentsForConversion(value);
   let xyz: ColorVector;
   let space: 'xyz-d50' | 'xyz-d65';
@@ -2821,17 +2821,17 @@ function convertNumericColorToXyz(value: NumericColor): NumericColor {
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space,
     components: xyz,
     alpha: value.alpha,
   };
 }
 
-function convertXyzToNumericColor(
-  value: NumericColor,
+function convertXyzToAbsoluteColor(
+  value: AbsoluteColor,
   target: RectangularColorSpace,
-): NumericColor {
+): AbsoluteColor {
   const xyz = componentsForConversion(value);
   let components: ColorVector;
 
@@ -2872,17 +2872,17 @@ function convertXyzToNumericColor(
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: target,
     components,
     alpha: value.alpha,
   };
 }
 
-function convertRectangularNumericColor(
-  value: NumericColor,
-  target: NumericColorSpace,
-): NumericColor {
+function convertRectangularAbsoluteColor(
+  value: AbsoluteColor,
+  target: AbsoluteColorSpace,
+): AbsoluteColor {
   switch (target) {
     case 'srgb-legacy':
       return { ...value, space: target };
@@ -2899,23 +2899,23 @@ function convertRectangularNumericColor(
   }
 }
 
-function convertHslToRgb(value: NumericColor): NumericColor {
+function convertHslToRgb(value: AbsoluteColor): AbsoluteColor {
   const components = componentsForConversion(value);
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'srgb',
     components: hslToRgb(...components),
     alpha: value.alpha,
   };
 }
 
-function convertRgbToHsl(value: NumericColor): NumericColor {
+function convertRgbToHsl(value: AbsoluteColor): AbsoluteColor {
   const [red, green, blue] = componentsForConversion(value);
   const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'hsl',
     components: [
       Number.isNaN(hue) ? undefined : hue,
@@ -2926,23 +2926,23 @@ function convertRgbToHsl(value: NumericColor): NumericColor {
   };
 }
 
-function convertHwbToRgb(value: NumericColor): NumericColor {
+function convertHwbToRgb(value: AbsoluteColor): AbsoluteColor {
   const components = componentsForConversion(value);
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'srgb',
     components: hwbToRgb(...components),
     alpha: value.alpha,
   };
 }
 
-function convertRgbToHwb(value: NumericColor): NumericColor {
+function convertRgbToHwb(value: AbsoluteColor): AbsoluteColor {
   const [red, green, blue] = componentsForConversion(value);
   const [hue, whiteness, blackness] = rgbToHwb(red, green, blue);
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'hwb',
     components: [
       Number.isNaN(hue) ? undefined : hue,
@@ -2953,13 +2953,13 @@ function convertRgbToHwb(value: NumericColor): NumericColor {
   };
 }
 
-function convertLabToLch(value: NumericColor): NumericColor {
+function convertLabToLch(value: AbsoluteColor): AbsoluteColor {
   const [lightness, chroma, hue] = labToLch(
     componentsForConversion(value),
   );
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'lch',
     components: [
       lightness,
@@ -2970,11 +2970,11 @@ function convertLabToLch(value: NumericColor): NumericColor {
   };
 }
 
-function convertLchToLab(value: NumericColor): NumericColor {
+function convertLchToLab(value: AbsoluteColor): AbsoluteColor {
   const [lightness = 0, chroma = 0, hue] = value.components;
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'lab',
     components: hue === undefined
       ? [lightness, 0, 0]
@@ -2983,13 +2983,13 @@ function convertLchToLab(value: NumericColor): NumericColor {
   };
 }
 
-function convertOklabToOklch(value: NumericColor): NumericColor {
+function convertOklabToOklch(value: AbsoluteColor): AbsoluteColor {
   const [lightness, chroma, hue] = oklabToOklch(
     componentsForConversion(value),
   );
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'oklch',
     components: [
       lightness,
@@ -3000,11 +3000,11 @@ function convertOklabToOklch(value: NumericColor): NumericColor {
   };
 }
 
-function convertOklchToOklab(value: NumericColor): NumericColor {
+function convertOklchToOklab(value: AbsoluteColor): AbsoluteColor {
   const [lightness = 0, chroma = 0, hue] = value.components;
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: 'oklab',
     components: hue === undefined
       ? [lightness, 0, 0]
@@ -3014,7 +3014,7 @@ function convertOklchToOklab(value: NumericColor): NumericColor {
 }
 
 function componentsForConversion(
-  value: NumericColor,
+  value: AbsoluteColor,
 ): [number, number, number] {
   const [first = 0, second = 0, third = 0] = value.components;
 
@@ -3362,7 +3362,7 @@ const D65_TO_D50: ColorMatrix = [
   [-0.009243040646204504, 0.015055191490298152, 0.7518742814281371],
 ];
 
-function adaptD65ToD50(value: NumericColor): NumericColor {
+function adaptD65ToD50(value: AbsoluteColor): AbsoluteColor {
   return {
     ...value,
     space: 'xyz-d50',
@@ -3379,7 +3379,7 @@ const D50_TO_D65: ColorMatrix = [
   [0.012314014864481998, -0.020507649298898964, 1.330365926242124],
 ];
 
-function adaptD50ToD65(value: NumericColor): NumericColor {
+function adaptD50ToD65(value: AbsoluteColor): AbsoluteColor {
   return {
     ...value,
     space: 'xyz-d65',
@@ -3569,21 +3569,21 @@ function transformColorVector(
 const GAMUT_MAPPING_JND = 0.02;
 const GAMUT_MAPPING_EPSILON = 0.0001;
 
-export function gamutMapNumericColor(
-  origin: NumericColor,
+export function gamutMapAbsoluteColor(
+  origin: AbsoluteColor,
   destination: ColorSpace,
-): NumericColor {
+): AbsoluteColor {
   if (!hasGamutLimits(destination)) {
-    return convertNumericColor(origin, destination);
+    return convertAbsoluteColor(origin, destination);
   }
 
-  const originOklch = convertNumericColorToOklch(origin);
+  const originOklch = convertAbsoluteColorToOklch(origin);
   const [lightness, originChroma, hue] =
     componentsForConversion(originOklch);
 
   if (lightness >= 1) {
-    return convertNumericColor({
-      kind: ColorKind.Numeric,
+    return convertAbsoluteColor({
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [1, 0, 0],
       alpha: origin.alpha,
@@ -3591,23 +3591,23 @@ export function gamutMapNumericColor(
   }
 
   if (lightness <= 0) {
-    return convertNumericColor({
-      kind: ColorKind.Numeric,
+    return convertAbsoluteColor({
+      kind: ColorKind.Absolute,
       space: 'oklab',
       components: [0, 0, 0],
       alpha: origin.alpha,
     }, destination);
   }
 
-  if (isNumericColorInGamut(originOklch, destination)) {
-    return convertNumericColor(originOklch, destination);
+  if (isAbsoluteColorInGamut(originOklch, destination)) {
+    return convertAbsoluteColor(originOklch, destination);
   }
 
-  let current: NumericColor = {
+  let current: AbsoluteColor = {
     ...originOklch,
     components: [lightness, originChroma, hue],
   };
-  let clipped = clipNumericColorToGamut(current, destination);
+  let clipped = clipAbsoluteColorToGamut(current, destination);
   let difference = deltaEOK(clipped, current);
 
   if (difference < GAMUT_MAPPING_JND) {
@@ -3626,12 +3626,12 @@ export function gamutMapNumericColor(
       components: [lightness, chroma, hue],
     };
 
-    if (minInGamut && isNumericColorInGamut(current, destination)) {
+    if (minInGamut && isAbsoluteColorInGamut(current, destination)) {
       min = chroma;
       continue;
     }
 
-    clipped = clipNumericColorToGamut(current, destination);
+    clipped = clipAbsoluteColorToGamut(current, destination);
     difference = deltaEOK(clipped, current);
 
     if (difference < GAMUT_MAPPING_JND) {
@@ -3663,24 +3663,24 @@ function hasGamutLimits(space: ColorSpace): boolean {
   }
 }
 
-function convertNumericColorToOklch(value: NumericColor): NumericColor {
+function convertAbsoluteColorToOklch(value: AbsoluteColor): AbsoluteColor {
   const prepared = replaceMissingComponents(
-    prepareNumericColorForConversion(value),
+    prepareAbsoluteColorForConversion(value),
   );
 
   return prepared.space === 'oklab'
     ? convertOklabToOklch(prepared)
-    : convertNumericColor(prepared, 'oklch');
+    : convertAbsoluteColor(prepared, 'oklch');
 }
 
-function isNumericColorInGamut(
-  value: NumericColor,
+function isAbsoluteColorInGamut(
+  value: AbsoluteColor,
   destination: ColorSpace,
 ): boolean {
   const gamutSpace = destination === 'hsl' || destination === 'hwb'
     ? 'srgb'
     : destination;
-  const converted = convertNumericColor(value, gamutSpace);
+  const converted = convertAbsoluteColor(value, gamutSpace);
 
   return converted.components.every(
     (component) =>
@@ -3690,11 +3690,11 @@ function isNumericColorInGamut(
   );
 }
 
-function clipNumericColorToGamut(
-  value: NumericColor,
+function clipAbsoluteColorToGamut(
+  value: AbsoluteColor,
   destination: ColorSpace,
-): NumericColor {
-  const converted = convertNumericColor(value, destination);
+): AbsoluteColor {
+  const converted = convertAbsoluteColor(value, destination);
   const [first, second, third] = converted.components;
 
   switch (destination) {
@@ -3719,12 +3719,12 @@ function clipNumericColorToGamut(
   }
 }
 
-export function deltaEOK(one: NumericColor, two: NumericColor): number {
+export function deltaEOK(one: AbsoluteColor, two: AbsoluteColor): number {
   const [lightness1, a1, b1] = componentsForConversion(
-    convertNumericColor(one, 'oklab'),
+    convertAbsoluteColor(one, 'oklab'),
   );
   const [lightness2, a2, b2] = componentsForConversion(
-    convertNumericColor(two, 'oklab'),
+    convertAbsoluteColor(two, 'oklab'),
   );
   const deltaLightness = lightness1 - lightness2;
   const deltaA = a1 - a2;
@@ -3738,11 +3738,11 @@ export function deltaEOK(one: NumericColor, two: NumericColor): number {
 }
 
 export function areColorsEquivalent(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
 ): boolean {
-  const preparedA = prepareNumericColorForComparison(a);
-  const preparedB = prepareNumericColorForComparison(b);
+  const preparedA = prepareAbsoluteColorForComparison(a);
+  const preparedB = prepareAbsoluteColorForComparison(b);
 
   if (preparedA.space === preparedB.space) {
     return areColorComponentsEquivalent(preparedA, preparedB);
@@ -3756,14 +3756,14 @@ export function areColorsEquivalent(
   }
 
   return areColorComponentsEquivalent(
-    convertNumericColor(preparedA, 'oklab'),
-    convertNumericColor(preparedB, 'oklab'),
+    convertAbsoluteColor(preparedA, 'oklab'),
+    convertAbsoluteColor(preparedB, 'oklab'),
   );
 }
 
-function prepareNumericColorForComparison(
-  value: NumericColor,
-): NumericColor {
+function prepareAbsoluteColorForComparison(
+  value: AbsoluteColor,
+): AbsoluteColor {
   const prepared = replacePowerlessColorComponents(
     normalizeColorEncoding(value),
   );
@@ -3774,8 +3774,8 @@ function prepareNumericColorForComparison(
 }
 
 function areColorComponentsEquivalent(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
 ): boolean {
   return (
     a.components.every(
@@ -3809,12 +3809,12 @@ function areColorComponentValuesEquivalent(
 // ████ ██    ██    ██    ████████ ██     ██ ██         ███████  ████████ ██     ██    ██    ████████
 
 export function interpolateColors(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
   progress: number,
   space?: ColorSpace,
   hue: HueInterpolationMethod = 'shorter',
-): NumericColor {
+): AbsoluteColor {
   space ??= (a.space === 'srgb-legacy' && b.space === 'srgb-legacy'
     ? 'srgb'
     : 'oklab');
@@ -3823,10 +3823,10 @@ export function interpolateColors(
   const carriedB = findCarriedForwardComponents(b, space);
 
   const preparedA = replacePowerlessColorComponents(normalizeColorEncoding(a));
-  const convertedA = convertNumericColor(replaceMissingComponents(preparedA), space);
+  const convertedA = convertAbsoluteColor(replaceMissingComponents(preparedA), space);
 
   const preparedB = replacePowerlessColorComponents(normalizeColorEncoding(b));
-  const convertedB = convertNumericColor(replaceMissingComponents(preparedB), space);
+  const convertedB = convertAbsoluteColor(replaceMissingComponents(preparedB), space);
 
   const [restoredA, restoredB] = restoreCarriedForwardComponents(
     convertedA, convertedB, carriedA, carriedB,
@@ -3863,7 +3863,7 @@ type ColorComponentCategory =
 
 // Section 13.2, "Interpolating with Missing Components."
 function findCarriedForwardComponents(
-  value: NumericColor,
+  value: AbsoluteColor,
   space: ColorSpace,
 ): CarriedColorComponents {
   const sourceCategories = componentCategories(value.space);
@@ -3911,11 +3911,11 @@ function findCarriedForwardComponents(
 
 // Section 13.2, "Interpolating with Missing Components."
 function restoreCarriedForwardComponents(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
   carriedA: CarriedColorComponents,
   carriedB: CarriedColorComponents,
-): [NumericColor, NumericColor] {
+): [AbsoluteColor, AbsoluteColor] {
   const componentsA = a.components.map((component, index) =>
     carriedA.components[index]
       ? carriedB.components[index]
@@ -3949,7 +3949,7 @@ function restoreCarriedForwardComponents(
   ];
 }
 
-function componentCategories(space: NumericColorSpace): [
+function componentCategories(space: AbsoluteColorSpace): [
   ColorComponentCategory | undefined,
   ColorComponentCategory | undefined,
   ColorComponentCategory | undefined,
@@ -3983,10 +3983,10 @@ function componentCategories(space: NumericColorSpace): [
 
 // Section 13.4, "Hue Interpolation."
 function fixupColorHues(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
   method: HueInterpolationMethod,
-): [NumericColor, NumericColor] {
+): [AbsoluteColor, AbsoluteColor] {
   const hueIndex = colorHueIndex(a.space);
 
   if (hueIndex === undefined) {
@@ -4048,7 +4048,7 @@ function fixupColorHues(
   ];
 }
 
-function premultiplyColor(value: NumericColor): NumericColor {
+function premultiplyColor(value: AbsoluteColor): AbsoluteColor {
   if (value.alpha === undefined) {
     return value;
   }
@@ -4069,10 +4069,10 @@ function premultiplyColor(value: NumericColor): NumericColor {
 }
 
 function interpolatePremultipliedColors(
-  a: NumericColor,
-  b: NumericColor,
+  a: AbsoluteColor,
+  b: AbsoluteColor,
   progress: number,
-): NumericColor {
+): AbsoluteColor {
   const components: ColorComponents = [
     interpolateComponent(a.components[0], b.components[0], progress),
     interpolateComponent(a.components[1], b.components[1], progress),
@@ -4085,7 +4085,7 @@ function interpolatePremultipliedColors(
   }
 
   return {
-    kind: ColorKind.Numeric,
+    kind: ColorKind.Absolute,
     space: a.space,
     components,
     alpha: interpolateComponent(a.alpha, b.alpha, progress),
@@ -4102,7 +4102,7 @@ function interpolateComponent(
     : (1 - progress) * a + progress * b;
 }
 
-function unpremultiplyColor(value: NumericColor): NumericColor {
+function unpremultiplyColor(value: AbsoluteColor): AbsoluteColor {
   if (value.alpha === undefined || value.alpha === 0) {
     return value;
   }
@@ -4121,7 +4121,7 @@ function unpremultiplyColor(value: NumericColor): NumericColor {
 }
 
 function restoreMissingComponents(
-  value: NumericColor,
+  value: AbsoluteColor,
   components: ColorVector,
 ): ColorComponents {
   return [
@@ -4131,7 +4131,7 @@ function restoreMissingComponents(
   ];
 }
 
-function colorHueIndex(space: NumericColorSpace): 0 | 2 | undefined {
+function colorHueIndex(space: AbsoluteColorSpace): 0 | 2 | undefined {
   switch (space) {
     case 'hsl':
     case 'hwb':
