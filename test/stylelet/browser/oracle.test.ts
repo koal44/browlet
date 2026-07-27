@@ -2201,6 +2201,113 @@ runScenarios('CSS zero and length-percentage combination oracle', 'skip', [
   },
 ]);
 
+const manuallySpecifiedPowerlessHueCases = [
+  {
+    id: 'hsl',
+    value: 'color-mix(in hsl, hsl(120 0.001% 50%), hsl(240 100% 50%))',
+    reference: 'color-mix(in hsl, hsl(none 0.001% 50%), hsl(240 100% 50%))',
+  },
+  {
+    id: 'hwb',
+    value: 'color-mix(in hwb, hwb(120 49.999% 50%), hwb(240 0% 0%))',
+    reference: 'color-mix(in hwb, hwb(none 49.999% 50%), hwb(240 0% 0%))',
+  },
+  {
+    id: 'lch',
+    value: 'color-mix(in lch, lch(50 0.0015 120), lch(70 40 240))',
+    reference: 'color-mix(in lch, lch(50 0.0015 none), lch(70 40 240))',
+  },
+  {
+    id: 'oklch',
+    value: 'color-mix(in oklch, oklch(.5 .000004 120), oklch(.7 .2 240))',
+    reference: 'color-mix(in oklch, oklch(.5 .000004 none), oklch(.7 .2 240))',
+  },
+];
+
+const convertedPowerlessHueCases = [
+  {
+    id: 'hsl',
+    value: 'color-mix(in hsl, color(srgb .5 .5 .5), hsl(240 100% 50%))',
+    reference: 'color-mix(in hsl, hsl(none 0% 50%), hsl(240 100% 50%))',
+  },
+  {
+    id: 'hwb',
+    value: 'color-mix(in hwb, color(srgb .5 .5 .5), hwb(240 0% 0%))',
+    reference: 'color-mix(in hwb, hwb(none 50% 50%), hwb(240 0% 0%))',
+  },
+  {
+    id: 'lch',
+    value: 'color-mix(in lch, lab(50 0 0), lch(70 40 240))',
+    reference: 'color-mix(in lch, lch(50 0 none), lch(70 40 240))',
+  },
+  {
+    id: 'oklch',
+    value: 'color-mix(in oklch, oklab(.5 0 0), oklch(.7 .2 240))',
+    reference: 'color-mix(in oklch, oklch(.5 0 none), oklch(.7 .2 240))',
+  },
+];
+
+runScenarios('CSS powerless hue epsilon oracle', 'skip', [
+  {
+    name: 'retains a manually specified hue in the interpolation space',
+    engines: ['native'],
+    markup: manuallySpecifiedPowerlessHueCases.map(({ id, value, reference }) => (
+      `<div id="manual-${id}" style="color: ${value}"></div>
+       <div id="manual-missing-${id}" style="color: ${reference}"></div>`
+    )).join('\n'),
+    setupPage: async (page) => {
+      await page.evaluate((ids) => {
+        for (const id of ids) {
+          const manual = document.querySelector<HTMLElement>(
+            `#manual-${id}`,
+          )!;
+          const missing = document.querySelector<HTMLElement>(
+            `#manual-missing-${id}`,
+          )!;
+          const retained = getComputedStyle(manual).color
+            !== getComputedStyle(missing).color;
+
+          manual.style.setProperty('--oracle', `${retained}`);
+        }
+      }, manuallySpecifiedPowerlessHueCases.map(({ id }) => id));
+    },
+    cases: manuallySpecifiedPowerlessHueCases.map(({ id }) => ({
+      computedStyle: '--oracle' as const,
+      ref: { by: 'id' as const, id: `manual-${id}` },
+      expect: { value: 'true' },
+    })),
+  },
+  {
+    name: 'makes a powerless hue missing when conversion produces it',
+    engines: ['native'],
+    markup: convertedPowerlessHueCases.map(({ id, value, reference }) => (
+      `<div id="converted-${id}" style="color: ${value}"></div>
+       <div id="converted-missing-${id}" style="color: ${reference}"></div>`
+    )).join('\n'),
+    setupPage: async (page) => {
+      await page.evaluate((ids) => {
+        for (const id of ids) {
+          const converted = document.querySelector<HTMLElement>(
+            `#converted-${id}`,
+          )!;
+          const missing = document.querySelector<HTMLElement>(
+            `#converted-missing-${id}`,
+          )!;
+          const equivalent = getComputedStyle(converted).color
+            === getComputedStyle(missing).color;
+
+          converted.style.setProperty('--oracle', `${equivalent}`);
+        }
+      }, convertedPowerlessHueCases.map(({ id }) => id));
+    },
+    cases: convertedPowerlessHueCases.map(({ id }) => ({
+      computedStyle: '--oracle' as const,
+      ref: { by: 'id' as const, id: `converted-${id}` },
+      expect: { value: 'true' },
+    })),
+  },
+]);
+
 type ColorSerializationCase = {
   prop?: string;
   decl: string;

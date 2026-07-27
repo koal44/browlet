@@ -22,10 +22,10 @@ function expectColorCloseTo(
   expected: AbsoluteColor | ColorVector,
 ): void {
   if (isColorVector(expected)) {
-    const [first, second, third, alpha] = expected;
+    const [first, second, third] = expected;
 
     if (expected.length === 4) {
-      expect(actual.alpha).toBe(alpha);
+      expect(actual.alpha).toBeCloseTo(expected[3], 12);
     }
 
     expect(deltaEOK(actual, {
@@ -35,8 +35,27 @@ function expectColorCloseTo(
     return;
   }
 
-  expect(actual.alpha).toBe(expected.alpha);
+  if (expected.alpha === undefined) {
+    expect(actual.alpha).toBeUndefined();
+  } else {
+    expect(actual.alpha).toBeCloseTo(expected.alpha, 12);
+  }
+
   expect(deltaEOK(actual, expected)).toBeLessThan(0.001);
+}
+
+function expectComponentsCloseTo(
+  actual: AbsoluteColor['components'],
+  expected: readonly (number | undefined)[],
+  precision: number,
+): void {
+  expected.forEach((component, index) => {
+    if (component === undefined) {
+      expect(actual[index]).toBeUndefined();
+    } else {
+      expect(actual[index]).toBeCloseTo(component, precision);
+    }
+  });
 }
 
 describe('color values', () => {
@@ -802,6 +821,7 @@ describe('color values', () => {
   it('serializes parsed color functions with canonical spelling and spacing', () => {
     const cases = [
       [' RGBa( 1 ,  2, 3 , 50% ) ', 'rgba(1, 2, 3, 0.5)'],
+      ['rgb(0\t,  51 ,255)', 'rgb(0, 51, 255)'],
       [' HSLa( .5turn , 25% , 75% , 20% ) ', 'rgba(175.3125, 207.1875, 207.1875, 0.2)'],
       [' HWB( .5turn   20%  30% / 50% ) ', 'rgba(51, 178.5, 178.5, 0.5)'],
       ['rgb(29 164 192 / 95%)', 'rgba(29, 164, 192, 0.95)'],
@@ -1388,6 +1408,28 @@ describe('color values', () => {
     expect(convertAbsoluteColor(gray, 'hwb').components[0]).toBeUndefined();
   });
 
+  it.each([
+    ['HSL', 'hsl', 'srgb', [0.4999975, 0.5000025, 0.4999975], 0],
+    ['HWB', 'hwb', 'srgb', [0.499995, 0.5, 0.499995], 0],
+    ['LCH', 'lch', 'lab', [50, -0.0005, 0.0008660254], 2],
+    ['OKLCH', 'oklch', 'oklab', [0.5, -0.0000015, 0.000002598], 2],
+  ] as const)(
+    'uses the %s powerless-hue epsilon when conversion produces the hue',
+    (_, target, source, components, hueIndex) => {
+      const converted = convertAbsoluteColor(
+        {
+          kind: ColorKind.Absolute,
+          space: source,
+          components: [...components],
+          alpha: 1,
+        },
+        target,
+      );
+
+      expect(converted.components[hueIndex]).toBeUndefined();
+    },
+  );
+
   it('routes absolute color conversion through sRGB', () => {
     const hsl: AbsoluteColor = {
       kind: ColorKind.Absolute,
@@ -1437,9 +1479,7 @@ describe('color values', () => {
 
     expect(labRoundTrip.space).toBe('lab');
     expect(labRoundTrip.alpha).toBe(lab.alpha);
-    expect(labRoundTrip.components[0]).toBeCloseTo(50, 12);
-    expect(labRoundTrip.components[1]).toBeCloseTo(0, 12);
-    expect(labRoundTrip.components[2]).toBeCloseTo(40, 12);
+    expectComponentsCloseTo(labRoundTrip.components, [50, 0, 40], 12);
     expect(convertAbsoluteColor(oklab, 'oklch')).toEqual({
       kind: ColorKind.Absolute,
       space: 'oklch',
@@ -1453,9 +1493,7 @@ describe('color values', () => {
 
     expect(oklabRoundTrip.space).toBe('oklab');
     expect(oklabRoundTrip.alpha).toBe(oklab.alpha);
-    expect(oklabRoundTrip.components[0]).toBeCloseTo(0.5, 12);
-    expect(oklabRoundTrip.components[1]).toBeCloseTo(0.1, 12);
-    expect(oklabRoundTrip.components[2]).toBeCloseTo(0, 12);
+    expectComponentsCloseTo(oklabRoundTrip.components, [0.5, 0.1, 0], 12);
   });
 
   it('replaces a missing polar hue with zero rectangular components', () => {
@@ -1500,11 +1538,12 @@ describe('color values', () => {
     const srgbXyz = convertAbsoluteColor(red, 'xyz-d65').components;
     const p3Xyz = convertAbsoluteColor(p3Red, 'xyz-d65').components;
 
-    expect(srgbXyz[0]).toBeCloseTo(0.4123907993, 9);
-    expect(srgbXyz[1]).toBeCloseTo(0.2126390059, 9);
-    expect(srgbXyz[2]).toBeCloseTo(0.0193308187, 9);
-    expect(p3Xyz[0]).toBeCloseTo(0.4865709486, 9);
-    expect(p3Xyz[1]).toBeCloseTo(0.2289745641, 9);
+    expectComponentsCloseTo(
+      srgbXyz,
+      [0.4123907993, 0.2126390059, 0.0193308187],
+      9,
+    );
+    expectComponentsCloseTo(p3Xyz, [0.4865709486, 0.2289745641], 9);
     expect(p3Xyz[2]).toBe(0);
   });
 
@@ -1519,9 +1558,7 @@ describe('color values', () => {
 
     expect(srgb.alpha).toBe(0.75);
 
-    for (const component of srgb.components) {
-      expect(component).toBeCloseTo(1, 6);
-    }
+    expectComponentsCloseTo(srgb.components, [1, 1, 1], 6);
   });
 
   it('round-trips absolute colors in every color space through XYZ', () => {
@@ -1634,10 +1671,11 @@ describe('color values', () => {
       expect(roundTrip.space).toBe(color.space);
       expect(roundTrip.alpha).toBe(color.alpha);
 
-      for (let index = 0; index < 3; index++) {
-        expect(roundTrip.components[index])
-          .toBeCloseTo(color.components[index]!, 7);
-      }
+      expectComponentsCloseTo(
+        roundTrip.components,
+        color.components,
+        7,
+      );
     }
   });
 
@@ -1705,18 +1743,120 @@ describe('color values', () => {
     })).toBe(false);
   });
 
-  it('converts powerless components to missing before comparison', () => {
+  it.each([
+    ['hsl', [120, 0, 50], [undefined, 0, 50]],
+    ['hwb', [120, 40, 60], [undefined, 40, 60]],
+    ['lch', [50, 0, 120], [50, 0, undefined]],
+    ['oklch', [0.5, 0, 120], [0.5, 0, undefined]],
+  ] as const)(
+    'converts powerless %s components to missing before comparison',
+    (space, components, expectedComponents) => {
+      const color: AbsoluteColor = {
+        kind: ColorKind.Absolute,
+        space,
+        components: [...components],
+        alpha: 1,
+      };
+
+      expect(areColorsEquivalent(color, {
+        ...color,
+        components: [...expectedComponents],
+      })).toBe(true);
+    },
+  );
+
+  it.each([
+    ['hsl', [120, 0.001, 50], [undefined, 0.001, 50]],
+    ['hwb', [120, 49.999, 50], [undefined, 49.999, 50]],
+    ['lch', [50, 0.0015, 120], [50, 0.0015, undefined]],
+    ['oklch', [0.5, 0.000004, 120], [0.5, 0.000004, undefined]],
+  ] as const)(
+    'does not apply the %s conversion epsilon during comparison',
+    (space, components, expectedComponents) => {
+      const color: AbsoluteColor = {
+        kind: ColorKind.Absolute,
+        space,
+        components: [...components],
+        alpha: 1,
+      };
+
+      expect(areColorsEquivalent(color, {
+        ...color,
+        components: [...expectedComponents],
+      })).toBe(false);
+    },
+  );
+
+  it('retains a manually specified HSL hue at the conversion epsilon', () => {
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: 'hsl',
-      components: [120, 0, 50],
+      components: [120, 0.001, 50],
       alpha: 1,
     };
 
-    expect(areColorsEquivalent(gray, {
-      ...gray,
-      components: [undefined, 0, 50],
-    })).toBe(true);
+    const result = interpolateColors(
+      gray,
+      { ...gray, components: [240, 100, 50] },
+      0.5,
+      'hsl',
+    );
+
+    expectComponentsCloseTo(result.components, [180, 50.0005, 50], 12);
+  });
+
+  it('retains a manually specified HWB hue at the conversion epsilon', () => {
+    const gray: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: 'hwb',
+      components: [120, 49.999, 50],
+      alpha: 1,
+    };
+
+    const result = interpolateColors(
+      gray,
+      { ...gray, components: [240, 0, 0] },
+      0.5,
+      'hwb',
+    );
+
+    expectComponentsCloseTo(result.components, [180, 24.9995, 25], 12);
+  });
+
+  it('retains a manually specified LCH hue at the conversion epsilon', () => {
+    const gray: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: 'lch',
+      components: [50, 0.0015, 120],
+      alpha: 1,
+    };
+
+    const result = interpolateColors(
+      gray,
+      { ...gray, components: [70, 40, 240] },
+      0.5,
+      'lch',
+    );
+
+    expectComponentsCloseTo(result.components, [60, 20.00075, 180], 12);
+  });
+
+  it('retains a manually specified OKLCH hue at the conversion epsilon', () => {
+    const gray: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: 'oklch',
+      components: [0.5, 0.000004, 120],
+      alpha: 1,
+    };
+
+    const result = interpolateColors(
+      gray,
+      { ...gray, components: [0.7, 0.2, 240] },
+      0.5,
+      'oklch',
+    );
+
+    expectComponentsCloseTo(result.components, [0.6, 0.100002, 180], 12);
   });
 
   it('compares colors from different spaces in Oklab', () => {
@@ -1815,8 +1955,7 @@ describe('color values', () => {
       'oklab',
     );
 
-    expect(result.alpha).toBeCloseTo(expected.alpha!, 12);
-    expect(deltaEOK(result, expected)).toBeLessThan(0.001);
+    expectColorCloseTo(result, expected);
   });
 
   it('keeps a component missing when both analogous sets are missing', () => {
@@ -1907,9 +2046,7 @@ describe('color values', () => {
     );
 
     expect(result.alpha).toBeCloseTo(0.5, 12);
-    expect(result.components[0]).toBeCloseTo(0.468, 12);
-    expect(result.components[1]).toBeCloseTo(0.204, 12);
-    expect(result.components[2]).toBeCloseTo(0.776, 12);
+    expectComponentsCloseTo(result.components, [0.468, 0.204, 0.776], 12);
   });
 
   it('matches the premultiplied Lab interpolation example', () => {
@@ -1931,9 +2068,7 @@ describe('color values', () => {
     );
 
     expect(result.alpha).toBeCloseTo(0.5, 12);
-    expect(result.components[0]).toBeCloseTo(58.873, 3);
-    expect(result.components[1]).toBeCloseTo(51.552, 3);
-    expect(result.components[2]).toBeCloseTo(7.108, 3);
+    expectComponentsCloseTo(result.components, [58.873, 51.552, 7.108], 3);
   });
 
   it('matches the premultiplied LCH interpolation example', () => {
@@ -2014,6 +2149,33 @@ describe('color values', () => {
 
   // Section 13.4, "Hue Interpolation."
   it.each([
+    ['LCH', 'lch', [100, 0, 40], [100, 0, 60], [100, 0, 50]],
+    ['OKLCH', 'oklch', [1, 0, 40], [1, 0, 60], [1, 0, 50]],
+  ] as const)(
+    'matches the same-space zero-chroma %s WPT',
+    (_, space, a, b, expected) => {
+      const result = interpolateColors(
+        {
+          kind: ColorKind.Absolute,
+          space,
+          components: [...a],
+          alpha: 1,
+        },
+        {
+          kind: ColorKind.Absolute,
+          space,
+          components: [...b],
+          alpha: 1,
+        },
+        0.5,
+        space,
+      );
+
+      expect(result.components).toEqual(expected);
+    },
+  );
+
+  it.each([
     ['shorter', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 60]],
     ['longer', [0.6, 0.24, 30], [0.8, 0.15, 90], [0.7, 0.195, 240]],
     ['increasing', [0.5, 0.1, 30], [0.7, 0.1, 190], [0.6, 0.1, 110]],
@@ -2041,9 +2203,7 @@ describe('color values', () => {
 
       expect(result.alpha).toBe(1);
 
-      for (let index = 0; index < 3; index++) {
-        expect(result.components[index]).toBeCloseTo(expected[index], 12);
-      }
+      expectComponentsCloseTo(result.components, expected, 12);
     },
   );
 
@@ -2178,9 +2338,7 @@ describe('color values', () => {
     );
 
     expect(result.space).toBe('oklab');
-    expect(result.components[0]).toBeCloseTo(0.5, 7);
-    expect(result.components[1]).toBeCloseTo(0, 7);
-    expect(result.components[2]).toBeCloseTo(0, 7);
+    expectComponentsCloseTo(result.components, [0.5, 0, 0], 7);
   });
 
   it('takes an individual missing component from the other color', () => {
@@ -2244,8 +2402,7 @@ describe('color values', () => {
     );
 
     expect(result.alpha).toBe(0.5);
-    expect(result.components[0]).toBeCloseTo(0.8, 7);
-    expect(result.components[1]).toBeCloseTo(0.2, 7);
+    expectComponentsCloseTo(result.components, [0.8, 0.2], 7);
     expect(result.components[2]).toBe(120);
   });
 

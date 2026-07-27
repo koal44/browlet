@@ -2670,23 +2670,21 @@ export function convertAbsoluteColor(
 function prepareAbsoluteColorForConversion(
   value: AbsoluteColor,
 ): AbsoluteColor {
-  const prepared = replacePowerlessColorComponents(
-    normalizeColorEncoding(value),
-  );
+  const normalized = normalizeColorEncoding(value);
 
-  switch (prepared.space) {
+  switch (normalized.space) {
     case 'srgb-legacy':
-      return { ...prepared, space: 'srgb' };
+      return { ...normalized, space: 'srgb' };
     case 'hsl':
-      return convertHslToRgb(prepared);
+      return convertHslToRgb(normalized);
     case 'hwb':
-      return convertHwbToRgb(prepared);
+      return convertHwbToRgb(normalized);
     case 'lch':
-      return convertLchToLab(prepared);
+      return convertLchToLab(normalized);
     case 'oklch':
-      return convertOklchToOklab(prepared);
+      return convertOklchToOklab(normalized);
     default:
-      return prepared;
+      return normalized;
   }
 }
 
@@ -2709,11 +2707,20 @@ function normalizeColorEncoding(value: AbsoluteColor): AbsoluteColor {
   };
 }
 
-function replacePowerlessColorComponents(value: AbsoluteColor): AbsoluteColor {
+const POWERLESS_HUE_EPSILON = {
+  hsl: 0.001,
+  hwb: 99.999,
+  lch: 0.0015,
+  oklch: 0.000004,
+} as const;
+
+function replacePowerlessComponents(value: AbsoluteColor): AbsoluteColor {
   const [firstComp, secondComp, thirdComp] = value.components;
   const second = secondComp ?? 0;
   const third = thirdComp ?? 0;
 
+  // Comparison uses the exact powerless conditions. The epsilon thresholds
+  // apply only when color space conversion produces a polar hue.
   switch (value.space) {
     case 'hsl':
       return second === 0 && firstComp !== undefined
@@ -2724,11 +2731,8 @@ function replacePowerlessColorComponents(value: AbsoluteColor): AbsoluteColor {
         ? { ...value, components: [undefined, second, third] }
         : value;
     case 'lch':
-      return second <= 0.0015 && thirdComp !== undefined
-        ? { ...value, components: [firstComp, second, undefined] }
-        : value;
     case 'oklch':
-      return second <= 0.000004 && thirdComp !== undefined
+      return second === 0 && thirdComp !== undefined
         ? { ...value, components: [firstComp, second, undefined] }
         : value;
     default:
@@ -3050,7 +3054,6 @@ function rgbToHsl(
   let sat = 0;
   const light = (min + max) / 2;
   const d = max - min;
-  const epsilon = 1 / 100000;
 
   if (d !== 0) {
     sat = light === 0 || light === 1
@@ -3083,11 +3086,13 @@ function rgbToHsl(
     hue -= 360;
   }
 
-  if (sat <= epsilon) {
+  sat *= 100;
+
+  if (sat <= POWERLESS_HUE_EPSILON.hsl) {
     hue = Number.NaN;
   }
 
-  return [hue, sat * 100, light * 100];
+  return [hue, sat, light * 100];
 }
 
 function hwbToRgb(
@@ -3148,16 +3153,15 @@ function rgbToHwb(
   green: number,
   blue: number,
 ): [number, number, number] {
-  const epsilon = 1 / 100000;
   let hue = rgbToHue(red, green, blue);
-  const white = Math.min(red, green, blue);
-  const black = 1 - Math.max(red, green, blue);
+  const white = Math.min(red, green, blue) * 100;
+  const black = (1 - Math.max(red, green, blue)) * 100;
 
-  if (white + black >= 1 - epsilon) {
+  if (white + black >= POWERLESS_HUE_EPSILON.hwb) {
     hue = Number.NaN;
   }
 
-  return [hue, white * 100, black * 100];
+  return [hue, white, black];
 }
 
 function linearizeSrgb(value: ColorVector): ColorVector {
@@ -3445,7 +3449,6 @@ function labToXyz(value: ColorVector): ColorVector {
 }
 
 function labToLch(value: ColorVector): ColorVector {
-  const epsilon = 0.0015;
   const chroma = Math.sqrt(value[1] ** 2 + value[2] ** 2);
   let hue = Math.atan2(value[2], value[1]) * 180 / Math.PI;
 
@@ -3453,7 +3456,7 @@ function labToLch(value: ColorVector): ColorVector {
     hue += 360;
   }
 
-  if (chroma <= epsilon) {
+  if (chroma <= POWERLESS_HUE_EPSILON.lch) {
     hue = Number.NaN;
   }
 
@@ -3511,7 +3514,6 @@ function oklabToXyz(value: ColorVector): ColorVector {
 }
 
 function oklabToOklch(value: ColorVector): ColorVector {
-  const epsilon = 0.000004;
   const chroma = Math.sqrt(value[1] ** 2 + value[2] ** 2);
   let hue = Math.atan2(value[2], value[1]) * 180 / Math.PI;
 
@@ -3519,7 +3521,7 @@ function oklabToOklch(value: ColorVector): ColorVector {
     hue += 360;
   }
 
-  if (chroma <= epsilon) {
+  if (chroma <= POWERLESS_HUE_EPSILON.oklch) {
     hue = Number.NaN;
   }
 
@@ -3764,7 +3766,7 @@ export function areColorsEquivalent(
 function prepareAbsoluteColorForComparison(
   value: AbsoluteColor,
 ): AbsoluteColor {
-  const prepared = replacePowerlessColorComponents(
+  const prepared = replacePowerlessComponents(
     normalizeColorEncoding(value),
   );
 
@@ -3822,11 +3824,11 @@ export function interpolateColors(
   const carriedA = findCarriedForwardComponents(a, space);
   const carriedB = findCarriedForwardComponents(b, space);
 
-  const preparedA = replacePowerlessColorComponents(normalizeColorEncoding(a));
-  const convertedA = convertAbsoluteColor(replaceMissingComponents(preparedA), space);
+  const normalizedA = normalizeColorEncoding(a);
+  const convertedA = convertAbsoluteColor(replaceMissingComponents(normalizedA), space);
 
-  const preparedB = replacePowerlessColorComponents(normalizeColorEncoding(b));
-  const convertedB = convertAbsoluteColor(replaceMissingComponents(preparedB), space);
+  const normalizedB = normalizeColorEncoding(b);
+  const convertedB = convertAbsoluteColor(replaceMissingComponents(normalizedB), space);
 
   const [restoredA, restoredB] = restoreCarriedForwardComponents(
     convertedA, convertedB, carriedA, carriedB,
