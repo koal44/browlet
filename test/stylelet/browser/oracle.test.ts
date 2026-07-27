@@ -2565,6 +2565,34 @@ const colorSerializations: ColorSerializationCase[] = [
     expect: null,
     browsers: ['firefox'],
   },
+  // Literal alpha is clamped even when a component remains deferred.
+  {
+    decl: 'rgb(calc(sign(1em - 1px)) 0 0 / 120%)',
+    expect: 'rgb(sign(1em - 1px) 0 0)',
+    browsers: ['chromium'],
+  },
+  // WebKit currently retains a redundant explicit unit alpha.
+  {
+    decl: 'rgb(calc(sign(1em - 1px)) 0 0 / 120%)',
+    expect: 'rgb(sign(1em - 1px) 0 0)',
+    browsers: ['webkit'],
+    status: 'fail',
+  },
+  {
+    decl: 'rgb(calc(sign(1em - 1px)) 0 0 / 120%)',
+    expect: null,
+    browsers: ['firefox'],
+  },
+  {
+    decl: 'color(display-p3 calc(sign(1em - 1px)) 0 0 / -0.2)',
+    expect: 'color(display-p3 sign(1em - 1px) 0 0 / 0)',
+    browsers: ['chromium', 'webkit'],
+  },
+  {
+    decl: 'color(display-p3 calc(sign(1em - 1px)) 0 0 / -0.2)',
+    expect: null,
+    browsers: ['firefox'],
+  },
   {
     decl: 'HSL(calc(60deg + 60deg) 100% 50%)',
     expect: 'rgb(0, 255, 0)',

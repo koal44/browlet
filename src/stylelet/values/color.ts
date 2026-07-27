@@ -22,6 +22,7 @@ import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';
 import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
+import type { PercentageLiteral } from './numeric-literal/percentage';
 import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
 import {
   resolvePercentage, serializePercentage, tryConsumePercentage,
@@ -53,18 +54,16 @@ export type ColorValue =
 // represent the `none` keyword.
 export type AbsoluteColor = {
   kind: ColorKind.Absolute;
-  space: AbsoluteColorSpace;
+  space: ColorSpace;
   components: AbsoluteTriplet;
   alpha: number | undefined;
+  // Retains legacy rgb()/rgba() serialization and interpolation behavior.
+  isLegacySrgb?: true;
+  // Components and alpha are stored as 8-bit integers.
   is8Bit?: true;
 };
 
-type AbsoluteColorSpace =
-  // Internal variant for colors serialized with rgb() or rgba().
-  | 'srgb-legacy'
-  | ColorSpace;
-
-type ColorSpace = RectangularColorSpace | PolarColorSpace;
+export type ColorSpace = RectangularColorSpace | PolarColorSpace;
 
 type RectangularColorSpace =
   | 'srgb'
@@ -85,29 +84,20 @@ type PolarColorSpace =
   | 'lch'
   | 'oklch';
 
-export type HueInterpolationMethod =
-  | 'shorter'
-  | 'longer'
-  | 'increasing'
-  | 'decreasing';
-
-export type ColorInterpolationMethod =
-  | {
-    space: RectangularColorSpace;
-    hue?: never;
-  }
-  | {
-    space: PolarColorSpace;
-    hue?: HueInterpolationMethod;
-  };
-
 type ColorTriplet<Value> = [Value, Value, Value];
 
 type AbsoluteComponent = number | undefined;
 type AbsoluteTriplet = ColorTriplet<AbsoluteComponent>;
 
-type SyntaxComponent = NumberValue | PercentageValue | 'none';
-type SyntaxTriplet = ColorTriplet<SyntaxComponent>;
+type SyntaxColorComponent = NumberValue | PercentageValue | 'none';
+type SyntaxTriplet = ColorTriplet<SyntaxColorComponent>;
+
+type SyntaxAlphaComponent = AlphaValue | 'none';
+type AlphaValue = NumberValue | PercentageValue;
+type AlphaLiteral = NumberLiteral | PercentageLiteral;
+
+type SyntaxHueComponent = HueValue | 'none';
+type HueValue = NumberValue | AngleValue;
 
 export type ColorBase =
   | HexColor
@@ -115,14 +105,14 @@ export type ColorBase =
   | NamedColor;
 
 export type ColorFunction =
-  | RgbColor
-  | HslColor
-  | HwbColor
-  | LabColor
-  | LchColor
-  | OklabColor
-  | OklchColor
-  | PredefinedColor;
+  | RgbFn
+  | HslFn
+  | HwbFn
+  | LabFn
+  | LchFn
+  | OklabFn
+  | OklchFn
+  | ColorFn;
 
 export enum ColorKind {
   Named = 1,
@@ -130,19 +120,16 @@ export enum ColorKind {
   System,
   Deprecated,
   Hex,
-  Rgb,
-  Hsl,
-  Hwb,
-  Lab,
-  Lch,
-  Oklab,
-  Oklch,
-  Color,
+  RgbFn,
+  HslFn,
+  HwbFn,
+  LabFn,
+  LchFn,
+  OklabFn,
+  OklchFn,
+  ColorFn,
   Absolute,
 }
-
-type AlphaValue = NumberValue | PercentageValue;
-type HueValue = NumberValue | AngleValue;
 
 export function parseColorValue(
   input: ParserInput,
@@ -236,16 +223,16 @@ const consumeColorFunction: TryComponentConsumer<ColorFunction> = oneOf(
  *   [ / [ <alpha-value> | none ] ]? )
  */
 
-export type RgbColor = {
-  kind: ColorKind.Rgb;
+export type RgbFn = {
+  kind: ColorKind.RgbFn;
   syntax: 'legacy' | 'modern';
   components: SyntaxTriplet;
-  alpha?: AlphaValue | 'none';
+  alpha?: SyntaxAlphaComponent;
 };
 
 function tryConsumeRgbFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeRgbFunction(c);
 }
 
@@ -253,7 +240,7 @@ const consumeRgbFunction = createRgbFunctionConsumer('rgb');
 
 function tryConsumeRgbaFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeRgbaFunction(c);
 }
 
@@ -261,7 +248,7 @@ const consumeRgbaFunction = createRgbFunctionConsumer('rgba');
 
 function createRgbFunctionConsumer(
   name: 'rgb' | 'rgba',
-): TryComponentConsumer<RgbColor> {
+): TryComponentConsumer<RgbFn> {
   return createFunctionalNotationConsumer(
     name,
     tryConsumeRgbArguments,
@@ -271,11 +258,11 @@ function createRgbFunctionConsumer(
 
 function tryConsumeRgbArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeRgbArguments(c);
 }
 
-const consumeRgbArguments: TryComponentConsumer<RgbColor> = oneOf(
+const consumeRgbArguments: TryComponentConsumer<RgbFn> = oneOf(
   [
     one(tryConsumeLegacyPercentageRgbArguments),
     one(tryConsumeLegacyNumberRgbArguments),
@@ -286,7 +273,7 @@ const consumeRgbArguments: TryComponentConsumer<RgbColor> = oneOf(
 
 function tryConsumeLegacyPercentageRgbArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeLegacyPercentageRgbArguments(c);
 }
 
@@ -295,7 +282,7 @@ const consumeLegacyPercentageRgbArguments =
 
 function tryConsumeLegacyNumberRgbArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeLegacyNumberRgbArguments(c);
 }
 
@@ -306,14 +293,14 @@ function createLegacyRgbArgumentsConsumer<
   Component extends NumberValue | PercentageValue,
 >(
   tryConsumeComponent: TryComponentConsumer<Component>,
-): TryComponentConsumer<RgbColor> {
+): TryComponentConsumer<RgbFn> {
   return sequenceOf(
     [
       commaRepeat(tryConsumeComponent, 3, 3),
       opt(tryConsumeLegacyAlpha),
     ],
     ([components, alpha]) => ok({
-      kind: ColorKind.Rgb,
+      kind: ColorKind.RgbFn,
       syntax: 'legacy',
       components,
       alpha: alpha[0],
@@ -337,17 +324,17 @@ const consumeLegacyAlpha: TryComponentConsumer<AlphaValue> = sequenceOf(
 
 function tryConsumeModernRgbArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<RgbColor> {
+): TryComponentConsumerResult<RgbFn> {
   return consumeModernRgbArguments(c);
 }
 
-const consumeModernRgbArguments: TryComponentConsumer<RgbColor> = sequenceOf(
+const consumeModernRgbArguments: TryComponentConsumer<RgbFn> = sequenceOf(
   [
     repeat(withComponentTrivia(tryConsumeRgbComponent), 3, 3),
     opt(tryConsumeModernAlpha),
   ],
   ([components, alpha]) => ok({
-    kind: ColorKind.Rgb,
+    kind: ColorKind.RgbFn,
     syntax: 'modern',
     components,
     alpha: alpha[0],
@@ -356,11 +343,11 @@ const consumeModernRgbArguments: TryComponentConsumer<RgbColor> = sequenceOf(
 
 function tryConsumeModernAlpha(
   c: ComponentCursor,
-): TryComponentConsumerResult<AlphaValue | 'none'> {
+): TryComponentConsumerResult<SyntaxAlphaComponent> {
   return consumeModernAlpha(c);
 }
 
-const consumeModernAlpha: TryComponentConsumer<AlphaValue | 'none'> = sequenceOf(
+const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> = sequenceOf(
   [
     one(withComponentTrivia(tryConsumeSlash)),
     one(withComponentTrivia(tryConsumeAlphaOrNone)),
@@ -370,11 +357,11 @@ const consumeModernAlpha: TryComponentConsumer<AlphaValue | 'none'> = sequenceOf
 
 function tryConsumeRgbComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeRgbComponent(c);
 }
 
-const consumeRgbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeRgbComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumePercentage),
@@ -385,11 +372,11 @@ const consumeRgbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
 
 function tryConsumeAlphaOrNone(
   c: ComponentCursor,
-): TryComponentConsumerResult<AlphaValue | 'none'> {
+): TryComponentConsumerResult<SyntaxAlphaComponent> {
   return consumeAlphaOrNone(c);
 }
 
-const consumeAlphaOrNone: TryComponentConsumer<AlphaValue | 'none'> = oneOf(
+const consumeAlphaOrNone: TryComponentConsumer<SyntaxAlphaComponent> = oneOf(
   [
     one(tryConsumeAlphaValue),
     one(tryConsumeNone),
@@ -827,18 +814,18 @@ const tryConsumeCurrentColorKeyword = createKeywordConsumer('currentcolor');
  *   hsla( <hue>, <percentage>, <percentage>, <alpha-value>? )
  */
 
-export type HslColor = {
-  kind: ColorKind.Hsl;
+export type HslFn = {
+  kind: ColorKind.HslFn;
   syntax: 'legacy' | 'modern';
-  hue: HueValue | 'none';
-  saturation: SyntaxComponent;
-  lightness: SyntaxComponent;
-  alpha?: AlphaValue | 'none';
+  hue: SyntaxHueComponent;
+  saturation: SyntaxColorComponent;
+  lightness: SyntaxColorComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 function tryConsumeHslFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslColor> {
+): TryComponentConsumerResult<HslFn> {
   return consumeHslFunction(c);
 }
 
@@ -846,7 +833,7 @@ const consumeHslFunction = createHslFunctionConsumer('hsl');
 
 function tryConsumeHslaFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslColor> {
+): TryComponentConsumerResult<HslFn> {
   return consumeHslaFunction(c);
 }
 
@@ -854,7 +841,7 @@ const consumeHslaFunction = createHslFunctionConsumer('hsla');
 
 function createHslFunctionConsumer(
   name: 'hsl' | 'hsla',
-): TryComponentConsumer<HslColor> {
+): TryComponentConsumer<HslFn> {
   return createFunctionalNotationConsumer(
     name,
     tryConsumeHslArguments,
@@ -864,11 +851,11 @@ function createHslFunctionConsumer(
 
 function tryConsumeHslArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslColor> {
+): TryComponentConsumerResult<HslFn> {
   return consumeHslArguments(c);
 }
 
-const consumeHslArguments: TryComponentConsumer<HslColor> = oneOf(
+const consumeHslArguments: TryComponentConsumer<HslFn> = oneOf(
   [
     one(tryConsumeLegacyHslArguments),
     one(tryConsumeModernHslArguments),
@@ -878,11 +865,11 @@ const consumeHslArguments: TryComponentConsumer<HslColor> = oneOf(
 
 function tryConsumeLegacyHslArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslColor> {
+): TryComponentConsumerResult<HslFn> {
   return consumeLegacyHslArguments(c);
 }
 
-const consumeLegacyHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
+const consumeLegacyHslArguments: TryComponentConsumer<HslFn> = sequenceOf(
   [
     one(withComponentTrivia(tryConsumeHue)),
     one(tryConsumeLegacyHslPercentage),
@@ -890,7 +877,7 @@ const consumeLegacyHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
     opt(tryConsumeLegacyAlpha),
   ],
   ([[hue], [saturation], [lightness], alpha]) => ok({
-    kind: ColorKind.Hsl,
+    kind: ColorKind.HslFn,
     syntax: 'legacy',
     hue,
     saturation,
@@ -915,11 +902,11 @@ const consumeLegacyHslPercentage: TryComponentConsumer<PercentageValue> = sequen
 
 function tryConsumeModernHslArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<HslColor> {
+): TryComponentConsumerResult<HslFn> {
   return consumeModernHslArguments(c);
 }
 
-const consumeModernHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
+const consumeModernHslArguments: TryComponentConsumer<HslFn> = sequenceOf(
   [
     one(withComponentTrivia(tryConsumeHueOrNone)),
     one(withComponentTrivia(tryConsumeHslComponent)),
@@ -927,7 +914,7 @@ const consumeModernHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
     opt(tryConsumeModernAlpha),
   ],
   ([[hue], [saturation], [lightness], alpha]) => ok({
-    kind: ColorKind.Hsl,
+    kind: ColorKind.HslFn,
     syntax: 'modern',
     hue,
     saturation,
@@ -938,11 +925,11 @@ const consumeModernHslArguments: TryComponentConsumer<HslColor> = sequenceOf(
 
 function tryConsumeHueOrNone(
   c: ComponentCursor,
-): TryComponentConsumerResult<HueValue | 'none'> {
+): TryComponentConsumerResult<SyntaxHueComponent> {
   return consumeHueOrNone(c);
 }
 
-const consumeHueOrNone: TryComponentConsumer<HueValue | 'none'> = oneOf(
+const consumeHueOrNone: TryComponentConsumer<SyntaxHueComponent> = oneOf(
   [
     one(tryConsumeHue),
     one(tryConsumeNone),
@@ -966,11 +953,11 @@ const consumeHue: TryComponentConsumer<HueValue> = oneOf(
 
 function tryConsumeHslComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeHslComponent(c);
 }
 
-const consumeHslComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeHslComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -987,17 +974,17 @@ const consumeHslComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
  *   [ / [ <alpha-value> | none ] ]? )
  */
 
-export type HwbColor = {
-  kind: ColorKind.Hwb;
-  hue: HueValue | 'none';
-  whiteness: SyntaxComponent;
-  blackness: SyntaxComponent;
-  alpha?: AlphaValue | 'none';
+export type HwbFn = {
+  kind: ColorKind.HwbFn;
+  hue: SyntaxHueComponent;
+  whiteness: SyntaxColorComponent;
+  blackness: SyntaxColorComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 function tryConsumeHwbFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<HwbColor> {
+): TryComponentConsumerResult<HwbFn> {
   return consumeHwbFunction(c);
 }
 
@@ -1009,11 +996,11 @@ const consumeHwbFunction = createFunctionalNotationConsumer(
 
 function tryConsumeHwbArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<HwbColor> {
+): TryComponentConsumerResult<HwbFn> {
   return consumeHwbArguments(c);
 }
 
-const consumeHwbArguments: TryComponentConsumer<HwbColor> = sequenceOf(
+const consumeHwbArguments: TryComponentConsumer<HwbFn> = sequenceOf(
   [
     one(withComponentTrivia(tryConsumeHueOrNone)),
     one(withComponentTrivia(tryConsumeHwbComponent)),
@@ -1021,7 +1008,7 @@ const consumeHwbArguments: TryComponentConsumer<HwbColor> = sequenceOf(
     opt(tryConsumeModernAlpha),
   ],
   ([[hue], [whiteness], [blackness], alpha]) => ok({
-    kind: ColorKind.Hwb,
+    kind: ColorKind.HwbFn,
     hue,
     whiteness,
     blackness,
@@ -1031,11 +1018,11 @@ const consumeHwbArguments: TryComponentConsumer<HwbColor> = sequenceOf(
 
 function tryConsumeHwbComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeHwbComponent(c);
 }
 
-const consumeHwbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeHwbComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1058,57 +1045,57 @@ const consumeHwbComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
  *   [ / [ <alpha-value> | none ] ]? )
  */
 
-export type LabColor = {
-  kind: ColorKind.Lab;
-  lightness: SyntaxComponent;
-  a: SyntaxComponent;
-  b: SyntaxComponent;
-  alpha?: AlphaValue | 'none';
+export type LabFn = {
+  kind: ColorKind.LabFn;
+  lightness: SyntaxColorComponent;
+  a: SyntaxColorComponent;
+  b: SyntaxColorComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
-export type OklabColor = {
-  kind: ColorKind.Oklab;
-  lightness: SyntaxComponent;
-  a: SyntaxComponent;
-  b: SyntaxComponent;
-  alpha?: AlphaValue | 'none';
+export type OklabFn = {
+  kind: ColorKind.OklabFn;
+  lightness: SyntaxColorComponent;
+  a: SyntaxColorComponent;
+  b: SyntaxColorComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 type LabArguments = {
-  lightness: SyntaxComponent;
-  a: SyntaxComponent;
-  b: SyntaxComponent;
-  alpha?: AlphaValue | 'none';
+  lightness: SyntaxColorComponent;
+  a: SyntaxColorComponent;
+  b: SyntaxColorComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 function tryConsumeLabFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<LabColor> {
+): TryComponentConsumerResult<LabFn> {
   return consumeLabFunction(c);
 }
 
-const consumeLabFunction: TryComponentConsumer<LabColor> =
+const consumeLabFunction: TryComponentConsumer<LabFn> =
   createFunctionalNotationConsumer(
     'lab',
     tryConsumeLabArguments,
     (arguments_) => ({
-      kind: ColorKind.Lab,
+      kind: ColorKind.LabFn,
       ...arguments_,
     }),
   );
 
 function tryConsumeOklabFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<OklabColor> {
+): TryComponentConsumerResult<OklabFn> {
   return consumeOklabFunction(c);
 }
 
-const consumeOklabFunction: TryComponentConsumer<OklabColor> =
+const consumeOklabFunction: TryComponentConsumer<OklabFn> =
   createFunctionalNotationConsumer(
     'oklab',
     tryConsumeLabArguments,
     (arguments_) => ({
-      kind: ColorKind.Oklab,
+      kind: ColorKind.OklabFn,
       ...arguments_,
     }),
   );
@@ -1136,11 +1123,11 @@ const consumeLabArguments: TryComponentConsumer<LabArguments> = sequenceOf(
 
 function tryConsumeLabComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeLabComponent(c);
 }
 
-const consumeLabComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeLabComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1163,57 +1150,57 @@ const consumeLabComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
  *   [ / [ <alpha-value> | none ] ]? )
  */
 
-export type LchColor = {
-  kind: ColorKind.Lch;
-  lightness: SyntaxComponent;
-  chroma: SyntaxComponent;
-  hue: HueValue | 'none';
-  alpha?: AlphaValue | 'none';
+export type LchFn = {
+  kind: ColorKind.LchFn;
+  lightness: SyntaxColorComponent;
+  chroma: SyntaxColorComponent;
+  hue: SyntaxHueComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
-export type OklchColor = {
-  kind: ColorKind.Oklch;
-  lightness: SyntaxComponent;
-  chroma: SyntaxComponent;
-  hue: HueValue | 'none';
-  alpha?: AlphaValue | 'none';
+export type OklchFn = {
+  kind: ColorKind.OklchFn;
+  lightness: SyntaxColorComponent;
+  chroma: SyntaxColorComponent;
+  hue: SyntaxHueComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 type LchArguments = {
-  lightness: SyntaxComponent;
-  chroma: SyntaxComponent;
-  hue: HueValue | 'none';
-  alpha?: AlphaValue | 'none';
+  lightness: SyntaxColorComponent;
+  chroma: SyntaxColorComponent;
+  hue: SyntaxHueComponent;
+  alpha?: SyntaxAlphaComponent;
 };
 
 function tryConsumeLchFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<LchColor> {
+): TryComponentConsumerResult<LchFn> {
   return consumeLchFunction(c);
 }
 
-const consumeLchFunction: TryComponentConsumer<LchColor> =
+const consumeLchFunction: TryComponentConsumer<LchFn> =
   createFunctionalNotationConsumer(
     'lch',
     tryConsumeLchArguments,
     (arguments_) => ({
-      kind: ColorKind.Lch,
+      kind: ColorKind.LchFn,
       ...arguments_,
     }),
   );
 
 function tryConsumeOklchFunction(
   c: ComponentCursor,
-): TryComponentConsumerResult<OklchColor> {
+): TryComponentConsumerResult<OklchFn> {
   return consumeOklchFunction(c);
 }
 
-const consumeOklchFunction: TryComponentConsumer<OklchColor> =
+const consumeOklchFunction: TryComponentConsumer<OklchFn> =
   createFunctionalNotationConsumer(
     'oklch',
     tryConsumeLchArguments,
     (arguments_) => ({
-      kind: ColorKind.Oklch,
+      kind: ColorKind.OklchFn,
       ...arguments_,
     }),
   );
@@ -1241,11 +1228,11 @@ const consumeLchArguments: TryComponentConsumer<LchArguments> = sequenceOf(
 
 function tryConsumeLchComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeLchComponent(c);
 }
 
-const consumeLchComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeLchComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumePercentage),
     one(tryConsumeNumber),
@@ -1271,16 +1258,16 @@ const consumeLchComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
  * <xyz-space> = xyz | xyz-d50 | xyz-d65
  */
 
-export type PredefinedColor = {
-  kind: ColorKind.Color;
-  space: PredefinedColorSpace;
+export type ColorFn = {
+  kind: ColorKind.ColorFn;
+  space: ColorFnSpace;
   components: SyntaxTriplet;
-  alpha?: AlphaValue | 'none';
+  alpha?: SyntaxAlphaComponent;
 };
 
-type PredefinedColorSpace = PredefinedRgb | XyzSpace;
+type ColorFnSpace = PredefinedRgbSpace | XyzSpace;
 
-type PredefinedRgb =
+type PredefinedRgbSpace =
   | 'srgb'
   | 'srgb-linear'
   | 'display-p3'
@@ -1291,18 +1278,18 @@ type PredefinedRgb =
 
 type XyzSpace = 'xyz' | 'xyz-d50' | 'xyz-d65';
 
-type ColorSpaceParams = {
-  space: PredefinedColorSpace;
+type ColorFnSpaceParams = {
+  space: ColorFnSpace;
   components: SyntaxTriplet;
 };
 
 function tryConsumeColorFunctionNotation(
   c: ComponentCursor,
-): TryComponentConsumerResult<PredefinedColor> {
+): TryComponentConsumerResult<ColorFn> {
   return consumeColorFunctionNotation(c);
 }
 
-const consumeColorFunctionNotation: TryComponentConsumer<PredefinedColor> =
+const consumeColorFunctionNotation: TryComponentConsumer<ColorFn> =
   createFunctionalNotationConsumer(
     'color',
     tryConsumeColorFunctionArguments,
@@ -1311,18 +1298,18 @@ const consumeColorFunctionNotation: TryComponentConsumer<PredefinedColor> =
 
 function tryConsumeColorFunctionArguments(
   c: ComponentCursor,
-): TryComponentConsumerResult<PredefinedColor> {
+): TryComponentConsumerResult<ColorFn> {
   return consumeColorFunctionArguments(c);
 }
 
-const consumeColorFunctionArguments: TryComponentConsumer<PredefinedColor> =
+const consumeColorFunctionArguments: TryComponentConsumer<ColorFn> =
   sequenceOf(
     [
       one(tryConsumeColorSpaceParams),
       opt(tryConsumeModernAlpha),
     ],
     ([[params], alpha]) => ok({
-      kind: ColorKind.Color,
+      kind: ColorKind.ColorFn,
       ...params,
       alpha: alpha[0],
     }),
@@ -1330,11 +1317,11 @@ const consumeColorFunctionArguments: TryComponentConsumer<PredefinedColor> =
 
 function tryConsumeColorSpaceParams(
   c: ComponentCursor,
-): TryComponentConsumerResult<ColorSpaceParams> {
+): TryComponentConsumerResult<ColorFnSpaceParams> {
   return consumeColorSpaceParams(c);
 }
 
-const consumeColorSpaceParams: TryComponentConsumer<ColorSpaceParams> = oneOf(
+const consumeColorSpaceParams: TryComponentConsumer<ColorFnSpaceParams> = oneOf(
   [
     one(tryConsumePredefinedRgbParams),
     one(tryConsumeXyzParams),
@@ -1344,11 +1331,11 @@ const consumeColorSpaceParams: TryComponentConsumer<ColorSpaceParams> = oneOf(
 
 function tryConsumePredefinedRgbParams(
   c: ComponentCursor,
-): TryComponentConsumerResult<ColorSpaceParams> {
+): TryComponentConsumerResult<ColorFnSpaceParams> {
   return consumePredefinedRgbParams(c);
 }
 
-const consumePredefinedRgbParams: TryComponentConsumer<ColorSpaceParams> =
+const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
   sequenceOf(
     [
       one(withComponentTrivia(tryConsumePredefinedRgb)),
@@ -1362,7 +1349,7 @@ const consumePredefinedRgbParams: TryComponentConsumer<ColorSpaceParams> =
 
 function tryConsumePredefinedRgb(
   c: ComponentCursor,
-): TryComponentConsumerResult<PredefinedRgb> {
+): TryComponentConsumerResult<PredefinedRgbSpace> {
   return consumePredefinedRgb(c);
 }
 
@@ -1378,11 +1365,11 @@ const consumePredefinedRgb = createKeywordConsumer(
 
 function tryConsumeXyzParams(
   c: ComponentCursor,
-): TryComponentConsumerResult<ColorSpaceParams> {
+): TryComponentConsumerResult<ColorFnSpaceParams> {
   return consumeXyzParams(c);
 }
 
-const consumeXyzParams: TryComponentConsumer<ColorSpaceParams> = sequenceOf(
+const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   [
     one(withComponentTrivia(tryConsumeXyzSpace)),
     repeat(withComponentTrivia(tryConsumeColorFunctionComponent), 3, 3),
@@ -1403,11 +1390,11 @@ const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
 
 function tryConsumeColorFunctionComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxComponent> {
+): TryComponentConsumerResult<SyntaxColorComponent> {
   return consumeColorFunctionComponent(c);
 }
 
-const consumeColorFunctionComponent: TryComponentConsumer<SyntaxComponent> = oneOf(
+const consumeColorFunctionComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumePercentage),
@@ -1433,6 +1420,16 @@ const consumeColorFunctionComponent: TryComponentConsumer<SyntaxComponent> = one
  *   in [ <rectangular-color-space> |
  *        <polar-color-space> <hue-interpolation-method>? ]
  */
+
+export type ColorInterpolationMethod =
+  | { space: RectangularColorSpace; hue?: never; }
+  | { space: PolarColorSpace; hue?: HueInterpolationMethod; };
+
+export type HueInterpolationMethod =
+  | 'shorter'
+  | 'longer'
+  | 'increasing'
+  | 'decreasing';
 
 export function parseColorInterpolationMethod(
   input: ParserInput,
@@ -1594,14 +1591,14 @@ export function resolveColorValue(
     }
     case ColorKind.Hex:
       return resolveHexColor(value);
-    case ColorKind.Rgb:
-    case ColorKind.Hsl:
-    case ColorKind.Hwb:
-    case ColorKind.Lab:
-    case ColorKind.Lch:
-    case ColorKind.Oklab:
-    case ColorKind.Oklch:
-    case ColorKind.Color:
+    case ColorKind.RgbFn:
+    case ColorKind.HslFn:
+    case ColorKind.HwbFn:
+    case ColorKind.LabFn:
+    case ColorKind.LchFn:
+    case ColorKind.OklabFn:
+    case ColorKind.OklchFn:
+    case ColorKind.ColorFn:
       return resolveColorFunction(value, context);
     default:
       return assertNever(value);
@@ -1645,49 +1642,50 @@ function resolveColorFunction(
   const resolvedValue = resolvedAlpha === value.alpha
     ? value
     : { ...value, alpha: resolvedAlpha };
-  const alpha = absoluteColorAlpha(resolvedAlpha);
-
-  if (alpha === null) {
-    return resolvedValue;
-  }
 
   switch (resolvedValue.kind) {
-    case ColorKind.Rgb:
-      return resolveRgbColor(resolvedValue, alpha, context);
-    case ColorKind.Hsl:
-      return resolveHslColor(resolvedValue, alpha, context);
-    case ColorKind.Hwb:
-      return resolveHwbColor(resolvedValue, alpha, context);
-    case ColorKind.Lab:
-      return resolveLabColor(resolvedValue, alpha, context, false);
-    case ColorKind.Oklab:
-      return resolveLabColor(resolvedValue, alpha, context, true);
-    case ColorKind.Lch:
-      return resolveLchColor(resolvedValue, alpha, context, false);
-    case ColorKind.Oklch:
-      return resolveLchColor(resolvedValue, alpha, context, true);
-    case ColorKind.Color:
-      return resolvePredefinedColor(resolvedValue, alpha, context);
+    case ColorKind.RgbFn:
+      return resolveRgbFn(resolvedValue, resolvedAlpha, context);
+    case ColorKind.HslFn:
+      return resolveHslFn(resolvedValue, resolvedAlpha, context);
+    case ColorKind.HwbFn:
+      return resolveHwbFn(resolvedValue, resolvedAlpha, context);
+    case ColorKind.LabFn:
+      return resolveLabFn(resolvedValue, resolvedAlpha, context, false);
+    case ColorKind.OklabFn:
+      return resolveLabFn(resolvedValue, resolvedAlpha, context, true);
+    case ColorKind.LchFn:
+      return resolveLchFn(resolvedValue, resolvedAlpha, context, false);
+    case ColorKind.OklchFn:
+      return resolveLchFn(resolvedValue, resolvedAlpha, context, true);
+    case ColorKind.ColorFn:
+      return resolveColorFn(resolvedValue, resolvedAlpha, context);
     default:
       return assertNever(resolvedValue);
   }
 }
 
-function resolveRgbColor(
-  value: RgbColor,
-  alpha: number | undefined,
+function resolveRgbFn(
+  value: RgbFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
-): AbsoluteColor | RgbColor {
+): AbsoluteColor | RgbFn | ColorFn {
   const { components: values } = value;
 
-  if (alpha === 1 && is8BitRgbComponents(values)) {
+  if (
+    alpha !== 'none' &&
+    alpha.type !== 'math' &&
+    alpha.value === 1 &&
+    is8BitRgbComponents(values)
+  ) {
     return {
       kind: ColorKind.Absolute,
-      space: 'srgb-legacy',
+      space: 'srgb',
       components: values.map(
         (component) => component.value,
       ) as AbsoluteTriplet,
       alpha: 0xff,
+      isLegacySrgb: true,
       is8Bit: true,
     };
   }
@@ -1709,6 +1707,15 @@ function resolveRgbColor(
     };
   }
 
+  if (isDeferredColorAlpha(alpha)) {
+    return {
+      kind: ColorKind.ColorFn,
+      space: 'srgb',
+      components: scaleRgbSyntaxComponents(clamped),
+      alpha,
+    };
+  }
+
   const scaled = scaleColorComponents(
     clamped,
     1 / 0xff,
@@ -1717,20 +1724,40 @@ function resolveRgbColor(
 
   return {
     kind: ColorKind.Absolute,
-    space: 'srgb-legacy',
+    space: 'srgb',
     components: scaled,
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
+    isLegacySrgb: true,
   };
 }
 
+function scaleRgbSyntaxComponents(
+  values: SyntaxTriplet,
+): SyntaxTriplet {
+  return values.map((value) => {
+    if (value === 'none') {
+      return value;
+    }
+
+    if (value.type === 'math') {
+      throw new Error('Deferred RGB components cannot be scaled');
+    }
+
+    return {
+      type: 'number',
+      value: value.value / (value.type === 'percentage' ? 100 : 0xff),
+    };
+  }) as SyntaxTriplet;
+}
+
 function is8BitRgbComponents(
-  values: RgbColor['components'],
+  values: RgbFn['components'],
 ): values is [NumberLiteral, NumberLiteral, NumberLiteral] {
   return values.every(is8BitRgbComponent);
 }
 
 function is8BitRgbComponent(
-  value: SyntaxComponent,
+  value: SyntaxColorComponent,
 ): value is NumberLiteral {
   return (
     value !== 'none' &&
@@ -1741,11 +1768,11 @@ function is8BitRgbComponent(
   );
 }
 
-function resolveHslColor(
-  value: HslColor,
-  alpha: number | undefined,
+function resolveHslFn(
+  value: HslFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
-): AbsoluteColor | HslColor {
+): AbsoluteColor | HslFn {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.saturation, value.lightness],
@@ -1758,7 +1785,10 @@ function resolveHslColor(
   );
   const hueValue = normalizeHueValue(clamped[0]);
 
-  if (hasDeferredColorComponents(clamped)) {
+  if (
+    hasDeferredColorComponents(clamped) ||
+    isDeferredColorAlpha(alpha)
+  ) {
     return {
       ...value,
       hue: hueValue,
@@ -1778,19 +1808,19 @@ function resolveHslColor(
     kind: ColorKind.Absolute,
     space: 'hsl',
     components: [absoluteHue, saturation, lightness],
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
   };
 
   return hasMissingColorComponent(absolute)
     ? absolute
-    : convertAbsoluteColor(absolute, 'srgb-legacy');
+    : convertToLegacySrgb(absolute);
 }
 
-function resolveHwbColor(
-  value: HwbColor,
-  alpha: number | undefined,
+function resolveHwbFn(
+  value: HwbFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
-): AbsoluteColor | HwbColor {
+): AbsoluteColor | HwbFn {
   const hue = resolveHue(value.hue, context);
   const components = resolveColorComponents(
     [value.whiteness, value.blackness],
@@ -1803,7 +1833,10 @@ function resolveHwbColor(
   );
   const hueValue = normalizeHueValue(clamped[0]);
 
-  if (hasDeferredColorComponents(clamped)) {
+  if (
+    hasDeferredColorComponents(clamped) ||
+    isDeferredColorAlpha(alpha)
+  ) {
     return {
       ...value,
       hue: hueValue,
@@ -1823,20 +1856,27 @@ function resolveHwbColor(
     kind: ColorKind.Absolute,
     space: 'hwb',
     components: [absoluteHue, whiteness, blackness],
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
   };
 
   return hasMissingColorComponent(absolute)
     ? absolute
-    : convertAbsoluteColor(absolute, 'srgb-legacy');
+    : convertToLegacySrgb(absolute);
 }
 
-function resolveLabColor(
-  value: LabColor | OklabColor,
-  alpha: number | undefined,
+function convertToLegacySrgb(value: AbsoluteColor): AbsoluteColor {
+  return {
+    ...convertAbsoluteColor(value, 'srgb'),
+    isLegacySrgb: true,
+  };
+}
+
+function resolveLabFn(
+  value: LabFn | OklabFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
   ok: boolean,
-): AbsoluteColor | LabColor | OklabColor {
+): AbsoluteColor | LabFn | OklabFn {
   const components = resolveColorComponents(
     [value.lightness, value.a, value.b],
     context,
@@ -1850,7 +1890,10 @@ function resolveLabColor(
     context,
   );
 
-  if (hasDeferredColorComponents(clamped)) {
+  if (
+    hasDeferredColorComponents(clamped) ||
+    isDeferredColorAlpha(alpha)
+  ) {
     return {
       ...value,
       lightness: clamped[0],
@@ -1869,16 +1912,16 @@ function resolveLabColor(
     kind: ColorKind.Absolute,
     space: ok ? 'oklab' : 'lab',
     components: scaled,
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
   };
 }
 
-function resolveLchColor(
-  value: LchColor | OklchColor,
-  alpha: number | undefined,
+function resolveLchFn(
+  value: LchFn | OklchFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
   ok: boolean,
-): AbsoluteColor | LchColor | OklchColor {
+): AbsoluteColor | LchFn | OklchFn {
   const components = resolveColorComponents(
     [value.lightness, value.chroma],
     context,
@@ -1894,7 +1937,10 @@ function resolveLchColor(
   );
   const hueValue = normalizeHueValue(clamped[2]);
 
-  if (hasDeferredColorComponents(clamped)) {
+  if (
+    hasDeferredColorComponents(clamped) ||
+    isDeferredColorAlpha(alpha)
+  ) {
     return {
       ...value,
       lightness: clamped[0],
@@ -1915,15 +1961,16 @@ function resolveLchColor(
     kind: ColorKind.Absolute,
     space: ok ? 'oklch' : 'lch',
     components: [lightness, chroma, absoluteHue],
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
   };
 }
 
-function resolvePredefinedColor(
-  value: PredefinedColor,
-  alpha: number | undefined,
+function resolveColorFn(
+  value: ColorFn,
+  alpha: SyntaxAlphaComponent,
   context: MathContext,
-): AbsoluteColor | PredefinedColor {
+): AbsoluteColor | ColorFn {
+  const space = value.space === 'xyz' ? 'xyz-d65' : value.space;
   const components = resolveColorComponents(
     value.components,
     context,
@@ -1931,13 +1978,17 @@ function resolvePredefinedColor(
   );
   const clamped = clampColorComponents(
     components,
-    COLOR_COMPONENT_CLAMPING.predefined,
+    COLOR_COMPONENT_CLAMPING.colorFn,
     context,
   );
 
-  if (hasDeferredColorComponents(clamped)) {
+  if (
+    hasDeferredColorComponents(clamped) ||
+    isDeferredColorAlpha(alpha)
+  ) {
     return {
       ...value,
+      space,
       components: clamped,
     };
   }
@@ -1946,33 +1997,33 @@ function resolvePredefinedColor(
 
   return {
     kind: ColorKind.Absolute,
-    space: value.space === 'xyz' ? 'xyz-d65' : value.space,
+    space,
     components: scaled,
-    alpha,
+    alpha: alpha === 'none' ? undefined : alpha.value,
   };
 }
 
 function resolveColorComponents<
-  const Values extends SyntaxComponent[],
+  const Values extends SyntaxColorComponent[],
 >(
   values: Values,
   context: MathContext,
   unwrapMathAt: ValueStage = 'declared',
-): { [Index in keyof Values]: SyntaxComponent } {
+): { [Index in keyof Values]: SyntaxColorComponent } {
   return values.map(
     (value) => resolveColorComponent(
       value,
       context,
       unwrapMathAt,
     ),
-  ) as { [Index in keyof Values]: SyntaxComponent };
+  ) as { [Index in keyof Values]: SyntaxColorComponent };
 }
 
 function resolveColorComponent(
-  value: SyntaxComponent,
+  value: SyntaxColorComponent,
   context: MathContext,
   unwrapMathAt: ValueStage,
-): SyntaxComponent {
+): SyntaxColorComponent {
   if (value === 'none') {
     return value;
   }
@@ -1989,7 +2040,7 @@ function hasDeferredColorComponents(
 }
 
 function scaleColorComponents<
-  const Values extends SyntaxComponent[],
+  const Values extends SyntaxColorComponent[],
 >(
   values: Values,
   numberScale: number | readonly number[],
@@ -2015,54 +2066,57 @@ function scaleColorComponents<
 }
 
 function resolveColorAlphaValue(
-  value: AlphaValue | 'none' | undefined,
+  value: SyntaxAlphaComponent | undefined,
   context: ColorResolutionContext,
-): AlphaValue | 'none' | undefined {
-  if (value === undefined || value === 'none') {
-    return value;
-  }
-
-  const calculationContext = colorCalculationContext(context, 'computed');
-
-  if (isNumberValue(value)) {
-    return resolveNumber(value, calculationContext);
-  }
-
-  const resolved = resolvePercentage(value, calculationContext);
-
-  return resolved.type === 'math'
-    ? tryCoercePercentageToNumber(resolved) ?? resolved
-    : resolved;
-}
-
-function absoluteColorAlpha(
-  value: AlphaValue | 'none' | undefined,
-): number | undefined | null {
+): SyntaxAlphaComponent {
   if (value === undefined) {
-    return 1;
+    return { type: 'number', value: 1 };
   }
 
   if (value === 'none') {
-    return undefined;
+    return value;
   }
 
-  if (value.type === 'math') {
-    return null;
+  if (value.type !== 'math') {
+    return clampColorAlphaLiteral(value);
   }
 
+  const calculationContext = colorCalculationContext(context, 'computed');
+  const resolved = isNumberValue(value)
+    ? resolveNumber(value, calculationContext)
+    : resolvePercentage(value, calculationContext);
+
+  if (resolved.type === 'math') {
+    return resolved.valueType === 'percentage'
+      ? tryCoercePercentageToNumber(resolved) ?? resolved
+      : resolved;
+  }
+
+  return clampColorAlphaLiteral(resolved);
+}
+
+function clampColorAlphaLiteral(value: AlphaLiteral): NumberLiteral {
   const alpha = value.type === 'percentage'
     ? value.value / 100
     : value.value;
-  const clampableAlpha = normalizeForClamping(alpha);
+  const clamped = clamp(normalizeForClamping(alpha), 0, 1);
 
-  return clamp(clampableAlpha, 0, 1);
+  return value.type === 'number' && Object.is(value.value, clamped)
+    ? value
+    : { type: 'number', value: clamped };
+}
+
+function isDeferredColorAlpha(
+  value: SyntaxAlphaComponent,
+): value is Exclude<AlphaValue, AlphaLiteral> {
+  return value !== 'none' && value.type === 'math';
 }
 
 function resolveHue(
-  value: HueValue | 'none',
+  value: SyntaxHueComponent,
   context: MathContext,
   unwrapMathAt: ValueStage = 'declared',
-): HueValue | 'none' {
+): SyntaxHueComponent {
   if (value === 'none') {
     return value;
   }
@@ -2074,7 +2128,7 @@ function resolveHue(
 }
 
 function scaleHue(
-  value: HueValue | 'none',
+  value: SyntaxHueComponent,
 ): AbsoluteComponent {
   if (value === 'none') {
     return undefined;
@@ -2090,8 +2144,8 @@ function scaleHue(
 }
 
 function normalizeHueValue(
-  value: HueValue | 'none',
-): HueValue | 'none' {
+  value: SyntaxHueComponent,
+): SyntaxHueComponent {
   if (value === 'none' || value.type === 'math') {
     return value;
   }
@@ -2143,7 +2197,8 @@ type ColorComponentRange = [
   maximum: number,
 ];
 
-type ClampableColorComponentValue = SyntaxComponent | AngleValue;
+type ClampableColorComponentValue =
+  SyntaxColorComponent | SyntaxHueComponent;
 
 type ClampableColorComponentValues =
   ColorTriplet<ClampableColorComponentValue>;
@@ -2196,7 +2251,7 @@ const COLOR_COMPONENT_CLAMPING = {
     percentages: [[0, 100], [0, Infinity], null],
     nonFiniteAt: 'computed',
   },
-  predefined: {
+  colorFn: {
     numbers: [null, null, null],
     percentages: [null, null, null],
     nonFiniteAt: 'computed',
@@ -2269,13 +2324,14 @@ function scaleAt(
 function absoluteColorFromRgba(rgba: number): AbsoluteColor {
   return {
     kind: ColorKind.Absolute,
-    space: 'srgb-legacy',
+    space: 'srgb',
     components: [
       rgba >>> 24,
       (rgba >>> 16) & 0xff,
       (rgba >>> 8) & 0xff,
     ],
     alpha: rgba & 0xff,
+    isLegacySrgb: true,
     is8Bit: true,
   };
 }
@@ -2305,14 +2361,14 @@ export function serializeColorValue(
       return serializeAbsoluteColor(value, htmlCompatible);
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
-    case ColorKind.Rgb:
-    case ColorKind.Hsl:
-    case ColorKind.Hwb:
-    case ColorKind.Lab:
-    case ColorKind.Lch:
-    case ColorKind.Oklab:
-    case ColorKind.Oklch:
-    case ColorKind.Color:
+    case ColorKind.RgbFn:
+    case ColorKind.HslFn:
+    case ColorKind.HwbFn:
+    case ColorKind.LabFn:
+    case ColorKind.LchFn:
+    case ColorKind.OklabFn:
+    case ColorKind.OklchFn:
+    case ColorKind.ColorFn:
       return serializeColorFunction(value);
     case ColorKind.Named:
       return value.name;
@@ -2330,11 +2386,11 @@ function serializeColorFunction(
   value: ColorFunction,
 ): string {
   switch (value.kind) {
-    case ColorKind.Rgb:
-      return serializeRgbColor(value);
-    case ColorKind.Hsl:
-      return serializeHslColor(value);
-    case ColorKind.Hwb:
+    case ColorKind.RgbFn:
+      return serializeRgbFn(value);
+    case ColorKind.HslFn:
+      return serializeHslFn(value);
+    case ColorKind.HwbFn:
       return serializeModernColorFunction(
         'hwb',
         [
@@ -2344,9 +2400,9 @@ function serializeColorFunction(
         ],
         value.alpha,
       );
-    case ColorKind.Lab:
-    case ColorKind.Oklab: {
-      const oklab = value.kind === ColorKind.Oklab;
+    case ColorKind.LabFn:
+    case ColorKind.OklabFn: {
+      const oklab = value.kind === ColorKind.OklabFn;
 
       return serializeModernColorFunction(
         oklab ? 'oklab' : 'lab',
@@ -2358,9 +2414,9 @@ function serializeColorFunction(
         value.alpha,
       );
     }
-    case ColorKind.Lch:
-    case ColorKind.Oklch: {
-      const oklch = value.kind === ColorKind.Oklch;
+    case ColorKind.LchFn:
+    case ColorKind.OklchFn: {
+      const oklch = value.kind === ColorKind.OklchFn;
 
       return serializeModernColorFunction(
         oklch ? 'oklch' : 'lch',
@@ -2372,11 +2428,11 @@ function serializeColorFunction(
         value.alpha,
       );
     }
-    case ColorKind.Color:
+    case ColorKind.ColorFn:
       return serializeModernColorFunction(
         'color',
         [
-          value.space === 'xyz' ? 'xyz-d65' : value.space,
+          value.space,
           ...value.components.map(
             (component) => serializeColorComponent(component, 1),
           ),
@@ -2388,8 +2444,8 @@ function serializeColorFunction(
   }
 }
 
-function serializeRgbColor(
-  value: RgbColor,
+function serializeRgbFn(
+  value: RgbFn,
 ): string {
   const components = value.components.map(
     (component) => serializeColorComponent(component, 255),
@@ -2401,8 +2457,8 @@ function serializeRgbColor(
     : serializeModernColorFunction('rgb', components, value.alpha);
 }
 
-function serializeHslColor(
-  value: HslColor,
+function serializeHslFn(
+  value: HslFn,
 ): string {
   const components = [
     serializeHue(value.hue),
@@ -2423,7 +2479,7 @@ function serializeHslColor(
 
 function canUseLegacyColorSerialization(
   values: readonly (
-    HueValue | PercentageValue | 'none' | undefined
+    SyntaxColorComponent | SyntaxHueComponent | undefined
   )[],
 ): boolean {
   // Missing components and deferred math values require modern syntax.
@@ -2436,7 +2492,7 @@ function canUseLegacyColorSerialization(
 function serializeLegacyColorFunction(
   name: 'rgb' | 'hsl',
   components: string[],
-  alphaValue: AlphaValue | 'none' | undefined,
+  alphaValue: SyntaxAlphaComponent | undefined,
 ): string {
   const alpha = serializeColorAlpha(alphaValue);
 
@@ -2448,7 +2504,7 @@ function serializeLegacyColorFunction(
 function serializeModernColorFunction(
   name: string,
   components: string[],
-  alphaValue: AlphaValue | 'none' | undefined,
+  alphaValue: SyntaxAlphaComponent | undefined,
 ): string {
   const alpha = serializeColorAlpha(alphaValue);
 
@@ -2458,7 +2514,7 @@ function serializeModernColorFunction(
 }
 
 function serializeHue(
-  value: HueValue | 'none',
+  value: SyntaxHueComponent,
 ): string {
   if (value === 'none') {
     return value;
@@ -2478,7 +2534,7 @@ function serializeHue(
 }
 
 function serializeColorComponent(
-  value: NumberValue | PercentageValue | 'none',
+  value: SyntaxColorComponent,
   percentageReference: number,
 ): string {
   if (value === 'none') {
@@ -2497,7 +2553,7 @@ function serializeColorComponent(
 }
 
 function serializeColorAlpha(
-  value: AlphaValue | 'none' | undefined,
+  value: SyntaxAlphaComponent | undefined,
 ): string | null {
   if (value === undefined) {
     return null;
@@ -2527,8 +2583,10 @@ function serializeAbsoluteColor(
   htmlCompatible: boolean,
 ): string {
   switch (value.space) {
-    case 'srgb-legacy':
-      return serializeAbsoluteRgb(value, htmlCompatible);
+    case 'srgb':
+      return value.isLegacySrgb
+        ? serializeAbsoluteRgb(value, htmlCompatible)
+        : `color(srgb ${serializeAbsoluteColorComponentsBody(value)})`;
     case 'hsl':
       return serializeAbsoluteHsl(value);
     case 'hwb':
@@ -2538,7 +2596,6 @@ function serializeAbsoluteColor(
     case 'oklab':
     case 'oklch':
       return serializeAbsoluteColorComponents(value.space, value);
-    case 'srgb':
     case 'srgb-linear':
     case 'display-p3':
     case 'display-p3-linear':
@@ -2576,8 +2633,8 @@ function serializeAbsoluteRgb(
 
   const components = value.components.map(
     (component) => serializeCssNumber(value.is8Bit
-      ? clamp(component!, 0, 0xff)
-      : clamp(component!, 0, 1) * 0xff),
+      ? component!
+      : component! * 0xff),
   );
   const alpha = value.is8Bit
     ? serialize8BitAlpha(value.alpha)
@@ -2612,19 +2669,17 @@ function serializeHtmlCompatibleRgb(value: AbsoluteColor): string | null {
 }
 
 function serialize8BitAlpha(value: number): string | null {
-  const alpha = clamp(value, 0, 0xff);
-
-  if (alpha === 0xff) {
+  if (value === 0xff) {
     return null;
   }
 
   for (let percentage = 0; percentage <= 100; percentage++) {
-    if (Math.round(percentage * 0xff / 100) === alpha) {
+    if (Math.round(percentage * 0xff / 100) === value) {
       return serializeCssNumber(percentage / 100);
     }
   }
 
-  return serializeCssNumber(Math.round(alpha / 0.255) / 1000);
+  return serializeCssNumber(Math.round(value / 0.255) / 1000);
 }
 
 function serializeAbsoluteHsl(
@@ -2704,13 +2759,9 @@ function serializeAbsoluteColorAlpha(value: number | undefined): string | null {
     return 'none';
   }
 
-  const alpha = Number.isNaN(value)
-    ? 0
-    : clamp(value, 0, 1);
-
-  return alpha === 1
+  return value === 1
     ? null
-    : serializeCssNumber(alpha);
+    : serializeCssNumber(value);
 }
 
 
@@ -2735,9 +2786,13 @@ type ColorMatrix = readonly [
 
 export function convertAbsoluteColor(
   value: AbsoluteColor,
-  target: AbsoluteColorSpace,
+  target: ColorSpace,
 ): AbsoluteColor {
-  if (value.space === target) {
+  if (
+    value.space === target &&
+    !value.isLegacySrgb &&
+    !value.is8Bit
+  ) {
     return value;
   }
 
@@ -2771,8 +2826,6 @@ function prepareAbsoluteColorForConversion(
   const normalized = normalizeColorEncoding(value);
 
   switch (normalized.space) {
-    case 'srgb-legacy':
-      return { ...normalized, space: 'srgb' };
     case 'hsl':
       return convertHslToRgb(normalized);
     case 'hwb':
@@ -2787,7 +2840,7 @@ function prepareAbsoluteColorForConversion(
 }
 
 function normalizeColorEncoding(value: AbsoluteColor): AbsoluteColor {
-  if (!value.is8Bit) {
+  if (!value.isLegacySrgb && !value.is8Bit) {
     return value;
   }
 
@@ -2797,11 +2850,11 @@ function normalizeColorEncoding(value: AbsoluteColor): AbsoluteColor {
     components: value.components.map(
       (component) => component === undefined
         ? component
-        : component / 0xff,
+        : value.is8Bit ? component / 0xff : component,
     ) as AbsoluteTriplet,
     alpha: value.alpha === undefined
       ? value.alpha
-      : value.alpha / 0xff,
+      : value.is8Bit ? value.alpha / 0xff : value.alpha,
   };
 }
 
@@ -2846,10 +2899,9 @@ function replaceMissingComponents(value: AbsoluteColor): AbsoluteColor {
 }
 
 function rectangularColorSpace(
-  value: AbsoluteColorSpace,
+  value: ColorSpace,
 ): RectangularColorSpace {
   switch (value) {
-    case 'srgb-legacy':
     case 'hsl':
     case 'hwb':
       return 'srgb';
@@ -2862,7 +2914,7 @@ function rectangularColorSpace(
   }
 }
 
-function colorSpaceWhitePoint(value: AbsoluteColorSpace): WhitePoint {
+function colorSpaceWhitePoint(value: ColorSpace): WhitePoint {
   switch (rectangularColorSpace(value)) {
     case 'lab':
     case 'prophoto-rgb':
@@ -2983,11 +3035,9 @@ function convertXyzToAbsoluteColor(
 
 function convertRectangularAbsoluteColor(
   value: AbsoluteColor,
-  target: AbsoluteColorSpace,
+  target: ColorSpace,
 ): AbsoluteColor {
   switch (target) {
-    case 'srgb-legacy':
-      return { ...value, space: target };
     case 'hsl':
       return convertRgbToHsl(value);
     case 'hwb':
@@ -3871,13 +3921,9 @@ export function areColorsEquivalent(
 function prepareAbsoluteColorForComparison(
   value: AbsoluteColor,
 ): AbsoluteColor {
-  const prepared = replacePowerlessComponents(
+  return replacePowerlessComponents(
     normalizeColorEncoding(value),
   );
-
-  return prepared.space === 'srgb-legacy'
-    ? { ...prepared, space: 'srgb' }
-    : prepared;
 }
 
 function areColorComponentsEquivalent(
@@ -3922,7 +3968,7 @@ export function interpolateColors(
   space?: ColorSpace,
   hue: HueInterpolationMethod = 'shorter',
 ): AbsoluteColor {
-  space ??= (a.space === 'srgb-legacy' && b.space === 'srgb-legacy'
+  space ??= (a.isLegacySrgb && b.isLegacySrgb
     ? 'srgb'
     : 'oklab');
 
@@ -4056,13 +4102,12 @@ function restoreCarriedForwardComponents(
   ];
 }
 
-function componentCategories(space: AbsoluteColorSpace): [
+function componentCategories(space: ColorSpace): [
   ColorComponentCategory | undefined,
   ColorComponentCategory | undefined,
   ColorComponentCategory | undefined,
 ] {
   switch (space) {
-    case 'srgb-legacy':
     case 'srgb':
     case 'srgb-linear':
     case 'display-p3':
@@ -4238,7 +4283,7 @@ function restoreMissingComponents(
   ];
 }
 
-function colorHueIndex(space: AbsoluteColorSpace): 0 | 2 | undefined {
+function colorHueIndex(space: ColorSpace): 0 | 2 | undefined {
   switch (space) {
     case 'hsl':
     case 'hwb':
