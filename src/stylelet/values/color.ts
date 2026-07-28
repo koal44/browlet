@@ -3988,6 +3988,112 @@ function clipColorToGamut(
   }
 }
 
+export function deltaE2000(
+  reference: AbsoluteColor,
+  sample: AbsoluteColor,
+): number {
+  const [lightness1, a1, b1] = componentsForConversion(
+    convertAbsoluteColor(reference, 'lab'),
+  );
+  const [lightness2, a2, b2] = componentsForConversion(
+    convertAbsoluteColor(sample, 'lab'),
+  );
+  const chroma1 = Math.sqrt(a1 ** 2 + b1 ** 2);
+  const chroma2 = Math.sqrt(a2 ** 2 + b2 ** 2);
+  const meanChroma = (chroma1 + chroma2) / 2;
+  const meanChroma7 = meanChroma ** 7;
+  const chroma25To7 = 25 ** 7;
+  const asymmetry = 0.5 * (
+    1 - Math.sqrt(meanChroma7 / (meanChroma7 + chroma25To7))
+  );
+  const adjustedA1 = (1 + asymmetry) * a1;
+  const adjustedA2 = (1 + asymmetry) * a2;
+  const adjustedChroma1 = Math.sqrt(adjustedA1 ** 2 + b1 ** 2);
+  const adjustedChroma2 = Math.sqrt(adjustedA2 ** 2 + b2 ** 2);
+  const hue1 = labHueInDegrees(adjustedA1, b1);
+  const hue2 = labHueInDegrees(adjustedA2, b2);
+  const deltaLightness = lightness2 - lightness1;
+  const deltaChroma = adjustedChroma2 - adjustedChroma1;
+  const hueDifference = hue2 - hue1;
+  const absoluteHueDifference = Math.abs(hueDifference);
+  const hueSum = hue1 + hue2;
+  let deltaHue: number;
+
+  if (adjustedChroma1 * adjustedChroma2 === 0) {
+    deltaHue = 0;
+  } else if (absoluteHueDifference <= 180) {
+    deltaHue = hueDifference;
+  } else if (hueDifference > 180) {
+    deltaHue = hueDifference - 360;
+  } else {
+    deltaHue = hueDifference + 360;
+  }
+
+  const degreesToRadians = Math.PI / 180;
+  const weightedDeltaHue = (
+    2
+    * Math.sqrt(adjustedChroma1 * adjustedChroma2)
+    * Math.sin(deltaHue * degreesToRadians / 2)
+  );
+  const meanLightness = (lightness1 + lightness2) / 2;
+  const meanAdjustedChroma = (adjustedChroma1 + adjustedChroma2) / 2;
+  const meanAdjustedChroma7 = meanAdjustedChroma ** 7;
+  let meanHue: number;
+
+  if (adjustedChroma1 * adjustedChroma2 === 0) {
+    meanHue = hueSum;
+  } else if (absoluteHueDifference <= 180) {
+    meanHue = hueSum / 2;
+  } else if (hueSum < 360) {
+    meanHue = (hueSum + 360) / 2;
+  } else {
+    meanHue = (hueSum - 360) / 2;
+  }
+
+  const lightnessOffset = (meanLightness - 50) ** 2;
+  const lightnessWeight = (
+    1
+    + 0.015 * lightnessOffset / Math.sqrt(20 + lightnessOffset)
+  );
+  const chromaWeight = 1 + 0.045 * meanAdjustedChroma;
+  const hueWeightFactor = (
+    1
+    - 0.17 * Math.cos((meanHue - 30) * degreesToRadians)
+    + 0.24 * Math.cos(2 * meanHue * degreesToRadians)
+    + 0.32 * Math.cos((3 * meanHue + 6) * degreesToRadians)
+    - 0.20 * Math.cos((4 * meanHue - 63) * degreesToRadians)
+  );
+  const hueWeight = (
+    1
+    + 0.015 * meanAdjustedChroma * hueWeightFactor
+  );
+  const rotationAngle = (
+    30
+    * Math.exp(-(((meanHue - 275) / 25) ** 2))
+  );
+  const rotationChroma = (
+    2
+    * Math.sqrt(
+      meanAdjustedChroma7
+      / (meanAdjustedChroma7 + chroma25To7),
+    )
+  );
+  const rotation = (
+    -Math.sin(2 * rotationAngle * degreesToRadians)
+    * rotationChroma
+  );
+  const lightnessTerm = deltaLightness / lightnessWeight;
+  const chromaTerm = deltaChroma / chromaWeight;
+  const hueTerm = weightedDeltaHue / hueWeight;
+
+  return Math.sqrt(
+    lightnessTerm ** 2
+    + chromaTerm ** 2
+    + hueTerm ** 2
+    + rotation * chromaTerm * hueTerm,
+  );
+}
+
 export function deltaEOK(one: AbsoluteColor, two: AbsoluteColor): number {
   const [lightness1, a1, b1] = componentsForConversion(
     convertAbsoluteColor(one, 'oklab'),
@@ -4004,6 +4110,15 @@ export function deltaEOK(one: AbsoluteColor, two: AbsoluteColor): number {
     + deltaA ** 2
     + deltaB ** 2,
   );
+}
+
+function labHueInDegrees(a: number, b: number): number {
+  if (a === 0 && b === 0) {
+    return 0;
+  }
+
+  const hue = Math.atan2(b, a) * 180 / Math.PI;
+  return hue < 0 ? hue + 360 : hue;
 }
 
 export function areColorsEquivalent(
