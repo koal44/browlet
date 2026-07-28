@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
-  deltaE2000, deltaEOK,
+  defineColorProfile, deltaE2000, deltaEOK,
   gamutMapColor, interpolateColors, parseColorInterpolationMethod, parseColorValue,
   resolveColorValue, serializeColorValue, type AbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
@@ -81,6 +81,51 @@ function resolveComputedAbsoluteColor(input: string): AbsoluteColor {
   }
 
   return color;
+}
+
+function testColorProfile() {
+  const inputs: Record<string, number>[] = [];
+  const profile = defineColorProfile({
+    space: '--four-channel',
+    components: ['r', 'g', 'b', 'spot'],
+    toAbsoluteColor: (components) => {
+      inputs.push(components);
+
+      return {
+        kind: ColorKind.Absolute,
+        space: SPACES.srgb,
+        components: [components.r, components.g, components.b],
+        alpha: 1,
+      };
+    },
+    fromAbsoluteColor: (color) => {
+      const [red = 0, green = 0, blue = 0] =
+        convertAbsoluteColor(color, 'srgb').components;
+
+      return { r: red, g: green, b: blue, spot: 0.25 };
+    },
+  });
+
+  return { inputs, profile };
+}
+
+function swappedSrgbProfile() {
+  return defineColorProfile({
+    space: '--foo',
+    components: ['r', 'g', 'b'],
+    toAbsoluteColor: ({ r, g, b }) => ({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [g, r, b],
+      alpha: 1,
+    }),
+    fromAbsoluteColor: (color) => {
+      const [red = 0, green = 0, blue = 0] =
+        convertAbsoluteColor(color, 'srgb').components;
+
+      return { r: green, g: red, b: blue };
+    },
+  });
 }
 
 describe('color values', () => {
@@ -549,6 +594,235 @@ describe('color values', () => {
       });
     },
   );
+
+  it('parses and serializes custom color space parameters', () => {
+    const color = parseColorValue(
+      'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)',
+    )!;
+
+    expect(color).toMatchObject({
+      kind: ColorKind.ColorFn,
+      space: '--four-channel',
+      components: [
+        { type: 'number', value: 0.125 },
+        { type: 'number', value: 0.25 },
+        { type: 'number', value: 0.5 },
+        { type: 'number', value: 0.75 },
+      ],
+      alpha: { type: 'number', value: 0.5 },
+    });
+    expect(serializeColorValue(color))
+      .toBe('color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)');
+  });
+
+  it('resolves the WPT swapped-sRGB profile through its supplied transform', () => {
+    const profile = swappedSrgbProfile();
+    const color = parseColorValue(
+      'color(--foo 0.6 0 0)',
+      {
+        stage: 'computed',
+        colorProfiles: new Map([[profile.space, profile]]),
+      },
+    );
+
+    expect(color).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      alpha: 1,
+    });
+    expectComponentsCloseTo(
+      (color as AbsoluteColor).components,
+      [0, 0.6, 0],
+      12,
+    );
+  });
+
+  it('clamps custom profile components at computed-value time', () => {
+    const { inputs, profile } = testColorProfile();
+    const profiles = new Map([[profile.space, profile]]);
+    const declared = parseColorValue(
+      'color(--four-channel -0.25 125% 0.5 2)',
+    )!;
+
+    expect(resolveColorValue(declared, {
+      stage: 'declared',
+      colorProfiles: profiles,
+    })).toMatchObject({
+      kind: ColorKind.ColorFn,
+      components: [
+        { type: 'number', value: -0.25 },
+        { type: 'number', value: 1.25 },
+        { type: 'number', value: 0.5 },
+        { type: 'number', value: 2 },
+      ],
+    });
+    expect(inputs).toEqual([]);
+
+    expect(resolveColorValue(declared, {
+      stage: 'computed',
+      colorProfiles: profiles,
+    })).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0, 1, 0.5],
+      alpha: 1,
+    });
+    expect(inputs).toEqual([{ r: 0, g: 1, b: 0.5, spot: 1 }]);
+  });
+
+  it('defaults missing and ignores excess custom profile components', () => {
+    const { inputs, profile } = testColorProfile();
+    const context = {
+      stage: 'computed' as const,
+      colorProfiles: new Map([[profile.space, profile]]),
+    };
+
+    parseColorValue('color(--four-channel 0.125 0.25)', context);
+    parseColorValue(
+      'color(--four-channel 0.125 0.25 0.5 0.75 0.9)',
+      context,
+    );
+
+    expect(inputs).toEqual([
+      { r: 0.125, g: 0.25, b: 0, spot: 0 },
+      { r: 0.125, g: 0.25, b: 0.5, spot: 0.75 },
+    ]);
+  });
+
+  it('only exposes declared custom profile component keywords', () => {
+    const { profile } = testColorProfile();
+    const profiles = new Map([[profile.space, profile]]);
+
+    expect(parseColorValue(
+      'color(from red --four-channel r g b spot / alpha)',
+      { colorProfiles: profiles },
+    )).toBeNull();
+
+    const alphaProfile = defineColorProfile({
+      space: '--alpha-channel',
+      components: ['alpha'],
+      toAbsoluteColor: ({ alpha }) => ({
+        kind: ColorKind.Absolute,
+        space: SPACES.srgb,
+        components: [alpha, 0, 0],
+        alpha: 1,
+      }),
+      fromAbsoluteColor: () => ({ alpha: 0.25 }),
+    });
+
+    expect(parseColorValue(
+      'color(from red --alpha-channel alpha)',
+      {
+        stage: 'computed',
+        colorProfiles: new Map([[alphaProfile.space, alphaProfile]]),
+      },
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.25, 0, 0],
+      alpha: 1,
+    });
+  });
+
+  it('resolves relative custom color components through its profile', () => {
+    const { inputs, profile } = testColorProfile();
+    const color = parseColorValue(
+      'color(from rgb(25.5 51 76.5 / 0.4) --four-channel '
+        + 'calc(r + 0.1) g b calc(spot * 2) / calc(r + 0.4))',
+      {
+        stage: 'computed',
+        colorProfiles: new Map([[profile.space, profile]]),
+      },
+    );
+
+    expect(color).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.2, 0.2, 0.3],
+      alpha: 0.5,
+    });
+    expect(inputs).toEqual([{ r: 0.2, g: 0.2, b: 0.3, spot: 0.5 }]);
+  });
+
+  it('does not clamp relative custom profile components', () => {
+    const { inputs, profile } = testColorProfile();
+
+    parseColorValue(
+      'color(from red --four-channel calc(r + 1) g b spot)',
+      {
+        stage: 'computed',
+        colorProfiles: new Map([[profile.space, profile]]),
+      },
+    );
+
+    expect(inputs).toEqual([{ r: 2, g: 0, b: 0, spot: 0.25 }]);
+  });
+
+  it.each([
+    [
+      'color(from color(display-p3 0.7 0.5 0.3 / 0.4) '
+        + 'display-p3 calc(r + 0.01) calc(g + 0.01) calc(b + 0.01) '
+        + '/ calc(alpha + 0.01))',
+      SPACES['display-p3'],
+      [0.71, 0.51, 0.31],
+      0.41,
+    ],
+    [
+      'color(from color(srgb 0.7 0.5 0.3 / 0.4) '
+        + 'srgb b alpha r / g)',
+      SPACES.srgb,
+      [0.3, 0.4, 0.7],
+      0.5,
+    ],
+    [
+      'color(from color(xyz 7 -20.5 100 / 0.4) xyz x y z / alpha)',
+      SPACES['xyz-d65'],
+      [7, -20.5, 100],
+      0.4,
+    ],
+  ] as const)(
+    'resolves the relative color() WPT case %s',
+    (input, space, components, alpha) => {
+      const color = parseColorValue(input, { stage: 'computed' });
+
+      expect(color).toMatchObject({
+        kind: ColorKind.Absolute,
+        space,
+      });
+      expectComponentsCloseTo(
+        (color as AbsoluteColor).components,
+        components,
+        12,
+      );
+      expect((color as AbsoluteColor).alpha).toBeCloseTo(alpha, 12);
+    },
+  );
+
+  it('serializes a deferred relative color() function', () => {
+    const color = parseColorValue(
+      'color(from currentColor display-p3 r g b / alpha)',
+    )!;
+
+    expect(color).toMatchObject({
+      kind: ColorKind.ColorFn,
+      space: 'display-p3',
+      origin: {
+        kind: ColorKind.CurrentColor,
+      },
+    });
+    expect(serializeColorValue(color))
+      .toBe('color(from currentcolor display-p3 r g b / alpha)');
+  });
+
+  it('scopes relative color() channel keywords to the selected profile', () => {
+    expect(parseColorValue('color(srgb r g b)')).toBeNull();
+    expect(parseColorValue(
+      'color(from red srgb x g b)',
+    )).toBeNull();
+    expect(parseColorValue(
+      'color(from red xyz r y z)',
+    )).toBeNull();
+  });
 
   it.each([
     [
