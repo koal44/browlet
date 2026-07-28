@@ -185,6 +185,39 @@ describe('color values', () => {
     }
   });
 
+  it.each([
+    ['abc', '#abc'],
+    ['ABC', '#abc'],
+    ['123', '#000123'],
+    ['023', '#000023'],
+    ['1ab', '#0001ab'],
+    ['+12345a', '#12345a'],
+    ['\\31 23', '#123'],
+    ['12\\33 ', '#000123'],
+  ])('parses the quirky color %s as %s', (input, hex) => {
+    expect(parseColorValue(input, {}, true)).toEqual(parseColorValue(hex));
+  });
+
+  it.each([
+    'abc',
+    '123',
+    '1ab',
+  ])('does not parse the quirky color %s unless enabled', (input) => {
+    expect(parseColorValue(input)).toBeNull();
+  });
+
+  it.each([
+    'a',
+    'aaaa',
+    '1234567',
+    '-123',
+    '1.0',
+    '1e1',
+    '12345g',
+  ])('rejects the invalid quirky color %s', (input) => {
+    expect(parseColorValue(input, {}, true)).toBeNull();
+  });
+
   it('resolves named colors at computed-value time', () => {
     const red = parseColorValue('red')!;
 

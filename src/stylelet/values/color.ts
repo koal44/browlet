@@ -13,8 +13,8 @@ import {
   isBad, ok, type TryComponentConsumer,
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
+import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { NumberTokenFlag, TokenKind } from '../parser/tokens';
 import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
 import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
 import { tryCoercePercentageToNumber, type MathContext } from './math-value';
@@ -30,7 +30,7 @@ import {
 } from './percentage';
 
 /*
- * <color> = <color-base> | currentColor | <system-color>
+ * <color> = <color-base> | currentColor | <system-color> | <quirky-color>
  *
  * <color-base> = <hex-color> | <color-function> | <named-color>
  *
@@ -134,10 +134,11 @@ export enum ColorKind {
 export function parseColorValue(
   input: ParserInput,
   context: ColorResolutionContext = {},
+  allowQuirkyColor = false,
 ): ColorValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeColor),
+    withComponentTrivia((c) => tryConsumeColor(c, allowQuirkyColor)),
     context,
   );
 
@@ -148,8 +149,13 @@ export function parseColorValue(
 
 export function tryConsumeColor(
   c: ComponentCursor,
+  allowQuirkyColor = false,
 ): TryComponentConsumerResult<ColorValue> {
-  const result = consumeColor(c);
+  const result = (
+    allowQuirkyColor
+      ? consumeColorInQuirksMode
+      : consumeColor
+  )(c);
 
   return result === null || isBad(result)
     ? result
@@ -165,6 +171,17 @@ const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
+  ],
+  ([value]) => ok(value),
+);
+
+const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
+  [
+    one(tryConsumeColorBase),
+    one(tryConsumeCurrentColor),
+    one(tryConsumeSystemColor),
+    one(tryConsumeDeprecatedColor),
+    one(tryConsumeQuirkyColor),
   ],
   ([value]) => ok(value),
 );
@@ -456,8 +473,12 @@ function tryConsumeHexColor(
 function isHexColorValue(value: string): boolean {
   return (
     [3, 4, 6, 8].includes(value.length) &&
-    /^[\da-f]+$/i.test(value)
+    isHexadecimal(value)
   );
+}
+
+function isHexadecimal(value: string): boolean {
+  return /^[\da-f]+$/i.test(value);
 }
 
 /*
@@ -1545,6 +1566,51 @@ const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod
     ],
     ([[method]]) => ok(method),
   );
+
+/*
+ * <quirky-color> = <number-token> | <dimension-token> | <ident-token>
+ *
+ * This conditional grammar is only enabled by the affected property parsers
+ * in quirks mode. It represents an ordinary <hex-color>.
+ */
+
+function tryConsumeQuirkyColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<HexColor> {
+  const start = c.pos();
+  const component = c.next();
+  let value: string;
+
+  if (isTokenKind(component, TokenKind.Ident)) {
+    value = component.value;
+  } else if (
+    isTokenKind(component, TokenKind.Number) &&
+    component.flag === NumberTokenFlag.Integer
+  ) {
+    value = String(component.value).padStart(6, '0');
+  } else if (
+    isTokenKind(component, TokenKind.Dimension) &&
+    component.flag === NumberTokenFlag.Integer
+  ) {
+    value = `${component.value}${component.unit}`.padStart(6, '0');
+  } else {
+    c.restore(start);
+    return null;
+  }
+
+  if (
+    (value.length !== 3 && value.length !== 6) ||
+    !isHexadecimal(value)
+  ) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok({
+    kind: ColorKind.Hex,
+    text: `#${value}`,
+  });
+}
 
 
 
