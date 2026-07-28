@@ -58,6 +58,18 @@ function expectComponentsCloseTo(
   });
 }
 
+function resolveComputedAbsoluteColor(input: string): AbsoluteColor {
+  const color = resolveColorValue(parseColorValue(input)!, {
+    stage: 'computed',
+  });
+
+  if (color.kind !== ColorKind.Absolute) {
+    throw new TypeError('Expected an absolute computed color');
+  }
+
+  return color;
+}
+
 describe('color values', () => {
   it('parses named colors case-insensitively', () => {
     expect(parseColorValue('ReD')).toMatchObject({
@@ -1015,6 +1027,290 @@ describe('color values', () => {
     expect(parseColorValue(
       'color(display-p3 calc(0.5) calc(25%) none / calc(40%))',
     )).not.toBeNull();
+  });
+
+  it('parses color-mix() with its optional interpolation method', () => {
+    expect(parseColorValue('color-mix(red)')).toMatchObject({
+      kind: ColorKind.ColorMixFn,
+      items: [
+        { color: { kind: ColorKind.Named, name: 'red' } },
+      ],
+    });
+
+    expect(parseColorValue('color-mix(red, blue)')).toEqual({
+      kind: ColorKind.ColorMixFn,
+      method: undefined,
+      items: [
+        {
+          color: { kind: ColorKind.Named, name: 'red' },
+          percentage: undefined,
+        },
+        {
+          color: { kind: ColorKind.Named, name: 'blue' },
+          percentage: undefined,
+        },
+      ],
+    });
+
+    expect(parseColorValue(
+      'color-mix(in lch longer hue, red 25%, 75% blue, green)',
+    )).toEqual({
+      kind: ColorKind.ColorMixFn,
+      method: { space: 'lch', hue: 'longer' },
+      items: [
+        {
+          color: { kind: ColorKind.Named, name: 'red' },
+          percentage: { type: 'percentage', value: 25 },
+        },
+        {
+          color: { kind: ColorKind.Named, name: 'blue' },
+          percentage: { type: 'percentage', value: 75 },
+        },
+        {
+          color: { kind: ColorKind.Named, name: 'green' },
+          percentage: undefined,
+        },
+      ],
+    });
+
+    expect(parseColorValue('color-mix(red calc(50%), blue)')).not.toBeNull();
+  });
+
+  it('parses nested color-mix() values', () => {
+    expect(parseColorValue('color-mix(red, color-mix(blue, green))'))
+      .toMatchObject({
+        kind: ColorKind.ColorMixFn,
+        items: [
+          { color: { kind: ColorKind.Named, name: 'red' } },
+          {
+            color: {
+              kind: ColorKind.ColorMixFn,
+              items: [
+                { color: { kind: ColorKind.Named, name: 'blue' } },
+                { color: { kind: ColorKind.Named, name: 'green' } },
+              ],
+            },
+          },
+        ],
+      });
+  });
+
+  it.each([
+    'color-mix()',
+    'color-mix(in srgb)',
+    'color-mix(in srgb,)',
+    'color-mix(red blue)',
+    'color-mix(red -1%, blue)',
+    'color-mix(red 101%, blue)',
+    'color-mix(red 20% 30%, blue)',
+  ])('rejects the invalid color mix %s', (input) => {
+    expect(parseColorValue(input)).toBeNull();
+  });
+
+  it('calculates color-mix() at computed-value time', () => {
+    const declared = parseColorValue('color-mix(in srgb, red, blue)')!;
+
+    expect(declared).toMatchObject({
+      kind: ColorKind.ColorMixFn,
+    });
+    expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.5, 0, 0.5],
+      alpha: 1,
+    });
+  });
+
+  it('produces different results in different mixing color spaces', () => {
+    const lch = convertAbsoluteColor(resolveComputedAbsoluteColor(
+      'color-mix(in lch, white, black)',
+    ), 'lch');
+    const xyz = convertAbsoluteColor(resolveComputedAbsoluteColor(
+      'color-mix(in xyz, white, black)',
+    ), 'lch');
+    const srgb = convertAbsoluteColor(resolveComputedAbsoluteColor(
+      'color-mix(in srgb, white, black)',
+    ), 'lch');
+
+    expect(lch.components[0]).toBeCloseTo(50, 8);
+    expect(xyz.components[0]).toBeCloseTo(76, 0);
+    expect(srgb.components[0]).toBeCloseTo(53.4, 1);
+  });
+
+  it('mixes weighted colors in XYZ', () => {
+    const computed = resolveComputedAbsoluteColor(
+      'color-mix(in xyz, rgb(82.02% 30.21% 35.02%) 75.23%,'
+      + ' rgb(5.64% 55.94% 85.31%))',
+    );
+    const rendered = convertAbsoluteColor(computed, 'srgb');
+
+    expect(computed.space).toBe('xyz-d65');
+    expectComponentsCloseTo(
+      rendered.components,
+      [0.723, 0.38639, 0.53557],
+      3,
+    );
+  });
+
+  it.each([
+    ['lch', [64.7841, 65.6008, 301.364]],
+    ['oklch', [0.72601, 0.15661, 264.052]],
+    ['srgb', [0.5, 0.5, 1]],
+  ] as const)(
+    'mixes white and blue in %s',
+    (space, components) => {
+      const computed = resolveComputedAbsoluteColor(
+        `color-mix(in ${space}, white, blue)`,
+      );
+
+      expect(computed.space).toBe(space);
+      expectComponentsCloseTo(computed.components, components, 3);
+    },
+  );
+
+  it('preserves out-of-gamut components when mixing in HSL', () => {
+    const computed = resolveComputedAbsoluteColor(
+      'color-mix(in hsl, color(display-p3 0 1 0) 80%, yellow)',
+    );
+
+    expect(computed.space).toBe('hsl');
+    expectComponentsCloseTo(
+      computed.components,
+      [114.3032, 261.5568, 30.2672],
+      2,
+    );
+  });
+
+  it.each([
+    [
+      'color-mix(in srgb, rgb(100% 0 0 / .7) 25%,'
+      + ' rgb(0 100% 0 / .2))',
+      0.325,
+    ],
+    [
+      'color-mix(in srgb, rgb(100% 0 0 / .7) 20%,'
+      + ' rgb(0 100% 0 / .2) 60%)',
+      0.26,
+    ],
+  ])('premultiplies non-unity alpha in %s', (input, alpha) => {
+    const computed = resolveComputedAbsoluteColor(input);
+
+    expectComponentsCloseTo(
+      computed.components,
+      [0.5384615384615384, 0.46153846153846156, 0],
+      12,
+    );
+    expect(computed.alpha).toBeCloseTo(alpha, 12);
+  });
+
+  it('mixes any number of colors in order', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix('
+      + 'oklab(.3 .1 .1),'
+      + 'oklab(.6 .2 .2),'
+      + 'oklab(.9 .3 .3))',
+    )!, { stage: 'computed' });
+
+    expect(computed.kind).toBe(ColorKind.Absolute);
+
+    if (computed.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected a calculated color mix');
+    }
+
+    expect(computed.space).toBe('oklab');
+    expectComponentsCloseTo(computed.components, [0.6, 0.2, 0.2], 12);
+    expect(computed.alpha).toBe(1);
+  });
+
+  it('converts a sole mix item and applies its alpha multiplier', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix(in oklab, red 30%)',
+    )!, { stage: 'computed' });
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: 'oklab',
+    });
+
+    if (computed.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected a calculated color mix');
+    }
+
+    expect(computed.alpha).toBeCloseTo(0.3, 12);
+  });
+
+  it('carries missing components through color-mix()', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix(in srgb, rgb(none 0 0), rgb(100% 100% 0))',
+    )!, { stage: 'computed' });
+
+    expect(computed).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [1, 0.5, 0],
+      alpha: 1,
+    });
+  });
+
+  it('preserves color-mix() while a color remains contextual', () => {
+    const declared = parseColorValue(
+      'color-mix(in srgb, currentcolor, blue)',
+    )!;
+    const computed = resolveColorValue(declared, { stage: 'computed' });
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.ColorMixFn,
+      items: [
+        { color: { kind: ColorKind.CurrentColor } },
+        { color: { kind: ColorKind.Absolute } },
+      ],
+    });
+
+    const currentColor = resolveColorValue(
+      parseColorValue('red')!,
+      { stage: 'computed' },
+    );
+
+    if (currentColor.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute current color');
+    }
+
+    expect(resolveColorValue(computed, {
+      stage: 'used',
+      currentColor,
+    })).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.5, 0, 0.5],
+      alpha: 1,
+    });
+  });
+
+  it('preserves color-mix() while a percentage remains deferred', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix(red calc(50% + sign(1em - 1px) * 10%), blue)',
+    )!, { stage: 'computed' });
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.ColorMixFn,
+      items: [
+        { percentage: { type: 'math', valueType: 'percentage' } },
+        { percentage: undefined },
+      ],
+    });
+  });
+
+  it('clamps calculated mix percentages before normalization', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix(in srgb, red calc(200%), blue 100%)',
+    )!, { stage: 'computed' });
+
+    expect(computed).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.5, 0, 0.5],
+      alpha: 1,
+    });
   });
 
   it.each([

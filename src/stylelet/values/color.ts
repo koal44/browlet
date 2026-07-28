@@ -6,7 +6,7 @@ import {
   tryConsumeHashToken,
 } from '../parser/component-consumers';
 import {
-  commaRepeat, one, oneOf, opt, repeat, sequenceOf,
+  allOf, commaRepeat, one, oneOf, opt, repeat, sequenceOf,
   withComponentTrivia,
 } from '../parser/component-grammar';
 import {
@@ -25,14 +25,16 @@ import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number
 import type { PercentageLiteral } from './numeric-literal/percentage';
 import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
 import {
-  resolvePercentage, serializePercentage, tryConsumePercentage,
+  createPercentageConsumer, resolvePercentage, serializePercentage, tryConsumePercentage,
   type PercentageValue,
 } from './percentage';
+import { normalizeMixPercentages } from './mix';
 
 /*
  * <color> = <color-base> | currentColor | <system-color> | <quirky-color>
  *
- * <color-base> = <hex-color> | <color-function> | <named-color>
+ * <color-base> = <hex-color> | <color-function> | <named-color> |
+ *                <color-mix()>
  *
  * <color-function> = <rgb()> | <rgba()> |
  *                    <hsl()> | <hsla()> | <hwb()> |
@@ -102,7 +104,8 @@ type HueValue = NumberValue | AngleValue;
 export type ColorBase =
   | HexColor
   | ColorFunction
-  | NamedColor;
+  | NamedColor
+  | ColorMixFn;
 
 export type ColorFunction =
   | RgbFn
@@ -129,6 +132,7 @@ export enum ColorKind {
   OklchFn,
   ColorFn,
   Absolute,
+  ColorMixFn,
 }
 
 export function parseColorValue(
@@ -197,6 +201,7 @@ const consumeColorBase: TryComponentConsumer<ColorBase> = oneOf(
     one(tryConsumeHexColor),
     one(tryConsumeColorFunction),
     one(tryConsumeNamedColor),
+    one(tryConsumeColorMixFn),
   ],
   ([value]) => ok(value),
 );
@@ -675,6 +680,64 @@ export const ColorRgba = {
 function opaque(rgb: number): number {
   return (((rgb & 0xffffff) << 8) | 0xff) >>> 0;
 }
+
+/*
+ * <color-mix()> = color-mix(
+ *   <color-interpolation-method>? ,
+ *   [ <color> && <percentage [0,100]>>? ]#)
+ */
+
+export type ColorMixFn = {
+  kind: ColorKind.ColorMixFn;
+  method?: ColorInterpolationMethod;
+  items: [ColorMixItem, ...ColorMixItem[]];
+};
+
+export type ColorMixItem = {
+  color: ColorValue;
+  percentage?: PercentageValue;
+};
+
+function tryConsumeColorMixFn(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorMixFn> {
+  return consumeColorMixFn(c);
+}
+
+const tryConsumeColorMixPercentage =
+  createPercentageConsumer({ min: 0, max: 100 });
+
+const consumeColorMixFn: TryComponentConsumer<ColorMixFn> =
+  createFunctionalNotationConsumer(
+    'color-mix',
+    sequenceOf(
+      [
+        opt(sequenceOf(
+          [
+            one(tryConsumeColorInterpolationMethod),
+            one(withComponentTrivia(tryConsumeComma)),
+          ],
+          ([[method]]) => ok(method),
+        )),
+        commaRepeat(allOf(
+          [
+            one(withComponentTrivia(tryConsumeColor)),
+            opt(withComponentTrivia(tryConsumeColorMixPercentage)),
+          ],
+          ([color, percentage]) => ok({
+            color: color![0],
+            percentage: percentage?.[0],
+          }),
+        )),
+      ],
+      ([method, items]) => ok({
+        kind: ColorKind.ColorMixFn as const,
+        method: method[0],
+        items,
+      }),
+    ),
+    (color) => color,
+  );
 
 /*
  * <system-color>
@@ -1666,6 +1729,8 @@ export function resolveColorValue(
     case ColorKind.OklchFn:
     case ColorKind.ColorFn:
       return resolveColorFunction(value, context);
+    case ColorKind.ColorMixFn:
+      return resolveColorMixFn(value, context);
     default:
       return assertNever(value);
   }
@@ -1698,6 +1763,60 @@ function resolveHexColor(value: HexColor): AbsoluteColor {
     : Number.parseInt(expanded, 16) >>> 0;
 
   return absoluteColorFromRgba(rgba);
+}
+
+function resolveColorMixFn(
+  value: ColorMixFn,
+  context: ColorResolutionContext,
+): ColorValue {
+  const [first, ...rest] = value.items;
+  const items: [ColorMixItem, ...ColorMixItem[]] = [
+    resolveColorMixItem(first, context),
+    ...rest.map((item) => resolveColorMixItem(item, context)),
+  ];
+  const resolved = items.every(
+    (item, index) => item === value.items[index],
+  )
+    ? value
+    : { ...value, items };
+
+  if (
+    !isComputedColorStage(context.stage ?? 'declared') ||
+    !items.every(isResolvedColorMixItem)
+  ) {
+    return resolved;
+  }
+
+  return calculateColorMix(items, value.method);
+}
+
+function resolveColorMixItem(
+  item: ColorMixItem,
+  context: ColorResolutionContext,
+): ColorMixItem {
+  const color = resolveColorValue(item.color, context);
+  const percentage = item.percentage === undefined
+    ? undefined
+    : resolvePercentage(item.percentage, {
+      ...colorCalculationContext(context, 'computed'),
+      range: [0, 100],
+    });
+
+  return color === item.color && percentage === item.percentage
+    ? item
+    : { color, percentage };
+}
+
+function isResolvedColorMixItem(
+  item: ColorMixItem,
+): item is ResolvedColorMixItem {
+  return (
+    item.color.kind === ColorKind.Absolute &&
+    (
+      item.percentage === undefined ||
+      item.percentage.type === 'percentage'
+    )
+  );
 }
 
 function resolveColorFunction(
@@ -2467,6 +2586,8 @@ export function serializeColorValue(
       return serializeAbsoluteColor(value, htmlCompatible);
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
+    case ColorKind.ColorMixFn:
+      throw new TypeError('Color mixes must be resolved before serialization');
     case ColorKind.RgbFn:
     case ColorKind.HslFn:
     case ColorKind.HwbFn:
@@ -4574,4 +4695,64 @@ function hslPremultiply(
   alpha: number,
 ): ColorVector {
   return polarPremultiply(color, alpha, 0);
+}
+
+
+
+// ██     ██ ████ ██     ██
+// ███   ███  ██   ██   ██
+// ████ ████  ██    ██ ██
+// ██ ███ ██  ██     ███
+// ██     ██  ██    ██ ██
+// ██     ██  ██   ██   ██
+// ██     ██ ████ ██     ██
+
+export type ResolvedColorMixItem = {
+  color: AbsoluteColor;
+  percentage?: PercentageLiteral;
+};
+
+export function calculateColorMix(
+  items: readonly ResolvedColorMixItem[],
+  method: ColorInterpolationMethod = { space: 'oklab' },
+): AbsoluteColor {
+  if (items.length === 0) {
+    throw new TypeError('A color mix requires at least one item');
+  }
+
+  const { percentages, leftover } = normalizeMixPercentages(
+    items.map((item) => item.percentage?.value),
+    true,
+  );
+  let color = items.length === 1
+    ? convertAbsoluteColor(items[0]!.color, method.space)
+    : items[0]!.color;
+  let combinedPercentage = percentages[0]!;
+
+  for (let index = 1; index < items.length; index++) {
+    const item = items[index]!;
+    const percentage = percentages[index]!;
+    const nextCombinedPercentage = combinedPercentage + percentage;
+    const progress = nextCombinedPercentage > 0
+      ? percentage / nextCombinedPercentage
+      : 0.5;
+
+    color = interpolateColors(
+      color,
+      item.color,
+      progress,
+      method.space,
+      method.hue,
+    );
+    combinedPercentage = nextCombinedPercentage;
+  }
+
+  if (color.alpha === undefined) {
+    return color;
+  }
+
+  return {
+    ...color,
+    alpha: color.alpha * (1 - leftover / 100),
+  };
 }
