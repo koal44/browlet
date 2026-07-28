@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ColorKind, ColorRgba, areColorsEquivalent, convertAbsoluteColor, deltaE2000, deltaEOK,
+  ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
+  deltaE2000, deltaEOK,
   gamutMapColor, interpolateColors, parseColorInterpolationMethod, parseColorValue,
   resolveColorValue, serializeColorValue, type AbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
@@ -137,7 +138,7 @@ describe('color values', () => {
   it('resolves deprecated colors through the modern system color', () => {
     const absolute: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.1, 0.2, 0.3],
       alpha: 1,
     };
@@ -165,7 +166,7 @@ describe('color values', () => {
       .toBe(transparent);
     expect(resolveColorValue(transparent, { stage: 'computed' })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 0, 0],
       alpha: 0,
       isLegacySrgb: true,
@@ -185,7 +186,7 @@ describe('color values', () => {
     (text, components, alpha) => {
       expect(parseColorValue(text)).toEqual({
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components,
         alpha,
         isLegacySrgb: true,
@@ -248,7 +249,7 @@ describe('color values', () => {
     expect(resolveColorValue(red, { stage: 'specified' })).toBe(red);
     expect(resolveColorValue(red, { stage: 'computed' })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [255, 0, 0],
       alpha: 255,
       isLegacySrgb: true,
@@ -259,7 +260,7 @@ describe('color values', () => {
   it('resolves contextual colors when their dependencies are available', () => {
     const absolute: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.1, 0.2, 0.3],
       alpha: 1,
     };
@@ -290,7 +291,7 @@ describe('color values', () => {
   it('resolves legacy rgb and rgba functions to absolute sRGB', () => {
     expect(parseColorValue('rgb(255, 0, 127)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [255, 0, 127],
       alpha: 255,
       isLegacySrgb: true,
@@ -298,7 +299,7 @@ describe('color values', () => {
     });
     expect(parseColorValue('rgba(100%, 0%, 50%, 25%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 0.5],
       alpha: 0.25,
       isLegacySrgb: true,
@@ -308,14 +309,14 @@ describe('color values', () => {
   it('resolves modern rgb and rgba functions to absolute sRGB', () => {
     expect(parseColorValue('rgb(255 20% none / 0.5)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0.2, undefined],
       alpha: 0.5,
       isLegacySrgb: true,
     });
     expect(parseColorValue('rgba(none 0 100% / none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 0, 1],
       alpha: undefined,
       isLegacySrgb: true,
@@ -365,7 +366,7 @@ describe('color values', () => {
     });
     expect(resolveColorValue(color, { stage: 'computed' })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 1,
     });
@@ -376,7 +377,7 @@ describe('color values', () => {
       + 'calc((b / 255) * 100%) / calc(alpha * 100%))',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.4, 0.2, 0.6],
       alpha: 1,
     });
@@ -387,7 +388,7 @@ describe('color values', () => {
       'rgb(from rgb(0 0 0 / 60%) alpha 153 153 / 0.9)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.6 / 255, 0.6, 0.6],
       alpha: 0.9,
     });
@@ -398,7 +399,7 @@ describe('color values', () => {
       'rgb(from rgb(20 30 40 / 70%) 300 -10 b)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [300 / 255, -10 / 255, 40 / 255],
       alpha: 0.7,
     });
@@ -406,7 +407,7 @@ describe('color values', () => {
       'rgb(from rgb(20 30 40 / 70%) r g b / calc(alpha * 2))',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [20 / 255, 30 / 255, 40 / 255],
       alpha: 1,
     });
@@ -417,7 +418,7 @@ describe('color values', () => {
       'rgb(from rgb(none 0 0 / none) r calc(r + 1) b)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 1 / 255, 0],
       alpha: undefined,
     });
@@ -466,7 +467,7 @@ describe('color values', () => {
 
     expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0.5, 0],
       alpha: 1,
       isLegacySrgb: true,
@@ -485,7 +486,7 @@ describe('color values', () => {
       unwrapMathAt: 'declared',
     })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0.5, 0],
       alpha: 1,
       isLegacySrgb: true,
@@ -503,13 +504,13 @@ describe('color values', () => {
       unwrapMathAt: 'declared',
     })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 0.5,
     });
     expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 0.5,
     });
@@ -528,7 +529,7 @@ describe('color values', () => {
     ) as AbsoluteColor;
 
     expect(hsl).toMatchObject({
-      space: 'srgb',
+      space: SPACES.srgb,
       isLegacySrgb: true,
     });
     expectColorCloseTo(hsl, [1, 0.647, 0, 1]);
@@ -542,7 +543,7 @@ describe('color values', () => {
     (space) => {
       expect(parseColorValue(`color(${space} -0.25 1.5 0.75)`)).toEqual({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [-0.25, 1.5, 0.75],
         alpha: 1,
       });
@@ -577,7 +578,7 @@ describe('color values', () => {
 
       expect(color).toMatchObject({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         alpha: 1,
       });
 
@@ -592,7 +593,7 @@ describe('color values', () => {
   it('clamps rgb components at parsed-value time', () => {
     expect(parseColorValue('rgb(300 -10 0 / 2)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
       isLegacySrgb: true,
@@ -615,7 +616,7 @@ describe('color values', () => {
 
       expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         ...expected,
         ...(isLegacySrgb ? { isLegacySrgb: true } : {}),
       });
@@ -699,7 +700,7 @@ describe('color values', () => {
 
       expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components,
         alpha,
         isLegacySrgb: true,
@@ -710,14 +711,14 @@ describe('color values', () => {
   it('resolves legacy hsl and hsla functions to absolute sRGB', () => {
     expect(parseColorValue('hsl(120, 100%, 50%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 1,
       isLegacySrgb: true,
     });
     expect(parseColorValue('hsla(0.5turn, 25%, 75%, 20%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.6875, 0.8125, 0.8125],
       alpha: 0.2,
       isLegacySrgb: true,
@@ -727,14 +728,14 @@ describe('color values', () => {
   it('resolves modern HSL without missing components to absolute sRGB', () => {
     expect(parseColorValue('hsl(120deg 100% 50 / 0.5)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
       isLegacySrgb: true,
     });
     expect(parseColorValue('hsla(none 0 100% / none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [undefined, 0, 100],
       alpha: undefined,
     });
@@ -750,9 +751,11 @@ describe('color values', () => {
         kind: ColorKind.Named,
         name: 'red',
       },
-      hue: promotedVariable('alpha'),
-      saturation: promotedVariable('s'),
-      lightness: promotedVariable('l'),
+      components: [
+        promotedVariable('alpha'),
+        promotedVariable('s'),
+        promotedVariable('l'),
+      ],
       alpha: promotedVariable('h'),
     });
     expect(serializeColorValue(color!))
@@ -776,7 +779,7 @@ describe('color values', () => {
       'hsl(from hsl(none 10% 50%) h calc(h + 20) l)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [undefined, 20, 50],
       alpha: 1,
     });
@@ -796,7 +799,7 @@ describe('color values', () => {
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
         kind: ColorKind.Absolute,
-        space: 'hsl',
+        space: SPACES.hsl,
         components,
         alpha,
       });
@@ -838,7 +841,7 @@ describe('color values', () => {
   ])('clamps negative hsl saturation at parsed-value time for %s', (input) => {
     expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
       alpha: 1,
       isLegacySrgb: true,
@@ -860,14 +863,14 @@ describe('color values', () => {
   it('resolves HWB without missing components to absolute sRGB', () => {
     expect(parseColorValue('hwb(120deg 20% 30 / 0.5)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.2, 0.7, 0.2],
       alpha: 0.5,
       isLegacySrgb: true,
     });
     expect(parseColorValue('hwb(none 0 100% / none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [undefined, 0, 100],
       alpha: undefined,
     });
@@ -882,9 +885,11 @@ describe('color values', () => {
         kind: ColorKind.Named,
         name: 'red',
       },
-      hue: promotedVariable('alpha'),
-      whiteness: promotedVariable('w'),
-      blackness: promotedVariable('b'),
+      components: [
+        promotedVariable('alpha'),
+        promotedVariable('w'),
+        promotedVariable('b'),
+      ],
       alpha: promotedVariable('h'),
     });
     expect(serializeColorValue(color!))
@@ -938,7 +943,7 @@ describe('color values', () => {
   ])('normalizes achromatic white and black in %s', (input, gray) => {
     expect(parseColorValue(input)).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [gray, gray, gray],
       alpha: 1,
       isLegacySrgb: true,
@@ -955,7 +960,7 @@ describe('color values', () => {
 
     expect(color).toMatchObject({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       alpha: 1,
       isLegacySrgb: true,
     });
@@ -970,7 +975,7 @@ describe('color values', () => {
   it('preserves missing HWB components outside interpolation', () => {
     expect(parseColorValue('hwb(none none 100%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [undefined, undefined, 100],
       alpha: 1,
     });
@@ -991,7 +996,7 @@ describe('color values', () => {
     (input, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
         kind: ColorKind.Absolute,
-        space: 'hwb',
+        space: SPACES.hwb,
         components,
         alpha,
       });
@@ -1001,13 +1006,13 @@ describe('color values', () => {
   it('resolves lab and oklab functions to absolute colors', () => {
     expect(parseColorValue('lab(50% 20 -30% / 0.4)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'lab',
+      space: SPACES.lab,
       components: [50, 20, -37.5],
       alpha: 0.4,
     });
     expect(parseColorValue('oklab(none 0.1 -20% / none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [undefined, 0.1, -0.08],
       alpha: undefined,
     });
@@ -1028,9 +1033,11 @@ describe('color values', () => {
           kind: ColorKind.Named,
           name: 'red',
         },
-        lightness: promotedVariable('alpha'),
-        a: promotedVariable('a'),
-        b: promotedVariable('b'),
+        components: [
+          promotedVariable('alpha'),
+          promotedVariable('a'),
+          promotedVariable('b'),
+        ],
         alpha: promotedVariable('l'),
       });
       expect(serializeColorValue(color!)).toBe(input);
@@ -1057,7 +1064,7 @@ describe('color values', () => {
     (input, space, components) => {
       expect(resolveComputedAbsoluteColor(input)).toEqual({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components,
         alpha: 1,
       });
@@ -1067,13 +1074,13 @@ describe('color values', () => {
   it('resolves lch and oklch functions to absolute colors', () => {
     expect(parseColorValue('lch(50 40% 270deg / 25%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'lch',
+      space: SPACES.lch,
       components: [50, 60, 270],
       alpha: 0.25,
     });
     expect(parseColorValue('oklch(none 0.2 none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [undefined, 0.2, undefined],
       alpha: 1,
     });
@@ -1094,9 +1101,11 @@ describe('color values', () => {
           kind: ColorKind.Named,
           name: 'red',
         },
-        lightness: promotedVariable('alpha'),
-        chroma: promotedVariable('c'),
-        hue: promotedVariable('h'),
+        components: [
+          promotedVariable('alpha'),
+          promotedVariable('c'),
+          promotedVariable('h'),
+        ],
         alpha: promotedVariable('l'),
       });
       expect(serializeColorValue(color!)).toBe(input);
@@ -1123,7 +1132,7 @@ describe('color values', () => {
     (input, space, components) => {
       expect(resolveComputedAbsoluteColor(input)).toEqual({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components,
         alpha: 1,
       });
@@ -1135,7 +1144,7 @@ describe('color values', () => {
       'lch(from lch(50 20 none / none) l calc(h + 10) h / alpha)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'lch',
+      space: SPACES.lch,
       components: [50, 10, undefined],
       alpha: undefined,
     });
@@ -1164,7 +1173,7 @@ describe('color values', () => {
       'alpha(from oklch(0.5 0.1 40 / 0.8) / calc(alpha * 0.5))',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.5, 0.1, 40],
       alpha: 0.4,
     });
@@ -1177,7 +1186,7 @@ describe('color values', () => {
       'alpha(from color(display-p3 1 0 0) / none)',
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'display-p3',
+      space: SPACES['display-p3'],
       components: [1, 0, 0],
       alpha: undefined,
     });
@@ -1186,7 +1195,7 @@ describe('color values', () => {
   it('clamps alpha and preserves the origin color encoding', () => {
     expect(resolveComputedAbsoluteColor('alpha(from red / 2)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [255, 0, 0],
       alpha: 255,
       isLegacySrgb: true,
@@ -1196,7 +1205,7 @@ describe('color values', () => {
 
     expect(translucent).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 0.5,
       isLegacySrgb: true,
@@ -1236,7 +1245,7 @@ describe('color values', () => {
     (input, space, components, alpha) => {
       expect(parseColorValue(input)).toEqual({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components,
         alpha,
       });
@@ -1305,7 +1314,7 @@ describe('color values', () => {
         { stage: 'computed' },
       )).toEqual({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components,
         alpha,
       });
@@ -1324,17 +1333,17 @@ describe('color values', () => {
       'xyz',
       'xyz-d50',
       'xyz-d65',
-    ];
+    ] as const;
 
     for (const space of spaces) {
       expect(parseColorValue(`color(${space} 0 0 0)`)).toMatchObject({
         kind: ColorKind.Absolute,
-        space: space === 'xyz' ? 'xyz-d65' : space,
+        space: SPACES[space === 'xyz' ? 'xyz-d65' : space],
       });
     }
 
     expect(parseColorValue('color(DISPLAY-P3 0 0 0)')).toMatchObject({
-      space: 'display-p3',
+      space: SPACES['display-p3'],
     });
   });
 
@@ -1354,14 +1363,14 @@ describe('color values', () => {
   it('resolves color function components and alpha', () => {
     expect(parseColorValue('color(display-p3 1 50% none / 25%)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'display-p3',
+      space: SPACES['display-p3'],
       components: [1, 0.5, undefined],
       alpha: 0.25,
     });
 
     expect(parseColorValue('color(xyz-d50 none 0.5 120% / none)')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'xyz-d50',
+      space: SPACES['xyz-d50'],
       components: [undefined, 0.5, 1.2],
       alpha: undefined,
     });
@@ -1371,7 +1380,7 @@ describe('color values', () => {
     expect(parseColorValue('color(prophoto-rgb -0.2 1.4 120% / 2)'))
       .toEqual({
         kind: ColorKind.Absolute,
-        space: 'prophoto-rgb',
+        space: SPACES['prophoto-rgb'],
         components: [-0.2, 1.4, 1.2],
         alpha: 1,
       });
@@ -1477,7 +1486,7 @@ describe('color values', () => {
     });
     expect(resolveColorValue(declared, { stage: 'computed' })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
     });
@@ -1506,7 +1515,7 @@ describe('color values', () => {
     );
     const rendered = convertAbsoluteColor(computed, 'srgb');
 
-    expect(computed.space).toBe('xyz-d65');
+    expect(computed.space.name).toBe('xyz-d65');
     expectComponentsCloseTo(
       rendered.components,
       [0.723, 0.38639, 0.53557],
@@ -1525,7 +1534,7 @@ describe('color values', () => {
         `color-mix(in ${space}, white, blue)`,
       );
 
-      expect(computed.space).toBe(space);
+      expect(computed.space.name).toBe(space);
       expectComponentsCloseTo(computed.components, components, 3);
     },
   );
@@ -1535,7 +1544,7 @@ describe('color values', () => {
       'color-mix(in hsl, color(display-p3 0 1 0) 80%, yellow)',
     );
 
-    expect(computed.space).toBe('hsl');
+    expect(computed.space.name).toBe('hsl');
     expectComponentsCloseTo(
       computed.components,
       [114.3032, 261.5568, 30.2672],
@@ -1579,7 +1588,7 @@ describe('color values', () => {
       throw new TypeError('Expected a calculated color mix');
     }
 
-    expect(computed.space).toBe('oklab');
+    expect(computed.space.name).toBe('oklab');
     expectComponentsCloseTo(computed.components, [0.6, 0.2, 0.2], 12);
     expect(computed.alpha).toBe(1);
   });
@@ -1591,7 +1600,7 @@ describe('color values', () => {
 
     expect(computed).toMatchObject({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
     });
 
     if (computed.kind !== ColorKind.Absolute) {
@@ -1608,7 +1617,7 @@ describe('color values', () => {
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0.5, 0],
       alpha: 1,
     });
@@ -1642,7 +1651,7 @@ describe('color values', () => {
       currentColor,
     })).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
     });
@@ -1669,7 +1678,7 @@ describe('color values', () => {
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
     });
@@ -2070,7 +2079,7 @@ describe('color values', () => {
   it('serializes absolute sRGB colors in legacy rgb form', () => {
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0.5, 0],
       alpha: 1,
       isLegacySrgb: true,
@@ -2083,7 +2092,7 @@ describe('color values', () => {
   it('preserves missing absolute sRGB components through color()', () => {
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 0.5, 0],
       alpha: undefined,
       isLegacySrgb: true,
@@ -2134,7 +2143,7 @@ describe('color values', () => {
       { stage: 'declared' },
     )).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 0, 0],
       alpha: 1,
       isLegacySrgb: true,
@@ -2183,7 +2192,7 @@ describe('color values', () => {
   it('keeps color(srgb) distinct from rgb()', () => {
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
     })).toBe('color(srgb 1 0 0)');
@@ -2234,13 +2243,13 @@ describe('color values', () => {
   it('serializes absolute HSL and HWB colors with missing components', () => {
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [20, undefined, 30],
       alpha: undefined,
     })).toBe('hsl(20 none 30% / none)');
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [20, undefined, 30],
       alpha: 1,
     })).toBe('hwb(20 none 30%)');
@@ -2250,31 +2259,31 @@ describe('color values', () => {
     const cases: [AbsoluteColor, string][] = [
       [{
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [56.2, 0, 83.6],
         alpha: 1,
       }, 'lab(56.2 0 83.6)'],
       [{
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [56.2, 83.6, 357.4],
         alpha: 0.93,
       }, 'lch(56.2 83.6 357.4 / 0.93)'],
       [{
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.54, -0.1, -0.02],
         alpha: 1,
       }, 'oklab(0.54 -0.1 -0.02)'],
       [{
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.5385, 0.1725, 320.67],
         alpha: 0.7,
       }, 'oklch(0.5385 0.1725 320.67 / 0.7)'],
       [{
         kind: ColorKind.Absolute,
-        space: 'display-p3',
+        space: SPACES['display-p3'],
         components: [0.28, 0.403, 0.423],
         alpha: 0.85,
       }, 'color(display-p3 0.28 0.403 0.423 / 0.85)'],
@@ -2344,7 +2353,7 @@ describe('color values', () => {
     (space, components) => {
       const converted = convertAbsoluteColor({
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [...components],
         alpha: 1,
       }, 'srgb');
@@ -2362,7 +2371,7 @@ describe('color values', () => {
   ] as const)('extends the %s transfer function out of gamut', (space) => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space,
+      space: SPACES[space],
       components: [-0.25, 0.5, 1.25],
       alpha: 1,
     };
@@ -2420,44 +2429,44 @@ describe('color values', () => {
     (rgb, srgbLch, srgbXyz, displayP3Lch, displayP3Xyz) => {
       const srgb: AbsoluteColor = {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [...rgb],
         alpha: 1,
       };
       const displayP3: AbsoluteColor = {
         ...srgb,
-        space: 'display-p3',
+        space: SPACES['display-p3'],
       };
       const actualSrgbXyz = convertAbsoluteColor(srgb, 'xyz-d65');
       const actualSrgbLch = convertAbsoluteColor(srgb, 'lch');
       const actualDisplayP3Xyz = convertAbsoluteColor(displayP3, 'xyz-d65');
       const actualDisplayP3Lch = convertAbsoluteColor(displayP3, 'lch');
 
-      expect(actualSrgbXyz.space).toBe('xyz-d65');
+      expect(actualSrgbXyz.space.name).toBe('xyz-d65');
       expectColorCloseTo(actualSrgbXyz, {
         kind: ColorKind.Absolute,
-        space: 'xyz-d65',
+        space: SPACES['xyz-d65'],
         components: [...srgbXyz],
         alpha: 1,
       });
-      expect(actualSrgbLch.space).toBe('lch');
+      expect(actualSrgbLch.space.name).toBe('lch');
       expectColorCloseTo(actualSrgbLch, {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [...srgbLch],
         alpha: 1,
       });
-      expect(actualDisplayP3Xyz.space).toBe('xyz-d65');
+      expect(actualDisplayP3Xyz.space.name).toBe('xyz-d65');
       expectColorCloseTo(actualDisplayP3Xyz, {
         kind: ColorKind.Absolute,
-        space: 'xyz-d65',
+        space: SPACES['xyz-d65'],
         components: [...displayP3Xyz],
         alpha: 1,
       });
-      expect(actualDisplayP3Lch.space).toBe('lch');
+      expect(actualDisplayP3Lch.space.name).toBe('lch');
       expectColorCloseTo(actualDisplayP3Lch, {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [...displayP3Lch],
         alpha: 1,
       });
@@ -2467,26 +2476,26 @@ describe('color values', () => {
   it('converts absolute HSL and HWB colors to sRGB', () => {
     const hsl: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
     };
     const hwb: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
     };
 
     expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
     });
     expect(convertAbsoluteColor(hwb, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
     });
@@ -2497,7 +2506,7 @@ describe('color values', () => {
 
     expect(convertAbsoluteColor(color, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 128 / 255],
       alpha: 0.8,
     });
@@ -2506,20 +2515,20 @@ describe('color values', () => {
   it('converts absolute sRGB colors to HSL and HWB', () => {
     const rgb: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
     };
 
     expect(convertAbsoluteColor(rgb, 'hsl')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
     });
     expect(convertAbsoluteColor(rgb, 'hwb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
     });
@@ -2528,7 +2537,7 @@ describe('color values', () => {
   it('corrects negative saturation when converting out-of-gamut sRGB to HSL', () => {
     const rgb: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [2, 1.5, 1.5],
       alpha: 0.5,
     };
@@ -2541,13 +2550,13 @@ describe('color values', () => {
   it('replaces missing components with zero during color conversion', () => {
     const hsl: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [undefined, 100, 50],
       alpha: undefined,
     };
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
       alpha: 1,
     };
@@ -2568,7 +2577,7 @@ describe('color values', () => {
       const converted = convertAbsoluteColor(
         {
           kind: ColorKind.Absolute,
-          space: source,
+          space: SPACES[source],
           components: [...components],
           alpha: 1,
         },
@@ -2588,7 +2597,7 @@ describe('color values', () => {
       const atBoundary = convertAbsoluteColor(
         {
           kind: ColorKind.Absolute,
-          space: source,
+          space: SPACES[source],
           components: [0.5, epsilon, 0],
           alpha: 1,
         },
@@ -2597,7 +2606,7 @@ describe('color values', () => {
       const aboveBoundary = convertAbsoluteColor(
         {
           kind: ColorKind.Absolute,
-          space: source,
+          space: SPACES[source],
           components: [0.5, epsilon * 1.0001, 0],
           alpha: 1,
         },
@@ -2612,20 +2621,20 @@ describe('color values', () => {
   it('routes absolute color conversion through sRGB', () => {
     const hsl: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
     };
 
     expect(convertAbsoluteColor(hsl, 'hwb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
     });
     expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
     });
@@ -2634,20 +2643,20 @@ describe('color values', () => {
   it('converts Lab and Oklab between rectangular and polar forms', () => {
     const lab: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'lab',
+      space: SPACES.lab,
       components: [50, 0, 40],
       alpha: 0.5,
     };
     const oklab: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.5, 0.1, 0],
       alpha: 0.25,
     };
 
     expect(convertAbsoluteColor(lab, 'lch')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'lch',
+      space: SPACES.lch,
       components: [50, 40, 90],
       alpha: 0.5,
     });
@@ -2656,12 +2665,12 @@ describe('color values', () => {
       'lab',
     );
 
-    expect(labRoundTrip.space).toBe('lab');
+    expect(labRoundTrip.space.name).toBe('lab');
     expect(labRoundTrip.alpha).toBe(lab.alpha);
     expectComponentsCloseTo(labRoundTrip.components, [50, 0, 40], 12);
     expect(convertAbsoluteColor(oklab, 'oklch')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.5, 0.1, 0],
       alpha: 0.25,
     });
@@ -2670,7 +2679,7 @@ describe('color values', () => {
       'oklab',
     );
 
-    expect(oklabRoundTrip.space).toBe('oklab');
+    expect(oklabRoundTrip.space.name).toBe('oklab');
     expect(oklabRoundTrip.alpha).toBe(oklab.alpha);
     expectComponentsCloseTo(oklabRoundTrip.components, [0.5, 0.1, 0], 12);
   });
@@ -2678,26 +2687,26 @@ describe('color values', () => {
   it('replaces a missing polar hue with zero rectangular components', () => {
     const lch: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'lch',
+      space: SPACES.lch,
       components: [50, 40, undefined],
       alpha: 0.5,
     };
     const oklch: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.5, 0.1, undefined],
       alpha: 0.25,
     };
 
     expect(convertAbsoluteColor(lch, 'lab')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'lab',
+      space: SPACES.lab,
       components: [50, 0, 0],
       alpha: 0.5,
     });
     expect(convertAbsoluteColor(oklch, 'oklab')).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.5, 0, 0],
       alpha: 0.25,
     });
@@ -2706,13 +2715,13 @@ describe('color values', () => {
   it('converts known sRGB and Display P3 primaries to XYZ D65', () => {
     const red: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
     };
     const p3Red: AbsoluteColor = {
       ...red,
-      space: 'display-p3',
+      space: SPACES['display-p3'],
     };
     const srgbXyz = convertAbsoluteColor(red, 'xyz-d65').components;
     const p3Xyz = convertAbsoluteColor(p3Red, 'xyz-d65').components;
@@ -2729,7 +2738,7 @@ describe('color values', () => {
   it('converts colors across D50 and D65 spaces', () => {
     const labWhite: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'lab',
+      space: SPACES.lab,
       components: [100, 0, 0],
       alpha: 0.75,
     };
@@ -2744,104 +2753,104 @@ describe('color values', () => {
     const colors: AbsoluteColor[] = [
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb-linear',
+        space: SPACES['srgb-linear'],
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'hsl',
+        space: SPACES.hsl,
         components: [210, 50, 40],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'hwb',
+        space: SPACES.hwb,
         components: [210, 20, 30],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [50, 20, -30],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [50, 36.0555127546, 303.690067526],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.5, 0.1, -0.1],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.5, 0.1414213562, 315],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'display-p3',
+        space: SPACES['display-p3'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'display-p3-linear',
+        space: SPACES['display-p3-linear'],
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'a98-rgb',
+        space: SPACES['a98-rgb'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'prophoto-rgb',
+        space: SPACES['prophoto-rgb'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'rec2020',
+        space: SPACES.rec2020,
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'xyz-d50',
+        space: SPACES['xyz-d50'],
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'xyz-d65',
+        space: SPACES['xyz-d65'],
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
       },
     ];
 
     for (const color of colors) {
-      const intermediate = color.space === 'xyz-d50'
+      const intermediate = color.space.name === 'xyz-d50'
         ? 'xyz-d65'
         : 'xyz-d50';
       const converted = convertAbsoluteColor(color, intermediate);
-      const roundTrip = convertAbsoluteColor(converted, color.space);
+      const roundTrip = convertAbsoluteColor(converted, color.space.name);
 
-      expect(roundTrip.space).toBe(color.space);
+      expect(roundTrip.space.name).toBe(color.space.name);
       expect(roundTrip.alpha).toBe(color.alpha);
 
       expectComponentsCloseTo(
@@ -2855,7 +2864,7 @@ describe('color values', () => {
   it('returns an unchanged absolute color conversion by identity', () => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'display-p3',
+      space: SPACES['display-p3'],
       components: [1, 0, 0],
       alpha: 1,
     };
@@ -2866,7 +2875,7 @@ describe('color values', () => {
   it('calculates color difference as Euclidean distance in Oklab', () => {
     const reference: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.5, 0.1, -0.2],
       alpha: 1,
     };
@@ -2920,7 +2929,7 @@ describe('color values', () => {
         components: readonly [number, number, number]
       ): AbsoluteColor => ({
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [...components],
         alpha: 1,
       });
@@ -2933,7 +2942,7 @@ describe('color values', () => {
   it('compares same-space color components and alpha within epsilon', () => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.5, 0.1, -0.2],
       alpha: 0.4,
     };
@@ -3013,7 +3022,7 @@ describe('color values', () => {
   it('uses the standardized epsilon for different color spaces', () => {
     const srgb: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
       alpha: 0.8,
     };
@@ -3048,7 +3057,7 @@ describe('color values', () => {
   it('only considers missing components equal to missing components', () => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.5, 0.2, undefined],
       alpha: undefined,
     };
@@ -3074,7 +3083,7 @@ describe('color values', () => {
     (space, components, expectedComponents) => {
       const color: AbsoluteColor = {
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [...components],
         alpha: 1,
       };
@@ -3096,7 +3105,7 @@ describe('color values', () => {
     (space, components, expectedComponents) => {
       const color: AbsoluteColor = {
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [...components],
         alpha: 1,
       };
@@ -3111,7 +3120,7 @@ describe('color values', () => {
   it('retains a manually specified HSL hue at the conversion epsilon', () => {
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hsl',
+      space: SPACES.hsl,
       components: [120, 0.001, 50],
       alpha: 1,
     };
@@ -3129,7 +3138,7 @@ describe('color values', () => {
   it('retains a manually specified HWB hue at the conversion epsilon', () => {
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'hwb',
+      space: SPACES.hwb,
       components: [120, 49.999, 50],
       alpha: 1,
     };
@@ -3147,7 +3156,7 @@ describe('color values', () => {
   it('retains a manually specified LCH hue at the conversion epsilon', () => {
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'lch',
+      space: SPACES.lch,
       components: [50, 0.0015, 120],
       alpha: 1,
     };
@@ -3165,7 +3174,7 @@ describe('color values', () => {
   it('retains a manually specified OKLCH hue at the conversion epsilon', () => {
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.5, 0.000004, 120],
       alpha: 1,
     };
@@ -3183,7 +3192,7 @@ describe('color values', () => {
   it('compares colors from different spaces in Oklab', () => {
     const srgb: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.8, 0.2, 0.4],
       alpha: 0.6,
     };
@@ -3204,21 +3213,21 @@ describe('color values', () => {
   it('rejects different-space colors with missing components', () => {
     const missing: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 0.2, 0.4],
       alpha: 1,
     };
 
     expect(areColorsEquivalent(missing, {
       ...missing,
-      space: 'display-p3',
+      space: SPACES['display-p3'],
     })).toBe(false);
   });
 
   it('compares legacy and 8-bit sRGB colors as sRGB', () => {
     const legacy: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [255, 128, 0],
       alpha: 128,
       isLegacySrgb: true,
@@ -3227,7 +3236,7 @@ describe('color values', () => {
 
     expect(areColorsEquivalent(legacy, {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 128 / 255, 0],
       alpha: 128 / 255,
     })).toBe(true);
@@ -3237,13 +3246,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [undefined, 0.2, 0.4],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'xyz-d65',
+        space: SPACES['xyz-d65'],
         components: [0.8, 0.3, 0.2],
         alpha: 1,
       },
@@ -3251,7 +3260,7 @@ describe('color values', () => {
       'xyz-d65',
     );
 
-    expect(result.space).toBe('xyz-d65');
+    expect(result.space.name).toBe('xyz-d65');
     expect(result.components[0]).toBe(0.8);
   });
 
@@ -3259,13 +3268,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [50, 0.02, undefined],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.7, 0.2, 80],
         alpha: 1,
       },
@@ -3285,13 +3294,13 @@ describe('color values', () => {
       const result = interpolateColors(
         {
           kind: ColorKind.Absolute,
-          space: 'hwb',
+          space: SPACES.hwb,
           components: [...components],
           alpha: 1,
         },
         {
           kind: ColorKind.Absolute,
-          space: 'hwb',
+          space: SPACES.hwb,
           components: [30, 30, 40],
           alpha: 1,
         },
@@ -3306,14 +3315,14 @@ describe('color values', () => {
   it('carries a wholly missing analogous set into the interpolation space', () => {
     const expected: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.7, 0.1, -0.1],
       alpha: 0.6,
     };
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [undefined, undefined, undefined],
         alpha: 0.4,
       },
@@ -3332,13 +3341,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [undefined, undefined, undefined],
         alpha: 0.4,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'display-p3',
+        space: SPACES['display-p3'],
         components: [undefined, undefined, undefined],
         alpha: 0.8,
       },
@@ -3348,7 +3357,7 @@ describe('color values', () => {
 
     expect(result).toMatchObject({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [undefined, undefined, undefined],
     });
     expect(result.alpha).toBeCloseTo(0.6, 12);
@@ -3357,7 +3366,7 @@ describe('color values', () => {
   it('uses the other color value for a missing alpha component', () => {
     const color: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.5, 0.1, -0.1],
       alpha: 0.6,
     };
@@ -3374,13 +3383,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.783, 0.108, 326.5],
         alpha: 0.5,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.392, 0.4, 0],
         alpha: undefined,
       },
@@ -3395,7 +3404,7 @@ describe('color values', () => {
   it('converts an uncarried missing component as zero', () => {
     const source: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [undefined, 0.2, 0.4],
       alpha: 1,
     };
@@ -3407,7 +3416,7 @@ describe('color values', () => {
       source,
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.8, 0.1, 0.1],
         alpha: 1,
       },
@@ -3423,13 +3432,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.24, 0.12, 0.98],
         alpha: 0.4,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.62, 0.26, 0.64],
         alpha: 0.6,
       },
@@ -3445,13 +3454,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [66.927, 4.873, 68.622],
         alpha: 0.4,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [53.503, 82.672, -33.901],
         alpha: 0.6,
       },
@@ -3467,13 +3476,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [66.93, 68.79, 85.94],
         alpha: 0.4,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [53.5, 89.35, 337.7],
         alpha: 0.6,
       },
@@ -3491,13 +3500,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.2, 0.1, -0.1],
         alpha: undefined,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.6, 0.3, 0.1],
         alpha: undefined,
       },
@@ -3507,7 +3516,7 @@ describe('color values', () => {
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0.4, 0.2, 0],
       alpha: undefined,
     });
@@ -3517,13 +3526,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.2, 0.1, -0.1],
         alpha: 0,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklab',
+        space: SPACES.oklab,
         components: [0.6, 0.3, 0.1],
         alpha: 0,
       },
@@ -3533,7 +3542,7 @@ describe('color values', () => {
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
-      space: 'oklab',
+      space: SPACES.oklab,
       components: [0, 0, 0],
       alpha: 0,
     });
@@ -3549,13 +3558,13 @@ describe('color values', () => {
       const result = interpolateColors(
         {
           kind: ColorKind.Absolute,
-          space,
+          space: SPACES[space],
           components: [...a],
           alpha: 1,
         },
         {
           kind: ColorKind.Absolute,
-          space,
+          space: SPACES[space],
           components: [...b],
           alpha: 1,
         },
@@ -3578,13 +3587,13 @@ describe('color values', () => {
       const result = interpolateColors(
         {
           kind: ColorKind.Absolute,
-          space: 'oklch',
+          space: SPACES.oklch,
           components: [...a],
           alpha: 1,
         },
         {
           kind: ColorKind.Absolute,
-          space: 'oklch',
+          space: SPACES.oklch,
           components: [...b],
           alpha: 1,
         },
@@ -3612,13 +3621,13 @@ describe('color values', () => {
       const result = interpolateColors(
         {
           kind: ColorKind.Absolute,
-          space: 'oklch',
+          space: SPACES.oklch,
           components: [0.5, 0.1, hueA],
           alpha: 1,
         },
         {
           kind: ColorKind.Absolute,
-          space: 'oklch',
+          space: SPACES.oklch,
           components: [0.5, 0.1, hueB],
           alpha: 1,
         },
@@ -3635,13 +3644,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.4, 0.1, 30],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.8, 0.1, 30],
         alpha: 1,
       },
@@ -3657,13 +3666,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.2, 0.1, undefined],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.8, 0.4, 180],
         alpha: 1,
       },
@@ -3678,13 +3687,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.2, 0.1, undefined],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.8, 0.4, undefined],
         alpha: 1,
       },
@@ -3702,13 +3711,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [...a],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space,
+        space: SPACES[space],
         components: [...b],
         alpha: 1,
       },
@@ -3723,14 +3732,14 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.2, 0.4, 0.6],
         alpha: 1,
         isLegacySrgb: true,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.8, 0.6, 0.4],
         alpha: 1,
         isLegacySrgb: true,
@@ -3740,7 +3749,7 @@ describe('color values', () => {
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
       alpha: 1,
     });
@@ -3750,21 +3759,21 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0, 0, 0],
         alpha: 1,
         isLegacySrgb: true,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [1, 1, 1],
         alpha: 1,
       },
       0.5,
     );
 
-    expect(result.space).toBe('oklab');
+    expect(result.space.name).toBe('oklab');
     expectComponentsCloseTo(result.components, [0.5, 0, 0], 7);
   });
 
@@ -3772,13 +3781,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0.5, 0, 0],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [undefined, 0.5, 0.5],
         alpha: 1,
       },
@@ -3793,13 +3802,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'lab',
+        space: SPACES.lab,
         components: [50, undefined, undefined],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'lch',
+        space: SPACES.lch,
         components: [70, undefined, undefined],
         alpha: 1,
       },
@@ -3814,14 +3823,14 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [0, 0, 0],
         alpha: 0,
         isLegacySrgb: true,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [0.8, 0.2, 120],
         alpha: 1,
       },
@@ -3838,13 +3847,13 @@ describe('color values', () => {
     const result = interpolateColors(
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [-1, 2, 3],
         alpha: 1,
       },
       {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [3, 4, -1],
         alpha: 1,
       },
@@ -3873,15 +3882,15 @@ describe('color values', () => {
     (oklch, srgb) => {
       const mapped = gamutMapColor({
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [...oklch],
         alpha: 1,
       }, 'srgb');
 
-      expect(mapped.space).toBe('srgb');
+      expect(mapped.space.name).toBe('srgb');
       expectColorCloseTo(mapped, {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [...srgb],
         alpha: 1,
       });
@@ -3891,14 +3900,14 @@ describe('color values', () => {
   it('returns the clipped color below the just-noticeable difference', () => {
     const mapped = gamutMapColor({
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.7, 0.2, 30],
       alpha: 0.5,
     }, 'srgb');
 
     expectColorCloseTo(mapped, {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [1, 0.38019885544225046, 0.3010433350997795],
       alpha: 0.5,
     });
@@ -3907,14 +3916,14 @@ describe('color values', () => {
   it('supports clipping as an explicit gamut-mapping method', () => {
     const mapped = gamutMapColor({
       kind: ColorKind.Absolute,
-      space: 'srgb-linear',
+      space: SPACES['srgb-linear'],
       components: [0.5, 1, 3],
       alpha: 0.4,
     }, 'srgb-linear', 'clip');
 
     expect(mapped).toEqual({
       kind: ColorKind.Absolute,
-      space: 'srgb-linear',
+      space: SPACES['srgb-linear'],
       components: [0.5, 1, 1],
       alpha: 0.4,
     });
@@ -3934,14 +3943,14 @@ describe('color values', () => {
     for (const [oklch, srgb] of cases) {
       const mapped = gamutMapColor({
         kind: ColorKind.Absolute,
-        space: 'oklch',
+        space: SPACES.oklch,
         components: [...oklch],
         alpha: 0.4,
       }, 'srgb');
 
       expectColorCloseTo(mapped, {
         kind: ColorKind.Absolute,
-        space: 'srgb',
+        space: SPACES.srgb,
         components: [...srgb],
         alpha: 0.4,
       });
@@ -3951,20 +3960,20 @@ describe('color values', () => {
   it('leaves in-gamut colors colorimetrically unchanged', () => {
     const origin: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'srgb',
+      space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
       alpha: 0.35,
     };
     const mapped = gamutMapColor(origin, 'srgb');
 
-    expect(mapped.space).toBe('srgb');
+    expect(mapped.space.name).toBe('srgb');
     expectColorCloseTo(mapped, origin);
   });
 
   it('converts without mapping when the destination has no gamut limits', () => {
     const origin: AbsoluteColor = {
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.7, 0.8, 40],
       alpha: 0.6,
     };
@@ -3984,12 +3993,12 @@ describe('color values', () => {
   ] as const)('returns an in-gamut color in %s', (destination) => {
     const mapped = gamutMapColor({
       kind: ColorKind.Absolute,
-      space: 'oklch',
+      space: SPACES.oklch,
       components: [0.7, 0.8, 40],
       alpha: 0.25,
     }, destination);
 
-    expect(mapped.space).toBe(destination);
+    expect(mapped.space.name).toBe(destination);
     expect(mapped.alpha).toBe(0.25);
 
     for (const component of mapped.components) {
