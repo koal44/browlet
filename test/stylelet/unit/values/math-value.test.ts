@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  accumulateMathValues, addMathValues, interpolateMathValues, parseMathValue, resolveMathValue,
-  serializeMathValue, tryCoercePercentageToNumber, type MathContext, type MathValueType,
-  type MathValue, type MathBase,
+  accumulateMathValues, addMathValues, interpolateMathValues, parseMathValue,
+  promoteNumericVariable, resolveMathValue, serializeMathValue, tryCoercePercentageToNumber,
+  type MathContext, type MathValueType, type MathValue, type MathBase,
 } from '../../../../src/stylelet/values/math-value';
 
 describe('calc', () => {
@@ -27,6 +27,7 @@ describe('calc', () => {
         type: 'math',
         calculation: numericLeaf(expected, type),
         valueType: expectedType,
+        promoted: false,
       });
     },
   );
@@ -72,13 +73,68 @@ describe('calc', () => {
       'percentage',
       {
         numericVariables: new Map([['p', {
-          value: null,
+          value: undefined,
           valueType: 'percentage',
         }]]),
       },
     )!;
 
     expect(tryCoercePercentageToNumber(percentage)).toBeNull();
+  });
+
+  it('promotes a numeric variable into a bare math value', () => {
+    const value = promoteNumericVariable('X', 'number', {
+      numericVariables: new Map([['x', {
+        value: undefined,
+        valueType: 'number',
+      }]]),
+    });
+
+    expect(value).toMatchObject({
+      type: 'math',
+      calculation: {
+        type: 'variable',
+        name: 'x',
+      },
+      valueType: 'number',
+      promoted: true,
+    });
+    expect(serializeMathValue(value)).toBe('x');
+  });
+
+  it('preserves promotion while resolving the same math value', () => {
+    const value = {
+      ...parseMathValue('calc(1em + 2px)', 'length')!,
+      promoted: true,
+    };
+
+    const resolved = resolveMathValue(value, {
+      length: { em: 16 },
+    });
+
+    expect(resolved).toMatchObject({
+      type: 'math',
+      promoted: true,
+    });
+    if (resolved.type !== 'math') {
+      throw new Error('Expected a math value');
+    }
+    expect(serializeMathValue(resolved)).toBe('calc(18px)');
+  });
+
+  it('does not promote a newly combined math value', () => {
+    const value = {
+      ...parseMathValue('calc(10px)', 'length')!,
+      promoted: true,
+    };
+
+    expect(addMathValues(
+      value,
+      parseMathValue('calc(20px)', 'length')!,
+    )).toMatchObject({
+      type: 'math',
+      promoted: false,
+    });
   });
 
   it('rejects a resolved literal that violates its value type', () => {
@@ -89,6 +145,7 @@ describe('calc', () => {
         mathHints([['percent', 1]], 'percent'),
       ),
       valueType: 'number',
+      promoted: false,
     };
 
     expect(() => resolveMathValue(value, { stage: 'computed' }))
@@ -106,6 +163,7 @@ describe('calc', () => {
         mathHints([['length', 1]]),
       ),
       valueType: 'length',
+      promoted: false,
     });
   });
 
@@ -117,6 +175,7 @@ describe('calc', () => {
         mathHints(),
       ),
       valueType: 'number',
+      promoted: false,
     });
   });
 
@@ -155,6 +214,7 @@ describe('calc', () => {
         mathHints(),
       ),
       valueType: 'number',
+      promoted: false,
     });
     expect(parseMathValue('min(1em, 2rem)', 'length')).toMatchObject({
       type: 'math',
@@ -166,6 +226,7 @@ describe('calc', () => {
         ],
       },
       valueType: 'length',
+      promoted: false,
     });
   });
 
@@ -1194,6 +1255,7 @@ describe('calc', () => {
         hints: mathHints([['length', 1]]),
       },
       valueType: 'length',
+      promoted: false,
     });
   });
 
@@ -1226,6 +1288,7 @@ describe('calc', () => {
         ],
       },
       valueType: 'length-percentage',
+      promoted: false,
     });
 
     expect(parseMathValue(
@@ -1353,6 +1416,7 @@ describe('calc', () => {
         mathHints([], 'percent'),
       ),
       valueType: 'number',
+      promoted: false,
     });
 
     const input = 'calc(1% / 1% * 10px)';
@@ -1407,6 +1471,7 @@ describe('calc', () => {
         mathHints([['length', 1]], 'length'),
       ),
       valueType: 'length-percentage',
+      promoted: false,
     });
 
     const percentage = parseMathValue('calc(25%)', 'percentage')!;
@@ -1420,6 +1485,7 @@ describe('calc', () => {
         mathHints([['percent', 1]], 'percent'),
       ),
       valueType: 'percentage',
+      promoted: false,
     });
   });
 
@@ -1643,7 +1709,7 @@ describe('calc', () => {
   it('passes unresolved numeric variables through nested calculations', () => {
     const context: MathContext = {
       numericVariables: new Map([['h', {
-        value: null,
+        value: undefined,
         valueType: 'number',
       }]]),
     };
@@ -1671,7 +1737,7 @@ describe('calc', () => {
   it('retains an unresolved numeric variable in a product', () => {
     const value = parseMathValue('calc(c * 0.9)', 'number', {
       numericVariables: new Map([['c', {
-        value: null,
+        value: undefined,
         valueType: 'number',
       }]]),
     });
@@ -1694,6 +1760,7 @@ describe('calc', () => {
         hints: mathHints(),
       },
       valueType: 'number',
+      promoted: false,
     });
     expect(serializeMathValue(value!)).toBe('calc(0.9 * c)');
   });
@@ -1716,11 +1783,29 @@ describe('calc', () => {
     });
   });
 
+  it('calculates with a missing numeric variable as zero', () => {
+    const context: MathContext = {
+      numericVariables: new Map([['x', {
+        value: 'none',
+        valueType: 'number',
+      }]]),
+    };
+    const value = parseMathValue('calc(x + 1)', 'number', context)!;
+
+    expect(resolveMathValue(value, {
+      ...context,
+      stage: 'computed',
+    })).toEqual({
+      type: 'number',
+      value: 1,
+    });
+  });
+
   it('types an unresolved dimensional numeric variable', () => {
     const lengthHints = mathHints([['length', 1]]);
     const context: MathContext = {
       numericVariables: new Map([['x', {
-        value: null,
+        value: undefined,
         valueType: 'length',
       }]]),
     };

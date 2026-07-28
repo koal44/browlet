@@ -9,6 +9,18 @@ type ColorVector3 = readonly [number, number, number];
 type ColorVector4 = readonly [number, number, number, number];
 type ColorVector = ColorVector3 | ColorVector4;
 
+function promotedVariable(name: string) {
+  return {
+    type: 'math' as const,
+    calculation: {
+      type: 'variable' as const,
+      name,
+    },
+    valueType: 'number' as const,
+    promoted: true,
+  };
+}
+
 function isColorVector(value: unknown): value is ColorVector {
   return (
     Array.isArray(value) &&
@@ -307,6 +319,107 @@ describe('color values', () => {
       components: [undefined, 0, 1],
       alpha: undefined,
       isLegacySrgb: true,
+    });
+  });
+
+  it('parses relative rgb component keywords only after an origin color', () => {
+    const color = parseColorValue('rgba(from red alpha g b / r)');
+
+    expect(color).toMatchObject({
+      kind: ColorKind.RgbFn,
+      syntax: 'modern',
+      origin: {
+        kind: ColorKind.Named,
+        name: 'red',
+      },
+      components: [
+        promotedVariable('alpha'),
+        promotedVariable('g'),
+        promotedVariable('b'),
+      ],
+      alpha: promotedVariable('r'),
+    });
+    expect(serializeColorValue(color!))
+      .toBe('rgb(from red alpha g b / r)');
+    expect(parseColorValue('rgb(r g b)')).toBeNull();
+    expect(parseColorValue('rgb(calc(r / 2) 0 0)')).toBeNull();
+    expect(parseColorValue('rgb(from red h g b)')).toBeNull();
+  });
+
+  it('resolves relative rgb component keywords and math variables', () => {
+    const color = parseColorValue(
+      'rgb(from red calc(r / 2) g b / alpha)',
+    )!;
+
+    expect(color).toMatchObject({
+      kind: ColorKind.RgbFn,
+      components: [
+        {
+          type: 'math',
+          valueType: 'number',
+          promoted: false,
+        },
+        promotedVariable('g'),
+        promotedVariable('b'),
+      ],
+    });
+    expect(resolveColorValue(color, { stage: 'computed' })).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.5, 0, 0],
+      alpha: 1,
+    });
+    expect(resolveComputedAbsoluteColor(
+      'rgb(from rebeccapurple '
+      + 'calc((r / 255) * 100%) '
+      + 'calc((g / 255) * 100%) '
+      + 'calc((b / 255) * 100%) / calc(alpha * 100%))',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.4, 0.2, 0.6],
+      alpha: 1,
+    });
+  });
+
+  it('does not rescale relative rgb keywords used in another position', () => {
+    expect(parseColorValue(
+      'rgb(from rgb(0 0 0 / 60%) alpha 153 153 / 0.9)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [0.6 / 255, 0.6, 0.6],
+      alpha: 0.9,
+    });
+  });
+
+  it('inherits and clamps relative rgb alpha without clamping channels', () => {
+    expect(parseColorValue(
+      'rgb(from rgb(20 30 40 / 70%) 300 -10 b)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [300 / 255, -10 / 255, 40 / 255],
+      alpha: 0.7,
+    });
+    expect(resolveComputedAbsoluteColor(
+      'rgb(from rgb(20 30 40 / 70%) r g b / calc(alpha * 2))',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [20 / 255, 30 / 255, 40 / 255],
+      alpha: 1,
+    });
+  });
+
+  it('carries missing relative rgb components and calculates with them as zero', () => {
+    expect(resolveComputedAbsoluteColor(
+      'rgb(from rgb(none 0 0 / none) r calc(r + 1) b)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [undefined, 1 / 255, 0],
+      alpha: undefined,
     });
   });
 
@@ -627,6 +740,48 @@ describe('color values', () => {
     });
   });
 
+  it('parses relative HSL component keywords only after an origin color', () => {
+    const color = parseColorValue('hsla(from red alpha s l / h)');
+
+    expect(color).toMatchObject({
+      kind: ColorKind.HslFn,
+      syntax: 'modern',
+      origin: {
+        kind: ColorKind.Named,
+        name: 'red',
+      },
+      hue: promotedVariable('alpha'),
+      saturation: promotedVariable('s'),
+      lightness: promotedVariable('l'),
+      alpha: promotedVariable('h'),
+    });
+    expect(serializeColorValue(color!))
+      .toBe('hsl(from red alpha s l / h)');
+    expect(parseColorValue('hsl(h s l)')).toBeNull();
+    expect(parseColorValue('hsl(calc(h + 180) 0 0)')).toBeNull();
+    expect(parseColorValue('hsl(from red r s l)')).toBeNull();
+  });
+
+  it('resolves relative HSL component keywords and math variables', () => {
+    const color = resolveComputedAbsoluteColor(
+      'hsl(from hsl(30 40% 50% / 0.5) '
+      + 'calc(h + 180) s l / calc(alpha * 2))',
+    );
+
+    expectColorCloseTo(color, [0.3, 0.5, 0.7, 1]);
+  });
+
+  it('carries missing relative HSL components and calculates with them as zero', () => {
+    expect(resolveComputedAbsoluteColor(
+      'hsl(from hsl(none 10% 50%) h calc(h + 20) l)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'hsl',
+      components: [undefined, 20, 50],
+      alpha: 1,
+    });
+  });
+
   it.each([
     ['hsl(none none none)', [undefined, undefined, undefined], 1],
     [
@@ -716,6 +871,35 @@ describe('color values', () => {
       components: [undefined, 0, 100],
       alpha: undefined,
     });
+  });
+
+  it('parses relative HWB component keywords only after an origin color', () => {
+    const color = parseColorValue('hwb(from red alpha w b / h)');
+
+    expect(color).toMatchObject({
+      kind: ColorKind.HwbFn,
+      origin: {
+        kind: ColorKind.Named,
+        name: 'red',
+      },
+      hue: promotedVariable('alpha'),
+      whiteness: promotedVariable('w'),
+      blackness: promotedVariable('b'),
+      alpha: promotedVariable('h'),
+    });
+    expect(serializeColorValue(color!))
+      .toBe('hwb(from red alpha w b / h)');
+    expect(parseColorValue('hwb(h w b)')).toBeNull();
+    expect(parseColorValue('hwb(from red r w b)')).toBeNull();
+  });
+
+  it('resolves relative HWB component keywords and math variables', () => {
+    const color = resolveComputedAbsoluteColor(
+      'hwb(from hwb(30 20% 40% / 0.5) '
+      + 'calc(h + 180) w b / calc(alpha * 2))',
+    );
+
+    expectColorCloseTo(color, [0.2, 0.4, 0.6, 1]);
   });
 
   it('rejects invalid hwb syntax', () => {
@@ -829,6 +1013,57 @@ describe('color values', () => {
     });
   });
 
+  it.each([
+    ['lab', ColorKind.LabFn],
+    ['oklab', ColorKind.OklabFn],
+  ] as const)(
+    'parses relative %s component keywords only after an origin color',
+    (name, kind) => {
+      const input = `${name}(from red alpha a b / l)`;
+      const color = parseColorValue(input);
+
+      expect(color).toMatchObject({
+        kind,
+        origin: {
+          kind: ColorKind.Named,
+          name: 'red',
+        },
+        lightness: promotedVariable('alpha'),
+        a: promotedVariable('a'),
+        b: promotedVariable('b'),
+        alpha: promotedVariable('l'),
+      });
+      expect(serializeColorValue(color!)).toBe(input);
+      expect(parseColorValue(`${name}(l a b)`)).toBeNull();
+      expect(parseColorValue(`${name}(from red r a b)`)).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      'lab(from lab(50 20 -30 / 0.5) '
+        + 'calc(l + 10) a calc(b * 2) / calc(alpha * 2))',
+      'lab',
+      [60, 20, -60],
+    ],
+    [
+      'oklab(from oklab(0.5 0.1 -0.1 / 0.5) '
+        + 'calc(l + 0.1) a calc(b * 2) / calc(alpha * 2))',
+      'oklab',
+      [0.6, 0.1, -0.2],
+    ],
+  ] as const)(
+    'resolves relative Lab-family component keywords in %s',
+    (input, space, components) => {
+      expect(resolveComputedAbsoluteColor(input)).toEqual({
+        kind: ColorKind.Absolute,
+        space,
+        components,
+        alpha: 1,
+      });
+    },
+  );
+
   it('resolves lch and oklch functions to absolute colors', () => {
     expect(parseColorValue('lch(50 40% 270deg / 25%)')).toEqual({
       kind: ColorKind.Absolute,
@@ -842,6 +1077,133 @@ describe('color values', () => {
       components: [undefined, 0.2, undefined],
       alpha: 1,
     });
+  });
+
+  it.each([
+    ['lch', ColorKind.LchFn],
+    ['oklch', ColorKind.OklchFn],
+  ] as const)(
+    'parses relative %s component keywords only after an origin color',
+    (name, kind) => {
+      const input = `${name}(from red alpha c h / l)`;
+      const color = parseColorValue(input);
+
+      expect(color).toMatchObject({
+        kind,
+        origin: {
+          kind: ColorKind.Named,
+          name: 'red',
+        },
+        lightness: promotedVariable('alpha'),
+        chroma: promotedVariable('c'),
+        hue: promotedVariable('h'),
+        alpha: promotedVariable('l'),
+      });
+      expect(serializeColorValue(color!)).toBe(input);
+      expect(parseColorValue(`${name}(l c h)`)).toBeNull();
+      expect(parseColorValue(`${name}(from red l a h)`)).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      'lch(from lch(50 30 40 / 0.5) '
+        + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
+      'lch',
+      [40, 30, 220],
+    ],
+    [
+      'oklch(from oklch(0.5 0.1 40 / 0.5) '
+        + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
+      'oklch',
+      [0.4, 0.1, 220],
+    ],
+  ] as const)(
+    'resolves relative polar Lab-family component keywords in %s',
+    (input, space, components) => {
+      expect(resolveComputedAbsoluteColor(input)).toEqual({
+        kind: ColorKind.Absolute,
+        space,
+        components,
+        alpha: 1,
+      });
+    },
+  );
+
+  it('carries missing relative LCH components and calculates with them as zero', () => {
+    expect(resolveComputedAbsoluteColor(
+      'lch(from lch(50 20 none / none) l calc(h + 10) h / alpha)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'lch',
+      components: [50, 10, undefined],
+      alpha: undefined,
+    });
+  });
+
+  it('parses alpha functions and scopes the alpha component keyword', () => {
+    const input = 'alpha(from currentcolor / alpha)';
+    const color = parseColorValue(input);
+
+    expect(color).toMatchObject({
+      kind: ColorKind.AlphaFn,
+      origin: {
+        kind: ColorKind.CurrentColor,
+      },
+      alpha: promotedVariable('alpha'),
+    });
+    expect(serializeColorValue(color!)).toBe(input);
+    expect(parseColorValue('alpha()')).toBeNull();
+    expect(parseColorValue('alpha(red / 0.5)')).toBeNull();
+    expect(parseColorValue('alpha(from red 0.5)')).toBeNull();
+    expect(parseColorValue('alpha(from red / r)')).toBeNull();
+  });
+
+  it('replaces, inherits, and removes alpha without changing color components', () => {
+    expect(resolveComputedAbsoluteColor(
+      'alpha(from oklch(0.5 0.1 40 / 0.8) / calc(alpha * 0.5))',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'oklch',
+      components: [0.5, 0.1, 40],
+      alpha: 0.4,
+    });
+    expect(resolveComputedAbsoluteColor(
+      'alpha(from lab(50 20 -30 / 0.3))',
+    )).toEqual(resolveComputedAbsoluteColor(
+      'lab(50 20 -30 / 0.3)',
+    ));
+    expect(resolveComputedAbsoluteColor(
+      'alpha(from color(display-p3 1 0 0) / none)',
+    )).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'display-p3',
+      components: [1, 0, 0],
+      alpha: undefined,
+    });
+  });
+
+  it('clamps alpha and preserves the origin color encoding', () => {
+    expect(resolveComputedAbsoluteColor('alpha(from red / 2)')).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [255, 0, 0],
+      alpha: 255,
+      isLegacySrgb: true,
+      is8Bit: true,
+    });
+    const translucent = resolveComputedAbsoluteColor('alpha(from red / 0.5)');
+
+    expect(translucent).toEqual({
+      kind: ColorKind.Absolute,
+      space: 'srgb',
+      components: [1, 0, 0],
+      alpha: 0.5,
+      isLegacySrgb: true,
+    });
+    expect(serializeColorValue(translucent)).toBe('rgba(255, 0, 0, 0.5)');
+    expect(resolveComputedAbsoluteColor('alpha(from red / -1)'))
+      .toEqual({ ...translucent, alpha: 0 });
   });
 
   it('rejects invalid Lab-family syntax', () => {

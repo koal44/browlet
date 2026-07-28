@@ -368,9 +368,9 @@ describe('component value combinators', () => {
         one(consumeD),
         one(consumeEF),
       ],
-      ([d, ef]) => ok([
+      ([d, [ef]]) => ok([
         d,
-        ef![0],
+        ef,
       ]),
     );
 

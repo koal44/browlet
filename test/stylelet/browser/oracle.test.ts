@@ -2555,6 +2555,17 @@ const colorSerializations: ColorSerializationCase[] = [
   { decl: 'color(display-p3 1 0 0)', expect: 'color(display-p3 1 0 0)' },
   { decl: 'currentColor', expect: 'currentcolor' },
 
+  // CSS Color 5 preserves whether a relative component was specified as an
+  // identifier or as a calculation in declared serialization.
+  {
+    decl: 'rgb(from rebeccapurple r g b / alpha)',
+    expect: 'rgb(from rebeccapurple r g b / alpha)',
+  },
+  {
+    decl: 'rgb(from rebeccapurple calc(r) calc(g) calc(b) / calc(alpha))',
+    expect: 'rgb(from rebeccapurple calc(r) calc(g) calc(b) / calc(alpha))',
+  },
+
   // Reducible and contextual color calculations.
   {
     decl: 'COLOR(DISPLAY-P3 calc(.1 + .2) 0 0)',
@@ -2877,7 +2888,7 @@ const colorSerializations: ColorSerializationCase[] = [
 
 const colorSerializationSheetId = 'color-declared-serialization';
 
-runScenarios('CSS declared color serialization oracle', 'skip', [
+runScenarios('CSS declared color serialization oracle', 'normal', [
   {
     name: 'compares HTML-compatible and CSS sRGB serialization',
     engines: ['native'],
@@ -3023,6 +3034,12 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
         #wide        { color: color(display-p3 1 0 0); }
         #current     { color: currentColor; }
         #border      { color: red; border-color: currentColor; }
+        #relative-bare {
+          color: rgb(from color(srgb none .2 .3) r g b);
+        }
+        #relative-calc {
+          color: rgb(from color(srgb none .2 .3) calc(r) g b);
+        }
       </style>
 
       <div id="named"></div>
@@ -3032,6 +3049,8 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
       <div id="wide"></div>
       <div style="color: blue"><div id="current"></div></div>
       <div id="border"></div>
+      <div id="relative-bare"></div>
+      <div id="relative-calc"></div>
     `,
     cases: [
       {
@@ -3068,6 +3087,21 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
         computedStyle: 'border-top-color',
         ref: { by: 'id', id: 'border' },
         expect: { value: 'rgb(255, 0, 0)' },
+      },
+      // CSS Color 5 allows a direct component keyword to carry `none`.
+      // All three engines currently replace it with zero, as does the WPT
+      // whose nearby FIXME predates the specification clarification.
+      ...(['chromium', 'firefox', 'webkit'] as const).map((browser) => ({
+        computedStyle: 'color' as const,
+        ref: { by: 'id' as const, id: 'relative-bare' },
+        browsers: [browser],
+        status: 'fail' as const,
+        expect: { value: 'color(srgb none 0.2 0.3)' },
+      })),
+      {
+        computedStyle: 'color',
+        ref: { by: 'id', id: 'relative-calc' },
+        expect: { value: 'color(srgb 0 0.2 0.3)' },
       },
     ],
   },

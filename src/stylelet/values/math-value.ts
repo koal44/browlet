@@ -53,6 +53,7 @@ export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';
   calculation: CalculationTree;
   valueType: Type;
+  promoted: boolean;
 };
 
 export type MathValueType = keyof MathLiteralByType;
@@ -102,7 +103,7 @@ export type MathContext = ValueStageContext & {
 
   /**
    * ASCII-lowercase numeric variable names, values, and types.
-   * A null value represents a variable that has not resolved yet.
+   * An undefined value represents a variable that has not resolved yet.
    */
   numericVariables?: ReadonlyMap<string, NumericVariable>;
 };
@@ -114,7 +115,7 @@ type InternalMathContext = MathContext & {
 };
 
 export type NumericVariable = {
-  value: NumericLiteral | null;
+  value: NumericLiteral | 'none' | undefined;
   valueType: MathValueType;
 };
 
@@ -160,6 +161,37 @@ export function createMathValueFromLiteral<Type extends MathValueType>(
     createNumericLeaf(normalized, mathHints),
     valueType,
   );
+}
+
+export function promoteNumericVariable<Type extends MathValueType>(
+  name: string,
+  valueType: Type,
+  context: MathContext = {},
+): MathValue<Type> {
+  const normalizedName = asciiLower(name);
+  const variable = context.numericVariables?.get(normalizedName);
+
+  if (variable === undefined || variable.valueType !== valueType) {
+    throw new TypeError('Cannot promote an unknown numeric variable');
+  }
+
+  return createMathValue(
+    {
+      type: 'variable',
+      name: normalizedName,
+      hints: mathHintsFromNumericVariable(variable, context),
+    },
+    valueType,
+    true,
+  );
+}
+
+export function promotedNumericVariableName(
+  value: MathValue,
+): string | null {
+  return value.promoted && value.calculation.type === 'variable'
+    ? value.calculation.name
+    : null;
 }
 
 type MathValueConsumerOptions<Type extends MathValueType = MathValueType> = {
@@ -234,6 +266,7 @@ export function tryCoercePercentageToNumber(
       numberMathHints(),
     ),
     valueType: 'number',
+    promoted: false,
   };
 }
 
@@ -241,6 +274,11 @@ export function serializeMathValue(
   value: MathValue,
 ): string {
   const { calculation } = value;
+  const promotedName = promotedNumericVariableName(value);
+
+  if (promotedName !== null) {
+    return promotedName;
+  }
 
   if (isNumericLeaf(calculation)) {
     return `calc(${serializeCalcTree(calculation)})`;
@@ -672,11 +710,13 @@ const tryConsumeMathValue: TryComponentConsumer<MathValue> = (c) => {
 function createMathValue<Type extends MathValueType>(
   calculation: CalculationTree,
   valueType: Type,
+  promoted = false,
 ): MathValue<Type> {
   return {
     type: 'math',
     calculation,
     valueType,
+    promoted,
   };
 }
 
@@ -1479,7 +1519,7 @@ function mathHintsFromNumericVariable(
 ): MathHints {
   const hints = mathHintsFromValueType(variable.valueType, context);
 
-  if (variable.value !== null) {
+  if (variable.value !== undefined && variable.value !== 'none') {
     const valueHints = mathHintsFromValue(variable.value, context);
 
     if (
@@ -1522,6 +1562,32 @@ function mathHintsFromValueType(
       return createMathHints([['time', 1]], 'time');
     case 'frequency-percentage':
       return createMathHints([['frequency', 1]], 'frequency');
+  }
+}
+
+function zeroNumericLiteral(valueType: MathValueType): NumericLiteral {
+  switch (valueType) {
+    case 'number':
+    case 'integer':
+      return { type: 'number', value: 0 };
+    case 'percentage':
+      return { type: 'percentage', value: 0 };
+    case 'angle':
+    case 'angle-percentage':
+      return { type: 'dimension', value: 0, unit: 'deg' };
+    case 'frequency':
+    case 'frequency-percentage':
+      return { type: 'dimension', value: 0, unit: 'hz' };
+    case 'length':
+    case 'length-percentage':
+      return { type: 'dimension', value: 0, unit: 'px' };
+    case 'resolution':
+      return { type: 'dimension', value: 0, unit: 'dppx' };
+    case 'time':
+    case 'time-percentage':
+      return { type: 'dimension', value: 0, unit: 's' };
+    case 'flex':
+      return { type: 'dimension', value: 0, unit: 'fr' };
   }
 }
 
@@ -2134,7 +2200,7 @@ function simplifyCalculationNode(
     case 'variable': {
       const variable = context.numericVariables?.get(root.name);
 
-      if (variable?.value === null || variable === undefined) {
+      if (variable === undefined || variable.value === undefined) {
         return root;
       }
 
@@ -2145,7 +2211,12 @@ function simplifyCalculationNode(
       }
 
       return simplifyCalculationNode(
-        createNumericLeaf(variable.value, hints),
+        createNumericLeaf(
+          variable.value === 'none'
+            ? zeroNumericLiteral(variable.valueType)
+            : variable.value,
+          hints,
+        ),
         context,
       );
     }

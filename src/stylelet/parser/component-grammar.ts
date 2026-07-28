@@ -47,7 +47,9 @@ type SequenceValue<P extends readonly AnyMultiplier[]> = {
   -readonly [I in keyof P]: MultiplierOutputOf<P[I]>;
 };
 
-type UnorderedValue<P extends readonly AnyMultiplier[]> = {
+type AllOfValue<P extends readonly AnyMultiplier[]> = SequenceValue<P>;
+
+type SomeOfValue<P extends readonly AnyMultiplier[]> = {
   -readonly [I in keyof P]: MultiplierOutputOf<P[I]> | undefined;
 };
 
@@ -197,7 +199,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
  */
 export function allOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<AllOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return tryConsumeAllOf(false, consumers, project);
 }
@@ -207,7 +209,7 @@ export function allOf<const P extends readonly AnyMultiplier[], R>(
  */
 export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<AllOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return tryConsumeAllOf(true, consumers, project);
 }
@@ -215,7 +217,7 @@ export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
 function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<AllOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
@@ -247,7 +249,7 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
         result.values[i] = empty.value;
       }
 
-      const raw = result.values as UnorderedValue<P>;
+      const raw = result.values as AllOfValue<P>;
 
       if (requireAnyValue && !hasAnyValue(raw)) {
         c.restore(start);
@@ -273,7 +275,7 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
  */
 export function someOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<SomeOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return tryConsumeSomeOf(false, consumers, project);
 }
@@ -283,7 +285,7 @@ export function someOf<const P extends readonly AnyMultiplier[], R>(
  */
 export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<SomeOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return tryConsumeSomeOf(true, consumers, project);
 }
@@ -291,7 +293,7 @@ export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
 function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
-  project: Projector<UnorderedValue<P>, R>,
+  project: Projector<SomeOfValue<P>, R>,
 ): TryComponentConsumer<R> {
   return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
@@ -327,7 +329,7 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
         result.values[i] = empty.value;
       }
 
-      const raw = result.values as UnorderedValue<P>;
+      const raw = result.values as SomeOfValue<P>;
 
       if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasAnyValue(raw))) {
         c.restore(start);
