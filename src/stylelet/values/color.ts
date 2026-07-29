@@ -294,6 +294,7 @@ export enum ColorKind {
   AlphaFn,
   ColorFn,
   DeviceCmykFn,
+  LightDarkColor,
   Absolute,
   ColorMixFn,
 }
@@ -353,7 +354,7 @@ function builtinColorProfile<
 
 /*
  * <color> = <color-base> | currentColor | <system-color> |
- *           <device-cmyk()> | <quirky-color>
+ *           <device-cmyk()> | <light-dark-color> | <quirky-color>
  *
  * <color-base> = <hex-color> | <color-function> | <named-color> |
  *                <color-mix()>
@@ -374,7 +375,8 @@ export type ColorValue =
   | CurrentColor
   | SystemColor
   | DeprecatedColor
-  | DeviceCmykFn;
+  | DeviceCmykFn
+  | LightDarkColor;
 
 export type ColorBase =
   | HexColor
@@ -428,7 +430,7 @@ export function tryConsumeColor(
     ));
 }
 
-// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()>
+// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <light-dark-color>
 const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
@@ -436,11 +438,12 @@ const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
     one(tryConsumeDeviceCmykFn),
+    one(tryConsumeLightDarkColor),
   ],
   ([value]) => ok(value),
 );
 
-// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <quirky-color>
+// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <light-dark-color> | <quirky-color>
 const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
@@ -448,6 +451,7 @@ const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
     one(tryConsumeDeviceCmykFn),
+    one(tryConsumeLightDarkColor),
     one(tryConsumeQuirkyColor),
   ],
   ([value]) => ok(value),
@@ -2209,6 +2213,46 @@ const consumeCmykComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
 );
 
 /*
+ * TODO: Extend <light-dark()> with <light-dark-image> when the <image>
+ *       production is implemented.
+ *
+ * <light-dark()> = <light-dark-color>
+ *
+ * <light-dark-color> = light-dark(<color>, <color>)
+ */
+
+export type LightDarkColor = {
+  kind: ColorKind.LightDarkColor;
+  light: ColorValue;
+  dark: ColorValue;
+};
+
+function tryConsumeLightDarkColor(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LightDarkColor> {
+  return consumeLightDarkColor(c);
+}
+
+// <light-dark-color> = light-dark(<color>, <color>)
+const consumeLightDarkColor: TryComponentConsumer<LightDarkColor> =
+  createFunctionalNotationConsumer(
+    'light-dark',
+    sequenceOf(
+      [
+        one(withComponentTrivia(tryConsumeColor)),
+        one(withComponentTrivia(tryConsumeComma)),
+        one(withComponentTrivia(tryConsumeColor)),
+      ],
+      ([[light], , [dark]]) => ok({
+        kind: ColorKind.LightDarkColor as const,
+        light,
+        dark,
+      }),
+    ),
+    (color) => color,
+  );
+
+/*
  * <color-space> = <rectangular-color-space> | <polar-color-space>
  *
  * <rectangular-color-space> = srgb | srgb-linear |
@@ -2438,9 +2482,12 @@ export function resolveColorValue(
 export type ColorResolutionContext = MathContext & ColorConversionContext & {
   currentColor?: AbsoluteColor;
   systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
+  colorScheme?: ColorScheme;
   // Converts the final resolved result to this space.
   targetColorSpace?: ColorSpaceName;
 };
+
+export type ColorScheme = 'light' | 'dark';
 
 export function tryResolveAbsoluteColor(
   value: ColorValue,
@@ -2498,6 +2545,8 @@ function resolveColorValueInternal(
       return resolveColorFunction(value, stage, context);
     case ColorKind.DeviceCmykFn:
       return resolveDeviceCmykFn(value, stage, context);
+    case ColorKind.LightDarkColor:
+      return resolveLightDarkColor(value, stage, context);
     case ColorKind.ColorMixFn:
       return resolveColorMixFn(value, stage, context);
     default:
@@ -3589,6 +3638,25 @@ function resolveDeviceCmykFn(
   };
 }
 
+function resolveLightDarkColor(
+  value: LightDarkColor,
+  stage: ValueStage,
+  context: ColorResolutionContext,
+): ColorValue {
+  if (
+    stage < ValueStage.Computed ||
+    context.colorScheme === undefined
+  ) {
+    return value;
+  }
+
+  return resolveColorValueInternal(
+    context.colorScheme === 'light' ? value.light : value.dark,
+    stage,
+    context,
+  );
+}
+
 function colorResolutionContextFor(context: unknown): ColorResolutionContext {
   return context === null || context === undefined
     ? {}
@@ -3618,6 +3686,8 @@ export function serializeColorValue(
       throw new TypeError('Color mixes must be resolved before serialization');
     case ColorKind.DeviceCmykFn:
       return serializeDeviceCmykFn(value);
+    case ColorKind.LightDarkColor:
+      return serializeLightDarkColor(value);
     case ColorKind.RgbFn:
     case ColorKind.HslFn:
     case ColorKind.HwbFn:
@@ -3922,6 +3992,14 @@ function serializeDeviceCmykFn(value: DeviceCmykFn): string {
       components,
       value.alpha,
     );
+}
+
+function serializeLightDarkColor(value: LightDarkColor): string {
+  return `light-dark(${
+    serializeColorValue(value.light)
+  }, ${
+    serializeColorValue(value.dark)
+  })`;
 }
 
 function serializeAbsoluteRgb(

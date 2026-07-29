@@ -765,6 +765,102 @@ describe('color values', () => {
     expectComponentsCloseTo(inputs[0], [0.1, 0.2, 0.3, 0.4], 12);
   });
 
+  it('parses and serializes the light-dark color production', () => {
+    const color = parseColorValue('LiGhT-DaRk(black, white)');
+
+    expect(color).toEqual({
+      kind: ColorKind.LightDarkColor,
+      light: {
+        kind: ColorKind.Named,
+        name: 'black',
+      },
+      dark: {
+        kind: ColorKind.Named,
+        name: 'white',
+      },
+    });
+    expect(serializeColorValue(color!)).toBe('light-dark(black, white)');
+  });
+
+  it.each([
+    'light-dark()',
+    'light-dark(red)',
+    'light-dark(red blue)',
+    'light-dark(red,, blue)',
+    'light-dark(red, blue, green)',
+    'light-dark(red, url(dark.png))',
+  ])('rejects invalid light-dark color syntax %s', (input) => {
+    expect(parseColorValue(input)).toBeNull();
+  });
+
+  it.each([
+    ['light', 'rgb(255, 255, 255)'],
+    ['dark', 'rgb(0, 0, 0)'],
+  ] as const)(
+    'resolves the %s light-dark color at computed-value time',
+    (colorScheme, serialized) => {
+      const declared = parseColorValue('light-dark(white, black)')!;
+
+      expect(resolveColorValue(
+        declared,
+        ValueStage.Declared,
+        { colorScheme },
+      )).toEqual(declared);
+      expect(serializeColorValue(resolveColorValue(
+        declared,
+        ValueStage.Computed,
+        { colorScheme },
+      ))).toBe(serialized);
+    },
+  );
+
+  it('preserves light-dark until color-scheme context is available', () => {
+    const color = parseColorValue('light-dark(white, black)')!;
+
+    expect(resolveColorValue(color, ValueStage.Computed)).toEqual(color);
+    expect(serializeColorValue(color)).toBe('light-dark(white, black)');
+  });
+
+  it('resolves nested light-dark colors using the same color scheme', () => {
+    const color = parseColorValue(
+      'light-dark(light-dark(white, red), red)',
+    )!;
+
+    expect(serializeColorValue(resolveColorValue(
+      color,
+      ValueStage.Computed,
+      { colorScheme: 'light' },
+    ))).toBe('rgb(255, 255, 255)');
+    expect(serializeColorValue(resolveColorValue(
+      color,
+      ValueStage.Computed,
+      { colorScheme: 'dark' },
+    ))).toBe('rgb(255, 0, 0)');
+  });
+
+  it('selects currentcolor without resolving it before the used stage', () => {
+    const declared = parseColorValue(
+      'light-dark(red, currentcolor)',
+    )!;
+    const computed = resolveColorValue(
+      declared,
+      ValueStage.Computed,
+      { colorScheme: 'dark' },
+    );
+
+    expect(computed).toEqual({
+      kind: ColorKind.CurrentColor,
+    });
+
+    const currentColor = resolveComputedAbsoluteColor('blue');
+
+    expect(resolveColorValue(
+      computed,
+      ValueStage.Used,
+      { colorScheme: 'dark', currentColor },
+    )).toBe(currentColor);
+  });
+
   it('parses and serializes custom color space parameters', () => {
     const color = parseColorValue(
       'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)',
