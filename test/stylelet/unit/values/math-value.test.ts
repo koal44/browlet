@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing';
 import {
-  accumulateMathValues, addMathValues, interpolateMathValues, parseMathValue,
-  promoteNumericVariable, resolveMathValue, serializeMathValue, tryCoercePercentageToNumber,
+  accumulateMathValues, addMathValues, coercePercentageMathToNumber,
+  interpolateMathValues, parseMathValue, promoteNumericVariable,
+  resolveMathValue, serializeMathValue,
   type MathContext, type MathValueType, type MathValue, type MathBase,
 } from '../../../../src/stylelet/values/math-value';
 
@@ -50,16 +51,14 @@ describe('calc', () => {
     expect(resolveMathValue(value, ValueStage.Declared, { unwrapMathAt: ValueStage.Declared })).toEqual(expected);
   });
 
-  it('coerces a percentage math leaf to number math', () => {
-    const percentage = parseMathValue(
-      'calc(2 * 60%)',
-      'percentage',
-    )!;
-    const number = tryCoercePercentageToNumber(percentage);
-
-    if (number === null) {
-      throw new Error('Expected percentage math to be coercible');
-    }
+  it('coerces percentage math into number math', () => {
+    const context = { percentHint: 'percent' } as const;
+    const percentage = parseMathValue('calc(2 * 60%)', 'percentage', context)!;
+    const number = coercePercentageMathToNumber(
+      percentage,
+      1 / 100,
+      1,
+    );
 
     expect(serializeMathValue(number)).toBe('calc(1.2)');
     expect(resolveMathValue(number, ValueStage.Computed)).toEqual({
@@ -68,19 +67,23 @@ describe('calc', () => {
     });
   });
 
-  it('does not coerce unresolved percentage math', () => {
-    const percentage = parseMathValue(
-      'calc(p)',
-      'percentage',
-      {
-        numericVariables: new Map([['p', {
-          value: undefined,
-          valueType: 'percentage',
-        }]]),
-      },
-    )!;
+  it('preserves unresolved math while dividing its percentage dimension', () => {
+    const context: MathContext = {
+      percentHint: 'percent',
+      numericVariables: new Map([['p', {
+        value: undefined,
+        valueType: 'percentage',
+      }]]),
+    };
+    const percentage = parseMathValue('calc(p)', 'percentage', context)!;
+    const number = coercePercentageMathToNumber(
+      percentage,
+      1 / 100,
+      1,
+    );
 
-    expect(tryCoercePercentageToNumber(percentage)).toBeNull();
+    expect(serializeMathValue(number)).toBe('calc(p / 100%)');
+    expect(number.valueType).toBe('number');
   });
 
   it('promotes a numeric variable into a bare math value', () => {
@@ -1170,6 +1173,20 @@ describe('calc', () => {
         .toBe(expected);
     },
   );
+
+  it('canonicalizes a special numeric dimension while simplifying', () => {
+    expect(parseMathValue(
+      'calc(-infinity * 1em)',
+      'length',
+    )?.calculation).toEqual(numericLeaf(
+      {
+        type: 'dimension',
+        value: -Infinity,
+        unit: 'px',
+      },
+      mathHints([['length', 1]]),
+    ));
+  });
 
   it('adds math functions into a simplified calc function', () => {
     const result = addMathValues(

@@ -2596,8 +2596,8 @@ describe.skip('animation-name', () => {
 describe('opacity values', () => {
   it.each([
     ['0.5', { type: 'number', value: 0.5 }],
-    ['50%', { type: 'percentage', value: 50 }],
-  ] as const)('parses the literal opacity value %s', (input, expected) => {
+    ['50%', { type: 'number', value: 0.5 }],
+  ] as const)('parses and normalizes the literal opacity value %s', (input, expected) => {
     expect(parseOpacityValue(input)).toEqual(expected);
   });
 
@@ -2620,14 +2620,14 @@ describe('opacity values', () => {
     expect(parseOpacityValue(input)).toBeNull();
   });
 
-  it('preserves literal opacity values through specified value', () => {
+  it('normalizes literal opacity percentages without early clamping', () => {
     const number = parseOpacityValue('2')!;
-    const percentage = parseOpacityValue('200%')!;
+    const percentage = { type: 'percentage', value: 200 } as const;
 
     expect(resolveOpacityValue(number, ValueStage.Specified))
       .toEqual(number);
     expect(resolveOpacityValue(percentage, ValueStage.Specified))
-      .toEqual(percentage);
+      .toEqual(number);
   });
 
   it.each([

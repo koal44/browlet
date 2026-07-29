@@ -65,11 +65,15 @@ export const tryConsumeInteger = createIntegerConsumer();
 
 // CSSOM, "To serialize a CSS component value", <integer>.
 export function serializeInteger(value: IntegerLiteral): string {
-  if (Number.isSafeInteger(value.value)) {
-    return Object.is(value.value, -0) ? '0' : String(value.value);
+  return serializeCssInteger(value.value);
+}
+
+export function serializeCssInteger(value: number): string {
+  if (Number.isSafeInteger(value)) {
+    return Object.is(value, -0) ? '0' : String(value);
   }
 
-  return BigInt(value.value).toString();
+  return BigInt(value).toString();
 }
 
 // CSS Values, "Computation and Combination of <integer>".

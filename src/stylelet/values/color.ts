@@ -18,7 +18,7 @@ import { NumberTokenFlag, TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
 import {
-  promoteNumericVariable, promotedNumericVariableName, tryCoercePercentageToNumber,
+  coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName,
   type MathContext, type NumericVariable,
 } from './math-value';
 import { completeMixPercentages, normalizeMixPercentages } from './mix';
@@ -34,10 +34,10 @@ import {
   type PercentageValue,
 } from './percentage';
 
-// Canonical representation of a resolved color in an identified coordinate
-// space. It has an intrinsic colorimetric interpretation when its space is
-// predefined; other spaces require external conversion context. Undefined
-// components represent the `none` keyword.
+// Resolved representation of a color in an identified coordinate space. It
+// has an intrinsic colorimetric interpretation when its space is predefined;
+// other spaces require external conversion context. Undefined components
+// represent the `none` keyword.
 export type AbsoluteColor<
   Space extends AbsoluteColorSpace = AbsoluteColorSpace,
 > = {
@@ -49,7 +49,7 @@ export type AbsoluteColor<
   >;
   alpha: number | undefined;
   // Retains legacy rgb()/rgba() serialization and interpolation behavior.
-  isLegacySrgb?: true;
+  isLegacySrgb: boolean;
   // Components and alpha are stored as 8-bit integers.
   is8Bit?: true;
 };
@@ -147,8 +147,7 @@ type PredefinedRgbColorSpace =
 type XyzColorSpace = XyzD50Space | XyzD65Space;
 
 type PredefinedRgbSpace = PredefinedRgbColorSpace['name'];
-type XyzSpace = 'xyz' | XyzColorSpace['name'];
-type ColorFnSpace = PredefinedRgbSpace | XyzSpace;
+type ColorFnSpace = PredefinedRgbSpace | XyzColorSpace['name'];
 
 type RectangularColorSpace =
   | PredefinedRgbColorSpace
@@ -212,7 +211,11 @@ function mapTuple<const Values extends readonly unknown[], Result>(
   return values.map(transform) as SameArityTuple<Values, Result>;
 }
 
-type SyntaxColorComponent = NumberValue | PercentageValue | 'none';
+type SyntaxComponent = SyntaxColorComponent | SyntaxAlphaComponent;
+type SyntaxColorComponent = SyntaxNonHueComponent | SyntaxHueComponent;
+
+type SyntaxNonHueComponent = NonHueValue | 'none';
+type NonHueValue = NumberValue | PercentageValue;
 
 type SyntaxAlphaComponent = AlphaValue | 'none';
 type AlphaValue = NumberValue | PercentageValue;
@@ -220,63 +223,6 @@ type AlphaLiteral = NumberLiteral | PercentageLiteral;
 
 type SyntaxHueComponent = HueValue | 'none';
 type HueValue = NumberValue | AngleValue;
-
-type ColorMetadata = {
-  space: PredefinedColorSpace | null;
-  components: readonly ColorComponentMetadata[];
-  /** Stage at which reducible math is unwrapped and its non-finite results become clampable. */
-  resolveAt: ValueStage;
-  convertToSrgb: boolean;
-};
-
-/** Resolution, clamping, and serialization policy for one color component. */
-type ColorComponentMetadata = {
-  /** Whether the component uses hue-specific resolution and serialization. */
-  isHue: boolean;
-  /** Multiplier from number syntax to the component's internal coordinate. */
-  numberScale: number;
-  /** Multiplier from percentage syntax to the component's internal coordinate. */
-  percentageScale: number;
-  /** Whether resolved syntax is eagerly lowered to a canonical number coordinate. */
-  canonicalize: boolean;
-  /** Coordinate represented by 100% when serialization should prefer percentages. */
-  percentageReference: number | null;
-  /** Inclusive number-syntax range applied during clamping. */
-  numberRange: ColorComponentRange | null;
-  /** Inclusive percentage-syntax range applied during clamping. */
-  percentageRange: ColorComponentRange | null;
-};
-
-type ColorComponentRange = [
-  minimum: number,
-  maximum: number,
-];
-
-function defineColorComponentMetadata({
-  isHue = false,
-  numberScale = 1,
-  percentageScale = 1,
-  canonicalize = true,
-  percentageReference = null,
-  numberRange = null,
-  percentageRange = null,
-}: Partial<ColorComponentMetadata> = {}): ColorComponentMetadata {
-  return {
-    isHue,
-    numberScale,
-    percentageScale,
-    canonicalize,
-    percentageReference,
-    numberRange,
-    percentageRange,
-  };
-}
-
-const HUE_COMPONENT_METADATA = defineColorComponentMetadata({ isHue: true });
-const PERCENTAGE_COMPONENT_METADATA = defineColorComponentMetadata({
-  canonicalize: false,
-  percentageReference: 100,
-});
 
 export enum ColorKind {
   Named = 1,
@@ -293,6 +239,7 @@ export enum ColorKind {
   OklchFn,
   AlphaFn,
   ColorFn,
+  CustomColorFn,
   DeviceCmykFn,
   LightDarkColor,
   Absolute,
@@ -317,7 +264,6 @@ const PROFILES = {
   'a98-rgb': builtinColorProfile('a98-rgb', ['r', 'g', 'b']),
   'prophoto-rgb': builtinColorProfile('prophoto-rgb', ['r', 'g', 'b']),
   rec2020: builtinColorProfile('rec2020', ['r', 'g', 'b']),
-  xyz: builtinColorProfile('xyz', ['x', 'y', 'z']),
   'xyz-d50': builtinColorProfile('xyz-d50', ['x', 'y', 'z']),
   'xyz-d65': builtinColorProfile('xyz-d65', ['x', 'y', 'z']),
 } satisfies Record<ColorFnSpace, ColorProfile>;
@@ -331,21 +277,15 @@ function builtinColorProfile<
   space: Space,
   components: readonly [First, Second, Third],
 ): ColorProfile<Space, readonly [First, Second, Third]> {
-  const absoluteSpace: ColorSpaceName = space === 'xyz' ? 'xyz-d65' : space;
-
   return defineColorProfile({
     space,
     components,
-    toAbsoluteColor: (values) => ({
-      kind: ColorKind.Absolute,
-      space: SPACES[absoluteSpace],
-      components: [values[0], values[1], values[2]],
-      alpha: 1,
-    }),
+    toAbsoluteColor: (values) =>
+      absoluteColorInPredefinedSpace(SPACES[space], values, 1),
     fromAbsoluteColor: (color) => {
       const values = convertPredefinedAbsoluteColor(
-        normalizeColorEncoding(color),
-        absoluteSpace,
+        normalizeAbsoluteColorEncoding(color),
+        space,
       ).components;
 
       return mapTuple(values, (value) => value ?? 0);
@@ -397,6 +337,9 @@ export type ColorFunction =
   | OklchFn
   | AlphaFn
   | ColorFn;
+
+export type RelativeColorFunction =
+  ColorFunction & { origin: ColorValue; };
 
 export function parseColorValue(
   input: ParserInput,
@@ -1040,12 +983,12 @@ const tryConsumeCurrentColorKeyword = createKeywordConsumer('currentcolor');
 
 export type RgbFn = {
   kind: ColorKind.RgbFn;
-  syntax: 'legacy' | 'modern';
+  useLegacySyntax: boolean;
   origin?: ColorValue;
   components: ColorComponentTuple<SrgbSpace, [
-    red: SyntaxColorComponent,
-    green: SyntaxColorComponent,
-    blue: SyntaxColorComponent,
+    red: SyntaxNonHueComponent,
+    green: SyntaxNonHueComponent,
+    blue: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
@@ -1125,7 +1068,7 @@ function createLegacyRgbSyntaxConsumer(
         ],
         ([components, [alpha]]) => ok({
           kind: ColorKind.RgbFn as const,
-          syntax: 'legacy' as const,
+          useLegacySyntax: true,
           components,
           alpha,
         }),
@@ -1143,7 +1086,7 @@ function createLegacyRgbSyntaxConsumer(
         ],
         ([components, [alpha]]) => ok({
           kind: ColorKind.RgbFn as const,
-          syntax: 'legacy' as const,
+          useLegacySyntax: true,
           components,
           alpha,
         }),
@@ -1158,25 +1101,6 @@ function tryConsumeModernRgbSyntax(
 ): TryComponentConsumerResult<RgbFn> {
   return consumeModernRgbSyntax(c);
 }
-
-const RGB_COMPONENT_METADATA = defineColorComponentMetadata({
-  numberScale: 1 / 0xff,
-  percentageScale: 1 / 100,
-  canonicalize: false,
-  numberRange: [0, 0xff],
-  percentageRange: [0, 100],
-});
-
-const RGB_METADATA = {
-  space: SPACES.srgb,
-  components: [
-    RGB_COMPONENT_METADATA,
-    RGB_COMPONENT_METADATA,
-    RGB_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Declared,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
 
 // <modern-rgb-syntax> = rgb([ from <color> ]? [ <number> | <percentage> | none ]{3} [ / [ <alpha-value> | none ] ]?)
 const consumeModernRgbSyntax = createModernRgbSyntaxConsumer();
@@ -1198,7 +1122,7 @@ function createModernRgbSyntaxConsumer(
         contextAfter: (_origin, context) =>
           contextWithRelativeColorVariables(
             context,
-            RGB_METADATA.space.keys,
+            SPACES.srgb.keys,
           ),
       }),
       repeat(withComponentTrivia(oneOf(
@@ -1214,7 +1138,7 @@ function createModernRgbSyntaxConsumer(
     ],
     ([[origin], components, [alpha]]) => ok({
       kind: ColorKind.RgbFn,
-      syntax: 'modern',
+      useLegacySyntax: false,
       origin,
       components,
       alpha,
@@ -1247,12 +1171,12 @@ function createModernRgbSyntaxConsumer(
 
 export type HslFn = {
   kind: ColorKind.HslFn;
-  syntax: 'legacy' | 'modern';
+  useLegacySyntax: boolean;
   origin?: ColorValue;
   components: ColorComponentTuple<HslSpace, [
     hue: SyntaxHueComponent,
-    saturation: SyntaxColorComponent,
-    lightness: SyntaxColorComponent,
+    saturation: SyntaxNonHueComponent,
+    lightness: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
@@ -1343,7 +1267,7 @@ function createLegacyHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
     ],
     ([[hue], [saturation], [lightness], [alpha]]) => ok({
       kind: ColorKind.HslFn,
-      syntax: 'legacy',
+      useLegacySyntax: true,
       components: [hue, saturation, lightness],
       alpha,
     }),
@@ -1355,22 +1279,6 @@ function tryConsumeModernHslSyntax(
 ): TryComponentConsumerResult<HslFn> {
   return consumeModernHslSyntax(c);
 }
-
-const HSL_METADATA = {
-  space: SPACES.hsl,
-  components: [
-    HUE_COMPONENT_METADATA,
-    defineColorComponentMetadata({
-      canonicalize: false,
-      percentageReference: 100,
-      numberRange: [0, Infinity],
-      percentageRange: [0, Infinity],
-    }),
-    PERCENTAGE_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Declared,
-  convertToSrgb: true,
-} as const satisfies ColorMetadata;
 
 // <modern-hsl-syntax> = hsl([ from <color> ]? [ <hue> | none ] [ <percentage> | <number> | none ]{2} [ / [ <alpha-value> | none ] ]?)
 const consumeModernHslSyntax = createModernHslSyntaxConsumer();
@@ -1391,7 +1299,7 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
         contextAfter: (_origin, context) =>
           contextWithRelativeColorVariables(
             context,
-            HSL_METADATA.space.keys,
+            SPACES.hsl.keys,
           ),
       }),
       one(withComponentTrivia(oneOf(
@@ -1415,7 +1323,7 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
     ],
     ([[origin], [hue], [saturation, lightness], [alpha]]) => ok({
       kind: ColorKind.HslFn,
-      syntax: 'modern',
+      useLegacySyntax: false,
       origin,
       components: [hue, saturation, lightness],
       alpha,
@@ -1449,25 +1357,15 @@ const consumeHue: TryComponentConsumer<HueValue> = oneOf(
 
 export type HwbFn = {
   kind: ColorKind.HwbFn;
+  useLegacySyntax: false;
   origin?: ColorValue;
   components: ColorComponentTuple<HwbSpace, [
     hue: SyntaxHueComponent,
-    whiteness: SyntaxColorComponent,
-    blackness: SyntaxColorComponent,
+    whiteness: SyntaxNonHueComponent,
+    blackness: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
-
-const HWB_METADATA = {
-  space: SPACES.hwb,
-  components: [
-    HUE_COMPONENT_METADATA,
-    PERCENTAGE_COMPONENT_METADATA,
-    PERCENTAGE_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Declared,
-  convertToSrgb: true,
-} as const satisfies ColorMetadata;
 
 function tryConsumeHwbFunction(
   c: ComponentCursor,
@@ -1485,7 +1383,7 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
-              HWB_METADATA.space.keys,
+              SPACES.hwb.keys,
             ),
         }),
         one(withComponentTrivia(oneOf(
@@ -1509,6 +1407,7 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
       ],
       ([[origin], [hue], [whiteness, blackness], [alpha]]) => ok<HwbFn>({
         kind: ColorKind.HwbFn as const,
+        useLegacySyntax: false,
         origin,
         components: [hue, whiteness, blackness],
         alpha,
@@ -1535,22 +1434,24 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
 
 export type LabFn = {
   kind: ColorKind.LabFn;
+  useLegacySyntax: false;
   origin?: ColorValue;
   components: ColorComponentTuple<LabSpace, [
-    lightness: SyntaxColorComponent,
-    a: SyntaxColorComponent,
-    b: SyntaxColorComponent,
+    lightness: SyntaxNonHueComponent,
+    a: SyntaxNonHueComponent,
+    b: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
 
 export type OklabFn = {
   kind: ColorKind.OklabFn;
+  useLegacySyntax: false;
   origin?: ColorValue;
   components: ColorComponentTuple<OklabSpace, [
-    lightness: SyntaxColorComponent,
-    a: SyntaxColorComponent,
-    b: SyntaxColorComponent,
+    lightness: SyntaxNonHueComponent,
+    a: SyntaxNonHueComponent,
+    b: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
@@ -1560,24 +1461,6 @@ type LabArguments = {
   components: LabFn['components'];
   alpha?: SyntaxAlphaComponent;
 };
-
-const LAB_AXIS_COMPONENT_METADATA = defineColorComponentMetadata({
-  percentageScale: 1.25,
-});
-
-const LAB_METADATA = {
-  space: SPACES.lab,
-  components: [
-    defineColorComponentMetadata({
-      numberRange: [0, 100],
-      percentageRange: [0, 100],
-    }),
-    LAB_AXIS_COMPONENT_METADATA,
-    LAB_AXIS_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
 
 function tryConsumeLabFunction(
   c: ComponentCursor,
@@ -1589,31 +1472,13 @@ function tryConsumeLabFunction(
 const consumeLabFunction: TryComponentConsumer<LabFn> =
   createLabFunctionConsumer(
     'lab',
-    LAB_METADATA,
+    SPACES.lab,
     (arguments_) => ({
       kind: ColorKind.LabFn,
+      useLegacySyntax: false,
       ...arguments_,
     }),
   );
-
-const OKLAB_AXIS_COMPONENT_METADATA = defineColorComponentMetadata({
-  percentageScale: 0.4 / 100,
-});
-
-const OKLAB_METADATA = {
-  space: SPACES.oklab,
-  components: [
-    defineColorComponentMetadata({
-      percentageScale: 1 / 100,
-      numberRange: [0, 1],
-      percentageRange: [0, 100],
-    }),
-    OKLAB_AXIS_COMPONENT_METADATA,
-    OKLAB_AXIS_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
 
 function tryConsumeOklabFunction(
   c: ComponentCursor,
@@ -1625,16 +1490,17 @@ function tryConsumeOklabFunction(
 const consumeOklabFunction: TryComponentConsumer<OklabFn> =
   createLabFunctionConsumer(
     'oklab',
-    OKLAB_METADATA,
+    SPACES.oklab,
     (arguments_) => ({
       kind: ColorKind.OklabFn,
+      useLegacySyntax: false,
       ...arguments_,
     }),
   );
 
 function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
   name: 'lab' | 'oklab',
-  metadata: ColorMetadata,
+  space: LabSpace | OklabSpace,
   project: (arguments_: LabArguments) => Color,
 ): TryComponentConsumer<Color> {
   return createFunctionalNotationConsumer(
@@ -1645,7 +1511,7 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
-              metadata.space?.keys ?? [],
+              space.keys,
             ),
         }),
         repeat(withComponentTrivia(oneOf(
@@ -1687,10 +1553,11 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
 
 export type LchFn = {
   kind: ColorKind.LchFn;
+  useLegacySyntax: false;
   origin?: ColorValue;
   components: ColorComponentTuple<LchSpace, [
-    lightness: SyntaxColorComponent,
-    chroma: SyntaxColorComponent,
+    lightness: SyntaxNonHueComponent,
+    chroma: SyntaxNonHueComponent,
     hue: SyntaxHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
@@ -1698,10 +1565,11 @@ export type LchFn = {
 
 export type OklchFn = {
   kind: ColorKind.OklchFn;
+  useLegacySyntax: false;
   origin?: ColorValue;
   components: ColorComponentTuple<OklchSpace, [
-    lightness: SyntaxColorComponent,
-    chroma: SyntaxColorComponent,
+    lightness: SyntaxNonHueComponent,
+    chroma: SyntaxNonHueComponent,
     hue: SyntaxHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
@@ -1713,24 +1581,6 @@ type LchArguments = {
   alpha?: SyntaxAlphaComponent;
 };
 
-const LCH_METADATA = {
-  space: SPACES.lch,
-  components: [
-    defineColorComponentMetadata({
-      numberRange: [0, 100],
-      percentageRange: [0, 100],
-    }),
-    defineColorComponentMetadata({
-      percentageScale: 1.5,
-      numberRange: [0, Infinity],
-      percentageRange: [0, Infinity],
-    }),
-    HUE_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
-
 function tryConsumeLchFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<LchFn> {
@@ -1741,31 +1591,13 @@ function tryConsumeLchFunction(
 const consumeLchFunction: TryComponentConsumer<LchFn> =
   createLchFunctionConsumer(
     'lch',
-    LCH_METADATA,
+    SPACES.lch,
     (arguments_) => ({
       kind: ColorKind.LchFn,
+      useLegacySyntax: false,
       ...arguments_,
     }),
   );
-
-const OKLCH_METADATA = {
-  space: SPACES.oklch,
-  components: [
-    defineColorComponentMetadata({
-      percentageScale: 1 / 100,
-      numberRange: [0, 1],
-      percentageRange: [0, 100],
-    }),
-    defineColorComponentMetadata({
-      percentageScale: 0.4 / 100,
-      numberRange: [0, Infinity],
-      percentageRange: [0, Infinity],
-    }),
-    HUE_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
 
 function tryConsumeOklchFunction(
   c: ComponentCursor,
@@ -1777,16 +1609,17 @@ function tryConsumeOklchFunction(
 const consumeOklchFunction: TryComponentConsumer<OklchFn> =
   createLchFunctionConsumer(
     'oklch',
-    OKLCH_METADATA,
+    SPACES.oklch,
     (arguments_) => ({
       kind: ColorKind.OklchFn,
+      useLegacySyntax: false,
       ...arguments_,
     }),
   );
 
 function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
   name: 'lch' | 'oklch',
-  metadata: ColorMetadata,
+  space: LchSpace | OklchSpace,
   project: (arguments_: LchArguments) => Color,
 ): TryComponentConsumer<Color> {
   return createFunctionalNotationConsumer(
@@ -1797,7 +1630,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
-              metadata.space?.keys ?? [],
+              space.keys,
             ),
         }),
         repeat(withComponentTrivia(oneOf(
@@ -1837,8 +1670,10 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
 
 export type AlphaFn = {
   kind: ColorKind.AlphaFn;
+  useLegacySyntax: false;
   origin: ColorValue;
   alpha?: SyntaxAlphaComponent;
+  components: never[];
 };
 
 function tryConsumeAlphaFunction(
@@ -1864,8 +1699,10 @@ const consumeAlphaFunction: TryComponentConsumer<AlphaFn> =
       ],
       ([[origin], [alpha]]) => ok({
         kind: ColorKind.AlphaFn as const,
+        useLegacySyntax: false as const,
         origin,
         alpha,
+        components: [],
       }),
     ),
     (color) => color,
@@ -1892,31 +1729,27 @@ const consumeAlphaFunction: TryComponentConsumer<AlphaFn> =
  * <xyz-space> = xyz | xyz-d50 | xyz-d65
  */
 
-export type ColorFn = {
+export type ColorFn =
+  | PredefinedColorFn
+  | CustomColorFn;
+
+export type PredefinedColorFn = {
   kind: ColorKind.ColorFn;
-  space: ColorFunctionSpace;
-  components: SyntaxColorComponent[];
+  useLegacySyntax: false;
+  space: ColorFnSpace;
+  components: SyntaxNonHueComponent[];
   alpha?: SyntaxAlphaComponent;
   origin?: ColorValue;
 };
 
-const COLOR_FN_METADATA = {
-  space: null,
-  components: [defineColorComponentMetadata({
-    percentageScale: 1 / 100,
-  })],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
-
-const CUSTOM_COLOR_FN_METADATA = {
-  ...COLOR_FN_METADATA,
-  components: [defineColorComponentMetadata({
-    percentageScale: 1 / 100,
-    numberRange: [0, 1],
-    percentageRange: [0, 100],
-  })],
-} as const satisfies ColorMetadata;
+export type CustomColorFn = {
+  kind: ColorKind.CustomColorFn;
+  useLegacySyntax: false;
+  space: CustomColorSpace['name'];
+  components: SyntaxNonHueComponent[];
+  alpha?: SyntaxAlphaComponent;
+  origin?: ColorValue;
+};
 
 function colorProfileFor(
   space: ColorFunctionSpace,
@@ -1933,10 +1766,9 @@ function isCustomColorProfileSpace(
   return space.startsWith('--');
 }
 
-type ColorFnSpaceParams = {
-  space: ColorFunctionSpace;
-  components: SyntaxColorComponent[];
-};
+type ColorFnSpaceParams =
+  | Pick<PredefinedColorFn, 'kind' | 'space' | 'components'>
+  | Pick<CustomColorFn, 'kind' | 'space' | 'components'>;
 
 function tryConsumeColorFunctionNotation(
   c: ComponentCursor,
@@ -1961,7 +1793,7 @@ const consumeColorFunctionNotation: TryComponentConsumer<ColorFn> =
         opt(tryConsumeModernAlpha),
       ],
       ([[origin], [params], [alpha]]) => ok({
-        kind: ColorKind.ColorFn as const,
+        useLegacySyntax: false as const,
         origin,
         ...params,
         alpha,
@@ -2010,6 +1842,7 @@ const consumeCustomParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf
     ))),
   ],
   ([[space], components]) => ok({
+    kind: ColorKind.CustomColorFn as const,
     space: space.value,
     components,
   }),
@@ -2040,6 +1873,7 @@ const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
       )), 3, 3),
     ],
     ([[space], components]) => ok({
+      kind: ColorKind.ColorFn as const,
       space,
       components,
     }),
@@ -2086,6 +1920,7 @@ const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
     )), 3, 3),
   ],
   ([[space], components]) => ok({
+    kind: ColorKind.ColorFn as const,
     space,
     components,
   }),
@@ -2093,8 +1928,12 @@ const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
 
 function tryConsumeXyzSpace(
   c: ComponentCursor,
-): TryComponentConsumerResult<XyzSpace> {
-  return consumeXyzSpace(c);
+): TryComponentConsumerResult<XyzColorSpace['name']> {
+  const space = consumeXyzSpace(c);
+
+  return space === null || isBad(space)
+    ? space
+    : ok(space.value === 'xyz' ? 'xyz-d65' : space.value);
 }
 
 // <xyz-space> = xyz | xyz-d50 | xyz-d65
@@ -2115,33 +1954,15 @@ const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
 
 export type DeviceCmykFn = {
   kind: ColorKind.DeviceCmykFn;
-  syntax: 'legacy' | 'modern';
+  useLegacySyntax: boolean;
   components: ColorComponentTuple<DeviceCmykSpace, [
-    cyan: SyntaxColorComponent,
-    magenta: SyntaxColorComponent,
-    yellow: SyntaxColorComponent,
-    black: SyntaxColorComponent,
+    cyan: SyntaxNonHueComponent,
+    magenta: SyntaxNonHueComponent,
+    yellow: SyntaxNonHueComponent,
+    black: SyntaxNonHueComponent,
   ]>;
   alpha?: SyntaxAlphaComponent;
 };
-
-const DEVICE_CMYK_COMPONENT_METADATA = defineColorComponentMetadata({
-  percentageScale: 1 / 100,
-  numberRange: [0, 1],
-  percentageRange: [0, 100],
-});
-
-const DEVICE_CMYK_METADATA = {
-  space: null,
-  components: [
-    DEVICE_CMYK_COMPONENT_METADATA,
-    DEVICE_CMYK_COMPONENT_METADATA,
-    DEVICE_CMYK_COMPONENT_METADATA,
-    DEVICE_CMYK_COMPONENT_METADATA,
-  ],
-  resolveAt: ValueStage.Computed,
-  convertToSrgb: false,
-} as const satisfies ColorMetadata;
 
 function tryConsumeDeviceCmykFn(
   c: ComponentCursor,
@@ -2175,7 +1996,7 @@ const consumeLegacyDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
     [commaRepeat(tryConsumeNumber, 4, 4)],
     ([components]) => ok({
       kind: ColorKind.DeviceCmykFn as const,
-      syntax: 'legacy' as const,
+      useLegacySyntax: true,
       components,
     }),
   );
@@ -2195,7 +2016,7 @@ const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
     ],
     ([components, [alpha]]) => ok({
       kind: ColorKind.DeviceCmykFn as const,
-      syntax: 'modern' as const,
+      useLegacySyntax: false,
       components,
       alpha,
     }),
@@ -2203,12 +2024,12 @@ const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
 
 function tryConsumeCmykComponent(
   c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxColorComponent> {
+): TryComponentConsumerResult<SyntaxNonHueComponent> {
   return consumeCmykComponent(c);
 }
 
 // <cmyk-component> = <number> | <percentage> | none
-const consumeCmykComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
+const consumeCmykComponent: TryComponentConsumer<SyntaxNonHueComponent> = oneOf(
   [
     one(tryConsumeNumber),
     one(tryConsumePercentage),
@@ -2518,7 +2339,510 @@ const consumeQuirkyColor: TryComponentConsumer<HexColor> = (c) => {
   });
 };
 
+// ████████  ████████ ██          ███    ████████ ████ ██     ██ ████████
+// ██     ██ ██       ██         ██ ██      ██     ██  ██     ██ ██
+// ██     ██ ██       ██        ██   ██     ██     ██  ██     ██ ██
+// ████████  ██████   ██       ██     ██    ██     ██  ██     ██ ██████
+// ██   ██   ██       ██       █████████    ██     ██   ██   ██  ██
+// ██    ██  ██       ██       ██     ██    ██     ██    ██ ██   ██
+// ██     ██ ████████ ████████ ██     ██    ██    ████    ███    ████████
 
+type RelativeColorParserContext = ColorResolutionContext & {
+  relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
+};
+
+function tryConsumeRelativeColorOrigin(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ColorValue> {
+  return consumeRelativeColorOrigin(c);
+}
+
+const consumeRelativeColorOrigin = sequenceOf(
+  [
+    one(createKeywordConsumer('from')),
+    one(withComponentTrivia(consumeColor)),
+  ],
+  ([, [origin]]) => ok(origin),
+);
+
+function tryConsumeRelativeColorKeyword(
+  c: ComponentCursor,
+): TryComponentConsumerResult<NumberValue> {
+  const start = c.pos();
+  const ident = tryConsumeIdent(c);
+
+  if (ident === null || isBad(ident)) {
+    return ident;
+  }
+
+  const name = asciiLower(ident.value.value);
+  const variable = relativeColorVariablesFor(c.context)?.get(name);
+
+  if (variable === undefined) {
+    c.restore(start);
+    return null;
+  }
+
+  return ok(promoteNumericVariable(
+    name,
+    'number',
+    colorResolutionContextFor(c.context),
+  ));
+}
+
+function contextWithRelativeColorVariables(
+  context: unknown,
+  components: readonly string[],
+  includeAlpha = true,
+): RelativeColorParserContext {
+  const outer = colorResolutionContextFor(context);
+  const relativeColorVariables = new Map(
+    relativeColorVariableNames(components, includeAlpha).map((name) => [
+      name,
+      {
+        value: undefined,
+        valueType: 'number',
+      } satisfies NumericVariable,
+    ]),
+  );
+
+  return {
+    ...outer,
+    relativeColorVariables,
+    numericVariables: new Map([
+      ...(outer.numericVariables ?? []),
+      ...relativeColorVariables,
+    ]),
+  };
+}
+
+function contextWithColorFnRelativeVariables(
+  space: ColorFunctionSpace,
+  context: unknown,
+): unknown {
+  if (relativeColorVariablesFor(context) === undefined) {
+    return context;
+  }
+
+  const resolutionContext = colorResolutionContextFor(context);
+  const profile = colorProfileFor(space, resolutionContext);
+
+  return contextWithRelativeColorVariables(
+    resolutionContext,
+    profile?.components ?? [],
+    !isCustomColorProfileSpace(space),
+  );
+}
+
+function relativeColorVariableNames(
+  components: readonly string[],
+  includeAlpha = true,
+): string[] {
+  return includeAlpha ? [...components, 'alpha'] : [...components];
+}
+
+function relativeColorVariablesFor(
+  context: unknown,
+): RelativeColorParserContext['relativeColorVariables'] {
+  return context === null || context === undefined
+    ? undefined
+    : (context as RelativeColorParserContext).relativeColorVariables;
+}
+
+// ██     ██ ████████ ████████    ███
+// ███   ███ ██          ██      ██ ██
+// ████ ████ ██          ██     ██   ██
+// ██ ███ ██ ██████      ██    ██     ██
+// ██     ██ ██          ██    █████████
+// ██     ██ ██          ██    ██     ██
+// ██     ██ ████████    ██    ██     ██
+
+type ColorMetadata = {
+  fnName: string;
+  space: PredefinedColorSpace | null;
+  components: readonly ColorComponentMetadata[];
+  alpha: ColorComponentMetadata;
+  /** Whether exact integer syntax can be retained in 8-bit storage. */
+  supports8BitEncoding: boolean;
+  /** Whether an absolute color in this space must be coerced to sRGB. */
+  coerceToAbsoluteSrgb: boolean;
+  /** Stage at which the function may lower to an absolute color. */
+  lowerAt: ValueStage;
+};
+
+/** Resolution, clamping, and serialization policy for one color component. */
+type ColorComponentMetadata = {
+  /** Stage at which reducible math is resolved. */
+  resolveMathAt: ValueStage;
+  /** Stage at which finite component ranges are applied. */
+  clampAt: ValueStage;
+  /** Stage at which the component is normalized. */
+  normalizeAt: ValueStage;
+  /** Stage at which the component uses its canonical syntax. */
+  canonicalizeAt: ValueStage;
+  /** Whether a canonical unit value is represented by an omitted component. */
+  omitUnitary: boolean;
+  /** Whether the component uses hue-specific resolution and serialization. */
+  isHue: boolean;
+  /** Multiplier from number syntax to the component's internal coordinate. */
+  numberScale: number;
+  /** Multiplier from percentage syntax to the component's internal coordinate. */
+  percentageScale: number;
+  /** Canonical syntax used to represent the component. */
+  canonicalSyntax: 'number' | 'percentage';
+  /** Inclusive number-syntax range applied during clamping. */
+  numberRange: ColorComponentRange | null;
+  /** Inclusive percentage-syntax range applied during clamping. */
+  percentageRange: ColorComponentRange | null;
+};
+
+type ColorComponentRange = [
+  minimum: number,
+  maximum: number,
+];
+
+function defineColorMetadata<const Metadata extends Partial<ColorMetadata>>(
+  metadata: Metadata & Pick<ColorMetadata, 'fnName' | 'space' | 'components'>,
+): ColorMetadata & Metadata {
+  return {
+    alpha: ALPHA_COMPONENT_METADATA,
+    supports8BitEncoding: false,
+    coerceToAbsoluteSrgb: false,
+    lowerAt: ValueStage.Declared,
+    ...metadata,
+  };
+}
+
+function defineColorComponentMetadata({
+  resolveMathAt = ValueStage.Computed,
+  clampAt = ValueStage.Declared,
+  normalizeAt = ValueStage.Declared,
+  canonicalizeAt = ValueStage.Declared,
+  omitUnitary = false,
+  isHue = false,
+  numberScale = 1,
+  percentageScale = 1,
+  canonicalSyntax = 'number',
+  numberRange = null,
+  percentageRange = null,
+}: Partial<ColorComponentMetadata> = {}): ColorComponentMetadata {
+  return {
+    resolveMathAt,
+    clampAt,
+    normalizeAt,
+    canonicalizeAt,
+    omitUnitary,
+    isHue,
+    numberScale,
+    percentageScale,
+    canonicalSyntax,
+    numberRange,
+    percentageRange,
+  };
+}
+
+function componentMetadataAtComputed(
+  metadata: ColorComponentMetadata,
+): ColorComponentMetadata {
+  return {
+    ...metadata,
+    resolveMathAt: ValueStage.Computed,
+    clampAt: ValueStage.Computed,
+    normalizeAt: ValueStage.Computed,
+    canonicalizeAt: ValueStage.Computed,
+  };
+}
+
+const ALPHA_COMPONENT_METADATA = defineColorComponentMetadata({
+  percentageScale: 1 / 100,
+  numberRange: [0, 1],
+  percentageRange: [0, 100],
+  omitUnitary: true,
+});
+
+const HUE_COMPONENT_METADATA = defineColorComponentMetadata({ isHue: true });
+const DECLARED_HUE_COMPONENT_METADATA = defineColorComponentMetadata({
+  isHue: true,
+  resolveMathAt: ValueStage.Declared,
+});
+const PERCENTAGE_COMPONENT_METADATA = defineColorComponentMetadata({
+  canonicalSyntax: 'percentage',
+  resolveMathAt: ValueStage.Declared,
+});
+
+const RGB_COMPONENT_METADATA = defineColorComponentMetadata({
+  resolveMathAt: ValueStage.Declared,
+  numberScale: 1 / 0xff,
+  percentageScale: 1 / 100,
+  numberRange: [0, 0xff],
+  percentageRange: [0, 100],
+});
+
+const RGB_METADATA = defineColorMetadata({
+  fnName: 'rgb',
+  space: SPACES.srgb,
+  components: [
+    RGB_COMPONENT_METADATA,
+    RGB_COMPONENT_METADATA,
+    RGB_COMPONENT_METADATA,
+  ],
+  supports8BitEncoding: true,
+});
+
+type RgbMetadata = typeof RGB_METADATA;
+
+const HSL_METADATA = defineColorMetadata({
+  fnName: 'hsl',
+  space: SPACES.hsl,
+  components: [
+    DECLARED_HUE_COMPONENT_METADATA,
+    defineColorComponentMetadata({
+      resolveMathAt: ValueStage.Declared,
+      canonicalSyntax: 'percentage',
+      numberRange: [0, Infinity],
+      percentageRange: [0, Infinity],
+    }),
+    PERCENTAGE_COMPONENT_METADATA,
+  ],
+  coerceToAbsoluteSrgb: true,
+});
+
+type HslMetadata = typeof HSL_METADATA;
+
+const HWB_METADATA = defineColorMetadata({
+  fnName: 'hwb',
+  space: SPACES.hwb,
+  components: [
+    DECLARED_HUE_COMPONENT_METADATA,
+    PERCENTAGE_COMPONENT_METADATA,
+    PERCENTAGE_COMPONENT_METADATA,
+  ],
+  coerceToAbsoluteSrgb: true,
+});
+
+type HwbMetadata = typeof HWB_METADATA;
+
+const LAB_AXIS_COMPONENT_METADATA = defineColorComponentMetadata({
+  percentageScale: 1.25,
+});
+
+const LAB_METADATA = defineColorMetadata({
+  fnName: 'lab',
+  space: SPACES.lab,
+  components: [
+    defineColorComponentMetadata({
+      numberRange: [0, 100],
+      percentageRange: [0, 100],
+    }),
+    LAB_AXIS_COMPONENT_METADATA,
+    LAB_AXIS_COMPONENT_METADATA,
+  ],
+});
+
+type LabMetadata = typeof LAB_METADATA;
+
+const OKLAB_AXIS_COMPONENT_METADATA = defineColorComponentMetadata({
+  percentageScale: 0.4 / 100,
+});
+
+const OKLAB_METADATA = defineColorMetadata({
+  fnName: 'oklab',
+  space: SPACES.oklab,
+  components: [
+    defineColorComponentMetadata({
+      percentageScale: 1 / 100,
+      numberRange: [0, 1],
+      percentageRange: [0, 100],
+    }),
+    OKLAB_AXIS_COMPONENT_METADATA,
+    OKLAB_AXIS_COMPONENT_METADATA,
+  ],
+});
+
+type OklabMetadata = typeof OKLAB_METADATA;
+
+const LCH_METADATA = defineColorMetadata({
+  fnName: 'lch',
+  space: SPACES.lch,
+  components: [
+    defineColorComponentMetadata({
+      numberRange: [0, 100],
+      percentageRange: [0, 100],
+    }),
+    defineColorComponentMetadata({
+      percentageScale: 1.5,
+      numberRange: [0, Infinity],
+      percentageRange: [0, Infinity],
+    }),
+    HUE_COMPONENT_METADATA,
+  ],
+});
+
+type LchMetadata = typeof LCH_METADATA;
+
+const OKLCH_METADATA = defineColorMetadata({
+  fnName: 'oklch',
+  space: SPACES.oklch,
+  components: [
+    defineColorComponentMetadata({
+      percentageScale: 1 / 100,
+      numberRange: [0, 1],
+      percentageRange: [0, 100],
+    }),
+    defineColorComponentMetadata({
+      percentageScale: 0.4 / 100,
+      numberRange: [0, Infinity],
+      percentageRange: [0, Infinity],
+    }),
+    HUE_COMPONENT_METADATA,
+  ],
+});
+
+type OklchMetadata = typeof OKLCH_METADATA;
+
+const ALPHA_FN_METADATA = defineColorMetadata({
+  fnName: 'alpha',
+  space: null,
+  components: [],
+  lowerAt: ValueStage.Computed,
+});
+
+type AlphaFnMetadata = typeof ALPHA_FN_METADATA;
+
+const COLOR_FN_METADATA = defineColorMetadata({
+  fnName: 'color',
+  space: null,
+  components: [defineColorComponentMetadata({
+    clampAt: ValueStage.Computed,
+    percentageScale: 1 / 100,
+  })],
+});
+
+type ColorFnMetadata = typeof COLOR_FN_METADATA;
+
+const CUSTOM_COLOR_FN_METADATA = defineColorMetadata({
+  ...COLOR_FN_METADATA,
+  components: [defineColorComponentMetadata({
+    clampAt: ValueStage.Computed,
+    percentageScale: 1 / 100,
+    numberRange: [0, 1],
+    percentageRange: [0, 100],
+  })],
+  lowerAt: ValueStage.Computed,
+});
+
+type CustomColorFnMetadata = typeof CUSTOM_COLOR_FN_METADATA;
+
+const DEVICE_CMYK_COMPONENT_METADATA = defineColorComponentMetadata({
+  clampAt: ValueStage.Computed,
+  percentageScale: 1 / 100,
+  numberRange: [0, 1],
+  percentageRange: [0, 100],
+});
+
+const DEVICE_CMYK_METADATA = defineColorMetadata({
+  fnName: 'device-cmyk',
+  space: null,
+  components: [
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+  ],
+  lowerAt: ValueStage.Computed,
+});
+
+type DeviceCmykMetadata = typeof DEVICE_CMYK_METADATA;
+
+type DefinedColorMetadata =
+  | RgbMetadata
+  | HslMetadata
+  | HwbMetadata
+  | LabMetadata
+  | OklabMetadata
+  | LchMetadata
+  | OklchMetadata
+  | AlphaFnMetadata
+  | ColorFnMetadata
+  | CustomColorFnMetadata
+  | DeviceCmykMetadata;
+
+const COLOR_METADATA = {
+  [ColorKind.RgbFn]: RGB_METADATA,
+  [ColorKind.HslFn]: HSL_METADATA,
+  [ColorKind.HwbFn]: HWB_METADATA,
+  [ColorKind.LabFn]: LAB_METADATA,
+  [ColorKind.OklabFn]: OKLAB_METADATA,
+  [ColorKind.LchFn]: LCH_METADATA,
+  [ColorKind.OklchFn]: OKLCH_METADATA,
+  [ColorKind.AlphaFn]: ALPHA_FN_METADATA,
+  [ColorKind.ColorFn]: COLOR_FN_METADATA,
+  [ColorKind.CustomColorFn]: CUSTOM_COLOR_FN_METADATA,
+} as const satisfies Record<
+  ColorFunction['kind'],
+  DefinedColorMetadata
+>;
+
+type ColorMetadataTable = typeof COLOR_METADATA;
+type DerivedColorMetadataTable = {
+  readonly [Kind in keyof ColorMetadataTable]: ColorMetadata;
+};
+
+const ORIGIN_COLOR_METADATA = deriveColorMetadataTable(
+  COLOR_METADATA,
+  colorMetadataAsOrigin,
+);
+
+const RELATIVE_COLOR_METADATA = deriveColorMetadataTable(
+  COLOR_METADATA,
+  colorMetadataAsRelative,
+);
+
+function deriveColorMetadataTable(
+  table: ColorMetadataTable,
+  derive: (metadata: ColorMetadata) => ColorMetadata,
+): DerivedColorMetadataTable {
+  return Object.fromEntries(
+    Object.entries(table).map(([kind, metadata]) => [
+      kind,
+      derive(metadata),
+    ]),
+  ) as DerivedColorMetadataTable;
+}
+
+function colorMetadataAsOrigin(
+  metadata: ColorMetadata,
+): ColorMetadata {
+  return {
+    ...metadata,
+    components: metadata.components.map(componentMetadataAtComputed),
+    alpha: {
+      ...componentMetadataAtComputed(metadata.alpha),
+      omitUnitary: false,
+    },
+    lowerAt: ValueStage.Computed,
+  };
+}
+
+function colorMetadataAsRelative(
+  metadata: ColorMetadata,
+): ColorMetadata {
+  return {
+    ...metadata,
+    components: metadata.components.map((component) => ({
+      ...componentMetadataAtComputed(component),
+      canonicalizeAt: ValueStage.Declared,
+      canonicalSyntax: 'number',
+      numberRange: null,
+      percentageRange: null,
+    })),
+    alpha: {
+      ...metadata.alpha,
+      omitUnitary: false,
+    },
+    lowerAt: ValueStage.Computed,
+  };
+}
 
 // ████████  ████████  ██████   ███████  ██       ██     ██ ████████
 // ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██
@@ -2567,33 +2891,40 @@ function resolveColorValueInternal(
   value: ColorValue,
   stage: ValueStage,
   context: ColorResolutionContext,
+  asOrigin = false,
 ): ColorValue {
   switch (value.kind) {
     case ColorKind.Absolute:
       return value;
     case ColorKind.Named:
-      return stage >= ValueStage.Computed
-        ? resolveNamedColor(value)
-        : value;
+      if (stage < ValueStage.Computed) {
+        return value;
+      }
+
+      return absoluteColorFromRgba(ColorRgba[value.name]);
     case ColorKind.CurrentColor:
-      return stage >= ValueStage.Used
-        ? context.currentColor ?? value
-        : value;
+      if (stage < ValueStage.Used) {
+        return value;
+      }
+
+      return context.currentColor ?? value;
     case ColorKind.System:
-      return stage >= ValueStage.Computed
-        ? context.systemColors?.get(value.name) ?? value
-        : value;
+      if (stage < ValueStage.Computed) {
+        return value;
+      }
+
+      return context.systemColors?.get(value.name) ?? value;
     case ColorKind.Deprecated: {
       if (stage < ValueStage.Computed) {
         return value;
       }
 
-      const system: SystemColor = {
-        kind: ColorKind.System,
-        name: DeprecatedColorSystemName[value.name],
-      };
+      const name = DeprecatedColorSystemName[value.name];
 
-      return context.systemColors?.get(system.name) ?? system;
+      return context.systemColors?.get(name) ?? {
+        kind: ColorKind.System,
+        name,
+      };
     }
     case ColorKind.Hex:
       return resolveHexColor(value);
@@ -2606,7 +2937,8 @@ function resolveColorValueInternal(
     case ColorKind.OklchFn:
     case ColorKind.AlphaFn:
     case ColorKind.ColorFn:
-      return resolveColorFunction(value, stage, context);
+    case ColorKind.CustomColorFn:
+      return resolveColorFunction(value, stage, context, asOrigin);
     case ColorKind.DeviceCmykFn:
       return resolveDeviceCmykFn(value, stage, context);
     case ColorKind.LightDarkColor:
@@ -2618,10 +2950,6 @@ function resolveColorValueInternal(
     default:
       return assertNever(value);
   }
-}
-
-function resolveNamedColor(value: NamedColor): AbsoluteColor {
-  return absoluteColorFromRgba(ColorRgba[value.name]);
 }
 
 function resolveHexColor(value: HexColor): AbsoluteColor {
@@ -2738,6 +3066,7 @@ function colorValueUsesCurrentColor(value: ColorValue): boolean {
     case ColorKind.OklchFn:
     case ColorKind.AlphaFn:
     case ColorKind.ColorFn:
+    case ColorKind.CustomColorFn:
       return value.origin === undefined
         ? false
         : colorValueUsesCurrentColor(value.origin);
@@ -2787,518 +3116,412 @@ function isResolvedColorMixItem(
   );
 }
 
-type RelativeColorFn = ColorFunction;
-type RelativeComponentFn = Exclude<RelativeColorFn, AlphaFn>;
-type MetadataColorFn = Exclude<RelativeComponentFn, RgbFn | ColorFn>;
-
-const COLOR_METADATA = {
-  [ColorKind.RgbFn]: RGB_METADATA,
-  [ColorKind.HslFn]: HSL_METADATA,
-  [ColorKind.HwbFn]: HWB_METADATA,
-  [ColorKind.LabFn]: LAB_METADATA,
-  [ColorKind.OklabFn]: OKLAB_METADATA,
-  [ColorKind.LchFn]: LCH_METADATA,
-  [ColorKind.OklchFn]: OKLCH_METADATA,
-  [ColorKind.ColorFn]: COLOR_FN_METADATA,
-} as const satisfies Record<
-  RelativeComponentFn['kind'],
-  ColorMetadata
->;
-
 function resolveColorFunction(
   value: ColorFunction,
   stage: ValueStage,
   context: ColorResolutionContext,
+  asOrigin: boolean,
 ): ColorValue {
-  if (value.origin !== undefined) {
-    return resolveRelativeFn(value, value.origin, stage, context);
+  if (isRelativeColorFunction(value)) {
+    return resolveRelativeFn(value, stage, context);
   }
 
-  const alpha = value.alpha;
-  const resolvedAlpha = resolveColorAlphaValue(alpha, stage, context);
-  const resolvedValue = resolvedAlpha === alpha
-    ? value
-    : { ...value, alpha: resolvedAlpha };
+  return resolveNonRelativeColorFn(
+    value,
+    stage,
+    context,
+    asOrigin,
+  );
+}
 
-  switch (resolvedValue.kind) {
-    case ColorKind.RgbFn:
-      return resolveRgbFn(
-        resolvedValue,
-        resolvedAlpha,
-        stage,
-        context,
-      );
-    case ColorKind.HslFn:
-    case ColorKind.HwbFn:
-    case ColorKind.LabFn:
-    case ColorKind.OklabFn:
-    case ColorKind.LchFn:
-    case ColorKind.OklchFn:
-      return resolveMetadataColorFn(
-        resolvedValue,
-        resolvedAlpha,
-        stage,
-        context,
-      );
-    case ColorKind.ColorFn:
-      return resolveColorFn(
-        resolvedValue,
-        resolvedAlpha,
-        stage,
-        context,
-      );
-    case ColorKind.AlphaFn:
-      throw new TypeError('Alpha functions require an origin color');
-    default:
-      return assertNever(resolvedValue);
+function isRelativeColorFunction(
+  value: ColorFunction,
+): value is RelativeColorFunction {
+  return value.origin !== undefined;
+}
+
+type LegacyColorFn = RgbFn | HslFn | DeviceCmykFn;
+
+function colorFnCanUseLegacySyntax(value: LegacyColorFn): boolean {
+  // Missing components and deferred math values require modern syntax.
+  return value.useLegacySyntax && [...value.components, value.alpha].every(
+    (component) => component === undefined
+      || (component !== 'none' && component.type !== 'math'),
+  );
+}
+
+type ComponentColorFn = Exclude<ColorFunction, AlphaFn>;
+
+function resolveNonRelativeColorFn(
+  value: ComponentColorFn,
+  stage: ValueStage,
+  context: ColorResolutionContext,
+  asOrigin: boolean,
+): AbsoluteColor | ComponentColorFn {
+  const metadata = asOrigin
+    ? ORIGIN_COLOR_METADATA[value.kind]
+    : COLOR_METADATA[value.kind];
+  const resolved = resolveComponents(value.components, stage, context, metadata);
+  const clamped = clampColorComponents(resolved, metadata, stage);
+  const normalized = normalizeColorComponents(clamped, metadata, stage);
+  const canonicalized = canonicalizeFnComponents(normalized, metadata, stage);
+  const resolvedAlpha = value.alpha
+    ? resolveAlphaComponent(value.alpha, stage, context, metadata.alpha)
+    : undefined;
+  const alpha = shouldOmitUnitaryComponent(resolvedAlpha, metadata.alpha.omitUnitary)
+    ? undefined
+    : resolvedAlpha;
+
+  const resolvedValue = {
+    ...value,
+    components: canonicalized,
+    alpha,
+    useLegacySyntax: false,
+  } as ComponentColorFn;
+
+  if (
+    stage < metadata.lowerAt ||
+    !hasNoDeferredComponents(normalized, alpha)
+  ) {
+    return resolvedValue;
   }
+
+  if (metadata.supports8BitEncoding) {
+    const quantized = tryLowerTo8BitAbsoluteColor(value, alpha, metadata);
+
+    if (quantized !== null) {
+      return quantized;
+    }
+  }
+
+  const toAbsoluteColor = createAbsoluteColorConverter(value, context);
+
+  if (toAbsoluteColor === null) {
+    return resolvedValue;
+  }
+
+  const scaled = mapTuple(normalized, (comp, i) => scaleFnComponent(comp, i, metadata));
+  return toAbsoluteColor(scaled, alpha);
 }
 
 function resolveRelativeFn(
-  value: RelativeColorFn,
-  originValue: ColorValue,
+  value: RelativeColorFunction,
   stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
-  if (stage < ValueStage.Computed) {
-    const alpha = value.alpha === undefined
-      ? undefined
-      : resolveColorAlphaValue(value.alpha, stage, context);
+  const metadata = RELATIVE_COLOR_METADATA[value.kind];
+  const origin = resolveColorValueInternal(value.origin, stage, context, true);
+  value.origin = origin;
 
-    if (value.kind === ColorKind.AlphaFn) {
-      return alpha === value.alpha
-        ? value
-        : { ...value, alpha };
-    }
-
-    const metadata = COLOR_METADATA[value.kind];
-    const components = mapTuple(
-      value.components,
-      (component, index) => canonicalizeRelativeFnComponentSyntax(
-        component,
-        index,
-        metadata,
-      ),
-    ) as typeof value.components;
-
-    return (
-      alpha === value.alpha &&
-      components.every(
-        (component, index) => component === value.components[index],
-      )
-    )
-      ? value
-      : { ...value, components, alpha } as ColorValue;
-  }
-
-  if (value.kind === ColorKind.AlphaFn) {
-    return resolveAlphaFn(value, stage, context);
-  }
-
-  if (value.kind === ColorKind.ColorFn) {
-    return resolveRelativeColorFn(value, originValue, stage, context);
-  }
-
-  const metadata = COLOR_METADATA[value.kind];
-  const prepared = prepareRelativeColorResolution(
-    originValue,
-    stage,
-    context,
-    metadata,
-  );
-
-  if (!('convertedOrigin' in prepared)) {
-    return prepared.origin === originValue
-      ? value
-      : { ...value, origin: prepared.origin };
-  }
-
-  const { origin, convertedOrigin, calculationContext } = prepared;
-  const components = mapTuple(
-    value.components,
-    (component, index) => resolveRelativeFnComponent(
-      component,
-      index,
-      convertedOrigin,
-      stage,
-      calculationContext,
-      metadata,
-    ),
-  ) as typeof value.components;
-  const alpha = resolveRelativeColorAlpha(
-    value.alpha,
-    convertedOrigin,
-    stage,
-    calculationContext,
-    metadata,
-  );
-
-  if (
-    hasDeferredColorComponents(components) ||
-    isDeferredColorAlpha(alpha)
-  ) {
-    return {
-      ...value,
-      origin,
-      components: canonicalizeFnComponents(components, metadata),
-      alpha,
-    } as ColorValue;
-  }
-
-  const absolute: PredefinedAbsoluteColor = {
-    kind: ColorKind.Absolute,
-    space: metadata.space,
-    components: mapTuple(
-      components,
-      (component, index) =>
-        scaleFnComponent(component, index, metadata),
-    ),
-    alpha: alpha === 'none' ? undefined : alpha.value,
-  };
-
-  return metadata.convertToSrgb && !hasMissingColorComponent(absolute)
-    ? convertAbsoluteColor(absolute, 'srgb', context)
-    : absolute;
-}
-
-function canonicalizeRelativeFnComponentSyntax(
-  component: ClampableColorComponentValue,
-  index: number,
-  metadata: ColorMetadata,
-): ClampableColorComponentValue {
-  const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-  if (
-    componentMetadata.isHue ||
-    component === 'none' ||
-    component.type !== 'percentage'
-  ) {
-    return component;
-  }
-
-  return {
-    type: 'number',
-    value: component.value *
-      componentMetadata.percentageScale /
-      componentMetadata.numberScale,
-  };
-}
-
-function resolveRelativeColorFn(
-  value: ColorFn,
-  originValue: ColorValue,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-): ColorValue {
-  const origin = resolveColorValueInternal(originValue, stage, context);
-  const profile = colorProfileFor(value.space, context);
-
-  if (origin.kind !== ColorKind.Absolute || profile === undefined) {
-    return origin === originValue
-      ? value
-      : { ...value, origin };
-  }
-
-  const normalizedOrigin = normalizeColorEncoding(origin);
-  const predefinedOrigin = tryCoercePredefinedAbsoluteColor(
-    normalizedOrigin,
-    context,
-  );
-  const originComponents = predefinedOrigin === null
+  const reference = origin.kind === ColorKind.Absolute
+    ? normalizeAbsoluteColorEncoding(origin)
+    : null;
+  const channelValues = reference === null
     ? null
-    : profile.fromAbsoluteColor(predefinedOrigin);
-
-  if (originComponents === null) {
-    return origin === originValue
-      ? value
-      : { ...value, origin };
-  }
-
-  const variables = relativeColorFnValues(
-    profile,
-    originComponents,
-    normalizedOrigin.alpha,
-  );
-  const calculationContext: ColorResolutionContext = {
-    ...context,
-    numericVariables: relativeColorNumericVariables(
+    : relativeColorChannelValues(
+      value,
+      reference,
       context,
-      variables,
-    ),
-  };
-  const metadata = COLOR_METADATA[ColorKind.ColorFn];
-  const components = value.components.map(
-    (component) => resolveRelativeColorFnComponent(
-      component,
-      variables,
-      stage,
-      calculationContext,
-    ),
-  );
-  const alpha = resolveRelativeColorFnAlpha(
-    value.alpha,
-    variables,
-    normalizedOrigin.alpha,
+      metadata,
+    );
+  const calculationContext = channelValues === null
+    ? context
+    : relativeColorCalculationContext(context, channelValues);
+  const resolved = resolveComponents(
+    value.components,
     stage,
     calculationContext,
+    metadata,
+    channelValues,
   );
-  const resolved: ColorFn = {
+  const clamped = clampColorComponents(resolved, metadata, stage);
+  const normalized = normalizeColorComponents(clamped, metadata, stage);
+  const canonicalized = canonicalizeFnComponents(normalized, metadata, stage);
+  const alphaValue = value.alpha ?? (
+    reference === null || stage < metadata.lowerAt
+      ? undefined
+      : reference.alpha === undefined
+        ? 'none'
+        : { type: 'number', value: reference.alpha }
+  );
+  const alpha = alphaValue === undefined
+    ? undefined
+    : resolveAlphaComponent(
+      alphaValue,
+      stage,
+      calculationContext,
+      metadata.alpha,
+      channelValues,
+    );
+  const resolvedValue = {
     ...value,
     origin,
-    components: canonicalizeFnComponents(components, metadata),
+    components: canonicalized,
     alpha,
-  };
+    useLegacySyntax: false,
+  } as RelativeColorFunction;
+
+  if (reference === null || channelValues === null) {
+    return resolvedValue;
+  }
 
   if (
-    hasDeferredColorComponents(components) ||
-    isDeferredColorAlpha(alpha)
+    stage < metadata.lowerAt ||
+    !hasNoDeferredComponents(normalized, alpha)
   ) {
-    return resolved;
+    return resolvedValue;
   }
 
-  const scaled = components.map(
-    (component, index) =>
-      scaleFnComponent(component, index, metadata),
-  );
-
-  if (isCustomColorProfileSpace(value.space)) {
-    return absoluteColorInCustomSpace(
-      value.space,
-      profile,
-      scaled,
-      alpha === 'none' ? undefined : alpha.value,
-    );
-  }
-
-  return absoluteColorFromProfile(
-    profile,
-    scaled,
-    alpha,
-  );
-}
-
-function resolveRelativeFnComponent(
-  component: ClampableColorComponentValue,
-  index: number,
-  origin: AbsoluteColor,
-  stage: ValueStage,
-  context: MathContext,
-  metadata: ColorMetadata,
-): ClampableColorComponentValue {
-  const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-  return componentMetadata.isHue
-    ? normalizeHueValue(resolveRelativeColorHue(
-      component as SyntaxHueComponent,
-      origin,
-      stage,
-      context,
-      metadata,
-    ))
-    : resolveRelativeColorComponent(
-      component as SyntaxColorComponent,
-      origin,
-      stage,
-      context,
-      metadata,
-    );
-}
-
-function canonicalizeFnComponents<
-  const Components extends ClampableColorComponentValues,
->(
-  components: Components,
-  metadata: ColorMetadata,
-): Components {
-  return mapTuple(components, (component, index) => {
-    const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-    return (
-      componentMetadata.isHue ||
-      !componentMetadata.canonicalize
-    )
-      ? component
-      : canonicalizeColorComponent(
-        component as SyntaxColorComponent,
-        componentMetadata.numberScale,
-        componentMetadata.percentageScale,
-      );
-  }) as Components;
-}
-
-function scaleFnComponent(
-  component: ClampableColorComponentValue,
-  index: number,
-  metadata: ColorMetadata,
-): AbsoluteComponent {
-  const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-  return componentMetadata.isHue
-    ? scaleHue(component as SyntaxHueComponent)
-    : scaleColorComponent(
-      component as SyntaxColorComponent,
-      componentMetadata.numberScale,
-      componentMetadata.percentageScale,
-    );
-}
-
-function resolveAlphaFn(
-  value: AlphaFn,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-): ColorValue {
-  const origin = resolveColorValueInternal(value.origin, stage, context);
-
-  if (origin.kind !== ColorKind.Absolute) {
-    return origin === value.origin
-      ? value
-      : { ...value, origin };
-  }
-
-  const normalizedOrigin = normalizeColorEncoding(origin);
-  let result = normalizedOrigin;
-
-  if (value.alpha !== undefined) {
-    const calculationContext: ColorResolutionContext = {
-      ...context,
-      numericVariables: relativeColorVariables(
-        normalizedOrigin,
-        context,
-        null,
-      ),
-    };
-    const alpha = resolveRelativeColorAlpha(
-      value.alpha,
-      normalizedOrigin,
-      stage,
-      calculationContext,
-      null,
-    );
-
-    if (isDeferredColorAlpha(alpha)) {
-      return {
-        ...value,
-        origin,
-        alpha,
-      };
-    }
-
-    const absoluteAlpha = alpha === 'none'
-      ? undefined
-      : alpha.value;
-
-    if (!Object.is(absoluteAlpha, normalizedOrigin.alpha)) {
-      result = {
-        ...normalizedOrigin,
-        alpha: absoluteAlpha,
-      };
-    }
-  }
-
-  return (
-    result.space.name === 'hsl' ||
-    result.space.name === 'hwb'
-  ) && !hasMissingColorComponent(result)
-    ? convertAbsoluteColor(result, 'srgb', context)
-    : result;
-}
-
-function resolveRgbFn(
-  value: RgbFn,
-  alpha: SyntaxAlphaComponent,
-  stage: ValueStage,
-  context: MathContext,
-): AbsoluteColor | RgbFn | ColorFn {
-  const { components: values } = value;
-  const metadata = COLOR_METADATA[ColorKind.RgbFn];
-
-  if (
-    alpha !== 'none' &&
-    alpha.type !== 'math' &&
-    alpha.value === 1 &&
-    is8BitRgbComponents(values)
-  ) {
-    return {
-      kind: ColorKind.Absolute,
-      space: SPACES.srgb,
-      components: mapTuple(
-        values,
-        (component) => component.value,
-      ),
-      alpha: 0xff,
-      isLegacySrgb: true,
-      is8Bit: true,
-    };
-  }
-
-  const components = resolveColorComponents(
-    values,
-    stage,
+  const toAbsoluteColor = createRelativeAbsoluteColorConverter(
+    value,
+    reference,
     context,
-    metadata.resolveAt,
-  );
-  const clamped = clampColorComponents(
-    components,
-    metadata,
-    stage,
   );
 
-  if (hasDeferredColorComponents(clamped)) {
-    return {
-      ...value,
-      components: mapTuple(clamped, (component) =>
-        canonicalizeColorComponent(
-          component,
-          1,
-          0xff / 100,
-        )),
-    };
-  }
-
-  if (isDeferredColorAlpha(alpha)) {
-    return {
-      kind: ColorKind.ColorFn,
-      space: 'srgb',
-      components: mapTuple(
-        clamped,
-        (component, index) => {
-          const componentMetadata = colorComponentMetadataAt(metadata, index);
-          return canonicalizeColorComponent(
-            component,
-            componentMetadata.numberScale,
-            componentMetadata.percentageScale,
-          );
-        },
-      ),
-      alpha,
-    };
+  if (toAbsoluteColor === null) {
+    return resolvedValue;
   }
 
   const scaled = mapTuple(
-    clamped,
+    normalized,
     (component, index) => scaleFnComponent(component, index, metadata),
   );
+  return toAbsoluteColor(scaled, alpha);
+}
 
+function relativeColorChannelValues(
+  value: RelativeColorFunction,
+  reference: AbsoluteColor,
+  context: ColorResolutionContext,
+  metadata: ColorMetadata,
+): ReadonlyMap<string, NumberLiteral | 'none'> | null {
+  let channelValues: Map<string, NumberLiteral | 'none'>;
+
+  if (value.kind === ColorKind.AlphaFn) {
+    channelValues = new Map([[
+      'alpha',
+      reference.alpha === undefined
+        ? 'none'
+        : { type: 'number', value: reference.alpha },
+    ]]);
+  } else if (
+    value.kind === ColorKind.ColorFn ||
+    value.kind === ColorKind.CustomColorFn
+  ) {
+    const profile = colorProfileFor(value.space, context);
+    const predefinedOrigin = tryCoercePredefinedAbsoluteColor(
+      reference,
+      context,
+    );
+    const components = (
+      profile === undefined ||
+      predefinedOrigin === null
+    )
+      ? null
+      : profile.fromAbsoluteColor(predefinedOrigin);
+
+    if (profile === undefined || components === null) {
+      return null;
+    }
+
+    channelValues = new Map(
+      profile.components.map((name, index) => [
+        name,
+        { type: 'number', value: components[index] ?? 0 },
+      ]),
+    );
+
+    if (value.kind === ColorKind.ColorFn) {
+      channelValues.set(
+        'alpha',
+        reference.alpha === undefined
+          ? 'none'
+          : { type: 'number', value: reference.alpha },
+      );
+    }
+  } else {
+    const space = metadata.space;
+
+    if (space === null) {
+      throw new TypeError('Relative color metadata requires a color space');
+    }
+
+    const predefinedOrigin = tryCoercePredefinedAbsoluteColor(
+      reference,
+      context,
+    );
+
+    if (predefinedOrigin === null) {
+      return null;
+    }
+
+    const carried = findCarriedForwardComponents(
+      reference,
+      space.name,
+    );
+    const converted = convertPredefinedAbsoluteColor(
+      predefinedOrigin,
+      space.name,
+    );
+    const components = mapTuple(
+      converted.components,
+      (component, index) =>
+        carried.components[index] ? undefined : component,
+    );
+    const alpha = carried.alpha ? undefined : converted.alpha;
+
+    channelValues = new Map(
+      space.keys.map((name, index) => {
+        const component = components[index];
+
+        return [
+          name,
+          component === undefined
+            ? 'none'
+            : {
+              type: 'number',
+              value: component /
+                colorComponentMetadataAt(metadata, index).numberScale,
+            },
+        ];
+      }),
+    );
+    channelValues.set(
+      'alpha',
+      alpha === undefined
+        ? 'none'
+        : { type: 'number', value: alpha },
+    );
+  }
+
+  return channelValues;
+}
+
+function relativeColorCalculationContext(
+  context: ColorResolutionContext,
+  channelValues: ReadonlyMap<string, NumberLiteral | 'none'>,
+): ColorResolutionContext {
   return {
-    kind: ColorKind.Absolute,
-    space: SPACES.srgb,
-    components: scaled,
-    alpha: alpha === 'none' ? undefined : alpha.value,
-    isLegacySrgb: true,
+    ...context,
+    numericVariables: new Map([
+      ...(context.numericVariables ?? []),
+      ...[...channelValues].map(([name, channel]) => [
+        name,
+        { value: channel, valueType: 'number' as const },
+      ] as const),
+    ]),
   };
 }
 
-function is8BitRgbComponents(
-  values: RgbFn['components'],
-): values is ColorComponentTuple<SrgbSpace, [
-  red: NumberLiteral,
-  green: NumberLiteral,
-  blue: NumberLiteral,
-]> {
-  return values.every(is8BitRgbComponent);
+/**
+ * An omitted relative channel argument means ordinary component resolution.
+ * `null` means relative resolution whose origin channels are not yet available.
+ * A map enables relative resolution with the origin's channel values.
+ */
+type RelativeColorChannelValues =
+  ReadonlyMap<string, NumberLiteral | 'none'> | null;
+
+function createRelativeAbsoluteColorConverter(
+  value: RelativeColorFunction,
+  reference: AbsoluteColor,
+  context: ColorConversionContext,
+): ((
+  components: readonly AbsoluteComponent[],
+  alpha: AlphaLiteral | 'none' | undefined,
+) => AbsoluteColor) | null {
+  switch (value.kind) {
+    case ColorKind.AlphaFn:
+      return (_components, alpha) => {
+        const absoluteAlpha = absoluteColorAlpha(alpha);
+        const result = Object.is(absoluteAlpha, reference.alpha)
+          ? reference
+          : { ...reference, alpha: absoluteAlpha };
+
+        return (
+          result.space.name === 'hsl' ||
+          result.space.name === 'hwb'
+        ) && !hasMissingColorComponent(result)
+          ? convertAbsoluteColor(result, 'srgb', context)
+          : result;
+      };
+    case ColorKind.ColorFn: {
+      const space = SPACES[value.space];
+
+      return (components, alpha) =>
+        absoluteColorInPredefinedSpace(
+          space,
+          components,
+          absoluteColorAlpha(alpha),
+        );
+    }
+    case ColorKind.CustomColorFn: {
+      const profile = context.colorProfiles?.get(value.space);
+
+      return profile === undefined
+        ? null
+        : (components, alpha) =>
+          absoluteColorInCustomSpace(
+            value.space,
+            profile,
+            components,
+            absoluteColorAlpha(alpha),
+          );
+    }
+    default: {
+      const metadata = RELATIVE_COLOR_METADATA[value.kind];
+      const space = metadata.space;
+
+      if (space === null) {
+        throw new TypeError('Relative color metadata requires a color space');
+      }
+
+      return (components, alpha) => {
+        const absolute = absoluteColorInPredefinedSpace(
+          space,
+          components,
+          absoluteColorAlpha(alpha),
+        );
+
+        return (
+          metadata.coerceToAbsoluteSrgb &&
+          !hasMissingColorComponent(absolute)
+        )
+          ? convertAbsoluteColor(absolute, 'srgb', context)
+          : absolute;
+      };
+    }
+  }
 }
 
-function is8BitRgbComponent(
+function tryLowerTo8BitAbsoluteColor(
+  value: ComponentColorFn,
+  alpha: SyntaxAlphaComponent | undefined,
+  metadata: ColorMetadata,
+): AbsoluteColor | null {
+  if (
+    !value.components.every(is8BitColorComponent) ||
+    (
+      alpha !== undefined &&
+      !is8BitColorComponent(alpha)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    kind: ColorKind.Absolute,
+    space: metadata.space!,
+    components: mapTuple(
+      value.components,
+      (component) => (component as NumberLiteral).value,
+    ),
+    alpha: (alpha?.value ?? 1) * 0xff,
+    isLegacySrgb: metadata.space?.name === 'srgb',
+    is8Bit: true,
+  };
+}
+
+function is8BitColorComponent(
   value: SyntaxColorComponent,
 ): value is NumberLiteral {
   return (
@@ -3310,86 +3533,380 @@ function is8BitRgbComponent(
   );
 }
 
-function resolveMetadataColorFn(
-  value: MetadataColorFn,
-  alpha: SyntaxAlphaComponent,
-  stage: ValueStage,
-  context: MathContext,
-): AbsoluteColor | MetadataColorFn {
-  const metadata = COLOR_METADATA[value.kind];
-  const resolved = mapTuple(
-    value.components,
-    (component, index) => resolveMetadataColorFnComponent(
-      component,
-      index,
-      stage,
-      context,
-      metadata,
-    ),
-  ) as typeof value.components;
-  const clamped = clampColorComponents(resolved, metadata, stage);
-  const normalized = normalizeFnComponents(clamped, metadata);
+function createAbsoluteColorConverter(
+  value: ComponentColorFn,
+  context: ColorConversionContext,
+): ((
+  components: readonly AbsoluteComponent[],
+  alpha: AlphaLiteral | 'none' | undefined,
+) => AbsoluteColor) | null {
+  switch (value.kind) {
+    case ColorKind.ColorFn: {
+      const space = SPACES[value.space];
 
-  if (
-    hasDeferredColorComponents(normalized) ||
-    isDeferredColorAlpha(alpha)
-  ) {
-    return {
-      ...value,
-      components: canonicalizeFnComponents(normalized, metadata),
-    } as MetadataColorFn;
+      return (components, alpha) =>
+        absoluteColorInPredefinedSpace(
+          space,
+          components,
+          absoluteColorAlpha(alpha),
+        );
+    }
+    case ColorKind.CustomColorFn: {
+      const profile = context.colorProfiles?.get(value.space);
+
+      return profile === undefined
+        ? null
+        : (components, alpha) =>
+          absoluteColorInCustomSpace(
+            value.space,
+            profile,
+            components,
+            absoluteColorAlpha(alpha),
+          );
+    }
+    default: {
+      const metadata = COLOR_METADATA[value.kind];
+      const space = metadata.space;
+
+      return (components, alpha) => {
+        const absolute = absoluteColorInPredefinedSpace(
+          space,
+          components,
+          absoluteColorAlpha(alpha),
+          space.name === 'srgb',
+        );
+
+        return (
+          metadata.coerceToAbsoluteSrgb &&
+          !hasMissingColorComponent(absolute)
+        )
+          ? convertToLegacySrgb(absolute)
+          : absolute;
+      };
+    }
   }
-
-  const absolute: PredefinedAbsoluteColor = {
-    kind: ColorKind.Absolute,
-    space: metadata.space,
-    components: mapTuple(
-      normalized,
-      (component, index) => scaleFnComponent(component, index, metadata),
-    ),
-    alpha: alpha === 'none' ? undefined : alpha.value,
-  };
-
-  return metadata.convertToSrgb && !hasMissingColorComponent(absolute)
-    ? convertToLegacySrgb(absolute)
-    : absolute;
 }
 
-function resolveMetadataColorFnComponent(
-  component: ClampableColorComponentValue,
-  index: number,
+function resolveComponents<const Values extends SyntaxComponent[]>(
+  values: Values,
   stage: ValueStage,
   context: MathContext,
   metadata: ColorMetadata,
-): ClampableColorComponentValue {
-  const componentMetadata = colorComponentMetadataAt(metadata, index);
+  channelValues?: RelativeColorChannelValues,
+): Values {
+  return mapTuple(
+    values,
+    (value, index) => resolveComponent(
+      value,
+      stage,
+      context,
+      colorComponentMetadataAt(metadata, index),
+      channelValues,
+    ),
+  ) as Values;
+}
 
-  return componentMetadata.isHue
-    ? resolveHue(
+function resolveComponent<Component extends SyntaxColorComponent>(
+  component: Component,
+  stage: ValueStage,
+  context: MathContext,
+  metadata: ColorComponentMetadata,
+  channelValues?: RelativeColorChannelValues,
+): Component {
+  if (channelValues !== undefined) {
+    const resolved = tryResolveFromOriginChannel(
+      component,
+      stage,
+      channelValues,
+      metadata,
+    );
+
+    if (resolved !== null) {
+      return resolved;
+    }
+  }
+
+  return (metadata.isHue
+    ? resolveHueComponent(
       component as SyntaxHueComponent,
       stage,
       context,
-      metadata.resolveAt,
+      metadata,
     )
-    : resolveColorComponent(
-      component as SyntaxColorComponent,
+    : resolveNonHueComponent(
+      component as SyntaxNonHueComponent,
       stage,
       context,
-      metadata.resolveAt,
-    );
+      metadata,
+    )) as Component;
 }
 
-function normalizeFnComponents<
-  const Components extends ClampableColorComponentValues,
+function tryResolveFromOriginChannel<Component extends SyntaxColorComponent>(
+  component: Component,
+  stage: ValueStage,
+  channelValues: RelativeColorChannelValues,
+  metadata: ColorComponentMetadata,
+): Component | null {
+  const channelName = tryGetColorFnVariableName(component);
+
+  if (channelName === null) {
+    return null;
+  }
+
+  if (stage < metadata.resolveMathAt || channelValues === null) {
+    return component;
+  }
+
+  const value = channelValues.get(channelName);
+
+  if (value === undefined) {
+    throw new TypeError(`Unknown relative color variable: ${channelName}`);
+  }
+
+  return value as Component;
+}
+
+function resolveNonHueComponent(
+  value: SyntaxNonHueComponent,
+  stage: ValueStage,
+  context: MathContext,
+  metadata: ColorComponentMetadata,
+): SyntaxNonHueComponent {
+  if (value === 'none') {
+    return value;
+  }
+
+  return resolveColorNumericValue(value, stage, context, metadata);
+}
+
+function resolveHueComponent(
+  value: SyntaxHueComponent,
+  stage: ValueStage,
+  context: MathContext,
+  metadata: ColorComponentMetadata,
+): SyntaxHueComponent {
+  if (value === 'none') {
+    return value;
+  }
+
+  const calculationContext = colorCalculationContext(
+    context,
+    metadata.resolveMathAt,
+  );
+  return isNumberValue(value)
+    ? resolveNumber(value, stage, calculationContext)
+    : resolveAngle(value, stage, calculationContext);
+}
+
+function canonicalizeFnComponents<
+  const Components extends SyntaxColorComponent[],
 >(
   components: Components,
   metadata: ColorMetadata,
+  stage: ValueStage = ValueStage.Declared,
 ): Components {
-  return mapTuple(components, (component, index) => (
-    colorComponentMetadataAt(metadata, index).isHue
-      ? normalizeHueValue(component as SyntaxHueComponent)
-      : component
-  )) as Components;
+  return mapTuple(
+    components,
+    (component, index) => canonicalizeColorComponent(
+      component,
+      colorComponentMetadataAt(metadata, index),
+      stage,
+    ),
+  ) as Components;
+}
+
+function canonicalizeColorComponent<Component extends SyntaxColorComponent>(
+  component: Component,
+  metadata: ColorComponentMetadata,
+  stage: ValueStage,
+): Component {
+  if (stage < metadata.canonicalizeAt || metadata.isHue) {
+    return component;
+  }
+
+  if (component !== 'none' && component.type === 'math') {
+    if (
+      metadata.canonicalSyntax === 'number' &&
+      component.valueType === 'percentage'
+    ) {
+      return coercePercentageMathToNumber(
+        component,
+        metadata.percentageScale,
+        metadata.numberScale,
+      ) as Component;
+    }
+
+    return component;
+  }
+
+  return (metadata.canonicalSyntax === 'number'
+    ? canonicalizeColorComponentAsNumber(
+      component as SyntaxNonHueComponent,
+      metadata,
+    )
+    : canonicalizeColorComponentAsPercentage(
+      component as SyntaxNonHueComponent,
+      metadata,
+    )) as Component;
+}
+
+function canonicalizeSpecifiedHue(
+  value: SyntaxHueComponent,
+): SyntaxHueComponent {
+  return value !== 'none' && value.type === 'angle' && value.unit !== 'deg'
+    ? resolveAngleLiteral(value)
+    : value;
+}
+
+function canonicalizeColorComponentAsNumber(
+  value: SyntaxNonHueComponent,
+  metadata: ColorComponentMetadata,
+): SyntaxNonHueComponent {
+  if (value === 'none') {
+    return value;
+  }
+
+  if (value.type === 'math') {
+    return value;
+  }
+
+  return {
+    type: 'number',
+    value: value.type === 'percentage'
+      ? value.value / (
+        metadata.numberScale /
+        metadata.percentageScale
+      )
+      : value.value,
+  };
+}
+
+function canonicalizeColorComponentAsPercentage(
+  value: SyntaxNonHueComponent,
+  metadata: ColorComponentMetadata,
+): SyntaxNonHueComponent {
+  if (value === 'none' || value.type === 'math') {
+    return value;
+  }
+
+  if (value.value === 0) {
+    return value.type === 'number'
+      ? value
+      : { type: 'number', value: 0 };
+  }
+
+  return value.type === 'percentage'
+    ? value
+    : {
+      type: 'percentage',
+      value: value.value *
+        metadata.numberScale /
+        metadata.percentageScale,
+    };
+}
+
+function scaleFnComponent(
+  component: SyntaxColorComponent,
+  index: number,
+  metadata: ColorMetadata,
+): AbsoluteComponent {
+  const componentMetadata = colorComponentMetadataAt(metadata, index);
+
+  return componentMetadata.isHue
+    ? scaleHue(component as SyntaxHueComponent)
+    : scaleColorComponent(
+      component as SyntaxNonHueComponent,
+      componentMetadata,
+    );
+}
+
+function scaleColorComponent(
+  value: SyntaxNonHueComponent,
+  metadata: ColorComponentMetadata,
+): AbsoluteComponent {
+  if (value === 'none') {
+    return undefined;
+  }
+
+  if (value.type === 'math') {
+    throw new Error('Deferred color components cannot be scaled');
+  }
+
+  return value.value * (
+    value.type === 'percentage'
+      ? metadata.percentageScale
+      : metadata.numberScale
+  );
+}
+
+function scaleHue(
+  value: SyntaxHueComponent,
+): AbsoluteComponent {
+  if (value === 'none') {
+    return undefined;
+  }
+
+  if (value.type === 'math') {
+    throw new Error('A deferred hue cannot be scaled');
+  }
+
+  return value.type === 'angle'
+    ? resolveAngleLiteral(value).value
+    : value.value;
+}
+
+function normalizeColorComponents<
+  const Components extends SyntaxColorComponent[],
+>(
+  components: Components,
+  metadata: ColorMetadata,
+  stage: ValueStage = ValueStage.Declared,
+): Components {
+  return mapTuple(
+    components,
+    (component, index) => normalizeColorComponent(
+      component,
+      colorComponentMetadataAt(metadata, index),
+      stage,
+    ),
+  ) as Components;
+}
+
+function normalizeColorComponent<Component extends SyntaxColorComponent>(
+  component: Component,
+  metadata: ColorComponentMetadata,
+  stage: ValueStage,
+): Component {
+  if (!metadata.isHue) {
+    return component;
+  }
+
+  return (stage < metadata.normalizeAt
+    ? canonicalizeSpecifiedHue(component as SyntaxHueComponent)
+    : normalizeHueValue(component as SyntaxHueComponent)) as Component;
+}
+
+function normalizeHueValue(
+  value: SyntaxHueComponent,
+): SyntaxHueComponent {
+  if (value === 'none' || value.type === 'math') {
+    return value;
+  }
+
+  const number = value.type === 'angle'
+    ? resolveAngleLiteral(value).value
+    : value.value;
+  const normalized = normalizeHue(number);
+
+  return value.type === 'number' && Object.is(normalized, value.value)
+    ? value
+    : { type: 'number', value: normalized };
+}
+
+function normalizeHue(value: number): number {
+  return Number.isFinite(value)
+    ? ((value % 360) + 360) % 360
+    : 0;
 }
 
 function convertToLegacySrgb(
@@ -3401,70 +3918,22 @@ function convertToLegacySrgb(
   };
 }
 
-function resolveColorFn(
-  value: ColorFn,
-  alpha: SyntaxAlphaComponent,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-): AbsoluteColor | ColorFn {
-  const space = value.space === 'xyz' ? 'xyz-d65' : value.space;
-  const isCustom = isCustomColorProfileSpace(space);
-  const metadata = isCustom && stage >= ValueStage.Computed
-    ? CUSTOM_COLOR_FN_METADATA
-    : COLOR_METADATA[ColorKind.ColorFn];
-  const components = resolveColorComponents(
-    value.components,
-    stage,
-    context,
-    metadata.resolveAt,
-  );
-  const clamped = clampColorComponents(
-    components,
-    metadata,
-    stage,
-  );
-  const canonical = canonicalizeFnComponents(clamped, metadata);
-  const resolved = {
-    ...value,
+function absoluteColorInPredefinedSpace(
+  space: PredefinedColorSpace,
+  components: readonly AbsoluteComponent[],
+  alpha: number | undefined,
+  isLegacySrgb = false,
+): PredefinedAbsoluteColor {
+  return {
+    kind: ColorKind.Absolute,
     space,
-    components: canonical,
-  };
-
-  if (isCustom && stage < ValueStage.Computed) {
-    return resolved;
-  }
-
-  if (
-    hasDeferredColorComponents(clamped) ||
-    isDeferredColorAlpha(alpha)
-  ) {
-    return resolved;
-  }
-
-  const scaled = mapTuple(
-    clamped,
-    (component, index) => scaleFnComponent(component, index, metadata),
-  );
-  const profile = colorProfileFor(space, context);
-
-  if (profile === undefined) {
-    return resolved;
-  }
-
-  if (isCustomColorProfileSpace(space)) {
-    return absoluteColorInCustomSpace(
-      space,
-      profile,
-      scaled,
-      alpha === 'none' ? undefined : alpha.value,
-    );
-  }
-
-  return absoluteColorFromProfile(
-    profile,
-    scaled,
+    components: mapTuple(
+      space.keys,
+      (_key, index) => components[index],
+    ),
     alpha,
-  );
+    isLegacySrgb,
+  };
 }
 
 function absoluteColorInCustomSpace(
@@ -3487,214 +3956,84 @@ function absoluteColorInCustomSpace(
         index < components.length ? components[index] : 0,
     ),
     alpha,
+    isLegacySrgb: false,
   };
 }
 
-function absoluteColorFromProfile(
-  profile: ColorProfile,
-  components: readonly AbsoluteComponent[],
-  alpha: AlphaLiteral | 'none',
-): PredefinedAbsoluteColor {
-  const absolute = profile.toAbsoluteColor(
-    components.map((component) => component ?? 0),
-  );
-
-  return {
-    ...absolute,
-    components: mapTuple(
-      absolute.components,
-      (component, index) =>
-        components[index] === undefined ? undefined : component,
-    ),
-    alpha: alpha === 'none' ? undefined : alpha.value,
-  };
-}
-
-function resolveColorComponents<
-  const Values extends SyntaxColorComponent[],
->(
-  values: Values,
-  stage: ValueStage,
-  context: MathContext,
-  unwrapMathAt: ValueStage = ValueStage.Declared,
-): { [Index in keyof Values]: SyntaxColorComponent } {
-  return mapTuple(
-    values,
-    (value) => resolveColorComponent(
-      value,
-      stage,
-      context,
-      unwrapMathAt,
-    ),
-  );
-}
-
-function resolveColorComponent(
-  value: SyntaxColorComponent,
-  stage: ValueStage,
-  context: MathContext,
-  unwrapMathAt: ValueStage,
-): SyntaxColorComponent {
-  if (value === 'none') {
-    return value;
-  }
-
-  return resolveColorNumericValue(value, stage, context, unwrapMathAt);
-}
-
-function hasDeferredColorComponents(
-  values: readonly ClampableColorComponentValue[],
-): boolean {
-  return values.some(
+function hasNoDeferredComponents(
+  values: SyntaxComponent[],
+  alpha: SyntaxAlphaComponent | undefined,
+): alpha is AlphaLiteral | 'none' | undefined {
+  return !values.some(
     (value) => value !== 'none' && value.type === 'math',
-  );
+  ) && !isDeferredColorAlpha(alpha);
 }
 
-function canonicalizeColorComponent(
-  value: SyntaxColorComponent,
-  numberScale: number,
-  percentageScale: number,
-): SyntaxColorComponent {
-  if (value === 'none' || value.type === 'math') {
-    return value;
-  }
-
-  return {
-    type: 'number',
-    value: value.value * (
-      value.type === 'percentage'
-        ? percentageScale
-        : numberScale
-    ),
-  };
-}
-
-function scaleColorComponent(
-  value: SyntaxColorComponent,
-  numberScale: number,
-  percentageScale: number,
-): AbsoluteComponent {
-  if (value === 'none') {
-    return undefined;
-  }
-
-  if (value.type === 'math') {
-    throw new Error('Deferred color components cannot be scaled');
-  }
-
-  return value.value * (
-    value.type === 'percentage'
-      ? percentageScale
-      : numberScale
-  );
-}
-
-function resolveColorAlphaValue(
-  value: SyntaxAlphaComponent | undefined,
+function resolveAlphaComponent(
+  value: SyntaxAlphaComponent,
   stage: ValueStage,
   context: ColorResolutionContext,
+  metadata = ALPHA_COMPONENT_METADATA,
+  channelValues?: RelativeColorChannelValues,
 ): SyntaxAlphaComponent {
-  if (value === undefined) {
-    return { type: 'number', value: 1 };
-  }
-
-  if (value === 'none') {
-    return value;
-  }
-
-  if (value.type !== 'math') {
-    return clampColorAlphaLiteral(value);
-  }
-
-  const calculationContext = colorCalculationContext(context, ValueStage.Computed);
-  const resolved = isNumberValue(value)
-    ? resolveNumber(value, stage, calculationContext)
-    : resolvePercentage(value, stage, calculationContext);
-
-  if (resolved.type === 'math') {
-    return resolved.valueType === 'percentage'
-      ? tryCoercePercentageToNumber(resolved) ?? resolved
-      : resolved;
-  }
-
-  return clampColorAlphaLiteral(resolved);
+  const resolved = resolveComponent(
+    value,
+    stage,
+    context,
+    metadata,
+    channelValues,
+  );
+  const clamped = clampColorComponent(resolved, metadata, stage);
+  const normalized = normalizeColorComponent(clamped, metadata, stage);
+  return canonicalizeColorComponent(
+    normalized,
+    metadata,
+    stage,
+  );
 }
 
-function clampColorAlphaLiteral(value: AlphaLiteral): NumberLiteral {
-  const alpha = value.type === 'percentage'
-    ? value.value / 100
-    : value.value;
-  const clamped = clamp(normalizeForClamping(alpha), 0, 1);
+function shouldOmitUnitaryComponent(
+  component: SyntaxColorComponent | undefined,
+  omitUnitary: boolean,
+): boolean {
+  return (
+    omitUnitary &&
+    component !== undefined &&
+    component !== 'none' &&
+    component.type === 'number' &&
+    component.value === 1
+  );
+}
 
-  return value.type === 'number' && Object.is(value.value, clamped)
-    ? value
-    : { type: 'number', value: clamped };
+function tryGetColorFnVariableName(
+  value: SyntaxComponent,
+): string | null {
+  return value !== 'none' && value.type === 'math'
+    ? tryGetMathVariableName(value)
+    : null;
+}
+
+function absoluteColorAlpha(
+  value: AlphaLiteral | 'none' | undefined,
+): number | undefined {
+  return value === 'none' ? undefined : value?.value ?? 1;
 }
 
 function isDeferredColorAlpha(
-  value: SyntaxAlphaComponent,
+  value: SyntaxAlphaComponent | undefined,
 ): value is Exclude<AlphaValue, AlphaLiteral> {
-  return value !== 'none' && value.type === 'math';
-}
-
-function resolveHue(
-  value: SyntaxHueComponent,
-  stage: ValueStage,
-  context: MathContext,
-  unwrapMathAt: ValueStage = ValueStage.Declared,
-): SyntaxHueComponent {
-  if (value === 'none') {
-    return value;
-  }
-
-  const calculationContext = colorCalculationContext(context, unwrapMathAt);
-  return isNumberValue(value)
-    ? resolveNumber(value, stage, calculationContext)
-    : resolveAngle(value, stage, calculationContext);
-}
-
-function scaleHue(
-  value: SyntaxHueComponent,
-): AbsoluteComponent {
-  if (value === 'none') {
-    return undefined;
-  }
-
-  if (value.type === 'math') {
-    throw new Error('A deferred hue cannot be scaled');
-  }
-
-  return value.type === 'angle'
-    ? resolveAngleLiteral(value).value
-    : value.value;
-}
-
-function normalizeHueValue(
-  value: SyntaxHueComponent,
-): SyntaxHueComponent {
-  if (value === 'none' || value.type === 'math') {
-    return value;
-  }
-
-  const number = value.type === 'angle'
-    ? resolveAngleLiteral(value)
-    : value;
-  const normalized = normalizeHue(number.value);
-
-  return Object.is(normalized, number.value)
-    ? number
-    : { ...number, value: normalized };
+  return value !== undefined && value !== 'none' && value.type === 'math';
 }
 
 function resolveColorNumericValue(
-  value: NumberValue | PercentageValue,
+  value: NonHueValue,
   stage: ValueStage,
   context: MathContext,
-  unwrapMathAt: ValueStage,
-): NumberValue | PercentageValue {
+  metadata: ColorComponentMetadata,
+): NonHueValue {
   const calculationContext = colorCalculationContext(
     context,
-    unwrapMathAt,
+    metadata.resolveMathAt,
   );
 
   return isNumberValue(value)
@@ -3719,46 +4058,57 @@ function isNumberValue(
     (value.type === 'math' && value.valueType === 'number');
 }
 
-type ClampableColorComponentValue =
-  SyntaxColorComponent | SyntaxHueComponent;
-
-type ClampableColorComponentValues = ClampableColorComponentValue[];
-
 function clampColorComponents<
-  const Values extends ClampableColorComponentValues,
+  const Values extends SyntaxColorComponent[],
 >(
   components: Values,
   metadata: ColorMetadata,
   stage: ValueStage,
 ): { [Index in keyof Values]: Values[Index] } {
-  const clampNonFinite = stage >= metadata.resolveAt;
-
   return mapTuple(
     components,
-    (component: ClampableColorComponentValue, index) => {
-      if (component === 'none' || component.type === 'math') {
-        return component;
-      }
-
-      if (!clampNonFinite && !Number.isFinite(component.value)) {
-        return component;
-      }
-
-      const clampable = normalizeForClamping(component.value);
-      const componentMetadata = colorComponentMetadataAt(metadata, index);
-      const range = component.type === 'percentage'
-        ? componentMetadata.percentageRange
-        : componentMetadata.numberRange;
-
-      const value = range === null
-        ? clampable
-        : clamp(clampable, ...range);
-
-      return Object.is(value, component.value)
-        ? component
-        : { ...component, value };
-    },
+    (component, index) => clampColorComponent(
+      component,
+      colorComponentMetadataAt(metadata, index),
+      stage,
+    ),
   );
+}
+
+function clampColorComponent<Component extends SyntaxColorComponent>(
+  component: Component,
+  metadata: ColorComponentMetadata,
+  stage: ValueStage,
+): Component {
+  if (component === 'none' || component.type === 'math') {
+    return component;
+  }
+
+  if (
+    stage < metadata.resolveMathAt &&
+    !Number.isFinite(component.value)
+  ) {
+    return component;
+  }
+
+  const literal = component as {
+    type: string;
+    value: number;
+  };
+  const clampable = normalizeForClamping(literal.value);
+  const range = stage >= metadata.clampAt
+    ? literal.type === 'percentage'
+      ? metadata.percentageRange
+      : metadata.numberRange
+    : null;
+
+  const value = range === null
+    ? clampable
+    : clamp(clampable, ...range);
+
+  return Object.is(value, literal.value)
+    ? component
+    : { ...literal, value } as Component;
 }
 
 function colorComponentMetadataAt(
@@ -3774,12 +4124,6 @@ function normalizeForClamping(value: number): number {
   return Number.isNaN(value) || Object.is(value, -0)
     ? 0
     : value;
-}
-
-function normalizeHue(value: number): number {
-  return Number.isFinite(value)
-    ? ((value % 360) + 360) % 360
-    : 0;
 }
 
 function hasMissingColorComponent(value: AbsoluteColor): boolean {
@@ -3807,22 +4151,31 @@ function resolveDeviceCmykFn(
   stage: ValueStage,
   context: ColorResolutionContext,
 ): DeviceCmykFn | AbsoluteColor<DeviceCmykSpace> {
-  const alpha = resolveColorAlphaValue(value.alpha, stage, context);
-  const components = resolveColorComponents(
+  const resolvedAlpha = value.alpha
+    ? resolveAlphaComponent(value.alpha, stage, context, DEVICE_CMYK_METADATA.alpha)
+    : undefined;
+  const alpha = shouldOmitUnitaryComponent(resolvedAlpha, DEVICE_CMYK_METADATA.alpha.omitUnitary)
+    ? undefined
+    : resolvedAlpha;
+  const components = resolveComponents(
     value.components,
     stage,
     context,
-    DEVICE_CMYK_METADATA.resolveAt,
+    DEVICE_CMYK_METADATA,
   );
   const resolved = (
     alpha === value.alpha &&
-    components.every((component, index) => component === value.components[index])
+    components.every((comp, i) => comp === value.components[i])
   )
     ? value
     : { ...value, components, alpha };
 
-  if (stage < ValueStage.Computed) {
-    return resolved;
+  if (stage < DEVICE_CMYK_METADATA.lowerAt) {
+    const useLegacySyntax = colorFnCanUseLegacySyntax(resolved);
+
+    return useLegacySyntax === resolved.useLegacySyntax
+      ? resolved
+      : { ...resolved, useLegacySyntax };
   }
 
   const clamped = clampColorComponents(
@@ -3835,13 +4188,12 @@ function resolveDeviceCmykFn(
     DEVICE_CMYK_METADATA,
   );
 
-  if (
-    hasDeferredColorComponents(canonical) ||
-    isDeferredColorAlpha(alpha)
-  ) {
+  if (!hasNoDeferredComponents(canonical, alpha)) {
+    const deferred = { ...resolved, components: canonical };
+
     return {
-      ...resolved,
-      components: canonical,
+      ...deferred,
+      useLegacySyntax: colorFnCanUseLegacySyntax(deferred),
     };
   }
 
@@ -3853,7 +4205,8 @@ function resolveDeviceCmykFn(
       (component, index) =>
         scaleFnComponent(component, index, DEVICE_CMYK_METADATA),
     ),
-    alpha: alpha === 'none' ? undefined : alpha.value,
+    alpha: absoluteColorAlpha(alpha),
+    isLegacySrgb: false,
   };
 }
 
@@ -3959,7 +4312,7 @@ export function serializeColorValue(
     case ColorKind.Absolute:
       return serializeAbsoluteColor(value, htmlCompatible);
     case ColorKind.Hex:
-      throw new TypeError('Hex colors must be resolved before serialization');
+      return value.text;
     case ColorKind.ColorMixFn:
       return serializeColorMixFn(value);
     case ColorKind.DeviceCmykFn:
@@ -3977,6 +4330,7 @@ export function serializeColorValue(
     case ColorKind.OklchFn:
     case ColorKind.AlphaFn:
     case ColorKind.ColorFn:
+    case ColorKind.CustomColorFn:
       return serializeColorFunction(value);
     case ColorKind.Named:
       return value.name;
@@ -4014,175 +4368,66 @@ function serializeColorMixMethod(
     return null;
   }
 
-  const hue = method.hue === undefined
-    ? ''
-    : ` ${method.hue} hue`;
+  const hue = method.hue ? ` ${method.hue} hue` : '';
 
   return `in ${method.space}${hue}`;
 }
 
-function serializeColorFunction(
-  value: ColorFunction,
-): string {
-  switch (value.kind) {
-    case ColorKind.RgbFn:
-      return serializeRgbFn(value);
-    case ColorKind.HslFn:
-      return serializeHslFn(value);
-    case ColorKind.HwbFn:
-    case ColorKind.LabFn:
-    case ColorKind.OklabFn:
-    case ColorKind.LchFn:
-    case ColorKind.OklchFn:
-      return serializeMetadataColorFn(value);
-    case ColorKind.AlphaFn:
-      return serializeRelativeColorFn(
-        'alpha',
-        value.origin,
-        [],
-        value.alpha,
-      );
-    case ColorKind.ColorFn:
-      return value.origin === undefined
-        ? serializeModernColorFunction(
-          'color',
-          [
-            value.space,
-            ...serializeFnComponents(value),
-          ],
-          value.alpha,
-        )
-        : serializeRelativeColorFn(
-          'color',
-          value.origin,
-          [
-            value.space,
-            ...serializeFnComponents(value),
-          ],
-          value.alpha,
-        );
-    default:
-      return assertNever(value);
-  }
-}
-
-function serializeMetadataColorFn(
-  value: Exclude<MetadataColorFn, HslFn>,
-): string {
+function serializeColorFunction(value: ColorFunction): string {
   const metadata = COLOR_METADATA[value.kind];
-  const components = serializeFnComponents(value);
-
-  return value.origin === undefined
-    ? serializeModernColorFunction(
-      metadata.space.name,
-      components,
-      value.alpha,
-    )
-    : serializeRelativeColorFn(
-      metadata.space.name,
-      value.origin,
-      components,
-      value.alpha,
-    );
-}
-
-function serializeFnComponents(
-  value: Exclude<ColorFunction, AlphaFn>,
-): string[] {
-  const metadata = COLOR_METADATA[value.kind];
-  const relative = value.origin !== undefined;
-
-  return value.components.map((component, index) => {
-    const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-    return componentMetadata.isHue
-      ? relative
-        ? serializeSpecifiedHue(component as SyntaxHueComponent)
-        : serializeHue(component as SyntaxHueComponent)
-      : serializeColorComponent(
-        component as SyntaxColorComponent,
-        relative ? null : componentMetadata.percentageReference,
-      );
-  });
-}
-
-function serializeRgbFn(
-  value: RgbFn,
-): string {
-  if (value.origin !== undefined) {
-    return serializeRelativeColorFn(
-      'rgb',
-      value.origin,
-      serializeFnComponents(value),
-      value.alpha,
-    );
-  }
-
-  const components = serializeFnComponents(value);
-
-  return value.syntax === 'legacy'
-      && canUseLegacyColorSerialization([...value.components, value.alpha])
-    ? serializeLegacyColorFunction('rgb', components, value.alpha)
-    : serializeModernColorFunction('rgb', components, value.alpha);
-}
-
-function serializeHslFn(
-  value: HslFn,
-): string {
-  const components = serializeFnComponents(value);
+  const args: string[] = [];
 
   if (value.origin !== undefined) {
-    return serializeRelativeColorFn(
-      'hsl',
-      value.origin,
-      components,
-      value.alpha,
+    args.push(
+      'from',
+      serializeColorValue(value.origin),
     );
   }
 
-  return value.syntax === 'legacy'
-      && canUseLegacyColorSerialization([
-        ...value.components,
-        value.alpha,
-      ])
-    ? serializeLegacyColorFunction('hsl', components, value.alpha)
-    : serializeModernColorFunction('hsl', components, value.alpha);
-}
+  if (
+    value.kind === ColorKind.ColorFn ||
+    value.kind === ColorKind.CustomColorFn
+  ) {
+    args.push(value.space);
+  }
 
-function canUseLegacyColorSerialization(
-  values: readonly (
-    SyntaxColorComponent | SyntaxHueComponent | undefined
-  )[],
-): boolean {
-  // Missing components and deferred math values require modern syntax.
-  return values.every(
-    (value) => value === undefined
-      || (value !== 'none' && value.type !== 'math'),
+  args.push(...serializeFnComponents(value));
+
+  return serializeColorNotation(
+    metadata.fnName,
+    args,
+    serializeColorAlpha(value.alpha),
+    value.useLegacySyntax,
   );
 }
 
-function serializeLegacyColorFunction(
-  name: 'rgb' | 'hsl',
-  components: string[],
-  alphaValue: SyntaxAlphaComponent | undefined,
-): string {
-  const alpha = serializeColorAlpha(alphaValue);
+function serializeFnComponents(value: ColorFunction): string[] {
+  if (value.kind === ColorKind.AlphaFn) {
+    return [];
+  }
 
-  return alpha === null
-    ? `${name}(${components.join(', ')})`
-    : `${name}a(${components.join(', ')}, ${alpha})`;
+  const metadata = COLOR_METADATA[value.kind];
+
+  return value.components.map((comp, i) => {
+    const componentMetadata = colorComponentMetadataAt(metadata, i);
+
+    return componentMetadata.isHue
+      ? serializeHue(comp as SyntaxHueComponent)
+      : serializeColorComponent(comp as SyntaxNonHueComponent);
+  });
 }
 
-function serializeModernColorFunction(
+function serializeColorNotation(
   name: string,
-  components: string[],
-  alphaValue: SyntaxAlphaComponent | undefined,
+  args: string[],
+  alpha: string | null,
+  useLegacySyntax = false,
 ): string {
-  const alpha = serializeColorAlpha(alphaValue);
-
   return alpha === null
-    ? `${name}(${components.join(' ')})`
-    : `${name}(${components.join(' ')} / ${alpha})`;
+    ? `${name}(${args.join(useLegacySyntax ? ', ' : ' ')})`
+    : useLegacySyntax
+      ? `${name}a(${args.join(', ')}, ${alpha})`
+      : `${name}(${args.join(' ')} / ${alpha})`;
 }
 
 function serializeHue(
@@ -4192,37 +4437,16 @@ function serializeHue(
     return value;
   }
 
-  if (value.type === 'math') {
-    return isNumberValue(value)
-      ? serializeNumber(value)
-      : serializeAngle(value);
-  }
-
-  if (value.type === 'angle') {
-    return serializeCssNumber(resolveAngleLiteral(value).value);
-  }
-
-  return serializeColorComponent(value, null);
+  return isNumberValue(value)
+    ? serializeNumber(value)
+    : serializeAngle(value);
 }
 
 function serializeColorComponent(
-  value: SyntaxColorComponent,
-  percentageReference: number | null, // null means canonical repr is a number, not a percentage
+  value: SyntaxNonHueComponent,
 ): string {
   if (value === 'none') {
     return value;
-  }
-
-  if (value.type !== 'math' && percentageReference !== null) {
-    if (value.value === 0) {
-      return '0';
-    }
-
-    const percentage = value.type === 'percentage'
-      ? value.value
-      : value.value / percentageReference * 100;
-
-    return serializeCssNumber(percentage) + '%';
   }
 
   return isNumberValue(value)
@@ -4233,27 +4457,7 @@ function serializeColorComponent(
 function serializeColorAlpha(
   value: SyntaxAlphaComponent | undefined,
 ): string | null {
-  if (value === undefined) {
-    return null;
-  }
-
-  if (value === 'none') {
-    return value;
-  }
-
-  if (value.type === 'math') {
-    return isNumberValue(value)
-      ? serializeNumber(value)
-      : serializePercentage(value);
-  }
-
-  const alpha = value.type === 'percentage'
-    ? value.value / 100
-    : value.value;
-
-  return alpha === 1
-    ? null
-    : serializeCssNumber(alpha);
+  return value === undefined ? null : serializeColorComponent(value);
 }
 
 function serializeAbsoluteColor(
@@ -4261,21 +4465,56 @@ function serializeAbsoluteColor(
   htmlCompatible: boolean,
 ): string {
   const { name: space } = value.space;
+  let metadata: ColorMetadata;
 
   switch (space) {
-    case 'srgb':
-      return value.isLegacySrgb
-        ? serializeAbsoluteRgb(value, htmlCompatible)
-        : `color(srgb ${serializeAbsoluteColorComponentsBody(value)})`;
+    case 'srgb': {
+      if (htmlCompatible && value.is8Bit && value.alpha === 0xff) {
+        return value.components.reduce(
+          (acc, c) => acc + c!.toString(16).padStart(2, '0'),
+          '#'
+        );
+      }
+
+      if (
+        value.isLegacySrgb &&
+        value.components.every((c) => c !== undefined) &&
+        value.alpha !== undefined
+      ) {
+        const components = value.components.map(
+          (c) => serializeCssNumber(value.is8Bit ? c : c * 0xff),
+        );
+        const alpha = value.is8Bit
+          ? serialize8BitAlpha(value.alpha)
+          : serializeAbsoluteColorAlpha(value.alpha);
+
+        return serializeColorNotation('rgb', components, alpha, true);
+      }
+
+      metadata = COLOR_FN_METADATA;
+      break;
+    }
     case 'hsl':
-      return serializeAbsoluteHsl(value);
+      metadata = HSL_METADATA;
+      break;
     case 'hwb':
-      return serializeAbsoluteHwb(value);
+      metadata = HWB_METADATA;
+      break;
     case 'lab':
+      metadata = LAB_METADATA;
+      break;
     case 'lch':
+      metadata = LCH_METADATA;
+      break;
     case 'oklab':
+      metadata = OKLAB_METADATA;
+      break;
     case 'oklch':
-      return serializeAbsoluteColorComponents(space, value);
+      metadata = OKLCH_METADATA;
+      break;
+    case 'device-cmyk':
+      metadata = DEVICE_CMYK_METADATA;
+      break;
     case 'srgb-linear':
     case 'display-p3':
     case 'display-p3-linear':
@@ -4284,27 +4523,36 @@ function serializeAbsoluteColor(
     case 'rec2020':
     case 'xyz-d50':
     case 'xyz-d65':
-      return `color(${space} ${serializeAbsoluteColorComponentsBody(value)})`;
-    case 'device-cmyk':
-      return `device-cmyk(${serializeAbsoluteColorComponentsBody(value)})`;
+      metadata = COLOR_FN_METADATA;
+      break;
     default:
-      return `color(${space} ${serializeAbsoluteColorComponentsBody(value)})`;
+      metadata = COLOR_FN_METADATA;
+      break;
   }
+
+  const components = value.components.map((component, index) =>
+    serializeAbsoluteColorComponent(
+      component,
+      colorComponentMetadataAt(metadata, index),
+    ));
+  const args = metadata.fnName === 'color'
+    ? [space, ...components]
+    : components;
+
+  return serializeColorNotation(
+    metadata.fnName,
+    args,
+    serializeAbsoluteColorAlpha(value.alpha),
+  );
 }
 
 function serializeDeviceCmykFn(value: DeviceCmykFn): string {
-  const components = value.components.map(
-    (component) => serializeColorComponent(component, null),
+  return serializeColorNotation(
+    DEVICE_CMYK_METADATA.fnName,
+    value.components.map((c) => serializeColorComponent(c)),
+    serializeColorAlpha(value.alpha),
+    value.useLegacySyntax,
   );
-
-  return value.syntax === 'legacy' &&
-      canUseLegacyColorSerialization(value.components)
-    ? `device-cmyk(${components.join(', ')})`
-    : serializeModernColorFunction(
-      'device-cmyk',
-      components,
-      value.alpha,
-    );
 }
 
 function serializeLightDarkColor(value: LightDarkColor): string {
@@ -4317,64 +4565,6 @@ function serializeLightDarkColor(value: LightDarkColor): string {
 
 function serializeContrastColorFn(value: ContrastColorFn): string {
   return `contrast-color(${serializeColorValue(value.color)})`;
-}
-
-function serializeAbsoluteRgb(
-  value: AbsoluteColor,
-  htmlCompatible: boolean,
-): string {
-  if (htmlCompatible) {
-    const serialized = serializeHtmlCompatibleRgb(value);
-
-    if (serialized !== null) {
-      return serialized;
-    }
-  }
-
-  if (
-    value.components.some((component) => component === undefined) ||
-    value.alpha === undefined
-  ) {
-    return `color(srgb ${serializeAbsoluteColorComponentsBody(
-      normalizeColorEncoding(value),
-    )})`;
-  }
-
-  const components = value.components.map(
-    (component) => serializeCssNumber(value.is8Bit
-      ? component!
-      : component! * 0xff),
-  );
-  const alpha = value.is8Bit
-    ? serialize8BitAlpha(value.alpha)
-    : serializeAbsoluteColorAlpha(value.alpha);
-
-  return alpha === null
-    ? `rgb(${components.join(', ')})`
-    : `rgba(${components.join(', ')}, ${alpha})`;
-}
-
-function serializeHtmlCompatibleRgb(value: AbsoluteColor): string | null {
-  if (!value.is8Bit || value.alpha !== 0xff) {
-    return null;
-  }
-
-  let serialized = '#';
-
-  for (const component of value.components) {
-    if (
-      component === undefined ||
-      !Number.isInteger(component) ||
-      component < 0 ||
-      component > 0xff
-    ) {
-      return null;
-    }
-
-    serialized += component.toString(16).padStart(2, '0');
-  }
-
-  return serialized;
 }
 
 function serialize8BitAlpha(value: number): string | null {
@@ -4391,76 +4581,15 @@ function serialize8BitAlpha(value: number): string | null {
   return serializeCssNumber(Math.round(value / 0.255) / 1000);
 }
 
-function serializeAbsoluteHsl(
-  value: AbsoluteColor,
+function serializeAbsoluteColorComponent(
+  value: AbsoluteComponent,
+  metadata: ColorComponentMetadata,
 ): string {
-  const [hue, saturation, lightness] = value.components;
-  const components = [
-    serializeAbsoluteColorComponent(hue),
-    serializeAbsoluteColorPercentage(saturation),
-    serializeAbsoluteColorPercentage(lightness),
-  ];
-
-  return serializeAbsoluteColorFunction('hsl', components, value.alpha);
-}
-
-function serializeAbsoluteHwb(
-  value: AbsoluteColor,
-): string {
-  const [hue, whiteness, blackness] = value.components;
-  const components = [
-    serializeAbsoluteColorComponent(hue),
-    serializeAbsoluteColorPercentage(whiteness),
-    serializeAbsoluteColorPercentage(blackness),
-  ];
-
-  return serializeAbsoluteColorFunction('hwb', components, value.alpha);
-}
-
-function serializeAbsoluteColorComponents(
-  name: 'lab' | 'lch' | 'oklab' | 'oklch',
-  value: AbsoluteColor,
-): string {
-  return serializeAbsoluteColorFunction(
-    name,
-    value.components.map(serializeAbsoluteColorComponent),
-    value.alpha,
-  );
-}
-
-function serializeAbsoluteColorComponentsBody(value: AbsoluteColor): string {
-  const components = value.components
-    .map(serializeAbsoluteColorComponent)
-    .join(' ');
-  const alpha = serializeAbsoluteColorAlpha(value.alpha);
-
-  return alpha === null
-    ? components
-    : `${components} / ${alpha}`;
-}
-
-function serializeAbsoluteColorFunction(
-  name: string,
-  components: string[],
-  alphaValue: number | undefined,
-): string {
-  const alpha = serializeAbsoluteColorAlpha(alphaValue);
-
-  return alpha === null
-    ? `${name}(${components.join(' ')})`
-    : `${name}(${components.join(' ')} / ${alpha})`;
-}
-
-function serializeAbsoluteColorComponent(value: AbsoluteComponent): string {
   return value === undefined
     ? 'none'
-    : serializeCssNumber(value);
-}
-
-function serializeAbsoluteColorPercentage(value: AbsoluteComponent): string {
-  return value === undefined
-    ? 'none'
-    : `${serializeCssNumber(value)}%`;
+    : `${serializeCssNumber(value)}${
+      metadata.canonicalSyntax === 'percentage' ? '%' : ''
+    }`;
 }
 
 function serializeAbsoluteColorAlpha(value: number | undefined): string | null {
@@ -4593,7 +4722,7 @@ function isPredefinedColorSpaceName(value: string): value is ColorSpaceName {
 function prepareAbsoluteColorForConversion(
   value: PredefinedAbsoluteColor,
 ): PredefinedAbsoluteColor {
-  const normalized = normalizeColorEncoding(value);
+  const normalized = normalizeAbsoluteColorEncoding(value);
 
   switch (normalized.space.name) {
     case 'hsl':
@@ -4609,7 +4738,7 @@ function prepareAbsoluteColorForConversion(
   }
 }
 
-function normalizeColorEncoding<Space extends AbsoluteColorSpace>(
+function normalizeAbsoluteColorEncoding<Space extends AbsoluteColorSpace>(
   value: AbsoluteColor<Space>,
 ): AbsoluteColor<Space> {
   if (!value.isLegacySrgb && !value.is8Bit) {
@@ -4628,6 +4757,7 @@ function normalizeColorEncoding<Space extends AbsoluteColorSpace>(
     alpha: value.alpha === undefined
       ? value.alpha
       : value.is8Bit ? value.alpha / 0xff : value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4751,6 +4881,7 @@ function convertAbsoluteColorToXyz(
     space: SPACES[space],
     components: xyz,
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4802,6 +4933,7 @@ function convertXyzToAbsoluteColor(
     space: SPACES[target],
     components,
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4833,6 +4965,7 @@ function convertHslToRgb(
     space: SPACES.srgb,
     components: hslToRgb(...components),
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4851,6 +4984,7 @@ function convertRgbToHsl(
       lightness,
     ],
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4864,6 +4998,7 @@ function convertHwbToRgb(
     space: SPACES.srgb,
     components: hwbToRgb(...components),
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4882,6 +5017,7 @@ function convertRgbToHwb(
       blackness,
     ],
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4901,6 +5037,7 @@ function convertLabToLch(
       Number.isNaN(hue) ? undefined : hue,
     ],
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4916,6 +5053,7 @@ function convertLchToLab(
       ? [lightness, 0, 0]
       : lchToLab([lightness, chroma, hue]),
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4935,6 +5073,7 @@ function convertOklabToOklch(
       Number.isNaN(hue) ? undefined : hue,
     ],
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -4950,6 +5089,7 @@ function convertOklchToOklab(
       ? [lightness, 0, 0]
       : oklchToOklab([lightness, chroma, hue]),
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -5512,6 +5652,7 @@ function naiveCmykToSrgb(
     space: SPACES.srgb,
     components: [red, green, blue],
     alpha: value.alpha,
+    isLegacySrgb: false,
   };
 }
 
@@ -5554,6 +5695,7 @@ export function gamutMapColor(
       space: SPACES.oklab,
       components: [1, 0, 0],
       alpha: origin.alpha,
+      isLegacySrgb: false,
     }, destination, context);
   }
 
@@ -5563,6 +5705,7 @@ export function gamutMapColor(
       space: SPACES.oklab,
       components: [0, 0, 0],
       alpha: origin.alpha,
+      isLegacySrgb: false,
     }, destination, context);
   }
 
@@ -5860,7 +6003,7 @@ function prepareAbsoluteColorForComparison(
   value: AbsoluteColor,
 ): AbsoluteColor {
   return replacePowerlessComponents(
-    normalizeColorEncoding(value),
+    normalizeAbsoluteColorEncoding(value),
   );
 }
 
@@ -5942,7 +6085,7 @@ export function interpolateColors(
   const carriedA = findCarriedForwardComponents(a, space);
   const carriedB = findCarriedForwardComponents(b, space);
 
-  const normalizedA = normalizeColorEncoding(a);
+  const normalizedA = normalizeAbsoluteColorEncoding(a);
   const convertedA = convertPredefinedAbsoluteColor(
     replaceMissingComponents(
       coercePredefinedAbsoluteColor(normalizedA, context),
@@ -5950,7 +6093,7 @@ export function interpolateColors(
     space,
   );
 
-  const normalizedB = normalizeColorEncoding(b);
+  const normalizedB = normalizeAbsoluteColorEncoding(b);
   const convertedB = convertPredefinedAbsoluteColor(
     replaceMissingComponents(
       coercePredefinedAbsoluteColor(normalizedB, context),
@@ -6005,7 +6148,7 @@ function convertAbsoluteColorToCustomSpace(
   target: DashedIdentValue['value'],
   context: ColorConversionContext,
 ): AbsoluteColor<CustomColorSpace> {
-  const normalized = normalizeColorEncoding(value);
+  const normalized = normalizeAbsoluteColorEncoding(value);
   const profile = context.colorProfiles?.get(target);
 
   if (profile === undefined) {
@@ -6312,6 +6455,7 @@ function interpolatePremultipliedColors<Space extends AbsoluteColorSpace>(
     space: a.space,
     components,
     alpha: interpolateComponent(a.alpha, b.alpha, progress),
+    isLegacySrgb: false,
   };
 }
 
@@ -6430,511 +6574,3 @@ export function calculateColorMix(
 }
 
 
-
-// ████████  ████████ ██          ███    ████████ ████ ██     ██ ████████
-// ██     ██ ██       ██         ██ ██      ██     ██  ██     ██ ██
-// ██     ██ ██       ██        ██   ██     ██     ██  ██     ██ ██
-// ████████  ██████   ██       ██     ██    ██     ██  ██     ██ ██████
-// ██   ██   ██       ██       █████████    ██     ██   ██   ██  ██
-// ██    ██  ██       ██       ██     ██    ██     ██    ██ ██   ██
-// ██     ██ ████████ ████████ ██     ██    ██    ████    ███    ████████
-
-type RelativeColorParserContext = ColorResolutionContext & {
-  relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
-};
-
-type PreparedRelativeColorResolution =
-  | { origin: ColorValue; }
-  | {
-    origin: AbsoluteColor;
-    convertedOrigin: AbsoluteColor;
-    calculationContext: MathContext;
-  };
-
-function tryConsumeRelativeColorOrigin(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ColorValue> {
-  return consumeRelativeColorOrigin(c);
-}
-
-const consumeRelativeColorOrigin = sequenceOf(
-  [
-    one(createKeywordConsumer('from')),
-    one(withComponentTrivia(consumeColor)),
-  ],
-  ([, [origin]]) => ok(origin),
-);
-
-function tryConsumeRelativeColorKeyword(
-  c: ComponentCursor,
-): TryComponentConsumerResult<NumberValue> {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
-
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
-
-  const name = asciiLower(ident.value.value);
-  const variable = relativeColorVariablesFor(c.context)?.get(name);
-
-  if (variable === undefined) {
-    c.restore(start);
-    return null;
-  }
-
-  return ok(promoteNumericVariable(
-    name,
-    'number',
-    colorResolutionContextFor(c.context),
-  ));
-}
-
-function contextWithRelativeColorVariables(
-  context: unknown,
-  components: readonly string[],
-  includeAlpha = true,
-): RelativeColorParserContext {
-  const outer = colorResolutionContextFor(context);
-  const relativeColorVariables = new Map(
-    relativeColorVariableNames(components, includeAlpha).map((name) => [
-      name,
-      {
-        value: undefined,
-        valueType: 'number',
-      } satisfies NumericVariable,
-    ]),
-  );
-
-  return {
-    ...outer,
-    relativeColorVariables,
-    numericVariables: new Map([
-      ...(outer.numericVariables ?? []),
-      ...relativeColorVariables,
-    ]),
-  };
-}
-
-function contextWithColorFnRelativeVariables(
-  space: ColorFunctionSpace,
-  context: unknown,
-): unknown {
-  if (relativeColorVariablesFor(context) === undefined) {
-    return context;
-  }
-
-  const resolutionContext = colorResolutionContextFor(context);
-  const profile = colorProfileFor(space, resolutionContext);
-
-  return contextWithRelativeColorVariables(
-    resolutionContext,
-    profile?.components ?? [],
-    !isCustomColorProfileSpace(space),
-  );
-}
-
-function relativeColorVariableNames(
-  components: readonly string[],
-  includeAlpha = true,
-): string[] {
-  return includeAlpha ? [...components, 'alpha'] : [...components];
-}
-
-function relativeColorVariablesFor(
-  context: unknown,
-): RelativeColorParserContext['relativeColorVariables'] {
-  return context === null || context === undefined
-    ? undefined
-    : (context as RelativeColorParserContext).relativeColorVariables;
-}
-
-type RelativeColorValue = NumberLiteral | 'none';
-type RelativeColorFnValues = ReadonlyMap<string, RelativeColorValue>;
-
-function relativeColorFnValues(
-  profile: ColorProfile,
-  components: ColorProfileComponentValues,
-  alpha: number | undefined,
-): RelativeColorFnValues {
-  const values: Map<string, RelativeColorValue> = new Map(
-    profile.components.map((name, index) => [
-      name,
-      {
-        type: 'number',
-        value: components[index] ?? 0,
-      } satisfies NumberLiteral,
-    ] as const),
-  );
-
-  if (!isCustomColorProfileSpace(profile.space)) {
-    values.set(
-      'alpha',
-      alpha === undefined
-        ? 'none'
-        : { type: 'number', value: alpha },
-    );
-  }
-
-  return values;
-}
-
-function relativeColorValue(
-  values: RelativeColorFnValues,
-  name: string,
-): RelativeColorValue {
-  const value = values.get(name);
-
-  if (value === undefined) {
-    throw new TypeError(`Unknown relative color variable: ${name}`);
-  }
-
-  return value;
-}
-
-function relativeColorNumericVariables(
-  context: MathContext,
-  values: Iterable<readonly [string, RelativeColorValue]>,
-): ReadonlyMap<string, NumericVariable> {
-  return new Map([
-    ...(context.numericVariables ?? []),
-    ...[...values].map(([name, value]) => [
-      name,
-      relativeColorNumericVariable(value),
-    ] as const),
-  ]);
-}
-
-function prepareRelativeColorResolution(
-  originValue: ColorValue,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-  metadata: ColorMetadata,
-): PreparedRelativeColorResolution {
-  const { space } = metadata;
-
-  if (space === null) {
-    throw new TypeError('Relative color metadata requires a color space');
-  }
-
-  const origin = resolveColorValueInternal(originValue, stage, context);
-
-  if (origin.kind !== ColorKind.Absolute) {
-    return { origin };
-  }
-
-  const convertedOrigin = convertRelativeColorOrigin(
-    origin,
-    space.name,
-    context,
-  );
-
-  return {
-    origin,
-    convertedOrigin,
-    calculationContext: {
-      ...context,
-      numericVariables: relativeColorVariables(
-        convertedOrigin,
-        context,
-        metadata,
-      ),
-    },
-  };
-}
-
-function convertRelativeColorOrigin(
-  origin: AbsoluteColor,
-  space: ColorSpaceName,
-  context: ColorConversionContext,
-): PredefinedAbsoluteColor {
-  const normalized = normalizeColorEncoding(origin);
-
-  if (normalized.space.name === space) {
-    return convertAbsoluteColor(normalized, space, context);
-  }
-
-  const carried = findCarriedForwardComponents(normalized, space);
-  const converted = convertAbsoluteColor(normalized, space, context);
-
-  return {
-    ...converted,
-    components: mapTuple(
-      converted.components,
-      (component, index) =>
-        carried.components[index] ? undefined : component,
-    ),
-    alpha: carried.alpha ? undefined : converted.alpha,
-  };
-}
-
-function relativeColorVariables(
-  origin: AbsoluteColor,
-  context: MathContext,
-  metadata: ColorMetadata | null,
-): ReadonlyMap<string, NumericVariable> {
-  return relativeColorNumericVariables(
-    context,
-    relativeColorVariableNames(
-      metadata?.space?.keys ?? [],
-    ).map((name) => [
-      name,
-      relativeColorChannelValue(name, origin, metadata),
-    ] as const),
-  );
-}
-
-function relativeColorNumericVariable(
-  value: RelativeColorValue,
-): NumericVariable {
-  return {
-    value,
-    valueType: 'number',
-  };
-}
-
-function resolveRelativeColorFnComponent(
-  value: SyntaxColorComponent,
-  origin: RelativeColorFnValues,
-  stage: ValueStage,
-  context: MathContext,
-): SyntaxColorComponent {
-  const name = value !== 'none' && value.type === 'math'
-    ? promotedNumericVariableName(value)
-    : null;
-
-  return name === null
-    ? resolveColorComponent(value, stage, context, ValueStage.Computed)
-    : relativeColorValue(origin, name);
-}
-
-function resolveRelativeColorFnAlpha(
-  value: SyntaxAlphaComponent | undefined,
-  origin: RelativeColorFnValues,
-  originAlpha: number | undefined,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-): SyntaxAlphaComponent {
-  if (value === undefined) {
-    return originAlpha === undefined
-      ? 'none'
-      : { type: 'number', value: originAlpha };
-  }
-
-  const name = value !== 'none' && value.type === 'math'
-    ? promotedNumericVariableName(value)
-    : null;
-
-  return resolveColorAlphaValue(
-    name === null ? value : relativeColorValue(origin, name),
-    stage,
-    context,
-  );
-}
-
-function resolveRelativeColorComponent(
-  value: SyntaxColorComponent,
-  origin: AbsoluteColor,
-  stage: ValueStage,
-  context: MathContext,
-  metadata: ColorMetadata,
-): SyntaxColorComponent {
-  const channelName = promotedRelativeColorChannelName(value, metadata);
-
-  if (channelName !== null) {
-    return relativeColorChannelValue(channelName, origin, metadata);
-  }
-
-  return resolveColorComponent(value, stage, context, ValueStage.Computed);
-}
-
-function resolveRelativeColorHue(
-  value: SyntaxHueComponent,
-  origin: AbsoluteColor,
-  stage: ValueStage,
-  context: MathContext,
-  metadata: ColorMetadata,
-): SyntaxHueComponent {
-  const channelName = promotedRelativeColorChannelName(value, metadata);
-
-  return channelName === null
-    ? resolveHue(value, stage, context, ValueStage.Computed)
-    : relativeColorChannelValue(channelName, origin, metadata);
-}
-
-function resolveRelativeColorAlpha(
-  value: SyntaxAlphaComponent | undefined,
-  origin: AbsoluteColor,
-  stage: ValueStage,
-  context: ColorResolutionContext,
-  metadata: ColorMetadata | null,
-): SyntaxAlphaComponent {
-  if (value === undefined) {
-    return origin.alpha === undefined
-      ? 'none'
-      : { type: 'number', value: origin.alpha };
-  }
-
-  const channelName = promotedRelativeColorChannelName(value, metadata);
-  return resolveColorAlphaValue(
-    channelName === null
-      ? value
-      : relativeColorChannelValue(channelName, origin, metadata),
-    stage,
-    context,
-  );
-}
-
-function relativeColorChannelValue(
-  name: string,
-  origin: AbsoluteColor,
-  metadata: ColorMetadata | null,
-): NumberLiteral | 'none' {
-  if (name === 'alpha') {
-    return origin.alpha === undefined
-      ? 'none'
-      : { type: 'number', value: origin.alpha };
-  }
-
-  const source = relativeColorComponentIndex(metadata, name);
-
-  if (source === null || metadata === null) {
-    throw new TypeError(`Unknown relative color variable: ${name}`);
-  }
-
-  const value = origin.components[source];
-
-  if (value === undefined) {
-    return 'none';
-  }
-
-  return {
-    type: 'number',
-    value: value / metadata.components[source]!.numberScale,
-  };
-}
-
-function promotedRelativeColorChannelName(
-  value: SyntaxColorComponent | SyntaxHueComponent,
-  metadata: ColorMetadata | null,
-): string | null {
-  if (value === 'none' || value.type !== 'math') {
-    return null;
-  }
-
-  const name = promotedNumericVariableName(value);
-
-  if (name === null) {
-    return null;
-  }
-
-  if (
-    name !== 'alpha' &&
-    relativeColorComponentIndex(metadata, name) === null
-  ) {
-    throw new TypeError(`Unknown promoted relative color variable: ${name}`);
-  }
-
-  return name;
-}
-
-function relativeColorComponentIndex(
-  metadata: ColorMetadata | null,
-  name: string,
-): number | null {
-  if (metadata?.space === null || metadata?.space === undefined) {
-    return null;
-  }
-
-  const keys: readonly string[] = metadata.space.keys;
-  const index = keys.indexOf(name);
-  return index === -1 ? null : index;
-}
-
-function serializeRelativeColorFn(
-  name: string,
-  origin: ColorValue,
-  components: string[],
-  alphaValue: SyntaxAlphaComponent | undefined,
-): string {
-  const alpha = alphaValue === undefined
-    ? null
-    : serializeColorComponent(alphaValue, null);
-  const body = [
-    'from',
-    serializeRelativeColorOrigin(origin),
-    ...components,
-  ].join(' ');
-
-  return alpha === null
-    ? `${name}(${body})`
-    : `${name}(${body} / ${alpha})`;
-}
-
-function serializeRelativeColorOrigin(
-  value: ColorValue,
-): string {
-  switch (value.kind) {
-    case ColorKind.Hex:
-      return value.text;
-    case ColorKind.RgbFn:
-    case ColorKind.HslFn:
-    case ColorKind.HwbFn:
-    case ColorKind.LabFn:
-    case ColorKind.LchFn:
-    case ColorKind.OklabFn:
-    case ColorKind.OklchFn:
-    case ColorKind.AlphaFn:
-    case ColorKind.ColorFn:
-      return serializeOriginColorFunction(value);
-    default:
-      return serializeColorValue(value);
-  }
-}
-
-function serializeOriginColorFunction(value: ColorFunction): string {
-  if (
-    value.kind === ColorKind.AlphaFn ||
-    value.origin !== undefined
-  ) {
-    return serializeColorFunction(value);
-  }
-
-  const metadata = COLOR_METADATA[value.kind];
-  const components = value.components.map((component, index) => {
-    const componentMetadata = colorComponentMetadataAt(metadata, index);
-
-    return componentMetadata.isHue
-      ? serializeSpecifiedHue(component as SyntaxHueComponent)
-      : serializeColorComponent(
-        component as SyntaxColorComponent,
-        null,
-      );
-  });
-  let name: string | undefined = value.kind === ColorKind.RgbFn
-    ? 'rgb'
-    : metadata.space?.name;
-
-  if (value.kind === ColorKind.ColorFn) {
-    name = 'color';
-    components.unshift(value.space === 'xyz' ? 'xyz-d65' : value.space);
-  }
-
-  if (name === undefined) {
-    throw new TypeError('Origin color function requires a serialization name');
-  }
-
-  const alpha = value.alpha === undefined
-    ? null
-    : serializeColorComponent(value.alpha, null);
-
-  return alpha === null
-    ? `${name}(${components.join(' ')})`
-    : `${name}(${components.join(' ')} / ${alpha})`;
-}
-
-function serializeSpecifiedHue(value: SyntaxHueComponent): string {
-  return value !== 'none' && value.type === 'angle'
-    ? `${serializeCssNumber(resolveAngleLiteral(value).value)}deg`
-    : serializeHue(value);
-}

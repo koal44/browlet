@@ -183,7 +183,7 @@ export function promoteNumericVariable<Type extends MathValueType>(
   );
 }
 
-export function promotedNumericVariableName(
+export function tryGetMathVariableName(
   value: MathValue,
 ): string | null {
   return value.promoted && value.calculation.type === 'variable'
@@ -251,32 +251,11 @@ export function resolveMathValue<Type extends MathValueType>(
     : { ...value, calculation };
 }
 
-export function tryCoercePercentageToNumber(
-  value: MathValue<'percentage'>,
-): MathValue<'number'> | null {
-  if (value.calculation.type !== 'percentage') {
-    return null;
-  }
-
-  return {
-    type: 'math',
-    calculation: createNumericLeaf(
-      {
-        type: 'number',
-        value: value.calculation.value / 100,
-      },
-      numberMathHints(),
-    ),
-    valueType: 'number',
-    promoted: false,
-  };
-}
-
 export function serializeMathValue(
   value: MathValue,
 ): string {
   const { calculation } = value;
-  const promotedName = promotedNumericVariableName(value);
+  const promotedName = tryGetMathVariableName(value);
 
   if (promotedName !== null) {
     return promotedName;
@@ -303,6 +282,51 @@ export function addMathValues<Type extends MathValueType>(
     a,
     b,
     context,
+  );
+}
+
+export function coercePercentageMathToNumber(
+  value: MathValue<'percentage'>,
+  percentageScale: number,
+  numberScale: number,
+): MathValue<'number'> {
+  const percentageBasis = createNumericLeaf(
+    { type: 'percentage', value: 100 },
+    percentageMathHints({ percentHint: 'percent' }),
+  );
+  const invertedPercentageBasis = {
+    type: 'invert' as const,
+    child: percentageBasis,
+    hints: invertMathHints(percentageBasis.hints),
+  };
+  const multiplier = createNumericLeaf(
+    {
+      type: 'number',
+      value: 100 * percentageScale / numberScale,
+    },
+    numberMathHints(),
+  );
+  const mathHints = multiplyMathHints([
+    mathHintsOf(value.calculation),
+    multiplier.hints,
+    mathHintsOf(invertedPercentageBasis),
+  ]);
+
+  if (mathHints === null) {
+    throw new TypeError('Cannot coerce inconsistent percentage math');
+  }
+
+  return createMathValue(
+    simplifyCalculationTree({
+      type: 'product',
+      children: [
+        value.calculation,
+        multiplier,
+        invertedPercentageBasis,
+      ],
+      hints: mathHints,
+    }, ValueStage.Declared, { percentHint: 'percent' }, 'number'),
+    'number',
   );
 }
 
@@ -2191,6 +2215,17 @@ function simplifyCalculationNode(
   root: CalculationTree,
   context: MathContext,
 ): CalculationTree {
+  const simplified = simplifyCalculationNodeInternal(root, context);
+
+  return simplified.type === 'dimension'
+    ? canonicalizeDimension(simplified, context)
+    : simplified;
+}
+
+function simplifyCalculationNodeInternal(
+  root: CalculationTree,
+  context: MathContext,
+): CalculationTree {
   switch (root.type) {
     case 'number':
       return root;
@@ -2199,7 +2234,7 @@ function simplifyCalculationNode(
       return resolvePercentage(root, context);
 
     case 'dimension':
-      return canonicalizeDimension(root, context);
+      return root;
 
     case 'variable': {
       const variable = context.numericVariables?.get(root.name);
@@ -3186,6 +3221,14 @@ function combineProductNumbers(
     (child): child is NumericLeaf & NumberLiteral => child.type === 'number',
   );
 
+  if (
+    numbers.length === 1 &&
+    numbers[0]!.value === 1 &&
+    children.length > 1
+  ) {
+    return children.filter((child) => child !== numbers[0]);
+  }
+
   if (numbers.length < 2) {
     return [...children];
   }
@@ -3349,6 +3392,14 @@ function canonicalizeDimension(
   context: MathContext,
 ): DimensionLeaf {
   const unit = asciiLower(value.unit);
+
+  if (!Number.isFinite(value.value)) {
+    return {
+      ...value,
+      unit: canonicalUnitForDimension(unit),
+    };
+  }
+
   let resolved: DimensionLiteral<string, string> | null;
 
   if (isUnit(LENGTH_UNITS, unit)) {
@@ -3400,6 +3451,32 @@ function canonicalizeDimension(
       },
       value.hints,
     );
+}
+
+function canonicalUnitForDimension(unit: string): string {
+  const hints = createMathHintsFromUnit(unit);
+  const category = hints === null
+    ? null
+    : mathCategory(hints);
+
+  switch (category) {
+    case 'length':
+      return 'px';
+    case 'angle':
+      return 'deg';
+    case 'time':
+      return 's';
+    case 'frequency':
+      return 'hz';
+    case 'resolution':
+      return 'dppx';
+    case 'flex':
+      return 'fr';
+    case 'number':
+    case 'percent':
+    case null:
+      throw new TypeError(`Cannot canonicalize unknown dimension unit: ${unit}`);
+  }
 }
 
 function resolvePercentage(
@@ -3541,8 +3618,8 @@ function serializeCalcTree(root: CalculationTree): string {
 }
 
 function serializeCalcSum(root: CalcSumNode): string {
-  const [first, ...rest] = sortCalculationChildren(root.children);
-  let serialized = `(${serializeCalcTree(first!)}`;
+  const [first, ...rest] = root.children;
+  let serialized = `(${serializeCalcTree(first)}`;
 
   for (const child of rest) {
     if (child.type === 'negate') {
@@ -3560,8 +3637,8 @@ function serializeCalcSum(root: CalcSumNode): string {
 }
 
 function serializeCalcProduct(root: CalcProductNode): string {
-  const [first, ...rest] = sortCalculationChildren(root.children);
-  let serialized = `(${serializeCalcTree(first!)}`;
+  const [first, ...rest] = root.children;
+  let serialized = `(${serializeCalcTree(first)}`;
 
   for (const child of rest) {
     if (child.type === 'invert') {
@@ -3622,33 +3699,7 @@ function serializeNumericLeaf(
       return `${keyword} * ${serializeDimension({
         type: 'dimension',
         value: 1,
-        unit: canonicalUnitForDimension(value.unit),
+        unit: value.unit,
       })}`;
-  }
-}
-
-function canonicalUnitForDimension(unit: string): string {
-  const hints = createMathHintsFromUnit(unit);
-  const category = hints === null
-    ? null
-    : mathCategory(hints);
-
-  switch (category) {
-    case 'length':
-      return 'px';
-    case 'angle':
-      return 'deg';
-    case 'time':
-      return 's';
-    case 'frequency':
-      return 'hz';
-    case 'resolution':
-      return 'dppx';
-    case 'flex':
-      return 'fr';
-    case 'number':
-    case 'percent':
-    case null:
-      throw new TypeError(`Cannot serialize unknown dimension unit: ${unit}`);
   }
 }

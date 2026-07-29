@@ -100,6 +100,7 @@ function testColorProfile() {
         space: SPACES.srgb,
         components: [components[0], components[1], components[2]],
         alpha: 1,
+        isLegacySrgb: false,
       };
     },
     fromAbsoluteColor: (color) => {
@@ -122,6 +123,7 @@ function swappedSrgbProfile() {
       space: SPACES.srgb,
       components: [g, r, b],
       alpha: 1,
+      isLegacySrgb: false,
     }),
     fromAbsoluteColor: (color) => {
       const [red = 0, green = 0, blue = 0] =
@@ -190,6 +192,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.1, 0.2, 0.3],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     expect(resolveColorValue(parseColorValue('ActiveCaption')!, ValueStage.Computed, {
@@ -311,6 +314,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.1, 0.2, 0.3],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const current = parseColorValue('currentcolor')!;
     const system = parseColorValue('CanvasText')!;
@@ -338,6 +342,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.1, 0.2, 0.3],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const current = parseColorValue('currentcolor')!;
 
@@ -359,6 +364,14 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [255, 0, 127],
       alpha: 255,
+      isLegacySrgb: true,
+      is8Bit: true,
+    });
+    expect(parseColorValue('rgba(255, 0, 127, 0)')).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [255, 0, 127],
+      alpha: 0,
       isLegacySrgb: true,
       is8Bit: true,
     });
@@ -393,7 +406,7 @@ describe('color values', () => {
 
     expect(color).toMatchObject({
       kind: ColorKind.RgbFn,
-      syntax: 'modern',
+      useLegacySyntax: false,
       origin: {
         kind: ColorKind.Named,
         name: 'red',
@@ -434,6 +447,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(resolveComputedAbsoluteColor(
       'rgb(from rebeccapurple '
@@ -445,6 +459,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.4, 0.2, 0.6],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -466,6 +481,24 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
       alpha: 0.8,
+      isLegacySrgb: false,
+    });
+  });
+
+  it('resolves an alpha function used as another relative color origin', () => {
+    const declared = parseColorValue(
+      'rgb(from alpha(from red / 0.5) r g b / alpha)',
+    )!;
+
+    expect(serializeColorValue(declared)).toBe(
+      'rgb(from alpha(from red / 0.5) r g b / alpha)',
+    );
+    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [1, 0, 0],
+      alpha: 0.5,
+      isLegacySrgb: false,
     });
   });
 
@@ -483,6 +516,44 @@ describe('color values', () => {
     )!)).toBe(
       'rgb(from color(xyz-d65 120% -1 0 / 100%) r g b)',
     );
+  });
+
+  it('canonicalizes specified hue angles without coercing hue numbers', () => {
+    const angles = parseColorValue(
+      'hsl(from hsl(.5turn 120% -20%) .5turn s l)',
+    );
+    expect(angles).toHaveProperty(
+      'origin.components.0',
+      { type: 'angle', value: 180, unit: 'deg' },
+    );
+    expect(angles).toHaveProperty(
+      'components.0',
+      { type: 'angle', value: 180, unit: 'deg' },
+    );
+
+    const numbers = parseColorValue(
+      'hsl(from hsl(.5 120% -20%) .5 s l)',
+    );
+    expect(numbers).toHaveProperty(
+      'origin.components.0',
+      { type: 'number', value: 0.5 },
+    );
+    expect(numbers).toHaveProperty(
+      'components.0',
+      { type: 'number', value: 0.5 },
+    );
+  });
+
+  it('resolves unit alpha omission while preserving it on origin functions', () => {
+    expect(parseColorValue('color(--custom 0 0 0 / 1)'))
+      .toHaveProperty('alpha', undefined);
+    expect(parseColorValue(
+      'rgb(from color(--custom 0 0 0 / 1) r g b)',
+    )).toMatchObject({
+      origin: {
+        alpha: { type: 'number', value: 1 },
+      },
+    });
   });
 
   it.each([
@@ -516,7 +587,7 @@ describe('color values', () => {
     ],
     [
       'rgb(from red calc(30%) g b)',
-      'rgb(from red calc(30%) g b)',
+      'rgb(from red calc(76.5) g b)',
     ],
     [
       'alpha(from rgb(0 0 0 / 0.25) / 100%)',
@@ -525,6 +596,10 @@ describe('color values', () => {
     [
       'alpha(from rgb(0 0 0 / 0.25))',
       'alpha(from rgb(0 0 0 / 0.25))',
+    ],
+    [
+      'color(from color(xyz 7 -20.5 100) xyz x y z)',
+      'color(from color(xyz-d65 7 -20.5 100) xyz-d65 x y z)',
     ],
   ] as const)(
     'serializes the declared relative color %s',
@@ -553,6 +628,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.4, 0.2, 0.6],
       alpha: 0.8,
+      isLegacySrgb: false,
     });
   });
 
@@ -564,6 +640,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.6 / 255, 0.6, 0.6],
       alpha: 0.9,
+      isLegacySrgb: false,
     });
   });
 
@@ -575,6 +652,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [300 / 255, -10 / 255, 40 / 255],
       alpha: 0.7,
+      isLegacySrgb: false,
     });
     expect(resolveComputedAbsoluteColor(
       'rgb(from rgb(20 30 40 / 70%) r g b / calc(alpha * 2))',
@@ -583,6 +661,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [20 / 255, 30 / 255, 40 / 255],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -594,6 +673,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [undefined, 1 / 255, 0],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -613,11 +693,11 @@ describe('color values', () => {
   it.each([
     [
       'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)',
-      'rgb(calc(50% + (10% * sign(1em - 10px))) 0 0 / 0.5)',
+      'rgb(calc(255 * (50% + (10% * sign(1em - 10px))) / 100%) 0 0 / 0.5)',
     ],
     [
       'rgb(0%, 0%, 0%, calc(50% + (sign(1em - 10px) * 10%)))',
-      'color(srgb 0 0 0 / calc(50% + (10% * sign(1em - 10px))))',
+      'rgb(0 0 0 / calc((50% + (10% * sign(1em - 10px))) / 100%))',
     ],
   ] as const)(
     'serializes the deferred legacy RGB calculation %s in modern syntax',
@@ -625,6 +705,21 @@ describe('color values', () => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
   );
+
+  it('stores deferred legacy RGB in its serializable modern form', () => {
+    expect(parseColorValue(
+      'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)',
+    )).toMatchObject({
+      kind: ColorKind.RgbFn,
+      useLegacySyntax: false,
+      components: [
+        { type: 'math', valueType: 'number' },
+        { type: 'number', value: 0 },
+        { type: 'number', value: 0 },
+      ],
+      alpha: { type: 'number', value: 0.5 },
+    });
+  });
 
   it('clamps independent RGB components while preserving deferred math', () => {
     const color = parseColorValue(
@@ -668,7 +763,8 @@ describe('color values', () => {
     )!;
 
     expect(declared).toMatchObject({
-      kind: ColorKind.ColorFn,
+      kind: ColorKind.RgbFn,
+      useLegacySyntax: false,
     });
     expect(resolveColorValue(declared, ValueStage.Declared, {
       unwrapMathAt: ValueStage.Declared,
@@ -677,12 +773,14 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: true,
     });
     expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: true,
     });
   });
 
@@ -716,6 +814,7 @@ describe('color values', () => {
         space: SPACES[space],
         components: [-0.25, 1.5, 0.75],
         alpha: 1,
+        isLegacySrgb: false,
       });
     },
   );
@@ -724,7 +823,7 @@ describe('color values', () => {
     expect(parseColorValue('device-cmyk(0, .81, .81, .25)'))
       .toMatchObject({
         kind: ColorKind.DeviceCmykFn,
-        syntax: 'legacy',
+        useLegacySyntax: true,
         components: [
           { type: 'number', value: 0 },
           { type: 'number', value: 0.81 },
@@ -736,7 +835,7 @@ describe('color values', () => {
       'device-cmyk(10% none 0.5 120% / 25%)',
     )).toMatchObject({
       kind: ColorKind.DeviceCmykFn,
-      syntax: 'modern',
+      useLegacySyntax: false,
       components: [
         { type: 'percentage', value: 10 },
         'none',
@@ -778,6 +877,7 @@ describe('color values', () => {
       },
       components: [0, 0.25, undefined, 1],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(computed))
       .toBe('device-cmyk(0 0.25 none 1 / 0.5)');
@@ -795,6 +895,7 @@ describe('color values', () => {
         keys: ['c', 'm', 'y', 'k'],
       },
       alpha: 1,
+      isLegacySrgb: false,
     });
     expectComponentsCloseTo(computed.components, [0, 0.7, 0.2, 0], 12);
     expect(serializeColorValue(computed))
@@ -811,6 +912,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expectComponentsCloseTo(srgb.components, [0.7, 0.133, 0.133], 12);
   });
@@ -831,6 +933,7 @@ describe('color values', () => {
             components[2],
           ],
           alpha: 1,
+          isLegacySrgb: false,
         };
       },
       fromAbsoluteColor: () => null,
@@ -859,6 +962,7 @@ describe('color values', () => {
         keys: ['c', 'm', 'y', 'k'],
       },
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(inputs).toEqual([]);
 
@@ -872,6 +976,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     if (computed.kind !== ColorKind.Absolute) {
       throw new TypeError('Expected an absolute computed color');
@@ -1081,7 +1186,7 @@ describe('color values', () => {
     )!;
 
     expect(color).toMatchObject({
-      kind: ColorKind.ColorFn,
+      kind: ColorKind.CustomColorFn,
       space: '--four-channel',
       components: [
         { type: 'number', value: 0.125 },
@@ -1124,6 +1229,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expectComponentsCloseTo(converted.components, [0.2, 0.4, 0.6], 12);
     expect(inputs).toHaveLength(1);
@@ -1166,6 +1272,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       alpha: 0.5,
+      isLegacySrgb: false,
     });
 
     if (resolved.kind !== ColorKind.Absolute) {
@@ -1193,6 +1300,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       alpha: 1,
+      isLegacySrgb: false,
     });
 
     if (resolved.kind !== ColorKind.Absolute) {
@@ -1215,6 +1323,7 @@ describe('color values', () => {
       space,
       components: [undefined, 0.4, 0.6, 0.8],
       alpha: undefined,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(custom, 'srgb', {
@@ -1224,6 +1333,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0, 0.4, 0.6],
       alpha: undefined,
+      isLegacySrgb: false,
     });
     expect(inputs).toEqual([[0, 0.4, 0.6, 0.8]]);
   });
@@ -1238,6 +1348,7 @@ describe('color values', () => {
       space,
       components: [0.5],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     expect(() => convertAbsoluteColor(custom, 'srgb'))
@@ -1262,6 +1373,7 @@ describe('color values', () => {
         keys: profile.components,
       },
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(color.kind).toBe(ColorKind.Absolute);
 
@@ -1289,6 +1401,7 @@ describe('color values', () => {
       },
       components: [0.125, 0.25, 0.5, 0.75],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
 
     expect(resolveColorValue(declared, ValueStage.Used, context))
@@ -1308,7 +1421,7 @@ describe('color values', () => {
     expect(resolveColorValue(declared, ValueStage.Declared, {
       colorProfiles: profiles,
     })).toMatchObject({
-      kind: ColorKind.ColorFn,
+      kind: ColorKind.CustomColorFn,
       components: [
         { type: 'number', value: -0.25 },
         { type: 'number', value: 1.25 },
@@ -1330,6 +1443,7 @@ describe('color values', () => {
       },
       components: [0, 1, 0.5, 1],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(computed))
       .toBe('color(--four-channel 0 1 0.5 1)');
@@ -1367,6 +1481,7 @@ describe('color values', () => {
       },
       components: [0.125, 0.25, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(excess).toEqual({
       kind: ColorKind.Absolute,
@@ -1376,6 +1491,7 @@ describe('color values', () => {
       },
       components: [0.125, 0.25, 0.5, 0.75],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(inputs).toEqual([]);
   });
@@ -1403,6 +1519,7 @@ describe('color values', () => {
       },
       components: [undefined, 0.25, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(computed))
       .toBe('color(--four-channel none 0.25 0 0)');
@@ -1426,6 +1543,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [alpha, 0, 0],
         alpha: 1,
+        isLegacySrgb: false,
       }),
       fromAbsoluteColor: () => [0.25],
     });
@@ -1446,6 +1564,7 @@ describe('color values', () => {
       },
       components: [0.25],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -1469,6 +1588,7 @@ describe('color values', () => {
       },
       components: [0.2, 0.2, 0.3, 0.5],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(color))
       .toBe('color(--four-channel 0.2 0.2 0.3 0.5 / 0.5)');
@@ -1494,6 +1614,7 @@ describe('color values', () => {
       },
       components: [2, 0, 0, 0.25],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(inputs).toEqual([]);
   });
@@ -1514,7 +1635,7 @@ describe('color values', () => {
     );
 
     expect(computed).toMatchObject({
-      kind: ColorKind.ColorFn,
+      kind: ColorKind.CustomColorFn,
       space: '--four-channel',
       origin: {
         kind: ColorKind.CurrentColor,
@@ -1558,6 +1679,7 @@ describe('color values', () => {
       expect(color).toMatchObject({
         kind: ColorKind.Absolute,
         space,
+        isLegacySrgb: false,
       });
       expectComponentsCloseTo(
         (color as AbsoluteColor).components,
@@ -1624,6 +1746,7 @@ describe('color values', () => {
         kind: ColorKind.Absolute,
         space: SPACES[space],
         alpha: 1,
+        isLegacySrgb: false,
       });
 
       if (color?.kind !== ColorKind.Absolute) {
@@ -1650,9 +1773,21 @@ describe('color values', () => {
     ['rgb(0 calc(-infinity) 0)', true, { components: [0, 0, 0], alpha: 1 }],
     ['rgb(0 0 calc(NaN))', true, { components: [0, 0, 0], alpha: 1 }],
     ['rgb(calc(0 / 0) 0 0)', true, { components: [0, 0, 0], alpha: 1 }],
-    ['rgb(0 0 0 / calc(infinity))', false, { components: [0, 0, 0], alpha: 1 }],
-    ['rgb(0 0 0 / calc(-infinity))', false, { components: [0, 0, 0], alpha: 0 }],
-    ['rgb(0 0 0 / calc(NaN))', false, { components: [0, 0, 0], alpha: 0 }],
+    [
+      'rgb(0 0 0 / calc(infinity))',
+      true,
+      { components: [0, 0, 0], alpha: 0xff, is8Bit: true },
+    ],
+    [
+      'rgb(0 0 0 / calc(-infinity))',
+      true,
+      { components: [0, 0, 0], alpha: 0, is8Bit: true },
+    ],
+    [
+      'rgb(0 0 0 / calc(NaN))',
+      true,
+      { components: [0, 0, 0], alpha: 0, is8Bit: true },
+    ],
   ] as const)(
     'clamps special calculations in the computed color %s',
     (input, isLegacySrgb, expected) => {
@@ -1662,7 +1797,7 @@ describe('color values', () => {
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         ...expected,
-        ...(isLegacySrgb ? { isLegacySrgb: true } : {}),
+        isLegacySrgb,
       });
     },
   );
@@ -1781,6 +1916,7 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [undefined, 0, 100],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -1789,7 +1925,7 @@ describe('color values', () => {
 
     expect(color).toMatchObject({
       kind: ColorKind.HslFn,
-      syntax: 'modern',
+      useLegacySyntax: false,
       origin: {
         kind: ColorKind.Named,
         name: 'red',
@@ -1827,6 +1963,7 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [undefined, 20, 50],
       alpha: 1,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(color)).toBe('hsl(none 20% 50%)');
   });
@@ -1848,6 +1985,7 @@ describe('color values', () => {
         space: SPACES.hsl,
         components,
         alpha,
+        isLegacySrgb: false,
       });
     },
   );
@@ -1872,7 +2010,7 @@ describe('color values', () => {
     ],
     [
       'hsl(0deg, 0%, 0%, calc(50% + (sign(1em - 10px) * 10%)))',
-      'hsl(0 0 0 / calc(50% + (10% * sign(1em - 10px))))',
+      'hsl(0 0 0 / calc((50% + (10% * sign(1em - 10px))) / 100%))',
     ],
   ] as const)(
     'serializes the deferred legacy HSL calculation %s in modern syntax',
@@ -1880,6 +2018,21 @@ describe('color values', () => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
   );
+
+  it('stores deferred HSL in its canonical serializable form', () => {
+    expect(parseColorValue(
+      'hsl(.5turn, calc(50% + (sign(1em - 10px) * 10%)), 25%, 50%)',
+    )).toMatchObject({
+      kind: ColorKind.HslFn,
+      useLegacySyntax: false,
+      components: [
+        { type: 'number', value: 180 },
+        { type: 'math', valueType: 'percentage' },
+        { type: 'percentage', value: 25 },
+      ],
+      alpha: { type: 'number', value: 0.5 },
+    });
+  });
 
   it.each([
     'hsl(120 -10% 50%)',
@@ -1919,6 +2072,7 @@ describe('color values', () => {
       space: SPACES.hwb,
       components: [undefined, 0, 100],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -1974,7 +2128,7 @@ describe('color values', () => {
     ],
     [
       'hwb(120deg 30% 50% / calc(50% + (sign(1em - 10px) * 10%)))',
-      'hwb(120 30% 50% / calc(50% + (10% * sign(1em - 10px))))',
+      'hwb(120 30% 50% / calc((50% + (10% * sign(1em - 10px))) / 100%))',
     ],
   ] as const)(
     'serializes the deferred HWB calculation %s',
@@ -1982,6 +2136,20 @@ describe('color values', () => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
   );
+
+  it('stores deferred HWB percentage channels as percentages', () => {
+    expect(parseColorValue(
+      'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)',
+    )).toMatchObject({
+      kind: ColorKind.HwbFn,
+      components: [
+        { type: 'math', valueType: 'angle' },
+        { type: 'percentage', value: 30 },
+        { type: 'percentage', value: 50 },
+      ],
+      alpha: { type: 'number', value: 0.5 },
+    });
+  });
 
   it.each([
     ['hwb(45 40% 60%)', 0.4],
@@ -2024,6 +2192,7 @@ describe('color values', () => {
       space: SPACES.hwb,
       components: [undefined, undefined, 100],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2045,6 +2214,7 @@ describe('color values', () => {
         space: SPACES.hwb,
         components,
         alpha,
+        isLegacySrgb: false,
       });
     },
   );
@@ -2055,12 +2225,14 @@ describe('color values', () => {
       space: SPACES.lab,
       components: [50, 20, -37.5],
       alpha: 0.4,
+      isLegacySrgb: false,
     });
     expect(parseColorValue('oklab(none 0.1 -20% / none)')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [undefined, 0.1, -0.08],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -2113,6 +2285,7 @@ describe('color values', () => {
         space: SPACES[space],
         components,
         alpha: 1,
+        isLegacySrgb: false,
       });
     },
   );
@@ -2123,12 +2296,14 @@ describe('color values', () => {
       space: SPACES.lch,
       components: [50, 60, 270],
       alpha: 0.25,
+      isLegacySrgb: false,
     });
     expect(parseColorValue('oklch(none 0.2 none)')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [undefined, 0.2, undefined],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2181,6 +2356,7 @@ describe('color values', () => {
         space: SPACES[space],
         components,
         alpha: 1,
+        isLegacySrgb: false,
       });
     },
   );
@@ -2193,6 +2369,7 @@ describe('color values', () => {
       space: SPACES.lch,
       components: [50, 10, undefined],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -2222,6 +2399,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.5, 0.1, 40],
       alpha: 0.4,
+      isLegacySrgb: false,
     });
     expect(resolveComputedAbsoluteColor(
       'alpha(from lab(50 20 -30 / 0.3))',
@@ -2235,6 +2413,7 @@ describe('color values', () => {
       space: SPACES['display-p3'],
       components: [1, 0, 0],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -2247,6 +2426,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
     const translucent = resolveComputedAbsoluteColor('alpha(from red / 0.5)');
 
@@ -2255,6 +2435,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(serializeColorValue(translucent))
       .toBe('color(srgb 1 0 0 / 0.5)');
@@ -2301,6 +2482,7 @@ describe('color values', () => {
         space: SPACES[space],
         components,
         alpha,
+        isLegacySrgb: false,
       });
     },
   );
@@ -2370,6 +2552,7 @@ describe('color values', () => {
         space: SPACES[space],
         components,
         alpha,
+        isLegacySrgb: false,
       });
     },
   );
@@ -2392,6 +2575,7 @@ describe('color values', () => {
       expect(parseColorValue(`color(${space} 0 0 0)`)).toMatchObject({
         kind: ColorKind.Absolute,
         space: SPACES[space === 'xyz' ? 'xyz-d65' : space],
+        isLegacySrgb: false,
       });
     }
 
@@ -2419,6 +2603,7 @@ describe('color values', () => {
       space: SPACES['display-p3'],
       components: [1, 0.5, undefined],
       alpha: 0.25,
+      isLegacySrgb: false,
     });
 
     expect(parseColorValue('color(xyz-d50 none 0.5 120% / none)')).toEqual({
@@ -2426,6 +2611,7 @@ describe('color values', () => {
       space: SPACES['xyz-d50'],
       components: [undefined, 0.5, 1.2],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -2436,6 +2622,7 @@ describe('color values', () => {
         space: SPACES['prophoto-rgb'],
         components: [-0.2, 1.4, 1.2],
         alpha: 1,
+        isLegacySrgb: false,
       });
   });
 
@@ -2623,6 +2810,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2692,7 +2880,7 @@ describe('color values', () => {
     },
   );
 
-  it('preserves an out-of-gamut HSL mix when lowering it to sRGB', () => {
+  it('preserves an out-of-gamut HSL mix when converting it to sRGB', () => {
     const computed = resolveComputedAbsoluteColor(
       'color-mix(in hsl, color(display-p3 0 1 0) 80%, yellow)',
     );
@@ -2753,6 +2941,7 @@ describe('color values', () => {
     expect(computed).toMatchObject({
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
+      isLegacySrgb: false,
     });
 
     if (computed.kind !== ColorKind.Absolute) {
@@ -2772,6 +2961,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0.5, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2807,6 +2997,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2840,6 +3031,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.75, 0.5, 0.75],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2867,6 +3059,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2953,6 +3146,7 @@ describe('color values', () => {
       },
       components: [0.25, 0, 0.75, 0.25],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -2998,6 +3192,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       components: [1, 0, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -3037,6 +3232,7 @@ describe('color values', () => {
   it.each([
     ['#ff00ffed', 'rgba(255, 0, 255, 0.93)'],
     ['rgb(255, 0, 255)', '#ff00ff'],
+    ['rgba(255, 0, 255, 0)', 'rgba(255, 0, 255, 0)'],
     ['rgb(254.5, 0, 255)', 'rgb(254.5, 0, 255)'],
     ['rgb(100%, 0%, 100%)', 'rgb(255, 0, 255)'],
     ['hsl(300 100% 50%)', 'rgb(255, 0, 255)'],
@@ -3230,8 +3426,8 @@ describe('color values', () => {
   const calculatedAlphaSerializationCases = [
     [
       'rgb(0 0 0 / calc(2 * 60%))',
-      'color(srgb 0 0 0 / calc(1.2))',
-      'color(srgb 0 0 0)',
+      'rgb(0 0 0 / calc(1.2))',
+      'rgb(0, 0, 0)',
     ],
     [
       'color(display-p3 0 1 0 / calc(2 * 60%))',
@@ -3241,7 +3437,7 @@ describe('color values', () => {
   ] as const;
 
   it.each(calculatedAlphaSerializationCases)(
-    'normalizes calculated alpha in the declared color %s',
+    'resolves calculated alpha in the declared color %s',
     (input, declared) => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(declared);
     },
@@ -3258,7 +3454,7 @@ describe('color values', () => {
 
   it.each([
     ['calc(2 * 60%)', 'number'],
-    ['calc(60% * sign(1em - 1px))', 'percentage'],
+    ['calc(60% * sign(1em - 1px))', 'number'],
   ] as const)(
     'resolves calculated alpha %s as %s math',
     (alpha, valueType) => {
@@ -3308,13 +3504,13 @@ describe('color values', () => {
     },
   );
 
-  it('preserves unresolved calculated percentage alpha', () => {
+  it('canonicalizes unresolved calculated percentage alpha as number math', () => {
     const color = parseColorValue(
       'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))',
     )!;
 
     expect(serializeColorValue(color)).toBe(
-      'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))',
+      'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px) / 100%))',
     );
   });
 
@@ -3412,7 +3608,7 @@ describe('color values', () => {
     },
   );
 
-  it('lowers resolved RGB components while retaining deferred alpha', () => {
+  it('retains RGB while its alpha is deferred', () => {
     expect(resolveColorValue(
       parseColorValue('rgb(none 0 0)')!,
       ValueStage.Declared,
@@ -3430,8 +3626,8 @@ describe('color values', () => {
       )!,
       ValueStage.Declared,
     )).toMatchObject({
-      kind: ColorKind.ColorFn,
-      space: 'srgb',
+      kind: ColorKind.RgbFn,
+      useLegacySyntax: false,
       components: [
         'none',
         { type: 'number', value: 0 },
@@ -3439,7 +3635,7 @@ describe('color values', () => {
       ],
       alpha: {
         type: 'math',
-        valueType: 'percentage',
+        valueType: 'number',
       },
     });
   });
@@ -3447,18 +3643,62 @@ describe('color values', () => {
   it.each([
     [
       'rgb(0 0 0 / calc(60% * sign(1em - 1px)))',
-      'color(srgb 0 0 0 / calc(60% * sign(1em - 1px)))',
+      'rgb(0 0 0 / calc(60% * sign(1em - 1px) / 100%))',
     ],
     [
       'rgb(none 0 0 / calc(60% * sign(1em - 1px)))',
-      'color(srgb none 0 0 / calc(60% * sign(1em - 1px)))',
+      'rgb(none 0 0 / calc(60% * sign(1em - 1px) / 100%))',
     ],
     [
       'rgb(none 0 0 / 0.5)',
       'color(srgb none 0 0 / 0.5)',
     ],
   ] as const)(
-    'serializes unresolved RGB as color(srgb) for %s',
+    'retains deferred RGB and lowers resolved missing RGB for %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  it.each([
+    [
+      'rgb(50% 0% 0% / calc(60% * sign(1em - 1px)))',
+      'rgb(127.5 0 0 / calc(60% * sign(1em - 1px) / 100%))',
+    ],
+    [
+      'rgb(calc(sign(1em - 1px)) 0 0'
+        + ' / calc(60% * sign(1em - 1px)))',
+      'rgb(sign(1em - 1px) 0 0'
+        + ' / calc(60% * sign(1em - 1px) / 100%))',
+    ],
+    [
+      'rgb(calc(sign(1em - 1px)) none 0'
+        + ' / calc(60% * sign(1em - 1px)))',
+      'rgb(sign(1em - 1px) none 0'
+        + ' / calc(60% * sign(1em - 1px) / 100%))',
+    ],
+    [
+      'rgb(calc(sign(1em - 1px)) 0 0 / none)',
+      'rgb(sign(1em - 1px) 0 0 / none)',
+    ],
+  ] as const)(
+    'canonicalizes resolved RGB components without lowering deferred %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
+  it.each([
+    [
+      'rgb(50% 0% 0% / none)',
+      'color(srgb 0.5 0 0 / none)',
+    ],
+    [
+      'rgb(none 50% 0 / none)',
+      'color(srgb none 0.5 0 / none)',
+    ],
+  ] as const)(
+    'lowers fully resolved missing RGB to color(srgb) for %s',
     (input, serialized) => {
       expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
     },
@@ -3470,6 +3710,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     })).toBe('color(srgb 1 0 0)');
   });
 
@@ -3521,12 +3762,14 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [20, undefined, 30],
       alpha: undefined,
+      isLegacySrgb: false,
     })).toBe('hsl(20 none 30% / none)');
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [20, undefined, 30],
       alpha: 1,
+      isLegacySrgb: false,
     })).toBe('hwb(20 none 30%)');
   });
 
@@ -3536,12 +3779,14 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [20, 40, 30],
       alpha: 1,
+      isLegacySrgb: false,
     })).toBe('hsl(20 40% 30%)');
     expect(serializeColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [20, 40, 30],
       alpha: 1,
+      isLegacySrgb: false,
     })).toBe('hwb(20 40% 30%)');
   });
 
@@ -3552,30 +3797,35 @@ describe('color values', () => {
         space: SPACES.lab,
         components: [56.2, 0, 83.6],
         alpha: 1,
+        isLegacySrgb: false,
       }, 'lab(56.2 0 83.6)'],
       [{
         kind: ColorKind.Absolute,
         space: SPACES.lch,
         components: [56.2, 83.6, 357.4],
         alpha: 0.93,
+        isLegacySrgb: false,
       }, 'lch(56.2 83.6 357.4 / 0.93)'],
       [{
         kind: ColorKind.Absolute,
         space: SPACES.oklab,
         components: [0.54, -0.1, -0.02],
         alpha: 1,
+        isLegacySrgb: false,
       }, 'oklab(0.54 -0.1 -0.02)'],
       [{
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.5385, 0.1725, 320.67],
         alpha: 0.7,
+        isLegacySrgb: false,
       }, 'oklch(0.5385 0.1725 320.67 / 0.7)'],
       [{
         kind: ColorKind.Absolute,
         space: SPACES['display-p3'],
         components: [0.28, 0.403, 0.423],
         alpha: 0.85,
+        isLegacySrgb: false,
       }, 'color(display-p3 0.28 0.403 0.423 / 0.85)'],
     ];
 
@@ -3646,6 +3896,7 @@ describe('color values', () => {
         space: SPACES[space],
         components: [...components],
         alpha: 1,
+        isLegacySrgb: false,
       }, 'srgb');
 
       expectColorCloseTo(converted, [0, 128 / 255, 0]);
@@ -3664,6 +3915,7 @@ describe('color values', () => {
       space: SPACES[space],
       components: [-0.25, 0.5, 1.25],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const xyz = convertAbsoluteColor(
       color,
@@ -3722,6 +3974,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [...rgb],
         alpha: 1,
+        isLegacySrgb: false,
       };
       const displayP3: AbsoluteColor = {
         ...srgb,
@@ -3738,6 +3991,7 @@ describe('color values', () => {
         space: SPACES['xyz-d65'],
         components: [...srgbXyz],
         alpha: 1,
+        isLegacySrgb: false,
       });
       expect(actualSrgbLch.space.name).toBe('lch');
       expectColorCloseTo(actualSrgbLch, {
@@ -3745,6 +3999,7 @@ describe('color values', () => {
         space: SPACES.lch,
         components: [...srgbLch],
         alpha: 1,
+        isLegacySrgb: false,
       });
       expect(actualDisplayP3Xyz.space.name).toBe('xyz-d65');
       expectColorCloseTo(actualDisplayP3Xyz, {
@@ -3752,6 +4007,7 @@ describe('color values', () => {
         space: SPACES['xyz-d65'],
         components: [...displayP3Xyz],
         alpha: 1,
+        isLegacySrgb: false,
       });
       expect(actualDisplayP3Lch.space.name).toBe('lch');
       expectColorCloseTo(actualDisplayP3Lch, {
@@ -3759,6 +4015,7 @@ describe('color values', () => {
         space: SPACES.lch,
         components: [...displayP3Lch],
         alpha: 1,
+        isLegacySrgb: false,
       });
     },
   );
@@ -3769,12 +4026,14 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
     const hwb: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
@@ -3782,12 +4041,14 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(convertAbsoluteColor(hwb, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
   });
 
@@ -3799,6 +4060,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 128 / 255],
       alpha: 0.8,
+      isLegacySrgb: false,
     });
   });
 
@@ -3808,6 +4070,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(rgb, 'hsl')).toEqual({
@@ -3815,12 +4078,14 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(convertAbsoluteColor(rgb, 'hwb')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
   });
 
@@ -3830,6 +4095,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [2, 1.5, 1.5],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
     const hsl = convertAbsoluteColor(rgb, 'hsl');
 
@@ -3843,12 +4109,14 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [undefined, 100, 50],
       alpha: undefined,
+      isLegacySrgb: false,
     };
     const gray: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(hsl, 'srgb').components).toEqual([1, 0, 0]);
@@ -3870,6 +4138,7 @@ describe('color values', () => {
           space: SPACES[source],
           components: [...components],
           alpha: 1,
+          isLegacySrgb: false,
         },
         target,
       );
@@ -3890,6 +4159,7 @@ describe('color values', () => {
           space: SPACES[source],
           components: [0.5, epsilon, 0],
           alpha: 1,
+          isLegacySrgb: false,
         },
         target,
       );
@@ -3899,6 +4169,7 @@ describe('color values', () => {
           space: SPACES[source],
           components: [0.5, epsilon * 1.0001, 0],
           alpha: 1,
+          isLegacySrgb: false,
         },
         target,
       );
@@ -3914,6 +4185,7 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(hsl, 'hwb')).toEqual({
@@ -3921,12 +4193,14 @@ describe('color values', () => {
       space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
   });
 
@@ -3936,12 +4210,14 @@ describe('color values', () => {
       space: SPACES.lab,
       components: [50, 0, 40],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
     const oklab: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [0.5, 0.1, 0],
       alpha: 0.25,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(lab, 'lch')).toEqual({
@@ -3949,6 +4225,7 @@ describe('color values', () => {
       space: SPACES.lch,
       components: [50, 40, 90],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     const labRoundTrip = convertAbsoluteColor(
       convertAbsoluteColor(lab, 'lch'),
@@ -3963,6 +4240,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.5, 0.1, 0],
       alpha: 0.25,
+      isLegacySrgb: false,
     });
     const oklabRoundTrip = convertAbsoluteColor(
       convertAbsoluteColor(oklab, 'oklch'),
@@ -3980,12 +4258,14 @@ describe('color values', () => {
       space: SPACES.lch,
       components: [50, 40, undefined],
       alpha: 0.5,
+      isLegacySrgb: false,
     };
     const oklch: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [0.5, 0.1, undefined],
       alpha: 0.25,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(lch, 'lab')).toEqual({
@@ -3993,12 +4273,14 @@ describe('color values', () => {
       space: SPACES.lab,
       components: [50, 0, 0],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
     expect(convertAbsoluteColor(oklch, 'oklab')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [0.5, 0, 0],
       alpha: 0.25,
+      isLegacySrgb: false,
     });
   });
 
@@ -4008,6 +4290,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const p3Red: AbsoluteColor = {
       ...red,
@@ -4031,6 +4314,7 @@ describe('color values', () => {
       space: SPACES.lab,
       components: [100, 0, 0],
       alpha: 0.75,
+      isLegacySrgb: false,
     };
     const srgb = convertAbsoluteColor(labWhite, 'srgb');
 
@@ -4046,90 +4330,105 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['srgb-linear'],
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.hsl,
         components: [210, 50, 40],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.hwb,
         components: [210, 20, 30],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.lab,
         components: [50, 20, -30],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.lch,
         components: [50, 36.0555127546, 303.690067526],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklab,
         components: [0.5, 0.1, -0.1],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.5, 0.1414213562, 315],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['display-p3'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['display-p3-linear'],
         components: [0.1, 0.3, 0.5],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['a98-rgb'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['prophoto-rgb'],
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.rec2020,
         components: [0.2, 0.4, 0.6],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['xyz-d50'],
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['xyz-d65'],
         components: [0.3, 0.4, 0.2],
         alpha: 0.7,
+        isLegacySrgb: false,
       },
     ];
 
@@ -4157,6 +4456,7 @@ describe('color values', () => {
       space: SPACES['display-p3'],
       components: [1, 0, 0],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     expect(convertAbsoluteColor(color, 'display-p3')).toBe(color);
@@ -4168,6 +4468,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0.5, 0.1, -0.2],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const sample: AbsoluteColor = {
       ...reference,
@@ -4222,6 +4523,7 @@ describe('color values', () => {
         space: SPACES.lab,
         components: [...components],
         alpha: 1,
+        isLegacySrgb: false,
       });
 
       expect(deltaE2000(color(reference), color(sample)))
@@ -4235,6 +4537,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0.5, 0.1, -0.2],
       alpha: 0.4,
+      isLegacySrgb: false,
     };
 
     expect(areColorsEquivalent(color, {
@@ -4315,6 +4618,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
       alpha: 0.8,
+      isLegacySrgb: false,
     };
     const oklab = convertAbsoluteColor(srgb, 'oklab');
 
@@ -4350,6 +4654,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.5, 0.2, undefined],
       alpha: undefined,
+      isLegacySrgb: false,
     };
 
     expect(areColorsEquivalent(color, { ...color })).toBe(true);
@@ -4376,6 +4681,7 @@ describe('color values', () => {
         space: SPACES[space],
         components: [...components],
         alpha: 1,
+        isLegacySrgb: false,
       };
 
       expect(areColorsEquivalent(color, {
@@ -4398,6 +4704,7 @@ describe('color values', () => {
         space: SPACES[space],
         components: [...components],
         alpha: 1,
+        isLegacySrgb: false,
       };
 
       expect(areColorsEquivalent(color, {
@@ -4413,6 +4720,7 @@ describe('color values', () => {
       space: SPACES.hsl,
       components: [120, 0.001, 50],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     const result = interpolateColors(
@@ -4431,6 +4739,7 @@ describe('color values', () => {
       space: SPACES.hwb,
       components: [120, 49.999, 50],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     const result = interpolateColors(
@@ -4449,6 +4758,7 @@ describe('color values', () => {
       space: SPACES.lch,
       components: [50, 0.0015, 120],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     const result = interpolateColors(
@@ -4467,6 +4777,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.5, 0.000004, 120],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     const result = interpolateColors(
@@ -4485,6 +4796,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.8, 0.2, 0.4],
       alpha: 0.6,
+      isLegacySrgb: false,
     };
 
     expect(areColorsEquivalent(
@@ -4506,6 +4818,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [undefined, 0.2, 0.4],
       alpha: 1,
+      isLegacySrgb: false,
     };
 
     expect(areColorsEquivalent(missing, {
@@ -4529,6 +4842,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 128 / 255, 0],
       alpha: 128 / 255,
+      isLegacySrgb: false,
     })).toBe(true);
   });
 
@@ -4539,12 +4853,14 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [undefined, 0.2, 0.4],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['xyz-d65'],
         components: [0.8, 0.3, 0.2],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'xyz-d65',
@@ -4561,12 +4877,14 @@ describe('color values', () => {
         space: SPACES.lch,
         components: [50, 0.02, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.7, 0.2, 80],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -4587,12 +4905,14 @@ describe('color values', () => {
           space: SPACES.hwb,
           components: [...components],
           alpha: 1,
+          isLegacySrgb: false,
         },
         {
           kind: ColorKind.Absolute,
           space: SPACES.hwb,
           components: [30, 30, 40],
           alpha: 1,
+          isLegacySrgb: false,
         },
         0.5,
         'hwb',
@@ -4608,6 +4928,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0.7, 0.1, -0.1],
       alpha: 0.6,
+      isLegacySrgb: false,
     };
     const result = interpolateColors(
       {
@@ -4615,6 +4936,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [undefined, undefined, undefined],
         alpha: 0.4,
+        isLegacySrgb: false,
       },
       {
         ...expected,
@@ -4634,12 +4956,14 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [undefined, undefined, undefined],
         alpha: 0.4,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES['display-p3'],
         components: [undefined, undefined, undefined],
         alpha: 0.8,
+        isLegacySrgb: false,
       },
       0.5,
       'oklab',
@@ -4649,6 +4973,7 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [undefined, undefined, undefined],
+      isLegacySrgb: false,
     });
     expect(result.alpha).toBeCloseTo(0.6, 12);
   });
@@ -4659,6 +4984,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0.5, 0.1, -0.1],
       alpha: 0.6,
+      isLegacySrgb: false,
     };
 
     expect(interpolateColors(
@@ -4676,12 +5002,14 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [0.783, 0.108, 326.5],
         alpha: 0.5,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.392, 0.4, 0],
         alpha: undefined,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -4697,6 +5025,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [undefined, 0.2, 0.4],
       alpha: 1,
+      isLegacySrgb: false,
     };
     const expected = convertAbsoluteColor({
       ...source,
@@ -4709,6 +5038,7 @@ describe('color values', () => {
         space: SPACES.oklab,
         components: [0.8, 0.1, 0.1],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0,
       'oklab',
@@ -4725,12 +5055,14 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [0.24, 0.12, 0.98],
         alpha: 0.4,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         components: [0.62, 0.26, 0.64],
         alpha: 0.6,
+        isLegacySrgb: false,
       },
       0.5,
       'srgb',
@@ -4747,12 +5079,14 @@ describe('color values', () => {
         space: SPACES.lab,
         components: [66.927, 4.873, 68.622],
         alpha: 0.4,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.lab,
         components: [53.503, 82.672, -33.901],
         alpha: 0.6,
+        isLegacySrgb: false,
       },
       0.5,
       'lab',
@@ -4769,12 +5103,14 @@ describe('color values', () => {
         space: SPACES.lch,
         components: [66.93, 68.79, 85.94],
         alpha: 0.4,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.lch,
         components: [53.5, 89.35, 337.7],
         alpha: 0.6,
+        isLegacySrgb: false,
       },
       0.5,
       'lch',
@@ -4793,12 +5129,14 @@ describe('color values', () => {
         space: SPACES.oklab,
         components: [0.2, 0.1, -0.1],
         alpha: undefined,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklab,
         components: [0.6, 0.3, 0.1],
         alpha: undefined,
+        isLegacySrgb: false,
       },
       0.5,
       'oklab',
@@ -4809,6 +5147,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0.4, 0.2, 0],
       alpha: undefined,
+      isLegacySrgb: false,
     });
   });
 
@@ -4819,12 +5158,14 @@ describe('color values', () => {
         space: SPACES.oklab,
         components: [0.2, 0.1, -0.1],
         alpha: 0,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklab,
         components: [0.6, 0.3, 0.1],
         alpha: 0,
+        isLegacySrgb: false,
       },
       0.5,
       'oklab',
@@ -4835,6 +5176,7 @@ describe('color values', () => {
       space: SPACES.oklab,
       components: [0, 0, 0],
       alpha: 0,
+      isLegacySrgb: false,
     });
   });
 
@@ -4851,12 +5193,14 @@ describe('color values', () => {
           space: SPACES[space],
           components: [...a],
           alpha: 1,
+          isLegacySrgb: false,
         },
         {
           kind: ColorKind.Absolute,
           space: SPACES[space],
           components: [...b],
           alpha: 1,
+          isLegacySrgb: false,
         },
         0.5,
         space,
@@ -4880,12 +5224,14 @@ describe('color values', () => {
           space: SPACES.oklch,
           components: [...a],
           alpha: 1,
+          isLegacySrgb: false,
         },
         {
           kind: ColorKind.Absolute,
           space: SPACES.oklch,
           components: [...b],
           alpha: 1,
+          isLegacySrgb: false,
         },
         0.5,
         'oklch',
@@ -4914,12 +5260,14 @@ describe('color values', () => {
           space: SPACES.oklch,
           components: [0.5, 0.1, hueA],
           alpha: 1,
+          isLegacySrgb: false,
         },
         {
           kind: ColorKind.Absolute,
           space: SPACES.oklch,
           components: [0.5, 0.1, hueB],
           alpha: 1,
+          isLegacySrgb: false,
         },
         0.5,
         'oklch',
@@ -4937,12 +5285,14 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [0.4, 0.1, 30],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.8, 0.1, 30],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -4959,12 +5309,14 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [0.2, 0.1, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.8, 0.4, 180],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -4980,12 +5332,14 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [0.2, 0.1, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [0.8, 0.4, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -5004,12 +5358,14 @@ describe('color values', () => {
         space: SPACES[space],
         components: [...a],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES[space],
         components: [...b],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       space,
@@ -5042,6 +5398,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
       alpha: 1,
+      isLegacySrgb: false,
     });
   });
 
@@ -5059,6 +5416,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [1, 1, 1],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
     );
@@ -5074,12 +5432,14 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [0.5, 0, 0],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         components: [undefined, 0.5, 0.5],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'srgb',
@@ -5095,12 +5455,14 @@ describe('color values', () => {
         space: SPACES.lab,
         components: [50, undefined, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.lch,
         components: [70, undefined, undefined],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'lch',
@@ -5123,6 +5485,7 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [0.8, 0.2, 120],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'oklch',
@@ -5140,12 +5503,14 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [-1, 2, 3],
         alpha: 1,
+        isLegacySrgb: false,
       },
       {
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         components: [3, 4, -1],
         alpha: 1,
+        isLegacySrgb: false,
       },
       0.5,
       'srgb',
@@ -5175,6 +5540,7 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [...oklch],
         alpha: 1,
+        isLegacySrgb: false,
       }, 'srgb');
 
       expect(mapped.space.name).toBe('srgb');
@@ -5183,6 +5549,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [...srgb],
         alpha: 1,
+        isLegacySrgb: false,
       });
     },
   );
@@ -5193,6 +5560,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.7, 0.2, 30],
       alpha: 0.5,
+      isLegacySrgb: false,
     }, 'srgb');
 
     expectColorCloseTo(mapped, {
@@ -5200,6 +5568,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0.38019885544225046, 0.3010433350997795],
       alpha: 0.5,
+      isLegacySrgb: false,
     });
   });
 
@@ -5209,6 +5578,7 @@ describe('color values', () => {
       space: SPACES['srgb-linear'],
       components: [0.5, 1, 3],
       alpha: 0.4,
+      isLegacySrgb: false,
     }, 'srgb-linear', 'clip');
 
     expect(mapped).toEqual({
@@ -5216,6 +5586,7 @@ describe('color values', () => {
       space: SPACES['srgb-linear'],
       components: [0.5, 1, 1],
       alpha: 0.4,
+      isLegacySrgb: false,
     });
   });
 
@@ -5236,6 +5607,7 @@ describe('color values', () => {
         space: SPACES.oklch,
         components: [...oklch],
         alpha: 0.4,
+        isLegacySrgb: false,
       }, 'srgb');
 
       expectColorCloseTo(mapped, {
@@ -5243,6 +5615,7 @@ describe('color values', () => {
         space: SPACES.srgb,
         components: [...srgb],
         alpha: 0.4,
+        isLegacySrgb: false,
       });
     }
   });
@@ -5253,6 +5626,7 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
       alpha: 0.35,
+      isLegacySrgb: false,
     };
     const mapped = gamutMapColor(origin, 'srgb');
 
@@ -5266,6 +5640,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.7, 0.8, 40],
       alpha: 0.6,
+      isLegacySrgb: false,
     };
 
     expect(gamutMapColor(origin, 'xyz-d65'))
@@ -5286,6 +5661,7 @@ describe('color values', () => {
       space: SPACES.oklch,
       components: [0.7, 0.8, 40],
       alpha: 0.25,
+      isLegacySrgb: false,
     }, destination);
 
     expect(mapped.space.name).toBe(destination);

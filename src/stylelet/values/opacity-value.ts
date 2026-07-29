@@ -41,7 +41,7 @@ export const tryConsumeOpacityValue: TryComponentConsumer<OpacityValue> = oneOf(
     one(tryConsumeNumber),
     one(tryConsumePercentage),
   ],
-  ([value]) => ok(value),
+  ([value]) => ok(resolveOpacityValue(value, ValueStage.Declared)),
 );
 
 export function resolveOpacityValue(
@@ -57,10 +57,7 @@ export function resolveOpacityValue(
     ? resolveNumber(value, stage, calculationContext)
     : resolvePercentage(value, stage, calculationContext);
 
-  if (
-    resolved.type === 'math' ||
-    stage < ValueStage.Computed
-  ) {
+  if (resolved.type === 'math') {
     return resolved;
   }
 
@@ -70,18 +67,13 @@ export function resolveOpacityValue(
 
   return {
     type: 'number',
-    value: clamp(number, 0, 1),
+    value: stage < ValueStage.Computed
+      ? number
+      : clamp(number, 0, 1),
   };
 }
 
 export function serializeOpacityValue(value: OpacityValue): string {
-  if (value.type === 'percentage') {
-    return serializeNumber({
-      type: 'number',
-      value: value.value / 100,
-    });
-  }
-
   return isNumberOpacityValue(value)
     ? serializeNumber(value)
     : serializePercentage(value);

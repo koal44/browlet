@@ -5,7 +5,7 @@ import {
   type TryComponentConsumerResult,
 } from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { serializeInteger } from './integer';
+import { serializeCssInteger } from './integer';
 
 /*
  * <number> = <number-token>
@@ -72,7 +72,7 @@ export function serializeNumber(value: NumberLiteral): string {
 // See CSSWG issue#5689 and the "CSSOM number serialization oracle" scenario.
 export function serializeCssNumber(value: number): string {
   if (Number.isInteger(value)) {
-    return serializeInteger({ type: 'integer', value });
+    return serializeCssInteger(value);
   }
 
   const rounded = Math.round(value * 1_000_000) / 1_000_000;
