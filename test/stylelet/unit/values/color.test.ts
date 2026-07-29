@@ -2650,12 +2650,95 @@ describe('color values', () => {
     });
   });
 
+  it('parses a declared custom color interpolation space', () => {
+    const { profile } = testColorProfile();
+    const context = {
+      colorProfiles: new Map([[profile.space, profile]]),
+    };
+
+    expect(parseColorInterpolationMethod('in --four-channel', context))
+      .toEqual({ space: '--four-channel' });
+    expect(parseColorInterpolationMethod('in --four-channel'))
+      .toBeNull();
+    expect(parseColorInterpolationMethod(
+      'in --four-channel longer hue',
+      context,
+    )).toBeNull();
+  });
+
   it.each([
     '', 'in', 'srgb', 'in unknown', 'in srgb shorter hue',
     'in oklch shorter', 'in oklch hue', 'in oklch shorter hue extra',
     'in srgb-legacy',
   ])('rejects the invalid color interpolation method %j', (input) => {
     expect(parseColorInterpolationMethod(input)).toBeNull();
+  });
+
+  it('interpolates every component in a custom color space', () => {
+    const { profile } = testColorProfile();
+    const context = {
+      colorProfiles: new Map([[profile.space, profile]]),
+    };
+    const color = parseColorValue(
+      'color-mix(in --four-channel, red 25%, blue 75%)',
+      context,
+    )!;
+    const result = resolveColorValue(color, ValueStage.Computed, context);
+
+    expect(result).toEqual({
+      kind: ColorKind.Absolute,
+      space: {
+        name: '--four-channel',
+        keys: ['r', 'g', 'b', 'spot'],
+      },
+      components: [0.25, 0, 0.75, 0.25],
+      alpha: 1,
+    });
+  });
+
+  it('premultiplies custom color components by alpha', () => {
+    const { profile } = testColorProfile();
+    const context = {
+      colorProfiles: new Map([[profile.space, profile]]),
+    };
+    const color = parseColorValue(
+      'color-mix(in --four-channel, ' +
+      'color(--four-channel 1 0 0 0 / 0.5), ' +
+      'color(--four-channel 0 0 1 1))',
+      context,
+    )!;
+    const result = resolveColorValue(color, ValueStage.Computed, context);
+
+    expect(result.kind).toBe(ColorKind.Absolute);
+    if (result.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected a calculated custom color mix');
+    }
+    expectComponentsCloseTo(
+      result.components,
+      [1 / 3, 0, 2 / 3, 2 / 3],
+      12,
+    );
+    expect(result.alpha).toBeCloseTo(0.75, 12);
+  });
+
+  it('carries missing components in a custom interpolation space', () => {
+    const { profile } = testColorProfile();
+    const context = {
+      colorProfiles: new Map([[profile.space, profile]]),
+    };
+    const color = parseColorValue(
+      'color-mix(in --four-channel, ' +
+      'color(--four-channel none 0 0 0), ' +
+      'color(--four-channel 1 0 0 0))',
+      context,
+    )!;
+    const result = resolveColorValue(color, ValueStage.Computed, context);
+
+    expect(result).toMatchObject({
+      kind: ColorKind.Absolute,
+      components: [1, 0, 0, 0],
+      alpha: 1,
+    });
   });
 
   it('serializes parsed color functions with canonical spelling and spacing', () => {
