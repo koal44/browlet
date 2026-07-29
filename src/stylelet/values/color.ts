@@ -21,6 +21,7 @@ import {
   promoteNumericVariable, promotedNumericVariableName, tryCoercePercentageToNumber,
   type MathContext, type NumericVariable,
 } from './math-value';
+import { completeMixPercentages, normalizeMixPercentages } from './mix';
 import { tryConsumeDashedIdent, type DashedIdentValue } from './dashed-ident';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
@@ -32,7 +33,6 @@ import {
   createPercentageConsumer, resolvePercentage, serializePercentage, tryConsumePercentage,
   type PercentageValue,
 } from './percentage';
-import { normalizeMixPercentages } from './mix';
 
 // Canonical representation of a resolved color in an identified coordinate
 // space. It has an intrinsic colorimetric interpretation when its space is
@@ -2641,16 +2641,22 @@ function resolveColorMixFn(
   stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
-  const [first, ...rest] = value.items;
+  const declared = canonicalizeColorMixFn(value);
+  const [first, ...rest] = declared.items;
   const items: [ColorMixItem, ...ColorMixItem[]] = [
     resolveColorMixItem(first, stage, context),
     ...rest.map((item) => resolveColorMixItem(item, stage, context)),
   ];
+
+  if (items.some(({ color }) => colorValueUsesCurrentColor(color))) {
+    return declared;
+  }
+
   const resolved = items.every(
-    (item, index) => item === value.items[index],
+    (item, index) => item === declared.items[index],
   )
-    ? value
-    : { ...value, items };
+    ? declared
+    : { ...declared, items };
 
   if (
     stage < ValueStage.Computed ||
@@ -2659,7 +2665,96 @@ function resolveColorMixFn(
     return resolved;
   }
 
-  return calculateColorMix(items, value.method, context);
+  return calculateColorMix(items, declared.method, context);
+}
+
+function canonicalizeColorMixFn(value: ColorMixFn): ColorMixFn {
+  const method = canonicalizeColorMixMethod(value.method);
+  const items = canonicalizeColorMixPercentages(value.items);
+
+  return method === value.method && items === value.items
+    ? value
+    : { ...value, method, items };
+}
+
+function canonicalizeColorMixMethod(
+  method: ColorInterpolationMethod | undefined,
+): ColorInterpolationMethod | undefined {
+  if (method === undefined || method.space === 'oklab') {
+    return undefined;
+  }
+
+  return method.hue === 'shorter'
+    ? { space: method.space }
+    : method;
+}
+
+function canonicalizeColorMixPercentages(
+  items: ColorMixFn['items'],
+): ColorMixFn['items'] {
+  if (items.some(({ percentage }) => percentage?.type === 'math')) {
+    return items;
+  }
+
+  const percentages = completeMixPercentages(
+    items.map(({ percentage }) =>
+      percentage === undefined || percentage.type === 'math'
+        ? undefined
+        : percentage.value
+    ),
+  );
+  const equalPercentage = 100 / items.length;
+  const allEqual = percentages.every(
+    (percentage) => percentage === equalPercentage,
+  );
+  const canonical = mapTuple(items, (item, index) => {
+    const percentage = allEqual
+      ? undefined
+      : item.percentage ?? {
+        type: 'percentage' as const,
+        value: percentages[index]!,
+      };
+
+    return percentage === item.percentage
+      ? item
+      : { ...item, percentage };
+  });
+
+  return canonical.every((item, index) => item === items[index])
+    ? items
+    : canonical;
+}
+
+function colorValueUsesCurrentColor(value: ColorValue): boolean {
+  switch (value.kind) {
+    case ColorKind.CurrentColor:
+      return true;
+    case ColorKind.RgbFn:
+    case ColorKind.HslFn:
+    case ColorKind.HwbFn:
+    case ColorKind.LabFn:
+    case ColorKind.LchFn:
+    case ColorKind.OklabFn:
+    case ColorKind.OklchFn:
+    case ColorKind.AlphaFn:
+    case ColorKind.ColorFn:
+      return value.origin === undefined
+        ? false
+        : colorValueUsesCurrentColor(value.origin);
+    case ColorKind.ColorMixFn:
+      return value.items.some(
+        ({ color }) => colorValueUsesCurrentColor(color),
+      );
+    case ColorKind.LightDarkColor:
+      return (
+        colorValueUsesCurrentColor(value.light) ||
+        colorValueUsesCurrentColor(value.dark)
+      );
+    case ColorKind.ContrastColorFn:
+      return colorValueUsesCurrentColor(value.color);
+    default:
+      return false;
+  }
 }
 
 function resolveColorMixItem(
@@ -2765,6 +2860,10 @@ function resolveRelativeFn(
   stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
+  if (stage < ValueStage.Computed) {
+    return value;
+  }
+
   if (value.kind === ColorKind.AlphaFn) {
     return resolveAlphaFn(value, stage, context);
   }
@@ -3808,7 +3907,7 @@ export function serializeColorValue(
     case ColorKind.Hex:
       throw new TypeError('Hex colors must be resolved before serialization');
     case ColorKind.ColorMixFn:
-      throw new TypeError('Color mixes must be resolved before serialization');
+      return serializeColorMixFn(value);
     case ColorKind.DeviceCmykFn:
       return serializeDeviceCmykFn(value);
     case ColorKind.LightDarkColor:
@@ -3835,6 +3934,37 @@ export function serializeColorValue(
     default:
       return assertNever(value);
   }
+}
+
+function serializeColorMixFn(value: ColorMixFn): string {
+  const method = serializeColorMixMethod(value.method);
+  const items = value.items.map((item) => {
+    const color = serializeColorValue(item.color);
+    const percentage = item.percentage === undefined
+      ? null
+      : serializePercentage(item.percentage);
+
+    return percentage === null ? color : `${color} ${percentage}`;
+  });
+  const body = method === null
+    ? items.join(', ')
+    : `${method}, ${items.join(', ')}`;
+
+  return `color-mix(${body})`;
+}
+
+function serializeColorMixMethod(
+  method: ColorInterpolationMethod | undefined,
+): string | null {
+  if (method === undefined) {
+    return null;
+  }
+
+  const hue = method.hue === undefined
+    ? ''
+    : ` ${method.hue} hue`;
+
+  return `in ${method.space}${hue}`;
 }
 
 function serializeColorFunction(
@@ -4382,7 +4512,7 @@ function tryCoercePredefinedAbsoluteColor(
   const profile = context.colorProfiles?.get(name);
 
   if (name === DEVICE_CMYK_SPACE.name && profile === undefined) {
-    return naivelyConvertDeviceCmykToSrgb(
+    return naiveCmykToSrgb(
       value as AbsoluteColor<DeviceCmykSpace>,
     );
   }
@@ -5313,7 +5443,7 @@ function transformColorVector(
   );
 }
 
-export function naivelyConvertDeviceCmykToSrgb(
+function naiveCmykToSrgb(
   value: AbsoluteColor<DeviceCmykSpace>,
 ): PredefinedAbsoluteColor {
   const [cyan = 0, magenta = 0, yellow = 0, black = 0] = value.components;
@@ -5326,34 +5456,6 @@ export function naivelyConvertDeviceCmykToSrgb(
     space: SPACES.srgb,
     components: [red, green, blue],
     alpha: value.alpha,
-  };
-}
-
-export function naivelyConvertSrgbToDeviceCmyk(
-  value: PredefinedAbsoluteColor,
-): AbsoluteColor<DeviceCmykSpace> {
-  const srgb = convertPredefinedAbsoluteColor(value, 'srgb');
-  const [red, green, blue] = mapTuple(
-    srgb.components,
-    (component) => clamp(component ?? 0, 0, 1),
-  );
-  const black = 1 - Math.max(red, green, blue);
-  const scale = 1 - black;
-  const components: AbsoluteColor<DeviceCmykSpace>['components'] =
-    scale === 0
-      ? [0, 0, 0, 1]
-      : [
-        (1 - red - black) / scale,
-        (1 - green - black) / scale,
-        (1 - blue - black) / scale,
-        black,
-      ];
-
-  return {
-    kind: ColorKind.Absolute,
-    space: DEVICE_CMYK_SPACE,
-    components,
-    alpha: srgb.alpha,
   };
 }
 
@@ -6250,17 +6352,24 @@ export function calculateColorMix(
     combinedPercentage = nextCombinedPercentage;
   }
 
-  const converted = isCustomColorProfileSpace(method.space)
+  let result = isCustomColorProfileSpace(method.space)
     ? convertAbsoluteColorToCustomSpace(color, method.space, context)
     : convertAbsoluteColor(color, method.space, context);
 
-  if (converted.alpha === undefined) {
-    return converted;
+  if (
+    (method.space === 'hsl' || method.space === 'hwb') &&
+    !hasMissingColorComponent(result)
+  ) {
+    result = convertAbsoluteColor(result, 'srgb', context);
+  }
+
+  if (result.alpha === undefined) {
+    return result;
   }
 
   return {
-    ...converted,
-    alpha: converted.alpha * (1 - leftover / 100),
+    ...result,
+    alpha: result.alpha * (1 - leftover / 100),
   };
 }
 
@@ -6709,7 +6818,67 @@ function serializeRelativeColorFn(
 function serializeRelativeColorOrigin(
   value: ColorValue,
 ): string {
-  return value.kind === ColorKind.Hex
-    ? value.text
-    : serializeColorValue(value);
+  switch (value.kind) {
+    case ColorKind.Hex:
+      return value.text;
+    case ColorKind.RgbFn:
+    case ColorKind.HslFn:
+    case ColorKind.HwbFn:
+    case ColorKind.LabFn:
+    case ColorKind.LchFn:
+    case ColorKind.OklabFn:
+    case ColorKind.OklchFn:
+    case ColorKind.AlphaFn:
+    case ColorKind.ColorFn:
+      return serializeOriginColorFunction(value);
+    default:
+      return serializeColorValue(value);
+  }
+}
+
+function serializeOriginColorFunction(value: ColorFunction): string {
+  if (
+    value.kind === ColorKind.AlphaFn ||
+    value.origin !== undefined
+  ) {
+    return serializeColorFunction(value);
+  }
+
+  const metadata = COLOR_METADATA[value.kind];
+  const components = value.components.map((component, index) => {
+    const componentMetadata = colorComponentMetadataAt(metadata, index);
+
+    return componentMetadata.isHue
+      ? serializeOriginHue(component as SyntaxHueComponent)
+      : serializeColorComponent(
+        component as SyntaxColorComponent,
+        null,
+      );
+  });
+  let name: string | undefined = value.kind === ColorKind.RgbFn
+    ? 'rgb'
+    : metadata.space?.name;
+
+  if (value.kind === ColorKind.ColorFn) {
+    name = 'color';
+    components.unshift(value.space === 'xyz' ? 'xyz-d65' : value.space);
+  }
+
+  if (name === undefined) {
+    throw new TypeError('Origin color function requires a serialization name');
+  }
+
+  const alpha = value.alpha === undefined
+    ? null
+    : serializeColorComponent(value.alpha, null);
+
+  return alpha === null
+    ? `${name}(${components.join(' ')})`
+    : `${name}(${components.join(' ')} / ${alpha})`;
+}
+
+function serializeOriginHue(value: SyntaxHueComponent): string {
+  return value !== 'none' && value.type === 'angle'
+    ? `${serializeCssNumber(resolveAngleLiteral(value).value)}deg`
+    : serializeHue(value);
 }

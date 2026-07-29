@@ -4,7 +4,6 @@ import {
   ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
   defineColorProfile, deltaE2000, deltaEOK,
   gamutMapColor, interpolateColors, parseColorInterpolationMethod, parseColorValue,
-  naivelyConvertSrgbToDeviceCmyk,
   resolveColorValue, serializeColorValue, tryResolveAbsoluteColor,
   type AbsoluteColor,
   type PredefinedAbsoluteColor, type SystemColorName,
@@ -449,8 +448,68 @@ describe('color values', () => {
     });
   });
 
+  it('does not resolve relative colors before computed-value time', () => {
+    const declared = parseColorValue(
+      'rgb(from rgb(20%, 40%, 60%, 80%) r g b / alpha)',
+    )!;
+
+    expect(declared).toMatchObject({
+      kind: ColorKind.RgbFn,
+      origin: {
+        kind: ColorKind.RgbFn,
+      },
+    });
+    expect(serializeColorValue(declared))
+      .toBe('rgb(from rgb(20% 40% 60% / 80%) r g b / alpha)');
+    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.2, 0.4, 0.6],
+      alpha: 0.8,
+    });
+  });
+
+  it('serializes origin functions without clamping or dropping explicit alpha', () => {
+    expect(serializeColorValue(parseColorValue(
+      'rgb(from rgba(300, -10, 20, 1) r g b)',
+    )!)).toBe('rgb(from rgb(300 -10 20 / 1) r g b)');
+    expect(serializeColorValue(parseColorValue(
+      'hsl(from hsla(0.5turn, 120%, -20%, 100%) h s l / alpha)',
+    )!)).toBe(
+      'hsl(from hsl(180deg 120% -20% / 100%) h s l / alpha)',
+    );
+    expect(serializeColorValue(parseColorValue(
+      'rgb(from color(xyz 120% -1 0 / 100%) r g b)',
+    )!)).toBe(
+      'rgb(from color(xyz-d65 120% -1 0 / 100%) r g b)',
+    );
+  });
+
+  it('resolves a relative currentcolor origin at used-value time', () => {
+    const declared = parseColorValue(
+      'rgb(from currentcolor g r b / alpha)',
+    )!;
+    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const currentColor = resolveComputedAbsoluteColor(
+      'rgb(20% 40% 60% / 80%)',
+    );
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.RgbFn,
+      origin: { kind: ColorKind.CurrentColor },
+    });
+    expect(resolveColorValue(computed, ValueStage.Used, {
+      currentColor,
+    })).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.4, 0.2, 0.6],
+      alpha: 0.8,
+    });
+  });
+
   it('does not rescale relative rgb keywords used in another position', () => {
-    expect(parseColorValue(
+    expect(resolveComputedAbsoluteColor(
       'rgb(from rgb(0 0 0 / 60%) alpha 153 153 / 0.9)',
     )).toEqual({
       kind: ColorKind.Absolute,
@@ -461,7 +520,7 @@ describe('color values', () => {
   });
 
   it('inherits and clamps relative rgb alpha without clamping channels', () => {
-    expect(parseColorValue(
+    expect(resolveComputedAbsoluteColor(
       'rgb(from rgb(20 30 40 / 70%) 300 -10 b)',
     )).toEqual({
       kind: ColorKind.Absolute,
@@ -676,6 +735,24 @@ describe('color values', () => {
       .toBe('device-cmyk(0 0.25 none 1 / 0.5)');
   });
 
+  it('canonicalizes device CMYK percentages and defaults alpha to opaque', () => {
+    const computed = resolveComputedAbsoluteColor(
+      'device-cmyk(0% 70% 20% 0%)',
+    );
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: {
+        name: 'device-cmyk',
+        keys: ['c', 'm', 'y', 'k'],
+      },
+      alpha: 1,
+    });
+    expectComponentsCloseTo(computed.components, [0, 0.7, 0.2, 0], 12);
+    expect(serializeColorValue(computed))
+      .toBe('device-cmyk(0 0.7 0.2 0)');
+  });
+
   it('uses naïve device CMYK conversion when no profile is available', () => {
     const cmyk = resolveComputedAbsoluteColor(
       'device-cmyk(0 0.81 0.81 0.3 / 0.5)',
@@ -688,15 +765,6 @@ describe('color values', () => {
       alpha: 0.5,
     });
     expectComponentsCloseTo(srgb.components, [0.7, 0.133, 0.133], 12);
-
-    const roundTrip = naivelyConvertSrgbToDeviceCmyk(srgb);
-
-    expectComponentsCloseTo(
-      roundTrip.components,
-      [0, 0.81, 0.81, 0.3],
-      12,
-    );
-    expect(roundTrip.alpha).toBe(0.5);
   });
 
   it('uses the device CMYK profile for an explicit target conversion', () => {
@@ -2366,13 +2434,57 @@ describe('color values', () => {
         },
         {
           color: { kind: ColorKind.Named, name: 'green' },
-          percentage: undefined,
+          percentage: { type: 'percentage', value: 0 },
         },
       ],
     });
 
     expect(parseColorValue('color-mix(red calc(50%), blue)')).not.toBeNull();
   });
+
+  it.each([
+    [
+      'color-mix(in oklab, teal, peru 40%)',
+      undefined,
+      [60, 40],
+    ],
+    [
+      'color-mix(in oklab, teal 50%, peru 50%)',
+      undefined,
+      [undefined, undefined],
+    ],
+    [
+      'color-mix(in oklab, teal 70%, peru 70%)',
+      undefined,
+      [70, 70],
+    ],
+    [
+      'color-mix(in oklch shorter hue, red, green, blue)',
+      { space: 'oklch' },
+      [undefined, undefined, undefined],
+    ],
+    [
+      'color-mix(red 70%, green 70%, blue)',
+      undefined,
+      [70, 70, 0],
+    ],
+  ])(
+    'stores the canonical declared mix %s',
+    (input, method, percentages) => {
+      const value = parseColorValue(input);
+
+      expect(value?.kind).toBe(ColorKind.ColorMixFn);
+      if (value?.kind !== ColorKind.ColorMixFn) {
+        throw new TypeError('Expected a color mix');
+      }
+      expect(value.method).toEqual(method);
+      expect(value.items.map(({ percentage }) =>
+        percentage === undefined || percentage.type === 'math'
+          ? undefined
+          : percentage.value
+      )).toEqual(percentages);
+    },
+  );
 
   it('parses nested color-mix() values', () => {
     expect(parseColorValue('color-mix(red, color-mix(blue, green))'))
@@ -2391,6 +2503,43 @@ describe('color values', () => {
           },
         ],
       });
+  });
+
+  it.each([
+    [
+      'color-mix(in oklab, teal, peru 40%)',
+      'color-mix(teal 60%, peru 40%)',
+    ],
+    [
+      'color-mix(in oklab, teal 50%, peru 50%)',
+      'color-mix(teal, peru)',
+    ],
+    [
+      'color-mix(in oklab, teal 70%, peru 70%)',
+      'color-mix(teal 70%, peru 70%)',
+    ],
+    [
+      'color-mix(in oklch longer hue, red, green, blue)',
+      'color-mix(in oklch longer hue, red, green, blue)',
+    ],
+    [
+      'color-mix(red 50%, green, blue)',
+      'color-mix(red 50%, green 25%, blue 25%)',
+    ],
+    [
+      'color-mix(in oklch shorter hue, red, blue)',
+      'color-mix(in oklch, red, blue)',
+    ],
+    [
+      'color-mix(red calc(50%), green, blue)',
+      'color-mix(red calc(50%), green, blue)',
+    ],
+    [
+      'color-mix(currentcolor, #fff)',
+      'color-mix(currentcolor, rgb(255, 255, 255))',
+    ],
+  ])('serializes the declared color mix %s', (input, expected) => {
+    expect(serializeColorValue(parseColorValue(input)!)).toBe(expected);
   });
 
   it.each([
@@ -2417,6 +2566,25 @@ describe('color values', () => {
       components: [0.5, 0, 0.5],
       alpha: 1,
     });
+  });
+
+  it('serializes computed HSL and HWB mixes in sRGB unless missing', () => {
+    const hsl = resolveComputedAbsoluteColor(
+      'color-mix(in hsl, red, blue)',
+    );
+    const hwb = resolveComputedAbsoluteColor(
+      'color-mix(in hwb, red, blue)',
+    );
+    const missing = resolveComputedAbsoluteColor(
+      'color-mix(in hsl, hsl(none 50% 50%), hsl(none 50% 50%))',
+    );
+
+    expect(hsl.space).toBe(SPACES.srgb);
+    expect(hwb.space).toBe(SPACES.srgb);
+    expect(missing.space).toBe(SPACES.hsl);
+    expect(serializeColorValue(hsl)).toMatch(/^color\(srgb /);
+    expect(serializeColorValue(hwb)).toMatch(/^color\(srgb /);
+    expect(serializeColorValue(missing)).toBe('hsl(none 50% 50%)');
   });
 
   it('produces different results in different mixing color spaces', () => {
@@ -2466,17 +2634,16 @@ describe('color values', () => {
     },
   );
 
-  it('preserves out-of-gamut components when mixing in HSL', () => {
+  it('preserves an out-of-gamut HSL mix when lowering it to sRGB', () => {
     const computed = resolveComputedAbsoluteColor(
       'color-mix(in hsl, color(display-p3 0 1 0) 80%, yellow)',
     );
 
-    expect(computed.space.name).toBe('hsl');
-    expectComponentsCloseTo(
-      computed.components,
-      [114.3032, 261.5568, 30.2672],
-      2,
-    );
+    expect(computed.space.name).toBe('srgb');
+    expect(computed.components.some(
+      (component) =>
+        component !== undefined && (component < 0 || component > 1),
+    )).toBe(true);
   });
 
   it.each([
@@ -2560,9 +2727,11 @@ describe('color values', () => {
       kind: ColorKind.ColorMixFn,
       items: [
         { color: { kind: ColorKind.CurrentColor } },
-        { color: { kind: ColorKind.Absolute } },
+        { color: { kind: ColorKind.Named } },
       ],
     });
+    expect(serializeColorValue(computed))
+      .toBe('color-mix(in srgb, currentcolor, blue)');
 
     const currentColor = resolveColorValue(
       parseColorValue('red')!,
@@ -2579,6 +2748,39 @@ describe('color values', () => {
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
+      alpha: 1,
+    });
+  });
+
+  it('preserves nested color-mix() around currentcolor', () => {
+    const declared = parseColorValue(
+      'color-mix(in srgb, '
+      + 'color-mix(in srgb, currentcolor, red), white)',
+    )!;
+    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const currentColor = resolveComputedAbsoluteColor('blue');
+
+    expect(computed.kind).toBe(ColorKind.ColorMixFn);
+    if (computed.kind !== ColorKind.ColorMixFn) {
+      throw new TypeError('Expected a deferred outer color mix');
+    }
+    const inner = computed.items[0].color;
+    expect(inner.kind).toBe(ColorKind.ColorMixFn);
+    if (inner.kind !== ColorKind.ColorMixFn) {
+      throw new TypeError('Expected a deferred inner color mix');
+    }
+    expect(inner.items[0].color).toEqual({
+      kind: ColorKind.CurrentColor,
+    });
+    expect(serializeColorValue(computed)).toBe(
+      'color-mix(in srgb, color-mix(in srgb, currentcolor, red), white)',
+    );
+    expect(resolveColorValue(computed, ValueStage.Used, {
+      currentColor,
+    })).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.75, 0.5, 0.75],
       alpha: 1,
     });
   });
@@ -3268,6 +3470,21 @@ describe('color values', () => {
       components: [20, undefined, 30],
       alpha: 1,
     })).toBe('hwb(20 none 30%)');
+  });
+
+  it('serializes absolute HSL and HWB colors without converting their spaces', () => {
+    expect(serializeColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.hsl,
+      components: [20, 40, 30],
+      alpha: 1,
+    })).toBe('hsl(20 40% 30%)');
+    expect(serializeColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.hwb,
+      components: [20, 40, 30],
+      alpha: 1,
+    })).toBe('hwb(20 40% 30%)');
   });
 
   it('serializes absolute wide-gamut colors in their notation', () => {

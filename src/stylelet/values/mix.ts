@@ -11,22 +11,7 @@ export function normalizeMixPercentages(
   percentages: number[];
   leftover: number;
 } {
-  const specifiedSum = Math.min(
-    percentages.reduce<number>(
-      (sum, percentage) => sum + (percentage ?? 0),
-      0,
-    ),
-    100,
-  );
-  const omittedCount = percentages.filter(
-    (percentage) => percentage === undefined,
-  ).length;
-  const omittedPercentage = omittedCount === 0
-    ? 0
-    : (100 - specifiedSum) / omittedCount;
-  let normalized = percentages.map(
-    (percentage) => percentage ?? omittedPercentage,
-  );
+  let normalized = completeMixPercentages(percentages);
   const total = normalized.reduce(
     (sum, percentage) => sum + percentage,
     0,
@@ -47,4 +32,26 @@ export function normalizeMixPercentages(
     percentages: normalized,
     leftover: total < 100 ? 100 - total : 0,
   };
+}
+
+export function completeMixPercentages(
+  percentages: readonly (number | undefined)[],
+): number[] {
+  const specifiedSum = Math.min(
+    percentages.reduce<number>(
+      (sum, percentage) => sum + (percentage ?? 0),
+      0,
+    ),
+    100,
+  );
+  const omittedCount = percentages.filter(
+    (percentage) => percentage === undefined,
+  ).length;
+  const omittedPercentage = omittedCount === 0
+    ? 0
+    : (100 - specifiedSum) / omittedCount;
+
+  return percentages.map(
+    (percentage) => percentage ?? omittedPercentage,
+  );
 }
