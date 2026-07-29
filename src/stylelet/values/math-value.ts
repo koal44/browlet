@@ -18,7 +18,7 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
 import { ANGLE_UNITS, resolveAngle, type AngleLiteral } from './numeric-literal/angle';
 import {
@@ -234,10 +234,10 @@ export function resolveMathValue<Type extends MathValueType>(
     context,
     value.valueType,
   );
-  const unwrapMathAt = context.unwrapMathAt ?? 'computed';
+  const unwrapMathAt = context.unwrapMathAt ?? ValueStage.Computed;
 
   if (
-    isAtOrBeyondValueStage(stage, unwrapMathAt) &&
+    stage >= unwrapMathAt &&
     isNumericLeaf(calculation)
   ) {
     return resolvedMathLiteralFromLeaf(
@@ -359,7 +359,7 @@ function combineMathValues<Type extends MathValueType>(
       type: 'sum',
       children: [a.calculation, b.calculation],
       hints: mathHints,
-    }, 'declared', context, valueType),
+    }, ValueStage.Declared, context, valueType),
     valueType,
   );
 }
@@ -566,7 +566,7 @@ function tryConsumeCalc(
   }
 
   return ok(createMathValue(
-    simplifyCalculationTree(result.value, 'declared', context, expectedType),
+    simplifyCalculationTree(result.value, ValueStage.Declared, context, expectedType),
     expectedType,
   ));
 }
@@ -960,7 +960,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     return ok(simplifyCalculationTree(
       result.value,
-      'declared',
+      ValueStage.Declared,
       context,
       valueType,
     ) as Node | NumericLeaf);
@@ -1402,7 +1402,7 @@ function tryConsumeCalcCalculation(
 
   return ok(simplifyCalculationTree(
     result.value,
-    'declared',
+    ValueStage.Declared,
     mathContextFor(c.context),
   ));
 }
@@ -2057,9 +2057,9 @@ function simplifyCalculationTree(
   const simplified = simplifyCalculationNode(root, context);
 
   if (
-    stage === 'declared' ||
-    stage === 'cascaded' ||
-    stage === 'specified' ||
+    stage === ValueStage.Declared ||
+    stage === ValueStage.Cascaded ||
+    stage === ValueStage.Specified ||
     context.insideCalculation ||
     !isNumericLeaf(simplified)
   ) {

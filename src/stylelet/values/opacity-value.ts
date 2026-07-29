@@ -5,7 +5,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import type { MathContext } from './math-value';
 import {
   accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,
@@ -51,7 +51,7 @@ export function resolveOpacityValue(
 ): OpacityValue {
   const calculationContext: MathContext = {
     ...context,
-    unwrapMathAt: context.unwrapMathAt ?? 'computed',
+    unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
   };
   const resolved = isNumberOpacityValue(value)
     ? resolveNumber(value, stage, calculationContext)
@@ -59,7 +59,7 @@ export function resolveOpacityValue(
 
   if (
     resolved.type === 'math' ||
-    !isAtOrBeyondValueStage(stage, 'computed')
+    stage < ValueStage.Computed
   ) {
     return resolved;
   }

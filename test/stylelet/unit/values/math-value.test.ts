@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ValueStage } from '../../../../src/stylelet/value-processing';
 import {
   accumulateMathValues, addMathValues, interpolateMathValues, parseMathValue,
   promoteNumericVariable, resolveMathValue, serializeMathValue, tryCoercePercentageToNumber,
@@ -44,9 +45,9 @@ describe('calc', () => {
       throw new Error('Expected a math value');
     }
 
-    expect(resolveMathValue(value, 'declared')).toEqual(value);
-    expect(resolveMathValue(value, 'computed')).toEqual(expected);
-    expect(resolveMathValue(value, 'declared', { unwrapMathAt: 'declared' })).toEqual(expected);
+    expect(resolveMathValue(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveMathValue(value, ValueStage.Computed)).toEqual(expected);
+    expect(resolveMathValue(value, ValueStage.Declared, { unwrapMathAt: ValueStage.Declared })).toEqual(expected);
   });
 
   it('coerces a percentage math leaf to number math', () => {
@@ -61,7 +62,7 @@ describe('calc', () => {
     }
 
     expect(serializeMathValue(number)).toBe('calc(1.2)');
-    expect(resolveMathValue(number, 'computed')).toEqual({
+    expect(resolveMathValue(number, ValueStage.Computed)).toEqual({
       type: 'number',
       value: 1.2,
     });
@@ -108,7 +109,7 @@ describe('calc', () => {
       promoted: true,
     };
 
-    const resolved = resolveMathValue(value, 'declared', {
+    const resolved = resolveMathValue(value, ValueStage.Declared, {
       length: { em: 16 },
     });
 
@@ -148,7 +149,7 @@ describe('calc', () => {
       promoted: false,
     };
 
-    expect(() => resolveMathValue(value, 'computed'))
+    expect(() => resolveMathValue(value, ValueStage.Computed))
       .toThrow('Resolved math value does not match its value type');
   });
 
@@ -959,8 +960,8 @@ describe('calc', () => {
     it('censors a negative zero into an unsigned zero', () => {
       const result = resolveMathValue(
         parseMathValue('calc(-5 * 0)', 'number')!,
-        'computed',
-        { unwrapMathAt: 'actual' },
+        ValueStage.Computed,
+        { unwrapMathAt: ValueStage.Actual },
       ) as MathValue;
 
       expect(result.calculation.type).toBe('number');
@@ -976,8 +977,8 @@ describe('calc', () => {
       (input, valueType, type) => {
         const result = (resolveMathValue(
           parseMathValue(input, valueType)!,
-          'computed',
-          { unwrapMathAt: 'actual' },
+          ValueStage.Computed,
+          { unwrapMathAt: ValueStage.Actual },
         ) as MathValue).calculation;
         const value = 'value' in result
           ? result.value
@@ -1009,10 +1010,10 @@ describe('calc', () => {
           'calc(1 / calc(-5 * 0))',
           'number',
         )!,
-        'computed',
+        ValueStage.Computed,
         {
           range: [-100, 100],
-          unwrapMathAt: 'actual',
+          unwrapMathAt: ValueStage.Actual,
         },
       );
 
@@ -1028,10 +1029,10 @@ describe('calc', () => {
     ] as const)('clamps %s to the target-context range', (input, expected) => {
       const result = resolveMathValue(
         parseMathValue(input, 'number')!,
-        'computed',
+        ValueStage.Computed,
         {
           range: [0, 100],
-          unwrapMathAt: 'actual',
+          unwrapMathAt: ValueStage.Actual,
         },
       ) as MathValue;
 
@@ -1041,8 +1042,8 @@ describe('calc', () => {
     it('clamps conceptual infinities to the finite host range', () => {
       const result = resolveMathValue(
         parseMathValue('calc(infinity)', 'number')!,
-        'used',
-        { unwrapMathAt: 'actual' },
+        ValueStage.Used,
+        { unwrapMathAt: ValueStage.Actual },
       ) as MathValue;
 
       expect(mathValueNumber(result)).toBe(Number.MAX_VALUE);
@@ -1057,8 +1058,8 @@ describe('calc', () => {
     ) => {
       const result = resolveMathValue(
         parseMathValue(input, 'integer')!,
-        'computed',
-        { unwrapMathAt: 'actual' },
+        ValueStage.Computed,
+        { unwrapMathAt: ValueStage.Actual },
       ) as MathValue;
 
       expect(mathValueNumber(result)).toBe(expected);
@@ -1154,7 +1155,7 @@ describe('calc', () => {
     (input, valueType, expected) => {
       const value = parseMathValue(input, valueType)!;
 
-      expect(resolveMathValue(value, 'computed')).toEqual(expected);
+      expect(resolveMathValue(value, ValueStage.Computed)).toEqual(expected);
     },
   );
 
@@ -1258,7 +1259,7 @@ describe('calc', () => {
     const parsed = parseMathValue('calc(1em + 2px)', 'length')!;
 
     expect(parsed.calculation.type).toBe('sum');
-    expect(resolveMathValue(parsed, 'declared', {
+    expect(resolveMathValue(parsed, ValueStage.Declared, {
       length: { em: 16 },
     })).toEqual({
       type: 'math',
@@ -1490,7 +1491,7 @@ describe('calc', () => {
 
     const percentage = parseMathValue('calc(25%)', 'percentage')!;
 
-    expect(resolveMathValue(percentage, 'declared', {
+    expect(resolveMathValue(percentage, ValueStage.Declared, {
       percentageReferenceValue: { type: 'number', value: 200 },
     })).toEqual({
       type: 'math',
@@ -1594,7 +1595,7 @@ describe('calc', () => {
   it('negates positive zero using CSS addition semantics', () => {
     const resolved = resolveMathValue(
       parseMathValue('calc(0 - 0)', 'number')!,
-      'computed',
+      ValueStage.Computed,
     );
 
     if (resolved.type !== 'number') {
@@ -1806,7 +1807,7 @@ describe('calc', () => {
     };
     const value = parseMathValue('calc(x + 1)', 'number', context)!;
 
-    expect(resolveMathValue(value, 'computed', {
+    expect(resolveMathValue(value, ValueStage.Computed, {
       ...context,
     })).toEqual({
       type: 'number',

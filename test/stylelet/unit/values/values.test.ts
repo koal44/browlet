@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ValueStage } from '../../../../src/stylelet/value-processing';
 import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
 import {
@@ -2623,9 +2624,9 @@ describe('opacity values', () => {
     const number = parseOpacityValue('2')!;
     const percentage = parseOpacityValue('200%')!;
 
-    expect(resolveOpacityValue(number, 'specified'))
+    expect(resolveOpacityValue(number, ValueStage.Specified))
       .toEqual(number);
-    expect(resolveOpacityValue(percentage, 'specified'))
+    expect(resolveOpacityValue(percentage, ValueStage.Specified))
       .toEqual(percentage);
   });
 
@@ -2641,7 +2642,7 @@ describe('opacity values', () => {
     (input, expected) => {
       expect(resolveOpacityValue(
         parseOpacityValue(input)!,
-        'computed',
+        ValueStage.Computed,
       )).toEqual({
         type: 'number',
         value: expected,
@@ -2663,7 +2664,7 @@ describe('opacity values', () => {
     (input, expected) => {
       expect(resolveOpacityValue(
         parseOpacityValue(input)!,
-        'computed',
+        ValueStage.Computed,
       )).toEqual({
         type: 'number',
         value: expected,
@@ -2674,13 +2675,13 @@ describe('opacity values', () => {
   it('uses the caller math-unwrapping policy', () => {
     const value = parseOpacityValue('calc(0.25 + 0.25)')!;
 
-    expect(resolveOpacityValue(value, 'computed', {
-      unwrapMathAt: 'used',
+    expect(resolveOpacityValue(value, ValueStage.Computed, {
+      unwrapMathAt: ValueStage.Used,
     })).toMatchObject({
       type: 'math',
     });
-    expect(resolveOpacityValue(value, 'computed', {
-      unwrapMathAt: 'computed',
+    expect(resolveOpacityValue(value, ValueStage.Computed, {
+      unwrapMathAt: ValueStage.Computed,
     })).toEqual({
       type: 'number',
       value: 0.5,
@@ -2728,7 +2729,7 @@ describe('opacity values', () => {
       const value = parseOpacityValue(input)!;
 
       expect(serializeOpacityValue(value)).toBe(specified);
-      expect(serializeOpacityValue(resolveOpacityValue(value, 'computed'))).toBe(computed);
+      expect(serializeOpacityValue(resolveOpacityValue(value, ValueStage.Computed))).toBe(computed);
     },
   );
 

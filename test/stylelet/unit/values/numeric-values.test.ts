@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ValueStage } from '../../../../src/stylelet/value-processing';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
@@ -74,19 +75,19 @@ describe('number values', () => {
     });
     expect(serializeNumber(value!)).toBe('calc(3)');
     expect(serializeNumber(
-      resolveNumber(value!, 'computed'),
+      resolveNumber(value!, ValueStage.Computed),
     )).toBe('3');
   });
 
   it('resolves a math value to a number at computed-value time', () => {
     const value = parseNumber('calc(1 + 2)')!;
 
-    expect(resolveNumber(value, 'declared')).toEqual(value);
-    expect(resolveNumber(value, 'declared', { unwrapMathAt: 'declared' })).toEqual({
+    expect(resolveNumber(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveNumber(value, ValueStage.Declared, { unwrapMathAt: ValueStage.Declared })).toEqual({
       type: 'number',
       value: 3,
     });
-    expect(resolveNumber(value, 'computed')).toEqual({
+    expect(resolveNumber(value, ValueStage.Computed)).toEqual({
       type: 'number',
       value: 3,
     });
@@ -121,10 +122,10 @@ describe('number values', () => {
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(resolveNumber(math, 'specified', {
+    expect(resolveNumber(math, ValueStage.Specified, {
       range: [0, 1],
     })).toBe(math);
-    expect(resolveNumber(math, 'computed', {
+    expect(resolveNumber(math, ValueStage.Computed, {
       range: [0, 1],
     })).toEqual({
       type: 'number',
@@ -195,8 +196,8 @@ describe('angle values', () => {
   it('resolves math values as canonical angles at the computed-value stage', () => {
     const value = parseAngle('calc(.5turn + 180deg)')!;
 
-    expect(resolveAngle(value, 'declared')).toEqual(value);
-    expect(resolveAngle(value, 'computed')).toEqual({
+    expect(resolveAngle(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveAngle(value, ValueStage.Computed)).toEqual({
       type: 'angle',
       value: 360,
       unit: 'deg',
@@ -232,8 +233,8 @@ describe('frequency values', () => {
   it('resolves math values as canonical frequencies at the computed-value stage', () => {
     const value = parseFrequency('calc(1khz + 500hz)')!;
 
-    expect(resolveFrequency(value, 'declared')).toEqual(value);
-    expect(resolveFrequency(value, 'computed')).toEqual({
+    expect(resolveFrequency(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveFrequency(value, ValueStage.Computed)).toEqual({
       type: 'frequency',
       value: 1500,
       unit: 'hz',
@@ -270,8 +271,8 @@ describe('length values', () => {
   it('resolves math values as canonical lengths at the computed-value stage', () => {
     const value = parseLength('calc(1in + 96px)')!;
 
-    expect(resolveLength(value, 'declared')).toEqual(value);
-    expect(resolveLength(value, 'computed')).toEqual({
+    expect(resolveLength(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveLength(value, ValueStage.Computed)).toEqual({
       type: 'length',
       value: 192,
       unit: 'px',
@@ -299,7 +300,7 @@ describe('length values', () => {
     const math = parseLength('calc(-1px)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(resolveLength(math, 'computed', {
+    expect(resolveLength(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
       type: 'length',
@@ -324,8 +325,8 @@ describe('resolution values', () => {
   it('resolves math values as canonical resolutions at the computed-value stage', () => {
     const value = parseResolution('calc(96dpi + 1dppx)')!;
 
-    expect(resolveResolution(value, 'declared')).toEqual(value);
-    expect(resolveResolution(value, 'computed')).toEqual({
+    expect(resolveResolution(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveResolution(value, ValueStage.Computed)).toEqual({
       type: 'resolution',
       value: 2,
       unit: 'dppx',
@@ -350,10 +351,10 @@ describe('resolution values', () => {
   it('clamps math results to the nonnegative resolution range', () => {
     const value = resolveResolution(
       parseResolution('calc(-1dppx)')!,
-      'computed',
+      ValueStage.Computed,
       {
         range: [0, Infinity],
-        unwrapMathAt: 'actual',
+        unwrapMathAt: ValueStage.Actual,
       },
     );
 
@@ -383,8 +384,8 @@ describe('time values', () => {
   it('resolves math values as canonical times at the computed-value stage', () => {
     const value = parseTime('calc(1000ms + 1s)')!;
 
-    expect(resolveTime(value, 'declared')).toEqual(value);
-    expect(resolveTime(value, 'computed')).toEqual({
+    expect(resolveTime(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveTime(value, ValueStage.Computed)).toEqual({
       type: 'time',
       value: 2,
       unit: 's',
@@ -427,8 +428,8 @@ describe('integer values', () => {
   it('rounds math results at the computed-value stage', () => {
     const value = resolveInteger(
       parseInteger('calc(1.5)')!,
-      'computed',
-      { unwrapMathAt: 'actual' },
+      ValueStage.Computed,
+      { unwrapMathAt: ValueStage.Actual },
     );
 
     expect(value).toMatchObject({
@@ -439,15 +440,15 @@ describe('integer values', () => {
       },
     });
     expect(serializeInteger(
-      resolveInteger(value, 'computed'),
+      resolveInteger(value, ValueStage.Computed),
     )).toBe('2');
   });
 
   it('resolves math values as integers at the computed-value stage', () => {
     const value = parseInteger('calc(1.5)')!;
 
-    expect(resolveInteger(value, 'declared')).toEqual(value);
-    expect(resolveInteger(value, 'computed')).toEqual({
+    expect(resolveInteger(value, ValueStage.Declared)).toEqual(value);
+    expect(resolveInteger(value, ValueStage.Computed)).toEqual({
       type: 'integer',
       value: 2,
     });
@@ -472,7 +473,7 @@ describe('integer values', () => {
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(resolveInteger(math, 'computed', {
+    expect(resolveInteger(math, ValueStage.Computed, {
       range: [0, 2],
     })).toEqual({
       type: 'integer',
@@ -499,7 +500,7 @@ describe('integer values', () => {
     );
 
     expect(serializeInteger(
-      resolveInteger(interpolated, 'computed'),
+      resolveInteger(interpolated, ValueStage.Computed),
     )).toBe('2');
     expect(serializeInteger(accumulateIntegers(a, math))).toBe('calc(3)');
   });
@@ -523,15 +524,15 @@ describe('percentage values', () => {
     });
     expect(serializePercentage(value!)).toBe('calc(30%)');
     expect(serializePercentage(
-      resolvePercentage(value!, 'computed'),
+      resolvePercentage(value!, ValueStage.Computed),
     )).toBe('30%');
   });
 
   it('resolves math values as percentages at the computed-value stage', () => {
     const value = parsePercentage('calc(10% + 20%)')!;
 
-    expect(resolvePercentage(value, 'declared')).toEqual(value);
-    expect(resolvePercentage(value, 'computed', {
+    expect(resolvePercentage(value, ValueStage.Declared)).toEqual(value);
+    expect(resolvePercentage(value, ValueStage.Computed, {
       percentHint: 'length',
     })).toEqual({
       type: 'percentage',
@@ -579,7 +580,7 @@ describe('percentage values', () => {
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(resolvePercentage(math, 'computed', {
+    expect(resolvePercentage(math, ValueStage.Computed, {
       range: [0, 100],
     })).toEqual({
       type: 'percentage',
@@ -636,11 +637,11 @@ describe('angle-percentage values', () => {
     const mixed = parseAnglePercentage('calc(10deg + 25%)')!;
     const percentage = parseAnglePercentage('calc(25%)')!;
 
-    expect(resolveAnglePercentage(mixed, 'computed')).toEqual(mixed);
-    expect(resolveAnglePercentage(mixed, 'computed', {
+    expect(resolveAnglePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
+    expect(resolveAnglePercentage(mixed, ValueStage.Computed, {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'deg' },
     })).toEqual({ type: 'angle', value: 60, unit: 'deg' });
-    expect(resolveAnglePercentage(percentage, 'computed'))
+    expect(resolveAnglePercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -707,7 +708,7 @@ describe('angle-percentage values', () => {
     const math = parseAnglePercentage('calc(-10deg)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(resolveAnglePercentage(math, 'computed', {
+    expect(resolveAnglePercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
       type: 'angle',
@@ -746,11 +747,11 @@ describe('length-percentage values', () => {
     const mixed = parseLengthPercentage('calc(10px + 25%)')!;
     const percentage = parseLengthPercentage('calc(25%)')!;
 
-    expect(resolveLengthPercentage(mixed, 'computed')).toEqual(mixed);
-    expect(resolveLengthPercentage(mixed, 'computed', {
+    expect(resolveLengthPercentage(mixed, ValueStage.Computed)).toEqual(mixed);
+    expect(resolveLengthPercentage(mixed, ValueStage.Computed, {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
     })).toEqual({ type: 'length', value: 60, unit: 'px' });
-    expect(resolveLengthPercentage(percentage, 'computed'))
+    expect(resolveLengthPercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -819,7 +820,7 @@ describe('length-percentage values', () => {
     const math = parseLengthPercentage('calc(-10px)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(resolveLengthPercentage(math, 'computed', {
+    expect(resolveLengthPercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
       type: 'length',
@@ -858,12 +859,12 @@ describe('frequency-percentage values', () => {
     const mixed = parseFrequencyPercentage('calc(10hz + 25%)')!;
     const percentage = parseFrequencyPercentage('calc(25%)')!;
 
-    expect(resolveFrequencyPercentage(mixed, 'computed'))
+    expect(resolveFrequencyPercentage(mixed, ValueStage.Computed))
       .toEqual(mixed);
-    expect(resolveFrequencyPercentage(mixed, 'computed', {
+    expect(resolveFrequencyPercentage(mixed, ValueStage.Computed, {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'hz' },
     })).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
-    expect(resolveFrequencyPercentage(percentage, 'computed'))
+    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -932,7 +933,7 @@ describe('frequency-percentage values', () => {
     const math = parseFrequencyPercentage('calc(-10hz)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(resolveFrequencyPercentage(math, 'computed', {
+    expect(resolveFrequencyPercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
       type: 'frequency',
@@ -971,11 +972,11 @@ describe('time-percentage values', () => {
     const mixed = parseTimePercentage('calc(10s + 25%)')!;
     const percentage = parseTimePercentage('calc(25%)')!;
 
-    expect(resolveTimePercentage(mixed, 'computed')).toEqual(mixed);
-    expect(resolveTimePercentage(mixed, 'computed', {
+    expect(resolveTimePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
+    expect(resolveTimePercentage(mixed, ValueStage.Computed, {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 's' },
     })).toEqual({ type: 'time', value: 60, unit: 's' });
-    expect(resolveTimePercentage(percentage, 'computed'))
+    expect(resolveTimePercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -1044,7 +1045,7 @@ describe('time-percentage values', () => {
     const math = parseTimePercentage('calc(-10s)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(resolveTimePercentage(math, 'computed', {
+    expect(resolveTimePercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
       type: 'time',
