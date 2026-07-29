@@ -485,6 +485,54 @@ describe('color values', () => {
     );
   });
 
+  it.each([
+    [
+      'hsl(from red .5turn s l / 100%)',
+      'hsl(from red 180deg s l / 1)',
+    ],
+    [
+      'rgb(from red r g b / 120%)',
+      'rgb(from red r g b / 1)',
+    ],
+    [
+      'rgb(from red r g b / -20%)',
+      'rgb(from red r g b / 0)',
+    ],
+    [
+      'rgb(from red r g b / 20%)',
+      'rgb(from red r g b / 0.2)',
+    ],
+    [
+      'alpha(from red / 50%)',
+      'alpha(from red / 0.5)',
+    ],
+    [
+      'rgb(from rebeccapurple 20% g b / alpha)',
+      'rgb(from rebeccapurple 51 g b / alpha)',
+    ],
+    [
+      'oklab(from red 50% 20% -20%)',
+      'oklab(from red 0.5 0.08 -0.08)',
+    ],
+    [
+      'rgb(from red calc(30%) g b)',
+      'rgb(from red calc(30%) g b)',
+    ],
+    [
+      'alpha(from rgb(0 0 0 / 0.25) / 100%)',
+      'alpha(from rgb(0 0 0 / 0.25) / 1)',
+    ],
+    [
+      'alpha(from rgb(0 0 0 / 0.25))',
+      'alpha(from rgb(0 0 0 / 0.25))',
+    ],
+  ] as const)(
+    'serializes the declared relative color %s',
+    (input, serialized) => {
+      expect(serializeColorValue(parseColorValue(input)!)).toBe(serialized);
+    },
+  );
+
   it('resolves a relative currentcolor origin at used-value time', () => {
     const declared = parseColorValue(
       'rgb(from currentcolor g r b / alpha)',
@@ -1770,14 +1818,17 @@ describe('color values', () => {
   });
 
   it('carries missing relative HSL components and calculates with them as zero', () => {
-    expect(resolveComputedAbsoluteColor(
+    const color = resolveComputedAbsoluteColor(
       'hsl(from hsl(none 10% 50%) h calc(h + 20) l)',
-    )).toEqual({
+    );
+
+    expect(color).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hsl,
       components: [undefined, 20, 50],
       alpha: 1,
     });
+    expect(serializeColorValue(color)).toBe('hsl(none 20% 50%)');
   });
 
   it.each([
@@ -2187,14 +2238,15 @@ describe('color values', () => {
     });
   });
 
-  it('clamps alpha and preserves the origin color encoding', () => {
+  it('clamps alpha and uses the origin color processing space', () => {
+    expect(serializeColorValue(resolveComputedAbsoluteColor(
+      'alpha(from red)',
+    ))).toBe('color(srgb 1 0 0)');
     expect(resolveComputedAbsoluteColor('alpha(from red / 2)')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
-      components: [255, 0, 0],
-      alpha: 255,
-      isLegacySrgb: true,
-      is8Bit: true,
+      components: [1, 0, 0],
+      alpha: 1,
     });
     const translucent = resolveComputedAbsoluteColor('alpha(from red / 0.5)');
 
@@ -2203,11 +2255,17 @@ describe('color values', () => {
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 0.5,
-      isLegacySrgb: true,
     });
-    expect(serializeColorValue(translucent)).toBe('rgba(255, 0, 0, 0.5)');
+    expect(serializeColorValue(translucent))
+      .toBe('color(srgb 1 0 0 / 0.5)');
     expect(resolveComputedAbsoluteColor('alpha(from red / -1)'))
       .toEqual({ ...translucent, alpha: 0 });
+    expect(serializeColorValue(resolveComputedAbsoluteColor(
+      'alpha(from hsl(120 20% 50%) / 0.5)',
+    ))).toBe('color(srgb 0.4 0.6 0.4 / 0.5)');
+    expect(serializeColorValue(resolveComputedAbsoluteColor(
+      'alpha(from hsl(none 20% 50%) / 0.5)',
+    ))).toBe('hsl(none 20% 50% / 0.5)');
   });
 
   it('rejects invalid Lab-family syntax', () => {

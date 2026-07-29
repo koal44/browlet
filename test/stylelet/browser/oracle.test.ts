@@ -2565,6 +2565,54 @@ const colorSerializations: ColorSerializationCase[] = [
     decl: 'rgb(from rebeccapurple calc(r) calc(g) calc(b) / calc(alpha))',
     expect: 'rgb(from rebeccapurple calc(r) calc(g) calc(b) / calc(alpha))',
   },
+  // All three engines currently retain the literal 20%.
+  ...failingColorSerialization(
+    'rgb(from rebeccapurple 20% g b / alpha)',
+    'rgb(from rebeccapurple 51 g b / alpha)',
+  ),
+  {
+    decl: 'rgb(from red calc(30%) g b)',
+    expect: 'rgb(from red calc(30%) g b)',
+  },
+  // Explicit unity in a relative color cannot be omitted because omission
+  // inherits the origin alpha. All three engines currently retain 100%.
+  ...failingColorSerialization(
+    'rgb(from rgba(0, 0, 0, 0.25) r g b / 100%)',
+    'rgb(from rgba(0, 0, 0, 0.25) r g b / 1)',
+  ),
+  // Section 11.3 requires literal percentages to serialize as numbers.
+  // Chromium and Firefox currently reject alpha(); WebKit retains 50%.
+  ...failingColorSerialization(
+    'alpha(from red / 50%)',
+    'alpha(from red / 0.5)',
+  ),
+  {
+    decl: 'alpha(from red)',
+    expect: 'alpha(from red)',
+    browsers: ['webkit'],
+  },
+  ...failingColorSerialization(
+    'alpha(from red)',
+    'alpha(from red)',
+    ['chromium', 'firefox'],
+  ),
+  // Explicit unity cannot be omitted without changing the meaning from
+  // replacement to inheritance. Chromium and Firefox currently reject
+  // alpha(); WebKit retains the percentage rather than canonicalizing it.
+  ...failingColorSerialization(
+    'alpha(from rgba(0, 0, 0, 0.25) / 100%)',
+    'alpha(from rgba(0, 0, 0, 0.25) / 1)',
+  ),
+  {
+    decl: 'alpha(from rgba(0, 0, 0, 0.25))',
+    expect: 'alpha(from rgba(0, 0, 0, 0.25))',
+    browsers: ['webkit'],
+  },
+  ...failingColorSerialization(
+    'alpha(from rgba(0, 0, 0, 0.25))',
+    'alpha(from rgba(0, 0, 0, 0.25))',
+    ['chromium', 'firefox'],
+  ),
 
   // Reducible and contextual color calculations.
   {

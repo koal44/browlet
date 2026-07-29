@@ -2861,7 +2861,34 @@ function resolveRelativeFn(
   context: ColorResolutionContext,
 ): ColorValue {
   if (stage < ValueStage.Computed) {
-    return value;
+    const alpha = value.alpha === undefined
+      ? undefined
+      : resolveColorAlphaValue(value.alpha, stage, context);
+
+    if (value.kind === ColorKind.AlphaFn) {
+      return alpha === value.alpha
+        ? value
+        : { ...value, alpha };
+    }
+
+    const metadata = COLOR_METADATA[value.kind];
+    const components = mapTuple(
+      value.components,
+      (component, index) => canonicalizeRelativeFnComponentSyntax(
+        component,
+        index,
+        metadata,
+      ),
+    ) as typeof value.components;
+
+    return (
+      alpha === value.alpha &&
+      components.every(
+        (component, index) => component === value.components[index],
+      )
+    )
+      ? value
+      : { ...value, components, alpha } as ColorValue;
   }
 
   if (value.kind === ColorKind.AlphaFn) {
@@ -2932,6 +2959,29 @@ function resolveRelativeFn(
   return metadata.convertToSrgb && !hasMissingColorComponent(absolute)
     ? convertAbsoluteColor(absolute, 'srgb', context)
     : absolute;
+}
+
+function canonicalizeRelativeFnComponentSyntax(
+  component: ClampableColorComponentValue,
+  index: number,
+  metadata: ColorMetadata,
+): ClampableColorComponentValue {
+  const componentMetadata = colorComponentMetadataAt(metadata, index);
+
+  if (
+    componentMetadata.isHue ||
+    component === 'none' ||
+    component.type !== 'percentage'
+  ) {
+    return component;
+  }
+
+  return {
+    type: 'number',
+    value: component.value *
+      componentMetadata.percentageScale /
+      componentMetadata.numberScale,
+  };
 }
 
 function resolveRelativeColorFn(
@@ -3105,48 +3155,52 @@ function resolveAlphaFn(
       : { ...value, origin };
   }
 
-  if (value.alpha === undefined) {
-    return origin;
-  }
-
   const normalizedOrigin = normalizeColorEncoding(origin);
-  const calculationContext: ColorResolutionContext = {
-    ...context,
-    numericVariables: relativeColorVariables(
-      normalizedOrigin,
-      context,
-      null,
-    ),
-  };
-  const alpha = resolveRelativeColorAlpha(
-    value.alpha,
-    normalizedOrigin,
-    stage,
-    calculationContext,
-    null,
-  );
+  let result = normalizedOrigin;
 
-  if (isDeferredColorAlpha(alpha)) {
-    return {
-      ...value,
-      origin,
-      alpha,
+  if (value.alpha !== undefined) {
+    const calculationContext: ColorResolutionContext = {
+      ...context,
+      numericVariables: relativeColorVariables(
+        normalizedOrigin,
+        context,
+        null,
+      ),
     };
+    const alpha = resolveRelativeColorAlpha(
+      value.alpha,
+      normalizedOrigin,
+      stage,
+      calculationContext,
+      null,
+    );
+
+    if (isDeferredColorAlpha(alpha)) {
+      return {
+        ...value,
+        origin,
+        alpha,
+      };
+    }
+
+    const absoluteAlpha = alpha === 'none'
+      ? undefined
+      : alpha.value;
+
+    if (!Object.is(absoluteAlpha, normalizedOrigin.alpha)) {
+      result = {
+        ...normalizedOrigin,
+        alpha: absoluteAlpha,
+      };
+    }
   }
 
-  const absoluteAlpha = alpha === 'none'
-    ? undefined
-    : alpha.value;
-
-  if (Object.is(absoluteAlpha, normalizedOrigin.alpha)) {
-    return origin;
-  }
-
-  return {
-    ...normalizedOrigin,
-    alpha: absoluteAlpha,
-    ...(origin.isLegacySrgb ? { isLegacySrgb: true } : {}),
-  };
+  return (
+    result.space.name === 'hsl' ||
+    result.space.name === 'hwb'
+  ) && !hasMissingColorComponent(result)
+    ? convertAbsoluteColor(result, 'srgb', context)
+    : result;
 }
 
 function resolveRgbFn(
@@ -4042,7 +4096,9 @@ function serializeFnComponents(
     const componentMetadata = colorComponentMetadataAt(metadata, index);
 
     return componentMetadata.isHue
-      ? serializeHue(component as SyntaxHueComponent)
+      ? relative
+        ? serializeSpecifiedHue(component as SyntaxHueComponent)
+        : serializeHue(component as SyntaxHueComponent)
       : serializeColorComponent(
         component as SyntaxColorComponent,
         relative ? null : componentMetadata.percentageReference,
@@ -6849,7 +6905,7 @@ function serializeOriginColorFunction(value: ColorFunction): string {
     const componentMetadata = colorComponentMetadataAt(metadata, index);
 
     return componentMetadata.isHue
-      ? serializeOriginHue(component as SyntaxHueComponent)
+      ? serializeSpecifiedHue(component as SyntaxHueComponent)
       : serializeColorComponent(
         component as SyntaxColorComponent,
         null,
@@ -6877,7 +6933,7 @@ function serializeOriginColorFunction(value: ColorFunction): string {
     : `${name}(${components.join(' ')} / ${alpha})`;
 }
 
-function serializeOriginHue(value: SyntaxHueComponent): string {
+function serializeSpecifiedHue(value: SyntaxHueComponent): string {
   return value !== 'none' && value.type === 'angle'
     ? `${serializeCssNumber(resolveAngleLiteral(value).value)}deg`
     : serializeHue(value);
