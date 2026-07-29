@@ -4,6 +4,7 @@ import {
   ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
   defineColorProfile, deltaE2000, deltaEOK,
   gamutMapColor, interpolateColors, parseColorInterpolationMethod, parseColorValue,
+  naivelyConvertSrgbToDeviceCmyk,
   resolveColorValue, serializeColorValue, tryResolveAbsoluteColor,
   type AbsoluteColor,
   type PredefinedAbsoluteColor, type SystemColorName,
@@ -612,6 +613,158 @@ describe('color values', () => {
     },
   );
 
+  it('parses legacy and modern device CMYK syntax', () => {
+    expect(parseColorValue('device-cmyk(0, .81, .81, .25)'))
+      .toMatchObject({
+        kind: ColorKind.DeviceCmykFn,
+        syntax: 'legacy',
+        components: [
+          { type: 'number', value: 0 },
+          { type: 'number', value: 0.81 },
+          { type: 'number', value: 0.81 },
+          { type: 'number', value: 0.25 },
+        ],
+      });
+    expect(parseColorValue(
+      'device-cmyk(10% none 0.5 120% / 25%)',
+    )).toMatchObject({
+      kind: ColorKind.DeviceCmykFn,
+      syntax: 'modern',
+      components: [
+        { type: 'percentage', value: 10 },
+        'none',
+        { type: 'number', value: 0.5 },
+        { type: 'percentage', value: 120 },
+      ],
+      alpha: { type: 'number', value: 0.25 },
+    });
+  });
+
+  it.each([
+    'device-cmyk(0 0 0)',
+    'device-cmyk(0 0 0 0 0)',
+    'device-cmyk(0%, 0%, 0%, 0%)',
+    'device-cmyk(0, 0, 0, 0 / 0.5)',
+    'device-cmyk(0 0 0 0, 0.5)',
+  ])('rejects invalid device CMYK syntax %s', (input) => {
+    expect(parseColorValue(input)).toBeNull();
+  });
+
+  it('resolves and serializes device CMYK without implicit conversion', () => {
+    const declared = parseColorValue(
+      'device-cmyk(-0.2 25% none 1.2 / 50%)',
+    )!;
+
+    expect(serializeColorValue(declared))
+      .toBe('device-cmyk(-0.2 25% none 1.2 / 0.5)');
+
+    const computed = resolveColorValue(
+      declared,
+      ValueStage.Computed,
+    );
+
+    expect(computed).toEqual({
+      kind: ColorKind.Absolute,
+      space: {
+        name: 'device-cmyk',
+        keys: ['c', 'm', 'y', 'k'],
+      },
+      components: [0, 0.25, undefined, 1],
+      alpha: 0.5,
+    });
+    expect(serializeColorValue(computed))
+      .toBe('device-cmyk(0 0.25 none 1 / 0.5)');
+  });
+
+  it('uses naïve device CMYK conversion when no profile is available', () => {
+    const cmyk = resolveComputedAbsoluteColor(
+      'device-cmyk(0 0.81 0.81 0.3 / 0.5)',
+    );
+    const srgb = convertAbsoluteColor(cmyk, 'srgb');
+
+    expect(srgb).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      alpha: 0.5,
+    });
+    expectComponentsCloseTo(srgb.components, [0.7, 0.133, 0.133], 12);
+
+    const roundTrip = naivelyConvertSrgbToDeviceCmyk(srgb);
+
+    expectComponentsCloseTo(
+      roundTrip.components,
+      [0, 0.81, 0.81, 0.3],
+      12,
+    );
+    expect(roundTrip.alpha).toBe(0.5);
+  });
+
+  it('uses the device CMYK profile for an explicit target conversion', () => {
+    const inputs: number[][] = [];
+    const profile = defineColorProfile({
+      space: 'device-cmyk',
+      components: ['c', 'm', 'y', 'k'],
+      toAbsoluteColor: (components) => {
+        inputs.push([...components]);
+        return {
+          kind: ColorKind.Absolute,
+          space: SPACES.srgb,
+          components: [
+            components[0],
+            components[1],
+            components[2],
+          ],
+          alpha: 1,
+        };
+      },
+      fromAbsoluteColor: () => null,
+    });
+    const context = {
+      colorProfiles: new Map([[profile.space, profile]]),
+      targetColorSpace: 'srgb' as const,
+    };
+    const profileContext = {
+      colorProfiles: context.colorProfiles,
+    };
+    const declared = parseColorValue(
+      'device-cmyk(0.1 0.2 0.3 0.4 / 0.5)',
+      profileContext,
+    )!;
+    const native = resolveColorValue(
+      declared,
+      ValueStage.Computed,
+      profileContext,
+    );
+
+    expect(native).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: {
+        name: 'device-cmyk',
+        keys: ['c', 'm', 'y', 'k'],
+      },
+      alpha: 0.5,
+    });
+    expect(inputs).toEqual([]);
+
+    const computed = resolveColorValue(
+      declared,
+      ValueStage.Computed,
+      context,
+    );
+
+    expect(computed).toMatchObject({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      alpha: 0.5,
+    });
+    if (computed.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute computed color');
+    }
+    expectComponentsCloseTo(computed.components, [0.1, 0.2, 0.3], 12);
+    expect(inputs).toHaveLength(1);
+    expectComponentsCloseTo(inputs[0], [0.1, 0.2, 0.3, 0.4], 12);
+  });
+
   it('parses and serializes custom color space parameters', () => {
     const color = parseColorValue(
       'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)',
@@ -679,7 +832,7 @@ describe('color values', () => {
     const { inputs, profile } = testColorProfile();
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
-      customColorTarget: 'srgb' as const,
+      targetColorSpace: 'srgb' as const,
     };
     const declared = parseColorValue(
       'color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)',
@@ -714,25 +867,31 @@ describe('color values', () => {
     expectComponentsCloseTo(inputs[0], [0.2, 0.4, 0.6, 0.8], 12);
   });
 
-  it('does not apply a custom color target to predefined colors', () => {
+  it('applies a requested target color space to predefined colors', () => {
     const declared = parseColorValue('color(display-p3 0.2 0.4 0.6)')!;
+    const source = resolveColorValue(
+      declared,
+      ValueStage.Computed,
+    );
     const resolved = resolveColorValue(
       declared,
       ValueStage.Computed,
-      { customColorTarget: 'srgb' },
+      { targetColorSpace: 'srgb' },
     );
 
     expect(resolved).toMatchObject({
       kind: ColorKind.Absolute,
-      space: SPACES['display-p3'],
+      space: SPACES.srgb,
       alpha: 1,
     });
 
     if (resolved.kind !== ColorKind.Absolute) {
       throw new TypeError('Expected an absolute computed color');
     }
-
-    expectComponentsCloseTo(resolved.components, [0.2, 0.4, 0.6], 12);
+    if (source.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute computed color');
+    }
+    expect(resolved).toEqual(convertAbsoluteColor(source, 'srgb'));
   });
 
   it('converts missing custom-space components as zero', () => {

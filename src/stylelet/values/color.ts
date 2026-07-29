@@ -54,7 +54,10 @@ export type AbsoluteColor<
   is8Bit?: true;
 };
 
-export type AbsoluteColorSpace = PredefinedColorSpace | CustomColorSpace;
+export type AbsoluteColorSpace =
+  | PredefinedColorSpace
+  | CustomColorSpace
+  | DeviceCmykSpace;
 
 export type CustomColorSpace<
   Keys extends readonly string[] = readonly string[],
@@ -62,9 +65,13 @@ export type CustomColorSpace<
 
 export type PredefinedAbsoluteColor = AbsoluteColor<PredefinedColorSpace>;
 
-export type ColorProfileSpace =
+type ColorFunctionSpace =
   | ColorFnSpace
   | DashedIdentValue['value'];
+
+export type ColorProfileSpace =
+  | ColorFunctionSpace
+  | DeviceCmykSpace['name'];
 
 export type ColorProfileComponentValues<
   Components extends readonly string[] = readonly string[],
@@ -109,6 +116,7 @@ const PROPHOTO_RGB_SPACE = defineColorSpace('prophoto-rgb', ['r', 'g', 'b'], 'd5
 const REC2020_SPACE = defineColorSpace('rec2020', ['r', 'g', 'b'], 'd65');
 const XYZ_D50_SPACE = defineColorSpace('xyz-d50', ['x', 'y', 'z'], 'd50');
 const XYZ_D65_SPACE = defineColorSpace('xyz-d65', ['x', 'y', 'z'], 'd65');
+const DEVICE_CMYK_SPACE = { name: 'device-cmyk', keys: ['c', 'm', 'y', 'k'] } as const;
 
 type SrgbSpace = typeof SRGB_SPACE;
 type LinearSrgbSpace = typeof LINEAR_SRGB_SPACE;
@@ -125,6 +133,7 @@ type ProphotoRgbSpace = typeof PROPHOTO_RGB_SPACE;
 type Rec2020Space = typeof REC2020_SPACE;
 type XyzD50Space = typeof XYZ_D50_SPACE;
 type XyzD65Space = typeof XYZ_D65_SPACE;
+export type DeviceCmykSpace = typeof DEVICE_CMYK_SPACE;
 
 type PredefinedRgbColorSpace =
   | SrgbSpace
@@ -284,6 +293,7 @@ export enum ColorKind {
   OklchFn,
   AlphaFn,
   ColorFn,
+  DeviceCmykFn,
   Absolute,
   ColorMixFn,
 }
@@ -342,7 +352,8 @@ function builtinColorProfile<
 }
 
 /*
- * <color> = <color-base> | currentColor | <system-color> | <quirky-color>
+ * <color> = <color-base> | currentColor | <system-color> |
+ *           <device-cmyk()> | <quirky-color>
  *
  * <color-base> = <hex-color> | <color-function> | <named-color> |
  *                <color-mix()>
@@ -362,7 +373,8 @@ export type ColorValue =
   | ColorBase
   | CurrentColor
   | SystemColor
-  | DeprecatedColor;
+  | DeprecatedColor
+  | DeviceCmykFn;
 
 export type ColorBase =
   | HexColor
@@ -416,24 +428,26 @@ export function tryConsumeColor(
     ));
 }
 
-// <color> = <color-base> | currentColor | <system-color>
+// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()>
 const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
+    one(tryConsumeDeviceCmykFn),
   ],
   ([value]) => ok(value),
 );
 
-// <color> = <color-base> | currentColor | <system-color> | <quirky-color>
+// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <quirky-color>
 const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
+    one(tryConsumeDeviceCmykFn),
     one(tryConsumeQuirkyColor),
   ],
   ([value]) => ok(value),
@@ -1871,7 +1885,7 @@ const consumeAlphaFunction: TryComponentConsumer<AlphaFn> =
 
 export type ColorFn = {
   kind: ColorKind.ColorFn;
-  space: ColorProfileSpace;
+  space: ColorFunctionSpace;
   components: SyntaxColorComponent[];
   alpha?: SyntaxAlphaComponent;
   origin?: ColorValue;
@@ -1896,7 +1910,7 @@ const CUSTOM_COLOR_FN_METADATA = {
 } as const satisfies ColorMetadata;
 
 function colorProfileFor(
-  space: ColorProfileSpace,
+  space: ColorFunctionSpace,
   context: ColorConversionContext,
 ): ColorProfile | undefined {
   return isCustomColorProfileSpace(space)
@@ -1911,7 +1925,7 @@ function isCustomColorProfileSpace(
 }
 
 type ColorFnSpaceParams = {
-  space: ColorProfileSpace;
+  space: ColorFunctionSpace;
   components: SyntaxColorComponent[];
 };
 
@@ -2076,6 +2090,123 @@ function tryConsumeXyzSpace(
 
 // <xyz-space> = xyz | xyz-d50 | xyz-d65
 const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
+
+/*
+ * <device-cmyk()> =
+ *   <legacy-device-cmyk-syntax> | <modern-device-cmyk-syntax>
+ *
+ * <legacy-device-cmyk-syntax> = device-cmyk(<number>#{4})
+ *
+ * <modern-device-cmyk-syntax> = device-cmyk(
+ *   <cmyk-component>{4}
+ *   [ / [ <alpha-value> | none ] ]? )
+ *
+ * <cmyk-component> = <number> | <percentage> | none
+ */
+
+export type DeviceCmykFn = {
+  kind: ColorKind.DeviceCmykFn;
+  syntax: 'legacy' | 'modern';
+  components: ColorComponentTuple<DeviceCmykSpace, [
+    cyan: SyntaxColorComponent,
+    magenta: SyntaxColorComponent,
+    yellow: SyntaxColorComponent,
+    black: SyntaxColorComponent,
+  ]>;
+  alpha?: SyntaxAlphaComponent;
+};
+
+const DEVICE_CMYK_COMPONENT_METADATA = defineColorComponentMetadata({
+  percentageScale: 1 / 100,
+  numberRange: [0, 1],
+  percentageRange: [0, 100],
+});
+
+const DEVICE_CMYK_METADATA = {
+  space: null,
+  components: [
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+    DEVICE_CMYK_COMPONENT_METADATA,
+  ],
+  resolveAt: ValueStage.Computed,
+  convertToSrgb: false,
+} as const satisfies ColorMetadata;
+
+function tryConsumeDeviceCmykFn(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DeviceCmykFn> {
+  return consumeDeviceCmykFn(c);
+}
+
+// <device-cmyk()> = <legacy-device-cmyk-syntax> | <modern-device-cmyk-syntax>
+const consumeDeviceCmykFn: TryComponentConsumer<DeviceCmykFn> =
+  createFunctionalNotationConsumer(
+    'device-cmyk',
+    oneOf(
+      [
+        one(tryConsumeLegacyDeviceCmykSyntax),
+        one(tryConsumeModernDeviceCmykSyntax),
+      ],
+      ([color]) => ok(color),
+    ),
+    (color) => color,
+  );
+
+function tryConsumeLegacyDeviceCmykSyntax(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DeviceCmykFn> {
+  return consumeLegacyDeviceCmykSyntax(c);
+}
+
+// <legacy-device-cmyk-syntax> = device-cmyk(<number>#{4})
+const consumeLegacyDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
+  sequenceOf(
+    [commaRepeat(tryConsumeNumber, 4, 4)],
+    ([components]) => ok({
+      kind: ColorKind.DeviceCmykFn as const,
+      syntax: 'legacy' as const,
+      components,
+    }),
+  );
+
+function tryConsumeModernDeviceCmykSyntax(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DeviceCmykFn> {
+  return consumeModernDeviceCmykSyntax(c);
+}
+
+// <modern-device-cmyk-syntax> = device-cmyk(<cmyk-component>{4} [ / [ <alpha-value> | none ] ]?)
+const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
+  sequenceOf(
+    [
+      repeat(withComponentTrivia(tryConsumeCmykComponent), 4, 4),
+      opt(tryConsumeModernAlpha),
+    ],
+    ([components, [alpha]]) => ok({
+      kind: ColorKind.DeviceCmykFn as const,
+      syntax: 'modern' as const,
+      components,
+      alpha,
+    }),
+  );
+
+function tryConsumeCmykComponent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<SyntaxColorComponent> {
+  return consumeCmykComponent(c);
+}
+
+// <cmyk-component> = <number> | <percentage> | none
+const consumeCmykComponent: TryComponentConsumer<SyntaxColorComponent> = oneOf(
+  [
+    one(tryConsumeNumber),
+    one(tryConsumePercentage),
+    one(tryConsumeNone),
+  ],
+  ([component]) => ok(component),
+);
 
 /*
  * <color-space> = <rectangular-color-space> | <polar-color-space>
@@ -2297,19 +2428,18 @@ export function resolveColorValue(
   const resolved = resolveColorValueInternal(value, stage, context);
 
   return (
-    context.customColorTarget !== undefined &&
-    resolved.kind === ColorKind.Absolute &&
-    isCustomColorProfileSpace(resolved.space.name)
+    context.targetColorSpace !== undefined &&
+    resolved.kind === ColorKind.Absolute
   )
-    ? convertAbsoluteColor(resolved, context.customColorTarget, context)
+    ? convertAbsoluteColor(resolved, context.targetColorSpace, context)
     : resolved;
 }
 
 export type ColorResolutionContext = MathContext & ColorConversionContext & {
   currentColor?: AbsoluteColor;
   systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
-  // Converts the final custom-space result through its profile to this space.
-  customColorTarget?: ColorSpaceName;
+  // Converts the final resolved result to this space.
+  targetColorSpace?: ColorSpaceName;
 };
 
 export function tryResolveAbsoluteColor(
@@ -2366,6 +2496,8 @@ function resolveColorValueInternal(
     case ColorKind.AlphaFn:
     case ColorKind.ColorFn:
       return resolveColorFunction(value, stage, context);
+    case ColorKind.DeviceCmykFn:
+      return resolveDeviceCmykFn(value, stage, context);
     case ColorKind.ColorMixFn:
       return resolveColorMixFn(value, stage, context);
     default:
@@ -2604,7 +2736,7 @@ function resolveRelativeColorFn(
   }
 
   const normalizedOrigin = normalizeColorEncoding(origin);
-  const predefinedOrigin = tryPredefinedAbsoluteColor(
+  const predefinedOrigin = tryCoercePredefinedAbsoluteColor(
     normalizedOrigin,
     context,
   );
@@ -3402,6 +3534,61 @@ function absoluteColorFromRgba(rgba: number): AbsoluteColor {
   };
 }
 
+function resolveDeviceCmykFn(
+  value: DeviceCmykFn,
+  stage: ValueStage,
+  context: ColorResolutionContext,
+): DeviceCmykFn | AbsoluteColor<DeviceCmykSpace> {
+  const alpha = resolveColorAlphaValue(value.alpha, stage, context);
+  const components = resolveColorComponents(
+    value.components,
+    stage,
+    context,
+    DEVICE_CMYK_METADATA.resolveAt,
+  );
+  const resolved = (
+    alpha === value.alpha &&
+    components.every((component, index) => component === value.components[index])
+  )
+    ? value
+    : { ...value, components, alpha };
+
+  if (stage < ValueStage.Computed) {
+    return resolved;
+  }
+
+  const clamped = clampColorComponents(
+    components,
+    DEVICE_CMYK_METADATA,
+    stage,
+  );
+  const canonical = canonicalizeFnComponents(
+    clamped,
+    DEVICE_CMYK_METADATA,
+  );
+
+  if (
+    hasDeferredColorComponents(canonical) ||
+    isDeferredColorAlpha(alpha)
+  ) {
+    return {
+      ...resolved,
+      components: canonical,
+    };
+  }
+
+  return {
+    kind: ColorKind.Absolute,
+    space: DEVICE_CMYK_SPACE,
+    components: mapTuple(
+      canonical,
+      (component, index) =>
+        scaleFnComponent(component, index, DEVICE_CMYK_METADATA),
+    ),
+    alpha: alpha === 'none' ? undefined : alpha.value,
+  };
+}
+
 function colorResolutionContextFor(context: unknown): ColorResolutionContext {
   return context === null || context === undefined
     ? {}
@@ -3429,6 +3616,8 @@ export function serializeColorValue(
       throw new TypeError('Hex colors must be resolved before serialization');
     case ColorKind.ColorMixFn:
       throw new TypeError('Color mixes must be resolved before serialization');
+    case ColorKind.DeviceCmykFn:
+      return serializeDeviceCmykFn(value);
     case ColorKind.RgbFn:
     case ColorKind.HslFn:
     case ColorKind.HwbFn:
@@ -3713,9 +3902,26 @@ function serializeAbsoluteColor(
     case 'xyz-d50':
     case 'xyz-d65':
       return `color(${space} ${serializeAbsoluteColorComponentsBody(value)})`;
+    case 'device-cmyk':
+      return `device-cmyk(${serializeAbsoluteColorComponentsBody(value)})`;
     default:
       return `color(${space} ${serializeAbsoluteColorComponentsBody(value)})`;
   }
+}
+
+function serializeDeviceCmykFn(value: DeviceCmykFn): string {
+  const components = value.components.map(
+    (component) => serializeColorComponent(component, null),
+  );
+
+  return value.syntax === 'legacy' &&
+      canUseLegacyColorSerialization(value.components)
+    ? `device-cmyk(${components.join(', ')})`
+    : serializeModernColorFunction(
+      'device-cmyk',
+      components,
+      value.alpha,
+    );
 }
 
 function serializeAbsoluteRgb(
@@ -3891,7 +4097,7 @@ type ColorMatrix = readonly [
 ];
 
 export type ColorConversionContext = {
-  colorProfiles?: ReadonlyMap<DashedIdentValue['value'], ColorProfile>;
+  colorProfiles?: ReadonlyMap<ColorProfileSpace, ColorProfile>;
 };
 
 export function convertAbsoluteColor(
@@ -3900,7 +4106,7 @@ export function convertAbsoluteColor(
   context: ColorConversionContext = {},
 ): PredefinedAbsoluteColor {
   return convertPredefinedAbsoluteColor(
-    predefinedAbsoluteColor(value, context),
+    coercePredefinedAbsoluteColor(value, context),
     target,
   );
 }
@@ -3941,11 +4147,11 @@ function convertPredefinedAbsoluteColor(
   return convertRectangularAbsoluteColor(converted, target);
 }
 
-function predefinedAbsoluteColor(
+function coercePredefinedAbsoluteColor(
   value: AbsoluteColor,
   context: ColorConversionContext,
 ): PredefinedAbsoluteColor {
-  const predefined = tryPredefinedAbsoluteColor(value, context);
+  const predefined = tryCoercePredefinedAbsoluteColor(value, context);
 
   if (predefined === null) {
     throw new TypeError(`Cannot convert color space ${value.space.name}`);
@@ -3954,7 +4160,7 @@ function predefinedAbsoluteColor(
   return predefined;
 }
 
-function tryPredefinedAbsoluteColor(
+function tryCoercePredefinedAbsoluteColor(
   value: AbsoluteColor,
   context: ColorConversionContext,
 ): PredefinedAbsoluteColor | null {
@@ -3965,6 +4171,12 @@ function tryPredefinedAbsoluteColor(
   }
 
   const profile = context.colorProfiles?.get(name);
+
+  if (name === DEVICE_CMYK_SPACE.name && profile === undefined) {
+    return naivelyConvertDeviceCmykToSrgb(
+      value as AbsoluteColor<DeviceCmykSpace>,
+    );
+  }
 
   if (profile === undefined) {
     return null;
@@ -4892,6 +5104,50 @@ function transformColorVector(
   );
 }
 
+export function naivelyConvertDeviceCmykToSrgb(
+  value: AbsoluteColor<DeviceCmykSpace>,
+): PredefinedAbsoluteColor {
+  const [cyan = 0, magenta = 0, yellow = 0, black = 0] = value.components;
+  const red = 1 - Math.min(1, cyan * (1 - black) + black);
+  const green = 1 - Math.min(1, magenta * (1 - black) + black);
+  const blue = 1 - Math.min(1, yellow * (1 - black) + black);
+
+  return {
+    kind: ColorKind.Absolute,
+    space: SPACES.srgb,
+    components: [red, green, blue],
+    alpha: value.alpha,
+  };
+}
+
+export function naivelyConvertSrgbToDeviceCmyk(
+  value: PredefinedAbsoluteColor,
+): AbsoluteColor<DeviceCmykSpace> {
+  const srgb = convertPredefinedAbsoluteColor(value, 'srgb');
+  const [red, green, blue] = mapTuple(
+    srgb.components,
+    (component) => clamp(component ?? 0, 0, 1),
+  );
+  const black = 1 - Math.max(red, green, blue);
+  const scale = 1 - black;
+  const components: AbsoluteColor<DeviceCmykSpace>['components'] =
+    scale === 0
+      ? [0, 0, 0, 1]
+      : [
+        (1 - red - black) / scale,
+        (1 - green - black) / scale,
+        (1 - blue - black) / scale,
+        black,
+      ];
+
+  return {
+    kind: ColorKind.Absolute,
+    space: DEVICE_CMYK_SPACE,
+    components,
+    alpha: srgb.alpha,
+  };
+}
+
 
 
 //  ██████      ███    ██     ██ ██     ██    ███
@@ -5013,7 +5269,7 @@ function convertAbsoluteColorToOklch(
 ): PredefinedAbsoluteColor {
   const prepared = replaceMissingComponents(
     prepareAbsoluteColorForConversion(
-      predefinedAbsoluteColor(value, context),
+      coercePredefinedAbsoluteColor(value, context),
     ),
   );
 
@@ -5294,7 +5550,7 @@ export function interpolateColors(
   const normalizedA = normalizeColorEncoding(a);
   const convertedA = convertPredefinedAbsoluteColor(
     replaceMissingComponents(
-      predefinedAbsoluteColor(normalizedA, context),
+      coercePredefinedAbsoluteColor(normalizedA, context),
     ),
     space,
   );
@@ -5302,7 +5558,7 @@ export function interpolateColors(
   const normalizedB = normalizeColorEncoding(b);
   const convertedB = convertPredefinedAbsoluteColor(
     replaceMissingComponents(
-      predefinedAbsoluteColor(normalizedB, context),
+      coercePredefinedAbsoluteColor(normalizedB, context),
     ),
     space,
   );
@@ -5837,7 +6093,7 @@ function contextWithRelativeColorVariables(
 }
 
 function contextWithColorFnRelativeVariables(
-  space: ColorProfileSpace,
+  space: ColorFunctionSpace,
   context: unknown,
 ): unknown {
   if (relativeColorVariablesFor(context) === undefined) {
