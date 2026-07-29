@@ -297,6 +297,7 @@ export enum ColorKind {
   LightDarkColor,
   Absolute,
   ColorMixFn,
+  ContrastColorFn,
 }
 
 export function defineColorProfile<
@@ -354,7 +355,8 @@ function builtinColorProfile<
 
 /*
  * <color> = <color-base> | currentColor | <system-color> |
- *           <device-cmyk()> | <light-dark-color> | <quirky-color>
+ *           <contrast-color()> | <device-cmyk()> |
+ *           <light-dark-color> | <quirky-color>
  *
  * <color-base> = <hex-color> | <color-function> | <named-color> |
  *                <color-mix()>
@@ -375,6 +377,7 @@ export type ColorValue =
   | CurrentColor
   | SystemColor
   | DeprecatedColor
+  | ContrastColorFn
   | DeviceCmykFn
   | LightDarkColor;
 
@@ -430,26 +433,28 @@ export function tryConsumeColor(
     ));
 }
 
-// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <light-dark-color>
+// <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
 const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
+    one(tryConsumeContrastColorFn),
     one(tryConsumeDeviceCmykFn),
     one(tryConsumeLightDarkColor),
   ],
   ([value]) => ok(value),
 );
 
-// <color> = <color-base> | currentColor | <system-color> | <device-cmyk()> | <light-dark-color> | <quirky-color>
+// <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color> | <quirky-color>
 const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
   [
     one(tryConsumeColorBase),
     one(tryConsumeCurrentColor),
     one(tryConsumeSystemColor),
     one(tryConsumeDeprecatedColor),
+    one(tryConsumeContrastColorFn),
     one(tryConsumeDeviceCmykFn),
     one(tryConsumeLightDarkColor),
     one(tryConsumeQuirkyColor),
@@ -2253,6 +2258,35 @@ const consumeLightDarkColor: TryComponentConsumer<LightDarkColor> =
   );
 
 /*
+ * <contrast-color()> = contrast-color(<color>)
+ */
+
+export type ContrastColorFn = {
+  kind: ColorKind.ContrastColorFn;
+  color: ColorValue;
+};
+
+function tryConsumeContrastColorFn(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ContrastColorFn> {
+  return consumeContrastColorFn(c);
+}
+
+// <contrast-color()> = contrast-color(<color>)
+const consumeContrastColorFn: TryComponentConsumer<ContrastColorFn> =
+  createFunctionalNotationConsumer(
+    'contrast-color',
+    sequenceOf(
+      [one(withComponentTrivia(tryConsumeColor))],
+      ([[color]]) => ok({
+        kind: ColorKind.ContrastColorFn as const,
+        color,
+      }),
+    ),
+    (color) => color,
+  );
+
+/*
  * <color-space> = <rectangular-color-space> | <polar-color-space>
  *
  * <rectangular-color-space> = srgb | srgb-linear |
@@ -2547,6 +2581,8 @@ function resolveColorValueInternal(
       return resolveDeviceCmykFn(value, stage, context);
     case ColorKind.LightDarkColor:
       return resolveLightDarkColor(value, stage, context);
+    case ColorKind.ContrastColorFn:
+      return resolveContrastColorFn(value, stage, context);
     case ColorKind.ColorMixFn:
       return resolveColorMixFn(value, stage, context);
     default:
@@ -3657,6 +3693,65 @@ function resolveLightDarkColor(
   );
 }
 
+function resolveContrastColorFn(
+  value: ContrastColorFn,
+  stage: ValueStage,
+  context: ColorResolutionContext,
+): ColorValue {
+  if (stage < ValueStage.Computed) {
+    return value;
+  }
+
+  const color = resolveColorValueInternal(value.color, stage, context);
+  const resolved = color === value.color ? value : { ...value, color };
+
+  if (color.kind !== ColorKind.Absolute) {
+    return resolved;
+  }
+
+  const absolute = tryCoercePredefinedAbsoluteColor(color, context);
+
+  return absolute === null
+    ? resolved
+    : calculateContrastColor(absolute);
+}
+
+// WCAG 2.1 contrast is the provisional UA-defined policy used by current engines.
+function calculateContrastColor(
+  background: PredefinedAbsoluteColor,
+): AbsoluteColor {
+  const luminance = relativeLuminance(background);
+  const blackContrast = contrastRatio(luminance, 0);
+  const whiteContrast = contrastRatio(luminance, 1);
+
+  return absoluteColorFromRgba(
+    blackContrast > whiteContrast
+      ? ColorRgba.black
+      : ColorRgba.white,
+  );
+}
+
+function contrastRatio(first: number, second: number): number {
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function relativeLuminance(value: PredefinedAbsoluteColor): number {
+  const [red = 0, green = 0, blue = 0] =
+    convertPredefinedAbsoluteColor(value, 'srgb').components;
+  const linearize = (component: number) => component <= 0.04045
+    ? component / 12.92
+    : ((component + 0.055) / 1.055) ** 2.4;
+
+  return (
+    0.2126 * linearize(red) +
+    0.7152 * linearize(green) +
+    0.0722 * linearize(blue)
+  );
+}
+
 function colorResolutionContextFor(context: unknown): ColorResolutionContext {
   return context === null || context === undefined
     ? {}
@@ -3688,6 +3783,8 @@ export function serializeColorValue(
       return serializeDeviceCmykFn(value);
     case ColorKind.LightDarkColor:
       return serializeLightDarkColor(value);
+    case ColorKind.ContrastColorFn:
+      return serializeContrastColorFn(value);
     case ColorKind.RgbFn:
     case ColorKind.HslFn:
     case ColorKind.HwbFn:
@@ -4000,6 +4097,10 @@ function serializeLightDarkColor(value: LightDarkColor): string {
   }, ${
     serializeColorValue(value.dark)
   })`;
+}
+
+function serializeContrastColorFn(value: ContrastColorFn): string {
+  return `contrast-color(${serializeColorValue(value.color)})`;
 }
 
 function serializeAbsoluteRgb(

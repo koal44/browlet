@@ -861,6 +861,104 @@ describe('color values', () => {
     )).toBe(currentColor);
   });
 
+  it('parses and serializes the contrast color production', () => {
+    const color = parseColorValue('CoNtRaSt-CoLoR(rebeccapurple)');
+
+    expect(color).toEqual({
+      kind: ColorKind.ContrastColorFn,
+      color: {
+        kind: ColorKind.Named,
+        name: 'rebeccapurple',
+      },
+    });
+    expect(serializeColorValue(color!))
+      .toBe('contrast-color(rebeccapurple)');
+  });
+
+  it.each([
+    'contrast-color()',
+    'contrast-color(1)',
+    'contrast-color(max)',
+    'contrast-color(max white)',
+    'contrast-color(white white)',
+    'contrast-color(red blue)',
+    'contrast-color(red, blue)',
+    'contrast-color(red / 0.5)',
+  ])('rejects invalid contrast color syntax %s', (input) => {
+    expect(parseColorValue(input)).toBeNull();
+  });
+
+  it.each([
+    ['white', 'rgb(0, 0, 0)'],
+    ['aliceblue', 'rgb(0, 0, 0)'],
+    ['mistyrose', 'rgb(0, 0, 0)'],
+    ['lightyellow', 'rgb(0, 0, 0)'],
+    ['palegreen', 'rgb(0, 0, 0)'],
+    ['darkblue', 'rgb(255, 255, 255)'],
+    ['maroon', 'rgb(255, 255, 255)'],
+    ['purple', 'rgb(255, 255, 255)'],
+    ['brown', 'rgb(255, 255, 255)'],
+    ['black', 'rgb(255, 255, 255)'],
+    ['rgb(255 255 255 / 0)', 'rgb(0, 0, 0)'],
+    ['device-cmyk(1 1 1 1)', 'rgb(255, 255, 255)'],
+  ])(
+    'chooses the maximum WCAG 2.1 contrast for %s',
+    (background, expected) => {
+      const color = parseColorValue(`contrast-color(${background})`)!;
+
+      expect(resolveColorValue(color, ValueStage.Declared)).toEqual(color);
+      expect(serializeColorValue(resolveColorValue(
+        color,
+        ValueStage.Computed,
+      ))).toBe(expected);
+    },
+  );
+
+  it('chooses white when black and white have equal contrast', () => {
+    const luminance = Math.sqrt(0.0525) - 0.05;
+    const component = 1.055 * luminance ** (1 / 2.4) - 0.055;
+    const color = parseColorValue(
+      `contrast-color(color(srgb ${component} ${component} ${component}))`,
+    )!;
+
+    expect(serializeColorValue(resolveColorValue(
+      color,
+      ValueStage.Computed,
+    ))).toBe('rgb(255, 255, 255)');
+  });
+
+  it('preserves contrast color until its input can be resolved', () => {
+    const color = parseColorValue('contrast-color(currentcolor)')!;
+    const computed = resolveColorValue(color, ValueStage.Computed);
+
+    expect(computed).toEqual(color);
+    expect(serializeColorValue(computed))
+      .toBe('contrast-color(currentcolor)');
+
+    const currentColor = resolveComputedAbsoluteColor('white');
+
+    expect(serializeColorValue(resolveColorValue(
+      computed,
+      ValueStage.Used,
+      { currentColor },
+    ))).toBe('rgb(0, 0, 0)');
+  });
+
+  it('uses color profile context only when contrast resolution needs it', () => {
+    const { profile } = testColorProfile();
+    const color = parseColorValue(
+      'contrast-color(color(--four-channel 1 1 1 0))',
+    )!;
+
+    expect(resolveColorValue(color, ValueStage.Computed))
+      .toMatchObject({ kind: ColorKind.ContrastColorFn });
+    expect(serializeColorValue(resolveColorValue(
+      color,
+      ValueStage.Computed,
+      { colorProfiles: new Map([[profile.space, profile]]) },
+    ))).toBe('rgb(0, 0, 0)');
+  });
+
   it('parses and serializes custom color space parameters', () => {
     const color = parseColorValue(
       'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)',
