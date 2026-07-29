@@ -4,6 +4,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import type { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -62,10 +63,15 @@ export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
 
 export function resolveAnglePercentage(
   value: AnglePercentageValue,
+  stage: ValueStage,
   context: MathContext = {},
 ): AnglePercentageValue {
   return value.type === 'math'
-    ? resolveMathValue(value, anglePercentageCalculationContext(context))
+    ? resolveMathValue(
+      value,
+      stage,
+      anglePercentageCalculationContext(context),
+    )
     : value;
 }
 

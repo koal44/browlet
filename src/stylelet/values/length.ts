@@ -4,6 +4,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import type { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -61,10 +62,11 @@ export const tryConsumeLength = createLengthConsumer();
 
 export function resolveLength(
   value: LengthValue,
+  stage: ValueStage,
   context: MathContext = {},
 ): LengthValue {
   return value.type === 'math'
-    ? resolveMathValue(value, context)
+    ? resolveMathValue(value, stage, context)
     : value;
 }
 

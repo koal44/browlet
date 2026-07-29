@@ -18,10 +18,7 @@ import {
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import {
-  isAtOrBeyondValueStage, type ValueStage,
-  type ValueStageContext,
-} from '../value-processing';
+import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
 import { ANGLE_UNITS, resolveAngle, type AngleLiteral } from './numeric-literal/angle';
 import {
@@ -79,7 +76,7 @@ export type MathRange = readonly [
   maximum: number,
 ];
 
-export type MathContext = ValueStageContext & {
+export type MathContext = {
   /** Value-processing stage at which math values should become literals. */
   unwrapMathAt?: ValueStage;
 
@@ -228,10 +225,15 @@ export function createMathValueConsumer<Type extends MathValueType>(
 
 export function resolveMathValue<Type extends MathValueType>(
   value: MathValue<Type>,
+  stage: ValueStage,
   context: MathContext = {},
 ): MathValue<Type> | MathLiteralByType[Type] {
-  const calculation = simplifyCalculationTree(value.calculation, context, value.valueType);
-  const stage = context.stage ?? 'declared';
+  const calculation = simplifyCalculationTree(
+    value.calculation,
+    stage,
+    context,
+    value.valueType,
+  );
   const unwrapMathAt = context.unwrapMathAt ?? 'computed';
 
   if (
@@ -357,7 +359,7 @@ function combineMathValues<Type extends MathValueType>(
       type: 'sum',
       children: [a.calculation, b.calculation],
       hints: mathHints,
-    }, context, valueType),
+    }, 'declared', context, valueType),
     valueType,
   );
 }
@@ -564,7 +566,7 @@ function tryConsumeCalc(
   }
 
   return ok(createMathValue(
-    simplifyCalculationTree(result.value, context, expectedType),
+    simplifyCalculationTree(result.value, 'declared', context, expectedType),
     expectedType,
   ));
 }
@@ -958,6 +960,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     return ok(simplifyCalculationTree(
       result.value,
+      'declared',
       context,
       valueType,
     ) as Node | NumericLeaf);
@@ -1399,6 +1402,7 @@ function tryConsumeCalcCalculation(
 
   return ok(simplifyCalculationTree(
     result.value,
+    'declared',
     mathContextFor(c.context),
   ));
 }
@@ -2046,11 +2050,11 @@ function enterCalculationContext(
 
 function simplifyCalculationTree(
   root: CalculationTree,
+  stage: ValueStage,
   context: InternalMathContext = {},
   valueType?: MathValueType,
 ): CalculationTree {
   const simplified = simplifyCalculationNode(root, context);
-  const stage = context.stage ?? 'declared';
 
   if (
     stage === 'declared' ||

@@ -6,11 +6,6 @@ export type ValueStage =
   | 'used'
   | 'actual';
 
-export type ValueStageContext = {
-  /** Value-processing stage whose available information is being applied. */
-  stage?: ValueStage;
-};
-
 export function isAtOrBeyondValueStage(
   stage: ValueStage,
   minimum: ValueStage,

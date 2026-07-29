@@ -4,6 +4,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import type { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -60,13 +61,14 @@ export const tryConsumeNumber = createNumberConsumer();
 
 export function resolveNumber(
   value: NumberValue,
+  stage: ValueStage,
   context: MathContext = {},
 ): NumberValue {
   if (value.type !== 'math') {
     return value;
   }
 
-  return resolveMathValue(value, context);
+  return resolveMathValue(value, stage, context);
 }
 
 export function serializeNumber(

@@ -2623,9 +2623,9 @@ describe('opacity values', () => {
     const number = parseOpacityValue('2')!;
     const percentage = parseOpacityValue('200%')!;
 
-    expect(resolveOpacityValue(number, { stage: 'specified' }))
+    expect(resolveOpacityValue(number, 'specified'))
       .toEqual(number);
-    expect(resolveOpacityValue(percentage, { stage: 'specified' }))
+    expect(resolveOpacityValue(percentage, 'specified'))
       .toEqual(percentage);
   });
 
@@ -2641,7 +2641,7 @@ describe('opacity values', () => {
     (input, expected) => {
       expect(resolveOpacityValue(
         parseOpacityValue(input)!,
-        { stage: 'computed' },
+        'computed',
       )).toEqual({
         type: 'number',
         value: expected,
@@ -2663,7 +2663,7 @@ describe('opacity values', () => {
     (input, expected) => {
       expect(resolveOpacityValue(
         parseOpacityValue(input)!,
-        { stage: 'computed' },
+        'computed',
       )).toEqual({
         type: 'number',
         value: expected,
@@ -2674,14 +2674,12 @@ describe('opacity values', () => {
   it('uses the caller math-unwrapping policy', () => {
     const value = parseOpacityValue('calc(0.25 + 0.25)')!;
 
-    expect(resolveOpacityValue(value, {
-      stage: 'computed',
+    expect(resolveOpacityValue(value, 'computed', {
       unwrapMathAt: 'used',
     })).toMatchObject({
       type: 'math',
     });
-    expect(resolveOpacityValue(value, {
-      stage: 'computed',
+    expect(resolveOpacityValue(value, 'computed', {
       unwrapMathAt: 'computed',
     })).toEqual({
       type: 'number',
@@ -2730,9 +2728,7 @@ describe('opacity values', () => {
       const value = parseOpacityValue(input)!;
 
       expect(serializeOpacityValue(value)).toBe(specified);
-      expect(serializeOpacityValue(resolveOpacityValue(value, {
-        stage: 'computed',
-      }))).toBe(computed);
+      expect(serializeOpacityValue(resolveOpacityValue(value, 'computed'))).toBe(computed);
     },
   );
 

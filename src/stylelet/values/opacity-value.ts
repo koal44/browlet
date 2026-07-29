@@ -5,7 +5,7 @@ import {
   type TryComponentConsumer,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { isAtOrBeyondValueStage } from '../value-processing';
+import { isAtOrBeyondValueStage, type ValueStage } from '../value-processing';
 import type { MathContext } from './math-value';
 import {
   accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,
@@ -46,16 +46,16 @@ export const tryConsumeOpacityValue: TryComponentConsumer<OpacityValue> = oneOf(
 
 export function resolveOpacityValue(
   value: OpacityValue,
+  stage: ValueStage,
   context: MathContext = {},
 ): OpacityValue {
-  const stage = context.stage ?? 'declared';
   const calculationContext: MathContext = {
     ...context,
     unwrapMathAt: context.unwrapMathAt ?? 'computed',
   };
   const resolved = isNumberOpacityValue(value)
-    ? resolveNumber(value, calculationContext)
-    : resolvePercentage(value, calculationContext);
+    ? resolveNumber(value, stage, calculationContext)
+    : resolvePercentage(value, stage, calculationContext);
 
   if (
     resolved.type === 'math' ||

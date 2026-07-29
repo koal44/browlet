@@ -74,19 +74,19 @@ describe('number values', () => {
     });
     expect(serializeNumber(value!)).toBe('calc(3)');
     expect(serializeNumber(
-      resolveNumber(value!, { stage: 'computed' }),
+      resolveNumber(value!, 'computed'),
     )).toBe('3');
   });
 
   it('resolves a math value to a number at computed-value time', () => {
     const value = parseNumber('calc(1 + 2)')!;
 
-    expect(resolveNumber(value)).toEqual(value);
-    expect(resolveNumber(value, { unwrapMathAt: 'declared' })).toEqual({
+    expect(resolveNumber(value, 'declared')).toEqual(value);
+    expect(resolveNumber(value, 'declared', { unwrapMathAt: 'declared' })).toEqual({
       type: 'number',
       value: 3,
     });
-    expect(resolveNumber(value, { stage: 'computed' })).toEqual({
+    expect(resolveNumber(value, 'computed')).toEqual({
       type: 'number',
       value: 3,
     });
@@ -117,26 +117,23 @@ describe('number values', () => {
     const specifiedMath = new ComponentCursor(
       parseListOfComponentValues('calc(2)'),
     );
-    const computedMath = new ComponentCursor(
-      parseListOfComponentValues('calc(2)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseNumber('calc(2)')!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(consume(computedMath)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'number',
-          value: 1,
-        },
-      },
+    expect(resolveNumber(math, 'specified', {
+      range: [0, 1],
+    })).toBe(math);
+    expect(resolveNumber(math, 'computed', {
+      range: [0, 1],
+    })).toEqual({
+      type: 'number',
+      value: 1,
     });
   });
 
   it('does not mutate the surrounding calculation context', () => {
-    const context = { stage: 'computed' } as const;
+    const context = { marker: true } as const;
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(1 + 2)'),
       { context },
@@ -198,8 +195,8 @@ describe('angle values', () => {
   it('resolves math values as canonical angles at the computed-value stage', () => {
     const value = parseAngle('calc(.5turn + 180deg)')!;
 
-    expect(resolveAngle(value)).toEqual(value);
-    expect(resolveAngle(value, { stage: 'computed' })).toEqual({
+    expect(resolveAngle(value, 'declared')).toEqual(value);
+    expect(resolveAngle(value, 'computed')).toEqual({
       type: 'angle',
       value: 360,
       unit: 'deg',
@@ -235,8 +232,8 @@ describe('frequency values', () => {
   it('resolves math values as canonical frequencies at the computed-value stage', () => {
     const value = parseFrequency('calc(1khz + 500hz)')!;
 
-    expect(resolveFrequency(value)).toEqual(value);
-    expect(resolveFrequency(value, { stage: 'computed' })).toEqual({
+    expect(resolveFrequency(value, 'declared')).toEqual(value);
+    expect(resolveFrequency(value, 'computed')).toEqual({
       type: 'frequency',
       value: 1500,
       unit: 'hz',
@@ -273,8 +270,8 @@ describe('length values', () => {
   it('resolves math values as canonical lengths at the computed-value stage', () => {
     const value = parseLength('calc(1in + 96px)')!;
 
-    expect(resolveLength(value)).toEqual(value);
-    expect(resolveLength(value, { stage: 'computed' })).toEqual({
+    expect(resolveLength(value, 'declared')).toEqual(value);
+    expect(resolveLength(value, 'computed')).toEqual({
       type: 'length',
       value: 192,
       unit: 'px',
@@ -299,21 +296,15 @@ describe('length values', () => {
     const specified = new ComponentCursor(
       parseListOfComponentValues('calc(-1px)'),
     );
-    const computed = new ComponentCursor(
-      parseListOfComponentValues('calc(-1px)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseLength('calc(-1px)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(consume(computed)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'dimension',
-          value: 0,
-          unit: 'px',
-        },
-      },
+    expect(resolveLength(math, 'computed', {
+      range: [0, Infinity],
+    })).toEqual({
+      type: 'length',
+      value: 0,
+      unit: 'px',
     });
   });
 });
@@ -333,8 +324,8 @@ describe('resolution values', () => {
   it('resolves math values as canonical resolutions at the computed-value stage', () => {
     const value = parseResolution('calc(96dpi + 1dppx)')!;
 
-    expect(resolveResolution(value)).toEqual(value);
-    expect(resolveResolution(value, { stage: 'computed' })).toEqual({
+    expect(resolveResolution(value, 'declared')).toEqual(value);
+    expect(resolveResolution(value, 'computed')).toEqual({
       type: 'resolution',
       value: 2,
       unit: 'dppx',
@@ -357,7 +348,14 @@ describe('resolution values', () => {
   });
 
   it('clamps math results to the nonnegative resolution range', () => {
-    const value = parseResolution('calc(-1dppx)', { stage: 'computed' });
+    const value = resolveResolution(
+      parseResolution('calc(-1dppx)')!,
+      'computed',
+      {
+        range: [0, Infinity],
+        unwrapMathAt: 'actual',
+      },
+    );
 
     expect(value).toMatchObject({
       type: 'math',
@@ -385,8 +383,8 @@ describe('time values', () => {
   it('resolves math values as canonical times at the computed-value stage', () => {
     const value = parseTime('calc(1000ms + 1s)')!;
 
-    expect(resolveTime(value)).toEqual(value);
-    expect(resolveTime(value, { stage: 'computed' })).toEqual({
+    expect(resolveTime(value, 'declared')).toEqual(value);
+    expect(resolveTime(value, 'computed')).toEqual({
       type: 'time',
       value: 2,
       unit: 's',
@@ -427,7 +425,11 @@ describe('integer values', () => {
   });
 
   it('rounds math results at the computed-value stage', () => {
-    const value = parseInteger('calc(1.5)', { stage: 'computed' });
+    const value = resolveInteger(
+      parseInteger('calc(1.5)')!,
+      'computed',
+      { unwrapMathAt: 'actual' },
+    );
 
     expect(value).toMatchObject({
       type: 'math',
@@ -437,15 +439,15 @@ describe('integer values', () => {
       },
     });
     expect(serializeInteger(
-      resolveInteger(value!, { stage: 'computed' }),
+      resolveInteger(value, 'computed'),
     )).toBe('2');
   });
 
   it('resolves math values as integers at the computed-value stage', () => {
     const value = parseInteger('calc(1.5)')!;
 
-    expect(resolveInteger(value)).toEqual(value);
-    expect(resolveInteger(value, { stage: 'computed' })).toEqual({
+    expect(resolveInteger(value, 'declared')).toEqual(value);
+    expect(resolveInteger(value, 'computed')).toEqual({
       type: 'integer',
       value: 2,
     });
@@ -466,21 +468,15 @@ describe('integer values', () => {
     const specifiedMath = new ComponentCursor(
       parseListOfComponentValues('calc(3)'),
     );
-    const computedMath = new ComponentCursor(
-      parseListOfComponentValues('calc(3)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseInteger('calc(3)')!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(consume(computedMath)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'number',
-          value: 2,
-        },
-      },
+    expect(resolveInteger(math, 'computed', {
+      range: [0, 2],
+    })).toEqual({
+      type: 'integer',
+      value: 2,
     });
   });
 
@@ -500,11 +496,10 @@ describe('integer values', () => {
       a,
       math,
       0.5,
-      { stage: 'computed' },
     );
 
     expect(serializeInteger(
-      resolveInteger(interpolated, { stage: 'computed' }),
+      resolveInteger(interpolated, 'computed'),
     )).toBe('2');
     expect(serializeInteger(accumulateIntegers(a, math))).toBe('calc(3)');
   });
@@ -528,16 +523,15 @@ describe('percentage values', () => {
     });
     expect(serializePercentage(value!)).toBe('calc(30%)');
     expect(serializePercentage(
-      resolvePercentage(value!, { stage: 'computed' }),
+      resolvePercentage(value!, 'computed'),
     )).toBe('30%');
   });
 
   it('resolves math values as percentages at the computed-value stage', () => {
     const value = parsePercentage('calc(10% + 20%)')!;
 
-    expect(resolvePercentage(value)).toEqual(value);
-    expect(resolvePercentage(value, {
-      stage: 'computed',
+    expect(resolvePercentage(value, 'declared')).toEqual(value);
+    expect(resolvePercentage(value, 'computed', {
       percentHint: 'length',
     })).toEqual({
       type: 'percentage',
@@ -581,21 +575,15 @@ describe('percentage values', () => {
     const specifiedMath = new ComponentCursor(
       parseListOfComponentValues('calc(125%)'),
     );
-    const computedMath = new ComponentCursor(
-      parseListOfComponentValues('calc(125%)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parsePercentage('calc(125%)')!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
-    expect(consume(computedMath)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'percentage',
-          value: 100,
-        },
-      },
+    expect(resolvePercentage(math, 'computed', {
+      range: [0, 100],
+    })).toEqual({
+      type: 'percentage',
+      value: 100,
     });
   });
 
@@ -648,12 +636,11 @@ describe('angle-percentage values', () => {
     const mixed = parseAnglePercentage('calc(10deg + 25%)')!;
     const percentage = parseAnglePercentage('calc(25%)')!;
 
-    expect(resolveAnglePercentage(mixed, { stage: 'computed' })).toEqual(mixed);
-    expect(resolveAnglePercentage(mixed, {
-      stage: 'computed',
+    expect(resolveAnglePercentage(mixed, 'computed')).toEqual(mixed);
+    expect(resolveAnglePercentage(mixed, 'computed', {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'deg' },
     })).toEqual({ type: 'angle', value: 60, unit: 'deg' });
-    expect(resolveAnglePercentage(percentage, { stage: 'computed' }))
+    expect(resolveAnglePercentage(percentage, 'computed'))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -717,21 +704,15 @@ describe('angle-percentage values', () => {
     const specified = new ComponentCursor(
       parseListOfComponentValues('calc(-10deg)'),
     );
-    const computed = new ComponentCursor(
-      parseListOfComponentValues('calc(-10deg)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseAnglePercentage('calc(-10deg)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(consume(computed)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'dimension',
-          value: 0,
-          unit: 'deg',
-        },
-      },
+    expect(resolveAnglePercentage(math, 'computed', {
+      range: [0, Infinity],
+    })).toEqual({
+      type: 'angle',
+      value: 0,
+      unit: 'deg',
     });
   });
 });
@@ -765,12 +746,11 @@ describe('length-percentage values', () => {
     const mixed = parseLengthPercentage('calc(10px + 25%)')!;
     const percentage = parseLengthPercentage('calc(25%)')!;
 
-    expect(resolveLengthPercentage(mixed, { stage: 'computed' })).toEqual(mixed);
-    expect(resolveLengthPercentage(mixed, {
-      stage: 'computed',
+    expect(resolveLengthPercentage(mixed, 'computed')).toEqual(mixed);
+    expect(resolveLengthPercentage(mixed, 'computed', {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
     })).toEqual({ type: 'length', value: 60, unit: 'px' });
-    expect(resolveLengthPercentage(percentage, { stage: 'computed' }))
+    expect(resolveLengthPercentage(percentage, 'computed'))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -836,21 +816,15 @@ describe('length-percentage values', () => {
     const specified = new ComponentCursor(
       parseListOfComponentValues('calc(-10px)'),
     );
-    const computed = new ComponentCursor(
-      parseListOfComponentValues('calc(-10px)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseLengthPercentage('calc(-10px)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(consume(computed)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'dimension',
-          value: 0,
-          unit: 'px',
-        },
-      },
+    expect(resolveLengthPercentage(math, 'computed', {
+      range: [0, Infinity],
+    })).toEqual({
+      type: 'length',
+      value: 0,
+      unit: 'px',
     });
   });
 });
@@ -884,13 +858,12 @@ describe('frequency-percentage values', () => {
     const mixed = parseFrequencyPercentage('calc(10hz + 25%)')!;
     const percentage = parseFrequencyPercentage('calc(25%)')!;
 
-    expect(resolveFrequencyPercentage(mixed, { stage: 'computed' }))
+    expect(resolveFrequencyPercentage(mixed, 'computed'))
       .toEqual(mixed);
-    expect(resolveFrequencyPercentage(mixed, {
-      stage: 'computed',
+    expect(resolveFrequencyPercentage(mixed, 'computed', {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 'hz' },
     })).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
-    expect(resolveFrequencyPercentage(percentage, { stage: 'computed' }))
+    expect(resolveFrequencyPercentage(percentage, 'computed'))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -956,21 +929,15 @@ describe('frequency-percentage values', () => {
     const specified = new ComponentCursor(
       parseListOfComponentValues('calc(-10hz)'),
     );
-    const computed = new ComponentCursor(
-      parseListOfComponentValues('calc(-10hz)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseFrequencyPercentage('calc(-10hz)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(consume(computed)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'dimension',
-          value: 0,
-          unit: 'hz',
-        },
-      },
+    expect(resolveFrequencyPercentage(math, 'computed', {
+      range: [0, Infinity],
+    })).toEqual({
+      type: 'frequency',
+      value: 0,
+      unit: 'hz',
     });
   });
 });
@@ -1004,12 +971,11 @@ describe('time-percentage values', () => {
     const mixed = parseTimePercentage('calc(10s + 25%)')!;
     const percentage = parseTimePercentage('calc(25%)')!;
 
-    expect(resolveTimePercentage(mixed, { stage: 'computed' })).toEqual(mixed);
-    expect(resolveTimePercentage(mixed, {
-      stage: 'computed',
+    expect(resolveTimePercentage(mixed, 'computed')).toEqual(mixed);
+    expect(resolveTimePercentage(mixed, 'computed', {
       percentageReferenceValue: { type: 'dimension', value: 200, unit: 's' },
     })).toEqual({ type: 'time', value: 60, unit: 's' });
-    expect(resolveTimePercentage(percentage, { stage: 'computed' }))
+    expect(resolveTimePercentage(percentage, 'computed'))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
@@ -1075,21 +1041,15 @@ describe('time-percentage values', () => {
     const specified = new ComponentCursor(
       parseListOfComponentValues('calc(-10s)'),
     );
-    const computed = new ComponentCursor(
-      parseListOfComponentValues('calc(-10s)'),
-      { context: { stage: 'computed' } },
-    );
+    const math = parseTimePercentage('calc(-10s)')!;
 
     expect(consume(specified)).toMatchObject({ kind: 'ok' });
-    expect(consume(computed)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'dimension',
-          value: 0,
-          unit: 's',
-        },
-      },
+    expect(resolveTimePercentage(math, 'computed', {
+      range: [0, Infinity],
+    })).toEqual({
+      type: 'time',
+      value: 0,
+      unit: 's',
     });
   });
 });

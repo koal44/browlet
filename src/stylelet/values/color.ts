@@ -409,6 +409,7 @@ export function tryConsumeColor(
     ? result
     : ok(resolveColorValue(
       result.value,
+      'declared',
       colorResolutionContextFor(c.context),
     ));
 }
@@ -2288,10 +2289,9 @@ const consumeQuirkyColor: TryComponentConsumer<HexColor> = (c) => {
 
 export function resolveColorValue(
   value: ColorValue,
+  stage: ValueStage,
   context: ColorResolutionContext = {},
 ): ColorValue {
-  const stage = context.stage ?? 'declared';
-
   switch (value.kind) {
     case ColorKind.Absolute:
       return value;
@@ -2330,9 +2330,9 @@ export function resolveColorValue(
     case ColorKind.OklchFn:
     case ColorKind.AlphaFn:
     case ColorKind.ColorFn:
-      return resolveColorFunction(value, context);
+      return resolveColorFunction(value, stage, context);
     case ColorKind.ColorMixFn:
-      return resolveColorMixFn(value, context);
+      return resolveColorMixFn(value, stage, context);
     default:
       return assertNever(value);
   }
@@ -2370,12 +2370,13 @@ function resolveHexColor(value: HexColor): AbsoluteColor {
 
 function resolveColorMixFn(
   value: ColorMixFn,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
   const [first, ...rest] = value.items;
   const items: [ColorMixItem, ...ColorMixItem[]] = [
-    resolveColorMixItem(first, context),
-    ...rest.map((item) => resolveColorMixItem(item, context)),
+    resolveColorMixItem(first, stage, context),
+    ...rest.map((item) => resolveColorMixItem(item, stage, context)),
   ];
   const resolved = items.every(
     (item, index) => item === value.items[index],
@@ -2384,7 +2385,7 @@ function resolveColorMixFn(
     : { ...value, items };
 
   if (
-    !isComputedColorStage(context.stage ?? 'declared') ||
+    !isComputedColorStage(stage) ||
     !items.every(isResolvedColorMixItem)
   ) {
     return resolved;
@@ -2395,12 +2396,13 @@ function resolveColorMixFn(
 
 function resolveColorMixItem(
   item: ColorMixItem,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorMixItem {
-  const color = resolveColorValue(item.color, context);
+  const color = resolveColorValue(item.color, stage, context);
   const percentage = item.percentage === undefined
     ? undefined
-    : resolvePercentage(item.percentage, {
+    : resolvePercentage(item.percentage, stage, {
       ...colorCalculationContext(context, 'computed'),
       range: [0, 100],
     });
@@ -2442,14 +2444,15 @@ const COLOR_METADATA = {
 
 function resolveColorFunction(
   value: ColorFunction,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
   if (value.origin !== undefined) {
-    return resolveRelativeFn(value, value.origin, context);
+    return resolveRelativeFn(value, value.origin, stage, context);
   }
 
   const alpha = value.alpha;
-  const resolvedAlpha = resolveColorAlphaValue(alpha, context);
+  const resolvedAlpha = resolveColorAlphaValue(alpha, stage, context);
   const resolvedValue = resolvedAlpha === alpha
     ? value
     : { ...value, alpha: resolvedAlpha };
@@ -2459,6 +2462,7 @@ function resolveColorFunction(
       return resolveRgbFn(
         resolvedValue,
         resolvedAlpha,
+        stage,
         context,
       );
     case ColorKind.HslFn:
@@ -2470,10 +2474,16 @@ function resolveColorFunction(
       return resolveMetadataColorFn(
         resolvedValue,
         resolvedAlpha,
+        stage,
         context,
       );
     case ColorKind.ColorFn:
-      return resolveColorFn(resolvedValue, resolvedAlpha, context);
+      return resolveColorFn(
+        resolvedValue,
+        resolvedAlpha,
+        stage,
+        context,
+      );
     case ColorKind.AlphaFn:
       throw new TypeError('Alpha functions require an origin color');
     default:
@@ -2484,19 +2494,21 @@ function resolveColorFunction(
 function resolveRelativeFn(
   value: RelativeColorFn,
   originValue: ColorValue,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
   if (value.kind === ColorKind.AlphaFn) {
-    return resolveAlphaFn(value, context);
+    return resolveAlphaFn(value, stage, context);
   }
 
   if (value.kind === ColorKind.ColorFn) {
-    return resolveRelativeColorFn(value, originValue, context);
+    return resolveRelativeColorFn(value, originValue, stage, context);
   }
 
   const metadata = COLOR_METADATA[value.kind];
   const prepared = prepareRelativeColorResolution(
     originValue,
+    stage,
     context,
     metadata,
   );
@@ -2514,6 +2526,7 @@ function resolveRelativeFn(
       component,
       index,
       convertedOrigin,
+      stage,
       calculationContext,
       metadata,
     ),
@@ -2521,6 +2534,7 @@ function resolveRelativeFn(
   const alpha = resolveRelativeColorAlpha(
     value.alpha,
     convertedOrigin,
+    stage,
     calculationContext,
     metadata,
   );
@@ -2556,9 +2570,10 @@ function resolveRelativeFn(
 function resolveRelativeColorFn(
   value: ColorFn,
   originValue: ColorValue,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
-  const origin = resolveColorValue(originValue, context);
+  const origin = resolveColorValue(originValue, stage, context);
   const profile = colorProfileFor(value.space, context);
 
   if (origin.kind !== ColorKind.Absolute || profile === undefined) {
@@ -2593,6 +2608,7 @@ function resolveRelativeColorFn(
     (component) => resolveRelativeColorFnComponent(
       component,
       variables,
+      stage,
       calculationContext,
     ),
   );
@@ -2600,6 +2616,7 @@ function resolveRelativeColorFn(
     value.alpha,
     variables,
     normalizedOrigin.alpha,
+    stage,
     calculationContext,
   );
   const resolved: ColorFn = {
@@ -2633,6 +2650,7 @@ function resolveRelativeFnComponent(
   component: ClampableColorComponentValue,
   index: number,
   origin: AbsoluteColor,
+  stage: ValueStage,
   context: MathContext,
   metadata: ColorMetadata,
 ): ClampableColorComponentValue {
@@ -2642,12 +2660,14 @@ function resolveRelativeFnComponent(
     ? normalizeHueValue(resolveRelativeColorHue(
       component as SyntaxHueComponent,
       origin,
+      stage,
       context,
       metadata,
     ))
     : resolveRelativeColorComponent(
       component as SyntaxColorComponent,
       origin,
+      stage,
       context,
       metadata,
     );
@@ -2693,9 +2713,10 @@ function scaleFnComponent(
 
 function resolveAlphaFn(
   value: AlphaFn,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
-  const origin = resolveColorValue(value.origin, context);
+  const origin = resolveColorValue(value.origin, stage, context);
 
   if (origin.kind !== ColorKind.Absolute) {
     return origin === value.origin
@@ -2719,6 +2740,7 @@ function resolveAlphaFn(
   const alpha = resolveRelativeColorAlpha(
     value.alpha,
     normalizedOrigin,
+    stage,
     calculationContext,
     null,
   );
@@ -2749,6 +2771,7 @@ function resolveAlphaFn(
 function resolveRgbFn(
   value: RgbFn,
   alpha: SyntaxAlphaComponent,
+  stage: ValueStage,
   context: MathContext,
 ): AbsoluteColor | RgbFn | ColorFn {
   const { components: values } = value;
@@ -2775,13 +2798,14 @@ function resolveRgbFn(
 
   const components = resolveColorComponents(
     values,
+    stage,
     context,
     metadata.resolveAt,
   );
   const clamped = clampColorComponents(
     components,
     metadata,
-    context,
+    stage,
   );
 
   if (hasDeferredColorComponents(clamped)) {
@@ -2854,6 +2878,7 @@ function is8BitRgbComponent(
 function resolveMetadataColorFn(
   value: MetadataColorFn,
   alpha: SyntaxAlphaComponent,
+  stage: ValueStage,
   context: MathContext,
 ): AbsoluteColor | MetadataColorFn {
   const metadata = COLOR_METADATA[value.kind];
@@ -2862,11 +2887,12 @@ function resolveMetadataColorFn(
     (component, index) => resolveMetadataColorFnComponent(
       component,
       index,
+      stage,
       context,
       metadata,
     ),
   ) as typeof value.components;
-  const clamped = clampColorComponents(resolved, metadata, context);
+  const clamped = clampColorComponents(resolved, metadata, stage);
   const normalized = normalizeFnComponents(clamped, metadata);
 
   if (
@@ -2897,6 +2923,7 @@ function resolveMetadataColorFn(
 function resolveMetadataColorFnComponent(
   component: ClampableColorComponentValue,
   index: number,
+  stage: ValueStage,
   context: MathContext,
   metadata: ColorMetadata,
 ): ClampableColorComponentValue {
@@ -2905,11 +2932,13 @@ function resolveMetadataColorFnComponent(
   return componentMetadata.isHue
     ? resolveHue(
       component as SyntaxHueComponent,
+      stage,
       context,
       metadata.resolveAt,
     )
     : resolveColorComponent(
       component as SyntaxColorComponent,
+      stage,
       context,
       metadata.resolveAt,
     );
@@ -2938,23 +2967,25 @@ function convertToLegacySrgb(value: AbsoluteColor): AbsoluteColor {
 function resolveColorFn(
   value: ColorFn,
   alpha: SyntaxAlphaComponent,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): AbsoluteColor | ColorFn {
   const space = value.space === 'xyz' ? 'xyz-d65' : value.space;
   const isCustom = isCustomColorProfileSpace(space);
-  const isComputed = isComputedColorStage(context.stage ?? 'declared');
+  const isComputed = isComputedColorStage(stage);
   const metadata = isCustom && isComputed
     ? CUSTOM_COLOR_FN_METADATA
     : COLOR_METADATA[ColorKind.ColorFn];
   const components = resolveColorComponents(
     value.components,
+    stage,
     context,
     metadata.resolveAt,
   );
   const clamped = clampColorComponents(
     components,
     metadata,
-    context,
+    stage,
   );
   const canonical = canonicalizeFnComponents(clamped, metadata);
   const resolved = {
@@ -3025,6 +3056,7 @@ function resolveColorComponents<
   const Values extends SyntaxColorComponent[],
 >(
   values: Values,
+  stage: ValueStage,
   context: MathContext,
   unwrapMathAt: ValueStage = 'declared',
 ): { [Index in keyof Values]: SyntaxColorComponent } {
@@ -3032,6 +3064,7 @@ function resolveColorComponents<
     values,
     (value) => resolveColorComponent(
       value,
+      stage,
       context,
       unwrapMathAt,
     ),
@@ -3040,6 +3073,7 @@ function resolveColorComponents<
 
 function resolveColorComponent(
   value: SyntaxColorComponent,
+  stage: ValueStage,
   context: MathContext,
   unwrapMathAt: ValueStage,
 ): SyntaxColorComponent {
@@ -3047,7 +3081,7 @@ function resolveColorComponent(
     return value;
   }
 
-  return resolveColorNumericValue(value, context, unwrapMathAt);
+  return resolveColorNumericValue(value, stage, context, unwrapMathAt);
 }
 
 function hasDeferredColorComponents(
@@ -3099,6 +3133,7 @@ function scaleColorComponent(
 
 function resolveColorAlphaValue(
   value: SyntaxAlphaComponent | undefined,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): SyntaxAlphaComponent {
   if (value === undefined) {
@@ -3115,8 +3150,8 @@ function resolveColorAlphaValue(
 
   const calculationContext = colorCalculationContext(context, 'computed');
   const resolved = isNumberValue(value)
-    ? resolveNumber(value, calculationContext)
-    : resolvePercentage(value, calculationContext);
+    ? resolveNumber(value, stage, calculationContext)
+    : resolvePercentage(value, stage, calculationContext);
 
   if (resolved.type === 'math') {
     return resolved.valueType === 'percentage'
@@ -3146,6 +3181,7 @@ function isDeferredColorAlpha(
 
 function resolveHue(
   value: SyntaxHueComponent,
+  stage: ValueStage,
   context: MathContext,
   unwrapMathAt: ValueStage = 'declared',
 ): SyntaxHueComponent {
@@ -3155,8 +3191,8 @@ function resolveHue(
 
   const calculationContext = colorCalculationContext(context, unwrapMathAt);
   return isNumberValue(value)
-    ? resolveNumber(value, calculationContext)
-    : resolveAngle(value, calculationContext);
+    ? resolveNumber(value, stage, calculationContext)
+    : resolveAngle(value, stage, calculationContext);
 }
 
 function scaleHue(
@@ -3194,6 +3230,7 @@ function normalizeHueValue(
 
 function resolveColorNumericValue(
   value: NumberValue | PercentageValue,
+  stage: ValueStage,
   context: MathContext,
   unwrapMathAt: ValueStage,
 ): NumberValue | PercentageValue {
@@ -3203,8 +3240,8 @@ function resolveColorNumericValue(
   );
 
   return isNumberValue(value)
-    ? resolveNumber(value, calculationContext)
-    : resolvePercentage(value, calculationContext);
+    ? resolveNumber(value, stage, calculationContext)
+    : resolvePercentage(value, stage, calculationContext);
 }
 
 function colorCalculationContext(
@@ -3234,10 +3271,10 @@ function clampColorComponents<
 >(
   components: Values,
   metadata: ColorMetadata,
-  context: MathContext,
+  stage: ValueStage,
 ): { [Index in keyof Values]: Values[Index] } {
   const clampNonFinite = isAtOrBeyondValueStage(
-    context.stage ?? 'declared',
+    stage,
     metadata.resolveAt,
   );
 
@@ -5721,6 +5758,7 @@ function relativeColorNumericVariables(
 
 function prepareRelativeColorResolution(
   originValue: ColorValue,
+  stage: ValueStage,
   context: ColorResolutionContext,
   metadata: ColorMetadata,
 ): PreparedRelativeColorResolution {
@@ -5730,7 +5768,7 @@ function prepareRelativeColorResolution(
     throw new TypeError('Relative color metadata requires a color space');
   }
 
-  const origin = resolveColorValue(originValue, context);
+  const origin = resolveColorValue(originValue, stage, context);
 
   if (origin.kind !== ColorKind.Absolute) {
     return { origin };
@@ -5804,6 +5842,7 @@ function relativeColorNumericVariable(
 function resolveRelativeColorFnComponent(
   value: SyntaxColorComponent,
   origin: RelativeColorFnValues,
+  stage: ValueStage,
   context: MathContext,
 ): SyntaxColorComponent {
   const name = value !== 'none' && value.type === 'math'
@@ -5811,7 +5850,7 @@ function resolveRelativeColorFnComponent(
     : null;
 
   return name === null
-    ? resolveColorComponent(value, context, 'computed')
+    ? resolveColorComponent(value, stage, context, 'computed')
     : relativeColorValue(origin, name);
 }
 
@@ -5819,6 +5858,7 @@ function resolveRelativeColorFnAlpha(
   value: SyntaxAlphaComponent | undefined,
   origin: RelativeColorFnValues,
   originAlpha: number | undefined,
+  stage: ValueStage,
   context: ColorResolutionContext,
 ): SyntaxAlphaComponent {
   if (value === undefined) {
@@ -5833,6 +5873,7 @@ function resolveRelativeColorFnAlpha(
 
   return resolveColorAlphaValue(
     name === null ? value : relativeColorValue(origin, name),
+    stage,
     context,
   );
 }
@@ -5840,6 +5881,7 @@ function resolveRelativeColorFnAlpha(
 function resolveRelativeColorComponent(
   value: SyntaxColorComponent,
   origin: AbsoluteColor,
+  stage: ValueStage,
   context: MathContext,
   metadata: ColorMetadata,
 ): SyntaxColorComponent {
@@ -5849,25 +5891,27 @@ function resolveRelativeColorComponent(
     return relativeColorChannelValue(channelName, origin, metadata);
   }
 
-  return resolveColorComponent(value, context, 'computed');
+  return resolveColorComponent(value, stage, context, 'computed');
 }
 
 function resolveRelativeColorHue(
   value: SyntaxHueComponent,
   origin: AbsoluteColor,
+  stage: ValueStage,
   context: MathContext,
   metadata: ColorMetadata,
 ): SyntaxHueComponent {
   const channelName = promotedRelativeColorChannelName(value, metadata);
 
   return channelName === null
-    ? resolveHue(value, context, 'computed')
+    ? resolveHue(value, stage, context, 'computed')
     : relativeColorChannelValue(channelName, origin, metadata);
 }
 
 function resolveRelativeColorAlpha(
   value: SyntaxAlphaComponent | undefined,
   origin: AbsoluteColor,
+  stage: ValueStage,
   context: ColorResolutionContext,
   metadata: ColorMetadata | null,
 ): SyntaxAlphaComponent {
@@ -5882,6 +5926,7 @@ function resolveRelativeColorAlpha(
     channelName === null
       ? value
       : relativeColorChannelValue(channelName, origin, metadata),
+    stage,
     context,
   );
 }
