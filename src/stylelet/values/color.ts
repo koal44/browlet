@@ -2945,22 +2945,17 @@ function resolveColorMixFn(
   stage: ValueStage,
   context: ColorResolutionContext,
 ): ColorValue {
-  const canonical = canonicalizeColorMixFn(value);
-  const [first, ...rest] = canonical.items;
-  const items: [ColorMixItem, ...ColorMixItem[]] = [
-    resolveColorMixItem(first, stage, context),
-    ...rest.map((item) => resolveColorMixItem(item, stage, context)),
-  ];
-
-  if (items.some(({ color }) => colorValueUsesCurrentColor(color))) {
-    return canonical;
-  }
-
-  const resolved = items.every(
-    (item, index) => item === canonical.items[index],
+  const method = canonicalizeColorMixMethod(value.method);
+  const items = canonicalizeColorMixPercentages(mapTuple(
+    value.items,
+    (item) => resolveColorMixItem(item, stage, context),
+  ));
+  const resolved = (
+    method === value.method &&
+    items.every((item, index) => item === value.items[index])
   )
-    ? canonical
-    : { ...canonical, items };
+    ? value
+    : { ...value, method, items };
 
   if (
     stage < ValueStage.Computed ||
@@ -2969,16 +2964,7 @@ function resolveColorMixFn(
     return resolved;
   }
 
-  return calculateColorMix(items, canonical.method, context);
-}
-
-function canonicalizeColorMixFn(value: ColorMixFn): ColorMixFn {
-  const method = canonicalizeColorMixMethod(value.method);
-  const items = canonicalizeColorMixPercentages(value.items);
-
-  return method === value.method && items === value.items
-    ? value
-    : { ...value, method, items };
+  return calculateColorMix(items, method, context);
 }
 
 function canonicalizeColorMixMethod(
@@ -3027,39 +3013,6 @@ function canonicalizeColorMixPercentages(
   return canonical.every((item, index) => item === items[index])
     ? items
     : canonical;
-}
-
-function colorValueUsesCurrentColor(value: ColorValue): boolean {
-  switch (value.kind) {
-    case ColorKind.CurrentColor:
-      return true;
-    case ColorKind.RgbFn:
-    case ColorKind.HslFn:
-    case ColorKind.HwbFn:
-    case ColorKind.LabFn:
-    case ColorKind.LchFn:
-    case ColorKind.OklabFn:
-    case ColorKind.OklchFn:
-    case ColorKind.AlphaFn:
-    case ColorKind.ColorFn:
-    case ColorKind.CustomColorFn:
-      return value.origin === undefined
-        ? false
-        : colorValueUsesCurrentColor(value.origin);
-    case ColorKind.ColorMixFn:
-      return value.items.some(
-        ({ color }) => colorValueUsesCurrentColor(color),
-      );
-    case ColorKind.LightDarkColor:
-      return (
-        colorValueUsesCurrentColor(value.light) ||
-        colorValueUsesCurrentColor(value.dark)
-      );
-    case ColorKind.ContrastColorFn:
-      return colorValueUsesCurrentColor(value.color);
-    default:
-      return false;
-  }
 }
 
 function resolveColorMixItem(

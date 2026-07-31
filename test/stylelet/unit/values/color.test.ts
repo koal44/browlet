@@ -2987,7 +2987,7 @@ describe('color values', () => {
     });
   });
 
-  it('preserves color-mix() while a color remains contextual', () => {
+  it('resolves other color-mix() items while preserving currentcolor', () => {
     const declared = parseColorValue(
       'color-mix(in srgb, currentcolor, blue)',
     )!;
@@ -2997,11 +2997,11 @@ describe('color values', () => {
       kind: ColorKind.ColorMixFn,
       items: [
         { color: { kind: ColorKind.CurrentColor } },
-        { color: { kind: ColorKind.Named } },
+        { color: { kind: ColorKind.Absolute, space: SPACES.srgb } },
       ],
     });
     expect(serializeColorValue(computed))
-      .toBe('color-mix(in srgb, currentcolor, blue)');
+      .toBe('color-mix(in srgb, currentcolor, rgb(0, 0, 255))');
 
     const currentColor = resolveColorValue(
       parseColorValue('red')!,
@@ -3023,7 +3023,18 @@ describe('color values', () => {
     });
   });
 
-  it('preserves nested color-mix() around currentcolor', () => {
+  it('completes mix percentages after resolving calculated percentages', () => {
+    const computed = resolveColorValue(parseColorValue(
+      'color-mix(in srgb, currentcolor calc(25%), blue)',
+    )!, ValueStage.Computed);
+
+    expect(serializeColorValue(computed)).toBe(
+      'color-mix('
+      + 'in srgb, currentcolor 25%, rgb(0, 0, 255) 75%)',
+    );
+  });
+
+  it('resolves other colors in nested color-mix() around currentcolor', () => {
     const declared = parseColorValue(
       'color-mix(in srgb, '
       + 'color-mix(in srgb, currentcolor, red), white)',
@@ -3044,7 +3055,9 @@ describe('color values', () => {
       kind: ColorKind.CurrentColor,
     });
     expect(serializeColorValue(computed)).toBe(
-      'color-mix(in srgb, color-mix(in srgb, currentcolor, red), white)',
+      'color-mix(in srgb, '
+      + 'color-mix(in srgb, currentcolor, rgb(255, 0, 0)), '
+      + 'rgb(255, 255, 255))',
     );
     expect(resolveColorValue(computed, ValueStage.Used, {
       currentColor,

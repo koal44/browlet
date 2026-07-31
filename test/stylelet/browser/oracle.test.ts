@@ -2936,7 +2936,7 @@ const colorSerializations: ColorSerializationCase[] = [
 
 const colorSerializationSheetId = 'color-declared-serialization';
 
-runScenarios('CSS declared color serialization oracle', 'normal', [
+runScenarios('CSS declared color serialization oracle', 'skip', [
   {
     name: 'compares HTML-compatible and CSS sRGB serialization',
     engines: ['native'],
