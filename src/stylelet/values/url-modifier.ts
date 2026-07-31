@@ -29,10 +29,64 @@ import { serializeCssString, tryConsumeString } from './string';
 
 /*
  * <url-modifier> = <request-url-modifier> | <unknown-url-modifier>
+ * <request-url-modifier> = <cross-origin-modifier>
+ *                        | <integrity-modifier>
+ *                        | <referrer-policy-modifier>
+ * <unknown-url-modifier> = <ident> | <function-block>
+ * <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
+ * <integrity-modifier> = integrity(<string>)
+ * <referrer-policy-modifier> = referrer-policy(
+ *     no-referrer
+ *   | no-referrer-when-downgrade
+ *   | same-origin
+ *   | origin
+ *   | strict-origin
+ *   | origin-when-cross-origin
+ *   | strict-origin-when-cross-origin
+ *   | unsafe-url
+ * )
  */
 export type UrlModifierValue =
   | RequestUrlModifierValue
   | UnknownUrlModifierValue;
+
+export type RequestUrlModifierValue =
+  | CrossOriginModifierValue
+  | IntegrityModifierValue
+  | ReferrerPolicyModifierValue;
+
+export type RequestUrlModifiers = {
+  crossOrigin?: CrossOriginModifierValue;
+  integrity?: IntegrityModifierValue;
+  referrerPolicy?: ReferrerPolicyModifierValue;
+};
+
+export type UnknownUrlModifierValue = IdentValue | FunctionBlock;
+
+export type CrossOriginModifierValue = {
+  type: 'cross-origin-modifier';
+  value: 'anonymous' | 'use-credentials';
+};
+
+export type IntegrityModifierValue = {
+  type: 'integrity-modifier';
+  value: string;
+};
+
+export type ReferrerPolicyModifierValue = {
+  type: 'referrer-policy-modifier';
+  value: ReferrerPolicy;
+};
+
+export type ReferrerPolicy =
+  | 'no-referrer'
+  | 'no-referrer-when-downgrade'
+  | 'same-origin'
+  | 'origin'
+  | 'strict-origin'
+  | 'origin-when-cross-origin'
+  | 'strict-origin-when-cross-origin'
+  | 'unsafe-url';
 
 export function parseUrlModifier(
   input: ParserInput,
@@ -53,6 +107,7 @@ export function tryConsumeUrlModifier(
   return consumeUrlModifier(c);
 }
 
+// <url-modifier> = <request-url-modifier> | <unknown-url-modifier>
 const consumeUrlModifier: TryComponentConsumer<UrlModifierValue> = oneOf(
   [
     one(tryConsumeRequestUrlModifier),
@@ -61,28 +116,13 @@ const consumeUrlModifier: TryComponentConsumer<UrlModifierValue> = oneOf(
   ([value]) => ok(value),
 );
 
-/*
- * <request-url-modifier> = <cross-origin-modifier>
- *                        | <integrity-modifier>
- *                        | <referrer-policy-modifier>
- */
-export type RequestUrlModifierValue =
-  | CrossOriginModifierValue
-  | IntegrityModifierValue
-  | ReferrerPolicyModifierValue;
-
-export type RequestUrlModifiers = {
-  crossOrigin?: CrossOriginModifierValue;
-  integrity?: IntegrityModifierValue;
-  referrerPolicy?: ReferrerPolicyModifierValue;
-};
-
 function tryConsumeRequestUrlModifier(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RequestUrlModifierValue> {
   return consumeRequestUrlModifier(c);
 }
 
+// <request-url-modifier> = <cross-origin-modifier> | <integrity-modifier> | <referrer-policy-modifier>
 const consumeRequestUrlModifier: TryComponentConsumer<RequestUrlModifierValue> =
   oneOf(
     [
@@ -92,6 +132,94 @@ const consumeRequestUrlModifier: TryComponentConsumer<RequestUrlModifierValue> =
     ],
     ([value]) => ok(value),
   );
+
+function tryConsumeUnknownUrlModifier(
+  c: ComponentCursor,
+): TryComponentConsumerResult<UnknownUrlModifierValue> {
+  const result = consumeUnknownUrlModifier(c);
+
+  if (
+    result !== null &&
+    !isBad(result) &&
+    'block' in result.value &&
+    result.value.value.length > 0 &&
+    !isAnyValue(result.value.value)
+  ) {
+    return bad(
+      ComponentConsumerBadReason.Invalid,
+      `Invalid component value in ${result.value.name}() arguments`,
+    );
+  }
+
+  return result;
+}
+
+// <unknown-url-modifier> = <ident> | <function-block>
+const consumeUnknownUrlModifier: TryComponentConsumer<UnknownUrlModifierValue> =
+  oneOf(
+    [
+      one(tryConsumeIdent),
+      one(tryConsumeFunctionBlock),
+    ],
+    ([value]) => ok(value),
+  );
+
+function tryConsumeCrossOriginModifier(
+  c: ComponentCursor,
+): TryComponentConsumerResult<CrossOriginModifierValue> {
+  return consumeCrossOriginModifier(c);
+}
+
+// <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
+const consumeCrossOriginModifier = createFunctionalNotationConsumer(
+  'cross-origin',
+  createKeywordConsumer('anonymous', 'use-credentials'),
+  (value): CrossOriginModifierValue => ({
+    type: 'cross-origin-modifier',
+    value,
+  }),
+);
+
+function tryConsumeIntegrityModifier(
+  c: ComponentCursor,
+): TryComponentConsumerResult<IntegrityModifierValue> {
+  return consumeIntegrityModifier(c);
+}
+
+// <integrity-modifier> = integrity(<string>)
+const consumeIntegrityModifier = createFunctionalNotationConsumer(
+  'integrity',
+  tryConsumeString,
+  (value): IntegrityModifierValue => ({
+    type: 'integrity-modifier',
+    value: value.value,
+  }),
+);
+
+function tryConsumeReferrerPolicyModifier(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ReferrerPolicyModifierValue> {
+  return consumeReferrerPolicyModifier(c);
+}
+
+// <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)
+const consumeReferrerPolicyModifier = createFunctionalNotationConsumer(
+  'referrer-policy',
+  createKeywordConsumer(
+    'no-referrer',
+    'no-referrer-when-downgrade',
+    'same-origin',
+    'origin',
+    'strict-origin',
+    'origin-when-cross-origin',
+    'strict-origin-when-cross-origin',
+    'unsafe-url',
+  ),
+  (value): ReferrerPolicyModifierValue => ({
+    type: 'referrer-policy-modifier',
+    value,
+  }),
+);
 
 export function isRequestUrlModifierValue(
   value: unknown,
@@ -106,21 +234,6 @@ export function isRequestUrlModifierValue(
       value.type === 'referrer-policy-modifier'
     )
   );
-}
-
-export function serializeRequestUrlModifier(
-  value: RequestUrlModifierValue,
-): string {
-  const name = requestUrlModifierName(value);
-
-  switch (value.type) {
-    case 'cross-origin-modifier':
-      return `${name}(${value.value})`;
-    case 'integrity-modifier':
-      return `${name}(${serializeCssString(value.value)})`;
-    case 'referrer-policy-modifier':
-      return `${name}(${value.value})`;
-  }
 }
 
 export function serializeRequestUrlModifiers(
@@ -145,6 +258,21 @@ export function serializeRequestUrlModifiers(
   return serialized;
 }
 
+export function serializeRequestUrlModifier(
+  value: RequestUrlModifierValue,
+): string {
+  const name = requestUrlModifierName(value);
+
+  switch (value.type) {
+    case 'cross-origin-modifier':
+      return `${name}(${value.value})`;
+    case 'integrity-modifier':
+      return `${name}(${serializeCssString(value.value)})`;
+    case 'referrer-policy-modifier':
+      return `${name}(${value.value})`;
+  }
+}
+
 export function requestUrlModifierName(
   value: RequestUrlModifierValue,
 ): 'cross-origin' | 'integrity' | 'referrer-policy' {
@@ -157,158 +285,3 @@ export function requestUrlModifierName(
       return 'referrer-policy';
   }
 }
-
-/*
- * <unknown-url-modifier> = <ident> | <function-block>
- *
- * <function-block> is the component-value representation of functional
- * notation.
- */
-export type UnknownUrlModifierValue = IdentValue | FunctionBlock;
-
-function tryConsumeUnknownUrlModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UnknownUrlModifierValue> {
-  const result = consumeUnknownUrlModifier(c);
-
-  if (
-    result !== null &&
-    !isBad(result) &&
-    'block' in result.value &&
-    result.value.value.length > 0 &&
-    !isAnyValue(result.value.value)
-  ) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Invalid component value in ${result.value.name}() arguments`,
-    );
-  }
-
-  return result;
-}
-
-const consumeUnknownUrlModifier: TryComponentConsumer<UnknownUrlModifierValue> =
-  oneOf(
-    [
-      one(tryConsumeIdent),
-      one(tryConsumeFunctionBlock),
-    ],
-    ([value]) => ok(value),
-  );
-
-/*
- * <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
- */
-export type CrossOriginModifierValue = {
-  type: 'cross-origin-modifier';
-  value: 'anonymous' | 'use-credentials';
-};
-
-function tryConsumeCrossOriginModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CrossOriginModifierValue> {
-  return consumeCrossOriginModifier(c);
-}
-
-const consumeCrossOriginModifier = createFunctionalNotationConsumer(
-  'cross-origin',
-  tryConsumeCrossOriginArgument,
-  (value): CrossOriginModifierValue => ({
-    type: 'cross-origin-modifier',
-    value,
-  }),
-);
-
-function tryConsumeCrossOriginArgument(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CrossOriginModifierValue['value']> {
-  return consumeCrossOriginArgument(c);
-}
-
-const consumeCrossOriginArgument =
-  createKeywordConsumer('anonymous', 'use-credentials');
-
-/*
- * <integrity-modifier> = integrity(<string>)
- */
-export type IntegrityModifierValue = {
-  type: 'integrity-modifier';
-  value: string;
-};
-
-function tryConsumeIntegrityModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IntegrityModifierValue> {
-  return consumeIntegrityModifier(c);
-}
-
-const consumeIntegrityModifier = createFunctionalNotationConsumer(
-  'integrity',
-  tryConsumeString,
-  (value): IntegrityModifierValue => ({
-    type: 'integrity-modifier',
-    value: value.value,
-  }),
-);
-
-/*
- * <referrer-policy-modifier> = referrer-policy(
- *     no-referrer
- *   | no-referrer-when-downgrade
- *   | same-origin
- *   | origin
- *   | strict-origin
- *   | origin-when-cross-origin
- *   | strict-origin-when-cross-origin
- *   | unsafe-url
- * )
- */
-export type ReferrerPolicyModifierValue = {
-  type: 'referrer-policy-modifier';
-  value: ReferrerPolicy;
-};
-
-export type ReferrerPolicy =
-  | 'no-referrer'
-  | 'no-referrer-when-downgrade'
-  | 'same-origin'
-  | 'origin'
-  | 'strict-origin'
-  | 'origin-when-cross-origin'
-  | 'strict-origin-when-cross-origin'
-  | 'unsafe-url';
-
-function tryConsumeReferrerPolicyModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ReferrerPolicyModifierValue> {
-  return consumeReferrerPolicyModifier(c);
-}
-
-const consumeReferrerPolicyModifier = createFunctionalNotationConsumer(
-  'referrer-policy',
-  tryConsumeReferrerPolicyArgument,
-  (value): ReferrerPolicyModifierValue => ({
-    type: 'referrer-policy-modifier',
-    value,
-  }),
-);
-
-function tryConsumeReferrerPolicyArgument(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ReferrerPolicy> {
-  return consumeReferrerPolicyArgument(c);
-}
-
-const REFERRER_POLICIES = [
-  'no-referrer',
-  'no-referrer-when-downgrade',
-  'same-origin',
-  'origin',
-  'strict-origin',
-  'origin-when-cross-origin',
-  'strict-origin-when-cross-origin',
-  'unsafe-url',
-] as const satisfies readonly ReferrerPolicy[];
-
-const consumeReferrerPolicyArgument: TryComponentConsumer<ReferrerPolicy> =
-  createKeywordConsumer(...REFERRER_POLICIES);

@@ -28,12 +28,6 @@ import {
  * <url> = <url()> | <src()>
  * <url()> = url( <string> <url-modifier>* ) | <url-token>
  * <src()> = src( <string> <url-modifier>* )
- *
- * Representing functional notation using component-value <function-block>s
- * gives the equivalent execution grammar:
- *
- * <url> = <url-notation> | <src-function>
- * <url-notation> = <url-function> | <url-token>
  */
 export type UrlNotation = 'url' | 'src';
 
@@ -72,55 +66,72 @@ export function serializeUrl(value: UrlValue): string {
   return `${value.notation}(${args.join(' ')})`;
 }
 
+// <url> = <url()> | <src()>
 const consumeUrl: TryComponentConsumer<UrlValue> = oneOf(
   [
-    one(tryConsumeUrlNotation),
-    one(tryConsumeSrcFunction),
+    one(tryConsumeUrlFn),
+    one(tryConsumeSrcFn),
   ],
   ([value]) => ok(value),
 );
 
-function tryConsumeUrlNotation(
+function tryConsumeUrlFn(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
-  return consumeUrlNotation(c);
+  return consumeUrlFn(c);
 }
 
-const consumeUrlNotation: TryComponentConsumer<UrlValue> = oneOf(
+// <url()> = url( <string> <url-modifier>* ) | <url-token>
+const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
   [
-    one(tryConsumeUrlFunction),
+    one(createFunctionalNotationConsumer(
+      'url',
+      sequenceOf(
+        [
+          one(tryConsumeString),
+          any(withComponentTrivia(tryConsumeUrlFunctionModifier), {
+            contextAfter: contextAfterUrlFunctionModifier,
+          }),
+        ],
+        ([[string], modifiers]) => ok({
+          value: string.value,
+          modifiers: urlModifiersFromArray(modifiers),
+        }),
+      ),
+      (value): UrlValue => ({
+        type: 'url',
+        notation: 'url',
+        value: value.value,
+        modifiers: value.modifiers,
+      }),
+      { contextForArguments: contextForUrlFunctionArguments },
+    )),
     one(tryConsumeUrlToken),
   ],
   ([value]) => ok(value),
 );
 
-function tryConsumeUrlFunction(
+function tryConsumeSrcFn(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
-  return consumeUrlFunction(c);
+  return consumeSrcFn(c);
 }
 
-const consumeUrlFunction = createFunctionalNotationConsumer(
-  'url',
-  tryConsumeUrlFunctionArguments,
-  (value): UrlValue => ({
-    type: 'url',
-    notation: 'url',
-    value: value.value,
-    modifiers: value.modifiers,
-  }),
-  { contextForArguments: contextForUrlFunctionArguments },
-);
-
-function tryConsumeSrcFunction(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlValue> {
-  return consumeSrcFunction(c);
-}
-
-const consumeSrcFunction = createFunctionalNotationConsumer(
+// <src()> = src( <string> <url-modifier>* )
+const consumeSrcFn = createFunctionalNotationConsumer(
   'src',
-  tryConsumeUrlFunctionArguments,
+  sequenceOf(
+    [
+      one(tryConsumeString),
+      any(withComponentTrivia(tryConsumeUrlFunctionModifier), {
+        contextAfter: contextAfterUrlFunctionModifier,
+      }),
+    ],
+    ([[string], modifiers]) => ok({
+      value: string.value,
+      modifiers: urlModifiersFromArray(modifiers),
+    }),
+  ),
   (value): UrlValue => ({
     type: 'url',
     notation: 'src',
@@ -133,6 +144,11 @@ const consumeSrcFunction = createFunctionalNotationConsumer(
 function tryConsumeUrlToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
+  return consumeUrlToken(c);
+}
+
+// <url-token>
+const consumeUrlToken: TryComponentConsumer<UrlValue> = (c) => {
   const start = c.pos();
   const component = c.next();
 
@@ -147,14 +163,6 @@ function tryConsumeUrlToken(
     value: component.value,
     modifiers: {},
   });
-}
-
-/*
- * <url-function-arguments> = <string> <url-modifier>*
- */
-type UrlFunctionArguments = {
-  value: string;
-  modifiers: RequestUrlModifiers;
 };
 
 type UrlFunctionParserContext = {
@@ -164,26 +172,6 @@ type UrlFunctionParserContext = {
 function contextForUrlFunctionArguments(): UrlFunctionParserContext {
   return {};
 }
-
-function tryConsumeUrlFunctionArguments(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlFunctionArguments> {
-  return consumeUrlFunctionArguments(c);
-}
-
-const consumeUrlFunctionArguments: TryComponentConsumer<UrlFunctionArguments> =
-  sequenceOf(
-    [
-      one(tryConsumeString),
-      any(withComponentTrivia(tryConsumeUrlFunctionModifier), {
-        contextAfter: contextAfterUrlFunctionModifier,
-      }),
-    ],
-    ([[string], modifiers]) => ok({
-      value: string.value,
-      modifiers: urlModifiersFromArray(modifiers),
-    }),
-  );
 
 function urlModifiersFromArray(
   values: readonly UrlModifierValue[],
