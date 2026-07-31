@@ -1,5 +1,5 @@
 import { asciiLower } from '../../shared/css';
-import { assertNever, clamp } from '../../shared/util';
+import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
   createDelimConsumer, createFunctionalNotationConsumer,
@@ -192,13 +192,6 @@ function defineColorSpace<
 }
 
 type AbsoluteComponent = number | undefined;
-type SameArityTuple<
-  Source extends readonly unknown[],
-  Value,
-> = {
-  -readonly [Index in keyof Source]: Value;
-};
-
 type ColorComponentTuple<
   Space extends ColorSpace,
   Components extends SameArityTuple<Space['keys'], unknown>,
@@ -213,13 +206,6 @@ type VariadicColorFunctionComponents = [
   ...coordinates: SyntaxComponent[],
   alpha: SyntaxAlphaComponent | undefined,
 ];
-
-function mapTuple<const Values extends readonly unknown[], Result>(
-  values: Values,
-  transform: (value: Values[number], index: number) => Result,
-): SameArityTuple<Values, Result> {
-  return values.map(transform) as SameArityTuple<Values, Result>;
-}
 
 type SyntaxComponent =
   | SyntaxNonHueComponent

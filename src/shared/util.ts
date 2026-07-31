@@ -1,5 +1,19 @@
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+export type SameArityTuple<
+  Source extends readonly unknown[],
+  Value,
+> = {
+  -readonly [Index in keyof Source]: Value;
+};
+
+export function mapTuple<const Values extends readonly unknown[], Result>(
+  values: Values,
+  transform: (value: Values[number], index: number) => Result,
+): SameArityTuple<Values, Result> {
+  return values.map(transform) as SameArityTuple<Values, Result>;
+}
+
 export type Permutations<T, K = T> =
   [T] extends [never] ? [] :
   T extends K ? [T, ...Permutations<Exclude<K, T>>] : never;
