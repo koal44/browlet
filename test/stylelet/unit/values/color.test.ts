@@ -415,8 +415,8 @@ describe('color values', () => {
         promotedVariable('alpha'),
         promotedVariable('g'),
         promotedVariable('b'),
+        promotedVariable('r'),
       ],
-      alpha: promotedVariable('r'),
     });
     expect(serializeColorValue(color!))
       .toBe('rgb(from red alpha g b / r)');
@@ -440,6 +440,7 @@ describe('color values', () => {
         },
         promotedVariable('g'),
         promotedVariable('b'),
+        promotedVariable('alpha'),
       ],
     });
     expect(resolveColorValue(color, ValueStage.Computed)).toEqual({
@@ -546,14 +547,13 @@ describe('color values', () => {
 
   it('resolves unit alpha omission while preserving it on origin functions', () => {
     expect(parseColorValue('color(--custom 0 0 0 / 1)'))
-      .toHaveProperty('alpha', undefined);
+      .toHaveProperty('components.3', undefined);
     expect(parseColorValue(
       'rgb(from color(--custom 0 0 0 / 1) r g b)',
-    )).toMatchObject({
-      origin: {
-        alpha: { type: 'number', value: 1 },
-      },
-    });
+    )).toHaveProperty(
+      'origin.components.3',
+      { type: 'number', value: 1 },
+    );
   });
 
   it.each([
@@ -630,6 +630,26 @@ describe('color values', () => {
       alpha: 0.8,
       isLegacySrgb: false,
     });
+  });
+
+  it('preserves relative colors whose origin channels are unavailable', () => {
+    const declared = parseColorValue(
+      'rgb(from currentcolor 1 2 3)',
+    )!;
+    const currentColor: AbsoluteColor = {
+      kind: ColorKind.Absolute,
+      space: { name: '--origin', keys: ['x'] },
+      components: [0.2],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    };
+    const resolved = resolveColorValue(declared, ValueStage.Used, {
+      currentColor,
+    });
+
+    expect(serializeColorValue(resolved)).toBe(
+      'rgb(from color(--origin 0.2 / 0.4) 1 2 3 / 0.4)',
+    );
   });
 
   it('does not rescale relative rgb keywords used in another position', () => {
@@ -716,8 +736,8 @@ describe('color values', () => {
         { type: 'math', valueType: 'number' },
         { type: 'number', value: 0 },
         { type: 'number', value: 0 },
+        { type: 'number', value: 0.5 },
       ],
-      alpha: { type: 'number', value: 0.5 },
     });
   });
 
@@ -829,6 +849,7 @@ describe('color values', () => {
           { type: 'number', value: 0.81 },
           { type: 'number', value: 0.81 },
           { type: 'number', value: 0.25 },
+          undefined,
         ],
       });
     expect(parseColorValue(
@@ -841,8 +862,8 @@ describe('color values', () => {
         'none',
         { type: 'number', value: 0.5 },
         { type: 'percentage', value: 120 },
+        { type: 'number', value: 0.25 },
       ],
-      alpha: { type: 'number', value: 0.25 },
     });
   });
 
@@ -1193,8 +1214,8 @@ describe('color values', () => {
         { type: 'number', value: 0.25 },
         { type: 'number', value: 0.5 },
         { type: 'number', value: 0.75 },
+        { type: 'number', value: 0.5 },
       ],
-      alpha: { type: 'number', value: 0.5 },
     });
     expect(serializeColorValue(color))
       .toBe('color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)');
@@ -1427,6 +1448,7 @@ describe('color values', () => {
         { type: 'number', value: 1.25 },
         { type: 'number', value: 0.5 },
         { type: 'number', value: 2 },
+        undefined,
       ],
     });
     expect(inputs).toEqual([]);
@@ -1776,17 +1798,17 @@ describe('color values', () => {
     [
       'rgb(0 0 0 / calc(infinity))',
       true,
-      { components: [0, 0, 0], alpha: 0xff, is8Bit: true },
+      { components: [0, 0, 0], alpha: 1 },
     ],
     [
       'rgb(0 0 0 / calc(-infinity))',
       true,
-      { components: [0, 0, 0], alpha: 0, is8Bit: true },
+      { components: [0, 0, 0], alpha: 0 },
     ],
     [
       'rgb(0 0 0 / calc(NaN))',
       true,
-      { components: [0, 0, 0], alpha: 0, is8Bit: true },
+      { components: [0, 0, 0], alpha: 0 },
     ],
   ] as const)(
     'clamps special calculations in the computed color %s',
@@ -1934,8 +1956,8 @@ describe('color values', () => {
         promotedVariable('alpha'),
         promotedVariable('s'),
         promotedVariable('l'),
+        promotedVariable('h'),
       ],
-      alpha: promotedVariable('h'),
     });
     expect(serializeColorValue(color!))
       .toBe('hsl(from red alpha s l / h)');
@@ -2029,8 +2051,8 @@ describe('color values', () => {
         { type: 'number', value: 180 },
         { type: 'math', valueType: 'percentage' },
         { type: 'percentage', value: 25 },
+        { type: 'number', value: 0.5 },
       ],
-      alpha: { type: 'number', value: 0.5 },
     });
   });
 
@@ -2089,8 +2111,8 @@ describe('color values', () => {
         promotedVariable('alpha'),
         promotedVariable('w'),
         promotedVariable('b'),
+        promotedVariable('h'),
       ],
-      alpha: promotedVariable('h'),
     });
     expect(serializeColorValue(color!))
       .toBe('hwb(from red alpha w b / h)');
@@ -2146,8 +2168,8 @@ describe('color values', () => {
         { type: 'math', valueType: 'angle' },
         { type: 'percentage', value: 30 },
         { type: 'percentage', value: 50 },
+        { type: 'number', value: 0.5 },
       ],
-      alpha: { type: 'number', value: 0.5 },
     });
   });
 
@@ -2255,8 +2277,8 @@ describe('color values', () => {
           promotedVariable('alpha'),
           promotedVariable('a'),
           promotedVariable('b'),
+          promotedVariable('l'),
         ],
-        alpha: promotedVariable('l'),
       });
       expect(serializeColorValue(color!)).toBe(input);
       expect(parseColorValue(`${name}(l a b)`)).toBeNull();
@@ -2326,8 +2348,8 @@ describe('color values', () => {
           promotedVariable('alpha'),
           promotedVariable('c'),
           promotedVariable('h'),
+          promotedVariable('l'),
         ],
-        alpha: promotedVariable('l'),
       });
       expect(serializeColorValue(color!)).toBe(input);
       expect(parseColorValue(`${name}(l c h)`)).toBeNull();
@@ -2382,7 +2404,7 @@ describe('color values', () => {
       origin: {
         kind: ColorKind.CurrentColor,
       },
-      alpha: promotedVariable('alpha'),
+      components: [promotedVariable('alpha')],
     });
     expect(serializeColorValue(color!)).toBe(input);
     expect(parseColorValue('alpha()')).toBeNull();
@@ -3247,6 +3269,23 @@ describe('color values', () => {
     },
   );
 
+  it('preserves percentage RGB encoding while alpha is deferred', () => {
+    const declared = parseColorValue(
+      'rgb(100% 0% 100% / calc(infinity))',
+    )!;
+    const computed = resolveColorValue(declared, ValueStage.Computed);
+
+    expect(computed).toEqual({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [1, 0, 1],
+      alpha: 1,
+      isLegacySrgb: true,
+    });
+    expect(serializeColorValue(computed, true))
+      .toBe('rgb(255, 0, 255)');
+  });
+
   // Section 16.2.2 serialization examples
   it.each([
     ['rgb(29 164 192 / 95%)', 'rgba(29, 164, 192, 0.95)'],
@@ -3458,11 +3497,18 @@ describe('color values', () => {
   ] as const)(
     'resolves calculated alpha %s as %s math',
     (alpha, valueType) => {
-      expect(parseColorValue(
+      const color = parseColorValue(
         `color(display-p3 0 1 0 / ${alpha})`,
-      )).toMatchObject({
+      );
+
+      expect(color).toMatchObject({
         kind: ColorKind.ColorFn,
-        alpha: { type: 'math', valueType },
+        components: [
+          { type: 'number', value: 0 },
+          { type: 'number', value: 1 },
+          { type: 'number', value: 0 },
+          { type: 'math', valueType },
+        ],
       });
     },
   );
@@ -3632,11 +3678,11 @@ describe('color values', () => {
         'none',
         { type: 'number', value: 0 },
         { type: 'number', value: 0 },
+        {
+          type: 'math',
+          valueType: 'number',
+        },
       ],
-      alpha: {
-        type: 'math',
-        valueType: 'number',
-      },
     });
   });
 
