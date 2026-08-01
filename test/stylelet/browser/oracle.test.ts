@@ -3154,3 +3154,251 @@ runScenarios('CSS declared color serialization oracle', 'skip', [
     ],
   },
 ]);
+
+runScenarios('CSS gradient default serialization oracle', 'skip', [
+  {
+    name: 'omits explicit defaults from computed gradients',
+    engines: ['native'],
+    markup: `
+      <div id="linear-default"
+        style="background-image: linear-gradient(to bottom, red, blue)"></div>
+      <div id="linear-angle-default"
+        style="background-image: linear-gradient(180deg, red, blue)"></div>
+      <div id="radial-default"
+        style="background-image: radial-gradient(ellipse farthest-corner at center, red, blue)"></div>
+      <div id="radial-circle-default-size"
+        style="background-image: radial-gradient(circle farthest-corner at center, red, blue)"></div>
+      <div id="conic-default"
+        style="background-image: conic-gradient(from 0deg at center, red, blue)"></div>
+    `,
+    cases: [
+      ...['linear-default', 'linear-angle-default'].map((id) => ({
+        computedStyle: 'background-image' as const,
+        ref: { by: 'id' as const, id },
+        expect: {
+          value: 'linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))',
+        },
+      })),
+      {
+        computedStyle: 'background-image',
+        ref: { by: 'id', id: 'radial-default' },
+        expect: {
+          value: 'radial-gradient(rgb(255, 0, 0), rgb(0, 0, 255))',
+        },
+      },
+      {
+        computedStyle: 'background-image',
+        ref: { by: 'id', id: 'radial-circle-default-size' },
+        expect: {
+          value: 'radial-gradient(circle, rgb(255, 0, 0), rgb(0, 0, 255))',
+        },
+      },
+      {
+        computedStyle: 'background-image',
+        ref: { by: 'id', id: 'conic-default' },
+        expect: {
+          value: 'conic-gradient(rgb(255, 0, 0), rgb(0, 0, 255))',
+        },
+      },
+    ],
+  },
+]);
+
+const radialGradientGeometryPairs = [
+  {
+    name: 'explicit percentage radii',
+    derived: 'ellipse 50% 25% at 50px 25px',
+    explicit: 'ellipse 100px 25px at 50px 25px',
+  },
+  {
+    name: 'closest-side ellipse',
+    derived: 'ellipse closest-side at 50px 25px',
+    explicit: 'ellipse 50px 25px at 50px 25px',
+  },
+  {
+    name: 'farthest-side ellipse',
+    derived: 'ellipse farthest-side at 50px 25px',
+    explicit: 'ellipse 150px 75px at 50px 25px',
+  },
+  {
+    name: 'closest-corner ellipse',
+    derived: 'ellipse closest-corner at 50px 25px',
+    explicit: 'ellipse 70.71067811865476px 35.35533905932738px at 50px 25px',
+  },
+  {
+    name: 'farthest-corner ellipse',
+    derived: 'ellipse farthest-corner at 50px 25px',
+    explicit: 'ellipse 212.13203435596427px 106.06601717798213px at 50px 25px',
+  },
+  {
+    name: 'closest-corner circle',
+    derived: 'circle closest-corner at 50px 25px',
+    explicit: 'circle 55.90169943749474px at 50px 25px',
+  },
+  {
+    name: 'farthest-corner circle',
+    derived: 'circle farthest-corner at 50px 25px',
+    explicit: 'circle 167.70509831248424px at 50px 25px',
+  },
+] as const;
+
+runScenarios('CSS radial gradient used geometry oracle', 'skip', [
+  {
+    name: 'renders extent and percentage geometry like explicit radii',
+    engines: ['native'],
+    browsers: ['chromium', 'firefox'],
+    markup: `
+      <style>
+        .radial-geometry-oracle {
+          width: 200px;
+          height: 100px;
+        }
+      </style>
+      ${radialGradientGeometryPairs.map(({ derived, explicit }, index) => `
+        <div id="radial-derived-${index}" class="radial-geometry-oracle"
+          style="background-image: radial-gradient(${derived}, red 0 49%, lime 50% 74%, blue 75%)"></div>
+        <div id="radial-explicit-${index}" class="radial-geometry-oracle"
+          style="background-image: radial-gradient(${explicit}, red 0 49%, lime 50% 74%, blue 75%)"></div>
+      `).join('')}
+    `,
+    setupPage: async (page) => {
+      for (let index = 0; index < radialGradientGeometryPairs.length; ++index) {
+        const pair = radialGradientGeometryPairs[index];
+        const derived = page.locator(`#radial-derived-${index}`);
+        const explicit = page.locator(`#radial-explicit-${index}`);
+
+        expect(await derived.evaluate((element) =>
+          getComputedStyle(element).backgroundImage), pair.name).not.toBe('none');
+        expect(await explicit.evaluate((element) =>
+          getComputedStyle(element).backgroundImage), pair.name).not.toBe('none');
+        const [derivedScreenshot, explicitScreenshot] = await Promise.all([
+          derived.screenshot(),
+          explicit.screenshot(),
+        ]);
+        const difference = await page.evaluate(async ({ left, right }) => {
+          const pixels = async (bytes: number[]): Promise<ImageData> => {
+            const image = await createImageBitmap(new Blob(
+              [Uint8Array.from(bytes)],
+              { type: 'image/png' },
+            ));
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const context = canvas.getContext('2d')!;
+            context.drawImage(image, 0, 0);
+            image.close();
+            return context.getImageData(0, 0, canvas.width, canvas.height);
+          };
+          const [leftPixels, rightPixels] = await Promise.all([
+            pixels(left), pixels(right),
+          ]);
+          let maxChannelDifference = 0;
+
+          for (let offset = 0; offset < leftPixels.data.length; ++offset) {
+            maxChannelDifference = Math.max(
+              maxChannelDifference,
+              Math.abs(leftPixels.data[offset] - rightPixels.data[offset]),
+            );
+          }
+
+          return maxChannelDifference;
+        }, {
+          left: [...derivedScreenshot],
+          right: [...explicitScreenshot],
+        });
+
+        expect(difference, pair.name).toBeLessThanOrEqual(1);
+      }
+    },
+  },
+]);
+
+runScenarios('CSS gradient interpolation oracle', 'skip', [
+  {
+    name: 'directly interpolates compatible linear and radial gradients',
+    engines: ['native'],
+    markup: `
+      <div id="linear-gradient-interpolation"></div>
+      <div id="radial-gradient-interpolation"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        CSS.registerProperty({
+          name: '--gradient-interpolation-oracle',
+          syntax: '<image>',
+          inherits: false,
+          initialValue: 'linear-gradient(red, blue)',
+        });
+
+        const sample = (id: string, from: string, to: string): void => {
+          const target = document.getElementById(id)!;
+          target.style.backgroundImage = 'var(--gradient-interpolation-oracle)';
+          const animation = target.animate(
+            [
+              { '--gradient-interpolation-oracle': from },
+              { '--gradient-interpolation-oracle': to },
+            ],
+            { duration: 1000, easing: 'linear', fill: 'both' },
+          );
+          animation.pause();
+          animation.currentTime = 250;
+        };
+
+        sample(
+          'linear-gradient-interpolation',
+          'linear-gradient(0deg, red 0%, blue 100%)',
+          'linear-gradient(90deg, red 20%, blue 80%)',
+        );
+        sample(
+          'radial-gradient-interpolation',
+          'radial-gradient(ellipse 20px 40px at 20% 30%, red 0%, blue 100%)',
+          'radial-gradient(ellipse 60px 80px at 80% 70%, red 20%, blue 80%)',
+        );
+      });
+    },
+    cases: [
+      ...(['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => [
+        // CSS Images 4 specifies this directly interpolated value.
+        {
+          computedStyle: 'background-image' as const,
+          ref: { by: 'id' as const, id: 'linear-gradient-interpolation' },
+          browsers: [browser],
+          status: 'fail' as const,
+          expect: {
+            value: 'linear-gradient(22.5deg, rgb(255, 0, 0) 5%, rgb(0, 0, 255) 95%)',
+          },
+        },
+        // The engine currently retains the start gradient at 25% progress.
+        {
+          computedStyle: 'background-image' as const,
+          ref: { by: 'id' as const, id: 'linear-gradient-interpolation' },
+          browsers: [browser],
+          expect: {
+            value: 'linear-gradient(0deg, rgb(255, 0, 0) 0%, rgb(0, 0, 255) 100%)',
+          },
+        },
+      ]),
+      ...(['chromium', 'firefox', 'webkit'] as const).flatMap((browser) => [
+        // CSS Images 4 specifies this directly interpolated value.
+        {
+          computedStyle: 'background-image' as const,
+          ref: { by: 'id' as const, id: 'radial-gradient-interpolation' },
+          browsers: [browser],
+          status: 'fail' as const,
+          expect: {
+            value: 'radial-gradient(30px 50px at 35% 40%, rgb(255, 0, 0) 5%, rgb(0, 0, 255) 95%)',
+          },
+        },
+        // The engine currently retains the start gradient at 25% progress.
+        {
+          computedStyle: 'background-image' as const,
+          ref: { by: 'id' as const, id: 'radial-gradient-interpolation' },
+          browsers: [browser],
+          expect: {
+            value: 'radial-gradient(20px 40px at 20% 30%, rgb(255, 0, 0) 0%, rgb(0, 0, 255) 100%)',
+          },
+        },
+      ]),
+    ],
+  },
+]);

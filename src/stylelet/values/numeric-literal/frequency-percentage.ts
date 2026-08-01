@@ -5,7 +5,8 @@ import {
 } from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
-  resolveFrequency, serializeFrequency, tryConsumeFrequency, type CanonicalFrequencyLiteral,
+  canonicalizeFrequency, serializeFrequency, tryConsumeFrequency,
+  type CanonicalFrequencyLiteral,
   type FrequencyLiteral,
 } from './frequency';
 import {
@@ -66,7 +67,7 @@ export function tryResolveFrequencyPercentage(
   context: FrequencyPercentageResolutionContext = {},
 ): CanonicalFrequencyLiteral | null {
   if (value.type === 'frequency') {
-    return resolveFrequency(value);
+    return canonicalizeFrequency(value);
   }
 
   if (context.percentageBasis === undefined) {

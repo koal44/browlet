@@ -755,6 +755,31 @@ describe('length-percentage values', () => {
       .toEqual({ type: 'percentage', value: 25 });
   });
 
+  it('resolves literal lengths to computed absolute lengths', () => {
+    const absolute = parseLengthPercentage('1in')!;
+    const relative = parseLengthPercentage('2em')!;
+
+    expect(resolveLengthPercentage(absolute, ValueStage.Specified))
+      .toEqual(absolute);
+    expect(resolveLengthPercentage(absolute, ValueStage.Computed))
+      .toEqual({ type: 'length', value: 96, unit: 'px' });
+    expect(resolveLengthPercentage(relative, ValueStage.Computed))
+      .toEqual(relative);
+    expect(resolveLengthPercentage(relative, ValueStage.Computed, {
+      length: { em: 16 },
+    })).toEqual({ type: 'length', value: 32, unit: 'px' });
+  });
+
+  it('resolves literal percentages only when their basis is available', () => {
+    const percentage = parseLengthPercentage('25%')!;
+
+    expect(resolveLengthPercentage(percentage, ValueStage.Computed))
+      .toEqual(percentage);
+    expect(resolveLengthPercentage(percentage, ValueStage.Computed, {
+      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
+    })).toEqual({ type: 'length', value: 50, unit: 'px' });
+  });
+
   it('rejects calculations from another dimensional category', () => {
     const c = new ComponentCursor(
       parseListOfComponentValues('calc(10deg + 25%)'),

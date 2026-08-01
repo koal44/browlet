@@ -8,7 +8,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
-import { serializeDimension, type DimensionLiteral } from './dimension';
+import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <length> = <dimension-token with a length unit> | <zero>
@@ -84,6 +84,18 @@ export const LENGTH_UNITS = [
 ] as const;
 
 export type LengthUnit = (typeof LENGTH_UNITS)[number];
+
+export function lengthLiteral(value: number): CanonicalLengthLiteral;
+export function lengthLiteral<Unit extends LengthUnit>(
+  value: number,
+  unit: Unit,
+): DimensionLiteral<'length', Unit>;
+export function lengthLiteral(
+  value: number,
+  unit: LengthUnit = 'px',
+): DimensionLiteral<'length', LengthUnit> {
+  return dimensionLiteral('length', value, unit);
+}
 
 export function parseLength(
   input: ParserInput,

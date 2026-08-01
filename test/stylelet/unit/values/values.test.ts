@@ -13,7 +13,7 @@ import {
 import { BlockItemAstKind, type StyleRuleAst } from '../../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
 import {
-  ANGLE_UNITS, createAngleConsumer, parseAngle, resolveAngle, serializeAngle,
+  ANGLE_UNITS, canonicalizeAngle, createAngleConsumer, parseAngle, serializeAngle,
   serializeCanonicalAngle, tryConsumeAngle,
 } from '../../../../src/stylelet/values/numeric-literal/angle';
 import {
@@ -40,7 +40,7 @@ import {
   serializeInteger, tryConsumeInteger,
 } from '../../../../src/stylelet/values/numeric-literal/integer';
 import {
-  createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency, resolveFrequency,
+  canonicalizeFrequency, createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency,
   serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
 } from '../../../../src/stylelet/values/numeric-literal/frequency';
 import {
@@ -70,7 +70,7 @@ import {
   tryConsumeRatio,
 } from '../../../../src/stylelet/values/ratio';
 import {
-  createResolutionConsumer, parseResolution, RESOLUTION_UNITS, resolveResolution,
+  canonicalizeResolution, createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
   serializeCanonicalResolution, serializeResolution, tryConsumeResolution,
 } from '../../../../src/stylelet/values/numeric-literal/resolution';
 import {
@@ -78,8 +78,8 @@ import {
   serializeString,
 } from '../../../../src/stylelet/values/string';
 import {
-  createTimeConsumer, parseTime, resolveTime, serializeCanonicalTime, serializeTime, TIME_UNITS,
-  tryConsumeTime,
+  canonicalizeTime, createTimeConsumer, parseTime, serializeCanonicalTime,
+  serializeTime, TIME_UNITS, tryConsumeTime,
 } from '../../../../src/stylelet/values/numeric-literal/time';
 import {
   createTimePercentageConsumer, parseTimePercentage, serializeTimePercentage,
@@ -2168,8 +2168,8 @@ describe('angle', () => {
     [{ type: 'angle', value: 100, unit: 'grad' }, 90],
     [{ type: 'angle', value: Math.PI, unit: 'rad' }, 180],
     [{ type: 'angle', value: 0.5, unit: 'turn' }, 180],
-  ] as const)('resolves %j to %ddeg', (value, expected) => {
-    expect(resolveAngle(value)).toEqual({
+  ] as const)('canonicalizes %j as %ddeg', (value, expected) => {
+    expect(canonicalizeAngle(value)).toEqual({
       type: 'angle',
       value: expected,
       unit: 'deg',
@@ -2275,8 +2275,8 @@ describe('time', () => {
   it.each([
     [{ type: 'time', value: 2, unit: 's' }, 2],
     [{ type: 'time', value: 250, unit: 'ms' }, 0.25],
-  ] as const)('resolves %j to %ds', (value, expected) => {
-    expect(resolveTime(value)).toEqual({
+  ] as const)('canonicalizes %j as %ds', (value, expected) => {
+    expect(canonicalizeTime(value)).toEqual({
       type: 'time',
       value: expected,
       unit: 's',
@@ -2362,8 +2362,8 @@ describe('frequency', () => {
   it.each([
     [{ type: 'frequency', value: 500, unit: 'hz' }, 500],
     [{ type: 'frequency', value: 1.5, unit: 'khz' }, 1500],
-  ] as const)('resolves %j to %dhz', (value, expected) => {
-    expect(resolveFrequency(value)).toEqual({
+  ] as const)('canonicalizes %j as %dhz', (value, expected) => {
+    expect(canonicalizeFrequency(value)).toEqual({
       type: 'frequency',
       value: expected,
       unit: 'hz',
@@ -2469,8 +2469,8 @@ describe('resolution', () => {
     [{ type: 'resolution', value: 96 / 2.54, unit: 'dpcm' }, 1],
     [{ type: 'resolution', value: 2, unit: 'dppx' }, 2],
     [{ type: 'resolution', value: 2, unit: 'x' }, 2],
-  ] as const)('resolves %j to %ddppx', (value, expected) => {
-    expect(resolveResolution(value)).toEqual({
+  ] as const)('canonicalizes %j as %ddppx', (value, expected) => {
+    expect(canonicalizeResolution(value)).toEqual({
       type: 'resolution',
       value: expected,
       unit: 'dppx',

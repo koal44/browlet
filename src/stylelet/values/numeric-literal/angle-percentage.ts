@@ -5,7 +5,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
-  resolveAngle, serializeAngle, tryConsumeAngle, type AngleLiteral,
+  canonicalizeAngle, serializeAngle, tryConsumeAngle, type AngleLiteral,
   type CanonicalAngleLiteral,
 } from './angle';
 import {
@@ -63,7 +63,7 @@ export function tryResolveAnglePercentage(
   context: AnglePercentageResolutionContext = {},
 ): CanonicalAngleLiteral | null {
   if (value.type === 'angle') {
-    return resolveAngle(value);
+    return canonicalizeAngle(value);
   }
 
   if (context.percentageBasis === undefined) {

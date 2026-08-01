@@ -5,7 +5,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
-  resolveTime, serializeTime, tryConsumeTime, type CanonicalTimeLiteral,
+  canonicalizeTime, serializeTime, tryConsumeTime, type CanonicalTimeLiteral,
   type TimeLiteral,
 } from './time';
 import {
@@ -63,7 +63,7 @@ export function tryResolveTimePercentage(
   context: TimePercentageResolutionContext = {},
 ): CanonicalTimeLiteral | null {
   if (value.type === 'time') {
-    return resolveTime(value);
+    return canonicalizeTime(value);
   }
 
   if (context.percentageBasis === undefined) {

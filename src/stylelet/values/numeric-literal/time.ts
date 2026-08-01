@@ -8,7 +8,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
-import { serializeDimension, type DimensionLiteral } from './dimension';
+import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <time> = <dimension-token with a time unit>
@@ -21,6 +21,18 @@ export type CanonicalTimeLiteral = DimensionLiteral<'time', 's'>;
 export const TIME_UNITS = ['s', 'ms'] as const;
 
 export type TimeUnit = (typeof TIME_UNITS)[number];
+
+export function timeLiteral(value: number): CanonicalTimeLiteral;
+export function timeLiteral<Unit extends TimeUnit>(
+  value: number,
+  unit: Unit,
+): DimensionLiteral<'time', Unit>;
+export function timeLiteral(
+  value: number,
+  unit: TimeUnit = 's',
+): TimeLiteral {
+  return dimensionLiteral('time', value, unit);
+}
 
 export function parseTime(
   input: ParserInput,
@@ -58,7 +70,7 @@ export function createTimeConsumer(
       return result;
     }
 
-    const canonical = resolveTime(result.value);
+    const canonical = canonicalizeTime(result.value);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -113,7 +125,7 @@ export function serializeCanonicalTime(value: CanonicalTimeLiteral): string {
   return serializeDimension(value);
 }
 
-export function resolveTime(value: TimeLiteral): CanonicalTimeLiteral {
+export function canonicalizeTime(value: TimeLiteral): CanonicalTimeLiteral {
   let seconds: number;
 
   switch (value.unit) {

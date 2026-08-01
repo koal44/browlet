@@ -85,10 +85,10 @@ export type PositionFour = {
   components: PositionFourComponents;
 };
 
-export type PositionContext = MathContext & {
+export type PositionContext = {
   writingMode?: PositionWritingMode;
   direction?: PositionDirection;
-};
+} & MathContext;
 
 export type PositionWritingMode =
   | 'horizontal-tb'
@@ -113,6 +113,19 @@ type PositionFourComponents = [
 ];
 
 type PositionComponent = PositionKeyword | LengthPercentageValue;
+
+export function positionLiteral<
+  const Components extends
+    | PositionOneComponents
+    | PositionTwoComponents
+    | PositionFourComponents,
+>(...components: Components): {
+  type: 'position';
+  offsets?: never;
+  components: Components;
+} {
+  return { type: 'position', components };
+}
 
 type PositionKeyword =
   | PositionEdgeKeyword

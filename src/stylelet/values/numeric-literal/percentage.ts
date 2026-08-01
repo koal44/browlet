@@ -16,6 +16,10 @@ export type PercentageLiteral = {
   value: number;
 };
 
+export function percentageLiteral(value: number): PercentageLiteral {
+  return { type: 'percentage', value };
+}
+
 export function parsePercentage(
   input: ParserInput,
   context: unknown = undefined,

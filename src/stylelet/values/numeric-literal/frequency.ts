@@ -8,7 +8,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
-import { serializeDimension, type DimensionLiteral } from './dimension';
+import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <frequency> = <dimension-token with a frequency unit>
@@ -21,6 +21,18 @@ export type CanonicalFrequencyLiteral = DimensionLiteral<'frequency', 'hz'>;
 export const FREQUENCY_UNITS = ['hz', 'khz'] as const;
 
 export type FrequencyUnit = (typeof FREQUENCY_UNITS)[number];
+
+export function frequencyLiteral(value: number): CanonicalFrequencyLiteral;
+export function frequencyLiteral<Unit extends FrequencyUnit>(
+  value: number,
+  unit: Unit,
+): DimensionLiteral<'frequency', Unit>;
+export function frequencyLiteral(
+  value: number,
+  unit: FrequencyUnit = 'hz',
+): FrequencyLiteral {
+  return dimensionLiteral('frequency', value, unit);
+}
 
 export function parseFrequency(
   input: ParserInput,
@@ -58,7 +70,7 @@ export function createFrequencyConsumer(
       return result;
     }
 
-    const canonical = resolveFrequency(result.value);
+    const canonical = canonicalizeFrequency(result.value);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -115,7 +127,7 @@ export function serializeCanonicalFrequency(
   return serializeDimension(value);
 }
 
-export function resolveFrequency(
+export function canonicalizeFrequency(
   value: FrequencyLiteral,
 ): CanonicalFrequencyLiteral {
   let hertz: number;

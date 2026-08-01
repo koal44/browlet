@@ -7,8 +7,8 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
+  interpolateMathValues, resolveMathValue, resolveNumericLiteral, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
 } from './math-value';
 import {
   createLengthPercentageConsumer as createLengthPercentageLiteralConsumer,
@@ -66,13 +66,18 @@ export function resolveLengthPercentage(
   stage: ValueStage,
   context: MathContext = {},
 ): LengthPercentageValue {
-  return value.type === 'math'
-    ? resolveMathValue(
-      value,
-      stage,
-      lengthPercentageCalculationContext(context),
-    )
-    : value;
+  const calculationContext = lengthPercentageCalculationContext(context);
+
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, calculationContext);
+  }
+
+  return resolveNumericLiteral(
+    value,
+    'length-percentage',
+    stage,
+    calculationContext,
+  );
 }
 
 export function serializeLengthPercentage(

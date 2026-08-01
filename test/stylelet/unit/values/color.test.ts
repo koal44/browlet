@@ -3,8 +3,10 @@ import { ValueStage } from '../../../../src/stylelet/value-processing';
 import {
   ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
   defineColorProfile, deltaE2000, deltaEOK,
-  gamutMapColor, interpolateColors, parseColorInterpolationMethod, parseColorValue,
-  resolveColorValue, serializeColorValue, tryResolveAbsoluteColor,
+  gamutMapColor, interpolateColors, isLegacySrgbColor,
+  parseColorInterpolationMethod, parseColorValue, resolveColorValue,
+  serializeColorInterpolationMethod, serializeColorValue,
+  tryResolveAbsoluteColor,
   type AbsoluteColor,
   type PredefinedAbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
@@ -135,6 +137,19 @@ function swappedSrgbProfile() {
 }
 
 describe('color values', () => {
+  it.each([
+    ['red', true],
+    ['#f00', true],
+    ['rgb(255 0 0)', true],
+    ['hsl(0 100% 50%)', true],
+    ['hwb(0 0% 0%)', true],
+    ['color(srgb 1 0 0)', false],
+    ['rgb(from red r g b)', false],
+    ['lab(50 0 0)', false],
+  ] as const)('classifies %s for legacy sRGB interpolation', (input, expected) => {
+    expect(isLegacySrgbColor(parseColorValue(input)!)).toBe(expected);
+  });
+
   it('parses named colors case-insensitively', () => {
     expect(parseColorValue('ReD')).toMatchObject({
       kind: ColorKind.Named,
@@ -961,19 +976,15 @@ describe('color values', () => {
     });
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
-      targetColorSpace: 'srgb' as const,
-    };
-    const profileContext = {
-      colorProfiles: context.colorProfiles,
     };
     const declared = parseColorValue(
       'device-cmyk(0.1 0.2 0.3 0.4 / 0.5)',
-      profileContext,
+      context,
     )!;
     const native = resolveColorValue(
       declared,
       ValueStage.Computed,
-      profileContext,
+      context,
     );
 
     expect(native).toMatchObject({
@@ -987,11 +998,11 @@ describe('color values', () => {
     });
     expect(inputs).toEqual([]);
 
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      context,
-    );
+    if (native.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute computed color');
+    }
+
+    const computed = convertAbsoluteColor(native, 'srgb', context);
 
     expect(computed).toMatchObject({
       kind: ColorKind.Absolute,
@@ -999,9 +1010,6 @@ describe('color values', () => {
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    if (computed.kind !== ColorKind.Absolute) {
-      throw new TypeError('Expected an absolute computed color');
-    }
     expectComponentsCloseTo(computed.components, [0.1, 0.2, 0.3], 12);
     expect(inputs).toHaveLength(1);
     expectComponentsCloseTo(inputs[0], [0.1, 0.2, 0.3, 0.4], 12);
@@ -1265,11 +1273,10 @@ describe('color values', () => {
     )).toEqual(converted);
   });
 
-  it('converts a custom color to its requested resolution target', () => {
+  it('converts a resolved custom color to an explicit target', () => {
     const { inputs, profile } = testColorProfile();
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
-      targetColorSpace: 'srgb' as const,
     };
     const declared = parseColorValue(
       'color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)',
@@ -1283,11 +1290,17 @@ describe('color values', () => {
     )).toEqual(declared);
     expect(inputs).toEqual([]);
 
-    const resolved = resolveColorValue(
+    const computed = resolveColorValue(
       declared,
       ValueStage.Computed,
       context,
     );
+
+    if (computed.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute computed color');
+    }
+
+    const resolved = convertAbsoluteColor(computed, 'srgb', context);
 
     expect(resolved).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1296,26 +1309,22 @@ describe('color values', () => {
       isLegacySrgb: false,
     });
 
-    if (resolved.kind !== ColorKind.Absolute) {
-      throw new TypeError('Expected an absolute computed color');
-    }
-
     expectComponentsCloseTo(resolved.components, [0.2, 0.4, 0.6], 12);
     expect(inputs).toHaveLength(1);
     expectComponentsCloseTo(inputs[0], [0.2, 0.4, 0.6, 0.8], 12);
   });
 
-  it('applies a requested target color space to predefined colors', () => {
+  it('converts a resolved predefined color to an explicit target', () => {
     const declared = parseColorValue('color(display-p3 0.2 0.4 0.6)')!;
     const source = resolveColorValue(
       declared,
       ValueStage.Computed,
     );
-    const resolved = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      { targetColorSpace: 'srgb' },
-    );
+    if (source.kind !== ColorKind.Absolute) {
+      throw new TypeError('Expected an absolute computed color');
+    }
+
+    const resolved = convertAbsoluteColor(source, 'srgb');
 
     expect(resolved).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1324,12 +1333,6 @@ describe('color values', () => {
       isLegacySrgb: false,
     });
 
-    if (resolved.kind !== ColorKind.Absolute) {
-      throw new TypeError('Expected an absolute computed color');
-    }
-    if (source.kind !== ColorKind.Absolute) {
-      throw new TypeError('Expected an absolute computed color');
-    }
     expect(resolved).toEqual(convertAbsoluteColor(source, 'srgb'));
   });
 
@@ -3129,6 +3132,11 @@ describe('color values', () => {
       space: 'oklch',
       hue,
     });
+  });
+
+  it('omits the default shorter hue interpolation method when serializing', () => {
+    expect(serializeColorInterpolationMethod({ space: 'oklch', hue: 'shorter' }))
+      .toBe('in oklch');
   });
 
   it('parses color interpolation methods case-insensitively', () => {

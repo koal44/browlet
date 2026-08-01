@@ -25,7 +25,7 @@ import { completeMixPercentages, normalizeMixPercentages } from './mix';
 import { tryConsumeDashedIdent, type DashedIdentValue } from './dashed-ident';
 import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { resolveAngle as resolveAngleLiteral } from './numeric-literal/angle';
+import { canonicalizeAngle } from './numeric-literal/angle';
 import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
 import type { PercentageLiteral } from './numeric-literal/percentage';
 import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
@@ -338,9 +338,26 @@ export type ColorFunction =
 export type RelativeColorFunction =
   ColorFunction & { origin: ColorValue; };
 
+/** Whether a color belongs to the legacy sRGB interpolation category. */
+export function isLegacySrgbColor(color: ColorValue): boolean {
+  switch (color.kind) {
+    case ColorKind.Named:
+    case ColorKind.Hex:
+      return true;
+    case ColorKind.RgbFn:
+    case ColorKind.HslFn:
+    case ColorKind.HwbFn:
+      return color.origin === undefined;
+    case ColorKind.Absolute:
+      return color.isLegacySrgb;
+    default:
+      return false;
+  }
+}
+
 export function parseColorValue(
   input: ParserInput,
-  context: ColorResolutionContext = {},
+  context: ColorContext = {},
   allowQuirkyColor = false,
 ): ColorValue | null {
   const result = parseAsComponentGrammar(
@@ -369,7 +386,7 @@ export function tryConsumeColor(
     : ok(resolveColorValue(
       result.value,
       ValueStage.Declared,
-      colorResolutionContextFor(c.context),
+      colorContextFor(c.context),
     ));
 }
 
@@ -1729,7 +1746,7 @@ export type CustomColorFn = {
 
 function colorProfileFor(
   space: ColorFunctionSpace,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): ColorProfile | undefined {
   return isCustomColorProfileSpace(space)
     ? context.colorProfiles?.get(space)
@@ -2129,7 +2146,7 @@ export type HueInterpolationMethod =
 
 export function parseColorInterpolationMethod(
   input: ParserInput,
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): ColorInterpolationMethod | null {
   const result = parseAsComponentGrammar(
     input,
@@ -2147,25 +2164,29 @@ export function tryConsumeColorInterpolationMethod(
 }
 
 // <color-interpolation-method> = in [ <rectangular-color-space> | <polar-color-space> <hue-interpolation-method>? | <custom-color-space> ]
+// Equivalent: in [ <polar-color-space> <hue-interpolation-method> | <color-space> ]
 const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMethod> =
   sequenceOf(
     [
       one(createKeywordConsumer('in')),
-      one(withComponentTrivia(tryConsumeColorSpace)),
-      opt(withComponentTrivia(tryConsumeHueInterpolationMethod)),
+      one(withComponentTrivia(oneOf(
+        [
+          one(sequenceOf(
+            [
+              one(tryConsumePolarColorSpace),
+              one(withComponentTrivia(tryConsumeHueInterpolationMethod)),
+            ],
+            ([[space], [hue]]) => ok<ColorInterpolationMethod>({ space, hue }),
+          )),
+          one(sequenceOf(
+            [one(tryConsumeColorSpace)],
+            ([[space]]) => ok<ColorInterpolationMethod>({ space }),
+          )),
+        ],
+        ([method]) => ok(method),
+      ))),
     ],
-    ([, [space], [hue]]): TryComponentConsumerResult<ColorInterpolationMethod> => {
-      if (isPolarColorSpace(space)) {
-        return ok({
-          space,
-          hue,
-        });
-      }
-
-      return hue === undefined
-        ? ok({ space })
-        : null;
-    },
+    ([, [method]]) => ok(method),
   );
 
 function tryConsumeColorSpace(
@@ -2232,7 +2253,7 @@ function tryConsumeCustomColorSpace(
   }
 
   const { value } = ident.value;
-  const context = colorResolutionContextFor(c.context);
+  const context = colorContextFor(c.context);
 
   if (context.colorProfiles?.has(value)) {
     return ok(value);
@@ -2240,17 +2261,6 @@ function tryConsumeCustomColorSpace(
 
   c.restore(start);
   return null;
-}
-
-function isPolarColorSpace(
-  space: ColorInterpolationSpaceName,
-): space is PolarColorSpaceName {
-  return (
-    space === 'hsl' ||
-    space === 'hwb' ||
-    space === 'lch' ||
-    space === 'oklch'
-  );
 }
 
 function tryConsumeHueInterpolationMethod(
@@ -2332,9 +2342,9 @@ const consumeQuirkyColor: TryComponentConsumer<HexColor> = (c) => {
 // ██    ██  ██       ██       ██     ██    ██     ██    ██ ██   ██
 // ██     ██ ████████ ████████ ██     ██    ██    ████    ███    ████████
 
-type RelativeColorParserContext = ColorResolutionContext & {
+type RelativeColorParserContext = {
   relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
-};
+} & ColorContext;
 
 function tryConsumeRelativeColorOrigin(
   c: ComponentCursor,
@@ -2371,7 +2381,7 @@ function tryConsumeRelativeColorKeyword(
   return ok(promoteNumericVariable(
     name,
     'number',
-    colorResolutionContextFor(c.context),
+    colorContextFor(c.context),
   ));
 }
 
@@ -2380,7 +2390,7 @@ function contextWithRelativeColorVariables(
   components: readonly string[],
   includeAlpha = true,
 ): RelativeColorParserContext {
-  const outer = colorResolutionContextFor(context);
+  const outer = colorContextFor(context);
   const relativeColorVariables = new Map(
     relativeColorVariableNames(components, includeAlpha).map((name) => [
       name,
@@ -2409,11 +2419,11 @@ function contextWithColorFnRelativeVariables(
     return context;
   }
 
-  const resolutionContext = colorResolutionContextFor(context);
-  const profile = colorProfileFor(space, resolutionContext);
+  const colorContext = colorContextFor(context);
+  const profile = colorProfileFor(space, colorContext);
 
   return contextWithRelativeColorVariables(
-    resolutionContext,
+    colorContext,
     profile?.components ?? [],
     !isCustomColorProfileSpace(space),
   );
@@ -2817,32 +2827,24 @@ function colorMetadataAsRelative(
 export function resolveColorValue(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorResolutionContext = {},
+  context: ColorContext = {},
 ): ColorValue {
-  const resolved = resolveColorValueInternal(value, stage, context);
-
-  return (
-    context.targetColorSpace !== undefined &&
-    resolved.kind === ColorKind.Absolute
-  )
-    ? convertAbsoluteColor(resolved, context.targetColorSpace, context)
-    : resolved;
+  return resolveColorValueInternal(value, stage, context);
 }
 
-export type ColorResolutionContext = MathContext & ColorConversionContext & {
+export type ColorContext = {
   currentColor?: AbsoluteColor;
   systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
   colorScheme?: ColorScheme;
-  // Converts the final resolved result to this space.
-  targetColorSpace?: ColorSpaceName;
-};
+  colorProfiles?: ReadonlyMap<ColorProfileSpace, ColorProfile>;
+} & MathContext;
 
 export type ColorScheme = 'light' | 'dark';
 
 export function tryResolveAbsoluteColor(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorResolutionContext = {},
+  context: ColorContext = {},
 ): AbsoluteColor | null {
   const resolved = resolveColorValue(value, stage, context);
 
@@ -2852,7 +2854,7 @@ export function tryResolveAbsoluteColor(
 function resolveColorValueInternal(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
   asOrigin = false,
 ): ColorValue {
   switch (value.kind) {
@@ -2929,7 +2931,7 @@ function resolveHexColor(value: HexColor): AbsoluteColor {
 function resolveColorMixFn(
   value: ColorMixFn,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
 ): ColorValue {
   const method = canonicalizeColorMixMethod(value.method);
   const items = canonicalizeColorMixPercentages(mapTuple(
@@ -3004,7 +3006,7 @@ function canonicalizeColorMixPercentages(
 function resolveColorMixItem(
   item: ColorMixItem,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
 ): ColorMixItem {
   const color = resolveColorValueInternal(item.color, stage, context);
   const percentage = item.percentage === undefined
@@ -3034,7 +3036,7 @@ function isResolvedColorMixItem(
 function resolveColorFunction(
   value: ColorFunction,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
   asOrigin: boolean,
 ): ColorValue {
   const isRelative = isRelativeColorFunction(value);
@@ -3131,7 +3133,7 @@ function shouldPreserveLegacySyntax(value: DeviceCmykFn): boolean {
 function relativeColorChannelValues(
   value: RelativeColorFunction,
   reference: AbsoluteColor,
-  context: ColorResolutionContext,
+  context: ColorContext,
   metadata: ColorMetadata,
 ): ReadonlyMap<string, NumberLiteral | 'none'> | null {
   if (value.kind === ColorKind.AlphaFn) {
@@ -3214,9 +3216,9 @@ function relativeChannelValue(
 }
 
 function relativeColorCalculationContext(
-  context: ColorResolutionContext,
+  context: ColorContext,
   channelValues: ReadonlyMap<string, NumberLiteral | 'none'>,
-): ColorResolutionContext {
+): ColorContext {
   return {
     ...context,
     numericVariables: new Map([
@@ -3250,7 +3252,7 @@ function createAbsoluteColorConverter(
   value: ColorFunction,
   metadata: ColorMetadata,
   reference: AbsoluteColor | undefined,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): AbsoluteColorConverter | null {
   switch (value.kind) {
     case ColorKind.AlphaFn: {
@@ -3380,7 +3382,7 @@ function resolveComponents<
 >(
   value: Value,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
   metadata: ColorMetadata,
   reference?: AbsoluteColor | null,
 ): {
@@ -3594,7 +3596,7 @@ function canonicalizeHueComponent(
   value: SyntaxHueComponent,
 ): SyntaxHueComponent {
   return value !== 'none' && value.type === 'angle' && value.unit !== 'deg'
-    ? resolveAngleLiteral(value)
+    ? canonicalizeAngle(value)
     : value;
 }
 
@@ -3703,7 +3705,7 @@ function scaleHueComponent(
   }
 
   return value.type === 'angle'
-    ? resolveAngleLiteral(value).value
+    ? canonicalizeAngle(value).value
     : value.value;
 }
 
@@ -3746,7 +3748,7 @@ function normalizeHueComponent(
   }
 
   const number = value.type === 'angle'
-    ? resolveAngleLiteral(value).value
+    ? canonicalizeAngle(value).value
     : value.value;
   const normalized = normalizeHue(number);
 
@@ -3993,7 +3995,7 @@ function absoluteColorFromRgba(rgba: number): AbsoluteColor {
 function resolveDeviceCmykFn(
   value: DeviceCmykFn,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
 ): DeviceCmykFn | AbsoluteColor<DeviceCmykSpace> {
   const metadata = DEVICE_CMYK_METADATA;
   let { components } = resolveComponents(
@@ -4041,7 +4043,7 @@ function resolveDeviceCmykFn(
 function resolveLightDarkColor(
   value: LightDarkColor,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
 ): ColorValue {
   if (
     stage < ValueStage.Computed ||
@@ -4060,7 +4062,7 @@ function resolveLightDarkColor(
 function resolveContrastColorFn(
   value: ContrastColorFn,
   stage: ValueStage,
-  context: ColorResolutionContext,
+  context: ColorContext,
 ): ColorValue {
   if (stage < ValueStage.Computed) {
     return value;
@@ -4116,7 +4118,7 @@ function relativeLuminance(value: PredefinedAbsoluteColor): number {
   );
 }
 
-function colorResolutionContextFor(context: unknown): ColorResolutionContext {
+function colorContextFor(context: unknown): ColorContext {
   return context === null || context === undefined
     ? {}
     : context;
@@ -4173,7 +4175,9 @@ export function serializeColorValue(
 }
 
 function serializeColorMixFn(value: ColorMixFn): string {
-  const method = serializeColorMixMethod(value.method);
+  const method = value.method === undefined
+    ? null
+    : serializeColorInterpolationMethod(value.method);
   const items = value.items.map((item) => {
     const color = serializeColorValue(item.color);
     const percentage = item.percentage === undefined
@@ -4189,14 +4193,12 @@ function serializeColorMixFn(value: ColorMixFn): string {
   return `color-mix(${body})`;
 }
 
-function serializeColorMixMethod(
-  method: ColorInterpolationMethod | undefined,
-): string | null {
-  if (method === undefined) {
-    return null;
-  }
-
-  const hue = method.hue ? ` ${method.hue} hue` : '';
+export function serializeColorInterpolationMethod(
+  method: ColorInterpolationMethod,
+): string {
+  const hue = method.hue === undefined || method.hue === 'shorter'
+    ? ''
+    : ` ${method.hue} hue`;
 
   return `in ${method.space}${hue}`;
 }
@@ -4449,14 +4451,10 @@ type ColorMatrix = readonly [
   readonly [number, number, number],
 ];
 
-export type ColorConversionContext = {
-  colorProfiles?: ReadonlyMap<ColorProfileSpace, ColorProfile>;
-};
-
 export function convertAbsoluteColor(
   value: AbsoluteColor,
   target: ColorSpaceName,
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): PredefinedAbsoluteColor {
   return convertPredefinedAbsoluteColor(
     coercePredefinedAbsoluteColor(value, context),
@@ -4502,7 +4500,7 @@ function convertPredefinedAbsoluteColor(
 
 function coercePredefinedAbsoluteColor(
   value: AbsoluteColor,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): PredefinedAbsoluteColor {
   const predefined = tryCoercePredefinedAbsoluteColor(value, context);
 
@@ -4515,7 +4513,7 @@ function coercePredefinedAbsoluteColor(
 
 function tryCoercePredefinedAbsoluteColor(
   value: AbsoluteColor,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): PredefinedAbsoluteColor | null {
   const { name } = value.space;
 
@@ -5504,7 +5502,7 @@ export function gamutMapColor(
   origin: AbsoluteColor,
   destination: ColorSpaceName,
   method: GamutMappingMethod = 'binary-search',
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): PredefinedAbsoluteColor {
   if (!hasGamutLimits(destination)) {
     return convertAbsoluteColor(origin, destination, context);
@@ -5604,7 +5602,7 @@ function hasGamutLimits(space: ColorSpaceName): boolean {
 
 function convertAbsoluteColorToOklch(
   value: AbsoluteColor,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): PredefinedAbsoluteColor {
   const prepared = replaceMissingComponents(
     prepareAbsoluteColorForConversion(
@@ -5620,7 +5618,7 @@ function convertAbsoluteColorToOklch(
 function isColorInGamut(
   value: AbsoluteColor,
   destination: ColorSpaceName,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): boolean {
   const gamutSpace = destination === 'hsl' || destination === 'hwb'
     ? 'srgb'
@@ -5638,7 +5636,7 @@ function isColorInGamut(
 function clipColorToGamut(
   value: AbsoluteColor,
   destination: ColorSpaceName,
-  context: ColorConversionContext,
+  context: ColorContext,
 ): PredefinedAbsoluteColor {
   const converted = convertAbsoluteColor(value, destination, context);
   const [first, second, third] = converted.components;
@@ -5668,7 +5666,7 @@ function clipColorToGamut(
 export function deltaE2000(
   reference: AbsoluteColor,
   sample: AbsoluteColor,
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): number {
   const [lightness1, a1, b1] = componentsForConversion(
     convertAbsoluteColor(reference, 'lab', context),
@@ -5775,7 +5773,7 @@ export function deltaE2000(
 export function deltaEOK(
   one: AbsoluteColor,
   two: AbsoluteColor,
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): number {
   const [lightness1, a1, b1] = componentsForConversion(
     convertAbsoluteColor(one, 'oklab', context),
@@ -5806,7 +5804,7 @@ function labHueInDegrees(a: number, b: number): number {
 export function areColorsEquivalent(
   a: AbsoluteColor,
   b: AbsoluteColor,
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): boolean {
   const preparedA = prepareAbsoluteColorForComparison(a);
   const preparedB = prepareAbsoluteColorForComparison(b);
@@ -5875,33 +5873,9 @@ export function interpolateColors(
   a: AbsoluteColor,
   b: AbsoluteColor,
   progress: number,
-  space?: ColorSpaceName,
-  hue?: HueInterpolationMethod,
-  context?: ColorConversionContext,
-): PredefinedAbsoluteColor;
-export function interpolateColors(
-  a: AbsoluteColor,
-  b: AbsoluteColor,
-  progress: number,
-  space: DashedIdentValue['value'],
-  hue?: never,
-  context?: ColorConversionContext,
-): AbsoluteColor<CustomColorSpace>;
-export function interpolateColors(
-  a: AbsoluteColor,
-  b: AbsoluteColor,
-  progress: number,
-  space: ColorInterpolationSpaceName | undefined,
-  hue?: HueInterpolationMethod,
-  context?: ColorConversionContext,
-): AbsoluteColor;
-export function interpolateColors(
-  a: AbsoluteColor,
-  b: AbsoluteColor,
-  progress: number,
   space?: ColorInterpolationSpaceName,
   hue: HueInterpolationMethod = 'shorter',
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): AbsoluteColor {
   space ??= (a.isLegacySrgb && b.isLegacySrgb
     ? 'srgb'
@@ -5953,7 +5927,7 @@ function interpolateCustomColors(
   b: AbsoluteColor,
   progress: number,
   space: DashedIdentValue['value'],
-  context: ColorConversionContext,
+  context: ColorContext,
 ): AbsoluteColor<CustomColorSpace> {
   const convertedA = convertAbsoluteColorToCustomSpace(a, space, context);
   const convertedB = convertAbsoluteColorToCustomSpace(b, space, context);
@@ -5975,7 +5949,7 @@ function interpolateCustomColors(
 function convertAbsoluteColorToCustomSpace(
   value: AbsoluteColor,
   target: DashedIdentValue['value'],
-  context: ColorConversionContext,
+  context: ColorContext,
 ): AbsoluteColor<CustomColorSpace> {
   const normalized = normalizeAbsoluteColorEncoding(value);
   const profile = context.colorProfiles?.get(target);
@@ -6349,7 +6323,7 @@ export type ResolvedColorMixItem = {
 export function calculateColorMix(
   items: readonly ResolvedColorMixItem[],
   method: ColorInterpolationMethod = { space: 'oklab' },
-  context: ColorConversionContext = {},
+  context: ColorContext = {},
 ): AbsoluteColor {
   if (items.length === 0) {
     throw new TypeError('A color mix requires at least one item');

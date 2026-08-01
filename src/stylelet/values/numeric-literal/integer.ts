@@ -16,6 +16,10 @@ export type IntegerLiteral = {
   value: number;
 };
 
+export function integerLiteral(value: number): IntegerLiteral {
+  return { type: 'integer', value };
+}
+
 export function parseInteger(
   input: ParserInput,
   context: unknown = undefined,

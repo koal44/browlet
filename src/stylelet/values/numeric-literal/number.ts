@@ -16,6 +16,10 @@ export type NumberLiteral = {
   value: number;
 };
 
+export function numberLiteral(value: number): NumberLiteral {
+  return { type: 'number', value };
+}
+
 export function parseNumber(
   input: ParserInput,
   context: unknown = undefined,

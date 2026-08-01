@@ -22,6 +22,14 @@ export type DimensionLiteral<
   unit: Unit;
 };
 
+export function dimensionLiteral<Type extends string, Unit extends string>(
+  type: Type,
+  value: number,
+  unit: Unit,
+): DimensionLiteral<Type, Unit> {
+  return { type, value, unit };
+}
+
 export function parseDimension(
   input: ParserInput,
   context: unknown = undefined,

@@ -8,7 +8,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
-import { serializeDimension, type DimensionLiteral } from './dimension';
+import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <angle> = <dimension-token with an angle unit>
@@ -23,6 +23,18 @@ export type CanonicalAngleLiteral = DimensionLiteral<'angle', 'deg'>;
 export const ANGLE_UNITS = ['deg', 'grad', 'rad', 'turn'] as const;
 
 export type AngleUnit = (typeof ANGLE_UNITS)[number];
+
+export function angleLiteral(value: number): CanonicalAngleLiteral;
+export function angleLiteral<Unit extends AngleUnit>(
+  value: number,
+  unit: Unit,
+): DimensionLiteral<'angle', Unit>;
+export function angleLiteral(
+  value: number,
+  unit: AngleUnit = 'deg',
+): AngleLiteral {
+  return dimensionLiteral('angle', value, unit);
+}
 
 export function parseAngle(
   input: ParserInput,
@@ -60,7 +72,7 @@ export function createAngleConsumer(
       return result;
     }
 
-    const canonical = resolveAngle(result.value);
+    const canonical = canonicalizeAngle(result.value);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -115,7 +127,7 @@ export function serializeCanonicalAngle(value: CanonicalAngleLiteral): string {
   return serializeDimension(value);
 }
 
-export function resolveAngle(value: AngleLiteral): CanonicalAngleLiteral {
+export function canonicalizeAngle(value: AngleLiteral): CanonicalAngleLiteral {
   let degrees: number;
 
   switch (value.unit) {

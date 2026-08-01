@@ -20,13 +20,13 @@ import {
 import { TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
-import { ANGLE_UNITS, resolveAngle, type AngleLiteral } from './numeric-literal/angle';
+import { ANGLE_UNITS, canonicalizeAngle, type AngleLiteral } from './numeric-literal/angle';
 import {
   serializeDimension, tryConsumeDimension,
   type DimensionLiteral,
 } from './numeric-literal/dimension';
 import {
-  FREQUENCY_UNITS, resolveFrequency,
+  FREQUENCY_UNITS, canonicalizeFrequency,
   type FrequencyLiteral,
 } from './numeric-literal/frequency';
 import { serializeIdentifier } from './ident';
@@ -41,10 +41,10 @@ import {
   type PercentageLiteral,
 } from './numeric-literal/percentage';
 import {
-  RESOLUTION_UNITS, resolveResolution,
+  RESOLUTION_UNITS, canonicalizeResolution,
   type ResolutionLiteral,
 } from './numeric-literal/resolution';
-import { TIME_UNITS, resolveTime, type TimeLiteral } from './numeric-literal/time';
+import { TIME_UNITS, canonicalizeTime, type TimeLiteral } from './numeric-literal/time';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';
@@ -105,11 +105,11 @@ export type MathContext = {
   numericVariables?: ReadonlyMap<string, NumericVariable>;
 };
 
-type InternalMathContext = MathContext & {
+type InternalMathContext = {
   expectedType?: MathValueType;
   insideCalculation?: boolean;
   termCount?: number;
-};
+} & MathContext;
 
 export type NumericVariable = {
   value: NumericLiteral | 'none' | undefined;
@@ -136,6 +136,37 @@ export function createMathValueFromLiteral<Type extends MathValueType>(
   valueType: Type,
   context: MathContext = {},
 ): MathValue<Type> {
+  return createMathValue(
+    createNumericLeafFromLiteral(literal, context),
+    valueType,
+  );
+}
+
+export function resolveNumericLiteral<Type extends MathValueType>(
+  literal: MathLiteralByType[Type],
+  valueType: Type,
+  stage: ValueStage,
+  context: MathContext = {},
+): MathLiteralByType[Type] {
+  if (stage < ValueStage.Computed) {
+    return literal;
+  }
+
+  const resolved = resolveNumericLeaf(
+    createNumericLeafFromLiteral(literal, context),
+    context,
+  );
+
+  return resolvedMathLiteralFromLeaf(
+    finalizeNumericLeaf(resolved, context, valueType),
+    valueType,
+  );
+}
+
+function createNumericLeafFromLiteral<Type extends MathValueType>(
+  literal: MathLiteralByType[Type],
+  context: MathContext,
+): NumericLeaf {
   const calculationLiteral: NumericLiteral = 'unit' in literal
     ? {
       type: 'dimension',
@@ -151,13 +182,23 @@ export function createMathValueFromLiteral<Type extends MathValueType>(
   const mathHints = mathHintsFromValue(normalized, context);
 
   if (mathHints === null) {
-    throw new TypeError('Cannot create a math value from an unknown dimension');
+    throw new TypeError('Cannot create a numeric leaf from an unknown dimension');
   }
 
-  return createMathValue(
-    createNumericLeaf(normalized, mathHints),
-    valueType,
-  );
+  return createNumericLeaf(normalized, mathHints);
+}
+
+function resolveNumericLeaf(
+  value: NumericLeaf,
+  context: MathContext,
+): NumericLeaf {
+  const resolved = value.type === 'percentage'
+    ? resolvePercentage(value, context)
+    : value;
+
+  return resolved.type === 'dimension'
+    ? canonicalizeDimension(resolved, context)
+    : resolved;
 }
 
 export function promoteNumericVariable<Type extends MathValueType>(
@@ -3412,25 +3453,25 @@ function canonicalizeDimension(
       context.length,
     );
   } else if (isUnit(ANGLE_UNITS, unit)) {
-    resolved = resolveAngle({
+    resolved = canonicalizeAngle({
       type: 'angle',
       value: value.value,
       unit,
     });
   } else if (isUnit(TIME_UNITS, unit)) {
-    resolved = resolveTime({
+    resolved = canonicalizeTime({
       type: 'time',
       value: value.value,
       unit,
     });
   } else if (isUnit(FREQUENCY_UNITS, unit)) {
-    resolved = resolveFrequency({
+    resolved = canonicalizeFrequency({
       type: 'frequency',
       value: value.value,
       unit,
     });
   } else if (isUnit(RESOLUTION_UNITS, unit)) {
-    resolved = resolveResolution({
+    resolved = canonicalizeResolution({
       type: 'resolution',
       value: value.value,
       unit,

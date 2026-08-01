@@ -20,10 +20,10 @@ import {
 
 export type LengthPercentageLiteral = DimensionPercentageLiteral<LengthLiteral>;
 
-export type LengthPercentageResolutionContext = LengthResolutionContext & {
+export type LengthPercentageResolutionContext = {
   /** Percentage basis in canonical CSS pixels. */
   percentageBasis?: number;
-};
+} & LengthResolutionContext;
 
 export function parseLengthPercentage(
   input: ParserInput,

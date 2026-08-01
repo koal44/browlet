@@ -8,7 +8,7 @@ import {
 } from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
-import { serializeDimension, type DimensionLiteral } from './dimension';
+import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
  * <resolution> = <nonnegative dimension-token with a resolution unit>
@@ -22,6 +22,18 @@ export type CanonicalResolutionLiteral =
 export const RESOLUTION_UNITS = ['dpi', 'dpcm', 'dppx', 'x'] as const;
 
 export type ResolutionUnit = (typeof RESOLUTION_UNITS)[number];
+
+export function resolutionLiteral(value: number): CanonicalResolutionLiteral;
+export function resolutionLiteral<Unit extends ResolutionUnit>(
+  value: number,
+  unit: Unit,
+): DimensionLiteral<'resolution', Unit>;
+export function resolutionLiteral(
+  value: number,
+  unit: ResolutionUnit = 'dppx',
+): ResolutionLiteral {
+  return dimensionLiteral('resolution', value, unit);
+}
 
 export function parseResolution(
   input: ParserInput,
@@ -59,7 +71,7 @@ export function createResolutionConsumer(
       return result;
     }
 
-    const canonical = resolveResolution(result.value);
+    const canonical = canonicalizeResolution(result.value);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -116,7 +128,7 @@ export function serializeCanonicalResolution(
   return serializeDimension(value);
 }
 
-export function resolveResolution(
+export function canonicalizeResolution(
   value: ResolutionLiteral,
 ): CanonicalResolutionLiteral {
   let dotsPerPixel: number;
