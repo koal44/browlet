@@ -21,8 +21,9 @@ import {
   tryConsumeAnglePercentage, tryAccumulateAnglePercentages, tryAddAnglePercentages,
   tryInterpolateAnglePercentages, tryResolveAnglePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/angle-percentage';
-import { parseAnyValue } from '../../../../src/stylelet/values/any-value';
+import { parseAnyValue, tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../../src/stylelet/values/auto';
+import { parseCssWideValue, tryConsumeCssWideValue } from '../../../../src/stylelet/values/css-wide';
 import { parseDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions, parseDimension, serializeDimension,
@@ -124,17 +125,91 @@ describe('auto', () => {
   });
 });
 
+describe('CSS-wide value', () => {
+  it('parses keywords case-insensitively and serializes their canonical spelling', () => {
+    const value = parseCssWideValue(' ReVeRt-LaYeR ');
+
+    expect(value).toMatchObject({
+      type: 'css-wide',
+      keyword: 'revert-layer',
+    });
+    expect(value!.serialize()).toBe('revert-layer');
+    expect(value!.resolve(ValueStage.Computed, {})).toBe(value);
+  });
+
+  it('rejects other identifiers and additional components', () => {
+    expect(parseCssWideValue('default')).toBeNull();
+    expect(parseCssWideValue('inherit initial')).toBeNull();
+  });
+
+  it('consumes one CSS-wide keyword without requiring the end of input', () => {
+    const components = parseListOfComponentValues('inherit initial');
+    const c = new ComponentCursor(components);
+
+    expect(tryConsumeCssWideValue(c)).toMatchObject({
+      kind: 'ok',
+      value: {
+        type: 'css-wide',
+        keyword: 'inherit',
+      },
+    });
+    expect(c.pos()).toBe(1);
+  });
+});
+
 // Free-form productions
 
 describe('any-value', () => {
   it('parses a nonempty sequence of arbitrary component values', () => {
     const expected = parseListOfComponentValues('a ! b; fn() []');
-    expect(parseAnyValue('a ! b; fn() []')).toEqual(expected);
+    expect(parseAnyValue('a ! b; fn() []')).toEqual({
+      type: 'any-value',
+      components: expected,
+    });
   });
 
   it('returns the original component values after validating them', () => {
     const components = parseListOfComponentValues('a fn(b)');
-    expect(parseAnyValue(components)).toBe(components);
+    expect(parseAnyValue(components)?.components).toBe(components);
+  });
+
+  it('consumes the remaining nonempty component-value sequence', () => {
+    const components = parseListOfComponentValues('a fn(b)');
+    const c = new ComponentCursor(components);
+
+    expect(tryConsumeAnyValue(c)).toEqual({
+      kind: 'ok',
+      value: {
+        type: 'any-value',
+        components,
+      },
+    });
+    expect(c.pos()).toBe(components.length);
+  });
+
+  it('stops before a component that cannot belong to the production', () => {
+    const components = parseListOfComponentValues('a)');
+    const c = new ComponentCursor(components);
+
+    expect(tryConsumeAnyValue(c)).toEqual({
+      kind: 'ok',
+      value: {
+        type: 'any-value',
+        components: components.slice(0, 1),
+      },
+    });
+    expect(c.pos()).toBe(1);
+    expect(c.peek()).toBe(RightParenToken);
+  });
+
+  it('restores the cursor when its first component does not match', () => {
+    const empty = new ComponentCursor([]);
+    const invalid = new ComponentCursor(parseListOfComponentValues(') a'));
+
+    expect(tryConsumeAnyValue(empty)).toBeNull();
+    expect(empty.pos()).toBe(0);
+    expect(tryConsumeAnyValue(invalid)).toBeNull();
+    expect(invalid.pos()).toBe(0);
   });
 
   it('accepts empty nested block contents', () => {
@@ -167,7 +242,13 @@ describe('declaration-value', () => {
 
   it('parses a nonempty sequence of declaration component values', () => {
     const components = values('red 1px url(foo.png)');
-    expect(parseDeclarationValue(components)).toBe(components);
+    const value = parseDeclarationValue(components);
+
+    expect(value).toEqual({
+      type: 'declaration-value',
+      components,
+    });
+    expect(value?.components).toBe(components);
   });
 
   it('rejects an empty production', () => {
@@ -428,6 +509,7 @@ describe('url-modifier', () => {
 
   it('parses unknown functional notation as a function block', () => {
     expect(parseUrlModifier('future-modifier(value)')).toEqual({
+      type: 'block',
       block: BlockKind.Function,
       name: 'future-modifier',
       value: [identToken('value')],
@@ -492,6 +574,7 @@ describe('url-modifier', () => {
 
   it('rejects unknown functional notation containing a bad token', () => {
     const components: ComponentValue[] = [{
+      type: 'block',
       block: BlockKind.Function,
       name: 'future-modifier',
       value: [BadStringToken],
@@ -513,6 +596,7 @@ describe('url-modifier', () => {
     expect(tryConsumeUrlModifier(c)).toEqual({
       kind: 'ok',
       value: {
+        type: 'block',
         block: BlockKind.Function,
         name: 'future-modifier',
         value: [],
@@ -533,10 +617,12 @@ describe('url', () => {
   it('preserves substitution in src() but not in url()', () => {
     expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
       {
+        type: 'block',
         block: BlockKind.Function,
         name: 'src',
         value: [
           {
+            type: 'block',
             block: BlockKind.Function,
             name: 'var',
             value: [identToken('--foo')],
@@ -691,12 +777,14 @@ describe('url', () => {
 
   it('rejects an unknown functional modifier containing a bad token', () => {
     expect(parseUrl([{
+      type: 'block',
       block: BlockKind.Function,
       name: 'url',
       value: [
         stringToken('image.png'),
         WhitespaceToken,
         {
+          type: 'block',
           block: BlockKind.Function,
           name: 'future-modifier',
           value: [BadStringToken],

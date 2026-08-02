@@ -53,7 +53,7 @@ export class ComponentCursor {
 
     if (
       value === null ||
-      !('kind' in value) ||
+      value.type !== 'token' ||
       value.kind !== kind
     ) {
       return false;

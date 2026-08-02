@@ -1,8 +1,8 @@
 import { asciiLower } from '../../shared/css';
 import { ComponentCursor } from './component-cursor';
 import {
-  isBad, type TryComponentConsumerResult,
-  type TryComponentConsumer,
+  isBad,
+  type TryComponentConsumerResult, type TryComponentConsumer,
 } from './component-try-consumer';
 import { TokenCursor } from './token-cursor';
 import type {
@@ -75,6 +75,7 @@ export type ComponentBlock =
   | FunctionBlock;
 
 export type SimpleBlock<K extends SimpleBlockKind = SimpleBlockKind> = {
+  type: 'block';
   block: K;
   value: ComponentValue[];
 };
@@ -85,6 +86,7 @@ export type SimpleBlockKind =
   | BlockKind.Parens;
 
 export type FunctionBlock = {
+  type: 'block';
   block: BlockKind.Function;
   name: string;
   value: ComponentValue[];
@@ -691,6 +693,7 @@ function consumeComponentValueFromTokens(c: TokenCursor): ComponentValue {
 // 5.4.8. Consume a simple block
 function consumeSimpleBlockFromTokens<K extends SimpleBlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
   const result: SimpleBlock<K> = {
+    type: 'block',
     block,
     value: [],
   };
@@ -731,6 +734,7 @@ function blockEndingTokenKind(block: BlockKind): TokenKind {
 // 5.4.9. Consume a function
 function consumeFunctionFromTokens(c: TokenCursor, name: string): FunctionBlock {
   const result: FunctionBlock = {
+    type: 'block',
     block: BlockKind.Function,
     name,
     value: [],
@@ -780,7 +784,7 @@ function consumeComponentTriviaAndSemicolons(c: ComponentCursor): void {
 type PreservedTokenKind = PreservedToken['kind'];
 
 export function isTokenKind<K extends PreservedTokenKind>(comp: ComponentValue | null, kind: K): comp is Extract<PreservedToken, { kind: K; }> {
-  return comp !== null && 'kind' in comp && comp.kind === kind;
+  return comp !== null && comp.type === 'token' && comp.kind === kind;
 }
 
 export function isIdentToken(comp: ComponentValue | null): comp is IdentToken {
@@ -795,17 +799,8 @@ export function isWhitespaceToken(comp: ComponentValue | null): comp is StaticTo
   return isTokenKind(comp, TokenKind.Whitespace);
 }
 
-export function isIdentTokenWithValue(comp: ComponentValue | null, expected: string, isInsensitive = false): comp is IdentToken {
-  return isIdentToken(comp)
-    && (
-      isInsensitive
-        ? asciiLower(comp.value) === asciiLower(expected)
-        : comp.value === expected
-    );
-}
-
 export function isComponentBlock(comp: ComponentValue | null): comp is ComponentBlock {
-  return comp !== null && !('kind' in comp);
+  return comp !== null && comp.type === 'block';
 }
 
 export function isBlockKind<K extends BlockKind>(
@@ -847,26 +842,4 @@ function isDeclarationEnd(token: Token): token is StaticToken<TokenKind.Semicolo
 
 function isComponentDeclarationEnd(comp: ComponentValue | null): boolean {
   return comp === null || isTokenKind(comp, TokenKind.Semicolon);
-}
-
-export function singleIdentToken(components: readonly ComponentValue[]): IdentToken | null {
-  let ident: IdentToken | null = null;
-
-  for (const component of components) {
-    if (isWhitespaceToken(component)) {
-      continue;
-    }
-
-    if (!isIdentToken(component)) {
-      return null;
-    }
-
-    if (ident !== null) {
-      return null;
-    }
-
-    ident = component;
-  }
-
-  return ident;
 }

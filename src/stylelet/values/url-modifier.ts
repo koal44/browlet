@@ -9,7 +9,7 @@ import {
   type TryComponentConsumerResult,
 } from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type FunctionBlock, type ParserInput } from '../parser/syntax';
-import { isAnyValue } from './any-value';
+import { isAnyValueContents } from './any-value';
 import { tryConsumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { serializeCssString, tryConsumeString } from './string';
@@ -141,9 +141,8 @@ function tryConsumeUnknownUrlModifier(
   if (
     result !== null &&
     !isBad(result) &&
-    'block' in result.value &&
-    result.value.value.length > 0 &&
-    !isAnyValue(result.value.value)
+    result.value.type === 'block' &&
+    !isAnyValueContents(result.value.value)
   ) {
     return bad(
       ComponentConsumerBadReason.Invalid,

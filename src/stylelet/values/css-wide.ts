@@ -1,4 +1,18 @@
-import { singleIdentToken, type ComponentValue } from '../parser/syntax';
+import type { ComponentCursor } from '../parser/component-cursor';
+import { withTrivia } from '../parser/component-grammar';
+import {
+  isBad, ok, unwrapConsumeResultOrThrow,
+  type TryComponentConsumerResult,
+} from '../parser/component-try-consumer';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import type { ValueStage } from '../value-processing';
+import { createKeywordConsumer } from './keyword';
+import type { PropertyValue } from './property-value';
+
+/*
+ * CSS-wide keywords:
+ * inherit | initial | unset | revert | revert-layer
+ */
 
 export const CSS_WIDE_KEYWORDS = [
   'inherit',
@@ -10,32 +24,50 @@ export const CSS_WIDE_KEYWORDS = [
 
 export type CssWideKeyword = (typeof CSS_WIDE_KEYWORDS)[number];
 
-export type CssWideValue = {
+export type CssWideValue<Value = unknown, Context = unknown> = {
   type: 'css-wide';
   keyword: CssWideKeyword;
+  resolve: (stage: ValueStage, context: Context) => PropertyValue<Value, Context>;
+  serialize: () => string;
 };
 
-export function parseCssWideValue(components: readonly ComponentValue[]): CssWideValue | null {
-  const token = singleIdentToken(components);
-  if (token === null) return null;
-
-  const keyword = token.value.toLowerCase();
-
-  return isCssWideKeyword(keyword)
-    ? { type: 'css-wide', keyword }
-    : null;
+export function parseCssWideValue<Value = unknown, Context = unknown>(
+  input: ParserInput,
+  context: unknown = undefined,
+): CssWideValue<Value, Context> | null {
+  return unwrapConsumeResultOrThrow(
+    parseAsComponentGrammar(
+      input,
+      withTrivia(tryConsumeCssWideValue<Value, Context>),
+      context,
+    ),
+    'CSS-wide value',
+  );
 }
 
-export function isCssWideValue(value: unknown): value is CssWideValue {
-  return !!value
-    && typeof value === 'object'
-    && (value as { type?: unknown; }).type === 'css-wide';
+export function tryConsumeCssWideValue<Value = unknown, Context = unknown>(
+  c: ComponentCursor,
+): TryComponentConsumerResult<CssWideValue<Value, Context>> {
+  const keyword = tryConsumeCssWideKeyword(c);
+
+  if (keyword === null || isBad(keyword)) {
+    return keyword;
+  }
+
+  return ok(createCssWideValue(keyword.value));
 }
 
-export function serializeCssWideValue(value: CssWideValue): string {
-  return value.keyword;
-}
+const tryConsumeCssWideKeyword = createKeywordConsumer(...CSS_WIDE_KEYWORDS);
 
-function isCssWideKeyword(value: string): value is CssWideKeyword {
-  return CSS_WIDE_KEYWORDS.some((keyword) => keyword === value);
+function createCssWideValue<Value, Context>(
+  keyword: CssWideKeyword,
+): CssWideValue<Value, Context> {
+  const value: CssWideValue<Value, Context> = {
+    type: 'css-wide',
+    keyword,
+    resolve: () => value,
+    serialize: () => keyword,
+  };
+
+  return value;
 }

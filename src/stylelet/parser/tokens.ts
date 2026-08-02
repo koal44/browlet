@@ -40,42 +40,50 @@ export enum NumberTokenFlag {
 }
 
 export type IdentToken = {
+  type: 'token';
   kind: TokenKind.Ident;
   value: string;
 };
 
 export type FunctionToken = {
+  type: 'token';
   kind: TokenKind.Function;
   value: string;
 };
 
 export type AtKeywordToken = {
+  type: 'token';
   kind: TokenKind.AtKeyword;
   value: string;
 };
 
 export type HashToken = {
+  type: 'token';
   kind: TokenKind.Hash;
   value: string;
   flag: HashTokenFlag;
 };
 
 export type StringToken = {
+  type: 'token';
   kind: TokenKind.String;
   value: string;
 };
 
 export type UrlToken = {
+  type: 'token';
   kind: TokenKind.Url;
   value: string;
 };
 
 export type DelimToken = {
+  type: 'token';
   kind: TokenKind.Delim;
   value: string;
 };
 
 export type NumberToken = {
+  type: 'token';
   kind: TokenKind.Number;
   value: number;
   repr: string;
@@ -83,12 +91,14 @@ export type NumberToken = {
 };
 
 export type PercentageToken = {
+  type: 'token';
   kind: TokenKind.Percentage;
   value: number;
   repr: string;
 };
 
 export type DimensionToken = {
+  type: 'token';
   kind: TokenKind.Dimension;
   value: number;
   repr: string;
@@ -114,6 +124,7 @@ export type StaticTokenKind =
   | TokenKind.EOF;
 
 export type StaticToken<K extends StaticTokenKind = StaticTokenKind> = {
+  type: 'token';
   kind: K;
 };
 
@@ -131,7 +142,7 @@ export type Token =
   | StaticToken;
 
 function staticToken<K extends StaticTokenKind>(kind: K): StaticToken<K> {
-  return Object.freeze({ kind });
+  return Object.freeze({ type: 'token', kind });
 }
 
 export const BadStringToken = staticToken(TokenKind.BadString);
@@ -151,44 +162,44 @@ export const RightBraceToken = staticToken(TokenKind.RightBrace);
 export const EOFToken = staticToken(TokenKind.EOF);
 
 export function identToken(value: string): IdentToken {
-  return { kind: TokenKind.Ident, value };
+  return { type: 'token', kind: TokenKind.Ident, value };
 }
 
 export function functionToken(value: string): FunctionToken {
-  return { kind: TokenKind.Function, value };
+  return { type: 'token', kind: TokenKind.Function, value };
 }
 
 export function atKeywordToken(value: string): AtKeywordToken {
-  return { kind: TokenKind.AtKeyword, value };
+  return { type: 'token', kind: TokenKind.AtKeyword, value };
 }
 
 export function hashToken(value: string, flag = HashTokenFlag.Unrestricted): HashToken {
-  return { kind: TokenKind.Hash, value, flag };
+  return { type: 'token', kind: TokenKind.Hash, value, flag };
 }
 
 export function stringToken(value: string): StringToken {
-  return { kind: TokenKind.String, value };
+  return { type: 'token', kind: TokenKind.String, value };
 }
 
 export function urlToken(value: string): UrlToken {
-  return { kind: TokenKind.Url, value };
+  return { type: 'token', kind: TokenKind.Url, value };
 }
 
 export function delimToken(value: string): DelimToken {
-  return { kind: TokenKind.Delim, value };
+  return { type: 'token', kind: TokenKind.Delim, value };
 }
 
 export function numberToken(value: number, flag = NumberTokenFlag.Integer, repr = ''): NumberToken {
-  return { kind: TokenKind.Number, value, flag, repr };
+  return { type: 'token', kind: TokenKind.Number, value, flag, repr };
 }
 
 export function percentageToken(value: number, repr = ''): PercentageToken {
-  return { kind: TokenKind.Percentage, value, repr };
+  return { type: 'token', kind: TokenKind.Percentage, value, repr };
 }
 
 export function dimensionToken(value: number, unit: string, flag = NumberTokenFlag.Integer,
   repr = ''): DimensionToken {
-  return { kind: TokenKind.Dimension, value, flag, unit, repr };
+  return { type: 'token', kind: TokenKind.Dimension, value, flag, unit, repr };
 }
 
 const LF = '\n';

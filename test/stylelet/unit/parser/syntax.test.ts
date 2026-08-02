@@ -4,13 +4,13 @@ import {
   BlockKind, RuleKind, parseCommaSeparatedListOfComponentValues, parseComponentValue,
   parseDeclaration, parseListOfComponentValues, parseListOfDeclarations, parseListOfRules,
   parseRule, parseStyleBlockContents, parseStylesheet, type AtRule, type ComponentValue,
-  type Declaration, type QualifiedRule, type Rule, type StyleBlockItem,
+  type Declaration, type PreservedToken, type QualifiedRule, type Rule, type StyleBlockItem,
 } from '../../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 
 function preservedKinds(values: readonly ComponentValue[]): TokenKind[] {
   return values
-    .filter((value): value is ComponentValue & { kind: TokenKind; } => 'kind' in value)
+    .filter((value): value is PreservedToken => value.type === 'token')
     .map((value) => value.kind);
 }
 
@@ -37,11 +37,11 @@ function expectDeclaration(value?: StyleBlockItem | null): Declaration {
 function expectPreservedToken(
   value: ComponentValue | null | undefined,
   kind: TokenKind,
-): ComponentValue & { kind: TokenKind; } {
+): PreservedToken {
   expect(value).toBeTruthy();
-  expect('kind' in value!).toBe(true);
-  expect((value as { kind: TokenKind; }).kind).toBe(kind);
-  return value as ComponentValue & { kind: TokenKind; };
+  expect(value!.type).toBe('token');
+  expect((value as PreservedToken).kind).toBe(kind);
+  return value as PreservedToken;
 }
 
 function expectSimpleBlock(
@@ -49,7 +49,7 @@ function expectSimpleBlock(
   block: BlockKind,
 ): { block: BlockKind; value: ComponentValue[]; } {
   expect(value).toBeTruthy();
-  expect('block' in value!).toBe(true);
+  expect(value!.type).toBe('block');
   expect((value as { block: BlockKind; }).block).toBe(block);
   return value as { block: BlockKind; value: ComponentValue[]; };
 }

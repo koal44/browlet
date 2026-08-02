@@ -1,16 +1,19 @@
 import {
-  BlockItemAstKind, PropertyId, getPropertyId, type CustomPropertyDeclarationAst,
-  type DeclarationAst,
+  BlockItemAstKind, PropertyId, getPropertyId,
+  type CustomPropertyDeclarationAst, type DeclarationAst,
 } from './types';
 import type { Declaration as SyntaxDeclaration } from './syntax';
 import { parseCssWideValue } from '../values/css-wide';
 import { parseColorValue } from '../values/color';
-import { isDeclarationValue } from '../values/declaration-value';
+import { isDeclarationValueComponents } from '../values/declaration-value';
 import { parseAnimationNameValue } from '../props/animation-name';
 import { parseMarginSideValue } from '../props/margin';
 
 export function buildDeclarationAst(declaration: SyntaxDeclaration): DeclarationAst | null {
-  if (declaration.value.length > 0 && !isDeclarationValue(declaration.value)) {
+  if (
+    declaration.value.length > 0 &&
+    !isDeclarationValueComponents(declaration.value)
+  ) {
     return null;
   }
 

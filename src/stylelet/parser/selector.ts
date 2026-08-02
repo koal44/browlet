@@ -5,8 +5,9 @@ import {
 } from './component-grammar';
 import type { ComponentCursor } from './component-cursor';
 import {
-  createDelimConsumer, tryConsumeColon, tryConsumeFunctionBlock, tryConsumeIdentToken,
-  tryConsumeIdHashToken, tryConsumeIntegerToken, tryConsumeStringToken,
+  createDelimConsumer, tryConsumeAnyValueFunctionBlock, tryConsumeColon,
+  tryConsumeIdentToken, tryConsumeIdHashToken, tryConsumeIntegerToken,
+  tryConsumeStringToken,
 } from './component-consumers';
 import type { ComponentValue, ParserInput } from './syntax';
 import {
@@ -16,7 +17,8 @@ import {
 import { TokenKind } from './tokens';
 import {
   addSpecificity, listSpecificity, SpecificityB, SpecificityA, SpecificityC, Specificity0,
-  sumSpecificity, type Specificity,
+  sumSpecificity,
+  type Specificity,
 } from './selector-specificity';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 import { tryConsumeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
@@ -1179,11 +1181,11 @@ const consumeAttrModifier = createKeywordConsumer('i', 's');
  *   : <function-token> <any-value> )
  *
  * Representing functional notation using the parser's component-value
- * <function-block> gives the equivalent execution grammar:
+ * function block, while retaining the required <any-value>, gives:
  *
  *   <pseudo-class-selector> =
  *     : <ident-token> |
- *     : <function-block>
+ *     : <any-value-function-block>
  */
 export type PseudoClassSelector = {
   kind: SelectorKind.PseudoClassSelector;
@@ -1196,15 +1198,19 @@ function tryConsumePseudoClassSelector(c: ComponentCursor): TryComponentConsumer
   return consumePseudoClassSelector(c);
 }
 
-// <pseudo-class-selector> = : [ <ident-token> | <function-block> ]
+// <pseudo-class-selector> = : [ <ident-token> | <any-value-function-block> ]
 const consumePseudoClassSelector: TryComponentConsumer<PseudoClassSelector> = sequenceOf(
   [
     one(tryConsumeColon),
     one(oneOf(
-      [one(tryConsumeIdentToken), one(tryConsumeFunctionBlock)],
-      ([value], ctx) => isIdentToken(value)
+      [one(tryConsumeIdentToken), one(tryConsumeAnyValueFunctionBlock)],
+      ([value], ctx) => value.type === 'token'
         ? createPseudoClassSelector(value.value, null, ctx as SelectorParserContext)
-        : createPseudoClassSelector(value.name, value.value, ctx as SelectorParserContext),
+        : createPseudoClassSelector(
+          value.name,
+          value.value.components,
+          ctx as SelectorParserContext,
+        ),
     )),
   ],
   ([, [selector]]) => ok(selector),
@@ -1215,12 +1221,13 @@ const consumePseudoClassSelector: TryComponentConsumer<PseudoClassSelector> = se
  *   : <pseudo-class-selector> | <legacy-pseudo-element-selector>
  *
  * Expanding <pseudo-class-selector>, and representing functional notation
- * using the parser's component-value <function-block>, gives:
+ * using the parser's component-value function block, while retaining its
+ * required <any-value>, gives:
  *
  *   <pseudo-element-selector> =
  *     <legacy-pseudo-element-selector> |
  *     : : <ident-token> |
- *     : : <function-block>
+ *     : : <any-value-function-block>
  */
 export type PseudoElementSelector = {
   kind: SelectorKind.PseudoElementSelector;
@@ -1242,10 +1249,15 @@ const consumePseudoElementSelector: TryComponentConsumer<PseudoElementSelector> 
           one(tryConsumeColon),
           one(tryConsumeColon),
           one(oneOf(
-            [one(tryConsumeIdentToken), one(tryConsumeFunctionBlock)],
-            ([value], ctx) => isIdentToken(value)
+            [one(tryConsumeIdentToken), one(tryConsumeAnyValueFunctionBlock)],
+            ([value], ctx) => value.type === 'token'
               ? createPseudoElementSelector(value.value, null, false, ctx as SelectorParserContext)
-              : createPseudoElementSelector(value.name, value.value, false, ctx as SelectorParserContext),
+              : createPseudoElementSelector(
+                value.name,
+                value.value.components,
+                false,
+                ctx as SelectorParserContext,
+              ),
           )),
         ],
         ([, , [selector]]) => ok(selector),

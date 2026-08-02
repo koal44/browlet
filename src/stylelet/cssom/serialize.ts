@@ -5,7 +5,7 @@ import type { DeclarationAst } from '../parser/types';
 import { PropertyId, getPropertyName } from '../parser/types';
 import { serializeAnimationName } from '../props/animation-name';
 import { serializeMarginSideValue } from '../props/margin';
-import { isCssWideValue, serializeCssWideValue, type CssWideValue } from '../values/css-wide';
+import type { CssWideValue } from '../values/css-wide';
 import { serializeCssString } from '../values/string';
 
 export type SerializedDeclaration = {
@@ -46,8 +46,13 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
 }
 
 function serialize<T>(value: T | CssWideValue, serialize: (value: T) => string): string {
+  const isCssWideValue = (value: T | CssWideValue): value is CssWideValue =>
+    !!value
+      && typeof value === 'object'
+      && (value as { type?: unknown; }).type === 'css-wide';
+
   return isCssWideValue(value)
-    ? serializeCssWideValue(value)
+    ? value.serialize()
     : serialize(value);
 }
 
@@ -63,7 +68,7 @@ export function serializeComponentValues(values: readonly ComponentValue[]): str
 }
 
 export function serializeComponentValue(value: ComponentValue): string {
-  if (!('kind' in value)) {
+  if (value.type === 'block') {
     switch (value.block) {
       case BlockKind.Brace:
         return `{${serializeComponentValues(value.value)}}`;
