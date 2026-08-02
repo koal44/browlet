@@ -1,5 +1,5 @@
 import { tryConsumeNumberToken } from '../parser/component-consumers';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { withTrivia } from '../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -22,7 +22,7 @@ export function parseZero(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeZero),
+      withTrivia(tryConsumeZero),
       context,
     ),
     'zero',

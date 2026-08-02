@@ -3,7 +3,7 @@ import type { ComponentCursor } from '../parser/component-cursor';
 import { createFunctionalNotationConsumer } from '../parser/component-consumers';
 import {
   one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf, sequenceOf,
-  withComponentTrivia,
+  withTrivia,
 } from '../parser/component-grammar';
 import {
   isBad, ok,
@@ -214,7 +214,7 @@ export function parseGradient(
 ): GradientValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeGradient),
+    withTrivia(tryConsumeGradient),
     context,
   );
 
@@ -272,32 +272,32 @@ const consumeLinearGradientSyntax: TryComponentConsumer<LinearGradientSyntax> = 
       [
         one(requiredSomeOf(
           [
-            one(withComponentTrivia(oneOf(
+            one(withTrivia(oneOf(
               [
                 one(tryConsumeAngle),
                 one(tryConsumeZero),
                 one(sequenceOf(
                   [
                     one(createKeywordConsumer('to')),
-                    one(withComponentTrivia(tryConsumeSideOrCorner)),
+                    one(withTrivia(tryConsumeSideOrCorner)),
                   ],
                   ([, [sideOrCorner]]) => ok<LinearGradientDirection>(sideOrCorner),
                 )),
               ],
               ([direction]) => ok(direction),
             ))),
-            one(withComponentTrivia(tryConsumeColorInterpolationMethod)),
+            one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
           ([direction, method]) => ok({
             ...(direction === undefined ? {} : { direction: direction[0] }),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
-        one(withComponentTrivia(tryConsumeComma)),
+        one(withTrivia(tryConsumeComma)),
       ],
       ([[prelude]]) => ok(prelude),
     )),
-    one(withComponentTrivia(tryConsumeColorStopList)),
+    one(withTrivia(tryConsumeColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
@@ -318,8 +318,8 @@ function tryConsumeSideOrCorner(
 // <side-or-corner> = [left | right] || [top | bottom]
 const consumeSideOrCorner: TryComponentConsumer<SideOrCorner> = requiredSomeOf(
   [
-    one(withComponentTrivia(createKeywordConsumer('left', 'right'))),
-    one(withComponentTrivia(createKeywordConsumer('top', 'bottom'))),
+    one(withTrivia(createKeywordConsumer('left', 'right'))),
+    one(withTrivia(createKeywordConsumer('top', 'bottom'))),
   ],
   ([horizontal, vertical]) => {
     if (horizontal === undefined) {
@@ -369,12 +369,12 @@ const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = 
       [
         one(requiredSomeOf(
           [
-            one(withComponentTrivia(requiredSequenceOf(
+            one(withTrivia(requiredSequenceOf(
               [
                 opt(requiredSomeOf(
                   [
-                    one(withComponentTrivia(tryConsumeRadialShape)),
-                    one(withComponentTrivia(tryConsumeRadialSize)),
+                    one(withTrivia(tryConsumeRadialShape)),
+                    one(withTrivia(tryConsumeRadialSize)),
                   ],
                   ([shape, size]) => {
                     const radialShape = shape?.[0];
@@ -395,8 +395,8 @@ const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = 
                 )),
                 opt(sequenceOf(
                   [
-                    one(withComponentTrivia(createKeywordConsumer('at'))),
-                    one(withComponentTrivia(tryConsumePosition)),
+                    one(withTrivia(createKeywordConsumer('at'))),
+                    one(withTrivia(tryConsumePosition)),
                   ],
                   ([, [position]]) => ok(position),
                 )),
@@ -406,18 +406,18 @@ const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = 
                 ...(position.length === 0 ? {} : { position: position[0] }),
               }),
             ))),
-            one(withComponentTrivia(tryConsumeColorInterpolationMethod)),
+            one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
           ([geometry, method]) => ok({
             ...(geometry === undefined ? {} : geometry[0]),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
-        one(withComponentTrivia(tryConsumeComma)),
+        one(withTrivia(tryConsumeComma)),
       ],
       ([[prelude]]) => ok(prelude),
     )),
-    one(withComponentTrivia(tryConsumeColorStopList)),
+    one(withTrivia(tryConsumeColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
@@ -444,7 +444,7 @@ const consumeRadialSize: TryComponentConsumer<RadialSize> = oneOf(
     one(sequenceOf(
       [
         one(tryConsumeRadialExtent),
-        opt(withComponentTrivia(tryConsumeRadialExtent)),
+        opt(withTrivia(tryConsumeRadialExtent)),
       ],
       ([[first], second]) => ok<RadialExtentSize>({
         type: 'radial-extent',
@@ -454,7 +454,7 @@ const consumeRadialSize: TryComponentConsumer<RadialSize> = oneOf(
     one(sequenceOf(
       [
         one(createLengthPercentageConsumer({ min: 0 })),
-        opt(withComponentTrivia(createLengthPercentageConsumer({ min: 0 }))),
+        opt(withTrivia(createLengthPercentageConsumer({ min: 0 }))),
       ],
       ([[first], second]) => ok<RadialRadiiSize>({
         type: 'radial-radii',
@@ -517,12 +517,12 @@ const consumeConicGradientSyntax: TryComponentConsumer<ConicGradientSyntax> = se
       [
         one(requiredSomeOf(
           [
-            one(withComponentTrivia(requiredSequenceOf(
+            one(withTrivia(requiredSequenceOf(
               [
                 opt(sequenceOf(
                   [
                     one(createKeywordConsumer('from')),
-                    one(withComponentTrivia(oneOf(
+                    one(withTrivia(oneOf(
                       [one(tryConsumeAngle), one(tryConsumeZero)],
                       ([angle]) => ok(angle),
                     ))),
@@ -531,8 +531,8 @@ const consumeConicGradientSyntax: TryComponentConsumer<ConicGradientSyntax> = se
                 )),
                 opt(sequenceOf(
                   [
-                    one(withComponentTrivia(createKeywordConsumer('at'))),
-                    one(withComponentTrivia(tryConsumePosition)),
+                    one(withTrivia(createKeywordConsumer('at'))),
+                    one(withTrivia(tryConsumePosition)),
                   ],
                   ([, [position]]) => ok(position),
                 )),
@@ -542,18 +542,18 @@ const consumeConicGradientSyntax: TryComponentConsumer<ConicGradientSyntax> = se
                 ...(position.length === 0 ? {} : { position: position[0] }),
               }),
             ))),
-            one(withComponentTrivia(tryConsumeColorInterpolationMethod)),
+            one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
           ([geometry, method]) => ok({
             ...(geometry === undefined ? {} : geometry[0]),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
-        one(withComponentTrivia(tryConsumeComma)),
+        one(withTrivia(tryConsumeComma)),
       ],
       ([[prelude]]) => ok(prelude),
     )),
-    one(withComponentTrivia(tryConsumeAngularColorStopList)),
+    one(withTrivia(tryConsumeAngularColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
@@ -641,7 +641,7 @@ function tryConsumeLinearColorStop(
 const consumeLinearColorStop: TryComponentConsumer<LinearColorStop> = sequenceOf(
   [
     one(tryConsumeColor),
-    opt(withComponentTrivia(tryConsumeColorStopLength)),
+    opt(withTrivia(tryConsumeColorStopLength)),
   ],
   ([[color], offsets]) => ok({
     type: 'color-stop',
@@ -673,7 +673,7 @@ const consumeColorStopLength: TryComponentConsumer<ColorStopLength> =
   sequenceOf(
     [
       one(tryConsumeLengthPercentage),
-      opt(withComponentTrivia(tryConsumeLengthPercentage)),
+      opt(withTrivia(tryConsumeLengthPercentage)),
     ],
     ([[first], second]) => ok(
       second.length === 0 ? [first] : [first, second[0]],
@@ -701,7 +701,7 @@ function tryConsumeAngularColorStop(
 const consumeAngularColorStop: TryComponentConsumer<GradientColorStop<AngularColorStopOffset>> = sequenceOf(
   [
     one(tryConsumeColor),
-    opt(withComponentTrivia(tryConsumeColorStopAngle)),
+    opt(withTrivia(tryConsumeColorStopAngle)),
   ],
   ([[color], offsets]) => ok({
     type: 'color-stop',
@@ -739,7 +739,7 @@ const consumeColorStopAngle: TryComponentConsumer<ColorStopAngle> =
         [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
         ([offset]) => ok(offset),
       )),
-      opt(withComponentTrivia(oneOf(
+      opt(withTrivia(oneOf(
         [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
         ([offset]) => ok(offset),
       ))),
@@ -759,15 +759,15 @@ function createGradientStopListConsumer<Offset>(
       repeat(
         sequenceOf(
           [
-            one(withComponentTrivia(tryConsumeComma)),
+            one(withTrivia(tryConsumeComma)),
             opt(sequenceOf(
               [
-                one(withComponentTrivia(tryConsumeHint)),
-                one(withComponentTrivia(tryConsumeComma)),
+                one(withTrivia(tryConsumeHint)),
+                one(withTrivia(tryConsumeComma)),
               ],
               ([[hint]]) => ok(hint),
             )),
-            one(withComponentTrivia(tryConsumeStop)),
+            one(withTrivia(tryConsumeStop)),
           ],
           ([, hint, [stop]]) => ok([
             ...(hint.length === 0 ? [] : [hint[0]]),

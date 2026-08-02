@@ -7,7 +7,7 @@ import {
 } from '../parser/component-consumers';
 import {
   commaRepeat, one, oneOf, opt, repeat, sequenceOf,
-  withComponentTrivia,
+  withTrivia,
 } from '../parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
@@ -124,7 +124,7 @@ export function parseMathValue<Type extends MathValueType>(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeMathValue),
+      withTrivia(tryConsumeMathValue),
       { ...context, expectedType },
     ),
     'math value',
@@ -1291,8 +1291,8 @@ const tryConsumeCalcProductOperator: TryComponentConsumer<'*' | '/'> = oneOf(
 
 const consumeCalcProductTail: TryComponentConsumer<CalcProductTail> = sequenceOf(
   [
-    one(withComponentTrivia(tryConsumeCalcProductOperator)),
-    one(withComponentTrivia(tryConsumeCalcValue)),
+    one(withTrivia(tryConsumeCalcProductOperator)),
+    one(withTrivia(tryConsumeCalcValue)),
   ],
   ([[operator], [value]]) => ok({ operator, value }),
 );
@@ -1434,7 +1434,7 @@ function tryConsumeParenthesizedCalcSum(
 
   const result = parseAsComponentGrammar(
     component.value,
-    withComponentTrivia(tryConsumeCalcSum),
+    withTrivia(tryConsumeCalcSum),
     c.context,
   );
 

@@ -1,6 +1,6 @@
 import { tryConsumeIdentToken } from '../parser/component-consumers';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { withTrivia } from '../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
@@ -19,7 +19,7 @@ export function parseIdent(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeIdent),
+      withTrivia(tryConsumeIdent),
       context,
     ),
     'ident',

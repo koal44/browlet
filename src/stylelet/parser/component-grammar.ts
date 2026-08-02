@@ -70,6 +70,9 @@ type Projector<Value, R> =
 
 /**
  * CSS value juxtaposition: `a b`
+ *
+ * Multipliers are greedy. Callers must factor productions where an earlier
+ * multiplier can consume input required by a later component.
  */
 export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -80,6 +83,8 @@ export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value required group: `[ a b c ]!`
+ *
+ * Shares the greedy multiplier behavior of `sequenceOf`.
  */
 export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -88,8 +93,6 @@ export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
   return tryConsumeSequenceOf(true, consumers, project);
 }
 
-// Local multiplier backtracking for direct sequence slots only. Nested consumers
-// remain opaque; their internal multipliers are not re-entered.
 function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
@@ -98,42 +101,44 @@ function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
   return (c): TryComponentConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
-    let caps = consumers.map((consumer) => consumer.max);
 
     try {
-      while (true) {
-        c.restore(start);
-        c.context = outerContext;
+      const values: unknown[] = [];
 
-        const attempt = __consumeSequenceAttempt(c, consumers, caps, outerContext);
+      for (const consumer of consumers) {
+        const slotStart = c.pos();
+        const result = consumeMultiplier(c, consumer);
 
-        if ('kind' in attempt && isBad(attempt)) {
-          return attempt;
-        }
-
-        if (attempt.matched) {
-          const raw = attempt.values as SequenceValue<P>;
-
-          if (!requireAnyValue || hasAnyValue(raw)) {
-            const projected = project(raw, c.context);
-
-            if (projected === null) {
-              // Try the next cap set.
-            } else {
-              return projected;
-            }
-          }
-        }
-
-        const nextCaps = __nextSequenceCaps(consumers, attempt.frames);
-
-        if (nextCaps === null) {
+        if (result === null) {
           c.restore(start);
           return null;
         }
 
-        caps = nextCaps;
+        if (isBad(result)) {
+          return result;
+        }
+
+        if (c.pos() === slotStart && hasMultiplierValue(result.value)) {
+          return c.error('Sequence consumer produced a value without consuming input');
+        }
+
+        values.push(result.value);
       }
+
+      const raw = values as SequenceValue<P>;
+
+      if (requireAnyValue && !hasMultiplierValue(raw)) {
+        c.restore(start);
+        return null;
+      }
+
+      const projected = project(raw, c.context);
+
+      if (projected === null) {
+        c.restore(start);
+      }
+
+      return projected;
     } finally {
       c.context = outerContext;
     }
@@ -142,6 +147,9 @@ function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value alternative: `a | b`
+ *
+ * Alternatives are tried in order and commit to the first success. Callers
+ * must factor productions where one alternative can accept a prefix of another.
  */
 export function oneOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -171,7 +179,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
 
         const value = result.value as AlternativeValue<P>;
 
-        if (c.pos() === componentStart && hasAnyValue(value)) {
+        if (c.pos() === componentStart && hasMultiplierValue(value)) {
           return c.error('Alternative consumer produced a value without consuming input');
         }
 
@@ -196,6 +204,9 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value double ampersand: `a && b`
+ *
+ * Components are tried in declaration order. Callers must factor productions
+ * whose components can consume the same leading input.
  */
 export function allOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -206,6 +217,8 @@ export function allOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value required double ampersand group: `[ a && b ]!`
+ *
+ * Shares the overlapping-component constraint of `allOf`.
  */
 export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -251,7 +264,7 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
 
       const raw = result.values as AllOfValue<P>;
 
-      if (requireAnyValue && !hasAnyValue(raw)) {
+      if (requireAnyValue && !hasMultiplierValue(raw)) {
         c.restore(start);
         return null;
       }
@@ -272,6 +285,9 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value double bar: `a || b`
+ *
+ * Components are tried in declaration order. Callers must factor productions
+ * whose components can consume the same leading input.
  */
 export function someOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -282,6 +298,8 @@ export function someOf<const P extends readonly AnyMultiplier[], R>(
 
 /**
  * CSS value required double bar group: `[ a || b ]!`
+ *
+ * Shares the overlapping-component constraint of `someOf`.
  */
 export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
@@ -306,7 +324,7 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
         return result;
       }
 
-      const hasConsumedValue = hasAnyValue(result.values);
+      const hasConsumedValue = hasMultiplierValue(result.values);
 
       let canMatchEmpty = true;
 
@@ -331,7 +349,7 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
 
       const raw = result.values as SomeOfValue<P>;
 
-      if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasAnyValue(raw))) {
+      if ((!hasConsumedValue && !canMatchEmpty) || (requireAnyValue && !hasMultiplierValue(raw))) {
         c.restore(start);
         return null;
       }
@@ -507,7 +525,7 @@ function createMultiplier<T, Output extends T[]>(
 // Consumer adapters
 // =============================================================================
 
-export function withComponentTrivia<T>(consume: TryComponentConsumer<T>): TryComponentConsumer<T> {
+export function withTrivia<T>(consume: TryComponentConsumer<T>): TryComponentConsumer<T> {
   return (c) => {
     const start = c.pos();
     const outerContext = c.context;
@@ -536,25 +554,23 @@ export function withComponentTrivia<T>(consume: TryComponentConsumer<T>): TryCom
 function consumeMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
-  max = multiplier.max,
 ): TryComponentConsumerResult<Output> {
   // TODO: Consider consuming through the multiplier after a bad item while retaining
   // the first bad result, so recovery can resume at the multiplier boundary.
   return multiplier.separator === 'comma'
-    ? consumeCommaMultiplier(c, multiplier, max)
-    : consumePlainMultiplier(c, multiplier, max);
+    ? consumeCommaMultiplier(c, multiplier)
+    : consumePlainMultiplier(c, multiplier);
 }
 
 function consumePlainMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
-  max = multiplier.max,
 ): TryComponentConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
   const values: T[] = [];
 
-  while (values.length < max) {
+  while (values.length < multiplier.max) {
     const itemStart = c.pos();
     const itemContext = c.context;
     const result = multiplier.base(c);
@@ -594,13 +610,12 @@ function consumePlainMultiplier<T, Output extends T[]>(
 function consumeCommaMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
-  max = multiplier.max,
 ): TryComponentConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
   const values: T[] = [];
 
-  if (max === 0) {
+  if (multiplier.max === 0) {
     return multiplier.min === 0
       ? ok([] as unknown as Output)
       : null;
@@ -653,7 +668,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
 
   values.push(first.value);
 
-  while (values.length < max) {
+  while (values.length < multiplier.max) {
     const separatorStart = c.pos();
 
     consumeComponentTrivia(c);
@@ -709,7 +724,7 @@ function consumeEmpty<T, Output extends T[]>(
     return null;
   }
 
-  if (hasAnyValue(result.value)) {
+  if (hasMultiplierValue(result.value)) {
     return c.error('Consumer produced a value without consuming input');
   }
 
@@ -751,13 +766,13 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
 
       const value = result.value as unknown;
 
-      if (c.pos() === start && !hasAnyValue(value)) {
+      if (c.pos() === start && !hasMultiplierValue(value)) {
         c.restore(start);
         c.context = outerContext;
         continue;
       }
 
-      if (c.pos() === start && hasAnyValue(value)) {
+      if (c.pos() === start && hasMultiplierValue(value)) {
         c.context = outerContext;
         return c.error('Unordered consumer produced a value without consuming input');
       }
@@ -783,108 +798,15 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
   return { values, seen };
 }
 
-function hasAnyValue(value: unknown): boolean {
+function hasMultiplierValue(value: unknown): boolean {
   if (Array.isArray(value)) {
-    return value.some(hasAnyValue);
+    return value.some(hasMultiplierValue);
   }
 
   if (value && typeof value === 'object') {
     const values = Object.values(value);
-    return values.length > 0 && values.some(hasAnyValue);
+    return values.length > 0 && values.some(hasMultiplierValue);
   }
 
   return value !== null && value !== undefined;
-}
-
-// =============================================================================
-// Backtracking support
-// =============================================================================
-
-type SequenceFrame = {
-  start: number;
-  values: unknown[];
-};
-
-type SequenceAttempt =
-  | ComponentConsumerBad
-  | { matched: boolean; values: unknown[]; frames: SequenceFrame[]; };
-
-export function __consumeSequenceAttempt<const P extends readonly AnyMultiplier[]>(
-  c: ComponentCursor,
-  consumers: P,
-  caps: readonly number[],
-  context: unknown = c.context,
-): SequenceAttempt {
-  c.context = context;
-
-  const values: unknown[] = [];
-  const frames: SequenceFrame[] = [];
-
-  for (let i = 0; i < consumers.length; i++) {
-    const consumer = consumers[i]!;
-    const slotStart = c.pos();
-    const result = consumeMultiplier(c, consumer, caps[i]);
-
-    if (result === null) {
-      c.restore(slotStart);
-      c.context = context;
-
-      return {
-        matched: false,
-        values,
-        frames,
-      };
-    }
-
-    if (isBad(result)) {
-      c.context = context;
-      return result;
-    }
-
-    const value = result.value as unknown;
-
-    if (c.pos() === slotStart && hasAnyValue(value)) {
-      c.context = context;
-      return c.error('Sequence consumer produced a value without consuming input');
-    }
-
-    values[i] = value;
-    frames[i] = {
-      start: slotStart,
-      values: value as unknown[],
-    };
-  }
-
-  return {
-    matched: true,
-    values,
-    frames,
-  };
-}
-
-export function __nextSequenceCaps<const P extends readonly AnyMultiplier[]>(
-  consumers: P,
-  frames: readonly SequenceFrame[],
-): number[] | null {
-  for (let i = frames.length - 1; i >= 0; i--) {
-    const consumer = consumers[i]!;
-    const frame = frames[i]!;
-    const nextCap = frame.values.length - 1;
-
-    if (nextCap < consumer.min) {
-      continue;
-    }
-
-    const caps = consumers.map((consumer) => consumer.max);
-
-    for (let j = 0; j < i; j++) {
-      caps[j] = frames[j]!.values.length;
-    }
-
-    caps[i] = nextCap;
-
-    return caps;
-  }
-
-  return null;
 }

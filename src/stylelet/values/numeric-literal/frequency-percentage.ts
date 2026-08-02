@@ -1,4 +1,4 @@
-import { withComponentTrivia } from '../../parser/component-grammar';
+import { withTrivia } from '../../parser/component-grammar';
 import {
   unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -34,7 +34,7 @@ export function parseFrequencyPercentage(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeFrequencyPercentage),
+      withTrivia(tryConsumeFrequencyPercentage),
       context,
     ),
     'frequency-percentage',

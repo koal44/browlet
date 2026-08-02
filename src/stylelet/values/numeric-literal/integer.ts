@@ -1,5 +1,5 @@
 import { tryConsumeIntegerToken } from '../../parser/component-consumers';
-import { withComponentTrivia } from '../../parser/component-grammar';
+import { withTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
   type TryComponentConsumerResult,
@@ -27,7 +27,7 @@ export function parseInteger(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeInteger),
+      withTrivia(tryConsumeInteger),
       context,
     ),
     'integer',

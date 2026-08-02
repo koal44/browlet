@@ -1,7 +1,7 @@
 import { mapTuple } from '../../shared/util';
 import type { ComponentCursor } from '../parser/component-cursor';
 import {
-  allOf, one, oneOf, repeat, sequenceOf, withComponentTrivia,
+  allOf, one, oneOf, repeat, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
@@ -151,7 +151,7 @@ export function parsePosition(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumePosition),
+      withTrivia(tryConsumePosition),
       context,
     ),
     'position',
@@ -211,7 +211,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
     one(sequenceOf(
       [
         one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
-        one(withComponentTrivia(createKeywordConsumer(
+        one(withTrivia(createKeywordConsumer(
           'top', 'center', 'bottom', 'y-start', 'y-end',
         ))),
       ],
@@ -220,7 +220,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
     one(sequenceOf(
       [
         one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
-        one(withComponentTrivia(createKeywordConsumer(
+        one(withTrivia(createKeywordConsumer(
           'left', 'center', 'right', 'x-start', 'x-end',
         ))),
       ],
@@ -235,7 +235,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
           ],
           ([horizontal]) => ok(horizontal),
         )),
-        one(withComponentTrivia(oneOf(
+        one(withTrivia(oneOf(
           [
             one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
             one(tryConsumeLengthPercentage),
@@ -248,7 +248,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
     one(sequenceOf(
       [
         one(createKeywordConsumer('block-start', 'center', 'block-end')),
-        one(withComponentTrivia(createKeywordConsumer(
+        one(withTrivia(createKeywordConsumer(
           'inline-start', 'center', 'inline-end',
         ))),
       ],
@@ -257,7 +257,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
     one(sequenceOf(
       [
         one(createKeywordConsumer('inline-start', 'center', 'inline-end')),
-        one(withComponentTrivia(createKeywordConsumer(
+        one(withTrivia(createKeywordConsumer(
           'block-start', 'center', 'block-end',
         ))),
       ],
@@ -266,7 +266,7 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
     one(sequenceOf(
       [
         repeat(
-          withComponentTrivia(createKeywordConsumer('start', 'center', 'end')),
+          withTrivia(createKeywordConsumer('start', 'center', 'end')),
           2,
           2,
         ),
@@ -293,19 +293,19 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
       [
         one(sequenceOf(
           [
-            one(withComponentTrivia(createKeywordConsumer(
+            one(withTrivia(createKeywordConsumer(
               'left', 'right', 'x-start', 'x-end',
             ))),
-            one(withComponentTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(tryConsumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => ok([edge, offset] as const),
         )),
         one(sequenceOf(
           [
-            one(withComponentTrivia(createKeywordConsumer(
+            one(withTrivia(createKeywordConsumer(
               'top', 'bottom', 'y-start', 'y-end',
             ))),
-            one(withComponentTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(tryConsumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => ok([edge, offset] as const),
         )),
@@ -319,15 +319,15 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
       [
         one(sequenceOf(
           [
-            one(withComponentTrivia(createKeywordConsumer('block-start', 'block-end'))),
-            one(withComponentTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(createKeywordConsumer('block-start', 'block-end'))),
+            one(withTrivia(tryConsumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => ok([edge, offset] as const),
         )),
         one(sequenceOf(
           [
-            one(withComponentTrivia(createKeywordConsumer('inline-start', 'inline-end'))),
-            one(withComponentTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(createKeywordConsumer('inline-start', 'inline-end'))),
+            one(withTrivia(tryConsumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => ok([edge, offset] as const),
         )),
@@ -342,8 +342,8 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
         repeat(
           sequenceOf(
             [
-              one(withComponentTrivia(createKeywordConsumer('start', 'end'))),
-              one(withComponentTrivia(tryConsumeLengthPercentage)),
+              one(withTrivia(createKeywordConsumer('start', 'end'))),
+              one(withTrivia(tryConsumeLengthPercentage)),
             ],
             ([[edge], [offset]]) => ok([edge, offset] as const),
           ),

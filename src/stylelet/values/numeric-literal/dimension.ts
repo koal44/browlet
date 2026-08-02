@@ -1,5 +1,5 @@
 import type { ComponentCursor } from '../../parser/component-cursor';
-import { withComponentTrivia } from '../../parser/component-grammar';
+import { withTrivia } from '../../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
@@ -37,7 +37,7 @@ export function parseDimension(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeDimension),
+      withTrivia(tryConsumeDimension),
       context,
     ),
     'dimension',

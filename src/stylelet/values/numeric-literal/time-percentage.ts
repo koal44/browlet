@@ -1,4 +1,4 @@
-import { withComponentTrivia } from '../../parser/component-grammar';
+import { withTrivia } from '../../parser/component-grammar';
 import {
   unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -32,7 +32,7 @@ export function parseTimePercentage(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeTimePercentage),
+      withTrivia(tryConsumeTimePercentage),
       context,
     ),
     'time-percentage',

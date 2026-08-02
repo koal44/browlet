@@ -1,7 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import { createDelimConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
 import type { ComponentCursor } from '../parser/component-cursor';
-import { one, oneOf, opt, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
 import {
   isBad, ok, type TryComponentConsumer,
   type TryComponentConsumerResult,
@@ -187,7 +187,7 @@ const consumeNDashHead: TryComponentConsumer<number> = oneOf(
 const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
   [
     one(
-      withComponentTrivia(
+      withTrivia(
         oneOf(
           [
             one(tryConsumePlus),
@@ -197,7 +197,7 @@ const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
         ),
       ),
     ),
-    one(withComponentTrivia(tryConsumeSignlessInteger)),
+    one(withTrivia(tryConsumeSignlessInteger)),
   ],
   ([[sign], [integer]]) => ok(
     sign === '-'
@@ -208,7 +208,7 @@ const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
 
 const consumeOffset: TryComponentConsumer<number> = oneOf(
   [
-    one(withComponentTrivia(tryConsumeSignedInteger)),
+    one(withTrivia(tryConsumeSignedInteger)),
     one(consumeDelimitedOffset),
   ],
   ([offset]) => ok(
@@ -232,7 +232,7 @@ const consumeNExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
 const consumeNDashExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
   [
     one(consumeNDashHead),
-    one(withComponentTrivia(tryConsumeSignlessInteger)),
+    one(withTrivia(tryConsumeSignlessInteger)),
   ],
   ([[a], [integer]]) => ok({
     a,

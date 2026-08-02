@@ -1,5 +1,5 @@
 import { clamp } from '../../shared/util';
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -29,7 +29,7 @@ export function parseOpacityValue(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeOpacityValue),
+      withTrivia(tryConsumeOpacityValue),
       context,
     ),
     'opacity value',

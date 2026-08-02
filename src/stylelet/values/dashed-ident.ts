@@ -1,5 +1,5 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { withComponentTrivia } from '../parser/component-grammar';
+import { withTrivia } from '../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumerResult,
@@ -20,7 +20,7 @@ export function parseDashedIdent(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeDashedIdent),
+      withTrivia(tryConsumeDashedIdent),
       context,
     ),
     'dashed ident',

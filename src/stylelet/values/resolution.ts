@@ -1,4 +1,4 @@
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -34,7 +34,7 @@ export function parseResolution(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeResolution),
+      withTrivia(tryConsumeResolution),
       context,
     ),
     'resolution',

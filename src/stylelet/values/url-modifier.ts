@@ -3,7 +3,7 @@ import {
   createFunctionalNotationConsumer,
   tryConsumeFunctionBlock,
 } from '../parser/component-consumers';
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok, type TryComponentConsumer,
   type TryComponentConsumerResult,
@@ -94,7 +94,7 @@ export function parseUrlModifier(
 ): UrlModifierValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeUrlModifier),
+    withTrivia(tryConsumeUrlModifier),
     context,
   );
 

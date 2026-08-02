@@ -1,7 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import { isAnyValue } from '../values/any-value';
 import type { ComponentCursor } from './component-cursor';
-import { withComponentTrivia } from './component-grammar';
+import { withTrivia } from './component-grammar';
 import type { TryComponentConsumer, TryComponentConsumerResult } from './component-try-consumer';
 import { bad, ComponentConsumerBadReason, isBad, ok } from './component-try-consumer';
 import {
@@ -133,7 +133,7 @@ export function createFunctionalNotationConsumer<ArgumentValue, Value>(
       : options.contextForArguments(c.context);
     const argumentValue = parseAsComponentGrammar(
       fn.value.value,
-      withComponentTrivia(tryConsumeArgumentValue),
+      withTrivia(tryConsumeArgumentValue),
       argumentContext,
     );
 

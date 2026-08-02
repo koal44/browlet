@@ -1,4 +1,4 @@
-import { commaRepeat, one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { commaRepeat, one, oneOf, withTrivia } from '../parser/component-grammar';
 import { createKeywordConsumer } from '../values/keyword';
 import {
   serializeCustomIdent, tryConsumeCustomIdent,
@@ -36,7 +36,7 @@ export function parseAnimationNameValue(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeAnimationName),
+      withTrivia(tryConsumeAnimationName),
       context,
     ),
     'animation-name value',

@@ -1,5 +1,5 @@
 import type { ComponentCursor } from '../parser/component-cursor';
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
   isBad, ok,
   type TryComponentConsumer, type TryComponentConsumerResult,
@@ -26,7 +26,7 @@ export function parseImage(
 ): ImageValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeImage),
+    withTrivia(tryConsumeImage),
     context,
   );
 

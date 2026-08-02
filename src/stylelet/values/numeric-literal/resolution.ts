@@ -1,7 +1,7 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
 import type { ComponentCursor } from '../../parser/component-cursor';
-import { withComponentTrivia } from '../../parser/component-grammar';
+import { withTrivia } from '../../parser/component-grammar';
 import {
   isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
   type TryComponentConsumerResult,
@@ -42,7 +42,7 @@ export function parseResolution(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeResolution),
+      withTrivia(tryConsumeResolution),
       context,
     ),
     'resolution',

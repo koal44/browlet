@@ -7,7 +7,7 @@ import {
 } from '../parser/component-consumers';
 import {
   allOf, commaRepeat, one, oneOf, opt, plus, repeat, sequenceOf,
-  withComponentTrivia,
+  withTrivia,
 } from '../parser/component-grammar';
 import {
   isBad, ok, type TryComponentConsumer,
@@ -362,7 +362,7 @@ export function parseColorValue(
 ): ColorValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia((c) => tryConsumeColor(c, allowQuirkyColor)),
+    withTrivia((c) => tryConsumeColor(c, allowQuirkyColor)),
     context,
   );
 
@@ -469,8 +469,8 @@ function tryConsumeModernAlpha(
 const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> =
   sequenceOf(
     [
-      one(withComponentTrivia(tryConsumeSlash)),
-      one(withComponentTrivia(oneOf(
+      one(withTrivia(tryConsumeSlash)),
+      one(withTrivia(oneOf(
         [
           one(tryConsumeAlphaValue),
           one(tryConsumeNone),
@@ -804,14 +804,14 @@ const consumeColorMixFn: TryComponentConsumer<ColorMixFn> =
         opt(sequenceOf(
           [
             one(tryConsumeColorInterpolationMethod),
-            one(withComponentTrivia(tryConsumeComma)),
+            one(withTrivia(tryConsumeComma)),
           ],
           ([[method]]) => ok(method),
         )),
         commaRepeat(allOf(
           [
-            one(withComponentTrivia(tryConsumeColor)),
-            opt(withComponentTrivia(tryConsumeColorMixPercentage)),
+            one(withTrivia(tryConsumeColor)),
+            opt(withTrivia(tryConsumeColorMixPercentage)),
           ],
           ([[color], [percentage]]) => ok({
             color,
@@ -1073,8 +1073,8 @@ function createLegacyRgbSyntaxConsumer(
           commaRepeat(tryConsumePercentage, 3, 3),
           opt(sequenceOf(
             [
-              one(withComponentTrivia(tryConsumeComma)),
-              one(withComponentTrivia(tryConsumeAlphaValue)),
+              one(withTrivia(tryConsumeComma)),
+              one(withTrivia(tryConsumeAlphaValue)),
             ],
             ([, [alpha]]) => ok(alpha),
           )),
@@ -1090,8 +1090,8 @@ function createLegacyRgbSyntaxConsumer(
           commaRepeat(tryConsumeNumber, 3, 3),
           opt(sequenceOf(
             [
-              one(withComponentTrivia(tryConsumeComma)),
-              one(withComponentTrivia(tryConsumeAlphaValue)),
+              one(withTrivia(tryConsumeComma)),
+              one(withTrivia(tryConsumeAlphaValue)),
             ],
             ([, [alpha]]) => ok(alpha),
           )),
@@ -1136,7 +1136,7 @@ function createModernRgbSyntaxConsumer(
             SPACES.srgb.keys,
           ),
       }),
-      repeat(withComponentTrivia(oneOf(
+      repeat(withTrivia(oneOf(
         [
           one(tryConsumeNumber),
           one(tryConsumePercentage),
@@ -1251,25 +1251,25 @@ const consumeLegacyHslaSyntax = createLegacyHslSyntaxConsumer();
 function createLegacyHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
   return sequenceOf(
     [
-      one(withComponentTrivia(tryConsumeHue)),
+      one(withTrivia(tryConsumeHue)),
       one(sequenceOf(
         [
-          one(withComponentTrivia(tryConsumeComma)),
-          one(withComponentTrivia(tryConsumePercentage)),
+          one(withTrivia(tryConsumeComma)),
+          one(withTrivia(tryConsumePercentage)),
         ],
         ([, [percentage]]) => ok(percentage),
       )),
       one(sequenceOf(
         [
-          one(withComponentTrivia(tryConsumeComma)),
-          one(withComponentTrivia(tryConsumePercentage)),
+          one(withTrivia(tryConsumeComma)),
+          one(withTrivia(tryConsumePercentage)),
         ],
         ([, [percentage]]) => ok(percentage),
       )),
       opt(sequenceOf(
         [
-          one(withComponentTrivia(tryConsumeComma)),
-          one(withComponentTrivia(tryConsumeAlphaValue)),
+          one(withTrivia(tryConsumeComma)),
+          one(withTrivia(tryConsumeAlphaValue)),
         ],
         ([, [alpha]]) => ok(alpha),
       )),
@@ -1310,7 +1310,7 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
             SPACES.hsl.keys,
           ),
       }),
-      one(withComponentTrivia(oneOf(
+      one(withTrivia(oneOf(
         [
           one(tryConsumeHue),
           one(tryConsumeNone),
@@ -1318,7 +1318,7 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
         ],
         ([hue]) => ok(hue),
       ))),
-      repeat(withComponentTrivia(oneOf(
+      repeat(withTrivia(oneOf(
         [
           one(tryConsumePercentage),
           one(tryConsumeNumber),
@@ -1392,7 +1392,7 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
               SPACES.hwb.keys,
             ),
         }),
-        one(withComponentTrivia(oneOf(
+        one(withTrivia(oneOf(
           [
             one(tryConsumeHue),
             one(tryConsumeNone),
@@ -1400,7 +1400,7 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
           ],
           ([hue]) => ok(hue),
         ))),
-        repeat(withComponentTrivia(oneOf(
+        repeat(withTrivia(oneOf(
           [
             one(tryConsumePercentage),
             one(tryConsumeNumber),
@@ -1516,7 +1516,7 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
               space.keys,
             ),
         }),
-        repeat(withComponentTrivia(oneOf(
+        repeat(withTrivia(oneOf(
           [
             one(tryConsumePercentage),
             one(tryConsumeNumber),
@@ -1631,7 +1631,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
               space.keys,
             ),
         }),
-        repeat(withComponentTrivia(oneOf(
+        repeat(withTrivia(oneOf(
           [
             one(tryConsumePercentage),
             one(tryConsumeNumber),
@@ -1640,7 +1640,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
           ],
           ([component]) => ok(component),
         )), 2, 2),
-        one(withComponentTrivia(oneOf(
+        one(withTrivia(oneOf(
           [
             one(tryConsumeHue),
             one(tryConsumeNone),
@@ -1831,11 +1831,11 @@ function tryConsumeCustomParams(
 // <custom-params> = <dashed-ident> [ <number> | <percentage> | none ]+
 const consumeCustomParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   [
-    one(withComponentTrivia(tryConsumeDashedIdent), {
+    one(withTrivia(tryConsumeDashedIdent), {
       contextAfter: (space, context) =>
         contextWithColorFnRelativeVariables(space.value, context),
     }),
-    plus(withComponentTrivia(oneOf(
+    plus(withTrivia(oneOf(
       [
         one(tryConsumeNumber),
         one(tryConsumePercentage),
@@ -1862,11 +1862,11 @@ function tryConsumePredefinedRgbParams(
 const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
   sequenceOf(
     [
-      one(withComponentTrivia(tryConsumePredefinedRgb), {
+      one(withTrivia(tryConsumePredefinedRgb), {
         contextAfter: (space, context) =>
           contextWithColorFnRelativeVariables(space, context),
       }),
-      repeat(withComponentTrivia(oneOf(
+      repeat(withTrivia(oneOf(
         [
           one(tryConsumeNumber),
           one(tryConsumePercentage),
@@ -1909,11 +1909,11 @@ function tryConsumeXyzParams(
 // <xyz-params> = <xyz-space> [ <number> | <percentage> | none ]{3}
 const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   [
-    one(withComponentTrivia(tryConsumeXyzSpace), {
+    one(withTrivia(tryConsumeXyzSpace), {
       contextAfter: (space, context) =>
         contextWithColorFnRelativeVariables(space, context),
     }),
-    repeat(withComponentTrivia(oneOf(
+    repeat(withTrivia(oneOf(
       [
         one(tryConsumeNumber),
         one(tryConsumePercentage),
@@ -2014,7 +2014,7 @@ function tryConsumeModernDeviceCmykSyntax(
 const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
   sequenceOf(
     [
-      repeat(withComponentTrivia(tryConsumeCmykComponent), 4, 4),
+      repeat(withTrivia(tryConsumeCmykComponent), 4, 4),
       opt(tryConsumeModernAlpha),
     ],
     ([components, [alpha]]) => ok({
@@ -2067,9 +2067,9 @@ const consumeLightDarkColor: TryComponentConsumer<LightDarkColor> =
     'light-dark',
     sequenceOf(
       [
-        one(withComponentTrivia(tryConsumeColor)),
-        one(withComponentTrivia(tryConsumeComma)),
-        one(withComponentTrivia(tryConsumeColor)),
+        one(withTrivia(tryConsumeColor)),
+        one(withTrivia(tryConsumeComma)),
+        one(withTrivia(tryConsumeColor)),
       ],
       ([[light], , [dark]]) => ok({
         kind: ColorKind.LightDarkColor as const,
@@ -2100,7 +2100,7 @@ const consumeContrastColorFn: TryComponentConsumer<ContrastColorFn> =
   createFunctionalNotationConsumer(
     'contrast-color',
     sequenceOf(
-      [one(withComponentTrivia(tryConsumeColor))],
+      [one(withTrivia(tryConsumeColor))],
       ([[color]]) => ok({
         kind: ColorKind.ContrastColorFn as const,
         color,
@@ -2150,7 +2150,7 @@ export function parseColorInterpolationMethod(
 ): ColorInterpolationMethod | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeColorInterpolationMethod),
+    withTrivia(tryConsumeColorInterpolationMethod),
     context,
   );
 
@@ -2169,12 +2169,12 @@ const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMe
   sequenceOf(
     [
       one(createKeywordConsumer('in')),
-      one(withComponentTrivia(oneOf(
+      one(withTrivia(oneOf(
         [
           one(sequenceOf(
             [
               one(tryConsumePolarColorSpace),
-              one(withComponentTrivia(tryConsumeHueInterpolationMethod)),
+              one(withTrivia(tryConsumeHueInterpolationMethod)),
             ],
             ([[space], [hue]]) => ok<ColorInterpolationMethod>({ space, hue }),
           )),
@@ -2279,7 +2279,7 @@ const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod
         'increasing',
         'decreasing',
       )),
-      one(withComponentTrivia(createKeywordConsumer('hue'))),
+      one(withTrivia(createKeywordConsumer('hue'))),
     ],
     ([[method]]) => ok(method),
   );
@@ -2355,7 +2355,7 @@ function tryConsumeRelativeColorOrigin(
 const consumeRelativeColorOrigin = sequenceOf(
   [
     one(createKeywordConsumer('from')),
-    one(withComponentTrivia(consumeColor)),
+    one(withTrivia(consumeColor)),
   ],
   ([, [origin]]) => ok(origin),
 );

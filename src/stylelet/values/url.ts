@@ -1,6 +1,6 @@
 import type { ComponentCursor } from '../parser/component-cursor';
 import { createFunctionalNotationConsumer } from '../parser/component-consumers';
-import { any, one, oneOf, sequenceOf, withComponentTrivia } from '../parser/component-grammar';
+import { any, one, oneOf, sequenceOf, withTrivia } from '../parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok, type TryComponentConsumer,
   type TryComponentConsumerResult,
@@ -44,7 +44,7 @@ export function parseUrl(
 ): UrlValue | null {
   const result = parseAsComponentGrammar(
     input,
-    withComponentTrivia(tryConsumeUrl),
+    withTrivia(tryConsumeUrl),
     context,
   );
 
@@ -89,7 +89,7 @@ const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
       sequenceOf(
         [
           one(tryConsumeString),
-          any(withComponentTrivia(tryConsumeUrlFunctionModifier), {
+          any(withTrivia(tryConsumeUrlFunctionModifier), {
             contextAfter: contextAfterUrlFunctionModifier,
           }),
         ],
@@ -123,7 +123,7 @@ const consumeSrcFn = createFunctionalNotationConsumer(
   sequenceOf(
     [
       one(tryConsumeString),
-      any(withComponentTrivia(tryConsumeUrlFunctionModifier), {
+      any(withTrivia(tryConsumeUrlFunctionModifier), {
         contextAfter: contextAfterUrlFunctionModifier,
       }),
     ],

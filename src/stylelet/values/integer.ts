@@ -1,4 +1,4 @@
-import { one, oneOf, withComponentTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
   ok, unwrapConsumeResultOrThrow,
   type TryComponentConsumer,
@@ -30,7 +30,7 @@ export function parseInteger(
   return unwrapConsumeResultOrThrow(
     parseAsComponentGrammar(
       input,
-      withComponentTrivia(tryConsumeInteger),
+      withTrivia(tryConsumeInteger),
       context,
     ),
     'integer',
