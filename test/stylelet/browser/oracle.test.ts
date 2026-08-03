@@ -3402,3 +3402,114 @@ runScenarios('CSS gradient interpolation oracle', 'skip', [
     ],
   },
 ]);
+
+runScenarios('CSS boolean expression oracle', 'skip', [
+  {
+    name: 'supports conditions use the shared boolean grammar',
+    engines: ['native'],
+    markup: '',
+    cases: [
+      { supports: { condition: '(color: red)' }, expect: { supported: true } },
+      { supports: { condition: 'not (color: not-a-color)' }, expect: { supported: true } },
+      { supports: { condition: '(color: red) and (display: block)' }, expect: { supported: true } },
+      { supports: { condition: '(color: red) or (color: not-a-color)' }, expect: { supported: true } },
+      { supports: { condition: '((color: red) and (display: block))' }, expect: { supported: true } },
+      { supports: { condition: '(color: red) and (display: block) or (width: 1px)' }, expect: { supported: false } },
+      { supports: { condition: 'not not (color: not-a-color)' }, expect: { supported: false } },
+      { supports: { condition: 'future() or (color: red)' }, expect: { supported: true } },
+      { supports: { condition: '(future) or (color: red)' }, expect: { supported: true } },
+    ],
+  },
+
+  {
+    name: 'media conditions preserve unknown through Kleene logic',
+    engines: ['native'],
+    markup: `
+      <style>
+        :root {
+          --known-test: fail;
+          --unknown-or-true: fail;
+          --unknown-and-false: pass;
+          --unknown-and-true: pass;
+          --unknown-or-false: pass;
+          --not-unknown: pass;
+          --top-level-unknown: pass;
+          --mixed-operators: pass;
+          --grouped-operators: fail;
+        }
+
+        @media (min-width: 0px) {
+          :root { --known-test: pass; }
+        }
+        @media future() or (min-width: 0px) {
+          :root { --unknown-or-true: pass; }
+        }
+        @media future() and (max-width: 0px) {
+          :root { --unknown-and-false: fail; }
+        }
+        @media future() and (min-width: 0px) {
+          :root { --unknown-and-true: fail; }
+        }
+        @media future() or (max-width: 0px) {
+          :root { --unknown-or-false: fail; }
+        }
+        @media not future() {
+          :root { --not-unknown: fail; }
+        }
+        @media future() {
+          :root { --top-level-unknown: fail; }
+        }
+        @media (min-width: 0px) and (min-width: 0px) or (min-width: 0px) {
+          :root { --mixed-operators: fail; }
+        }
+        @media ((min-width: 0px) and (min-width: 0px)) or (max-width: 0px) {
+          :root { --grouped-operators: pass; }
+        }
+      </style>
+    `,
+    cases: [
+      { computedStyle: '--known-test', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--unknown-or-true', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--unknown-and-false', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--unknown-and-true', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--unknown-or-false', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--not-unknown', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--top-level-unknown', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--mixed-operators', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+      { computedStyle: '--grouped-operators', ref: { by: 'documentElement' }, expect: { value: 'pass' } },
+    ],
+  },
+
+  {
+    name: 'condition serialization preserves boolean structure',
+    engines: ['native'],
+    markup: `
+      <style id="boolean-expression-serialization">
+        @supports ((color: red) and (display: block)) {}
+        @supports future() or (color: red) {}
+        @media ((min-width: 0px) and (min-height: 0px)) or future() {}
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'sheet.cssRules.item', rule: 0 },
+        ref: { by: 'id', id: 'boolean-expression-serialization' },
+        expect: { cssom: { conditionText: '((color: red) and (display: block))' } },
+      },
+      {
+        cssom: { target: 'sheet.cssRules.item', rule: 1 },
+        ref: { by: 'id', id: 'boolean-expression-serialization' },
+        expect: { cssom: { conditionText: 'future() or (color: red)' } },
+      },
+      {
+        cssom: { target: 'sheet.cssRules.item', rule: 2 },
+        ref: { by: 'id', id: 'boolean-expression-serialization' },
+        expect: {
+          cssom: {
+            conditionText: '((min-width: 0px) and (min-height: 0px)) or future()',
+          },
+        },
+      },
+    ],
+  },
+]);

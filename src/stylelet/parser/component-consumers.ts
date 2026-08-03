@@ -35,6 +35,8 @@ export type FunctionalNotationConsumerOptions = {
 // TODO: Fold free-form production handling into functional-notation argument
 // parsing, including its strictness and additional boundaries. This should be
 // the sole public entry point for that machinery, without caller-applied wrappers.
+
+// <function-token matching name> <argument-value> )
 export function createFunctionalNotationConsumer<ArgumentValue, Value>(
   name: string,
   tryConsumeArgumentValue: TryComponentConsumer<ArgumentValue>,
@@ -100,6 +102,7 @@ export type FreeFormOptions = {
   stopBefore?: (component: ComponentValue) => boolean;
 };
 
+// <free-form[ <value> ]>
 export function createFreeFormConsumer<Value>(
   tryConsumeValue: TryComponentConsumer<Value>,
   options: FreeFormOptions = {},
@@ -165,10 +168,12 @@ export function createFreeFormConsumer<Value>(
   };
 }
 
+// :
 export function tryConsumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
   return c.match(TokenKind.Colon) ? ok(':') : null;
 }
 
+// <ident-token>
 export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerResult<IdentToken> {
   const start = c.pos();
   const component = c.next();
@@ -181,6 +186,7 @@ export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerRe
   return ok(component);
 }
 
+// <string-token>
 export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerResult<StringToken> {
   const start = c.pos();
   const component = c.next();
@@ -193,6 +199,7 @@ export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerR
   return ok(component);
 }
 
+// <hash-token>
 export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
   const start = c.pos();
   const component = c.next();
@@ -205,6 +212,7 @@ export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerRes
   return ok(component);
 }
 
+// <hash-token with the id flag>
 export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
   const start = c.pos();
   const result = tryConsumeHashToken(c);
@@ -221,6 +229,7 @@ export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerR
   return result;
 }
 
+// <function-token> <component-value>* )
 export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
   const start = c.pos();
   const component = c.next();
@@ -239,10 +248,9 @@ export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsume
  * CSS Syntax represents the complete functional notation as a function block,
  * whether it ended with an explicit closing parenthesis or at EOF.
  */
-export type AnyValueFunctionBlock = Omit<FunctionBlock, 'value'> & {
-  value: AnyValue;
-};
+export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
 
+// <function-token> <any-value> )
 export function tryConsumeAnyValueFunctionBlock(
   c: ComponentCursor,
 ): TryComponentConsumerResult<AnyValueFunctionBlock> {
@@ -270,6 +278,7 @@ export function tryConsumeAnyValueFunctionBlock(
   });
 }
 
+// <number-token with the integer flag>
 export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
   const start = c.pos();
   const component = c.next();
@@ -285,6 +294,7 @@ export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumer
   return ok(component);
 }
 
+// <number-token>
 export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
   const start = c.pos();
   const component = c.next();
@@ -297,6 +307,7 @@ export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerR
   return ok(component);
 }
 
+// <percentage-token>
 export function tryConsumePercentageToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PercentageToken> {
@@ -311,6 +322,7 @@ export function tryConsumePercentageToken(
   return ok(component);
 }
 
+// <delim-token matching expected>
 export function createDelimConsumer<T extends string>(expected: T): TryComponentConsumer<T> {
   return (c) => {
     const start = c.pos();

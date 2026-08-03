@@ -132,13 +132,13 @@ function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
         return null;
       }
 
-      const projected = project(raw, c.context);
+      const projection = project(raw, c.context);
 
-      if (projected === null) {
+      if (projection === null) {
         c.restore(start);
       }
 
-      return projected;
+      return projection;
     } finally {
       c.context = outerContext;
     }
@@ -183,15 +183,15 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
           return c.error('Alternative consumer produced a value without consuming input');
         }
 
-        const projected = project(value, c.context);
+        const projection = project(value, c.context);
 
-        if (projected === null) {
+        if (projection === null) {
           c.restore(start);
           c.context = outerContext;
           continue;
         }
 
-        return projected;
+        return projection;
       }
 
       c.restore(start);
@@ -269,14 +269,14 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
         return null;
       }
 
-      const projected = project(raw, c.context);
+      const projection = project(raw, c.context);
 
-      if (projected === null) {
+      if (projection === null) {
         c.restore(start);
         return null;
       }
 
-      return projected;
+      return projection;
     } finally {
       c.context = outerContext;
     }
@@ -354,14 +354,14 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
         return null;
       }
 
-      const projected = project(raw, c.context);
+      const projection = project(raw, c.context);
 
-      if (projected === null) {
+      if (projection === null) {
         c.restore(start);
         return null;
       }
 
-      return projected;
+      return projection;
     } finally {
       c.context = outerContext;
     }
@@ -549,13 +549,13 @@ export function project<Input, Output>(
         return result;
       }
 
-      const projected = projector(result.value, c.context);
+      const projection = projector(result.value, c.context);
 
-      if (projected === null) {
+      if (projection === null) {
         c.restore(start);
       }
 
-      return projected;
+      return projection;
     } finally {
       c.context = outerContext;
     }

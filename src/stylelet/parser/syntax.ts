@@ -71,30 +71,43 @@ export type PreservedToken =
   | StaticToken<TokenKind.RightBrace>;
 
 export type ComponentBlock =
-  | SimpleBlock
-  | FunctionBlock;
+  | SimpleBlock<ComponentValue[]>
+  | FunctionBlock<ComponentValue[]>;
 
-export type SimpleBlock<K extends SimpleBlockKind = SimpleBlockKind> = {
-  type: 'block';
-  block: K;
-  value: ComponentValue[];
-};
+export type SimpleBlock<Contents = ComponentValue[]> =
+  | BraceBlock<Contents>
+  | BracketBlock<Contents>
+  | ParensBlock<Contents>
 
 export type SimpleBlockKind =
   | BlockKind.Brace
   | BlockKind.Bracket
   | BlockKind.Parens;
 
-export type FunctionBlock = {
+export type BraceBlock<Contents = ComponentValue[]> = {
+  type: 'block';
+  block: BlockKind.Brace;
+  value: Contents;
+};
+
+export type BracketBlock<Contents = ComponentValue[]> = {
+  type: 'block';
+  block: BlockKind.Bracket;
+  value: Contents;
+};
+
+export type ParensBlock<Contents = ComponentValue[]> = {
+  type: 'block';
+  block: BlockKind.Parens;
+  value: Contents;
+};
+
+export type FunctionBlock<Contents = ComponentValue[]> = {
   type: 'block';
   block: BlockKind.Function;
   name: string;
-  value: ComponentValue[];
+  value: Contents;
 };
-
-export type BraceBlock = SimpleBlock<BlockKind.Brace>;
-export type BracketBlock = SimpleBlock<BlockKind.Bracket>;
-export type ParensBlock = SimpleBlock<BlockKind.Parens>;
 
 export type Declaration = {
   name: string;
@@ -691,11 +704,15 @@ function consumeComponentValueFromTokens(c: TokenCursor): ComponentValue {
 }
 
 // 5.4.8. Consume a simple block
-function consumeSimpleBlockFromTokens<K extends SimpleBlockKind>(c: TokenCursor, block: K): SimpleBlock<K> {
-  const result: SimpleBlock<K> = {
+function consumeSimpleBlockFromTokens(c: TokenCursor, block: BlockKind.Brace): BraceBlock;
+function consumeSimpleBlockFromTokens(c: TokenCursor, block: BlockKind.Bracket): BracketBlock;
+function consumeSimpleBlockFromTokens(c: TokenCursor, block: BlockKind.Parens): ParensBlock;
+function consumeSimpleBlockFromTokens(c: TokenCursor, block: SimpleBlockKind) {
+  const value: ComponentValue[] = [];
+  const result = {
     type: 'block',
     block,
-    value: [],
+    value,
   };
 
   const ending = blockEndingTokenKind(block);
