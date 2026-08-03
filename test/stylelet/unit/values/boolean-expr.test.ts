@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { BlockKind } from '../../../../src/stylelet/parser/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import {
+  describe, expect,
+  it,
+} from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { parseListOfComponentValues, BlockKind } from '../../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 import {
   createBooleanExprConsumer,

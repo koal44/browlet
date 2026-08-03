@@ -1,21 +1,15 @@
-import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
+import { type TryComponentConsumer } from '../parser/component-cursor';
+import { adaptConsumer } from '../parser/component-grammar';
 import { createKeywordConsumer } from './keyword';
 
 export type AutoValue = {
   type: 'auto';
 };
 
-export function tryConsumeAuto(c: ComponentCursor): TryComponentConsumerResult<AutoValue> {
-  const keyword = tryConsumeAutoKeyword(c);
-
-  if (keyword === null) {
-    return null;
-  }
-
-  return { type: 'auto' };
-}
-
-const tryConsumeAutoKeyword = createKeywordConsumer('auto');
+export const tryConsumeAuto: TryComponentConsumer<AutoValue> = adaptConsumer(
+  createKeywordConsumer('auto'),
+  () => ({ type: 'auto' }),
+);
 
 export function serializeAuto(value: AutoValue): string {
   return value.type;

@@ -2,44 +2,29 @@ import { asciiLower } from '../../shared/css';
 import { assertNever } from '../../shared/util';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
-  createDelimConsumer, createFunctionalNotationConsumer,
-  tryConsumeIdentToken,
+  consumeWhitespace, createFunctionalNotationConsumer, tryConsumeAsteriskDelim,
+  tryConsumeComma, tryConsumeIdentToken, tryConsumeParensBlock, tryConsumeSlashDelim,
 } from '../parser/component-consumers';
 import {
-  commaRepeat, one, oneOf, opt, repeat, sequenceOf,
-  withTrivia,
+  commaRepeat, one, oneOf, opt, adaptConsumer, repeat, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
-import {
-  consumeComponentTrivia, isDelimToken, isParensBlock, parseAsComponentGrammar,
-  type ParserInput,
-} from '../parser/syntax';
+import { isDelimToken } from '../parser/component-value';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
 import { ANGLE_UNITS, canonicalizeAngle, type AngleLiteral } from './numeric-literal/angle';
-import {
-  serializeDimension, tryConsumeDimension,
-  type DimensionLiteral,
-} from './numeric-literal/dimension';
-import {
-  FREQUENCY_UNITS, canonicalizeFrequency,
-  type FrequencyLiteral,
-} from './numeric-literal/frequency';
-import { serializeIdentifier } from './ident';
-import type { IntegerLiteral } from './numeric-literal/integer';
+import { serializeDimension, tryConsumeDimension, type DimensionLiteral } from './numeric-literal/dimension';
+import { FREQUENCY_UNITS, canonicalizeFrequency, type FrequencyLiteral } from './numeric-literal/frequency';
+import { serializeCssIdentifier } from './ident';
+import { type IntegerLiteral } from './numeric-literal/integer';
 import {
   LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type LengthLiteral,
   type LengthResolutionContext,
 } from './numeric-literal/length';
 import { serializeNumber, tryConsumeNumber, type NumberLiteral } from './numeric-literal/number';
-import {
-  serializePercentage, tryConsumePercentage,
-  type PercentageLiteral,
-} from './numeric-literal/percentage';
-import {
-  RESOLUTION_UNITS, canonicalizeResolution,
-  type ResolutionLiteral,
-} from './numeric-literal/resolution';
+import { serializePercentage, tryConsumePercentage, type PercentageLiteral } from './numeric-literal/percentage';
+import { RESOLUTION_UNITS, canonicalizeResolution, type ResolutionLiteral } from './numeric-literal/resolution';
 import { TIME_UNITS, canonicalizeTime, type TimeLiteral } from './numeric-literal/time';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
@@ -591,39 +576,7 @@ type UnaryMathFunctionName =
 function tryConsumeCalc(
   c: ComponentCursor,
 ): TryComponentConsumerResult<MathValue> {
-  const start = c.pos();
-  const outerContext = c.context;
-  const result = consumeCalcCalculation(c);
-
-  if (result === null) return null;
-
-  const context = mathContextFor(c.context);
-  const mathHints = mathHintsOf(result);
-
-  if (!context.insideCalculation) {
-    if (mathCategory(mathHints) === null) {
-      c.restore(start);
-      c.context = outerContext;
-      return null;
-    }
-  }
-
-  const expectedType = requiredExpectedType(
-    c.context as InternalMathContext,
-  );
-
-  if (!context.insideCalculation) {
-    if (!matchesExpectedCalculationType(mathHints, expectedType, context)) {
-      c.restore(start);
-      c.context = outerContext;
-      return null;
-    }
-  }
-
-  return createMathValue(
-    simplifyCalculationTree(result, ValueStage.Declared, context, expectedType),
-    expectedType,
-  );
+  return consumeCalc(c);
 }
 
 /*
@@ -636,6 +589,32 @@ const consumeCalcCalculation = createFunctionalNotationConsumer(
   (calculation) => calculation,
   {
     contextForArguments: enterCalculationContext,
+  },
+);
+
+const consumeCalc = adaptConsumer(
+  consumeCalcCalculation,
+  (result, rawContext) => {
+    const context = mathContextFor(rawContext);
+    const mathHints = mathHintsOf(result);
+
+    if (!context.insideCalculation && mathCategory(mathHints) === null) {
+      return null;
+    }
+
+    const expectedType = requiredExpectedType(rawContext as InternalMathContext);
+
+    if (
+      !context.insideCalculation &&
+      !matchesExpectedCalculationType(mathHints, expectedType, context)
+    ) {
+      return null;
+    }
+
+    return createMathValue(
+      simplifyCalculationTree(result, ValueStage.Declared, context, expectedType),
+      expectedType,
+    );
   },
 );
 
@@ -901,7 +880,7 @@ function createRoundConsumer(): TryComponentConsumer<
   const consumeArguments = sequenceOf(
     [
       opt(tryConsumeRoundingStrategyPrefix),
-      commaRepeat(tryConsumeCalcSum, 1, 2),
+      commaRepeat(withTrivia(tryConsumeCalcSum), 1, 2),
     ],
     ([[explicitStrategy], children]) => {
       const [value, step] = children;
@@ -960,55 +939,42 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
   name: string,
   consumeArguments: TryComponentConsumer<Node>,
 ): TryComponentConsumer<Node | NumericLeaf> {
-  const consume = createFunctionalNotationConsumer(
+  return createFunctionalNotationConsumer(
     name,
     consumeArguments,
-    (node) => node,
+    (result, rawContext) => {
+      const context = mathContextFor(rawContext);
+
+      if (!context.insideCalculation && mathCategory(result.hints) === null) {
+        return null;
+      }
+
+      const valueType = context.insideCalculation
+        ? undefined
+        : requiredExpectedType(rawContext as InternalMathContext);
+
+      if (
+        valueType !== undefined &&
+        !matchesExpectedCalculationType(
+          result.hints,
+          valueType,
+          context,
+        )
+      ) {
+        return null;
+      }
+
+      return simplifyCalculationTree(
+        result,
+        ValueStage.Declared,
+        context,
+        valueType,
+      ) as Node | NumericLeaf;
+    },
     {
       contextForArguments: enterCalculationContext,
     },
   );
-
-  return (c) => {
-    const start = c.pos();
-    const outerContext = c.context;
-    const result = consume(c);
-
-    if (result === null) return null;
-
-    const context = mathContextFor(c.context);
-
-    if (!context.insideCalculation) {
-      if (mathCategory(result.hints) === null) {
-        c.restore(start);
-        c.context = outerContext;
-        return null;
-      }
-    }
-
-    const valueType = context.insideCalculation
-      ? undefined
-      : requiredExpectedType(c.context as InternalMathContext);
-
-    if (valueType !== undefined) {
-      if (!matchesExpectedCalculationType(
-        result.hints,
-        valueType,
-        context,
-      )) {
-        c.restore(start);
-        c.context = outerContext;
-        return null;
-      }
-    }
-
-    return simplifyCalculationTree(
-      result,
-      ValueStage.Declared,
-      context,
-      valueType,
-    ) as Node | NumericLeaf;
-  };
 }
 
 function createMathFunctionNode<
@@ -1083,21 +1049,16 @@ const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
 function tryConsumeRoundingStrategyPrefix(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RoundingStrategy> {
-  const start = c.pos();
-  const strategy = tryConsumeRoundingStrategy(c);
-
-  if (strategy === null) return null;
-
-  consumeComponentTrivia(c);
-
-  if (!c.match(TokenKind.Comma)) {
-    c.restore(start);
-    return null;
-  }
-
-  consumeComponentTrivia(c);
-  return strategy;
+  return consumeRoundingStrategyPrefix(c);
 }
+
+const consumeRoundingStrategyPrefix = sequenceOf(
+  [
+    one(tryConsumeRoundingStrategy),
+    one(withTrivia(tryConsumeComma)),
+  ],
+  ([[strategy]]) => strategy,
+);
 
 function haveSameMathHints(
   a: MathHints,
@@ -1191,7 +1152,7 @@ function tryConsumeCalcSumOperator(
     return null;
   }
 
-  consumeComponentTrivia(c);
+  consumeWhitespace(c);
   const component = c.next();
 
   if (!isDelimToken(component, '+') && !isDelimToken(component, '-')) {
@@ -1204,7 +1165,7 @@ function tryConsumeCalcSumOperator(
     return null;
   }
 
-  consumeComponentTrivia(c);
+  consumeWhitespace(c);
   return component.value as '+' | '-';
 }
 
@@ -1240,13 +1201,10 @@ function tryConsumeCalcProduct(
   return consumeCalcProduct(c);
 }
 
-const tryConsumeAsterisk = createDelimConsumer('*');
-const tryConsumeSlash = createDelimConsumer('/');
-
 const tryConsumeCalcProductOperator: TryComponentConsumer<'*' | '/'> = oneOf(
   [
-    one(tryConsumeAsterisk),
-    one(tryConsumeSlash),
+    one(tryConsumeAsteriskDelim),
+    one(tryConsumeSlashDelim),
   ],
   ([operator]) => operator,
 );
@@ -1316,20 +1274,7 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
 function tryConsumeCalcValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
-  const result = consumeCalcValue(c);
-
-  if (result === null) return null;
-
-  const context = c.context as InternalMathContext;
-
-  if (
-    context.termCount !== undefined &&
-    ++context.termCount > CALC_COMPLEXITY_LIMIT
-  ) {
-    return null;
-  }
-
-  return result;
+  return consumeCalcValue(c);
 }
 
 const tryConsumeMathFunctionCalculation: TryComponentConsumer<CalculationTree> =
@@ -1369,55 +1314,62 @@ const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
     one(tryConsumeParenthesizedCalcSum),
     one(tryConsumeMathFunctionCalculation),
   ],
-  ([value]) => value,
+  ([result], rawContext) => {
+    const context = rawContext as InternalMathContext;
+
+    if (
+      context.termCount !== undefined &&
+      context.termCount + 1 > CALC_COMPLEXITY_LIMIT
+    ) {
+      return null;
+    }
+
+    if (context.termCount !== undefined) {
+      context.termCount++;
+    }
+
+    return result;
+  },
 );
 
 function tryConsumeParenthesizedCalcSum(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
-  const start = c.pos();
-  const component = c.next();
+  return consumeParenthesizedCalcSum(c);
+}
 
-  if (!isParensBlock(component)) {
-    c.restore(start);
-    return null;
-  }
-
-  const result = parseAsComponentGrammar(
+const consumeParenthesizedCalcSum = adaptConsumer(
+  tryConsumeParensBlock,
+  (component, context) => parseAsComponentGrammar(
     component.value,
     withTrivia(tryConsumeCalcSum),
-    c.context,
-  );
-
-  if (result === null) {
-    c.restore(start);
-    return null;
-  }
-
-  return result;
-}
+    context,
+  ),
+);
 
 function tryConsumeCalcCalculation(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CalculationTree> {
-  if (!mathContextFor(c.context).insideCalculation) {
-    const result = tryConsumeCalc(c);
-
-    return result === null
-      ? result
-      : result.calculation;
-  }
-
-  const result = consumeCalcCalculation(c);
-
-  if (result === null) return null;
-
-  return simplifyCalculationTree(
-    result,
-    ValueStage.Declared,
-    mathContextFor(c.context),
-  );
+  return (
+    mathContextFor(c.context).insideCalculation
+      ? consumeNestedCalcCalculation
+      : consumeTopLevelCalcCalculation
+  )(c);
 }
+
+const consumeTopLevelCalcCalculation = adaptConsumer(
+  tryConsumeCalc,
+  (value) => value.calculation,
+);
+
+const consumeNestedCalcCalculation = adaptConsumer(
+  consumeCalcCalculation,
+  (calculation, context) => simplifyCalculationTree(
+    calculation,
+    ValueStage.Declared,
+    mathContextFor(context),
+  ),
+);
 
 /*
  * <calc-keyword> = e | pi | infinity | -infinity | NaN
@@ -1428,48 +1380,44 @@ function tryConsumeCalcCalculation(
 function tryConsumeCalcKeyword(
   c: ComponentCursor,
 ): TryComponentConsumerResult<NumericLeaf | VariableLeaf> {
-  const start = c.pos();
-  const token = tryConsumeIdentToken(c);
-
-  if (token === null) return null;
-
-  const name = asciiLower(token.value);
-  let value: number | undefined;
-
-  switch (name) {
-    case 'e': value = Math.E; break;
-    case 'pi': value = Math.PI; break;
-    case 'infinity': value = Infinity; break;
-    case '-infinity': value = -Infinity; break;
-    case 'nan': value = NaN; break;
-    default:
-      break;
-  }
-
-  if (value !== undefined) {
-    return createNumericLeaf(
-      { type: 'number', value },
-      numberMathHints(),
-    );
-  }
-
-  const variable = mathContextFor(c.context)
-    .numericVariables?.get(name);
-
-  if (variable === undefined) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'variable',
-    name,
-    hints: mathHintsFromNumericVariable(
-      variable,
-      mathContextFor(c.context),
-    ),
-  };
+  return consumeCalcKeyword(c);
 }
+
+const consumeCalcKeyword: TryComponentConsumer<NumericLeaf | VariableLeaf> = adaptConsumer(
+  tryConsumeIdentToken,
+  (token, rawContext) => {
+    const name = asciiLower(token.value);
+    let value: number | undefined;
+
+    switch (name) {
+      case 'e': value = Math.E; break;
+      case 'pi': value = Math.PI; break;
+      case 'infinity': value = Infinity; break;
+      case '-infinity': value = -Infinity; break;
+      case 'nan': value = NaN; break;
+      default:
+        break;
+    }
+
+    if (value !== undefined) {
+      return createNumericLeaf(
+        { type: 'number', value },
+        numberMathHints(),
+      );
+    }
+
+    const context = mathContextFor(rawContext);
+    const variable = context.numericVariables?.get(name);
+
+    if (variable === undefined) return null;
+
+    return {
+      type: 'variable',
+      name,
+      hints: mathHintsFromNumericVariable(variable, context),
+    };
+  },
+);
 
 // █████▌ █   ▐▌ ████▌  █████▌  ███▌
 //   █▌   ▐▌  █  █▌  █▌ █▌     █▌  █▌
@@ -3579,7 +3527,7 @@ function serializeCalcTree(root: CalculationTree): string {
       return serializeNumericLeaf(root);
 
     case 'variable':
-      return serializeIdentifier(root.name);
+      return serializeCssIdentifier(root.name);
 
     case 'negate':
       return `(-1 * ${serializeCalcTree(root.child)})`;

@@ -1,5 +1,7 @@
 import { EOFToken, type Token } from './tokens';
 
+export type TokenPredicate = (token: Token) => boolean;
+
 export class TokenCursor {
   constructor(
     private readonly input: readonly Token[],
@@ -24,5 +26,15 @@ export class TokenCursor {
     }
 
     return this.input[this.i++]!;
+  }
+
+  consumeWhile(predicate: TokenPredicate): number {
+    const start = this.i;
+
+    while (this.i < this.input.length && predicate(this.input[this.i]!)) {
+      this.i++;
+    }
+
+    return this.i - start;
   }
 }

@@ -1,13 +1,11 @@
-import { BlockItemAstKind, type DeclarationAst, type StyleBlockAst } from '../parser/types';
+import { BlockItemAstKind, serializeAstDeclaration, type SerializedDeclarationAst, type DeclarationAst, type StyleBlockAst } from './ast';
 import { notImplemented } from '../util';
-import type { SerializedDeclaration } from './serialize';
-import { serializeAstDeclaration } from './serialize';
 
 export class SelectletCSSStyleDeclaration {
   [index: number]: string;
 
   private _names: string[] = [];
-  private _declarations = new Map<string, SerializedDeclaration>();
+  private _declarations = new Map<string, SerializedDeclarationAst>();
 
   constructor(block?: StyleBlockAst) {
     if (block) {
@@ -68,7 +66,7 @@ export class SelectletCSSStyleDeclaration {
     this.setActiveDeclaration(active);
   }
 
-  private setActiveDeclaration(declaration: SerializedDeclaration): void {
+  private setActiveDeclaration(declaration: SerializedDeclarationAst): void {
     const name = declaration.name;
     const previous = this._declarations.get(name);
 

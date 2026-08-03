@@ -1,10 +1,12 @@
-import type { ComponentValue } from './syntax';
-import type { TokenKind } from './tokens';
+import { type ComponentValue } from './component-value';
+import { type TokenKind } from './tokens';
 
 export type ComponentCursorOptions = {
   position?: number;
   context?: unknown;
 };
+
+export type ComponentPredicate = (component: ComponentValue) => boolean;
 
 export type TryComponentConsumer<T> =
   (c: ComponentCursor) => TryComponentConsumerResult<T>;
@@ -62,6 +64,16 @@ export class ComponentCursor {
     }
 
     return value;
+  }
+
+  consumeWhile(predicate: ComponentPredicate): number {
+    const start = this.i;
+
+    while (this.i < this.input.length && predicate(this.input[this.i]!)) {
+      this.i++;
+    }
+
+    return this.i - start;
   }
 
   match(kind: TokenKind): boolean {

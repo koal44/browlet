@@ -1,19 +1,19 @@
 import { asciiLower } from '../../shared/css';
-import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { withTrivia } from '../parser/component-grammar';
+import { type TryComponentConsumer } from '../parser/component-cursor';
+import { adaptConsumer, withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
-import { serializeIdentifier, tryConsumeIdent } from './ident';
+import { serializeCssIdentifier, tryConsumeIdent } from './ident';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
   value: string;
 };
 
-const RESERVED_CUSTOM_IDENT_KEYWORDS = [
+const RESERVED_CUSTOM_IDENT_KEYWORDS: ReadonlySet<string> = new Set([
   ...CSS_WIDE_KEYWORDS,
   'default',
-] as const;
+]);
 
 export function parseCustomIdent(
   input: ParserInput,
@@ -22,43 +22,27 @@ export function parseCustomIdent(
 ): CustomIdentValue | null {
   return parseAsComponentGrammar(
     input,
-    withTrivia((c) => tryConsumeCustomIdent(c, excluded)),
+    withTrivia(createCustomIdentConsumer(excluded)),
     context,
   );
 }
 
-export function tryConsumeCustomIdent(
-  c: ComponentCursor,
+export function createCustomIdentConsumer(
   excluded: readonly string[] = [],
-): TryComponentConsumerResult<CustomIdentValue> {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
+): TryComponentConsumer<CustomIdentValue> {
+  const excludedKeywords = new Set(excluded.map(asciiLower));
 
-  if (ident === null) return null;
+  return adaptConsumer(tryConsumeIdent, ({ value }) => {
+    const lower = asciiLower(value);
 
-  const value = ident.value;
-  const lower = asciiLower(value);
-
-  for (const keyword of RESERVED_CUSTOM_IDENT_KEYWORDS) {
-    if (lower === keyword) {
-      c.restore(start);
-      return null;
-    }
-  }
-
-  for (const keyword of excluded) {
-    if (lower === asciiLower(keyword)) {
-      c.restore(start);
-      return null;
-    }
-  }
-
-  return {
-    type: 'custom-ident',
-    value,
-  };
+    return RESERVED_CUSTOM_IDENT_KEYWORDS.has(lower) || excludedKeywords.has(lower)
+      ? null
+      : { type: 'custom-ident' as const, value };
+  });
 }
 
+export const tryConsumeCustomIdent = createCustomIdentConsumer();
+
 export function serializeCustomIdent(value: CustomIdentValue): string {
-  return serializeIdentifier(value.value);
+  return serializeCssIdentifier(value.value);
 }

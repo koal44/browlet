@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { BlockKind, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import { BlockKind } from '../../../../src/stylelet/parser/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
   parseGeneralEnclosed,
   tryConsumeGeneralEnclosed,

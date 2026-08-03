@@ -1,8 +1,8 @@
+import { tryConsumeDimensionToken } from '../../parser/component-consumers';
 import { type ComponentCursor, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { withTrivia } from '../../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { TokenKind } from '../../parser/tokens';
-import { serializeIdentifier } from '../ident';
+import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { serializeCssIdentifier } from '../ident';
 import { serializeCssNumber } from './number';
 
 /*
@@ -40,20 +40,17 @@ export function parseDimension(
 export function tryConsumeDimension(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DimensionLiteral> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (!isTokenKind(component, TokenKind.Dimension)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'dimension',
-    value: component.value,
-    unit: component.unit,
-  };
+  return consumeDimension(c);
 }
+
+const consumeDimension = adaptConsumer(
+  tryConsumeDimensionToken,
+  (token): DimensionLiteral => ({
+    type: 'dimension',
+    value: token.value,
+    unit: token.unit,
+  }),
+);
 
 export function serializeDimension(
   value: DimensionLiteral<string, string>,
@@ -62,7 +59,7 @@ export function serializeDimension(
 }
 
 function serializeDimensionUnit(unit: string): string {
-  const serialized = serializeIdentifier(unit);
+  const serialized = serializeCssIdentifier(unit);
 
   // Escape a leading e/E when adjoining the unit to a number would otherwise
   // turn the pair into scientific notation rather than a dimension token.

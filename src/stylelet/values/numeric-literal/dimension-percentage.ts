@@ -1,5 +1,5 @@
 import { one, oneOf } from '../../parser/component-grammar';
-import { type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
 import { addDimensions, interpolateDimensions, type DimensionLiteral } from './dimension';
 import {
   addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
@@ -39,31 +39,15 @@ export function createDimensionPercentageConsumer<
     );
   }
 
-  const tryConsumeUnrestricted: TryComponentConsumer<
-    DimensionPercentageLiteral<Dimension>
-  > = oneOf(
+  return oneOf(
     [
       one(tryConsumeDimension),
       one(tryConsumePercentage),
     ],
-    ([value]) => value,
+    ([value]) => value.value < min || value.value > max
+      ? null
+      : value,
   );
-
-  return (c): TryComponentConsumerResult<
-    DimensionPercentageLiteral<Dimension>
-  > => {
-    const start = c.pos();
-    const result = tryConsumeUnrestricted(c);
-
-    if (result === null) return null;
-
-    if (result.value < min || result.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
 }
 
 function canCheckRangeWithoutResolution(min: number, max: number): boolean {

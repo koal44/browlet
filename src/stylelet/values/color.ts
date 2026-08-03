@@ -2,20 +2,19 @@ import { asciiLower } from '../../shared/css';
 import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../shared/util';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
-  createDelimConsumer, createFunctionalNotationConsumer,
-  tryConsumeHashToken,
+  createFunctionalNotationConsumer, tryConsumeComma, tryConsumeDimensionToken,
+  tryConsumeHashToken, tryConsumeIdentToken, tryConsumeIntegerToken, tryConsumeSlashDelim,
 } from '../parser/component-consumers';
 import {
-  allOf, commaRepeat, one, oneOf, opt, plus, repeat, sequenceOf,
-  withTrivia,
+  allOf, commaRepeat, one, oneOf, opt, plus, adaptConsumer, repeat, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { NumberTokenFlag, TokenKind } from '../parser/tokens';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { NumberTokenFlag } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
 import {
-  coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName,
-  type MathContext, type NumericVariable,
+  coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName, type MathContext,
+  type NumericVariable,
 } from './math-value';
 import { completeMixPercentages, normalizeMixPercentages } from './mix';
 import { tryConsumeDashedIdent, type DashedIdentValue } from './dashed-ident';
@@ -23,7 +22,7 @@ import { tryConsumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { canonicalizeAngle } from './numeric-literal/angle';
 import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
-import type { PercentageLiteral } from './numeric-literal/percentage';
+import { type PercentageLiteral } from './numeric-literal/percentage';
 import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
 import {
   createPercentageConsumer, resolvePercentage, serializePercentage, tryConsumePercentage,
@@ -369,15 +368,11 @@ export function tryConsumeColor(
   c: ComponentCursor,
   allowQuirkyColor = false,
 ): TryComponentConsumerResult<ColorValue> {
-  const result = (
+  return (
     allowQuirkyColor
-      ? consumeColorInQuirksMode
-      : consumeColor
+      ? consumeDeclaredColorInQuirksMode
+      : consumeDeclaredColor
   )(c);
-
-  return result === null
-    ? null
-    : resolveColorValue(result, ValueStage.Declared, colorContextFor(c.context));
 }
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
@@ -407,6 +402,18 @@ const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeQuirkyColor),
   ],
   ([value]) => value,
+);
+
+const consumeDeclaredColor = adaptConsumer(
+  consumeColor,
+  (value, context) =>
+    resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
+);
+
+const consumeDeclaredColorInQuirksMode = adaptConsumer(
+  consumeColorInQuirksMode,
+  (value, context) =>
+    resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
 );
 
 function tryConsumeColorBase(
@@ -459,7 +466,7 @@ function tryConsumeModernAlpha(
 const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> =
   sequenceOf(
     [
-      one(withTrivia(tryConsumeSlash)),
+      one(withTrivia(tryConsumeSlashDelim)),
       one(withTrivia(oneOf(
         [
           one(tryConsumeAlphaValue),
@@ -496,20 +503,6 @@ function tryConsumeNone(
 
 const consumeNone = createKeywordConsumer('none');
 
-function tryConsumeSlash(
-  c: ComponentCursor,
-): TryComponentConsumerResult<'/'> {
-  return consumeSlash(c);
-}
-
-const consumeSlash = createDelimConsumer('/');
-
-function tryConsumeComma(
-  c: ComponentCursor,
-): TryComponentConsumerResult<','> {
-  return c.match(TokenKind.Comma) ? ',' : null;
-}
-
 /*
  * <hex-color> = <hash-token> whose value consists of
  *               3, 4, 6, or 8 hexadecimal digits
@@ -527,24 +520,12 @@ function tryConsumeHexColor(
 }
 
 // <hex-color> = <hash-token> whose value consists of 3, 4, 6, or 8 hexadecimal digits
-const consumeHexColor: TryComponentConsumer<HexColor> = (c) => {
-  const start = c.pos();
-  const result = tryConsumeHashToken(c);
-
-  if (result === null) return null;
-
-  const token = result;
-
-  if (!isHexColorValue(token.value)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    kind: ColorKind.Hex,
-    text: `#${token.value}`,
-  };
-};
+const consumeHexColor: TryComponentConsumer<HexColor> = adaptConsumer(
+  tryConsumeHashToken,
+  (token) => isHexColorValue(token.value)
+    ? { kind: ColorKind.Hex, text: `#${token.value}` }
+    : null,
+);
 
 function isHexColorValue(value: string): boolean {
   return (
@@ -577,27 +558,19 @@ function tryConsumeNamedColor(
 }
 
 // <named-color>
-const consumeNamedColor: TryComponentConsumer<NamedColor> = (c) => {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
+const consumeNamedColor: TryComponentConsumer<NamedColor> = adaptConsumer(
+  tryConsumeIdent,
+  (ident) => {
+    const name = asciiLower(ident.value);
+    const rgba = Object.hasOwn(ColorRgba, name)
+      ? ColorRgba[name as keyof typeof ColorRgba]
+      : undefined;
 
-  if (ident === null) return null;
-
-  const name = asciiLower(ident.value);
-  const rgba = Object.hasOwn(ColorRgba, name)
-    ? ColorRgba[name as keyof typeof ColorRgba]
-    : undefined;
-
-  if (rgba === undefined) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    kind: ColorKind.Named,
-    name: name as ColorName,
-  };
-};
+    return rgba === undefined
+      ? null
+      : { kind: ColorKind.Named, name: name as ColorName };
+  },
+);
 
 export const ColorRgba = {
   transparent: 0x00000000,
@@ -835,24 +808,16 @@ function tryConsumeSystemColor(
 }
 
 // <system-color>
-const consumeSystemColor: TryComponentConsumer<SystemColor> = (c) => {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
+const consumeSystemColor: TryComponentConsumer<SystemColor> = adaptConsumer(
+  tryConsumeIdent,
+  (ident) => {
+    const name = asciiLower(ident.value);
 
-  if (ident === null) return null;
-
-  const name = asciiLower(ident.value);
-
-  if (!SystemColorNameSet.has(name)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    kind: ColorKind.System,
-    name: name as SystemColorName,
-  };
-};
+    return SystemColorNameSet.has(name)
+      ? { kind: ColorKind.System, name: name as SystemColorName }
+      : null;
+  },
+);
 
 const SystemColorNames = [
   'accentcolor', 'accentcolortext', 'activetext',
@@ -889,24 +854,16 @@ function tryConsumeDeprecatedColor(
 }
 
 // <deprecated-color>
-const consumeDeprecatedColor: TryComponentConsumer<DeprecatedColor> = (c) => {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
+const consumeDeprecatedColor: TryComponentConsumer<DeprecatedColor> = adaptConsumer(
+  tryConsumeIdent,
+  (ident) => {
+    const name = asciiLower(ident.value);
 
-  if (ident === null) return null;
-
-  const name = asciiLower(ident.value);
-
-  if (!Object.hasOwn(DeprecatedColorSystemName, name)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    kind: ColorKind.Deprecated,
-    name: name as DeprecatedColorName,
-  };
-};
+    return Object.hasOwn(DeprecatedColorSystemName, name)
+      ? { kind: ColorKind.Deprecated, name: name as DeprecatedColorName }
+      : null;
+  },
+);
 
 const DeprecatedColorSystemName = {
   activeborder: 'buttonborder',
@@ -945,16 +902,13 @@ export type CurrentColor = {
 function tryConsumeCurrentColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CurrentColor> {
-  const keyword = tryConsumeCurrentColorKeyword(c);
-
-  if (keyword === null) return null;
-
-  return {
-    kind: ColorKind.CurrentColor,
-  };
+  return consumeCurrentColor(c);
 }
 
-const tryConsumeCurrentColorKeyword = createKeywordConsumer('currentcolor');
+const consumeCurrentColor: TryComponentConsumer<CurrentColor> = adaptConsumer(
+  createKeywordConsumer('currentcolor'),
+  () => ({ kind: ColorKind.CurrentColor }),
+);
 
 /*
  * <rgb()> = [ <legacy-rgb-syntax> | <modern-rgb-syntax> ]
@@ -1913,15 +1867,14 @@ const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
 function tryConsumeXyzSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<XyzColorSpace['name']> {
-  const space = consumeXyzSpace(c);
-
-  return space === null
-    ? space
-    : (space === 'xyz' ? 'xyz-d65' : space);
+  return consumeXyzSpace(c);
 }
 
 // <xyz-space> = xyz | xyz-d50 | xyz-d65
-const consumeXyzSpace = createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65');
+const consumeXyzSpace = adaptConsumer(
+  createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65'),
+  (space) => space === 'xyz' ? 'xyz-d65' : space,
+);
 
 /*
  * <device-cmyk()> =
@@ -2188,27 +2141,26 @@ const consumeColorSpace: TryComponentConsumer<ColorInterpolationSpaceName> = one
 function tryConsumeRectangularColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RectangularColorSpaceName> {
-  const result = consumeRectangularColorSpace(c);
-
-  return result === null
-    ? result
-    : (result === 'xyz' ? 'xyz-d65' : result);
+  return consumeRectangularColorSpace(c);
 }
 
 // <rectangular-color-space> = srgb | srgb-linear | display-p3 | display-p3-linear | a98-rgb | prophoto-rgb | rec2020 | lab | oklab | <xyz-space>
-const consumeRectangularColorSpace = createKeywordConsumer(
-  'srgb',
-  'srgb-linear',
-  'display-p3',
-  'display-p3-linear',
-  'a98-rgb',
-  'prophoto-rgb',
-  'rec2020',
-  'lab',
-  'oklab',
-  'xyz',
-  'xyz-d50',
-  'xyz-d65',
+const consumeRectangularColorSpace = adaptConsumer(
+  createKeywordConsumer(
+    'srgb',
+    'srgb-linear',
+    'display-p3',
+    'display-p3-linear',
+    'a98-rgb',
+    'prophoto-rgb',
+    'rec2020',
+    'lab',
+    'oklab',
+    'xyz',
+    'xyz-d50',
+    'xyz-d65',
+  ),
+  (space) => space === 'xyz' ? 'xyz-d65' : space,
 );
 
 function tryConsumePolarColorSpace(
@@ -2225,21 +2177,15 @@ const consumePolarColorSpace =
 function tryConsumeCustomColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DashedIdentValue['value']> {
-  const start = c.pos();
-  const ident = tryConsumeDashedIdent(c);
-
-  if (ident === null) return null;
-
-  const { value } = ident;
-  const context = colorContextFor(c.context);
-
-  if (context.colorProfiles?.has(value)) {
-    return value;
-  }
-
-  c.restore(start);
-  return null;
+  return consumeCustomColorSpace(c);
 }
+
+const consumeCustomColorSpace = adaptConsumer(
+  tryConsumeDashedIdent,
+  ({ value }, context) => colorContextFor(context).colorProfiles?.has(value)
+    ? value
+    : null,
+);
 
 function tryConsumeHueInterpolationMethod(
   c: ComponentCursor,
@@ -2276,41 +2222,24 @@ function tryConsumeQuirkyColor(
 }
 
 // <quirky-color> = <number-token> | <dimension-token> | <ident-token>
-const consumeQuirkyColor: TryComponentConsumer<HexColor> = (c) => {
-  const start = c.pos();
-  const component = c.next();
-  let value: string;
-
-  if (isTokenKind(component, TokenKind.Ident)) {
-    value = component.value;
-  } else if (
-    isTokenKind(component, TokenKind.Number) &&
-    component.flag === NumberTokenFlag.Integer
-  ) {
-    value = String(component.value).padStart(6, '0');
-  } else if (
-    isTokenKind(component, TokenKind.Dimension) &&
-    component.flag === NumberTokenFlag.Integer
-  ) {
-    value = `${component.value}${component.unit}`.padStart(6, '0');
-  } else {
-    c.restore(start);
-    return null;
-  }
-
-  if (
-    (value.length !== 3 && value.length !== 6) ||
-    !isHexadecimal(value)
-  ) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    kind: ColorKind.Hex,
-    text: `#${value}`,
-  };
-};
+const consumeQuirkyColor: TryComponentConsumer<HexColor> = oneOf(
+  [
+    one(adaptConsumer(tryConsumeIdentToken, (token) => token.value)),
+    one(adaptConsumer(tryConsumeIntegerToken, (token) =>
+      String(token.value).padStart(6, '0'),
+    )),
+    one(adaptConsumer(tryConsumeDimensionToken, (token) =>
+      token.flag === NumberTokenFlag.Integer
+        ? `${token.value}${token.unit}`.padStart(6, '0')
+        : null,
+    )),
+  ],
+  ([value]) => (
+    (value.length === 3 || value.length === 6) && isHexadecimal(value)
+  )
+    ? { kind: ColorKind.Hex, text: `#${value}` }
+    : null,
+);
 
 // ████████  ████████ ██          ███    ████████ ████ ██     ██ ████████
 // ██     ██ ██       ██         ██ ██      ██     ██  ██     ██ ██
@@ -2341,25 +2270,19 @@ const consumeRelativeColorOrigin = sequenceOf(
 function tryConsumeRelativeColorKeyword(
   c: ComponentCursor,
 ): TryComponentConsumerResult<NumberValue> {
-  const start = c.pos();
-  const ident = tryConsumeIdent(c);
-
-  if (ident === null) return null;
-
-  const name = asciiLower(ident.value);
-  const variable = relativeColorVariablesFor(c.context)?.get(name);
-
-  if (variable === undefined) {
-    c.restore(start);
-    return null;
-  }
-
-  return promoteNumericVariable(
-    name,
-    'number',
-    colorContextFor(c.context),
-  );
+  return consumeRelativeColorKeyword(c);
 }
+
+const consumeRelativeColorKeyword = adaptConsumer(
+  tryConsumeIdent,
+  (ident, context) => {
+    const name = asciiLower(ident.value);
+
+    return relativeColorVariablesFor(context)?.has(name) === true
+      ? promoteNumericVariable(name, 'number', colorContextFor(context))
+      : null;
+  },
+);
 
 function contextWithRelativeColorVariables(
   context: unknown,

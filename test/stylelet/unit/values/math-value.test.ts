@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
+import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { ValueStage } from '../../../../src/stylelet/value-processing';
 import {
   accumulateMathValues, addMathValues, coercePercentageMathToNumber,
-  interpolateMathValues, parseMathValue, promoteNumericVariable,
+  createMathValueConsumer, interpolateMathValues, parseMathValue, promoteNumericVariable,
   resolveMathValue, serializeMathValue,
   type MathContext, type MathValueType, type MathValue, type MathBase,
 } from '../../../../src/stylelet/values/math-value';
@@ -1954,6 +1956,17 @@ describe('calc', () => {
     const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
 
     expectInvalidMath(`calc(${input})`);
+  });
+
+  it('does not advance after rejecting aggregate calculation complexity', () => {
+    const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
+    const cursor = new ComponentCursor(
+      parseListOfComponentValues(`calc(${input}) trailing`),
+    );
+    const consume = createMathValueConsumer({ expectedType: 'number' });
+
+    expect(consume(cursor)).toBeNull();
+    expect(cursor.pos()).toBe(0);
   });
 
   it('keeps parser bookkeeping out of the supplied context', () => {

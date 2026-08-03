@@ -1,8 +1,10 @@
 import { asciiLower } from '../../shared/css';
-import { createDelimConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
+import {
+  tryConsumeDimensionToken, tryConsumeIdentToken, tryConsumeIntegerToken,
+  tryConsumeMinusDelim, tryConsumePlusDelim,
+} from '../parser/component-consumers';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { one, oneOf, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
-import { isIdentToken, isTokenKind } from '../parser/syntax';
+import { one, oneOf, opt, adaptConsumer, sequenceOf, withTrivia } from '../parser/component-grammar';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
 import { createKeywordConsumer } from './keyword';
@@ -16,67 +18,41 @@ export type AnPlusBValue = {
 function createIntegerConsumer(
   sign: 'any' | 'signed' | 'signless',
 ): TryComponentConsumer<NumberToken> {
-  return (c) => {
-    const start = c.pos();
-    const result = tryConsumeIntegerToken(c);
-
-    if (result === null) return null;
-
-    const component = result;
-
+  return adaptConsumer(tryConsumeIntegerToken, (component) => {
     const isSigned =
       component.repr.startsWith('+') ||
       component.repr.startsWith('-');
 
-    if (
+    return (
       (sign === 'signed' && !isSigned) ||
       (sign === 'signless' && isSigned)
-    ) {
-      c.restore(start);
-      return null;
-    }
-
-    return component;
-  };
+    )
+      ? null
+      : component;
+  });
 }
 
 function createIntegerDimensionConsumer(
   unitPattern: RegExp,
 ): TryComponentConsumer<DimensionToken> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (
-      !isTokenKind(component, TokenKind.Dimension) ||
+  return adaptConsumer(tryConsumeDimensionToken, (component) =>
+    (
       component.flag !== NumberTokenFlag.Integer ||
       !unitPattern.test(asciiLower(component.unit))
-    ) {
-      c.restore(start);
-      return null;
-    }
-
-    return component;
-  };
+    )
+      ? null
+      : component,
+  );
 }
 
 function createIdentPatternConsumer(
   valuePattern: RegExp,
 ): TryComponentConsumer<IdentToken> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (
-      !isIdentToken(component) ||
-      !valuePattern.test(asciiLower(component.value))
-    ) {
-      c.restore(start);
-      return null;
-    }
-
-    return component;
-  };
+  return adaptConsumer(tryConsumeIdentToken, (component) =>
+    valuePattern.test(asciiLower(component.value))
+      ? component
+      : null,
+  );
 }
 
 /*
@@ -125,8 +101,6 @@ const tryConsumeSignedInteger = createIntegerConsumer('signed');
 // <signless-integer>
 const tryConsumeSignlessInteger = createIntegerConsumer('signless');
 
-const tryConsumePlus = createDelimConsumer('+');
-const tryConsumeMinus = createDelimConsumer('-');
 const tryConsumeOdd = createKeywordConsumer('odd');
 const tryConsumeEven = createKeywordConsumer('even');
 const tryConsumeN = createKeywordConsumer('n');
@@ -136,7 +110,7 @@ const tryConsumeDashNDash = createKeywordConsumer('-n-');
 
 const consumePositiveN: TryComponentConsumer<number> = sequenceOf(
   [
-    opt(tryConsumePlus),
+    opt(tryConsumePlusDelim),
     one(tryConsumeN),
   ],
   () => 1,
@@ -144,7 +118,7 @@ const consumePositiveN: TryComponentConsumer<number> = sequenceOf(
 
 const consumePositiveNDash: TryComponentConsumer<number> = sequenceOf(
   [
-    opt(tryConsumePlus),
+    opt(tryConsumePlusDelim),
     one(tryConsumeNDash),
   ],
   () => 1,
@@ -182,8 +156,8 @@ const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
       withTrivia(
         oneOf(
           [
-            one(tryConsumePlus),
-            one(tryConsumeMinus),
+            one(tryConsumePlusDelim),
+            one(tryConsumeMinusDelim),
           ],
           ([sign]) => sign,
         ),
@@ -234,7 +208,7 @@ const consumeEmbeddedNegative: TryComponentConsumer<AnPlusBValue> = oneOf(
     one(
       sequenceOf(
         [
-          opt(tryConsumePlus),
+          opt(tryConsumePlusDelim),
           one(tryConsumeNDashDigitIdent),
         ],
         ([, [ident]]) => ident,

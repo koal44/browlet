@@ -1,8 +1,8 @@
 import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { withTrivia } from '../parser/component-grammar';
+import { adaptConsumer, withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { tryConsumeCustomIdent } from './custom-ident';
-import { serializeIdentifier } from './ident';
+import { serializeCssIdentifier } from './ident';
 
 export type DashedIdentValue = {
   type: 'dashed-ident';
@@ -23,26 +23,17 @@ export function parseDashedIdent(
 export function tryConsumeDashedIdent(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DashedIdentValue> {
-  const start = c.pos();
-  const customIdent = tryConsumeCustomIdent(c);
-
-  if (customIdent === null) return null;
-
-  const value = customIdent.value;
-
-  if (!isDashedIdentifier(value)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'dashed-ident',
-    value,
-  };
+  return consumeDashedIdent(c);
 }
 
+const consumeDashedIdent = adaptConsumer(tryConsumeCustomIdent, ({ value }) =>
+  isDashedIdentifier(value)
+    ? { type: 'dashed-ident' as const, value }
+    : null,
+);
+
 export function serializeDashedIdent(value: DashedIdentValue): string {
-  return serializeIdentifier(value.value);
+  return serializeCssIdentifier(value.value);
 }
 
 function isDashedIdentifier(value: string): value is `--${string}` {

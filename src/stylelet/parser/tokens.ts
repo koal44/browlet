@@ -128,6 +128,10 @@ export type StaticToken<K extends StaticTokenKind = StaticTokenKind> = {
   kind: K;
 };
 
+type AnyStaticToken = {
+  [K in StaticTokenKind]: StaticToken<K>;
+}[StaticTokenKind];
+
 export type Token =
   | IdentToken
   | FunctionToken
@@ -139,7 +143,7 @@ export type Token =
   | NumberToken
   | PercentageToken
   | DimensionToken
-  | StaticToken;
+  | AnyStaticToken;
 
 function staticToken<K extends StaticTokenKind>(kind: K): StaticToken<K> {
   return Object.freeze({ type: 'token', kind });
@@ -289,6 +293,13 @@ export function tokenize(input: string): Token[] {
 
     if (token.kind === TokenKind.EOF) {
       return tokens;
+    }
+
+    if (
+      token.kind === TokenKind.Whitespace &&
+      tokens[tokens.length - 1]?.kind === TokenKind.Whitespace
+    ) {
+      continue;
     }
 
     tokens.push(token);

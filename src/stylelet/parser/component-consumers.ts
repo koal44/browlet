@@ -1,18 +1,22 @@
 import { asciiLower } from '../../shared/css';
-import {
-  isAnyValueContents, tryConsumeAnyValue,
-  type AnyValue,
-} from '../values/any-value';
+import { isAnyValueContents, tryConsumeAnyValue, type AnyValue } from '../values/any-value';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
-import { withTrivia } from './component-grammar';
-
+import { adaptConsumer, withTrivia } from './component-grammar';
 import {
-  isBraceBlock, isDelimToken, isFunctionBlock, isIdentToken, isTokenKind,
-  consumeComponentTrivia, parseAsComponentGrammar,
-  type ComponentValue, type FunctionBlock,
-} from './syntax';
-import type { HashToken, IdentToken, NumberToken, PercentageToken, StringToken } from './tokens';
+  isBraceBlock, isBracketBlock, isDelimToken, isFunctionBlock, isIdentToken, isParensBlock,
+  isTokenKind, isWhitespaceToken, type BraceBlock, type BracketBlock, type ComponentValue,
+  type FunctionBlock, type ParensBlock,
+} from './component-value';
+import { parseAsComponentGrammar } from './syntax';
+import type {
+  DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken,
+  StringToken, UrlToken,
+} from './tokens';
 import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
+
+// =============================================================================
+// Consumer creators
+// =============================================================================
 
 export type FunctionalNotationConsumerOptions = {
   contextForArguments?: (context: unknown) => unknown;
@@ -26,43 +30,31 @@ export type FunctionalNotationConsumerOptions = {
 export function createFunctionalNotationConsumer<ArgumentValue, Value>(
   name: string,
   tryConsumeArgumentValue: TryComponentConsumer<ArgumentValue>,
-  project: (value: ArgumentValue) => Value,
+  projectValue: (
+    value: ArgumentValue,
+    context: unknown,
+  ) => TryComponentConsumerResult<Value>,
   options: FunctionalNotationConsumerOptions = {},
 ): TryComponentConsumer<Value> {
   const normalizedName = asciiLower(name);
 
-  return (c): TryComponentConsumerResult<Value> => {
-    const start = c.pos();
-    const fn = tryConsumeFunctionBlock(c);
-
-    if (fn === null) return null;
-
-    if (asciiLower(fn.name) !== normalizedName) {
-      c.restore(start);
-      return null;
-    }
-
-    if (!isAnyValueContents(fn.value)) {
-      c.restore(start);
-      return null;
-    }
+  return adaptConsumer(tryConsumeFunctionBlock, (fn, context) => {
+    if (asciiLower(fn.name) !== normalizedName) return null;
+    if (!isAnyValueContents(fn.value)) return null;
 
     const argumentContext = options.contextForArguments === undefined
-      ? c.context
-      : options.contextForArguments(c.context);
+      ? context
+      : options.contextForArguments(context);
     const argumentValue = parseAsComponentGrammar(
       fn.value,
       withTrivia(tryConsumeArgumentValue),
       argumentContext,
     );
 
-    if (argumentValue === null) {
-      c.restore(start);
-      return null;
-    }
-
-    return project(argumentValue);
-  };
+    return argumentValue === null
+      ? null
+      : projectValue(argumentValue, context);
+  });
 }
 
 export type FreeFormOptions = {
@@ -79,7 +71,7 @@ export function createFreeFormConsumer<Value>(
 
   return (c) => {
     const start = c.pos();
-    consumeComponentTrivia(c);
+    consumeWhitespace(c);
 
     const first = c.peek();
 
@@ -136,134 +128,85 @@ export function createFreeFormConsumer<Value>(
   };
 }
 
-// :
+// =============================================================================
+// Component consumers
+// =============================================================================
+
+// <whitespace-token>*
+export function consumeWhitespace(c: ComponentCursor): void {
+  c.consumeWhile(isWhitespaceToken);
+}
+
+// =============================================================================
+// Token consumers
+// =============================================================================
+
+// <colon-token>
 export function tryConsumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
   return c.match(TokenKind.Colon) ? ':' : null;
 }
 
+// <comma-token>
+export function tryConsumeComma(c: ComponentCursor): TryComponentConsumerResult<','> {
+  return c.match(TokenKind.Comma) ? ',' : null;
+}
+
 // <ident-token>
 export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerResult<IdentToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
-  if (!isIdentToken(component)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isIdentToken(component)) return null;
 
+  c.next();
   return component;
 }
 
 // <string-token>
 export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerResult<StringToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
-  if (!isTokenKind(component, TokenKind.String)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isTokenKind(component, TokenKind.String)) return null;
 
+  c.next();
   return component;
 }
 
 // <hash-token>
 export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
-  if (!isTokenKind(component, TokenKind.Hash)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isTokenKind(component, TokenKind.Hash)) return null;
 
+  c.next();
   return component;
 }
 
 // <hash-token with the id flag>
-export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
-  const start = c.pos();
-  const result = tryConsumeHashToken(c);
+export const tryConsumeIdHashToken: TryComponentConsumer<HashToken> = adaptConsumer(
+  tryConsumeHashToken,
+  (token) => token.flag === HashTokenFlag.Id ? token : null,
+);
 
-  if (result === null) return null;
-
-  if (result.flag !== HashTokenFlag.Id) {
-    c.restore(start);
-    return null;
-  }
-
-  return result;
-}
-
-// <function-token> <component-value>* )
-export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (!isFunctionBlock(component)) {
-    c.restore(start);
-    return null;
-  }
-
-  return component;
-}
-
-/*
- * <function-token> <any-value> )
- *
- * CSS Syntax represents the complete functional notation as a function block,
- * whether it ended with an explicit closing parenthesis or at EOF.
- */
-export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
-
-// <function-token> <any-value> )
-export function tryConsumeAnyValueFunctionBlock(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AnyValueFunctionBlock> {
-  const start = c.pos();
-  const fn = tryConsumeFunctionBlock(c);
-
-  if (fn === null) return null;
-
-  const value = parseAsComponentGrammar(fn.value, tryConsumeAnyValue);
-
-  if (value === null) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    ...fn,
-    value,
-  };
-}
-
-// <number-token with the integer flag>
+// <integer-token>
 export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
   if (
     !isTokenKind(component, TokenKind.Number) ||
     component.flag !== NumberTokenFlag.Integer
-  ) {
-    c.restore(start);
-    return null;
-  }
+  ) return null;
 
+  c.next();
   return component;
 }
 
 // <number-token>
 export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
-  if (!isTokenKind(component, TokenKind.Number)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isTokenKind(component, TokenKind.Number)) return null;
 
+  c.next();
   return component;
 }
 
@@ -271,28 +214,164 @@ export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerR
 export function tryConsumePercentageToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PercentageToken> {
-  const start = c.pos();
-  const component = c.next();
+  const component = c.peek();
 
-  if (!isTokenKind(component, TokenKind.Percentage)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isTokenKind(component, TokenKind.Percentage)) return null;
 
+  c.next();
   return component;
 }
 
-// <delim-token matching expected>
-export function createDelimConsumer<T extends string>(expected: T): TryComponentConsumer<T> {
+// <dimension-token>
+export function tryConsumeDimensionToken(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DimensionToken> {
+  const component = c.peek();
+
+  if (!isTokenKind(component, TokenKind.Dimension)) return null;
+
+  c.next();
+  return component;
+}
+
+// <url-token>
+export function tryConsumeUrlToken(
+  c: ComponentCursor,
+): TryComponentConsumerResult<UrlToken> {
+  const component = c.peek();
+
+  if (!isTokenKind(component, TokenKind.Url)) return null;
+
+  c.next();
+  return component;
+}
+
+// <delim-token matching '*'>
+export const tryConsumeAsteriskDelim = createDelimConsumer('*');
+
+// <delim-token matching '^'>
+export const tryConsumeCaretDelim = createDelimConsumer('^');
+
+// <delim-token matching '$'>
+export const tryConsumeDollarDelim = createDelimConsumer('$');
+
+// <delim-token matching '.'>
+export const tryConsumeDotDelim = createDelimConsumer('.');
+
+// <delim-token matching '='>
+export const tryConsumeEqualsDelim = createDelimConsumer('=');
+
+// <delim-token matching '>'>
+export const tryConsumeGreaterDelim = createDelimConsumer('>');
+
+// <delim-token matching '-'>
+export const tryConsumeMinusDelim = createDelimConsumer('-');
+
+// <delim-token matching '|'>
+export const tryConsumePipeDelim = createDelimConsumer('|');
+
+// <delim-token matching '+'>
+export const tryConsumePlusDelim = createDelimConsumer('+');
+
+// <delim-token matching '/'>
+export const tryConsumeSlashDelim = createDelimConsumer('/');
+
+// <delim-token matching '~'>
+export const tryConsumeTildeDelim = createDelimConsumer('~');
+
+// =============================================================================
+// Block consumers
+// =============================================================================
+
+/*
+ * Token grammar: { <component-value>* }
+ * Component-value form: a brace block containing <component-value>*.
+ */
+export function tryConsumeBraceBlock(c: ComponentCursor): TryComponentConsumerResult<BraceBlock> {
+  const component = c.peek();
+
+  if (!isBraceBlock(component)) return null;
+
+  c.next();
+  return component;
+}
+
+/*
+ * Token grammar: [ <component-value>* ]
+ * Component-value form: a bracket block containing <component-value>*.
+ */
+export function tryConsumeBracketBlock(c: ComponentCursor): TryComponentConsumerResult<BracketBlock> {
+  const component = c.peek();
+
+  if (!isBracketBlock(component)) return null;
+
+  c.next();
+  return component;
+}
+
+/*
+ * Token grammar: ( <component-value>* )
+ * Component-value form: a parentheses block containing <component-value>*.
+ */
+export function tryConsumeParensBlock(c: ComponentCursor): TryComponentConsumerResult<ParensBlock> {
+  const component = c.peek();
+
+  if (!isParensBlock(component)) return null;
+
+  c.next();
+  return component;
+}
+
+/*
+ * Token grammar: <function-token> <component-value>* )
+ * Component-value form: a function block containing <component-value>*.
+ */
+export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
+  const component = c.peek();
+
+  if (!isFunctionBlock(component)) return null;
+
+  c.next();
+  return component;
+}
+
+/*
+ * Token grammar: <function-token> <any-value> )
+ * Component-value form: a function block containing <any-value>.
+ *
+ * CSS Syntax represents the complete functional notation as a function block,
+ * whether it ended with an explicit closing parenthesis or at EOF.
+ */
+export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
+
+export function tryConsumeAnyValueFunctionBlock(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AnyValueFunctionBlock> {
+  return consumeAnyValueFunctionBlock(c);
+}
+
+const consumeAnyValueFunctionBlock = adaptConsumer(
+  tryConsumeFunctionBlock,
+  (fn) => {
+    const value = parseAsComponentGrammar(fn.value, tryConsumeAnyValue);
+
+    return value === null
+      ? null
+      : { ...fn, value };
+  },
+);
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function createDelimConsumer<T extends string>(expected: T): TryComponentConsumer<T> {
   return (c) => {
-    const start = c.pos();
-    const component = c.next();
+    const component = c.peek();
 
-    if (!isDelimToken(component, expected)) {
-      c.restore(start);
-      return null;
-    }
+    if (!isDelimToken(component, expected)) return null;
 
+    c.next();
     return expected;
   };
 }

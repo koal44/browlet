@@ -1,9 +1,9 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { withTrivia } from '../../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { TokenKind } from '../../parser/tokens';
+import { tryConsumeDimensionToken } from '../../parser/component-consumers';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
+import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -55,46 +55,25 @@ export function createTimeConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<TimeLiteral> => {
-    const start = c.pos();
-    const result = tryConsumeUnrestrictedTime(c);
+  return adaptConsumer(tryConsumeDimensionToken, (component) => {
+    const unit = timeUnitFor(component.unit);
 
-    if (result === null) return null;
+    if (unit === null) return null;
 
+    const result: TimeLiteral = {
+      type: 'time',
+      value: component.value,
+      unit,
+    };
     const canonical = canonicalizeTime(result);
 
-    if (canonical.value < min || canonical.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
+    return canonical.value < min || canonical.value > max
+      ? null
+      : result;
+  });
 }
 
 export const tryConsumeTime = createTimeConsumer();
-
-function tryConsumeUnrestrictedTime(
-  c: ComponentCursor,
-): TryComponentConsumerResult<TimeLiteral> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (isTokenKind(component, TokenKind.Dimension)) {
-    const unit = timeUnitFor(component.unit);
-
-    if (unit !== null) {
-      return {
-        type: 'time',
-        value: component.value,
-        unit,
-      };
-    }
-  }
-
-  c.restore(start);
-  return null;
-}
 
 function timeUnitFor(raw: string): TimeUnit | null {
   const normalized = asciiLower(raw);

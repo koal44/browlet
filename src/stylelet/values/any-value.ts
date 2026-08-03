@@ -1,8 +1,6 @@
 import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import {
-  parseListOfComponentValues,
-  type BlockKind, type ComponentValue, type ParserInput, type PreservedToken, type SimpleBlockKind,
-} from '../parser/syntax';
+import { type BlockKind, type ComponentValue, type PreservedToken, type SimpleBlockKind } from '../parser/component-value';
+import { parseListOfComponentValues, type ParserInput } from '../parser/syntax';
 import { TokenKind, type StaticToken } from '../parser/tokens';
 
 export type AnyValue = {
@@ -38,14 +36,11 @@ export function parseAnyValue(input: ParserInput): AnyValue | null {
 export function tryConsumeAnyValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<AnyValue> {
-  const start = c.pos();
-  const first = c.next();
+  const first = c.peek();
 
-  if (!isAnyValueComponent(first)) {
-    c.restore(start);
-    return null;
-  }
+  if (!isAnyValueComponent(first)) return null;
 
+  c.next();
   const components: AnyValueComponents = [first];
 
   while (true) {

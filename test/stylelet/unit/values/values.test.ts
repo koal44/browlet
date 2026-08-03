@@ -1,17 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
-import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
+import { type ComponentValue, BlockKind } from '../../../../src/stylelet/parser/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
-  BlockKind, parseListOfComponentValues,
-  type ComponentValue,
-} from '../../../../src/stylelet/parser/syntax';
+  describe, expect,
+  it,
+} from 'vitest';
+import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
   stringToken,
 } from '../../../../src/stylelet/parser/tokens';
-import { BlockItemAstKind, type StyleRuleAst } from '../../../../src/stylelet/parser/types';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
+import { parseAnimationNameValue } from '../../../../src/stylelet/props/animation-name';
 import {
   ANGLE_UNITS, canonicalizeAngle, createAngleConsumer, parseAngle, serializeAngle,
   serializeCanonicalAngle, tryConsumeAngle,
@@ -33,7 +33,7 @@ import { parseCustomIdent, serializeCustomIdent } from '../../../../src/stylelet
 import { parseDashedIdent, serializeDashedIdent } from '../../../../src/stylelet/values/dashed-ident';
 import {
   parseIdent, serializeIdent,
-  serializeIdentifier,
+  serializeCssIdentifier,
 } from '../../../../src/stylelet/values/ident';
 import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 import {
@@ -316,7 +316,7 @@ describe('ident', () => {
     ['f\u00F6o', 'f\u00F6o'],
     ['\u{1F600}', '\u{1F600}'],
   ])('serializes %j as %j', (value, expected) => {
-    expect(serializeIdentifier(value)).toBe(expected);
+    expect(serializeCssIdentifier(value)).toBe(expected);
   });
 
   it('serializes an IdentValue', () => {
@@ -335,7 +335,7 @@ describe('ident', () => {
     'f\u00F6o',
     '\u{1F600}',
   ])('round-trips the semantic identifier %j', (value) => {
-    expect(parseIdent(serializeIdentifier(value))).toEqual({
+    expect(parseIdent(serializeCssIdentifier(value))).toEqual({
       type: 'ident',
       value,
     });
@@ -2609,38 +2609,29 @@ describe.skip('animation-name', () => {
   const stringValue = (value: string) => ({ type: 'string', value });
 
   function valueOf(css: string): unknown {
-    const sheet = parseStylesheet(`.foo { ${css} }`);
-    const rule = sheet.rules[0] as StyleRuleAst | undefined;
-
-    const item = rule?.block.items[0];
-
-    if (item?.kind !== BlockItemAstKind.Declaration) {
-      return undefined;
-    }
-
-    return item.value;
+    return parseAnimationNameValue(css) ?? undefined;
   }
 
   it('parses none', () => {
-    expect(valueOf('animation-name: none;')).toMatchObject(
+    expect(valueOf('none')).toMatchObject(
       animationName(none()),
     );
   });
 
   it('parses a custom ident keyframes name', () => {
-    expect(valueOf('animation-name: fade-in;')).toMatchObject(
+    expect(valueOf('fade-in')).toMatchObject(
       animationName(customIdent('fade-in')),
     );
   });
 
   it('parses a string keyframes name', () => {
-    expect(valueOf('animation-name: "fade-in";')).toMatchObject(
+    expect(valueOf('"fade-in"')).toMatchObject(
       animationName(stringValue('fade-in')),
     );
   });
 
   it('parses comma-separated animation names', () => {
-    expect(valueOf('animation-name: fade-in, "slide", none;')).toMatchObject(
+    expect(valueOf('fade-in, "slide", none')).toMatchObject(
       animationName(
         customIdent('fade-in'),
         stringValue('slide'),
@@ -2651,12 +2642,12 @@ describe.skip('animation-name', () => {
 
   it('drops invalid animation-name declarations', () => {
     const cases = [
-      'animation-name: ;',
-      'animation-name: 1;',
-      'animation-name: 1px;',
-      'animation-name: var(--x);',
-      'animation-name: fade-in,;',
-      'animation-name: fade-in,, slide;',
+      '',
+      '1',
+      '1px',
+      'var(--x)',
+      'fade-in,',
+      'fade-in,, slide',
     ];
 
     for (const css of cases) {

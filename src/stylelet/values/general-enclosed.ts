@@ -1,9 +1,8 @@
+import { tryConsumeFunctionBlock, tryConsumeParensBlock } from '../parser/component-consumers';
 import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import {
-  isFunctionBlock, isParensBlock, parseAsComponentGrammar,
-  type FunctionBlock, type ParensBlock, type ParserInput,
-} from '../parser/syntax';
-import { withTrivia } from '../parser/component-grammar';
+import { one, oneOf, withTrivia } from '../parser/component-grammar';
+import { type FunctionBlock, type ParensBlock } from '../parser/component-value';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { parseAnyValue, type AnyValue } from './any-value';
 
 export type GeneralEnclosedValue = {
@@ -29,28 +28,24 @@ export function parseGeneralEnclosed(input: ParserInput): GeneralEnclosedValue |
 export function tryConsumeGeneralEnclosed(
   c: ComponentCursor,
 ): TryComponentConsumerResult<GeneralEnclosedValue> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (!isFunctionBlock(component) && !isParensBlock(component)) {
-    c.restore(start);
-    return null;
-  }
-
-  const value = component.value.length === 0
-    ? undefined
-    : parseAnyValue(component.value);
-
-  if (value === null) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'general-enclosed',
-    value: {
-      ...component,
-      value,
-    },
-  };
+  return consumeGeneralEnclosed(c);
 }
+
+const consumeGeneralEnclosed = oneOf(
+  [
+    one(tryConsumeFunctionBlock),
+    one(tryConsumeParensBlock),
+  ],
+  ([component]): GeneralEnclosedValue | null => {
+    const value = component.value.length === 0
+      ? undefined
+      : parseAnyValue(component.value);
+
+    return value === null
+      ? null
+      : {
+        type: 'general-enclosed',
+        value: { ...component, value },
+      };
+  },
+);

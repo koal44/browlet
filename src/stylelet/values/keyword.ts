@@ -1,6 +1,7 @@
 import { asciiLower } from '../../shared/css';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { tryConsumeIdentToken } from '../parser/component-consumers';
+import { adaptConsumer } from '../parser/component-grammar';
 
 export function createKeywordConsumer<
   const Keywords extends readonly [string, ...string[]],
@@ -11,12 +12,7 @@ export function createKeywordConsumer<
     (keyword) => [asciiLower(keyword), keyword] as const,
   );
 
-  return (c: ComponentCursor): TryComponentConsumerResult<Keywords[number]> => {
-    const start = c.pos();
-    const ident = tryConsumeIdentToken(c);
-
-    if (ident === null) return null;
-
+  return adaptConsumer(tryConsumeIdentToken, (ident) => {
     const value = asciiLower(ident.value);
 
     for (const [text, keyword] of normalized) {
@@ -25,7 +21,6 @@ export function createKeywordConsumer<
       }
     }
 
-    c.restore(start);
     return null;
-  };
+  });
 }

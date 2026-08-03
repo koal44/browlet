@@ -1,12 +1,10 @@
 import { assertNever, mapTuple } from '../../shared/util';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer } from '../parser/component-consumers';
+import { createFunctionalNotationConsumer, tryConsumeComma } from '../parser/component-consumers';
 import {
-  one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf, sequenceOf,
-  withTrivia,
+  one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
 import {
@@ -15,26 +13,23 @@ import {
 } from './angle-percentage';
 import {
   ColorKind, interpolateColors, isLegacySrgbColor, resolveColorValue,
-  serializeColorInterpolationMethod,
-  serializeColorValue, tryConsumeColor, tryConsumeColorInterpolationMethod,
-  type AbsoluteColor, type ColorInterpolationMethod, type ColorContext, type ColorValue,
+  serializeColorInterpolationMethod, serializeColorValue, tryConsumeColor,
+  tryConsumeColorInterpolationMethod, type AbsoluteColor, type ColorInterpolationMethod,
+  type ColorContext, type ColorValue,
 } from './color';
 import { createKeywordConsumer } from './keyword';
 import {
   createLengthPercentageConsumer, resolveLengthPercentage, serializeLengthPercentage,
   tryConsumeLengthPercentage, type LengthPercentageValue,
 } from './length-percentage';
-import {
-  angleLiteral, canonicalizeAngle,
-  type CanonicalAngleLiteral,
-} from './numeric-literal/angle';
+import { angleLiteral, canonicalizeAngle, type CanonicalAngleLiteral } from './numeric-literal/angle';
 import { tryResolveAnglePercentage as tryResolveAnglePercentageLiteral } from './numeric-literal/angle-percentage';
 import { dimensionLiteral, type DimensionLiteral } from './numeric-literal/dimension';
 import { lengthLiteral, type CanonicalLengthLiteral } from './numeric-literal/length';
 import { percentageLiteral, type PercentageLiteral } from './numeric-literal/percentage';
 import {
-  resolvePosition, serializePosition, tryConsumePosition,
-  positionLiteral, type PositionContext, type PositionOffsets, type PositionValue,
+  resolvePosition, serializePosition, tryConsumePosition, positionLiteral, type PositionContext,
+  type PositionOffsets, type PositionValue,
 } from './position';
 import { serializeNumber } from './number';
 import { tryConsumeZero, type ZeroValue } from './zero';
@@ -780,12 +775,6 @@ function createGradientStopListConsumer<Offset>(
       return stops;
     },
   );
-}
-
-function tryConsumeComma(
-  c: ComponentCursor,
-): TryComponentConsumerResult<','> {
-  return c.match(TokenKind.Comma) ? ',' : null;
 }
 
 

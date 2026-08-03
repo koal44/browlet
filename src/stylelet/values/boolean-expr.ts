@@ -1,11 +1,10 @@
 import {
-  one, oneOf, plus, project, recursive, sequenceOf, withTrivia,
+  one, oneOf, plus, adaptConsumer, recursive, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
-import {
-  isParensBlock, parseAsComponentGrammar,
-  type ParensBlock, type ParserInput,
-} from '../parser/syntax';
+import { tryConsumeParensBlock } from '../parser/component-consumers';
+import { type ParensBlock } from '../parser/component-value';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { tryConsumeGeneralEnclosed, type GeneralEnclosedValue } from './general-enclosed';
 import { createKeywordConsumer } from './keyword';
 
@@ -88,7 +87,7 @@ export function createBooleanExprConsumer<Test>(
 ): TryComponentConsumer<BooleanExprValue<Test>> {
   return recursive((consumeExpr) => {
     // <test>
-    const consumeTest = project(
+    const consumeTest = adaptConsumer(
       tryConsumeTest,
       (value): BooleanExprTest<Test> => ({
         type: 'boolean-test',
@@ -188,28 +187,17 @@ export function createBooleanExprConsumer<Test>(
 function createParensConsumer<Test>(
   tryConsumeValue: TryComponentConsumer<BooleanExprValue<Test>>,
 ): TryComponentConsumer<BooleanExprParens<Test>> {
-  return (c) => {
-    const start = c.pos();
-    const component = c.next();
-
-    if (!isParensBlock(component)) {
-      c.restore(start);
-      return null;
-    }
-
+  return adaptConsumer(tryConsumeParensBlock, (component, context) => {
     const value = parseAsComponentGrammar(
       component.value,
       withTrivia(tryConsumeValue),
-      c.context,
+      context,
     );
 
-    if (value === null) {
-      c.restore(start);
-      return null;
-    }
-
-    return { ...component, value };
-  };
+    return value === null
+      ? null
+      : { ...component, value };
+  });
 }
 
 // =============================================================================

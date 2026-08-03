@@ -1,8 +1,7 @@
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer } from '../parser/component-consumers';
-import { any, one, oneOf, sequenceOf, withTrivia } from '../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
+import { createFunctionalNotationConsumer, tryConsumeUrlToken } from '../parser/component-consumers';
+import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { serializeCssString, tryConsumeString } from './string';
 import {
   isRequestUrlModifierValue, serializeRequestUrlModifiers,
@@ -102,7 +101,7 @@ const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
       }),
       { contextForArguments: contextForUrlFunctionArguments },
     )),
-    one(tryConsumeUrlToken),
+    one(tryConsumeUrlTokenValue),
   ],
   ([value]) => value,
 );
@@ -137,29 +136,22 @@ const consumeSrcFn = createFunctionalNotationConsumer(
   { contextForArguments: contextForUrlFunctionArguments },
 );
 
-function tryConsumeUrlToken(
+function tryConsumeUrlTokenValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
   return consumeUrlToken(c);
 }
 
 // <url-token>
-const consumeUrlToken: TryComponentConsumer<UrlValue> = (c) => {
-  const start = c.pos();
-  const component = c.next();
-
-  if (!isTokenKind(component, TokenKind.Url)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
+const consumeUrlToken: TryComponentConsumer<UrlValue> = adaptConsumer(
+  tryConsumeUrlToken,
+  (component): UrlValue => ({
     type: 'url',
     notation: 'url',
     value: component.value,
     modifiers: {},
-  };
-};
+  }),
+);
 
 type UrlFunctionParserContext = {
   seenRequestModifiers?: ReadonlySet<RequestUrlModifierValue['type']>;
@@ -198,20 +190,18 @@ function urlModifiersFromArray(
 function tryConsumeUrlFunctionModifier(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlModifierValue> {
-  const result = tryConsumeUrlModifier(c);
-
-  if (result === null || !isRequestUrlModifierValue(result)) {
-    return result;
-  }
-
-  const context = c.context as UrlFunctionParserContext;
-
-  if (context.seenRequestModifiers?.has(result.type) === true) {
-    return null;
-  }
-
-  return result;
+  return consumeUrlFunctionModifier(c);
 }
+
+const consumeUrlFunctionModifier = adaptConsumer(
+  tryConsumeUrlModifier,
+  (value, context) => (
+    isRequestUrlModifierValue(value) &&
+    (context as UrlFunctionParserContext).seenRequestModifiers?.has(value.type) === true
+  )
+    ? null
+    : value,
+);
 
 function contextAfterUrlFunctionModifier(
   value: UrlModifierValue,

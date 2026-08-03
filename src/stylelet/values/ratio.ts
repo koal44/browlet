@@ -1,4 +1,4 @@
-import { createDelimConsumer } from '../parser/component-consumers';
+import { tryConsumeSlashDelim } from '../parser/component-consumers';
 import { one, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
@@ -26,11 +26,9 @@ export function parseRatio(
 }
 
 const tryConsumeNonnegativeNumber = createNumberConsumer({ min: 0 });
-const tryConsumeSlash = createDelimConsumer('/');
-
 const tryConsumeRatioDenominator: TryComponentConsumer<number> = sequenceOf(
   [
-    one(withTrivia(tryConsumeSlash)),
+    one(withTrivia(tryConsumeSlashDelim)),
     one(withTrivia(tryConsumeNonnegativeNumber)),
   ],
   ([, [denominator]]) => denominator.value,

@@ -1,9 +1,7 @@
+import { tryConsumeStringToken } from '../parser/component-consumers';
 import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import {
-  consumeComponentTrivia, isTokenKind, parseAsComponentGrammar,
-  type ParserInput,
-} from '../parser/syntax';
-import { TokenKind } from '../parser/tokens';
+import { adaptConsumer, withTrivia } from '../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 
 export type StringValue = {
   type: 'string';
@@ -14,26 +12,17 @@ export function parseString(
   input: ParserInput,
   context: unknown = undefined,
 ): StringValue | null {
-  return parseAsComponentGrammar(input, tryConsumeString, context);
+  return parseAsComponentGrammar(input, withTrivia(tryConsumeString), context);
 }
 
 export function tryConsumeString(c: ComponentCursor): TryComponentConsumerResult<StringValue> {
-  const start = c.pos();
-
-  consumeComponentTrivia(c);
-
-  const comp = c.next();
-
-  if (!isTokenKind(comp, TokenKind.String)) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'string',
-    value: comp.value,
-  };
+  return consumeString(c);
 }
+
+const consumeString = adaptConsumer(
+  tryConsumeStringToken,
+  (token): StringValue => ({ type: 'string', value: token.value }),
+);
 
 export function serializeString(value: StringValue): string {
   return serializeCssString(value.value);

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../../../src/stylelet/parser/component-cursor';
 import {
-  consumeComponentTrivia, isIdentToken, parseAsComponentGrammar, parseListAsComponentGrammar,
-  parseListOfComponentValues,
-} from '../../../../src/stylelet/parser/syntax';
+  ComponentCursor, type TryComponentConsumer,
+  type TryComponentConsumerResult,
+} from '../../../../src/stylelet/parser/component-cursor';
+import { consumeWhitespace } from '../../../../src/stylelet/parser/component-consumers';
+import { isIdentToken } from '../../../../src/stylelet/parser/component-value';
+import { parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 import {
   allOf, any, commaRepeat, one, oneOf, opt, plus,
-  project, recursive, repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf,
+  adaptConsumer, recursive, repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf,
   sequenceOf, someOf, withTrivia,
 } from '../../../../src/stylelet/parser/component-grammar';
 
@@ -40,12 +42,12 @@ const consumeB = valueLiteralConsumer('b');
 const consumeC = valueLiteralConsumer('c');
 
 function expectDone(c: ComponentCursor): void {
-  consumeComponentTrivia(c);
+  consumeWhitespace(c);
   expect(c.peek()).toBeNull();
 }
 
 function expectNextIdent(c: ComponentCursor, expected: string): void {
-  consumeComponentTrivia(c);
+  consumeWhitespace(c);
 
   const value = c.peek();
 
@@ -56,7 +58,7 @@ function expectNextIdent(c: ComponentCursor, expected: string): void {
 }
 
 function expectNextComma(c: ComponentCursor): void {
-  consumeComponentTrivia(c);
+  consumeWhitespace(c);
 
   const value = c.peek();
 
@@ -222,7 +224,7 @@ describe('component value combinators', () => {
         return null;
       }
 
-      consumeComponentTrivia(c);
+      consumeWhitespace(c);
 
       const cv = consumeC(c);
 
@@ -1012,7 +1014,7 @@ describe('selector separator trivia prototype', () => {
     const explicit = consumeExplicitCombinator(c);
 
     if (explicit !== null) {
-      consumeComponentTrivia(c);
+      consumeWhitespace(c);
       return explicit;
     }
 
@@ -1712,7 +1714,7 @@ describe('component grammar context restoration', () => {
 
 describe('component grammar consumer projection', () => {
   it('changes a consumer value without adding a grammar production', () => {
-    const consume = project(
+    const consume = adaptConsumer(
       consumeA,
       (value) => value.toUpperCase(),
     );
@@ -1723,7 +1725,7 @@ describe('component grammar consumer projection', () => {
   });
 
   it('restores the cursor when the projection rejects a consumed value', () => {
-    const consume = project(
+    const consume = adaptConsumer(
       consumeA,
       () => null,
     );
@@ -1746,7 +1748,7 @@ describe('component grammar consumer projection', () => {
 
       return result;
     };
-    const consume = project(
+    const consume = adaptConsumer(
       consumeWithInnerContext,
       (value, context) => ({ value, context }),
     );

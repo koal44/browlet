@@ -1,115 +1,17 @@
 import { asciiLower } from '../../shared/css';
 import { ComponentCursor, type TryComponentConsumerResult, type TryComponentConsumer } from './component-cursor';
 import { TokenCursor } from './token-cursor';
-import type {
-  AtKeywordToken, DelimToken, DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken,
-  StaticToken, StringToken, Token, UrlToken,
-} from './tokens';
 import { tokenize, TokenKind } from './tokens';
-
-export enum RuleKind {
-  At = 1,
-  Qualified,
-}
-
-export enum BlockKind {
-  Brace = 1,
-  Bracket,
-  Parens,
-  Function,
-}
-
-export type StyleSheet = {
-  rules: Rule[];
-};
-
-export type Rule =
-  | AtRule
-  | QualifiedRule;
-
-export type AtRule = {
-  kind: RuleKind.At;
-  name: string;
-  prelude: ComponentValue[];
-  block: BraceBlock | null;
-};
-
-export type QualifiedRule = {
-  kind: RuleKind.Qualified;
-  prelude: ComponentValue[];
-  block: BraceBlock;
-};
-
-export type ComponentValue =
-  | PreservedToken
-  | ComponentBlock;
-
-export type PreservedToken =
-  | IdentToken
-  | AtKeywordToken
-  | HashToken
-  | StringToken
-  | StaticToken<TokenKind.BadString>
-  | UrlToken
-  | StaticToken<TokenKind.BadUrl>
-  | DelimToken
-  | NumberToken
-  | PercentageToken
-  | DimensionToken
-  | StaticToken<TokenKind.Whitespace>
-  | StaticToken<TokenKind.CDO>
-  | StaticToken<TokenKind.CDC>
-  | StaticToken<TokenKind.Colon>
-  | StaticToken<TokenKind.Semicolon>
-  | StaticToken<TokenKind.Comma>
-  | StaticToken<TokenKind.RightBracket>
-  | StaticToken<TokenKind.RightParen>
-  | StaticToken<TokenKind.RightBrace>;
-
-export type ComponentBlock =
-  | SimpleBlock<ComponentValue[]>
-  | FunctionBlock<ComponentValue[]>;
-
-export type SimpleBlock<Contents = ComponentValue[]> =
-  | BraceBlock<Contents>
-  | BracketBlock<Contents>
-  | ParensBlock<Contents>
-
-export type SimpleBlockKind =
-  | BlockKind.Brace
-  | BlockKind.Bracket
-  | BlockKind.Parens;
-
-export type BraceBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Brace;
-  value: Contents;
-};
-
-export type BracketBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Bracket;
-  value: Contents;
-};
-
-export type ParensBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Parens;
-  value: Contents;
-};
-
-export type FunctionBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Function;
-  name: string;
-  value: Contents;
-};
-
-export type Declaration = {
-  name: string;
-  value: ComponentValue[];
-  important: boolean;
-};
+import {
+  BlockKind, isBraceBlock, isDelimToken, isIdentToken, isTokenKind, isWhitespaceToken,
+  type BraceBlock, type BracketBlock, type ComponentValue, type FunctionBlock, type ParensBlock,
+  type SimpleBlockKind,
+} from './component-value';
+import {
+  RuleKind,
+  type AtRule, type Declaration, type DeclarationOrAtRuleList, type QualifiedRule,
+  type Rule, type StyleBlockContents, type StyleSheet,
+} from './rule';
 
 export type ParserInput = string | readonly ComponentValue[];
 
@@ -127,7 +29,7 @@ export function parseAsComponentGrammar<T>(
     return null;
   }
 
-  consumeComponentTrivia(c);
+  c.consumeWhile(isWhitespaceToken);
 
   if (c.peek() !== null) {
     return null;
@@ -195,9 +97,7 @@ export function parseRule(input: string): Rule | null {
 }
 
 function consumeWhitespaceTokens(c: TokenCursor): void {
-  while (c.peek().kind === TokenKind.Whitespace) {
-    c.next();
-  }
+  c.consumeWhile((token) => token.kind === TokenKind.Whitespace);
 }
 
 // 5.3.6. Parse a declaration
@@ -222,9 +122,6 @@ export function parseDeclaration(
   return consumeDeclarationFromComponents(new ComponentCursor(values, { context }));
 }
 
-export type StyleBlockItem = Declaration | Rule;
-export type StyleBlockContents = StyleBlockItem[];
-
 // 5.3.7. Parse a style block's contents
 export function parseStyleBlockContents(
   input: ParserInput,
@@ -233,9 +130,6 @@ export function parseStyleBlockContents(
   const components = parseListOfComponentValues(input);
   return consumeStyleBlockContentsFromComponents(new ComponentCursor(components, { context }));
 }
-
-export type DeclarationOrAtRule = Declaration | AtRule;
-export type DeclarationOrAtRuleList = DeclarationOrAtRule[];
 
 // 5.3.8. Parse a list of declarations
 export function parseListOfDeclarations(input: string): DeclarationOrAtRuleList {
@@ -504,7 +398,10 @@ function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlock
   const items: StyleBlockContents = [];
 
   while (true) {
-    consumeComponentTriviaAndSemicolons(c);
+    c.consumeWhile((component) => (
+      isWhitespaceToken(component) ||
+      isTokenKind(component, TokenKind.Semicolon)
+    ));
 
     const comp = c.peek();
 
@@ -520,7 +417,10 @@ function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlock
     if (isIdentToken(comp)) {
       const temp: ComponentValue[] = [];
 
-      while (!isComponentDeclarationEnd(c.peek())) {
+      while (true) {
+        const component = c.peek();
+
+        if (component === null || isTokenKind(component, TokenKind.Semicolon)) break;
         temp.push(c.consume());
       }
 
@@ -540,7 +440,10 @@ function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlock
       continue;
     }
 
-    while (!isComponentDeclarationEnd(c.peek())) {
+    while (true) {
+      const component = c.peek();
+
+      if (component === null || isTokenKind(component, TokenKind.Semicolon)) break;
       c.consume();
     }
   }
@@ -574,7 +477,10 @@ function consumeListOfDeclarationsFromTokens(c: TokenCursor): DeclarationOrAtRul
     if (token.kind === TokenKind.Ident) {
       const temp: ComponentValue[] = [token];
 
-      while (!isDeclarationEnd(c.peek())) {
+      while (true) {
+        const next = c.peek();
+
+        if (next.kind === TokenKind.Semicolon || next.kind === TokenKind.EOF) break;
         temp.push(consumeComponentValueFromTokens(c));
       }
 
@@ -586,7 +492,10 @@ function consumeListOfDeclarationsFromTokens(c: TokenCursor): DeclarationOrAtRul
 
     c.restore(pos);
 
-    while (!isDeclarationEnd(c.peek())) {
+    while (true) {
+      const next = c.peek();
+
+      if (next.kind === TokenKind.Semicolon || next.kind === TokenKind.EOF) break;
       consumeComponentValueFromTokens(c);
     }
   }
@@ -688,8 +597,8 @@ function consumeComponentValueFromTokens(c: TokenCursor): ComponentValue {
     return consumeFunctionFromTokens(c, token.value);
   }
 
-  if (!isPreservedToken(token)) {
-    throw new Error('consumeComponentValueFromTokens called at EOF or with a non-preserved token');
+  if (token.kind === TokenKind.EOF) {
+    throw new Error('consumeComponentValueFromTokens called at EOF');
   }
 
   return token;
@@ -764,91 +673,4 @@ function consumeFunctionFromTokens(c: TokenCursor, name: string): FunctionBlock 
     c.restore(pos);
     result.value.push(consumeComponentValueFromTokens(c));
   }
-}
-
-// ---
-
-export function consumeComponentTrivia(c: ComponentCursor): void {
-  while (isWhitespaceToken(c.peek())) {
-    c.next();
-  }
-}
-
-function consumeComponentTriviaAndSemicolons(c: ComponentCursor): void {
-  while (true) {
-    const comp = c.peek();
-
-    if (
-      isWhitespaceToken(comp) ||
-      isTokenKind(comp, TokenKind.Semicolon)
-    ) {
-      c.next();
-      continue;
-    }
-
-    return;
-  }
-}
-
-type PreservedTokenKind = PreservedToken['kind'];
-
-export function isTokenKind<K extends PreservedTokenKind>(comp: ComponentValue | null, kind: K): comp is Extract<PreservedToken, { kind: K; }> {
-  return comp !== null && comp.type === 'token' && comp.kind === kind;
-}
-
-export function isIdentToken(comp: ComponentValue | null): comp is IdentToken {
-  return isTokenKind(comp, TokenKind.Ident);
-}
-
-export function isDelimToken(comp: ComponentValue | null, delim: string): comp is DelimToken {
-  return isTokenKind(comp, TokenKind.Delim) && comp.value === delim;
-}
-
-export function isWhitespaceToken(comp: ComponentValue | null): comp is StaticToken<TokenKind.Whitespace> {
-  return isTokenKind(comp, TokenKind.Whitespace);
-}
-
-export function isComponentBlock(comp: ComponentValue | null): comp is ComponentBlock {
-  return comp !== null && comp.type === 'block';
-}
-
-export function isBlockKind<K extends BlockKind>(
-  comp: ComponentValue | null,
-  block: K,
-): comp is ComponentBlock & { block: K; } {
-  return isComponentBlock(comp) && comp.block === block;
-}
-
-export function isBraceBlock(comp: ComponentValue | null): comp is BraceBlock {
-  return isBlockKind(comp, BlockKind.Brace);
-}
-
-export function isBracketBlock(comp: ComponentValue | null): comp is BracketBlock {
-  return isBlockKind(comp, BlockKind.Bracket);
-}
-
-export function isParensBlock(comp: ComponentValue | null): comp is ParensBlock {
-  return isBlockKind(comp, BlockKind.Parens);
-}
-
-export function isFunctionBlock(comp: ComponentValue | null): comp is FunctionBlock {
-  return isBlockKind(comp, BlockKind.Function);
-}
-
-function isPreservedToken(token: Token): token is PreservedToken {
-  return (
-    token.kind !== TokenKind.Function &&
-    token.kind !== TokenKind.LeftBrace &&
-    token.kind !== TokenKind.LeftBracket &&
-    token.kind !== TokenKind.LeftParen &&
-    token.kind !== TokenKind.EOF
-  );
-}
-
-function isDeclarationEnd(token: Token): token is StaticToken<TokenKind.Semicolon> | StaticToken<TokenKind.EOF> {
-  return token.kind === TokenKind.Semicolon || token.kind === TokenKind.EOF;
-}
-
-function isComponentDeclarationEnd(comp: ComponentValue | null): boolean {
-  return comp === null || isTokenKind(comp, TokenKind.Semicolon);
 }

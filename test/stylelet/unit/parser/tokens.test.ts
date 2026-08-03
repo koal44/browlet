@@ -280,6 +280,12 @@ describe('style tokenizer consumers', () => {
       ['ws'],
     ]);
 
+    expect(view('a /**/ b')).toEqual([
+      ['ident', 'a'],
+      ['ws'],
+      ['ident', 'b'],
+    ]);
+
     expect(view('(),:;[]{}')).toEqual([
       ['('],
       [')'],

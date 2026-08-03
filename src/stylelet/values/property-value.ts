@@ -1,10 +1,8 @@
 import { asciiLower } from '../../shared/css';
 import { withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
-import {
-  BlockKind, parseAsComponentGrammar, parseListOfComponentValues,
-  type ComponentValue, type ParserInput,
-} from '../parser/syntax';
+import { type ComponentValue, BlockKind } from '../parser/component-value';
+import { parseAsComponentGrammar, parseListOfComponentValues, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import { tryConsumeCssWideValue, type CssWideValue } from './css-wide';
 import { parseDeclarationValue } from './declaration-value';

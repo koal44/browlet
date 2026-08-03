@@ -1,5 +1,5 @@
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
-import { consumeComponentTrivia } from './syntax';
+import { isWhitespaceToken } from './component-value';
 import { TokenKind } from './tokens';
 
 // =============================================================================
@@ -497,7 +497,7 @@ function createMultiplier<T, Output extends T[]>(
  * Changes the semantic value produced by a consumer without adding a grammar
  * production.
  */
-export function project<Input, Output>(
+export function adaptConsumer<Input, Output>(
   consume: TryComponentConsumer<Input>,
   projector: Projector<Input, Output>,
 ): TryComponentConsumer<Output> {
@@ -532,7 +532,7 @@ export function withTrivia<T>(consume: TryComponentConsumer<T>): TryComponentCon
     const outerContext = c.context;
 
     try {
-      consumeComponentTrivia(c);
+      c.consumeWhile(isWhitespaceToken);
 
       const result = consume(c);
 
@@ -687,14 +687,14 @@ function consumeCommaMultiplier<T, Output extends T[]>(
   while (values.length < multiplier.max) {
     const separatorStart = c.pos();
 
-    consumeComponentTrivia(c);
+    c.consumeWhile(isWhitespaceToken);
 
     if (!c.match(TokenKind.Comma)) {
       c.restore(separatorStart);
       break;
     }
 
-    consumeComponentTrivia(c);
+    c.consumeWhile(isWhitespaceToken);
 
     const next = consumeItem();
 

@@ -1,9 +1,9 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { withTrivia } from '../../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { TokenKind } from '../../parser/tokens';
+import { tryConsumeDimensionToken } from '../../parser/component-consumers';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
+import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -57,46 +57,25 @@ export function createAngleConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return (c): TryComponentConsumerResult<AngleLiteral> => {
-    const start = c.pos();
-    const result = tryConsumeUnrestrictedAngle(c);
+  return adaptConsumer(tryConsumeDimensionToken, (component) => {
+    const unit = angleUnitFor(component.unit);
 
-    if (result === null) return null;
+    if (unit === null) return null;
 
+    const result: AngleLiteral = {
+      type: 'angle',
+      value: component.value,
+      unit,
+    };
     const canonical = canonicalizeAngle(result);
 
-    if (canonical.value < min || canonical.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
+    return canonical.value < min || canonical.value > max
+      ? null
+      : result;
+  });
 }
 
 export const tryConsumeAngle = createAngleConsumer();
-
-function tryConsumeUnrestrictedAngle(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AngleLiteral> {
-  const start = c.pos();
-  const component = c.next();
-
-  if (isTokenKind(component, TokenKind.Dimension)) {
-    const unit = angleUnitFor(component.unit);
-
-    if (unit !== null) {
-      return {
-        type: 'angle',
-        value: component.value,
-        unit,
-      };
-    }
-  }
-
-  c.restore(start);
-  return null;
-}
 
 function angleUnitFor(raw: string): AngleUnit | null {
   const normalized = asciiLower(raw);

@@ -1,10 +1,9 @@
+// Coverage for the quarantined, provisional CSSOM AST layer.
 import { describe, expect, it } from 'vitest';
 import { ColorKind, type ColorName } from '../../../../src/stylelet/values/color';
-import { parseStylesheet } from '../../../../src/stylelet/parser/ast';
 import {
-  AtRuleKindAst, BlockItemAstKind, PropertyId,
-  RuleKindAst,
-} from '../../../../src/stylelet/parser/types';
+  AtRuleKindAst, BlockItemAstKind, parseStylesheet, PropertyId, RuleKindAst,
+} from '../../../../src/stylelet/cssom/ast';
 import type { LengthUnit } from '../../../../src/stylelet/values/numeric-literal/length';
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 

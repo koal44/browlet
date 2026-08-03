@@ -1,15 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import {
+  describe, expect,
+  it,
+} from 'vitest';
 import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
 import {
-  createDelimConsumer, createFreeFormConsumer, createFunctionalNotationConsumer,
-  tryConsumeAnyValueFunctionBlock,
+  consumeWhitespace, createFreeFormConsumer,
+  createFunctionalNotationConsumer, tryConsumeAnyValueFunctionBlock, tryConsumeBraceBlock,
+  tryConsumeBracketBlock, tryConsumeFunctionBlock, tryConsumeParensBlock, tryConsumeSlashDelim,
 } from '../../../../src/stylelet/parser/component-consumers';
-
-import { BlockKind, isTokenKind, parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import { isTokenKind, BlockKind } from '../../../../src/stylelet/parser/component-value';
+import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
 import { BadStringToken, TokenKind } from '../../../../src/stylelet/parser/tokens';
 import { ColorKind, resolveColorValue, serializeColorValue, tryConsumeColor } from '../../../../src/stylelet/values/color';
 import { createWholeValueConsumer } from '../../../../src/stylelet/values/whole-value';
+
+describe('consumeWhitespace', () => {
+  it('consumes consecutive whitespace components', () => {
+    const c = new ComponentCursor(parseListOfComponentValues('  value'));
+
+    consumeWhitespace(c);
+
+    expect(isTokenKind(c.peek(), TokenKind.Ident)).toBe(true);
+    expect(c.pos()).toBe(1);
+  });
+});
 
 describe('createFreeFormConsumer', () => {
   const consumeColorWholeValue = createWholeValueConsumer(
@@ -152,6 +167,32 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
   });
 });
 
+describe('block consumers', () => {
+  it.each([
+    ['{value} other', tryConsumeBraceBlock, BlockKind.Brace],
+    ['[value] other', tryConsumeBracketBlock, BlockKind.Bracket],
+    ['(value) other', tryConsumeParensBlock, BlockKind.Parens],
+    ['fn(value) other', tryConsumeFunctionBlock, BlockKind.Function],
+  ] as const)('consumes one block from %j and leaves following components', (input, consume, block) => {
+    const c = new ComponentCursor(parseListOfComponentValues(input));
+
+    expect(consume(c)).toMatchObject({ type: 'block', block });
+    expect(c.pos()).toBe(1);
+  });
+
+  it.each([
+    tryConsumeBraceBlock,
+    tryConsumeBracketBlock,
+    tryConsumeParensBlock,
+    tryConsumeFunctionBlock,
+  ])('returns null without advancing when the block kind differs', (consume) => {
+    const c = new ComponentCursor(parseListOfComponentValues('ident'));
+
+    expect(consume(c)).toBeNull();
+    expect(c.pos()).toBe(0);
+  });
+});
+
 describe('createFunctionalNotationConsumer', () => {
   it('returns null when the matched function has invalid components', () => {
     const c = new ComponentCursor([{
@@ -174,7 +215,7 @@ describe('createFunctionalNotationConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
     const consume = createFunctionalNotationConsumer(
       'fn',
-      createDelimConsumer('/'),
+      tryConsumeSlashDelim,
       (value) => value,
     );
 

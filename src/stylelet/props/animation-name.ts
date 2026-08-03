@@ -1,7 +1,7 @@
-import { commaRepeat, one, oneOf, withTrivia } from '../parser/component-grammar';
+import { commaRepeat, one, oneOf, sequenceOf, withTrivia } from '../parser/component-grammar';
 import { createKeywordConsumer } from '../values/keyword';
 import {
-  serializeCustomIdent, tryConsumeCustomIdent,
+  createCustomIdentConsumer, serializeCustomIdent,
   type CustomIdentValue,
 } from '../values/custom-ident';
 import { serializeString, tryConsumeString, type StringValue } from '../values/string';
@@ -37,19 +37,7 @@ export function parseAnimationNameValue(
 }
 
 export function tryConsumeAnimationName(c: ComponentCursor): TryComponentConsumerResult<AnimationNameValue> {
-  const start = c.pos();
-
-  const values = tryConsumeAnimationNameList(c);
-
-  if (values === null) {
-    c.restore(start);
-    return null;
-  }
-
-  return {
-    type: 'animation-name',
-    values,
-  };
+  return consumeAnimationName(c);
 }
 
 const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
@@ -63,10 +51,11 @@ const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
 };
 
 const tryConsumeNoneKeyword = createKeywordConsumer('none');
+const tryConsumeKeyframesCustomIdent = createCustomIdentConsumer(['none']);
 
 const tryConsumeKeyframesName: TryComponentConsumer<KeyframesNameValue> = oneOf(
   [
-    one((c) => tryConsumeCustomIdent(c, ['none'])),
+    one(tryConsumeKeyframesCustomIdent),
     one(tryConsumeString),
   ],
   ([value]) => value,
@@ -80,9 +69,9 @@ const tryConsumeAnimationNameItem: TryComponentConsumer<AnimationNameItemValue> 
   ([value]) => value,
 );
 
-const tryConsumeAnimationNameList = commaRepeat(
-  tryConsumeAnimationNameItem,
-  1,
+const consumeAnimationName = sequenceOf(
+  [commaRepeat(tryConsumeAnimationNameItem, 1)],
+  ([values]): AnimationNameValue => ({ type: 'animation-name', values }),
 );
 
 export function serializeAnimationName(value: AnimationNameValue): string {

@@ -1,9 +1,9 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
+import { tryConsumeDimensionToken, tryConsumeNumberToken } from '../../parser/component-consumers';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { withTrivia } from '../../parser/component-grammar';
-import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { TokenKind } from '../../parser/tokens';
+import { one, oneOf, adaptConsumer, withTrivia } from '../../parser/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -124,52 +124,48 @@ export function createLengthConsumer(
     );
   }
 
-  return (c): TryComponentConsumerResult<LengthLiteral> => {
-    const start = c.pos();
-    const result = tryConsumeUnrestrictedLength(c);
-
-    if (result === null) return null;
-
-    const value = result;
-
-    if (value.value < min || value.value > max) {
-      c.restore(start);
-      return null;
-    }
-
-    return result;
-  };
+  return oneOf(
+    [
+      one(tryConsumeLengthDimension),
+      one(tryConsumeUnitlessZeroLength),
+    ],
+    ([value]) => value.value < min || value.value > max
+      ? null
+      : value,
+  );
 }
 
 export const tryConsumeLength = createLengthConsumer();
 
-function tryConsumeUnrestrictedLength(
+function tryConsumeLengthDimension(
   c: ComponentCursor,
 ): TryComponentConsumerResult<LengthLiteral> {
-  const start = c.pos();
-  const component = c.next();
+  return consumeLengthDimension(c);
+}
 
-  if (isTokenKind(component, TokenKind.Dimension)) {
+const consumeLengthDimension: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+  tryConsumeDimensionToken,
+  (component) => {
     const unit = lengthUnitFor(component.unit);
 
-    if (unit !== null) {
-      return {
-        type: 'length',
-        value: component.value,
-        unit,
-      };
-    }
-  } else if (isTokenKind(component, TokenKind.Number) && component.value === 0) {
-    return {
-      type: 'length',
-      value: 0,
-      unit: '',
-    };
-  }
+    return unit === null
+      ? null
+      : { type: 'length', value: component.value, unit };
+  },
+);
 
-  c.restore(start);
-  return null;
+function tryConsumeUnitlessZeroLength(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LengthLiteral> {
+  return consumeUnitlessZeroLength(c);
 }
+
+const consumeUnitlessZeroLength: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+  tryConsumeNumberToken,
+  (component) => component.value === 0
+    ? { type: 'length', value: 0, unit: '' }
+    : null,
+);
 
 function canCheckLengthRangeWithoutResolution(min: number, max: number): boolean {
   // All length-unit conversions preserve sign, so zero and infinite bounds

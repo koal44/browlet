@@ -1,4 +1,4 @@
-import { serializeComponentValues } from '../cssom/serialize';
+import { serializeComponentValues } from '../parser/component-value';
 import type { ValueStage } from '../value-processing';
 import type { DeclarationValue } from './declaration-value';
 import type { PropertyValue } from './property-value';

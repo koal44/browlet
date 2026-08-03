@@ -149,8 +149,6 @@ export default tseslint.config(
       '@stylistic/object-curly-newline': ['warn', {
         ObjectExpression: { multiline: true, consistent: true },
         ObjectPattern: { multiline: true, consistent: true },
-        ExportDeclaration: { multiline: true, minProperties: 6 },
-        ImportDeclaration: { multiline: true, minProperties: 6 },
       }],
       '@stylistic/eol-last': ['warn', 'always'],
       '@stylistic/linebreak-style': ['warn', 'unix'],
