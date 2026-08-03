@@ -7,8 +7,8 @@ import {
 import { TokenKind } from '../../../../src/stylelet/parser/tokens';
 import {
   allOf, any, commaRepeat, one, oneOf, opt, plus,
-  repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf, sequenceOf, someOf,
-  withTrivia,
+  project, recursive, repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf,
+  sequenceOf, someOf, withTrivia,
 } from '../../../../src/stylelet/parser/component-grammar';
 import {
   bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow,
@@ -1926,5 +1926,150 @@ describe('component grammar context restoration', () => {
 
     expectDone(c);
     expect(c.context).toBe(baseContext);
+  });
+});
+
+describe('component grammar consumer projection', () => {
+  it('changes a consumer value without adding a grammar production', () => {
+    const consume = project(
+      consumeA,
+      (value) => ok(value.toUpperCase()),
+    );
+    const c = cursor('a b');
+
+    expect(unwrap(consume(c))).toBe('A');
+    expectNextIdent(c, 'b');
+  });
+
+  it('restores the cursor when the projection rejects a consumed value', () => {
+    const consume = project(
+      consumeA,
+      () => null,
+    );
+    const c = cursor('a b');
+
+    expect(unwrap(consume(c))).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'a');
+  });
+
+  it('propagates a committed failure at its failure position', () => {
+    const consume = project(
+      badAfterA('bad projected value'),
+      () => ok('unreachable'),
+    );
+    const c = cursor('a b');
+    const result = consume(c);
+
+    expect(result).toMatchObject({
+      kind: 'bad',
+      message: 'bad projected value',
+    });
+    expectNextIdent(c, 'b');
+  });
+
+  it('passes consumer context to the projector and restores the outer context', () => {
+    const outerContext = { mode: 'outer' };
+    const innerContext = { mode: 'inner' };
+    const consumeWithInnerContext: TryComponentConsumer<'a'> = (c) => {
+      const result = consumeA(c);
+
+      if (result !== null && !isBad(result)) {
+        c.context = innerContext;
+      }
+
+      return result;
+    };
+    const consume = project(
+      consumeWithInnerContext,
+      (value, context) => ok({ value, context }),
+    );
+    const c = cursor('a', outerContext);
+
+    expect(unwrap(consume(c))).toEqual({
+      value: 'a',
+      context: innerContext,
+    });
+    expect(c.context).toBe(outerContext);
+  });
+});
+
+describe('recursive component grammar construction', () => {
+  type NestedValue =
+    | 'a'
+    | {
+      type: 'nested';
+      value: NestedValue;
+    };
+
+  const createNestedConsumer = (
+    onCreate: () => void = () => undefined,
+  ): TryComponentConsumer<NestedValue> => recursive((self) => {
+    onCreate();
+
+    // <nested> = b <nested> | a
+    const consumeNested = sequenceOf(
+      [
+        one(consumeB),
+        one(self),
+      ],
+      ([, [value]]) => ok<NestedValue>({
+        type: 'nested',
+        value,
+      }),
+    );
+
+    return oneOf(
+      [
+        one(consumeNested),
+        one(consumeA),
+      ],
+      ([value]) => ok(value),
+    );
+  });
+
+  it('parses recursive productions through the stable self reference', () => {
+    const consume = createNestedConsumer();
+    const c = cursor('b b a');
+
+    expect(unwrap(consume(c))).toEqual({
+      type: 'nested',
+      value: {
+        type: 'nested',
+        value: 'a',
+      },
+    });
+    expectDone(c);
+  });
+
+  it('constructs the recursive grammar only once', () => {
+    let constructions = 0;
+    const consume = createNestedConsumer(() => constructions++);
+
+    expect(constructions).toBe(1);
+    expect(unwrap(consume(cursor('a')))).toBe('a');
+    expect(unwrap(consume(cursor('b a')))).toEqual({
+      type: 'nested',
+      value: 'a',
+    });
+    expect(constructions).toBe(1);
+  });
+
+  it('restores the cursor when a recursive production does not match', () => {
+    const consume = createNestedConsumer();
+    const c = cursor('b c');
+
+    expect(unwrap(consume(c))).toBeNull();
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'b');
+  });
+
+  it('rejects use of the self reference during grammar construction', () => {
+    const c = cursor('a');
+
+    expect(() => recursive((self) => {
+      self(c);
+      return consumeA;
+    })).toThrow('Recursive consumer used during construction');
   });
 });

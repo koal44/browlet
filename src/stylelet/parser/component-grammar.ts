@@ -525,6 +525,43 @@ function createMultiplier<T, Output extends T[]>(
 // Consumer adapters
 // =============================================================================
 
+/**
+ * Changes the semantic value produced by a consumer without adding a grammar
+ * production.
+ */
+export function project<Input, Output>(
+  consume: TryComponentConsumer<Input>,
+  projector: Projector<Input, Output>,
+): TryComponentConsumer<Output> {
+  return (c): TryComponentConsumerResult<Output> => {
+    const start = c.pos();
+    const outerContext = c.context;
+
+    try {
+      const result = consume(c);
+
+      if (result === null) {
+        c.restore(start);
+        return null;
+      }
+
+      if (isBad(result)) {
+        return result;
+      }
+
+      const projected = projector(result.value, c.context);
+
+      if (projected === null) {
+        c.restore(start);
+      }
+
+      return projected;
+    } finally {
+      c.context = outerContext;
+    }
+  };
+}
+
 export function withTrivia<T>(consume: TryComponentConsumer<T>): TryComponentConsumer<T> {
   return (c) => {
     const start = c.pos();
@@ -545,6 +582,37 @@ export function withTrivia<T>(consume: TryComponentConsumer<T>): TryComponentCon
       c.context = outerContext;
     }
   };
+}
+
+// =============================================================================
+// Recursive grammar construction
+// =============================================================================
+
+/**
+ * Builds a recursive grammar around a stable reference to its own consumer.
+ * A recursive branch must consume input or enter a nested component cursor
+ * before invoking that reference again.
+ */
+export function recursive<T>(
+  create: (self: TryComponentConsumer<T>) => TryComponentConsumer<T>,
+): TryComponentConsumer<T> {
+  const reference: {
+    consume?: TryComponentConsumer<T>;
+  } = {};
+
+  const self: TryComponentConsumer<T> = (c) => {
+    const consume = reference.consume;
+
+    if (consume === undefined) {
+      throw new Error('Recursive consumer used during construction');
+    }
+
+    return consume(c);
+  };
+
+  reference.consume = create(self);
+
+  return self;
 }
 
 // =============================================================================
