@@ -1,6 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   createDelimConsumer, createFunctionalNotationConsumer,
   tryConsumeHashToken,
@@ -9,10 +9,6 @@ import {
   allOf, commaRepeat, one, oneOf, opt, plus, repeat, sequenceOf,
   withTrivia,
 } from '../parser/component-grammar';
-import {
-  isBad, ok, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
@@ -366,9 +362,7 @@ export function parseColorValue(
     context,
   );
 
-  return result === null || isBad(result)
-    ? null
-    : result.value;
+  return result;
 }
 
 export function tryConsumeColor(
@@ -381,13 +375,9 @@ export function tryConsumeColor(
       : consumeColor
   )(c);
 
-  return result === null || isBad(result)
-    ? result
-    : ok(resolveColorValue(
-      result.value,
-      ValueStage.Declared,
-      colorContextFor(c.context),
-    ));
+  return result === null
+    ? null
+    : resolveColorValue(result, ValueStage.Declared, colorContextFor(c.context));
 }
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
@@ -401,7 +391,7 @@ const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeDeviceCmykFn),
     one(tryConsumeLightDarkColor),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color> | <quirky-color>
@@ -416,7 +406,7 @@ const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
     one(tryConsumeLightDarkColor),
     one(tryConsumeQuirkyColor),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeColorBase(
@@ -433,7 +423,7 @@ const consumeColorBase: TryComponentConsumer<ColorBase> = oneOf(
     one(tryConsumeNamedColor),
     one(tryConsumeColorMixFn),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeColorFunction(
@@ -457,7 +447,7 @@ const consumeColorFunction: TryComponentConsumer<ColorFunction> = oneOf(
     one(tryConsumeAlphaFunction),
     one(tryConsumeColorFunctionNotation),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeModernAlpha(
@@ -476,10 +466,10 @@ const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> =
           one(tryConsumeNone),
           one(tryConsumeRelativeColorKeyword),
         ],
-        ([alpha]) => ok(alpha),
+        ([alpha]) => alpha,
       ))),
     ],
-    ([, [alpha]]) => ok(alpha),
+    ([, [alpha]]) => alpha,
   );
 
 function tryConsumeAlphaValue(
@@ -495,7 +485,7 @@ const consumeAlphaValue: TryComponentConsumer<AlphaValue> =
       one(tryConsumeNumber),
       one(tryConsumePercentage),
     ],
-    ([alpha]) => ok(alpha),
+    ([alpha]) => alpha,
   );
 
 function tryConsumeNone(
@@ -517,7 +507,7 @@ const consumeSlash = createDelimConsumer('/');
 function tryConsumeComma(
   c: ComponentCursor,
 ): TryComponentConsumerResult<','> {
-  return c.match(TokenKind.Comma) ? ok(',') : null;
+  return c.match(TokenKind.Comma) ? ',' : null;
 }
 
 /*
@@ -541,21 +531,19 @@ const consumeHexColor: TryComponentConsumer<HexColor> = (c) => {
   const start = c.pos();
   const result = tryConsumeHashToken(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
-  const token = result.value;
+  const token = result;
 
   if (!isHexColorValue(token.value)) {
     c.restore(start);
     return null;
   }
 
-  return ok({
+  return {
     kind: ColorKind.Hex,
     text: `#${token.value}`,
-  });
+  };
 };
 
 function isHexColorValue(value: string): boolean {
@@ -593,11 +581,9 @@ const consumeNamedColor: TryComponentConsumer<NamedColor> = (c) => {
   const start = c.pos();
   const ident = tryConsumeIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const name = asciiLower(ident.value.value);
+  const name = asciiLower(ident.value);
   const rgba = Object.hasOwn(ColorRgba, name)
     ? ColorRgba[name as keyof typeof ColorRgba]
     : undefined;
@@ -607,10 +593,10 @@ const consumeNamedColor: TryComponentConsumer<NamedColor> = (c) => {
     return null;
   }
 
-  return ok({
+  return {
     kind: ColorKind.Named,
     name: name as ColorName,
-  });
+  };
 };
 
 export const ColorRgba = {
@@ -806,20 +792,20 @@ const consumeColorMixFn: TryComponentConsumer<ColorMixFn> =
             one(tryConsumeColorInterpolationMethod),
             one(withTrivia(tryConsumeComma)),
           ],
-          ([[method]]) => ok(method),
+          ([[method]]) => method,
         )),
         commaRepeat(allOf(
           [
             one(withTrivia(tryConsumeColor)),
             opt(withTrivia(tryConsumeColorMixPercentage)),
           ],
-          ([[color], [percentage]]) => ok({
+          ([[color], [percentage]]) => ({
             color,
             percentage,
           }),
         )),
       ],
-      ([[method], items]) => ok({
+      ([[method], items]) => ({
         kind: ColorKind.ColorMixFn as const,
         method,
         items,
@@ -853,21 +839,19 @@ const consumeSystemColor: TryComponentConsumer<SystemColor> = (c) => {
   const start = c.pos();
   const ident = tryConsumeIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const name = asciiLower(ident.value.value);
+  const name = asciiLower(ident.value);
 
   if (!SystemColorNameSet.has(name)) {
     c.restore(start);
     return null;
   }
 
-  return ok({
+  return {
     kind: ColorKind.System,
     name: name as SystemColorName,
-  });
+  };
 };
 
 const SystemColorNames = [
@@ -909,21 +893,19 @@ const consumeDeprecatedColor: TryComponentConsumer<DeprecatedColor> = (c) => {
   const start = c.pos();
   const ident = tryConsumeIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const name = asciiLower(ident.value.value);
+  const name = asciiLower(ident.value);
 
   if (!Object.hasOwn(DeprecatedColorSystemName, name)) {
     c.restore(start);
     return null;
   }
 
-  return ok({
+  return {
     kind: ColorKind.Deprecated,
     name: name as DeprecatedColorName,
-  });
+  };
 };
 
 const DeprecatedColorSystemName = {
@@ -965,13 +947,11 @@ function tryConsumeCurrentColor(
 ): TryComponentConsumerResult<CurrentColor> {
   const keyword = tryConsumeCurrentColorKeyword(c);
 
-  if (keyword === null || isBad(keyword)) {
-    return keyword;
-  }
+  if (keyword === null) return null;
 
-  return ok({
+  return {
     kind: ColorKind.CurrentColor,
-  });
+  };
 }
 
 const tryConsumeCurrentColorKeyword = createKeywordConsumer('currentcolor');
@@ -1021,7 +1001,7 @@ const consumeRgbFunction: TryComponentConsumer<RgbFn> =
         one(tryConsumeLegacyRgbSyntax),
         one(tryConsumeModernRgbSyntax),
       ],
-      ([color]) => ok(color),
+      ([color]) => color,
     ),
     (color) => color,
   );
@@ -1041,7 +1021,7 @@ const consumeRgbaFunction: TryComponentConsumer<RgbFn> =
         one(tryConsumeLegacyRgbaSyntax),
         one(tryConsumeModernRgbaSyntax),
       ],
-      ([color]) => ok(color),
+      ([color]) => color,
     ),
     (color) => color,
   );
@@ -1076,10 +1056,10 @@ function createLegacyRgbSyntaxConsumer(
               one(withTrivia(tryConsumeComma)),
               one(withTrivia(tryConsumeAlphaValue)),
             ],
-            ([, [alpha]]) => ok(alpha),
+            ([, [alpha]]) => alpha,
           )),
         ],
-        ([components, [alpha]]) => ok({
+        ([components, [alpha]]) => ({
           kind: ColorKind.RgbFn as const,
           useLegacySyntax: true,
           components: [...components, alpha] as RgbFn['components'],
@@ -1093,17 +1073,17 @@ function createLegacyRgbSyntaxConsumer(
               one(withTrivia(tryConsumeComma)),
               one(withTrivia(tryConsumeAlphaValue)),
             ],
-            ([, [alpha]]) => ok(alpha),
+            ([, [alpha]]) => alpha,
           )),
         ],
-        ([components, [alpha]]) => ok({
+        ([components, [alpha]]) => ({
           kind: ColorKind.RgbFn as const,
           useLegacySyntax: true,
           components: [...components, alpha] as RgbFn['components'],
         }),
       )),
     ],
-    ([color]) => ok(color),
+    ([color]) => color,
   );
 }
 
@@ -1143,11 +1123,11 @@ function createModernRgbSyntaxConsumer(
           one(tryConsumeNone),
           one(tryConsumeRelativeColorKeyword),
         ],
-        ([component]) => ok(component),
+        ([component]) => component,
       )), 3, 3),
       opt(tryConsumeModernAlpha),
     ],
-    ([[origin], components, [alpha]]) => ok({
+    ([[origin], components, [alpha]]) => ({
       kind: ColorKind.RgbFn,
       useLegacySyntax: false,
       origin,
@@ -1205,7 +1185,7 @@ const consumeHslFunction: TryComponentConsumer<HslFn> =
         one(tryConsumeLegacyHslSyntax),
         one(tryConsumeModernHslSyntax),
       ],
-      ([color]) => ok(color),
+      ([color]) => color,
     ),
     (color) => color,
   );
@@ -1225,7 +1205,7 @@ const consumeHslaFunction: TryComponentConsumer<HslFn> =
         one(tryConsumeLegacyHslaSyntax),
         one(tryConsumeModernHslaSyntax),
       ],
-      ([color]) => ok(color),
+      ([color]) => color,
     ),
     (color) => color,
   );
@@ -1257,24 +1237,24 @@ function createLegacyHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
           one(withTrivia(tryConsumeComma)),
           one(withTrivia(tryConsumePercentage)),
         ],
-        ([, [percentage]]) => ok(percentage),
+        ([, [percentage]]) => percentage,
       )),
       one(sequenceOf(
         [
           one(withTrivia(tryConsumeComma)),
           one(withTrivia(tryConsumePercentage)),
         ],
-        ([, [percentage]]) => ok(percentage),
+        ([, [percentage]]) => percentage,
       )),
       opt(sequenceOf(
         [
           one(withTrivia(tryConsumeComma)),
           one(withTrivia(tryConsumeAlphaValue)),
         ],
-        ([, [alpha]]) => ok(alpha),
+        ([, [alpha]]) => alpha,
       )),
     ],
-    ([[hue], [saturation], [lightness], [alpha]]) => ok({
+    ([[hue], [saturation], [lightness], [alpha]]) => ({
       kind: ColorKind.HslFn,
       useLegacySyntax: true,
       components: [hue, saturation, lightness, alpha],
@@ -1316,7 +1296,7 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
           one(tryConsumeNone),
           one(tryConsumeRelativeColorKeyword),
         ],
-        ([hue]) => ok(hue),
+        ([hue]) => hue,
       ))),
       repeat(withTrivia(oneOf(
         [
@@ -1325,11 +1305,11 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
           one(tryConsumeNone),
           one(tryConsumeRelativeColorKeyword),
         ],
-        ([component]) => ok(component),
+        ([component]) => component,
       )), 2, 2),
       opt(tryConsumeModernAlpha),
     ],
-    ([[origin], [hue], [saturation, lightness], [alpha]]) => ok({
+    ([[origin], [hue], [saturation, lightness], [alpha]]) => ({
       kind: ColorKind.HslFn,
       useLegacySyntax: false,
       origin,
@@ -1350,7 +1330,7 @@ const consumeHue: TryComponentConsumer<HueValue> = oneOf(
     one(tryConsumeNumber),
     one(tryConsumeAngle),
   ],
-  ([hue]) => ok(hue),
+  ([hue]) => hue,
 );
 
 /*
@@ -1398,7 +1378,7 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
             one(tryConsumeNone),
             one(tryConsumeRelativeColorKeyword),
           ],
-          ([hue]) => ok(hue),
+          ([hue]) => hue,
         ))),
         repeat(withTrivia(oneOf(
           [
@@ -1407,11 +1387,11 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
             one(tryConsumeNone),
             one(tryConsumeRelativeColorKeyword),
           ],
-          ([component]) => ok(component),
+          ([component]) => component,
         )), 2, 2),
         opt(tryConsumeModernAlpha),
       ],
-      ([[origin], [hue], [whiteness, blackness], [alpha]]) => ok<HwbFn>({
+      ([[origin], [hue], [whiteness, blackness], [alpha]]): HwbFn => ({
         kind: ColorKind.HwbFn as const,
         useLegacySyntax: false,
         origin,
@@ -1523,11 +1503,11 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
             one(tryConsumeNone),
             one(tryConsumeRelativeColorKeyword),
           ],
-          ([component]) => ok(component),
+          ([component]) => component,
         )), 3, 3),
         opt(tryConsumeModernAlpha),
       ],
-      ([[origin], components, [alpha]]) => ok({
+      ([[origin], components, [alpha]]) => ({
         origin,
         components: [...components, alpha],
       }),
@@ -1638,7 +1618,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
             one(tryConsumeNone),
             one(tryConsumeRelativeColorKeyword),
           ],
-          ([component]) => ok(component),
+          ([component]) => component,
         )), 2, 2),
         one(withTrivia(oneOf(
           [
@@ -1646,11 +1626,11 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
             one(tryConsumeNone),
             one(tryConsumeRelativeColorKeyword),
           ],
-          ([hue]) => ok(hue),
+          ([hue]) => hue,
         ))),
         opt(tryConsumeModernAlpha),
       ],
-      ([[origin], components, [hue], [alpha]]) => ok({
+      ([[origin], components, [hue], [alpha]]) => ({
         origin,
         components: [...components, hue, alpha],
       }),
@@ -1693,7 +1673,7 @@ const consumeAlphaFunction: TryComponentConsumer<AlphaFn> =
         }),
         opt(tryConsumeModernAlpha),
       ],
-      ([[origin], [alpha]]) => ok({
+      ([[origin], [alpha]]) => ({
         kind: ColorKind.AlphaFn as const,
         useLegacySyntax: false as const,
         origin,
@@ -1793,7 +1773,7 @@ const consumeColorFunctionNotation: TryComponentConsumer<ColorFn> =
         }),
         opt(tryConsumeModernAlpha),
       ],
-      ([[origin], [params], [alpha]]) => ok({
+      ([[origin], [params], [alpha]]) => ({
         useLegacySyntax: false as const,
         origin,
         ...params,
@@ -1819,7 +1799,7 @@ const consumeColorSpaceParams: TryComponentConsumer<ColorFnSpaceParams> = oneOf(
     one(tryConsumePredefinedRgbParams),
     one(tryConsumeXyzParams),
   ],
-  ([params]) => ok(params),
+  ([params]) => params,
 );
 
 function tryConsumeCustomParams(
@@ -1842,10 +1822,10 @@ const consumeCustomParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf
         one(tryConsumeNone),
         one(tryConsumeRelativeColorKeyword),
       ],
-      ([component]) => ok(component),
+      ([component]) => component,
     ))),
   ],
-  ([[space], components]) => ok({
+  ([[space], components]) => ({
     kind: ColorKind.CustomColorFn as const,
     space: space.value,
     components,
@@ -1873,10 +1853,10 @@ const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
           one(tryConsumeNone),
           one(tryConsumeRelativeColorKeyword),
         ],
-        ([component]) => ok(component),
+        ([component]) => component,
       )), 3, 3),
     ],
-    ([[space], components]) => ok({
+    ([[space], components]) => ({
       kind: ColorKind.ColorFn as const,
       space,
       components,
@@ -1920,10 +1900,10 @@ const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
         one(tryConsumeNone),
         one(tryConsumeRelativeColorKeyword),
       ],
-      ([component]) => ok(component),
+      ([component]) => component,
     )), 3, 3),
   ],
-  ([[space], components]) => ok({
+  ([[space], components]) => ({
     kind: ColorKind.ColorFn as const,
     space,
     components,
@@ -1935,9 +1915,9 @@ function tryConsumeXyzSpace(
 ): TryComponentConsumerResult<XyzColorSpace['name']> {
   const space = consumeXyzSpace(c);
 
-  return space === null || isBad(space)
+  return space === null
     ? space
-    : ok(space.value === 'xyz' ? 'xyz-d65' : space.value);
+    : (space === 'xyz' ? 'xyz-d65' : space);
 }
 
 // <xyz-space> = xyz | xyz-d50 | xyz-d65
@@ -1982,7 +1962,7 @@ const consumeDeviceCmykFn: TryComponentConsumer<DeviceCmykFn> =
         one(tryConsumeLegacyDeviceCmykSyntax),
         one(tryConsumeModernDeviceCmykSyntax),
       ],
-      ([color]) => ok(color),
+      ([color]) => color,
     ),
     (color) => color,
   );
@@ -1997,7 +1977,7 @@ function tryConsumeLegacyDeviceCmykSyntax(
 const consumeLegacyDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
   sequenceOf(
     [commaRepeat(tryConsumeNumber, 4, 4)],
-    ([components]) => ok({
+    ([components]) => ({
       kind: ColorKind.DeviceCmykFn as const,
       useLegacySyntax: true,
       components: [...components, undefined],
@@ -2017,7 +1997,7 @@ const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
       repeat(withTrivia(tryConsumeCmykComponent), 4, 4),
       opt(tryConsumeModernAlpha),
     ],
-    ([components, [alpha]]) => ok({
+    ([components, [alpha]]) => ({
       kind: ColorKind.DeviceCmykFn as const,
       useLegacySyntax: false,
       components: [...components, alpha],
@@ -2037,7 +2017,7 @@ const consumeCmykComponent: TryComponentConsumer<SyntaxNonHueComponent> = oneOf(
     one(tryConsumePercentage),
     one(tryConsumeNone),
   ],
-  ([component]) => ok(component),
+  ([component]) => component,
 );
 
 /*
@@ -2071,7 +2051,7 @@ const consumeLightDarkColor: TryComponentConsumer<LightDarkColor> =
         one(withTrivia(tryConsumeComma)),
         one(withTrivia(tryConsumeColor)),
       ],
-      ([[light], , [dark]]) => ok({
+      ([[light], , [dark]]) => ({
         kind: ColorKind.LightDarkColor as const,
         light,
         dark,
@@ -2101,7 +2081,7 @@ const consumeContrastColorFn: TryComponentConsumer<ContrastColorFn> =
     'contrast-color',
     sequenceOf(
       [one(withTrivia(tryConsumeColor))],
-      ([[color]]) => ok({
+      ([[color]]) => ({
         kind: ColorKind.ContrastColorFn as const,
         color,
       }),
@@ -2154,7 +2134,7 @@ export function parseColorInterpolationMethod(
     context,
   );
 
-  return result === null || isBad(result) ? null : result.value;
+  return result;
 }
 
 export function tryConsumeColorInterpolationMethod(
@@ -2176,17 +2156,17 @@ const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMe
               one(tryConsumePolarColorSpace),
               one(withTrivia(tryConsumeHueInterpolationMethod)),
             ],
-            ([[space], [hue]]) => ok<ColorInterpolationMethod>({ space, hue }),
+            ([[space], [hue]]) => ({ space, hue }),
           )),
           one(sequenceOf(
             [one(tryConsumeColorSpace)],
-            ([[space]]) => ok<ColorInterpolationMethod>({ space }),
+            ([[space]]) => ({ space }),
           )),
         ],
-        ([method]) => ok(method),
+        ([method]) => method,
       ))),
     ],
-    ([, [method]]) => ok(method),
+    ([, [method]]) => method,
   );
 
 function tryConsumeColorSpace(
@@ -2202,7 +2182,7 @@ const consumeColorSpace: TryComponentConsumer<ColorInterpolationSpaceName> = one
     one(tryConsumePolarColorSpace),
     one(tryConsumeCustomColorSpace),
   ],
-  ([space]) => ok(space),
+  ([space]) => space,
 );
 
 function tryConsumeRectangularColorSpace(
@@ -2210,9 +2190,9 @@ function tryConsumeRectangularColorSpace(
 ): TryComponentConsumerResult<RectangularColorSpaceName> {
   const result = consumeRectangularColorSpace(c);
 
-  return result === null || isBad(result)
+  return result === null
     ? result
-    : ok(result.value === 'xyz' ? 'xyz-d65' : result.value);
+    : (result === 'xyz' ? 'xyz-d65' : result);
 }
 
 // <rectangular-color-space> = srgb | srgb-linear | display-p3 | display-p3-linear | a98-rgb | prophoto-rgb | rec2020 | lab | oklab | <xyz-space>
@@ -2248,15 +2228,13 @@ function tryConsumeCustomColorSpace(
   const start = c.pos();
   const ident = tryConsumeDashedIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const { value } = ident.value;
+  const { value } = ident;
   const context = colorContextFor(c.context);
 
   if (context.colorProfiles?.has(value)) {
-    return ok(value);
+    return value;
   }
 
   c.restore(start);
@@ -2281,7 +2259,7 @@ const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod
       )),
       one(withTrivia(createKeywordConsumer('hue'))),
     ],
-    ([[method]]) => ok(method),
+    ([[method]]) => method,
   );
 
 /*
@@ -2328,10 +2306,10 @@ const consumeQuirkyColor: TryComponentConsumer<HexColor> = (c) => {
     return null;
   }
 
-  return ok({
+  return {
     kind: ColorKind.Hex,
     text: `#${value}`,
-  });
+  };
 };
 
 // ████████  ████████ ██          ███    ████████ ████ ██     ██ ████████
@@ -2357,7 +2335,7 @@ const consumeRelativeColorOrigin = sequenceOf(
     one(createKeywordConsumer('from')),
     one(withTrivia(consumeColor)),
   ],
-  ([, [origin]]) => ok(origin),
+  ([, [origin]]) => origin,
 );
 
 function tryConsumeRelativeColorKeyword(
@@ -2366,11 +2344,9 @@ function tryConsumeRelativeColorKeyword(
   const start = c.pos();
   const ident = tryConsumeIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const name = asciiLower(ident.value.value);
+  const name = asciiLower(ident.value);
   const variable = relativeColorVariablesFor(c.context)?.get(name);
 
   if (variable === undefined) {
@@ -2378,11 +2354,11 @@ function tryConsumeRelativeColorKeyword(
     return null;
   }
 
-  return ok(promoteNumericVariable(
+  return promoteNumericVariable(
     name,
     'number',
     colorContextFor(c.context),
-  ));
+  );
 }
 
 function contextWithRelativeColorVariables(
@@ -3125,8 +3101,8 @@ function isRelativeColorFunction(
 function shouldPreserveLegacySyntax(value: DeviceCmykFn): boolean {
   // Missing components and deferred math values require modern syntax.
   return value.useLegacySyntax && value.components.every(
-    (component) => component === undefined
-      || (component !== 'none' && component.type !== 'math'),
+    (component) => component === undefined ||
+      (component !== 'none' && component.type !== 'math'),
   );
 }
 
@@ -5627,9 +5603,9 @@ function isColorInGamut(
 
   return converted.components.every(
     (component) =>
-      component !== undefined
-      && component >= 0
-      && component <= 1,
+      component !== undefined &&
+      component >= 0 &&
+      component <= 1,
   );
 }
 
@@ -5706,11 +5682,10 @@ export function deltaE2000(
   }
 
   const degreesToRadians = Math.PI / 180;
-  const weightedDeltaHue = (
+  const weightedDeltaHue =
     2
     * Math.sqrt(adjustedChroma1 * adjustedChroma2)
-    * Math.sin(deltaHue * degreesToRadians / 2)
-  );
+    * Math.sin(deltaHue * degreesToRadians / 2);
   const meanLightness = (lightness1 + lightness2) / 2;
   const meanAdjustedChroma = (adjustedChroma1 + adjustedChroma2) / 2;
   const meanAdjustedChroma7 = meanAdjustedChroma ** 7;
@@ -5727,37 +5702,31 @@ export function deltaE2000(
   }
 
   const lightnessOffset = (meanLightness - 50) ** 2;
-  const lightnessWeight = (
+  const lightnessWeight =
     1
-    + 0.015 * lightnessOffset / Math.sqrt(20 + lightnessOffset)
-  );
+    + 0.015 * lightnessOffset / Math.sqrt(20 + lightnessOffset);
   const chromaWeight = 1 + 0.045 * meanAdjustedChroma;
-  const hueWeightFactor = (
+  const hueWeightFactor =
     1
     - 0.17 * Math.cos((meanHue - 30) * degreesToRadians)
     + 0.24 * Math.cos(2 * meanHue * degreesToRadians)
     + 0.32 * Math.cos((3 * meanHue + 6) * degreesToRadians)
-    - 0.20 * Math.cos((4 * meanHue - 63) * degreesToRadians)
-  );
-  const hueWeight = (
+    - 0.20 * Math.cos((4 * meanHue - 63) * degreesToRadians);
+  const hueWeight =
     1
-    + 0.015 * meanAdjustedChroma * hueWeightFactor
-  );
-  const rotationAngle = (
+    + 0.015 * meanAdjustedChroma * hueWeightFactor;
+  const rotationAngle =
     30
-    * Math.exp(-(((meanHue - 275) / 25) ** 2))
-  );
-  const rotationChroma = (
+    * Math.exp(-(((meanHue - 275) / 25) ** 2));
+  const rotationChroma =
     2
     * Math.sqrt(
       meanAdjustedChroma7
       / (meanAdjustedChroma7 + chroma25To7),
-    )
-  );
-  const rotation = (
+    );
+  const rotation =
     -Math.sin(2 * rotationAngle * degreesToRadians)
-    * rotationChroma
-  );
+    * rotationChroma;
   const lightnessTerm = deltaLightness / lightnessWeight;
   const chromaTerm = deltaChroma / chromaWeight;
   const hueTerm = weightedDeltaHue / hueWeight;
@@ -5814,8 +5783,8 @@ export function areColorsEquivalent(
   }
 
   if (
-    hasMissingColorComponents(preparedA)
-    || hasMissingColorComponents(preparedB)
+    hasMissingColorComponents(preparedA) ||
+    hasMissingColorComponents(preparedB)
   ) {
     return false;
   }
@@ -5842,8 +5811,8 @@ function areColorComponentsEquivalent(
     a.components.every(
       (component, index) =>
         areColorComponentValuesEquivalent(component, b.components[index]),
-    )
-    && areColorComponentValuesEquivalent(a.alpha, b.alpha)
+    ) &&
+    areColorComponentValuesEquivalent(a.alpha, b.alpha)
   );
 }
 
@@ -5877,9 +5846,9 @@ export function interpolateColors(
   hue: HueInterpolationMethod = 'shorter',
   context: ColorContext = {},
 ): AbsoluteColor {
-  space ??= (a.isLegacySrgb && b.isLegacySrgb
+  space ??= a.isLegacySrgb && b.isLegacySrgb
     ? 'srgb'
-    : 'oklab');
+    : 'oklab';
 
   if (isCustomColorProfileSpace(space)) {
     return interpolateCustomColors(a, b, progress, space, context);
@@ -6059,8 +6028,8 @@ function findCarriedForwardComponents(
     .filter((index) => index !== undefined);
 
   if (
-    sourceSet.length > 0
-    && sourceSet.every((index) => value.components[index] === undefined)
+    sourceSet.length > 0 &&
+    sourceSet.every((index) => value.components[index] === undefined)
   ) {
     for (const index of targetSet) {
       carriedComps[index] = true;

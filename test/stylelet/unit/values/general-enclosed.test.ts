@@ -43,13 +43,10 @@ describe('<general-enclosed>', () => {
     const c = new ComponentCursor(parseListOfComponentValues('future() other'));
 
     expect(tryConsumeGeneralEnclosed(c)).toMatchObject({
-      kind: 'ok',
+      type: 'general-enclosed',
       value: {
-        type: 'general-enclosed',
-        value: {
-          block: BlockKind.Function,
-          name: 'future',
-        },
+        block: BlockKind.Function,
+        name: 'future',
       },
     });
     expect(c.pos()).toBe(1);

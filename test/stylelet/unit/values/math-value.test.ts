@@ -1251,7 +1251,7 @@ describe('calc', () => {
     'log(1, 2, 3)',
     'abs(1, 2)',
   ])('rejects invalid math-function arguments in %s', (input) => {
-    expectBadMath(input);
+    expectInvalidMath(input);
   });
 
   it.each([
@@ -1292,7 +1292,7 @@ describe('calc', () => {
   });
 
   it('types percentages in their supplied calculation context', () => {
-    expectBadMath('calc(10px + 25%)');
+    expectInvalidMath('calc(10px + 25%)');
 
     const context = {
       percentHint: 'length',
@@ -1734,7 +1734,7 @@ describe('calc', () => {
       'calc(1px * 1em)',
       'calc(1unknown)',
     ])('rejects the invalid calculation %j', (input) => {
-      expectBadMath(input);
+      expectInvalidMath(input);
     });
   });
 
@@ -1890,7 +1890,7 @@ describe('calc', () => {
   });
 
   it('rejects a numeric variable outside its defining context', () => {
-    expectBadMath('calc(h + 180)');
+    expectInvalidMath('calc(h + 180)');
   });
 
   it.each([
@@ -1908,7 +1908,7 @@ describe('calc', () => {
     'calc(1/**/+ 2)',
     'calc(1 +/**/2)',
   ])('rejects an additive operator without required whitespace in %j', (input) => {
-    expectBadMath(input);
+    expectInvalidMath(input);
   });
 
   it.each([
@@ -1927,7 +1927,7 @@ describe('calc', () => {
     'calc(1 2)',
     'calc(())',
   ])('commits after recognizing the malformed calculation %j', (input) => {
-    expectBadMath(input);
+    expectInvalidMath(input);
   });
 
   it('supports at least 32 calculation terms', () => {
@@ -1953,7 +1953,7 @@ describe('calc', () => {
   it('bounds aggregate calculation complexity', () => {
     const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
 
-    expectBadMath(`calc(${input})`);
+    expectInvalidMath(`calc(${input})`);
   });
 
   it('keeps parser bookkeeping out of the supplied context', () => {
@@ -1991,12 +1991,12 @@ function numericLeaf<
   return { ...value, hints: hints };
 }
 
-function expectBadMath(
+function expectInvalidMath(
   input: string,
   expectedType: MathValueType = 'number',
   context: MathContext = {},
 ): void {
-  expect(() => parseMathValue(input, expectedType, context)).toThrow();
+  expect(parseMathValue(input, expectedType, context)).toBeNull();
 }
 
 function expectNoMath(

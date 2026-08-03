@@ -1600,7 +1600,7 @@ describe('color values', () => {
     };
     const declared = parseColorValue(
       'color(from rgb(25.5 51 76.5 / 0.4) --four-channel '
-        + 'calc(r + 0.1) g b calc(spot * 2) / calc(r + 0.4))',
+      + 'calc(r + 0.1) g b calc(spot * 2) / calc(r + 0.4))',
       context,
     )!;
     const color = resolveColorValue(declared, ValueStage.Computed, context);
@@ -1674,15 +1674,15 @@ describe('color values', () => {
   it.each([
     [
       'color(from color(display-p3 0.7 0.5 0.3 / 0.4) '
-        + 'display-p3 calc(r + 0.01) calc(g + 0.01) calc(b + 0.01) '
-        + '/ calc(alpha + 0.01))',
+      + 'display-p3 calc(r + 0.01) calc(g + 0.01) calc(b + 0.01) '
+      + '/ calc(alpha + 0.01))',
       SPACES['display-p3'],
       [0.71, 0.51, 0.31],
       0.41,
     ],
     [
       'color(from color(srgb 0.7 0.5 0.3 / 0.4) '
-        + 'srgb b alpha r / g)',
+      + 'srgb b alpha r / g)',
       SPACES.srgb,
       [0.3, 0.4, 0.7],
       0.5,
@@ -2292,13 +2292,13 @@ describe('color values', () => {
   it.each([
     [
       'lab(from lab(50 20 -30 / 0.5) '
-        + 'calc(l + 10) a calc(b * 2) / calc(alpha * 2))',
+      + 'calc(l + 10) a calc(b * 2) / calc(alpha * 2))',
       'lab',
       [60, 20, -60],
     ],
     [
       'oklab(from oklab(0.5 0.1 -0.1 / 0.5) '
-        + 'calc(l + 0.1) a calc(b * 2) / calc(alpha * 2))',
+      + 'calc(l + 0.1) a calc(b * 2) / calc(alpha * 2))',
       'oklab',
       [0.6, 0.1, -0.2],
     ],
@@ -2363,13 +2363,13 @@ describe('color values', () => {
   it.each([
     [
       'lch(from lch(50 30 40 / 0.5) '
-        + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
+      + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
       'lch',
       [40, 30, 220],
     ],
     [
       'oklch(from oklch(0.5 0.1 40 / 0.5) '
-        + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
+      + 'calc(l * 0.8) c calc(h + 180) / calc(alpha * 2))',
       'oklch',
       [0.4, 0.1, 220],
     ],
@@ -2540,28 +2540,28 @@ describe('color values', () => {
   it.each([
     [
       'lab(calc(50 * 3) calc(0.5 - 1) calc(1.5)'
-        + ' / calc(-0.5 + 1))',
+      + ' / calc(-0.5 + 1))',
       'lab',
       [100, -0.5, 1.5],
       0.5,
     ],
     [
       'lch(calc(-50 * 3) calc(0.5 + 1) calc(-20deg * 2)'
-        + ' / calc(-0.5 * 2))',
+      + ' / calc(-0.5 * 2))',
       'lch',
       [0, 1.5, 320],
       0,
     ],
     [
       'oklab(calc(0.5 * 3) calc(0.5 - 1) calc(1.5)'
-        + ' / calc(-0.5 + 1))',
+      + ' / calc(-0.5 + 1))',
       'oklab',
       [1, -0.5, 1.5],
       0.5,
     ],
     [
       'oklch(calc(-0.5 * 3) calc(0.5 + 1) calc(-20deg * 2)'
-        + ' / calc(-0.5 * 2))',
+      + ' / calc(-0.5 * 2))',
       'oklch',
       [0, 1.5, 320],
       0,
@@ -3734,15 +3734,15 @@ describe('color values', () => {
     ],
     [
       'rgb(calc(sign(1em - 1px)) 0 0'
-        + ' / calc(60% * sign(1em - 1px)))',
+      + ' / calc(60% * sign(1em - 1px)))',
       'rgb(sign(1em - 1px) 0 0'
-        + ' / calc(60% * sign(1em - 1px) / 100%))',
+      + ' / calc(60% * sign(1em - 1px) / 100%))',
     ],
     [
       'rgb(calc(sign(1em - 1px)) none 0'
-        + ' / calc(60% * sign(1em - 1px)))',
+      + ' / calc(60% * sign(1em - 1px)))',
       'rgb(sign(1em - 1px) none 0'
-        + ' / calc(60% * sign(1em - 1px) / 100%))',
+      + ' / calc(60% * sign(1em - 1px) / 100%))',
     ],
     [
       'rgb(calc(sign(1em - 1px)) 0 0 / none)',

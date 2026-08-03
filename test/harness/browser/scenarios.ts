@@ -173,8 +173,8 @@ export function runScenarios(label: string, status: ScenariosStatus, scenarios: 
 
     const scenarioHas = (s: Scenario, status: 'only' | 'fixme'): boolean =>
       s.status === status ||
-        !!s.cases?.some((c) => c.status === status) ||
-        !!s.steps?.some((step) => step.cases.some((c) => c.status === status));
+      !!s.cases?.some((c) => c.status === status) ||
+      !!s.steps?.some((step) => step.cases.some((c) => c.status === status));
 
     const hasScenariosOnly = scenarios.some((s) => scenarioHas(s, 'only'));
 
@@ -329,9 +329,9 @@ async function evalCase(page: Page, caseInfo: CaseInfo): Promise<EvalResult> {
       : undefined;
     let equivMismatchMsg = equivCase && (pw.isRehomed(c.ref) || pw.isRehomed(equivCase.ref))
       ? `Equivalent-case assertion unsupported because one or more contexts were rehomed.\n` +
-        `Identity-based equivalence is only supported for document-backed contexts.\n` +
-        `  case context: ${pw.stringify(c.ref)}${pw.isRehomed(c.ref) ? ' (rehomed)' : ''}\n` +
-        `  equivalent case context: ${pw.stringify(equivCase.ref)}${pw.isRehomed(equivCase.ref) ? ' (rehomed)' : ''}`
+      `Identity-based equivalence is only supported for document-backed contexts.\n` +
+      `  case context: ${pw.stringify(c.ref)}${pw.isRehomed(c.ref) ? ' (rehomed)' : ''}\n` +
+      `  equivalent case context: ${pw.stringify(equivCase.ref)}${pw.isRehomed(equivCase.ref) ? ' (rehomed)' : ''}`
       : undefined;
 
     const allEngines: Permutations<Engine> = ['native', 'selectlet'];

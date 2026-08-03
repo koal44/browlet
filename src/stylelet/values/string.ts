@@ -1,13 +1,9 @@
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   consumeComponentTrivia, isTokenKind, parseAsComponentGrammar,
   type ParserInput,
 } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 
 export type StringValue = {
   type: 'string';
@@ -18,10 +14,7 @@ export function parseString(
   input: ParserInput,
   context: unknown = undefined,
 ): StringValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(input, tryConsumeString, context),
-    'string',
-  );
+  return parseAsComponentGrammar(input, tryConsumeString, context);
 }
 
 export function tryConsumeString(c: ComponentCursor): TryComponentConsumerResult<StringValue> {
@@ -36,10 +29,10 @@ export function tryConsumeString(c: ComponentCursor): TryComponentConsumerResult
     return null;
   }
 
-  return ok({
+  return {
     type: 'string',
     value: comp.value,
-  });
+  };
 }
 
 export function serializeString(value: StringValue): string {

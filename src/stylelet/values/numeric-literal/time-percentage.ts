@@ -1,8 +1,5 @@
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   canonicalizeTime, serializeTime, tryConsumeTime, type CanonicalTimeLiteral,
@@ -29,13 +26,10 @@ export function parseTimePercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): TimePercentageLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeTimePercentage),
-      context,
-    ),
-    'time-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeTimePercentage),
+    context,
   );
 }
 

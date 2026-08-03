@@ -1,8 +1,5 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import {
@@ -30,13 +27,10 @@ export function parseTimePercentage(
   input: ParserInput,
   context: MathContext = {},
 ): TimePercentageValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeTimePercentage),
-      context,
-    ),
-    'time-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeTimePercentage),
+    context,
   );
 }
 
@@ -55,7 +49,7 @@ export function createTimePercentageConsumer(
         ...(range === undefined ? {} : { range }),
       })),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 }
 

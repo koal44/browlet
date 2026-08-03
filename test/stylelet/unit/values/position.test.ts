@@ -179,16 +179,11 @@ describe('position values', () => {
     ));
     const one = new ComponentCursor(parseListOfComponentValues('top 50px'));
 
-    expect(tryConsumePosition(four)).toEqual({
-      kind: 'ok',
-      value: position(['left', length(10), 'top', length(20)]),
-    });
+    expect(tryConsumePosition(four))
+      .toEqual(position(['left', length(10), 'top', length(20)]));
     expect(four.pos()).toBe(7);
 
-    expect(tryConsumePosition(one)).toEqual({
-      kind: 'ok',
-      value: position(['top']),
-    });
+    expect(tryConsumePosition(one)).toEqual(position(['top']));
     expect(one.pos()).toBe(1);
   });
 });

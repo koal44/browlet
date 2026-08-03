@@ -1,11 +1,7 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import type { ComponentCursor } from '../../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -39,13 +35,10 @@ export function parseResolution(
   input: ParserInput,
   context: unknown = undefined,
 ): ResolutionLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeResolution),
-      context,
-    ),
-    'resolution',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeResolution),
+    context,
   );
 }
 
@@ -67,11 +60,9 @@ export function createResolutionConsumer(
     const start = c.pos();
     const result = tryConsumeUnrestrictedResolution(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
-    const canonical = canonicalizeResolution(result.value);
+    const canonical = canonicalizeResolution(result);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -94,11 +85,11 @@ function tryConsumeUnrestrictedResolution(
     const unit = resolutionUnitFor(component.unit);
 
     if (unit !== null) {
-      return ok({
+      return {
         type: 'resolution',
         value: component.value,
         unit,
-      });
+      };
     }
   }
 

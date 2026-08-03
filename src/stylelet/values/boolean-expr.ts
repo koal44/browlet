@@ -1,10 +1,7 @@
 import {
   one, oneOf, plus, project, recursive, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import {
   isParensBlock, parseAsComponentGrammar,
   type ParensBlock, type ParserInput,
@@ -71,12 +68,9 @@ export function parseBooleanExpr<Test>(
   input: ParserInput,
   tryConsumeTest: TryComponentConsumer<Test>,
 ): BooleanExprValue<Test> | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(createBooleanExprConsumer(tryConsumeTest)),
-    ),
-    '<boolean-expr[]>',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(createBooleanExprConsumer(tryConsumeTest)),
   );
 }
 
@@ -96,7 +90,7 @@ export function createBooleanExprConsumer<Test>(
     // <test>
     const consumeTest = project(
       tryConsumeTest,
-      (value) => ok<BooleanExprTest<Test>>({
+      (value): BooleanExprTest<Test> => ({
         type: 'boolean-test',
         value,
       }),
@@ -112,7 +106,7 @@ export function createBooleanExprConsumer<Test>(
         one(consumeParens),
         one(tryConsumeGeneralEnclosed),
       ],
-      ([value]) => ok(value),
+      ([value]) => value,
     );
 
     // not <boolean-expr-group>
@@ -121,7 +115,7 @@ export function createBooleanExprConsumer<Test>(
         one(tryConsumeNot),
         one(withTrivia(consumeGroup)),
       ],
-      ([, [value]]) => ok<BooleanExprNot<Test>>({
+      ([, [value]]): BooleanExprNot<Test> => ({
         type: 'boolean-not',
         value,
       }),
@@ -133,7 +127,7 @@ export function createBooleanExprConsumer<Test>(
         one(tryConsumeAnd),
         one(withTrivia(consumeGroup)),
       ],
-      ([, [value]]) => ok(value),
+      ([, [value]]) => value,
     );
 
     // or <boolean-expr-group>
@@ -142,7 +136,7 @@ export function createBooleanExprConsumer<Test>(
         one(tryConsumeOr),
         one(withTrivia(consumeGroup)),
       ],
-      ([, [value]]) => ok(value),
+      ([, [value]]) => value,
     );
 
     // <boolean-expr-group> [ and <boolean-expr-group> ]+
@@ -151,13 +145,13 @@ export function createBooleanExprConsumer<Test>(
         one(consumeGroup),
         plus(consumeAndGroup),
       ],
-      ([[first], rest]) => {
+      ([[first], rest]): BooleanExprAnd<Test> => {
         const [second, ...remaining] = rest;
 
-        return ok<BooleanExprValue<Test>>({
+        return {
           type: 'boolean-and',
           values: [first, second, ...remaining],
-        });
+        };
       },
     );
 
@@ -167,13 +161,13 @@ export function createBooleanExprConsumer<Test>(
         one(consumeGroup),
         plus(consumeOrGroup),
       ],
-      ([[first], rest]) => {
+      ([[first], rest]): BooleanExprOr<Test> => {
         const [second, ...remaining] = rest;
 
-        return ok<BooleanExprValue<Test>>({
+        return {
           type: 'boolean-or',
           values: [first, second, ...remaining],
-        });
+        };
       },
     );
 
@@ -185,7 +179,7 @@ export function createBooleanExprConsumer<Test>(
         one(consumeOrOperation),
         one(consumeGroup),
       ],
-      ([value]) => ok<BooleanExprValue<Test>>(value),
+      ([value]) => value,
     );
   });
 }
@@ -214,11 +208,7 @@ function createParensConsumer<Test>(
       return null;
     }
 
-    if (isBad(value)) {
-      return value;
-    }
-
-    return ok({ ...component, value: value.value });
+    return { ...component, value };
   };
 }
 

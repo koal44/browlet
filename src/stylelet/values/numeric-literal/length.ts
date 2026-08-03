@@ -1,11 +1,7 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import type { ComponentCursor } from '../../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -101,13 +97,10 @@ export function parseLength(
   input: ParserInput,
   context: unknown = undefined,
 ): LengthLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeLength),
-      context,
-    ),
-    'length',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeLength),
+    context,
   );
 }
 
@@ -135,11 +128,9 @@ export function createLengthConsumer(
     const start = c.pos();
     const result = tryConsumeUnrestrictedLength(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
-    const value = result.value;
+    const value = result;
 
     if (value.value < min || value.value > max) {
       c.restore(start);
@@ -162,18 +153,18 @@ function tryConsumeUnrestrictedLength(
     const unit = lengthUnitFor(component.unit);
 
     if (unit !== null) {
-      return ok({
+      return {
         type: 'length',
         value: component.value,
         unit,
-      });
+      };
     }
   } else if (isTokenKind(component, TokenKind.Number) && component.value === 0) {
-    return ok({
+    return {
       type: 'length',
       value: 0,
       unit: '',
-    });
+    };
   }
 
   c.restore(start);

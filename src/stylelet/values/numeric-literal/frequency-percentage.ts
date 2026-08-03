@@ -1,8 +1,5 @@
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   canonicalizeFrequency, serializeFrequency, tryConsumeFrequency,
@@ -31,13 +28,10 @@ export function parseFrequencyPercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): FrequencyPercentageLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeFrequencyPercentage),
-      context,
-    ),
-    'frequency-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeFrequencyPercentage),
+    context,
   );
 }
 

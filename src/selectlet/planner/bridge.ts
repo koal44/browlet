@@ -248,8 +248,8 @@ export function buildLookupPlan(compound: CompoundSelector, snap: Snapshot): Loo
 }
 
 export function sameLookupPlan(a: LookupPlan, b: LookupPlan): boolean {
-  return a.strategy === b.strategy
-    && a.lookupQuery === b.lookupQuery;
+  return a.strategy === b.strategy &&
+    a.lookupQuery === b.lookupQuery;
 }
 
 function applyLookupSeed(compound: CompoundSelector, plan: LookupPlan): void {

@@ -1,15 +1,11 @@
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { createFunctionalNotationConsumer } from '../parser/component-consumers';
 import { any, one, oneOf, sequenceOf, withTrivia } from '../parser/component-grammar';
-import {
-  bad, ComponentConsumerBadReason, isBad, ok, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { serializeCssString, tryConsumeString } from './string';
 import {
-  isRequestUrlModifierValue, requestUrlModifierName, serializeRequestUrlModifiers,
+  isRequestUrlModifierValue, serializeRequestUrlModifiers,
   tryConsumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
   type UrlModifierValue,
 } from './url-modifier';
@@ -48,7 +44,7 @@ export function parseUrl(
     context,
   );
 
-  return result === null || isBad(result) ? null : result.value;
+  return result;
 }
 
 export function tryConsumeUrl(
@@ -72,7 +68,7 @@ const consumeUrl: TryComponentConsumer<UrlValue> = oneOf(
     one(tryConsumeUrlFn),
     one(tryConsumeSrcFn),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeUrlFn(
@@ -93,7 +89,7 @@ const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
             contextAfter: contextAfterUrlFunctionModifier,
           }),
         ],
-        ([[string], modifiers]) => ok({
+        ([[string], modifiers]) => ({
           value: string.value,
           modifiers: urlModifiersFromArray(modifiers),
         }),
@@ -108,7 +104,7 @@ const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
     )),
     one(tryConsumeUrlToken),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeSrcFn(
@@ -127,7 +123,7 @@ const consumeSrcFn = createFunctionalNotationConsumer(
         contextAfter: contextAfterUrlFunctionModifier,
       }),
     ],
-    ([[string], modifiers]) => ok({
+    ([[string], modifiers]) => ({
       value: string.value,
       modifiers: urlModifiersFromArray(modifiers),
     }),
@@ -157,12 +153,12 @@ const consumeUrlToken: TryComponentConsumer<UrlValue> = (c) => {
     return null;
   }
 
-  return ok({
+  return {
     type: 'url',
     notation: 'url',
     value: component.value,
     modifiers: {},
-  });
+  };
 };
 
 type UrlFunctionParserContext = {
@@ -204,17 +200,14 @@ function tryConsumeUrlFunctionModifier(
 ): TryComponentConsumerResult<UrlModifierValue> {
   const result = tryConsumeUrlModifier(c);
 
-  if (result === null || isBad(result) || !isRequestUrlModifierValue(result.value)) {
+  if (result === null || !isRequestUrlModifierValue(result)) {
     return result;
   }
 
   const context = c.context as UrlFunctionParserContext;
 
-  if (context.seenRequestModifiers?.has(result.value.type) === true) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Duplicate ${requestUrlModifierName(result.value)} URL modifier`,
-    );
+  if (context.seenRequestModifiers?.has(result.type) === true) {
+    return null;
   }
 
   return result;

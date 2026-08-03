@@ -1,10 +1,6 @@
 import { tryConsumeIdentToken } from '../parser/component-consumers';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { withTrivia } from '../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 
 export type IdentValue = {
@@ -16,13 +12,10 @@ export function parseIdent(
   input: ParserInput,
   context: unknown = undefined,
 ): IdentValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeIdent),
-      context,
-    ),
-    'ident',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeIdent),
+    context,
   );
 }
 
@@ -31,14 +24,12 @@ export function tryConsumeIdent(
 ): TryComponentConsumerResult<IdentValue> {
   const token = tryConsumeIdentToken(c);
 
-  if (token === null || isBad(token)) {
-    return token;
-  }
+  if (token === null) return null;
 
-  return ok({
+  return {
     type: 'ident',
-    value: token.value.value,
-  });
+    value: token.value,
+  };
 }
 
 export function serializeIdent(value: IdentValue): string {

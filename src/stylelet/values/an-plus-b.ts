@@ -1,11 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import { createDelimConsumer, tryConsumeIntegerToken } from '../parser/component-consumers';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { one, oneOf, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
-import {
-  isBad, ok, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { isIdentToken, isTokenKind } from '../parser/syntax';
 import type { DimensionToken, IdentToken, NumberToken } from '../parser/tokens';
 import { NumberTokenFlag, TokenKind } from '../parser/tokens';
@@ -24,9 +20,9 @@ function createIntegerConsumer(
     const start = c.pos();
     const result = tryConsumeIntegerToken(c);
 
-    if (result === null || isBad(result)) return result;
+    if (result === null) return null;
 
-    const component = result.value;
+    const component = result;
 
     const isSigned =
       component.repr.startsWith('+') ||
@@ -40,7 +36,7 @@ function createIntegerConsumer(
       return null;
     }
 
-    return ok(component);
+    return component;
   };
 }
 
@@ -60,7 +56,7 @@ function createIntegerDimensionConsumer(
       return null;
     }
 
-    return ok(component);
+    return component;
   };
 }
 
@@ -79,7 +75,7 @@ function createIdentPatternConsumer(
       return null;
     }
 
-    return ok(component);
+    return component;
   };
 }
 
@@ -143,7 +139,7 @@ const consumePositiveN: TryComponentConsumer<number> = sequenceOf(
     opt(tryConsumePlus),
     one(tryConsumeN),
   ],
-  () => ok(1),
+  () => 1,
 );
 
 const consumePositiveNDash: TryComponentConsumer<number> = sequenceOf(
@@ -151,7 +147,7 @@ const consumePositiveNDash: TryComponentConsumer<number> = sequenceOf(
     opt(tryConsumePlus),
     one(tryConsumeNDash),
   ],
-  () => ok(1),
+  () => 1,
 );
 
 const consumeNHead: TryComponentConsumer<number> = oneOf(
@@ -160,13 +156,11 @@ const consumeNHead: TryComponentConsumer<number> = oneOf(
     one(consumePositiveN),
     one(tryConsumeDashN),
   ],
-  ([head]) => ok(
-    typeof head === 'number'
-      ? head
-      : typeof head === 'string'
-        ? -1
-        : head.value,
-  ),
+  ([head]) => typeof head === 'number'
+    ? head
+    : typeof head === 'string'
+      ? -1
+      : head.value,
 );
 
 const consumeNDashHead: TryComponentConsumer<number> = oneOf(
@@ -175,13 +169,11 @@ const consumeNDashHead: TryComponentConsumer<number> = oneOf(
     one(consumePositiveNDash),
     one(tryConsumeDashNDash),
   ],
-  ([head]) => ok(
-    typeof head === 'number'
-      ? head
-      : typeof head === 'string'
-        ? -1
-        : head.value,
-  ),
+  ([head]) => typeof head === 'number'
+    ? head
+    : typeof head === 'string'
+      ? -1
+      : head.value,
 );
 
 const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
@@ -193,17 +185,15 @@ const consumeDelimitedOffset: TryComponentConsumer<number> = sequenceOf(
             one(tryConsumePlus),
             one(tryConsumeMinus),
           ],
-          ([sign]) => ok(sign),
+          ([sign]) => sign,
         ),
       ),
     ),
     one(withTrivia(tryConsumeSignlessInteger)),
   ],
-  ([[sign], [integer]]) => ok(
-    sign === '-'
-      ? -integer.value
-      : integer.value,
-  ),
+  ([[sign], [integer]]) => sign === '-'
+    ? -integer.value
+    : integer.value,
 );
 
 const consumeOffset: TryComponentConsumer<number> = oneOf(
@@ -211,11 +201,9 @@ const consumeOffset: TryComponentConsumer<number> = oneOf(
     one(withTrivia(tryConsumeSignedInteger)),
     one(consumeDelimitedOffset),
   ],
-  ([offset]) => ok(
-    typeof offset === 'number'
-      ? offset
-      : offset.value,
-  ),
+  ([offset]) => typeof offset === 'number'
+    ? offset
+    : offset.value,
 );
 
 const consumeNExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
@@ -223,7 +211,7 @@ const consumeNExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
     one(consumeNHead),
     opt(consumeOffset),
   ],
-  ([[a], offset]) => ok({
+  ([[a], offset]) => ({
     a,
     b: offset[0] ?? 0,
   }),
@@ -234,7 +222,7 @@ const consumeNDashExpression: TryComponentConsumer<AnPlusBValue> = sequenceOf(
     one(consumeNDashHead),
     one(withTrivia(tryConsumeSignlessInteger)),
   ],
-  ([[a], [integer]]) => ok({
+  ([[a], [integer]]) => ({
     a,
     b: -integer.value,
   }),
@@ -249,26 +237,26 @@ const consumeEmbeddedNegative: TryComponentConsumer<AnPlusBValue> = oneOf(
           opt(tryConsumePlus),
           one(tryConsumeNDashDigitIdent),
         ],
-        ([, [ident]]) => ok(ident),
+        ([, [ident]]) => ident,
       ),
     ),
     one(tryConsumeDashNDashDigitIdent),
   ],
   ([component]) => {
     if (component.kind === TokenKind.Dimension) {
-      return ok({
+      return {
         a: component.value,
         b: -Number.parseInt(component.unit.slice(2), 10),
-      });
+      };
     }
 
     const value = asciiLower(component.value);
     const isNegativeN = value.startsWith('-n-');
 
-    return ok({
+    return {
       a: isNegativeN ? -1 : 1,
       b: -Number.parseInt(value.slice(isNegativeN ? 3 : 2), 10),
-    });
+    };
   },
 );
 
@@ -277,14 +265,14 @@ const consumeParity: TryComponentConsumer<AnPlusBValue> = oneOf(
     one(tryConsumeOdd),
     one(tryConsumeEven),
   ],
-  ([value]) => ok(value === 'odd'
+  ([value]) => value === 'odd'
     ? { a: 2, b: 1 }
-    : { a: 2, b: 0 }),
+    : { a: 2, b: 0 },
 );
 
 const consumeInteger: TryComponentConsumer<AnPlusBValue> = sequenceOf(
   [one(tryConsumeInteger)],
-  ([[integer]]) => ok({ a: 0, b: integer.value }),
+  ([[integer]]) => ({ a: 0, b: integer.value }),
 );
 
 const consumeAnPlusBAtomic: TryComponentConsumer<AnPlusBValue> = oneOf(
@@ -293,7 +281,7 @@ const consumeAnPlusBAtomic: TryComponentConsumer<AnPlusBValue> = oneOf(
     one(consumeInteger),
     one(consumeEmbeddedNegative),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 const consumeAnPlusB: TryComponentConsumer<AnPlusBValue> = oneOf(
@@ -302,7 +290,7 @@ const consumeAnPlusB: TryComponentConsumer<AnPlusBValue> = oneOf(
     one(consumeNExpression),
     one(consumeNDashExpression),
   ],
-  ([value]) => ok({
+  ([value]) => ({
     a: value.a === 0 ? 0 : value.a,
     b: value.b === 0 ? 0 : value.b,
   }),

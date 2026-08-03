@@ -1,9 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import { withTrivia } from '../parser/component-grammar';
-import {
-  unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import {
   BlockKind, parseAsComponentGrammar, parseListOfComponentValues,
   type ComponentValue, type ParserInput,
@@ -54,22 +51,16 @@ function parsePropertyValue<Value, Context>(
       : createSubstitutionValue<Value, Context>(declaration);
   }
 
-  const cssWide = unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      components,
-      withTrivia(tryConsumeCssWideValue<Value, Context>),
-    ),
-    'CSS-wide property value',
+  const cssWide = parseAsComponentGrammar(
+    components,
+    withTrivia(tryConsumeCssWideValue<Value, Context>),
   );
 
   if (cssWide !== null) {
     return cssWide;
   }
 
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(components, withTrivia(tryConsumeWholeValue)),
-    'property value',
-  );
+  return parseAsComponentGrammar(components, withTrivia(tryConsumeWholeValue));
 }
 
 const ARBITRARY_SUBSTITUTION_FUNCTION_NAMES = new Set([

@@ -47,9 +47,9 @@ export function serializeAstDeclaration(declaration: DeclarationAst): Serialized
 
 function serialize<T>(value: T | CssWideValue, serialize: (value: T) => string): string {
   const isCssWideValue = (value: T | CssWideValue): value is CssWideValue =>
-    !!value
-      && typeof value === 'object'
-      && (value as { type?: unknown; }).type === 'css-wide';
+    !!value &&
+    typeof value === 'object' &&
+    (value as { type?: unknown; }).type === 'css-wide';
 
   return isCssWideValue(value)
     ? value.serialize()

@@ -1,9 +1,6 @@
 import { clamp } from '../../shared/util';
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { ValueStage } from '../value-processing';
 import type { MathContext } from './math-value';
@@ -26,13 +23,10 @@ export function parseOpacityValue(
   input: ParserInput,
   context: MathContext = {},
 ): OpacityValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeOpacityValue),
-      context,
-    ),
-    'opacity value',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeOpacityValue),
+    context,
   );
 }
 
@@ -41,7 +35,7 @@ export const tryConsumeOpacityValue: TryComponentConsumer<OpacityValue> = oneOf(
     one(tryConsumeNumber),
     one(tryConsumePercentage),
   ],
-  ([value]) => ok(resolveOpacityValue(value, ValueStage.Declared)),
+  ([value]) => resolveOpacityValue(value, ValueStage.Declared),
 );
 
 export function resolveOpacityValue(

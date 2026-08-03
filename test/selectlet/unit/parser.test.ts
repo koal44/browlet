@@ -701,9 +701,9 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parseRelativeSelectorList(new TextCursor('(~ .item)'), {})
       .arms[0].steps[0].combinator).toBe('~');
 
-    expect(describeRelativeCompound((
+    expect(describeRelativeCompound(
       parseRelativeSelectorList(new TextCursor('(~ .item)'), {})
-        .arms[0].steps[0].compound))).toBe('.item');
+        .arms[0].steps[0].compound)).toBe('.item');
   });
 
   it('parses multiple steps with mixed combinators', () => {
@@ -721,7 +721,7 @@ describe('parsePseudoBodyRelativeSelectorList', () => {
     expect(parsed.arms).toHaveLength(3);
 
     expect(parsed.arms[0].steps.map((s) => s.combinator)).toEqual(['>']);
-    expect(parsed.arms[0].steps.map((s) => describeRelativeCompound((s.compound)))).toEqual(['img']);
+    expect(parsed.arms[0].steps.map((s) => describeRelativeCompound(s.compound))).toEqual(['img']);
 
     expect(parsed.arms[1].steps.map((s) => s.combinator)).toEqual(['+']);
     expect(parsed.arms[1].steps.map((s) => describeRelativeCompound(s.compound))).toEqual(['dt']);

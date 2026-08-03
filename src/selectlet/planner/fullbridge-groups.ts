@@ -110,8 +110,8 @@ function finalizeFullBridgeDrafts(drafts: FullBridgeDraft[], snap: Snapshot): Fu
 }
 
 function compareFullBridgeDrafts(a: FullBridgeDraft, b: FullBridgeDraft): number {
-  return lookupStrategyRank(a.lookup.strategy) - lookupStrategyRank(b.lookup.strategy)
-    || a.cost - b.cost;
+  return lookupStrategyRank(a.lookup.strategy) - lookupStrategyRank(b.lookup.strategy) ||
+    a.cost - b.cost;
 }
 
 function lookupStrategyRank(strategy: LookupPlan['strategy']): number {

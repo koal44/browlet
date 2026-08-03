@@ -1,8 +1,5 @@
 import { one, oneOf } from '../../parser/component-grammar';
-import {
-  isBad, ok, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { addDimensions, interpolateDimensions, type DimensionLiteral } from './dimension';
 import {
   addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
@@ -49,7 +46,7 @@ export function createDimensionPercentageConsumer<
       one(tryConsumeDimension),
       one(tryConsumePercentage),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 
   return (c): TryComponentConsumerResult<
@@ -58,11 +55,9 @@ export function createDimensionPercentageConsumer<
     const start = c.pos();
     const result = tryConsumeUnrestricted(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
-    if (result.value.value < min || result.value.value > max) {
+    if (result.value < min || result.value > max) {
       c.restore(start);
       return null;
     }

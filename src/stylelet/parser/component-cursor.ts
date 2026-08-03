@@ -6,6 +6,22 @@ export type ComponentCursorOptions = {
   context?: unknown;
 };
 
+export type TryComponentConsumer<T> =
+  (c: ComponentCursor) => TryComponentConsumerResult<T>;
+
+/**
+ * Try consumers use two channels:
+ *
+ *   null        = this consumer did not match this production. The consumer
+ *                 must leave the cursor position and context unchanged, so
+ *                 the caller may safely try another production.
+ *
+ *   value       = this consumer matched a valid construct. The cursor usually
+ *                 advances, but nullable productions may succeed without
+ *                 consuming input.
+ */
+export type TryComponentConsumerResult<T> = T | null;
+
 export class ComponentCursor {
   private i: number;
   context: unknown;

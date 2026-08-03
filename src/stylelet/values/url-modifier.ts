@@ -1,14 +1,14 @@
-import type { ComponentCursor } from '../parser/component-cursor';
+import { asciiLower } from '../../shared/css';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   createFunctionalNotationConsumer,
   tryConsumeFunctionBlock,
 } from '../parser/component-consumers';
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import {
-  bad, ComponentConsumerBadReason, isBad, ok, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
-import { parseAsComponentGrammar, type FunctionBlock, type ParserInput } from '../parser/syntax';
+  isFunctionBlock, parseAsComponentGrammar,
+  type FunctionBlock, type ParserInput,
+} from '../parser/syntax';
 import { isAnyValueContents } from './any-value';
 import { tryConsumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
@@ -98,7 +98,7 @@ export function parseUrlModifier(
     context,
   );
 
-  return result === null || isBad(result) ? null : result.value;
+  return result;
 }
 
 export function tryConsumeUrlModifier(
@@ -108,13 +108,31 @@ export function tryConsumeUrlModifier(
 }
 
 // <url-modifier> = <request-url-modifier> | <unknown-url-modifier>
-const consumeUrlModifier: TryComponentConsumer<UrlModifierValue> = oneOf(
-  [
-    one(tryConsumeRequestUrlModifier),
-    one(tryConsumeUnknownUrlModifier),
-  ],
-  ([value]) => ok(value),
-);
+const consumeUrlModifier: TryComponentConsumer<UrlModifierValue> = (c) => {
+  const start = c.pos();
+  const request = tryConsumeRequestUrlModifier(c);
+
+  if (request !== null) return request;
+
+  const component = c.peek();
+
+  if (isFunctionBlock(component)) {
+    switch (asciiLower(component.name)) {
+      case 'cross-origin':
+      case 'integrity':
+      case 'referrer-policy':
+        return null;
+    }
+  }
+
+  const unknown = tryConsumeUnknownUrlModifier(c);
+
+  if (unknown === null) {
+    c.restore(start);
+  }
+
+  return unknown;
+};
 
 function tryConsumeRequestUrlModifier(
   c: ComponentCursor,
@@ -130,7 +148,7 @@ const consumeRequestUrlModifier: TryComponentConsumer<RequestUrlModifierValue> =
       one(tryConsumeIntegrityModifier),
       one(tryConsumeReferrerPolicyModifier),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 
 function tryConsumeUnknownUrlModifier(
@@ -140,14 +158,10 @@ function tryConsumeUnknownUrlModifier(
 
   if (
     result !== null &&
-    !isBad(result) &&
-    result.value.type === 'block' &&
-    !isAnyValueContents(result.value.value)
+    result.type === 'block' &&
+    !isAnyValueContents(result.value)
   ) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Invalid component value in ${result.value.name}() arguments`,
-    );
+    return null;
   }
 
   return result;
@@ -160,7 +174,7 @@ const consumeUnknownUrlModifier: TryComponentConsumer<UnknownUrlModifierValue> =
       one(tryConsumeIdent),
       one(tryConsumeFunctionBlock),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 
 function tryConsumeCrossOriginModifier(

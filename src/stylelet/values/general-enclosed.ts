@@ -1,5 +1,4 @@
-import type { ComponentCursor } from '../parser/component-cursor';
-import { ok, unwrapConsumeResultOrThrow, type TryComponentConsumerResult } from '../parser/component-try-consumer';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   isFunctionBlock, isParensBlock, parseAsComponentGrammar,
   type FunctionBlock, type ParensBlock, type ParserInput,
@@ -17,10 +16,7 @@ export type GeneralEnclosedBlock =
   | ParensBlock<AnyValue | undefined>;
 
 export function parseGeneralEnclosed(input: ParserInput): GeneralEnclosedValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(input, withTrivia(tryConsumeGeneralEnclosed)),
-    '<general-enclosed>',
-  );
+  return parseAsComponentGrammar(input, withTrivia(tryConsumeGeneralEnclosed));
 }
 
 /*
@@ -50,11 +46,11 @@ export function tryConsumeGeneralEnclosed(
     return null;
   }
 
-  return ok({
+  return {
     type: 'general-enclosed',
     value: {
       ...component,
       value,
     },
-  });
+  };
 }

@@ -238,9 +238,9 @@ describe('gradient values', () => {
       expect(parseGradient(`radial-gradient(${input}, red, blue)`)).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
-          shape: size.type === 'radial-radii'
-          && size.radii.length === 1
-          && size.radii[0].type === 'length'
+          shape: size.type === 'radial-radii' &&
+            size.radii.length === 1 &&
+            size.radii[0].type === 'length'
             ? 'circle'
             : 'ellipse',
           size: size,

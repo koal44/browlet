@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { withTrivia } from '../../../../src/stylelet/parser/component-grammar';
-import { unwrapConsumeResultOrThrow } from '../../../../src/stylelet/parser/component-try-consumer';
+
 import { parseAsComponentGrammar } from '../../../../src/stylelet/parser/syntax';
 import { ValueStage } from '../../../../src/stylelet/value-processing';
 import {
@@ -25,7 +25,7 @@ describe('whole value', () => {
       withTrivia(consumeColorWholeValue),
     );
     const value: WholeValue<ColorValue, ColorContext> | null =
-      unwrapConsumeResultOrThrow(result, '<whole-value>');
+      result;
 
     expect(value).not.toBeNull();
     expect(value).toMatchObject({

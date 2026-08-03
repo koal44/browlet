@@ -1,8 +1,4 @@
-import type { ComponentCursor } from './component-cursor';
-import {
-  isBad, ok, type ComponentConsumerBad, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from './component-try-consumer';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
 import { consumeComponentTrivia } from './syntax';
 import { TokenKind } from './tokens';
 
@@ -107,22 +103,18 @@ function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
 
       for (const consumer of consumers) {
         const slotStart = c.pos();
-        const result = consumeMultiplier(c, consumer);
+        const result: unknown = consumeMultiplier(c, consumer);
 
         if (result === null) {
           c.restore(start);
           return null;
         }
 
-        if (isBad(result)) {
-          return result;
-        }
-
-        if (c.pos() === slotStart && hasMultiplierValue(result.value)) {
+        if (c.pos() === slotStart && hasMultiplierValue(result)) {
           return c.error('Sequence consumer produced a value without consuming input');
         }
 
-        values.push(result.value);
+        values.push(result);
       }
 
       const raw = values as SequenceValue<P>;
@@ -165,7 +157,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
         c.context = outerContext;
 
         const componentStart = c.pos();
-        const result = consumeMultiplier(c, consumer);
+        const result: unknown = consumeMultiplier(c, consumer);
 
         if (result === null) {
           c.restore(start);
@@ -173,11 +165,7 @@ export function oneOf<const P extends readonly AnyMultiplier[], R>(
           continue;
         }
 
-        if (isBad(result)) {
-          return result;
-        }
-
-        const value = result.value as AlternativeValue<P>;
+        const value = result as AlternativeValue<P>;
 
         if (c.pos() === componentStart && hasMultiplierValue(value)) {
           return c.error('Alternative consumer produced a value without consuming input');
@@ -239,27 +227,19 @@ function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
     try {
       const result = consumeUnordered(c, consumers);
 
-      if ('kind' in result && isBad(result)) {
-        return result;
-      }
-
       for (let i = 0; i < consumers.length; i++) {
         if (result.seen.has(i)) {
           continue;
         }
 
-        const empty = consumeEmpty(c, consumers[i]!);
+        const empty: unknown = consumeEmpty(c, consumers[i]!);
 
         if (empty === null) {
           c.restore(start);
           return null;
         }
 
-        if (isBad(empty)) {
-          return empty;
-        }
-
-        result.values[i] = empty.value;
+        result.values[i] = empty;
       }
 
       const raw = result.values as AllOfValue<P>;
@@ -320,10 +300,6 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
     try {
       const result = consumeUnordered(c, consumers);
 
-      if ('kind' in result && isBad(result)) {
-        return result;
-      }
-
       const hasConsumedValue = hasMultiplierValue(result.values);
 
       let canMatchEmpty = true;
@@ -333,18 +309,14 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
           continue;
         }
 
-        const empty = consumeEmpty(c, consumers[i]!);
+        const empty: unknown = consumeEmpty(c, consumers[i]!);
 
         if (empty === null) {
           canMatchEmpty = false;
           continue;
         }
 
-        if (isBad(empty)) {
-          return empty;
-        }
-
-        result.values[i] = empty.value;
+        result.values[i] = empty;
       }
 
       const raw = result.values as SomeOfValue<P>;
@@ -390,11 +362,7 @@ export function required<T>(
         return c.error(expected);
       }
 
-      if (isBad(result)) {
-        return c.error(result.message ?? result.reason);
-      }
-
-      return result.value;
+      return result;
     } finally {
       c.context = outerContext;
     }
@@ -545,11 +513,7 @@ export function project<Input, Output>(
         return null;
       }
 
-      if (isBad(result)) {
-        return result;
-      }
-
-      const projection = projector(result.value, c.context);
+      const projection = projector(result, c.context);
 
       if (projection === null) {
         c.restore(start);
@@ -623,8 +587,6 @@ function consumeMultiplier<T, Output extends T[]>(
   c: ComponentCursor,
   multiplier: Multiplier<T, Output>,
 ): TryComponentConsumerResult<Output> {
-  // TODO: Consider consuming through the multiplier after a bad item while retaining
-  // the first bad result, so recovery can resume at the multiplier boundary.
   return multiplier.separator === 'comma'
     ? consumeCommaMultiplier(c, multiplier)
     : consumePlainMultiplier(c, multiplier);
@@ -649,21 +611,16 @@ function consumePlainMultiplier<T, Output extends T[]>(
       break;
     }
 
-    if (isBad(result)) {
-      c.context = outerContext;
-      return result;
-    }
-
     if (c.pos() === itemStart) {
       c.context = outerContext;
       return c.error('Repeated consumer matched without consuming input');
     }
 
-    values.push(result.value);
+    values.push(result);
 
     c.context = multiplier.contextAfter === undefined
       ? itemContext
-      : multiplier.contextAfter(result.value, itemContext);
+      : multiplier.contextAfter(result, itemContext);
   }
 
   if (values.length < multiplier.min) {
@@ -672,7 +629,7 @@ function consumePlainMultiplier<T, Output extends T[]>(
     return null;
   }
 
-  return ok(values as Output);
+  return values as Output;
 }
 
 function consumeCommaMultiplier<T, Output extends T[]>(
@@ -685,7 +642,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
 
   if (multiplier.max === 0) {
     return multiplier.min === 0
-      ? ok([] as unknown as Output)
+      ? [] as unknown as Output
       : null;
   }
 
@@ -700,11 +657,6 @@ function consumeCommaMultiplier<T, Output extends T[]>(
       return null;
     }
 
-    if (isBad(result)) {
-      c.context = outerContext;
-      return result;
-    }
-
     if (c.pos() === itemStart) {
       c.context = outerContext;
       return c.error('Comma repeat matched without consuming input');
@@ -712,7 +664,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
 
     c.context = multiplier.contextAfter === undefined
       ? itemContext
-      : multiplier.contextAfter(result.value, itemContext);
+      : multiplier.contextAfter(result, itemContext);
 
     return result;
   };
@@ -723,18 +675,14 @@ function consumeCommaMultiplier<T, Output extends T[]>(
     c.context = outerContext;
 
     if (multiplier.min === 0) {
-      return ok([] as unknown as Output);
+      return [] as unknown as Output;
     }
 
     c.restore(start);
     return null;
   }
 
-  if (isBad(first)) {
-    return first;
-  }
-
-  values.push(first.value);
+  values.push(first);
 
   while (values.length < multiplier.max) {
     const separatorStart = c.pos();
@@ -755,11 +703,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
       break;
     }
 
-    if (isBad(next)) {
-      return next;
-    }
-
-    values.push(next.value);
+    values.push(next);
   }
 
   if (values.length < multiplier.min) {
@@ -768,7 +712,7 @@ function consumeCommaMultiplier<T, Output extends T[]>(
     return null;
   }
 
-  return ok(values as Output);
+  return values as Output;
 }
 
 function consumeEmpty<T, Output extends T[]>(
@@ -781,10 +725,6 @@ function consumeEmpty<T, Output extends T[]>(
   const result = consumeMultiplier(c, multiplier);
   const end = c.pos();
 
-  if (isBad(result)) {
-    return result;
-  }
-
   c.restore(start);
   c.context = outerContext;
 
@@ -792,16 +732,17 @@ function consumeEmpty<T, Output extends T[]>(
     return null;
   }
 
-  if (hasMultiplierValue(result.value)) {
+  if (hasMultiplierValue(result)) {
     return c.error('Consumer produced a value without consuming input');
   }
 
   return result;
 }
 
-type UnorderedConsumeResult =
-  | ComponentConsumerBad
-  | { values: unknown[]; seen: Set<number>; };
+type UnorderedConsumeResult = {
+  values: unknown[];
+  seen: Set<number>;
+};
 
 function consumeUnordered<const P extends readonly AnyMultiplier[]>(
   c: ComponentCursor,
@@ -819,7 +760,7 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
       const part = remaining[i]!;
       const start = c.pos();
       const outerContext = c.context;
-      const result = consumeMultiplier(c, part.consumer);
+      const result: unknown = consumeMultiplier(c, part.consumer);
 
       if (result === null) {
         c.restore(start);
@@ -827,12 +768,7 @@ function consumeUnordered<const P extends readonly AnyMultiplier[]>(
         continue;
       }
 
-      if (isBad(result)) {
-        c.context = outerContext;
-        return result;
-      }
-
-      const value = result.value as unknown;
+      const value = result as unknown;
 
       if (c.pos() === start && !hasMultiplierValue(value)) {
         c.restore(start);

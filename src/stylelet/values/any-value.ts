@@ -1,5 +1,4 @@
-import type { ComponentCursor } from '../parser/component-cursor';
-import { ok, type TryComponentConsumerResult } from '../parser/component-try-consumer';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   parseListOfComponentValues,
   type BlockKind, type ComponentValue, type ParserInput, type PreservedToken, type SimpleBlockKind,
@@ -58,7 +57,7 @@ export function tryConsumeAnyValue(
     c.next();
   }
 
-  return ok({ type: 'any-value', components });
+  return { type: 'any-value', components };
 }
 
 export function isAnyValueComponents(

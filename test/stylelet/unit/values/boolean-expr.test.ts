@@ -154,11 +154,8 @@ describe('<boolean-expr[]>', () => {
     const tryConsume = createBooleanExprConsumer(tryConsumeTest);
 
     expect(tryConsume(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        type: 'boolean-test',
-        value: 'a',
-      },
+      type: 'boolean-test',
+      value: 'a',
     });
     expect(c.peek()).toMatchObject({
       type: 'token',
@@ -171,8 +168,7 @@ describe('<boolean-expr[]>', () => {
     const tryConsume = createBooleanExprConsumer(tryConsumeTest);
 
     expect(tryConsume(c)).toMatchObject({
-      kind: 'ok',
-      value: { type: 'boolean-and' },
+      type: 'boolean-and',
     });
     expect(c.peek()).toMatchObject({
       type: 'token',

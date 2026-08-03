@@ -4,7 +4,7 @@ import {
   createDelimConsumer, createFreeFormConsumer, createFunctionalNotationConsumer,
   tryConsumeAnyValueFunctionBlock,
 } from '../../../../src/stylelet/parser/component-consumers';
-import { ok, unwrapConsumeResultOrThrow } from '../../../../src/stylelet/parser/component-try-consumer';
+
 import { BlockKind, isTokenKind, parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
 import { BadStringToken, TokenKind } from '../../../../src/stylelet/parser/tokens';
@@ -33,7 +33,7 @@ describe('createFreeFormConsumer', () => {
     ' { red } ',
   ])('parses %j as the same value', (input) => {
     const result = parseAsComponentGrammar(input, consumeFreeFormColorWholeValue);
-    const value = unwrapConsumeResultOrThrow(result, '<free-form>');
+    const value = result;
 
     expect(value).toMatchObject({
       type: 'whole-value',
@@ -49,13 +49,10 @@ describe('createFreeFormConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
     expect(consumeFreeFormColorWholeValue(c)).toMatchObject({
-      kind: 'ok',
+      type: 'whole-value',
       value: {
-        type: 'whole-value',
-        value: {
-          kind: ColorKind.Named,
-          name: 'red',
-        },
+        kind: ColorKind.Named,
+        name: 'red',
       },
     });
     expect(isTokenKind(c.peek(), TokenKind.Comma)).toBe(true);
@@ -75,13 +72,10 @@ describe('createFreeFormConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red: blue'));
 
     expect(consume(c)).toMatchObject({
-      kind: 'ok',
+      type: 'whole-value',
       value: {
-        type: 'whole-value',
-        value: {
-          kind: ColorKind.Named,
-          name: 'red',
-        },
+        kind: ColorKind.Named,
+        name: 'red',
       },
     });
     expect(isTokenKind(c.peek(), TokenKind.Colon)).toBe(true);
@@ -92,10 +86,7 @@ describe('createFreeFormConsumer', () => {
     const consume = createFreeFormConsumer(tryConsumeAnyValue);
 
     expect(consume(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        type: 'any-value',
-      },
+      type: 'any-value',
     });
     expect(isTokenKind(c.peek(), TokenKind.Comma)).toBe(true);
   });
@@ -105,10 +96,7 @@ describe('createFreeFormConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
     expect(consume(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        type: 'any-value',
-      },
+      type: 'any-value',
     });
     expect(c.peek()).toBeNull();
   });
@@ -135,14 +123,11 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(value) other'));
 
     expect(tryConsumeAnyValueFunctionBlock(c)).toMatchObject({
-      kind: 'ok',
+      type: 'block',
+      block: BlockKind.Function,
+      name: 'fn',
       value: {
-        type: 'block',
-        block: BlockKind.Function,
-        name: 'fn',
-        value: {
-          type: 'any-value',
-        },
+        type: 'any-value',
       },
     });
     expect(c.pos()).toBe(1);
@@ -152,12 +137,9 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(value'));
 
     expect(tryConsumeAnyValueFunctionBlock(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        type: 'block',
-        block: BlockKind.Function,
-        name: 'fn',
-      },
+      type: 'block',
+      block: BlockKind.Function,
+      name: 'fn',
     });
     expect(c.pos()).toBe(1);
   });
@@ -171,7 +153,7 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
 });
 
 describe('createFunctionalNotationConsumer', () => {
-  it('commits by default when the matched function has invalid components', () => {
+  it('returns null when the matched function has invalid components', () => {
     const c = new ComponentCursor([{
       type: 'block',
       block: BlockKind.Function,
@@ -180,51 +162,20 @@ describe('createFunctionalNotationConsumer', () => {
     }]);
     const consume = createFunctionalNotationConsumer(
       'fn',
-      (arguments_) => ok(arguments_.next()),
+      (arguments_) => arguments_.next(),
       (value) => value,
     );
 
-    expect(consume(c)).toMatchObject({ kind: 'bad', reason: 'invalid' });
-    expect(c.pos()).toBe(1);
+    expect(consume(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
-  it('can delegate invalid-component handling to the argument consumer', () => {
-    const c = new ComponentCursor([{
-      type: 'block',
-      block: BlockKind.Function,
-      name: 'fn',
-      value: [BadStringToken],
-    }]);
-    const consume = createFunctionalNotationConsumer(
-      'fn',
-      (arguments_) => ok(arguments_.next()),
-      (value) => value,
-      { invalidArgumentComponents: 'delegate' },
-    );
-
-    expect(consume(c)).toEqual({ kind: 'ok', value: BadStringToken });
-    expect(c.pos()).toBe(1);
-  });
-
-  it('commits by default when the arguments do not match their grammar', () => {
+  it('returns null when the arguments do not match their grammar', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
     const consume = createFunctionalNotationConsumer(
       'fn',
       createDelimConsumer('/'),
       (value) => value,
-    );
-
-    expect(consume(c)).toMatchObject({ kind: 'bad', reason: 'invalid' });
-    expect(c.pos()).toBe(1);
-  });
-
-  it('can delegate an argument-grammar mismatch to the outer caller', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
-    const consume = createFunctionalNotationConsumer(
-      'fn',
-      createDelimConsumer('/'),
-      (value) => value,
-      { argumentGrammarMismatch: 'delegate' },
     );
 
     expect(consume(c)).toBeNull();

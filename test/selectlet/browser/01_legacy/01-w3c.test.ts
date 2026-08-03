@@ -2691,8 +2691,8 @@ runScenarios('w3c iframes 3', 'normal', [
           empty.appendChild(validInput.cloneNode());
           empty.appendChild(invalidInput.cloneNode());
 
-          (validInput).type = 'number';
-          (invalidInput).type = 'text';
+          validInput.type = 'number';
+          invalidInput.type = 'text';
         }); },
         cases: [
           { select: '#styleTests form:valid', expect: { count: 1 } },
@@ -2718,8 +2718,8 @@ runScenarios('w3c iframes 3', 'normal', [
           empty.appendChild(validInput.cloneNode());
           empty.appendChild(invalidInput.cloneNode());
 
-          (validInput).type = 'number';
-          (invalidInput).type = 'text';
+          validInput.type = 'number';
+          invalidInput.type = 'text';
         }); },
         cases: [
           { select: '#styleTests fieldset:valid', expect: { count: 1 } },

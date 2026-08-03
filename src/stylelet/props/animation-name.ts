@@ -6,11 +6,7 @@ import {
 } from '../values/custom-ident';
 import { serializeString, tryConsumeString, type StringValue } from '../values/string';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ComponentCursor } from '../parser/component-cursor';
-import {
-  ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 
 export type AnimationNameValue = {
   type: 'animation-name';
@@ -33,46 +29,37 @@ export function parseAnimationNameValue(
   input: ParserInput,
   context: unknown = undefined,
 ): AnimationNameValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeAnimationName),
-      context,
-    ),
-    'animation-name value',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeAnimationName),
+    context,
   );
 }
 
 export function tryConsumeAnimationName(c: ComponentCursor): TryComponentConsumerResult<AnimationNameValue> {
   const start = c.pos();
 
-  const values = unwrapConsumeResultOrThrow(
-    tryConsumeAnimationNameList(c),
-    'animation-name list',
-  );
+  const values = tryConsumeAnimationNameList(c);
 
   if (values === null) {
     c.restore(start);
     return null;
   }
 
-  return ok({
+  return {
     type: 'animation-name',
     values,
-  });
+  };
 }
 
 const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
-  const value = unwrapConsumeResultOrThrow(
-    tryConsumeNoneKeyword(c),
-    'animation-name none',
-  );
+  const value = tryConsumeNoneKeyword(c);
 
   if (value === null) {
     return null;
   }
 
-  return ok({ type: 'none' });
+  return { type: 'none' };
 };
 
 const tryConsumeNoneKeyword = createKeywordConsumer('none');
@@ -82,7 +69,7 @@ const tryConsumeKeyframesName: TryComponentConsumer<KeyframesNameValue> = oneOf(
     one((c) => tryConsumeCustomIdent(c, ['none'])),
     one(tryConsumeString),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 const tryConsumeAnimationNameItem: TryComponentConsumer<AnimationNameItemValue> = oneOf(
@@ -90,7 +77,7 @@ const tryConsumeAnimationNameItem: TryComponentConsumer<AnimationNameItemValue> 
     one(tryConsumeNone),
     one(tryConsumeKeyframesName),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 const tryConsumeAnimationNameList = commaRepeat(

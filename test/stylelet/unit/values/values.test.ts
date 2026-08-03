@@ -106,9 +106,9 @@ describe('keyword', () => {
     const consumeStrategy = createKeywordConsumer('nearest', 'up', 'to-zero');
 
     expect(consumeAuto(new ComponentCursor(parseListOfComponentValues('AUTO'))))
-      .toEqual({ kind: 'ok', value: 'auto' });
+      .toBe('auto');
     expect(consumeStrategy(new ComponentCursor(parseListOfComponentValues('To-ZeRo'))))
-      .toEqual({ kind: 'ok', value: 'to-zero' });
+      .toBe('to-zero');
   });
 
   it('leaves component trivia to the caller', () => {
@@ -147,11 +147,8 @@ describe('CSS-wide value', () => {
     const c = new ComponentCursor(components);
 
     expect(tryConsumeCssWideValue(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        type: 'css-wide',
-        keyword: 'inherit',
-      },
+      type: 'css-wide',
+      keyword: 'inherit',
     });
     expect(c.pos()).toBe(1);
   });
@@ -178,11 +175,8 @@ describe('any-value', () => {
     const c = new ComponentCursor(components);
 
     expect(tryConsumeAnyValue(c)).toEqual({
-      kind: 'ok',
-      value: {
-        type: 'any-value',
-        components,
-      },
+      type: 'any-value',
+      components,
     });
     expect(c.pos()).toBe(components.length);
   });
@@ -192,11 +186,8 @@ describe('any-value', () => {
     const c = new ComponentCursor(components);
 
     expect(tryConsumeAnyValue(c)).toEqual({
-      kind: 'ok',
-      value: {
-        type: 'any-value',
-        components: components.slice(0, 1),
-      },
+      type: 'any-value',
+      components: components.slice(0, 1),
     });
     expect(c.pos()).toBe(1);
     expect(c.peek()).toBe(RightParenToken);
@@ -565,11 +556,8 @@ describe('url-modifier', () => {
       parseListOfComponentValues('cross-origin(unknown)'),
     );
 
-    expect(tryConsumeUrlModifier(c)).toMatchObject({
-      kind: 'bad',
-      reason: 'invalid',
-    });
-    expect(c.pos()).toBe(1);
+    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('rejects unknown functional notation containing a bad token', () => {
@@ -583,24 +571,18 @@ describe('url-modifier', () => {
     expect(parseUrlModifier(components)).toBeNull();
 
     const c = new ComponentCursor(components);
-    expect(tryConsumeUrlModifier(c)).toMatchObject({
-      kind: 'bad',
-      reason: 'invalid',
-    });
-    expect(c.pos()).toBe(1);
+    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('consumes a URL modifier through the component grammar', () => {
     const c = new ComponentCursor(parseListOfComponentValues('future-modifier()'));
 
     expect(tryConsumeUrlModifier(c)).toEqual({
-      kind: 'ok',
-      value: {
-        type: 'block',
-        block: BlockKind.Function,
-        name: 'future-modifier',
-        value: [],
-      },
+      type: 'block',
+      block: BlockKind.Function,
+      name: 'future-modifier',
+      value: [],
     });
     expect(c.pos()).toBe(1);
   });
@@ -767,12 +749,8 @@ describe('url', () => {
       'REFERRER-POLICY(origin))',
     ].join(' ')));
 
-    expect(tryConsumeUrl(c)).toEqual({
-      kind: 'bad',
-      reason: 'invalid',
-      message: 'Duplicate referrer-policy URL modifier',
-    });
-    expect(c.pos()).toBe(1);
+    expect(tryConsumeUrl(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('rejects an unknown functional modifier containing a bad token', () => {
@@ -812,11 +790,8 @@ describe('url', () => {
     );
     const result = tryConsumeUrl(c);
 
-    expect(result).toMatchObject({
-      kind: 'bad',
-      reason: 'invalid',
-    });
-    expect(c.pos()).toBe(1);
+    expect(result).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 });
 
@@ -860,8 +835,8 @@ describe('integer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('12 13'));
 
     expect(tryConsumeInteger(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'integer', value: 12 },
+      type: 'integer',
+      value: 12,
     });
     expect(c.pos()).toBe(1);
   });
@@ -878,8 +853,8 @@ describe('integer', () => {
     const consume = createIntegerConsumer({ min: -2, max: 3 });
 
     expect(consume(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'integer', value },
+      type: 'integer',
+      value,
     });
   });
 
@@ -991,8 +966,8 @@ describe('number', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25 2'));
 
     expect(tryConsumeNumber(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'number', value: 1.25 },
+      type: 'number',
+      value: 1.25,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1002,8 +977,8 @@ describe('number', () => {
     const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
 
     expect(consume(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'number', value },
+      type: 'number',
+      value,
     });
   });
 
@@ -1097,8 +1072,8 @@ describe('zero', () => {
     const c = new ComponentCursor(parseListOfComponentValues('0.0 1'));
 
     expect(tryConsumeZero(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'number', value: 0 },
+      type: 'number',
+      value: 0,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1162,8 +1137,9 @@ describe('dimension', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25em 2s'));
 
     expect(tryConsumeDimension(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'dimension', value: 1.25, unit: 'em' },
+      type: 'dimension',
+      value: 1.25,
+      unit: 'em',
     });
     expect(c.pos()).toBe(1);
   });
@@ -1278,8 +1254,8 @@ describe('percentage', () => {
     const c = new ComponentCursor(parseListOfComponentValues('12.5% 25%'));
 
     expect(tryConsumePercentage(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value: 12.5 },
+      type: 'percentage',
+      value: 12.5,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1296,8 +1272,8 @@ describe('percentage', () => {
     const consume = createPercentageConsumer({ min: -10, max: 125 });
 
     expect(consume(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value },
+      type: 'percentage',
+      value,
     });
   });
 
@@ -1383,8 +1359,8 @@ describe('length-percentage', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1px'));
 
     expect(tryConsumeLengthPercentage(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value: 25 },
+      type: 'percentage',
+      value: 25,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1510,8 +1486,8 @@ describe('angle-percentage', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 90deg'));
 
     expect(tryConsumeAnglePercentage(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value: 25 },
+      type: 'percentage',
+      value: 25,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1609,8 +1585,8 @@ describe('frequency-percentage', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1khz'));
 
     expect(tryConsumeFrequencyPercentage(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value: 25 },
+      type: 'percentage',
+      value: 25,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1708,8 +1684,8 @@ describe('time-percentage', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1s'));
 
     expect(tryConsumeTimePercentage(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'percentage', value: 25 },
+      type: 'percentage',
+      value: 25,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1825,8 +1801,9 @@ describe('ratio', () => {
     const c = new ComponentCursor(parseListOfComponentValues('3/2 4'));
 
     expect(tryConsumeRatio(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'ratio', numerator: 3, denominator: 2 },
+      type: 'ratio',
+      numerator: 3,
+      denominator: 2,
     });
     expect(c.pos()).toBe(3);
   });
@@ -1835,8 +1812,9 @@ describe('ratio', () => {
     const c = new ComponentCursor(parseListOfComponentValues('3 4'));
 
     expect(tryConsumeRatio(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'ratio', numerator: 3, denominator: 1 },
+      type: 'ratio',
+      numerator: 3,
+      denominator: 1,
     });
     expect(c.pos()).toBe(1);
   });
@@ -1972,8 +1950,9 @@ describe('length', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25em 2px'));
 
     expect(tryConsumeLength(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'length', value: 1.25, unit: 'em' },
+      type: 'length',
+      value: 1.25,
+      unit: 'em',
     });
     expect(c.pos()).toBe(1);
   });
@@ -1999,8 +1978,9 @@ describe('length', () => {
       const consume = createLengthConsumer({ min: 0 });
 
       expect(consume(c)).toEqual({
-        kind: 'ok',
-        value: { type: 'length', value, unit },
+        type: 'length',
+        value,
+        unit,
       });
     },
   );
@@ -2215,8 +2195,9 @@ describe('angle', () => {
     const c = new ComponentCursor(parseListOfComponentValues('0.25turn 90deg'));
 
     expect(tryConsumeAngle(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'angle', value: 0.25, unit: 'turn' },
+      type: 'angle',
+      value: 0.25,
+      unit: 'turn',
     });
     expect(c.pos()).toBe(1);
   });
@@ -2325,8 +2306,9 @@ describe('time', () => {
     const c = new ComponentCursor(parseListOfComponentValues('250ms 1s'));
 
     expect(tryConsumeTime(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'time', value: 250, unit: 'ms' },
+      type: 'time',
+      value: 250,
+      unit: 'ms',
     });
     expect(c.pos()).toBe(1);
   });
@@ -2422,8 +2404,9 @@ describe('frequency', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1khz 500hz'));
 
     expect(tryConsumeFrequency(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'frequency', value: 1, unit: 'khz' },
+      type: 'frequency',
+      value: 1,
+      unit: 'khz',
     });
     expect(c.pos()).toBe(1);
   });
@@ -2524,8 +2507,9 @@ describe('resolution', () => {
     const c = new ComponentCursor(parseListOfComponentValues('2dppx 96dpi'));
 
     expect(tryConsumeResolution(c)).toEqual({
-      kind: 'ok',
-      value: { type: 'resolution', value: 2, unit: 'dppx' },
+      type: 'resolution',
+      value: 2,
+      unit: 'dppx',
     });
     expect(c.pos()).toBe(1);
   });

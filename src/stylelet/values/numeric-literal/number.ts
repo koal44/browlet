@@ -1,9 +1,6 @@
 import { tryConsumeNumberToken } from '../../parser/component-consumers';
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { serializeCssInteger } from './integer';
 
@@ -24,13 +21,10 @@ export function parseNumber(
   input: ParserInput,
   context: unknown = undefined,
 ): NumberLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeNumber),
-      context,
-    ),
-    'number',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeNumber),
+    context,
   );
 }
 
@@ -49,19 +43,17 @@ export function createNumberConsumer(
     const start = c.pos();
     const token = tryConsumeNumberToken(c);
 
-    if (token === null || isBad(token)) {
-      return token;
-    }
+    if (token === null) return null;
 
-    if (token.value.value < min || token.value.value > max) {
+    if (token.value < min || token.value > max) {
       c.restore(start);
       return null;
     }
 
-    return ok({
+    return {
       type: 'number',
-      value: token.value.value,
-    });
+      value: token.value,
+    };
   };
 }
 

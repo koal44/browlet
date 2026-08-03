@@ -1,14 +1,10 @@
 import { assertNever, mapTuple } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { createFunctionalNotationConsumer } from '../parser/component-consumers';
 import {
   one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf, sequenceOf,
   withTrivia,
 } from '../parser/component-grammar';
-import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
@@ -218,7 +214,7 @@ export function parseGradient(
     context,
   );
 
-  return result === null || isBad(result) ? null : result.value;
+  return result;
 }
 
 export function tryConsumeGradient(
@@ -237,7 +233,7 @@ const consumeGradient: TryComponentConsumer<GradientValue> = oneOf(
     one(tryConsumeConicGradientFn),
     one(tryConsumeRepeatingConicGradientFn),
   ],
-  ([gradient]) => ok(gradient),
+  ([gradient]) => gradient,
 );
 
 function tryConsumeLinearGradientFn(
@@ -281,31 +277,31 @@ const consumeLinearGradientSyntax: TryComponentConsumer<LinearGradientSyntax> = 
                     one(createKeywordConsumer('to')),
                     one(withTrivia(tryConsumeSideOrCorner)),
                   ],
-                  ([, [sideOrCorner]]) => ok<LinearGradientDirection>(sideOrCorner),
+                  ([, [sideOrCorner]]) => sideOrCorner,
                 )),
               ],
-              ([direction]) => ok(direction),
+              ([direction]) => direction,
             ))),
             one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
-          ([direction, method]) => ok({
+          ([direction, method]) => ({
             ...(direction === undefined ? {} : { direction: direction[0] }),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
         one(withTrivia(tryConsumeComma)),
       ],
-      ([[prelude]]) => ok(prelude),
+      ([[prelude]]) => prelude,
     )),
     one(withTrivia(tryConsumeColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
-    return ok({
+    return {
       direction: syntax.direction ?? defaultLinearGradientDirection(),
       method: syntax.method ?? defaultGradientMethod(stops),
       stops,
-    });
+    };
   },
 );
 
@@ -323,17 +319,17 @@ const consumeSideOrCorner: TryComponentConsumer<SideOrCorner> = requiredSomeOf(
   ],
   ([horizontal, vertical]) => {
     if (horizontal === undefined) {
-      return ok<SideOrCorner>({
+      return {
         type: 'side-or-corner',
         vertical: vertical![0],
-      });
+      };
     }
 
-    return ok<SideOrCorner>({
+    return {
       type: 'side-or-corner',
       horizontal: horizontal[0],
       ...(vertical === undefined ? {} : { vertical: vertical[0] }),
-    });
+    };
   },
 );
 
@@ -387,10 +383,10 @@ const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = 
                       return null;
                     }
 
-                    return ok({
+                    return {
                       ...(radialShape === undefined ? {} : { shape: radialShape }),
                       ...(radialSize === undefined ? {} : { size: radialSize }),
-                    });
+                    };
                   },
                 )),
                 opt(sequenceOf(
@@ -398,37 +394,37 @@ const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = 
                     one(withTrivia(createKeywordConsumer('at'))),
                     one(withTrivia(tryConsumePosition)),
                   ],
-                  ([, [position]]) => ok(position),
+                  ([, [position]]) => position,
                 )),
               ],
-              ([shapeAndSize, position]) => ok({
+              ([shapeAndSize, position]) => ({
                 ...(shapeAndSize.length === 0 ? {} : shapeAndSize[0]),
                 ...(position.length === 0 ? {} : { position: position[0] }),
               }),
             ))),
             one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
-          ([geometry, method]) => ok({
+          ([geometry, method]) => ({
             ...(geometry === undefined ? {} : geometry[0]),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
         one(withTrivia(tryConsumeComma)),
       ],
-      ([[prelude]]) => ok(prelude),
+      ([[prelude]]) => prelude,
     )),
     one(withTrivia(tryConsumeColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
     const size = syntax.size ?? defaultRadialGradientSize();
-    return ok({
+    return {
       shape: syntax.shape ?? defaultRadialGradientShape(size),
       size,
       position: syntax.position ?? defaultGradientPosition(),
       method: syntax.method ?? defaultGradientMethod(stops),
       stops,
-    });
+    };
   },
 );
 
@@ -446,7 +442,7 @@ const consumeRadialSize: TryComponentConsumer<RadialSize> = oneOf(
         one(tryConsumeRadialExtent),
         opt(withTrivia(tryConsumeRadialExtent)),
       ],
-      ([[first], second]) => ok<RadialExtentSize>({
+      ([[first], second]): RadialExtentSize => ({
         type: 'radial-extent',
         extents: second.length === 0 ? [first] : [first, second[0]],
       }),
@@ -456,13 +452,13 @@ const consumeRadialSize: TryComponentConsumer<RadialSize> = oneOf(
         one(createLengthPercentageConsumer({ min: 0 })),
         opt(withTrivia(createLengthPercentageConsumer({ min: 0 }))),
       ],
-      ([[first], second]) => ok<RadialRadiiSize>({
+      ([[first], second]): RadialRadiiSize => ({
         type: 'radial-radii',
         radii: second.length === 0 ? [first] : [first, second[0]],
       }),
     )),
   ],
-  ([size]) => ok(size),
+  ([size]) => size,
 );
 
 function tryConsumeRadialExtent(
@@ -524,45 +520,45 @@ const consumeConicGradientSyntax: TryComponentConsumer<ConicGradientSyntax> = se
                     one(createKeywordConsumer('from')),
                     one(withTrivia(oneOf(
                       [one(tryConsumeAngle), one(tryConsumeZero)],
-                      ([angle]) => ok(angle),
+                      ([angle]) => angle,
                     ))),
                   ],
-                  ([, [angle]]) => ok(angle),
+                  ([, [angle]]) => angle,
                 )),
                 opt(sequenceOf(
                   [
                     one(withTrivia(createKeywordConsumer('at'))),
                     one(withTrivia(tryConsumePosition)),
                   ],
-                  ([, [position]]) => ok(position),
+                  ([, [position]]) => position,
                 )),
               ],
-              ([angle, position]) => ok({
+              ([angle, position]) => ({
                 ...(angle.length === 0 ? {} : { angle: angle[0] }),
                 ...(position.length === 0 ? {} : { position: position[0] }),
               }),
             ))),
             one(withTrivia(tryConsumeColorInterpolationMethod)),
           ],
-          ([geometry, method]) => ok({
+          ([geometry, method]) => ({
             ...(geometry === undefined ? {} : geometry[0]),
             ...(method === undefined ? {} : { method: method[0] }),
           }),
         )),
         one(withTrivia(tryConsumeComma)),
       ],
-      ([[prelude]]) => ok(prelude),
+      ([[prelude]]) => prelude,
     )),
     one(withTrivia(tryConsumeAngularColorStopList)),
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
-    return ok({
+    return {
       angle: syntax.angle ?? defaultConicGradientAngle(),
       position: syntax.position ?? defaultGradientPosition(),
       method: syntax.method ?? defaultGradientMethod(stops),
       stops,
-    });
+    };
   },
 );
 
@@ -643,7 +639,7 @@ const consumeLinearColorStop: TryComponentConsumer<LinearColorStop> = sequenceOf
     one(tryConsumeColor),
     opt(withTrivia(tryConsumeColorStopLength)),
   ],
-  ([[color], offsets]) => ok({
+  ([[color], offsets]) => ({
     type: 'color-stop',
     color,
     ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
@@ -659,7 +655,7 @@ function tryConsumeLinearColorHint(
 // <linear-color-hint> = <length-percentage>
 const consumeLinearColorHint: TryComponentConsumer<LinearColorHint> = sequenceOf(
   [one(tryConsumeLengthPercentage)],
-  ([[offset]]) => ok({ type: 'color-hint', offset }),
+  ([[offset]]) => ({ type: 'color-hint', offset }),
 );
 
 function tryConsumeColorStopLength(
@@ -675,9 +671,7 @@ const consumeColorStopLength: TryComponentConsumer<ColorStopLength> =
       one(tryConsumeLengthPercentage),
       opt(withTrivia(tryConsumeLengthPercentage)),
     ],
-    ([[first], second]) => ok(
-      second.length === 0 ? [first] : [first, second[0]],
-    ),
+    ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
   );
 
 function tryConsumeAngularColorStopList(
@@ -703,7 +697,7 @@ const consumeAngularColorStop: TryComponentConsumer<GradientColorStop<AngularCol
     one(tryConsumeColor),
     opt(withTrivia(tryConsumeColorStopAngle)),
   ],
-  ([[color], offsets]) => ok({
+  ([[color], offsets]) => ({
     type: 'color-stop',
     color,
     ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
@@ -720,9 +714,9 @@ function tryConsumeAngularColorHint(
 const consumeAngularColorHint: TryComponentConsumer<GradientColorHint<AngularColorStopOffset>> = sequenceOf(
   [one(oneOf(
     [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-    ([offset]) => ok(offset),
+    ([offset]) => offset,
   ))],
-  ([[offset]]) => ok({ type: 'color-hint', offset }),
+  ([[offset]]) => ({ type: 'color-hint', offset }),
 );
 
 function tryConsumeColorStopAngle(
@@ -737,16 +731,14 @@ const consumeColorStopAngle: TryComponentConsumer<ColorStopAngle> =
     [
       one(oneOf(
         [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-        ([offset]) => ok(offset),
+        ([offset]) => offset,
       )),
       opt(withTrivia(oneOf(
         [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-        ([offset]) => ok(offset),
+        ([offset]) => offset,
       ))),
     ],
-    ([[first], second]) => ok(
-      second.length === 0 ? [first] : [first, second[0]],
-    ),
+    ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
   );
 
 function createGradientStopListConsumer<Offset>(
@@ -765,14 +757,14 @@ function createGradientStopListConsumer<Offset>(
                 one(withTrivia(tryConsumeHint)),
                 one(withTrivia(tryConsumeComma)),
               ],
-              ([[hint]]) => ok(hint),
+              ([[hint]]) => hint,
             )),
             one(withTrivia(tryConsumeStop)),
           ],
-          ([, hint, [stop]]) => ok([
+          ([, hint, [stop]]) => [
             ...(hint.length === 0 ? [] : [hint[0]]),
             stop,
-          ]),
+          ],
         ),
         0,
         MAX_COLOR_STOPS - 1,
@@ -785,7 +777,7 @@ function createGradientStopListConsumer<Offset>(
         stops.push(...tail);
       }
 
-      return ok(stops);
+      return stops;
     },
   );
 }
@@ -793,7 +785,7 @@ function createGradientStopListConsumer<Offset>(
 function tryConsumeComma(
   c: ComponentCursor,
 ): TryComponentConsumerResult<','> {
-  return c.match(TokenKind.Comma) ? ok(',') : null;
+  return c.match(TokenKind.Comma) ? ',' : null;
 }
 
 
@@ -817,9 +809,9 @@ function defaultLinearGradientDirection(): LinearGradientDirection {
 }
 
 function defaultRadialGradientShape(size: RadialSize): RadialShape {
-  return size.type === 'radial-radii'
-    && size.radii.length === 1
-    && size.radii[0].type === 'length'
+  return size.type === 'radial-radii' &&
+    size.radii.length === 1 &&
+    size.radii[0].type === 'length'
     ? 'circle'
     : 'ellipse';
 }
@@ -852,9 +844,9 @@ function isDefaultLinearGradientDirection(
 ): boolean {
   return value.type === 'angle'
     ? canonicalizeAngle(value).value === 180
-    : value.type === 'side-or-corner'
-      && value.horizontal === undefined
-      && value.vertical === 'bottom';
+    : value.type === 'side-or-corner' &&
+      value.horizontal === undefined &&
+      value.vertical === 'bottom';
 }
 
 function isDefaultRadialGradientShape(
@@ -865,24 +857,24 @@ function isDefaultRadialGradientShape(
 }
 
 function isDefaultRadialGradientSize(size: RadialSize): boolean {
-  return size.type === 'radial-extent'
-    && size.extents.length === 1
-    && size.extents[0] === 'farthest-corner';
+  return size.type === 'radial-extent' &&
+    size.extents.length === 1 &&
+    size.extents[0] === 'farthest-corner';
 }
 
 function isZeroAngle(value: AngleValue | ZeroValue): boolean {
-  return value.type === 'number'
-    || value.type === 'angle' && value.value === 0;
+  return value.type === 'number' ||
+    value.type === 'angle' && value.value === 0;
 }
 
 function isCenterPosition(value: PositionValue): boolean {
   const components = value.offsets ?? value.components;
 
-  return components.length <= 2
-    && components.every((component) => component === 'center'
-      || typeof component !== 'string'
-        && component.type === 'percentage'
-        && component.value === 50);
+  return components.length <= 2 &&
+    components.every((component) => component === 'center' ||
+      typeof component !== 'string' &&
+      component.type === 'percentage' &&
+      component.value === 50);
 }
 
 function isDefaultGradientMethod<Offset>(
@@ -1092,8 +1084,8 @@ function radialGradientGeometry(
     : extentRadialGradientRadii(gradient.shape, gradient.size.extents, center, boxSize);
 
   // Degenerate radial gradients use arbitrary radii and have no unique length.
-  return radii === undefined
-    || radii.some((radius) => !Number.isFinite(radius) || radius <= 0)
+  return radii === undefined ||
+    radii.some((radius) => !Number.isFinite(radius) || radius <= 0)
     ? undefined
     : { center, radii };
 }
@@ -1159,9 +1151,9 @@ function extentRadialGradientRadii(
 
   if (extents.length === 2) {
     // Corner extents describe a whole shape, not one independent axis.
-    return shape === 'ellipse'
-      && isSideExtent(horizontalExtent)
-      && isSideExtent(verticalExtent)
+    return shape === 'ellipse' &&
+      isSideExtent(horizontalExtent) &&
+      isSideExtent(verticalExtent)
       ? [
         extentSideDistance(horizontalExtent, horizontalDistances),
         extentSideDistance(verticalExtent, verticalDistances),
@@ -1382,8 +1374,8 @@ function isComparableGradientStopOffset(
   offset: GradientStopOffset,
   gradientType: GradientType,
 ): offset is ExplicitGradientStopOffset {
-  return offset.type === 'percentage'
-    || (gradientType === 'conic'
+  return offset.type === 'percentage' ||
+    (gradientType === 'conic'
       ? offset.type === 'angle' && offset.unit === 'deg'
       : offset.type === 'length' && offset.unit === 'px');
 }
@@ -1630,10 +1622,10 @@ export function tryResolveExplicitGradient(
         } as ExplicitLinearGradient;
     }
     case 'radial': {
-      const size = resolved.shape === 'ellipse'
-        && resolved.size.type === 'radial-radii'
-        && resolved.size.radii.length === 2
-        && resolved.size.radii.every(isExplicitLengthPercentage)
+      const size = resolved.shape === 'ellipse' &&
+        resolved.size.type === 'radial-radii' &&
+        resolved.size.radii.length === 2 &&
+        resolved.size.radii.every(isExplicitLengthPercentage)
         ? resolved.size as ExplicitRadialSize
         : null;
       const position = isExplicitGradientPosition(resolved.position)
@@ -1725,18 +1717,18 @@ export function isExplicitGradient(
 
   switch (value.gradientType) {
     case 'linear':
-      return isCanonicalAngle(value.direction)
-        && 'lineLength' in value
-        && isCanonicalLength(value.lineLength);
+      return isCanonicalAngle(value.direction) &&
+        'lineLength' in value &&
+        isCanonicalLength(value.lineLength);
     case 'radial':
-      return value.shape === 'ellipse'
-        && value.size.type === 'radial-radii'
-        && value.size.radii.length === 2
-        && value.size.radii.every(isExplicitLengthPercentage)
-        && isExplicitGradientPosition(value.position);
+      return value.shape === 'ellipse' &&
+        value.size.type === 'radial-radii' &&
+        value.size.radii.length === 2 &&
+        value.size.radii.every(isExplicitLengthPercentage) &&
+        isExplicitGradientPosition(value.position);
     case 'conic':
-      return isCanonicalAngle(value.angle)
-        && isExplicitGradientPosition(value.position);
+      return isCanonicalAngle(value.angle) &&
+        isExplicitGradientPosition(value.position);
     default:
       return assertNever(value);
   }
@@ -1746,9 +1738,9 @@ function hasExplicitGradientStops(
   stops: GradientStops<GradientStopOffset>,
   gradientType: GradientType,
 ): boolean {
-  return hasComparableGradientStopOffsets(stops, gradientType)
-    && stops.every((stop) => stop.type === 'color-hint'
-      || stop.color.kind === ColorKind.Absolute && stop.offsets?.length === 1);
+  return hasComparableGradientStopOffsets(stops, gradientType) &&
+    stops.every((stop) => stop.type === 'color-hint' ||
+      stop.color.kind === ColorKind.Absolute && stop.offsets?.length === 1);
 }
 
 function isCanonicalAngle(
@@ -1758,28 +1750,28 @@ function isCanonicalAngle(
 }
 
 function isCanonicalLength(value: unknown): value is CanonicalLengthLiteral {
-  return typeof value === 'object'
-    && value !== null
-    && 'type' in value
-    && value.type === 'length'
-    && 'unit' in value
-    && value.unit === 'px'
-    && 'value' in value
-    && typeof value.value === 'number';
+  return typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === 'length' &&
+    'unit' in value &&
+    value.unit === 'px' &&
+    'value' in value &&
+    typeof value.value === 'number';
 }
 
 function isExplicitLengthPercentage(
   value: LengthPercentageValue,
 ): value is ExplicitLengthPercentageLiteral {
-  return value.type === 'percentage'
-    || value.type === 'length' && value.unit === 'px';
+  return value.type === 'percentage' ||
+    value.type === 'length' && value.unit === 'px';
 }
 
 function isExplicitGradientPosition(
   value: PositionValue,
 ): value is ExplicitGradientPosition {
-  return value.offsets !== undefined
-    && value.offsets.every(isExplicitLengthPercentage);
+  return value.offsets !== undefined &&
+    value.offsets.every(isExplicitLengthPercentage);
 }
 
 function explicitGradientPosition(
@@ -1914,10 +1906,10 @@ function serializeGradientStops<
       return serializeStopOffset(stop.offset);
     }
 
-    const offsets = stop.offsets?.length === 1
-      && (index === 0 && isZeroGradientStopOffset(stop.offsets[0])
-        || index === stops.length - 1
-          && isFullGradientStopOffset(stop.offsets[0]))
+    const offsets = stop.offsets?.length === 1 &&
+      (index === 0 && isZeroGradientStopOffset(stop.offsets[0]) ||
+        index === stops.length - 1 &&
+        isFullGradientStopOffset(stop.offsets[0]))
       ? []
       : stop.offsets ?? [];
 
@@ -1956,9 +1948,9 @@ export function interpolateGradients(
   const colorStopCountA = gradientColorStopCount(a.stops);
   const colorStopCountB = gradientColorStopCount(b.stops);
 
-  if (a.gradientType !== b.gradientType
-    || a.repeating !== b.repeating
-    || !a.repeating && colorStopCountA !== colorStopCountB) {
+  if (a.gradientType !== b.gradientType ||
+    a.repeating !== b.repeating ||
+    !a.repeating && colorStopCountA !== colorStopCountB) {
     // TODO: Return cross-fade() once image combinations are represented.
     throw new Error('Gradient interpolation requires cross-fade()');
   }
@@ -2026,9 +2018,9 @@ function interpolateLinearGradients(
   let angleB = b.direction.value;
   const method = discreteGradientMethod(a.method, b.method, progress);
 
-  if (originalA.direction.type === 'side-or-corner'
-    && originalB.direction.type === 'side-or-corner'
-    && Math.abs(angleA - angleB) > 180) {
+  if (originalA.direction.type === 'side-or-corner' &&
+    originalB.direction.type === 'side-or-corner' &&
+    Math.abs(angleA - angleB) > 180) {
     if (angleA < angleB) {
       angleA += 360;
     } else {
@@ -2208,8 +2200,8 @@ function interpolateExplicitGradientStops<
     if (stop.type === 'color-stop' && other.type === 'color-stop') {
       return {
         type: 'color-stop',
-        color: (method.hue === undefined || method.hue === 'shorter')
-          && areIdenticalAbsoluteColors(stop.color, other.color)
+        color: (method.hue === undefined || method.hue === 'shorter') &&
+          areIdenticalAbsoluteColors(stop.color, other.color)
           ? stop.color
           : interpolateColors(
             stop.color,
@@ -2232,12 +2224,12 @@ function interpolateExplicitGradientStops<
 }
 
 function areIdenticalAbsoluteColors(a: AbsoluteColor, b: AbsoluteColor): boolean {
-  return a.space.name === b.space.name
-    && a.alpha === b.alpha
-    && a.isLegacySrgb === b.isLegacySrgb
-    && a.is8Bit === b.is8Bit
-    && a.components.length === b.components.length
-    && a.components.every((component, index) => component === b.components[index]);
+  return a.space.name === b.space.name &&
+    a.alpha === b.alpha &&
+    a.isLegacySrgb === b.isLegacySrgb &&
+    a.is8Bit === b.is8Bit &&
+    a.components.length === b.components.length &&
+    a.components.every((component, index) => component === b.components[index]);
 }
 
 function interpolateExplicitGradientStopOffset<

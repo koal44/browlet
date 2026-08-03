@@ -1,11 +1,7 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import type { ComponentCursor } from '../../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -38,13 +34,10 @@ export function parseTime(
   input: ParserInput,
   context: unknown = undefined,
 ): TimeLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeTime),
-      context,
-    ),
-    'time',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeTime),
+    context,
   );
 }
 
@@ -66,11 +59,9 @@ export function createTimeConsumer(
     const start = c.pos();
     const result = tryConsumeUnrestrictedTime(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
-    const canonical = canonicalizeTime(result.value);
+    const canonical = canonicalizeTime(result);
 
     if (canonical.value < min || canonical.value > max) {
       c.restore(start);
@@ -93,11 +84,11 @@ function tryConsumeUnrestrictedTime(
     const unit = timeUnitFor(component.unit);
 
     if (unit !== null) {
-      return ok({
+      return {
         type: 'time',
         value: component.value,
         unit,
-      });
+      };
     }
   }
 

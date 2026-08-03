@@ -1,9 +1,5 @@
 import { asciiLower } from '../../shared/css';
-import { ComponentCursor } from './component-cursor';
-import {
-  isBad,
-  type TryComponentConsumerResult, type TryComponentConsumer,
-} from './component-try-consumer';
+import { ComponentCursor, type TryComponentConsumerResult, type TryComponentConsumer } from './component-cursor';
 import { TokenCursor } from './token-cursor';
 import type {
   AtKeywordToken, DelimToken, DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken,
@@ -129,10 +125,6 @@ export function parseAsComponentGrammar<T>(
 
   if (result === null) {
     return null;
-  }
-
-  if (isBad(result)) {
-    return result;
   }
 
   consumeComponentTrivia(c);

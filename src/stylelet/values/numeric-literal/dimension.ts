@@ -1,9 +1,5 @@
-import type { ComponentCursor } from '../../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumerResult,
-} from '../../parser/component-try-consumer';
 import { isTokenKind, parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import { TokenKind } from '../../parser/tokens';
 import { serializeIdentifier } from '../ident';
@@ -34,13 +30,10 @@ export function parseDimension(
   input: ParserInput,
   context: unknown = undefined,
 ): DimensionLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeDimension),
-      context,
-    ),
-    'dimension',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeDimension),
+    context,
   );
 }
 
@@ -55,11 +48,11 @@ export function tryConsumeDimension(
     return null;
   }
 
-  return ok({
+  return {
     type: 'dimension',
     value: component.value,
     unit: component.unit,
-  });
+  };
 }
 
 export function serializeDimension(

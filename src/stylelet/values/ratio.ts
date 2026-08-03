@@ -1,9 +1,6 @@
 import { createDelimConsumer } from '../parser/component-consumers';
 import { one, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { createNumberConsumer, serializeCssNumber } from './numeric-literal/number';
 
@@ -21,13 +18,10 @@ export function parseRatio(
   input: ParserInput,
   context: unknown = undefined,
 ): RatioValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeRatio),
-      context,
-    ),
-    'ratio',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeRatio),
+    context,
   );
 }
 
@@ -39,7 +33,7 @@ const tryConsumeRatioDenominator: TryComponentConsumer<number> = sequenceOf(
     one(withTrivia(tryConsumeSlash)),
     one(withTrivia(tryConsumeNonnegativeNumber)),
   ],
-  ([, [denominator]]) => ok(denominator.value),
+  ([, [denominator]]) => denominator.value,
 );
 
 export const tryConsumeRatio: TryComponentConsumer<RatioValue> = sequenceOf(
@@ -47,7 +41,7 @@ export const tryConsumeRatio: TryComponentConsumer<RatioValue> = sequenceOf(
     one(tryConsumeNonnegativeNumber),
     opt(tryConsumeRatioDenominator),
   ],
-  ([[numerator], denominator]) => ok({
+  ([[numerator], denominator]) => ({
     type: 'ratio',
     numerator: numerator.value,
     denominator: denominator[0] ?? 1,

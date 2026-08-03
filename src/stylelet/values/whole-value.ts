@@ -1,5 +1,5 @@
-import type { TryComponentConsumer } from '../parser/component-try-consumer';
-import { isBad, ok } from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
+
 import type { ValueStage } from '../value-processing';
 import type { PropertyValue } from './property-value';
 
@@ -21,11 +21,9 @@ export function createWholeValueConsumer<Value, Context = unknown>(
   return (c) => {
     const result = tryConsumeValue(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
-    return ok(createWholeValue(result.value, resolveValue, serializeValue));
+    return createWholeValue(result, resolveValue, serializeValue);
   };
 }
 

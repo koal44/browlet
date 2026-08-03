@@ -1,8 +1,5 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { serializeAuto, tryConsumeAuto, type AutoValue } from '../values/auto';
 import type { MathContext } from '../values/math-value';
@@ -24,13 +21,10 @@ export function parseMarginSideValue(
   input: ParserInput,
   context: MathContext = {},
 ): MarginSideValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeMarginSideValue),
-      context,
-    ),
-    'margin side value',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeMarginSideValue),
+    context,
   );
 }
 
@@ -39,7 +33,7 @@ export const tryConsumeMarginSideValue: TryComponentConsumer<MarginSideValue> = 
     one(tryConsumeLengthPercentage),
     one(tryConsumeAuto),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 export function serializeMarginSideValue(value: MarginSideValue): string {

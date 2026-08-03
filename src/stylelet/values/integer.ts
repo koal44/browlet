@@ -1,8 +1,5 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import {
@@ -27,13 +24,10 @@ export function parseInteger(
   input: ParserInput,
   context: MathContext = {},
 ): IntegerValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeInteger),
-      context,
-    ),
-    'integer',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeInteger),
+    context,
   );
 }
 
@@ -51,7 +45,7 @@ export function createIntegerConsumer(
         ...(range === undefined ? {} : { range }),
       })),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 }
 

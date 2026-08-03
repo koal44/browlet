@@ -1,8 +1,5 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import {
@@ -30,13 +27,10 @@ export function parseLengthPercentage(
   input: ParserInput,
   context: MathContext = {},
 ): LengthPercentageValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeLengthPercentage),
-      context,
-    ),
-    'length-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeLengthPercentage),
+    context,
   );
 }
 
@@ -55,7 +49,7 @@ export function createLengthPercentageConsumer(
         ...(range === undefined ? {} : { range }),
       })),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 }
 

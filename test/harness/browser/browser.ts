@@ -95,21 +95,21 @@ export function installBrowserHelpers(): void {
   }
 
   function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
-    return typeof x === 'object'
-      && x !== null
-      && 'length' in x
-      && 'cssText' in x
-      && hasFn(x, 'item')
-      && hasFn(x, 'getPropertyValue')
-      && hasFn(x, 'getPropertyPriority');
+    return typeof x === 'object' &&
+      x !== null &&
+      'length' in x &&
+      'cssText' in x &&
+      hasFn(x, 'item') &&
+      hasFn(x, 'getPropertyValue') &&
+      hasFn(x, 'getPropertyPriority');
   }
 
   function isCssRuleList(x: unknown): x is CSSRuleList {
-    return typeof x === 'object'
-      && x !== null
-      && 'length' in x
-      && hasFn(x, 'item')
-      && !hasFn(x, 'getPropertyValue');
+    return typeof x === 'object' &&
+      x !== null &&
+      'length' in x &&
+      hasFn(x, 'item') &&
+      !hasFn(x, 'getPropertyValue');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type

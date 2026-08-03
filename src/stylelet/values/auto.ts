@@ -1,8 +1,4 @@
-import type { ComponentCursor } from '../parser/component-cursor';
-import {
-  ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { createKeywordConsumer } from './keyword';
 
 export type AutoValue = {
@@ -10,16 +6,13 @@ export type AutoValue = {
 };
 
 export function tryConsumeAuto(c: ComponentCursor): TryComponentConsumerResult<AutoValue> {
-  const keyword = unwrapConsumeResultOrThrow(
-    tryConsumeAutoKeyword(c),
-    'auto keyword',
-  );
+  const keyword = tryConsumeAutoKeyword(c);
 
   if (keyword === null) {
     return null;
   }
 
-  return ok({ type: 'auto' });
+  return { type: 'auto' };
 }
 
 const tryConsumeAutoKeyword = createKeywordConsumer('auto');

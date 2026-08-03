@@ -1,8 +1,5 @@
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   serializeLength, tryConsumeLength, tryResolveLength, type CanonicalLengthLiteral,
@@ -29,13 +26,10 @@ export function parseLengthPercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): LengthPercentageLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeLengthPercentage),
-      context,
-    ),
-    'length-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeLengthPercentage),
+    context,
   );
 }
 

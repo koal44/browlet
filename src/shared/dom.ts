@@ -110,8 +110,8 @@ export function isHtmlForm(e: Element): e is HTMLFormElement {
 }
 
 export type ValidityElement =
-  HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLObjectElement |
-  HTMLOutputElement | HTMLSelectElement | HTMLTextAreaElement;
+  HTMLButtonElement | HTMLFieldSetElement | HTMLInputElement | HTMLObjectElement
+  | HTMLOutputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 export function isValidityElement(e: Element): e is ValidityElement {
   return 'willValidate' in e;

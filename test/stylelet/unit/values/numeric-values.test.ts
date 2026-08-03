@@ -121,7 +121,7 @@ describe('number values', () => {
     const math = parseNumber('calc(2)')!;
 
     expect(consume(literal)).toBeNull();
-    expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
+    expect(consume(specifiedMath)).not.toBeNull();
     expect(resolveNumber(math, ValueStage.Specified, {
       range: [0, 1],
     })).toBe(math);
@@ -140,7 +140,7 @@ describe('number values', () => {
       { context },
     );
 
-    expect(tryConsumeNumber(c)).toMatchObject({ kind: 'ok' });
+    expect(tryConsumeNumber(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -299,7 +299,7 @@ describe('length values', () => {
     );
     const math = parseLength('calc(-1px)')!;
 
-    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(specified)).not.toBeNull();
     expect(resolveLength(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
@@ -472,7 +472,7 @@ describe('integer values', () => {
     const math = parseInteger('calc(3)')!;
 
     expect(consume(literal)).toBeNull();
-    expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
+    expect(consume(specifiedMath)).not.toBeNull();
     expect(resolveInteger(math, ValueStage.Computed, {
       range: [0, 2],
     })).toEqual({
@@ -559,12 +559,9 @@ describe('percentage values', () => {
     );
 
     expect(tryConsumePercentage(c)).toMatchObject({
-      kind: 'ok',
-      value: {
-        calculation: {
-          type: 'percentage',
-          value: 25,
-        },
+      calculation: {
+        type: 'percentage',
+        value: 25,
       },
     });
     expect(c.context).toBe(context);
@@ -579,7 +576,7 @@ describe('percentage values', () => {
     const math = parsePercentage('calc(125%)')!;
 
     expect(consume(literal)).toBeNull();
-    expect(consume(specifiedMath)).toMatchObject({ kind: 'ok' });
+    expect(consume(specifiedMath)).not.toBeNull();
     expect(resolvePercentage(math, ValueStage.Computed, {
       range: [0, 100],
     })).toEqual({
@@ -650,7 +647,8 @@ describe('angle-percentage values', () => {
       parseListOfComponentValues('calc(10px + 25%)'),
     );
 
-    expect(tryConsumeAnglePercentage(c)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeAnglePercentage(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('uses the angle percentage type and restores outer context', () => {
@@ -662,7 +660,7 @@ describe('angle-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeAnglePercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(tryConsumeAnglePercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -707,7 +705,7 @@ describe('angle-percentage values', () => {
     );
     const math = parseAnglePercentage('calc(-10deg)')!;
 
-    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(specified)).not.toBeNull();
     expect(resolveAnglePercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
@@ -785,7 +783,8 @@ describe('length-percentage values', () => {
       parseListOfComponentValues('calc(10deg + 25%)'),
     );
 
-    expect(tryConsumeLengthPercentage(c)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeLengthPercentage(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('uses the length percentage type and restores outer context', () => {
@@ -797,7 +796,7 @@ describe('length-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeLengthPercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(tryConsumeLengthPercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -844,7 +843,7 @@ describe('length-percentage values', () => {
     );
     const math = parseLengthPercentage('calc(-10px)')!;
 
-    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(specified)).not.toBeNull();
     expect(resolveLengthPercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
@@ -898,7 +897,8 @@ describe('frequency-percentage values', () => {
       parseListOfComponentValues('calc(10s + 25%)'),
     );
 
-    expect(tryConsumeFrequencyPercentage(c)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeFrequencyPercentage(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('uses the frequency percentage type and restores outer context', () => {
@@ -910,7 +910,7 @@ describe('frequency-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeFrequencyPercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(tryConsumeFrequencyPercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -957,7 +957,7 @@ describe('frequency-percentage values', () => {
     );
     const math = parseFrequencyPercentage('calc(-10hz)')!;
 
-    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(specified)).not.toBeNull();
     expect(resolveFrequencyPercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({
@@ -1010,7 +1010,8 @@ describe('time-percentage values', () => {
       parseListOfComponentValues('calc(10hz + 25%)'),
     );
 
-    expect(tryConsumeTimePercentage(c)).toMatchObject({ kind: 'bad' });
+    expect(tryConsumeTimePercentage(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('uses the time percentage type and restores outer context', () => {
@@ -1022,7 +1023,7 @@ describe('time-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeTimePercentage(c)).toMatchObject({ kind: 'ok' });
+    expect(tryConsumeTimePercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -1069,7 +1070,7 @@ describe('time-percentage values', () => {
     );
     const math = parseTimePercentage('calc(-10s)')!;
 
-    expect(consume(specified)).toMatchObject({ kind: 'ok' });
+    expect(consume(specified)).not.toBeNull();
     expect(resolveTimePercentage(math, ValueStage.Computed, {
       range: [0, Infinity],
     })).toEqual({

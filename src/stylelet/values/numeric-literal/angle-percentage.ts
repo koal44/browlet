@@ -1,8 +1,5 @@
 import { withTrivia } from '../../parser/component-grammar';
-import {
-  unwrapConsumeResultOrThrow,
-  type TryComponentConsumer,
-} from '../../parser/component-try-consumer';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
 import {
   canonicalizeAngle, serializeAngle, tryConsumeAngle, type AngleLiteral,
@@ -29,13 +26,10 @@ export function parseAnglePercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): AnglePercentageLiteral | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeAnglePercentage),
-      context,
-    ),
-    'angle-percentage',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeAnglePercentage),
+    context,
   );
 }
 

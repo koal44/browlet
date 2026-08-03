@@ -1,11 +1,7 @@
 import { asciiLower } from '../../shared/css';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import {
-  isBad, ok, unwrapConsumeResultOrThrow,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
 import { serializeIdentifier, tryConsumeIdent } from './ident';
 
@@ -24,13 +20,10 @@ export function parseCustomIdent(
   excluded: readonly string[] = [],
   context: unknown = undefined,
 ): CustomIdentValue | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia((c) => tryConsumeCustomIdent(c, excluded)),
-      context,
-    ),
-    'custom ident',
+  return parseAsComponentGrammar(
+    input,
+    withTrivia((c) => tryConsumeCustomIdent(c, excluded)),
+    context,
   );
 }
 
@@ -41,11 +34,9 @@ export function tryConsumeCustomIdent(
   const start = c.pos();
   const ident = tryConsumeIdent(c);
 
-  if (ident === null || isBad(ident)) {
-    return ident;
-  }
+  if (ident === null) return null;
 
-  const value = ident.value.value;
+  const value = ident.value;
   const lower = asciiLower(value);
 
   for (const keyword of RESERVED_CUSTOM_IDENT_KEYWORDS) {
@@ -62,10 +53,10 @@ export function tryConsumeCustomIdent(
     }
   }
 
-  return ok({
+  return {
     type: 'custom-ident',
     value,
-  });
+  };
 }
 
 export function serializeCustomIdent(value: CustomIdentValue): string {

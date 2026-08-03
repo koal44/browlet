@@ -1,6 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever } from '../../shared/util';
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import {
   createDelimConsumer, createFunctionalNotationConsumer,
   tryConsumeIdentToken,
@@ -9,10 +9,6 @@ import {
   commaRepeat, one, oneOf, opt, repeat, sequenceOf,
   withTrivia,
 } from '../parser/component-grammar';
-import {
-  bad, ComponentConsumerBadReason, isBad, ok, unwrapConsumeResultOrThrow, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import {
   consumeComponentTrivia, isDelimToken, isParensBlock, parseAsComponentGrammar,
   type ParserInput,
@@ -121,14 +117,11 @@ export function parseMathValue<Type extends MathValueType>(
   expectedType: Type,
   context: MathContext = {},
 ): MathValue<Type> | null {
-  return unwrapConsumeResultOrThrow(
-    parseAsComponentGrammar(
-      input,
-      withTrivia(tryConsumeMathValue),
-      { ...context, expectedType },
-    ),
-    'math value',
-  ) as MathValue<Type> | null;
+  return (parseAsComponentGrammar(
+    input,
+    withTrivia(tryConsumeMathValue),
+    { ...context, expectedType },
+  )) as MathValue<Type> | null;
 }
 
 export function createMathValueFromLiteral<Type extends MathValueType>(
@@ -602,19 +595,16 @@ function tryConsumeCalc(
   const outerContext = c.context;
   const result = consumeCalcCalculation(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
   const context = mathContextFor(c.context);
-  const mathHints = mathHintsOf(result.value);
+  const mathHints = mathHintsOf(result);
 
   if (!context.insideCalculation) {
     if (mathCategory(mathHints) === null) {
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        'Invalid calculation type',
-      );
+      c.restore(start);
+      c.context = outerContext;
+      return null;
     }
   }
 
@@ -630,10 +620,10 @@ function tryConsumeCalc(
     }
   }
 
-  return ok(createMathValue(
-    simplifyCalculationTree(result.value, ValueStage.Declared, context, expectedType),
+  return createMathValue(
+    simplifyCalculationTree(result, ValueStage.Declared, context, expectedType),
     expectedType,
-  ));
+  );
 }
 
 /*
@@ -758,20 +748,18 @@ const tryConsumeNonCalcMathFunction: TryComponentConsumer<
       one(tryConsumeHypot), one(tryConsumeLog), one(tryConsumeExp),
       one(tryConsumeAbs), one(tryConsumeSign),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 
 const tryConsumeMathValue: TryComponentConsumer<MathValue> = (c) => {
   const result = tryConsumeMathFunctionCalculation(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
-  return ok(createMathValue(
-    result.value,
+  return createMathValue(
+    result,
     requiredExpectedType(c.context as InternalMathContext),
-  ));
+  );
 };
 
 function createMathValue<Type extends MathValueType>(
@@ -872,7 +860,7 @@ function createClampConsumer(): TryComponentConsumer<
       one(tryConsumeCalcSum),
       one(createKeywordConsumer('none')),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
   const consumeArguments = sequenceOf(
     [commaRepeat(consumeArgument, 3, 3)],
@@ -880,10 +868,7 @@ function createClampConsumer(): TryComponentConsumer<
       const [minimumArgument, value, maximumArgument] = args;
 
       if (value === 'none') {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Invalid clamp() arguments',
-        );
+        return null;
       }
 
       const minimum = minimumArgument === 'none'
@@ -934,10 +919,7 @@ function createRoundConsumer(): TryComponentConsumer<
           strategy !== 'line-width'
         )
       ) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Invalid round() argument type',
-        );
+        return null;
       }
 
       return createMathFunctionNode<MathRoundNode>(
@@ -992,18 +974,15 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
     const outerContext = c.context;
     const result = consume(c);
 
-    if (result === null || isBad(result)) {
-      return result;
-    }
+    if (result === null) return null;
 
     const context = mathContextFor(c.context);
 
     if (!context.insideCalculation) {
-      if (mathCategory(result.value.hints) === null) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Invalid calculation type',
-        );
+      if (mathCategory(result.hints) === null) {
+        c.restore(start);
+        c.context = outerContext;
+        return null;
       }
     }
 
@@ -1013,7 +992,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
     if (valueType !== undefined) {
       if (!matchesExpectedCalculationType(
-        result.value.hints,
+        result.hints,
         valueType,
         context,
       )) {
@@ -1023,12 +1002,12 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
       }
     }
 
-    return ok(simplifyCalculationTree(
-      result.value,
+    return simplifyCalculationTree(
+      result,
       ValueStage.Declared,
       context,
       valueType,
-    ) as Node | NumericLeaf);
+    ) as Node | NumericLeaf;
   };
 }
 
@@ -1047,30 +1026,24 @@ function createMathFunctionNode<
     categories.some((category) => category === null) ||
     (
       argumentCategories !== undefined &&
-      categories.some((category) => (
+      categories.some((category) =>
         !argumentCategories.includes(category!)
-      ))
+      )
     ) ||
     (
       typeRule === 'same' &&
-      !hints.every((argumentHints) => (
+      !hints.every((argumentHints) =>
         haveSameMathHints(argumentHints, hints[0]!)
-      ))
+      )
     )
   ) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Invalid ${node.type}() argument type`,
-    );
+    return null;
   }
 
   const consistentHints = addMathHints(hints);
 
   if (consistentHints === null) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Inconsistent ${node.type}() argument types`,
-    );
+    return null;
   }
 
   let mathHints: MathHints;
@@ -1095,16 +1068,13 @@ function createMathFunctionNode<
   }
 
   if (mathCategory(mathHints) === null) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Invalid ${node.type}() result type`,
-    );
+    return null;
   }
 
-  return ok({
+  return {
     ...node,
     hints: mathHints,
-  } as Node);
+  } as Node;
 }
 
 const tryConsumeRoundingStrategy: TryComponentConsumer<RoundingStrategy> =
@@ -1116,18 +1086,13 @@ function tryConsumeRoundingStrategyPrefix(
   const start = c.pos();
   const strategy = tryConsumeRoundingStrategy(c);
 
-  if (strategy === null || isBad(strategy)) {
-    return strategy;
-  }
+  if (strategy === null) return null;
 
   consumeComponentTrivia(c);
 
   if (!c.match(TokenKind.Comma)) {
     c.restore(start);
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      'Expected a comma after the round() strategy',
-    );
+    return null;
   }
 
   consumeComponentTrivia(c);
@@ -1169,7 +1134,7 @@ const consumeCalcSumTail: TryComponentConsumer<CalcSumTail> = sequenceOf(
     one(tryConsumeCalcSumOperator),
     one(tryConsumeCalcProduct),
   ],
-  ([[operator], [value]]) => ok({ operator, value }),
+  ([[operator], [value]]) => ({ operator, value }),
 );
 
 const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
@@ -1179,7 +1144,7 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
   ],
   ([[first], tail]) => {
     if (tail.length === 0) {
-      return ok(first);
+      return first;
     }
 
     const children: CalculationTree[] = [first];
@@ -1203,20 +1168,17 @@ const consumeCalcSum: TryComponentConsumer<CalculationTree> = sequenceOf(
       );
 
       if (sumHints === null) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Inconsistent calculation sum types',
-        );
+        return null;
       }
 
       mathHints = sumHints;
     }
 
-    return ok({
+    return {
       type: 'sum',
       children: children as CalcSumNode['children'],
       hints: mathHints,
-    });
+    };
   },
 );
 
@@ -1243,7 +1205,7 @@ function tryConsumeCalcSumOperator(
   }
 
   consumeComponentTrivia(c);
-  return ok(component.value as '+' | '-');
+  return component.value as '+' | '-';
 }
 
 /*
@@ -1286,7 +1248,7 @@ const tryConsumeCalcProductOperator: TryComponentConsumer<'*' | '/'> = oneOf(
     one(tryConsumeAsterisk),
     one(tryConsumeSlash),
   ],
-  ([operator]) => ok(operator),
+  ([operator]) => operator,
 );
 
 const consumeCalcProductTail: TryComponentConsumer<CalcProductTail> = sequenceOf(
@@ -1294,7 +1256,7 @@ const consumeCalcProductTail: TryComponentConsumer<CalcProductTail> = sequenceOf
     one(withTrivia(tryConsumeCalcProductOperator)),
     one(withTrivia(tryConsumeCalcValue)),
   ],
-  ([[operator], [value]]) => ok({ operator, value }),
+  ([[operator], [value]]) => ({ operator, value }),
 );
 
 const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
@@ -1304,7 +1266,7 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
   ],
   ([[first], tail]) => {
     if (tail.length === 0) {
-      return ok(first);
+      return first;
     }
 
     const children: CalculationTree[] = [first];
@@ -1329,20 +1291,17 @@ const consumeCalcProduct: TryComponentConsumer<CalculationTree> = sequenceOf(
       );
 
       if (productHints === null) {
-        return bad(
-          ComponentConsumerBadReason.Invalid,
-          'Inconsistent calculation product types',
-        );
+        return null;
       }
 
       mathHints = productHints;
     }
 
-    return ok({
+    return {
       type: 'product',
       children: children as CalcProductNode['children'],
       hints: mathHints,
-    });
+    };
   },
 );
 
@@ -1359,20 +1318,15 @@ function tryConsumeCalcValue(
 ): TryComponentConsumerResult<CalculationTree> {
   const result = consumeCalcValue(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
   const context = c.context as InternalMathContext;
 
   if (
-    context.termCount !== undefined
-    && ++context.termCount > CALC_COMPLEXITY_LIMIT
+    context.termCount !== undefined &&
+    ++context.termCount > CALC_COMPLEXITY_LIMIT
   ) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      `Calculation exceeds the complexity limit of ${CALC_COMPLEXITY_LIMIT}`,
-    );
+    return null;
   }
 
   return result;
@@ -1384,7 +1338,7 @@ const tryConsumeMathFunctionCalculation: TryComponentConsumer<CalculationTree> =
       one(tryConsumeCalcCalculation),
       one(tryConsumeNonCalcMathFunction),
     ],
-    ([value]) => ok(value),
+    ([value]) => value,
   );
 
 const tryConsumeCalcNumericLeaf: TryComponentConsumer<NumericLeaf> = oneOf(
@@ -1403,11 +1357,8 @@ const tryConsumeCalcNumericLeaf: TryComponentConsumer<NumericLeaf> = oneOf(
     );
 
     return mathHints === null
-      ? bad(
-        ComponentConsumerBadReason.Invalid,
-        'Invalid calculation value type',
-      )
-      : ok(createNumericLeaf(normalized, mathHints));
+      ? null
+      : createNumericLeaf(normalized, mathHints);
   },
 );
 
@@ -1418,7 +1369,7 @@ const consumeCalcValue: TryComponentConsumer<CalculationTree> = oneOf(
     one(tryConsumeParenthesizedCalcSum),
     one(tryConsumeMathFunctionCalculation),
   ],
-  ([value]) => ok(value),
+  ([value]) => value,
 );
 
 function tryConsumeParenthesizedCalcSum(
@@ -1439,10 +1390,8 @@ function tryConsumeParenthesizedCalcSum(
   );
 
   if (result === null) {
-    return bad(
-      ComponentConsumerBadReason.Invalid,
-      'Invalid parenthesized calculation',
-    );
+    c.restore(start);
+    return null;
   }
 
   return result;
@@ -1454,22 +1403,20 @@ function tryConsumeCalcCalculation(
   if (!mathContextFor(c.context).insideCalculation) {
     const result = tryConsumeCalc(c);
 
-    return result === null || isBad(result)
+    return result === null
       ? result
-      : ok(result.value.calculation);
+      : result.calculation;
   }
 
   const result = consumeCalcCalculation(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
-  return ok(simplifyCalculationTree(
-    result.value,
+  return simplifyCalculationTree(
+    result,
     ValueStage.Declared,
     mathContextFor(c.context),
-  ));
+  );
 }
 
 /*
@@ -1484,11 +1431,9 @@ function tryConsumeCalcKeyword(
   const start = c.pos();
   const token = tryConsumeIdentToken(c);
 
-  if (token === null || isBad(token)) {
-    return token;
-  }
+  if (token === null) return null;
 
-  const name = asciiLower(token.value.value);
+  const name = asciiLower(token.value);
   let value: number | undefined;
 
   switch (name) {
@@ -1502,10 +1447,10 @@ function tryConsumeCalcKeyword(
   }
 
   if (value !== undefined) {
-    return ok(createNumericLeaf(
+    return createNumericLeaf(
       { type: 'number', value },
       numberMathHints(),
-    ));
+    );
   }
 
   const variable = mathContextFor(c.context)
@@ -1516,14 +1461,14 @@ function tryConsumeCalcKeyword(
     return null;
   }
 
-  return ok({
+  return {
     type: 'variable',
     name,
     hints: mathHintsFromNumericVariable(
       variable,
       mathContextFor(c.context),
     ),
-  });
+  };
 }
 
 // █████▌ █   ▐▌ ████▌  █████▌  ███▌
@@ -2060,11 +2005,11 @@ function containMixedPercentAndDimension(
   b: MathHints,
 ): boolean {
   const combined = [...a.exponents, ...b.exponents];
-  return combined.some(([base, power]) => (
+  return combined.some(([base, power]) =>
     base === 'percent' && power !== 0
-  )) && combined.some(([base, power]) => (
+  ) && combined.some(([base, power]) =>
     base !== 'percent' && power !== 0
-  ));
+  );
 }
 
 function mathContextFor(
@@ -2792,9 +2737,8 @@ function simplifyMathFunctionArguments(
   root: MathFunctionNode,
   context: MathContext,
 ): MathFunctionNode {
-  const simplify = (calculation: CalculationTree): CalculationTree => (
-    simplifyCalculationNode(calculation, context)
-  );
+  const simplify = (calculation: CalculationTree): CalculationTree =>
+    simplifyCalculationNode(calculation, context);
   const mathHints = cloneMathHints(root.hints);
 
   switch (root.type) {
@@ -2920,13 +2864,13 @@ function haveSameMathHintsAndUnit(
   first: NumericLeaf,
   ...rest: readonly NumericLeaf[]
 ): boolean {
-  return rest.every((value) => (
+  return rest.every((value) =>
     first.type === value.type &&
     (
       first.type !== 'dimension' ||
       (value.type === 'dimension' && first.unit === value.unit)
     )
-  ));
+  );
 }
 
 function roundingBounds(
@@ -3053,9 +2997,9 @@ function simplifySum(
       ? { ...child, child: operand }
       : simplifyCalculationNode({ ...child, child: operand }, context);
   });
-  const flattened = simplified.flatMap((child) => (
+  const flattened = simplified.flatMap((child) =>
     child.type === 'sum' ? child.children : [child]
-  ));
+  );
   const children = sortCalculationChildren(
     combineLikeNumericLeaves(flattened),
   );
@@ -3075,12 +3019,12 @@ function simplifyProduct(
   root: CalcProductNode,
   context: MathContext,
 ): CalculationTree {
-  const simplified = root.children.map((child) => (
+  const simplified = root.children.map((child) =>
     simplifyCalculationNode(child, context)
-  ));
-  const flattened = simplified.flatMap((child) => (
+  );
+  const flattened = simplified.flatMap((child) =>
     child.type === 'product' ? child.children : [child]
-  ));
+  );
   const children = sortCalculationChildren(
     combineProductNumbers(flattened),
   );
@@ -3096,12 +3040,12 @@ function simplifyProduct(
     ) {
       return {
         type: 'sum',
-        children: sum.children.map((child) => (
+        children: sum.children.map((child) =>
           scaleNumericLeaf(
             child as NumericLeaf,
             number,
           )
-        )) as CalcSumNode['children'],
+        ) as CalcSumNode['children'],
         hints: cloneMathHints(root.hints),
       };
     }

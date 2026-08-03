@@ -1,9 +1,5 @@
-import type { ComponentCursor } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import {
-  isBad, ok,
-  type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-try-consumer';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import {
@@ -30,7 +26,7 @@ export function parseImage(
     context,
   );
 
-  return result === null || isBad(result) ? null : result.value;
+  return result;
 }
 
 export function tryConsumeImage(
@@ -45,7 +41,7 @@ const consumeImage: TryComponentConsumer<ImageValue> = oneOf(
     one(tryConsumeUrl),
     one(tryConsumeGradient),
   ],
-  ([image]) => ok(image),
+  ([image]) => image,
 );
 
 export function resolveImage(

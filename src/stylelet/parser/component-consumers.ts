@@ -3,10 +3,9 @@ import {
   isAnyValueContents, tryConsumeAnyValue,
   type AnyValue,
 } from '../values/any-value';
-import type { ComponentCursor } from './component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
 import { withTrivia } from './component-grammar';
-import type { TryComponentConsumer, TryComponentConsumerResult } from './component-try-consumer';
-import { bad, ComponentConsumerBadReason, isBad, ok } from './component-try-consumer';
+
 import {
   isBraceBlock, isDelimToken, isFunctionBlock, isIdentToken, isTokenKind,
   consumeComponentTrivia, parseAsComponentGrammar,
@@ -17,19 +16,6 @@ import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
 
 export type FunctionalNotationConsumerOptions = {
   contextForArguments?: (context: unknown) => unknown;
-
-  /**
-   * The default, `bad`, rejects invalid component values before applying the
-   * argument grammar. `delegate` leaves their handling to that consumer.
-   */
-  invalidArgumentComponents?: 'bad' | 'delegate';
-
-  /**
-   * The default, `bad`, commits once the function name matches but its
-   * arguments do not. `delegate` restores the outer cursor and reports no
-   * match to the caller.
-   */
-  argumentGrammarMismatch?: 'bad' | 'delegate';
 };
 
 // TODO: Fold free-form production handling into functional-notation argument
@@ -49,51 +35,33 @@ export function createFunctionalNotationConsumer<ArgumentValue, Value>(
     const start = c.pos();
     const fn = tryConsumeFunctionBlock(c);
 
-    if (fn === null || isBad(fn)) {
-      return fn;
-    }
+    if (fn === null) return null;
 
-    if (asciiLower(fn.value.name) !== normalizedName) {
+    if (asciiLower(fn.name) !== normalizedName) {
       c.restore(start);
       return null;
     }
 
-    if (
-      options.invalidArgumentComponents !== 'delegate' &&
-      !isAnyValueContents(fn.value.value)
-    ) {
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        `Invalid component value in ${name}() arguments`,
-      );
+    if (!isAnyValueContents(fn.value)) {
+      c.restore(start);
+      return null;
     }
 
     const argumentContext = options.contextForArguments === undefined
       ? c.context
       : options.contextForArguments(c.context);
     const argumentValue = parseAsComponentGrammar(
-      fn.value.value,
+      fn.value,
       withTrivia(tryConsumeArgumentValue),
       argumentContext,
     );
 
     if (argumentValue === null) {
-      if (options.argumentGrammarMismatch === 'delegate') {
-        c.restore(start);
-        return null;
-      }
-
-      return bad(
-        ComponentConsumerBadReason.Invalid,
-        `Invalid ${name}() arguments`,
-      );
+      c.restore(start);
+      return null;
     }
 
-    if (isBad(argumentValue)) {
-      return argumentValue;
-    }
-
-    return ok(project(argumentValue.value));
+    return project(argumentValue);
   };
 }
 
@@ -170,7 +138,7 @@ export function createFreeFormConsumer<Value>(
 
 // :
 export function tryConsumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
-  return c.match(TokenKind.Colon) ? ok(':') : null;
+  return c.match(TokenKind.Colon) ? ':' : null;
 }
 
 // <ident-token>
@@ -183,7 +151,7 @@ export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerRe
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <string-token>
@@ -196,7 +164,7 @@ export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerR
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <hash-token>
@@ -209,7 +177,7 @@ export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerRes
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <hash-token with the id flag>
@@ -217,11 +185,9 @@ export function tryConsumeIdHashToken(c: ComponentCursor): TryComponentConsumerR
   const start = c.pos();
   const result = tryConsumeHashToken(c);
 
-  if (result === null || isBad(result)) {
-    return result;
-  }
+  if (result === null) return null;
 
-  if (result.value.flag !== HashTokenFlag.Id) {
+  if (result.flag !== HashTokenFlag.Id) {
     c.restore(start);
     return null;
   }
@@ -239,7 +205,7 @@ export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsume
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 /*
@@ -257,25 +223,19 @@ export function tryConsumeAnyValueFunctionBlock(
   const start = c.pos();
   const fn = tryConsumeFunctionBlock(c);
 
-  if (fn === null || isBad(fn)) {
-    return fn;
-  }
+  if (fn === null) return null;
 
-  const value = parseAsComponentGrammar(fn.value.value, tryConsumeAnyValue);
+  const value = parseAsComponentGrammar(fn.value, tryConsumeAnyValue);
 
   if (value === null) {
     c.restore(start);
     return null;
   }
 
-  if (isBad(value)) {
-    return value;
-  }
-
-  return ok({
-    ...fn.value,
-    value: value.value,
-  });
+  return {
+    ...fn,
+    value,
+  };
 }
 
 // <number-token with the integer flag>
@@ -291,7 +251,7 @@ export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumer
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <number-token>
@@ -304,7 +264,7 @@ export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerR
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <percentage-token>
@@ -319,7 +279,7 @@ export function tryConsumePercentageToken(
     return null;
   }
 
-  return ok(component);
+  return component;
 }
 
 // <delim-token matching expected>
@@ -333,6 +293,6 @@ export function createDelimConsumer<T extends string>(expected: T): TryComponent
       return null;
     }
 
-    return ok(expected);
+    return expected;
   };
 }
