@@ -1,4 +1,6 @@
-import { type ComponentValue, BlockKind } from '../../../../src/stylelet/parser/component-value';
+import {
+  type ComponentValue, BlockKind, serializeCssIdentifier, serializeCssString,
+} from '../../../../src/stylelet/parser/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import {
   describe, expect,
@@ -31,10 +33,7 @@ import {
 } from '../../../../src/stylelet/values/numeric-literal/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../../src/stylelet/values/dashed-ident';
-import {
-  parseIdent, serializeIdent,
-  serializeCssIdentifier,
-} from '../../../../src/stylelet/values/ident';
+import { parseIdent, serializeIdent } from '../../../../src/stylelet/values/ident';
 import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
@@ -74,10 +73,7 @@ import {
   canonicalizeResolution, createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
   serializeCanonicalResolution, serializeResolution, tryConsumeResolution,
 } from '../../../../src/stylelet/values/numeric-literal/resolution';
-import {
-  parseString, serializeCssString,
-  serializeString,
-} from '../../../../src/stylelet/values/string';
+import { parseString, serializeString } from '../../../../src/stylelet/values/string';
 import {
   canonicalizeTime, createTimeConsumer, parseTime, serializeCanonicalTime,
   serializeTime, TIME_UNITS, tryConsumeTime,

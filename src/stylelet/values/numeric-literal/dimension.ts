@@ -1,8 +1,8 @@
 import { tryConsumeDimensionToken } from '../../parser/component-consumers';
+import { serializeCssDimensionUnit } from '../../parser/component-value';
 import { type ComponentCursor, type TryComponentConsumerResult } from '../../parser/component-cursor';
 import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
-import { serializeCssIdentifier } from '../ident';
 import { serializeCssNumber } from './number';
 
 /*
@@ -55,19 +55,7 @@ const consumeDimension = adaptConsumer(
 export function serializeDimension(
   value: DimensionLiteral<string, string>,
 ): string {
-  return `${serializeCssNumber(value.value)}${serializeDimensionUnit(value.unit)}`;
-}
-
-function serializeDimensionUnit(unit: string): string {
-  const serialized = serializeCssIdentifier(unit);
-
-  // Escape a leading e/E when adjoining the unit to a number would otherwise
-  // turn the pair into scientific notation rather than a dimension token.
-  if (/^[eE](?:[+-]?[0-9])/.test(unit)) {
-    return `\\${unit.codePointAt(0)!.toString(16)} ${serialized.slice(1)}`;
-  }
-
-  return serialized;
+  return `${serializeCssNumber(value.value)}${serializeCssDimensionUnit(value.unit)}`;
 }
 
 // CSS Values, "Combination of Dimensions".

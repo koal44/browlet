@@ -2,7 +2,8 @@ import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsu
 import { createFunctionalNotationConsumer, tryConsumeUrlToken } from '../parser/component-consumers';
 import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { serializeCssString, tryConsumeString } from './string';
+import { serializeCssString } from '../parser/component-value';
+import { tryConsumeString } from './string';
 import {
   isRequestUrlModifierValue, serializeRequestUrlModifiers,
   tryConsumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,

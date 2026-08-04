@@ -16,7 +16,7 @@ import { createKeywordConsumer } from './keyword';
 import { ANGLE_UNITS, canonicalizeAngle, type AngleLiteral } from './numeric-literal/angle';
 import { serializeDimension, tryConsumeDimension, type DimensionLiteral } from './numeric-literal/dimension';
 import { FREQUENCY_UNITS, canonicalizeFrequency, type FrequencyLiteral } from './numeric-literal/frequency';
-import { serializeCssIdentifier } from './ident';
+import { serializeCssIdentifier } from '../parser/component-value';
 import { type IntegerLiteral } from './numeric-literal/integer';
 import {
   LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type LengthLiteral,

@@ -2,7 +2,7 @@ import { type ComponentCursor, type TryComponentConsumerResult } from '../parser
 import { adaptConsumer, withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { tryConsumeCustomIdent } from './custom-ident';
-import { serializeCssIdentifier } from './ident';
+import { serializeCssIdentifier } from '../parser/component-value';
 
 export type DashedIdentValue = {
   type: 'dashed-ident';

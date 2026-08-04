@@ -3,7 +3,8 @@ import { type TryComponentConsumer } from '../parser/component-cursor';
 import { adaptConsumer, withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
-import { serializeCssIdentifier, tryConsumeIdent } from './ident';
+import { serializeCssIdentifier } from '../parser/component-value';
+import { tryConsumeIdent } from './ident';
 
 export type CustomIdentValue = {
   type: 'custom-ident';

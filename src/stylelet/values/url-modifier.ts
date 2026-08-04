@@ -16,7 +16,8 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { isAnyValueContents } from './any-value';
 import { tryConsumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { serializeCssString, tryConsumeString } from './string';
+import { serializeCssString } from '../parser/component-value';
+import { tryConsumeString } from './string';
 
 /*
  * NOTE: The URL modifier grammar is a provisional synthesis, not a verbatim
