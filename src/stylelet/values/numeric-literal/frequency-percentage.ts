@@ -20,8 +20,7 @@ export type FrequencyPercentageLiteral =
   DimensionPercentageLiteral<FrequencyLiteral>;
 
 export type FrequencyPercentageResolutionContext = {
-  /** Percentage basis in canonical hertz. */
-  percentageBasis?: number;
+  percentageReferenceValue?: CanonicalFrequencyLiteral;
 };
 
 export function parseFrequencyPercentage(
@@ -64,14 +63,15 @@ export function tryResolveFrequencyPercentage(
     return canonicalizeFrequency(value);
   }
 
-  if (context.percentageBasis === undefined) {
+  const reference = context.percentageReferenceValue;
+
+  if (reference === undefined) {
     return null;
   }
 
   return {
-    type: 'frequency',
-    value: context.percentageBasis * value.value / 100,
-    unit: 'hz',
+    ...reference,
+    value: reference.value * value.value / 100,
   };
 }
 

@@ -1,6 +1,8 @@
 import { one, oneOf } from '../../parser/component-grammar';
 import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { addDimensions, interpolateDimensions, type DimensionLiteral } from './dimension';
+import {
+  addDimensions, interpolateDimensions, type AnyDimensionLiteral,
+} from './dimension';
 import {
   addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
   type PercentageLiteral,
@@ -12,7 +14,7 @@ import {
  */
 
 export type DimensionPercentageLiteral<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 > = Dimension | PercentageLiteral;
 
 export type DimensionPercentageConsumerOptions = {
@@ -24,7 +26,7 @@ export type DimensionPercentageConsumerOptions = {
 };
 
 export function createDimensionPercentageConsumer<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 >(
   tryConsumeDimension: TryComponentConsumer<Dimension>,
   productionName: string,
@@ -60,54 +62,62 @@ function canCheckRangeWithoutResolution(min: number, max: number): boolean {
 }
 
 export function serializeDimensionPercentage<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 >(
   value: DimensionPercentageLiteral<Dimension>,
   serializeDimension: (value: Dimension) => string,
 ): string {
-  return 'unit' in value
-    ? serializeDimension(value)
-    : serializePercentage(value);
+  return value.type === 'percentage'
+    ? serializePercentage(value)
+    : serializeDimension(value);
 }
 
 // CSS Values, "Combination of Percentages and Dimensions".
 export function tryAddDimensionPercentages<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 >(
   a: DimensionPercentageLiteral<Dimension>,
   b: DimensionPercentageLiteral<Dimension>,
 ): DimensionPercentageLiteral<Dimension> | null {
-  if (!('unit' in a) && !('unit' in b)) {
+  if (a.type === 'percentage' && b.type === 'percentage') {
     return addPercentages(a, b);
   }
 
-  if ('unit' in a && 'unit' in b && a.unit === b.unit) {
-    return addDimensions(a, b) as Dimension;
+  if (
+    a.type !== 'percentage' &&
+    b.type !== 'percentage' &&
+    a.unit === b.unit
+  ) {
+    return addDimensions(a, b);
   }
 
   return null;
 }
 
 export function tryInterpolateDimensionPercentages<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 >(
   a: DimensionPercentageLiteral<Dimension>,
   b: DimensionPercentageLiteral<Dimension>,
   p: number,
 ): DimensionPercentageLiteral<Dimension> | null {
-  if (!('unit' in a) && !('unit' in b)) {
+  if (a.type === 'percentage' && b.type === 'percentage') {
     return interpolatePercentages(a, b, p);
   }
 
-  if ('unit' in a && 'unit' in b && a.unit === b.unit) {
-    return interpolateDimensions(a, b, p) as Dimension;
+  if (
+    a.type !== 'percentage' &&
+    b.type !== 'percentage' &&
+    a.unit === b.unit
+  ) {
+    return interpolateDimensions(a, b, p);
   }
 
   return null;
 }
 
 export function tryAccumulateDimensionPercentages<
-  Dimension extends DimensionLiteral<string, string>,
+  Dimension extends AnyDimensionLiteral,
 >(
   a: DimensionPercentageLiteral<Dimension>,
   b: DimensionPercentageLiteral<Dimension>,

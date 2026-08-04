@@ -91,7 +91,7 @@ import {
   tryConsumeUrlModifier,
 } from '../../../../src/stylelet/values/url-modifier';
 import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../../src/stylelet/values/url';
-import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/zero';
+import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/numeric-literal/zero';
 import {
   accumulateOpacities, addOpacities, interpolateOpacities, parseOpacityValue, resolveOpacityValue,
   serializeOpacityValue,
@@ -1410,7 +1410,7 @@ describe('length-percentage', () => {
   it('resolves a percentage using its canonical length basis', () => {
     expect(tryResolveLengthPercentage(
       { type: 'percentage', value: 25 },
-      { percentageBasis: 200 },
+      { percentageReferenceValue: { type: 'length', value: 200, unit: 'px' } },
     )).toEqual({
       type: 'length',
       value: 50,
@@ -1536,7 +1536,11 @@ describe('angle-percentage', () => {
 
   it.each([
     [{ type: 'angle', value: 0.25, unit: 'turn' }, {}, 90],
-    [{ type: 'percentage', value: 25 }, { percentageBasis: 360 }, 90],
+    [
+      { type: 'percentage', value: 25 },
+      { percentageReferenceValue: { type: 'angle', value: 360, unit: 'deg' } },
+      90,
+    ],
   ] as const)('resolves %j to %ddeg', (value, context, expected) => {
     expect(tryResolveAnglePercentage(value, context)).toEqual({
       type: 'angle',
@@ -1635,7 +1639,11 @@ describe('frequency-percentage', () => {
 
   it.each([
     [{ type: 'frequency', value: 1.5, unit: 'khz' }, {}, 1500],
-    [{ type: 'percentage', value: 25 }, { percentageBasis: 2000 }, 500],
+    [
+      { type: 'percentage', value: 25 },
+      { percentageReferenceValue: { type: 'frequency', value: 2000, unit: 'hz' } },
+      500,
+    ],
   ] as const)('resolves %j to %dhz', (value, context, expected) => {
     expect(tryResolveFrequencyPercentage(value, context)).toEqual({
       type: 'frequency',
@@ -1734,7 +1742,11 @@ describe('time-percentage', () => {
 
   it.each([
     [{ type: 'time', value: 250, unit: 'ms' }, {}, 0.25],
-    [{ type: 'percentage', value: 25 }, { percentageBasis: 2 }, 0.5],
+    [
+      { type: 'percentage', value: 25 },
+      { percentageReferenceValue: { type: 'time', value: 2, unit: 's' } },
+      0.5,
+    ],
   ] as const)('resolves %j to %ds', (value, context, expected) => {
     expect(tryResolveTimePercentage(value, context)).toEqual({
       type: 'time',
@@ -2705,6 +2717,15 @@ describe('opacity values', () => {
       .toEqual(number);
     expect(resolveOpacityValue(percentage, ValueStage.Specified))
       .toEqual(number);
+  });
+
+  it('resolves a raw percentage through the opacity facade', () => {
+    const percentage = { type: 'percentage', value: 25 } as const;
+
+    expect(resolveOpacityValue(percentage, ValueStage.Specified))
+      .toEqual({ type: 'number', value: 0.25 });
+    expect(resolveOpacityValue(percentage, ValueStage.Computed))
+      .toEqual({ type: 'number', value: 0.25 });
   });
 
   it.each([

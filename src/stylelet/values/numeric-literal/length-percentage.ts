@@ -17,10 +17,9 @@ import {
 
 export type LengthPercentageLiteral = DimensionPercentageLiteral<LengthLiteral>;
 
-export type LengthPercentageResolutionContext = {
-  /** Percentage basis in canonical CSS pixels. */
-  percentageBasis?: number;
-} & LengthResolutionContext;
+export type LengthPercentageResolutionContext = LengthResolutionContext & {
+  percentageReferenceValue?: CanonicalLengthLiteral;
+};
 
 export function parseLengthPercentage(
   input: ParserInput,
@@ -60,14 +59,15 @@ export function tryResolveLengthPercentage(
     return tryResolveLength(value, context);
   }
 
-  if (context.percentageBasis === undefined) {
+  const reference = context.percentageReferenceValue;
+
+  if (reference === undefined) {
     return null;
   }
 
   return {
-    type: 'length',
-    value: context.percentageBasis * value.value / 100,
-    unit: 'px',
+    ...reference,
+    value: reference.value * value.value / 100,
   };
 }
 

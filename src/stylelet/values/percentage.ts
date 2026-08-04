@@ -66,7 +66,7 @@ export function resolvePercentage(
   context: MathContext = {},
 ): PercentageValue {
   return value.type === 'math'
-    ? resolveMathValue(value, stage, percentageCalculationContext(context))
+    ? resolveMathValue(value, stage, percentageMathContext(context))
     : value;
 }
 
@@ -87,12 +87,12 @@ export function addPercentages(
     return addPercentageLiterals(a, b);
   }
 
-  const calculationContext = percentageCalculationContext(context);
+  const mathContext = percentageMathContext(context);
 
   return addMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -106,13 +106,13 @@ export function interpolatePercentages(
     return interpolatePercentageLiterals(a, b, p);
   }
 
-  const calculationContext = percentageCalculationContext(context);
+  const mathContext = percentageMathContext(context);
 
   return interpolateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
     p,
-    calculationContext,
+    mathContext,
   );
 }
 
@@ -125,12 +125,12 @@ export function accumulatePercentages(
     return accumulatePercentageLiterals(a, b);
   }
 
-  const calculationContext = percentageCalculationContext(context);
+  const mathContext = percentageMathContext(context);
 
   return accumulateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -143,12 +143,13 @@ function asMathValue(
     : createMathValueFromLiteral(value, 'percentage', context);
 }
 
-function percentageCalculationContext(
+function percentageMathContext(
   context: MathContext,
 ): MathContext {
   return {
     ...context,
     percentHint: 'percent',
+    percentageReferenceValue: undefined,
   };
 }
 

@@ -13,19 +13,29 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { TokenKind } from '../parser/tokens';
 import { ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
-import { ANGLE_UNITS, canonicalizeAngle, type AngleLiteral } from './numeric-literal/angle';
-import { serializeDimension, tryConsumeDimension, type DimensionLiteral } from './numeric-literal/dimension';
-import { FREQUENCY_UNITS, canonicalizeFrequency, type FrequencyLiteral } from './numeric-literal/frequency';
+import {
+  ANGLE_UNITS, canonicalizeAngle, type AngleLiteral, type CanonicalAngleLiteral,
+} from './numeric-literal/angle';
+import {
+  serializeDimension, tryConsumeDimension, type AnyDimensionLiteral,
+  type DimensionLiteral,
+} from './numeric-literal/dimension';
+import {
+  FREQUENCY_UNITS, canonicalizeFrequency, type CanonicalFrequencyLiteral,
+  type FrequencyLiteral,
+} from './numeric-literal/frequency';
 import { serializeCssIdentifier } from '../parser/component-value';
 import { type IntegerLiteral } from './numeric-literal/integer';
 import {
-  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type LengthLiteral,
-  type LengthResolutionContext,
+  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type CanonicalLengthLiteral,
+  type LengthLiteral, type LengthResolutionContext,
 } from './numeric-literal/length';
 import { serializeNumber, tryConsumeNumber, type NumberLiteral } from './numeric-literal/number';
 import { serializePercentage, tryConsumePercentage, type PercentageLiteral } from './numeric-literal/percentage';
 import { RESOLUTION_UNITS, canonicalizeResolution, type ResolutionLiteral } from './numeric-literal/resolution';
-import { TIME_UNITS, canonicalizeTime, type TimeLiteral } from './numeric-literal/time';
+import {
+  TIME_UNITS, canonicalizeTime, type CanonicalTimeLiteral, type TimeLiteral,
+} from './numeric-literal/time';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';
@@ -57,6 +67,12 @@ export type MathRange = readonly [
   maximum: number,
 ];
 
+export type PercentageReferenceValue =
+  | CanonicalLengthLiteral
+  | CanonicalFrequencyLiteral
+  | CanonicalAngleLiteral
+  | CanonicalTimeLiteral;
+
 export type MathContext = {
   /** Value-processing stage at which math values should become literals. */
   unwrapMathAt?: ValueStage;
@@ -76,8 +92,8 @@ export type MathContext = {
    */
   percentHint?: MathBase;
 
-  /** Numeric value against which percentages can be resolved. */
-  percentageReferenceValue?: NumberLiteral | DimensionLiteral;
+  /** Canonical value against which percentages can be resolved. */
+  percentageReferenceValue?: PercentageReferenceValue;
 
   /**
    * ASCII-lowercase numeric variable names, values, and types.
@@ -120,27 +136,6 @@ export function createMathValueFromLiteral<Type extends MathValueType>(
   );
 }
 
-export function resolveNumericLiteral<Type extends MathValueType>(
-  literal: MathLiteralByType[Type],
-  valueType: Type,
-  stage: ValueStage,
-  context: MathContext = {},
-): MathLiteralByType[Type] {
-  if (stage < ValueStage.Computed) {
-    return literal;
-  }
-
-  const resolved = resolveNumericLeaf(
-    createNumericLeafFromLiteral(literal, context),
-    context,
-  );
-
-  return resolvedMathLiteralFromLeaf(
-    finalizeNumericLeaf(resolved, context, valueType),
-    valueType,
-  );
-}
-
 function createNumericLeafFromLiteral<Type extends MathValueType>(
   literal: MathLiteralByType[Type],
   context: MathContext,
@@ -164,19 +159,6 @@ function createNumericLeafFromLiteral<Type extends MathValueType>(
   }
 
   return createNumericLeaf(normalized, mathHints);
-}
-
-function resolveNumericLeaf(
-  value: NumericLeaf,
-  context: MathContext,
-): NumericLeaf {
-  const resolved = value.type === 'percentage'
-    ? resolvePercentage(value, context)
-    : value;
-
-  return resolved.type === 'dimension'
-    ? canonicalizeDimension(resolved, context)
-    : resolved;
 }
 
 export function promoteNumericVariable<Type extends MathValueType>(
@@ -3333,7 +3315,7 @@ function canonicalizeDimension(
     };
   }
 
-  let resolved: DimensionLiteral<string, string> | null;
+  let resolved: AnyDimensionLiteral | null;
 
   if (isUnit(LENGTH_UNITS, unit)) {
     resolved = tryResolveLength(
@@ -3422,17 +3404,14 @@ function resolvePercentage(
     return value;
   }
 
-  const resolved = createNumericLeaf(
-    {
-      ...reference,
-      value: reference.value * value.value / 100,
-    },
-    value.hints,
-  );
+  const scaled = reference.value * value.value / 100;
+  const literal: NumericLiteral = {
+    type: 'dimension',
+    value: scaled,
+    unit: reference.unit,
+  };
 
-  return resolved.type === 'dimension'
-    ? canonicalizeDimension(resolved, context)
-    : resolved;
+  return createNumericLeaf(literal, value.hints);
 }
 
 function isUnit<Unit extends string>(

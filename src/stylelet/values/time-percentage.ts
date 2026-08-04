@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -13,6 +13,7 @@ import {
   tryAccumulateTimePercentages as tryAccumulateTimePercentageLiterals,
   tryAddTimePercentages as tryAddTimePercentageLiterals,
   tryInterpolateTimePercentages as tryInterpolateTimePercentageLiterals,
+  tryResolveTimePercentage as tryResolveTimePercentageLiteral,
   type TimePercentageConsumerOptions, type TimePercentageLiteral,
 } from './numeric-literal/time-percentage';
 
@@ -60,13 +61,18 @@ export function resolveTimePercentage(
   stage: ValueStage,
   context: MathContext = {},
 ): TimePercentageValue {
-  return value.type === 'math'
-    ? resolveMathValue(
-      value,
-      stage,
-      timePercentageCalculationContext(context),
-    )
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, timePercentageMathContext(context));
+  }
+
+  if (stage < ValueStage.Computed) {
+    return value;
+  }
+
+  const reference = context.percentageReferenceValue;
+  return tryResolveTimePercentageLiteral(value, {
+    percentageReferenceValue: reference?.type === 'time' ? reference : undefined,
+  }) ?? value;
 }
 
 export function serializeTimePercentage(
@@ -90,12 +96,12 @@ export function addTimePercentages(
     }
   }
 
-  const calculationContext = timePercentageCalculationContext(context);
+  const mathContext = timePercentageMathContext(context);
 
   return addMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -113,13 +119,13 @@ export function interpolateTimePercentages(
     }
   }
 
-  const calculationContext = timePercentageCalculationContext(context);
+  const mathContext = timePercentageMathContext(context);
 
   return interpolateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
     p,
-    calculationContext,
+    mathContext,
   );
 }
 
@@ -136,12 +142,12 @@ export function accumulateTimePercentages(
     }
   }
 
-  const calculationContext = timePercentageCalculationContext(context);
+  const mathContext = timePercentageMathContext(context);
 
   return accumulateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -154,7 +160,7 @@ function asMathValue(
     : createMathValueFromLiteral(value, 'time-percentage', context);
 }
 
-function timePercentageCalculationContext(
+function timePercentageMathContext(
   context: MathContext,
 ): MathContext {
   return {

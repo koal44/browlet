@@ -89,7 +89,7 @@ export function addLengths(
   context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
-    return normalizeUnitlessZero(addDimensions(a, b));
+    return addDimensions(a, b);
   }
 
   return addMathValues(
@@ -106,7 +106,7 @@ export function interpolateLengths(
   context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
-    return normalizeUnitlessZero(interpolateDimensions(a, b, p));
+    return interpolateDimensions(a, b, p);
   }
 
   return interpolateMathValues(
@@ -123,7 +123,7 @@ export function accumulateLengths(
   context: MathContext = {},
 ): LengthValue {
   if (a.type === 'length' && b.type === 'length') {
-    return normalizeUnitlessZero(accumulateDimensions(a, b));
+    return accumulateDimensions(a, b);
   }
 
   return accumulateMathValues(
@@ -142,15 +142,6 @@ function asMathValue(
     : createMathValueFromLiteral(value, 'length', context);
 }
 
-function normalizeUnitlessZero(
-  value: ReturnType<typeof addDimensions<'length', LengthLiteral['unit']>>,
-): LengthLiteral {
-  const unit = value.unit;
-
-  return unit === ''
-    ? { type: 'length', value: 0, unit }
-    : { type: 'length', value: value.value, unit };
-}
 
 function lengthRange(
   options: LengthConsumerOptions,

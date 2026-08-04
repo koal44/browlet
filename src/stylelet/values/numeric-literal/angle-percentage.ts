@@ -18,8 +18,7 @@ import {
 export type AnglePercentageLiteral = DimensionPercentageLiteral<AngleLiteral>;
 
 export type AnglePercentageResolutionContext = {
-  /** Percentage basis in canonical degrees. */
-  percentageBasis?: number;
+  percentageReferenceValue?: CanonicalAngleLiteral;
 };
 
 export function parseAnglePercentage(
@@ -60,14 +59,15 @@ export function tryResolveAnglePercentage(
     return canonicalizeAngle(value);
   }
 
-  if (context.percentageBasis === undefined) {
+  const reference = context.percentageReferenceValue;
+
+  if (reference === undefined) {
     return null;
   }
 
   return {
-    type: 'angle',
-    value: context.percentageBasis * value.value / 100,
-    unit: 'deg',
+    ...reference,
+    value: reference.value * value.value / 100,
   };
 }
 

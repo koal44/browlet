@@ -1,11 +1,11 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, resolveNumericLiteral, serializeMathValue,
+  interpolateMathValues, resolveMathValue, serializeMathValue,
   type MathContext, type MathRange, type MathValue,
 } from './math-value';
 import {
@@ -14,6 +14,7 @@ import {
   tryAccumulateLengthPercentages as tryAccumulateLengthPercentageLiterals,
   tryAddLengthPercentages as tryAddLengthPercentageLiterals,
   tryInterpolateLengthPercentages as tryInterpolateLengthPercentageLiterals,
+  tryResolveLengthPercentage as tryResolveLengthPercentageLiteral,
   type LengthPercentageConsumerOptions, type LengthPercentageLiteral,
 } from './numeric-literal/length-percentage';
 
@@ -67,18 +68,21 @@ export function resolveLengthPercentage(
   stage: ValueStage,
   context: MathContext = {},
 ): LengthPercentageValue {
-  const calculationContext = lengthPercentageCalculationContext(context);
+  const mathContext = lengthPercentageMathContext(context);
 
   if (value.type === 'math') {
-    return resolveMathValue(value, stage, calculationContext);
+    return resolveMathValue(value, stage, mathContext);
   }
 
-  return resolveNumericLiteral(
-    value,
-    'length-percentage',
-    stage,
-    calculationContext,
-  );
+  if (stage < ValueStage.Computed) {
+    return value;
+  }
+
+  const reference = context.percentageReferenceValue;
+  return tryResolveLengthPercentageLiteral(value, {
+    ...context.length,
+    percentageReferenceValue: reference?.type === 'length' ? reference : undefined,
+  }) ?? value;
 }
 
 export function serializeLengthPercentage(
@@ -102,12 +106,12 @@ export function addLengthPercentages(
     }
   }
 
-  const calculationContext = lengthPercentageCalculationContext(context);
+  const mathContext = lengthPercentageMathContext(context);
 
   return addMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -125,13 +129,13 @@ export function interpolateLengthPercentages(
     }
   }
 
-  const calculationContext = lengthPercentageCalculationContext(context);
+  const mathContext = lengthPercentageMathContext(context);
 
   return interpolateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
     p,
-    calculationContext,
+    mathContext,
   );
 }
 
@@ -148,12 +152,12 @@ export function accumulateLengthPercentages(
     }
   }
 
-  const calculationContext = lengthPercentageCalculationContext(context);
+  const mathContext = lengthPercentageMathContext(context);
 
   return accumulateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -166,7 +170,7 @@ function asMathValue(
     : createMathValueFromLiteral(value, 'length-percentage', context);
 }
 
-function lengthPercentageCalculationContext(
+function lengthPercentageMathContext(
   context: MathContext,
 ): MathContext {
   return {

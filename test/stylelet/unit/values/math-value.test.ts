@@ -324,7 +324,7 @@ describe('calc', () => {
       expect(parseMathValue('max(10%, 20%)', 'length-percentage', {
         percentHint: 'length',
         percentageReferenceValue: {
-          type: 'dimension',
+          type: 'length',
           value: 200,
           unit: 'px',
         },
@@ -591,7 +591,7 @@ describe('calc', () => {
       const resolved = parseMathValue('atan2(10%, 20%)', 'angle', {
         percentHint: 'length',
         percentageReferenceValue: {
-          type: 'dimension',
+          type: 'length',
           value: -100,
           unit: 'px',
         },
@@ -712,7 +712,7 @@ describe('calc', () => {
       expect(parseMathValue('hypot(3%, 4%)', 'length-percentage', {
         percentHint: 'length',
         percentageReferenceValue: {
-          type: 'dimension',
+          type: 'length',
           value: -100,
           unit: 'px',
         },
@@ -828,7 +828,7 @@ describe('calc', () => {
       expect(parseMathValue('abs(10%)', 'length-percentage', {
         percentHint: 'length',
         percentageReferenceValue: {
-          type: 'dimension',
+          type: 'length',
           value: -200,
           unit: 'px',
         },
@@ -841,7 +841,7 @@ describe('calc', () => {
       expect(parseMathValue('sign(10%)', 'number', {
         percentHint: 'length',
         percentageReferenceValue: {
-          type: 'dimension',
+          type: 'length',
           value: -200,
           unit: 'px',
         },
@@ -1490,11 +1490,11 @@ describe('calc', () => {
     );
   });
 
-  it('resolves percentages against an available reference value', () => {
+  it('resolves percentages against an available dimension reference', () => {
     expect(parseMathValue('calc(10px + 25%)', 'length-percentage', {
       percentHint: 'length',
       percentageReferenceValue: {
-        type: 'dimension',
+        type: 'length',
         value: 200,
         unit: 'px',
       },
@@ -1505,20 +1505,6 @@ describe('calc', () => {
         mathHints([['length', 1]], 'length'),
       ),
       valueType: 'length-percentage',
-      promoted: false,
-    });
-
-    const percentage = parseMathValue('calc(25%)', 'percentage')!;
-
-    expect(resolveMathValue(percentage, ValueStage.Declared, {
-      percentageReferenceValue: { type: 'number', value: 200 },
-    })).toEqual({
-      type: 'math',
-      calculation: numericLeaf(
-        { type: 'number', value: 50 },
-        mathHints([['percent', 1]], 'percent'),
-      ),
-      valueType: 'percentage',
       promoted: false,
     });
   });

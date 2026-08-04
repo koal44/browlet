@@ -43,13 +43,13 @@ export function resolveOpacityValue(
   stage: ValueStage,
   context: MathContext = {},
 ): OpacityValue {
-  const calculationContext: MathContext = {
+  const mathContext: MathContext = {
     ...context,
     unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
   };
   const resolved = isNumberOpacityValue(value)
-    ? resolveNumber(value, stage, calculationContext)
-    : resolvePercentage(value, stage, calculationContext);
+    ? resolveNumber(value, stage, mathContext)
+    : resolvePercentage(value, stage, mathContext);
 
   if (resolved.type === 'math') {
     return resolved;

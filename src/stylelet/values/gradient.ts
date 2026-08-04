@@ -22,9 +22,9 @@ import {
   createLengthPercentageConsumer, resolveLengthPercentage, serializeLengthPercentage,
   tryConsumeLengthPercentage, type LengthPercentageValue,
 } from './length-percentage';
+import type { PercentageReferenceValue } from './math-value';
 import { angleLiteral, canonicalizeAngle, type CanonicalAngleLiteral } from './numeric-literal/angle';
 import { tryResolveAnglePercentage as tryResolveAnglePercentageLiteral } from './numeric-literal/angle-percentage';
-import { dimensionLiteral, type DimensionLiteral } from './numeric-literal/dimension';
 import { lengthLiteral, type CanonicalLengthLiteral } from './numeric-literal/length';
 import { percentageLiteral, type PercentageLiteral } from './numeric-literal/percentage';
 import {
@@ -32,7 +32,7 @@ import {
   type PositionOffsets, type PositionValue,
 } from './position';
 import { serializeNumber } from './number';
-import { tryConsumeZero, type ZeroValue } from './zero';
+import { tryConsumeZero, type ZeroValue } from './numeric-literal/zero';
 
 /*
  * <gradient> =
@@ -923,7 +923,7 @@ function resolveLinearGradient(
 ): LinearGradient {
   const direction = resolveLinearGradientDirection(value.direction, stage, context);
   const lineLength = linearGradientLineLength(direction, context.gradientBoxSize);
-  const percentageReferenceValue = resolvePercentageReference(lineLength, 'px', stage);
+  const percentageReferenceValue = resolvePercentageReference(lineLength, stage, lengthLiteral);
   const resolved = { ...value, direction };
   const stops = resolveGradientStops(
     resolved,
@@ -947,14 +947,14 @@ function resolveLinearGradientDirection(
     : value;
 }
 
-function resolvePercentageReference<Unit extends string>(
+function resolvePercentageReference<Reference extends PercentageReferenceValue>(
   value: number | undefined,
-  unit: Unit,
   stage: ValueStage,
-): DimensionLiteral<'dimension', Unit> | undefined {
+  create: (value: number) => Reference,
+): Reference | undefined {
   return stage < ValueStage.Used || value === undefined
     ? undefined
-    : dimensionLiteral('dimension', value, unit);
+    : create(value);
 }
 
 function linearGradientLineLength(
@@ -1034,7 +1034,7 @@ function resolveRadialGradient(
   const position = resolvePosition(value.position, stage, geometryContext);
   const resolved = { ...value, size, position };
   const lineLength = radialGradientLineLength(resolved, stage, geometryContext);
-  const percentageReferenceValue = resolvePercentageReference(lineLength, 'px', stage);
+  const percentageReferenceValue = resolvePercentageReference(lineLength, stage, lengthLiteral);
   const stops = resolveGradientStops(resolved, stage, { ...context, percentageReferenceValue });
 
   return {
@@ -1203,7 +1203,7 @@ function resolveLengthPercentageInPixels(
 ): number | undefined {
   const resolved = resolveLengthPercentage(value, stage, {
     ...context,
-    percentageReferenceValue: dimensionLiteral('dimension', percentageBasis, 'px'),
+    percentageReferenceValue: lengthLiteral(percentageBasis),
   });
 
   return resolved.type === 'length' && resolved.unit === 'px'
@@ -1230,7 +1230,7 @@ function resolveConicGradient(
   stage: ValueStage,
   context: GradientContext,
 ): ConicGradient {
-  const percentageReferenceValue = resolvePercentageReference(360, 'deg', stage);
+  const percentageReferenceValue = resolvePercentageReference(360, stage, angleLiteral);
   const angle = resolveAngleOrZero(value.angle, stage, context);
   const position = resolvePosition(value.position, stage, context);
   const resolved = { ...value, angle, position };
@@ -1308,7 +1308,9 @@ function resolveAngularColorStopOffset(
   }
 
   if (stage >= ValueStage.Used && value.type !== 'math') {
-    return tryResolveAnglePercentageLiteral(value, { percentageBasis: 360 })!;
+    return tryResolveAnglePercentageLiteral(value, {
+      percentageReferenceValue: angleLiteral(360),
+    })!;
   }
 
   return resolveAnglePercentage(value, stage, context);

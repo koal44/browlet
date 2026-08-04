@@ -18,8 +18,7 @@ import {
 export type TimePercentageLiteral = DimensionPercentageLiteral<TimeLiteral>;
 
 export type TimePercentageResolutionContext = {
-  /** Percentage basis in canonical seconds. */
-  percentageBasis?: number;
+  percentageReferenceValue?: CanonicalTimeLiteral;
 };
 
 export function parseTimePercentage(
@@ -60,14 +59,15 @@ export function tryResolveTimePercentage(
     return canonicalizeTime(value);
   }
 
-  if (context.percentageBasis === undefined) {
+  const reference = context.percentageReferenceValue;
+
+  if (reference === undefined) {
     return null;
   }
 
   return {
-    type: 'time',
-    value: context.percentageBasis * value.value / 100,
-    unit: 's',
+    ...reference,
+    value: reference.value * value.value / 100,
   };
 }
 

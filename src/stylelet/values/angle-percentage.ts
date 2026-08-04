@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -13,6 +13,7 @@ import {
   tryAccumulateAnglePercentages as tryAccumulateAnglePercentageLiterals,
   tryAddAnglePercentages as tryAddAnglePercentageLiterals,
   tryInterpolateAnglePercentages as tryInterpolateAnglePercentageLiterals,
+  tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
   type AnglePercentageConsumerOptions, type AnglePercentageLiteral,
 } from './numeric-literal/angle-percentage';
 
@@ -60,13 +61,18 @@ export function resolveAnglePercentage(
   stage: ValueStage,
   context: MathContext = {},
 ): AnglePercentageValue {
-  return value.type === 'math'
-    ? resolveMathValue(
-      value,
-      stage,
-      anglePercentageCalculationContext(context),
-    )
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, anglePercentageMathContext(context));
+  }
+
+  if (stage < ValueStage.Computed) {
+    return value;
+  }
+
+  const reference = context.percentageReferenceValue;
+  return tryResolveAnglePercentageLiteral(value, {
+    percentageReferenceValue: reference?.type === 'angle' ? reference : undefined,
+  }) ?? value;
 }
 
 export function serializeAnglePercentage(
@@ -90,12 +96,12 @@ export function addAnglePercentages(
     }
   }
 
-  const calculationContext = anglePercentageCalculationContext(context);
+  const mathContext = anglePercentageMathContext(context);
 
   return addMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -113,13 +119,13 @@ export function interpolateAnglePercentages(
     }
   }
 
-  const calculationContext = anglePercentageCalculationContext(context);
+  const mathContext = anglePercentageMathContext(context);
 
   return interpolateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
     p,
-    calculationContext,
+    mathContext,
   );
 }
 
@@ -136,12 +142,12 @@ export function accumulateAnglePercentages(
     }
   }
 
-  const calculationContext = anglePercentageCalculationContext(context);
+  const mathContext = anglePercentageMathContext(context);
 
   return accumulateMathValues(
-    asMathValue(a, calculationContext),
-    asMathValue(b, calculationContext),
-    calculationContext,
+    asMathValue(a, mathContext),
+    asMathValue(b, mathContext),
+    mathContext,
   );
 }
 
@@ -154,7 +160,7 @@ function asMathValue(
     : createMathValueFromLiteral(value, 'angle-percentage', context);
 }
 
-function anglePercentageCalculationContext(
+function anglePercentageMathContext(
   context: MathContext,
 ): MathContext {
   return {

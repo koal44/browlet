@@ -10,7 +10,7 @@ import { serializeCssNumber } from './number';
  */
 
 export type DimensionLiteral<
-  Type extends string = 'dimension',
+  Type extends DimensionType = 'dimension',
   Unit extends string = string,
 > = {
   type: Type;
@@ -18,7 +18,22 @@ export type DimensionLiteral<
   unit: Unit;
 };
 
-export function dimensionLiteral<Type extends string, Unit extends string>(
+export type DimensionType =
+  | 'dimension'
+  | 'length'
+  | 'angle'
+  | 'time'
+  | 'frequency'
+  | 'resolution'
+  | 'flex';
+
+export type AnyDimensionLiteral =
+  DimensionLiteral<DimensionType, string>;
+
+export function dimensionLiteral<
+  Type extends DimensionType,
+  Unit extends string,
+>(
   type: Type,
   value: number,
   unit: Unit,
@@ -53,49 +68,47 @@ const consumeDimension = adaptConsumer(
 );
 
 export function serializeDimension(
-  value: DimensionLiteral<string, string>,
+  value: AnyDimensionLiteral,
 ): string {
   return `${serializeCssNumber(value.value)}${serializeCssDimensionUnit(value.unit)}`;
 }
 
 // CSS Values, "Combination of Dimensions".
-export function addDimensions<Type extends string, Unit extends string>(
-  a: DimensionLiteral<Type, Unit>,
-  b: DimensionLiteral<Type, Unit>,
-): DimensionLiteral<Type, Unit> {
+export function addDimensions<Dimension extends AnyDimensionLiteral>(
+  a: Dimension,
+  b: Dimension,
+): Dimension {
   assertSameDimensionUnit(a, b);
 
   return {
-    type: a.type,
+    ...a,
     value: a.value + b.value,
-    unit: a.unit,
   };
 }
 
-export function interpolateDimensions<Type extends string, Unit extends string>(
-  a: DimensionLiteral<Type, Unit>,
-  b: DimensionLiteral<Type, Unit>,
+export function interpolateDimensions<Dimension extends AnyDimensionLiteral>(
+  a: Dimension,
+  b: Dimension,
   p: number,
-): DimensionLiteral<Type, Unit> {
+): Dimension {
   assertSameDimensionUnit(a, b);
 
   return {
-    type: a.type,
+    ...a,
     value: (1 - p) * a.value + p * b.value,
-    unit: a.unit,
   };
 }
 
-export function accumulateDimensions<Type extends string, Unit extends string>(
-  a: DimensionLiteral<Type, Unit>,
-  b: DimensionLiteral<Type, Unit>,
-): DimensionLiteral<Type, Unit> {
+export function accumulateDimensions<Dimension extends AnyDimensionLiteral>(
+  a: Dimension,
+  b: Dimension,
+): Dimension {
   return addDimensions(a, b);
 }
 
 function assertSameDimensionUnit(
-  a: DimensionLiteral<string, string>,
-  b: DimensionLiteral<string, string>,
+  a: AnyDimensionLiteral,
+  b: AnyDimensionLiteral,
 ): void {
   if (a.unit !== b.unit) {
     throw new TypeError(`Dimension units must match: ${a.unit} and ${b.unit}`);

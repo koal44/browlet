@@ -1,8 +1,8 @@
-import { tryConsumeNumberToken } from '../parser/component-consumers';
-import { adaptConsumer, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { NumberLiteral } from './numeric-literal/number';
+import { tryConsumeNumberToken } from '../../parser/component-consumers';
+import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
+import { type TryComponentConsumer } from '../../parser/component-cursor';
+import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import type { NumberLiteral } from './number';
 
 /*
  * <zero> = <number-token with a value of 0>

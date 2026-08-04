@@ -2918,7 +2918,7 @@ function resolveColorMixItem(
   const percentage = item.percentage === undefined
     ? undefined
     : resolvePercentage(item.percentage, stage, {
-      ...colorCalculationContext(context, ValueStage.Computed),
+      ...colorMathContext(context, ValueStage.Computed),
       range: [0, 100],
     });
 
@@ -3121,7 +3121,7 @@ function relativeChannelValue(
     : { type: 'number', value: component / scale };
 }
 
-function relativeColorCalculationContext(
+function relativeColorMathContext(
   context: ColorContext,
   channelValues: ReadonlyMap<string, NumberLiteral | 'none'>,
 ): ColorContext {
@@ -3296,7 +3296,7 @@ function resolveComponents<
   channelsAvailable: boolean;
 } {
   const components = value.components;
-  let calculationContext = context;
+  let mathContext = context;
   let channelValues: RelativeColorChannelValues | undefined;
 
   if (reference !== undefined) {
@@ -3309,9 +3309,9 @@ function resolveComponents<
         context,
         metadata,
       );
-    calculationContext = channelValues === null
+    mathContext = channelValues === null
       ? context
-      : relativeColorCalculationContext(context, channelValues);
+      : relativeColorMathContext(context, channelValues);
 
     const alphaIndex = components.length - 1;
     if (
@@ -3331,7 +3331,7 @@ function resolveComponents<
       (component, index) => resolveComponent(
         component,
         stage,
-        calculationContext,
+        mathContext,
         componentMetadataAt(metadata, index, components.length),
         channelValues,
       ),
@@ -3431,13 +3431,13 @@ function resolveHueComponent(
     return value;
   }
 
-  const calculationContext = colorCalculationContext(
+  const mathContext = colorMathContext(
     context,
     metadata.resolveMathAt,
   );
   return isNumberValue(value)
-    ? resolveNumber(value, stage, calculationContext)
-    : resolveAngle(value, stage, calculationContext);
+    ? resolveNumber(value, stage, mathContext)
+    : resolveAngle(value, stage, mathContext);
 }
 
 function canonicalizeComponents<
@@ -3774,17 +3774,17 @@ function resolveNonHueValue(
   context: MathContext,
   metadata: ColorComponentMetadata,
 ): NonHueValue {
-  const calculationContext = colorCalculationContext(
+  const mathContext = colorMathContext(
     context,
     metadata.resolveMathAt,
   );
 
   return isNumberValue(value)
-    ? resolveNumber(value, stage, calculationContext)
-    : resolvePercentage(value, stage, calculationContext);
+    ? resolveNumber(value, stage, mathContext)
+    : resolvePercentage(value, stage, mathContext);
 }
 
-function colorCalculationContext(
+function colorMathContext(
   context: MathContext,
   unwrapMathAt: ValueStage,
 ): MathContext {

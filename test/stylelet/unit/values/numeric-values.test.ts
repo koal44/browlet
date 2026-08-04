@@ -54,6 +54,70 @@ import {
   interpolateTimePercentages, parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
   tryConsumeTimePercentage,
 } from '../../../../src/stylelet/values/time-percentage';
+import type { MathContext } from '../../../../src/stylelet/values/math-value';
+
+function expectLiteralResolution<Value>(
+  parse: (input: string) => Value | null,
+  resolve: (value: Value, stage: ValueStage, context: MathContext) => Value,
+  input: string,
+  computed: unknown,
+  context: MathContext = {},
+): void {
+  const value = parse(input);
+
+  expect(value).not.toBeNull();
+  expect(resolve(value!, ValueStage.Specified, context)).toBe(value);
+  expect(resolve(value!, ValueStage.Computed, context)).toEqual(computed);
+}
+
+describe('dimensional value literals', () => {
+  it.each([
+    ['angle', () => expectLiteralResolution(
+      parseAngle,
+      resolveAngle,
+      '0.5turn',
+      { type: 'angle', value: 180, unit: 'deg' },
+    )],
+    ['frequency', () => expectLiteralResolution(
+      parseFrequency,
+      resolveFrequency,
+      '1khz',
+      { type: 'frequency', value: 1_000, unit: 'hz' },
+    )],
+    ['length', () => expectLiteralResolution(
+      parseLength,
+      resolveLength,
+      '1in',
+      { type: 'length', value: 96, unit: 'px' },
+    )],
+    ['resolution', () => expectLiteralResolution(
+      parseResolution,
+      resolveResolution,
+      '96dpi',
+      { type: 'resolution', value: 1, unit: 'dppx' },
+    )],
+    ['time', () => expectLiteralResolution(
+      parseTime,
+      resolveTime,
+      '250ms',
+      { type: 'time', value: 0.25, unit: 's' },
+    )],
+  ])('canonicalizes a literal %s at computed-value time', (_name, test) => {
+    test();
+  });
+
+  it('preserves a relative length until its context is available', () => {
+    const value = parseLength('2em')!;
+
+    expect(resolveLength(value, ValueStage.Specified, {
+      length: { em: 16 },
+    })).toBe(value);
+    expect(resolveLength(value, ValueStage.Computed)).toBe(value);
+    expect(resolveLength(value, ValueStage.Computed, {
+      length: { em: 16 },
+    })).toEqual({ type: 'length', value: 32, unit: 'px' });
+  });
+});
 
 describe('number values', () => {
   it('parses a number literal', () => {
@@ -636,10 +700,32 @@ describe('angle-percentage values', () => {
 
     expect(resolveAnglePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveAnglePercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'deg' },
+      percentageReferenceValue: { type: 'angle', value: 200, unit: 'deg' },
     })).toEqual({ type: 'angle', value: 60, unit: 'deg' });
     expect(resolveAnglePercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
+  });
+
+  it('canonicalizes literal angles at the computed-value stage', () => {
+    const angle = parseAnglePercentage('0.5turn')!;
+
+    expect(resolveAnglePercentage(angle, ValueStage.Specified)).toBe(angle);
+    expect(resolveAnglePercentage(angle, ValueStage.Computed))
+      .toEqual({ type: 'angle', value: 180, unit: 'deg' });
+  });
+
+  it('resolves literal percentages only when their basis is available', () => {
+    const percentage = parseAnglePercentage('25%')!;
+    const context = {
+      percentageReferenceValue: { type: 'angle', value: 200, unit: 'deg' },
+    } as const;
+
+    expect(resolveAnglePercentage(percentage, ValueStage.Specified, context))
+      .toBe(percentage);
+    expect(resolveAnglePercentage(percentage, ValueStage.Computed))
+      .toBe(percentage);
+    expect(resolveAnglePercentage(percentage, ValueStage.Computed, context))
+      .toEqual({ type: 'angle', value: 50, unit: 'deg' });
   });
 
   it('rejects calculations from another dimensional category', () => {
@@ -747,7 +833,7 @@ describe('length-percentage values', () => {
 
     expect(resolveLengthPercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveLengthPercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
+      percentageReferenceValue: { type: 'length', value: 200, unit: 'px' },
     })).toEqual({ type: 'length', value: 60, unit: 'px' });
     expect(resolveLengthPercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
@@ -774,7 +860,7 @@ describe('length-percentage values', () => {
     expect(resolveLengthPercentage(percentage, ValueStage.Computed))
       .toEqual(percentage);
     expect(resolveLengthPercentage(percentage, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'px' },
+      percentageReferenceValue: { type: 'length', value: 200, unit: 'px' },
     })).toEqual({ type: 'length', value: 50, unit: 'px' });
   });
 
@@ -886,10 +972,33 @@ describe('frequency-percentage values', () => {
     expect(resolveFrequencyPercentage(mixed, ValueStage.Computed))
       .toEqual(mixed);
     expect(resolveFrequencyPercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'dimension', value: 200, unit: 'hz' },
+      percentageReferenceValue: { type: 'frequency', value: 200, unit: 'hz' },
     })).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
     expect(resolveFrequencyPercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
+  });
+
+  it('canonicalizes literal frequencies at the computed-value stage', () => {
+    const frequency = parseFrequencyPercentage('1khz')!;
+
+    expect(resolveFrequencyPercentage(frequency, ValueStage.Specified))
+      .toBe(frequency);
+    expect(resolveFrequencyPercentage(frequency, ValueStage.Computed))
+      .toEqual({ type: 'frequency', value: 1_000, unit: 'hz' });
+  });
+
+  it('resolves literal percentages only when their basis is available', () => {
+    const percentage = parseFrequencyPercentage('25%')!;
+    const context = {
+      percentageReferenceValue: { type: 'frequency', value: 200, unit: 'hz' },
+    } as const;
+
+    expect(resolveFrequencyPercentage(percentage, ValueStage.Specified, context))
+      .toBe(percentage);
+    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed))
+      .toBe(percentage);
+    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed, context))
+      .toEqual({ type: 'frequency', value: 50, unit: 'hz' });
   });
 
   it('rejects calculations from another dimensional category', () => {
@@ -999,10 +1108,32 @@ describe('time-percentage values', () => {
 
     expect(resolveTimePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveTimePercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'dimension', value: 200, unit: 's' },
+      percentageReferenceValue: { type: 'time', value: 200, unit: 's' },
     })).toEqual({ type: 'time', value: 60, unit: 's' });
     expect(resolveTimePercentage(percentage, ValueStage.Computed))
       .toEqual({ type: 'percentage', value: 25 });
+  });
+
+  it('canonicalizes literal times at the computed-value stage', () => {
+    const time = parseTimePercentage('250ms')!;
+
+    expect(resolveTimePercentage(time, ValueStage.Specified)).toBe(time);
+    expect(resolveTimePercentage(time, ValueStage.Computed))
+      .toEqual({ type: 'time', value: 0.25, unit: 's' });
+  });
+
+  it('resolves literal percentages only when their basis is available', () => {
+    const percentage = parseTimePercentage('25%')!;
+    const context = {
+      percentageReferenceValue: { type: 'time', value: 200, unit: 's' },
+    } as const;
+
+    expect(resolveTimePercentage(percentage, ValueStage.Specified, context))
+      .toBe(percentage);
+    expect(resolveTimePercentage(percentage, ValueStage.Computed))
+      .toBe(percentage);
+    expect(resolveTimePercentage(percentage, ValueStage.Computed, context))
+      .toEqual({ type: 'time', value: 50, unit: 's' });
   });
 
   it('rejects calculations from another dimensional category', () => {
