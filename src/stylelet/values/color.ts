@@ -28,6 +28,7 @@ import {
   createPercentageConsumer, resolvePercentage, serializePercentage, tryConsumePercentage,
   type PercentageValue,
 } from './percentage';
+import type { ValueDefinition } from './value-definition';
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;
@@ -374,6 +375,12 @@ export function tryConsumeColor(
       : consumeDeclaredColor
   )(c);
 }
+
+export const colorDef: ValueDefinition<ColorValue, ColorContext> = {
+  tryConsume: tryConsumeColor,
+  resolve: resolveColorValue,
+  serialize: serializeColorValue,
+};
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
 const consumeColor: TryComponentConsumer<ColorValue> = oneOf(

@@ -1,7 +1,8 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
+import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -12,7 +13,7 @@ import {
   interpolateDimensions,
 } from './numeric-literal/dimension';
 import {
-  createResolutionConsumer as createResolutionLiteralConsumer,
+  canonicalizeResolution, createResolutionConsumer as createResolutionLiteralConsumer,
   serializeResolution as serializeResolutionLiteral, type ResolutionConsumerOptions,
   type ResolutionLiteral,
 } from './numeric-literal/resolution';
@@ -54,14 +55,24 @@ export function createResolutionConsumer(
 
 export const tryConsumeResolution = createResolutionConsumer();
 
+export const resolutionDef: ValueDefinition<ResolutionValue, MathContext> = {
+  tryConsume: tryConsumeResolution,
+  resolve: resolveResolution,
+  serialize: serializeResolution,
+};
+
 export function resolveResolution(
   value: ResolutionValue,
   stage: ValueStage,
   context: MathContext = {},
 ): ResolutionValue {
-  return value.type === 'math'
-    ? resolveMathValue(value, stage, context)
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, context);
+  }
+
+  return stage < ValueStage.Computed
+    ? value
+    : canonicalizeResolution(value);
 }
 
 export function serializeResolution(

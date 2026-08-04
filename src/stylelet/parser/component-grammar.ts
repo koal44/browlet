@@ -10,11 +10,9 @@ type OptionalValue<T> = [] | [T];
 type NonEmptyArray<T> = [T, ...T[]];
 
 type Tuple<T, Length extends number, Result extends T[] = []> =
-  number extends Length
-    ? T[]
-    : Result['length'] extends Length
-      ? Result
-      : Tuple<T, Length, [...Result, T]>;
+  number extends Length ? T[] :
+  Result['length'] extends Length ? Result :
+  Tuple<T, Length, [...Result, T]>;
 
 type AtLeast<T, Minimum extends number> =
   Minimum extends 0 ? T[] :
@@ -493,13 +491,20 @@ function createMultiplier<T, Output extends T[]>(
 // Consumer adapters
 // =============================================================================
 
+export type AdaptConsumerOptions = {
+  /** Requires consumption through eof (trailing trivia allowed). */
+  complete?: boolean;
+};
+
 /**
- * Changes the semantic value produced by a consumer without adding a grammar
- * production.
+ * Adapts a consumer to project an alternative result.
+ *
+ * The `complete` option requires consumption through eof.
  */
 export function adaptConsumer<Input, Output>(
   consume: TryComponentConsumer<Input>,
   projector: Projector<Input, Output>,
+  options: AdaptConsumerOptions = {},
 ): TryComponentConsumer<Output> {
   return (c): TryComponentConsumerResult<Output> => {
     const start = c.pos();
@@ -511,6 +516,15 @@ export function adaptConsumer<Input, Output>(
       if (result === null) {
         c.restore(start);
         return null;
+      }
+
+      if (options.complete) {
+        c.consumeWhile(isWhitespaceToken);
+
+        if (c.peek() !== null) {
+          c.restore(start);
+          return null;
+        }
       }
 
       const projection = projector(result, c.context);

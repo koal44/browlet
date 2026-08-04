@@ -1,34 +1,73 @@
+import {
+  type ComponentCursor, type TryComponentConsumerResult,
+} from '../parser/component-cursor';
 import { isDelimToken, isTokenKind, type ComponentValue } from '../parser/component-value';
 import { parseListOfComponentValues, type ParserInput } from '../parser/syntax';
 import { TokenKind, type StaticToken } from '../parser/tokens';
-import { isAnyValueComponents, type AnyValueComponent } from './any-value';
+import {
+  isAnyValueContents, tryConsumeAnyValue, type AnyValueComponent,
+} from './any-value';
 
 export type DeclarationValue = {
   type: 'declaration-value';
-  components: DeclarationValueComponents;
+  components: [DeclarationComponent, ...DeclarationComponent[]];
 };
 
-export type DeclarationValueComponents = [
-  DeclarationValueComponent,
-  ...DeclarationValueComponent[],
-];
+export type OptionalDeclarationValue = {
+  type: 'declaration-value';
+  components: DeclarationComponent[];
+};
 
-export type DeclarationValueComponent = Exclude<
+export type DeclarationComponent = Exclude<
   AnyValueComponent,
   StaticToken<TokenKind.Semicolon>
 >;
 
 export function parseDeclarationValue(input: ParserInput): DeclarationValue | null {
   const components = parseListOfComponentValues(input);
-  return isDeclarationValueComponents(components)
+  if (components.length > 0 && isDeclarationValueContents(components)) {
+    return {
+      type: 'declaration-value',
+      components: components as [DeclarationComponent, ...DeclarationComponent[]],
+    };
+  }
+  return null;
+}
+
+export function parseOptionalDeclarationValue(
+  input: ParserInput,
+): OptionalDeclarationValue | null {
+  const components = parseListOfComponentValues(input);
+  return isDeclarationValueContents(components)
     ? { type: 'declaration-value', components }
     : null;
 }
 
-export function isDeclarationValueComponents(
+// <declaration-value>?
+export function tryConsumeOptionalDeclarationValue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<OptionalDeclarationValue> {
+  const start = c.pos();
+  const value = tryConsumeAnyValue(c);
+
+  if (value === null) {
+    return c.peek() === null
+      ? { type: 'declaration-value', components: [] }
+      : null;
+  }
+
+  if (!isDeclarationValueContents(value.components)) {
+    c.restore(start);
+    return null;
+  }
+
+  return { type: 'declaration-value', components: value.components };
+}
+
+export function isDeclarationValueContents(
   components: readonly ComponentValue[],
-): components is DeclarationValueComponents {
-  if (!isAnyValueComponents(components)) return false;
+): components is DeclarationComponent[] {
+  if (!isAnyValueContents(components)) return false;
 
   for (const component of components) {
     if (

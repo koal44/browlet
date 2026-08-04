@@ -1,7 +1,8 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
+import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -13,7 +14,7 @@ import {
 } from './numeric-literal/dimension';
 import {
   createLengthConsumer as createLengthLiteralConsumer, serializeLength as serializeLengthLiteral,
-  type LengthConsumerOptions, type LengthLiteral,
+  tryResolveLength, type LengthConsumerOptions, type LengthLiteral,
 } from './numeric-literal/length';
 
 /*
@@ -54,14 +55,24 @@ export function createLengthConsumer(
 
 export const tryConsumeLength = createLengthConsumer();
 
+export const lengthDef: ValueDefinition<LengthValue, MathContext> = {
+  tryConsume: tryConsumeLength,
+  resolve: resolveLength,
+  serialize: serializeLength,
+};
+
 export function resolveLength(
   value: LengthValue,
   stage: ValueStage,
   context: MathContext = {},
 ): LengthValue {
-  return value.type === 'math'
-    ? resolveMathValue(value, stage, context)
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, context);
+  }
+
+  if (stage < ValueStage.Computed) return value;
+
+  return tryResolveLength(value, context.length) ?? value;
 }
 
 export function serializeLength(

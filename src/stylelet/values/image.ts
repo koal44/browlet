@@ -7,6 +7,7 @@ import {
   type GradientContext, type GradientValue,
 } from './gradient';
 import { serializeUrl, tryConsumeUrl, type UrlValue } from './url';
+import type { ValueDefinition } from './value-definition';
 
 /*
  * <image> = <url> | <gradient>
@@ -34,6 +35,12 @@ export function tryConsumeImage(
 ): TryComponentConsumerResult<ImageValue> {
   return consumeImage(c);
 }
+
+export const imageDef: ValueDefinition<ImageValue, ImageContext> = {
+  tryConsume: tryConsumeImage,
+  resolve: resolveImage,
+  serialize: serializeImage,
+};
 
 // <image> = <url> | <gradient>
 const consumeImage: TryComponentConsumer<ImageValue> = oneOf(

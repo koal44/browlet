@@ -1390,6 +1390,37 @@ runScenarios('custom-ident default reservation oracle', 'skip', [
   },
 ]);
 
+runScenarios('CSSOM custom property declaration value oracle', 'only', [
+  {
+    name: 'native declaration retention',
+    engines: ['native'],
+    markup: `
+      <style id="sheet">
+        .valid   { --probe: red blue; }
+        .invalid { --probe: red ! blue; }
+      </style>
+    `,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: '--probe' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: {
+          cssom: {
+            name: '--probe',
+            value: 'red blue',
+            important: false,
+          },
+        },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: '--probe' },
+        ref: { by: 'id', id: 'sheet' },
+        expect: { cssom: null },
+      },
+    ],
+  },
+]);
+
 runScenarios('CSS.supports URL modifier oracle', 'skip', [
   {
     name: 'native URL modifier support',

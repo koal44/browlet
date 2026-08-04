@@ -1,5 +1,5 @@
 import { parseStylesheet, type StyleSheetAst } from './ast';
-import { notImplemented } from '../util';
+import { notImplemented } from './util';
 import { SelectletCSSRuleList } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
 

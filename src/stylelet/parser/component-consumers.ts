@@ -264,6 +264,12 @@ export const tryConsumeEqualsDelim = createDelimConsumer('=');
 // <delim-token matching '>'>
 export const tryConsumeGreaterDelim = createDelimConsumer('>');
 
+// <delim-token matching '#'>
+export const tryConsumeHashDelim = createDelimConsumer('#');
+
+// <delim-token matching '<'>
+export const tryConsumeLessDelim = createDelimConsumer('<');
+
 // <delim-token matching '-'>
 export const tryConsumeMinusDelim = createDelimConsumer('-');
 

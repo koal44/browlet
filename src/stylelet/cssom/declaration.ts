@@ -1,5 +1,5 @@
 import { BlockItemAstKind, serializeAstDeclaration, type SerializedDeclarationAst, type DeclarationAst, type StyleBlockAst } from './ast';
-import { notImplemented } from '../util';
+import { notImplemented } from './util';
 
 export class SelectletCSSStyleDeclaration {
   [index: number]: string;

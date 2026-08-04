@@ -2,6 +2,7 @@ import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
+import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -52,6 +53,12 @@ export function createNumberConsumer(
 }
 
 export const tryConsumeNumber = createNumberConsumer();
+
+export const numberDef: ValueDefinition<NumberValue, MathContext> = {
+  tryConsume: tryConsumeNumber,
+  resolve: resolveNumber,
+  serialize: serializeNumber,
+};
 
 export function resolveNumber(
   value: NumberValue,

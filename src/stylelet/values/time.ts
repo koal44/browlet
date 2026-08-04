@@ -1,7 +1,8 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
+import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -12,8 +13,8 @@ import {
   interpolateDimensions,
 } from './numeric-literal/dimension';
 import {
-  createTimeConsumer as createTimeLiteralConsumer, serializeTime as serializeTimeLiteral,
-  type TimeConsumerOptions, type TimeLiteral,
+  canonicalizeTime, createTimeConsumer as createTimeLiteralConsumer,
+  serializeTime as serializeTimeLiteral, type TimeConsumerOptions, type TimeLiteral,
 } from './numeric-literal/time';
 
 /*
@@ -53,14 +54,24 @@ export function createTimeConsumer(
 
 export const tryConsumeTime = createTimeConsumer();
 
+export const timeDef: ValueDefinition<TimeValue, MathContext> = {
+  tryConsume: tryConsumeTime,
+  resolve: resolveTime,
+  serialize: serializeTime,
+};
+
 export function resolveTime(
   value: TimeValue,
   stage: ValueStage,
   context: MathContext = {},
 ): TimeValue {
-  return value.type === 'math'
-    ? resolveMathValue(value, stage, context)
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, context);
+  }
+
+  return stage < ValueStage.Computed
+    ? value
+    : canonicalizeTime(value);
 }
 
 export function serializeTime(

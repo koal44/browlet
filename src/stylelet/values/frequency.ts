@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { ValueStage } from '../value-processing';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -12,9 +12,9 @@ import {
   interpolateDimensions,
 } from './numeric-literal/dimension';
 import {
-  createFrequencyConsumer as createFrequencyLiteralConsumer,
-  serializeFrequency as serializeFrequencyLiteral, type FrequencyConsumerOptions,
-  type FrequencyLiteral,
+  canonicalizeFrequency, createFrequencyConsumer as createFrequencyLiteralConsumer,
+  serializeFrequency as serializeFrequencyLiteral,
+  type FrequencyConsumerOptions, type FrequencyLiteral,
 } from './numeric-literal/frequency';
 
 /*
@@ -59,9 +59,13 @@ export function resolveFrequency(
   stage: ValueStage,
   context: MathContext = {},
 ): FrequencyValue {
-  return value.type === 'math'
-    ? resolveMathValue(value, stage, context)
-    : value;
+  if (value.type === 'math') {
+    return resolveMathValue(value, stage, context);
+  }
+
+  return stage < ValueStage.Computed
+    ? value
+    : canonicalizeFrequency(value);
 }
 
 export function serializeFrequency(

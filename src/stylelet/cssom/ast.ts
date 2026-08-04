@@ -13,7 +13,7 @@ import { assertNever, requireDefined } from '../../shared/util';
 import { parseSelectorList, type SelectorList } from '../parser/selector';
 import { parseCssWideValue, type CssWideValue } from '../values/css-wide';
 import { parseColorValue, type ColorValue } from '../values/color';
-import { isDeclarationValueComponents } from '../values/declaration-value';
+import { isDeclarationValueContents } from '../values/declaration-value';
 import { parseAnimationNameValue, serializeAnimationName, type AnimationNameValue } from '../props/animation-name';
 import { parseMarginSideValue, serializeMarginSideValue, type MarginSideValue } from '../props/margin';
 import { asciiLower } from '../../shared/css';
@@ -245,7 +245,7 @@ function buildDeclarationAst(
 ): DeclarationAst | null {
   if (
     declaration.value.length > 0 &&
-    !isDeclarationValueComponents(declaration.value)
+    !isDeclarationValueContents(declaration.value)
   ) {
     return null;
   }

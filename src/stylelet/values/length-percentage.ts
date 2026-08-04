@@ -2,6 +2,7 @@ import { one, oneOf, withTrivia } from '../parser/component-grammar';
 import { type TryComponentConsumer } from '../parser/component-cursor';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
+import type { ValueDefinition } from './value-definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, resolveNumericLiteral, serializeMathValue,
@@ -54,6 +55,12 @@ export function createLengthPercentageConsumer(
 }
 
 export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
+
+export const lengthPercentageDef: ValueDefinition<LengthPercentageValue, MathContext> = {
+  tryConsume: tryConsumeLengthPercentage,
+  resolve: resolveLengthPercentage,
+  serialize: serializeLengthPercentage,
+};
 
 export function resolveLengthPercentage(
   value: LengthPercentageValue,

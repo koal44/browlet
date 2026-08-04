@@ -9,6 +9,7 @@ import {
   tryConsumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
   type UrlModifierValue,
 } from './url-modifier';
+import type { ValueDefinition } from './value-definition';
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL
@@ -52,6 +53,12 @@ export function tryConsumeUrl(
 ): TryComponentConsumerResult<UrlValue> {
   return consumeUrl(c);
 }
+
+export const urlDef: ValueDefinition<UrlValue> = {
+  tryConsume: tryConsumeUrl,
+  resolve: (value) => value,
+  serialize: serializeUrl,
+};
 
 export function serializeUrl(value: UrlValue): string {
   const args = [

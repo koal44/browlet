@@ -57,6 +57,7 @@ describe('property value', () => {
         },
       });
       expect(value?.serialize()).toBe('var(--color)');
+      expect(value?.resolve(ValueStage.Specified, {})).toBe(value);
     });
 
     it('preserves arbitrary substitution nested inside property syntax', () => {
@@ -79,6 +80,10 @@ describe('property value', () => {
   });
 
   describe('invalid value', () => {
+    it('rejects an empty ordinary property value', () => {
+      expect(colorProperty.parse('')).toBeNull();
+    });
+
     it('rejects invalid syntax without arbitrary substitution', () => {
       expect(colorProperty.parse('definitely-not-a-color')).toBeNull();
       expect(colorProperty.parse('red blue')).toBeNull();

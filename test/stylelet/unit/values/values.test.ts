@@ -26,7 +26,10 @@ import {
 import { parseAnyValue, tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
 import { serializeAuto } from '../../../../src/stylelet/values/auto';
 import { parseCssWideValue, tryConsumeCssWideValue } from '../../../../src/stylelet/values/css-wide';
-import { parseDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
+import {
+  parseDeclarationValue, parseOptionalDeclarationValue,
+  tryConsumeOptionalDeclarationValue,
+} from '../../../../src/stylelet/values/declaration-value';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions, parseDimension, serializeDimension,
   tryConsumeDimension,
@@ -240,6 +243,21 @@ describe('declaration-value', () => {
 
   it('rejects an empty production', () => {
     expect(parseDeclarationValue('')).toBeNull();
+  });
+
+  it('represents an omitted optional declaration value with empty components', () => {
+    expect(parseOptionalDeclarationValue('')).toEqual({
+      type: 'declaration-value',
+      components: [],
+    });
+    expect(tryConsumeOptionalDeclarationValue(new ComponentCursor([]))).toEqual({
+      type: 'declaration-value',
+      components: [],
+    });
+  });
+
+  it('distinguishes an invalid optional declaration value from an omitted one', () => {
+    expect(parseOptionalDeclarationValue('a ! b')).toBeNull();
   });
 
   it('rejects top-level semicolons and bangs', () => {

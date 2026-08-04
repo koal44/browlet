@@ -5,6 +5,7 @@ import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
 import { serializeCssIdentifier } from '../parser/component-value';
 import { tryConsumeIdent } from './ident';
+import type { ValueDefinition } from './value-definition';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
@@ -43,6 +44,12 @@ export function createCustomIdentConsumer(
 }
 
 export const tryConsumeCustomIdent = createCustomIdentConsumer();
+
+export const customIdentDef: ValueDefinition<CustomIdentValue> = {
+  tryConsume: tryConsumeCustomIdent,
+  resolve: (value) => value,
+  serialize: serializeCustomIdent,
+};
 
 export function serializeCustomIdent(value: CustomIdentValue): string {
   return serializeCssIdentifier(value.value);

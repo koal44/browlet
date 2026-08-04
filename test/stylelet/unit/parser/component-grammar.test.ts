@@ -1760,6 +1760,36 @@ describe('component grammar consumer projection', () => {
     });
     expect(c.context).toBe(outerContext);
   });
+
+  it('accepts a complete match with trailing trivia', () => {
+    const consume = adaptConsumer(
+      consumeA,
+      (value) => value.toUpperCase(),
+      { complete: true },
+    );
+    const c = cursor('a  ');
+
+    expect(consume(c)).toBe('A');
+    expectDone(c);
+  });
+
+  it('rejects and restores a prefix match before projecting it', () => {
+    let projected = false;
+    const consume = adaptConsumer(
+      consumeA,
+      (value) => {
+        projected = true;
+        return value;
+      },
+      { complete: true },
+    );
+    const c = cursor('a b');
+
+    expect(consume(c)).toBeNull();
+    expect(projected).toBe(false);
+    expect(c.pos()).toBe(0);
+    expectNextIdent(c, 'a');
+  });
 });
 
 describe('recursive component grammar construction', () => {

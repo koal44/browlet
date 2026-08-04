@@ -1,6 +1,6 @@
 import { SelectletCSSStyleDeclaration } from './declaration';
 import { SelectletCSSRuleList } from './rule-list';
-import { notImplemented } from '../util';
+import { notImplemented } from './util';
 import type { StyleBlockAst, StyleRuleAst } from './ast';
 
 export class SelectletCSSStyleRule implements CSSStyleRule {
