@@ -4,51 +4,100 @@ import { ValueStage } from '../../../src/stylelet/value-processing';
 import { ColorKind } from '../../../src/stylelet/values/color';
 
 describe('property value', () => {
-  describe('ordinary value', () => {
-    it('parses, serializes, and resolves a color whole value', () => {
-      const value = colorProperty.parse('red');
+  describe('value instance', () => {
+    it('creates a raw value, then resolves and serializes a color value instance', () => {
+      const raw = colorProperty.parse('red');
 
-      expect(value).toMatchObject({
-        type: 'whole-value',
+      expect(raw).toMatchObject({
+        type: 'raw-property-value',
+        declaration: {
+          type: 'declaration-value',
+        },
+      });
+      expect(raw?.serialize()).toBe('red');
+      expect(raw?.resolve(ValueStage.Declared, {})).toMatchObject({
+        type: 'value-instance',
         value: {
           kind: ColorKind.Named,
           name: 'red',
         },
       });
-      expect(value?.serialize()).toBe('red');
-      expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-        type: 'whole-value',
+      expect(raw?.resolve(ValueStage.Computed, {})).toMatchObject({
+        type: 'value-instance',
         value: {
           kind: ColorKind.Absolute,
         },
       });
     });
 
-    it('rejects a free-form brace wrapper around a direct property value', () => {
-      expect(colorProperty.parse('{red}')).toBeNull();
+    it('rejects a free-form brace wrapper during declared resolution', () => {
+      const input = colorProperty.parse('{red}');
+
+      expect(input).not.toBeNull();
+      expect(input?.resolve(ValueStage.Declared, {})).toBeNull();
+    });
+  });
+
+  describe('whole-value notation', () => {
+    it('selects the first argument valid for the property', () => {
+      const input = colorProperty.parse('first-valid(10px, red)');
+      const specified = input?.resolve(ValueStage.Specified, {});
+
+      expect(input).not.toBeNull();
+      expect(specified?.type).toBe('first-valid');
+      expect(specified?.serialize()).toBe('first-valid(10px, red)');
+      expect(specified?.resolve(ValueStage.Specified, {})).toBe(specified);
+      expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
+        type: 'value-instance',
+        value: {
+          kind: ColorKind.Absolute,
+        },
+      });
+    });
+
+    it('becomes guaranteed-invalid when no argument is valid', () => {
+      const input = colorProperty.parse('first-valid(10px, 20px)');
+
+      expect(input).not.toBeNull();
+      expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
+        type: 'guaranteed-invalid',
+      });
+    });
+
+    it('resolves each argument through the complete property pipeline', () => {
+      const input = colorProperty.parse('first-valid(inherit, red)');
+
+      expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
+        type: 'css-wide',
+        keyword: 'inherit',
+      });
     });
   });
 
   describe('CSS-wide value', () => {
     it('recognizes a CSS-wide keyword as the entire property value', () => {
-      const value = colorProperty.parse(' InHeRiT ');
+      const input = colorProperty.parse(' InHeRiT ');
+      const declared = input?.resolve(ValueStage.Declared, {});
 
-      expect(value).toMatchObject({
+      expect(declared).toMatchObject({
         type: 'css-wide',
         keyword: 'inherit',
       });
-      expect(value?.serialize()).toBe('inherit');
+      expect(declared?.serialize()).toBe('inherit');
     });
 
     it('does not recognize a CSS-wide keyword as part of another value', () => {
-      expect(colorProperty.parse('inherit red')).toBeNull();
-      expect(colorProperty.parse('red inherit')).toBeNull();
+      expect(colorProperty.parse('inherit red')?.resolve(ValueStage.Declared, {}))
+        .toBeNull();
+      expect(colorProperty.parse('red inherit')?.resolve(ValueStage.Declared, {}))
+        .toBeNull();
     });
   });
 
   describe('substitution value', () => {
     it('preserves a top-level arbitrary substitution function', () => {
-      const value = colorProperty.parse('var(--color)');
+      const input = colorProperty.parse('var(--color)');
+      const value = input?.resolve(ValueStage.Declared, {});
 
       expect(value).toMatchObject({
         type: 'substitution-value',
@@ -61,7 +110,8 @@ describe('property value', () => {
     });
 
     it('preserves arbitrary substitution nested inside property syntax', () => {
-      const value = colorProperty.parse('rgb(var(--channels))');
+      const value = colorProperty.parse('rgb(var(--channels))')
+        ?.resolve(ValueStage.Declared, {});
 
       expect(value).toMatchObject({
         type: 'substitution-value',
@@ -73,20 +123,32 @@ describe('property value', () => {
     });
 
     it('defers a potentially invalid value containing substitution', () => {
-      expect(colorProperty.parse('red var(--extra)')).toMatchObject({
-        type: 'substitution-value',
-      });
+      expect(
+        colorProperty.parse('red var(--extra)')
+          ?.resolve(ValueStage.Declared, {}),
+      ).toMatchObject({ type: 'substitution-value' });
     });
   });
 
   describe('invalid value', () => {
-    it('rejects an empty ordinary property value', () => {
-      expect(colorProperty.parse('')).toBeNull();
+    it('rejects an empty ordinary property value during declared resolution', () => {
+      const input = colorProperty.parse('');
+
+      expect(input).not.toBeNull();
+      expect(input?.resolve(ValueStage.Declared, {})).toBeNull();
     });
 
-    it('rejects invalid syntax without arbitrary substitution', () => {
-      expect(colorProperty.parse('definitely-not-a-color')).toBeNull();
-      expect(colorProperty.parse('red blue')).toBeNull();
+    it('rejects invalid property syntax during declared resolution', () => {
+      expect(
+        colorProperty.parse('definitely-not-a-color')
+          ?.resolve(ValueStage.Declared, {}),
+      ).toBeNull();
+      expect(colorProperty.parse('red blue')?.resolve(ValueStage.Declared, {}))
+        .toBeNull();
+    });
+
+    it('rejects an invalid declaration value during input parsing', () => {
+      expect(colorProperty.parse('red ! blue')).toBeNull();
     });
   });
 });

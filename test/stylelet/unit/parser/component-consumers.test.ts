@@ -12,8 +12,7 @@ import { isTokenKind, BlockKind } from '../../../../src/stylelet/parser/componen
 import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
 import { tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
 import { BadStringToken, TokenKind } from '../../../../src/stylelet/parser/tokens';
-import { ColorKind, resolveColorValue, serializeColorValue, tryConsumeColor } from '../../../../src/stylelet/values/color';
-import { createWholeValueConsumer } from '../../../../src/stylelet/values/whole-value';
+import { ColorKind, tryConsumeColor } from '../../../../src/stylelet/values/color';
 
 describe('consumeWhitespace', () => {
   it('consumes consecutive whitespace components', () => {
@@ -27,13 +26,7 @@ describe('consumeWhitespace', () => {
 });
 
 describe('createFreeFormConsumer', () => {
-  const consumeColorWholeValue = createWholeValueConsumer(
-    tryConsumeColor,
-    resolveColorValue,
-    serializeColorValue,
-  );
-  const consumeFreeFormColorWholeValue =
-    createFreeFormConsumer(consumeColorWholeValue);
+  const consumeFreeFormColor = createFreeFormConsumer(tryConsumeColor);
 
   it.each([
     'red',
@@ -47,28 +40,20 @@ describe('createFreeFormConsumer', () => {
     '{ red }',
     ' { red } ',
   ])('parses %j as the same value', (input) => {
-    const result = parseAsComponentGrammar(input, consumeFreeFormColorWholeValue);
-    const value = result;
+    const value = parseAsComponentGrammar(input, consumeFreeFormColor);
 
     expect(value).toMatchObject({
-      type: 'whole-value',
-      value: {
-        kind: ColorKind.Named,
-        name: 'red',
-      },
+      kind: ColorKind.Named,
+      name: 'red',
     });
-    expect(value!.serialize()).toBe('red');
   });
 
   it('stops an unwrapped value before a top-level comma', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
-    expect(consumeFreeFormColorWholeValue(c)).toMatchObject({
-      type: 'whole-value',
-      value: {
-        kind: ColorKind.Named,
-        name: 'red',
-      },
+    expect(consumeFreeFormColor(c)).toMatchObject({
+      kind: ColorKind.Named,
+      name: 'red',
     });
     expect(isTokenKind(c.peek(), TokenKind.Comma)).toBe(true);
   });
@@ -76,22 +61,19 @@ describe('createFreeFormConsumer', () => {
   it('requires the unwrapped partition to match the complete value grammar', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red blue'));
 
-    expect(consumeFreeFormColorWholeValue(c)).toBeNull();
+    expect(consumeFreeFormColor(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('supports an additional top-level boundary predicate', () => {
-    const consume = createFreeFormConsumer(consumeColorWholeValue, {
+    const consume = createFreeFormConsumer(tryConsumeColor, {
       stopBefore: (component) => isTokenKind(component, TokenKind.Colon),
     });
     const c = new ComponentCursor(parseListOfComponentValues('red: blue'));
 
     expect(consume(c)).toMatchObject({
-      type: 'whole-value',
-      value: {
-        kind: ColorKind.Named,
-        name: 'red',
-      },
+      kind: ColorKind.Named,
+      name: 'red',
     });
     expect(isTokenKind(c.peek(), TokenKind.Colon)).toBe(true);
   });
@@ -117,7 +99,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('includes a top-level comma in a non-strict partition', () => {
-    const consume = createFreeFormConsumer(consumeColorWholeValue, { strict: false });
+    const consume = createFreeFormConsumer(tryConsumeColor, { strict: false });
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
     expect(consume(c)).toBeNull();
@@ -125,7 +107,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('includes a brace block in a non-strict partition', () => {
-    const consume = createFreeFormConsumer(consumeColorWholeValue, { strict: false });
+    const consume = createFreeFormConsumer(tryConsumeColor, { strict: false });
     const c = new ComponentCursor(parseListOfComponentValues('red {blue}'));
 
     expect(consume(c)).toBeNull();

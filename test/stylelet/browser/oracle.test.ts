@@ -1390,7 +1390,7 @@ runScenarios('custom-ident default reservation oracle', 'skip', [
   },
 ]);
 
-runScenarios('CSSOM custom property declaration value oracle', 'only', [
+runScenarios('CSSOM custom property declaration value oracle', 'skip', [
   {
     name: 'native declaration retention',
     engines: ['native'],

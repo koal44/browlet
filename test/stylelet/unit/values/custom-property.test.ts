@@ -17,9 +17,11 @@ describe('custom property', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
 
     for (const input of ['red', '10px']) {
-      const value = property.parse(input);
+      const raw = property.parse(input);
+      const value = raw?.resolve(ValueStage.Specified, {});
 
-      expect(value).toMatchObject({ type: 'custom-property-value' });
+      expect(value).toBe(raw);
+      expect(value).toMatchObject({ type: 'raw-property-value' });
       expect(value?.serialize()).toBe(input);
       expect(value?.resolve(ValueStage.Specified, {})).toBe(value);
     }
@@ -27,7 +29,8 @@ describe('custom property', () => {
 
   it('represents a custom property requiring substitution as a substitution value', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
-    const value = property.parse('var(--color)');
+    const value = property.parse('var(--color)')
+      ?.resolve(ValueStage.Declared, {});
 
     expect(value).toMatchObject({
       type: 'substitution-value',
@@ -41,10 +44,10 @@ describe('custom property', () => {
 
   it('distinguishes an empty custom property from the guaranteed-invalid value', () => {
     const property = defineCustomProperty({ syntax: syntax('*') });
-    const value = property.parse('');
+    const value = property.parse('')?.resolve(ValueStage.Declared, {});
 
     expect(value).toMatchObject({
-      type: 'custom-property-value',
+      type: 'raw-property-value',
       declaration: {
         type: 'declaration-value',
         components: [],
@@ -64,7 +67,7 @@ describe('custom property', () => {
   it('recognizes CSS-wide keywords independently of registered syntax', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
 
-    expect(property.parse('inherit')).toMatchObject({
+    expect(property.parse('inherit')?.resolve(ValueStage.Declared, {})).toMatchObject({
       type: 'css-wide',
       keyword: 'inherit',
     });
@@ -75,7 +78,7 @@ describe('custom property', () => {
     const value = property.parse('red');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'whole-value',
+      type: 'value-instance',
       value: {
         type: 'parsed-syntax-type',
         name: 'color',
@@ -99,7 +102,7 @@ describe('custom property', () => {
       const declared = property.parse(input);
 
       expect(declared?.serialize()).toBe(input);
-      expect(declared?.resolve(ValueStage.Computed, context).serialize())
+      expect(declared?.resolve(ValueStage.Computed, context)?.serialize())
         .toBe(serialized);
     },
   );
@@ -117,7 +120,7 @@ describe('custom property', () => {
         const declared = property.parse(input);
 
         expect(declared?.serialize()).toBe(input);
-        expect(declared?.resolve(ValueStage.Computed, context).serialize())
+        expect(declared?.resolve(ValueStage.Computed, context)?.serialize())
           .toBe(serialized);
       },
     );
@@ -127,7 +130,7 @@ describe('custom property', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
     const declared = property.parse('light-dark(white, black)');
 
-    expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' }).serialize())
+    expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' })?.serialize())
       .toBe('rgb(0, 0, 0)');
   });
 
@@ -137,7 +140,7 @@ describe('custom property', () => {
       'light-dark(white, black), light-dark(red, blue)',
     );
 
-    expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' }).serialize())
+    expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' })?.serialize())
       .toBe('rgb(0, 0, 0), rgb(0, 0, 255)');
   });
 
@@ -150,7 +153,7 @@ describe('custom property', () => {
     (syntaxText, input, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
 
-      expect(property.parse(input)?.resolve(ValueStage.Computed, {}).serialize())
+      expect(property.parse(input)?.resolve(ValueStage.Computed, {})?.serialize())
         .toBe(serialized);
     },
   );
@@ -167,7 +170,7 @@ describe('custom property', () => {
     const value = property.parse('red');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'whole-value',
+      type: 'value-instance',
       value: {
         type: 'parsed-syntax-keyword',
         name: 'red',
@@ -197,7 +200,7 @@ describe('custom property', () => {
     const value = property.parse('auto extra');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'whole-value',
+      type: 'value-instance',
       value: {
         type: 'parsed-syntax-list',
         multiplier: '+',
@@ -214,7 +217,7 @@ describe('custom property', () => {
     const value = property.parse('red, blue');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'whole-value',
+      type: 'value-instance',
       value: {
         type: 'parsed-syntax-list',
         multiplier: '#',
@@ -231,7 +234,7 @@ describe('custom property', () => {
     const value = property.parse('10px / anything');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'whole-value',
+      type: 'value-instance',
       value: {
         type: 'parsed-universal-syntax',
       },

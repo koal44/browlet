@@ -5,7 +5,7 @@ import { ValueStage } from '../value-processing';
 import type { ColorContext } from './color';
 import { tryConsumeCssWideValue, type CssWideValue } from './css-wide';
 import {
-  parseDeclarationValue, parseOptionalDeclarationValue,
+  parseOptionalDeclarationValue,
   type DeclarationValue, type OptionalDeclarationValue,
 } from './declaration-value';
 import { guaranteedInvalidValue, type GuaranteedInvalidValue } from './guaranteed-invalid';
@@ -16,12 +16,12 @@ import {
   type SubstitutionValue,
 } from './substitution-value';
 import {
+  createFirstValidValue, parseFirstValid, type FirstValidValue,
+} from './substitution/first-valid';
+import {
   createSyntaxConsumer, resolveParsedSyntaxValue, serializeParsedSyntaxValue,
   type ParsedSyntaxValue, type SyntaxValue,
 } from './syntax-value';
-import {
-  createWholeValueParser, type WholeValue, type WholeValueParser,
-} from './whole-value';
 import type { ValueDefinition } from './value-definition';
 
 export type PropertyContext =
@@ -30,112 +30,108 @@ export type PropertyContext =
   & ImageContext;
 
 export type PropertyValue<Value, Context = unknown> =
-  | WholeValue<Value, Context>
+  | ValueInstance<Value, Context>
+  | FirstValidValue<Value, Context>
   | SubstitutionValue<Value, Context>
-  | CustomPropertyValue<Value, Context>
+  | RawPropertyValue<Value, Context>
   | GuaranteedInvalidValue
   | CssWideValue<Value, Context>;
 
-export type CustomPropertyValue<Value, Context = unknown> = {
-  type: 'custom-property-value';
-  declaration: OptionalDeclarationValue;
+export type ValueInstance<Value, Context = unknown> = {
+  type: 'value-instance';
+  value: Value;
   resolve: (stage: ValueStage, context: Context) => PropertyValue<Value, Context>;
+  serialize: () => string;
+  add?: (value: Value, context: Context) => Value;
+  accumulate?: (value: Value, context: Context) => Value;
+  interpolate?: (value: Value, progress: number, context: Context) => Value;
+};
+
+export type RawPropertyValue<Value, Context = unknown> = {
+  type: 'raw-property-value';
+  declaration: OptionalDeclarationValue;
+  resolve: (stage: ValueStage, context: Context) => PropertyValue<Value, Context> | null;
   serialize: () => string;
 };
 
-export type Property<Value, Context = unknown> = {
-  parse: (input: ParserInput) => PropertyValue<Value, Context> | null;
-};
-
-export function defineProperty<Value, Context = unknown>(
-  definition: ValueDefinition<Value, Context>,
-): Property<Value, Context> {
-  const parseWholeValue = createWholeValueParser(
-    definition.tryConsume,
-    definition.resolve,
-    definition.serialize,
-  );
-
-  return {
-    parse: (input) => parsePropertyValue(input, {
-      parseDeclarationValue,
-      parseWholeValue,
-      parseOrdinaryValue: (declaration) =>
-        parseWholeValue(declaration.components),
-    }),
+export function defineCustomProperty(definition: { syntax: SyntaxValue; }) {
+  const syntaxDef: ValueDefinition<ParsedSyntaxValue, PropertyContext> = {
+    tryConsume: createSyntaxConsumer(definition.syntax),
+    resolve: resolveParsedSyntaxValue,
+    serialize: serializeParsedSyntaxValue,
+    parseAt: ValueStage.Computed,
+    onParseFailure: 'guaranteed-invalid',
   };
+
+  return defineProperty(syntaxDef);
 }
 
-type PropertyValueParseOptions<Value, Context, Declaration> = {
-  parseDeclarationValue: (input: ParserInput) => Declaration | null;
-  parseWholeValue: WholeValueParser<Value, Context>;
-  parseOrdinaryValue: (
-    declaration: Declaration,
-  ) => PropertyValue<Value, Context> | null;
-};
+export function defineProperty<Value, Context>(
+  definition: ValueDefinition<Value, Context>,
+) {
+  function parse(
+    input: ParserInput,
+  ): RawPropertyValue<Value, Context> | null {
+    const declaration = parseOptionalDeclarationValue(input);
 
-function parsePropertyValue<
-  Value,
-  Context,
-  Declaration extends OptionalDeclarationValue,
->(
-  input: ParserInput,
-  {
-    parseDeclarationValue,
-    parseWholeValue,
-    parseOrdinaryValue,
-  }: PropertyValueParseOptions<Value, Context, Declaration>,
-): PropertyValue<Value, Context> | null {
-  const declaration = parseDeclarationValue(input);
+    if (declaration === null) return null;
 
-  if (declaration === null) return null;
-
-  const cssWideValue = parseAsComponentGrammar(
-    declaration.components,
-    withTrivia(tryConsumeCssWideValue<Value, Context>),
-  );
-
-  if (cssWideValue !== null) return cssWideValue;
-
-  if (isSubstitutionDeclaration(declaration)) {
-    return createSubstitutionValue(declaration, parseWholeValue);
-  }
-
-  return parseOrdinaryValue(declaration);
-}
-
-export function defineCustomProperty(definition: {
-  syntax: SyntaxValue;
-}): Property<ParsedSyntaxValue, PropertyContext> {
-  const parseWholeValue = createWholeValueParser<ParsedSyntaxValue, PropertyContext>(
-    createSyntaxConsumer(definition.syntax),
-    resolveParsedSyntaxValue,
-    serializeParsedSyntaxValue,
-  );
-
-  const parseOrdinaryValue = (declaration: OptionalDeclarationValue) => {
-    const value: CustomPropertyValue<ParsedSyntaxValue, PropertyContext> = {
-      type: 'custom-property-value',
+    const value: RawPropertyValue<Value, Context> = {
+      type: 'raw-property-value',
       declaration,
-      resolve: (stage, context) => resolveCustomPropertyValue(
-        value,
-        parseWholeValue,
-        stage,
-        context,
-      ),
+      resolve: (stage, context) => resolveRawPropertyValue(value, stage, context),
       serialize: () => serializeComponentValues(declaration.components),
     };
 
     return value;
-  };
+  }
 
-  return {
-    parse: (input) => parsePropertyValue(input, {
-      parseDeclarationValue: parseOptionalDeclarationValue,
-      parseWholeValue,
-      parseOrdinaryValue,
-    }),
-  };
+  function resolveRawPropertyValue(
+    value: RawPropertyValue<Value, Context>,
+    stage: ValueStage,
+    context: Context,
+  ): PropertyValue<Value, Context> | null {
+    const { declaration } = value;
+    const cssWideValue = parseAsComponentGrammar(
+      declaration.components,
+      withTrivia(tryConsumeCssWideValue<Value, Context>),
+    );
+
+    if (cssWideValue !== null) return cssWideValue.resolve(stage, context);
+
+    if (isSubstitutionDeclaration(declaration)) {
+      return createSubstitutionValue(declaration, parse)
+        .resolve(stage, context);
+    }
+
+    const firstValid = parseFirstValid(declaration.components);
+
+    if (firstValid !== null) {
+      return createFirstValidValue(firstValid, parse)
+        .resolve(stage, context);
+    }
+
+    if (definition.parseAt !== undefined && stage < definition.parseAt) {
+      return value;
+    }
+
+    const result = parseAndResolveRawValueFromSyntax(
+      value,
+      definition,
+      stage,
+      context,
+    );
+
+    if (
+      result === null &&
+      definition.onParseFailure === 'guaranteed-invalid'
+    ) {
+      return guaranteedInvalidValue;
+    }
+
+    return result;
+  }
+  return { parse };
 }
 
 function isSubstitutionDeclaration(
@@ -144,19 +140,40 @@ function isSubstitutionDeclaration(
   return containsSubstitutionFunction(declaration.components);
 }
 
-function resolveCustomPropertyValue<Value, Context>(
-  value: CustomPropertyValue<Value, Context>,
-  parseWholeValue: WholeValueParser<Value, Context>,
+function parseAndResolveRawValueFromSyntax<Value, Context>(
+  raw: RawPropertyValue<Value, Context>,
+  definition: ValueDefinition<Value, Context>,
   stage: ValueStage,
   context: Context,
-): PropertyValue<Value, Context> {
-  if (stage < ValueStage.Computed) return value;
+): PropertyValue<Value, Context> | null {
+  const value = parseRawValueFromSyntax(raw, definition);
 
-  const parsedResult = parseWholeValue(value.declaration.components);
+  return value === null ? null : value.resolve(stage, context);
+}
 
-  if (parsedResult === null) {
-    return guaranteedInvalidValue;
-  }
+function parseRawValueFromSyntax<Value, Context>(
+  raw: RawPropertyValue<Value, Context>,
+  definition: ValueDefinition<Value, Context>,
+): ValueInstance<Value, Context> | null {
+  const value = parseAsComponentGrammar(
+    raw.declaration.components,
+    withTrivia(definition.tryConsume),
+  );
 
-  return parsedResult.resolve(stage, context);
+  return value === null ? null : createValueInstance(value, definition);
+}
+
+function createValueInstance<Value, Context>(
+  value: Value,
+  definition: ValueDefinition<Value, Context>,
+): ValueInstance<Value, Context> {
+  return {
+    type: 'value-instance',
+    value,
+    resolve: (stage, context) => {
+      const resolved = definition.resolve(value, stage, context);
+      return createValueInstance(resolved, definition);
+    },
+    serialize: () => definition.serialize(value),
+  };
 }

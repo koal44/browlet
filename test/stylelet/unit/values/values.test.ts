@@ -28,7 +28,7 @@ import { serializeAuto } from '../../../../src/stylelet/values/auto';
 import { parseCssWideValue, tryConsumeCssWideValue } from '../../../../src/stylelet/values/css-wide';
 import {
   parseDeclarationValue, parseOptionalDeclarationValue,
-  tryConsumeOptionalDeclarationValue,
+  tryConsumeDeclarationValue, tryConsumeOptionalDeclarationValue,
 } from '../../../../src/stylelet/values/declaration-value';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions, parseDimension, serializeDimension,
@@ -241,6 +241,15 @@ describe('declaration-value', () => {
     expect(value?.components).toBe(components);
   });
 
+  it('consumes a nonempty declaration value', () => {
+    const components = values('red 1px url(foo.png)');
+
+    expect(tryConsumeDeclarationValue(new ComponentCursor(components))).toEqual({
+      type: 'declaration-value',
+      components,
+    });
+  });
+
   it('rejects an empty production', () => {
     expect(parseDeclarationValue('')).toBeNull();
   });
@@ -263,6 +272,13 @@ describe('declaration-value', () => {
   it('rejects top-level semicolons and bangs', () => {
     expect(parseDeclarationValue('a ! b')).toBeNull();
     expect(parseDeclarationValue('a; b')).toBeNull();
+  });
+
+  it('restores after consuming an invalid declaration value', () => {
+    const c = new ComponentCursor(values('a ! b'));
+
+    expect(tryConsumeDeclarationValue(c)).toBeNull();
+    expect(c.pos()).toBe(0);
   });
 
   it('allows semicolons and bangs inside blocks', () => {

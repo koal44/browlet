@@ -25,11 +25,8 @@ export type DeclarationComponent = Exclude<
 
 export function parseDeclarationValue(input: ParserInput): DeclarationValue | null {
   const components = parseListOfComponentValues(input);
-  if (components.length > 0 && isDeclarationValueContents(components)) {
-    return {
-      type: 'declaration-value',
-      components: components as [DeclarationComponent, ...DeclarationComponent[]],
-    };
+  if (isNonEmptyDeclarationValueContents(components)) {
+    return { type: 'declaration-value', components: components };
   }
   return null;
 }
@@ -41,6 +38,24 @@ export function parseOptionalDeclarationValue(
   return isDeclarationValueContents(components)
     ? { type: 'declaration-value', components }
     : null;
+}
+
+// <declaration-value>
+export function tryConsumeDeclarationValue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<DeclarationValue> {
+  const start = c.pos();
+  const value = tryConsumeAnyValue(c);
+
+  if (
+    value === null ||
+    !isNonEmptyDeclarationValueContents(value.components)
+  ) {
+    c.restore(start);
+    return null;
+  }
+
+  return { type: 'declaration-value', components: value.components };
 }
 
 // <declaration-value>?
@@ -79,4 +94,10 @@ export function isDeclarationValueContents(
   }
 
   return true;
+}
+
+function isNonEmptyDeclarationValueContents(
+  components: readonly ComponentValue[],
+): components is [DeclarationComponent, ...DeclarationComponent[]] {
+  return components.length > 0 && isDeclarationValueContents(components);
 }

@@ -2,11 +2,11 @@ import { asciiLower } from '../../shared/css';
 import {
   BlockKind, serializeComponentValues, type ComponentValue,
 } from '../parser/component-value';
+import type { ParserInput } from '../parser/syntax';
 import { ValueStage } from '../value-processing';
 import type { DeclarationValue } from './declaration-value';
 import type { GuaranteedInvalidValue } from './guaranteed-invalid';
-import type { PropertyValue } from './property-value';
-import type { WholeValueParser } from './whole-value';
+import type { PropertyValue, RawPropertyValue } from './property-value';
 
 export type SubstitutionValue<Value, Context = unknown> = {
   type: 'substitution-value';
@@ -17,14 +17,16 @@ export type SubstitutionValue<Value, Context = unknown> = {
 
 export function createSubstitutionValue<Value, Context = unknown>(
   declaration: DeclarationValue,
-  parseWholeValue: WholeValueParser<Value, Context>,
+  parseInput: (
+    input: ParserInput,
+  ) => RawPropertyValue<Value, Context> | null,
 ): SubstitutionValue<Value, Context> {
   const value: SubstitutionValue<Value, Context> = {
     type: 'substitution-value',
     declaration,
     resolve: (stage, context) => resolveSubstitutionValue(
       value,
-      parseWholeValue,
+      parseInput,
       stage,
       context,
     ),
@@ -70,7 +72,9 @@ const ARBITRARY_SUBSTITUTION_FUNCTION_NAMES = new Set([
 
 function resolveSubstitutionValue<Value, Context>(
   value: SubstitutionValue<Value, Context>,
-  parseWholeValue: WholeValueParser<Value, Context>,
+  parseInput: (
+    input: ParserInput,
+  ) => RawPropertyValue<Value, Context> | null,
   stage: ValueStage,
   context: Context,
 ): PropertyValue<Value, Context> {
@@ -83,7 +87,7 @@ function resolveSubstitutionValue<Value, Context>(
 
   if ('type' in substituted) return substituted;
 
-  const parsedResult = parseWholeValue(substituted);
+  const parsedResult = parseInput(substituted)?.resolve(stage, context) ?? null;
 
   if (parsedResult === null) {
     throw new Error('Handling substituted parse failure is not implemented');
