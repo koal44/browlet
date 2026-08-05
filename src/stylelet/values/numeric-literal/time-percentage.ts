@@ -1,8 +1,10 @@
-import { withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { withTrivia } from '../../syntax/component-grammar';
 import {
-  canonicalizeTime, serializeTime, tryConsumeTime, type CanonicalTimeLiteral,
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
+import {
+  canonicalizeTime, serializeTime, consumeTime, type CanonicalTimeLiteral,
   type TimeLiteral,
 } from './time';
 import {
@@ -25,11 +27,13 @@ export function parseTimePercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): TimePercentageLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeTimePercentage),
-    context,
-  );
+  return timePercentageParser(input, context);
+}
+
+export function consumeTimePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<TimePercentageLiteral> {
+  return timePercentageConsumer(c);
 }
 
 export type TimePercentageConsumerOptions =
@@ -39,13 +43,11 @@ export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
 ): TryComponentConsumer<TimePercentageLiteral> {
   return createDimensionPercentageConsumer(
-    tryConsumeTime,
+    consumeTime,
     'Time-percentage',
     options,
   );
 }
-
-export const tryConsumeTimePercentage = createTimePercentageConsumer();
 
 export function serializeTimePercentage(value: TimePercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeTime);
@@ -92,3 +94,7 @@ export function tryAccumulateTimePercentages(
 ): TimePercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }
+
+// <time-percentage> = [ <time> | <percentage> ]
+const timePercentageConsumer = createTimePercentageConsumer();
+const timePercentageParser = createComponentParser(withTrivia(timePercentageConsumer));

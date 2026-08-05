@@ -1,12 +1,16 @@
 import {
   type ComponentCursor, type TryComponentConsumerResult,
-} from '../parser/component-cursor';
-import { isDelimToken, isTokenKind, type ComponentValue } from '../parser/component-value';
-import { parseListOfComponentValues, type ParserInput } from '../parser/syntax';
-import { TokenKind, type StaticToken } from '../parser/tokens';
+} from './component-cursor';
+import { isDelimToken, isTokenKind, type ComponentValue } from './component-value';
+import { parseListOfComponentValues, type ParserInput } from './parser';
+import { TokenKind, type StaticToken } from './tokens';
 import {
-  isAnyValueContents, tryConsumeAnyValue, type AnyValueComponent,
+  isAnyValueContents, consumeAnyValue, type AnyValueComponent,
 } from './any-value';
+
+/*
+ * <declaration-value>
+ */
 
 export type DeclarationValue = {
   type: 'declaration-value';
@@ -31,21 +35,12 @@ export function parseDeclarationValue(input: ParserInput): DeclarationValue | nu
   return null;
 }
 
-export function parseOptionalDeclarationValue(
-  input: ParserInput,
-): OptionalDeclarationValue | null {
-  const components = parseListOfComponentValues(input);
-  return isDeclarationValueContents(components)
-    ? { type: 'declaration-value', components }
-    : null;
-}
-
 // <declaration-value>
-export function tryConsumeDeclarationValue(
+export function consumeDeclarationValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DeclarationValue> {
   const start = c.pos();
-  const value = tryConsumeAnyValue(c);
+  const value = consumeAnyValue(c);
 
   if (
     value === null ||
@@ -58,12 +53,21 @@ export function tryConsumeDeclarationValue(
   return { type: 'declaration-value', components: value.components };
 }
 
+export function parseOptionalDeclarationValue(
+  input: ParserInput,
+): OptionalDeclarationValue | null {
+  const components = parseListOfComponentValues(input);
+  return isDeclarationValueContents(components)
+    ? { type: 'declaration-value', components }
+    : null;
+}
+
 // <declaration-value>?
-export function tryConsumeOptionalDeclarationValue(
+export function consumeOptionalDeclarationValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<OptionalDeclarationValue> {
   const start = c.pos();
-  const value = tryConsumeAnyValue(c);
+  const value = consumeAnyValue(c);
 
   if (value === null) {
     return c.peek() === null

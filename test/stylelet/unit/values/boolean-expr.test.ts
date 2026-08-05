@@ -1,32 +1,32 @@
-import { BlockKind } from '../../../../src/stylelet/parser/component-value';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import { BlockKind } from '../../../../src/stylelet/syntax/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   describe, expect,
   it,
 } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   createBooleanExprConsumer,
   parseBooleanExpr,
   resolveBooleanExpr,
   type BooleanExprResult,
 } from '../../../../src/stylelet/values/boolean-expr';
-import { tryConsumeGeneralEnclosed } from '../../../../src/stylelet/values/general-enclosed';
+import { consumeGeneralEnclosed } from '../../../../src/stylelet/values/general-enclosed';
 import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 
-const tryConsumeTest = createKeywordConsumer('a', 'b', 'c');
+const consumeTest = createKeywordConsumer('a', 'b', 'c');
 
 describe('<boolean-expr[]>', () => {
   it('wraps the generic test value', () => {
-    expect(parseBooleanExpr('a', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('a', consumeTest)).toEqual({
       type: 'boolean-test',
       value: 'a',
     });
   });
 
   it('parses not with one group operand', () => {
-    expect(parseBooleanExpr('NOT a', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('NOT a', consumeTest)).toEqual({
       type: 'boolean-not',
       value: {
         type: 'boolean-test',
@@ -36,7 +36,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('keeps and operands in one flat expression', () => {
-    expect(parseBooleanExpr('a and b AND c', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('a and b AND c', consumeTest)).toEqual({
       type: 'boolean-and',
       values: [
         { type: 'boolean-test', value: 'a' },
@@ -47,7 +47,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('does not let the nullable and tail mask an or expression', () => {
-    expect(parseBooleanExpr('a or b or c', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('a or b or c', consumeTest)).toEqual({
       type: 'boolean-or',
       values: [
         { type: 'boolean-test', value: 'a' },
@@ -58,7 +58,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('chooses the nonempty tail recursively inside parentheses', () => {
-    expect(parseBooleanExpr('(a or b)', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('(a or b)', consumeTest)).toEqual({
       type: 'block',
       block: BlockKind.Parens,
       value: {
@@ -72,7 +72,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('retains grouping as a parsed parentheses block', () => {
-    expect(parseBooleanExpr('(a and b) or c', tryConsumeTest)).toEqual({
+    expect(parseBooleanExpr('(a and b) or c', consumeTest)).toEqual({
       type: 'boolean-or',
       values: [
         {
@@ -92,7 +92,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('uses general-enclosed for unknown function and parentheses blocks', () => {
-    expect(parseBooleanExpr('future()', tryConsumeTest)).toMatchObject({
+    expect(parseBooleanExpr('future()', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
         block: BlockKind.Function,
@@ -100,7 +100,7 @@ describe('<boolean-expr[]>', () => {
         value: undefined,
       },
     });
-    expect(parseBooleanExpr('(future)', tryConsumeTest)).toMatchObject({
+    expect(parseBooleanExpr('(future)', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
         block: BlockKind.Parens,
@@ -110,7 +110,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('gives the supplied test grammar priority over general-enclosed', () => {
-    expect(parseBooleanExpr('known(value)', tryConsumeGeneralEnclosed)).toMatchObject({
+    expect(parseBooleanExpr('known(value)', consumeGeneralEnclosed)).toMatchObject({
       type: 'boolean-test',
       value: {
         type: 'general-enclosed',
@@ -123,7 +123,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('falls back to general-enclosed when grouped boolean parsing fails', () => {
-    expect(parseBooleanExpr('(a and)', tryConsumeTest)).toMatchObject({
+    expect(parseBooleanExpr('(a and)', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
         block: BlockKind.Parens,
@@ -141,7 +141,7 @@ describe('<boolean-expr[]>', () => {
     'a b',
     'future(])',
   ])('rejects %j as a complete expression', (input) => {
-    expect(parseBooleanExpr(input, tryConsumeTest)).toBeNull();
+    expect(parseBooleanExpr(input, consumeTest)).toBeNull();
   });
 
   it.each([
@@ -150,14 +150,14 @@ describe('<boolean-expr[]>', () => {
     'a or',
     'a or b or',
   ])('rejects the incomplete tail in %j when parsing the complete grammar', (input) => {
-    expect(parseBooleanExpr(input, tryConsumeTest)).toBeNull();
+    expect(parseBooleanExpr(input, consumeTest)).toBeNull();
   });
 
   it('leaves an incomplete Boolean tail for the enclosing grammar', () => {
     const c = new ComponentCursor(parseListOfComponentValues('a and'));
-    const tryConsume = createBooleanExprConsumer(tryConsumeTest);
+    const consume = createBooleanExprConsumer(consumeTest);
 
-    expect(tryConsume(c)).toMatchObject({
+    expect(consume(c)).toMatchObject({
       type: 'boolean-test',
       value: 'a',
     });
@@ -169,9 +169,9 @@ describe('<boolean-expr[]>', () => {
 
   it('consumes one expression and leaves following components', () => {
     const c = new ComponentCursor(parseListOfComponentValues('a and b trailing'));
-    const tryConsume = createBooleanExprConsumer(tryConsumeTest);
+    const consume = createBooleanExprConsumer(consumeTest);
 
-    expect(tryConsume(c)).toMatchObject({
+    expect(consume(c)).toMatchObject({
       type: 'boolean-and',
     });
     expect(c.peek()).toMatchObject({
@@ -206,7 +206,7 @@ describe('resolveBooleanExpr', () => {
     ['b or c', 'unknown'],
     ['(a or c) and b', false],
   ] as const)('resolves %s with three-valued logic', (input, expected) => {
-    const value = parseBooleanExpr(input, tryConsumeTest)!;
+    const value = parseBooleanExpr(input, consumeTest)!;
 
     expect(resolveBooleanExpr(value, {
       resolveTest,
@@ -215,13 +215,13 @@ describe('resolveBooleanExpr', () => {
   });
 
   it('resolves top-level unknown to false by default', () => {
-    const value = parseBooleanExpr('c', tryConsumeTest)!;
+    const value = parseBooleanExpr('c', consumeTest)!;
 
     expect(resolveBooleanExpr(value, { resolveTest })).toBe(false);
   });
 
   it('treats general-enclosed as unknown by default', () => {
-    const value = parseBooleanExpr('future()', tryConsumeTest)!;
+    const value = parseBooleanExpr('future()', consumeTest)!;
 
     expect(resolveBooleanExpr(value, {
       resolveTest,
@@ -230,7 +230,7 @@ describe('resolveBooleanExpr', () => {
   });
 
   it('allows the containing context to define general-enclosed as false', () => {
-    const value = parseBooleanExpr('not future()', tryConsumeTest)!;
+    const value = parseBooleanExpr('not future()', consumeTest)!;
 
     expect(resolveBooleanExpr(value, {
       resolveTest,

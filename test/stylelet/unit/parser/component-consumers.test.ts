@@ -2,17 +2,17 @@ import {
   describe, expect,
   it,
 } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
 import {
   consumeWhitespace, createFreeFormConsumer,
-  createFunctionalNotationConsumer, tryConsumeAnyValueFunctionBlock, tryConsumeBraceBlock,
-  tryConsumeBracketBlock, tryConsumeFunctionBlock, tryConsumeParensBlock, tryConsumeSlashDelim,
-} from '../../../../src/stylelet/parser/component-consumers';
-import { isTokenKind, BlockKind } from '../../../../src/stylelet/parser/component-value';
-import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
-import { BadStringToken, TokenKind } from '../../../../src/stylelet/parser/tokens';
-import { ColorKind, tryConsumeColor } from '../../../../src/stylelet/values/color';
+  createFunctionalNotationConsumer, consumeAnyValueFunctionBlock, consumeBraceBlock,
+  consumeBracketBlock, consumeFunctionBlock, consumeParensBlock, consumeSlashDelim,
+} from '../../../../src/stylelet/syntax/component-consumers';
+import { isTokenKind, BlockKind } from '../../../../src/stylelet/syntax/component-value';
+import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { consumeAnyValue } from '../../../../src/stylelet/syntax/any-value';
+import { BadStringToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { ColorKind, consumeColor } from '../../../../src/stylelet/values/color';
 
 describe('consumeWhitespace', () => {
   it('consumes consecutive whitespace components', () => {
@@ -26,7 +26,7 @@ describe('consumeWhitespace', () => {
 });
 
 describe('createFreeFormConsumer', () => {
-  const consumeFreeFormColor = createFreeFormConsumer(tryConsumeColor);
+  const consumeFreeFormColor = createFreeFormConsumer(consumeColor);
 
   it.each([
     'red',
@@ -66,7 +66,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('supports an additional top-level boundary predicate', () => {
-    const consume = createFreeFormConsumer(tryConsumeColor, {
+    const consume = createFreeFormConsumer(consumeColor, {
       stopBefore: (component) => isTokenKind(component, TokenKind.Colon),
     });
     const c = new ComponentCursor(parseListOfComponentValues('red: blue'));
@@ -80,7 +80,7 @@ describe('createFreeFormConsumer', () => {
 
   it('prevents a strict any-value from crossing a top-level comma', () => {
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
-    const consume = createFreeFormConsumer(tryConsumeAnyValue);
+    const consume = createFreeFormConsumer(consumeAnyValue);
 
     expect(consume(c)).toMatchObject({
       type: 'any-value',
@@ -89,7 +89,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('allows top-level commas in a non-strict any-value', () => {
-    const consume = createFreeFormConsumer(tryConsumeAnyValue, { strict: false });
+    const consume = createFreeFormConsumer(consumeAnyValue, { strict: false });
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
     expect(consume(c)).toMatchObject({
@@ -99,7 +99,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('includes a top-level comma in a non-strict partition', () => {
-    const consume = createFreeFormConsumer(tryConsumeColor, { strict: false });
+    const consume = createFreeFormConsumer(consumeColor, { strict: false });
     const c = new ComponentCursor(parseListOfComponentValues('red, blue'));
 
     expect(consume(c)).toBeNull();
@@ -107,7 +107,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('includes a brace block in a non-strict partition', () => {
-    const consume = createFreeFormConsumer(tryConsumeColor, { strict: false });
+    const consume = createFreeFormConsumer(consumeColor, { strict: false });
     const c = new ComponentCursor(parseListOfComponentValues('red {blue}'));
 
     expect(consume(c)).toBeNull();
@@ -115,11 +115,11 @@ describe('createFreeFormConsumer', () => {
   });
 });
 
-describe('tryConsumeAnyValueFunctionBlock', () => {
+describe('consumeAnyValueFunctionBlock', () => {
   it('consumes one functional notation and leaves following components', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(value) other'));
 
-    expect(tryConsumeAnyValueFunctionBlock(c)).toMatchObject({
+    expect(consumeAnyValueFunctionBlock(c)).toMatchObject({
       type: 'block',
       block: BlockKind.Function,
       name: 'fn',
@@ -133,7 +133,7 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
   it('accepts a function that CSS Syntax automatically closes at EOF', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(value'));
 
-    expect(tryConsumeAnyValueFunctionBlock(c)).toMatchObject({
+    expect(consumeAnyValueFunctionBlock(c)).toMatchObject({
       type: 'block',
       block: BlockKind.Function,
       name: 'fn',
@@ -144,17 +144,17 @@ describe('tryConsumeAnyValueFunctionBlock', () => {
   it.each(['fn()', 'fn(])'])('returns null without advancing for %j', (input) => {
     const c = new ComponentCursor(parseListOfComponentValues(input));
 
-    expect(tryConsumeAnyValueFunctionBlock(c)).toBeNull();
+    expect(consumeAnyValueFunctionBlock(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });
 
 describe('block consumers', () => {
   it.each([
-    ['{value} other', tryConsumeBraceBlock, BlockKind.Brace],
-    ['[value] other', tryConsumeBracketBlock, BlockKind.Bracket],
-    ['(value) other', tryConsumeParensBlock, BlockKind.Parens],
-    ['fn(value) other', tryConsumeFunctionBlock, BlockKind.Function],
+    ['{value} other', consumeBraceBlock, BlockKind.Brace],
+    ['[value] other', consumeBracketBlock, BlockKind.Bracket],
+    ['(value) other', consumeParensBlock, BlockKind.Parens],
+    ['fn(value) other', consumeFunctionBlock, BlockKind.Function],
   ] as const)('consumes one block from %j and leaves following components', (input, consume, block) => {
     const c = new ComponentCursor(parseListOfComponentValues(input));
 
@@ -163,10 +163,10 @@ describe('block consumers', () => {
   });
 
   it.each([
-    tryConsumeBraceBlock,
-    tryConsumeBracketBlock,
-    tryConsumeParensBlock,
-    tryConsumeFunctionBlock,
+    consumeBraceBlock,
+    consumeBracketBlock,
+    consumeParensBlock,
+    consumeFunctionBlock,
   ])('returns null without advancing when the block kind differs', (consume) => {
     const c = new ComponentCursor(parseListOfComponentValues('ident'));
 
@@ -197,7 +197,7 @@ describe('createFunctionalNotationConsumer', () => {
     const c = new ComponentCursor(parseListOfComponentValues('fn(other)'));
     const consume = createFunctionalNotationConsumer(
       'fn',
-      tryConsumeSlashDelim,
+      consumeSlashDelim,
       (value) => value,
     );
 

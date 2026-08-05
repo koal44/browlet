@@ -1,8 +1,10 @@
-import { withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { withTrivia } from '../../syntax/component-grammar';
 import {
-  canonicalizeFrequency, serializeFrequency, tryConsumeFrequency,
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
+import {
+  canonicalizeFrequency, serializeFrequency, consumeFrequency,
   type CanonicalFrequencyLiteral,
   type FrequencyLiteral,
 } from './frequency';
@@ -27,11 +29,13 @@ export function parseFrequencyPercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): FrequencyPercentageLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeFrequencyPercentage),
-    context,
-  );
+  return frequencyPercentageParser(input, context);
+}
+
+export function consumeFrequencyPercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<FrequencyPercentageLiteral> {
+  return frequencyPercentageConsumer(c);
 }
 
 export type FrequencyPercentageConsumerOptions =
@@ -41,13 +45,11 @@ export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
 ): TryComponentConsumer<FrequencyPercentageLiteral> {
   return createDimensionPercentageConsumer(
-    tryConsumeFrequency,
+    consumeFrequency,
     'Frequency-percentage',
     options,
   );
 }
-
-export const tryConsumeFrequencyPercentage = createFrequencyPercentageConsumer();
 
 export function serializeFrequencyPercentage(
   value: FrequencyPercentageLiteral,
@@ -96,3 +98,7 @@ export function tryAccumulateFrequencyPercentages(
 ): FrequencyPercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }
+
+// <frequency-percentage> = [ <frequency> | <percentage> ]
+const frequencyPercentageConsumer = createFrequencyPercentageConsumer();
+const frequencyPercentageParser = createComponentParser(withTrivia(frequencyPercentageConsumer));

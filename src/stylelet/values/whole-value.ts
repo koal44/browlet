@@ -1,31 +1,27 @@
-import type { TryComponentConsumer } from '../parser/component-cursor';
-import { serializeComponentValues } from '../parser/component-value';
+import type { TryComponentConsumer } from '../syntax/component-cursor';
+import { serializeComponentValues } from '../syntax/component-value';
 import {
   adaptConsumer, withTrivia,
-} from '../parser/component-grammar';
-import { parseAsComponentGrammar,
-  type ParserInput } from '../parser/syntax';
-import { ValueStage, type PropertyContext } from '../value-processing';
+} from '../syntax/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import { type PropertyContext } from '../value-processing/context';
 import {
-  tryConsumeCssWideValue, type CssWideValue,
+  consumeCssWideValue, type CssWideValue,
 } from './css-wide';
 import {
   parseOptionalDeclarationValue,
   type OptionalDeclarationValue,
-} from './declaration-value';
-import {
-  guaranteedInvalidValue,
-  type GuaranteedInvalidValue,
-} from './guaranteed-invalid';
+} from '../syntax/declaration-value';
 import {
   createSubstitutionValue, isSubstitutionDeclaration,
   type SubstitutionValue,
 } from './substitution-value';
 import {
-  serializeFirstValid, tryConsumeFirstValid,
+  serializeFirstValid, consumeFirstValid,
   type FirstValidValue,
 } from './substitution/first-valid';
-import type { ValueDefinition } from './value-definition';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   createSyntaxConsumer, resolveParsedSyntaxValue, serializeParsedSyntaxValue,
   type ParsedSyntaxValue, type SyntaxValue,
@@ -77,9 +73,21 @@ type WholeValueDefinition<Value, Context> = {
   consume: TryComponentConsumer<ParsedWholeValue<Value, Context>>;
 };
 
+export type GuaranteedInvalidValue = {
+  type: 'guaranteed-invalid';
+  resolve: (stage: ValueStage, context: unknown) => GuaranteedInvalidValue;
+  serialize: () => string;
+};
+
+export const guaranteedInvalidValue: GuaranteedInvalidValue = {
+  type: 'guaranteed-invalid',
+  resolve: () => guaranteedInvalidValue,
+  serialize: () => '',
+};
+
 export function defineCustomProperty(definition: { syntax: SyntaxValue; }) {
   const syntaxDef: ValueDefinition<ParsedSyntaxValue, PropertyContext> = {
-    tryConsume: createSyntaxConsumer(definition.syntax),
+    consume: createSyntaxConsumer(definition.syntax),
     resolve: resolveParsedSyntaxValue,
     serialize: serializeParsedSyntaxValue,
     custom: true,
@@ -106,16 +114,16 @@ export function defineProperty<Value, Context>(
     return value;
   }
 
-  const consumeFirstValid = adaptConsumer(
-    tryConsumeFirstValid,
+  const firstValidWholeConsumer = adaptConsumer(
+    consumeFirstValid,
     (value) => createFirstValidWholeValue(value, parse),
   );
-  const consumeOrdinary = adaptConsumer(
-    definition.tryConsume,
+  const ordinaryConsumer = adaptConsumer(
+    definition.consume,
     (value) => createOrdinaryWholeValue(value, definition),
   );
   const consume: TryComponentConsumer<ParsedWholeValue<Value, Context>> =
-    (c) => tryConsumeCssWideValue(c) ?? consumeFirstValid(c) ?? consumeOrdinary(c);
+    (c) => consumeCssWideValue(c) ?? firstValidWholeConsumer(c) ?? ordinaryConsumer(c);
 
   function resolveRaw(
     value: RawWholeValue<Value, Context>,

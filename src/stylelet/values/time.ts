@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -23,26 +25,34 @@ import {
 
 export type TimeValue = TimeLiteral | MathValue<'time'>;
 
+export const timeDef: ValueDefinition<TimeValue, MathContext> = {
+  consume: consumeTime,
+  resolve: resolveTime,
+  serialize: serializeTime,
+};
+
 export function parseTime(
   input: ParserInput,
   context: MathContext = {},
 ): TimeValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeTime),
-    context,
-  );
+  return timeParser(input, context);
+}
+
+export function consumeTime(
+  c: ComponentCursor,
+): TryComponentConsumerResult<TimeValue> {
+  return timeConsumer(c);
 }
 
 export function createTimeConsumer(
   options: TimeConsumerOptions = {},
 ): TryComponentConsumer<TimeValue> {
-  const tryConsumeLiteral = createTimeLiteralConsumer(options);
+  const literalConsumer = createTimeLiteralConsumer(options);
   const range = timeRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'time',
         ...(range === undefined ? {} : { range }),
@@ -51,14 +61,6 @@ export function createTimeConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeTime = createTimeConsumer();
-
-export const timeDef: ValueDefinition<TimeValue, MathContext> = {
-  tryConsume: tryConsumeTime,
-  resolve: resolveTime,
-  serialize: serializeTime,
-};
 
 export function resolveTime(
   value: TimeValue,
@@ -153,3 +155,7 @@ function timeRange(
     options.max ?? Infinity,
   ];
 }
+
+// <time> = <dimension-token with a time unit> | <math-function>
+const timeConsumer = createTimeConsumer();
+const timeParser = createComponentParser(withTrivia(timeConsumer));

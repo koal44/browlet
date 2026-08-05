@@ -1,8 +1,10 @@
-import { tryConsumeDimensionToken } from '../../parser/component-consumers';
-import { serializeCssDimensionUnit } from '../../parser/component-value';
-import { type ComponentCursor, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeDimensionToken } from '../../syntax/component-consumers';
+import { serializeCssDimensionUnit } from '../../syntax/component-value';
+import {
+  type ComponentCursor, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
 
 /*
@@ -45,27 +47,14 @@ export function parseDimension(
   input: ParserInput,
   context: unknown = undefined,
 ): DimensionLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeDimension),
-    context,
-  );
+  return dimensionParser(input, context);
 }
 
-export function tryConsumeDimension(
+export function consumeDimension(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DimensionLiteral> {
-  return consumeDimension(c);
+  return dimensionConsumer(c);
 }
-
-const consumeDimension = adaptConsumer(
-  tryConsumeDimensionToken,
-  (token): DimensionLiteral => ({
-    type: 'dimension',
-    value: token.value,
-    unit: token.unit,
-  }),
-);
 
 export function serializeDimension(
   value: AnyDimensionLiteral,
@@ -114,3 +103,15 @@ function assertSameDimensionUnit(
     throw new TypeError(`Dimension units must match: ${a.unit} and ${b.unit}`);
   }
 }
+
+// <dimension> = <dimension-token>
+const dimensionConsumer = adaptConsumer(
+  consumeDimensionToken,
+  (token): DimensionLiteral => ({
+    type: 'dimension',
+    value: token.value,
+    unit: token.unit,
+  }),
+);
+
+const dimensionParser = createComponentParser(withTrivia(dimensionConsumer));

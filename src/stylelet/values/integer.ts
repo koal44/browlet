@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import type { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -21,26 +23,34 @@ import {
 
 export type IntegerValue = IntegerLiteral | MathValue<'integer'>;
 
+export const integerDef: ValueDefinition<IntegerValue, MathContext> = {
+  consume: consumeInteger,
+  resolve: resolveInteger,
+  serialize: serializeInteger,
+};
+
 export function parseInteger(
   input: ParserInput,
   context: MathContext = {},
 ): IntegerValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeInteger),
-    context,
-  );
+  return integerParser(input, context);
+}
+
+export function consumeInteger(
+  c: ComponentCursor,
+): TryComponentConsumerResult<IntegerValue> {
+  return integerConsumer(c);
 }
 
 export function createIntegerConsumer(
   options: IntegerConsumerOptions = {},
 ): TryComponentConsumer<IntegerValue> {
-  const tryConsumeLiteral = createIntegerLiteralConsumer(options);
+  const literalConsumer = createIntegerLiteralConsumer(options);
   const range = integerRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'integer',
         ...(range === undefined ? {} : { range }),
@@ -49,14 +59,6 @@ export function createIntegerConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeInteger = createIntegerConsumer();
-
-export const integerDef: ValueDefinition<IntegerValue, MathContext> = {
-  tryConsume: tryConsumeInteger,
-  resolve: resolveInteger,
-  serialize: serializeInteger,
-};
 
 export function resolveInteger(
   value: IntegerValue,
@@ -147,3 +149,7 @@ function integerRange(
     options.max ?? Infinity,
   ];
 }
+
+// <integer> = <integer-number-token> | <math-function>
+const integerConsumer = createIntegerConsumer();
+const integerParser = createComponentParser(withTrivia(integerConsumer));

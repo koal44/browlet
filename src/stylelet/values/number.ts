@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import type { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -21,15 +23,23 @@ import {
 
 export type NumberValue = NumberLiteral | MathValue<'number'>;
 
+export const numberDef: ValueDefinition<NumberValue, MathContext> = {
+  consume: consumeNumber,
+  resolve: resolveNumber,
+  serialize: serializeNumber,
+};
+
 export function parseNumber(
   input: ParserInput,
   context: MathContext = {},
 ): NumberValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeNumber),
-    context,
-  );
+  return numberParser(input, context);
+}
+
+export function consumeNumber(
+  c: ComponentCursor,
+): TryComponentConsumerResult<NumberValue> {
+  return numberConsumer(c);
 }
 
 export type NumberConsumerOptions = NumberLiteralConsumerOptions;
@@ -37,12 +47,12 @@ export type NumberConsumerOptions = NumberLiteralConsumerOptions;
 export function createNumberConsumer(
   options: NumberConsumerOptions = {},
 ): TryComponentConsumer<NumberValue> {
-  const tryConsumeLiteral = createNumberLiteralConsumer(options);
+  const literalConsumer = createNumberLiteralConsumer(options);
   const range = numberRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'number',
         ...(range === undefined ? {} : { range }),
@@ -51,14 +61,6 @@ export function createNumberConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeNumber = createNumberConsumer();
-
-export const numberDef: ValueDefinition<NumberValue, MathContext> = {
-  tryConsume: tryConsumeNumber,
-  resolve: resolveNumber,
-  serialize: serializeNumber,
-};
 
 export function resolveNumber(
   value: NumberValue,
@@ -151,3 +153,7 @@ function numberRange(
     options.max ?? Infinity,
   ];
 }
+
+// <number> = <number-token> | <math-function>
+const numberConsumer = createNumberConsumer();
+const numberParser = createComponentParser(withTrivia(numberConsumer));

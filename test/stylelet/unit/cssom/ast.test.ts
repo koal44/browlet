@@ -5,7 +5,7 @@ import {
   AtRuleKindAst, BlockItemAstKind, parseStylesheet, PropertyId, RuleKindAst,
 } from '../../../../src/stylelet/cssom/ast';
 import type { LengthUnit } from '../../../../src/stylelet/values/numeric-literal/length';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 
 const cls = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });
 const id = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });

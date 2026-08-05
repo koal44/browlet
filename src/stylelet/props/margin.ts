@@ -1,10 +1,12 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { serializeAuto, tryConsumeAuto, type AutoValue } from '../values/auto';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { serializeAuto, consumeAuto, type AutoValue } from '../values/auto';
 import type { MathContext } from '../values/math-value';
 import {
-  serializeLengthPercentage, tryConsumeLengthPercentage,
+  serializeLengthPercentage, consumeLengthPercentage,
   type LengthPercentageValue,
 } from '../values/length-percentage';
 
@@ -21,23 +23,28 @@ export function parseMarginSideValue(
   input: ParserInput,
   context: MathContext = {},
 ): MarginSideValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeMarginSideValue),
-    context,
-  );
+  return marginSideValueParser(input, context);
 }
 
-export const tryConsumeMarginSideValue: TryComponentConsumer<MarginSideValue> = oneOf(
-  [
-    one(tryConsumeLengthPercentage),
-    one(tryConsumeAuto),
-  ],
-  ([value]) => value,
-);
+export function consumeMarginSideValue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<MarginSideValue> {
+  return marginSideValueConsumer(c);
+}
 
 export function serializeMarginSideValue(value: MarginSideValue): string {
   return value.type === 'auto'
     ? serializeAuto(value)
     : serializeLengthPercentage(value);
 }
+
+// <margin-top>, <margin-right>, <margin-bottom>, <margin-left> = <length-percentage> | auto
+const marginSideValueConsumer: TryComponentConsumer<MarginSideValue> = oneOf(
+  [
+    one(consumeLengthPercentage),
+    one(consumeAuto),
+  ],
+  ([value]) => value,
+);
+
+const marginSideValueParser = createComponentParser(withTrivia(marginSideValueConsumer));

@@ -1,8 +1,14 @@
-import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { tryConsumeCustomIdent } from './custom-ident';
-import { serializeCssIdentifier } from '../parser/component-value';
+import {
+  type ComponentCursor, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { consumeCustomIdent } from './custom-ident';
+import { serializeCssIdentifier } from '../syntax/component-value';
+
+/*
+ * <dashed-ident> = a <custom-ident> that starts with two dashes
+ */
 
 export type DashedIdentValue = {
   type: 'dashed-ident';
@@ -13,24 +19,14 @@ export function parseDashedIdent(
   input: ParserInput,
   context: unknown = undefined,
 ): DashedIdentValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeDashedIdent),
-    context,
-  );
+  return dashedIdentParser(input, context);
 }
 
-export function tryConsumeDashedIdent(
+export function consumeDashedIdent(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DashedIdentValue> {
-  return consumeDashedIdent(c);
+  return dashedIdentConsumer(c);
 }
-
-const consumeDashedIdent = adaptConsumer(tryConsumeCustomIdent, ({ value }) =>
-  isDashedIdentifier(value)
-    ? { type: 'dashed-ident' as const, value }
-    : null,
-);
 
 export function serializeDashedIdent(value: DashedIdentValue): string {
   return serializeCssIdentifier(value.value);
@@ -39,3 +35,13 @@ export function serializeDashedIdent(value: DashedIdentValue): string {
 function isDashedIdentifier(value: string): value is `--${string}` {
   return value.startsWith('--');
 }
+
+// <dashed-ident> = a <custom-ident> that starts with two dashes
+const dashedIdentConsumer = adaptConsumer(
+  consumeCustomIdent,
+  ({ value }) => isDashedIdentifier(value)
+    ? { type: 'dashed-ident' as const, value }
+    : null,
+);
+
+const dashedIdentParser = createComponentParser(withTrivia(dashedIdentConsumer));

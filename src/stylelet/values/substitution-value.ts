@@ -1,12 +1,11 @@
 import { asciiLower } from '../../shared/css';
 import {
   BlockKind, serializeComponentValues, type ComponentValue,
-} from '../parser/component-value';
-import type { ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { DeclarationValue, OptionalDeclarationValue } from './declaration-value';
-import type { GuaranteedInvalidValue } from './guaranteed-invalid';
-import type { RawWholeValue, WholeValue } from './whole-value';
+} from '../syntax/component-value';
+import type { ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { DeclarationValue, OptionalDeclarationValue } from '../syntax/declaration-value';
+import type { GuaranteedInvalidValue, RawWholeValue, WholeValue } from './whole-value';
 
 export type SubstitutionValue<Value, Context = unknown> = {
   type: 'substitution-value';

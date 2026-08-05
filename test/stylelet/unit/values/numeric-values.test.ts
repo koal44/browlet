@@ -1,58 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
-  resolveNumber, serializeNumber, tryConsumeNumber,
+  resolveNumber, serializeNumber, consumeNumber,
 } from '../../../../src/stylelet/values/number';
 import {
   accumulateAngles, addAngles, interpolateAngles, parseAngle, resolveAngle, serializeAngle,
-  tryConsumeAngle,
+  consumeAngle,
 } from '../../../../src/stylelet/values/angle';
 import {
   accumulateFrequencies, addFrequencies, interpolateFrequencies, parseFrequency, resolveFrequency,
-  serializeFrequency, tryConsumeFrequency,
+  serializeFrequency, consumeFrequency,
 } from '../../../../src/stylelet/values/frequency';
 import {
   accumulateLengths, addLengths, createLengthConsumer, interpolateLengths, parseLength,
-  resolveLength, serializeLength, tryConsumeLength,
+  resolveLength, serializeLength, consumeLength,
 } from '../../../../src/stylelet/values/length';
 import {
   accumulateResolutions, addResolutions, interpolateResolutions, parseResolution, resolveResolution,
-  serializeResolution, tryConsumeResolution,
+  serializeResolution, consumeResolution,
 } from '../../../../src/stylelet/values/resolution';
 import {
   accumulateTimes, addTimes, interpolateTimes, parseTime, resolveTime, serializeTime,
-  tryConsumeTime,
+  consumeTime,
 } from '../../../../src/stylelet/values/time';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
-  resolveInteger, serializeInteger, tryConsumeInteger,
+  resolveInteger, serializeInteger, consumeInteger,
 } from '../../../../src/stylelet/values/integer';
 import {
   accumulatePercentages, addPercentages, createPercentageConsumer, interpolatePercentages,
-  parsePercentage, resolvePercentage, serializePercentage, tryConsumePercentage,
+  parsePercentage, resolvePercentage, serializePercentage, consumePercentage,
 } from '../../../../src/stylelet/values/percentage';
 import {
   accumulateAnglePercentages, addAnglePercentages, createAnglePercentageConsumer,
   interpolateAnglePercentages, parseAnglePercentage, resolveAnglePercentage,
-  serializeAnglePercentage, tryConsumeAnglePercentage,
+  serializeAnglePercentage, consumeAnglePercentage,
 } from '../../../../src/stylelet/values/angle-percentage';
 import {
   accumulateLengthPercentages, addLengthPercentages, createLengthPercentageConsumer,
   interpolateLengthPercentages, parseLengthPercentage, resolveLengthPercentage,
-  serializeLengthPercentage, tryConsumeLengthPercentage,
+  serializeLengthPercentage, consumeLengthPercentage,
 } from '../../../../src/stylelet/values/length-percentage';
 import {
   accumulateFrequencyPercentages, addFrequencyPercentages, createFrequencyPercentageConsumer,
   interpolateFrequencyPercentages, parseFrequencyPercentage, resolveFrequencyPercentage,
-  serializeFrequencyPercentage, tryConsumeFrequencyPercentage,
+  serializeFrequencyPercentage, consumeFrequencyPercentage,
 } from '../../../../src/stylelet/values/frequency-percentage';
 import {
   accumulateTimePercentages, addTimePercentages, createTimePercentageConsumer,
   interpolateTimePercentages, parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
-  tryConsumeTimePercentage,
+  consumeTimePercentage,
 } from '../../../../src/stylelet/values/time-percentage';
 import type { MathContext } from '../../../../src/stylelet/values/math-value';
 
@@ -172,7 +172,7 @@ describe('number values', () => {
       parseListOfComponentValues('calc(1px)'),
     );
 
-    expect(tryConsumeNumber(c)).toBeNull();
+    expect(consumeNumber(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -204,7 +204,7 @@ describe('number values', () => {
       { context },
     );
 
-    expect(tryConsumeNumber(c)).not.toBeNull();
+    expect(consumeNumber(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -253,7 +253,7 @@ describe('angle values', () => {
     );
 
     expect(serializeAngle(value!)).toBe('calc(1deg)');
-    expect(tryConsumeAngle(other)).toBeNull();
+    expect(consumeAngle(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
@@ -290,7 +290,7 @@ describe('frequency values', () => {
     );
 
     expect(serializeFrequency(value!)).toBe('calc(1hz)');
-    expect(tryConsumeFrequency(other)).toBeNull();
+    expect(consumeFrequency(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
@@ -328,7 +328,7 @@ describe('length values', () => {
     );
 
     expect(serializeLength(value!)).toBe('calc(1px)');
-    expect(tryConsumeLength(other)).toBeNull();
+    expect(consumeLength(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
@@ -382,7 +382,7 @@ describe('resolution values', () => {
     );
 
     expect(serializeResolution(value!)).toBe('calc(1dppx)');
-    expect(tryConsumeResolution(other)).toBeNull();
+    expect(consumeResolution(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
@@ -441,7 +441,7 @@ describe('time values', () => {
     );
 
     expect(serializeTime(value!)).toBe('calc(1s)');
-    expect(tryConsumeTime(other)).toBeNull();
+    expect(consumeTime(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
@@ -522,7 +522,7 @@ describe('integer values', () => {
     for (const input of ['calc(1px)', 'calc(1%)']) {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumeInteger(c)).toBeNull();
+      expect(consumeInteger(c)).toBeNull();
       expect(c.pos()).toBe(0);
     }
   });
@@ -608,7 +608,7 @@ describe('percentage values', () => {
     for (const input of ['calc(1)', 'calc(1px)']) {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumePercentage(c)).toBeNull();
+      expect(consumePercentage(c)).toBeNull();
       expect(c.pos()).toBe(0);
     }
   });
@@ -622,7 +622,7 @@ describe('percentage values', () => {
       { context },
     );
 
-    expect(tryConsumePercentage(c)).toMatchObject({
+    expect(consumePercentage(c)).toMatchObject({
       calculation: {
         type: 'percentage',
         value: 25,
@@ -733,7 +733,7 @@ describe('angle-percentage values', () => {
       parseListOfComponentValues('calc(10px + 25%)'),
     );
 
-    expect(tryConsumeAnglePercentage(c)).toBeNull();
+    expect(consumeAnglePercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -746,7 +746,7 @@ describe('angle-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeAnglePercentage(c)).not.toBeNull();
+    expect(consumeAnglePercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -869,7 +869,7 @@ describe('length-percentage values', () => {
       parseListOfComponentValues('calc(10deg + 25%)'),
     );
 
-    expect(tryConsumeLengthPercentage(c)).toBeNull();
+    expect(consumeLengthPercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -882,7 +882,7 @@ describe('length-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeLengthPercentage(c)).not.toBeNull();
+    expect(consumeLengthPercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -1006,7 +1006,7 @@ describe('frequency-percentage values', () => {
       parseListOfComponentValues('calc(10s + 25%)'),
     );
 
-    expect(tryConsumeFrequencyPercentage(c)).toBeNull();
+    expect(consumeFrequencyPercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1019,7 +1019,7 @@ describe('frequency-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeFrequencyPercentage(c)).not.toBeNull();
+    expect(consumeFrequencyPercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
@@ -1141,7 +1141,7 @@ describe('time-percentage values', () => {
       parseListOfComponentValues('calc(10hz + 25%)'),
     );
 
-    expect(tryConsumeTimePercentage(c)).toBeNull();
+    expect(consumeTimePercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1154,7 +1154,7 @@ describe('time-percentage values', () => {
       { context },
     );
 
-    expect(tryConsumeTimePercentage(c)).not.toBeNull();
+    expect(consumeTimePercentage(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 

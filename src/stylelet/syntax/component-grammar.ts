@@ -72,7 +72,7 @@ export function sequenceOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeSequenceOf(false, consumers, project);
+  return consumeSequenceOf(false, consumers, project);
 }
 
 /**
@@ -84,10 +84,10 @@ export function requiredSequenceOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeSequenceOf(true, consumers, project);
+  return consumeSequenceOf(true, consumers, project);
 }
 
-function tryConsumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
+function consumeSequenceOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<SequenceValue<P>, R>,
@@ -198,7 +198,7 @@ export function allOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeAllOf(false, consumers, project);
+  return consumeAllOf(false, consumers, project);
 }
 
 /**
@@ -210,10 +210,10 @@ export function requiredAllOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeAllOf(true, consumers, project);
+  return consumeAllOf(true, consumers, project);
 }
 
-function tryConsumeAllOf<const P extends readonly AnyMultiplier[], R>(
+function consumeAllOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<AllOfValue<P>, R>,
@@ -271,7 +271,7 @@ export function someOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeSomeOf(false, consumers, project);
+  return consumeSomeOf(false, consumers, project);
 }
 
 /**
@@ -283,10 +283,10 @@ export function requiredSomeOf<const P extends readonly AnyMultiplier[], R>(
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
 ): TryComponentConsumer<R> {
-  return tryConsumeSomeOf(true, consumers, project);
+  return consumeSomeOf(true, consumers, project);
 }
 
-function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
+function consumeSomeOf<const P extends readonly AnyMultiplier[], R>(
   requireAnyValue: boolean,
   consumers: P,
   project: Projector<SomeOfValue<P>, R>,
@@ -342,12 +342,12 @@ function tryConsumeSomeOf<const P extends readonly AnyMultiplier[], R>(
 // Required consumer adapter
 // =============================================================================
 
-export type ComponentConsumer<T> = (c: ComponentCursor) => T;
+type RequiredComponentConsumer<T> = (c: ComponentCursor) => T;
 
 export function required<T>(
   consume: TryComponentConsumer<T>,
   expected: string,
-): ComponentConsumer<T> {
+): RequiredComponentConsumer<T> {
   return (c): T => {
     const start = c.pos();
     const outerContext = c.context;

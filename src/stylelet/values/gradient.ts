@@ -1,26 +1,27 @@
 import { assertNever, mapTuple } from '../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer, tryConsumeComma } from '../parser/component-consumers';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { createFunctionalNotationConsumer, consumeComma } from '../syntax/component-consumers';
 import {
-  one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia,
-} from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
+  adaptConsumer, one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf,
+  sequenceOf, withTrivia,
+} from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
 import {
-  resolveAnglePercentage, serializeAnglePercentage, tryConsumeAnglePercentage,
+  resolveAnglePercentage, serializeAnglePercentage, consumeAnglePercentage,
   type AnglePercentageValue,
 } from './angle-percentage';
 import {
   ColorKind, interpolateColors, isLegacySrgbColor, resolveColorValue,
-  serializeColorInterpolationMethod, serializeColorValue, tryConsumeColor,
-  tryConsumeColorInterpolationMethod, type AbsoluteColor, type ColorInterpolationMethod,
+  serializeColorInterpolationMethod, serializeColorValue, consumeColor,
+  consumeColorInterpolationMethod, type AbsoluteColor, type ColorInterpolationMethod,
   type ColorContext, type ColorValue,
 } from './color';
 import { createKeywordConsumer } from './keyword';
 import {
   createLengthPercentageConsumer, resolveLengthPercentage, serializeLengthPercentage,
-  tryConsumeLengthPercentage, type LengthPercentageValue,
+  consumeLengthPercentage, type LengthPercentageValue,
 } from './length-percentage';
 import type { PercentageReferenceValue } from './math-value';
 import { angleLiteral, canonicalizeAngle, type CanonicalAngleLiteral } from './numeric-literal/angle';
@@ -28,11 +29,11 @@ import { tryResolveAnglePercentage as tryResolveAnglePercentageLiteral } from '.
 import { lengthLiteral, type CanonicalLengthLiteral } from './numeric-literal/length';
 import { percentageLiteral, type PercentageLiteral } from './numeric-literal/percentage';
 import {
-  resolvePosition, serializePosition, tryConsumePosition, positionLiteral, type PositionContext,
+  resolvePosition, serializePosition, consumePosition, positionLiteral, type PositionContext,
   type PositionOffsets, type PositionValue,
 } from './position';
 import { serializeNumber } from './number';
-import { tryConsumeZero, type ZeroValue } from './numeric-literal/zero';
+import { consumeZero, type ZeroValue } from './numeric-literal/zero';
 
 /*
  * <gradient> =
@@ -195,566 +196,46 @@ type ColorStopAngle = StopOffsets<AngularColorStopOffset>;
 
 type LinearGradientSyntax = Omit<LinearGradient, 'type' | 'gradientType' | 'repeating'>;
 type RadialGradientSyntax = Omit<RadialGradient, 'type' | 'gradientType' | 'repeating'>;
-type ConicGradientSyntax =  Omit<ConicGradient,  'type' | 'gradientType' | 'repeating'>;
-
-const MAX_COLOR_STOPS = 2_048;
+type ConicGradientSyntax = Omit<ConicGradient, 'type' | 'gradientType' | 'repeating'>;
 
 export function parseGradient(
   input: ParserInput,
   context: GradientContext = {},
 ): GradientValue | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeGradient),
-    context,
-  );
-
-  return result;
+  return gradientParser(input, context);
 }
 
-export function tryConsumeGradient(
+export function consumeGradient(
   c: ComponentCursor,
 ): TryComponentConsumerResult<GradientValue> {
-  return consumeGradient(c);
+  return gradientConsumer(c);
 }
 
-// <gradient> = <linear-gradient()> | <repeating-linear-gradient()> | <radial-gradient()> | <repeating-radial-gradient()> | <conic-gradient()> | <repeating-conic-gradient()>
-const consumeGradient: TryComponentConsumer<GradientValue> = oneOf(
-  [
-    one(tryConsumeLinearGradientFn),
-    one(tryConsumeRepeatingLinearGradientFn),
-    one(tryConsumeRadialGradientFn),
-    one(tryConsumeRepeatingRadialGradientFn),
-    one(tryConsumeConicGradientFn),
-    one(tryConsumeRepeatingConicGradientFn),
-  ],
-  ([gradient]) => gradient,
-);
+// =============================================================================
+// Syntax
+// =============================================================================
 
-function tryConsumeLinearGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LinearGradient> {
-  return consumeLinearGradientFn(c);
-}
-
-// <linear-gradient()> = linear-gradient( [ <linear-gradient-syntax> ] )
-const consumeLinearGradientFn = createFunctionalNotationConsumer(
-  'linear-gradient',
-  tryConsumeLinearGradientSyntax,
-  (syntax): LinearGradient => ({
-    type: 'gradient',
-    gradientType: 'linear',
-    repeating: false,
-    ...syntax,
-  }),
-);
-
-function tryConsumeLinearGradientSyntax(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LinearGradientSyntax> {
-  return consumeLinearGradientSyntax(c);
-}
-
-// <linear-gradient-syntax> = [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ]? , <color-stop-list>
-// Comma-explicit: [ [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ] ,]? <color-stop-list>
-const consumeLinearGradientSyntax: TryComponentConsumer<LinearGradientSyntax> = sequenceOf(
-  [
-    opt(sequenceOf(
-      [
-        one(requiredSomeOf(
-          [
-            one(withTrivia(oneOf(
-              [
-                one(tryConsumeAngle),
-                one(tryConsumeZero),
-                one(sequenceOf(
-                  [
-                    one(createKeywordConsumer('to')),
-                    one(withTrivia(tryConsumeSideOrCorner)),
-                  ],
-                  ([, [sideOrCorner]]) => sideOrCorner,
-                )),
-              ],
-              ([direction]) => direction,
-            ))),
-            one(withTrivia(tryConsumeColorInterpolationMethod)),
-          ],
-          ([direction, method]) => ({
-            ...(direction === undefined ? {} : { direction: direction[0] }),
-            ...(method === undefined ? {} : { method: method[0] }),
-          }),
-        )),
-        one(withTrivia(tryConsumeComma)),
-      ],
-      ([[prelude]]) => prelude,
-    )),
-    one(withTrivia(tryConsumeColorStopList)),
-  ],
-  ([prelude, [stops]]) => {
-    const syntax = prelude.length === 0 ? {} : prelude[0];
-    return {
-      direction: syntax.direction ?? defaultLinearGradientDirection(),
-      method: syntax.method ?? defaultGradientMethod(stops),
-      stops,
-    };
-  },
-);
-
-function tryConsumeSideOrCorner(
-  c: ComponentCursor,
-): TryComponentConsumerResult<SideOrCorner> {
-  return consumeSideOrCorner(c);
-}
-
-// <side-or-corner> = [left | right] || [top | bottom]
-const consumeSideOrCorner: TryComponentConsumer<SideOrCorner> = requiredSomeOf(
-  [
-    one(withTrivia(createKeywordConsumer('left', 'right'))),
-    one(withTrivia(createKeywordConsumer('top', 'bottom'))),
-  ],
-  ([horizontal, vertical]) => {
-    if (horizontal === undefined) {
-      return {
-        type: 'side-or-corner',
-        vertical: vertical![0],
-      };
-    }
-
-    return {
-      type: 'side-or-corner',
-      horizontal: horizontal[0],
-      ...(vertical === undefined ? {} : { vertical: vertical[0] }),
-    };
-  },
-);
-
-function tryConsumeRadialGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialGradient> {
-  return consumeRadialGradientFn(c);
-}
-
-// <radial-gradient()> = radial-gradient( [ <radial-gradient-syntax> ] )
-const consumeRadialGradientFn = createFunctionalNotationConsumer(
-  'radial-gradient',
-  tryConsumeRadialGradientSyntax,
-  (syntax): RadialGradient => ({
-    type: 'gradient',
-    gradientType: 'radial',
-    repeating: false,
-    ...syntax,
-  }),
-);
-
-function tryConsumeRadialGradientSyntax(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialGradientSyntax> {
-  return consumeRadialGradientSyntax(c);
-}
-
-// <radial-gradient-syntax> = [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <color-stop-list>
-// Comma-explicit: [ [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <color-stop-list>
-const consumeRadialGradientSyntax: TryComponentConsumer<RadialGradientSyntax> = sequenceOf(
-  [
-    opt(sequenceOf(
-      [
-        one(requiredSomeOf(
-          [
-            one(withTrivia(requiredSequenceOf(
-              [
-                opt(requiredSomeOf(
-                  [
-                    one(withTrivia(tryConsumeRadialShape)),
-                    one(withTrivia(tryConsumeRadialSize)),
-                  ],
-                  ([shape, size]) => {
-                    const radialShape = shape?.[0];
-                    const radialSize = size?.[0];
-                    const sizeArity = radialSize?.type === 'radial-extent'
-                      ? radialSize.extents.length
-                      : radialSize?.radii.length;
-
-                    if (radialShape === 'circle' && sizeArity === 2) {
-                      return null;
-                    }
-
-                    return {
-                      ...(radialShape === undefined ? {} : { shape: radialShape }),
-                      ...(radialSize === undefined ? {} : { size: radialSize }),
-                    };
-                  },
-                )),
-                opt(sequenceOf(
-                  [
-                    one(withTrivia(createKeywordConsumer('at'))),
-                    one(withTrivia(tryConsumePosition)),
-                  ],
-                  ([, [position]]) => position,
-                )),
-              ],
-              ([shapeAndSize, position]) => ({
-                ...(shapeAndSize.length === 0 ? {} : shapeAndSize[0]),
-                ...(position.length === 0 ? {} : { position: position[0] }),
-              }),
-            ))),
-            one(withTrivia(tryConsumeColorInterpolationMethod)),
-          ],
-          ([geometry, method]) => ({
-            ...(geometry === undefined ? {} : geometry[0]),
-            ...(method === undefined ? {} : { method: method[0] }),
-          }),
-        )),
-        one(withTrivia(tryConsumeComma)),
-      ],
-      ([[prelude]]) => prelude,
-    )),
-    one(withTrivia(tryConsumeColorStopList)),
-  ],
-  ([prelude, [stops]]) => {
-    const syntax = prelude.length === 0 ? {} : prelude[0];
-    const size = syntax.size ?? defaultRadialGradientSize();
-    return {
-      shape: syntax.shape ?? defaultRadialGradientShape(size),
-      size,
-      position: syntax.position ?? defaultGradientPosition(),
-      method: syntax.method ?? defaultGradientMethod(stops),
-      stops,
-    };
-  },
-);
-
-function tryConsumeRadialSize(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialSize> {
-  return consumeRadialSize(c);
-}
-
-// <radial-size> = <radial-extent>{1,2} | <length-percentage [0,infinity]>{1,2}
-const consumeRadialSize: TryComponentConsumer<RadialSize> = oneOf(
-  [
-    one(sequenceOf(
-      [
-        one(tryConsumeRadialExtent),
-        opt(withTrivia(tryConsumeRadialExtent)),
-      ],
-      ([[first], second]): RadialExtentSize => ({
-        type: 'radial-extent',
-        extents: second.length === 0 ? [first] : [first, second[0]],
-      }),
-    )),
-    one(sequenceOf(
-      [
-        one(createLengthPercentageConsumer({ min: 0 })),
-        opt(withTrivia(createLengthPercentageConsumer({ min: 0 }))),
-      ],
-      ([[first], second]): RadialRadiiSize => ({
-        type: 'radial-radii',
-        radii: second.length === 0 ? [first] : [first, second[0]],
-      }),
-    )),
-  ],
-  ([size]) => size,
-);
-
-function tryConsumeRadialExtent(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialExtent> {
-  return consumeRadialExtent(c);
-}
-
-// <radial-extent> = closest-corner | closest-side | farthest-corner | farthest-side
-const consumeRadialExtent = createKeywordConsumer(
-  'closest-corner', 'closest-side', 'farthest-corner', 'farthest-side',
-);
-
-function tryConsumeRadialShape(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialShape> {
-  return consumeRadialShape(c);
-}
-
-// <radial-shape> = circle | ellipse
-const consumeRadialShape = createKeywordConsumer('circle', 'ellipse');
-
-function tryConsumeConicGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ConicGradient> {
-  return consumeConicGradientFn(c);
-}
-
-// <conic-gradient()> = conic-gradient( [ <conic-gradient-syntax> ] )
-const consumeConicGradientFn = createFunctionalNotationConsumer(
-  'conic-gradient',
-  tryConsumeConicGradientSyntax,
-  (syntax): ConicGradient => ({
-    type: 'gradient',
-    gradientType: 'conic',
-    repeating: false,
-    ...syntax,
-  }),
-);
-
-function tryConsumeConicGradientSyntax(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ConicGradientSyntax> {
-  return consumeConicGradientSyntax(c);
-}
-
-// <conic-gradient-syntax> = [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <angular-color-stop-list>
-// Comma-explicit: [ [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <angular-color-stop-list>
-const consumeConicGradientSyntax: TryComponentConsumer<ConicGradientSyntax> = sequenceOf(
-  [
-    opt(sequenceOf(
-      [
-        one(requiredSomeOf(
-          [
-            one(withTrivia(requiredSequenceOf(
-              [
-                opt(sequenceOf(
-                  [
-                    one(createKeywordConsumer('from')),
-                    one(withTrivia(oneOf(
-                      [one(tryConsumeAngle), one(tryConsumeZero)],
-                      ([angle]) => angle,
-                    ))),
-                  ],
-                  ([, [angle]]) => angle,
-                )),
-                opt(sequenceOf(
-                  [
-                    one(withTrivia(createKeywordConsumer('at'))),
-                    one(withTrivia(tryConsumePosition)),
-                  ],
-                  ([, [position]]) => position,
-                )),
-              ],
-              ([angle, position]) => ({
-                ...(angle.length === 0 ? {} : { angle: angle[0] }),
-                ...(position.length === 0 ? {} : { position: position[0] }),
-              }),
-            ))),
-            one(withTrivia(tryConsumeColorInterpolationMethod)),
-          ],
-          ([geometry, method]) => ({
-            ...(geometry === undefined ? {} : geometry[0]),
-            ...(method === undefined ? {} : { method: method[0] }),
-          }),
-        )),
-        one(withTrivia(tryConsumeComma)),
-      ],
-      ([[prelude]]) => prelude,
-    )),
-    one(withTrivia(tryConsumeAngularColorStopList)),
-  ],
-  ([prelude, [stops]]) => {
-    const syntax = prelude.length === 0 ? {} : prelude[0];
-    return {
-      angle: syntax.angle ?? defaultConicGradientAngle(),
-      position: syntax.position ?? defaultGradientPosition(),
-      method: syntax.method ?? defaultGradientMethod(stops),
-      stops,
-    };
-  },
-);
-
-function tryConsumeRepeatingLinearGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LinearGradient> {
-  return consumeRepeatingLinearGradientFn(c);
-}
-
-// <repeating-linear-gradient()> = repeating-linear-gradient( [ <linear-gradient-syntax> ] )
-const consumeRepeatingLinearGradientFn = createFunctionalNotationConsumer(
-  'repeating-linear-gradient',
-  tryConsumeLinearGradientSyntax,
-  (syntax): LinearGradient => ({
-    type: 'gradient',
-    gradientType: 'linear',
-    repeating: true,
-    ...syntax,
-  }),
-);
-
-function tryConsumeRepeatingRadialGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RadialGradient> {
-  return consumeRepeatingRadialGradientFn(c);
-}
-
-// <repeating-radial-gradient()> = repeating-radial-gradient( [ <radial-gradient-syntax> ] )
-const consumeRepeatingRadialGradientFn = createFunctionalNotationConsumer(
-  'repeating-radial-gradient',
-  tryConsumeRadialGradientSyntax,
-  (syntax): RadialGradient => ({
-    type: 'gradient',
-    gradientType: 'radial',
-    repeating: true,
-    ...syntax,
-  }),
-);
-
-function tryConsumeRepeatingConicGradientFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ConicGradient> {
-  return consumeRepeatingConicGradientFn(c);
-}
-
-// <repeating-conic-gradient()> = repeating-conic-gradient( [ <conic-gradient-syntax> ] )
-const consumeRepeatingConicGradientFn = createFunctionalNotationConsumer(
-  'repeating-conic-gradient',
-  tryConsumeConicGradientSyntax,
-  (syntax): ConicGradient => ({
-    type: 'gradient',
-    gradientType: 'conic',
-    repeating: true,
-    ...syntax,
-  }),
-);
-
-function tryConsumeColorStopList(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ColorStops> {
-  return consumeColorStopList(c);
-}
-
-// <color-stop-list> = <linear-color-stop> , [ <linear-color-hint>? , <linear-color-stop> ]#?
-// Comma-explicit: <linear-color-stop> [ , [ <linear-color-hint> ,]? <linear-color-stop> ]*
-const consumeColorStopList: TryComponentConsumer<ColorStops> =
-  createGradientStopListConsumer(tryConsumeLinearColorStop, tryConsumeLinearColorHint);
-
-function tryConsumeLinearColorStop(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LinearColorStop> {
-  return consumeLinearColorStop(c);
-}
-
-// <linear-color-stop> = <color> <color-stop-length>?
-const consumeLinearColorStop: TryComponentConsumer<LinearColorStop> = sequenceOf(
-  [
-    one(tryConsumeColor),
-    opt(withTrivia(tryConsumeColorStopLength)),
-  ],
-  ([[color], offsets]) => ({
-    type: 'color-stop',
-    color,
-    ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
-  }),
-);
-
-function tryConsumeLinearColorHint(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LinearColorHint> {
-  return consumeLinearColorHint(c);
-}
-
-// <linear-color-hint> = <length-percentage>
-const consumeLinearColorHint: TryComponentConsumer<LinearColorHint> = sequenceOf(
-  [one(tryConsumeLengthPercentage)],
-  ([[offset]]) => ({ type: 'color-hint', offset }),
-);
-
-function tryConsumeColorStopLength(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ColorStopLength> {
-  return consumeColorStopLength(c);
-}
-
-// <color-stop-length> = <length-percentage>{1,2}
-const consumeColorStopLength: TryComponentConsumer<ColorStopLength> =
-  sequenceOf(
-    [
-      one(tryConsumeLengthPercentage),
-      opt(withTrivia(tryConsumeLengthPercentage)),
-    ],
-    ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
-  );
-
-function tryConsumeAngularColorStopList(
-  c: ComponentCursor,
-): TryComponentConsumerResult<GradientStops<AngularColorStopOffset>> {
-  return consumeAngularColorStopList(c);
-}
-
-// <angular-color-stop-list> = <angular-color-stop> , [ <angular-color-hint>? , <angular-color-stop> ]#?
-// Comma-explicit: <angular-color-stop> [ , [ <angular-color-hint> ,]? <angular-color-stop> ]*
-const consumeAngularColorStopList: TryComponentConsumer<GradientStops<AngularColorStopOffset>> =
-  createGradientStopListConsumer(tryConsumeAngularColorStop, tryConsumeAngularColorHint);
-
-function tryConsumeAngularColorStop(
-  c: ComponentCursor,
-): TryComponentConsumerResult<GradientColorStop<AngularColorStopOffset>> {
-  return consumeAngularColorStop(c);
-}
-
-// <angular-color-stop> = <color> <color-stop-angle>?
-const consumeAngularColorStop: TryComponentConsumer<GradientColorStop<AngularColorStopOffset>> = sequenceOf(
-  [
-    one(tryConsumeColor),
-    opt(withTrivia(tryConsumeColorStopAngle)),
-  ],
-  ([[color], offsets]) => ({
-    type: 'color-stop',
-    color,
-    ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
-  }),
-);
-
-function tryConsumeAngularColorHint(
-  c: ComponentCursor,
-): TryComponentConsumerResult<GradientColorHint<AngularColorStopOffset>> {
-  return consumeAngularColorHint(c);
-}
-
-// <angular-color-hint> = <angle-percentage> | <zero>
-const consumeAngularColorHint: TryComponentConsumer<GradientColorHint<AngularColorStopOffset>> = sequenceOf(
-  [one(oneOf(
-    [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-    ([offset]) => offset,
-  ))],
-  ([[offset]]) => ({ type: 'color-hint', offset }),
-);
-
-function tryConsumeColorStopAngle(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ColorStopAngle> {
-  return consumeColorStopAngle(c);
-}
-
-// <color-stop-angle> = [ <angle-percentage> | <zero> ]{1,2}
-const consumeColorStopAngle: TryComponentConsumer<ColorStopAngle> =
-  sequenceOf(
-    [
-      one(oneOf(
-        [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-        ([offset]) => offset,
-      )),
-      opt(withTrivia(oneOf(
-        [one(tryConsumeAnglePercentage), one(tryConsumeZero)],
-        ([offset]) => offset,
-      ))),
-    ],
-    ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
-  );
+const MAX_COLOR_STOPS = 2_048;
 
 function createGradientStopListConsumer<Offset>(
-  tryConsumeStop: TryComponentConsumer<GradientColorStop<Offset>>,
-  tryConsumeHint: TryComponentConsumer<GradientColorHint<Offset>>,
+  consumeStop: TryComponentConsumer<GradientColorStop<Offset>>,
+  consumeHint: TryComponentConsumer<GradientColorHint<Offset>>,
 ): TryComponentConsumer<GradientStops<Offset>> {
   return sequenceOf(
     [
-      one(tryConsumeStop),
+      one(consumeStop),
       repeat(
         sequenceOf(
           [
-            one(withTrivia(tryConsumeComma)),
+            one(withTrivia(consumeComma)),
             opt(sequenceOf(
               [
-                one(withTrivia(tryConsumeHint)),
-                one(withTrivia(tryConsumeComma)),
+                one(withTrivia(consumeHint)),
+                one(withTrivia(consumeComma)),
               ],
               ([[hint]]) => hint,
             )),
-            one(withTrivia(tryConsumeStop)),
+            one(withTrivia(consumeStop)),
           ],
           ([, hint, [stop]]) => [
             ...(hint.length === 0 ? [] : [hint[0]]),
@@ -777,7 +258,396 @@ function createGradientStopListConsumer<Offset>(
   );
 }
 
+// <color-stop-length> = <length-percentage>{1,2}
+const colorStopLengthConsumer: TryComponentConsumer<ColorStopLength> = sequenceOf(
+  [
+    one(consumeLengthPercentage),
+    opt(withTrivia(consumeLengthPercentage)),
+  ],
+  ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
+);
 
+// <linear-color-hint> = <length-percentage>
+const linearColorHintConsumer: TryComponentConsumer<LinearColorHint> = adaptConsumer(
+  consumeLengthPercentage,
+  (offset) => ({ type: 'color-hint', offset }),
+);
+
+// <linear-color-stop> = <color> <color-stop-length>?
+const linearColorStopConsumer: TryComponentConsumer<LinearColorStop> = sequenceOf(
+  [
+    one(consumeColor),
+    opt(withTrivia(colorStopLengthConsumer)),
+  ],
+  ([[color], offsets]) => ({
+    type: 'color-stop',
+    color,
+    ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
+  }),
+);
+
+// <angle-percentage> | <zero>
+const angularColorStopOffsetConsumer: TryComponentConsumer<AngularColorStopOffset> = oneOf(
+  [one(consumeAnglePercentage), one(consumeZero)],
+  ([offset]) => offset,
+);
+
+// <color-stop-angle> = [ <angle-percentage> | <zero> ]{1,2}
+const colorStopAngleConsumer: TryComponentConsumer<ColorStopAngle> = sequenceOf(
+  [
+    one(angularColorStopOffsetConsumer),
+    opt(withTrivia(angularColorStopOffsetConsumer)),
+  ],
+  ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
+);
+
+// <angular-color-hint> = <angle-percentage> | <zero>
+const angularColorHintConsumer: TryComponentConsumer<GradientColorHint<AngularColorStopOffset>> =
+  adaptConsumer(
+    angularColorStopOffsetConsumer,
+    (offset) => ({ type: 'color-hint', offset }),
+  );
+
+// <angular-color-stop> = <color> <color-stop-angle>?
+const angularColorStopConsumer: TryComponentConsumer<GradientColorStop<AngularColorStopOffset>> =
+  sequenceOf(
+    [
+      one(consumeColor),
+      opt(withTrivia(colorStopAngleConsumer)),
+    ],
+    ([[color], offsets]) => ({
+      type: 'color-stop',
+      color,
+      ...(offsets.length === 0 ? {} : { offsets: offsets[0] }),
+    }),
+  );
+
+// <color-stop-list> = <linear-color-stop> , [ <linear-color-hint>? , <linear-color-stop> ]#?
+// Comma-explicit: <linear-color-stop> [ , [ <linear-color-hint> ,]? <linear-color-stop> ]*
+const colorStopListConsumer: TryComponentConsumer<ColorStops> =
+  createGradientStopListConsumer(linearColorStopConsumer, linearColorHintConsumer);
+
+// <angular-color-stop-list> = <angular-color-stop> , [ <angular-color-hint>? , <angular-color-stop> ]#?
+// Comma-explicit: <angular-color-stop> [ , [ <angular-color-hint> ,]? <angular-color-stop> ]*
+const angularColorStopListConsumer: TryComponentConsumer<GradientStops<AngularColorStopOffset>> =
+  createGradientStopListConsumer(angularColorStopConsumer, angularColorHintConsumer);
+
+// <side-or-corner> = [left | right] || [top | bottom]
+const sideOrCornerConsumer: TryComponentConsumer<SideOrCorner> = requiredSomeOf(
+  [
+    one(withTrivia(createKeywordConsumer('left', 'right'))),
+    one(withTrivia(createKeywordConsumer('top', 'bottom'))),
+  ],
+  ([horizontal, vertical]) => {
+    if (horizontal === undefined) {
+      return {
+        type: 'side-or-corner',
+        vertical: vertical![0],
+      };
+    }
+
+    return {
+      type: 'side-or-corner',
+      horizontal: horizontal[0],
+      ...(vertical === undefined ? {} : { vertical: vertical[0] }),
+    };
+  },
+);
+
+// <radial-extent> = closest-corner | closest-side | farthest-corner | farthest-side
+const radialExtentConsumer = createKeywordConsumer(
+  'closest-corner', 'closest-side', 'farthest-corner', 'farthest-side',
+);
+
+// <radial-shape> = circle | ellipse
+const radialShapeConsumer = createKeywordConsumer('circle', 'ellipse');
+
+// <radial-size> = <radial-extent>{1,2} | <length-percentage [0,infinity]>{1,2}
+const radialSizeConsumer: TryComponentConsumer<RadialSize> = oneOf(
+  [
+    one(sequenceOf(
+      [
+        one(radialExtentConsumer),
+        opt(withTrivia(radialExtentConsumer)),
+      ],
+      ([[first], second]): RadialExtentSize => ({
+        type: 'radial-extent',
+        extents: second.length === 0 ? [first] : [first, second[0]],
+      }),
+    )),
+    one(sequenceOf(
+      [
+        one(createLengthPercentageConsumer({ min: 0 })),
+        opt(withTrivia(createLengthPercentageConsumer({ min: 0 }))),
+      ],
+      ([[first], second]): RadialRadiiSize => ({
+        type: 'radial-radii',
+        radii: second.length === 0 ? [first] : [first, second[0]],
+      }),
+    )),
+  ],
+  ([size]) => size,
+);
+
+// <linear-gradient-syntax> = [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ]? , <color-stop-list>
+// Comma-explicit: [ [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ] ,]? <color-stop-list>
+const linearGradientSyntaxConsumer: TryComponentConsumer<LinearGradientSyntax> = sequenceOf(
+  [
+    opt(sequenceOf(
+      [
+        one(requiredSomeOf(
+          [
+            one(withTrivia(oneOf(
+              [
+                one(consumeAngle),
+                one(consumeZero),
+                one(sequenceOf(
+                  [
+                    one(createKeywordConsumer('to')),
+                    one(withTrivia(sideOrCornerConsumer)),
+                  ],
+                  ([, [sideOrCorner]]) => sideOrCorner,
+                )),
+              ],
+              ([direction]) => direction,
+            ))),
+            one(withTrivia(consumeColorInterpolationMethod)),
+          ],
+          ([direction, method]) => ({
+            ...(direction === undefined ? {} : { direction: direction[0] }),
+            ...(method === undefined ? {} : { method: method[0] }),
+          }),
+        )),
+        one(withTrivia(consumeComma)),
+      ],
+      ([[prelude]]) => prelude,
+    )),
+    one(withTrivia(colorStopListConsumer)),
+  ],
+  ([prelude, [stops]]) => {
+    const syntax = prelude.length === 0 ? {} : prelude[0];
+    return {
+      direction: syntax.direction ?? defaultLinearGradientDirection(),
+      method: syntax.method ?? defaultGradientMethod(stops),
+      stops,
+    };
+  },
+);
+
+// <radial-gradient-syntax> = [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <color-stop-list>
+// Comma-explicit: [ [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <color-stop-list>
+const radialGradientSyntaxConsumer: TryComponentConsumer<RadialGradientSyntax> = sequenceOf(
+  [
+    opt(sequenceOf(
+      [
+        one(requiredSomeOf(
+          [
+            one(withTrivia(requiredSequenceOf(
+              [
+                opt(requiredSomeOf(
+                  [
+                    one(withTrivia(radialShapeConsumer)),
+                    one(withTrivia(radialSizeConsumer)),
+                  ],
+                  ([shape, size]) => {
+                    const radialShape = shape?.[0];
+                    const radialSize = size?.[0];
+                    const sizeArity = radialSize?.type === 'radial-extent'
+                      ? radialSize.extents.length
+                      : radialSize?.radii.length;
+
+                    if (radialShape === 'circle' && sizeArity === 2) {
+                      return null;
+                    }
+
+                    return {
+                      ...(radialShape === undefined ? {} : { shape: radialShape }),
+                      ...(radialSize === undefined ? {} : { size: radialSize }),
+                    };
+                  },
+                )),
+                opt(sequenceOf(
+                  [
+                    one(withTrivia(createKeywordConsumer('at'))),
+                    one(withTrivia(consumePosition)),
+                  ],
+                  ([, [position]]) => position,
+                )),
+              ],
+              ([shapeAndSize, position]) => ({
+                ...(shapeAndSize.length === 0 ? {} : shapeAndSize[0]),
+                ...(position.length === 0 ? {} : { position: position[0] }),
+              }),
+            ))),
+            one(withTrivia(consumeColorInterpolationMethod)),
+          ],
+          ([geometry, method]) => ({
+            ...(geometry === undefined ? {} : geometry[0]),
+            ...(method === undefined ? {} : { method: method[0] }),
+          }),
+        )),
+        one(withTrivia(consumeComma)),
+      ],
+      ([[prelude]]) => prelude,
+    )),
+    one(withTrivia(colorStopListConsumer)),
+  ],
+  ([prelude, [stops]]) => {
+    const syntax = prelude.length === 0 ? {} : prelude[0];
+    const size = syntax.size ?? defaultRadialGradientSize();
+    return {
+      shape: syntax.shape ?? defaultRadialGradientShape(size),
+      size,
+      position: syntax.position ?? defaultGradientPosition(),
+      method: syntax.method ?? defaultGradientMethod(stops),
+      stops,
+    };
+  },
+);
+
+// <conic-gradient-syntax> = [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <angular-color-stop-list>
+// Comma-explicit: [ [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <angular-color-stop-list>
+const conicGradientSyntaxConsumer: TryComponentConsumer<ConicGradientSyntax> = sequenceOf(
+  [
+    opt(sequenceOf(
+      [
+        one(requiredSomeOf(
+          [
+            one(withTrivia(requiredSequenceOf(
+              [
+                opt(sequenceOf(
+                  [
+                    one(createKeywordConsumer('from')),
+                    one(withTrivia(oneOf(
+                      [one(consumeAngle), one(consumeZero)],
+                      ([angle]) => angle,
+                    ))),
+                  ],
+                  ([, [angle]]) => angle,
+                )),
+                opt(sequenceOf(
+                  [
+                    one(withTrivia(createKeywordConsumer('at'))),
+                    one(withTrivia(consumePosition)),
+                  ],
+                  ([, [position]]) => position,
+                )),
+              ],
+              ([angle, position]) => ({
+                ...(angle.length === 0 ? {} : { angle: angle[0] }),
+                ...(position.length === 0 ? {} : { position: position[0] }),
+              }),
+            ))),
+            one(withTrivia(consumeColorInterpolationMethod)),
+          ],
+          ([geometry, method]) => ({
+            ...(geometry === undefined ? {} : geometry[0]),
+            ...(method === undefined ? {} : { method: method[0] }),
+          }),
+        )),
+        one(withTrivia(consumeComma)),
+      ],
+      ([[prelude]]) => prelude,
+    )),
+    one(withTrivia(angularColorStopListConsumer)),
+  ],
+  ([prelude, [stops]]) => {
+    const syntax = prelude.length === 0 ? {} : prelude[0];
+    return {
+      angle: syntax.angle ?? defaultConicGradientAngle(),
+      position: syntax.position ?? defaultGradientPosition(),
+      method: syntax.method ?? defaultGradientMethod(stops),
+      stops,
+    };
+  },
+);
+
+// <linear-gradient()> = linear-gradient( [ <linear-gradient-syntax> ] )
+const linearGradientFnConsumer = createFunctionalNotationConsumer(
+  'linear-gradient',
+  linearGradientSyntaxConsumer,
+  (syntax): LinearGradient => ({
+    type: 'gradient',
+    gradientType: 'linear',
+    repeating: false,
+    ...syntax,
+  }),
+);
+
+// <repeating-linear-gradient()> = repeating-linear-gradient( [ <linear-gradient-syntax> ] )
+const repeatingLinearGradientFnConsumer = createFunctionalNotationConsumer(
+  'repeating-linear-gradient',
+  linearGradientSyntaxConsumer,
+  (syntax): LinearGradient => ({
+    type: 'gradient',
+    gradientType: 'linear',
+    repeating: true,
+    ...syntax,
+  }),
+);
+
+// <radial-gradient()> = radial-gradient( [ <radial-gradient-syntax> ] )
+const radialGradientFnConsumer = createFunctionalNotationConsumer(
+  'radial-gradient',
+  radialGradientSyntaxConsumer,
+  (syntax): RadialGradient => ({
+    type: 'gradient',
+    gradientType: 'radial',
+    repeating: false,
+    ...syntax,
+  }),
+);
+
+// <repeating-radial-gradient()> = repeating-radial-gradient( [ <radial-gradient-syntax> ] )
+const repeatingRadialGradientFnConsumer = createFunctionalNotationConsumer(
+  'repeating-radial-gradient',
+  radialGradientSyntaxConsumer,
+  (syntax): RadialGradient => ({
+    type: 'gradient',
+    gradientType: 'radial',
+    repeating: true,
+    ...syntax,
+  }),
+);
+
+// <conic-gradient()> = conic-gradient( [ <conic-gradient-syntax> ] )
+const conicGradientFnConsumer = createFunctionalNotationConsumer(
+  'conic-gradient',
+  conicGradientSyntaxConsumer,
+  (syntax): ConicGradient => ({
+    type: 'gradient',
+    gradientType: 'conic',
+    repeating: false,
+    ...syntax,
+  }),
+);
+
+// <repeating-conic-gradient()> = repeating-conic-gradient( [ <conic-gradient-syntax> ] )
+const repeatingConicGradientFnConsumer = createFunctionalNotationConsumer(
+  'repeating-conic-gradient',
+  conicGradientSyntaxConsumer,
+  (syntax): ConicGradient => ({
+    type: 'gradient',
+    gradientType: 'conic',
+    repeating: true,
+    ...syntax,
+  }),
+);
+
+// <gradient> = <linear-gradient()> | <repeating-linear-gradient()> | <radial-gradient()> | <repeating-radial-gradient()> | <conic-gradient()> | <repeating-conic-gradient()>
+const gradientConsumer: TryComponentConsumer<GradientValue> = oneOf(
+  [
+    one(linearGradientFnConsumer),
+    one(repeatingLinearGradientFnConsumer),
+    one(radialGradientFnConsumer),
+    one(repeatingRadialGradientFnConsumer),
+    one(conicGradientFnConsumer),
+    one(repeatingConicGradientFnConsumer),
+  ],
+  ([gradient]) => gradient,
+);
+
+const gradientParser = createComponentParser(withTrivia(gradientConsumer));
 
 // ██████   ███████ ███████  █████  ██    ██ ██      ████████
 // ██   ██  ██      ██      ██   ██ ██    ██ ██         ██

@@ -6,7 +6,7 @@ import {
   type ConicGradient, type LinearGradient, type RadialGradient,
 } from '../../../../src/stylelet/values/gradient';
 import { parsePosition } from '../../../../src/stylelet/values/position';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 
 type LinearGradientStops = LinearGradient['stops'];
 type LinearColorStop = Extract<LinearGradientStops[number], { type: 'color-stop'; }>;

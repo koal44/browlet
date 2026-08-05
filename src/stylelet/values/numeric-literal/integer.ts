@@ -1,7 +1,9 @@
-import { tryConsumeIntegerToken } from '../../parser/component-consumers';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeIntegerToken } from '../../syntax/component-consumers';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 
 /*
  * <integer> = <integer-number-token>
@@ -21,11 +23,13 @@ export function parseInteger(
   input: ParserInput,
   context: unknown = undefined,
 ): IntegerLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeInteger),
-    context,
-  );
+  return integerParser(input, context);
+}
+
+export function consumeInteger(
+  c: ComponentCursor,
+): TryComponentConsumerResult<IntegerLiteral> {
+  return integerConsumer(c);
 }
 
 export type IntegerConsumerOptions = {
@@ -39,14 +43,12 @@ export function createIntegerConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumeIntegerToken, (token) =>
+  return adaptConsumer(consumeIntegerToken, (token) =>
     token.value < min || token.value > max
       ? null
       : { type: 'integer', value: token.value },
   );
 }
-
-export const tryConsumeInteger = createIntegerConsumer();
 
 // CSSOM, "To serialize a CSS component value", <integer>.
 export function serializeInteger(value: IntegerLiteral): string {
@@ -87,3 +89,7 @@ function integerResult(value: number): IntegerLiteral {
     value: value === 0 ? 0 : value,
   };
 }
+
+// <integer> = <integer-number-token>
+const integerConsumer = createIntegerConsumer();
+const integerParser = createComponentParser(withTrivia(integerConsumer));

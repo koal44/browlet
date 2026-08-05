@@ -1,7 +1,7 @@
 import { asciiLower } from '../../shared/css';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { tryConsumeIdentToken } from '../parser/component-consumers';
-import { adaptConsumer } from '../parser/component-grammar';
+import { type TryComponentConsumer } from '../syntax/component-cursor';
+import { consumeIdentToken } from '../syntax/component-consumers';
+import { adaptConsumer } from '../syntax/component-grammar';
 
 export function createKeywordConsumer<
   const Keywords extends readonly [string, ...string[]],
@@ -12,7 +12,7 @@ export function createKeywordConsumer<
     (keyword) => [asciiLower(keyword), keyword] as const,
   );
 
-  return adaptConsumer(tryConsumeIdentToken, (ident) => {
+  return adaptConsumer(consumeIdentToken, (ident) => {
     const value = asciiLower(ident.value);
 
     for (const [text, keyword] of normalized) {

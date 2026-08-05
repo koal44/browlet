@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
-import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
-import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
+import { defineCustomProperty, guaranteedInvalidValue } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax, type SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
 function syntax(input: string): SyntaxValue {

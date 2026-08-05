@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
-import { serializeComponentValues, type BraceBlock, type ComponentValue } from '../parser/component-value';
+import { serializeComponentValues, type BraceBlock, type ComponentValue } from '../syntax/component-value';
 import {
   parseStyleBlockContents, parseStylesheet as parseSyntaxStylesheet,
-} from '../parser/syntax';
+} from '../syntax/parser';
 import {
   RuleKind as RuleKindSyntax,
   type Declaration as SyntaxDeclaration,
   type QualifiedRule as SyntaxQualifiedRule, type Rule as SyntaxRule,
   type StyleBlockItem as SyntaxStyleBlockItem, type StyleSheet as SyntaxStyleSheet,
-} from '../parser/rule';
+} from '../syntax/rule';
 import { assertNever, requireDefined } from '../../shared/util';
-import { parseSelectorList, type SelectorList } from '../parser/selector';
+import { parseSelectorList, type SelectorList } from '../syntax/selector';
 import { parseCssWideValue, type CssWideValue } from '../values/css-wide';
 import { parseColorValue, type ColorValue } from '../values/color';
-import { isDeclarationValueContents } from '../values/declaration-value';
+import { isDeclarationValueContents } from '../syntax/declaration-value';
 import { parseAnimationNameValue, serializeAnimationName, type AnimationNameValue } from '../props/animation-name';
 import { parseMarginSideValue, serializeMarginSideValue, type MarginSideValue } from '../props/margin';
 import { asciiLower } from '../../shared/css';

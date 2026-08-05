@@ -1,34 +1,34 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../syntax/component-cursor';
 import {
-  createFunctionalNotationConsumer, tryConsumeComma, tryConsumeDimensionToken,
-  tryConsumeHashToken, tryConsumeIdentToken, tryConsumeIntegerToken, tryConsumeSlashDelim,
-} from '../parser/component-consumers';
+  createFunctionalNotationConsumer, consumeComma, consumeDimensionToken,
+  consumeHashToken, consumeIdentToken, consumeIntegerToken, consumeSlashDelim,
+} from '../syntax/component-consumers';
 import {
   allOf, commaRepeat, one, oneOf, opt, plus, adaptConsumer, repeat, sequenceOf, withTrivia,
-} from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { NumberTokenFlag } from '../parser/tokens';
-import { ValueStage } from '../value-processing';
-import { resolveAngle, serializeAngle, tryConsumeAngle, type AngleValue } from './angle';
+} from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { NumberTokenFlag } from '../syntax/tokens';
+import { ValueStage } from '../value-processing/stage';
+import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
 import {
   coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName, type MathContext,
   type NumericVariable,
 } from './math-value';
 import { completeMixPercentages, normalizeMixPercentages } from './mix';
-import { tryConsumeDashedIdent, type DashedIdentValue } from './dashed-ident';
-import { tryConsumeIdent } from './ident';
+import { consumeDashedIdent, type DashedIdentValue } from './dashed-ident';
+import { consumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { canonicalizeAngle } from './numeric-literal/angle';
 import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
 import { type PercentageLiteral } from './numeric-literal/percentage';
-import { resolveNumber, serializeNumber, tryConsumeNumber, type NumberValue } from './number';
+import { resolveNumber, serializeNumber, consumeNumber, type NumberValue } from './number';
 import {
-  createPercentageConsumer, resolvePercentage, serializePercentage, tryConsumePercentage,
+  createPercentageConsumer, resolvePercentage, serializePercentage, consumePercentage,
   type PercentageValue,
 } from './percentage';
-import type { ValueDefinition } from './value-definition';
+import type { ValueDefinition } from '../value-processing/definition';
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;
@@ -334,6 +334,12 @@ export type ColorFunction =
 export type RelativeColorFunction =
   ColorFunction & { origin: ColorValue; };
 
+export const colorDef: ValueDefinition<ColorValue, ColorContext> = {
+  consume: consumeColor,
+  resolve: resolveColorValue,
+  serialize: serializeColorValue,
+};
+
 /** Whether a color belongs to the legacy sRGB interpolation category. */
 export function isLegacySrgbColor(color: ColorValue): boolean {
   switch (color.kind) {
@@ -356,129 +362,120 @@ export function parseColorValue(
   context: ColorContext = {},
   allowQuirkyColor = false,
 ): ColorValue | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia((c) => tryConsumeColor(c, allowQuirkyColor)),
-    context,
-  );
-
-  return result;
+  return (
+    allowQuirkyColor
+      ? colorInQuirksModeParser
+      : colorParser
+  )(input, context);
 }
 
-export function tryConsumeColor(
+export function consumeColor(
   c: ComponentCursor,
   allowQuirkyColor = false,
 ): TryComponentConsumerResult<ColorValue> {
   return (
     allowQuirkyColor
-      ? consumeDeclaredColorInQuirksMode
-      : consumeDeclaredColor
+      ? declaredColorInQuirksModeConsumer
+      : declaredColorConsumer
   )(c);
 }
 
-export const colorDef: ValueDefinition<ColorValue, ColorContext> = {
-  tryConsume: tryConsumeColor,
-  resolve: resolveColorValue,
-  serialize: serializeColorValue,
-};
-
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
-const consumeColor: TryComponentConsumer<ColorValue> = oneOf(
+const colorConsumer: TryComponentConsumer<ColorValue> = oneOf(
   [
-    one(tryConsumeColorBase),
-    one(tryConsumeCurrentColor),
-    one(tryConsumeSystemColor),
-    one(tryConsumeDeprecatedColor),
-    one(tryConsumeContrastColorFn),
-    one(tryConsumeDeviceCmykFn),
-    one(tryConsumeLightDarkColor),
+    one(consumeColorBase),
+    one(consumeCurrentColor),
+    one(consumeSystemColor),
+    one(consumeDeprecatedColor),
+    one(consumeContrastColorFn),
+    one(consumeDeviceCmykFn),
+    one(consumeLightDarkColor),
   ],
   ([value]) => value,
 );
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color> | <quirky-color>
-const consumeColorInQuirksMode: TryComponentConsumer<ColorValue> = oneOf(
+const colorInQuirksModeConsumer: TryComponentConsumer<ColorValue> = oneOf(
   [
-    one(tryConsumeColorBase),
-    one(tryConsumeCurrentColor),
-    one(tryConsumeSystemColor),
-    one(tryConsumeDeprecatedColor),
-    one(tryConsumeContrastColorFn),
-    one(tryConsumeDeviceCmykFn),
-    one(tryConsumeLightDarkColor),
-    one(tryConsumeQuirkyColor),
+    one(colorConsumer),
+    one(consumeQuirkyColor),
   ],
   ([value]) => value,
 );
 
-const consumeDeclaredColor = adaptConsumer(
-  consumeColor,
+const declaredColorConsumer = adaptConsumer(
+  colorConsumer,
   (value, context) =>
     resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
 );
 
-const consumeDeclaredColorInQuirksMode = adaptConsumer(
-  consumeColorInQuirksMode,
+const declaredColorInQuirksModeConsumer = adaptConsumer(
+  colorInQuirksModeConsumer,
   (value, context) =>
     resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
 );
 
-function tryConsumeColorBase(
+const colorParser = createComponentParser(withTrivia(declaredColorConsumer));
+const colorInQuirksModeParser = createComponentParser(
+  withTrivia(declaredColorInQuirksModeConsumer),
+);
+
+function consumeColorBase(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorBase> {
-  return consumeColorBase(c);
+  return colorBaseConsumer(c);
 }
 
 // <color-base> = <hex-color> | <color-function> | <named-color> | <color-mix()>
-const consumeColorBase: TryComponentConsumer<ColorBase> = oneOf(
+const colorBaseConsumer: TryComponentConsumer<ColorBase> = oneOf(
   [
-    one(tryConsumeHexColor),
-    one(tryConsumeColorFunction),
-    one(tryConsumeNamedColor),
-    one(tryConsumeColorMixFn),
+    one(consumeHexColor),
+    one(consumeColorFunction),
+    one(consumeNamedColor),
+    one(consumeColorMixFn),
   ],
   ([value]) => value,
 );
 
-function tryConsumeColorFunction(
+function consumeColorFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFunction> {
-  return consumeColorFunction(c);
+  return colorFunctionConsumer(c);
 }
 
 // <color-function> = <rgb()> | <rgba()> | <hsl()> | <hsla()> | <hwb()> | <lab()> | <lch()> | <oklab()> | <oklch()> | <alpha()> | <color()>
-const consumeColorFunction: TryComponentConsumer<ColorFunction> = oneOf(
+const colorFunctionConsumer: TryComponentConsumer<ColorFunction> = oneOf(
   [
-    one(tryConsumeRgbFunction),
-    one(tryConsumeRgbaFunction),
-    one(tryConsumeHslFunction),
-    one(tryConsumeHslaFunction),
-    one(tryConsumeHwbFunction),
-    one(tryConsumeLabFunction),
-    one(tryConsumeLchFunction),
-    one(tryConsumeOklabFunction),
-    one(tryConsumeOklchFunction),
-    one(tryConsumeAlphaFunction),
-    one(tryConsumeColorFunctionNotation),
+    one(consumeRgbFunction),
+    one(consumeRgbaFunction),
+    one(consumeHslFunction),
+    one(consumeHslaFunction),
+    one(consumeHwbFunction),
+    one(consumeLabFunction),
+    one(consumeLchFunction),
+    one(consumeOklabFunction),
+    one(consumeOklchFunction),
+    one(consumeAlphaFunction),
+    one(consumeColorFunctionNotation),
   ],
   ([value]) => value,
 );
 
-function tryConsumeModernAlpha(
+function consumeModernAlpha(
   c: ComponentCursor,
 ): TryComponentConsumerResult<SyntaxAlphaComponent> {
-  return consumeModernAlpha(c);
+  return modernAlphaConsumer(c);
 }
 
-const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> =
+const modernAlphaConsumer: TryComponentConsumer<SyntaxAlphaComponent> =
   sequenceOf(
     [
-      one(withTrivia(tryConsumeSlashDelim)),
+      one(withTrivia(consumeSlashDelim)),
       one(withTrivia(oneOf(
         [
-          one(tryConsumeAlphaValue),
-          one(tryConsumeNone),
-          one(tryConsumeRelativeColorKeyword),
+          one(consumeAlphaValue),
+          one(consumeNone),
+          one(consumeRelativeColorKeyword),
         ],
         ([alpha]) => alpha,
       ))),
@@ -486,29 +483,29 @@ const consumeModernAlpha: TryComponentConsumer<SyntaxAlphaComponent> =
     ([, [alpha]]) => alpha,
   );
 
-function tryConsumeAlphaValue(
+function consumeAlphaValue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<AlphaValue> {
-  return consumeAlphaValue(c);
+  return alphaValueConsumer(c);
 }
 
 // <alpha-value> = <number> | <percentage>
-const consumeAlphaValue: TryComponentConsumer<AlphaValue> =
+const alphaValueConsumer: TryComponentConsumer<AlphaValue> =
   oneOf(
     [
-      one(tryConsumeNumber),
-      one(tryConsumePercentage),
+      one(consumeNumber),
+      one(consumePercentage),
     ],
     ([alpha]) => alpha,
   );
 
-function tryConsumeNone(
+function consumeNone(
   c: ComponentCursor,
 ): TryComponentConsumerResult<'none'> {
-  return consumeNone(c);
+  return noneConsumer(c);
 }
 
-const consumeNone = createKeywordConsumer('none');
+const noneConsumer = createKeywordConsumer('none');
 
 /*
  * <hex-color> = <hash-token> whose value consists of
@@ -520,15 +517,15 @@ export type HexColor = {
   text: string;
 };
 
-function tryConsumeHexColor(
+function consumeHexColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HexColor> {
-  return consumeHexColor(c);
+  return hexColorConsumer(c);
 }
 
 // <hex-color> = <hash-token> whose value consists of 3, 4, 6, or 8 hexadecimal digits
-const consumeHexColor: TryComponentConsumer<HexColor> = adaptConsumer(
-  tryConsumeHashToken,
+const hexColorConsumer: TryComponentConsumer<HexColor> = adaptConsumer(
+  consumeHashToken,
   (token) => isHexColorValue(token.value)
     ? { kind: ColorKind.Hex, text: `#${token.value}` }
     : null,
@@ -558,15 +555,15 @@ export type NamedColor = {
 
 export type ColorName = keyof typeof ColorRgba;
 
-function tryConsumeNamedColor(
+function consumeNamedColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<NamedColor> {
-  return consumeNamedColor(c);
+  return namedColorConsumer(c);
 }
 
 // <named-color>
-const consumeNamedColor: TryComponentConsumer<NamedColor> = adaptConsumer(
-  tryConsumeIdent,
+const namedColorConsumer: TryComponentConsumer<NamedColor> = adaptConsumer(
+  consumeIdent,
   (ident) => {
     const name = asciiLower(ident.value);
     const rgba = Object.hasOwn(ColorRgba, name)
@@ -752,32 +749,32 @@ export type ColorMixItem = {
   percentage?: PercentageValue;
 };
 
-function tryConsumeColorMixFn(
+function consumeColorMixFn(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorMixFn> {
-  return consumeColorMixFn(c);
+  return colorMixFnConsumer(c);
 }
 
-const tryConsumeColorMixPercentage =
+const colorMixPercentageConsumer =
   createPercentageConsumer({ min: 0, max: 100 });
 
 // <color-mix()> = color-mix(<color-interpolation-method>? , [ <color> && <percentage [0,100]>? ]#)
-const consumeColorMixFn: TryComponentConsumer<ColorMixFn> =
+const colorMixFnConsumer: TryComponentConsumer<ColorMixFn> =
   createFunctionalNotationConsumer(
     'color-mix',
     sequenceOf(
       [
         opt(sequenceOf(
           [
-            one(tryConsumeColorInterpolationMethod),
-            one(withTrivia(tryConsumeComma)),
+            one(consumeColorInterpolationMethod),
+            one(withTrivia(consumeComma)),
           ],
           ([[method]]) => method,
         )),
         commaRepeat(allOf(
           [
-            one(withTrivia(tryConsumeColor)),
-            opt(withTrivia(tryConsumeColorMixPercentage)),
+            one(withTrivia(consumeColor)),
+            opt(withTrivia(colorMixPercentageConsumer)),
           ],
           ([[color], [percentage]]) => ({
             color,
@@ -808,15 +805,15 @@ export type SystemColor = {
 
 export type SystemColorName = typeof SystemColorNames[number];
 
-function tryConsumeSystemColor(
+function consumeSystemColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<SystemColor> {
-  return consumeSystemColor(c);
+  return systemColorConsumer(c);
 }
 
 // <system-color>
-const consumeSystemColor: TryComponentConsumer<SystemColor> = adaptConsumer(
-  tryConsumeIdent,
+const systemColorConsumer: TryComponentConsumer<SystemColor> = adaptConsumer(
+  consumeIdent,
   (ident) => {
     const name = asciiLower(ident.value);
 
@@ -854,15 +851,15 @@ export type DeprecatedColor = {
 
 export type DeprecatedColorName = keyof typeof DeprecatedColorSystemName;
 
-function tryConsumeDeprecatedColor(
+function consumeDeprecatedColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DeprecatedColor> {
-  return consumeDeprecatedColor(c);
+  return deprecatedColorConsumer(c);
 }
 
 // <deprecated-color>
-const consumeDeprecatedColor: TryComponentConsumer<DeprecatedColor> = adaptConsumer(
-  tryConsumeIdent,
+const deprecatedColorConsumer: TryComponentConsumer<DeprecatedColor> = adaptConsumer(
+  consumeIdent,
   (ident) => {
     const name = asciiLower(ident.value);
 
@@ -906,13 +903,13 @@ export type CurrentColor = {
   kind: ColorKind.CurrentColor;
 };
 
-function tryConsumeCurrentColor(
+function consumeCurrentColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CurrentColor> {
-  return consumeCurrentColor(c);
+  return currentColorConsumer(c);
 }
 
-const consumeCurrentColor: TryComponentConsumer<CurrentColor> = adaptConsumer(
+const currentColorConsumer: TryComponentConsumer<CurrentColor> = adaptConsumer(
   createKeywordConsumer('currentcolor'),
   () => ({ kind: ColorKind.CurrentColor }),
 );
@@ -947,63 +944,63 @@ export type RgbFn = {
   ]>;
 };
 
-function tryConsumeRgbFunction(
+function consumeRgbFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeRgbFunction(c);
+  return rgbFunctionConsumer(c);
 }
 
 // <rgb()> = <legacy-rgb-syntax> | <modern-rgb-syntax>
-const consumeRgbFunction: TryComponentConsumer<RgbFn> =
+const rgbFunctionConsumer: TryComponentConsumer<RgbFn> =
   createFunctionalNotationConsumer(
     'rgb',
     oneOf(
       [
-        one(tryConsumeLegacyRgbSyntax),
-        one(tryConsumeModernRgbSyntax),
+        one(consumeLegacyRgbSyntax),
+        one(consumeModernRgbSyntax),
       ],
       ([color]) => color,
     ),
     (color) => color,
   );
 
-function tryConsumeRgbaFunction(
+function consumeRgbaFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeRgbaFunction(c);
+  return rgbaFunctionConsumer(c);
 }
 
 // <rgba()> = <legacy-rgba-syntax> | <modern-rgba-syntax>
-const consumeRgbaFunction: TryComponentConsumer<RgbFn> =
+const rgbaFunctionConsumer: TryComponentConsumer<RgbFn> =
   createFunctionalNotationConsumer(
     'rgba',
     oneOf(
       [
-        one(tryConsumeLegacyRgbaSyntax),
-        one(tryConsumeModernRgbaSyntax),
+        one(consumeLegacyRgbaSyntax),
+        one(consumeModernRgbaSyntax),
       ],
       ([color]) => color,
     ),
     (color) => color,
   );
 
-function tryConsumeLegacyRgbSyntax(
+function consumeLegacyRgbSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeLegacyRgbSyntax(c);
+  return legacyRgbSyntaxConsumer(c);
 }
 
 // <legacy-rgb-syntax> = rgb(<percentage>#{3} [ , <alpha-value> ]?) | rgb(<number>#{3} [ , <alpha-value> ]?)
-const consumeLegacyRgbSyntax = createLegacyRgbSyntaxConsumer();
+const legacyRgbSyntaxConsumer = createLegacyRgbSyntaxConsumer();
 
-function tryConsumeLegacyRgbaSyntax(
+function consumeLegacyRgbaSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeLegacyRgbaSyntax(c);
+  return legacyRgbaSyntaxConsumer(c);
 }
 
 // <legacy-rgba-syntax> = rgba(<percentage>#{3} [ , <alpha-value> ]?) | rgba(<number>#{3} [ , <alpha-value> ]?)
-const consumeLegacyRgbaSyntax = createLegacyRgbSyntaxConsumer();
+const legacyRgbaSyntaxConsumer = createLegacyRgbSyntaxConsumer();
 
 function createLegacyRgbSyntaxConsumer(
 ): TryComponentConsumer<RgbFn> {
@@ -1011,11 +1008,11 @@ function createLegacyRgbSyntaxConsumer(
     [
       one(sequenceOf(
         [
-          commaRepeat(tryConsumePercentage, 3, 3),
+          commaRepeat(consumePercentage, 3, 3),
           opt(sequenceOf(
             [
-              one(withTrivia(tryConsumeComma)),
-              one(withTrivia(tryConsumeAlphaValue)),
+              one(withTrivia(consumeComma)),
+              one(withTrivia(consumeAlphaValue)),
             ],
             ([, [alpha]]) => alpha,
           )),
@@ -1028,11 +1025,11 @@ function createLegacyRgbSyntaxConsumer(
       )),
       one(sequenceOf(
         [
-          commaRepeat(tryConsumeNumber, 3, 3),
+          commaRepeat(consumeNumber, 3, 3),
           opt(sequenceOf(
             [
-              one(withTrivia(tryConsumeComma)),
-              one(withTrivia(tryConsumeAlphaValue)),
+              one(withTrivia(consumeComma)),
+              one(withTrivia(consumeAlphaValue)),
             ],
             ([, [alpha]]) => alpha,
           )),
@@ -1048,29 +1045,29 @@ function createLegacyRgbSyntaxConsumer(
   );
 }
 
-function tryConsumeModernRgbSyntax(
+function consumeModernRgbSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeModernRgbSyntax(c);
+  return modernRgbSyntaxConsumer(c);
 }
 
 // <modern-rgb-syntax> = rgb([ from <color> ]? [ <number> | <percentage> | none ]{3} [ / [ <alpha-value> | none ] ]?)
-const consumeModernRgbSyntax = createModernRgbSyntaxConsumer();
+const modernRgbSyntaxConsumer = createModernRgbSyntaxConsumer();
 
-function tryConsumeModernRgbaSyntax(
+function consumeModernRgbaSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RgbFn> {
-  return consumeModernRgbaSyntax(c);
+  return modernRgbaSyntaxConsumer(c);
 }
 
 // <modern-rgba-syntax> = rgba([ from <color> ]? [ <number> | <percentage> | none ]{3} [ / [ <alpha-value> | none ] ]?)
-const consumeModernRgbaSyntax = createModernRgbSyntaxConsumer();
+const modernRgbaSyntaxConsumer = createModernRgbSyntaxConsumer();
 
 function createModernRgbSyntaxConsumer(
 ): TryComponentConsumer<RgbFn> {
   return sequenceOf(
     [
-      opt(tryConsumeRelativeColorOrigin, {
+      opt(consumeRelativeColorOrigin, {
         contextAfter: (_origin, context) =>
           contextWithRelativeColorVariables(
             context,
@@ -1079,14 +1076,14 @@ function createModernRgbSyntaxConsumer(
       }),
       repeat(withTrivia(oneOf(
         [
-          one(tryConsumeNumber),
-          one(tryConsumePercentage),
-          one(tryConsumeNone),
-          one(tryConsumeRelativeColorKeyword),
+          one(consumeNumber),
+          one(consumePercentage),
+          one(consumeNone),
+          one(consumeRelativeColorKeyword),
         ],
         ([component]) => component,
       )), 3, 3),
-      opt(tryConsumeModernAlpha),
+      opt(consumeModernAlpha),
     ],
     ([[origin], components, [alpha]]) => ({
       kind: ColorKind.RgbFn,
@@ -1131,86 +1128,86 @@ export type HslFn = {
   ]>;
 };
 
-function tryConsumeHslFunction(
+function consumeHslFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeHslFunction(c);
+  return hslFunctionConsumer(c);
 }
 
 // <hsl()> = <legacy-hsl-syntax> | <modern-hsl-syntax>
-const consumeHslFunction: TryComponentConsumer<HslFn> =
+const hslFunctionConsumer: TryComponentConsumer<HslFn> =
   createFunctionalNotationConsumer(
     'hsl',
     oneOf(
       [
-        one(tryConsumeLegacyHslSyntax),
-        one(tryConsumeModernHslSyntax),
+        one(consumeLegacyHslSyntax),
+        one(consumeModernHslSyntax),
       ],
       ([color]) => color,
     ),
     (color) => color,
   );
 
-function tryConsumeHslaFunction(
+function consumeHslaFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeHslaFunction(c);
+  return hslaFunctionConsumer(c);
 }
 
 // <hsla()> = <legacy-hsla-syntax> | <modern-hsla-syntax>
-const consumeHslaFunction: TryComponentConsumer<HslFn> =
+const hslaFunctionConsumer: TryComponentConsumer<HslFn> =
   createFunctionalNotationConsumer(
     'hsla',
     oneOf(
       [
-        one(tryConsumeLegacyHslaSyntax),
-        one(tryConsumeModernHslaSyntax),
+        one(consumeLegacyHslaSyntax),
+        one(consumeModernHslaSyntax),
       ],
       ([color]) => color,
     ),
     (color) => color,
   );
 
-function tryConsumeLegacyHslSyntax(
+function consumeLegacyHslSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeLegacyHslSyntax(c);
+  return legacyHslSyntaxConsumer(c);
 }
 
 // <legacy-hsl-syntax> = hsl(<hue>, <percentage>, <percentage> [ , <alpha-value> ]?)
-const consumeLegacyHslSyntax = createLegacyHslSyntaxConsumer();
+const legacyHslSyntaxConsumer = createLegacyHslSyntaxConsumer();
 
-function tryConsumeLegacyHslaSyntax(
+function consumeLegacyHslaSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeLegacyHslaSyntax(c);
+  return legacyHslaSyntaxConsumer(c);
 }
 
 // <legacy-hsla-syntax> = hsla(<hue>, <percentage>, <percentage> [ , <alpha-value> ]?)
-const consumeLegacyHslaSyntax = createLegacyHslSyntaxConsumer();
+const legacyHslaSyntaxConsumer = createLegacyHslSyntaxConsumer();
 
 function createLegacyHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
   return sequenceOf(
     [
-      one(withTrivia(tryConsumeHue)),
+      one(withTrivia(consumeHue)),
       one(sequenceOf(
         [
-          one(withTrivia(tryConsumeComma)),
-          one(withTrivia(tryConsumePercentage)),
+          one(withTrivia(consumeComma)),
+          one(withTrivia(consumePercentage)),
         ],
         ([, [percentage]]) => percentage,
       )),
       one(sequenceOf(
         [
-          one(withTrivia(tryConsumeComma)),
-          one(withTrivia(tryConsumePercentage)),
+          one(withTrivia(consumeComma)),
+          one(withTrivia(consumePercentage)),
         ],
         ([, [percentage]]) => percentage,
       )),
       opt(sequenceOf(
         [
-          one(withTrivia(tryConsumeComma)),
-          one(withTrivia(tryConsumeAlphaValue)),
+          one(withTrivia(consumeComma)),
+          one(withTrivia(consumeAlphaValue)),
         ],
         ([, [alpha]]) => alpha,
       )),
@@ -1223,28 +1220,28 @@ function createLegacyHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
   );
 }
 
-function tryConsumeModernHslSyntax(
+function consumeModernHslSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeModernHslSyntax(c);
+  return modernHslSyntaxConsumer(c);
 }
 
 // <modern-hsl-syntax> = hsl([ from <color> ]? [ <hue> | none ] [ <percentage> | <number> | none ]{2} [ / [ <alpha-value> | none ] ]?)
-const consumeModernHslSyntax = createModernHslSyntaxConsumer();
+const modernHslSyntaxConsumer = createModernHslSyntaxConsumer();
 
-function tryConsumeModernHslaSyntax(
+function consumeModernHslaSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HslFn> {
-  return consumeModernHslaSyntax(c);
+  return modernHslaSyntaxConsumer(c);
 }
 
 // <modern-hsla-syntax> = hsla([ from <color> ]? [ <hue> | none ] [ <percentage> | <number> | none ]{2} [ / [ <alpha-value> | none ] ]?)
-const consumeModernHslaSyntax = createModernHslSyntaxConsumer();
+const modernHslaSyntaxConsumer = createModernHslSyntaxConsumer();
 
 function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
   return sequenceOf(
     [
-      opt(tryConsumeRelativeColorOrigin, {
+      opt(consumeRelativeColorOrigin, {
         contextAfter: (_origin, context) =>
           contextWithRelativeColorVariables(
             context,
@@ -1253,22 +1250,22 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
       }),
       one(withTrivia(oneOf(
         [
-          one(tryConsumeHue),
-          one(tryConsumeNone),
-          one(tryConsumeRelativeColorKeyword),
+          one(consumeHue),
+          one(consumeNone),
+          one(consumeRelativeColorKeyword),
         ],
         ([hue]) => hue,
       ))),
       repeat(withTrivia(oneOf(
         [
-          one(tryConsumePercentage),
-          one(tryConsumeNumber),
-          one(tryConsumeNone),
-          one(tryConsumeRelativeColorKeyword),
+          one(consumePercentage),
+          one(consumeNumber),
+          one(consumeNone),
+          one(consumeRelativeColorKeyword),
         ],
         ([component]) => component,
       )), 2, 2),
-      opt(tryConsumeModernAlpha),
+      opt(consumeModernAlpha),
     ],
     ([[origin], [hue], [saturation, lightness], [alpha]]) => ({
       kind: ColorKind.HslFn,
@@ -1279,17 +1276,17 @@ function createModernHslSyntaxConsumer(): TryComponentConsumer<HslFn> {
   );
 }
 
-function tryConsumeHue(
+function consumeHue(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HueValue> {
-  return consumeHue(c);
+  return hueConsumer(c);
 }
 
 // <hue> = <number> | <angle>
-const consumeHue: TryComponentConsumer<HueValue> = oneOf(
+const hueConsumer: TryComponentConsumer<HueValue> = oneOf(
   [
-    one(tryConsumeNumber),
-    one(tryConsumeAngle),
+    one(consumeNumber),
+    one(consumeAngle),
   ],
   ([hue]) => hue,
 );
@@ -1314,19 +1311,19 @@ export type HwbFn = {
   ]>;
 };
 
-function tryConsumeHwbFunction(
+function consumeHwbFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HwbFn> {
-  return consumeHwbFunction(c);
+  return hwbFunctionConsumer(c);
 }
 
 // <hwb()> = hwb([ from <color> ]? [ <hue> | none ] [ <percentage> | <number> | none ]{2} [ / [ <alpha-value> | none ] ]?)
-const consumeHwbFunction: TryComponentConsumer<HwbFn> =
+const hwbFunctionConsumer: TryComponentConsumer<HwbFn> =
   createFunctionalNotationConsumer(
     'hwb',
     sequenceOf(
       [
-        opt(tryConsumeRelativeColorOrigin, {
+        opt(consumeRelativeColorOrigin, {
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
@@ -1335,22 +1332,22 @@ const consumeHwbFunction: TryComponentConsumer<HwbFn> =
         }),
         one(withTrivia(oneOf(
           [
-            one(tryConsumeHue),
-            one(tryConsumeNone),
-            one(tryConsumeRelativeColorKeyword),
+            one(consumeHue),
+            one(consumeNone),
+            one(consumeRelativeColorKeyword),
           ],
           ([hue]) => hue,
         ))),
         repeat(withTrivia(oneOf(
           [
-            one(tryConsumePercentage),
-            one(tryConsumeNumber),
-            one(tryConsumeNone),
-            one(tryConsumeRelativeColorKeyword),
+            one(consumePercentage),
+            one(consumeNumber),
+            one(consumeNone),
+            one(consumeRelativeColorKeyword),
           ],
           ([component]) => component,
         )), 2, 2),
-        opt(tryConsumeModernAlpha),
+        opt(consumeModernAlpha),
       ],
       ([[origin], [hue], [whiteness, blackness], [alpha]]): HwbFn => ({
         kind: ColorKind.HwbFn as const,
@@ -1405,14 +1402,14 @@ type LabArguments = {
   components: LabFn['components'];
 };
 
-function tryConsumeLabFunction(
+function consumeLabFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<LabFn> {
-  return consumeLabFunction(c);
+  return labFunctionConsumer(c);
 }
 
 // <lab()> = lab([ from <color> ]? [ <percentage> | <number> | none ]{3} [ / [ <alpha-value> | none ] ]?)
-const consumeLabFunction: TryComponentConsumer<LabFn> =
+const labFunctionConsumer: TryComponentConsumer<LabFn> =
   createLabFunctionConsumer(
     'lab',
     SPACES.lab,
@@ -1423,14 +1420,14 @@ const consumeLabFunction: TryComponentConsumer<LabFn> =
     }),
   );
 
-function tryConsumeOklabFunction(
+function consumeOklabFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<OklabFn> {
-  return consumeOklabFunction(c);
+  return oklabFunctionConsumer(c);
 }
 
 // <oklab()> = oklab([ from <color> ]? [ <percentage> | <number> | none ]{3} [ / [ <alpha-value> | none ] ]?)
-const consumeOklabFunction: TryComponentConsumer<OklabFn> =
+const oklabFunctionConsumer: TryComponentConsumer<OklabFn> =
   createLabFunctionConsumer(
     'oklab',
     SPACES.oklab,
@@ -1450,7 +1447,7 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
     name,
     sequenceOf(
       [
-        opt(tryConsumeRelativeColorOrigin, {
+        opt(consumeRelativeColorOrigin, {
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
@@ -1459,14 +1456,14 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
         }),
         repeat(withTrivia(oneOf(
           [
-            one(tryConsumePercentage),
-            one(tryConsumeNumber),
-            one(tryConsumeNone),
-            one(tryConsumeRelativeColorKeyword),
+            one(consumePercentage),
+            one(consumeNumber),
+            one(consumeNone),
+            one(consumeRelativeColorKeyword),
           ],
           ([component]) => component,
         )), 3, 3),
-        opt(tryConsumeModernAlpha),
+        opt(consumeModernAlpha),
       ],
       ([[origin], components, [alpha]]) => ({
         origin,
@@ -1520,14 +1517,14 @@ type LchArguments = {
   components: LchFn['components'];
 };
 
-function tryConsumeLchFunction(
+function consumeLchFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<LchFn> {
-  return consumeLchFunction(c);
+  return lchFunctionConsumer(c);
 }
 
 // <lch()> = lch([ from <color> ]? [ <percentage> | <number> | none ]{2} [ <hue> | none ] [ / [ <alpha-value> | none ] ]?)
-const consumeLchFunction: TryComponentConsumer<LchFn> =
+const lchFunctionConsumer: TryComponentConsumer<LchFn> =
   createLchFunctionConsumer(
     'lch',
     SPACES.lch,
@@ -1538,14 +1535,14 @@ const consumeLchFunction: TryComponentConsumer<LchFn> =
     }),
   );
 
-function tryConsumeOklchFunction(
+function consumeOklchFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<OklchFn> {
-  return consumeOklchFunction(c);
+  return oklchFunctionConsumer(c);
 }
 
 // <oklch()> = oklch([ from <color> ]? [ <percentage> | <number> | none ]{2} [ <hue> | none ] [ / [ <alpha-value> | none ] ]?)
-const consumeOklchFunction: TryComponentConsumer<OklchFn> =
+const oklchFunctionConsumer: TryComponentConsumer<OklchFn> =
   createLchFunctionConsumer(
     'oklch',
     SPACES.oklch,
@@ -1565,7 +1562,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
     name,
     sequenceOf(
       [
-        opt(tryConsumeRelativeColorOrigin, {
+        opt(consumeRelativeColorOrigin, {
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
@@ -1574,22 +1571,22 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
         }),
         repeat(withTrivia(oneOf(
           [
-            one(tryConsumePercentage),
-            one(tryConsumeNumber),
-            one(tryConsumeNone),
-            one(tryConsumeRelativeColorKeyword),
+            one(consumePercentage),
+            one(consumeNumber),
+            one(consumeNone),
+            one(consumeRelativeColorKeyword),
           ],
           ([component]) => component,
         )), 2, 2),
         one(withTrivia(oneOf(
           [
-            one(tryConsumeHue),
-            one(tryConsumeNone),
-            one(tryConsumeRelativeColorKeyword),
+            one(consumeHue),
+            one(consumeNone),
+            one(consumeRelativeColorKeyword),
           ],
           ([hue]) => hue,
         ))),
-        opt(tryConsumeModernAlpha),
+        opt(consumeModernAlpha),
       ],
       ([[origin], components, [hue], [alpha]]) => ({
         origin,
@@ -1613,26 +1610,26 @@ export type AlphaFn = {
   components: [alpha: SyntaxAlphaComponent | undefined];
 };
 
-function tryConsumeAlphaFunction(
+function consumeAlphaFunction(
   c: ComponentCursor,
 ): TryComponentConsumerResult<AlphaFn> {
-  return consumeAlphaFunction(c);
+  return alphaFunctionConsumer(c);
 }
 
 // <alpha()> = alpha([ from <color> ] [ / [ <alpha-value> | none ] ]?)
-const consumeAlphaFunction: TryComponentConsumer<AlphaFn> =
+const alphaFunctionConsumer: TryComponentConsumer<AlphaFn> =
   createFunctionalNotationConsumer(
     'alpha',
     sequenceOf(
       [
-        one(tryConsumeRelativeColorOrigin, {
+        one(consumeRelativeColorOrigin, {
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(
               context,
               [],
             ),
         }),
-        opt(tryConsumeModernAlpha),
+        opt(consumeModernAlpha),
       ],
       ([[origin], [alpha]]) => ({
         kind: ColorKind.AlphaFn as const,
@@ -1712,27 +1709,27 @@ type ColorFnSpaceParams =
     components: SyntaxNonHueComponent[];
   };
 
-function tryConsumeColorFunctionNotation(
+function consumeColorFunctionNotation(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFn> {
-  return consumeColorFunctionNotation(c);
+  return colorFunctionNotationConsumer(c);
 }
 
 // <color()> = color([ from <color> ]? <colorspace-params> [ / [ <alpha-value> | none ] ]?)
-const consumeColorFunctionNotation: TryComponentConsumer<ColorFn> =
+const colorFunctionNotationConsumer: TryComponentConsumer<ColorFn> =
   createFunctionalNotationConsumer(
     'color',
     sequenceOf(
       [
-        opt(tryConsumeRelativeColorOrigin, {
+        opt(consumeRelativeColorOrigin, {
           contextAfter: (_origin, context) =>
             contextWithRelativeColorVariables(context, []),
         }),
-        one(tryConsumeColorSpaceParams, {
+        one(consumeColorSpaceParams, {
           contextAfter: (params, context) =>
             contextWithColorFnRelativeVariables(params.space, context),
         }),
-        opt(tryConsumeModernAlpha),
+        opt(consumeModernAlpha),
       ],
       ([[origin], [params], [alpha]]) => ({
         useLegacySyntax: false as const,
@@ -1747,41 +1744,41 @@ const consumeColorFunctionNotation: TryComponentConsumer<ColorFn> =
     (color) => color,
   );
 
-function tryConsumeColorSpaceParams(
+function consumeColorSpaceParams(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFnSpaceParams> {
-  return consumeColorSpaceParams(c);
+  return colorSpaceParamsConsumer(c);
 }
 
 // <colorspace-params> = <custom-params> | <predefined-rgb-params> | <xyz-params>
-const consumeColorSpaceParams: TryComponentConsumer<ColorFnSpaceParams> = oneOf(
+const colorSpaceParamsConsumer: TryComponentConsumer<ColorFnSpaceParams> = oneOf(
   [
-    one(tryConsumeCustomParams),
-    one(tryConsumePredefinedRgbParams),
-    one(tryConsumeXyzParams),
+    one(consumeCustomParams),
+    one(consumePredefinedRgbParams),
+    one(consumeXyzParams),
   ],
   ([params]) => params,
 );
 
-function tryConsumeCustomParams(
+function consumeCustomParams(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFnSpaceParams> {
-  return consumeCustomParams(c);
+  return customParamsConsumer(c);
 }
 
 // <custom-params> = <dashed-ident> [ <number> | <percentage> | none ]+
-const consumeCustomParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
+const customParamsConsumer: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   [
-    one(withTrivia(tryConsumeDashedIdent), {
+    one(withTrivia(consumeDashedIdent), {
       contextAfter: (space, context) =>
         contextWithColorFnRelativeVariables(space.value, context),
     }),
     plus(withTrivia(oneOf(
       [
-        one(tryConsumeNumber),
-        one(tryConsumePercentage),
-        one(tryConsumeNone),
-        one(tryConsumeRelativeColorKeyword),
+        one(consumeNumber),
+        one(consumePercentage),
+        one(consumeNone),
+        one(consumeRelativeColorKeyword),
       ],
       ([component]) => component,
     ))),
@@ -1793,26 +1790,26 @@ const consumeCustomParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf
   }),
 );
 
-function tryConsumePredefinedRgbParams(
+function consumePredefinedRgbParams(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFnSpaceParams> {
-  return consumePredefinedRgbParams(c);
+  return predefinedRgbParamsConsumer(c);
 }
 
 // <predefined-rgb-params> = <predefined-rgb> [ <number> | <percentage> | none ]{3}
-const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
+const predefinedRgbParamsConsumer: TryComponentConsumer<ColorFnSpaceParams> =
   sequenceOf(
     [
-      one(withTrivia(tryConsumePredefinedRgb), {
+      one(withTrivia(consumePredefinedRgb), {
         contextAfter: (space, context) =>
           contextWithColorFnRelativeVariables(space, context),
       }),
       repeat(withTrivia(oneOf(
         [
-          one(tryConsumeNumber),
-          one(tryConsumePercentage),
-          one(tryConsumeNone),
-          one(tryConsumeRelativeColorKeyword),
+          one(consumeNumber),
+          one(consumePercentage),
+          one(consumeNone),
+          one(consumeRelativeColorKeyword),
         ],
         ([component]) => component,
       )), 3, 3),
@@ -1824,14 +1821,14 @@ const consumePredefinedRgbParams: TryComponentConsumer<ColorFnSpaceParams> =
     }),
   );
 
-function tryConsumePredefinedRgb(
+function consumePredefinedRgb(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PredefinedRgbSpace> {
-  return consumePredefinedRgb(c);
+  return predefinedRgbConsumer(c);
 }
 
 // <predefined-rgb> = srgb | srgb-linear | display-p3 | display-p3-linear | a98-rgb | prophoto-rgb | rec2020
-const consumePredefinedRgb = createKeywordConsumer(
+const predefinedRgbConsumer = createKeywordConsumer(
   'srgb',
   'srgb-linear',
   'display-p3',
@@ -1841,25 +1838,25 @@ const consumePredefinedRgb = createKeywordConsumer(
   'rec2020',
 );
 
-function tryConsumeXyzParams(
+function consumeXyzParams(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorFnSpaceParams> {
-  return consumeXyzParams(c);
+  return xyzParamsConsumer(c);
 }
 
 // <xyz-params> = <xyz-space> [ <number> | <percentage> | none ]{3}
-const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
+const xyzParamsConsumer: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   [
-    one(withTrivia(tryConsumeXyzSpace), {
+    one(withTrivia(consumeXyzSpace), {
       contextAfter: (space, context) =>
         contextWithColorFnRelativeVariables(space, context),
     }),
     repeat(withTrivia(oneOf(
       [
-        one(tryConsumeNumber),
-        one(tryConsumePercentage),
-        one(tryConsumeNone),
-        one(tryConsumeRelativeColorKeyword),
+        one(consumeNumber),
+        one(consumePercentage),
+        one(consumeNone),
+        one(consumeRelativeColorKeyword),
       ],
       ([component]) => component,
     )), 3, 3),
@@ -1871,14 +1868,14 @@ const consumeXyzParams: TryComponentConsumer<ColorFnSpaceParams> = sequenceOf(
   }),
 );
 
-function tryConsumeXyzSpace(
+function consumeXyzSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<XyzColorSpace['name']> {
-  return consumeXyzSpace(c);
+  return xyzSpaceConsumer(c);
 }
 
 // <xyz-space> = xyz | xyz-d50 | xyz-d65
-const consumeXyzSpace = adaptConsumer(
+const xyzSpaceConsumer = adaptConsumer(
   createKeywordConsumer('xyz', 'xyz-d50', 'xyz-d65'),
   (space) => space === 'xyz' ? 'xyz-d65' : space,
 );
@@ -1907,55 +1904,55 @@ export type DeviceCmykFn = {
   ]>;
 };
 
-function tryConsumeDeviceCmykFn(
+function consumeDeviceCmykFn(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DeviceCmykFn> {
-  return consumeDeviceCmykFn(c);
+  return deviceCmykFnConsumer(c);
 }
 
 // <device-cmyk()> = <legacy-device-cmyk-syntax> | <modern-device-cmyk-syntax>
-const consumeDeviceCmykFn: TryComponentConsumer<DeviceCmykFn> =
+const deviceCmykFnConsumer: TryComponentConsumer<DeviceCmykFn> =
   createFunctionalNotationConsumer(
     'device-cmyk',
     oneOf(
       [
-        one(tryConsumeLegacyDeviceCmykSyntax),
-        one(tryConsumeModernDeviceCmykSyntax),
+        one(consumeLegacyDeviceCmykSyntax),
+        one(consumeModernDeviceCmykSyntax),
       ],
       ([color]) => color,
     ),
     (color) => color,
   );
 
-function tryConsumeLegacyDeviceCmykSyntax(
+function consumeLegacyDeviceCmykSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DeviceCmykFn> {
-  return consumeLegacyDeviceCmykSyntax(c);
+  return legacyDeviceCmykSyntaxConsumer(c);
 }
 
 // <legacy-device-cmyk-syntax> = device-cmyk(<number>#{4})
-const consumeLegacyDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
-  sequenceOf(
-    [commaRepeat(tryConsumeNumber, 4, 4)],
-    ([components]) => ({
+const legacyDeviceCmykSyntaxConsumer: TryComponentConsumer<DeviceCmykFn> =
+  adaptConsumer(
+    commaRepeat(consumeNumber, 4, 4),
+    (components) => ({
       kind: ColorKind.DeviceCmykFn as const,
       useLegacySyntax: true,
       components: [...components, undefined],
     }),
   );
 
-function tryConsumeModernDeviceCmykSyntax(
+function consumeModernDeviceCmykSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DeviceCmykFn> {
-  return consumeModernDeviceCmykSyntax(c);
+  return modernDeviceCmykSyntaxConsumer(c);
 }
 
 // <modern-device-cmyk-syntax> = device-cmyk(<cmyk-component>{4} [ / [ <alpha-value> | none ] ]?)
-const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
+const modernDeviceCmykSyntaxConsumer: TryComponentConsumer<DeviceCmykFn> =
   sequenceOf(
     [
-      repeat(withTrivia(tryConsumeCmykComponent), 4, 4),
-      opt(tryConsumeModernAlpha),
+      repeat(withTrivia(consumeCmykComponent), 4, 4),
+      opt(consumeModernAlpha),
     ],
     ([components, [alpha]]) => ({
       kind: ColorKind.DeviceCmykFn as const,
@@ -1964,18 +1961,18 @@ const consumeModernDeviceCmykSyntax: TryComponentConsumer<DeviceCmykFn> =
     }),
   );
 
-function tryConsumeCmykComponent(
+function consumeCmykComponent(
   c: ComponentCursor,
 ): TryComponentConsumerResult<SyntaxNonHueComponent> {
-  return consumeCmykComponent(c);
+  return cmykComponentConsumer(c);
 }
 
 // <cmyk-component> = <number> | <percentage> | none
-const consumeCmykComponent: TryComponentConsumer<SyntaxNonHueComponent> = oneOf(
+const cmykComponentConsumer: TryComponentConsumer<SyntaxNonHueComponent> = oneOf(
   [
-    one(tryConsumeNumber),
-    one(tryConsumePercentage),
-    one(tryConsumeNone),
+    one(consumeNumber),
+    one(consumePercentage),
+    one(consumeNone),
   ],
   ([component]) => component,
 );
@@ -1995,21 +1992,21 @@ export type LightDarkColor = {
   dark: ColorValue;
 };
 
-function tryConsumeLightDarkColor(
+function consumeLightDarkColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<LightDarkColor> {
-  return consumeLightDarkColor(c);
+  return lightDarkColorConsumer(c);
 }
 
 // <light-dark-color> = light-dark(<color>, <color>)
-const consumeLightDarkColor: TryComponentConsumer<LightDarkColor> =
+const lightDarkColorConsumer: TryComponentConsumer<LightDarkColor> =
   createFunctionalNotationConsumer(
     'light-dark',
     sequenceOf(
       [
-        one(withTrivia(tryConsumeColor)),
-        one(withTrivia(tryConsumeComma)),
-        one(withTrivia(tryConsumeColor)),
+        one(withTrivia(consumeColor)),
+        one(withTrivia(consumeComma)),
+        one(withTrivia(consumeColor)),
       ],
       ([[light], , [dark]]) => ({
         kind: ColorKind.LightDarkColor as const,
@@ -2029,19 +2026,19 @@ export type ContrastColorFn = {
   color: ColorValue;
 };
 
-function tryConsumeContrastColorFn(
+function consumeContrastColorFn(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ContrastColorFn> {
-  return consumeContrastColorFn(c);
+  return contrastColorFnConsumer(c);
 }
 
 // <contrast-color()> = contrast-color(<color>)
-const consumeContrastColorFn: TryComponentConsumer<ContrastColorFn> =
+const contrastColorFnConsumer: TryComponentConsumer<ContrastColorFn> =
   createFunctionalNotationConsumer(
     'contrast-color',
-    sequenceOf(
-      [one(withTrivia(tryConsumeColor))],
-      ([[color]]) => ({
+    adaptConsumer(
+      withTrivia(consumeColor),
+      (color) => ({
         kind: ColorKind.ContrastColorFn as const,
         color,
       }),
@@ -2088,24 +2085,18 @@ export function parseColorInterpolationMethod(
   input: ParserInput,
   context: ColorContext = {},
 ): ColorInterpolationMethod | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeColorInterpolationMethod),
-    context,
-  );
-
-  return result;
+  return colorInterpolationMethodParser(input, context);
 }
 
-export function tryConsumeColorInterpolationMethod(
+export function consumeColorInterpolationMethod(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorInterpolationMethod> {
-  return consumeColorInterpolationMethod(c);
+  return colorInterpolationMethodConsumer(c);
 }
 
 // <color-interpolation-method> = in [ <rectangular-color-space> | <polar-color-space> <hue-interpolation-method>? | <custom-color-space> ]
 // Equivalent: in [ <polar-color-space> <hue-interpolation-method> | <color-space> ]
-const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMethod> =
+const colorInterpolationMethodConsumer: TryComponentConsumer<ColorInterpolationMethod> =
   sequenceOf(
     [
       one(createKeywordConsumer('in')),
@@ -2113,14 +2104,14 @@ const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMe
         [
           one(sequenceOf(
             [
-              one(tryConsumePolarColorSpace),
-              one(withTrivia(tryConsumeHueInterpolationMethod)),
+              one(consumePolarColorSpace),
+              one(withTrivia(consumeHueInterpolationMethod)),
             ],
             ([[space], [hue]]) => ({ space, hue }),
           )),
-          one(sequenceOf(
-            [one(tryConsumeColorSpace)],
-            ([[space]]) => ({ space }),
+          one(adaptConsumer(
+            consumeColorSpace,
+            (space) => ({ space }),
           )),
         ],
         ([method]) => method,
@@ -2129,79 +2120,74 @@ const consumeColorInterpolationMethod: TryComponentConsumer<ColorInterpolationMe
     ([, [method]]) => method,
   );
 
-function tryConsumeColorSpace(
+const colorInterpolationMethodParser = createComponentParser(
+  withTrivia(colorInterpolationMethodConsumer),
+);
+
+function consumeColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorInterpolationSpaceName> {
-  return consumeColorSpace(c);
+  return colorSpaceConsumer(c);
 }
 
 // <color-space> = <rectangular-color-space> | <polar-color-space> | <custom-color-space>
-const consumeColorSpace: TryComponentConsumer<ColorInterpolationSpaceName> = oneOf(
+const colorSpaceConsumer: TryComponentConsumer<ColorInterpolationSpaceName> = oneOf(
   [
-    one(tryConsumeRectangularColorSpace),
-    one(tryConsumePolarColorSpace),
-    one(tryConsumeCustomColorSpace),
+    one(consumeRectangularColorSpace),
+    one(consumePolarColorSpace),
+    one(consumeCustomColorSpace),
   ],
   ([space]) => space,
 );
 
-function tryConsumeRectangularColorSpace(
+function consumeRectangularColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<RectangularColorSpaceName> {
-  return consumeRectangularColorSpace(c);
+  return rectangularColorSpaceConsumer(c);
 }
 
 // <rectangular-color-space> = srgb | srgb-linear | display-p3 | display-p3-linear | a98-rgb | prophoto-rgb | rec2020 | lab | oklab | <xyz-space>
-const consumeRectangularColorSpace = adaptConsumer(
-  createKeywordConsumer(
-    'srgb',
-    'srgb-linear',
-    'display-p3',
-    'display-p3-linear',
-    'a98-rgb',
-    'prophoto-rgb',
-    'rec2020',
-    'lab',
-    'oklab',
-    'xyz',
-    'xyz-d50',
-    'xyz-d65',
-  ),
-  (space) => space === 'xyz' ? 'xyz-d65' : space,
+const rectangularColorSpaceConsumer: TryComponentConsumer<RectangularColorSpaceName> = oneOf(
+  [
+    one(predefinedRgbConsumer),
+    one(createKeywordConsumer('lab', 'oklab')),
+    one(xyzSpaceConsumer),
+  ],
+  ([space]) => space,
 );
 
-function tryConsumePolarColorSpace(
+function consumePolarColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PolarColorSpaceName> {
-  return consumePolarColorSpace(c);
+  return polarColorSpaceConsumer(c);
 }
 
 // <polar-color-space> = hsl | hwb | lch | oklch
-const consumePolarColorSpace =
+const polarColorSpaceConsumer =
   createKeywordConsumer('hsl', 'hwb', 'lch', 'oklch');
 
 // <custom-color-space> = <dashed-ident>
-function tryConsumeCustomColorSpace(
+function consumeCustomColorSpace(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DashedIdentValue['value']> {
-  return consumeCustomColorSpace(c);
+  return customColorSpaceConsumer(c);
 }
 
-const consumeCustomColorSpace = adaptConsumer(
-  tryConsumeDashedIdent,
+const customColorSpaceConsumer = adaptConsumer(
+  consumeDashedIdent,
   ({ value }, context) => colorContextFor(context).colorProfiles?.has(value)
     ? value
     : null,
 );
 
-function tryConsumeHueInterpolationMethod(
+function consumeHueInterpolationMethod(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HueInterpolationMethod> {
-  return consumeHueInterpolationMethod(c);
+  return hueInterpolationMethodConsumer(c);
 }
 
 // <hue-interpolation-method> = [ shorter | longer | increasing | decreasing ] hue
-const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod> =
+const hueInterpolationMethodConsumer: TryComponentConsumer<HueInterpolationMethod> =
   sequenceOf(
     [
       one(createKeywordConsumer(
@@ -2222,20 +2208,20 @@ const consumeHueInterpolationMethod: TryComponentConsumer<HueInterpolationMethod
  * in quirks mode. It represents an ordinary <hex-color>.
  */
 
-function tryConsumeQuirkyColor(
+function consumeQuirkyColor(
   c: ComponentCursor,
 ): TryComponentConsumerResult<HexColor> {
-  return consumeQuirkyColor(c);
+  return quirkyColorConsumer(c);
 }
 
 // <quirky-color> = <number-token> | <dimension-token> | <ident-token>
-const consumeQuirkyColor: TryComponentConsumer<HexColor> = oneOf(
+const quirkyColorConsumer: TryComponentConsumer<HexColor> = oneOf(
   [
-    one(adaptConsumer(tryConsumeIdentToken, (token) => token.value)),
-    one(adaptConsumer(tryConsumeIntegerToken, (token) =>
+    one(adaptConsumer(consumeIdentToken, (token) => token.value)),
+    one(adaptConsumer(consumeIntegerToken, (token) =>
       String(token.value).padStart(6, '0'),
     )),
-    one(adaptConsumer(tryConsumeDimensionToken, (token) =>
+    one(adaptConsumer(consumeDimensionToken, (token) =>
       token.flag === NumberTokenFlag.Integer
         ? `${token.value}${token.unit}`.padStart(6, '0')
         : null,
@@ -2260,28 +2246,28 @@ type RelativeColorParserContext = {
   relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
 } & ColorContext;
 
-function tryConsumeRelativeColorOrigin(
+function consumeRelativeColorOrigin(
   c: ComponentCursor,
 ): TryComponentConsumerResult<ColorValue> {
-  return consumeRelativeColorOrigin(c);
+  return relativeColorOriginConsumer(c);
 }
 
-const consumeRelativeColorOrigin = sequenceOf(
+const relativeColorOriginConsumer = sequenceOf(
   [
     one(createKeywordConsumer('from')),
-    one(withTrivia(consumeColor)),
+    one(withTrivia(colorConsumer)),
   ],
   ([, [origin]]) => origin,
 );
 
-function tryConsumeRelativeColorKeyword(
+function consumeRelativeColorKeyword(
   c: ComponentCursor,
 ): TryComponentConsumerResult<NumberValue> {
-  return consumeRelativeColorKeyword(c);
+  return relativeColorKeywordConsumer(c);
 }
 
-const consumeRelativeColorKeyword = adaptConsumer(
-  tryConsumeIdent,
+const relativeColorKeywordConsumer = adaptConsumer(
+  consumeIdent,
   (ident, context) => {
     const name = asciiLower(ident.value);
 

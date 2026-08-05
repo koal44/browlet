@@ -1,8 +1,8 @@
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
-  parseSyntax, tryConsumeSyntax,
+  consumeSyntax, parseSyntax,
   type SyntaxValue,
 } from '../../../../src/stylelet/values/syntax-value';
 import { describe, expect, it } from 'vitest';
@@ -117,7 +117,7 @@ describe('<syntax>', () => {
       parseListOfComponentValues('<length> trailing'),
     );
 
-    expect(tryConsumeSyntax(c)).toEqual(lengthSyntax);
+    expect(consumeSyntax(c)).toEqual(lengthSyntax);
     expect(c.peek()).toMatchObject({
       type: 'token',
       kind: TokenKind.Whitespace,
@@ -129,7 +129,7 @@ describe('<syntax>', () => {
       parseListOfComponentValues('<length >'),
     );
 
-    expect(tryConsumeSyntax(c)).toBeNull();
+    expect(consumeSyntax(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });

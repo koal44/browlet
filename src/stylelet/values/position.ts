@@ -1,14 +1,14 @@
 import { mapTuple } from '../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
+import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../syntax/component-cursor';
 import {
-  allOf, one, oneOf, repeat, sequenceOf, withTrivia,
-} from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+  adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia,
+} from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import { createKeywordConsumer } from './keyword';
 import {
   addLengthPercentages, interpolateLengthPercentages, resolveLengthPercentage,
-  serializeLengthPercentage, tryConsumeLengthPercentage,
+  serializeLengthPercentage, consumeLengthPercentage,
   type LengthPercentageValue,
 } from './length-percentage';
 import type { MathContext } from './math-value';
@@ -144,37 +144,21 @@ export function parsePosition(
   input: ParserInput,
   context: PositionContext = {},
 ): PositionValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumePosition),
-    context,
-  );
+  return positionParser(input, context);
 }
 
-export function tryConsumePosition(
+export function consumePosition(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PositionValue> {
-  return consumePosition(c);
+  return positionConsumer(c);
 }
 
-// <position> = <position-one> | <position-two> | <position-four>
-const consumePosition: TryComponentConsumer<PositionValue> = oneOf(
-  [
-    one(tryConsumePositionFour),
-    one(tryConsumePositionTwo),
-    one(tryConsumePositionOne),
-  ],
-  ([value]) => value,
-);
-
-function tryConsumePositionOne(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PositionOne> {
-  return consumePositionOne(c);
-}
+// =============================================================================
+// Syntax
+// =============================================================================
 
 // <position-one> = left | center | right | top | bottom | x-start | x-end | y-start | y-end | block-start | block-end | inline-start | inline-end | <length-percentage>
-const consumePositionOne: TryComponentConsumer<PositionOne> = oneOf(
+const positionOneConsumer: TryComponentConsumer<PositionOne> = oneOf(
   [
     one(createKeywordConsumer(
       'left', 'center', 'right', 'top', 'bottom',
@@ -182,7 +166,7 @@ const consumePositionOne: TryComponentConsumer<PositionOne> = oneOf(
       'block-start', 'block-end',
       'inline-start', 'inline-end',
     )),
-    one(tryConsumeLengthPercentage),
+    one(consumeLengthPercentage),
   ],
   ([component]) => ({
     type: 'position',
@@ -190,14 +174,8 @@ const consumePositionOne: TryComponentConsumer<PositionOne> = oneOf(
   }),
 );
 
-function tryConsumePositionTwo(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PositionTwo> {
-  return consumePositionTwo(c);
-}
-
 // <position-two> = [ [ left | center | right | x-start | x-end ] && [ top | center | bottom | y-start | y-end ] | [ left | center | right | x-start | x-end | <length-percentage> ] [ top | center | bottom | y-start | y-end | <length-percentage> ] | [ block-start | center | block-end ] && [ inline-start | center | inline-end ] | [ start | center | end ]{2} ]
-const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
+const positionTwoConsumer: TryComponentConsumer<PositionTwo> = oneOf(
   // Expand the unordered conjunctions because both operands can consume
   // `center`: H && V = H V | V H, and B && I = B I | I B.
   [
@@ -224,14 +202,14 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
         one(oneOf(
           [
             one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
-            one(tryConsumeLengthPercentage),
+            one(consumeLengthPercentage),
           ],
           ([horizontal]) => horizontal,
         )),
         one(withTrivia(oneOf(
           [
             one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
-            one(tryConsumeLengthPercentage),
+            one(consumeLengthPercentage),
           ],
           ([vertical]) => vertical,
         ))),
@@ -256,15 +234,10 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
       ],
       ([[inline], [block]]) => [block, inline],
     )),
-    one(sequenceOf(
-      [
-        repeat(
-          withTrivia(createKeywordConsumer('start', 'center', 'end')),
-          2,
-          2,
-        ),
-      ],
-      ([components]) => components,
+    one(repeat(
+      withTrivia(createKeywordConsumer('start', 'center', 'end')),
+      2,
+      2,
     )),
   ],
   ([components]): PositionTwo => ({
@@ -273,14 +246,8 @@ const consumePositionTwo: TryComponentConsumer<PositionTwo> = oneOf(
   }),
 );
 
-function tryConsumePositionFour(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PositionFour> {
-  return consumePositionFour(c);
-}
-
 // <position-four> = [ [ [ left | right | x-start | x-end ] <length-percentage> ] && [ [ top | bottom | y-start | y-end ] <length-percentage> ] | [ [ block-start | block-end ] <length-percentage> ] && [ [ inline-start | inline-end ] <length-percentage> ] | [ [ start | end ] <length-percentage> ]{2} ]
-const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
+const positionFourConsumer: TryComponentConsumer<PositionFour> = oneOf(
   [
     one(allOf(
       [
@@ -289,7 +256,7 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
             one(withTrivia(createKeywordConsumer(
               'left', 'right', 'x-start', 'x-end',
             ))),
-            one(withTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(consumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => [edge, offset] as const,
         )),
@@ -298,7 +265,7 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
             one(withTrivia(createKeywordConsumer(
               'top', 'bottom', 'y-start', 'y-end',
             ))),
-            one(withTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(consumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => [edge, offset] as const,
         )),
@@ -313,14 +280,14 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
         one(sequenceOf(
           [
             one(withTrivia(createKeywordConsumer('block-start', 'block-end'))),
-            one(withTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(consumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => [edge, offset] as const,
         )),
         one(sequenceOf(
           [
             one(withTrivia(createKeywordConsumer('inline-start', 'inline-end'))),
-            one(withTrivia(tryConsumeLengthPercentage)),
+            one(withTrivia(consumeLengthPercentage)),
           ],
           ([[edge], [offset]]) => [edge, offset] as const,
         )),
@@ -330,21 +297,19 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
         ...inline,
       ] as PositionFourComponents,
     )),
-    one(sequenceOf(
-      [
-        repeat(
-          sequenceOf(
-            [
-              one(withTrivia(createKeywordConsumer('start', 'end'))),
-              one(withTrivia(tryConsumeLengthPercentage)),
-            ],
-            ([[edge], [offset]]) => [edge, offset] as const,
-          ),
-          2,
-          2,
+    one(adaptConsumer(
+      repeat(
+        sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer('start', 'end'))),
+            one(withTrivia(consumeLengthPercentage)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
         ),
-      ],
-      ([[first, second]]) => [
+        2,
+        2,
+      ),
+      ([first, second]) => [
         ...first,
         ...second,
       ],
@@ -355,6 +320,18 @@ const consumePositionFour: TryComponentConsumer<PositionFour> = oneOf(
     components: components as PositionFourComponents,
   }),
 );
+
+// <position> = <position-one> | <position-two> | <position-four>
+const positionConsumer: TryComponentConsumer<PositionValue> = oneOf(
+  [
+    one(positionFourConsumer),
+    one(positionTwoConsumer),
+    one(positionOneConsumer),
+  ],
+  ([value]) => value,
+);
+
+const positionParser = createComponentParser(withTrivia(positionConsumer));
 
 // ████████  ████████  ██████   ███████  ██       ██     ██ ████████
 // ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██

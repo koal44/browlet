@@ -1,13 +1,15 @@
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
 import {
-  resolveGradient, serializeGradient, tryConsumeGradient,
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import type { ValueStage } from '../value-processing/stage';
+import {
+  resolveGradient, serializeGradient, consumeGradient,
   type GradientContext, type GradientValue,
 } from './gradient';
-import { serializeUrl, tryConsumeUrl, type UrlValue } from './url';
-import type { ValueDefinition } from './value-definition';
+import { serializeUrl, consumeUrl, type UrlValue } from './url';
+import type { ValueDefinition } from '../value-processing/definition';
 
 /*
  * <image> = <url> | <gradient>
@@ -17,39 +19,24 @@ export type ImageValue = UrlValue | GradientValue;
 
 export type ImageContext = GradientContext;
 
-export function parseImage(
-  input: ParserInput,
-  context: ImageContext = {},
-): ImageValue | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeImage),
-    context,
-  );
-
-  return result;
-}
-
-export function tryConsumeImage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ImageValue> {
-  return consumeImage(c);
-}
-
 export const imageDef: ValueDefinition<ImageValue, ImageContext> = {
-  tryConsume: tryConsumeImage,
+  consume: consumeImage,
   resolve: resolveImage,
   serialize: serializeImage,
 };
 
-// <image> = <url> | <gradient>
-const consumeImage: TryComponentConsumer<ImageValue> = oneOf(
-  [
-    one(tryConsumeUrl),
-    one(tryConsumeGradient),
-  ],
-  ([image]) => image,
-);
+export function parseImage(
+  input: ParserInput,
+  context: ImageContext = {},
+): ImageValue | null {
+  return imageParser(input, context);
+}
+
+export function consumeImage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ImageValue> {
+  return imageConsumer(c);
+}
 
 export function resolveImage(
   value: ImageValue,
@@ -62,3 +49,14 @@ export function resolveImage(
 export function serializeImage(value: ImageValue): string {
   return value.type === 'url' ? serializeUrl(value) : serializeGradient(value);
 }
+
+// <image> = <url> | <gradient>
+const imageConsumer: TryComponentConsumer<ImageValue> = oneOf(
+  [
+    one(consumeUrl),
+    one(consumeGradient),
+  ],
+  ([image]) => image,
+);
+
+const imageParser = createComponentParser(withTrivia(imageConsumer));

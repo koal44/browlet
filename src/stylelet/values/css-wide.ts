@@ -1,7 +1,7 @@
-import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { withTrivia } from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { withTrivia } from '../syntax/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
+import type { ValueStage } from '../value-processing/stage';
 import { createKeywordConsumer } from './keyword';
 import type { WholeValue } from './whole-value';
 
@@ -33,22 +33,20 @@ export function parseCssWideValue<Value = unknown, Context = unknown>(
 ): CssWideValue<Value, Context> | null {
   return parseAsComponentGrammar(
     input,
-    withTrivia(tryConsumeCssWideValue<Value, Context>),
+    withTrivia(consumeCssWideValue<Value, Context>),
     context,
   );
 }
 
-export function tryConsumeCssWideValue<Value = unknown, Context = unknown>(
+export function consumeCssWideValue<Value, Context>(
   c: ComponentCursor,
 ): TryComponentConsumerResult<CssWideValue<Value, Context>> {
-  const keyword = tryConsumeCssWideKeyword(c);
+  const keyword = cssWideKeywordConsumer(c);
 
   if (keyword === null) return null;
 
   return createCssWideValue(keyword);
 }
-
-const tryConsumeCssWideKeyword = createKeywordConsumer(...CSS_WIDE_KEYWORDS);
 
 function createCssWideValue<Value, Context>(
   keyword: CssWideKeyword,
@@ -62,3 +60,6 @@ function createCssWideValue<Value, Context>(
 
   return value;
 }
+
+// <css-wide-keyword> = inherit | initial | unset | revert | revert-layer
+const cssWideKeywordConsumer = createKeywordConsumer(...CSS_WIDE_KEYWORDS);

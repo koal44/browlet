@@ -15,6 +15,16 @@ import {
 
 export type ParserInput = string | readonly ComponentValue[];
 
+export function createComponentParser<T>(
+  consumer: TryComponentConsumer<T>,
+): (
+  input: ParserInput,
+  context?: unknown,
+) => TryComponentConsumerResult<T> {
+  return (input, context = undefined) =>
+    parseAsComponentGrammar(input, consumer, context);
+}
+
 // 5.3.1. Parse something according to a CSS grammar
 export function parseAsComponentGrammar<T>(
   input: ParserInput,

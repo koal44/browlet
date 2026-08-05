@@ -1,9 +1,11 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { tryConsumeDimensionToken } from '../../parser/component-consumers';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeDimensionToken } from '../../syntax/component-consumers';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -35,11 +37,13 @@ export function parseResolution(
   input: ParserInput,
   context: unknown = undefined,
 ): ResolutionLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeResolution),
-    context,
-  );
+  return resolutionParser(input, context);
+}
+
+export function consumeResolution(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ResolutionLiteral> {
+  return resolutionConsumer(c);
 }
 
 export type ResolutionConsumerOptions = {
@@ -56,7 +60,7 @@ export function createResolutionConsumer(
   const min = Math.max(0, options.min ?? -Infinity);
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumeDimensionToken, (component) => {
+  return adaptConsumer(consumeDimensionToken, (component) => {
     const unit = resolutionUnitFor(component.unit);
 
     if (unit === null) return null;
@@ -72,20 +76,6 @@ export function createResolutionConsumer(
       ? null
       : result;
   });
-}
-
-export const tryConsumeResolution = createResolutionConsumer();
-
-function resolutionUnitFor(raw: string): ResolutionUnit | null {
-  const normalized = asciiLower(raw);
-
-  return isResolutionUnit(normalized)
-    ? normalized
-    : null;
-}
-
-function isResolutionUnit(value: string): value is ResolutionUnit {
-  return RESOLUTION_UNITS.some((unit) => unit === value);
 }
 
 export function serializeResolution(value: ResolutionLiteral): string {
@@ -123,3 +113,19 @@ export function canonicalizeResolution(
     unit: 'dppx',
   };
 }
+
+function resolutionUnitFor(raw: string): ResolutionUnit | null {
+  const normalized = asciiLower(raw);
+
+  return isResolutionUnit(normalized)
+    ? normalized
+    : null;
+}
+
+function isResolutionUnit(value: string): value is ResolutionUnit {
+  return RESOLUTION_UNITS.some((unit) => unit === value);
+}
+
+// <resolution> = <nonnegative dimension-token with a resolution unit>
+const resolutionConsumer = createResolutionConsumer();
+const resolutionParser = createComponentParser(withTrivia(resolutionConsumer));

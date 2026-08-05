@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { colorProperty } from '../../../src/stylelet/props/color';
-import { ValueStage } from '../../../src/stylelet/value-processing';
+import { ValueStage } from '../../../src/stylelet/value-processing/stage';
 import { colorDef, ColorKind } from '../../../src/stylelet/values/color';
 import { defineProperty } from '../../../src/stylelet/values/whole-value';
 

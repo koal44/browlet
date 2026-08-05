@@ -1,15 +1,23 @@
 import { asciiLower } from '../../shared/css';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
+import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
-import { serializeCssIdentifier } from '../parser/component-value';
-import { tryConsumeIdent } from './ident';
-import type { ValueDefinition } from './value-definition';
+import { serializeCssIdentifier } from '../syntax/component-value';
+import { consumeIdent } from './ident';
+import type { ValueDefinition } from '../value-processing/definition';
 
 export type CustomIdentValue = {
   type: 'custom-ident';
   value: string;
+};
+
+export const customIdentDef: ValueDefinition<CustomIdentValue> = {
+  consume: consumeCustomIdent,
+  resolve: (value) => value,
+  serialize: serializeCustomIdent,
 };
 
 const RESERVED_CUSTOM_IDENT_KEYWORDS: ReadonlySet<string> = new Set([
@@ -29,12 +37,18 @@ export function parseCustomIdent(
   );
 }
 
+export function consumeCustomIdent(
+  c: ComponentCursor,
+): TryComponentConsumerResult<CustomIdentValue> {
+  return customIdentConsumer(c);
+}
+
 export function createCustomIdentConsumer(
   excluded: readonly string[] = [],
 ): TryComponentConsumer<CustomIdentValue> {
   const excludedKeywords = new Set(excluded.map(asciiLower));
 
-  return adaptConsumer(tryConsumeIdent, ({ value }) => {
+  return adaptConsumer(consumeIdent, ({ value }) => {
     const lower = asciiLower(value);
 
     return RESERVED_CUSTOM_IDENT_KEYWORDS.has(lower) || excludedKeywords.has(lower)
@@ -43,14 +57,9 @@ export function createCustomIdentConsumer(
   });
 }
 
-export const tryConsumeCustomIdent = createCustomIdentConsumer();
-
-export const customIdentDef: ValueDefinition<CustomIdentValue> = {
-  tryConsume: tryConsumeCustomIdent,
-  resolve: (value) => value,
-  serialize: serializeCustomIdent,
-};
-
 export function serializeCustomIdent(value: CustomIdentValue): string {
   return serializeCssIdentifier(value.value);
 }
+
+// <custom-ident>
+const customIdentConsumer = createCustomIdentConsumer();

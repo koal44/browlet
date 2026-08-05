@@ -1,8 +1,8 @@
-import type { TryComponentConsumer } from '../parser/component-cursor';
-import type { ValueStage } from '../value-processing';
+import type { TryComponentConsumer } from '../syntax/component-cursor';
+import type { ValueStage } from './stage';
 
 export type ValueDefinition<Value, Context = unknown> = {
-  tryConsume: TryComponentConsumer<Value>;
+  consume: TryComponentConsumer<Value>;
   resolve: (value: Value, stage: ValueStage, context: Context) => Value;
   serialize: (value: Value) => string;
   custom?: boolean;

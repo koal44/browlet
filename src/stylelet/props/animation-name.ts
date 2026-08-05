@@ -1,12 +1,21 @@
-import { commaRepeat, one, oneOf, sequenceOf, withTrivia } from '../parser/component-grammar';
+import {
+  adaptConsumer, commaRepeat, one, oneOf, sequenceOf, withTrivia,
+} from '../syntax/component-grammar';
 import { createKeywordConsumer } from '../values/keyword';
 import {
   createCustomIdentConsumer, serializeCustomIdent,
   type CustomIdentValue,
 } from '../values/custom-ident';
-import { serializeString, tryConsumeString, type StringValue } from '../values/string';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
+import { serializeString, consumeString, type StringValue } from '../values/string';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+
+/*
+ * <'animation-name'> = [ none | <keyframes-name> ]#
+ * <keyframes-name> = <custom-ident> | <string>
+ */
 
 export type AnimationNameValue = {
   type: 'animation-name';
@@ -29,50 +38,14 @@ export function parseAnimationNameValue(
   input: ParserInput,
   context: unknown = undefined,
 ): AnimationNameValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeAnimationName),
-    context,
-  );
+  return animationNameParser(input, context);
 }
 
-export function tryConsumeAnimationName(c: ComponentCursor): TryComponentConsumerResult<AnimationNameValue> {
-  return consumeAnimationName(c);
+export function consumeAnimationName(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AnimationNameValue> {
+  return animationNameConsumer(c);
 }
-
-const tryConsumeNone: TryComponentConsumer<AnimationNameNoneValue> = (c) => {
-  const value = tryConsumeNoneKeyword(c);
-
-  if (value === null) {
-    return null;
-  }
-
-  return { type: 'none' };
-};
-
-const tryConsumeNoneKeyword = createKeywordConsumer('none');
-const tryConsumeKeyframesCustomIdent = createCustomIdentConsumer(['none']);
-
-const tryConsumeKeyframesName: TryComponentConsumer<KeyframesNameValue> = oneOf(
-  [
-    one(tryConsumeKeyframesCustomIdent),
-    one(tryConsumeString),
-  ],
-  ([value]) => value,
-);
-
-const tryConsumeAnimationNameItem: TryComponentConsumer<AnimationNameItemValue> = oneOf(
-  [
-    one(tryConsumeNone),
-    one(tryConsumeKeyframesName),
-  ],
-  ([value]) => value,
-);
-
-const consumeAnimationName = sequenceOf(
-  [commaRepeat(tryConsumeAnimationNameItem, 1)],
-  ([values]): AnimationNameValue => ({ type: 'animation-name', values }),
-);
 
 export function serializeAnimationName(value: AnimationNameValue): string {
   return value.values.map(serializeAnimationNameItem).join(', ');
@@ -90,3 +63,47 @@ function serializeAnimationNameItem(value: AnimationNameItemValue): string {
       return serializeString(value);
   }
 }
+
+// =============================================================================
+// Syntax
+// =============================================================================
+
+/*
+ * Implementation factorization of <'animation-name'>:
+ *
+ * <animation-name-none> = none
+ * <animation-name-item> = <animation-name-none> | <keyframes-name>
+ * <'animation-name'> = <animation-name-item>#
+ */
+
+// <keyframes-name> = <custom-ident> | <string>
+const keyframesNameConsumer: TryComponentConsumer<KeyframesNameValue> = oneOf(
+  [
+    one(createCustomIdentConsumer(['none'])),
+    one(consumeString),
+  ],
+  ([value]) => value,
+);
+
+// <animation-name-none> = none
+const animationNameNoneConsumer: TryComponentConsumer<AnimationNameNoneValue> = adaptConsumer(
+  createKeywordConsumer('none'),
+  (): AnimationNameNoneValue => ({ type: 'none' }),
+);
+
+// <animation-name-item> = <animation-name-none> | <keyframes-name>
+const animationNameItemConsumer: TryComponentConsumer<AnimationNameItemValue> = oneOf(
+  [
+    one(animationNameNoneConsumer),
+    one(keyframesNameConsumer),
+  ],
+  ([value]) => value,
+);
+
+// <'animation-name'> = <animation-name-item>#
+const animationNameConsumer: TryComponentConsumer<AnimationNameValue> = sequenceOf(
+  [commaRepeat(animationNameItemConsumer, 1)],
+  ([values]): AnimationNameValue => ({ type: 'animation-name', values }),
+);
+
+const animationNameParser = createComponentParser(withTrivia(animationNameConsumer));

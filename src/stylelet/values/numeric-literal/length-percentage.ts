@@ -1,8 +1,10 @@
-import { withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { withTrivia } from '../../syntax/component-grammar';
 import {
-  serializeLength, tryConsumeLength, tryResolveLength, type CanonicalLengthLiteral,
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
+import {
+  serializeLength, consumeLength, tryResolveLength, type CanonicalLengthLiteral,
   type LengthResolutionContext, type LengthLiteral,
 } from './length';
 import {
@@ -25,11 +27,13 @@ export function parseLengthPercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): LengthPercentageLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeLengthPercentage),
-    context,
-  );
+  return lengthPercentageParser(input, context);
+}
+
+export function consumeLengthPercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LengthPercentageLiteral> {
+  return lengthPercentageConsumer(c);
 }
 
 export type LengthPercentageConsumerOptions =
@@ -39,13 +43,11 @@ export function createLengthPercentageConsumer(
   options: LengthPercentageConsumerOptions = {},
 ): TryComponentConsumer<LengthPercentageLiteral> {
   return createDimensionPercentageConsumer(
-    tryConsumeLength,
+    consumeLength,
     'Length-percentage',
     options,
   );
 }
-
-export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
 
 export function serializeLengthPercentage(value: LengthPercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeLength);
@@ -92,3 +94,7 @@ export function tryAccumulateLengthPercentages(
 ): LengthPercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }
+
+// <length-percentage> = [ <length> | <percentage> ]
+const lengthPercentageConsumer = createLengthPercentageConsumer();
+const lengthPercentageParser = createComponentParser(withTrivia(lengthPercentageConsumer));

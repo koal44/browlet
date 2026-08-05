@@ -1,15 +1,15 @@
 import { clamp } from '../../shared/util';
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import type { MathContext } from './math-value';
 import {
   accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,
-  tryConsumeNumber, type NumberValue,
+  consumeNumber, type NumberValue,
 } from './number';
 import {
-  resolvePercentage, serializePercentage, tryConsumePercentage,
+  resolvePercentage, serializePercentage, consumePercentage,
   type PercentageValue,
 } from './percentage';
 
@@ -23,20 +23,14 @@ export function parseOpacityValue(
   input: ParserInput,
   context: MathContext = {},
 ): OpacityValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeOpacityValue),
-    context,
-  );
+  return opacityValueParser(input, context);
 }
 
-export const tryConsumeOpacityValue: TryComponentConsumer<OpacityValue> = oneOf(
-  [
-    one(tryConsumeNumber),
-    one(tryConsumePercentage),
-  ],
-  ([value]) => resolveOpacityValue(value, ValueStage.Declared),
-);
+export function consumeOpacityValue(
+  c: ComponentCursor,
+): TryComponentConsumerResult<OpacityValue> {
+  return opacityValueConsumer(c);
+}
 
 export function resolveOpacityValue(
   value: OpacityValue,
@@ -106,3 +100,14 @@ function isNumberOpacityValue(
     value.valueType === 'number'
   );
 }
+
+// <opacity-value> = <number> | <percentage>
+const opacityValueConsumer = oneOf(
+  [
+    one(consumeNumber),
+    one(consumePercentage),
+  ],
+  ([value]) => resolveOpacityValue(value, ValueStage.Declared),
+);
+
+const opacityValueParser = createComponentParser(withTrivia(opacityValueConsumer));

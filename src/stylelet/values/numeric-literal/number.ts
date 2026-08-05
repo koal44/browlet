@@ -1,7 +1,9 @@
-import { tryConsumeNumberToken } from '../../parser/component-consumers';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeNumberToken } from '../../syntax/component-consumers';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssInteger } from './integer';
 
 /*
@@ -21,11 +23,13 @@ export function parseNumber(
   input: ParserInput,
   context: unknown = undefined,
 ): NumberLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeNumber),
-    context,
-  );
+  return numberParser(input, context);
+}
+
+export function consumeNumber(
+  c: ComponentCursor,
+): TryComponentConsumerResult<NumberLiteral> {
+  return numberConsumer(c);
 }
 
 export type NumberConsumerOptions = {
@@ -39,14 +43,12 @@ export function createNumberConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumeNumberToken, (token) =>
+  return adaptConsumer(consumeNumberToken, (token) =>
     token.value < min || token.value > max
       ? null
       : { type: 'number', value: token.value },
   );
 }
-
-export const tryConsumeNumber = createNumberConsumer();
 
 export function serializeNumber(value: NumberLiteral): string {
   return serializeCssNumber(value.value);
@@ -90,3 +92,7 @@ export function accumulateNumbers(
 ): NumberLiteral {
   return addNumbers(a, b);
 }
+
+// <number> = <number-token>
+const numberConsumer = createNumberConsumer();
+const numberParser = createComponentParser(withTrivia(numberConsumer));

@@ -1,14 +1,14 @@
-import { type ComponentValue, type PreservedToken, BlockKind } from '../../../../src/stylelet/parser/component-value';
+import { type ComponentValue, type PreservedToken, BlockKind } from '../../../../src/stylelet/syntax/component-value';
 import {
   parseCommaSeparatedListOfComponentValues, parseComponentValue, parseDeclaration,
   parseListOfComponentValues, parseListOfDeclarations, parseListOfRules, parseRule,
   parseStyleBlockContents, parseStylesheet,
-} from '../../../../src/stylelet/parser/syntax';
+} from '../../../../src/stylelet/syntax/parser';
 import {
   RuleKind, type AtRule, type Declaration, type QualifiedRule, type Rule, type StyleBlockItem,
-} from '../../../../src/stylelet/parser/rule';
+} from '../../../../src/stylelet/syntax/rule';
 import { describe, expect, test } from 'vitest';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 
 function preservedKinds(values: readonly ComponentValue[]): TokenKind[] {
   return values

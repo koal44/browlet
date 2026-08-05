@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
   defineColorProfile, deltaE2000, deltaEOK,

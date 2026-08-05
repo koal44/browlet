@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
 import {
   isTokenKind, serializeComponentValues,
-} from '../../../../src/stylelet/parser/component-value';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+} from '../../../../src/stylelet/syntax/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
-  parseFirstValid, serializeFirstValid, tryConsumeFirstValid,
+  parseFirstValid, serializeFirstValid, consumeFirstValid,
 } from '../../../../src/stylelet/values/substitution/first-valid';
 
 describe('<first-valid()>', () => {
@@ -65,7 +65,7 @@ describe('<first-valid()>', () => {
       parseListOfComponentValues('first-valid(red, blue) trailing'),
     );
 
-    expect(tryConsumeFirstValid(c)?.type).toBe('first-valid');
+    expect(consumeFirstValid(c)?.type).toBe('first-valid');
     expect(isTokenKind(c.peek(), TokenKind.Whitespace)).toBe(true);
   });
 
@@ -74,7 +74,7 @@ describe('<first-valid()>', () => {
       parseListOfComponentValues('first-valid(red,)'),
     );
 
-    expect(tryConsumeFirstValid(c)).toBeNull();
+    expect(consumeFirstValid(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });

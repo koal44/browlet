@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   accumulateMathValues, addMathValues, coercePercentageMathToNumber,
   createMathValueConsumer, interpolateMathValues, parseMathValue, promoteNumericVariable,

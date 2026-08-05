@@ -1,11 +1,11 @@
 import {
   one, oneOf, plus, adaptConsumer, recursive, sequenceOf, withTrivia,
-} from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { tryConsumeParensBlock } from '../parser/component-consumers';
-import { type ParensBlock } from '../parser/component-value';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { tryConsumeGeneralEnclosed, type GeneralEnclosedValue } from './general-enclosed';
+} from '../syntax/component-grammar';
+import { type TryComponentConsumer } from '../syntax/component-cursor';
+import { consumeParensBlock } from '../syntax/component-consumers';
+import { type ParensBlock } from '../syntax/component-value';
+import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
+import { consumeGeneralEnclosed, type GeneralEnclosedValue } from './general-enclosed';
 import { createKeywordConsumer } from './keyword';
 
 export type BooleanExprValue<Test> =
@@ -59,17 +59,13 @@ export type BooleanExprContext<Test> = {
   preserveUnknown?: boolean;
 };
 
-const tryConsumeNot = createKeywordConsumer('not');
-const tryConsumeAnd = withTrivia(createKeywordConsumer('and'));
-const tryConsumeOr = withTrivia(createKeywordConsumer('or'));
-
 export function parseBooleanExpr<Test>(
   input: ParserInput,
-  tryConsumeTest: TryComponentConsumer<Test>,
+  testConsumer: TryComponentConsumer<Test>,
 ): BooleanExprValue<Test> | null {
   return parseAsComponentGrammar(
     input,
-    withTrivia(createBooleanExprConsumer(tryConsumeTest)),
+    withTrivia(createBooleanExprConsumer(testConsumer)),
   );
 }
 
@@ -83,12 +79,12 @@ export function parseBooleanExpr<Test>(
  *   <test> | ( <boolean-expr[ <test> ]> ) | <general-enclosed>
  */
 export function createBooleanExprConsumer<Test>(
-  tryConsumeTest: TryComponentConsumer<Test>,
+  consumeTest: TryComponentConsumer<Test>,
 ): TryComponentConsumer<BooleanExprValue<Test>> {
   return recursive((consumeExpr) => {
     // <test>
-    const consumeTest = adaptConsumer(
-      tryConsumeTest,
+    const testConsumer = adaptConsumer(
+      consumeTest,
       (value): BooleanExprTest<Test> => ({
         type: 'boolean-test',
         value,
@@ -96,23 +92,23 @@ export function createBooleanExprConsumer<Test>(
     );
 
     // ( <boolean-expr[ <test> ]> )
-    const consumeParens = createParensConsumer(consumeExpr);
+    const parensConsumer = createParensConsumer(consumeExpr);
 
     // <boolean-expr-group> = <test> | ( <boolean-expr[ <test> ]> ) | <general-enclosed>
-    const consumeGroup = oneOf(
+    const groupConsumer = oneOf(
       [
-        one(consumeTest),
-        one(consumeParens),
-        one(tryConsumeGeneralEnclosed),
+        one(testConsumer),
+        one(parensConsumer),
+        one(consumeGeneralEnclosed),
       ],
       ([value]) => value,
     );
 
     // not <boolean-expr-group>
-    const consumeNot = sequenceOf(
+    const notExprConsumer = sequenceOf(
       [
-        one(tryConsumeNot),
-        one(withTrivia(consumeGroup)),
+        one(notConsumer),
+        one(withTrivia(groupConsumer)),
       ],
       ([, [value]]): BooleanExprNot<Test> => ({
         type: 'boolean-not',
@@ -121,28 +117,28 @@ export function createBooleanExprConsumer<Test>(
     );
 
     // and <boolean-expr-group>
-    const consumeAndGroup = sequenceOf(
+    const andGroupConsumer = sequenceOf(
       [
-        one(tryConsumeAnd),
-        one(withTrivia(consumeGroup)),
+        one(andConsumer),
+        one(withTrivia(groupConsumer)),
       ],
       ([, [value]]) => value,
     );
 
     // or <boolean-expr-group>
-    const consumeOrGroup = sequenceOf(
+    const orGroupConsumer = sequenceOf(
       [
-        one(tryConsumeOr),
-        one(withTrivia(consumeGroup)),
+        one(orConsumer),
+        one(withTrivia(groupConsumer)),
       ],
       ([, [value]]) => value,
     );
 
     // <boolean-expr-group> [ and <boolean-expr-group> ]+
-    const consumeAndOperation = sequenceOf(
+    const andOperationConsumer = sequenceOf(
       [
-        one(consumeGroup),
-        plus(consumeAndGroup),
+        one(groupConsumer),
+        plus(andGroupConsumer),
       ],
       ([[first], rest]): BooleanExprAnd<Test> => {
         const [second, ...remaining] = rest;
@@ -155,10 +151,10 @@ export function createBooleanExprConsumer<Test>(
     );
 
     // <boolean-expr-group> [ or <boolean-expr-group> ]+
-    const consumeOrOperation = sequenceOf(
+    const orOperationConsumer = sequenceOf(
       [
-        one(consumeGroup),
-        plus(consumeOrGroup),
+        one(groupConsumer),
+        plus(orGroupConsumer),
       ],
       ([[first], rest]): BooleanExprOr<Test> => {
         const [second, ...remaining] = rest;
@@ -173,10 +169,10 @@ export function createBooleanExprConsumer<Test>(
     // <boolean-expr[]> = not <boolean-expr-group> | <and-operation> | <or-operation> | <boolean-expr-group>
     return oneOf(
       [
-        one(consumeNot),
-        one(consumeAndOperation),
-        one(consumeOrOperation),
-        one(consumeGroup),
+        one(notExprConsumer),
+        one(andOperationConsumer),
+        one(orOperationConsumer),
+        one(groupConsumer),
       ],
       ([value]) => value,
     );
@@ -185,12 +181,12 @@ export function createBooleanExprConsumer<Test>(
 
 // ( <contents> )
 function createParensConsumer<Test>(
-  tryConsumeValue: TryComponentConsumer<BooleanExprValue<Test>>,
+  valueConsumer: TryComponentConsumer<BooleanExprValue<Test>>,
 ): TryComponentConsumer<BooleanExprParens<Test>> {
-  return adaptConsumer(tryConsumeParensBlock, (component, context) => {
+  return adaptConsumer(consumeParensBlock, (component, context) => {
     const value = parseAsComponentGrammar(
       component.value,
-      withTrivia(tryConsumeValue),
+      withTrivia(valueConsumer),
       context,
     );
 
@@ -199,6 +195,11 @@ function createParensConsumer<Test>(
       : { ...component, value };
   });
 }
+
+// Keyword terminals used by <boolean-expr>.
+const notConsumer = createKeywordConsumer('not');
+const andConsumer = withTrivia(createKeywordConsumer('and'));
+const orConsumer = withTrivia(createKeywordConsumer('or'));
 
 // =============================================================================
 // Resolve

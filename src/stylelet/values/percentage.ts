@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import type { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -22,26 +24,34 @@ import {
 
 export type PercentageValue = PercentageLiteral | MathValue<'percentage'>;
 
+export const percentageDef: ValueDefinition<PercentageValue, MathContext> = {
+  consume: consumePercentage,
+  resolve: resolvePercentage,
+  serialize: serializePercentage,
+};
+
 export function parsePercentage(
   input: ParserInput,
   context: MathContext = {},
 ): PercentageValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumePercentage),
-    context,
-  );
+  return percentageParser(input, context);
+}
+
+export function consumePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PercentageValue> {
+  return percentageConsumer(c);
 }
 
 export function createPercentageConsumer(
   options: PercentageConsumerOptions = {},
 ): TryComponentConsumer<PercentageValue> {
-  const tryConsumeLiteral = createPercentageLiteralConsumer(options);
+  const literalConsumer = createPercentageLiteralConsumer(options);
   const range = percentageRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'percentage',
         percentHint: 'percent',
@@ -51,14 +61,6 @@ export function createPercentageConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumePercentage = createPercentageConsumer();
-
-export const percentageDef: ValueDefinition<PercentageValue, MathContext> = {
-  tryConsume: tryConsumePercentage,
-  resolve: resolvePercentage,
-  serialize: serializePercentage,
-};
 
 export function resolvePercentage(
   value: PercentageValue,
@@ -165,3 +167,7 @@ function percentageRange(
     options.max ?? Infinity,
   ];
 }
+
+// <percentage> = <percentage-token> | <math-function>
+const percentageConsumer = createPercentageConsumer();
+const percentageParser = createComponentParser(withTrivia(percentageConsumer));

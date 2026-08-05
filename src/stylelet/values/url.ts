@@ -1,15 +1,17 @@
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { createFunctionalNotationConsumer, tryConsumeUrlToken } from '../parser/component-consumers';
-import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { serializeCssString } from '../parser/component-value';
-import { tryConsumeString } from './string';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createFunctionalNotationConsumer, consumeUrlToken } from '../syntax/component-consumers';
+import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { serializeCssString } from '../syntax/component-value';
+import { consumeString } from './string';
 import {
   isRequestUrlModifierValue, serializeRequestUrlModifiers,
-  tryConsumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
+  consumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
   type UrlModifierValue,
 } from './url-modifier';
-import type { ValueDefinition } from './value-definition';
+import type { ValueDefinition } from '../value-processing/definition';
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL
@@ -26,7 +28,6 @@ import type { ValueDefinition } from './value-definition';
  * <url()> = url( <string> <url-modifier>* ) | <url-token>
  * <src()> = src( <string> <url-modifier>* )
  */
-export type UrlNotation = 'url' | 'src';
 
 export type UrlValue = {
   type: 'url';
@@ -35,30 +36,26 @@ export type UrlValue = {
   modifiers: RequestUrlModifiers;
 };
 
+export type UrlNotation = 'url' | 'src';
+
+export const urlDef: ValueDefinition<UrlValue> = {
+  consume: consumeUrl,
+  resolve: (value) => value,
+  serialize: serializeUrl,
+};
+
 export function parseUrl(
   input: ParserInput,
   context: unknown = undefined,
 ): UrlValue | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeUrl),
-    context,
-  );
-
-  return result;
+  return urlParser(input, context);
 }
 
-export function tryConsumeUrl(
+export function consumeUrl(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlValue> {
-  return consumeUrl(c);
+  return urlConsumer(c);
 }
-
-export const urlDef: ValueDefinition<UrlValue> = {
-  tryConsume: tryConsumeUrl,
-  resolve: (value) => value,
-  serialize: serializeUrl,
-};
 
 export function serializeUrl(value: UrlValue): string {
   const args = [
@@ -68,98 +65,6 @@ export function serializeUrl(value: UrlValue): string {
 
   return `${value.notation}(${args.join(' ')})`;
 }
-
-// <url> = <url()> | <src()>
-const consumeUrl: TryComponentConsumer<UrlValue> = oneOf(
-  [
-    one(tryConsumeUrlFn),
-    one(tryConsumeSrcFn),
-  ],
-  ([value]) => value,
-);
-
-function tryConsumeUrlFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlValue> {
-  return consumeUrlFn(c);
-}
-
-// <url()> = url( <string> <url-modifier>* ) | <url-token>
-const consumeUrlFn: TryComponentConsumer<UrlValue> = oneOf(
-  [
-    one(createFunctionalNotationConsumer(
-      'url',
-      sequenceOf(
-        [
-          one(tryConsumeString),
-          any(withTrivia(tryConsumeUrlFunctionModifier), {
-            contextAfter: contextAfterUrlFunctionModifier,
-          }),
-        ],
-        ([[string], modifiers]) => ({
-          value: string.value,
-          modifiers: urlModifiersFromArray(modifiers),
-        }),
-      ),
-      (value): UrlValue => ({
-        type: 'url',
-        notation: 'url',
-        value: value.value,
-        modifiers: value.modifiers,
-      }),
-      { contextForArguments: contextForUrlFunctionArguments },
-    )),
-    one(tryConsumeUrlTokenValue),
-  ],
-  ([value]) => value,
-);
-
-function tryConsumeSrcFn(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlValue> {
-  return consumeSrcFn(c);
-}
-
-// <src()> = src( <string> <url-modifier>* )
-const consumeSrcFn = createFunctionalNotationConsumer(
-  'src',
-  sequenceOf(
-    [
-      one(tryConsumeString),
-      any(withTrivia(tryConsumeUrlFunctionModifier), {
-        contextAfter: contextAfterUrlFunctionModifier,
-      }),
-    ],
-    ([[string], modifiers]) => ({
-      value: string.value,
-      modifiers: urlModifiersFromArray(modifiers),
-    }),
-  ),
-  (value): UrlValue => ({
-    type: 'url',
-    notation: 'src',
-    value: value.value,
-    modifiers: value.modifiers,
-  }),
-  { contextForArguments: contextForUrlFunctionArguments },
-);
-
-function tryConsumeUrlTokenValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlValue> {
-  return consumeUrlToken(c);
-}
-
-// <url-token>
-const consumeUrlToken: TryComponentConsumer<UrlValue> = adaptConsumer(
-  tryConsumeUrlToken,
-  (component): UrlValue => ({
-    type: 'url',
-    notation: 'url',
-    value: component.value,
-    modifiers: {},
-  }),
-);
 
 type UrlFunctionParserContext = {
   seenRequestModifiers?: ReadonlySet<RequestUrlModifierValue['type']>;
@@ -195,22 +100,6 @@ function urlModifiersFromArray(
   return modifiers;
 }
 
-function tryConsumeUrlFunctionModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlModifierValue> {
-  return consumeUrlFunctionModifier(c);
-}
-
-const consumeUrlFunctionModifier = adaptConsumer(
-  tryConsumeUrlModifier,
-  (value, context) => (
-    isRequestUrlModifierValue(value) &&
-    (context as UrlFunctionParserContext).seenRequestModifiers?.has(value.type) === true
-  )
-    ? null
-    : value,
-);
-
 function contextAfterUrlFunctionModifier(
   value: UrlModifierValue,
   context: unknown,
@@ -229,3 +118,94 @@ function contextAfterUrlFunctionModifier(
     ]),
   };
 }
+
+// =============================================================================
+// Syntax
+// =============================================================================
+
+// Implementation adapter rejecting duplicate recognized request modifiers.
+const urlFunctionModifierConsumer = adaptConsumer(
+  consumeUrlModifier,
+  (value, context) => (
+    isRequestUrlModifierValue(value) &&
+    (context as UrlFunctionParserContext).seenRequestModifiers?.has(value.type) === true
+  )
+    ? null
+    : value,
+);
+
+// <url-token>
+const urlTokenValueConsumer: TryComponentConsumer<UrlValue> = adaptConsumer(
+  consumeUrlToken,
+  (component): UrlValue => ({
+    type: 'url',
+    notation: 'url',
+    value: component.value,
+    modifiers: {},
+  }),
+);
+
+// <src()> = src( <string> <url-modifier>* )
+const srcFnConsumer = createFunctionalNotationConsumer(
+  'src',
+  sequenceOf(
+    [
+      one(consumeString),
+      any(withTrivia(urlFunctionModifierConsumer), {
+        contextAfter: contextAfterUrlFunctionModifier,
+      }),
+    ],
+    ([[string], modifiers]) => ({
+      value: string.value,
+      modifiers: urlModifiersFromArray(modifiers),
+    }),
+  ),
+  (value): UrlValue => ({
+    type: 'url',
+    notation: 'src',
+    value: value.value,
+    modifiers: value.modifiers,
+  }),
+  { contextForArguments: contextForUrlFunctionArguments },
+);
+
+// <url()> = url( <string> <url-modifier>* ) | <url-token>
+const urlFnConsumer: TryComponentConsumer<UrlValue> = oneOf(
+  [
+    one(createFunctionalNotationConsumer(
+      'url',
+      sequenceOf(
+        [
+          one(consumeString),
+          any(withTrivia(urlFunctionModifierConsumer), {
+            contextAfter: contextAfterUrlFunctionModifier,
+          }),
+        ],
+        ([[string], modifiers]) => ({
+          value: string.value,
+          modifiers: urlModifiersFromArray(modifiers),
+        }),
+      ),
+      (value): UrlValue => ({
+        type: 'url',
+        notation: 'url',
+        value: value.value,
+        modifiers: value.modifiers,
+      }),
+      { contextForArguments: contextForUrlFunctionArguments },
+    )),
+    one(urlTokenValueConsumer),
+  ],
+  ([value]) => value,
+);
+
+// <url> = <url()> | <src()>
+const urlConsumer: TryComponentConsumer<UrlValue> = oneOf(
+  [
+    one(urlFnConsumer),
+    one(srcFnConsumer),
+  ],
+  ([value]) => value,
+);
+
+const urlParser = createComponentParser(withTrivia(urlConsumer));

@@ -1,9 +1,11 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { tryConsumeDimensionToken } from '../../parser/component-consumers';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeDimensionToken } from '../../syntax/component-consumers';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -11,11 +13,9 @@ import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './d
  */
 
 export type TimeLiteral = DimensionLiteral<'time', TimeUnit>;
-
 export type CanonicalTimeLiteral = DimensionLiteral<'time', 's'>;
 
 export const TIME_UNITS = ['s', 'ms'] as const;
-
 export type TimeUnit = (typeof TIME_UNITS)[number];
 
 export function timeLiteral(value: number): CanonicalTimeLiteral;
@@ -34,11 +34,13 @@ export function parseTime(
   input: ParserInput,
   context: unknown = undefined,
 ): TimeLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeTime),
-    context,
-  );
+  return timeParser(input, context);
+}
+
+export function consumeTime(
+  c: ComponentCursor,
+): TryComponentConsumerResult<TimeLiteral> {
+  return timeConsumer(c);
 }
 
 export type TimeConsumerOptions = {
@@ -55,7 +57,7 @@ export function createTimeConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumeDimensionToken, (component) => {
+  return adaptConsumer(consumeDimensionToken, (component) => {
     const unit = timeUnitFor(component.unit);
 
     if (unit === null) return null;
@@ -71,20 +73,6 @@ export function createTimeConsumer(
       ? null
       : result;
   });
-}
-
-export const tryConsumeTime = createTimeConsumer();
-
-function timeUnitFor(raw: string): TimeUnit | null {
-  const normalized = asciiLower(raw);
-
-  return isTimeUnit(normalized)
-    ? normalized
-    : null;
-}
-
-function isTimeUnit(value: string): value is TimeUnit {
-  return TIME_UNITS.some((unit) => unit === value);
 }
 
 export function serializeTime(value: TimeLiteral): string {
@@ -115,3 +103,19 @@ export function canonicalizeTime(value: TimeLiteral): CanonicalTimeLiteral {
     unit: 's',
   };
 }
+
+function timeUnitFor(raw: string): TimeUnit | null {
+  const normalized = asciiLower(raw);
+
+  return isTimeUnit(normalized)
+    ? normalized
+    : null;
+}
+
+function isTimeUnit(value: string): value is TimeUnit {
+  return TIME_UNITS.some((unit) => unit === value);
+}
+
+// <time> = <dimension-token with a time unit>
+const timeConsumer = createTimeConsumer();
+const timeParser = createComponentParser(withTrivia(timeConsumer));

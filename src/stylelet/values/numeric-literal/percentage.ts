@@ -1,7 +1,9 @@
-import { tryConsumePercentageToken } from '../../parser/component-consumers';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumePercentageToken } from '../../syntax/component-consumers';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
 
 /*
@@ -21,11 +23,13 @@ export function parsePercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): PercentageLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumePercentage),
-    context,
-  );
+  return percentageParser(input, context);
+}
+
+export function consumePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<PercentageLiteral> {
+  return percentageConsumer(c);
 }
 
 export type PercentageConsumerOptions = {
@@ -39,14 +43,12 @@ export function createPercentageConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumePercentageToken, (token) =>
+  return adaptConsumer(consumePercentageToken, (token) =>
     token.value < min || token.value > max
       ? null
       : { type: 'percentage', value: token.value },
   );
 }
-
-export const tryConsumePercentage = createPercentageConsumer();
 
 // CSSOM, "To serialize a CSS component value", <percentage>.
 export function serializePercentage(value: PercentageLiteral): string {
@@ -81,3 +83,7 @@ export function accumulatePercentages(
 ): PercentageLiteral {
   return addPercentages(a, b);
 }
+
+// <percentage> = <percentage-token>
+const percentageConsumer = createPercentageConsumer();
+const percentageParser = createComponentParser(withTrivia(percentageConsumer));

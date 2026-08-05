@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   ComponentCursor, type TryComponentConsumer,
   type TryComponentConsumerResult,
-} from '../../../../src/stylelet/parser/component-cursor';
-import { consumeWhitespace } from '../../../../src/stylelet/parser/component-consumers';
-import { isIdentToken } from '../../../../src/stylelet/parser/component-value';
-import { parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { TokenKind } from '../../../../src/stylelet/parser/tokens';
+} from '../../../../src/stylelet/syntax/component-cursor';
+import { consumeWhitespace } from '../../../../src/stylelet/syntax/component-consumers';
+import { isIdentToken } from '../../../../src/stylelet/syntax/component-value';
+import { parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   allOf, any, commaRepeat, one, oneOf, opt, plus,
   adaptConsumer, recursive, repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf,
   sequenceOf, someOf, withTrivia,
-} from '../../../../src/stylelet/parser/component-grammar';
+} from '../../../../src/stylelet/syntax/component-grammar';
 
 const cursor = (css: string, context: unknown = undefined): ComponentCursor =>
   new ComponentCursor(parseListOfComponentValues(css), { context });
@@ -475,7 +475,7 @@ describe('component value combinators', () => {
     const c = cursor('a b c, a c, b');
 
     // [ a? b? c? ]#
-    const tryConsumeOptionalABC = sequenceOf(
+    const consumeOptionalABC = sequenceOf(
       [
         opt(consumeA),
         opt(consumeB),
@@ -483,9 +483,9 @@ describe('component value combinators', () => {
       ],
       (value) => value,
     );
-    const tryConsumeOptionalABCList = commaRepeat(tryConsumeOptionalABC);
+    const consumeOptionalABCList = commaRepeat(consumeOptionalABC);
 
-    expect(tryConsumeOptionalABCList(c)).toEqual([
+    expect(consumeOptionalABCList(c)).toEqual([
       [['a'], ['b'], ['c']],
       [['a'], [], ['c']],
       [[], ['b'], []],
@@ -497,7 +497,7 @@ describe('component value combinators', () => {
     const c = cursor('');
 
     // [ a? b? c? ]#
-    const tryConsumeOptionalABC = sequenceOf(
+    const consumeOptionalABC = sequenceOf(
       [
         opt(consumeA),
         opt(consumeB),
@@ -505,9 +505,9 @@ describe('component value combinators', () => {
       ],
       (value) => value,
     );
-    const tryConsumeOptionalABCList = commaRepeat(tryConsumeOptionalABC);
+    const consumeOptionalABCList = commaRepeat(consumeOptionalABC);
 
-    expect(() => tryConsumeOptionalABCList(c)).toThrow('Comma repeat matched without consuming input');
+    expect(() => consumeOptionalABCList(c)).toThrow('Comma repeat matched without consuming input');
     expect(c.pos()).toBe(0);
   });
 

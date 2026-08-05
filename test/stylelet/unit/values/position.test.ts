@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   accumulatePositions, addPositions, interpolatePositions, parsePosition,
-  resolvePosition, serializePosition, tryConsumePosition,
+  resolvePosition, serializePosition, consumePosition,
   tryResolvePositionOffsets, type PositionContext, type PositionFour,
   type PositionOffsets, type PositionOffsetTuple, type PositionOne,
   type PositionTwo, type PositionValue,
@@ -179,11 +179,11 @@ describe('position values', () => {
     ));
     const one = new ComponentCursor(parseListOfComponentValues('top 50px'));
 
-    expect(tryConsumePosition(four))
+    expect(consumePosition(four))
       .toEqual(position(['left', length(10), 'top', length(20)]));
     expect(four.pos()).toBe(7);
 
-    expect(tryConsumePosition(one)).toEqual(position(['top']));
+    expect(consumePosition(one)).toEqual(position(['top']));
     expect(one.pos()).toBe(1);
   });
 });

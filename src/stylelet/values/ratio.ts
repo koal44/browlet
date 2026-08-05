@@ -1,7 +1,9 @@
-import { tryConsumeSlashDelim } from '../parser/component-consumers';
-import { one, opt, sequenceOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
+import { consumeSlashDelim } from '../syntax/component-consumers';
+import { one, opt, sequenceOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { createNumberConsumer, serializeCssNumber } from './numeric-literal/number';
 
 /*
@@ -18,33 +20,14 @@ export function parseRatio(
   input: ParserInput,
   context: unknown = undefined,
 ): RatioValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeRatio),
-    context,
-  );
+  return ratioParser(input, context);
 }
 
-const tryConsumeNonnegativeNumber = createNumberConsumer({ min: 0 });
-const tryConsumeRatioDenominator: TryComponentConsumer<number> = sequenceOf(
-  [
-    one(withTrivia(tryConsumeSlashDelim)),
-    one(withTrivia(tryConsumeNonnegativeNumber)),
-  ],
-  ([, [denominator]]) => denominator.value,
-);
-
-export const tryConsumeRatio: TryComponentConsumer<RatioValue> = sequenceOf(
-  [
-    one(tryConsumeNonnegativeNumber),
-    opt(tryConsumeRatioDenominator),
-  ],
-  ([[numerator], denominator]) => ({
-    type: 'ratio',
-    numerator: numerator.value,
-    denominator: denominator[0] ?? 1,
-  }),
-);
+export function consumeRatio(
+  c: ComponentCursor,
+): TryComponentConsumerResult<RatioValue> {
+  return ratioConsumer(c);
+}
 
 export function serializeRatio(value: RatioValue): string {
   return `${serializeCssNumber(value.numerator)} / ${serializeCssNumber(value.denominator)}`;
@@ -78,3 +61,37 @@ export function interpolateRatios(
     denominator: 1,
   };
 }
+
+// =============================================================================
+// Syntax
+// =============================================================================
+
+// <number [0,∞]>
+const nonnegativeNumberConsumer = createNumberConsumer({ min: 0 });
+
+/*
+ * Implementation factorization of <ratio>:
+ * <ratio-denominator> = / <number [0,∞]>
+ */
+const ratioDenominatorConsumer: TryComponentConsumer<number> = sequenceOf(
+  [
+    one(withTrivia(consumeSlashDelim)),
+    one(withTrivia(nonnegativeNumberConsumer)),
+  ],
+  ([, [denominator]]) => denominator.value,
+);
+
+// <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
+const ratioConsumer: TryComponentConsumer<RatioValue> = sequenceOf(
+  [
+    one(nonnegativeNumberConsumer),
+    opt(ratioDenominatorConsumer),
+  ],
+  ([[numerator], denominator]) => ({
+    type: 'ratio',
+    numerator: numerator.value,
+    denominator: denominator[0] ?? 1,
+  }),
+);
+
+const ratioParser = createComponentParser(withTrivia(ratioConsumer));

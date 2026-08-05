@@ -1,17 +1,17 @@
 import {
-  tryConsumeAsteriskDelim, tryConsumeGreaterDelim, tryConsumeHashDelim,
-  tryConsumeIdentToken, tryConsumeLessDelim, tryConsumePipeDelim,
-  tryConsumePlusDelim, tryConsumeStringToken,
-} from '../parser/component-consumers';
+  consumeAsteriskDelim, consumeGreaterDelim, consumeHashDelim,
+  consumeIdentToken, consumeLessDelim, consumePipeDelim,
+  consumePlusDelim, consumeStringToken,
+} from '../syntax/component-consumers';
 import {
   type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../parser/component-cursor';
-import { serializeComponentValues, serializeCssIdentifier } from '../parser/component-value';
+} from '../syntax/component-cursor';
+import { serializeComponentValues, serializeCssIdentifier } from '../syntax/component-value';
 import {
   adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia,
-} from '../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { type PropertyContext, type ValueStage } from '../value-processing';
+} from '../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { type ValueStage } from '../value-processing/stage';
 import { angleDef } from './angle';
 import { colorDef } from './color';
 import { customIdentDef } from './custom-ident';
@@ -26,9 +26,10 @@ import { stringDef } from './string';
 import { timeDef } from './time';
 import { urlDef } from './url';
 import {
-  tryConsumeOptionalDeclarationValue,
+  consumeOptionalDeclarationValue,
   type DeclarationComponent,
-} from './declaration-value';
+} from '../syntax/declaration-value';
+import { type PropertyContext } from '../value-processing/context';
 
 export type SyntaxValue =
   | UniversalSyntaxValue
@@ -132,25 +133,25 @@ const syntaxTypeDefs = {
 type DefinedSyntaxTypeName = keyof typeof syntaxTypeDefs;
 
 type DefValue<Definition> =
-  Definition extends { tryConsume: TryComponentConsumer<infer Value>; }
+  Definition extends { consume: TryComponentConsumer<infer Value>; }
     ? Value
     : never;
 
 export function parseSyntax(input: ParserInput): SyntaxValue | null {
-  return parseAsComponentGrammar(input, withTrivia(tryConsumeSyntax));
+  return syntaxParser(input);
 }
 
-export function tryConsumeSyntax(
+export function consumeSyntax(
   c: ComponentCursor,
 ): TryComponentConsumerResult<SyntaxValue> {
-  return consumeSyntax(c);
+  return syntaxConsumer(c);
 }
 
 export function createSyntaxConsumer(
   syntax: SyntaxValue,
 ): TryComponentConsumer<ParsedSyntaxValue> {
   if (syntax.type === 'universal-syntax') {
-    return consumeUniversalSyntaxValue;
+    return universalSyntaxValueConsumer;
   }
 
   const clauses = syntax.components.map((component) =>
@@ -235,8 +236,8 @@ type SyntaxSingleTypeName = Exclude<SyntaxTypeName, 'transform-list'>;
 const syntaxTypeNameSet = new Set<SyntaxTypeName>(syntaxTypeNames);
 
 // <syntax-type-name>
-const consumeSyntaxTypeName = adaptConsumer(
-  tryConsumeIdentToken,
+const syntaxTypeNameConsumer = adaptConsumer(
+  consumeIdentToken,
   (token): SyntaxSingleTypeName | null => token.value !== 'transform-list' &&
     syntaxTypeNameSet.has(token.value as SyntaxTypeName)
     ? token.value as SyntaxSingleTypeName
@@ -244,13 +245,13 @@ const consumeSyntaxTypeName = adaptConsumer(
 );
 
 // <syntax-single-component> = '<' <syntax-type-name> '>' | <ident>
-const consumeSyntaxSingleComponent = oneOf(
+const syntaxSingleComponentConsumer = oneOf(
   [
     one(sequenceOf(
       [
-        one(tryConsumeLessDelim),
-        one(consumeSyntaxTypeName),
-        one(tryConsumeGreaterDelim),
+        one(consumeLessDelim),
+        one(syntaxTypeNameConsumer),
+        one(consumeGreaterDelim),
       ],
       ([, [name]]): SyntaxTypeComponent => ({
         type: 'syntax-type',
@@ -258,7 +259,7 @@ const consumeSyntaxSingleComponent = oneOf(
       }),
     )),
     one(adaptConsumer(
-      customIdentDef.tryConsume,
+      customIdentDef.consume,
       (ident): SyntaxKeywordComponent => ({
         type: 'syntax-keyword',
         name: ident.value,
@@ -269,10 +270,10 @@ const consumeSyntaxSingleComponent = oneOf(
 );
 
 // <syntax-multiplier> = [ '#' | '+' ]
-const consumeSyntaxMultiplier = oneOf(
+const syntaxMultiplierConsumer = oneOf(
   [
-    one(tryConsumeHashDelim),
-    one(tryConsumePlusDelim),
+    one(consumeHashDelim),
+    one(consumePlusDelim),
   ],
   ([value]): SyntaxMultiplier => value,
 );
@@ -282,12 +283,12 @@ const consumeSyntaxMultiplier = oneOf(
  *   <syntax-single-component> <syntax-multiplier>? |
  *   '<' transform-list '>'
  */
-const consumeSyntaxComponent = oneOf(
+const syntaxComponentConsumer = oneOf(
   [
     one(sequenceOf(
       [
-        one(consumeSyntaxSingleComponent),
-        opt(consumeSyntaxMultiplier),
+        one(syntaxSingleComponentConsumer),
+        opt(syntaxMultiplierConsumer),
       ],
       ([[component], multiplier]): SyntaxComponent => multiplier.length === 0
         ? component
@@ -295,12 +296,12 @@ const consumeSyntaxComponent = oneOf(
     )),
     one(sequenceOf(
       [
-        one(tryConsumeLessDelim),
+        one(consumeLessDelim),
         one(adaptConsumer(
-          tryConsumeIdentToken,
+          consumeIdentToken,
           (token) => token.value === 'transform-list' ? token.value : null,
         )),
-        one(tryConsumeGreaterDelim),
+        one(consumeGreaterDelim),
       ],
       (): SyntaxTypeComponent => ({
         type: 'syntax-type',
@@ -312,11 +313,11 @@ const consumeSyntaxComponent = oneOf(
 );
 
 // <syntax-combinator> = '|'
-const consumeSyntaxCombinator = tryConsumePipeDelim;
+const syntaxCombinatorConsumer = consumePipeDelim;
 
 // <syntax-string> = <string> whose value parses as <syntax>
-const consumeSyntaxString = adaptConsumer(
-  tryConsumeStringToken,
+const syntaxStringConsumer = adaptConsumer(
+  consumeStringToken,
   (token) => parseSyntax(token.value),
 );
 
@@ -326,19 +327,19 @@ const consumeSyntaxString = adaptConsumer(
  *   <syntax-component> [ <syntax-combinator> <syntax-component> ]* |
  *   <syntax-string>
  */
-const consumeSyntax = oneOf(
+const syntaxConsumer = oneOf(
   [
     one(adaptConsumer(
-      tryConsumeAsteriskDelim,
+      consumeAsteriskDelim,
       (): UniversalSyntaxValue => ({ type: 'universal-syntax' }),
     )),
     one(sequenceOf(
       [
-        one(consumeSyntaxComponent),
+        one(syntaxComponentConsumer),
         any(sequenceOf(
           [
-            one(withTrivia(consumeSyntaxCombinator)),
-            one(withTrivia(consumeSyntaxComponent)),
+            one(withTrivia(syntaxCombinatorConsumer)),
+            one(withTrivia(syntaxComponentConsumer)),
           ],
           ([, [component]]) => component,
         )),
@@ -348,10 +349,12 @@ const consumeSyntax = oneOf(
         components: [first, ...rest],
       }),
     )),
-    one(consumeSyntaxString),
+    one(syntaxStringConsumer),
   ],
   ([value]) => value,
 );
+
+const syntaxParser = createComponentParser(withTrivia(syntaxConsumer));
 
 // =============================================================================
 // Values parsed with a syntax
@@ -437,7 +440,7 @@ function createSyntaxComponentConsumer(
     component.type === 'syntax-type'
       ? createSyntaxTypeConsumer(component.name)
       : adaptConsumer(
-        tryConsumeIdentToken,
+        consumeIdentToken,
         (token): ParsedSyntaxKeyword | null =>
           token.value === component.name
             ? { type: 'parsed-syntax-keyword', name: component.name }
@@ -475,57 +478,57 @@ function createSyntaxTypeConsumer(
 ): TryComponentConsumer<ParsedSyntaxType> {
   switch (name) {
     case 'length':
-      return adaptConsumer(syntaxTypeDefs.length.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.length.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'number':
-      return adaptConsumer(syntaxTypeDefs.number.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.number.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'percentage':
-      return adaptConsumer(syntaxTypeDefs.percentage.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.percentage.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'length-percentage':
-      return adaptConsumer(syntaxTypeDefs['length-percentage'].tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs['length-percentage'].consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'string':
-      return adaptConsumer(syntaxTypeDefs.string.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.string.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'color':
-      return adaptConsumer(syntaxTypeDefs.color.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.color.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'image':
-      return adaptConsumer(syntaxTypeDefs.image.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.image.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'url':
-      return adaptConsumer(syntaxTypeDefs.url.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.url.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'integer':
-      return adaptConsumer(syntaxTypeDefs.integer.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.integer.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'angle':
-      return adaptConsumer(syntaxTypeDefs.angle.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.angle.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'time':
-      return adaptConsumer(syntaxTypeDefs.time.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.time.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'resolution':
-      return adaptConsumer(syntaxTypeDefs.resolution.tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs.resolution.consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'transform-function':
       throw new Error('<transform-function> parsing is not implemented');
     case 'custom-ident':
-      return adaptConsumer(syntaxTypeDefs['custom-ident'].tryConsume, (value): ParsedSyntaxType => ({
+      return adaptConsumer(syntaxTypeDefs['custom-ident'].consume, (value): ParsedSyntaxType => ({
         type: 'parsed-syntax-type', name, value,
       }));
     case 'transform-list':
@@ -534,8 +537,8 @@ function createSyntaxTypeConsumer(
 }
 
 // '*' = <declaration-value>?
-const consumeUniversalSyntaxValue = adaptConsumer(
-  tryConsumeOptionalDeclarationValue,
+const universalSyntaxValueConsumer = adaptConsumer(
+  consumeOptionalDeclarationValue,
   (value): ParsedUniversalSyntax => ({
     type: 'parsed-universal-syntax',
     components: value.components,

@@ -1,5 +1,5 @@
 import { asciiLower } from '../../shared/css';
-import { isAnyValueContents, tryConsumeAnyValue, type AnyValue } from '../values/any-value';
+import { isAnyValueContents, consumeAnyValue, type AnyValue } from './any-value';
 import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
 import { adaptConsumer, withTrivia } from './component-grammar';
 import {
@@ -7,7 +7,7 @@ import {
   isTokenKind, isWhitespaceToken, type BraceBlock, type BracketBlock, type ComponentValue,
   type FunctionBlock, type ParensBlock,
 } from './component-value';
-import { parseAsComponentGrammar } from './syntax';
+import { parseAsComponentGrammar } from './parser';
 import type {
   DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken,
   StringToken, UrlToken,
@@ -29,7 +29,7 @@ export type FunctionalNotationConsumerOptions = {
 // <function-token matching name> <argument-value> )
 export function createFunctionalNotationConsumer<ArgumentValue, Value>(
   name: string,
-  tryConsumeArgumentValue: TryComponentConsumer<ArgumentValue>,
+  consumeArgumentValue: TryComponentConsumer<ArgumentValue>,
   projectValue: (
     value: ArgumentValue,
     context: unknown,
@@ -38,7 +38,7 @@ export function createFunctionalNotationConsumer<ArgumentValue, Value>(
 ): TryComponentConsumer<Value> {
   const normalizedName = asciiLower(name);
 
-  return adaptConsumer(tryConsumeFunctionBlock, (fn, context) => {
+  return adaptConsumer(consumeFunctionBlock, (fn, context) => {
     if (asciiLower(fn.name) !== normalizedName) return null;
     if (!isAnyValueContents(fn.value)) return null;
 
@@ -47,7 +47,7 @@ export function createFunctionalNotationConsumer<ArgumentValue, Value>(
       : options.contextForArguments(context);
     const argumentValue = parseAsComponentGrammar(
       fn.value,
-      withTrivia(tryConsumeArgumentValue),
+      withTrivia(consumeArgumentValue),
       argumentContext,
     );
 
@@ -57,15 +57,15 @@ export function createFunctionalNotationConsumer<ArgumentValue, Value>(
   });
 }
 
-export type FreeFormOptions = {
+export type FreeFormConsumerOptions = {
   strict?: boolean;
   stopBefore?: (component: ComponentValue) => boolean;
 };
 
 // <free-form[ <value> ]>
 export function createFreeFormConsumer<Value>(
-  tryConsumeValue: TryComponentConsumer<Value>,
-  options: FreeFormOptions = {},
+  consumeValue: TryComponentConsumer<Value>,
+  options: FreeFormConsumerOptions = {},
 ): TryComponentConsumer<Value> {
   const strict = options.strict ?? true;
 
@@ -80,7 +80,7 @@ export function createFreeFormConsumer<Value>(
 
       const result = parseAsComponentGrammar(
         first.value,
-        withTrivia(tryConsumeValue),
+        withTrivia(consumeValue),
         c.context,
       );
 
@@ -116,7 +116,7 @@ export function createFreeFormConsumer<Value>(
 
     const result = parseAsComponentGrammar(
       components,
-      tryConsumeValue,
+      consumeValue,
       c.context,
     );
 
@@ -142,17 +142,17 @@ export function consumeWhitespace(c: ComponentCursor): void {
 // =============================================================================
 
 // <colon-token>
-export function tryConsumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
+export function consumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
   return c.match(TokenKind.Colon) ? ':' : null;
 }
 
 // <comma-token>
-export function tryConsumeComma(c: ComponentCursor): TryComponentConsumerResult<','> {
+export function consumeComma(c: ComponentCursor): TryComponentConsumerResult<','> {
   return c.match(TokenKind.Comma) ? ',' : null;
 }
 
 // <ident-token>
-export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerResult<IdentToken> {
+export function consumeIdentToken(c: ComponentCursor): TryComponentConsumerResult<IdentToken> {
   const component = c.peek();
 
   if (!isIdentToken(component)) return null;
@@ -162,7 +162,7 @@ export function tryConsumeIdentToken(c: ComponentCursor): TryComponentConsumerRe
 }
 
 // <string-token>
-export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerResult<StringToken> {
+export function consumeStringToken(c: ComponentCursor): TryComponentConsumerResult<StringToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.String)) return null;
@@ -172,7 +172,7 @@ export function tryConsumeStringToken(c: ComponentCursor): TryComponentConsumerR
 }
 
 // <hash-token>
-export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
+export function consumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Hash)) return null;
@@ -182,13 +182,13 @@ export function tryConsumeHashToken(c: ComponentCursor): TryComponentConsumerRes
 }
 
 // <hash-token with the id flag>
-export const tryConsumeIdHashToken: TryComponentConsumer<HashToken> = adaptConsumer(
-  tryConsumeHashToken,
+export const consumeIdHashToken: TryComponentConsumer<HashToken> = adaptConsumer(
+  consumeHashToken,
   (token) => token.flag === HashTokenFlag.Id ? token : null,
 );
 
 // <integer-token>
-export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
+export function consumeIntegerToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
   const component = c.peek();
 
   if (
@@ -201,7 +201,7 @@ export function tryConsumeIntegerToken(c: ComponentCursor): TryComponentConsumer
 }
 
 // <number-token>
-export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
+export function consumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Number)) return null;
@@ -211,7 +211,7 @@ export function tryConsumeNumberToken(c: ComponentCursor): TryComponentConsumerR
 }
 
 // <percentage-token>
-export function tryConsumePercentageToken(
+export function consumePercentageToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<PercentageToken> {
   const component = c.peek();
@@ -223,7 +223,7 @@ export function tryConsumePercentageToken(
 }
 
 // <dimension-token>
-export function tryConsumeDimensionToken(
+export function consumeDimensionToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<DimensionToken> {
   const component = c.peek();
@@ -235,7 +235,7 @@ export function tryConsumeDimensionToken(
 }
 
 // <url-token>
-export function tryConsumeUrlToken(
+export function consumeUrlToken(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlToken> {
   const component = c.peek();
@@ -247,43 +247,43 @@ export function tryConsumeUrlToken(
 }
 
 // <delim-token matching '*'>
-export const tryConsumeAsteriskDelim = createDelimConsumer('*');
+export const consumeAsteriskDelim = createDelimConsumer('*');
 
 // <delim-token matching '^'>
-export const tryConsumeCaretDelim = createDelimConsumer('^');
+export const consumeCaretDelim = createDelimConsumer('^');
 
 // <delim-token matching '$'>
-export const tryConsumeDollarDelim = createDelimConsumer('$');
+export const consumeDollarDelim = createDelimConsumer('$');
 
 // <delim-token matching '.'>
-export const tryConsumeDotDelim = createDelimConsumer('.');
+export const consumeDotDelim = createDelimConsumer('.');
 
 // <delim-token matching '='>
-export const tryConsumeEqualsDelim = createDelimConsumer('=');
+export const consumeEqualsDelim = createDelimConsumer('=');
 
 // <delim-token matching '>'>
-export const tryConsumeGreaterDelim = createDelimConsumer('>');
+export const consumeGreaterDelim = createDelimConsumer('>');
 
 // <delim-token matching '#'>
-export const tryConsumeHashDelim = createDelimConsumer('#');
+export const consumeHashDelim = createDelimConsumer('#');
 
 // <delim-token matching '<'>
-export const tryConsumeLessDelim = createDelimConsumer('<');
+export const consumeLessDelim = createDelimConsumer('<');
 
 // <delim-token matching '-'>
-export const tryConsumeMinusDelim = createDelimConsumer('-');
+export const consumeMinusDelim = createDelimConsumer('-');
 
 // <delim-token matching '|'>
-export const tryConsumePipeDelim = createDelimConsumer('|');
+export const consumePipeDelim = createDelimConsumer('|');
 
 // <delim-token matching '+'>
-export const tryConsumePlusDelim = createDelimConsumer('+');
+export const consumePlusDelim = createDelimConsumer('+');
 
 // <delim-token matching '/'>
-export const tryConsumeSlashDelim = createDelimConsumer('/');
+export const consumeSlashDelim = createDelimConsumer('/');
 
 // <delim-token matching '~'>
-export const tryConsumeTildeDelim = createDelimConsumer('~');
+export const consumeTildeDelim = createDelimConsumer('~');
 
 // =============================================================================
 // Block consumers
@@ -293,7 +293,7 @@ export const tryConsumeTildeDelim = createDelimConsumer('~');
  * Token grammar: { <component-value>* }
  * Component-value form: a brace block containing <component-value>*.
  */
-export function tryConsumeBraceBlock(c: ComponentCursor): TryComponentConsumerResult<BraceBlock> {
+export function consumeBraceBlock(c: ComponentCursor): TryComponentConsumerResult<BraceBlock> {
   const component = c.peek();
 
   if (!isBraceBlock(component)) return null;
@@ -306,7 +306,7 @@ export function tryConsumeBraceBlock(c: ComponentCursor): TryComponentConsumerRe
  * Token grammar: [ <component-value>* ]
  * Component-value form: a bracket block containing <component-value>*.
  */
-export function tryConsumeBracketBlock(c: ComponentCursor): TryComponentConsumerResult<BracketBlock> {
+export function consumeBracketBlock(c: ComponentCursor): TryComponentConsumerResult<BracketBlock> {
   const component = c.peek();
 
   if (!isBracketBlock(component)) return null;
@@ -319,7 +319,7 @@ export function tryConsumeBracketBlock(c: ComponentCursor): TryComponentConsumer
  * Token grammar: ( <component-value>* )
  * Component-value form: a parentheses block containing <component-value>*.
  */
-export function tryConsumeParensBlock(c: ComponentCursor): TryComponentConsumerResult<ParensBlock> {
+export function consumeParensBlock(c: ComponentCursor): TryComponentConsumerResult<ParensBlock> {
   const component = c.peek();
 
   if (!isParensBlock(component)) return null;
@@ -332,7 +332,7 @@ export function tryConsumeParensBlock(c: ComponentCursor): TryComponentConsumerR
  * Token grammar: <function-token> <component-value>* )
  * Component-value form: a function block containing <component-value>*.
  */
-export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
+export function consumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
   const component = c.peek();
 
   if (!isFunctionBlock(component)) return null;
@@ -350,16 +350,16 @@ export function tryConsumeFunctionBlock(c: ComponentCursor): TryComponentConsume
  */
 export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
 
-export function tryConsumeAnyValueFunctionBlock(
+export function consumeAnyValueFunctionBlock(
   c: ComponentCursor,
 ): TryComponentConsumerResult<AnyValueFunctionBlock> {
-  return consumeAnyValueFunctionBlock(c);
+  return anyValueFunctionBlockConsumer(c);
 }
 
-const consumeAnyValueFunctionBlock = adaptConsumer(
-  tryConsumeFunctionBlock,
+const anyValueFunctionBlockConsumer = adaptConsumer(
+  consumeFunctionBlock,
   (fn) => {
-    const value = parseAsComponentGrammar(fn.value, tryConsumeAnyValue);
+    const value = parseAsComponentGrammar(fn.value, consumeAnyValue);
 
     return value === null
       ? null

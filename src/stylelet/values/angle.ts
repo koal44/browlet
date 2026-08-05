@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -23,26 +25,34 @@ import {
 
 export type AngleValue = AngleLiteral | MathValue<'angle'>;
 
+export const angleDef: ValueDefinition<AngleValue, MathContext> = {
+  consume: consumeAngle,
+  resolve: resolveAngle,
+  serialize: serializeAngle,
+};
+
 export function parseAngle(
   input: ParserInput,
   context: MathContext = {},
 ): AngleValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeAngle),
-    context,
-  );
+  return angleParser(input, context);
+}
+
+export function consumeAngle(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AngleValue> {
+  return angleConsumer(c);
 }
 
 export function createAngleConsumer(
   options: AngleConsumerOptions = {},
 ): TryComponentConsumer<AngleValue> {
-  const tryConsumeLiteral = createAngleLiteralConsumer(options);
+  const literalConsumer = createAngleLiteralConsumer(options);
   const range = angleRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'angle',
         ...(range === undefined ? {} : { range }),
@@ -51,14 +61,6 @@ export function createAngleConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeAngle = createAngleConsumer();
-
-export const angleDef: ValueDefinition<AngleValue, MathContext> = {
-  tryConsume: tryConsumeAngle,
-  resolve: resolveAngle,
-  serialize: serializeAngle,
-};
 
 export function resolveAngle(
   value: AngleValue,
@@ -153,3 +155,7 @@ function angleRange(
     options.max ?? Infinity,
   ];
 }
+
+// <angle> = <dimension-token with an angle unit> | <math-function>
+const angleConsumer = createAngleConsumer();
+const angleParser = createComponentParser(withTrivia(angleConsumer));

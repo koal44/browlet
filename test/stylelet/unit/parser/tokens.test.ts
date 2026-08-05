@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterCodePoints, NumberTokenFlag, TokenKind, tokenize,
   HashTokenFlag,
-} from '../../../../src/stylelet/parser/tokens';
+} from '../../../../src/stylelet/syntax/tokens';
 
 describe('filterCodePoints', () => {
   it('should filter code points correctly', () => {

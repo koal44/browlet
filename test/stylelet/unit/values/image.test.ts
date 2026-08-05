@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseGradient } from '../../../../src/stylelet/values/gradient';
 import { parseImage, resolveImage, serializeImage } from '../../../../src/stylelet/values/image';
 import { parseUrl } from '../../../../src/stylelet/values/url';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 
 describe('image values', () => {
   it('parses URL images', () => {

@@ -1,7 +1,9 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -14,8 +16,9 @@ import {
   tryAddAnglePercentages as tryAddAnglePercentageLiterals,
   tryInterpolateAnglePercentages as tryInterpolateAnglePercentageLiterals,
   tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
-  type AnglePercentageConsumerOptions, type AnglePercentageLiteral,
+  type AnglePercentageLiteral,
 } from './numeric-literal/angle-percentage';
+import { type DimensionPercentageConsumerOptions } from './numeric-literal/dimension-percentage';
 
 /*
  * <angle-percentage> = <angle> | <percentage> | <math-function>
@@ -28,22 +31,24 @@ export function parseAnglePercentage(
   input: ParserInput,
   context: MathContext = {},
 ): AnglePercentageValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeAnglePercentage),
-    context,
-  );
+  return anglePercentageParser(input, context);
+}
+
+export function consumeAnglePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AnglePercentageValue> {
+  return anglePercentageConsumer(c);
 }
 
 export function createAnglePercentageConsumer(
-  options: AnglePercentageConsumerOptions = {},
+  options: DimensionPercentageConsumerOptions = {},
 ): TryComponentConsumer<AnglePercentageValue> {
-  const tryConsumeLiteral = createAnglePercentageLiteralConsumer(options);
+  const literalConsumer = createAnglePercentageLiteralConsumer(options);
   const range = anglePercentageRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'angle-percentage',
         percentHint: 'angle',
@@ -53,8 +58,6 @@ export function createAnglePercentageConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
 
 export function resolveAnglePercentage(
   value: AnglePercentageValue,
@@ -170,7 +173,7 @@ function anglePercentageMathContext(
 }
 
 function anglePercentageRange(
-  options: AnglePercentageConsumerOptions,
+  options: DimensionPercentageConsumerOptions,
 ): MathRange | undefined {
   if (options.min === undefined && options.max === undefined) {
     return undefined;
@@ -181,3 +184,7 @@ function anglePercentageRange(
     options.max ?? Infinity,
   ];
 }
+
+// <angle-percentage> = <angle> | <percentage> | <math-function>
+const anglePercentageConsumer = createAnglePercentageConsumer();
+const anglePercentageParser = createComponentParser(withTrivia(anglePercentageConsumer));

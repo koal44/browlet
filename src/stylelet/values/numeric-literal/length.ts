@@ -1,9 +1,11 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { tryConsumeDimensionToken, tryConsumeNumberToken } from '../../parser/component-consumers';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../../parser/component-cursor';
-import { one, oneOf, adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeDimensionToken, consumeNumberToken } from '../../syntax/component-consumers';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { one, oneOf, adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -97,11 +99,13 @@ export function parseLength(
   input: ParserInput,
   context: unknown = undefined,
 ): LengthLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeLength),
-    context,
-  );
+  return lengthParser(input, context);
+}
+
+export function consumeLength(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LengthLiteral> {
+  return lengthConsumer(c);
 }
 
 export type LengthConsumerOptions = {
@@ -126,66 +130,13 @@ export function createLengthConsumer(
 
   return oneOf(
     [
-      one(tryConsumeLengthDimension),
-      one(tryConsumeUnitlessZeroLength),
+      one(lengthDimensionConsumer),
+      one(unitlessZeroLengthConsumer),
     ],
     ([value]) => value.value < min || value.value > max
       ? null
       : value,
   );
-}
-
-export const tryConsumeLength = createLengthConsumer();
-
-function tryConsumeLengthDimension(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LengthLiteral> {
-  return consumeLengthDimension(c);
-}
-
-const consumeLengthDimension: TryComponentConsumer<LengthLiteral> = adaptConsumer(
-  tryConsumeDimensionToken,
-  (component) => {
-    const unit = lengthUnitFor(component.unit);
-
-    return unit === null
-      ? null
-      : { type: 'length', value: component.value, unit };
-  },
-);
-
-function tryConsumeUnitlessZeroLength(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LengthLiteral> {
-  return consumeUnitlessZeroLength(c);
-}
-
-const consumeUnitlessZeroLength: TryComponentConsumer<LengthLiteral> = adaptConsumer(
-  tryConsumeNumberToken,
-  (component) => component.value === 0
-    ? { type: 'length', value: 0, unit: '' }
-    : null,
-);
-
-function canCheckLengthRangeWithoutResolution(min: number, max: number): boolean {
-  // All length-unit conversions preserve sign, so zero and infinite bounds
-  // do not require the contextual value to be reduced to pixels first.
-  return (
-    (min === -Infinity || min === 0) &&
-    (max === 0 || max === Infinity)
-  );
-}
-
-function lengthUnitFor(raw: string): LengthUnit | null {
-  const normalized = asciiLower(raw);
-
-  return isLengthUnit(normalized)
-    ? normalized
-    : null;
-}
-
-function isLengthUnit(value: string): value is LengthUnit {
-  return LENGTH_UNITS.some((unit) => unit === value);
 }
 
 export function serializeLength(value: LengthLiteral): string {
@@ -448,3 +399,59 @@ function maximumSize(
     ? undefined
     : Math.max(width, height);
 }
+
+// =============================================================================
+// Syntax
+// =============================================================================
+
+/*
+ * Implementation factorization of <length>:
+ *
+ * <length-dimension> = <dimension-token with a length unit>
+ * <length> = <length-dimension> | <zero>
+ */
+
+function canCheckLengthRangeWithoutResolution(min: number, max: number): boolean {
+  // All length-unit conversions preserve sign, so zero and infinite bounds
+  // do not require the contextual value to be reduced to pixels first.
+  return (
+    (min === -Infinity || min === 0) &&
+    (max === 0 || max === Infinity)
+  );
+}
+
+function lengthUnitFor(raw: string): LengthUnit | null {
+  const normalized = asciiLower(raw);
+
+  return isLengthUnit(normalized)
+    ? normalized
+    : null;
+}
+
+function isLengthUnit(value: string): value is LengthUnit {
+  return LENGTH_UNITS.some((unit) => unit === value);
+}
+
+// <length-dimension> = <dimension-token with a length unit>
+const lengthDimensionConsumer: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+  consumeDimensionToken,
+  (component) => {
+    const unit = lengthUnitFor(component.unit);
+
+    return unit === null
+      ? null
+      : { type: 'length', value: component.value, unit };
+  },
+);
+
+// <zero> = <number-token with a value of 0>
+const unitlessZeroLengthConsumer: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+  consumeNumberToken,
+  (component) => component.value === 0
+    ? { type: 'length', value: 0, unit: '' }
+    : null,
+);
+
+// <length> = <length-dimension> | <zero>
+const lengthConsumer = createLengthConsumer();
+const lengthParser = createComponentParser(withTrivia(lengthConsumer));

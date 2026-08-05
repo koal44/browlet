@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -24,26 +26,34 @@ import {
 
 export type LengthValue = LengthLiteral | MathValue<'length'>;
 
+export const lengthDef: ValueDefinition<LengthValue, MathContext> = {
+  consume: consumeLength,
+  resolve: resolveLength,
+  serialize: serializeLength,
+};
+
 export function parseLength(
   input: ParserInput,
   context: MathContext = {},
 ): LengthValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeLength),
-    context,
-  );
+  return lengthParser(input, context);
+}
+
+export function consumeLength(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LengthValue> {
+  return lengthConsumer(c);
 }
 
 export function createLengthConsumer(
   options: LengthConsumerOptions = {},
 ): TryComponentConsumer<LengthValue> {
-  const tryConsumeLiteral = createLengthLiteralConsumer(options);
+  const literalConsumer = createLengthLiteralConsumer(options);
   const range = lengthRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'length',
         ...(range === undefined ? {} : { range }),
@@ -52,14 +62,6 @@ export function createLengthConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeLength = createLengthConsumer();
-
-export const lengthDef: ValueDefinition<LengthValue, MathContext> = {
-  tryConsume: tryConsumeLength,
-  resolve: resolveLength,
-  serialize: serializeLength,
-};
 
 export function resolveLength(
   value: LengthValue,
@@ -155,3 +157,7 @@ function lengthRange(
     options.max ?? Infinity,
   ];
 }
+
+// <length> = <dimension-token with a length unit> | <zero> | <math-function>
+const lengthConsumer = createLengthConsumer();
+const lengthParser = createComponentParser(withTrivia(lengthConsumer));

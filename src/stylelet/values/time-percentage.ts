@@ -1,7 +1,9 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -28,22 +30,24 @@ export function parseTimePercentage(
   input: ParserInput,
   context: MathContext = {},
 ): TimePercentageValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeTimePercentage),
-    context,
-  );
+  return timePercentageParser(input, context);
+}
+
+export function consumeTimePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<TimePercentageValue> {
+  return timePercentageConsumer(c);
 }
 
 export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
 ): TryComponentConsumer<TimePercentageValue> {
-  const tryConsumeLiteral = createTimePercentageLiteralConsumer(options);
+  const literalConsumer = createTimePercentageLiteralConsumer(options);
   const range = timePercentageRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'time-percentage',
         percentHint: 'time',
@@ -53,8 +57,6 @@ export function createTimePercentageConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeTimePercentage = createTimePercentageConsumer();
 
 export function resolveTimePercentage(
   value: TimePercentageValue,
@@ -181,3 +183,7 @@ function timePercentageRange(
     options.max ?? Infinity,
   ];
 }
+
+// <time-percentage> = <time> | <percentage> | <math-function>
+const timePercentageConsumer = createTimePercentageConsumer();
+const timePercentageParser = createComponentParser(withTrivia(timePercentageConsumer));

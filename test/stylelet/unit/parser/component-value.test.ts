@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { serializeComponentValues } from '../../../../src/stylelet/parser/component-value';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
-import { hashToken, HashTokenFlag } from '../../../../src/stylelet/parser/tokens';
+import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { hashToken, HashTokenFlag } from '../../../../src/stylelet/syntax/tokens';
 
 describe('component value serialization', () => {
   it.each([

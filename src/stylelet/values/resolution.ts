@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -25,25 +27,33 @@ import {
 
 export type ResolutionValue = ResolutionLiteral | MathValue<'resolution'>;
 
+export const resolutionDef: ValueDefinition<ResolutionValue, MathContext> = {
+  consume: consumeResolution,
+  resolve: resolveResolution,
+  serialize: serializeResolution,
+};
+
 export function parseResolution(
   input: ParserInput,
   context: MathContext = {},
 ): ResolutionValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeResolution),
-    context,
-  );
+  return resolutionParser(input, context);
+}
+
+export function consumeResolution(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ResolutionValue> {
+  return resolutionConsumer(c);
 }
 
 export function createResolutionConsumer(
   options: ResolutionConsumerOptions = {},
 ): TryComponentConsumer<ResolutionValue> {
-  const tryConsumeLiteral = createResolutionLiteralConsumer(options);
+  const literalConsumer = createResolutionLiteralConsumer(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'resolution',
         range: resolutionRange(options),
@@ -52,14 +62,6 @@ export function createResolutionConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeResolution = createResolutionConsumer();
-
-export const resolutionDef: ValueDefinition<ResolutionValue, MathContext> = {
-  tryConsume: tryConsumeResolution,
-  resolve: resolveResolution,
-  serialize: serializeResolution,
-};
 
 export function resolveResolution(
   value: ResolutionValue,
@@ -150,3 +152,7 @@ function resolutionRange(
     options.max ?? Infinity,
   ];
 }
+
+// <resolution> = <dimension-token with a resolution unit> | <math-function>
+const resolutionConsumer = createResolutionConsumer();
+const resolutionParser = createComponentParser(withTrivia(resolutionConsumer));

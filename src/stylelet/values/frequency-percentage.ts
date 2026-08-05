@@ -1,7 +1,9 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -28,22 +30,24 @@ export function parseFrequencyPercentage(
   input: ParserInput,
   context: MathContext = {},
 ): FrequencyPercentageValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeFrequencyPercentage),
-    context,
-  );
+  return frequencyPercentageParser(input, context);
+}
+
+export function consumeFrequencyPercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<FrequencyPercentageValue> {
+  return frequencyPercentageConsumer(c);
 }
 
 export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
 ): TryComponentConsumer<FrequencyPercentageValue> {
-  const tryConsumeLiteral = createFrequencyPercentageLiteralConsumer(options);
+  const literalConsumer = createFrequencyPercentageLiteralConsumer(options);
   const range = frequencyPercentageRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'frequency-percentage',
         percentHint: 'frequency',
@@ -53,9 +57,6 @@ export function createFrequencyPercentageConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeFrequencyPercentage =
-  createFrequencyPercentageConsumer();
 
 export function resolveFrequencyPercentage(
   value: FrequencyPercentageValue,
@@ -182,3 +183,7 @@ function frequencyPercentageRange(
     options.max ?? Infinity,
   ];
 }
+
+// <frequency-percentage> = <frequency> | <percentage> | <math-function>
+const frequencyPercentageConsumer = createFrequencyPercentageConsumer();
+const frequencyPercentageParser = createComponentParser(withTrivia(frequencyPercentageConsumer));

@@ -1,9 +1,15 @@
-import { tryConsumeFunctionBlock, tryConsumeParensBlock } from '../parser/component-consumers';
-import { type ComponentCursor, type TryComponentConsumerResult } from '../parser/component-cursor';
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type FunctionBlock, type ParensBlock } from '../parser/component-value';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { parseAnyValue, type AnyValue } from './any-value';
+import { consumeFunctionBlock, consumeParensBlock } from '../syntax/component-consumers';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type FunctionBlock, type ParensBlock } from '../syntax/component-value';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { parseAnyValue, type AnyValue } from '../syntax/any-value';
+
+/*
+ * <general-enclosed> =
+ *   [ <function-token> <any-value>? ) ] |
+ *   [ ( <any-value>? ) ]
+ */
 
 export type GeneralEnclosedValue = {
   type: 'general-enclosed';
@@ -15,26 +21,24 @@ export type GeneralEnclosedBlock =
   | ParensBlock<AnyValue | undefined>;
 
 export function parseGeneralEnclosed(input: ParserInput): GeneralEnclosedValue | null {
-  return parseAsComponentGrammar(input, withTrivia(tryConsumeGeneralEnclosed));
+  return generalEnclosedParser(input);
 }
 
-/*
- * <general-enclosed> =
- *   [ <function-token> <any-value>? ) ] |
- *   [ ( <any-value>? ) ]
- *
- * CSS Syntax represents these alternatives as function and parentheses blocks.
- */
-export function tryConsumeGeneralEnclosed(
+export function consumeGeneralEnclosed(
   c: ComponentCursor,
 ): TryComponentConsumerResult<GeneralEnclosedValue> {
-  return consumeGeneralEnclosed(c);
+  return generalEnclosedConsumer(c);
 }
 
-const consumeGeneralEnclosed = oneOf(
+// =============================================================================
+// Syntax
+// =============================================================================
+
+// CSS Syntax represents the alternatives as function and parentheses blocks.
+const generalEnclosedConsumer = oneOf(
   [
-    one(tryConsumeFunctionBlock),
-    one(tryConsumeParensBlock),
+    one(consumeFunctionBlock),
+    one(consumeParensBlock),
   ],
   ([component]): GeneralEnclosedValue | null => {
     const value = component.value.length === 0
@@ -49,3 +53,5 @@ const consumeGeneralEnclosed = oneOf(
       };
   },
 );
+
+const generalEnclosedParser = createComponentParser(withTrivia(generalEnclosedConsumer));

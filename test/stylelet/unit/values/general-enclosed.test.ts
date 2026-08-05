@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
-import { BlockKind } from '../../../../src/stylelet/parser/component-value';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { BlockKind } from '../../../../src/stylelet/syntax/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   parseGeneralEnclosed,
-  tryConsumeGeneralEnclosed,
+  consumeGeneralEnclosed,
 } from '../../../../src/stylelet/values/general-enclosed';
 
 describe('<general-enclosed>', () => {
@@ -43,7 +43,7 @@ describe('<general-enclosed>', () => {
   it('consumes one block and leaves the following components', () => {
     const c = new ComponentCursor(parseListOfComponentValues('future() other'));
 
-    expect(tryConsumeGeneralEnclosed(c)).toMatchObject({
+    expect(consumeGeneralEnclosed(c)).toMatchObject({
       type: 'general-enclosed',
       value: {
         block: BlockKind.Function,

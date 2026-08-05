@@ -1,10 +1,10 @@
-import { one, oneOf } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
+import { one, oneOf } from '../../syntax/component-grammar';
+import { type TryComponentConsumer } from '../../syntax/component-cursor';
 import {
   addDimensions, interpolateDimensions, type AnyDimensionLiteral,
 } from './dimension';
 import {
-  addPercentages, interpolatePercentages, serializePercentage, tryConsumePercentage,
+  addPercentages, interpolatePercentages, serializePercentage, consumePercentage,
   type PercentageLiteral,
 } from './percentage';
 
@@ -28,7 +28,7 @@ export type DimensionPercentageConsumerOptions = {
 export function createDimensionPercentageConsumer<
   Dimension extends AnyDimensionLiteral,
 >(
-  tryConsumeDimension: TryComponentConsumer<Dimension>,
+  consumeDimension: TryComponentConsumer<Dimension>,
   productionName: string,
   options: DimensionPercentageConsumerOptions = {},
 ): TryComponentConsumer<DimensionPercentageLiteral<Dimension>> {
@@ -43,8 +43,8 @@ export function createDimensionPercentageConsumer<
 
   return oneOf(
     [
-      one(tryConsumeDimension),
-      one(tryConsumePercentage),
+      one(consumeDimension),
+      one(consumePercentage),
     ],
     ([value]) => value.value < min || value.value > max
       ? null

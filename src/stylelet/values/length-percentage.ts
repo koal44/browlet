@@ -1,8 +1,10 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
-import type { ValueDefinition } from './value-definition';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
+import type { ValueDefinition } from '../value-processing/definition';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue,
@@ -25,26 +27,34 @@ import {
 export type LengthPercentageValue =
   LengthPercentageLiteral | MathValue<'length-percentage'>;
 
+export const lengthPercentageDef: ValueDefinition<LengthPercentageValue, MathContext> = {
+  consume: consumeLengthPercentage,
+  resolve: resolveLengthPercentage,
+  serialize: serializeLengthPercentage,
+};
+
 export function parseLengthPercentage(
   input: ParserInput,
   context: MathContext = {},
 ): LengthPercentageValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeLengthPercentage),
-    context,
-  );
+  return lengthPercentageParser(input, context);
+}
+
+export function consumeLengthPercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<LengthPercentageValue> {
+  return lengthPercentageConsumer(c);
 }
 
 export function createLengthPercentageConsumer(
   options: LengthPercentageConsumerOptions = {},
 ): TryComponentConsumer<LengthPercentageValue> {
-  const tryConsumeLiteral = createLengthPercentageLiteralConsumer(options);
+  const literalConsumer = createLengthPercentageLiteralConsumer(options);
   const range = lengthPercentageRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'length-percentage',
         percentHint: 'length',
@@ -54,14 +64,6 @@ export function createLengthPercentageConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeLengthPercentage = createLengthPercentageConsumer();
-
-export const lengthPercentageDef: ValueDefinition<LengthPercentageValue, MathContext> = {
-  tryConsume: tryConsumeLengthPercentage,
-  resolve: resolveLengthPercentage,
-  serialize: serializeLengthPercentage,
-};
 
 export function resolveLengthPercentage(
   value: LengthPercentageValue,
@@ -191,3 +193,7 @@ function lengthPercentageRange(
     options.max ?? Infinity,
   ];
 }
+
+// <length-percentage> = <length> | <percentage> | <math-function>
+const lengthPercentageConsumer = createLengthPercentageConsumer();
+const lengthPercentageParser = createComponentParser(withTrivia(lengthPercentageConsumer));

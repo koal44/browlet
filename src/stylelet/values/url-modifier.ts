@@ -1,23 +1,22 @@
 import { asciiLower } from '../../shared/css';
 import type {
-  ComponentCursor, TryComponentConsumer,
-  TryComponentConsumerResult,
-} from '../parser/component-cursor';
+  ComponentCursor, TryComponentConsumer, TryComponentConsumerResult,
+} from '../syntax/component-cursor';
 import {
   createFunctionalNotationConsumer,
-  tryConsumeFunctionBlock,
-} from '../parser/component-consumers';
+  consumeFunctionBlock,
+} from '../syntax/component-consumers';
 import {
   one, oneOf,
   withTrivia,
-} from '../parser/component-grammar';
-import { type FunctionBlock } from '../parser/component-value';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { isAnyValueContents } from './any-value';
-import { tryConsumeIdent, type IdentValue } from './ident';
+} from '../syntax/component-grammar';
+import { type FunctionBlock } from '../syntax/component-value';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { isAnyValueContents } from '../syntax/any-value';
+import { consumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { serializeCssString } from '../parser/component-value';
-import { tryConsumeString } from './string';
+import { serializeCssString } from '../syntax/component-value';
+import { consumeString } from './string';
 
 /*
  * NOTE: The URL modifier grammar is a provisional synthesis, not a verbatim
@@ -97,133 +96,14 @@ export function parseUrlModifier(
   input: ParserInput,
   context: unknown = undefined,
 ): UrlModifierValue | null {
-  const result = parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeUrlModifier),
-    context,
-  );
-
-  return result;
+  return urlModifierParser(input, context);
 }
 
-export function tryConsumeUrlModifier(
+export function consumeUrlModifier(
   c: ComponentCursor,
 ): TryComponentConsumerResult<UrlModifierValue> {
-  return consumeUrlModifier(c);
+  return urlModifierConsumer(c);
 }
-
-// <url-modifier> = <request-url-modifier> | <unknown-url-modifier>
-const consumeUrlModifier = oneOf(
-  [
-    one(tryConsumeRequestUrlModifier),
-    one(tryConsumeUnknownUrlModifier),
-  ],
-  ([value]) => value,
-);
-
-function tryConsumeRequestUrlModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RequestUrlModifierValue> {
-  return consumeRequestUrlModifier(c);
-}
-
-// <request-url-modifier> = <cross-origin-modifier> | <integrity-modifier> | <referrer-policy-modifier>
-const consumeRequestUrlModifier: TryComponentConsumer<RequestUrlModifierValue> =
-  oneOf(
-    [
-      one(tryConsumeCrossOriginModifier),
-      one(tryConsumeIntegrityModifier),
-      one(tryConsumeReferrerPolicyModifier),
-    ],
-    ([value]) => value,
-  );
-
-function tryConsumeUnknownUrlModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UnknownUrlModifierValue> {
-  return consumeUnknownUrlModifier(c);
-}
-
-// <unknown-url-modifier> = <ident> | <function-block>
-const consumeUnknownUrlModifier: TryComponentConsumer<UnknownUrlModifierValue> =
-  oneOf(
-    [
-      one(tryConsumeIdent),
-      one(tryConsumeFunctionBlock),
-    ],
-    ([value]) => {
-      if (value.type === 'block') {
-        // A recognized request modifier does not become unknown when its arguments fail.
-        switch (asciiLower(value.name)) {
-          case 'cross-origin':
-          case 'integrity':
-          case 'referrer-policy':
-            return null;
-        }
-
-        if (!isAnyValueContents(value.value)) return null;
-      }
-
-      return value;
-    },
-  );
-
-function tryConsumeCrossOriginModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CrossOriginModifierValue> {
-  return consumeCrossOriginModifier(c);
-}
-
-// <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
-const consumeCrossOriginModifier = createFunctionalNotationConsumer(
-  'cross-origin',
-  createKeywordConsumer('anonymous', 'use-credentials'),
-  (value): CrossOriginModifierValue => ({
-    type: 'cross-origin-modifier',
-    value,
-  }),
-);
-
-function tryConsumeIntegrityModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IntegrityModifierValue> {
-  return consumeIntegrityModifier(c);
-}
-
-// <integrity-modifier> = integrity(<string>)
-const consumeIntegrityModifier = createFunctionalNotationConsumer(
-  'integrity',
-  tryConsumeString,
-  (value): IntegrityModifierValue => ({
-    type: 'integrity-modifier',
-    value: value.value,
-  }),
-);
-
-function tryConsumeReferrerPolicyModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ReferrerPolicyModifierValue> {
-  return consumeReferrerPolicyModifier(c);
-}
-
-// <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)
-const consumeReferrerPolicyModifier = createFunctionalNotationConsumer(
-  'referrer-policy',
-  createKeywordConsumer(
-    'no-referrer',
-    'no-referrer-when-downgrade',
-    'same-origin',
-    'origin',
-    'strict-origin',
-    'origin-when-cross-origin',
-    'strict-origin-when-cross-origin',
-    'unsafe-url',
-  ),
-  (value): ReferrerPolicyModifierValue => ({
-    type: 'referrer-policy-modifier',
-    value,
-  }),
-);
 
 export function isRequestUrlModifierValue(
   value: unknown,
@@ -289,3 +169,92 @@ export function requestUrlModifierName(
       return 'referrer-policy';
   }
 }
+
+// =============================================================================
+// Syntax
+// =============================================================================
+
+// <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
+const crossOriginModifierConsumer = createFunctionalNotationConsumer(
+  'cross-origin',
+  createKeywordConsumer('anonymous', 'use-credentials'),
+  (value): CrossOriginModifierValue => ({
+    type: 'cross-origin-modifier',
+    value,
+  }),
+);
+
+// <integrity-modifier> = integrity(<string>)
+const integrityModifierConsumer = createFunctionalNotationConsumer(
+  'integrity',
+  consumeString,
+  (value): IntegrityModifierValue => ({
+    type: 'integrity-modifier',
+    value: value.value,
+  }),
+);
+
+// <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)
+const referrerPolicyModifierConsumer = createFunctionalNotationConsumer(
+  'referrer-policy',
+  createKeywordConsumer(
+    'no-referrer',
+    'no-referrer-when-downgrade',
+    'same-origin',
+    'origin',
+    'strict-origin',
+    'origin-when-cross-origin',
+    'strict-origin-when-cross-origin',
+    'unsafe-url',
+  ),
+  (value): ReferrerPolicyModifierValue => ({
+    type: 'referrer-policy-modifier',
+    value,
+  }),
+);
+
+// <request-url-modifier> = <cross-origin-modifier> | <integrity-modifier> | <referrer-policy-modifier>
+const requestUrlModifierConsumer: TryComponentConsumer<RequestUrlModifierValue> =
+  oneOf(
+    [
+      one(crossOriginModifierConsumer),
+      one(integrityModifierConsumer),
+      one(referrerPolicyModifierConsumer),
+    ],
+    ([value]) => value,
+  );
+
+// <unknown-url-modifier> = <ident> | <function-block>
+const unknownUrlModifierConsumer: TryComponentConsumer<UnknownUrlModifierValue> =
+  oneOf(
+    [
+      one(consumeIdent),
+      one(consumeFunctionBlock),
+    ],
+    ([value]) => {
+      if (value.type === 'block') {
+        // A recognized request modifier does not become unknown when its arguments fail.
+        switch (asciiLower(value.name)) {
+          case 'cross-origin':
+          case 'integrity':
+          case 'referrer-policy':
+            return null;
+        }
+
+        if (!isAnyValueContents(value.value)) return null;
+      }
+
+      return value;
+    },
+  );
+
+// <url-modifier> = <request-url-modifier> | <unknown-url-modifier>
+const urlModifierConsumer = oneOf(
+  [
+    one(requestUrlModifierConsumer),
+    one(unknownUrlModifierConsumer),
+  ],
+  ([value]) => value,
+);
+
+const urlModifierParser = createComponentParser(withTrivia(urlModifierConsumer));

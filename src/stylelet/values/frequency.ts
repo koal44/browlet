@@ -1,7 +1,9 @@
-import { one, oneOf, withTrivia } from '../parser/component-grammar';
-import { type TryComponentConsumer } from '../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import { ValueStage } from '../value-processing';
+import { one, oneOf, withTrivia } from '../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../syntax/parser';
+import { ValueStage } from '../value-processing/stage';
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
@@ -27,22 +29,24 @@ export function parseFrequency(
   input: ParserInput,
   context: MathContext = {},
 ): FrequencyValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeFrequency),
-    context,
-  );
+  return frequencyParser(input, context);
+}
+
+export function consumeFrequency(
+  c: ComponentCursor,
+): TryComponentConsumerResult<FrequencyValue> {
+  return frequencyConsumer(c);
 }
 
 export function createFrequencyConsumer(
   options: FrequencyConsumerOptions = {},
 ): TryComponentConsumer<FrequencyValue> {
-  const tryConsumeLiteral = createFrequencyLiteralConsumer(options);
+  const literalConsumer = createFrequencyLiteralConsumer(options);
   const range = frequencyRange(options);
 
   return oneOf(
     [
-      one(tryConsumeLiteral),
+      one(literalConsumer),
       one(createMathValueConsumer({
         expectedType: 'frequency',
         ...(range === undefined ? {} : { range }),
@@ -51,8 +55,6 @@ export function createFrequencyConsumer(
     ([value]) => value,
   );
 }
-
-export const tryConsumeFrequency = createFrequencyConsumer();
 
 export function resolveFrequency(
   value: FrequencyValue,
@@ -147,3 +149,7 @@ function frequencyRange(
     options.max ?? Infinity,
   ];
 }
+
+// <frequency> = <dimension-token with a frequency unit> | <math-function>
+const frequencyConsumer = createFrequencyConsumer();
+const frequencyParser = createComponentParser(withTrivia(frequencyConsumer));

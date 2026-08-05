@@ -1,38 +1,38 @@
 import {
   type ComponentValue, BlockKind, serializeCssIdentifier, serializeCssString,
-} from '../../../../src/stylelet/parser/component-value';
-import { parseListOfComponentValues } from '../../../../src/stylelet/parser/syntax';
+} from '../../../../src/stylelet/syntax/component-value';
+import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   describe, expect,
   it,
 } from 'vitest';
-import { ValueStage } from '../../../../src/stylelet/value-processing';
-import { ComponentCursor } from '../../../../src/stylelet/parser/component-cursor';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
+import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
   stringToken,
-} from '../../../../src/stylelet/parser/tokens';
+} from '../../../../src/stylelet/syntax/tokens';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
 import { parseAnimationNameValue } from '../../../../src/stylelet/props/animation-name';
 import {
   ANGLE_UNITS, canonicalizeAngle, createAngleConsumer, parseAngle, serializeAngle,
-  serializeCanonicalAngle, tryConsumeAngle,
+  serializeCanonicalAngle, consumeAngle,
 } from '../../../../src/stylelet/values/numeric-literal/angle';
 import {
   createAnglePercentageConsumer, parseAnglePercentage, serializeAnglePercentage,
-  tryConsumeAnglePercentage, tryAccumulateAnglePercentages, tryAddAnglePercentages,
+  consumeAnglePercentage, tryAccumulateAnglePercentages, tryAddAnglePercentages,
   tryInterpolateAnglePercentages, tryResolveAnglePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/angle-percentage';
-import { parseAnyValue, tryConsumeAnyValue } from '../../../../src/stylelet/values/any-value';
+import { parseAnyValue, consumeAnyValue } from '../../../../src/stylelet/syntax/any-value';
 import { serializeAuto } from '../../../../src/stylelet/values/auto';
-import { parseCssWideValue, tryConsumeCssWideValue } from '../../../../src/stylelet/values/css-wide';
+import { parseCssWideValue, consumeCssWideValue } from '../../../../src/stylelet/values/css-wide';
 import {
   parseDeclarationValue, parseOptionalDeclarationValue,
-  tryConsumeDeclarationValue, tryConsumeOptionalDeclarationValue,
-} from '../../../../src/stylelet/values/declaration-value';
+  consumeDeclarationValue, consumeOptionalDeclarationValue,
+} from '../../../../src/stylelet/syntax/declaration-value';
 import {
   accumulateDimensions, addDimensions, interpolateDimensions, parseDimension, serializeDimension,
-  tryConsumeDimension,
+  consumeDimension,
 } from '../../../../src/stylelet/values/numeric-literal/dimension';
 import { parseCustomIdent, serializeCustomIdent } from '../../../../src/stylelet/values/custom-ident';
 import { parseDashedIdent, serializeDashedIdent } from '../../../../src/stylelet/values/dashed-ident';
@@ -40,58 +40,58 @@ import { parseIdent, serializeIdent } from '../../../../src/stylelet/values/iden
 import { createKeywordConsumer } from '../../../../src/stylelet/values/keyword';
 import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
-  serializeInteger, tryConsumeInteger,
+  serializeInteger, consumeInteger,
 } from '../../../../src/stylelet/values/numeric-literal/integer';
 import {
   canonicalizeFrequency, createFrequencyConsumer, FREQUENCY_UNITS, parseFrequency,
-  serializeCanonicalFrequency, serializeFrequency, tryConsumeFrequency,
+  serializeCanonicalFrequency, serializeFrequency, consumeFrequency,
 } from '../../../../src/stylelet/values/numeric-literal/frequency';
 import {
   createFrequencyPercentageConsumer, parseFrequencyPercentage, serializeFrequencyPercentage,
-  tryConsumeFrequencyPercentage, tryAccumulateFrequencyPercentages, tryAddFrequencyPercentages,
+  consumeFrequencyPercentage, tryAccumulateFrequencyPercentages, tryAddFrequencyPercentages,
   tryInterpolateFrequencyPercentages, tryResolveFrequencyPercentage,
 } from '../../../../src/stylelet/values/numeric-literal/frequency-percentage';
 import {
   createLengthConsumer, LENGTH_UNITS, parseLength, serializeCanonicalLength, serializeLength,
-  snapLengthAsLineWidth, tryConsumeLength, tryResolveLength, type LengthResolutionContext,
+  snapLengthAsLineWidth, consumeLength, tryResolveLength, type LengthResolutionContext,
 } from '../../../../src/stylelet/values/numeric-literal/length';
 import {
   createLengthPercentageConsumer, parseLengthPercentage, serializeLengthPercentage,
-  tryConsumeLengthPercentage, tryAccumulateLengthPercentages, tryAddLengthPercentages,
+  consumeLengthPercentage, tryAccumulateLengthPercentages, tryAddLengthPercentages,
   tryInterpolateLengthPercentages, tryResolveLengthPercentage,
 } from '../../../../src/stylelet/values/numeric-literal/length-percentage';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
-  serializeNumber, tryConsumeNumber,
+  serializeNumber, consumeNumber,
 } from '../../../../src/stylelet/values/numeric-literal/number';
 import {
   accumulatePercentages, addPercentages, createPercentageConsumer, interpolatePercentages,
-  parsePercentage, serializePercentage, tryConsumePercentage,
+  parsePercentage, serializePercentage, consumePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/percentage';
 import {
   interpolateRatios, isDegenerateRatio, parseRatio, serializeRatio,
-  tryConsumeRatio,
+  consumeRatio,
 } from '../../../../src/stylelet/values/ratio';
 import {
   canonicalizeResolution, createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
-  serializeCanonicalResolution, serializeResolution, tryConsumeResolution,
+  serializeCanonicalResolution, serializeResolution, consumeResolution,
 } from '../../../../src/stylelet/values/numeric-literal/resolution';
 import { parseString, serializeString } from '../../../../src/stylelet/values/string';
 import {
   canonicalizeTime, createTimeConsumer, parseTime, serializeCanonicalTime,
-  serializeTime, TIME_UNITS, tryConsumeTime,
+  serializeTime, TIME_UNITS, consumeTime,
 } from '../../../../src/stylelet/values/numeric-literal/time';
 import {
   createTimePercentageConsumer, parseTimePercentage, serializeTimePercentage,
-  tryConsumeTimePercentage, tryAccumulateTimePercentages, tryAddTimePercentages,
+  consumeTimePercentage, tryAccumulateTimePercentages, tryAddTimePercentages,
   tryInterpolateTimePercentages, tryResolveTimePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/time-percentage';
 import {
   parseUrlModifier, serializeRequestUrlModifier,
-  tryConsumeUrlModifier,
+  consumeUrlModifier,
 } from '../../../../src/stylelet/values/url-modifier';
-import { parseUrl, serializeUrl, tryConsumeUrl } from '../../../../src/stylelet/values/url';
-import { parseZero, tryConsumeZero } from '../../../../src/stylelet/values/numeric-literal/zero';
+import { parseUrl, serializeUrl, consumeUrl } from '../../../../src/stylelet/values/url';
+import { parseZero, consumeZero } from '../../../../src/stylelet/values/numeric-literal/zero';
 import {
   accumulateOpacities, addOpacities, interpolateOpacities, parseOpacityValue, resolveOpacityValue,
   serializeOpacityValue,
@@ -145,7 +145,7 @@ describe('CSS-wide value', () => {
     const components = parseListOfComponentValues('inherit initial');
     const c = new ComponentCursor(components);
 
-    expect(tryConsumeCssWideValue(c)).toMatchObject({
+    expect(consumeCssWideValue(c)).toMatchObject({
       type: 'css-wide',
       keyword: 'inherit',
     });
@@ -173,7 +173,7 @@ describe('any-value', () => {
     const components = parseListOfComponentValues('a fn(b)');
     const c = new ComponentCursor(components);
 
-    expect(tryConsumeAnyValue(c)).toEqual({
+    expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
       components,
     });
@@ -184,7 +184,7 @@ describe('any-value', () => {
     const components = parseListOfComponentValues('a)');
     const c = new ComponentCursor(components);
 
-    expect(tryConsumeAnyValue(c)).toEqual({
+    expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
       components: components.slice(0, 1),
     });
@@ -196,9 +196,9 @@ describe('any-value', () => {
     const empty = new ComponentCursor([]);
     const invalid = new ComponentCursor(parseListOfComponentValues(') a'));
 
-    expect(tryConsumeAnyValue(empty)).toBeNull();
+    expect(consumeAnyValue(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
-    expect(tryConsumeAnyValue(invalid)).toBeNull();
+    expect(consumeAnyValue(invalid)).toBeNull();
     expect(invalid.pos()).toBe(0);
   });
 
@@ -244,7 +244,7 @@ describe('declaration-value', () => {
   it('consumes a nonempty declaration value', () => {
     const components = values('red 1px url(foo.png)');
 
-    expect(tryConsumeDeclarationValue(new ComponentCursor(components))).toEqual({
+    expect(consumeDeclarationValue(new ComponentCursor(components))).toEqual({
       type: 'declaration-value',
       components,
     });
@@ -259,7 +259,7 @@ describe('declaration-value', () => {
       type: 'declaration-value',
       components: [],
     });
-    expect(tryConsumeOptionalDeclarationValue(new ComponentCursor([]))).toEqual({
+    expect(consumeOptionalDeclarationValue(new ComponentCursor([]))).toEqual({
       type: 'declaration-value',
       components: [],
     });
@@ -277,7 +277,7 @@ describe('declaration-value', () => {
   it('restores after consuming an invalid declaration value', () => {
     const c = new ComponentCursor(values('a ! b'));
 
-    expect(tryConsumeDeclarationValue(c)).toBeNull();
+    expect(consumeDeclarationValue(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -586,7 +586,7 @@ describe('url-modifier', () => {
       parseListOfComponentValues('cross-origin(unknown)'),
     );
 
-    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -601,14 +601,14 @@ describe('url-modifier', () => {
     expect(parseUrlModifier(components)).toBeNull();
 
     const c = new ComponentCursor(components);
-    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('consumes a URL modifier through the component grammar', () => {
     const c = new ComponentCursor(parseListOfComponentValues('future-modifier()'));
 
-    expect(tryConsumeUrlModifier(c)).toEqual({
+    expect(consumeUrlModifier(c)).toEqual({
       type: 'block',
       block: BlockKind.Function,
       name: 'future-modifier',
@@ -620,7 +620,7 @@ describe('url-modifier', () => {
   it('returns null without advancing for anything outside the modifier syntax', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1px'));
 
-    expect(tryConsumeUrlModifier(c)).toBeNull();
+    expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });
@@ -779,7 +779,7 @@ describe('url', () => {
       'REFERRER-POLICY(origin))',
     ].join(' ')));
 
-    expect(tryConsumeUrl(c)).toBeNull();
+    expect(consumeUrl(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -818,7 +818,7 @@ describe('url', () => {
     const c = new ComponentCursor(
       parseListOfComponentValues('url("image.png" 1px)'),
     );
-    const result = tryConsumeUrl(c);
+    const result = consumeUrl(c);
 
     expect(result).toBeNull();
     expect(c.pos()).toBe(0);
@@ -864,7 +864,7 @@ describe('integer', () => {
   it('consumes one integer from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('12 13'));
 
-    expect(tryConsumeInteger(c)).toEqual({
+    expect(consumeInteger(c)).toEqual({
       type: 'integer',
       value: 12,
     });
@@ -874,7 +874,7 @@ describe('integer', () => {
   it('returns null without advancing for a non-integer number token', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.0'));
 
-    expect(tryConsumeInteger(c)).toBeNull();
+    expect(consumeInteger(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -995,7 +995,7 @@ describe('number', () => {
   it('consumes one number from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25 2'));
 
-    expect(tryConsumeNumber(c)).toEqual({
+    expect(consumeNumber(c)).toEqual({
       type: 'number',
       value: 1.25,
     });
@@ -1101,7 +1101,7 @@ describe('zero', () => {
   it('consumes one literal zero from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('0.0 1'));
 
-    expect(tryConsumeZero(c)).toEqual({
+    expect(consumeZero(c)).toEqual({
       type: 'number',
       value: 0,
     });
@@ -1111,7 +1111,7 @@ describe('zero', () => {
   it('returns null without advancing for a nonzero number', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1'));
 
-    expect(tryConsumeZero(c)).toBeNull();
+    expect(consumeZero(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1166,7 +1166,7 @@ describe('dimension', () => {
   it('consumes one dimension from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25em 2s'));
 
-    expect(tryConsumeDimension(c)).toEqual({
+    expect(consumeDimension(c)).toEqual({
       type: 'dimension',
       value: 1.25,
       unit: 'em',
@@ -1177,7 +1177,7 @@ describe('dimension', () => {
   it('returns null without advancing for a non-dimension component', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1%'));
 
-    expect(tryConsumeDimension(c)).toBeNull();
+    expect(consumeDimension(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1283,7 +1283,7 @@ describe('percentage', () => {
   it('consumes one percentage from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('12.5% 25%'));
 
-    expect(tryConsumePercentage(c)).toEqual({
+    expect(consumePercentage(c)).toEqual({
       type: 'percentage',
       value: 12.5,
     });
@@ -1293,7 +1293,7 @@ describe('percentage', () => {
   it('returns null without advancing for a non-percentage component', () => {
     const c = new ComponentCursor(parseListOfComponentValues('12.5'));
 
-    expect(tryConsumePercentage(c)).toBeNull();
+    expect(consumePercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1388,7 +1388,7 @@ describe('length-percentage', () => {
   it('consumes one length-percentage from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1px'));
 
-    expect(tryConsumeLengthPercentage(c)).toEqual({
+    expect(consumeLengthPercentage(c)).toEqual({
       type: 'percentage',
       value: 25,
     });
@@ -1515,7 +1515,7 @@ describe('angle-percentage', () => {
   it('consumes one angle-percentage from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 90deg'));
 
-    expect(tryConsumeAnglePercentage(c)).toEqual({
+    expect(consumeAnglePercentage(c)).toEqual({
       type: 'percentage',
       value: 25,
     });
@@ -1618,7 +1618,7 @@ describe('frequency-percentage', () => {
   it('consumes one frequency-percentage from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1khz'));
 
-    expect(tryConsumeFrequencyPercentage(c)).toEqual({
+    expect(consumeFrequencyPercentage(c)).toEqual({
       type: 'percentage',
       value: 25,
     });
@@ -1721,7 +1721,7 @@ describe('time-percentage', () => {
   it('consumes one time-percentage from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('25% 1s'));
 
-    expect(tryConsumeTimePercentage(c)).toEqual({
+    expect(consumeTimePercentage(c)).toEqual({
       type: 'percentage',
       value: 25,
     });
@@ -1842,7 +1842,7 @@ describe('ratio', () => {
   it('consumes one ratio from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('3/2 4'));
 
-    expect(tryConsumeRatio(c)).toEqual({
+    expect(consumeRatio(c)).toEqual({
       type: 'ratio',
       numerator: 3,
       denominator: 2,
@@ -1853,7 +1853,7 @@ describe('ratio', () => {
   it('defaults an omitted denominator while leaving the next component', () => {
     const c = new ComponentCursor(parseListOfComponentValues('3 4'));
 
-    expect(tryConsumeRatio(c)).toEqual({
+    expect(consumeRatio(c)).toEqual({
       type: 'ratio',
       numerator: 3,
       denominator: 1,
@@ -1991,7 +1991,7 @@ describe('length', () => {
   it('consumes one length from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1.25em 2px'));
 
-    expect(tryConsumeLength(c)).toEqual({
+    expect(consumeLength(c)).toEqual({
       type: 'length',
       value: 1.25,
       unit: 'em',
@@ -2004,7 +2004,7 @@ describe('length', () => {
     (input) => {
       const c = new ComponentCursor(parseListOfComponentValues(input));
 
-      expect(tryConsumeLength(c)).toBeNull();
+      expect(consumeLength(c)).toBeNull();
       expect(c.pos()).toBe(0);
     },
   );
@@ -2236,7 +2236,7 @@ describe('angle', () => {
   it('consumes one angle from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('0.25turn 90deg'));
 
-    expect(tryConsumeAngle(c)).toEqual({
+    expect(consumeAngle(c)).toEqual({
       type: 'angle',
       value: 0.25,
       unit: 'turn',
@@ -2247,7 +2247,7 @@ describe('angle', () => {
   it('returns null without advancing for a non-angle dimension', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1px'));
 
-    expect(tryConsumeAngle(c)).toBeNull();
+    expect(consumeAngle(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -2347,7 +2347,7 @@ describe('time', () => {
   it('consumes one time from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('250ms 1s'));
 
-    expect(tryConsumeTime(c)).toEqual({
+    expect(consumeTime(c)).toEqual({
       type: 'time',
       value: 250,
       unit: 'ms',
@@ -2358,7 +2358,7 @@ describe('time', () => {
   it('returns null without advancing for a non-time dimension', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1deg'));
 
-    expect(tryConsumeTime(c)).toBeNull();
+    expect(consumeTime(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -2445,7 +2445,7 @@ describe('frequency', () => {
   it('consumes one frequency from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('1khz 500hz'));
 
-    expect(tryConsumeFrequency(c)).toEqual({
+    expect(consumeFrequency(c)).toEqual({
       type: 'frequency',
       value: 1,
       unit: 'khz',
@@ -2548,7 +2548,7 @@ describe('resolution', () => {
   it('consumes one resolution from the current cursor position', () => {
     const c = new ComponentCursor(parseListOfComponentValues('2dppx 96dpi'));
 
-    expect(tryConsumeResolution(c)).toEqual({
+    expect(consumeResolution(c)).toEqual({
       type: 'resolution',
       value: 2,
       unit: 'dppx',

@@ -1,9 +1,11 @@
 import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
-import { tryConsumeDimensionToken } from '../../parser/component-consumers';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeDimensionToken } from '../../syntax/component-consumers';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*
@@ -13,11 +15,9 @@ import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './d
  */
 
 export type AngleLiteral = DimensionLiteral<'angle', AngleUnit>;
-
 export type CanonicalAngleLiteral = DimensionLiteral<'angle', 'deg'>;
 
 export const ANGLE_UNITS = ['deg', 'grad', 'rad', 'turn'] as const;
-
 export type AngleUnit = (typeof ANGLE_UNITS)[number];
 
 export function angleLiteral(value: number): CanonicalAngleLiteral;
@@ -36,11 +36,13 @@ export function parseAngle(
   input: ParserInput,
   context: unknown = undefined,
 ): AngleLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeAngle),
-    context,
-  );
+  return angleParser(input, context);
+}
+
+export function consumeAngle(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AngleLiteral> {
+  return angleConsumer(c);
 }
 
 export type AngleConsumerOptions = {
@@ -57,7 +59,7 @@ export function createAngleConsumer(
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
-  return adaptConsumer(tryConsumeDimensionToken, (component) => {
+  return adaptConsumer(consumeDimensionToken, (component) => {
     const unit = angleUnitFor(component.unit);
 
     if (unit === null) return null;
@@ -73,20 +75,6 @@ export function createAngleConsumer(
       ? null
       : result;
   });
-}
-
-export const tryConsumeAngle = createAngleConsumer();
-
-function angleUnitFor(raw: string): AngleUnit | null {
-  const normalized = asciiLower(raw);
-
-  return isAngleUnit(normalized)
-    ? normalized
-    : null;
-}
-
-function isAngleUnit(value: string): value is AngleUnit {
-  return ANGLE_UNITS.some((unit) => unit === value);
 }
 
 export function serializeAngle(value: AngleLiteral): string {
@@ -123,3 +111,19 @@ export function canonicalizeAngle(value: AngleLiteral): CanonicalAngleLiteral {
     unit: 'deg',
   };
 }
+
+function angleUnitFor(raw: string): AngleUnit | null {
+  const normalized = asciiLower(raw);
+
+  return isAngleUnit(normalized)
+    ? normalized
+    : null;
+}
+
+function isAngleUnit(value: string): value is AngleUnit {
+  return ANGLE_UNITS.some((unit) => unit === value);
+}
+
+// <angle> = <dimension-token with an angle unit>
+const angleConsumer = createAngleConsumer();
+const angleParser = createComponentParser(withTrivia(angleConsumer));

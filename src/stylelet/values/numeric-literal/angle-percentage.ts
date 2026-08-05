@@ -1,8 +1,10 @@
-import { withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { withTrivia } from '../../syntax/component-grammar';
 import {
-  canonicalizeAngle, serializeAngle, tryConsumeAngle, type AngleLiteral,
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
+import {
+  canonicalizeAngle, serializeAngle, consumeAngle, type AngleLiteral,
   type CanonicalAngleLiteral,
 } from './angle';
 import {
@@ -25,27 +27,24 @@ export function parseAnglePercentage(
   input: ParserInput,
   context: unknown = undefined,
 ): AnglePercentageLiteral | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeAnglePercentage),
-    context,
-  );
+  return anglePercentageParser(input, context);
 }
 
-export type AnglePercentageConsumerOptions =
-  DimensionPercentageConsumerOptions;
+export function consumeAnglePercentage(
+  c: ComponentCursor,
+): TryComponentConsumerResult<AnglePercentageLiteral> {
+  return anglePercentageConsumer(c);
+}
 
 export function createAnglePercentageConsumer(
-  options: AnglePercentageConsumerOptions = {},
+  options: DimensionPercentageConsumerOptions = {},
 ): TryComponentConsumer<AnglePercentageLiteral> {
   return createDimensionPercentageConsumer(
-    tryConsumeAngle,
+    consumeAngle,
     'Angle-percentage',
     options,
   );
 }
-
-export const tryConsumeAnglePercentage = createAnglePercentageConsumer();
 
 export function serializeAnglePercentage(value: AnglePercentageLiteral): string {
   return serializeDimensionPercentage(value, serializeAngle);
@@ -92,3 +91,7 @@ export function tryAccumulateAnglePercentages(
 ): AnglePercentageLiteral | null {
   return tryAccumulateDimensionPercentages(a, b);
 }
+
+// <angle-percentage> = [ <angle> | <percentage> ]
+const anglePercentageConsumer = createAnglePercentageConsumer();
+const anglePercentageParser = createComponentParser(withTrivia(anglePercentageConsumer));

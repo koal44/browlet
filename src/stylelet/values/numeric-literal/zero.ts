@@ -1,7 +1,9 @@
-import { tryConsumeNumberToken } from '../../parser/component-consumers';
-import { adaptConsumer, withTrivia } from '../../parser/component-grammar';
-import { type TryComponentConsumer } from '../../parser/component-cursor';
-import { parseAsComponentGrammar, type ParserInput } from '../../parser/syntax';
+import { consumeNumberToken } from '../../syntax/component-consumers';
+import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
+import {
+  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
+} from '../../syntax/component-cursor';
+import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import type { NumberLiteral } from './number';
 
 /*
@@ -16,16 +18,21 @@ export function parseZero(
   input: ParserInput,
   context: unknown = undefined,
 ): ZeroValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(tryConsumeZero),
-    context,
-  );
+  return zeroParser(input, context);
 }
 
-export const tryConsumeZero: TryComponentConsumer<ZeroValue> = adaptConsumer(
-  tryConsumeNumberToken,
+export function consumeZero(
+  c: ComponentCursor,
+): TryComponentConsumerResult<ZeroValue> {
+  return zeroConsumer(c);
+}
+
+// <zero> = <number-token with a value of 0>
+const zeroConsumer: TryComponentConsumer<ZeroValue> = adaptConsumer(
+  consumeNumberToken,
   (token) => token.value === 0
     ? { type: 'number', value: 0 }
     : null,
 );
+
+const zeroParser = createComponentParser(withTrivia(zeroConsumer));
