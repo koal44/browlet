@@ -1,29 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { colorProperty } from '../../../src/stylelet/props/color';
 import { ValueStage } from '../../../src/stylelet/value-processing';
-import { ColorKind } from '../../../src/stylelet/values/color';
+import { colorDef, ColorKind } from '../../../src/stylelet/values/color';
+import { defineProperty } from '../../../src/stylelet/values/whole-value';
 
 describe('property value', () => {
-  describe('value instance', () => {
+  describe('ordinary value', () => {
     it('creates a raw value, then resolves and serializes a color value instance', () => {
       const raw = colorProperty.parse('red');
 
       expect(raw).toMatchObject({
-        type: 'raw-property-value',
+        type: 'raw',
         declaration: {
           type: 'declaration-value',
         },
       });
       expect(raw?.serialize()).toBe('red');
       expect(raw?.resolve(ValueStage.Declared, {})).toMatchObject({
-        type: 'value-instance',
+        type: 'ordinary',
         value: {
           kind: ColorKind.Named,
           name: 'red',
         },
       });
       expect(raw?.resolve(ValueStage.Computed, {})).toMatchObject({
-        type: 'value-instance',
+        type: 'ordinary',
         value: {
           kind: ColorKind.Absolute,
         },
@@ -39,6 +40,18 @@ describe('property value', () => {
   });
 
   describe('whole-value notation', () => {
+    it('creates a host-bound consumer from only the value definition', () => {
+      const { parse } = defineProperty(colorDef);
+      const parsed = parse('first-valid(10px, red)');
+
+      expect(parsed?.resolve(ValueStage.Computed, {})).toMatchObject({
+        type: 'ordinary',
+        value: {
+          kind: ColorKind.Absolute,
+        },
+      });
+    });
+
     it('selects the first argument valid for the property', () => {
       const input = colorProperty.parse('first-valid(10px, red)');
       const specified = input?.resolve(ValueStage.Specified, {});
@@ -48,7 +61,7 @@ describe('property value', () => {
       expect(specified?.serialize()).toBe('first-valid(10px, red)');
       expect(specified?.resolve(ValueStage.Specified, {})).toBe(specified);
       expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
-        type: 'value-instance',
+        type: 'ordinary',
         value: {
           kind: ColorKind.Absolute,
         },

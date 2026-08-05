@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
-import { defineCustomProperty } from '../../../../src/stylelet/values/property-value';
+import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax, type SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
 function syntax(input: string): SyntaxValue {
@@ -21,7 +21,7 @@ describe('custom property', () => {
       const value = raw?.resolve(ValueStage.Specified, {});
 
       expect(value).toBe(raw);
-      expect(value).toMatchObject({ type: 'raw-property-value' });
+      expect(value).toMatchObject({ type: 'raw' });
       expect(value?.serialize()).toBe(input);
       expect(value?.resolve(ValueStage.Specified, {})).toBe(value);
     }
@@ -47,7 +47,7 @@ describe('custom property', () => {
     const value = property.parse('')?.resolve(ValueStage.Declared, {});
 
     expect(value).toMatchObject({
-      type: 'raw-property-value',
+      type: 'raw',
       declaration: {
         type: 'declaration-value',
         components: [],
@@ -78,7 +78,7 @@ describe('custom property', () => {
     const value = property.parse('red');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'value-instance',
+      type: 'ordinary',
       value: {
         type: 'parsed-syntax-type',
         name: 'color',
@@ -170,7 +170,7 @@ describe('custom property', () => {
     const value = property.parse('red');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'value-instance',
+      type: 'ordinary',
       value: {
         type: 'parsed-syntax-keyword',
         name: 'red',
@@ -200,7 +200,7 @@ describe('custom property', () => {
     const value = property.parse('auto extra');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'value-instance',
+      type: 'ordinary',
       value: {
         type: 'parsed-syntax-list',
         multiplier: '+',
@@ -217,7 +217,7 @@ describe('custom property', () => {
     const value = property.parse('red, blue');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'value-instance',
+      type: 'ordinary',
       value: {
         type: 'parsed-syntax-list',
         multiplier: '#',
@@ -234,7 +234,7 @@ describe('custom property', () => {
     const value = property.parse('10px / anything');
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
-      type: 'value-instance',
+      type: 'ordinary',
       value: {
         type: 'parsed-universal-syntax',
       },

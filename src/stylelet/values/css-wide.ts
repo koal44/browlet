@@ -3,7 +3,7 @@ import { withTrivia } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
 import type { ValueStage } from '../value-processing';
 import { createKeywordConsumer } from './keyword';
-import type { PropertyValue } from './property-value';
+import type { WholeValue } from './whole-value';
 
 /*
  * CSS-wide keywords:
@@ -23,7 +23,7 @@ export type CssWideKeyword = (typeof CSS_WIDE_KEYWORDS)[number];
 export type CssWideValue<Value = unknown, Context = unknown> = {
   type: 'css-wide';
   keyword: CssWideKeyword;
-  resolve: (stage: ValueStage, context: Context) => PropertyValue<Value, Context>;
+  resolve: (stage: ValueStage, context: Context) => WholeValue<Value, Context>;
   serialize: () => string;
 };
 

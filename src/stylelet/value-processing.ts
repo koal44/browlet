@@ -1,3 +1,7 @@
+import type { ColorContext } from './values/color';
+import type { ImageContext } from './values/image';
+import type { MathContext } from './values/math-value';
+
 export enum ValueStage {
   Declared,
   Cascaded,
@@ -6,3 +10,8 @@ export enum ValueStage {
   Used,
   Actual,
 }
+
+export type PropertyContext =
+  & MathContext
+  & ColorContext
+  & ImageContext;

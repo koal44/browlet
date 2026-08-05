@@ -4,14 +4,14 @@ import {
 } from '../parser/component-value';
 import type { ParserInput } from '../parser/syntax';
 import { ValueStage } from '../value-processing';
-import type { DeclarationValue } from './declaration-value';
+import type { DeclarationValue, OptionalDeclarationValue } from './declaration-value';
 import type { GuaranteedInvalidValue } from './guaranteed-invalid';
-import type { PropertyValue, RawPropertyValue } from './property-value';
+import type { RawWholeValue, WholeValue } from './whole-value';
 
 export type SubstitutionValue<Value, Context = unknown> = {
   type: 'substitution-value';
   declaration: DeclarationValue;
-  resolve: (stage: ValueStage, context: Context) => PropertyValue<Value, Context>;
+  resolve: (stage: ValueStage, context: Context) => WholeValue<Value, Context>;
   serialize: () => string;
 };
 
@@ -19,7 +19,7 @@ export function createSubstitutionValue<Value, Context = unknown>(
   declaration: DeclarationValue,
   parseInput: (
     input: ParserInput,
-  ) => RawPropertyValue<Value, Context> | null,
+  ) => RawWholeValue<Value, Context> | null,
 ): SubstitutionValue<Value, Context> {
   const value: SubstitutionValue<Value, Context> = {
     type: 'substitution-value',
@@ -61,6 +61,12 @@ export function containsSubstitutionFunction(
   return false;
 }
 
+export function isSubstitutionDeclaration(
+  declaration: OptionalDeclarationValue | DeclarationValue,
+): declaration is DeclarationValue {
+  return containsSubstitutionFunction(declaration.components);
+}
+
 const ARBITRARY_SUBSTITUTION_FUNCTION_NAMES = new Set([
   'var',
   'attr',
@@ -74,10 +80,10 @@ function resolveSubstitutionValue<Value, Context>(
   value: SubstitutionValue<Value, Context>,
   parseInput: (
     input: ParserInput,
-  ) => RawPropertyValue<Value, Context> | null,
+  ) => RawWholeValue<Value, Context> | null,
   stage: ValueStage,
   context: Context,
-): PropertyValue<Value, Context> {
+): WholeValue<Value, Context> {
   if (stage < ValueStage.Computed) return value;
 
   const substituted = resolveSubstitutionFunction(

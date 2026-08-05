@@ -11,7 +11,7 @@ import {
   adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia,
 } from '../parser/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../parser/syntax';
-import type { ValueStage } from '../value-processing';
+import { type PropertyContext, type ValueStage } from '../value-processing';
 import { angleDef } from './angle';
 import { colorDef } from './color';
 import { customIdentDef } from './custom-ident';
@@ -21,7 +21,6 @@ import { lengthPercentageDef } from './length-percentage';
 import { lengthDef } from './length';
 import { numberDef } from './number';
 import { percentageDef } from './percentage';
-import type { PropertyContext } from './property-value';
 import { resolutionDef } from './resolution';
 import { stringDef } from './string';
 import { timeDef } from './time';
