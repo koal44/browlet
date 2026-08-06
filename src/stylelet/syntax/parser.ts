@@ -129,7 +129,7 @@ export function parseDeclaration(
     values.push(consumeComponentValueFromTokens(c));
   }
 
-  return consumeDeclarationFromComponents(new ComponentCursor(values, { context }));
+  return consumeDeclaration(new ComponentCursor(values, { context }));
 }
 
 // 5.3.7. Parse a style block's contents
@@ -434,7 +434,7 @@ function consumeStyleBlockContentsFromComponents(c: ComponentCursor): StyleBlock
         temp.push(c.consume());
       }
 
-      const declaration = consumeDeclarationFromComponents(
+      const declaration = consumeDeclaration(
         new ComponentCursor(temp, { context: c.context }),
       );
 
@@ -494,7 +494,7 @@ function consumeListOfDeclarationsFromTokens(c: TokenCursor): DeclarationOrAtRul
         temp.push(consumeComponentValueFromTokens(c));
       }
 
-      const declaration = consumeDeclarationFromComponents(new ComponentCursor(temp));
+      const declaration = consumeDeclaration(new ComponentCursor(temp));
       if (declaration !== null) declarations.push(declaration);
 
       continue;
@@ -512,11 +512,13 @@ function consumeListOfDeclarationsFromTokens(c: TokenCursor): DeclarationOrAtRul
 }
 
 // 5.4.6. Consume a declaration
-function consumeDeclarationFromComponents(c: ComponentCursor): Declaration | null {
+export function consumeDeclaration(c: ComponentCursor): Declaration | null {
+  const start = c.pos();
   const comp = c.next();
 
   if (!isIdentToken(comp)) {
-    throw new Error('consumeDeclarationFromComponents called without an ident token');
+    c.restore(start);
+    return null;
   }
 
   const declaration: Declaration = {
@@ -530,6 +532,7 @@ function consumeDeclarationFromComponents(c: ComponentCursor): Declaration | nul
   }
 
   if (!isTokenKind(c.peek(), TokenKind.Colon)) {
+    c.restore(start);
     return null;
   }
 

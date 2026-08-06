@@ -32,8 +32,8 @@ export type Declaration = {
   important: boolean;
 };
 
-export type StyleBlockItem = Declaration | Rule;
 export type StyleBlockContents = StyleBlockItem[];
+export type StyleBlockItem = Declaration | Rule;
 
 export type DeclarationOrAtRule = Declaration | AtRule;
 export type DeclarationOrAtRuleList = DeclarationOrAtRule[];

@@ -91,11 +91,6 @@ export function createFreeFormConsumer<Value>(
       return result;
     }
 
-    if (first === null) {
-      c.restore(start);
-      return null;
-    }
-
     const components: ComponentValue[] = [];
 
     while (true) {
@@ -149,6 +144,11 @@ export function consumeColon(c: ComponentCursor): TryComponentConsumerResult<':'
 // <comma-token>
 export function consumeComma(c: ComponentCursor): TryComponentConsumerResult<','> {
   return c.match(TokenKind.Comma) ? ',' : null;
+}
+
+// <semicolon-token>
+export function consumeSemicolon(c: ComponentCursor): TryComponentConsumerResult<';'> {
+  return c.match(TokenKind.Semicolon) ? ';' : null;
 }
 
 // <ident-token>

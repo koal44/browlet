@@ -11,6 +11,7 @@ import {
 import { isTokenKind, BlockKind } from '../../../../src/stylelet/syntax/component-value';
 import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { consumeAnyValue } from '../../../../src/stylelet/syntax/any-value';
+import { consumeOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
 import { BadStringToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import { ColorKind, consumeColor } from '../../../../src/stylelet/values/color';
 
@@ -112,6 +113,16 @@ describe('createFreeFormConsumer', () => {
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
+  });
+
+  it('delegates an empty partition to an optional declaration-value grammar', () => {
+    const consume = createFreeFormConsumer(consumeOptionalDeclarationValue);
+    const c = new ComponentCursor([]);
+
+    expect(consume(c)).toEqual({
+      type: 'declaration-value',
+      components: [],
+    });
   });
 });
 
