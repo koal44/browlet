@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
 import {
@@ -33,14 +33,14 @@ export function parseFrequency(
 }
 
 export function consumeFrequency(
-  c: ComponentCursor,
-): TryComponentConsumerResult<FrequencyValue> {
+  c: TokenCursor,
+): TryConsumerResult<FrequencyValue> {
   return frequencyConsumer(c);
 }
 
 export function createFrequencyConsumer(
   options: FrequencyConsumerOptions = {},
-): TryComponentConsumer<FrequencyValue> {
+): TryConsumer<FrequencyValue> {
   const literalConsumer = createFrequencyLiteralConsumer(options);
   const range = frequencyRange(options);
 

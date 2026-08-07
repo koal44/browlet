@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
 import type { ValueDefinition } from '../value-processing/definition';
@@ -39,14 +39,14 @@ export function parseAngle(
 }
 
 export function consumeAngle(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AngleValue> {
+  c: TokenCursor,
+): TryConsumerResult<AngleValue> {
   return angleConsumer(c);
 }
 
 export function createAngleConsumer(
   options: AngleConsumerOptions = {},
-): TryComponentConsumer<AngleValue> {
+): TryConsumer<AngleValue> {
   const literalConsumer = createAngleLiteralConsumer(options);
   const range = angleRange(options);
 

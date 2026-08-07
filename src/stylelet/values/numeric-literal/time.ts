@@ -2,8 +2,8 @@ import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -38,8 +38,8 @@ export function parseTime(
 }
 
 export function consumeTime(
-  c: ComponentCursor,
-): TryComponentConsumerResult<TimeLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<TimeLiteral> {
   return timeConsumer(c);
 }
 
@@ -53,7 +53,7 @@ export type TimeConsumerOptions = {
 
 export function createTimeConsumer(
   options: TimeConsumerOptions = {},
-): TryComponentConsumer<TimeLiteral> {
+): TryConsumer<TimeLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

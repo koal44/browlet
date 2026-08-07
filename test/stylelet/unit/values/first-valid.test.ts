@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   isTokenKind, serializeComponentValues,
 } from '../../../../src/stylelet/syntax/component-value';
@@ -61,7 +61,7 @@ describe('<first-valid()>', () => {
   });
 
   it('consumes one notation without consuming following input', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('first-valid(red, blue) trailing'),
     );
 
@@ -70,7 +70,7 @@ describe('<first-valid()>', () => {
   });
 
   it('restores the cursor when the notation does not match', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('first-valid(red,)'),
     );
 

@@ -1,6 +1,6 @@
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { consumeCustomIdent } from './custom-ident';
@@ -23,8 +23,8 @@ export function parseDashedIdent(
 }
 
 export function consumeDashedIdent(
-  c: ComponentCursor,
-): TryComponentConsumerResult<DashedIdentValue> {
+  c: TokenCursor,
+): TryConsumerResult<DashedIdentValue> {
   return dashedIdentConsumer(c);
 }
 

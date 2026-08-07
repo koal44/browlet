@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
@@ -1946,7 +1946,7 @@ describe('calc', () => {
 
   it('does not advance after rejecting aggregate calculation complexity', () => {
     const input = `${'('.repeat(64)}1${')'.repeat(64)}`;
-    const cursor = new ComponentCursor(
+    const cursor = new TokenCursor(
       parseListOfComponentValues(`calc(${input}) trailing`),
     );
     const consume = createMathValueConsumer({ expectedType: 'number' });

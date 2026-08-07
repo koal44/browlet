@@ -2,8 +2,8 @@ import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -38,8 +38,8 @@ export function parseFrequency(
 }
 
 export function consumeFrequency(
-  c: ComponentCursor,
-): TryComponentConsumerResult<FrequencyLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<FrequencyLiteral> {
   return frequencyConsumer(c);
 }
 
@@ -53,7 +53,7 @@ export type FrequencyConsumerOptions = {
 
 export function createFrequencyConsumer(
   options: FrequencyConsumerOptions = {},
-): TryComponentConsumer<FrequencyLiteral> {
+): TryConsumer<FrequencyLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

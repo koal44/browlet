@@ -1,6 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import {
-  BlockKind, serializeComponentValues, type ComponentValue,
+  isComponentBlock, isFunctionBlock, serializeComponentValues, type ComponentValue,
 } from '../syntax/component-value';
 import type { ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
@@ -39,9 +39,9 @@ export function containsSubstitutionFunction(
   components: readonly ComponentValue[],
 ): boolean {
   for (const component of components) {
-    if (component.type !== 'block') continue;
+    if (!isComponentBlock(component)) continue;
 
-    if (component.block === BlockKind.Function) {
+    if (isFunctionBlock(component)) {
       const name = asciiLower(component.name);
 
       if (

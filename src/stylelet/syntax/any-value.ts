@@ -1,7 +1,9 @@
-import { type ComponentCursor, type TryComponentConsumerResult } from './component-cursor';
-import { type BlockKind, type ComponentValue, type PreservedToken, type SimpleBlockKind } from './component-value';
+import { type TokenCursor, type TryConsumerResult } from './token-cursor';
+import {
+  type ComponentValue, type PreservedToken, type SimpleBlockKind, isComponentBlock,
+} from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
-import { TokenKind, type StaticToken } from './tokens';
+import { TokenKind, type StaticToken, type Token } from './tokens';
 
 /*
  * <any-value>
@@ -16,8 +18,8 @@ export type AnyValueComponents = [AnyValueComponent, ...AnyValueComponent[]];
 
 export type AnyValueComponent =
   | AnyValueToken
-  | { type: 'block'; block: SimpleBlockKind; value: AnyValueContents; }
-  | { type: 'block'; block: BlockKind.Function; name: string; value: AnyValueContents; };
+  | { type: SimpleBlockKind; value: AnyValueContents; }
+  | { type: TokenKind.FunctionBlock; name: string; value: AnyValueContents; };
 
 type AnyValueToken = Exclude<PreservedToken, InvalidAnyValueToken>;
 export type AnyValueContents = AnyValueComponent[];
@@ -37,8 +39,8 @@ export function parseAnyValue(input: ParserInput): AnyValue | null {
 }
 
 export function consumeAnyValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AnyValue> {
+  c: TokenCursor,
+): TryConsumerResult<AnyValue> {
   const first = c.peek();
 
   if (!isAnyValueComponent(first)) return null;
@@ -71,20 +73,19 @@ export function isAnyValueContents(
 }
 
 function isAnyValueComponent(
-  component: ComponentValue | null,
+  component: Token,
 ): component is AnyValueComponent {
-  if (component === null) return false;
-
-  if (component.type === 'block') {
+  if (isComponentBlock(component)) {
     return isAnyValueContents(component.value);
   }
 
-  switch (component.kind) {
+  switch (component.type) {
     case TokenKind.BadString:
     case TokenKind.BadUrl:
     case TokenKind.RightParen:
     case TokenKind.RightBracket:
     case TokenKind.RightBrace:
+    case TokenKind.EOF:
       return false;
 
     default:

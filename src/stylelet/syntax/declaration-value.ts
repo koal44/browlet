@@ -1,6 +1,6 @@
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from './component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from './token-cursor';
 import { isDelimToken, isTokenKind, type ComponentValue } from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
 import { TokenKind, type StaticToken } from './tokens';
@@ -37,8 +37,8 @@ export function parseDeclarationValue(input: ParserInput): DeclarationValue | nu
 
 // <declaration-value>
 export function consumeDeclarationValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<DeclarationValue> {
+  c: TokenCursor,
+): TryConsumerResult<DeclarationValue> {
   const start = c.pos();
   const value = consumeAnyValue(c);
 
@@ -64,13 +64,13 @@ export function parseOptionalDeclarationValue(
 
 // <declaration-value>?
 export function consumeOptionalDeclarationValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<OptionalDeclarationValue> {
+  c: TokenCursor,
+): TryConsumerResult<OptionalDeclarationValue> {
   const start = c.pos();
   const value = consumeAnyValue(c);
 
   if (value === null) {
-    return c.peek() === null
+    return c.peek().type === TokenKind.EOF
       ? { type: 'declaration-value', components: [] }
       : null;
   }

@@ -1,6 +1,6 @@
 import { consumeFunctionBlock, consumeParensBlock } from '../syntax/component-consumers';
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import { type FunctionBlock, type ParensBlock } from '../syntax/component-value';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { parseAnyValue, type AnyValue } from '../syntax/any-value';
@@ -25,8 +25,8 @@ export function parseGeneralEnclosed(input: ParserInput): GeneralEnclosedValue |
 }
 
 export function consumeGeneralEnclosed(
-  c: ComponentCursor,
-): TryComponentConsumerResult<GeneralEnclosedValue> {
+  c: TokenCursor,
+): TryConsumerResult<GeneralEnclosedValue> {
   return generalEnclosedConsumer(c);
 }
 

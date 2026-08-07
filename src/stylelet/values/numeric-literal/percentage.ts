@@ -1,8 +1,8 @@
 import { consumePercentageToken } from '../../syntax/component-consumers';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
 
@@ -27,8 +27,8 @@ export function parsePercentage(
 }
 
 export function consumePercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PercentageLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<PercentageLiteral> {
   return percentageConsumer(c);
 }
 
@@ -39,7 +39,7 @@ export type PercentageConsumerOptions = {
 
 export function createPercentageConsumer(
   options: PercentageConsumerOptions = {},
-): TryComponentConsumer<PercentageLiteral> {
+): TryConsumer<PercentageLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

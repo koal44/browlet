@@ -4,8 +4,8 @@ import {
   consumePlusDelim, consumeStringToken,
 } from '../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { serializeComponentValues, serializeCssIdentifier } from '../syntax/component-value';
 import {
   adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia,
@@ -133,7 +133,7 @@ const syntaxTypeDefs = {
 type DefinedSyntaxTypeName = keyof typeof syntaxTypeDefs;
 
 type DefValue<Definition> =
-  Definition extends { consume: TryComponentConsumer<infer Value>; }
+  Definition extends { consume: TryConsumer<infer Value>; }
     ? Value
     : never;
 
@@ -142,14 +142,14 @@ export function parseSyntax(input: ParserInput): SyntaxValue | null {
 }
 
 export function consumeSyntax(
-  c: ComponentCursor,
-): TryComponentConsumerResult<SyntaxValue> {
+  c: TokenCursor,
+): TryConsumerResult<SyntaxValue> {
   return syntaxConsumer(c);
 }
 
 export function createSyntaxConsumer(
   syntax: SyntaxValue,
-): TryComponentConsumer<ParsedSyntaxValue> {
+): TryConsumer<ParsedSyntaxValue> {
   if (syntax.type === 'universal-syntax') {
     return universalSyntaxValueConsumer;
   }
@@ -435,8 +435,8 @@ function serializeParsedSyntaxType(value: ParsedSyntaxType): string {
 
 function createSyntaxComponentConsumer(
   component: SyntaxComponent,
-): TryComponentConsumer<ParsedSyntaxValue> {
-  const consume: TryComponentConsumer<ParsedSyntaxComponent> =
+): TryConsumer<ParsedSyntaxValue> {
+  const consume: TryConsumer<ParsedSyntaxComponent> =
     component.type === 'syntax-type'
       ? createSyntaxTypeConsumer(component.name)
       : adaptConsumer(
@@ -475,7 +475,7 @@ function createSyntaxComponentConsumer(
 
 function createSyntaxTypeConsumer(
   name: SyntaxTypeName,
-): TryComponentConsumer<ParsedSyntaxType> {
+): TryConsumer<ParsedSyntaxType> {
   switch (name) {
     case 'length':
       return adaptConsumer(syntaxTypeDefs.length.consume, (value): ParsedSyntaxType => ({

@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import type { ValueStage } from '../value-processing/stage';
 import type { ValueDefinition } from '../value-processing/definition';
@@ -37,14 +37,14 @@ export function parseInteger(
 }
 
 export function consumeInteger(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IntegerValue> {
+  c: TokenCursor,
+): TryConsumerResult<IntegerValue> {
   return integerConsumer(c);
 }
 
 export function createIntegerConsumer(
   options: IntegerConsumerOptions = {},
-): TryComponentConsumer<IntegerValue> {
+): TryConsumer<IntegerValue> {
   const literalConsumer = createIntegerLiteralConsumer(options);
   const range = integerRange(options);
 

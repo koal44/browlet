@@ -1,9 +1,4 @@
-import { type BraceBlock, type ComponentValue } from './component-value';
-
-export enum RuleKind {
-  At = 1,
-  Qualified,
-}
+import { type ComponentValue } from './component-value';
 
 export type StyleSheet = {
   rules: Rule[];
@@ -11,29 +6,46 @@ export type StyleSheet = {
 
 export type Rule =
   | AtRule
-  | QualifiedRule;
+  | QualifiedRule
+  | NestedDeclarationsRule;
 
-export type AtRule = {
-  kind: RuleKind.At;
+export type AtRule =
+  | StatementAtRule
+  | BlockAtRule;
+
+export type StatementAtRule = {
+  kind: 'statement-at-rule';
   name: string;
   prelude: ComponentValue[];
-  block: BraceBlock | null;
+};
+
+export type BlockAtRule = {
+  kind: 'block-at-rule';
+  name: string;
+  prelude: ComponentValue[];
+  block: {
+    declarations: Declaration[];
+    rules: Rule[];
+  };
 };
 
 export type QualifiedRule = {
-  kind: RuleKind.Qualified;
+  kind: 'qualified-rule';
   prelude: ComponentValue[];
-  block: BraceBlock;
+  declarations: Declaration[];
+  rules: Rule[];
 };
+
+export type NestedDeclarationsRule = {
+  kind: 'nested-declarations-rule';
+  declarations: Declaration[];
+};
+
+export type BlockContents = Array<Rule | Declaration[]>;
 
 export type Declaration = {
   name: string;
   value: ComponentValue[];
   important: boolean;
+  originalText?: string;
 };
-
-export type StyleBlockContents = StyleBlockItem[];
-export type StyleBlockItem = Declaration | Rule;
-
-export type DeclarationOrAtRule = Declaration | AtRule;
-export type DeclarationOrAtRuleList = DeclarationOrAtRule[];

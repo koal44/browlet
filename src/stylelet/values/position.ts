@@ -1,5 +1,5 @@
 import { mapTuple } from '../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia,
 } from '../syntax/component-grammar';
@@ -148,8 +148,8 @@ export function parsePosition(
 }
 
 export function consumePosition(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PositionValue> {
+  c: TokenCursor,
+): TryConsumerResult<PositionValue> {
   return positionConsumer(c);
 }
 
@@ -158,7 +158,7 @@ export function consumePosition(
 // =============================================================================
 
 // <position-one> = left | center | right | top | bottom | x-start | x-end | y-start | y-end | block-start | block-end | inline-start | inline-end | <length-percentage>
-const positionOneConsumer: TryComponentConsumer<PositionOne> = oneOf(
+const positionOneConsumer: TryConsumer<PositionOne> = oneOf(
   [
     one(createKeywordConsumer(
       'left', 'center', 'right', 'top', 'bottom',
@@ -175,7 +175,7 @@ const positionOneConsumer: TryComponentConsumer<PositionOne> = oneOf(
 );
 
 // <position-two> = [ [ left | center | right | x-start | x-end ] && [ top | center | bottom | y-start | y-end ] | [ left | center | right | x-start | x-end | <length-percentage> ] [ top | center | bottom | y-start | y-end | <length-percentage> ] | [ block-start | center | block-end ] && [ inline-start | center | inline-end ] | [ start | center | end ]{2} ]
-const positionTwoConsumer: TryComponentConsumer<PositionTwo> = oneOf(
+const positionTwoConsumer: TryConsumer<PositionTwo> = oneOf(
   // Expand the unordered conjunctions because both operands can consume
   // `center`: H && V = H V | V H, and B && I = B I | I B.
   [
@@ -247,7 +247,7 @@ const positionTwoConsumer: TryComponentConsumer<PositionTwo> = oneOf(
 );
 
 // <position-four> = [ [ [ left | right | x-start | x-end ] <length-percentage> ] && [ [ top | bottom | y-start | y-end ] <length-percentage> ] | [ [ block-start | block-end ] <length-percentage> ] && [ [ inline-start | inline-end ] <length-percentage> ] | [ [ start | end ] <length-percentage> ]{2} ]
-const positionFourConsumer: TryComponentConsumer<PositionFour> = oneOf(
+const positionFourConsumer: TryConsumer<PositionFour> = oneOf(
   [
     one(allOf(
       [
@@ -322,7 +322,7 @@ const positionFourConsumer: TryComponentConsumer<PositionFour> = oneOf(
 );
 
 // <position> = <position-one> | <position-two> | <position-four>
-const positionConsumer: TryComponentConsumer<PositionValue> = oneOf(
+const positionConsumer: TryConsumer<PositionValue> = oneOf(
   [
     one(positionFourConsumer),
     one(positionTwoConsumer),

@@ -1,7 +1,7 @@
 import { withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import {
   canonicalizeTime, serializeTime, consumeTime, type CanonicalTimeLiteral,
@@ -31,8 +31,8 @@ export function parseTimePercentage(
 }
 
 export function consumeTimePercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<TimePercentageLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<TimePercentageLiteral> {
   return timePercentageConsumer(c);
 }
 
@@ -41,7 +41,7 @@ export type TimePercentageConsumerOptions =
 
 export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
-): TryComponentConsumer<TimePercentageLiteral> {
+): TryConsumer<TimePercentageLiteral> {
   return createDimensionPercentageConsumer(
     consumeTime,
     'Time-percentage',

@@ -1,6 +1,6 @@
 import { clamp } from '../../shared/util';
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
 import type { MathContext } from './math-value';
@@ -27,8 +27,8 @@ export function parseOpacityValue(
 }
 
 export function consumeOpacityValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<OpacityValue> {
+  c: TokenCursor,
+): TryConsumerResult<OpacityValue> {
   return opacityValueConsumer(c);
 }
 

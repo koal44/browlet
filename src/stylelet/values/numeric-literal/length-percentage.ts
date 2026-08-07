@@ -1,7 +1,7 @@
 import { withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import {
   serializeLength, consumeLength, tryResolveLength, type CanonicalLengthLiteral,
@@ -31,8 +31,8 @@ export function parseLengthPercentage(
 }
 
 export function consumeLengthPercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LengthPercentageLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<LengthPercentageLiteral> {
   return lengthPercentageConsumer(c);
 }
 
@@ -41,7 +41,7 @@ export type LengthPercentageConsumerOptions =
 
 export function createLengthPercentageConsumer(
   options: LengthPercentageConsumerOptions = {},
-): TryComponentConsumer<LengthPercentageLiteral> {
+): TryConsumer<LengthPercentageLiteral> {
   return createDimensionPercentageConsumer(
     consumeLength,
     'Length-percentage',

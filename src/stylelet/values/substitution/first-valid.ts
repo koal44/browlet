@@ -5,8 +5,8 @@ import {
 } from '../../syntax/component-value';
 import { commaRepeat, withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { TokenKind } from '../../syntax/tokens';
 import {
@@ -23,8 +23,8 @@ export function parseFirstValid(input: ParserInput): FirstValidValue | null {
 }
 
 export function consumeFirstValid(
-  c: ComponentCursor,
-): TryComponentConsumerResult<FirstValidValue> {
+  c: TokenCursor,
+): TryConsumerResult<FirstValidValue> {
   return firstValidConsumer(c);
 }
 

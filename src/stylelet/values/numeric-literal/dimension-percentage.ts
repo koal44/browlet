@@ -1,5 +1,5 @@
 import { one, oneOf } from '../../syntax/component-grammar';
-import { type TryComponentConsumer } from '../../syntax/component-cursor';
+import { type TryConsumer } from '../../syntax/token-cursor';
 import {
   addDimensions, interpolateDimensions, type AnyDimensionLiteral,
 } from './dimension';
@@ -28,10 +28,10 @@ export type DimensionPercentageConsumerOptions = {
 export function createDimensionPercentageConsumer<
   Dimension extends AnyDimensionLiteral,
 >(
-  consumeDimension: TryComponentConsumer<Dimension>,
+  consumeDimension: TryConsumer<Dimension>,
   productionName: string,
   options: DimensionPercentageConsumerOptions = {},
-): TryComponentConsumer<DimensionPercentageLiteral<Dimension>> {
+): TryConsumer<DimensionPercentageLiteral<Dimension>> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

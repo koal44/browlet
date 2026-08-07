@@ -1,6 +1,6 @@
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import type { ValueStage } from '../value-processing/stage';
@@ -33,8 +33,8 @@ export function parseImage(
 }
 
 export function consumeImage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ImageValue> {
+  c: TokenCursor,
+): TryConsumerResult<ImageValue> {
   return imageConsumer(c);
 }
 
@@ -51,7 +51,7 @@ export function serializeImage(value: ImageValue): string {
 }
 
 // <image> = <url> | <gradient>
-const imageConsumer: TryComponentConsumer<ImageValue> = oneOf(
+const imageConsumer: TryConsumer<ImageValue> = oneOf(
   [
     one(consumeUrl),
     one(consumeGradient),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
@@ -168,7 +168,7 @@ describe('number values', () => {
   });
 
   it('rejects a math function with a non-number result', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(1px)'),
     );
 
@@ -178,8 +178,8 @@ describe('number values', () => {
 
   it('applies consumer ranges to literals and math functions at their stages', () => {
     const consume = createNumberConsumer({ min: 0, max: 1 });
-    const literal = new ComponentCursor(parseListOfComponentValues('2'));
-    const specifiedMath = new ComponentCursor(
+    const literal = new TokenCursor(parseListOfComponentValues('2'));
+    const specifiedMath = new TokenCursor(
       parseListOfComponentValues('calc(2)'),
     );
     const math = parseNumber('calc(2)')!;
@@ -199,7 +199,7 @@ describe('number values', () => {
 
   it('does not mutate the surrounding calculation context', () => {
     const context = { marker: true } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(1 + 2)'),
       { context },
     );
@@ -248,7 +248,7 @@ describe('number values', () => {
 describe('angle values', () => {
   it('accepts angle-valued math and rejects other categories', () => {
     const value = parseAngle('min(1deg, 2deg)');
-    const other = new ComponentCursor(
+    const other = new TokenCursor(
       parseListOfComponentValues('calc(1s)'),
     );
 
@@ -285,7 +285,7 @@ describe('angle values', () => {
 describe('frequency values', () => {
   it('accepts frequency-valued math and rejects other categories', () => {
     const value = parseFrequency('min(1hz, 2hz)');
-    const other = new ComponentCursor(
+    const other = new TokenCursor(
       parseListOfComponentValues('calc(1s)'),
     );
 
@@ -323,7 +323,7 @@ describe('frequency values', () => {
 describe('length values', () => {
   it('accepts length-valued math and rejects other categories', () => {
     const value = parseLength('min(1px, 2px)');
-    const other = new ComponentCursor(
+    const other = new TokenCursor(
       parseListOfComponentValues('calc(1deg)'),
     );
 
@@ -358,7 +358,7 @@ describe('length values', () => {
 
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createLengthConsumer({ min: 0 });
-    const specified = new ComponentCursor(
+    const specified = new TokenCursor(
       parseListOfComponentValues('calc(-1px)'),
     );
     const math = parseLength('calc(-1px)')!;
@@ -377,7 +377,7 @@ describe('length values', () => {
 describe('resolution values', () => {
   it('accepts resolution-valued math and rejects other categories', () => {
     const value = parseResolution('min(1dppx, 2dppx)');
-    const other = new ComponentCursor(
+    const other = new TokenCursor(
       parseListOfComponentValues('calc(1hz)'),
     );
 
@@ -436,7 +436,7 @@ describe('resolution values', () => {
 describe('time values', () => {
   it('accepts time-valued math and rejects other categories', () => {
     const value = parseTime('min(1s, 2s)');
-    const other = new ComponentCursor(
+    const other = new TokenCursor(
       parseListOfComponentValues('calc(1hz)'),
     );
 
@@ -520,7 +520,7 @@ describe('integer values', () => {
 
   it('rejects non-number math results', () => {
     for (const input of ['calc(1px)', 'calc(1%)']) {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
 
       expect(consumeInteger(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -529,8 +529,8 @@ describe('integer values', () => {
 
   it('applies ranges to literals and math functions at their stages', () => {
     const consume = createIntegerConsumer({ min: 0, max: 2 });
-    const literal = new ComponentCursor(parseListOfComponentValues('3'));
-    const specifiedMath = new ComponentCursor(
+    const literal = new TokenCursor(parseListOfComponentValues('3'));
+    const specifiedMath = new TokenCursor(
       parseListOfComponentValues('calc(3)'),
     );
     const math = parseInteger('calc(3)')!;
@@ -606,7 +606,7 @@ describe('percentage values', () => {
 
   it('rejects non-percentage math results', () => {
     for (const input of ['calc(1)', 'calc(1px)']) {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
 
       expect(consumePercentage(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -617,7 +617,7 @@ describe('percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(25%)'),
       { context },
     );
@@ -633,8 +633,8 @@ describe('percentage values', () => {
 
   it('applies ranges to literals and math functions at their stages', () => {
     const consume = createPercentageConsumer({ min: 0, max: 100 });
-    const literal = new ComponentCursor(parseListOfComponentValues('125%'));
-    const specifiedMath = new ComponentCursor(
+    const literal = new TokenCursor(parseListOfComponentValues('125%'));
+    const specifiedMath = new TokenCursor(
       parseListOfComponentValues('calc(125%)'),
     );
     const math = parsePercentage('calc(125%)')!;
@@ -729,7 +729,7 @@ describe('angle-percentage values', () => {
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10px + 25%)'),
     );
 
@@ -741,7 +741,7 @@ describe('angle-percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10deg + 25%)'),
       { context },
     );
@@ -786,7 +786,7 @@ describe('angle-percentage values', () => {
 
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createAnglePercentageConsumer({ min: 0 });
-    const specified = new ComponentCursor(
+    const specified = new TokenCursor(
       parseListOfComponentValues('calc(-10deg)'),
     );
     const math = parseAnglePercentage('calc(-10deg)')!;
@@ -865,7 +865,7 @@ describe('length-percentage values', () => {
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10deg + 25%)'),
     );
 
@@ -877,7 +877,7 @@ describe('length-percentage values', () => {
     const context = {
       percentHint: 'angle',
     } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10px + 25%)'),
       { context },
     );
@@ -924,7 +924,7 @@ describe('length-percentage values', () => {
 
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createLengthPercentageConsumer({ min: 0 });
-    const specified = new ComponentCursor(
+    const specified = new TokenCursor(
       parseListOfComponentValues('calc(-10px)'),
     );
     const math = parseLengthPercentage('calc(-10px)')!;
@@ -1002,7 +1002,7 @@ describe('frequency-percentage values', () => {
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10s + 25%)'),
     );
 
@@ -1014,7 +1014,7 @@ describe('frequency-percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10hz + 25%)'),
       { context },
     );
@@ -1061,7 +1061,7 @@ describe('frequency-percentage values', () => {
 
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createFrequencyPercentageConsumer({ min: 0 });
-    const specified = new ComponentCursor(
+    const specified = new TokenCursor(
       parseListOfComponentValues('calc(-10hz)'),
     );
     const math = parseFrequencyPercentage('calc(-10hz)')!;
@@ -1137,7 +1137,7 @@ describe('time-percentage values', () => {
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10hz + 25%)'),
     );
 
@@ -1149,7 +1149,7 @@ describe('time-percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('calc(10s + 25%)'),
       { context },
     );
@@ -1196,7 +1196,7 @@ describe('time-percentage values', () => {
 
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createTimePercentageConsumer({ min: 0 });
-    const specified = new ComponentCursor(
+    const specified = new TokenCursor(
       parseListOfComponentValues('calc(-10s)'),
     );
     const math = parseTimePercentage('calc(-10s)')!;

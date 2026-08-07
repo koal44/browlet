@@ -1,5 +1,5 @@
 import {
-  type ComponentValue, BlockKind, serializeCssIdentifier, serializeCssString,
+  type ComponentValue, serializeCssIdentifier, serializeCssString,
 } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
@@ -7,10 +7,10 @@ import {
   it,
 } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
-  stringToken,
+  stringToken, TokenKind,
 } from '../../../../src/stylelet/syntax/tokens';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
 import { parseAnimationNameValue } from '../../../../src/stylelet/props/animation-name';
@@ -104,14 +104,14 @@ describe('keyword', () => {
     const consumeAuto = createKeywordConsumer('auto');
     const consumeStrategy = createKeywordConsumer('nearest', 'up', 'to-zero');
 
-    expect(consumeAuto(new ComponentCursor(parseListOfComponentValues('AUTO'))))
+    expect(consumeAuto(new TokenCursor(parseListOfComponentValues('AUTO'))))
       .toBe('auto');
-    expect(consumeStrategy(new ComponentCursor(parseListOfComponentValues('To-ZeRo'))))
+    expect(consumeStrategy(new TokenCursor(parseListOfComponentValues('To-ZeRo'))))
       .toBe('to-zero');
   });
 
   it('leaves component trivia to the caller', () => {
-    const cursor = new ComponentCursor(parseListOfComponentValues(' auto'));
+    const cursor = new TokenCursor(parseListOfComponentValues(' auto'));
 
     expect(createKeywordConsumer('auto')(cursor)).toBeNull();
     expect(cursor.pos()).toBe(0);
@@ -143,7 +143,7 @@ describe('CSS-wide value', () => {
 
   it('consumes one CSS-wide keyword without requiring the end of input', () => {
     const components = parseListOfComponentValues('inherit initial');
-    const c = new ComponentCursor(components);
+    const c = new TokenCursor(components);
 
     expect(consumeCssWideValue(c)).toMatchObject({
       type: 'css-wide',
@@ -171,7 +171,7 @@ describe('any-value', () => {
 
   it('consumes the remaining nonempty component-value sequence', () => {
     const components = parseListOfComponentValues('a fn(b)');
-    const c = new ComponentCursor(components);
+    const c = new TokenCursor(components);
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
@@ -182,7 +182,7 @@ describe('any-value', () => {
 
   it('stops before a component that cannot belong to the production', () => {
     const components = parseListOfComponentValues('a)');
-    const c = new ComponentCursor(components);
+    const c = new TokenCursor(components);
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
@@ -193,8 +193,8 @@ describe('any-value', () => {
   });
 
   it('restores the cursor when its first component does not match', () => {
-    const empty = new ComponentCursor([]);
-    const invalid = new ComponentCursor(parseListOfComponentValues(') a'));
+    const empty = new TokenCursor([]);
+    const invalid = new TokenCursor(parseListOfComponentValues(') a'));
 
     expect(consumeAnyValue(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
@@ -244,7 +244,7 @@ describe('declaration-value', () => {
   it('consumes a nonempty declaration value', () => {
     const components = values('red 1px url(foo.png)');
 
-    expect(consumeDeclarationValue(new ComponentCursor(components))).toEqual({
+    expect(consumeDeclarationValue(new TokenCursor(components))).toEqual({
       type: 'declaration-value',
       components,
     });
@@ -259,7 +259,7 @@ describe('declaration-value', () => {
       type: 'declaration-value',
       components: [],
     });
-    expect(consumeOptionalDeclarationValue(new ComponentCursor([]))).toEqual({
+    expect(consumeOptionalDeclarationValue(new TokenCursor([]))).toEqual({
       type: 'declaration-value',
       components: [],
     });
@@ -275,7 +275,7 @@ describe('declaration-value', () => {
   });
 
   it('restores after consuming an invalid declaration value', () => {
-    const c = new ComponentCursor(values('a ! b'));
+    const c = new TokenCursor(values('a ! b'));
 
     expect(consumeDeclarationValue(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -530,8 +530,7 @@ describe('url-modifier', () => {
 
   it('parses unknown functional notation as a function block', () => {
     expect(parseUrlModifier('future-modifier(value)')).toEqual({
-      type: 'block',
-      block: BlockKind.Function,
+      type: TokenKind.FunctionBlock,
       name: 'future-modifier',
       value: [identToken('value')],
     });
@@ -582,7 +581,7 @@ describe('url-modifier', () => {
   });
 
   it('commits after recognizing a request modifier with invalid arguments', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('cross-origin(unknown)'),
     );
 
@@ -592,25 +591,23 @@ describe('url-modifier', () => {
 
   it('rejects unknown functional notation containing a bad token', () => {
     const components: ComponentValue[] = [{
-      type: 'block',
-      block: BlockKind.Function,
+      type: TokenKind.FunctionBlock,
       name: 'future-modifier',
       value: [BadStringToken],
     }];
 
     expect(parseUrlModifier(components)).toBeNull();
 
-    const c = new ComponentCursor(components);
+    const c = new TokenCursor(components);
     expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('consumes a URL modifier through the component grammar', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('future-modifier()'));
+    const c = new TokenCursor(parseListOfComponentValues('future-modifier()'));
 
     expect(consumeUrlModifier(c)).toEqual({
-      type: 'block',
-      block: BlockKind.Function,
+      type: TokenKind.FunctionBlock,
       name: 'future-modifier',
       value: [],
     });
@@ -618,7 +615,7 @@ describe('url-modifier', () => {
   });
 
   it('returns null without advancing for anything outside the modifier syntax', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1px'));
+    const c = new TokenCursor(parseListOfComponentValues('1px'));
 
     expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -629,13 +626,11 @@ describe('url', () => {
   it('preserves substitution in src() but not in url()', () => {
     expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
       {
-        type: 'block',
-        block: BlockKind.Function,
+        type: TokenKind.FunctionBlock,
         name: 'src',
         value: [
           {
-            type: 'block',
-            block: BlockKind.Function,
+            type: TokenKind.FunctionBlock,
             name: 'var',
             value: [identToken('--foo')],
           },
@@ -772,7 +767,7 @@ describe('url', () => {
   });
 
   it('commits after consuming a duplicate request URL modifier', () => {
-    const c = new ComponentCursor(parseListOfComponentValues([
+    const c = new TokenCursor(parseListOfComponentValues([
       'src("image.png"',
       'referrer-policy(no-referrer)',
       'unknown()',
@@ -785,15 +780,13 @@ describe('url', () => {
 
   it('rejects an unknown functional modifier containing a bad token', () => {
     expect(parseUrl([{
-      type: 'block',
-      block: BlockKind.Function,
+      type: TokenKind.FunctionBlock,
       name: 'url',
       value: [
         stringToken('image.png'),
         WhitespaceToken,
         {
-          type: 'block',
-          block: BlockKind.Function,
+          type: TokenKind.FunctionBlock,
           name: 'future-modifier',
           value: [BadStringToken],
         },
@@ -815,7 +808,7 @@ describe('url', () => {
   });
 
   it('commits after recognizing a function with invalid arguments', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('url("image.png" 1px)'),
     );
     const result = consumeUrl(c);
@@ -862,7 +855,7 @@ describe('integer', () => {
   });
 
   it('consumes one integer from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('12 13'));
+    const c = new TokenCursor(parseListOfComponentValues('12 13'));
 
     expect(consumeInteger(c)).toEqual({
       type: 'integer',
@@ -872,14 +865,14 @@ describe('integer', () => {
   });
 
   it('returns null without advancing for a non-integer number token', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1.0'));
+    const c = new TokenCursor(parseListOfComponentValues('1.0'));
 
     expect(consumeInteger(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it.each([-2, 0, 3])('includes the range boundary %d', (value) => {
-    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const c = new TokenCursor(parseListOfComponentValues(String(value)));
     const consume = createIntegerConsumer({ min: -2, max: 3 });
 
     expect(consume(c)).toEqual({
@@ -889,7 +882,7 @@ describe('integer', () => {
   });
 
   it.each([-3, 4])('returns null without advancing for out-of-range integer %d', (value) => {
-    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const c = new TokenCursor(parseListOfComponentValues(String(value)));
     const consume = createIntegerConsumer({ min: -2, max: 3 });
 
     expect(consume(c)).toBeNull();
@@ -993,7 +986,7 @@ describe('number', () => {
   });
 
   it('consumes one number from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1.25 2'));
+    const c = new TokenCursor(parseListOfComponentValues('1.25 2'));
 
     expect(consumeNumber(c)).toEqual({
       type: 'number',
@@ -1003,7 +996,7 @@ describe('number', () => {
   });
 
   it.each([-1.5, 0, 2.5])('includes the range boundary %d', (value) => {
-    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const c = new TokenCursor(parseListOfComponentValues(String(value)));
     const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
 
     expect(consume(c)).toEqual({
@@ -1013,7 +1006,7 @@ describe('number', () => {
   });
 
   it.each([-1.6, 2.6])('returns null without advancing for out-of-range number %d', (value) => {
-    const c = new ComponentCursor(parseListOfComponentValues(String(value)));
+    const c = new TokenCursor(parseListOfComponentValues(String(value)));
     const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
 
     expect(consume(c)).toBeNull();
@@ -1099,7 +1092,7 @@ describe('zero', () => {
   });
 
   it('consumes one literal zero from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('0.0 1'));
+    const c = new TokenCursor(parseListOfComponentValues('0.0 1'));
 
     expect(consumeZero(c)).toEqual({
       type: 'number',
@@ -1109,7 +1102,7 @@ describe('zero', () => {
   });
 
   it('returns null without advancing for a nonzero number', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1'));
+    const c = new TokenCursor(parseListOfComponentValues('1'));
 
     expect(consumeZero(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -1164,7 +1157,7 @@ describe('dimension', () => {
   });
 
   it('consumes one dimension from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1.25em 2s'));
+    const c = new TokenCursor(parseListOfComponentValues('1.25em 2s'));
 
     expect(consumeDimension(c)).toEqual({
       type: 'dimension',
@@ -1175,7 +1168,7 @@ describe('dimension', () => {
   });
 
   it('returns null without advancing for a non-dimension component', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1%'));
+    const c = new TokenCursor(parseListOfComponentValues('1%'));
 
     expect(consumeDimension(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -1281,7 +1274,7 @@ describe('percentage', () => {
   });
 
   it('consumes one percentage from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('12.5% 25%'));
+    const c = new TokenCursor(parseListOfComponentValues('12.5% 25%'));
 
     expect(consumePercentage(c)).toEqual({
       type: 'percentage',
@@ -1291,14 +1284,14 @@ describe('percentage', () => {
   });
 
   it('returns null without advancing for a non-percentage component', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('12.5'));
+    const c = new TokenCursor(parseListOfComponentValues('12.5'));
 
     expect(consumePercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it.each([-10, 0, 125])('includes the numeric range boundary %d', (value) => {
-    const c = new ComponentCursor(parseListOfComponentValues(`${value}%`));
+    const c = new TokenCursor(parseListOfComponentValues(`${value}%`));
     const consume = createPercentageConsumer({ min: -10, max: 125 });
 
     expect(consume(c)).toEqual({
@@ -1310,7 +1303,7 @@ describe('percentage', () => {
   it.each([-10.1, 125.1])(
     'returns null without advancing for out-of-range value %d',
     (value) => {
-      const c = new ComponentCursor(parseListOfComponentValues(`${value}%`));
+      const c = new TokenCursor(parseListOfComponentValues(`${value}%`));
       const consume = createPercentageConsumer({ min: -10, max: 125 });
 
       expect(consume(c)).toBeNull();
@@ -1386,7 +1379,7 @@ describe('length-percentage', () => {
   );
 
   it('consumes one length-percentage from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('25% 1px'));
+    const c = new TokenCursor(parseListOfComponentValues('25% 1px'));
 
     expect(consumeLengthPercentage(c)).toEqual({
       type: 'percentage',
@@ -1398,7 +1391,7 @@ describe('length-percentage', () => {
   it.each(['0', '1em', '150%'])(
     'applies a nonnegative range to either alternative for %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createLengthPercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1409,7 +1402,7 @@ describe('length-percentage', () => {
   it.each(['-1em', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createLengthPercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1513,7 +1506,7 @@ describe('angle-percentage', () => {
   );
 
   it('consumes one angle-percentage from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('25% 90deg'));
+    const c = new TokenCursor(parseListOfComponentValues('25% 90deg'));
 
     expect(consumeAnglePercentage(c)).toEqual({
       type: 'percentage',
@@ -1525,7 +1518,7 @@ describe('angle-percentage', () => {
   it.each(['1deg', '150%'])(
     'accepts the nonnegative angle-percentage %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createAnglePercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1536,7 +1529,7 @@ describe('angle-percentage', () => {
   it.each(['-1deg', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createAnglePercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1616,7 +1609,7 @@ describe('frequency-percentage', () => {
   );
 
   it('consumes one frequency-percentage from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('25% 1khz'));
+    const c = new TokenCursor(parseListOfComponentValues('25% 1khz'));
 
     expect(consumeFrequencyPercentage(c)).toEqual({
       type: 'percentage',
@@ -1628,7 +1621,7 @@ describe('frequency-percentage', () => {
   it.each(['1hz', '150%'])(
     'accepts the nonnegative frequency-percentage %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createFrequencyPercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1639,7 +1632,7 @@ describe('frequency-percentage', () => {
   it.each(['-1hz', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createFrequencyPercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1719,7 +1712,7 @@ describe('time-percentage', () => {
   );
 
   it('consumes one time-percentage from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('25% 1s'));
+    const c = new TokenCursor(parseListOfComponentValues('25% 1s'));
 
     expect(consumeTimePercentage(c)).toEqual({
       type: 'percentage',
@@ -1731,7 +1724,7 @@ describe('time-percentage', () => {
   it.each(['1s', '150%'])(
     'accepts the nonnegative time-percentage %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createTimePercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1742,7 +1735,7 @@ describe('time-percentage', () => {
   it.each(['-1s', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createTimePercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1840,7 +1833,7 @@ describe('ratio', () => {
   });
 
   it('consumes one ratio from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('3/2 4'));
+    const c = new TokenCursor(parseListOfComponentValues('3/2 4'));
 
     expect(consumeRatio(c)).toEqual({
       type: 'ratio',
@@ -1851,7 +1844,7 @@ describe('ratio', () => {
   });
 
   it('defaults an omitted denominator while leaving the next component', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('3 4'));
+    const c = new TokenCursor(parseListOfComponentValues('3 4'));
 
     expect(consumeRatio(c)).toEqual({
       type: 'ratio',
@@ -1989,7 +1982,7 @@ describe('length', () => {
   });
 
   it('consumes one length from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1.25em 2px'));
+    const c = new TokenCursor(parseListOfComponentValues('1.25em 2px'));
 
     expect(consumeLength(c)).toEqual({
       type: 'length',
@@ -2002,7 +1995,7 @@ describe('length', () => {
   it.each(['1s', '1', '1%'])(
     'returns null without advancing for %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
 
       expect(consumeLength(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -2016,7 +2009,7 @@ describe('length', () => {
   ] as const)(
     'accepts the nonnegative length %j without resolving it',
     (input, value, unit) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createLengthConsumer({ min: 0 });
 
       expect(consume(c)).toEqual({
@@ -2030,7 +2023,7 @@ describe('length', () => {
   it.each(['-1px', '-1em', '-1vw'])(
     'returns null without advancing for the negative length %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createLengthConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -2234,7 +2227,7 @@ describe('angle', () => {
   });
 
   it('consumes one angle from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('0.25turn 90deg'));
+    const c = new TokenCursor(parseListOfComponentValues('0.25turn 90deg'));
 
     expect(consumeAngle(c)).toEqual({
       type: 'angle',
@@ -2245,7 +2238,7 @@ describe('angle', () => {
   });
 
   it('returns null without advancing for a non-angle dimension', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1px'));
+    const c = new TokenCursor(parseListOfComponentValues('1px'));
 
     expect(consumeAngle(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -2256,7 +2249,7 @@ describe('angle', () => {
     `${Math.PI}rad`,
     '0.5turn',
   ])('accepts the angle %j within a canonical range', (input) => {
-    const c = new ComponentCursor(parseListOfComponentValues(input));
+    const c = new TokenCursor(parseListOfComponentValues(input));
     const consume = createAngleConsumer({ min: 90, max: 180 });
 
     expect(consume(c)).not.toBeNull();
@@ -2266,7 +2259,7 @@ describe('angle', () => {
   it.each(['0.2turn', '4rad'])(
     'returns null without advancing for the out-of-range angle %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createAngleConsumer({ min: 90, max: 180 });
 
       expect(consume(c)).toBeNull();
@@ -2345,7 +2338,7 @@ describe('time', () => {
   );
 
   it('consumes one time from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('250ms 1s'));
+    const c = new TokenCursor(parseListOfComponentValues('250ms 1s'));
 
     expect(consumeTime(c)).toEqual({
       type: 'time',
@@ -2356,7 +2349,7 @@ describe('time', () => {
   });
 
   it('returns null without advancing for a non-time dimension', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1deg'));
+    const c = new TokenCursor(parseListOfComponentValues('1deg'));
 
     expect(consumeTime(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -2365,7 +2358,7 @@ describe('time', () => {
   it.each(['500ms', '2s'])(
     'accepts the time %j within a canonical range',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createTimeConsumer({ min: 0.5, max: 2 });
 
       expect(consume(c)).not.toBeNull();
@@ -2376,7 +2369,7 @@ describe('time', () => {
   it.each(['499ms', '2.001s'])(
     'returns null without advancing for the out-of-range time %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createTimeConsumer({ min: 0.5, max: 2 });
 
       expect(consume(c)).toBeNull();
@@ -2443,7 +2436,7 @@ describe('frequency', () => {
   );
 
   it('consumes one frequency from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('1khz 500hz'));
+    const c = new TokenCursor(parseListOfComponentValues('1khz 500hz'));
 
     expect(consumeFrequency(c)).toEqual({
       type: 'frequency',
@@ -2456,7 +2449,7 @@ describe('frequency', () => {
   it.each(['1000hz', '2khz'])(
     'accepts the frequency %j within a canonical range',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createFrequencyConsumer({ min: 1000, max: 2000 });
 
       expect(consume(c)).not.toBeNull();
@@ -2465,7 +2458,7 @@ describe('frequency', () => {
   );
 
   it('returns null without advancing for an out-of-range frequency', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('0.5khz'));
+    const c = new TokenCursor(parseListOfComponentValues('0.5khz'));
     const consume = createFrequencyConsumer({ min: 1000 });
 
     expect(consume(c)).toBeNull();
@@ -2546,7 +2539,7 @@ describe('resolution', () => {
   );
 
   it('consumes one resolution from the current cursor position', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('2dppx 96dpi'));
+    const c = new TokenCursor(parseListOfComponentValues('2dppx 96dpi'));
 
     expect(consumeResolution(c)).toEqual({
       type: 'resolution',
@@ -2559,7 +2552,7 @@ describe('resolution', () => {
   it.each(['96dpi', '1dppx', '2x'])(
     'accepts the resolution %j within a canonical range',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createResolutionConsumer({ min: 1, max: 2 });
 
       expect(consume(c)).not.toBeNull();
@@ -2570,7 +2563,7 @@ describe('resolution', () => {
   it.each(['95dpi', '2.1x'])(
     'returns null without advancing for the out-of-range resolution %j',
     (input) => {
-      const c = new ComponentCursor(parseListOfComponentValues(input));
+      const c = new TokenCursor(parseListOfComponentValues(input));
       const consume = createResolutionConsumer({ min: 1, max: 2 });
 
       expect(consume(c)).toBeNull();

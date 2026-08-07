@@ -1,7 +1,7 @@
 import { withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import {
   canonicalizeAngle, serializeAngle, consumeAngle, type AngleLiteral,
@@ -31,14 +31,14 @@ export function parseAnglePercentage(
 }
 
 export function consumeAnglePercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AnglePercentageLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<AnglePercentageLiteral> {
   return anglePercentageConsumer(c);
 }
 
 export function createAnglePercentageConsumer(
   options: DimensionPercentageConsumerOptions = {},
-): TryComponentConsumer<AnglePercentageLiteral> {
+): TryConsumer<AnglePercentageLiteral> {
   return createDimensionPercentageConsumer(
     consumeAngle,
     'Angle-percentage',

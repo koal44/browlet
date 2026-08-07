@@ -1,4 +1,4 @@
-import { type ComponentCursor, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import { withTrivia } from '../syntax/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
 import type { ValueStage } from '../value-processing/stage';
@@ -39,8 +39,8 @@ export function parseCssWideValue<Value = unknown, Context = unknown>(
 }
 
 export function consumeCssWideValue<Value, Context>(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CssWideValue<Value, Context>> {
+  c: TokenCursor,
+): TryConsumerResult<CssWideValue<Value, Context>> {
   const keyword = cssWideKeywordConsumer(c);
 
   if (keyword === null) return null;

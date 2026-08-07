@@ -1,8 +1,8 @@
 import { consumeNumberToken } from '../../syntax/component-consumers';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssInteger } from './integer';
 
@@ -27,8 +27,8 @@ export function parseNumber(
 }
 
 export function consumeNumber(
-  c: ComponentCursor,
-): TryComponentConsumerResult<NumberLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<NumberLiteral> {
   return numberConsumer(c);
 }
 
@@ -39,7 +39,7 @@ export type NumberConsumerOptions = {
 
 export function createNumberConsumer(
   options: NumberConsumerOptions = {},
-): TryComponentConsumer<NumberLiteral> {
+): TryConsumer<NumberLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

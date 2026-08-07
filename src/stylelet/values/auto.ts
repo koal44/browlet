@@ -1,6 +1,6 @@
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { adaptConsumer } from '../syntax/component-grammar';
 import { createKeywordConsumer } from './keyword';
 
@@ -13,8 +13,8 @@ export type AutoValue = {
 };
 
 export function consumeAuto(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AutoValue> {
+  c: TokenCursor,
+): TryConsumerResult<AutoValue> {
   return autoConsumer(c);
 }
 
@@ -23,7 +23,7 @@ export function serializeAuto(value: AutoValue): string {
 }
 
 // auto
-const autoConsumer: TryComponentConsumer<AutoValue> = adaptConsumer(
+const autoConsumer: TryConsumer<AutoValue> = adaptConsumer(
   createKeywordConsumer('auto'),
   () => ({ type: 'auto' }),
 );

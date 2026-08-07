@@ -1,8 +1,8 @@
 import { consumeIdentToken } from '../syntax/component-consumers';
 import { serializeCssIdentifier } from '../syntax/component-value';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 
@@ -23,8 +23,8 @@ export function parseIdent(
 }
 
 export function consumeIdent(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IdentValue> {
+  c: TokenCursor,
+): TryConsumerResult<IdentValue> {
   return identConsumer(c);
 }
 
@@ -33,7 +33,7 @@ export function serializeIdent(value: IdentValue): string {
 }
 
 // <ident> = <ident-token>
-const identConsumer: TryComponentConsumer<IdentValue> = adaptConsumer(
+const identConsumer: TryConsumer<IdentValue> = adaptConsumer(
   consumeIdentToken,
   (token) => ({
     type: 'ident',

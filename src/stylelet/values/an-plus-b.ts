@@ -4,11 +4,11 @@ import {
   consumeMinusDelim, consumePlusDelim,
 } from '../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { one, oneOf, opt, adaptConsumer, sequenceOf, withTrivia } from '../syntax/component-grammar';
 import type { DimensionToken, IdentToken, NumberToken } from '../syntax/tokens';
-import { NumberTokenFlag, TokenKind } from '../syntax/tokens';
+import { NumericSign, NumberTokenFlag, TokenKind } from '../syntax/tokens';
 import { createKeywordConsumer } from './keyword';
 import { serializeCssNumber } from './numeric-literal/number';
 
@@ -34,8 +34,8 @@ export type AnPlusBValue = {
 };
 
 export function consumeAnPlusB(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AnPlusBValue> {
+  c: TokenCursor,
+): TryConsumerResult<AnPlusBValue> {
   return anPlusBConsumer(c);
 }
 
@@ -67,11 +67,9 @@ export function serializeAnPlusB(value: AnPlusBValue): string {
 
 function createIntegerConsumer(
   sign: 'any' | 'signed' | 'signless',
-): TryComponentConsumer<NumberToken> {
+): TryConsumer<NumberToken> {
   return adaptConsumer(consumeIntegerToken, (component) => {
-    const isSigned =
-      component.repr.startsWith('+') ||
-      component.repr.startsWith('-');
+    const isSigned = component.sign !== NumericSign.None;
 
     return (
       (sign === 'signed' && !isSigned) ||
@@ -84,7 +82,7 @@ function createIntegerConsumer(
 
 function createIntegerDimensionConsumer(
   unitPattern: RegExp,
-): TryComponentConsumer<DimensionToken> {
+): TryConsumer<DimensionToken> {
   return adaptConsumer(consumeDimensionToken, (component) =>
     (
       component.flag !== NumberTokenFlag.Integer ||
@@ -97,7 +95,7 @@ function createIntegerDimensionConsumer(
 
 function createIdentPatternConsumer(
   valuePattern: RegExp,
-): TryComponentConsumer<IdentToken> {
+): TryConsumer<IdentToken> {
   return adaptConsumer(consumeIdentToken, (component) =>
     valuePattern.test(asciiLower(component.value))
       ? component
@@ -138,7 +136,7 @@ const nDashConsumer = createKeywordConsumer('n-');
 const dashNDashConsumer = createKeywordConsumer('-n-');
 
 // <positive-n> = '+'?† n
-const positiveNConsumer: TryComponentConsumer<number> = sequenceOf(
+const positiveNConsumer: TryConsumer<number> = sequenceOf(
   [
     opt(consumePlusDelim),
     one(nConsumer),
@@ -147,7 +145,7 @@ const positiveNConsumer: TryComponentConsumer<number> = sequenceOf(
 );
 
 // <positive-ndash> = '+'?† n-
-const positiveNDashConsumer: TryComponentConsumer<number> = sequenceOf(
+const positiveNDashConsumer: TryConsumer<number> = sequenceOf(
   [
     opt(consumePlusDelim),
     one(nDashConsumer),
@@ -156,7 +154,7 @@ const positiveNDashConsumer: TryComponentConsumer<number> = sequenceOf(
 );
 
 // <n-head> = <n-dimension> | <positive-n> | -n
-const nHeadConsumer: TryComponentConsumer<number> = oneOf(
+const nHeadConsumer: TryConsumer<number> = oneOf(
   [
     one(nDimensionConsumer),
     one(positiveNConsumer),
@@ -170,7 +168,7 @@ const nHeadConsumer: TryComponentConsumer<number> = oneOf(
 );
 
 // <ndash-head> = <ndash-dimension> | <positive-ndash> | -n-
-const nDashHeadConsumer: TryComponentConsumer<number> = oneOf(
+const nDashHeadConsumer: TryConsumer<number> = oneOf(
   [
     one(nDashDimensionConsumer),
     one(positiveNDashConsumer),
@@ -184,7 +182,7 @@ const nDashHeadConsumer: TryComponentConsumer<number> = oneOf(
 );
 
 // <delimited-offset> = [ '+' | '-' ] <signless-integer>
-const delimitedOffsetConsumer: TryComponentConsumer<number> = sequenceOf(
+const delimitedOffsetConsumer: TryConsumer<number> = sequenceOf(
   [
     one(
       withTrivia(
@@ -205,7 +203,7 @@ const delimitedOffsetConsumer: TryComponentConsumer<number> = sequenceOf(
 );
 
 // <offset> = <signed-integer> | <delimited-offset>
-const offsetConsumer: TryComponentConsumer<number> = oneOf(
+const offsetConsumer: TryConsumer<number> = oneOf(
   [
     one(withTrivia(signedIntegerConsumer)),
     one(delimitedOffsetConsumer),
@@ -216,7 +214,7 @@ const offsetConsumer: TryComponentConsumer<number> = oneOf(
 );
 
 // <n-expression> = <n-head> <offset>?
-const nExpressionConsumer: TryComponentConsumer<AnPlusBValue> = sequenceOf(
+const nExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
   [
     one(nHeadConsumer),
     opt(offsetConsumer),
@@ -228,7 +226,7 @@ const nExpressionConsumer: TryComponentConsumer<AnPlusBValue> = sequenceOf(
 );
 
 // <ndash-expression> = <ndash-head> <signless-integer>
-const nDashExpressionConsumer: TryComponentConsumer<AnPlusBValue> = sequenceOf(
+const nDashExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
   [
     one(nDashHeadConsumer),
     one(withTrivia(signlessIntegerConsumer)),
@@ -240,7 +238,7 @@ const nDashExpressionConsumer: TryComponentConsumer<AnPlusBValue> = sequenceOf(
 );
 
 // <embedded-negative> = <ndashdigit-dimension> | '+'?† <ndashdigit-ident> | <dashndashdigit-ident>
-const embeddedNegativeConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
+const embeddedNegativeConsumer: TryConsumer<AnPlusBValue> = oneOf(
   [
     one(nDashDigitDimensionConsumer),
     one(
@@ -255,7 +253,7 @@ const embeddedNegativeConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
     one(dashNDashDigitIdentConsumer),
   ],
   ([component]) => {
-    if (component.kind === TokenKind.Dimension) {
+    if (component.type === TokenKind.Dimension) {
       return {
         a: component.value,
         b: -Number.parseInt(component.unit.slice(2), 10),
@@ -273,7 +271,7 @@ const embeddedNegativeConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
 );
 
 // <parity> = odd | even
-const parityConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
+const parityConsumer: TryConsumer<AnPlusBValue> = oneOf(
   [
     one(oddConsumer),
     one(evenConsumer),
@@ -284,13 +282,13 @@ const parityConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
 );
 
 // <integer-expression> = <integer>
-const integerExpressionConsumer: TryComponentConsumer<AnPlusBValue> = sequenceOf(
+const integerExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
   [one(integerConsumer)],
   ([[integer]]) => ({ a: 0, b: integer.value }),
 );
 
 // <a-n-plus-b-atomic> = <parity> | <integer-expression> | <embedded-negative>
-const anPlusBAtomicConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
+const anPlusBAtomicConsumer: TryConsumer<AnPlusBValue> = oneOf(
   [
     one(parityConsumer),
     one(integerExpressionConsumer),
@@ -304,7 +302,7 @@ const anPlusBAtomicConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
  *
  * <a-n-plus-b> = <a-n-plus-b-atomic> | <n-expression> | <ndash-expression>
  */
-const anPlusBConsumer: TryComponentConsumer<AnPlusBValue> = oneOf(
+const anPlusBConsumer: TryConsumer<AnPlusBValue> = oneOf(
   [
     one(anPlusBAtomicConsumer),
     one(nExpressionConsumer),

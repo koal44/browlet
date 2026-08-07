@@ -2,8 +2,8 @@ import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
 import { consumeDimensionToken, consumeNumberToken } from '../../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { one, oneOf, adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -103,8 +103,8 @@ export function parseLength(
 }
 
 export function consumeLength(
-  c: ComponentCursor,
-): TryComponentConsumerResult<LengthLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<LengthLiteral> {
   return lengthConsumer(c);
 }
 
@@ -118,7 +118,7 @@ export type LengthConsumerOptions = {
 
 export function createLengthConsumer(
   options: LengthConsumerOptions = {},
-): TryComponentConsumer<LengthLiteral> {
+): TryConsumer<LengthLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 
@@ -433,7 +433,7 @@ function isLengthUnit(value: string): value is LengthUnit {
 }
 
 // <length-dimension> = <dimension-token with a length unit>
-const lengthDimensionConsumer: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+const lengthDimensionConsumer: TryConsumer<LengthLiteral> = adaptConsumer(
   consumeDimensionToken,
   (component) => {
     const unit = lengthUnitFor(component.unit);
@@ -445,7 +445,7 @@ const lengthDimensionConsumer: TryComponentConsumer<LengthLiteral> = adaptConsum
 );
 
 // <zero> = <number-token with a value of 0>
-const unitlessZeroLengthConsumer: TryComponentConsumer<LengthLiteral> = adaptConsumer(
+const unitlessZeroLengthConsumer: TryConsumer<LengthLiteral> = adaptConsumer(
   consumeNumberToken,
   (component) => component.value === 0
     ? { type: 'length', value: 0, unit: '' }

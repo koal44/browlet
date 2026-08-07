@@ -1,28 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ComponentCursor, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../../../src/stylelet/syntax/component-cursor';
+  TokenCursor, type TryConsumer,
+  type TryConsumerResult,
+} from '../../../../src/stylelet/syntax/token-cursor';
 import { consumeWhitespace } from '../../../../src/stylelet/syntax/component-consumers';
 import { isIdentToken } from '../../../../src/stylelet/syntax/component-value';
 import { parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
-import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { EOFToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   allOf, any, commaRepeat, one, oneOf, opt, plus,
   adaptConsumer, recursive, repeat, required, requiredAllOf, requiredSequenceOf, requiredSomeOf,
   sequenceOf, someOf, withTrivia,
 } from '../../../../src/stylelet/syntax/component-grammar';
 
-const cursor = (css: string, context: unknown = undefined): ComponentCursor =>
-  new ComponentCursor(parseListOfComponentValues(css), { context });
+const cursor = (css: string, context: unknown = undefined): TokenCursor =>
+  new TokenCursor(parseListOfComponentValues(css), { context });
 
-const literalConsumer = <T extends string>(expected: T): TryComponentConsumer<T> => {
-  return (c: ComponentCursor): TryComponentConsumerResult<T> => {
+const literalConsumer = <T extends string>(expected: T): TryConsumer<T> => {
+  return (c: TokenCursor): TryConsumerResult<T> => {
     const start = c.pos();
     const comp = c.next();
 
     if (
-      comp === null ||
       !isIdentToken(comp) ||
       comp.value.toLowerCase() !== expected
     ) {
@@ -34,36 +33,36 @@ const literalConsumer = <T extends string>(expected: T): TryComponentConsumer<T>
   };
 };
 
-const valueLiteralConsumer = <T extends string>(expected: T): TryComponentConsumer<T> =>
+const valueLiteralConsumer = <T extends string>(expected: T): TryConsumer<T> =>
   withTrivia(literalConsumer(expected));
 
 const consumeA = valueLiteralConsumer('a');
 const consumeB = valueLiteralConsumer('b');
 const consumeC = valueLiteralConsumer('c');
 
-function expectDone(c: ComponentCursor): void {
+function expectDone(c: TokenCursor): void {
   consumeWhitespace(c);
-  expect(c.peek()).toBeNull();
+  expect(c.peek()).toBe(EOFToken);
 }
 
-function expectNextIdent(c: ComponentCursor, expected: string): void {
+function expectNextIdent(c: TokenCursor, expected: string): void {
   consumeWhitespace(c);
 
   const value = c.peek();
 
   expect(value).toMatchObject({
-    kind: TokenKind.Ident,
+    type: TokenKind.Ident,
     value: expected,
   });
 }
 
-function expectNextComma(c: ComponentCursor): void {
+function expectNextComma(c: TokenCursor): void {
   consumeWhitespace(c);
 
   const value = c.peek();
 
   expect(value).toMatchObject({
-    kind: TokenKind.Comma,
+    type: TokenKind.Comma,
   });
 }
 
@@ -214,7 +213,7 @@ describe('component value combinators', () => {
   });
 
   it('does not interleave inside grouped components', () => {
-    const groupedBC: TryComponentConsumer<readonly ['b', 'c']> = (c: ComponentCursor) => {
+    const groupedBC: TryConsumer<readonly ['b', 'c']> = (c: TokenCursor) => {
       const start = c.pos();
 
       const bv = consumeB(c);
@@ -556,7 +555,7 @@ describe('component value combinators', () => {
   });
 
   it('throws when a repeat parser succeeds without consuming input', () => {
-    const consumeEmpty: TryComponentConsumer<'empty'> = () => 'empty';
+    const consumeEmpty: TryConsumer<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
@@ -663,7 +662,7 @@ describe('component value combinators', () => {
   });
 
   it('throws when a comma-repeat parser succeeds without consuming input', () => {
-    const consumeEmpty: TryComponentConsumer<'empty'> = () => 'empty';
+    const consumeEmpty: TryConsumer<'empty'> = () => 'empty';
 
     const c = cursor('a');
 
@@ -970,14 +969,12 @@ describe('component grammar trivia ownership', () => {
 describe('selector separator trivia prototype', () => {
   type DemoCombinator = ' ' | '>' | '+' | '~' | '||';
 
-  const consumeExplicitCombinator: TryComponentConsumer<DemoCombinator> = (c) => {
+  const consumeExplicitCombinator: TryConsumer<DemoCombinator> = (c) => {
     const start = c.pos();
     const first = c.next();
 
     if (
-      first !== null &&
-      'kind' in first &&
-      first.kind === TokenKind.Delim
+      first.type === TokenKind.Delim
     ) {
       switch (first.value) {
         case '>':
@@ -989,9 +986,7 @@ describe('selector separator trivia prototype', () => {
           const second = c.next();
 
           if (
-            second !== null &&
-            'kind' in second &&
-            second.kind === TokenKind.Delim &&
+            second.type === TokenKind.Delim &&
             second.value === '|'
           ) {
             return '||';
@@ -1007,7 +1002,7 @@ describe('selector separator trivia prototype', () => {
     return null;
   };
 
-  const consumeSelectorSeparator: TryComponentConsumer<DemoCombinator> = (c) => {
+  const consumeSelectorSeparator: TryConsumer<DemoCombinator> = (c) => {
     const start = c.pos();
 
     const sawWhitespace = c.match(TokenKind.Whitespace);
@@ -1156,7 +1151,7 @@ describe('component combinator null projections', () => {
 
     const consume = sequenceOf(
       [one(consumeA)],
-      (): TryComponentConsumerResult<'accepted'> => null,
+      (): TryConsumerResult<'accepted'> => null,
     );
 
     expect(consume(c)).toBeNull();
@@ -1165,7 +1160,7 @@ describe('component combinator null projections', () => {
   });
 
   it('tries the next alternative when a oneOf projection returns null', () => {
-    const consumeFirstA: TryComponentConsumer<'first'> = (c) => {
+    const consumeFirstA: TryConsumer<'first'> = (c) => {
       const value = consumeA(c);
 
       if (value === null) {
@@ -1175,7 +1170,7 @@ describe('component combinator null projections', () => {
       return 'first';
     };
 
-    const consumeSecondA: TryComponentConsumer<'second'> = (c) => {
+    const consumeSecondA: TryConsumer<'second'> = (c) => {
       const value = consumeA(c);
 
       if (value === null) {
@@ -1211,7 +1206,7 @@ describe('component combinator null projections', () => {
         one(consumeA),
         one(consumeB),
       ],
-      (): TryComponentConsumerResult<'accepted'> => null,
+      (): TryConsumerResult<'accepted'> => null,
     );
 
     const c = cursor('b a');
@@ -1227,7 +1222,7 @@ describe('component combinator null projections', () => {
         one(consumeA),
         one(consumeB),
       ],
-      (): TryComponentConsumerResult<'accepted'> => null,
+      (): TryConsumerResult<'accepted'> => null,
     );
 
     const c = cursor('a');
@@ -1243,7 +1238,7 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'test' };
     const seen: unknown[] = [];
 
-    const consume: TryComponentConsumer<'a'> = (c) => {
+    const consume: TryConsumer<'a'> = (c) => {
       seen.push(c.context);
       return consumeA(c);
     };
@@ -1256,7 +1251,7 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'list-test' };
     const seen: unknown[] = [];
 
-    const consume: TryComponentConsumer<'a'> = (c) => {
+    const consume: TryConsumer<'a'> = (c) => {
       seen.push(c.context);
       return consumeA(c);
     };
@@ -1276,7 +1271,7 @@ describe('component grammar context plumbing', () => {
     const context = { mode: 'combinator-test' };
     const seen: unknown[] = [];
 
-    const consumeContextAwareA: TryComponentConsumer<'a'> = (c) => {
+    const consumeContextAwareA: TryConsumer<'a'> = (c) => {
       seen.push(c.context);
       return consumeA(c);
     };
@@ -1372,7 +1367,7 @@ const contextConsumer = <T extends string, R extends string>(
   expectedMode: string,
   literal: T,
   value: R,
-): TryComponentConsumer<R> => {
+): TryConsumer<R> => {
   return (c) => {
     const context = c.context as DemoContext;
 
@@ -1392,7 +1387,7 @@ const contextConsumer = <T extends string, R extends string>(
 
 const contextLeakingNullConsumer = (
   mode: string,
-): TryComponentConsumer<'leaked'> => {
+): TryConsumer<'leaked'> => {
   return (c) => {
     c.context = { mode };
     return null;
@@ -1558,7 +1553,7 @@ describe('component grammar contextAfter', () => {
       mode: 'base',
     };
 
-    const consumeContextMutatingA: TryComponentConsumer<string> = (c) => {
+    const consumeContextMutatingA: TryConsumer<string> = (c) => {
       const mode = (c.context as DemoContext).mode ?? 'missing';
 
       const value = consumeA(c);
@@ -1739,7 +1734,7 @@ describe('component grammar consumer projection', () => {
   it('passes consumer context to the projector and restores the outer context', () => {
     const outerContext = { mode: 'outer' };
     const innerContext = { mode: 'inner' };
-    const consumeWithInnerContext: TryComponentConsumer<'a'> = (c) => {
+    const consumeWithInnerContext: TryConsumer<'a'> = (c) => {
       const result = consumeA(c);
 
       if (result !== null) {
@@ -1802,7 +1797,7 @@ describe('recursive component grammar construction', () => {
 
   const createNestedConsumer = (
     onCreate: () => void = () => undefined,
-  ): TryComponentConsumer<NestedValue> => recursive((self) => {
+  ): TryConsumer<NestedValue> => recursive((self) => {
     onCreate();
 
     // <nested> = b <nested> | a

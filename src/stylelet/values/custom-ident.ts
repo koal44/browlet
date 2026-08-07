@@ -1,7 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
 import { CSS_WIDE_KEYWORDS } from './css-wide';
@@ -38,14 +38,14 @@ export function parseCustomIdent(
 }
 
 export function consumeCustomIdent(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CustomIdentValue> {
+  c: TokenCursor,
+): TryConsumerResult<CustomIdentValue> {
   return customIdentConsumer(c);
 }
 
 export function createCustomIdentConsumer(
   excluded: readonly string[] = [],
-): TryComponentConsumer<CustomIdentValue> {
+): TryConsumer<CustomIdentValue> {
   const excludedKeywords = new Set(excluded.map(asciiLower));
 
   return adaptConsumer(consumeIdent, ({ value }) => {

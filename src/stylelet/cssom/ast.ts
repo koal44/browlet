@@ -1,13 +1,10 @@
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
-import { serializeComponentValues, type BraceBlock, type ComponentValue } from '../syntax/component-value';
+import { serializeComponentValues, type ComponentValue } from '../syntax/component-value';
+import { parseStylesheet as parseSyntaxStylesheet } from '../syntax/parser';
 import {
-  parseStyleBlockContents, parseStylesheet as parseSyntaxStylesheet,
-} from '../syntax/parser';
-import {
-  RuleKind as RuleKindSyntax,
   type Declaration as SyntaxDeclaration,
   type QualifiedRule as SyntaxQualifiedRule, type Rule as SyntaxRule,
-  type StyleBlockItem as SyntaxStyleBlockItem, type StyleSheet as SyntaxStyleSheet,
+  type StyleSheet as SyntaxStyleSheet,
 } from '../syntax/rule';
 import { assertNever, requireDefined } from '../../shared/util';
 import { parseSelectorList, type SelectorList } from '../syntax/selector';
@@ -164,10 +161,12 @@ type BoxValue<T> = {
 
 function buildTopLevelRuleAst(rule: SyntaxRule): CssRuleAst | null {
   switch (rule.kind) {
-    case RuleKindSyntax.Qualified:
+    case 'qualified-rule':
       return buildStyleRuleAst(rule);
 
-    case RuleKindSyntax.At:
+    case 'statement-at-rule':
+    case 'block-at-rule':
+    case 'nested-declarations-rule':
       return null;
   }
 }
@@ -192,48 +191,51 @@ function buildStyleRuleAst(rule: SyntaxQualifiedRule): StyleRuleAst | null {
     selector: rule.prelude,
     selectorText,
     selectorList,
-    block: buildStyleBlockAst(rule.block),
+    block: buildStyleBlockAst(rule.declarations, rule.rules),
   };
 }
 
-function buildStyleBlockAst(block: BraceBlock): StyleBlockAst {
-  const syntaxItems = parseStyleBlockContents(block.value);
+function buildStyleBlockAst(
+  declarations: readonly SyntaxDeclaration[],
+  rules: readonly SyntaxRule[],
+): StyleBlockAst {
   const items: StyleBlockItemAst[] = [];
 
-  for (const item of syntaxItems) {
-    const ast = buildStyleBlockItemAst(item);
+  for (const declaration of declarations) {
+    const ast = buildDeclarationAst(declaration);
     if (ast !== null) items.push(ast);
   }
 
+  for (const rule of rules) {
+    switch (rule.kind) {
+      case 'qualified-rule':
+        items.push(buildNestedStyleRuleAst(rule));
+        break;
+
+      case 'nested-declarations-rule':
+        for (const declaration of rule.declarations) {
+          const ast = buildDeclarationAst(declaration);
+          if (ast !== null) items.push(ast);
+        }
+        break;
+
+      case 'statement-at-rule':
+      case 'block-at-rule':
+        break;
+
+      default: assertNever(rule);
+    }
+  }
+
   return { items };
-}
-
-function buildStyleBlockItemAst(item: SyntaxStyleBlockItem): StyleBlockItemAst | null {
-  if (isSyntaxDeclaration(item)) {
-    return buildDeclarationAst(item);
-  }
-
-  switch (item.kind) {
-    case RuleKindSyntax.At:
-      return null;
-
-    case RuleKindSyntax.Qualified:
-      return buildNestedStyleRuleAst(item);
-
-    default: assertNever(item);
-  }
 }
 
 function buildNestedStyleRuleAst(rule: SyntaxQualifiedRule): NestedStyleRuleAst {
   return {
     kind: BlockItemAstKind.NestedStyle,
     selector: rule.prelude,
-    block: buildStyleBlockAst(rule.block),
+    block: buildStyleBlockAst(rule.declarations, rule.rules),
   };
-}
-
-function isSyntaxDeclaration(item: SyntaxStyleBlockItem): item is SyntaxDeclaration {
-  return 'value' in item;
 }
 
 // =============================================================================

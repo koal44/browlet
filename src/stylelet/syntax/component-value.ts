@@ -1,129 +1,94 @@
 import {
-  type AtKeywordToken, type DelimToken, type DimensionToken, type HashToken, type IdentToken,
-  type NumberToken, type PercentageToken, type StaticToken, type StringToken, type UrlToken,
-  HashTokenFlag, TokenKind,
+  HashTokenFlag, NumericSign, NumberTokenFlag, TokenKind,
+  type BlockKind, type BraceBlock, type BracketBlock, type ComponentBlock, type ComponentValue,
+  type DelimToken, type FunctionBlock, type IdentToken, type ParensBlock,
+  type PreservedToken, type SimpleBlock, type SimpleBlockKind, type StaticToken, type Token,
 } from './tokens';
 
-export enum BlockKind {
-  Brace = 1,
-  Bracket,
-  Parens,
-  Function,
-}
-
-export type ComponentValue =
-  | PreservedToken
-  | ComponentBlock;
-
-export type PreservedToken =
-  | IdentToken
-  | AtKeywordToken
-  | HashToken
-  | StringToken
-  | StaticToken<TokenKind.BadString>
-  | UrlToken
-  | StaticToken<TokenKind.BadUrl>
-  | DelimToken
-  | NumberToken
-  | PercentageToken
-  | DimensionToken
-  | StaticToken<TokenKind.Whitespace>
-  | StaticToken<TokenKind.CDO>
-  | StaticToken<TokenKind.CDC>
-  | StaticToken<TokenKind.Colon>
-  | StaticToken<TokenKind.Semicolon>
-  | StaticToken<TokenKind.Comma>
-  | StaticToken<TokenKind.RightBracket>
-  | StaticToken<TokenKind.RightParen>
-  | StaticToken<TokenKind.RightBrace>;
-
-export type ComponentBlock =
-  | SimpleBlock<ComponentValue[]>
-  | FunctionBlock<ComponentValue[]>;
-
-export type SimpleBlock<Contents = ComponentValue[]> =
-  | BraceBlock<Contents>
-  | BracketBlock<Contents>
-  | ParensBlock<Contents>;
-
-export type SimpleBlockKind =
-  | BlockKind.Brace
-  | BlockKind.Bracket
-  | BlockKind.Parens;
-
-export type BraceBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Brace;
-  value: Contents;
+export {
+  type BlockKind,
+  type BraceBlock,
+  type BracketBlock,
+  type ComponentBlock,
+  type ComponentValue,
+  type FunctionBlock,
+  type ParensBlock,
+  type PreservedToken,
+  type SimpleBlock,
+  type SimpleBlockKind,
 };
 
-export type BracketBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Bracket;
-  value: Contents;
-};
-
-export type ParensBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Parens;
-  value: Contents;
-};
-
-export type FunctionBlock<Contents = ComponentValue[]> = {
-  type: 'block';
-  block: BlockKind.Function;
-  name: string;
-  value: Contents;
-};
-
-type PreservedTokenKind = PreservedToken['kind'];
+type PreservedTokenKind = PreservedToken['type'];
 
 export function isTokenKind<K extends PreservedTokenKind>(
-  component: ComponentValue | null,
+  component: Token,
   kind: K,
-): component is Extract<PreservedToken, { kind: K; }> {
-  return component !== null && component.type === 'token' && component.kind === kind;
+): component is Extract<PreservedToken, { type: K; }> {
+  return component.type === kind;
 }
 
-export function isIdentToken(component: ComponentValue | null): component is IdentToken {
+export function isIdentToken(component: Token): component is IdentToken {
   return isTokenKind(component, TokenKind.Ident);
 }
 
-export function isDelimToken(component: ComponentValue | null, delim: string): component is DelimToken {
+export function isDelimToken(component: Token, delim: string): component is DelimToken {
   return isTokenKind(component, TokenKind.Delim) && component.value === delim;
 }
 
 export function isWhitespaceToken(
-  component: ComponentValue | null,
+  component: Token,
 ): component is StaticToken<TokenKind.Whitespace> {
   return isTokenKind(component, TokenKind.Whitespace);
 }
 
-export function isComponentBlock(component: ComponentValue | null): component is ComponentBlock {
-  return component !== null && component.type === 'block';
+export function isComponentBlock(component: Token): component is ComponentBlock {
+  switch (component.type) {
+    case TokenKind.BraceBlock:
+    case TokenKind.BracketBlock:
+    case TokenKind.ParensBlock:
+    case TokenKind.FunctionBlock:
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+export function isComponentValue(token: Token): token is ComponentValue {
+  switch (token.type) {
+    case TokenKind.Function:
+    case TokenKind.LeftBrace:
+    case TokenKind.LeftBracket:
+    case TokenKind.LeftParen:
+    case TokenKind.EOF:
+      return false;
+
+    default:
+      return true;
+  }
 }
 
 export function isBlockKind<K extends BlockKind>(
-  component: ComponentValue | null,
-  block: K,
-): component is ComponentBlock & { block: K; } {
-  return isComponentBlock(component) && component.block === block;
+  component: Token,
+  kind: K,
+): component is Extract<ComponentBlock, { type: K; }> {
+  return component.type === kind;
 }
 
-export function isBraceBlock(component: ComponentValue | null): component is BraceBlock {
-  return isBlockKind(component, BlockKind.Brace);
+export function isBraceBlock(component: Token): component is BraceBlock {
+  return isBlockKind(component, TokenKind.BraceBlock);
 }
 
-export function isBracketBlock(component: ComponentValue | null): component is BracketBlock {
-  return isBlockKind(component, BlockKind.Bracket);
+export function isBracketBlock(component: Token): component is BracketBlock {
+  return isBlockKind(component, TokenKind.BracketBlock);
 }
 
-export function isParensBlock(component: ComponentValue | null): component is ParensBlock {
-  return isBlockKind(component, BlockKind.Parens);
+export function isParensBlock(component: Token): component is ParensBlock {
+  return isBlockKind(component, TokenKind.ParensBlock);
 }
 
-export function isFunctionBlock(component: ComponentValue | null): component is FunctionBlock {
-  return isBlockKind(component, BlockKind.Function);
+export function isFunctionBlock(component: Token): component is FunctionBlock {
+  return isBlockKind(component, TokenKind.FunctionBlock);
 }
 
 export function serializeComponentValues(values: readonly ComponentValue[]): string {
@@ -143,23 +108,19 @@ export function serializeComponentValues(values: readonly ComponentValue[]): str
 }
 
 function serializeComponentValue(value: ComponentValue): string {
-  if (value.type === 'block') {
-    switch (value.block) {
-      case BlockKind.Brace:
-        return `{${serializeComponentValues(value.value)}}`;
+  switch (value.type) {
+    case TokenKind.BraceBlock:
+      return `{${serializeComponentValues(value.value)}}`;
 
-      case BlockKind.Bracket:
-        return `[${serializeComponentValues(value.value)}]`;
+    case TokenKind.BracketBlock:
+      return `[${serializeComponentValues(value.value)}]`;
 
-      case BlockKind.Parens:
-        return `(${serializeComponentValues(value.value)})`;
+    case TokenKind.ParensBlock:
+      return `(${serializeComponentValues(value.value)})`;
 
-      case BlockKind.Function:
-        return `${serializeCssIdentifier(value.name)}(${serializeComponentValues(value.value)})`;
-    }
-  }
+    case TokenKind.FunctionBlock:
+      return `${serializeCssIdentifier(value.name)}(${serializeComponentValues(value.value)})`;
 
-  switch (value.kind) {
     case TokenKind.Ident:
       return serializeCssIdentifier(value.value);
 
@@ -187,13 +148,21 @@ function serializeComponentValue(value: ComponentValue): string {
       return serializeCssDelimToken(value.value);
 
     case TokenKind.Number:
-      return value.repr;
+      return serializeNumericToken(value.value, value.sign, value.flag);
 
     case TokenKind.Percentage:
-      return value.repr;
+      return `${serializeNumericToken(value.value, value.sign)}%`;
 
     case TokenKind.Dimension:
-      return value.repr;
+      return (
+        serializeNumericToken(value.value, value.sign, value.flag) +
+        serializeCssDimensionUnit(value.unit)
+      );
+
+    case TokenKind.UnicodeRange:
+      return value.start === value.end
+        ? `U+${value.start.toString(16)}`
+        : `U+${value.start.toString(16)}-${value.end.toString(16)}`;
 
     case TokenKind.Whitespace:
       return ' ';
@@ -222,6 +191,34 @@ function serializeComponentValue(value: ComponentValue): string {
     case TokenKind.RightBrace:
       return '}';
   }
+}
+
+function serializeNumericToken(
+  value: number,
+  sign: NumericSign,
+  flag?: NumberTokenFlag,
+): string {
+  let result: string;
+
+  if (sign === NumericSign.Minus && (value >= 0 || Object.is(value, -0))) {
+    result = `-${String(Math.abs(value))}`;
+  } else {
+    result = String(value);
+
+    if (sign === NumericSign.Plus && value >= 0) {
+      result = `+${result}`;
+    }
+  }
+
+  if (
+    flag === NumberTokenFlag.Number &&
+    !result.includes('.') &&
+    !/[eE]/.test(result)
+  ) {
+    result += '.0';
+  }
+
+  return result;
 }
 
 export function serializeCssIdentifier(value: string): string {
@@ -385,17 +382,24 @@ function isAsciiLetter(codePoint: number): boolean {
 }
 
 function firstTokenSerializationType(value: ComponentValue): TokenSerializationType {
-  if (value.type === 'block') {
-    if (value.block === BlockKind.Function) return TokenSerializationType.Function;
-    if (value.block === BlockKind.Parens) return TokenSerializationType.OpenParen;
-    return TokenSerializationType.Other;
-  }
+  switch (value.type) {
+    case TokenKind.FunctionBlock:
+      return TokenSerializationType.Function;
 
-  return tokenSerializationType(value);
+    case TokenKind.ParensBlock:
+      return TokenSerializationType.OpenParen;
+
+    case TokenKind.BraceBlock:
+    case TokenKind.BracketBlock:
+      return TokenSerializationType.Other;
+
+    default:
+      return tokenSerializationType(value);
+  }
 }
 
 function lastTokenSerializationType(value: ComponentValue): TokenSerializationType {
-  return value.type === 'block'
+  return isComponentBlock(value)
     ? TokenSerializationType.Other
     : tokenSerializationType(value);
 }
@@ -500,7 +504,7 @@ enum TokenSerializationType {
 }
 
 function tokenSerializationType(value: PreservedToken): TokenSerializationType {
-  switch (value.kind) {
+  switch (value.type) {
     case TokenKind.Ident:
       return TokenSerializationType.Ident;
 
@@ -524,6 +528,9 @@ function tokenSerializationType(value: PreservedToken): TokenSerializationType {
 
     case TokenKind.Dimension:
       return TokenSerializationType.Dimension;
+
+    case TokenKind.UnicodeRange:
+      return TokenSerializationType.Ident;
 
     case TokenKind.CDC:
       return TokenSerializationType.CDC;

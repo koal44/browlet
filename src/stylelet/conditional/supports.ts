@@ -5,8 +5,8 @@ import {
   adaptConsumer, withTrivia,
 } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { isTokenKind } from '../syntax/component-value';
 import {
   consumeDeclaration, createComponentParser, parseAsComponentGrammar,
@@ -47,14 +47,14 @@ export function parseSupportsCondition(
 }
 
 export function consumeSupportsCondition(
-  c: ComponentCursor,
-): TryComponentConsumerResult<SupportsCondition> {
+  c: TokenCursor,
+): TryConsumerResult<SupportsCondition> {
   return supportsConditionConsumer(c);
 }
 
 export function consumeSupportsDeclaration(
-  c: ComponentCursor,
-): TryComponentConsumerResult<SupportsDeclaration> {
+  c: TokenCursor,
+): TryConsumerResult<SupportsDeclaration> {
   const start = c.pos();
   const declaration = consumeDeclaration(c);
 

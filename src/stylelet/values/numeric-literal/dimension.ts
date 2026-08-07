@@ -1,8 +1,8 @@
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import { serializeCssDimensionUnit } from '../../syntax/component-value';
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
@@ -51,8 +51,8 @@ export function parseDimension(
 }
 
 export function consumeDimension(
-  c: ComponentCursor,
-): TryComponentConsumerResult<DimensionLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<DimensionLiteral> {
   return dimensionConsumer(c);
 }
 

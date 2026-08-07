@@ -1,4 +1,4 @@
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
@@ -113,19 +113,18 @@ describe('<syntax>', () => {
   });
 
   it('consumes one syntax value without consuming following input', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('<length> trailing'),
     );
 
     expect(consumeSyntax(c)).toEqual(lengthSyntax);
     expect(c.peek()).toMatchObject({
-      type: 'token',
-      kind: TokenKind.Whitespace,
+      type: TokenKind.Whitespace,
     });
   });
 
   it('restores the cursor when the syntax does not match', () => {
-    const c = new ComponentCursor(
+    const c = new TokenCursor(
       parseListOfComponentValues('<length >'),
     );
 

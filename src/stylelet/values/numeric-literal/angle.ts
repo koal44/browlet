@@ -2,8 +2,8 @@ import { asciiLower } from '../../../shared/css';
 import { assertNever } from '../../../shared/util';
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
@@ -40,8 +40,8 @@ export function parseAngle(
 }
 
 export function consumeAngle(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AngleLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<AngleLiteral> {
   return angleConsumer(c);
 }
 
@@ -55,7 +55,7 @@ export type AngleConsumerOptions = {
 
 export function createAngleConsumer(
   options: AngleConsumerOptions = {},
-): TryComponentConsumer<AngleLiteral> {
+): TryConsumer<AngleLiteral> {
   const min = options.min ?? -Infinity;
   const max = options.max ?? Infinity;
 

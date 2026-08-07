@@ -1,7 +1,7 @@
 import { withTrivia } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import {
   canonicalizeFrequency, serializeFrequency, consumeFrequency,
@@ -33,8 +33,8 @@ export function parseFrequencyPercentage(
 }
 
 export function consumeFrequencyPercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<FrequencyPercentageLiteral> {
+  c: TokenCursor,
+): TryConsumerResult<FrequencyPercentageLiteral> {
   return frequencyPercentageConsumer(c);
 }
 
@@ -43,7 +43,7 @@ export type FrequencyPercentageConsumerOptions =
 
 export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
-): TryComponentConsumer<FrequencyPercentageLiteral> {
+): TryConsumer<FrequencyPercentageLiteral> {
   return createDimensionPercentageConsumer(
     consumeFrequency,
     'Frequency-percentage',

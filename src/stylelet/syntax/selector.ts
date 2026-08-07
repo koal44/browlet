@@ -2,7 +2,7 @@ import { asciiLower } from '../../shared/css';
 import {
   any, commaRepeat, one, oneOf, opt, plus, adaptConsumer, requiredSequenceOf, sequenceOf, withTrivia,
 } from './component-grammar';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
+import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import {
   consumeAnyValueFunctionBlock, consumeAsteriskDelim, consumeBracketBlock,
   consumeCaretDelim, consumeColon, consumeDollarDelim, consumeDotDelim,
@@ -12,6 +12,7 @@ import {
 } from './component-consumers';
 import { isDelimToken, isWhitespaceToken, type ComponentValue } from './component-value';
 import { type ParserInput, parseAsComponentGrammar, parseListAsComponentGrammar } from './parser';
+import { TokenKind } from './tokens';
 import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 import { consumeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
 import { createKeywordConsumer } from '../values/keyword';
@@ -127,7 +128,7 @@ export function parseSelectorList(
   return parseAsComponentGrammar(input, consumeSelectorList, context);
 }
 
-function consumeSelectorList(c: ComponentCursor): TryComponentConsumerResult<SelectorList> {
+function consumeSelectorList(c: TokenCursor): TryConsumerResult<SelectorList> {
   return consumeComplexSelectorList(c);
 }
 
@@ -147,12 +148,12 @@ export function parseComplexSelectorList(
   return parseAsComponentGrammar(input, consumeComplexSelectorList, context);
 }
 
-function consumeComplexSelectorList(c: ComponentCursor): TryComponentConsumerResult<ComplexSelectorList> {
+function consumeComplexSelectorList(c: TokenCursor): TryConsumerResult<ComplexSelectorList> {
   return complexSelectorListConsumer(c);
 }
 
 // <complex-selector-list> = <complex-selector>#
-const complexSelectorListConsumer: TryComponentConsumer<ComplexSelectorList> = adaptConsumer(
+const complexSelectorListConsumer: TryConsumer<ComplexSelectorList> = adaptConsumer(
   commaRepeat(consumeComplexSelector),
   (arms) => ({
     kind: SelectorKind.ComplexSelectorList,
@@ -177,12 +178,12 @@ export function parseComplexRealSelectorList(
   return parseAsComponentGrammar(input, consumeComplexRealSelectorList, context);
 }
 
-function consumeComplexRealSelectorList(c: ComponentCursor): TryComponentConsumerResult<ComplexRealSelectorList> {
+function consumeComplexRealSelectorList(c: TokenCursor): TryConsumerResult<ComplexRealSelectorList> {
   return complexRealSelectorListConsumer(c);
 }
 
 // <complex-real-selector-list> = <complex-real-selector>#
-const complexRealSelectorListConsumer: TryComponentConsumer<ComplexRealSelectorList> = adaptConsumer(
+const complexRealSelectorListConsumer: TryConsumer<ComplexRealSelectorList> = adaptConsumer(
   commaRepeat(consumeComplexRealSelector),
   (arms) => ({
     kind: SelectorKind.ComplexRealSelectorList,
@@ -207,12 +208,12 @@ export function parseCompoundSelectorList(
   return parseAsComponentGrammar(input, consumeCompoundSelectorList, context);
 }
 
-function consumeCompoundSelectorList(c: ComponentCursor): TryComponentConsumerResult<CompoundSelectorList> {
+function consumeCompoundSelectorList(c: TokenCursor): TryConsumerResult<CompoundSelectorList> {
   return compoundSelectorListConsumer(c);
 }
 
 // <compound-selector-list> = <compound-selector>#
-const compoundSelectorListConsumer: TryComponentConsumer<CompoundSelectorList> = adaptConsumer(
+const compoundSelectorListConsumer: TryConsumer<CompoundSelectorList> = adaptConsumer(
   commaRepeat(consumeCompoundSelector),
   (arms) => ({
     kind: SelectorKind.CompoundSelectorList,
@@ -237,12 +238,12 @@ export function parseSimpleSelectorList(
   return parseAsComponentGrammar(input, consumeSimpleSelectorList, context);
 }
 
-function consumeSimpleSelectorList(c: ComponentCursor): TryComponentConsumerResult<SimpleSelectorList> {
+function consumeSimpleSelectorList(c: TokenCursor): TryConsumerResult<SimpleSelectorList> {
   return simpleSelectorListConsumer(c);
 }
 
 // <simple-selector-list> = <simple-selector>#
-const simpleSelectorListConsumer: TryComponentConsumer<SimpleSelectorList> = adaptConsumer(
+const simpleSelectorListConsumer: TryConsumer<SimpleSelectorList> = adaptConsumer(
   commaRepeat(consumeSimpleSelector),
   (arms) => ({
     kind: SelectorKind.SimpleSelectorList,
@@ -267,12 +268,12 @@ export function parseRelativeSelectorList(
   return parseAsComponentGrammar(input, consumeRelativeSelectorList, context);
 }
 
-function consumeRelativeSelectorList(c: ComponentCursor): TryComponentConsumerResult<RelativeSelectorList> {
+function consumeRelativeSelectorList(c: TokenCursor): TryConsumerResult<RelativeSelectorList> {
   return relativeSelectorListConsumer(c);
 }
 
 // <relative-selector-list> = <relative-selector>#
-const relativeSelectorListConsumer: TryComponentConsumer<RelativeSelectorList> = adaptConsumer(
+const relativeSelectorListConsumer: TryConsumer<RelativeSelectorList> = adaptConsumer(
   commaRepeat(consumeRelativeSelector),
   (arms) => ({
     kind: SelectorKind.RelativeSelectorList,
@@ -297,12 +298,12 @@ export function parseRelativeRealSelectorList(
   return parseAsComponentGrammar(input, consumeRelativeRealSelectorList, context);
 }
 
-function consumeRelativeRealSelectorList(c: ComponentCursor): TryComponentConsumerResult<RelativeRealSelectorList> {
+function consumeRelativeRealSelectorList(c: TokenCursor): TryConsumerResult<RelativeRealSelectorList> {
   return relativeRealSelectorListConsumer(c);
 }
 
 // <relative-real-selector-list> = <relative-real-selector>#
-const relativeRealSelectorListConsumer: TryComponentConsumer<RelativeRealSelectorList> = adaptConsumer(
+const relativeRealSelectorListConsumer: TryConsumer<RelativeRealSelectorList> = adaptConsumer(
   commaRepeat(consumeRelativeRealSelector),
   (arms) => ({
     kind: SelectorKind.RelativeRealSelectorList,
@@ -336,11 +337,11 @@ export function parseComplexSelector(
   return parseAsComponentGrammar(input, consumeComplexSelector, context);
 }
 
-function consumeComplexSelector(c: ComponentCursor): TryComponentConsumerResult<ComplexSelector> {
+function consumeComplexSelector(c: TokenCursor): TryConsumerResult<ComplexSelector> {
   return complexSelectorConsumer(c);
 }
 
-const complexSelectorConsumer: TryComponentConsumer<ComplexSelector> = sequenceOf(
+const complexSelectorConsumer: TryConsumer<ComplexSelector> = sequenceOf(
   [
     one(consumeComplexSelectorUnit, {
       contextAfter: (unit, context) =>
@@ -399,11 +400,11 @@ export type ComplexSelectorUnit = {
   specificity: Specificity;
 };
 
-function consumeComplexSelectorUnit(c: ComponentCursor): TryComponentConsumerResult<ComplexSelectorUnit> {
+function consumeComplexSelectorUnit(c: TokenCursor): TryConsumerResult<ComplexSelectorUnit> {
   return complexSelectorUnitConsumer(c);
 }
 
-const complexSelectorUnitConsumer: TryComponentConsumer<ComplexSelectorUnit> =
+const complexSelectorUnitConsumer: TryConsumer<ComplexSelectorUnit> =
   requiredSequenceOf(
     [
       opt(consumeCompoundSelector),
@@ -451,11 +452,11 @@ export function parseComplexRealSelector(
   return parseAsComponentGrammar(input, consumeComplexRealSelector, context);
 }
 
-function consumeComplexRealSelector(c: ComponentCursor): TryComponentConsumerResult<ComplexRealSelector> {
+function consumeComplexRealSelector(c: TokenCursor): TryConsumerResult<ComplexRealSelector> {
   return complexRealSelectorConsumer(c);
 }
 
-const complexRealSelectorConsumer: TryComponentConsumer<ComplexRealSelector> = sequenceOf(
+const complexRealSelectorConsumer: TryConsumer<ComplexRealSelector> = sequenceOf(
   [
     one(consumeCompoundSelector),
 
@@ -494,11 +495,11 @@ export type RelativeSelector = {
   specificity: Specificity;
 };
 
-function consumeRelativeSelector(c: ComponentCursor): TryComponentConsumerResult<RelativeSelector> {
+function consumeRelativeSelector(c: TokenCursor): TryConsumerResult<RelativeSelector> {
   return relativeSelectorConsumer(c);
 }
 
-const relativeSelectorConsumer: TryComponentConsumer<RelativeSelector> = sequenceOf(
+const relativeSelectorConsumer: TryConsumer<RelativeSelector> = sequenceOf(
   [
     opt(consumeCombinator),
     one(consumeComplexSelector),
@@ -522,11 +523,11 @@ export type RelativeRealSelector = {
   specificity: Specificity;
 };
 
-function consumeRelativeRealSelector(c: ComponentCursor): TryComponentConsumerResult<RelativeRealSelector> {
+function consumeRelativeRealSelector(c: TokenCursor): TryConsumerResult<RelativeRealSelector> {
   return relativeRealSelectorConsumer(c);
 }
 
-const relativeRealSelectorConsumer: TryComponentConsumer<RelativeRealSelector> = sequenceOf(
+const relativeRealSelectorConsumer: TryConsumer<RelativeRealSelector> = sequenceOf(
   [
     opt(consumeCombinator),
     one(consumeComplexRealSelector),
@@ -557,11 +558,11 @@ export function parseCompoundSelector(
   return parseAsComponentGrammar(input, consumeCompoundSelector, context);
 }
 
-function consumeCompoundSelector(c: ComponentCursor): TryComponentConsumerResult<CompoundSelector> {
+function consumeCompoundSelector(c: TokenCursor): TryConsumerResult<CompoundSelector> {
   return compoundSelectorConsumer(c);
 }
 
-const compoundSelectorConsumer: TryComponentConsumer<CompoundSelector> = requiredSequenceOf(
+const compoundSelectorConsumer: TryConsumer<CompoundSelector> = requiredSequenceOf(
   [
     opt(consumeTypeSelector),
     any(consumeSubclassSelector),
@@ -590,12 +591,12 @@ export type PseudoCompoundSelector = {
 };
 
 function consumePseudoCompoundSelector(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PseudoCompoundSelector> {
+  c: TokenCursor,
+): TryConsumerResult<PseudoCompoundSelector> {
   return pseudoCompoundSelectorConsumer(c);
 }
 
-const pseudoCompoundSelectorConsumer: TryComponentConsumer<PseudoCompoundSelector> = sequenceOf(
+const pseudoCompoundSelectorConsumer: TryConsumer<PseudoCompoundSelector> = sequenceOf(
   [
     one(consumePseudoElementSelector, {
       contextAfter: (pseudoElement, context) => {
@@ -653,11 +654,11 @@ export function parseSimpleSelector(
   return parseAsComponentGrammar(input, consumeSimpleSelector, context);
 }
 
-function consumeSimpleSelector(c: ComponentCursor): TryComponentConsumerResult<SimpleSelector> {
+function consumeSimpleSelector(c: TokenCursor): TryConsumerResult<SimpleSelector> {
   return simpleSelectorConsumer(c);
 }
 
-const simpleSelectorConsumer: TryComponentConsumer<SimpleSelector> = oneOf(
+const simpleSelectorConsumer: TryConsumer<SimpleSelector> = oneOf(
   [
     one(consumeTypeSelector),
     one(consumeSubclassSelector),
@@ -677,11 +678,11 @@ const simpleSelectorConsumer: TryComponentConsumer<SimpleSelector> = oneOf(
  */
 export type Combinator = ' ' | '>' | '+' | '~' | '||';
 
-function consumeCombinator(c: ComponentCursor): TryComponentConsumerResult<Combinator> {
+function consumeCombinator(c: TokenCursor): TryConsumerResult<Combinator> {
   return combinatorConsumer(c);
 }
 
-const combinatorConsumer: TryComponentConsumer<Combinator> = oneOf(
+const combinatorConsumer: TryConsumer<Combinator> = oneOf(
   [
     one(consumeDescendantCombinator),
 
@@ -732,8 +733,8 @@ const combinatorConsumer: TryComponentConsumer<Combinator> = oneOf(
 
 // <whitespace-token>+ without a following explicit combinator
 function consumeDescendantCombinator(
-  c: ComponentCursor,
-): TryComponentConsumerResult<' '> {
+  c: TokenCursor,
+): TryConsumerResult<' '> {
   const start = c.pos();
 
   if (consumeCombinatorWhitespace(c) === null) return null;
@@ -757,8 +758,8 @@ function consumeDescendantCombinator(
 
 // <whitespace-token>+
 function consumeCombinatorWhitespace(
-  c: ComponentCursor,
-): TryComponentConsumerResult<' '> {
+  c: TokenCursor,
+): TryConsumerResult<' '> {
   return c.consumeWhile(isWhitespaceToken) === 0 ? null : ' ';
 }
 
@@ -770,11 +771,11 @@ export type WqName = {
   name: string;
 };
 
-function consumeWqName(c: ComponentCursor): TryComponentConsumerResult<WqName> {
+function consumeWqName(c: TokenCursor): TryConsumerResult<WqName> {
   return wqNameConsumer(c);
 }
 
-const wqNameConsumer: TryComponentConsumer<WqName> = sequenceOf(
+const wqNameConsumer: TryConsumer<WqName> = sequenceOf(
   [
     opt(consumeNsPrefix),
     one(consumeIdentToken),
@@ -789,11 +790,11 @@ const wqNameConsumer: TryComponentConsumer<WqName> = sequenceOf(
 /*
  * <ns-prefix> = [ <ident-token> | '*' ]? '|'
  */
-function consumeNsPrefix(c: ComponentCursor): TryComponentConsumerResult<string> {
+function consumeNsPrefix(c: TokenCursor): TryConsumerResult<string> {
   return nsPrefixConsumer(c);
 }
 
-const nsPrefixConsumer: TryComponentConsumer<string> = sequenceOf(
+const nsPrefixConsumer: TryConsumer<string> = sequenceOf(
   [
     opt(
       oneOf(
@@ -842,7 +843,7 @@ export type TypeSelector = {
   specificity: Specificity;
 };
 
-function consumeTypeSelector(c: ComponentCursor): TryComponentConsumerResult<TypeSelector> {
+function consumeTypeSelector(c: TokenCursor): TryConsumerResult<TypeSelector> {
   const ctx = c.context as SelectorParserContext;
 
   if (ctx.pseudoClassTailElement !== undefined) {
@@ -852,7 +853,7 @@ function consumeTypeSelector(c: ComponentCursor): TryComponentConsumerResult<Typ
   return typeSelectorConsumer(c);
 }
 
-const typeSelectorConsumer: TryComponentConsumer<TypeSelector> = sequenceOf(
+const typeSelectorConsumer: TryConsumer<TypeSelector> = sequenceOf(
   [
     opt(consumeNsPrefix),
 
@@ -889,11 +890,11 @@ export type SubclassSelector =
   | AttributeSelector
   | PseudoClassSelector;
 
-function consumeSubclassSelector(c: ComponentCursor): TryComponentConsumerResult<SubclassSelector> {
+function consumeSubclassSelector(c: TokenCursor): TryConsumerResult<SubclassSelector> {
   return subclassSelectorConsumer(c);
 }
 
-const subclassSelectorConsumer: TryComponentConsumer<SubclassSelector> = oneOf(
+const subclassSelectorConsumer: TryConsumer<SubclassSelector> = oneOf(
   [
     one(consumeIdSelector),
     one(consumeClassSelector),
@@ -915,7 +916,7 @@ export type IdSelector = {
   specificity: Specificity;
 };
 
-function consumeIdSelector(c: ComponentCursor): TryComponentConsumerResult<IdSelector> {
+function consumeIdSelector(c: TokenCursor): TryConsumerResult<IdSelector> {
   const ctx = c.context as SelectorParserContext;
 
   if (ctx.pseudoClassTailElement !== undefined) {
@@ -925,7 +926,7 @@ function consumeIdSelector(c: ComponentCursor): TryComponentConsumerResult<IdSel
   return idSelectorConsumer(c);
 }
 
-const idSelectorConsumer: TryComponentConsumer<IdSelector> = adaptConsumer(
+const idSelectorConsumer: TryConsumer<IdSelector> = adaptConsumer(
   consumeIdHashToken,
   (hash) => ({
     kind: SelectorKind.IdSelector,
@@ -943,7 +944,7 @@ export type ClassSelector = {
   specificity: Specificity;
 };
 
-function consumeClassSelector(c: ComponentCursor): TryComponentConsumerResult<ClassSelector> {
+function consumeClassSelector(c: TokenCursor): TryConsumerResult<ClassSelector> {
   const ctx = c.context as SelectorParserContext;
 
   if (ctx.pseudoClassTailElement !== undefined) {
@@ -953,7 +954,7 @@ function consumeClassSelector(c: ComponentCursor): TryComponentConsumerResult<Cl
   return classSelectorConsumer(c);
 }
 
-const classSelectorConsumer: TryComponentConsumer<ClassSelector> = sequenceOf(
+const classSelectorConsumer: TryConsumer<ClassSelector> = sequenceOf(
   [
     one(consumeDotDelim),
     one(consumeIdentToken),
@@ -985,7 +986,7 @@ export type AttributeSelector = {
   specificity: Specificity;
 };
 
-function consumeAttributeSelector(c: ComponentCursor): TryComponentConsumerResult<AttributeSelector> {
+function consumeAttributeSelector(c: TokenCursor): TryConsumerResult<AttributeSelector> {
   const ctx = c.context as SelectorParserContext;
 
   if (ctx.pseudoClassTailElement !== undefined) {
@@ -996,7 +997,7 @@ function consumeAttributeSelector(c: ComponentCursor): TryComponentConsumerResul
 }
 
 // Bracket contents: <wq-name> [ <attr-matcher> <attr-value> <attr-modifier>? ]?
-const attributeSelectorBodyConsumer: TryComponentConsumer<AttributeSelector> = sequenceOf(
+const attributeSelectorBodyConsumer: TryConsumer<AttributeSelector> = sequenceOf(
   [
     one(withTrivia(consumeWqName)),
     opt(
@@ -1035,11 +1036,11 @@ const attributeSelectorConsumer = adaptConsumer(
  */
 export type AttrMatcher = '=' | '~=' | '|=' | '^=' | '$=' | '*=';
 
-function consumeAttrMatcher(c: ComponentCursor): TryComponentConsumerResult<AttrMatcher> {
+function consumeAttrMatcher(c: TokenCursor): TryConsumerResult<AttrMatcher> {
   return attrMatcherConsumer(c);
 }
 
-const attrMatcherConsumer: TryComponentConsumer<AttrMatcher> = sequenceOf(
+const attrMatcherConsumer: TryConsumer<AttrMatcher> = sequenceOf(
   [
     opt(oneOf(
       [
@@ -1059,11 +1060,11 @@ const attrMatcherConsumer: TryComponentConsumer<AttrMatcher> = sequenceOf(
 /*
  * <attr-value> = [ <string-token> | <ident-token> ]
  */
-function consumeAttrValue(c: ComponentCursor): TryComponentConsumerResult<string> {
+function consumeAttrValue(c: TokenCursor): TryConsumerResult<string> {
   return attrValueConsumer(c);
 }
 
-const attrValueConsumer: TryComponentConsumer<string> = oneOf(
+const attrValueConsumer: TryConsumer<string> = oneOf(
   [
     one(consumeStringToken),
     one(consumeIdentToken),
@@ -1076,7 +1077,7 @@ const attrValueConsumer: TryComponentConsumer<string> = oneOf(
  */
 export type AttrModifier = 'i' | 's';
 
-function consumeAttrModifier(c: ComponentCursor): TryComponentConsumerResult<AttrModifier> {
+function consumeAttrModifier(c: TokenCursor): TryConsumerResult<AttrModifier> {
   return attrModifierConsumer(c);
 }
 
@@ -1102,17 +1103,17 @@ export type PseudoClassSelector = {
   specificity: Specificity;
 };
 
-function consumePseudoClassSelector(c: ComponentCursor): TryComponentConsumerResult<PseudoClassSelector> {
+function consumePseudoClassSelector(c: TokenCursor): TryConsumerResult<PseudoClassSelector> {
   return pseudoClassSelectorConsumer(c);
 }
 
 // <pseudo-class-selector> = : [ <ident-token> | <any-value-function-block> ]
-const pseudoClassSelectorConsumer: TryComponentConsumer<PseudoClassSelector> = sequenceOf(
+const pseudoClassSelectorConsumer: TryConsumer<PseudoClassSelector> = sequenceOf(
   [
     one(consumeColon),
     one(oneOf(
       [one(consumeIdentToken), one(consumeAnyValueFunctionBlock)],
-      ([value], ctx) => value.type === 'token'
+      ([value], ctx) => value.type === TokenKind.Ident
         ? createPseudoClassSelector(value.value, null, ctx as SelectorParserContext)
         : createPseudoClassSelector(
           value.name,
@@ -1144,11 +1145,11 @@ export type PseudoElementSelector = {
   specificity: Specificity;
 };
 
-function consumePseudoElementSelector(c: ComponentCursor): TryComponentConsumerResult<PseudoElementSelector> {
+function consumePseudoElementSelector(c: TokenCursor): TryConsumerResult<PseudoElementSelector> {
   return pseudoElementSelectorConsumer(c);
 }
 
-const pseudoElementSelectorConsumer: TryComponentConsumer<PseudoElementSelector> = oneOf(
+const pseudoElementSelectorConsumer: TryConsumer<PseudoElementSelector> = oneOf(
   [
     one(consumeLegacyPseudoElementSelector),
     one(
@@ -1158,7 +1159,7 @@ const pseudoElementSelectorConsumer: TryComponentConsumer<PseudoElementSelector>
           one(consumeColon),
           one(oneOf(
             [one(consumeIdentToken), one(consumeAnyValueFunctionBlock)],
-            ([value], ctx) => value.type === 'token'
+            ([value], ctx) => value.type === TokenKind.Ident
               ? createPseudoElementSelector(value.value, null, false, ctx as SelectorParserContext)
               : createPseudoElementSelector(
                 value.name,
@@ -1185,12 +1186,12 @@ type LegacyPseudoElementName =
   | 'first-line'
   | 'first-letter';
 
-function consumeLegacyPseudoElementSelector(c: ComponentCursor): TryComponentConsumerResult<PseudoElementSelector> {
+function consumeLegacyPseudoElementSelector(c: TokenCursor): TryConsumerResult<PseudoElementSelector> {
   return legacyPseudoElementSelectorConsumer(c);
 }
 
 // <legacy-pseudo-element-selector> = : [before | after | first-line | first-letter]
-const legacyPseudoElementSelectorConsumer: TryComponentConsumer<PseudoElementSelector> = sequenceOf(
+const legacyPseudoElementSelectorConsumer: TryConsumer<PseudoElementSelector> = sequenceOf(
   [
     one(consumeColon),
     one(createKeywordConsumer('before', 'after', 'first-line', 'first-letter')),
@@ -1296,7 +1297,7 @@ function createPseudoClassSelector(
   rawName: string,
   value: readonly ComponentValue[] | null,
   context: SelectorParserContext,
-): TryComponentConsumerResult<PseudoClassSelector> {
+): TryConsumerResult<PseudoClassSelector> {
   const name = canonicalPseudoClassName(rawName);
 
   if (name === null) {
@@ -1644,7 +1645,7 @@ function createNoArgumentPseudoClassSelector(
   name: string,
   value: readonly ComponentValue[] | null,
   specificity: Specificity = SpecificityB,
-): TryComponentConsumerResult<PseudoClassSelector> {
+): TryConsumerResult<PseudoClassSelector> {
   if (value !== null) {
     return null;
   }
@@ -1663,7 +1664,7 @@ function createArgumentPseudoClassSelector<T extends PseudoArgument>(
   context: SelectorParserContext,
   parseArgument: PseudoArgumentParser<T>,
   specificity: Specificity | ((argument: T) => Specificity) = SpecificityB,
-): TryComponentConsumerResult<PseudoClassSelector> {
+): TryConsumerResult<PseudoClassSelector> {
   if (value === null) return null;
 
   const argument = parseArgument(value, context);
@@ -1722,7 +1723,7 @@ function createPseudoElementSelector(
   value: readonly ComponentValue[] | null,
   legacy: boolean,
   context: SelectorParserContext,
-): TryComponentConsumerResult<PseudoElementSelector> {
+): TryConsumerResult<PseudoElementSelector> {
   const name = canonicalPseudoElementName(rawName);
 
   if (name === null) {
@@ -1872,7 +1873,7 @@ function createNoArgumentPseudoElementSelector(
   value: readonly ComponentValue[] | null,
   legacy: boolean,
   specificity: Specificity = SpecificityC,
-): TryComponentConsumerResult<PseudoElementSelector> {
+): TryConsumerResult<PseudoElementSelector> {
   if (value !== null) {
     return null;
   }
@@ -1994,7 +1995,7 @@ function parseForgivingSelectorListArgument(
 function parseStrictComplexRealSelectorListArgument(
   arg: readonly ComponentValue[],
   context: SelectorParserContext,
-): TryComponentConsumerResult<ComplexRealSelectorList> {
+): TryConsumerResult<ComplexRealSelectorList> {
   const argumentContext = contextForSelectorArgument(context);
   const parseSelector = parserForSelectorRestriction(argumentContext);
 
@@ -2070,7 +2071,7 @@ function parseCompoundSelectorListArgument(
 
 function parserForSelectorRestriction(
   context: SelectorParserContext,
-): TryComponentConsumer<ComplexRealSelector> {
+): TryConsumer<ComplexRealSelector> {
   switch (context.selectorRestriction) {
     case 'simple':
       return simpleAsComplexRealSelectorConsumer;
@@ -2151,7 +2152,7 @@ function parseNthChildArgument(
   return parseAsComponentGrammar(value, consumeNthChildArgument, context);
 }
 
-function consumeNthChildArgument(c: ComponentCursor): TryComponentConsumerResult<NthChildPseudoArgument> {
+function consumeNthChildArgument(c: TokenCursor): TryConsumerResult<NthChildPseudoArgument> {
   return nthChildArgumentConsumer(c);
 }
 
@@ -2169,7 +2170,7 @@ const nthChildArgumentConsumer = sequenceOf(
 
 const ofIdentConsumer = createKeywordConsumer('of');
 
-function consumeNthChildOfClause(c: ComponentCursor): TryComponentConsumerResult<ComplexRealSelectorList> {
+function consumeNthChildOfClause(c: TokenCursor): TryConsumerResult<ComplexRealSelectorList> {
   return nthChildOfClauseConsumer(c);
 }
 
@@ -2182,8 +2183,8 @@ const nthChildOfClauseConsumer = sequenceOf(
 );
 
 function consumeNthChildOfSelectorList(
-  c: ComponentCursor,
-): TryComponentConsumerResult<ComplexRealSelectorList> {
+  c: TokenCursor,
+): TryConsumerResult<ComplexRealSelectorList> {
   const outerContext = c.context as SelectorParserContext;
   const argumentContext = contextForSelectorArgument(outerContext);
 
@@ -2265,30 +2266,16 @@ function parseIntegerListArgument(
   value: readonly ComponentValue[],
   context: SelectorParserContext,
 ): IntegerListPseudoArgument | null {
-  const parsed = parseListAsComponentGrammar(
+  const parsed = parseAsComponentGrammar(
     value,
-    withTrivia(integerConsumer),
+    commaRepeat(withTrivia(integerConsumer)),
     context,
   );
-  const values: number[] = [];
-
-  for (const result of parsed) {
-    const integer = result;
-
-    if (integer === null) {
-      return null;
-    }
-
-    values.push(integer);
-  }
-
-  if (values.length === 0) {
-    return null;
-  }
+  if (parsed === null) return null;
 
   return {
     kind: PseudoArgumentKind.IntegerList,
-    values,
+    values: parsed,
   };
 }
 
@@ -2313,35 +2300,20 @@ function parseLanguageRangeListArgument(
   value: readonly ComponentValue[],
   context: SelectorParserContext,
 ): LanguageRangeListPseudoArgument | null {
-  const parsed = parseListAsComponentGrammar(
+  const parsed = parseAsComponentGrammar(
     value,
-    withTrivia(languageRangeConsumer),
+    commaRepeat(withTrivia(languageRangeConsumer)),
     context,
   );
-
-  const ranges: LanguageRange[] = [];
-
-  for (const result of parsed) {
-    const range = result;
-
-    if (range === null) {
-      return null;
-    }
-
-    ranges.push(range);
-  }
-
-  if (ranges.length === 0) {
-    return null;
-  }
+  if (parsed === null) return null;
 
   return {
     kind: PseudoArgumentKind.LanguageRangeList,
-    ranges,
+    ranges: parsed,
   };
 }
 
-const languageRangeConsumer: TryComponentConsumer<LanguageRange> = oneOf(
+const languageRangeConsumer: TryConsumer<LanguageRange> = oneOf(
   [
     one(consumeIdentToken),
     one(consumeStringToken),
@@ -2407,11 +2379,11 @@ function parsePartNameListArgument(
 /*
  * <part-name-list> = <ident-token>+
  */
-function consumePartNameList(c: ComponentCursor): TryComponentConsumerResult<string[]> {
+function consumePartNameList(c: TokenCursor): TryConsumerResult<string[]> {
   return partNameListConsumer(c);
 }
 
-const partNameListConsumer: TryComponentConsumer<string[]> = plus(
+const partNameListConsumer: TryConsumer<string[]> = plus(
   withTrivia(adaptConsumer(consumeIdentToken, ({ value }) => value)),
 );
 

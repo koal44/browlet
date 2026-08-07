@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  filterCodePoints, NumberTokenFlag, TokenKind, tokenize,
-  HashTokenFlag,
+  decodeStylesheetBytes, filterCodePoints, HashTokenFlag, NumericSign, NumberTokenFlag,
+  tokenize, TokenKind,
 } from '../../../../src/stylelet/syntax/tokens';
 
 describe('filterCodePoints', () => {
@@ -18,14 +18,14 @@ describe('filterCodePoints', () => {
 
 function view(input: string): unknown[] {
   return tokenize(input).map((token) => {
-    switch (token.kind) {
+    switch (token.type) {
       case TokenKind.Ident: return ['ident', token.value];
       case TokenKind.Function: return ['function', token.value];
       case TokenKind.Url: return ['url', token.value];
       case TokenKind.BadUrl: return ['bad-url'];
-      case TokenKind.Number: return ['number', token.value, token.flag, token.repr];
-      case TokenKind.Percentage: return ['percentage', token.value, token.repr];
-      case TokenKind.Dimension: return ['dimension', token.value, token.flag, token.unit, token.repr];
+      case TokenKind.Number: return ['number', token.value, token.flag, token.sign];
+      case TokenKind.Percentage: return ['percentage', token.value, token.sign];
+      case TokenKind.Dimension: return ['dimension', token.value, token.flag, token.unit, token.sign];
       case TokenKind.Whitespace: return ['ws'];
       case TokenKind.String: return ['string', token.value];
       case TokenKind.BadString: return ['bad-string'];
@@ -43,7 +43,7 @@ function view(input: string): unknown[] {
       case TokenKind.RightBracket: return [']'];
       case TokenKind.LeftBrace: return ['{'];
       case TokenKind.RightBrace: return ['}'];
-      default: return [token.kind];
+      default: return [token.type];
     }
   });
 }
@@ -70,31 +70,60 @@ describe('style tokenizer consumers', () => {
     ]);
   });
 
+  it('consume a token recognizes unicode ranges only when allowed', () => {
+    expect(tokenize('U+416 U+4?? U+400-4ff', true)).toMatchObject([
+      { type: TokenKind.UnicodeRange, start: 0x416, end: 0x416 },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4ff },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4ff },
+    ]);
+
+    expect(view('U+416')).toEqual([
+      ['ident', 'U'],
+      ['number', 416, NumberTokenFlag.Integer, NumericSign.Plus],
+    ]);
+  });
+
   it('consume numeric token returns number, percentage, and dimension tokens', () => {
     expect(view('123')).toEqual([
-      ['number', 123, NumberTokenFlag.Integer, '123'],
+      ['number', 123, NumberTokenFlag.Integer, NumericSign.None],
     ]);
 
     expect(view('+.5')).toEqual([
-      ['number', 0.5, NumberTokenFlag.Number, '+.5'],
+      ['number', 0.5, NumberTokenFlag.Number, NumericSign.Plus],
     ]);
 
     expect(view('1e0')).toEqual([
-      ['number', 1, NumberTokenFlag.Number, '1e0'],
+      ['number', 1, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('10%')).toEqual([
-      ['percentage', 10, '10%'],
+      ['percentage', 10, NumericSign.None],
     ]);
 
     expect(view('12px')).toEqual([
-      ['dimension', 12, NumberTokenFlag.Integer, 'px', '12px'],
+      ['dimension', 12, NumberTokenFlag.Integer, 'px', NumericSign.None],
+    ]);
+  });
+
+  it('consume numeric token preserves its optional sign character', () => {
+    expect(tokenize('+1 -2 3 +4% -5px')).toMatchObject([
+      { type: TokenKind.Number, sign: NumericSign.Plus },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Number, sign: NumericSign.Minus },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Number, sign: NumericSign.None },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Percentage, sign: NumericSign.Plus },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Dimension, sign: NumericSign.Minus },
     ]);
   });
 
   it('consume numeric token decodes escaped dimension units', () => {
     expect(view('1\\70 x')).toEqual([
-      ['dimension', 1, NumberTokenFlag.Integer, 'px', '1\\70 x'],
+      ['dimension', 1, NumberTokenFlag.Integer, 'px', NumericSign.None],
     ]);
   });
 
@@ -214,37 +243,37 @@ describe('style tokenizer consumers', () => {
 
   it('consume number converts decimal and exponent representations', () => {
     expect(view('.5')).toEqual([
-      ['number', 0.5, NumberTokenFlag.Number, '.5'],
+      ['number', 0.5, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('-.5')).toEqual([
-      ['number', -0.5, NumberTokenFlag.Number, '-.5'],
+      ['number', -0.5, NumberTokenFlag.Number, NumericSign.Minus],
     ]);
 
     expect(view('1.25')).toEqual([
-      ['number', 1.25, NumberTokenFlag.Number, '1.25'],
+      ['number', 1.25, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('1e2')).toEqual([
-      ['number', 100, NumberTokenFlag.Number, '1e2'],
+      ['number', 100, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('1E-2')).toEqual([
-      ['number', 0.01, NumberTokenFlag.Number, '1E-2'],
+      ['number', 0.01, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('+1.2e+3')).toEqual([
-      ['number', 1200, NumberTokenFlag.Number, '+1.2e+3'],
+      ['number', 1200, NumberTokenFlag.Number, NumericSign.Plus],
     ]);
   });
 
   it('consume number only treats exponent syntax as exponent when followed by a digit', () => {
     expect(view('1e')).toEqual([
-      ['dimension', 1, NumberTokenFlag.Integer, 'e', '1e'],
+      ['dimension', 1, NumberTokenFlag.Integer, 'e', NumericSign.None],
     ]);
 
     expect(view('1e+')).toEqual([
-      ['dimension', 1, NumberTokenFlag.Integer, 'e', '1e'],
+      ['dimension', 1, NumberTokenFlag.Integer, 'e', NumericSign.None],
       ['delim', '+'],
     ]);
   });
@@ -322,7 +351,7 @@ describe('style tokenizer consumers', () => {
 
     expect(view('@1')).toEqual([
       ['delim', '@'],
-      ['number', 1, NumberTokenFlag.Integer, '1'],
+      ['number', 1, NumberTokenFlag.Integer, NumericSign.None],
     ]);
   });
 
@@ -332,11 +361,11 @@ describe('style tokenizer consumers', () => {
     ]);
 
     expect(view('+1')).toEqual([
-      ['number', 1, NumberTokenFlag.Integer, '+1'],
+      ['number', 1, NumberTokenFlag.Integer, NumericSign.Plus],
     ]);
 
     expect(view('+.5')).toEqual([
-      ['number', 0.5, NumberTokenFlag.Number, '+.5'],
+      ['number', 0.5, NumberTokenFlag.Number, NumericSign.Plus],
     ]);
 
     expect(view('.')).toEqual([
@@ -344,7 +373,7 @@ describe('style tokenizer consumers', () => {
     ]);
 
     expect(view('.5')).toEqual([
-      ['number', 0.5, NumberTokenFlag.Number, '.5'],
+      ['number', 0.5, NumberTokenFlag.Number, NumericSign.None],
     ]);
 
     expect(view('-')).toEqual([
@@ -352,7 +381,7 @@ describe('style tokenizer consumers', () => {
     ]);
 
     expect(view('-1')).toEqual([
-      ['number', -1, NumberTokenFlag.Integer, '-1'],
+      ['number', -1, NumberTokenFlag.Integer, NumericSign.Minus],
     ]);
 
     expect(view('--foo')).toEqual([
@@ -404,4 +433,102 @@ describe('style tokenizer consumers', () => {
     ]);
   });
 
+  it('uses the restricted non-ASCII ident code point ranges', () => {
+    const allowed = [
+      '\u00B7', '\u00C0', '\u037D', '\u037F', '\u200C', '\u200D',
+      '\u203F', '\u2040', '\u2070', '\u2C00', '\u3001', '\uF900',
+      '\uFDF0', '\uFFFD', '𐀀', '💩',
+    ];
+    const excluded = [
+      '\u0080', '\u00B6', '\u00D7', '\u00F7', '\u037E', '\u200E',
+      '\u203E', '\u2041', '\u206F', '\u2FF0', '\u3000', '\uFDD0',
+      '\uFFFE', '\uFFFF',
+    ];
+
+    for (const input of allowed) {
+      expect(tokenize(input), input).toMatchObject([
+        { type: TokenKind.Ident, value: input },
+      ]);
+    }
+
+    for (const input of excluded) {
+      expect(tokenize(input), input).toMatchObject([
+        { type: TokenKind.Delim, value: input },
+      ]);
+    }
+  });
+
+});
+
+describe('3.2. The input byte stream', () => {
+  const textEncoder = new TextEncoder();
+
+  it('defaults to UTF-8 and replaces malformed input', () => {
+    expect(decodeStylesheetBytes(textEncoder.encode('a { color: é; }')))
+      .toBe('a { color: é; }');
+    expect(decodeStylesheetBytes(new Uint8Array([0xE2, 0x82])))
+      .toBe('\uFFFD');
+  });
+
+  it('prefers a transport encoding over declarations and the environment', () => {
+    const bytes = new Uint8Array([
+      ...textEncoder.encode('@charset "utf-8"; '),
+      0xE9,
+    ]);
+
+    expect(decodeStylesheetBytes(bytes, {
+      transportEncoding: 'windows-1252',
+      environmentEncoding: 'utf-8',
+    })).toBe('@charset "utf-8"; é');
+  });
+
+  it('recognizes an exact byte-level encoding declaration', () => {
+    const bytes = new Uint8Array([
+      ...textEncoder.encode('@charset "windows-1252"; '),
+      0xE9,
+    ]);
+
+    expect(decodeStylesheetBytes(bytes))
+      .toBe('@charset "windows-1252"; é');
+  });
+
+  it('uses the environment after invalid transport and declaration labels', () => {
+    const bytes = new Uint8Array([
+      ...textEncoder.encode('@charset "not-an-encoding"; '),
+      0xE9,
+    ]);
+
+    expect(decodeStylesheetBytes(bytes, {
+      transportEncoding: 'also-not-an-encoding',
+      environmentEncoding: 'windows-1252',
+    })).toBe('@charset "not-an-encoding"; é');
+  });
+
+  it('treats a declared UTF-16 encoding as UTF-8', () => {
+    const bytes = textEncoder.encode('@charset "utf-16le"; é');
+
+    expect(decodeStylesheetBytes(bytes))
+      .toBe('@charset "utf-16le"; é');
+  });
+
+  it('gives a byte order mark precedence over the fallback encoding', () => {
+    const bytes = new Uint8Array([
+      0xEF, 0xBB, 0xBF,
+      ...textEncoder.encode('é'),
+    ]);
+
+    expect(decodeStylesheetBytes(bytes, {
+      transportEncoding: 'windows-1252',
+    })).toBe('é');
+  });
+
+  it('supports the replacement and x-user-defined encodings', () => {
+    expect(decodeStylesheetBytes(new Uint8Array([0x61, 0x62]), {
+      transportEncoding: 'iso-2022-kr',
+    })).toBe('\uFFFD');
+
+    expect(decodeStylesheetBytes(new Uint8Array([0x41, 0x80, 0xFF]), {
+      transportEncoding: 'x-user-defined',
+    })).toBe(`A${String.fromCodePoint(0xF800, 0xF87F)}`);
+  });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
-import { BlockKind } from '../../../../src/stylelet/syntax/component-value';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   parseGeneralEnclosed,
   consumeGeneralEnclosed,
@@ -9,16 +9,16 @@ import {
 
 describe('<general-enclosed>', () => {
   it.each([
-    ['future()', BlockKind.Function],
-    ['future(value)', BlockKind.Function],
-    ['future(value, {other})', BlockKind.Function],
-    ['()', BlockKind.Parens],
-    ['(value)', BlockKind.Parens],
-    ['(value, {other})', BlockKind.Parens],
+    ['future()', TokenKind.FunctionBlock],
+    ['future(value)', TokenKind.FunctionBlock],
+    ['future(value, {other})', TokenKind.FunctionBlock],
+    ['()', TokenKind.ParensBlock],
+    ['(value)', TokenKind.ParensBlock],
+    ['(value, {other})', TokenKind.ParensBlock],
   ])('parses %s', (input, block) => {
     expect(parseGeneralEnclosed(input)).toMatchObject({
       type: 'general-enclosed',
-      value: { block },
+      value: { type: block },
     });
   });
 
@@ -41,12 +41,12 @@ describe('<general-enclosed>', () => {
   });
 
   it('consumes one block and leaves the following components', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('future() other'));
+    const c = new TokenCursor(parseListOfComponentValues('future() other'));
 
     expect(consumeGeneralEnclosed(c)).toMatchObject({
       type: 'general-enclosed',
       value: {
-        block: BlockKind.Function,
+        type: TokenKind.FunctionBlock,
         name: 'future',
       },
     });

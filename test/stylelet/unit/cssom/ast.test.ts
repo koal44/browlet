@@ -11,10 +11,10 @@ const cls = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } 
 const id = (name: string) => ({ unit: { compound: { subclasses: [{ name }] } } });
 const arm = (...parts: unknown[]) => ({ parts });
 
-const ident = (value: string) => ({ kind: TokenKind.Ident, value });
-// const ws = () => ({ kind: TokenKind.Whitespace });
-// const delim = (value: string) => ({ kind: TokenKind.Delim, value });
-const str = (value: string) => ({ kind: TokenKind.String, value });
+const ident = (value: string) => ({ type: TokenKind.Ident, value });
+// const ws = () => ({ type: TokenKind.Whitespace });
+// const delim = (value: string) => ({ type: TokenKind.Delim, value });
+const str = (value: string) => ({ type: TokenKind.String, value });
 
 const customDecl = (
   name: string,

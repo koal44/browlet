@@ -1,6 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import { assertNever } from '../../shared/util';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from '../syntax/component-cursor';
+import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   consumeWhitespace, createFunctionalNotationConsumer, consumeAsteriskDelim,
   consumeComma, consumeIdentToken, consumeParensBlock, consumeSlashDelim,
@@ -195,7 +195,7 @@ type MathValueConsumerOptions<Type extends MathValueType = MathValueType> = {
 
 export function createMathValueConsumer<Type extends MathValueType>(
   options: MathValueConsumerOptions<Type>,
-): TryComponentConsumer<MathValue<Type>> {
+): TryConsumer<MathValue<Type>> {
   return (c) => {
     const outerContext = c.context;
     const mathContext = outerContext === null || outerContext === undefined
@@ -210,7 +210,7 @@ export function createMathValueConsumer<Type extends MathValueType>(
         ...(options.percentHint === undefined ? {} : { percentHint: options.percentHint }),
       };
 
-      return mathValueConsumer(c) as TryComponentConsumerResult<
+      return mathValueConsumer(c) as TryConsumerResult<
         MathValue<Type>
       >;
     } finally {
@@ -551,8 +551,8 @@ type UnaryMathFunctionName =
   | 'sign';
 
 function consumeCalc(
-  c: ComponentCursor,
-): TryComponentConsumerResult<MathValue> {
+  c: TokenCursor,
+): TryConsumerResult<MathValue> {
   return calcConsumer(c);
 }
 
@@ -691,7 +691,7 @@ const signConsumer = createUnaryMathFunctionConsumer(
   'number',
 );
 
-const nonCalcMathFunctionConsumer: TryComponentConsumer<
+const nonCalcMathFunctionConsumer: TryConsumer<
   MathFunctionNode | NumericLeaf
 > =
   oneOf(
@@ -730,7 +730,7 @@ function createVariadicMathFunctionConsumer<
   Name extends VariadicMathFunctionName,
 >(
   name: Name,
-): TryComponentConsumer<
+): TryConsumer<
   MathVariadicFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = adaptConsumer(
@@ -753,7 +753,7 @@ function createBinaryMathFunctionConsumer<
   name: Name,
   typeRule: MathFunctionTypeRule,
   argumentCategories?: readonly MathCategory[],
-): TryComponentConsumer<
+): TryConsumer<
   MathBinaryFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = adaptConsumer(
@@ -779,7 +779,7 @@ function createUnaryMathFunctionConsumer<
   name: Name,
   typeRule: MathFunctionTypeRule,
   argumentCategories?: readonly MathCategory[],
-): TryComponentConsumer<
+): TryConsumer<
   MathUnaryFunctionNode<Name> | NumericLeaf
 > {
   const consumeArguments = adaptConsumer(
@@ -797,10 +797,10 @@ function createUnaryMathFunctionConsumer<
   return createMathFunctionConsumer(name, consumeArguments);
 }
 
-function createClampConsumer(): TryComponentConsumer<
+function createClampConsumer(): TryConsumer<
   MathClampNode | NumericLeaf
 > {
-  const consumeArgument: TryComponentConsumer<CalculationTree | 'none'> = oneOf(
+  const consumeArgument: TryConsumer<CalculationTree | 'none'> = oneOf(
     [
       one(consumeCalcSum),
       one(createKeywordConsumer('none')),
@@ -840,7 +840,7 @@ function createClampConsumer(): TryComponentConsumer<
   return createMathFunctionConsumer('clamp', consumeArguments);
 }
 
-function createRoundConsumer(): TryComponentConsumer<
+function createRoundConsumer(): TryConsumer<
   MathRoundNode | NumericLeaf
 > {
   const consumeArguments = sequenceOf(
@@ -878,7 +878,7 @@ function createRoundConsumer(): TryComponentConsumer<
   return createMathFunctionConsumer('round', consumeArguments);
 }
 
-function createLogConsumer(): TryComponentConsumer<
+function createLogConsumer(): TryConsumer<
   MathLogNode | NumericLeaf
 > {
   const consumeArguments = adaptConsumer(
@@ -903,8 +903,8 @@ function createLogConsumer(): TryComponentConsumer<
 
 function createMathFunctionConsumer<Node extends MathFunctionNode>(
   name: string,
-  consumeArguments: TryComponentConsumer<Node>,
-): TryComponentConsumer<Node | NumericLeaf> {
+  consumeArguments: TryConsumer<Node>,
+): TryConsumer<Node | NumericLeaf> {
   return createFunctionalNotationConsumer(
     name,
     consumeArguments,
@@ -1009,12 +1009,12 @@ function createMathFunctionNode<
   } as Node;
 }
 
-const roundingStrategyConsumer: TryComponentConsumer<RoundingStrategy> =
+const roundingStrategyConsumer: TryConsumer<RoundingStrategy> =
   createKeywordConsumer('nearest', 'up', 'down', 'to-zero', 'line-width');
 
 function consumeRoundingStrategyPrefix(
-  c: ComponentCursor,
-): TryComponentConsumerResult<RoundingStrategy> {
+  c: TokenCursor,
+): TryConsumerResult<RoundingStrategy> {
   return roundingStrategyPrefixConsumer(c);
 }
 
@@ -1051,13 +1051,13 @@ type CalcSumTail = {
 };
 
 function consumeCalcSum(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CalculationTree> {
+  c: TokenCursor,
+): TryConsumerResult<CalculationTree> {
   return calcSumConsumer(c);
 }
 
 // Repeated <calc-sum> fragment: [ '+' | '-' ] <calc-product>
-const calcSumTailConsumer: TryComponentConsumer<CalcSumTail> = sequenceOf(
+const calcSumTailConsumer: TryConsumer<CalcSumTail> = sequenceOf(
   [
     one(consumeCalcSumOperator),
     one(consumeCalcProduct),
@@ -1065,7 +1065,7 @@ const calcSumTailConsumer: TryComponentConsumer<CalcSumTail> = sequenceOf(
   ([[operator], [value]]) => ({ operator, value }),
 );
 
-const calcSumConsumer: TryComponentConsumer<CalculationTree> = sequenceOf(
+const calcSumConsumer: TryConsumer<CalculationTree> = sequenceOf(
   [
     one(consumeCalcProduct),
     repeat(calcSumTailConsumer, 0, CALC_TERM_LIMIT - 1),
@@ -1111,8 +1111,8 @@ const calcSumConsumer: TryComponentConsumer<CalculationTree> = sequenceOf(
 );
 
 function consumeCalcSumOperator(
-  c: ComponentCursor,
-): TryComponentConsumerResult<'+' | '-'> {
+  c: TokenCursor,
+): TryConsumerResult<'+' | '-'> {
   const start = c.pos();
 
   if (!c.match(TokenKind.Whitespace)) {
@@ -1163,12 +1163,12 @@ type CalcProductTail = {
 };
 
 function consumeCalcProduct(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CalculationTree> {
+  c: TokenCursor,
+): TryConsumerResult<CalculationTree> {
   return calcProductConsumer(c);
 }
 
-const calcProductOperatorConsumer: TryComponentConsumer<'*' | '/'> = oneOf(
+const calcProductOperatorConsumer: TryConsumer<'*' | '/'> = oneOf(
   [
     one(consumeAsteriskDelim),
     one(consumeSlashDelim),
@@ -1177,7 +1177,7 @@ const calcProductOperatorConsumer: TryComponentConsumer<'*' | '/'> = oneOf(
 );
 
 // Repeated <calc-product> fragment: [ '*' | '/' ] <calc-value>
-const calcProductTailConsumer: TryComponentConsumer<CalcProductTail> = sequenceOf(
+const calcProductTailConsumer: TryConsumer<CalcProductTail> = sequenceOf(
   [
     one(withTrivia(calcProductOperatorConsumer)),
     one(withTrivia(consumeCalcValue)),
@@ -1185,7 +1185,7 @@ const calcProductTailConsumer: TryComponentConsumer<CalcProductTail> = sequenceO
   ([[operator], [value]]) => ({ operator, value }),
 );
 
-const calcProductConsumer: TryComponentConsumer<CalculationTree> = sequenceOf(
+const calcProductConsumer: TryConsumer<CalculationTree> = sequenceOf(
   [
     one(consumeCalcValue),
     repeat(calcProductTailConsumer, 0, CALC_TERM_LIMIT - 1),
@@ -1240,12 +1240,12 @@ const calcProductConsumer: TryComponentConsumer<CalculationTree> = sequenceOf(
  */
 
 function consumeCalcValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CalculationTree> {
+  c: TokenCursor,
+): TryConsumerResult<CalculationTree> {
   return calcValueConsumer(c);
 }
 
-const mathFunctionCalculationConsumer: TryComponentConsumer<CalculationTree> =
+const mathFunctionCalculationConsumer: TryConsumer<CalculationTree> =
   oneOf(
     [
       one(consumeCalcCalculation),
@@ -1254,7 +1254,7 @@ const mathFunctionCalculationConsumer: TryComponentConsumer<CalculationTree> =
     ([value]) => value,
   );
 
-const mathValueConsumer: TryComponentConsumer<MathValue> = adaptConsumer(
+const mathValueConsumer: TryConsumer<MathValue> = adaptConsumer(
   mathFunctionCalculationConsumer,
   (calculation, context) => createMathValue(
     calculation,
@@ -1262,7 +1262,7 @@ const mathValueConsumer: TryComponentConsumer<MathValue> = adaptConsumer(
   ),
 );
 
-const calcNumericLeafConsumer: TryComponentConsumer<NumericLeaf> = oneOf(
+const calcNumericLeafConsumer: TryConsumer<NumericLeaf> = oneOf(
   [
     one(consumeNumber),
     one(consumeDimension),
@@ -1283,7 +1283,7 @@ const calcNumericLeafConsumer: TryComponentConsumer<NumericLeaf> = oneOf(
   },
 );
 
-const calcValueConsumer: TryComponentConsumer<CalculationTree> = oneOf(
+const calcValueConsumer: TryConsumer<CalculationTree> = oneOf(
   [
     one(calcNumericLeafConsumer),
     one(consumeCalcKeyword),
@@ -1309,8 +1309,8 @@ const calcValueConsumer: TryComponentConsumer<CalculationTree> = oneOf(
 );
 
 function consumeParenthesizedCalcSum(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CalculationTree> {
+  c: TokenCursor,
+): TryConsumerResult<CalculationTree> {
   return parenthesizedCalcSumConsumer(c);
 }
 
@@ -1324,8 +1324,8 @@ const parenthesizedCalcSumConsumer = adaptConsumer(
 );
 
 function consumeCalcCalculation(
-  c: ComponentCursor,
-): TryComponentConsumerResult<CalculationTree> {
+  c: TokenCursor,
+): TryConsumerResult<CalculationTree> {
   return (
     mathContextFor(c.context).insideCalculation
       ? nestedCalcCalculationConsumer
@@ -1356,12 +1356,12 @@ const nestedCalcCalculationConsumer = adaptConsumer(
  */
 
 function consumeCalcKeyword(
-  c: ComponentCursor,
-): TryComponentConsumerResult<NumericLeaf | VariableLeaf> {
+  c: TokenCursor,
+): TryConsumerResult<NumericLeaf | VariableLeaf> {
   return calcKeywordConsumer(c);
 }
 
-const calcKeywordConsumer: TryComponentConsumer<NumericLeaf | VariableLeaf> = adaptConsumer(
+const calcKeywordConsumer: TryConsumer<NumericLeaf | VariableLeaf> = adaptConsumer(
   consumeIdentToken,
   (token, rawContext) => {
     const name = asciiLower(token.value);

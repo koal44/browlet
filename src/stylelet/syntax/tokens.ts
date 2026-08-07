@@ -14,6 +14,7 @@ export enum TokenKind {
   Number,
   Percentage,
   Dimension,
+  UnicodeRange,
   Whitespace,
   CDO,
   CDC,
@@ -27,6 +28,10 @@ export enum TokenKind {
   LeftBrace,
   RightBrace,
   EOF,
+  BraceBlock,
+  BracketBlock,
+  ParensBlock,
+  FunctionBlock,
 }
 
 export enum HashTokenFlag {
@@ -39,71 +44,73 @@ export enum NumberTokenFlag {
   Number = 1,
 }
 
+export enum NumericSign {
+  None = 0,
+  Plus,
+  Minus,
+}
+
 export type IdentToken = {
-  type: 'token';
-  kind: TokenKind.Ident;
+  type: TokenKind.Ident;
   value: string;
 };
 
 export type FunctionToken = {
-  type: 'token';
-  kind: TokenKind.Function;
+  type: TokenKind.Function;
   value: string;
 };
 
 export type AtKeywordToken = {
-  type: 'token';
-  kind: TokenKind.AtKeyword;
+  type: TokenKind.AtKeyword;
   value: string;
 };
 
 export type HashToken = {
-  type: 'token';
-  kind: TokenKind.Hash;
+  type: TokenKind.Hash;
   value: string;
   flag: HashTokenFlag;
 };
 
 export type StringToken = {
-  type: 'token';
-  kind: TokenKind.String;
+  type: TokenKind.String;
   value: string;
 };
 
 export type UrlToken = {
-  type: 'token';
-  kind: TokenKind.Url;
+  type: TokenKind.Url;
   value: string;
 };
 
 export type DelimToken = {
-  type: 'token';
-  kind: TokenKind.Delim;
+  type: TokenKind.Delim;
   value: string;
 };
 
 export type NumberToken = {
-  type: 'token';
-  kind: TokenKind.Number;
+  type: TokenKind.Number;
   value: number;
-  repr: string;
+  sign: NumericSign;
   flag: NumberTokenFlag;
 };
 
 export type PercentageToken = {
-  type: 'token';
-  kind: TokenKind.Percentage;
+  type: TokenKind.Percentage;
   value: number;
-  repr: string;
+  sign: NumericSign;
 };
 
 export type DimensionToken = {
-  type: 'token';
-  kind: TokenKind.Dimension;
+  type: TokenKind.Dimension;
   value: number;
-  repr: string;
+  sign: NumericSign;
   flag: NumberTokenFlag;
   unit: string;
+};
+
+export type UnicodeRangeToken = {
+  type: TokenKind.UnicodeRange;
+  start: number;
+  end: number;
 };
 
 export type StaticTokenKind =
@@ -124,8 +131,7 @@ export type StaticTokenKind =
   | TokenKind.EOF;
 
 export type StaticToken<K extends StaticTokenKind = StaticTokenKind> = {
-  type: 'token';
-  kind: K;
+  type: K;
 };
 
 type AnyStaticToken = {
@@ -133,6 +139,74 @@ type AnyStaticToken = {
 }[StaticTokenKind];
 
 export type Token =
+  | LexicalToken
+  | ComponentBlock;
+
+export type ComponentValue =
+  | PreservedToken
+  | ComponentBlock;
+
+export type PreservedToken =
+  | IdentToken
+  | AtKeywordToken
+  | HashToken
+  | StringToken
+  | StaticToken<TokenKind.BadString>
+  | UrlToken
+  | StaticToken<TokenKind.BadUrl>
+  | DelimToken
+  | NumberToken
+  | PercentageToken
+  | DimensionToken
+  | UnicodeRangeToken
+  | StaticToken<TokenKind.Whitespace>
+  | StaticToken<TokenKind.CDO>
+  | StaticToken<TokenKind.CDC>
+  | StaticToken<TokenKind.Colon>
+  | StaticToken<TokenKind.Semicolon>
+  | StaticToken<TokenKind.Comma>
+  | StaticToken<TokenKind.RightBracket>
+  | StaticToken<TokenKind.RightParen>
+  | StaticToken<TokenKind.RightBrace>;
+
+export type ComponentBlock =
+  | SimpleBlock<ComponentValue[]>
+  | FunctionBlock<ComponentValue[]>;
+
+export type SimpleBlock<Contents = ComponentValue[]> =
+  | BraceBlock<Contents>
+  | BracketBlock<Contents>
+  | ParensBlock<Contents>;
+
+export type BlockKind = ComponentBlock['type'];
+
+export type SimpleBlockKind =
+  | TokenKind.BraceBlock
+  | TokenKind.BracketBlock
+  | TokenKind.ParensBlock;
+
+export type BraceBlock<Contents = ComponentValue[]> = {
+  type: TokenKind.BraceBlock;
+  value: Contents;
+};
+
+export type BracketBlock<Contents = ComponentValue[]> = {
+  type: TokenKind.BracketBlock;
+  value: Contents;
+};
+
+export type ParensBlock<Contents = ComponentValue[]> = {
+  type: TokenKind.ParensBlock;
+  value: Contents;
+};
+
+export type FunctionBlock<Contents = ComponentValue[]> = {
+  type: TokenKind.FunctionBlock;
+  name: string;
+  value: Contents;
+};
+
+type LexicalToken =
   | IdentToken
   | FunctionToken
   | AtKeywordToken
@@ -143,10 +217,11 @@ export type Token =
   | NumberToken
   | PercentageToken
   | DimensionToken
+  | UnicodeRangeToken
   | AnyStaticToken;
 
 function staticToken<K extends StaticTokenKind>(kind: K): StaticToken<K> {
-  return Object.freeze({ type: 'token', kind });
+  return Object.freeze({ type: kind });
 }
 
 export const BadStringToken = staticToken(TokenKind.BadString);
@@ -166,49 +241,185 @@ export const RightBraceToken = staticToken(TokenKind.RightBrace);
 export const EOFToken = staticToken(TokenKind.EOF);
 
 export function identToken(value: string): IdentToken {
-  return { type: 'token', kind: TokenKind.Ident, value };
+  return { type: TokenKind.Ident, value };
 }
 
 export function functionToken(value: string): FunctionToken {
-  return { type: 'token', kind: TokenKind.Function, value };
+  return { type: TokenKind.Function, value };
 }
 
 export function atKeywordToken(value: string): AtKeywordToken {
-  return { type: 'token', kind: TokenKind.AtKeyword, value };
+  return { type: TokenKind.AtKeyword, value };
 }
 
 export function hashToken(value: string, flag = HashTokenFlag.Unrestricted): HashToken {
-  return { type: 'token', kind: TokenKind.Hash, value, flag };
+  return { type: TokenKind.Hash, value, flag };
 }
 
 export function stringToken(value: string): StringToken {
-  return { type: 'token', kind: TokenKind.String, value };
+  return { type: TokenKind.String, value };
 }
 
 export function urlToken(value: string): UrlToken {
-  return { type: 'token', kind: TokenKind.Url, value };
+  return { type: TokenKind.Url, value };
 }
 
 export function delimToken(value: string): DelimToken {
-  return { type: 'token', kind: TokenKind.Delim, value };
+  return { type: TokenKind.Delim, value };
 }
 
-export function numberToken(value: number, flag = NumberTokenFlag.Integer, repr = ''): NumberToken {
-  return { type: 'token', kind: TokenKind.Number, value, flag, repr };
+export function numberToken(
+  value: number,
+  flag = NumberTokenFlag.Integer,
+  sign = NumericSign.None,
+): NumberToken {
+  return { type: TokenKind.Number, value, sign, flag };
 }
 
-export function percentageToken(value: number, repr = ''): PercentageToken {
-  return { type: 'token', kind: TokenKind.Percentage, value, repr };
+export function percentageToken(
+  value: number,
+  sign = NumericSign.None,
+): PercentageToken {
+  return { type: TokenKind.Percentage, value, sign };
 }
 
-export function dimensionToken(value: number, unit: string, flag = NumberTokenFlag.Integer,
-  repr = ''): DimensionToken {
-  return { type: 'token', kind: TokenKind.Dimension, value, flag, unit, repr };
+export function dimensionToken(
+  value: number,
+  unit: string,
+  flag = NumberTokenFlag.Integer,
+  sign = NumericSign.None,
+): DimensionToken {
+  return { type: TokenKind.Dimension, value, sign, flag, unit };
+}
+
+export function unicodeRangeToken(start: number, end: number): UnicodeRangeToken {
+  return { type: TokenKind.UnicodeRange, start, end };
 }
 
 const LF = '\n';
 const ReplacementCharacter = '\uFFFD';
+const MaximumAllowedCodePoint = 0x10FFFF;
 
+export type DecodeStylesheetOptions = {
+  transportEncoding?: string;
+  environmentEncoding?: string;
+};
+
+// 3.2. The input byte stream
+export function decodeStylesheetBytes(
+  bytes: Uint8Array,
+  options: DecodeStylesheetOptions = {},
+): string {
+  const fallback = determineFallbackEncoding(bytes, options);
+  const encoding = sniffByteOrderMark(bytes) ?? fallback;
+
+  return decode(bytes, encoding);
+}
+
+function determineFallbackEncoding(
+  bytes: Uint8Array,
+  {
+    transportEncoding,
+    environmentEncoding,
+  }: DecodeStylesheetOptions,
+): string {
+  const transport = getEncoding(transportEncoding);
+  if (transport !== null) return transport;
+
+  const declared = getDeclaredEncoding(bytes);
+  if (declared !== null) {
+    return declared === 'utf-16be' || declared === 'utf-16le'
+      ? 'utf-8'
+      : declared;
+  }
+
+  const environment = getEncoding(environmentEncoding);
+  return environment ?? 'utf-8';
+}
+
+function getDeclaredEncoding(bytes: Uint8Array): string | null {
+  const prefix = [
+    0x40, 0x63, 0x68, 0x61, 0x72,
+    0x73, 0x65, 0x74, 0x20, 0x22,
+  ];
+
+  if (!startsWith(bytes, prefix)) return null;
+
+  const limit = Math.min(bytes.length, 1024);
+
+  for (let i = prefix.length; i < limit; i++) {
+    const byte = bytes[i]!;
+
+    if (byte === 0x22) {
+      if (i + 1 >= limit || bytes[i + 1] !== 0x3B) return null;
+
+      const label = String.fromCharCode(...bytes.subarray(prefix.length, i));
+      return getEncoding(label);
+    }
+
+    if (!(byte <= 0x21 || (byte >= 0x23 && byte <= 0x7F))) return null;
+  }
+
+  return null;
+}
+
+function sniffByteOrderMark(bytes: Uint8Array): string | null {
+  if (startsWith(bytes, [0xEF, 0xBB, 0xBF])) return 'utf-8';
+  if (startsWith(bytes, [0xFE, 0xFF])) return 'utf-16be';
+  if (startsWith(bytes, [0xFF, 0xFE])) return 'utf-16le';
+
+  return null;
+}
+
+function getEncoding(label?: string): string | null {
+  if (label === undefined) return null;
+
+  const normalized = label
+    .replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '')
+    .toLowerCase();
+
+  if (ReplacementEncodingLabels.has(normalized)) return 'replacement';
+  if (normalized === 'x-user-defined') return normalized;
+
+  try {
+    return new TextDecoder(normalized).encoding;
+  } catch {
+    return null;
+  }
+}
+
+function decode(bytes: Uint8Array, encoding: string): string {
+  if (encoding === 'replacement') {
+    return bytes.length === 0 ? '' : '\uFFFD';
+  }
+
+  if (encoding === 'x-user-defined') {
+    let result = '';
+
+    for (const byte of bytes) {
+      result += String.fromCodePoint(byte <= 0x7F ? byte : 0xF780 + byte);
+    }
+
+    return result;
+  }
+
+  return new TextDecoder(encoding).decode(bytes);
+}
+
+function startsWith(bytes: Uint8Array, prefix: readonly number[]): boolean {
+  return prefix.every((byte, index) => bytes[index] === byte);
+}
+
+const ReplacementEncodingLabels = new Set([
+  'csiso2022kr',
+  'hz-gb-2312',
+  'iso-2022-cn',
+  'iso-2022-cn-ext',
+  'iso-2022-kr',
+  'replacement',
+]);
+
+// 3.3. Preprocessing the input stream
 export function filterCodePoints(input: string): string {
   let out = '';
   let last = 0;
@@ -284,20 +495,20 @@ type IdentLikeToken =
   | UrlToken
   | StaticToken<TokenKind.BadUrl>;
 
-export function tokenize(input: string): Token[] {
+export function tokenize(input: string, unicodeRangesAllowed = false): Token[] {
   const c = new TextCursor(filterCodePoints(input));
   const tokens: Token[] = [];
 
   while (true) {
-    const token = consumeToken(c);
+    const token = consumeToken(c, unicodeRangesAllowed);
 
-    if (token.kind === TokenKind.EOF) {
+    if (token.type === TokenKind.EOF) {
       return tokens;
     }
 
     if (
-      token.kind === TokenKind.Whitespace &&
-      tokens[tokens.length - 1]?.kind === TokenKind.Whitespace
+      token.type === TokenKind.Whitespace &&
+      tokens[tokens.length - 1]?.type === TokenKind.Whitespace
     ) {
       continue;
     }
@@ -307,7 +518,7 @@ export function tokenize(input: string): Token[] {
 }
 
 // 4.3.1. Consume a token
-function consumeToken(c: TextCursor): Token {
+function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
   consumeComments(c);
 
   const pos = c.pos();
@@ -317,7 +528,7 @@ function consumeToken(c: TextCursor): Token {
     return EOFToken;
   }
 
-  if (isCssWhitespace(ch)) {
+  if (isWhitespace(ch)) {
     consumeWhitespace(c);
     return WhitespaceToken;
   }
@@ -332,7 +543,7 @@ function consumeToken(c: TextCursor): Token {
         ? HashTokenFlag.Id
         : HashTokenFlag.Unrestricted;
 
-      return hashToken(consumeIdentSequenceUnchecked(c), flag);
+      return hashToken(consumeIdentSequence(c), flag);
     }
 
     return delimToken(ch);
@@ -410,7 +621,7 @@ function consumeToken(c: TextCursor): Token {
 
   if (ch === '@') {
     if (wouldStartIdentSequenceCodePoints(c.peek(), c.peek(1), c.peek(2))) {
-      return atKeywordToken(consumeIdentSequenceUnchecked(c));
+      return atKeywordToken(consumeIdentSequence(c));
     }
 
     return delimToken(ch);
@@ -446,6 +657,14 @@ function consumeToken(c: TextCursor): Token {
     return consumeNumericToken(c);
   }
 
+  if (
+    unicodeRangesAllowed &&
+    wouldStartUnicodeRangeCodePoints(ch, c.peek(), c.peek(1))
+  ) {
+    c.restore(pos);
+    return consumeUnicodeRangeToken(c);
+  }
+
   if (isIdentStartCodePoint(ch)) {
     c.restore(pos);
     return consumeIdentLikeToken(c);
@@ -472,32 +691,36 @@ function consumeComments(c: TextCursor): void {
 
 // 4.3.3. Consume a numeric token
 function consumeNumericToken(c: TextCursor): NumericToken {
-  const start = c.pos();
   const number = consumeNumber(c);
 
   if (wouldStartIdentSequenceCodePoints(c.peek(), c.peek(1), c.peek(2))) {
-    const unit = consumeIdentSequenceUnchecked(c);
-    return dimensionToken(number.value, unit, number.flag, c.slice(start, c.pos()));
+    const unit = consumeIdentSequence(c);
+    return dimensionToken(
+      number.value,
+      unit,
+      number.flag,
+      number.sign,
+    );
   }
 
   if (c.peek() === '%') {
     c.advance();
-    return percentageToken(number.value, c.slice(start, c.pos()));
+    return percentageToken(number.value, number.sign);
   }
 
-  return numberToken(number.value, number.flag, c.slice(start, c.pos()));
+  return numberToken(number.value, number.flag, number.sign);
 }
 
 // 4.3.4. Consume an ident-like token
 function consumeIdentLikeToken(c: TextCursor): IdentLikeToken {
-  const value = consumeIdentSequenceUnchecked(c);
+  const value = consumeIdentSequence(c);
 
   if (asciiEquals(value, 'url') && c.peek() === '(') {
     c.advance();
 
     // Spec says: while the next two input code points are whitespace,
     // consume the next input code point.
-    while (isCssWhitespace(c.peek()) && isCssWhitespace(c.peek(1))) {
+    while (isWhitespace(c.peek()) && isWhitespace(c.peek(1))) {
       c.advance();
     }
 
@@ -507,7 +730,7 @@ function consumeIdentLikeToken(c: TextCursor): IdentLikeToken {
     if (
       ch === '"' ||
       ch === "'" ||
-      (isCssWhitespace(ch) && (next === '"' || next === "'"))
+      (isWhitespace(ch) && (next === '"' || next === "'"))
     ) {
       return functionToken(value);
     }
@@ -583,7 +806,7 @@ function consumeUrlToken(c: TextCursor): UrlToken | StaticToken<TokenKind.BadUrl
       return urlToken(value);
     }
 
-    if (isCssWhitespace(ch)) {
+    if (isWhitespace(ch)) {
       consumeWhitespace(c);
 
       if (c.match(')')) {
@@ -640,7 +863,7 @@ function consumeEscapedCodePoint(c: TextCursor): string {
     hex += c.next();
   }
 
-  if (isCssWhitespace(c.peek())) {
+  if (isWhitespace(c.peek())) {
     c.advance();
   }
 
@@ -648,7 +871,7 @@ function consumeEscapedCodePoint(c: TextCursor): string {
 
   if (
     value === 0 ||
-    value > 0x10FFFF ||
+    value > MaximumAllowedCodePoint ||
     (value >= 0xD800 && value <= 0xDFFF)
   ) {
     return '\uFFFD';
@@ -700,8 +923,21 @@ function wouldStartNumberCodePoints(first: string, second: string, third: string
   return isDigit(first);
 }
 
-// 4.3.11. Consume an ident sequence
-function consumeIdentSequenceUnchecked(c: TextCursor): string {
+// 4.3.11. Check if three code points would start a unicode-range
+function wouldStartUnicodeRangeCodePoints(
+  first: string,
+  second: string,
+  third: string,
+): boolean {
+  return (
+    (first === 'U' || first === 'u') &&
+    second === '+' &&
+    (third === '?' || isHexDigit(third))
+  );
+}
+
+// 4.3.12. Consume an ident sequence
+function consumeIdentSequence(c: TextCursor): string {
   // Deliberately does not validate that the stream starts with an ident sequence.
   let result = '';
 
@@ -726,16 +962,20 @@ function consumeIdentSequenceUnchecked(c: TextCursor): string {
 type ConsumedNumber = {
   value: number;
   flag: NumberTokenFlag;
-  repr: string;
+  sign: NumericSign;
 };
 
-// 4.3.12. Consume a number
+// 4.3.13. Consume a number
 function consumeNumber(c: TextCursor): ConsumedNumber {
   let flag = NumberTokenFlag.Integer;
+  let sign = NumericSign.None;
   let repr = '';
 
-  if (c.peek() === '+' || c.peek() === '-') {
-    repr += c.next();
+  const first = c.peek();
+  if (first === '+' || first === '-') {
+    sign = first === '+' ? NumericSign.Plus : NumericSign.Minus;
+    repr += first;
+    c.advance();
   }
 
   while (isDigit(c.peek())) {
@@ -778,11 +1018,10 @@ function consumeNumber(c: TextCursor): ConsumedNumber {
   return {
     value: convertStringToNumber(repr),
     flag,
-    repr,
+    sign,
   };
 }
 
-// 4.3.13. Convert a string to a number
 function convertStringToNumber(repr: string): number {
   let i = 0;
 
@@ -793,7 +1032,7 @@ function convertStringToNumber(repr: string): number {
   }
 
   const integerStart = i;
-  while (isDigit(repr[i])) i++;
+  while (isDigit(repr.charAt(i))) i++;
   const integerPart = repr.slice(integerStart, i);
   const integer = integerPart === '' ? 0 : Number(integerPart);
 
@@ -804,7 +1043,7 @@ function convertStringToNumber(repr: string): number {
     i++;
 
     const fractionStart = i;
-    while (isDigit(repr[i])) i++;
+    while (isDigit(repr.charAt(i))) i++;
 
     const fractionPart = repr.slice(fractionStart, i);
     fractionDigits = fractionPart.length;
@@ -823,7 +1062,7 @@ function convertStringToNumber(repr: string): number {
     }
 
     const exponentStart = i;
-    while (isDigit(repr[i])) i++;
+    while (isDigit(repr.charAt(i))) i++;
 
     const exponentPart = repr.slice(exponentStart, i);
     exponent = exponentPart === '' ? 0 : Number(exponentPart);
@@ -832,7 +1071,43 @@ function convertStringToNumber(repr: string): number {
   return s * (integer + fraction * 10 ** -fractionDigits) * 10 ** (t * exponent);
 }
 
-// 4.3.14. Consume the remnants of a bad url
+// 4.3.14. Consume a unicode-range token
+function consumeUnicodeRangeToken(c: TextCursor): UnicodeRangeToken {
+  c.advance(2); // U+
+
+  let firstSegment = '';
+
+  while (firstSegment.length < 6 && isHexDigit(c.peek())) {
+    firstSegment += c.next();
+  }
+
+  while (firstSegment.length < 6 && c.peek() === '?') {
+    firstSegment += c.next();
+  }
+
+  if (firstSegment.includes('?')) {
+    const start = Number.parseInt(firstSegment.replaceAll('?', '0'), 16);
+    const end = Number.parseInt(firstSegment.replaceAll('?', 'F'), 16);
+    return unicodeRangeToken(start, end);
+  }
+
+  const start = Number.parseInt(firstSegment, 16);
+
+  if (c.peek() === '-' && isHexDigit(c.peek(1))) {
+    c.advance();
+
+    let endSegment = '';
+    while (endSegment.length < 6 && isHexDigit(c.peek())) {
+      endSegment += c.next();
+    }
+
+    return unicodeRangeToken(start, Number.parseInt(endSegment, 16));
+  }
+
+  return unicodeRangeToken(start, start);
+}
+
+// 4.3.15. Consume the remnants of a bad url
 function consumeBadUrlRemnants(c: TextCursor): void {
   while (true) {
     const ch = c.next();
@@ -849,12 +1124,12 @@ function consumeBadUrlRemnants(c: TextCursor): void {
 
 // Consume whitespace
 function consumeWhitespace(c: TextCursor): void {
-  c.consumeWhile(isCssWhitespace);
+  c.consumeWhile(isWhitespace);
 }
 
 // Assumes the input stream has already gone through filterCodePoints(),
 // so CR, CRLF, and FF have already become LF.
-function isCssWhitespace(ch: string): boolean {
+function isWhitespace(ch: string): boolean {
   return ch === ' ' || ch === '\t' || isNewline(ch);
 }
 
@@ -866,44 +1141,87 @@ function asciiEquals(a: string, b: string): boolean {
   return a.length === b.length && asciiLower(a) === asciiLower(b);
 }
 
-function isDigit(ch: string | undefined): boolean {
-  if (ch === undefined || ch === '') return false;
+function isDigit(ch: string): boolean {
+  if (ch === '') return false;
 
   const code = ch.charCodeAt(0);
   return code >= 0x30 && code <= 0x39;
 }
 
-function isHexDigit(ch: string | undefined): boolean {
-  if (ch === undefined || ch === '') return false;
+function isHexDigit(ch: string): boolean {
+  if (ch === '') return false;
 
   const code = ch.charCodeAt(0);
 
   return (
-    (code >= 0x30 && code <= 0x39) ||
+    isDigit(ch) ||
     (code >= 0x41 && code <= 0x46) ||
     (code >= 0x61 && code <= 0x66)
   );
 }
 
-function isIdentStartCodePoint(ch: string | undefined): boolean {
-  if (ch === undefined || ch === '') return false;
+function isUppercaseLetter(ch: string): boolean {
+  if (ch === '') return false;
 
   const code = ch.charCodeAt(0);
+  return code >= 0x41 && code <= 0x5A;
+}
+
+function isLowercaseLetter(ch: string): boolean {
+  if (ch === '') return false;
+
+  const code = ch.charCodeAt(0);
+  return code >= 0x61 && code <= 0x7A;
+}
+
+function isLetter(ch: string): boolean {
+  return isUppercaseLetter(ch) || isLowercaseLetter(ch);
+}
+
+function isIdentStartCodePoint(ch: string): boolean {
+  if (ch === '') return false;
+
+  if (ch === '_' || isLetter(ch)) return true;
+
+  // Filtering guarantees that surrogate code units only occur in valid
+  // pairs, which represent allowed code points above U+FFFF.
+  const code = ch.charCodeAt(0);
+  if (code >= 0xD800 && code <= 0xDFFF) return true;
+
+  return isNonAsciiIdentCodePoint(ch);
+}
+
+function isNonAsciiIdentCodePoint(ch: string): boolean {
+  if (ch === '') return false;
+
+  const code = ch.codePointAt(0)!;
+  if (code < 0xB7) return false;
 
   return (
-    ch === '_' ||
-    (code >= 0x41 && code <= 0x5A) ||
-    (code >= 0x61 && code <= 0x7A) ||
-    code >= 0x80
+    code === 0xB7 ||
+    (code >= 0xC0 && code <= 0xD6) ||
+    (code >= 0xD8 && code <= 0xF6) ||
+    (code >= 0xF8 && code <= 0x37D) ||
+    (code >= 0x37F && code <= 0x1FFF) ||
+    code === 0x200C ||
+    code === 0x200D ||
+    code === 0x203F ||
+    code === 0x2040 ||
+    (code >= 0x2070 && code <= 0x218F) ||
+    (code >= 0x2C00 && code <= 0x2FEF) ||
+    (code >= 0x3001 && code <= 0xD7FF) ||
+    (code >= 0xF900 && code <= 0xFDCF) ||
+    (code >= 0xFDF0 && code <= 0xFFFD) ||
+    code >= 0x10000
   );
 }
 
-function isIdentCodePoint(ch: string | undefined): boolean {
+function isIdentCodePoint(ch: string): boolean {
   return isIdentStartCodePoint(ch) || isDigit(ch) || ch === '-';
 }
 
-function isNonPrintableCodePoint(ch: string | undefined): boolean {
-  if (ch === undefined || ch === '') return false;
+function isNonPrintableCodePoint(ch: string): boolean {
+  if (ch === '') return false;
 
   const code = ch.charCodeAt(0);
 

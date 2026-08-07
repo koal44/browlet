@@ -1,10 +1,11 @@
 import {
   one, oneOf, plus, adaptConsumer, recursive, sequenceOf, withTrivia,
 } from '../syntax/component-grammar';
-import { type TryComponentConsumer } from '../syntax/component-cursor';
+import { type TryConsumer } from '../syntax/token-cursor';
 import { consumeParensBlock } from '../syntax/component-consumers';
 import { type ParensBlock } from '../syntax/component-value';
 import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
+import { TokenKind } from '../syntax/tokens';
 import { consumeGeneralEnclosed, type GeneralEnclosedValue } from './general-enclosed';
 import { createKeywordConsumer } from './keyword';
 
@@ -61,7 +62,7 @@ export type BooleanExprContext<Test> = {
 
 export function parseBooleanExpr<Test>(
   input: ParserInput,
-  testConsumer: TryComponentConsumer<Test>,
+  testConsumer: TryConsumer<Test>,
 ): BooleanExprValue<Test> | null {
   return parseAsComponentGrammar(
     input,
@@ -79,8 +80,8 @@ export function parseBooleanExpr<Test>(
  *   <test> | ( <boolean-expr[ <test> ]> ) | <general-enclosed>
  */
 export function createBooleanExprConsumer<Test>(
-  consumeTest: TryComponentConsumer<Test>,
-): TryComponentConsumer<BooleanExprValue<Test>> {
+  consumeTest: TryConsumer<Test>,
+): TryConsumer<BooleanExprValue<Test>> {
   return recursive((consumeExpr) => {
     // <test>
     const testConsumer = adaptConsumer(
@@ -181,8 +182,8 @@ export function createBooleanExprConsumer<Test>(
 
 // ( <contents> )
 function createParensConsumer<Test>(
-  valueConsumer: TryComponentConsumer<BooleanExprValue<Test>>,
-): TryComponentConsumer<BooleanExprParens<Test>> {
+  valueConsumer: TryConsumer<BooleanExprValue<Test>>,
+): TryConsumer<BooleanExprParens<Test>> {
   return adaptConsumer(consumeParensBlock, (component, context) => {
     const value = parseAsComponentGrammar(
       component.value,
@@ -221,11 +222,11 @@ function resolveBooleanExprValue<Test>(
   context: BooleanExprContext<Test>,
 ): BooleanExprResult {
   switch (value.type) {
+    case TokenKind.ParensBlock:
+      return resolveBooleanExprValue(value.value, context);
+
     case 'boolean-test':
       return context.resolveTest(value.value);
-
-    case 'block':
-      return resolveBooleanExprValue(value.value, context);
 
     case 'general-enclosed':
       return context.resolveGeneralEnclosed?.(value) ?? 'unknown';

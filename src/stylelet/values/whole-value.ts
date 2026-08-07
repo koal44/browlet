@@ -1,4 +1,4 @@
-import type { TryComponentConsumer } from '../syntax/component-cursor';
+import type { TryConsumer } from '../syntax/token-cursor';
 import { serializeComponentValues } from '../syntax/component-value';
 import {
   adaptConsumer, withTrivia,
@@ -70,7 +70,7 @@ type ParsedWholeValue<Value, Context> =
 
 type WholeValueDefinition<Value, Context> = {
   parse: (input: ParserInput) => RawWholeValue<Value, Context> | null;
-  consume: TryComponentConsumer<ParsedWholeValue<Value, Context>>;
+  consume: TryConsumer<ParsedWholeValue<Value, Context>>;
 };
 
 export type GuaranteedInvalidValue = {
@@ -122,7 +122,7 @@ export function defineProperty<Value, Context>(
     definition.consume,
     (value) => createOrdinaryWholeValue(value, definition),
   );
-  const consume: TryComponentConsumer<ParsedWholeValue<Value, Context>> =
+  const consume: TryConsumer<ParsedWholeValue<Value, Context>> =
     (c) => consumeCssWideValue(c) ?? firstValidWholeConsumer(c) ?? ordinaryConsumer(c);
 
   function resolveRaw(

@@ -1,6 +1,6 @@
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createFunctionalNotationConsumer, consumeUrlToken } from '../syntax/component-consumers';
 import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
@@ -52,8 +52,8 @@ export function parseUrl(
 }
 
 export function consumeUrl(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlValue> {
+  c: TokenCursor,
+): TryConsumerResult<UrlValue> {
   return urlConsumer(c);
 }
 
@@ -135,7 +135,7 @@ const urlFunctionModifierConsumer = adaptConsumer(
 );
 
 // <url-token>
-const urlTokenValueConsumer: TryComponentConsumer<UrlValue> = adaptConsumer(
+const urlTokenValueConsumer: TryConsumer<UrlValue> = adaptConsumer(
   consumeUrlToken,
   (component): UrlValue => ({
     type: 'url',
@@ -170,7 +170,7 @@ const srcFnConsumer = createFunctionalNotationConsumer(
 );
 
 // <url()> = url( <string> <url-modifier>* ) | <url-token>
-const urlFnConsumer: TryComponentConsumer<UrlValue> = oneOf(
+const urlFnConsumer: TryConsumer<UrlValue> = oneOf(
   [
     one(createFunctionalNotationConsumer(
       'url',
@@ -200,7 +200,7 @@ const urlFnConsumer: TryComponentConsumer<UrlValue> = oneOf(
 );
 
 // <url> = <url()> | <src()>
-const urlConsumer: TryComponentConsumer<UrlValue> = oneOf(
+const urlConsumer: TryConsumer<UrlValue> = oneOf(
   [
     one(urlFnConsumer),
     one(srcFnConsumer),

@@ -1,8 +1,8 @@
 import { consumeStringToken } from '../syntax/component-consumers';
 import { serializeCssString } from '../syntax/component-value';
 import {
-  type ComponentCursor, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import type { ValueDefinition } from '../value-processing/definition';
@@ -30,8 +30,8 @@ export function parseString(
 }
 
 export function consumeString(
-  c: ComponentCursor,
-): TryComponentConsumerResult<StringValue> {
+  c: TokenCursor,
+): TryConsumerResult<StringValue> {
   return stringConsumer(c);
 }
 

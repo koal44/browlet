@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
 import {
@@ -34,14 +34,14 @@ export function parseTimePercentage(
 }
 
 export function consumeTimePercentage(
-  c: ComponentCursor,
-): TryComponentConsumerResult<TimePercentageValue> {
+  c: TokenCursor,
+): TryConsumerResult<TimePercentageValue> {
   return timePercentageConsumer(c);
 }
 
 export function createTimePercentageConsumer(
   options: TimePercentageConsumerOptions = {},
-): TryComponentConsumer<TimePercentageValue> {
+): TryConsumer<TimePercentageValue> {
   const literalConsumer = createTimePercentageLiteralConsumer(options);
   const range = timePercentageRange(options);
 

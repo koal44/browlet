@@ -1,7 +1,7 @@
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { serializeAuto, consumeAuto, type AutoValue } from '../values/auto';
 import type { MathContext } from '../values/math-value';
@@ -27,8 +27,8 @@ export function parseMarginSideValue(
 }
 
 export function consumeMarginSideValue(
-  c: ComponentCursor,
-): TryComponentConsumerResult<MarginSideValue> {
+  c: TokenCursor,
+): TryConsumerResult<MarginSideValue> {
   return marginSideValueConsumer(c);
 }
 
@@ -39,7 +39,7 @@ export function serializeMarginSideValue(value: MarginSideValue): string {
 }
 
 // <margin-top>, <margin-right>, <margin-bottom>, <margin-left> = <length-percentage> | auto
-const marginSideValueConsumer: TryComponentConsumer<MarginSideValue> = oneOf(
+const marginSideValueConsumer: TryConsumer<MarginSideValue> = oneOf(
   [
     one(consumeLengthPercentage),
     one(consumeAuto),

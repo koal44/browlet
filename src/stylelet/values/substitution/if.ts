@@ -6,9 +6,9 @@ import {
   any, one, opt, oneOf, sequenceOf, withTrivia,
 } from '../../syntax/component-grammar';
 import {
-  type ComponentCursor, type TryComponentConsumer,
-  type TryComponentConsumerResult,
-} from '../../syntax/component-cursor';
+  type TokenCursor, type TryConsumer,
+  type TryConsumerResult,
+} from '../../syntax/token-cursor';
 import { isTokenKind } from '../../syntax/component-value';
 import {
   consumeDeclarationValue, consumeOptionalDeclarationValue,
@@ -79,8 +79,8 @@ export function parseIf(input: ParserInput): IfValue | null {
 }
 
 export function consumeIf(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IfValue> {
+  c: TokenCursor,
+): TryConsumerResult<IfValue> {
   return ifConsumer(c);
 }
 
@@ -89,8 +89,8 @@ export function parseIfArguments(input: ParserInput): IfArguments | null {
 }
 
 export function consumeIfArguments(
-  c: ComponentCursor,
-): TryComponentConsumerResult<IfArguments> {
+  c: TokenCursor,
+): TryConsumerResult<IfArguments> {
   return ifArgumentsConsumer(c);
 }
 
@@ -115,7 +115,7 @@ const supportsTestConsumer = createFunctionalNotationConsumer(
 );
 
 // Currently supported branches of <if-test>.
-const ifTestConsumer: TryComponentConsumer<IfTest> = oneOf(
+const ifTestConsumer: TryConsumer<IfTest> = oneOf(
   [one(supportsTestConsumer)],
   ([test]) => test,
 );
@@ -123,7 +123,7 @@ const ifTestConsumer: TryComponentConsumer<IfTest> = oneOf(
 const elseConditionConsumer = createKeywordConsumer('else');
 
 // <if-condition> = <boolean-expr[ <if-test> ]> | else
-const ifConditionConsumer: TryComponentConsumer<IfCondition> = oneOf(
+const ifConditionConsumer: TryConsumer<IfCondition> = oneOf(
   [
     one(createBooleanExprConsumer(ifTestConsumer)),
     one(elseConditionConsumer),
@@ -175,9 +175,9 @@ const ifArgumentsConsumer = createFunctionalNotationConsumer(
 const ifArgumentsParser = createComponentParser(withTrivia(ifArgumentsConsumer));
 
 function createIfBranchConsumer<Condition, Branch>(
-  conditionConsumer: TryComponentConsumer<Condition>,
+  conditionConsumer: TryConsumer<Condition>,
   project: (condition: Condition, value: OptionalDeclarationValue) => Branch,
-): TryComponentConsumer<Branch> {
+): TryConsumer<Branch> {
   return (c) => {
     const start = c.pos();
     const condition = conditionConsumer(c);
@@ -199,8 +199,8 @@ function createIfBranchConsumer<Condition, Branch>(
 }
 
 function createIfBranchListConsumer<Branch>(
-  branchConsumer: TryComponentConsumer<Branch>,
-): TryComponentConsumer<[Branch, ...Branch[]]> {
+  branchConsumer: TryConsumer<Branch>,
+): TryConsumer<[Branch, ...Branch[]]> {
   const subsequentBranchConsumer = sequenceOf(
     [
       one(withTrivia(consumeSemicolon)),

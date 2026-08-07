@@ -1,6 +1,6 @@
 import { asciiLower } from '../../shared/css';
 import { isAnyValueContents, consumeAnyValue, type AnyValue } from './any-value';
-import { type ComponentCursor, type TryComponentConsumer, type TryComponentConsumerResult } from './component-cursor';
+import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { adaptConsumer, withTrivia } from './component-grammar';
 import {
   isBraceBlock, isBracketBlock, isDelimToken, isFunctionBlock, isIdentToken, isParensBlock,
@@ -29,13 +29,13 @@ export type FunctionalNotationConsumerOptions = {
 // <function-token matching name> <argument-value> )
 export function createFunctionalNotationConsumer<ArgumentValue, Value>(
   name: string,
-  consumeArgumentValue: TryComponentConsumer<ArgumentValue>,
+  consumeArgumentValue: TryConsumer<ArgumentValue>,
   projectValue: (
     value: ArgumentValue,
     context: unknown,
-  ) => TryComponentConsumerResult<Value>,
+  ) => TryConsumerResult<Value>,
   options: FunctionalNotationConsumerOptions = {},
-): TryComponentConsumer<Value> {
+): TryConsumer<Value> {
   const normalizedName = asciiLower(name);
 
   return adaptConsumer(consumeFunctionBlock, (fn, context) => {
@@ -64,9 +64,9 @@ export type FreeFormConsumerOptions = {
 
 // <free-form[ <value> ]>
 export function createFreeFormConsumer<Value>(
-  consumeValue: TryComponentConsumer<Value>,
+  consumeValue: TryConsumer<Value>,
   options: FreeFormConsumerOptions = {},
-): TryComponentConsumer<Value> {
+): TryConsumer<Value> {
   const strict = options.strict ?? true;
 
   return (c) => {
@@ -96,7 +96,7 @@ export function createFreeFormConsumer<Value>(
     while (true) {
       const component = c.peek();
 
-      if (component === null) break;
+      if (component.type === TokenKind.EOF) break;
       if (strict && (
         isTokenKind(component, TokenKind.Comma) ||
         isBraceBlock(component) ||
@@ -128,7 +128,7 @@ export function createFreeFormConsumer<Value>(
 // =============================================================================
 
 // <whitespace-token>*
-export function consumeWhitespace(c: ComponentCursor): void {
+export function consumeWhitespace(c: TokenCursor): void {
   c.consumeWhile(isWhitespaceToken);
 }
 
@@ -137,22 +137,22 @@ export function consumeWhitespace(c: ComponentCursor): void {
 // =============================================================================
 
 // <colon-token>
-export function consumeColon(c: ComponentCursor): TryComponentConsumerResult<':'> {
+export function consumeColon(c: TokenCursor): TryConsumerResult<':'> {
   return c.match(TokenKind.Colon) ? ':' : null;
 }
 
 // <comma-token>
-export function consumeComma(c: ComponentCursor): TryComponentConsumerResult<','> {
+export function consumeComma(c: TokenCursor): TryConsumerResult<','> {
   return c.match(TokenKind.Comma) ? ',' : null;
 }
 
 // <semicolon-token>
-export function consumeSemicolon(c: ComponentCursor): TryComponentConsumerResult<';'> {
+export function consumeSemicolon(c: TokenCursor): TryConsumerResult<';'> {
   return c.match(TokenKind.Semicolon) ? ';' : null;
 }
 
 // <ident-token>
-export function consumeIdentToken(c: ComponentCursor): TryComponentConsumerResult<IdentToken> {
+export function consumeIdentToken(c: TokenCursor): TryConsumerResult<IdentToken> {
   const component = c.peek();
 
   if (!isIdentToken(component)) return null;
@@ -162,7 +162,7 @@ export function consumeIdentToken(c: ComponentCursor): TryComponentConsumerResul
 }
 
 // <string-token>
-export function consumeStringToken(c: ComponentCursor): TryComponentConsumerResult<StringToken> {
+export function consumeStringToken(c: TokenCursor): TryConsumerResult<StringToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.String)) return null;
@@ -172,7 +172,7 @@ export function consumeStringToken(c: ComponentCursor): TryComponentConsumerResu
 }
 
 // <hash-token>
-export function consumeHashToken(c: ComponentCursor): TryComponentConsumerResult<HashToken> {
+export function consumeHashToken(c: TokenCursor): TryConsumerResult<HashToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Hash)) return null;
@@ -182,13 +182,13 @@ export function consumeHashToken(c: ComponentCursor): TryComponentConsumerResult
 }
 
 // <hash-token with the id flag>
-export const consumeIdHashToken: TryComponentConsumer<HashToken> = adaptConsumer(
+export const consumeIdHashToken: TryConsumer<HashToken> = adaptConsumer(
   consumeHashToken,
   (token) => token.flag === HashTokenFlag.Id ? token : null,
 );
 
 // <integer-token>
-export function consumeIntegerToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
+export function consumeIntegerToken(c: TokenCursor): TryConsumerResult<NumberToken> {
   const component = c.peek();
 
   if (
@@ -201,7 +201,7 @@ export function consumeIntegerToken(c: ComponentCursor): TryComponentConsumerRes
 }
 
 // <number-token>
-export function consumeNumberToken(c: ComponentCursor): TryComponentConsumerResult<NumberToken> {
+export function consumeNumberToken(c: TokenCursor): TryConsumerResult<NumberToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Number)) return null;
@@ -212,8 +212,8 @@ export function consumeNumberToken(c: ComponentCursor): TryComponentConsumerResu
 
 // <percentage-token>
 export function consumePercentageToken(
-  c: ComponentCursor,
-): TryComponentConsumerResult<PercentageToken> {
+  c: TokenCursor,
+): TryConsumerResult<PercentageToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Percentage)) return null;
@@ -224,8 +224,8 @@ export function consumePercentageToken(
 
 // <dimension-token>
 export function consumeDimensionToken(
-  c: ComponentCursor,
-): TryComponentConsumerResult<DimensionToken> {
+  c: TokenCursor,
+): TryConsumerResult<DimensionToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Dimension)) return null;
@@ -236,8 +236,8 @@ export function consumeDimensionToken(
 
 // <url-token>
 export function consumeUrlToken(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlToken> {
+  c: TokenCursor,
+): TryConsumerResult<UrlToken> {
   const component = c.peek();
 
   if (!isTokenKind(component, TokenKind.Url)) return null;
@@ -293,7 +293,7 @@ export const consumeTildeDelim = createDelimConsumer('~');
  * Token grammar: { <component-value>* }
  * Component-value form: a brace block containing <component-value>*.
  */
-export function consumeBraceBlock(c: ComponentCursor): TryComponentConsumerResult<BraceBlock> {
+export function consumeBraceBlock(c: TokenCursor): TryConsumerResult<BraceBlock> {
   const component = c.peek();
 
   if (!isBraceBlock(component)) return null;
@@ -306,7 +306,7 @@ export function consumeBraceBlock(c: ComponentCursor): TryComponentConsumerResul
  * Token grammar: [ <component-value>* ]
  * Component-value form: a bracket block containing <component-value>*.
  */
-export function consumeBracketBlock(c: ComponentCursor): TryComponentConsumerResult<BracketBlock> {
+export function consumeBracketBlock(c: TokenCursor): TryConsumerResult<BracketBlock> {
   const component = c.peek();
 
   if (!isBracketBlock(component)) return null;
@@ -319,7 +319,7 @@ export function consumeBracketBlock(c: ComponentCursor): TryComponentConsumerRes
  * Token grammar: ( <component-value>* )
  * Component-value form: a parentheses block containing <component-value>*.
  */
-export function consumeParensBlock(c: ComponentCursor): TryComponentConsumerResult<ParensBlock> {
+export function consumeParensBlock(c: TokenCursor): TryConsumerResult<ParensBlock> {
   const component = c.peek();
 
   if (!isParensBlock(component)) return null;
@@ -332,7 +332,7 @@ export function consumeParensBlock(c: ComponentCursor): TryComponentConsumerResu
  * Token grammar: <function-token> <component-value>* )
  * Component-value form: a function block containing <component-value>*.
  */
-export function consumeFunctionBlock(c: ComponentCursor): TryComponentConsumerResult<FunctionBlock> {
+export function consumeFunctionBlock(c: TokenCursor): TryConsumerResult<FunctionBlock> {
   const component = c.peek();
 
   if (!isFunctionBlock(component)) return null;
@@ -351,8 +351,8 @@ export function consumeFunctionBlock(c: ComponentCursor): TryComponentConsumerRe
 export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
 
 export function consumeAnyValueFunctionBlock(
-  c: ComponentCursor,
-): TryComponentConsumerResult<AnyValueFunctionBlock> {
+  c: TokenCursor,
+): TryConsumerResult<AnyValueFunctionBlock> {
   return anyValueFunctionBlockConsumer(c);
 }
 
@@ -371,7 +371,7 @@ const anyValueFunctionBlockConsumer = adaptConsumer(
 // Helpers
 // =============================================================================
 
-function createDelimConsumer<T extends string>(expected: T): TryComponentConsumer<T> {
+function createDelimConsumer<T extends string>(expected: T): TryConsumer<T> {
   return (c) => {
     const component = c.peek();
 

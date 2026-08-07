@@ -1,10 +1,9 @@
-import { BlockKind } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   describe, expect,
   it,
 } from 'vitest';
-import { ComponentCursor } from '../../../../src/stylelet/syntax/component-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   createBooleanExprConsumer,
@@ -59,8 +58,7 @@ describe('<boolean-expr[]>', () => {
 
   it('chooses the nonempty tail recursively inside parentheses', () => {
     expect(parseBooleanExpr('(a or b)', consumeTest)).toEqual({
-      type: 'block',
-      block: BlockKind.Parens,
+      type: TokenKind.ParensBlock,
       value: {
         type: 'boolean-or',
         values: [
@@ -76,8 +74,7 @@ describe('<boolean-expr[]>', () => {
       type: 'boolean-or',
       values: [
         {
-          type: 'block',
-          block: BlockKind.Parens,
+          type: TokenKind.ParensBlock,
           value: {
             type: 'boolean-and',
             values: [
@@ -95,7 +92,7 @@ describe('<boolean-expr[]>', () => {
     expect(parseBooleanExpr('future()', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
-        block: BlockKind.Function,
+        type: TokenKind.FunctionBlock,
         name: 'future',
         value: undefined,
       },
@@ -103,7 +100,7 @@ describe('<boolean-expr[]>', () => {
     expect(parseBooleanExpr('(future)', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
-        block: BlockKind.Parens,
+        type: TokenKind.ParensBlock,
         value: { type: 'any-value' },
       },
     });
@@ -115,7 +112,7 @@ describe('<boolean-expr[]>', () => {
       value: {
         type: 'general-enclosed',
         value: {
-          block: BlockKind.Function,
+          type: TokenKind.FunctionBlock,
           name: 'known',
         },
       },
@@ -126,7 +123,7 @@ describe('<boolean-expr[]>', () => {
     expect(parseBooleanExpr('(a and)', consumeTest)).toMatchObject({
       type: 'general-enclosed',
       value: {
-        block: BlockKind.Parens,
+        type: TokenKind.ParensBlock,
         value: { type: 'any-value' },
       },
     });
@@ -154,7 +151,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('leaves an incomplete Boolean tail for the enclosing grammar', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('a and'));
+    const c = new TokenCursor(parseListOfComponentValues('a and'));
     const consume = createBooleanExprConsumer(consumeTest);
 
     expect(consume(c)).toMatchObject({
@@ -162,21 +159,19 @@ describe('<boolean-expr[]>', () => {
       value: 'a',
     });
     expect(c.peek()).toMatchObject({
-      type: 'token',
-      kind: TokenKind.Whitespace,
+      type: TokenKind.Whitespace,
     });
   });
 
   it('consumes one expression and leaves following components', () => {
-    const c = new ComponentCursor(parseListOfComponentValues('a and b trailing'));
+    const c = new TokenCursor(parseListOfComponentValues('a and b trailing'));
     const consume = createBooleanExprConsumer(consumeTest);
 
     expect(consume(c)).toMatchObject({
       type: 'boolean-and',
     });
     expect(c.peek()).toMatchObject({
-      type: 'token',
-      kind: TokenKind.Whitespace,
+      type: TokenKind.Whitespace,
     });
   });
 });

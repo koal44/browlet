@@ -1,7 +1,7 @@
 import { asciiLower } from '../../shared/css';
 import type {
-  ComponentCursor, TryComponentConsumer, TryComponentConsumerResult,
-} from '../syntax/component-cursor';
+  TokenCursor, TryConsumer, TryConsumerResult,
+} from '../syntax/token-cursor';
 import {
   createFunctionalNotationConsumer,
   consumeFunctionBlock,
@@ -16,6 +16,7 @@ import { isAnyValueContents } from '../syntax/any-value';
 import { consumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
 import { serializeCssString } from '../syntax/component-value';
+import { TokenKind } from '../syntax/tokens';
 import { consumeString } from './string';
 
 /*
@@ -100,8 +101,8 @@ export function parseUrlModifier(
 }
 
 export function consumeUrlModifier(
-  c: ComponentCursor,
-): TryComponentConsumerResult<UrlModifierValue> {
+  c: TokenCursor,
+): TryConsumerResult<UrlModifierValue> {
   return urlModifierConsumer(c);
 }
 
@@ -214,7 +215,7 @@ const referrerPolicyModifierConsumer = createFunctionalNotationConsumer(
 );
 
 // <request-url-modifier> = <cross-origin-modifier> | <integrity-modifier> | <referrer-policy-modifier>
-const requestUrlModifierConsumer: TryComponentConsumer<RequestUrlModifierValue> =
+const requestUrlModifierConsumer: TryConsumer<RequestUrlModifierValue> =
   oneOf(
     [
       one(crossOriginModifierConsumer),
@@ -225,14 +226,14 @@ const requestUrlModifierConsumer: TryComponentConsumer<RequestUrlModifierValue> 
   );
 
 // <unknown-url-modifier> = <ident> | <function-block>
-const unknownUrlModifierConsumer: TryComponentConsumer<UnknownUrlModifierValue> =
+const unknownUrlModifierConsumer: TryConsumer<UnknownUrlModifierValue> =
   oneOf(
     [
       one(consumeIdent),
       one(consumeFunctionBlock),
     ],
     ([value]) => {
-      if (value.type === 'block') {
+      if (value.type === TokenKind.FunctionBlock) {
         // A recognized request modifier does not become unknown when its arguments fail.
         switch (asciiLower(value.name)) {
           case 'cross-origin':
