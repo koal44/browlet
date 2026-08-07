@@ -84,7 +84,9 @@ export type PositionFour = {
 export type PositionContext = {
   writingMode?: PositionWritingMode;
   direction?: PositionDirection;
-} & MathContext;
+};
+
+export type PositionValueContext = PositionContext & MathContext;
 
 export type PositionWritingMode =
   | 'horizontal-tb'
@@ -142,7 +144,7 @@ function isPositionKeyword(
 
 export function parsePosition(
   input: ParserInput,
-  context: PositionContext = {},
+  context: PositionValueContext = {},
 ): PositionValue | null {
   return positionParser(input, context);
 }
@@ -344,7 +346,7 @@ const positionParser = createComponentParser(withTrivia(positionConsumer));
 export function resolvePosition(
   value: PositionValue,
   stage: ValueStage,
-  context: PositionContext = {},
+  context: PositionValueContext = {},
 ): PositionValue {
   if (value.offsets !== undefined) {
     return {
@@ -370,7 +372,7 @@ export function resolvePosition(
 export function tryResolvePositionOffsets(
   value: PositionValue,
   stage: ValueStage,
-  context: PositionContext = {},
+  context: PositionValueContext = {},
 ): PositionOffsets | null {
   const resolved = resolvePosition(value, stage, context);
 
@@ -379,7 +381,7 @@ export function tryResolvePositionOffsets(
 
 function positionOffsets(
   value: PositionSyntax,
-  context: PositionContext,
+  context: PositionValueContext,
 ): PositionOffsets | null {
   const { components } = value;
 
@@ -433,7 +435,7 @@ function positionTwoOffsets(
 
 function positionFourOffsets(
   [firstEdge, firstOffset, secondEdge, secondOffset]: PositionFourComponents,
-  context: PositionContext,
+  context: PositionValueContext,
 ): PositionOffsets | null {
   const axes: [PositionAxis, PositionAxis] = usesLogicalAxisOrder([
     firstEdge,
@@ -495,7 +497,7 @@ function positionEdgeOffset(
   keyword: PositionEdgeKeyword,
   offset: LengthPercentageValue,
   axis: PositionAxis,
-  context: PositionContext,
+  context: PositionValueContext,
 ): PositionedOffset | null {
   const edge = physicalEdge(keyword, axis, context);
 
@@ -517,7 +519,7 @@ function positionEdgeOffset(
 
 function negateLengthPercentage(
   value: LengthPercentageValue,
-  context: PositionContext,
+  context: PositionValueContext,
 ): LengthPercentageValue {
   if (value.type !== 'math') {
     if (value.type === 'percentage') {

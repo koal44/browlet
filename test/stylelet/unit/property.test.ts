@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { colorProperty } from '../../../src/stylelet/props/color';
+import { propertyRegistry } from '../../../src/stylelet/css/property';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
 import { colorDef, ColorKind } from '../../../src/stylelet/values/color';
 import { defineProperty } from '../../../src/stylelet/values/whole-value';
 
 describe('property value', () => {
+  it('preserves an exact property definition through the registry', () => {
+    const definition: typeof colorProperty = propertyRegistry.color;
+    const raw = definition.parse('red');
+    const computed = raw?.resolve(ValueStage.Computed, {});
+
+    expect(raw?.serialize()).toBe('red');
+    expect(computed?.serialize()).toBe('rgb(255, 0, 0)');
+
+    if (computed?.type === 'ordinary') {
+      expect(computed.value.kind).toBe(ColorKind.Absolute);
+    }
+  });
+
   describe('ordinary value', () => {
     it('creates a raw value, then resolves and serializes a color value instance', () => {
       const raw = colorProperty.parse('red');

@@ -1,8 +1,17 @@
-import { EOFToken, TokenKind, type ComponentValue, type Token } from './tokens';
+import {
+  EOFToken, TokenKind,
+  type ComponentValue, type Token, type TokenSourceRange,
+} from './tokens';
+
+export type TokenSource = {
+  text: string;
+  ranges: readonly TokenSourceRange[];
+};
 
 export type TokenCursorOptions = {
   position?: number;
   context?: unknown;
+  source?: TokenSource;
 };
 
 export type TokenPredicate<Value extends Token> = (value: Value) => boolean;
@@ -25,6 +34,7 @@ export type TryConsumerResult<T> = T | null;
 
 export class TokenCursor<Value extends Token = ComponentValue> {
   private i: number;
+  private readonly source?: TokenSource;
   context: unknown;
 
   constructor(
@@ -33,6 +43,7 @@ export class TokenCursor<Value extends Token = ComponentValue> {
   ) {
     this.i = options.position ?? 0;
     this.context = options.context;
+    this.source = options.source;
   }
 
   pos(): number {
@@ -84,6 +95,17 @@ export class TokenCursor<Value extends Token = ComponentValue> {
 
     this.i++;
     return true;
+  }
+
+  sourceText(start: number, end: number): string | undefined {
+    if (this.source === undefined) return undefined;
+    if (start === end) return '';
+
+    const first = this.source.ranges[start];
+    const last = this.source.ranges[end - 1];
+    if (first === undefined || last === undefined) return undefined;
+
+    return this.source.text.slice(first.start, last.end);
   }
 
   error(message: string): never {

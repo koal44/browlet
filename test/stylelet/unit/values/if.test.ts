@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
-import type { PropertyContext } from '../../../../src/stylelet/value-processing/context';
+import type { PropertyContext } from '../../../../src/stylelet/css/property';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   consumeIf, parseIf, parseIfArguments,

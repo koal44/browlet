@@ -29,7 +29,7 @@ import {
   consumeOptionalDeclarationValue,
   type DeclarationComponent,
 } from '../syntax/declaration-value';
-import { type PropertyContext } from '../value-processing/context';
+import { type PropertyContext } from '../css/property';
 
 export type SyntaxValue =
   | UniversalSyntaxValue

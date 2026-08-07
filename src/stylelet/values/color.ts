@@ -334,7 +334,7 @@ export type ColorFunction =
 export type RelativeColorFunction =
   ColorFunction & { origin: ColorValue; };
 
-export const colorDef: ValueDefinition<ColorValue, ColorContext> = {
+export const colorDef: ValueDefinition<ColorValue, ColorValueContext> = {
   consume: consumeColor,
   resolve: resolveColorValue,
   serialize: serializeColorValue,
@@ -359,7 +359,7 @@ export function isLegacySrgbColor(color: ColorValue): boolean {
 
 export function parseColorValue(
   input: ParserInput,
-  context: ColorContext = {},
+  context: ColorValueContext = {},
   allowQuirkyColor = false,
 ): ColorValue | null {
   return (
@@ -406,13 +406,13 @@ const colorInQuirksModeConsumer: TryConsumer<ColorValue> = oneOf(
 const declaredColorConsumer = adaptConsumer(
   colorConsumer,
   (value, context) =>
-    resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
+    resolveColorValue(value, ValueStage.Declared, colorValueContextFor(context)),
 );
 
 const declaredColorInQuirksModeConsumer = adaptConsumer(
   colorInQuirksModeConsumer,
   (value, context) =>
-    resolveColorValue(value, ValueStage.Declared, colorContextFor(context)),
+    resolveColorValue(value, ValueStage.Declared, colorValueContextFor(context)),
 );
 
 const colorParser = createComponentParser(withTrivia(declaredColorConsumer));
@@ -2244,7 +2244,7 @@ const quirkyColorConsumer: TryConsumer<HexColor> = oneOf(
 
 type RelativeColorParserContext = {
   relativeColorVariables?: ReadonlyMap<string, NumericVariable>;
-} & ColorContext;
+} & ColorValueContext;
 
 function consumeRelativeColorOrigin(
   c: TokenCursor,
@@ -2272,7 +2272,7 @@ const relativeColorKeywordConsumer = adaptConsumer(
     const name = asciiLower(ident.value);
 
     return relativeColorVariablesFor(context)?.has(name) === true
-      ? promoteNumericVariable(name, 'number', colorContextFor(context))
+      ? promoteNumericVariable(name, 'number', colorValueContextFor(context))
       : null;
   },
 );
@@ -2282,7 +2282,7 @@ function contextWithRelativeColorVariables(
   components: readonly string[],
   includeAlpha = true,
 ): RelativeColorParserContext {
-  const outer = colorContextFor(context);
+  const outer = colorValueContextFor(context);
   const relativeColorVariables = new Map(
     relativeColorVariableNames(components, includeAlpha).map((name) => [
       name,
@@ -2311,7 +2311,7 @@ function contextWithColorFnRelativeVariables(
     return context;
   }
 
-  const colorContext = colorContextFor(context);
+  const colorContext = colorValueContextFor(context);
   const profile = colorProfileFor(space, colorContext);
 
   return contextWithRelativeColorVariables(
@@ -2719,7 +2719,7 @@ function colorMetadataAsRelative(
 export function resolveColorValue(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorContext = {},
+  context: ColorValueContext = {},
 ): ColorValue {
   return resolveColorValueInternal(value, stage, context);
 }
@@ -2729,14 +2729,16 @@ export type ColorContext = {
   systemColors?: ReadonlyMap<SystemColorName, AbsoluteColor>;
   colorScheme?: ColorScheme;
   colorProfiles?: ReadonlyMap<ColorProfileSpace, ColorProfile>;
-} & MathContext;
+};
+
+export type ColorValueContext = ColorContext & MathContext;
 
 export type ColorScheme = 'light' | 'dark';
 
 export function tryResolveAbsoluteColor(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorContext = {},
+  context: ColorValueContext = {},
 ): AbsoluteColor | null {
   const resolved = resolveColorValue(value, stage, context);
 
@@ -2746,7 +2748,7 @@ export function tryResolveAbsoluteColor(
 function resolveColorValueInternal(
   value: ColorValue,
   stage: ValueStage,
-  context: ColorContext,
+  context: ColorValueContext,
   asOrigin = false,
 ): ColorValue {
   switch (value.kind) {
@@ -2898,7 +2900,7 @@ function canonicalizeColorMixPercentages(
 function resolveColorMixItem(
   item: ColorMixItem,
   stage: ValueStage,
-  context: ColorContext,
+  context: ColorValueContext,
 ): ColorMixItem {
   const color = resolveColorValueInternal(item.color, stage, context);
   const percentage = item.percentage === undefined
@@ -3108,9 +3110,9 @@ function relativeChannelValue(
 }
 
 function relativeColorMathContext(
-  context: ColorContext,
+  context: ColorValueContext,
   channelValues: ReadonlyMap<string, NumberLiteral | 'none'>,
-): ColorContext {
+): ColorValueContext {
   return {
     ...context,
     numericVariables: new Map([
@@ -3274,7 +3276,7 @@ function resolveComponents<
 >(
   value: Value,
   stage: ValueStage,
-  context: ColorContext,
+  context: ColorValueContext,
   metadata: ColorMetadata,
   reference?: AbsoluteColor | null,
 ): {
@@ -4011,6 +4013,12 @@ function relativeLuminance(value: PredefinedAbsoluteColor): number {
 }
 
 function colorContextFor(context: unknown): ColorContext {
+  return context === null || context === undefined
+    ? {}
+    : context;
+}
+
+function colorValueContextFor(context: unknown): ColorValueContext {
   return context === null || context === undefined
     ? {}
     : context;

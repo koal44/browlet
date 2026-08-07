@@ -16,7 +16,7 @@ import {
   ColorKind, interpolateColors, isLegacySrgbColor, resolveColorValue,
   serializeColorInterpolationMethod, serializeColorValue, consumeColor,
   consumeColorInterpolationMethod, type AbsoluteColor, type ColorInterpolationMethod,
-  type ColorContext, type ColorValue,
+  type ColorValueContext, type ColorValue,
 } from './color';
 import { createKeywordConsumer } from './keyword';
 import {
@@ -29,8 +29,8 @@ import { tryResolveAnglePercentage as tryResolveAnglePercentageLiteral } from '.
 import { lengthLiteral, type CanonicalLengthLiteral } from './numeric-literal/length';
 import { percentageLiteral, type PercentageLiteral } from './numeric-literal/percentage';
 import {
-  resolvePosition, serializePosition, consumePosition, positionLiteral, type PositionContext,
-  type PositionOffsets, type PositionValue,
+  resolvePosition, serializePosition, consumePosition, positionLiteral,
+  type PositionOffsets, type PositionValue, type PositionValueContext,
 } from './position';
 import { serializeNumber } from './number';
 import { consumeZero, type ZeroValue } from './numeric-literal/zero';
@@ -103,7 +103,12 @@ type Gradient<
 export type GradientContext = {
   /** Concrete dimensions into which the gradient is drawn, in CSS pixels. */
   gradientBoxSize?: GradientBoxSize;
-} & ColorContext & PositionContext;
+};
+
+export type GradientValueContext =
+  & GradientContext
+  & ColorValueContext
+  & PositionValueContext;
 
 type GradientBoxSize = {
   width: number;
@@ -200,7 +205,7 @@ type ConicGradientSyntax = Omit<ConicGradient, 'type' | 'gradientType' | 'repeat
 
 export function parseGradient(
   input: ParserInput,
-  context: GradientContext = {},
+  context: GradientValueContext = {},
 ): GradientValue | null {
   return gradientParser(input, context);
 }
@@ -772,7 +777,7 @@ function isSideExtent(extent: RadialExtent): extent is 'closest-side' | 'farthes
 export function resolveGradient(
   value: GradientValue,
   stage: ValueStage,
-  context: GradientContext = {},
+  context: GradientValueContext = {},
 ): GradientValue {
   switch (value.gradientType) {
     case 'linear':
@@ -789,7 +794,7 @@ export function resolveGradient(
 function resolveLinearGradient(
   value: LinearGradient,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): LinearGradient {
   const direction = resolveLinearGradientDirection(value.direction, stage, context);
   const lineLength = linearGradientLineLength(direction, context.gradientBoxSize);
@@ -810,7 +815,7 @@ function resolveLinearGradient(
 function resolveLinearGradientDirection(
   value: LinearGradientDirection,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): LinearGradientDirection {
   return value.type === 'angle' || value.type === 'math'
     ? resolveAngle(value, stage, context)
@@ -897,7 +902,7 @@ function linearGradientAngle(
 function resolveRadialGradient(
   value: RadialGradient,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): RadialGradient {
   const geometryContext = { ...context, percentageReferenceValue: undefined };
   const size = resolveRadialGradientSize(value.size, stage, geometryContext);
@@ -916,7 +921,7 @@ function resolveRadialGradient(
 function radialGradientLineLength(
   gradient: RadialGradient,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): number | undefined {
   return radialGradientGeometry(gradient, stage, context)?.radii[0];
 }
@@ -924,7 +929,7 @@ function radialGradientLineLength(
 function radialGradientGeometry(
   gradient: RadialGradient,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): { center: RadialCenter; radii: RadialRadii; } | undefined {
   const boxSize = context.gradientBoxSize;
 
@@ -953,7 +958,7 @@ function radialGradientCenter(
   position: PositionValue,
   boxSize: GradientBoxSize,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): RadialCenter | undefined {
   if (position.offsets === undefined) {
     return undefined;
@@ -972,7 +977,7 @@ function resolveRadialRadii(
   radii: RadialRadiiSize['radii'],
   boxSize: GradientBoxSize,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): RadialRadii | undefined {
   if (shape === 'ellipse' && radii.length === 1) {
     // Images 4 accepts this syntax without defining the missing vertical radius.
@@ -1069,7 +1074,7 @@ function resolveLengthPercentageInPixels(
   value: LengthPercentageValue,
   percentageBasis: number,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): number | undefined {
   const resolved = resolveLengthPercentage(value, stage, {
     ...context,
@@ -1084,7 +1089,7 @@ function resolveLengthPercentageInPixels(
 function resolveRadialGradientSize(
   value: RadialSize,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): RadialSize {
   return value.type === 'radial-radii'
     ? {
@@ -1098,7 +1103,7 @@ function resolveRadialGradientSize(
 function resolveConicGradient(
   value: ConicGradient,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ConicGradient {
   const percentageReferenceValue = resolvePercentageReference(360, stage, angleLiteral);
   const angle = resolveAngleOrZero(value.angle, stage, context);
@@ -1122,7 +1127,7 @@ function resolveGradientStops<
 >(
   gradient: Gradient<Type, Offset>,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): GradientStops<Offset> {
   const { stops } = gradient;
   const resolved = mapTuple(stops, (stop) => {
@@ -1153,7 +1158,7 @@ function resolveStopOffset<
   offset: Offset,
   gradient: Gradient<Type, Offset>,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): Offset {
   return (gradient.gradientType === 'conic'
     ? resolveAngularColorStopOffset(
@@ -1171,7 +1176,7 @@ function resolveStopOffset<
 function resolveAngularColorStopOffset(
   value: AngularColorStopOffset,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): AngularColorStopOffset {
   if (value.type === 'number') {
     return stage < ValueStage.Used ? value : angleLiteral(0);
@@ -1189,7 +1194,7 @@ function resolveAngularColorStopOffset(
 function resolveAngleOrZero(
   value: AngleValue | ZeroValue,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): AngleValue | ZeroValue {
   return value.type === 'number' ? value : resolveAngle(value, stage, context);
 }
@@ -1248,7 +1253,7 @@ function colorStopFixup<
   stops: GradientStops<Offset>,
   gradient: Gradient<Type, Offset>,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): GradientStops<Offset> {
   if (stage < ValueStage.Used) {
     return stops;
@@ -1449,7 +1454,7 @@ type ExplicitGradientStopOffset =
 export function tryResolveExplicitGradient(
   value: GradientValue,
   stage: ValueStage,
-  context: GradientContext = {},
+  context: GradientValueContext = {},
 ): ExplicitGradient | null {
   if (stage < ValueStage.Used) {
     return null;
@@ -1545,7 +1550,7 @@ function tryResolveExplicitGradientStops(
   computed: GradientValue,
   original: GradientValue,
   stage: ValueStage,
-  context: GradientContext,
+  context: GradientValueContext,
 ): GradientStops<ExplicitGradientStopOffset> | null {
   const stops = computed.stops as GradientStops<GradientStopOffset>;
 
@@ -1804,7 +1809,7 @@ export function interpolateGradients(
   a: GradientValue,
   b: GradientValue,
   progress: number,
-  context: GradientContext = {},
+  context: GradientValueContext = {},
 ): ExplicitGradient {
   const colorStopCountA = gradientColorStopCount(a.stops);
   const colorStopCountB = gradientColorStopCount(b.stops);
@@ -1873,7 +1878,7 @@ function interpolateLinearGradients(
   a: ExplicitLinearGradient,
   b: ExplicitLinearGradient,
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitLinearGradient {
   let angleA = a.direction.value;
   let angleB = b.direction.value;
@@ -1912,7 +1917,7 @@ function interpolateRadialGradients(
   a: ExplicitRadialGradient,
   b: ExplicitRadialGradient,
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitRadialGradient {
   const method = discreteGradientMethod(a.method, b.method, progress);
 
@@ -1943,7 +1948,7 @@ function interpolateConicGradients(
   a: ExplicitConicGradient,
   b: ExplicitConicGradient,
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitConicGradient {
   const method = discreteGradientMethod(a.method, b.method, progress);
 
@@ -1966,7 +1971,7 @@ function interpolateExplicitGradientPosition(
   a: ExplicitGradientPosition,
   b: ExplicitGradientPosition,
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitGradientPosition {
   return {
     type: 'position',
@@ -1978,7 +1983,7 @@ function interpolateLengthTuple(
   a: [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral],
   b: [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral],
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral] {
   const boxSize = context.gradientBoxSize;
   const percentageBases = [boxSize?.width, boxSize?.height] as const;
@@ -1998,7 +2003,7 @@ function interpolateExplicitLengthPercentage(
   b: ExplicitLengthPercentageLiteral,
   progress: number,
   percentageBasis: number | undefined,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitLengthPercentageLiteral {
   if (a.type === b.type) {
     return {
@@ -2038,7 +2043,7 @@ function interpolateExplicitGradientStops<
   b: ExplicitGradientStops<Offset>,
   method: ColorInterpolationMethod,
   progress: number,
-  context: GradientContext,
+  context: GradientValueContext,
 ): ExplicitGradientStops<Offset> {
   if (a.length !== b.length) {
     throw new Error('TODO: Define interpolation for unmatched gradient hints');

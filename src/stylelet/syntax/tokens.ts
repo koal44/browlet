@@ -495,11 +495,46 @@ type IdentLikeToken =
   | UrlToken
   | StaticToken<TokenKind.BadUrl>;
 
+export type TokenSourceRange = {
+  start: number;
+  end: number;
+};
+
+export type TokenizedInput = {
+  source: string;
+  tokens: Token[];
+  ranges: TokenSourceRange[];
+};
+
 export function tokenize(input: string, unicodeRangesAllowed = false): Token[] {
-  const c = new TextCursor(filterCodePoints(input));
+  return tokenizeSource(filterCodePoints(input), unicodeRangesAllowed);
+}
+
+export function tokenizeWithSource(
+  input: string,
+  unicodeRangesAllowed = false,
+): TokenizedInput {
+  const source = filterCodePoints(input);
+  const ranges: TokenSourceRange[] = [];
+
+  return {
+    source,
+    tokens: tokenizeSource(source, unicodeRangesAllowed, ranges),
+    ranges,
+  };
+}
+
+function tokenizeSource(
+  source: string,
+  unicodeRangesAllowed: boolean,
+  ranges?: TokenSourceRange[],
+): Token[] {
+  const c = new TextCursor(source);
   const tokens: Token[] = [];
 
   while (true) {
+    if (ranges !== undefined) consumeComments(c);
+    const start = ranges === undefined ? 0 : c.pos();
     const token = consumeToken(c, unicodeRangesAllowed);
 
     if (token.type === TokenKind.EOF) {
@@ -510,10 +545,14 @@ export function tokenize(input: string, unicodeRangesAllowed = false): Token[] {
       token.type === TokenKind.Whitespace &&
       tokens[tokens.length - 1]?.type === TokenKind.Whitespace
     ) {
+      if (ranges !== undefined) {
+        ranges[ranges.length - 1]!.end = c.pos();
+      }
       continue;
     }
 
     tokens.push(token);
+    ranges?.push({ start, end: c.pos() });
   }
 }
 

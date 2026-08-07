@@ -5,7 +5,7 @@ import {
 } from '../syntax/component-grammar';
 import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
 import { ValueStage } from '../value-processing/stage';
-import { type PropertyContext } from '../value-processing/context';
+import { type PropertyContext } from '../css/property';
 import {
   consumeCssWideValue, type CssWideValue,
 } from './css-wide';
@@ -68,7 +68,7 @@ type ParsedWholeValue<Value, Context> =
   | OrdinaryWholeValue<Value, Context>
   | FirstValidWholeValue<Value, Context>;
 
-type WholeValueDefinition<Value, Context> = {
+export type WholeValueDefinition<Value, Context> = {
   parse: (input: ParserInput) => RawWholeValue<Value, Context> | null;
   consume: TryConsumer<ParsedWholeValue<Value, Context>>;
 };

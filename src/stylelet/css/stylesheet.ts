@@ -1,0 +1,101 @@
+import {
+  parseSyntaxStylesheet,
+  type ParserInput, type SyntaxBlockContents, type SyntaxQualifiedRule,
+  type SyntaxRule, type SyntaxStyleSheet,
+} from '../syntax/parser';
+import {
+  parseSelectorList, type SelectorList,
+} from '../syntax/selector';
+import {
+  interpretPropertyDeclaration, type PropertyDeclaration,
+} from './property';
+
+export type StyleSheet = {
+  rules: Rule[];
+  originalText?: string;
+};
+
+export type Rule = StyleRule;
+
+export type StyleRule = {
+  type: 'style-rule';
+  selectors: SelectorList;
+  block: StyleBlock;
+};
+
+export type StyleBlock = Array<PropertyDeclaration | Rule>;
+
+export function parseStylesheet(input: ParserInput): StyleSheet {
+  return interpretStylesheet(parseSyntaxStylesheet(input));
+}
+
+// CSS Syntax 3, 8.1. Parse a CSS stylesheet
+export function interpretStylesheet(sheet: SyntaxStyleSheet): StyleSheet {
+  const rules: Rule[] = [];
+
+  for (const rule of sheet.rules) {
+    const interpreted = interpretStylesheetRule(rule);
+    if (interpreted !== null) rules.push(interpreted);
+  }
+
+  return {
+    rules,
+    ...(sheet.originalText === undefined
+      ? {}
+      : { originalText: sheet.originalText }),
+  };
+}
+
+function interpretStylesheetRule(rule: SyntaxRule): Rule | null {
+  switch (rule.type) {
+    case 'qualified-rule': return interpretStyleRule(rule);
+    case 'statement-at-rule':
+    case 'block-at-rule': return null;
+  }
+}
+
+function interpretStyleBlockRule(rule: SyntaxRule): Rule | null {
+  switch (rule.type) {
+    case 'qualified-rule':
+      // Nested style rules are defined by CSS Nesting Level 1. Leave them
+      // uninterpreted until that module supplies the required selector context.
+      return null;
+
+    case 'statement-at-rule':
+    case 'block-at-rule':
+      // No at-rules have semantic representations yet. Section 8.1 requires
+      // unrecognized at-rules to be discarded.
+      return null;
+  }
+}
+
+// CSS Syntax 3, 8.2. Style rules
+function interpretStyleRule(rule: SyntaxQualifiedRule): StyleRule | null {
+  const selectors = parseSelectorList(rule.prelude);
+  if (selectors === null) return null;
+
+  return {
+    type: 'style-rule',
+    selectors,
+    block: interpretStyleBlock(rule.block),
+  };
+}
+
+function interpretStyleBlock(block: SyntaxBlockContents): StyleBlock {
+  const result: StyleBlock = [];
+
+  for (const item of block) {
+    if (Array.isArray(item)) {
+      for (const declaration of item) {
+        const interpreted = interpretPropertyDeclaration(declaration);
+        if (interpreted !== null) result.push(interpreted);
+      }
+      continue;
+    }
+
+    const rule = interpretStyleBlockRule(item);
+    if (rule !== null) result.push(rule);
+  }
+
+  return result;
+}

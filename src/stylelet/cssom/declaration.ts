@@ -1,13 +1,17 @@
-import { BlockItemAstKind, serializeAstDeclaration, type SerializedDeclarationAst, type DeclarationAst, type StyleBlockAst } from './ast';
+import {
+  serializePropertyDeclaration,
+  type PropertyDeclaration, type SerializedPropertyDeclaration,
+} from '../css/property';
+import { type StyleBlock } from '../css/stylesheet';
 import { notImplemented } from './util';
 
 export class SelectletCSSStyleDeclaration {
   [index: number]: string;
 
   private _names: string[] = [];
-  private _declarations = new Map<string, SerializedDeclarationAst>();
+  private _declarations = new Map<string, SerializedPropertyDeclaration>();
 
-  constructor(block?: StyleBlockAst) {
+  constructor(block?: StyleBlock) {
     if (block) {
       this.load(block);
     }
@@ -53,20 +57,18 @@ export class SelectletCSSStyleDeclaration {
     return this._names[Symbol.iterator]();
   }
 
-  private load(block: StyleBlockAst): void {
-    for (const item of block.items) {
-      if (item.kind !== BlockItemAstKind.Declaration) continue;
+  private load(block: StyleBlock): void {
+    for (const item of block) {
+      if (item.type === 'style-rule') continue;
       this.addDeclaration(item);
     }
   }
 
-  private addDeclaration(declaration: DeclarationAst): void {
-    const active = serializeAstDeclaration(declaration);
-    if (!active) return;
-    this.setActiveDeclaration(active);
+  private addDeclaration(declaration: PropertyDeclaration): void {
+    this.setActiveDeclaration(serializePropertyDeclaration(declaration));
   }
 
-  private setActiveDeclaration(declaration: SerializedDeclarationAst): void {
+  private setActiveDeclaration(declaration: SerializedPropertyDeclaration): void {
     const name = declaration.name;
     const previous = this._declarations.get(name);
 

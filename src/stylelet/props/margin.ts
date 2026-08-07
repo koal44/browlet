@@ -1,38 +1,48 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
+import { one, oneOf } from '../syntax/component-grammar';
+import type {
+  TokenCursor, TryConsumer, TryConsumerResult,
 } from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
 import { serializeAuto, consumeAuto, type AutoValue } from '../values/auto';
+import type { ValueDefinition } from '../value-processing/definition';
 import type { MathContext } from '../values/math-value';
 import {
-  serializeLengthPercentage, consumeLengthPercentage,
+  resolveLengthPercentage, serializeLengthPercentage, consumeLengthPercentage,
   type LengthPercentageValue,
 } from '../values/length-percentage';
+import { defineProperty } from '../values/whole-value';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =
  *   <length-percentage> | auto
  */
 
-export type MarginSideValue =
-  | LengthPercentageValue
-  | AutoValue;
+export type MarginTopValue = MarginSideValue;
+export type MarginRightValue = MarginSideValue;
+export type MarginBottomValue = MarginSideValue;
+export type MarginLeftValue = MarginSideValue;
 
-export function parseMarginSideValue(
-  input: ParserInput,
-  context: MathContext = {},
-): MarginSideValue | null {
-  return marginSideValueParser(input, context);
-}
+type MarginSideValue = LengthPercentageValue | AutoValue;
 
-export function consumeMarginSideValue(
+const marginSideDef: ValueDefinition<MarginSideValue, MathContext> = {
+  consume: consumeMarginSideValue,
+  resolve: (value, stage, context) => value.type === 'auto'
+    ? value
+    : resolveLengthPercentage(value, stage, context),
+  serialize: serializeMarginSideValue,
+};
+
+export const marginTopProperty = defineProperty(marginSideDef);
+export const marginRightProperty = defineProperty(marginSideDef);
+export const marginBottomProperty = defineProperty(marginSideDef);
+export const marginLeftProperty = defineProperty(marginSideDef);
+
+function consumeMarginSideValue(
   c: TokenCursor,
 ): TryConsumerResult<MarginSideValue> {
   return marginSideValueConsumer(c);
 }
 
-export function serializeMarginSideValue(value: MarginSideValue): string {
+function serializeMarginSideValue(value: MarginSideValue): string {
   return value.type === 'auto'
     ? serializeAuto(value)
     : serializeLengthPercentage(value);
@@ -46,5 +56,3 @@ const marginSideValueConsumer: TryConsumer<MarginSideValue> = oneOf(
   ],
   ([value]) => value,
 );
-
-const marginSideValueParser = createComponentParser(withTrivia(marginSideValueConsumer));

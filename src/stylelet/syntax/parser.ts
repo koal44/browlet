@@ -4,12 +4,54 @@ import {
   isWhitespaceToken,
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
-import {
-  type BlockContents, type AtRule, type Declaration, type QualifiedRule,
-  type Rule, type StyleSheet,
-} from './rule';
 import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
-import { tokenize, TokenKind, type Token } from './tokens';
+import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
+
+export type SyntaxStyleSheet = {
+  rules: SyntaxRule[];
+  originalText?: string;
+};
+
+export type SyntaxRule =
+  | SyntaxAtRule
+  | SyntaxQualifiedRule;
+
+export type SyntaxAtRule =
+  | SyntaxStatementAtRule
+  | SyntaxBlockAtRule;
+
+export type SyntaxStatementAtRule = {
+  type: 'statement-at-rule';
+  name: string;
+  prelude: ComponentValue[];
+};
+
+export type SyntaxBlockAtRule = {
+  type: 'block-at-rule';
+  name: string;
+  prelude: ComponentValue[];
+  block: SyntaxBlockContents;
+};
+
+export type SyntaxQualifiedRule = {
+  type: 'qualified-rule';
+  prelude: ComponentValue[];
+  block: SyntaxBlockContents;
+};
+
+export type SyntaxDeclaration = {
+  name: string;
+  value: ComponentValue[];
+  important: boolean;
+  originalText?: string;
+};
+
+export type SyntaxBlockContents = Array<SyntaxDeclarationList | SyntaxRule>;
+export type SyntaxDeclarationList = SyntaxDeclaration[];
+export type SyntaxQualifiedRuleList = SyntaxQualifiedRule[];
+export type SyntaxAtRuleList = SyntaxAtRule[];
+export type SyntaxDeclarationRuleList = Array<SyntaxDeclarationList | SyntaxAtRule>;
+export type SyntaxRuleList = Array<SyntaxQualifiedRule | SyntaxAtRule>;
 
 export type ParserInput = string | readonly Token[];
 
@@ -56,28 +98,31 @@ export function parseListAsComponentGrammar<T>(
 
 // 5.4.3. Parse a stylesheet
 // The owning sheet/CSSOM layer is responsible for the optional location.
-export function parseStylesheet(input: ParserInput): StyleSheet {
-  return { rules: consumeStylesheetContents(normalize(input)) };
+export function parseSyntaxStylesheet(input: ParserInput): SyntaxStyleSheet {
+  return {
+    rules: consumeStylesheetContents(normalize(input)),
+    ...(typeof input === 'string' ? { originalText: input } : {}),
+  };
 }
 
 // 5.4.4. Parse a stylesheet's contents
-export function parseStylesheetContents(input: ParserInput): Rule[] {
+export function parseSyntaxStylesheetContents(input: ParserInput): SyntaxRule[] {
   return consumeStylesheetContents(normalize(input));
 }
 
 // Legacy name retained for callers using the former specification terminology.
-export const parseListOfRules = parseStylesheetContents;
+export const parseListOfRules = parseSyntaxStylesheetContents;
 
 // 5.4.5. Parse a block's contents
 export function parseBlockContents(
   input: ParserInput,
   context: unknown = undefined,
-): BlockContents {
+): SyntaxBlockContents {
   return consumeBlockContents(normalize(input, context));
 }
 
 // 5.4.6. Parse a rule
-export function parseRule(input: ParserInput): Rule | null {
+export function parseRule(input: ParserInput): SyntaxRule | null {
   const c = normalize(input);
 
   consumeTrivia(c);
@@ -97,7 +142,7 @@ export function parseRule(input: ParserInput): Rule | null {
 export function parseDeclaration(
   input: ParserInput,
   context: unknown = undefined,
-): Declaration | null {
+): SyntaxDeclaration | null {
   const c = normalize(input, context);
   consumeTrivia(c);
   return consumeDeclaration(c);
@@ -141,16 +186,31 @@ export function parseCommaSeparatedListOfComponentValues(
 }
 
 function normalize(input: ParserInput, context: unknown = undefined): TokenCursor<Token> {
-  return new TokenCursor(typeof input === 'string' ? tokenize(input) : input, { context });
+  if (typeof input !== 'string') return new TokenCursor(input, { context });
+
+  const { source, tokens, ranges } = tokenizeWithSource(input);
+  return new TokenCursor(tokens, {
+    context,
+    source: { text: source, ranges },
+  });
 }
 
 function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
   c.consumeWhile(isWhitespaceToken);
 }
 
+// TODO: Sections 5.5.2, 5.5.3, 5.5.6, and 7 describe validating rules and
+// declarations in their current context while consuming them. This parser
+// currently performs only the structural checks needed for generic CSS syntax
+// and defers property-, descriptor-, and rule-specific validity to semantic
+// interpretation. The specification's implementation note suggests that
+// grammar-aware checks mainly enable earlier exits and avoid reparsing. Revisit
+// this when those contexts exist, and verify that deferred validation still
+// preserves invalid-rule recovery and declaration-list boundaries.
+
 // 5.5.1. Consume a stylesheet's contents
-function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
-  const rules: Rule[] = [];
+function consumeStylesheetContents(c: TokenCursor<Token>): SyntaxRule[] {
+  const rules: SyntaxRule[] = [];
 
   while (true) {
     switch (c.peek().type) {
@@ -179,7 +239,7 @@ function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
 function consumeAtRule<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
-): AtRule {
+): SyntaxAtRule {
   const token = c.next();
 
   if (token.type !== TokenKind.AtKeyword) {
@@ -194,11 +254,11 @@ function consumeAtRule<Value extends Token>(
       case TokenKind.Semicolon:
       case TokenKind.EOF:
         c.next();
-        return { kind: 'statement-at-rule', name, prelude };
+        return { type: 'statement-at-rule', name, prelude };
 
       case TokenKind.RightBrace:
         if (nested) {
-          return { kind: 'statement-at-rule', name, prelude };
+          return { type: 'statement-at-rule', name, prelude };
         }
         prelude.push(consumeComponentValue(c));
         break;
@@ -206,10 +266,10 @@ function consumeAtRule<Value extends Token>(
       case TokenKind.LeftBrace:
       case TokenKind.BraceBlock:
         return {
-          kind: 'block-at-rule',
+          type: 'block-at-rule',
           name,
           prelude,
-          block: materializeBlockContents(consumeBlock(c)),
+          block: consumeBlock(c),
         };
 
       default:
@@ -223,7 +283,7 @@ function consumeQualifiedRule<Value extends Token>(
   c: TokenCursor<Value>,
   stopToken?: TokenKind,
   nested = false,
-): QualifiedRule | null {
+): SyntaxQualifiedRule | null {
   const prelude: ComponentValue[] = [];
 
   while (true) {
@@ -253,13 +313,10 @@ function consumeQualifiedRule<Value extends Token>(
         return null;
       }
 
-      const block = materializeBlockContents(consumeBlock(c));
-
       return {
-        kind: 'qualified-rule',
+        type: 'qualified-rule',
         prelude,
-        declarations: block.declarations,
-        rules: block.rules,
+        block: consumeBlock(c),
       };
     }
 
@@ -277,7 +334,7 @@ function looksLikeCustomProperty(prelude: readonly ComponentValue[]): boolean {
 }
 
 // 5.5.4. Consume a block
-function consumeBlock<Value extends Token>(c: TokenCursor<Value>): BlockContents {
+function consumeBlock<Value extends Token>(c: TokenCursor<Value>): SyntaxBlockContents {
   const opening = c.peek();
 
   if (isBraceBlock(opening)) {
@@ -296,9 +353,9 @@ function consumeBlock<Value extends Token>(c: TokenCursor<Value>): BlockContents
 }
 
 // 5.5.5. Consume a block's contents
-function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): BlockContents {
-  const contents: BlockContents = [];
-  let declarations: Declaration[] = [];
+function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): SyntaxBlockContents {
+  const contents: SyntaxBlockContents = [];
+  let declarations: SyntaxDeclaration[] = [];
 
   const flushDeclarations = (): void => {
     if (declarations.length === 0) return;
@@ -347,27 +404,11 @@ function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): Block
   }
 }
 
-function materializeBlockContents(contents: BlockContents): {
-  declarations: Declaration[];
-  rules: Rule[];
-} {
-  const items = [...contents];
-  const declarations = Array.isArray(items[0])
-    ? items.shift() as Declaration[]
-    : [];
-  const rules = items.map((item): Rule => Array.isArray(item)
-    ? { kind: 'nested-declarations-rule', declarations: item }
-    : item,
-  );
-
-  return { declarations, rules };
-}
-
 // 5.5.6. Consume a declaration
 export function consumeDeclaration<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
-): Declaration | null {
+): SyntaxDeclaration | null {
   const token = c.peek();
 
   if (!isIdentToken(token)) {
@@ -377,7 +418,7 @@ export function consumeDeclaration<Value extends Token>(
 
   c.next();
 
-  const declaration: Declaration = {
+  const declaration: SyntaxDeclaration = {
     name: token.value,
     value: [],
     important: false,
@@ -392,20 +433,30 @@ export function consumeDeclaration<Value extends Token>(
 
   c.next();
   consumeTrivia(c);
+  const valueStart = c.pos();
   declaration.value = consumeListOfComponentValues(c, TokenKind.Semicolon, nested);
+  let valueEnd = c.pos();
 
-  consumeImportantFlag(declaration);
-  trimTrailingWhitespace(declaration.value);
+  valueEnd -= consumeImportantFlag(declaration);
+  valueEnd -= trimTrailingWhitespace(declaration.value);
+  const originalText = c.sourceText(valueStart, valueEnd);
 
   if (declaration.name.startsWith('--')) {
-    // Exact original text requires source ranges on the token stream. Until
-    // those are available, leave the optional field absent rather than store
-    // a normalized serialization that falsely claims to be the source text.
+    declaration.originalText = originalText;
     return declaration;
   }
 
   if (hasDisallowedTopLevelBraceBlock(declaration.value)) {
     return null;
+  }
+
+  if (
+    asciiLower(declaration.name) === 'unicode-range' &&
+    originalText !== undefined
+  ) {
+    declaration.value = [...parseListOfComponentValues(
+      tokenize(originalText, true),
+    )];
   }
 
   return declaration;
@@ -433,13 +484,13 @@ function consumeBadDeclarationRemnants<Value extends Token>(
   }
 }
 
-function consumeImportantFlag(declaration: Declaration): void {
+function consumeImportantFlag(declaration: SyntaxDeclaration): number {
   const value = declaration.value;
   const importantIndex = lastNonWhitespaceIndex(value, value.length - 1);
-  if (importantIndex < 0) return;
+  if (importantIndex < 0) return 0;
 
   const bangIndex = lastNonWhitespaceIndex(value, importantIndex - 1);
-  if (bangIndex < 0) return;
+  if (bangIndex < 0) return 0;
 
   const bang = value[bangIndex]!;
   const important = value[importantIndex]!;
@@ -449,9 +500,13 @@ function consumeImportantFlag(declaration: Declaration): void {
     isIdentToken(important) &&
     asciiLower(important.value) === 'important'
   ) {
+    const removed = value.length - bangIndex;
     value.splice(bangIndex);
     declaration.important = true;
+    return removed;
   }
+
+  return 0;
 }
 
 function lastNonWhitespaceIndex(
@@ -465,10 +520,14 @@ function lastNonWhitespaceIndex(
   return -1;
 }
 
-function trimTrailingWhitespace(values: ComponentValue[]): void {
+function trimTrailingWhitespace(values: ComponentValue[]): number {
+  const start = values.length;
+
   while (values.length > 0 && isWhitespaceToken(values[values.length - 1]!)) {
     values.pop();
   }
+
+  return start - values.length;
 }
 
 function hasDisallowedTopLevelBraceBlock(values: readonly ComponentValue[]): boolean {
@@ -502,6 +561,10 @@ function consumeListOfComponentValues<Value extends Token>(
 }
 
 // 5.5.8. Consume a component value
+// The parser uses one cursor abstraction for both lexical token streams and
+// component-value streams. Consuming a component value folds opening and
+// function tokens into blocks; grammar consumers then reuse the same cursor
+// over the resulting component values.
 function consumeComponentValue<Value extends Token>(
   c: TokenCursor<Value>,
 ): ComponentValue {

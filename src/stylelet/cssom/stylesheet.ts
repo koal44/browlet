@@ -1,4 +1,4 @@
-import { parseStylesheet, type StyleSheetAst } from './ast';
+import { parseStylesheet, type StyleSheet } from '../css/stylesheet';
 import { notImplemented } from './util';
 import { SelectletCSSRuleList } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
@@ -88,7 +88,7 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
   }
 }
 
-function buildCSSRuleList(sheet: StyleSheetAst): SelectletCSSRuleList {
+function buildCSSRuleList(sheet: StyleSheet): SelectletCSSRuleList {
   return new SelectletCSSRuleList(
     sheet.rules.map((rule) => new SelectletCSSStyleRule(rule)),
   );

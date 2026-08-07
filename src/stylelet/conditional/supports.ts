@@ -10,9 +10,8 @@ import {
 import { isTokenKind } from '../syntax/component-value';
 import {
   consumeDeclaration, createComponentParser, parseAsComponentGrammar,
-  type ParserInput,
+  type ParserInput, type SyntaxDeclaration,
 } from '../syntax/parser';
-import type { Declaration } from '../syntax/rule';
 import { TokenKind } from '../syntax/tokens';
 import {
   createBooleanExprConsumer, type BooleanExprValue,
@@ -33,11 +32,15 @@ import {
 
 export type SupportsCondition = BooleanExprValue<SupportsFeature>;
 
+export type SupportsContext = {
+  supports?: (declaration: SyntaxDeclaration) => boolean;
+};
+
 type SupportsFeature = SupportsDeclaration;
 
 export type SupportsDeclaration = {
   type: 'supports-declaration';
-  declaration: Declaration;
+  declaration: SyntaxDeclaration;
 };
 
 export function parseSupportsCondition(

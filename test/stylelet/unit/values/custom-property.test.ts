@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type {
+  CustomPropertyRegistration, CustomPropertyRegistry,
+} from '../../../../src/stylelet/css/property';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { defineCustomProperty, guaranteedInvalidValue } from '../../../../src/stylelet/values/whole-value';
@@ -12,6 +15,25 @@ function syntax(input: string): SyntaxValue {
 }
 
 describe('custom property', () => {
+  it('holds a synthesized definition and initial whole value in a registration', () => {
+    const syntaxValue = syntax('<color>');
+    const definition = defineCustomProperty({ syntax: syntaxValue });
+    const initialValue = definition.parse('red')!;
+    const registration: CustomPropertyRegistration = {
+      name: '--accent',
+      syntax: syntaxValue,
+      definition,
+      inherits: false,
+      initialValue,
+    };
+    const registry: CustomPropertyRegistry = new Map([
+      [registration.name, registration],
+    ]);
+
+    expect(registry.get('--accent')).toBe(registration);
+    expect(registration.initialValue.serialize()).toBe('red');
+  });
+
   it('defers registered syntax validation until the computed stage', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
 
