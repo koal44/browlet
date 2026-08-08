@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
-  CustomPropertyRegistration, CustomPropertyRegistry,
+  CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
 } from '../../../../src/stylelet/css/property';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
+import { CSS_WIDE_KEYWORDS } from '../../../../src/stylelet/values/css-wide';
 import { defineCustomProperty, guaranteedInvalidValue } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax, type SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
@@ -85,15 +86,21 @@ describe('custom property', () => {
     expect(property.parse('red ! blue')).toBeNull();
   });
 
-  it('recognizes CSS-wide keywords independently of registered syntax', () => {
-    const property = defineCustomProperty({ syntax: syntax('<color>') });
+  // CSS Properties and Values API 1, 2.3. Specified Value-Time Behavior
+  it.each(CSS_WIDE_KEYWORDS)(
+    'accepts the CSS-wide keyword %s independently of registered syntax',
+    (keyword) => {
+      const property = defineCustomProperty({ syntax: syntax('<color>') });
 
-    expect(property.parse('inherit')?.resolve(ValueStage.Declared, {})).toMatchObject({
-      type: 'css-wide',
-      keyword: 'inherit',
-    });
-  });
+      expect(property.parse(keyword)?.resolve(ValueStage.Declared, {}))
+        .toMatchObject({
+          type: 'css-wide',
+          keyword,
+        });
+    },
+  );
 
+  // CSS Properties and Values API 1, 2.4. Computed Value-Time Behavior
   it('parses a valid registered value at the computed stage', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
     const value = property.parse('red');
@@ -112,7 +119,10 @@ describe('custom property', () => {
 
   it.each([
     ['<number>', 'calc(1 + 2)', {}, '3'],
+    ['<integer>', 'calc(1 + 2)', {}, '3'],
+    ['<percentage>', 'calc(10% + 20%)', {}, '30%'],
     ['<length>', 'calc(2em)', { length: { em: 16 } }, '32px'],
+    ['<length-percentage>', 'calc(2em)', { length: { em: 16 } }, '32px'],
     ['<angle>', 'calc(0.5turn)', {}, '180deg'],
     ['<time>', 'calc(250ms)', {}, '0.25s'],
     ['<resolution>', 'calc(96dpi)', {}, '1dppx'],
@@ -164,6 +174,59 @@ describe('custom property', () => {
     expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' })?.serialize())
       .toBe('rgb(0, 0, 0), rgb(0, 0, 255)');
   });
+
+  it.each([
+    ['<number>', '5', '5'],
+    ['<integer>', '5', '5'],
+    ['<percentage>', '20%', '20%'],
+    ['<string>', '"hello"', '"hello"'],
+    ['<custom-ident>', 'hello', 'hello'],
+    ['<url>', 'url("https://example.com/image.png")', 'url("https://example.com/image.png")'],
+    ['*', '10px / anything', '10px / anything'],
+  ])(
+    'computes the registered %s literal %s as specified',
+    (syntaxText, input, serialized) => {
+      const property = defineCustomProperty({ syntax: syntax(syntaxText) });
+
+      expect(property.parse(input)?.resolve(ValueStage.Computed, {})?.serialize())
+        .toBe(serialized);
+    },
+  );
+
+  it('computes a registered image value', () => {
+    const property = defineCustomProperty({ syntax: syntax('<image>') });
+
+    expect(property.parse('linear-gradient(red, blue)')
+      ?.resolve(ValueStage.Computed, {})
+      ?.serialize())
+      .toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
+  });
+
+  it('resolves a relative registered URL against its stylesheet', () => {
+    const property = defineCustomProperty({ syntax: syntax('<url>') });
+    const context: PropertyContext = {
+      baseUrl: new URL('https://example.com/styles/site.css'),
+    };
+
+    expect(property.parse('url("image.png")')
+      ?.resolve(ValueStage.Computed, context)
+      ?.serialize())
+      .toBe('url("https://example.com/styles/image.png")');
+  });
+
+  it.skip.each([
+    ['<transform-function>', 'translateX(2em)', 'translateX(32px)'],
+    ['<transform-list>', 'translateX(2em) rotate(0deg)', 'translateX(32px) rotate(0deg)'],
+  ])(
+    'computes lengths in a registered %s value',
+    (syntaxText, input, serialized) => {
+      const property = defineCustomProperty({ syntax: syntax(syntaxText) });
+
+      expect(property.parse(input)?.resolve(ValueStage.Computed, {
+        length: { em: 16 },
+      })?.serialize()).toBe(serialized);
+    },
+  );
 
   it.each([
     ['red | <color>', 'red', 'red'],

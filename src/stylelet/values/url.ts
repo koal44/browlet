@@ -12,6 +12,8 @@ import {
   type UrlModifierValue,
 } from './url-modifier';
 import type { ValueDefinition } from '../value-processing/definition';
+import { ValueStage } from '../value-processing/stage';
+import type { TreeScope } from '../css/tree-scope';
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL
@@ -34,13 +36,22 @@ export type UrlValue = {
   notation: UrlNotation;
   value: string;
   modifiers: RequestUrlModifiers;
+  // Fragment-only URLs carry this flag before their scope is known.
+  local?: true;
+  // Captured declaration provenance for local URL matching.
+  treeScope?: TreeScope;
 };
 
 export type UrlNotation = 'url' | 'src';
 
-export const urlDef: ValueDefinition<UrlValue> = {
+export type UrlContext = {
+  baseUrl?: URL;
+  treeScope?: TreeScope;
+};
+
+export const urlDef: ValueDefinition<UrlValue, UrlContext> = {
   consume: consumeUrl,
-  resolve: (value) => value,
+  resolve: resolveUrl,
   serialize: serializeUrl,
 };
 
@@ -57,6 +68,41 @@ export function consumeUrl(
   return urlConsumer(c);
 }
 
+export function resolveUrl(
+  value: UrlValue,
+  stage: ValueStage,
+  context: UrlContext = {},
+): UrlValue {
+  if (value.local === true) {
+    if (
+      stage < ValueStage.Specified ||
+      value.treeScope !== undefined ||
+      context.treeScope === undefined
+    ) {
+      return value;
+    }
+
+    return { ...value, treeScope: context.treeScope };
+  }
+
+  if (
+    stage < ValueStage.Computed ||
+    value.value === ''
+  ) {
+    return value;
+  }
+
+  try {
+    return {
+      ...value,
+      value: new URL(value.value, context.baseUrl).href,
+    };
+  } catch {
+    // A URL that cannot be made absolute retains its specified value.
+    return value;
+  }
+}
+
 export function serializeUrl(value: UrlValue): string {
   const args = [
     serializeCssString(value.value),
@@ -69,6 +115,20 @@ export function serializeUrl(value: UrlValue): string {
 type UrlFunctionParserContext = {
   seenRequestModifiers?: ReadonlySet<RequestUrlModifierValue['type']>;
 };
+
+function createUrlValue(
+  notation: UrlNotation,
+  value: string,
+  modifiers: RequestUrlModifiers,
+): UrlValue {
+  return {
+    type: 'url',
+    notation,
+    value,
+    modifiers,
+    ...(value.startsWith('#') ? { local: true as const } : {}),
+  };
+}
 
 function contextForUrlFunctionArguments(): UrlFunctionParserContext {
   return {};
@@ -137,12 +197,7 @@ const urlFunctionModifierConsumer = adaptConsumer(
 // <url-token>
 const urlTokenValueConsumer: TryConsumer<UrlValue> = adaptConsumer(
   consumeUrlToken,
-  (component): UrlValue => ({
-    type: 'url',
-    notation: 'url',
-    value: component.value,
-    modifiers: {},
-  }),
+  (component) => createUrlValue('url', component.value, {}),
 );
 
 // <src()> = src( <string> <url-modifier>* )
@@ -160,12 +215,7 @@ const srcFnConsumer = createFunctionalNotationConsumer(
       modifiers: urlModifiersFromArray(modifiers),
     }),
   ),
-  (value): UrlValue => ({
-    type: 'url',
-    notation: 'src',
-    value: value.value,
-    modifiers: value.modifiers,
-  }),
+  (value) => createUrlValue('src', value.value, value.modifiers),
   { contextForArguments: contextForUrlFunctionArguments },
 );
 
@@ -186,12 +236,7 @@ const urlFnConsumer: TryConsumer<UrlValue> = oneOf(
           modifiers: urlModifiersFromArray(modifiers),
         }),
       ),
-      (value): UrlValue => ({
-        type: 'url',
-        notation: 'url',
-        value: value.value,
-        modifiers: value.modifiers,
-      }),
+      (value) => createUrlValue('url', value.value, value.modifiers),
       { contextForArguments: contextForUrlFunctionArguments },
     )),
     one(urlTokenValueConsumer),

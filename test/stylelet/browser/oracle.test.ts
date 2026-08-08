@@ -1540,6 +1540,321 @@ runScenarios('CSSOM URL modifier oracle', 'skip', [
   },
 ]);
 
+/*
+ * WPT covers the ordinary fragment-only, empty, relative-to-document-base,
+ * relative-to-stylesheet, and distinct document/shadow-tree cases in
+ * css/css-values/urls and css/css-shadow/svg-id-ref-001.html. These scenarios
+ * cover the remaining mutable-base, shared-sheet, host-fallback, and
+ * inheritance boundaries.
+ *
+ * TODO: Propose the shared constructed stylesheet, inherited reference, and
+ * host-tree fallback scenarios as WPTs once Selectlet can exercise the model
+ * through a DOM integration such as jsdom.
+ */
+runScenarios('CSS local URL scope oracle', 'skip', [
+  {
+    name: 'preserves special URLs and the base used when a rule was parsed',
+    engines: ['native'],
+    markup: '<div id="url-base-oracle"></div>',
+    setupPage: async (page) => {
+      await page.route(/^https:\/\/(?:first|second)\.example\//, async (route) => {
+        await route.fulfill({ body: '', contentType: 'image/png' });
+      });
+      await page.evaluate(async () => {
+        const base = document.createElement('base');
+        base.href = 'https://first.example/styles/';
+        document.head.prepend(base);
+
+        const style = document.createElement('style');
+        style.textContent = `
+          #url-base-oracle {
+            background-image: url("image.png");
+            mask-image: url("#mask");
+            cursor: url(""), pointer;
+          }
+        `;
+        document.head.append(style);
+
+        const target = document.getElementById('url-base-oracle') as HTMLElement;
+        const read = () => {
+          const computed = getComputedStyle(target);
+          return {
+            relative: computed.backgroundImage,
+            fragment: computed.maskImage,
+            empty: computed.cursor,
+          };
+        };
+
+        const before = read();
+        base.href = 'https://second.example/assets/';
+        await new Promise(requestAnimationFrame);
+        const after = read();
+
+        target.style.setProperty('--oracle', JSON.stringify({ before, after }));
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'url-base-oracle' },
+        expect: {
+          value: JSON.stringify({
+            before: {
+              relative: 'url("https://first.example/styles/image.png")',
+              fragment: 'url("#mask")',
+              empty: 'url(""), pointer',
+            },
+            after: {
+              relative: 'url("https://first.example/styles/image.png")',
+              fragment: 'url("#mask")',
+              empty: 'url(""), pointer',
+            },
+          }),
+        },
+      },
+    ],
+  },
+  {
+    name: 'scopes one constructed stylesheet independently in each adopted root',
+    engines: ['native'],
+    markup: `
+      <div id="document-target" class="local-url-target"></div>
+      <div id="shadow-host"></div>
+      <div id="adopted-scope-oracle"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const definitions = (x: number) => `
+          <svg width="0" height="0" style="position: absolute">
+            <defs>
+              <clipPath id="clip" clipPathUnits="objectBoundingBox">
+                <rect x="${x}" y="0" width="0.5" height="1" />
+              </clipPath>
+            </defs>
+          </svg>
+        `;
+
+        document.body.insertAdjacentHTML('afterbegin', definitions(0));
+
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(`
+          .local-url-target {
+            position: fixed;
+            top: 0;
+            width: 100px;
+            height: 100px;
+            background: green;
+            clip-path: url("#clip");
+          }
+        `);
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+
+        const documentTarget = document.getElementById('document-target')!;
+        documentTarget.style.left = '0';
+
+        const host = document.getElementById('shadow-host') as HTMLElement;
+        host.style.cssText = 'position: fixed; left: 120px; top: 0; width: 100px; height: 100px';
+        const shadow = host.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `${definitions(0.5)}<div id="shadow-target" class="local-url-target"></div>`;
+        shadow.adoptedStyleSheets = [sheet];
+        const shadowTarget = shadow.getElementById('shadow-target')!;
+        shadowTarget.style.left = '120px';
+
+        const result = {
+          document: [
+            document.elementFromPoint(25, 50) === documentTarget,
+            document.elementFromPoint(75, 50) === documentTarget,
+          ],
+          shadow: [
+            shadow.elementFromPoint(145, 50) === shadowTarget,
+            shadow.elementFromPoint(195, 50) === shadowTarget,
+          ],
+        };
+        document.getElementById('adopted-scope-oracle')!
+          .setAttribute('style', `--oracle: ${JSON.stringify(result)}`);
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'adopted-scope-oracle' },
+        browsers: ['chromium', 'firefox'],
+        expect: {
+          value: JSON.stringify({
+            document: [true, false],
+            shadow: [false, true],
+          }),
+        },
+      },
+      // WebKit resolves the shadow-tree use against the document's #clip.
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'adopted-scope-oracle' },
+        browsers: ['webkit'],
+        status: 'fail',
+        expect: {
+          value: JSON.stringify({
+            document: [true, false],
+            shadow: [false, true],
+          }),
+        },
+      },
+    ],
+  },
+  {
+    name: 'falls back from a shadow root to its host tree for an unresolved ID',
+    engines: ['native'],
+    markup: `
+      <svg width="0" height="0" style="position: absolute">
+        <defs>
+          <clipPath id="host-clip" clipPathUnits="objectBoundingBox">
+            <rect x="0" y="0" width="0.5" height="1" />
+          </clipPath>
+        </defs>
+      </svg>
+      <div id="fallback-host"></div>
+      <div id="fallback-oracle"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(`
+          #fallback-target {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100px;
+            height: 100px;
+            background: green;
+            clip-path: url("#host-clip");
+          }
+        `);
+
+        const host = document.getElementById('fallback-host')!;
+        const shadow = host.attachShadow({ mode: 'open' });
+        shadow.innerHTML = '<div id="fallback-target"></div>';
+        shadow.adoptedStyleSheets = [sheet];
+        const target = shadow.getElementById('fallback-target')!;
+        const result = [
+          shadow.elementFromPoint(25, 50) === target,
+          shadow.elementFromPoint(75, 50) === target,
+        ];
+        document.getElementById('fallback-oracle')!
+          .setAttribute('style', `--oracle: ${JSON.stringify(result)}`);
+      });
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'fallback-oracle' },
+        browsers: ['webkit'],
+        expect: { value: JSON.stringify([true, false]) },
+      },
+      // Chromium and Firefox do not continue the ID lookup in the host's tree.
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'fallback-oracle' },
+        browsers: ['chromium', 'firefox'],
+        status: 'fail',
+        expect: { value: JSON.stringify([true, false]) },
+      },
+    ],
+  },
+  {
+    name: 'retains the captured root when a local URL is inherited into a shadow tree',
+    engines: ['native'],
+    markup: `
+      <style>#inherited-url-host { fill: url("#paint"); }</style>
+      <svg width="0" height="0" style="position: absolute">
+        <defs>
+          <linearGradient id="paint">
+            <stop offset="0" stop-color="red" />
+            <stop offset="1" stop-color="red" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div id="inherited-url-host"></div>
+    `,
+    setupPage: async (page) => {
+      await page.evaluate(() => {
+        const host = document.getElementById('inherited-url-host')!;
+        const shadow = host.attachShadow({ mode: 'open' });
+        shadow.innerHTML = `
+          <style>.local { fill: url("#paint"); }</style>
+          <svg width="80" height="40">
+            <defs>
+              <linearGradient id="paint">
+                <stop offset="0" stop-color="blue" />
+                <stop offset="1" stop-color="blue" />
+              </linearGradient>
+            </defs>
+            <rect id="inherited-paint" width="40" height="40" />
+            <rect id="local-paint" class="local" x="40" width="40" height="40" />
+          </svg>
+        `;
+      });
+
+      const sample = async (selector: string): Promise<number[]> => {
+        const screenshot = await page.locator(selector).screenshot();
+        return page.evaluate(async (bytes) => {
+          const image = await createImageBitmap(new Blob(
+            [Uint8Array.from(bytes)],
+            { type: 'image/png' },
+          ));
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const context = canvas.getContext('2d')!;
+          context.drawImage(image, 0, 0);
+          image.close();
+          return [...context.getImageData(
+            Math.floor(canvas.width / 2),
+            Math.floor(canvas.height / 2),
+            1,
+            1,
+          ).data];
+        }, [...screenshot]);
+      };
+
+      const result = {
+        inherited: await sample('#inherited-paint'),
+        local: await sample('#local-paint'),
+      };
+      await page.evaluate((value) => {
+        document.getElementById('inherited-url-host')!
+          .setAttribute('style', `--oracle: ${JSON.stringify(value)}`);
+      }, result);
+    },
+    cases: [
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'inherited-url-host' },
+        browsers: ['chromium'],
+        expect: {
+          value: JSON.stringify({
+            inherited: [255, 0, 0, 255],
+            local: [0, 0, 255, 255],
+          }),
+        },
+      },
+      // Firefox and WebKit rebind the inherited reference to the receiving
+      // shadow root.
+      {
+        computedStyle: '--oracle',
+        ref: { by: 'id', id: 'inherited-url-host' },
+        browsers: ['firefox', 'webkit'],
+        status: 'fail',
+        expect: {
+          value: JSON.stringify({
+            inherited: [255, 0, 0, 255],
+            local: [0, 0, 255, 255],
+          }),
+        },
+      },
+    ],
+  },
+]);
+
 runScenarios('CSSOM number serialization oracle', 'skip', [
   {
     name: 'native number rounding and notation',

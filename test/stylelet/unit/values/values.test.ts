@@ -7,6 +7,7 @@ import {
   it,
 } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
+import { createTreeScope } from '../../../../src/stylelet/css/tree-scope';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
@@ -90,7 +91,9 @@ import {
   parseUrlModifier, serializeRequestUrlModifier,
   consumeUrlModifier,
 } from '../../../../src/stylelet/values/url-modifier';
-import { parseUrl, serializeUrl, consumeUrl } from '../../../../src/stylelet/values/url';
+import {
+  parseUrl, resolveUrl, serializeUrl, consumeUrl,
+} from '../../../../src/stylelet/values/url';
 import { parseZero, consumeZero } from '../../../../src/stylelet/values/numeric-literal/zero';
 import {
   accumulateOpacities, addOpacities, interpolateOpacities, parseOpacityValue, resolveOpacityValue,
@@ -623,6 +626,86 @@ describe('url-modifier', () => {
 });
 
 describe('url', () => {
+  it.each(['#paint', '#xywh=0,0,10,10'])(
+    'sets the local URL flag on the fragment-only URL %j',
+    (fragment) => {
+      expect(parseUrl(`url("${fragment}")`))
+        .toHaveProperty('local', true);
+    },
+  );
+
+  it('captures the active tree scope independently for each use', () => {
+    const value = parseUrl('url("#paint")')!;
+    const documentScope = createTreeScope();
+    const shadowScope = createTreeScope();
+    const documentValue = resolveUrl(
+      value,
+      ValueStage.Specified,
+      { treeScope: documentScope },
+    );
+    const shadowValue = resolveUrl(
+      value,
+      ValueStage.Specified,
+      { treeScope: shadowScope },
+    );
+
+    expect(documentValue).toHaveProperty('treeScope', documentScope);
+    expect(shadowValue).toHaveProperty('treeScope', shadowScope);
+  });
+
+  it('retains the captured tree scope through inheritance', () => {
+    const documentScope = createTreeScope();
+    const shadowScope = createTreeScope();
+    const specified = resolveUrl(
+      parseUrl('url("#paint")')!,
+      ValueStage.Specified,
+      { treeScope: documentScope },
+    );
+    const inherited = resolveUrl(
+      specified,
+      ValueStage.Computed,
+      { treeScope: shadowScope },
+    );
+
+    expect(inherited).toHaveProperty('treeScope', documentScope);
+  });
+
+  it('resolves a relative URL against its computed-value context', () => {
+    const value = parseUrl('url("../image.png")')!;
+
+    expect(resolveUrl(value, ValueStage.Computed, {
+      baseUrl: new URL('https://example.com/styles/site.css'),
+    })).toEqual({
+      ...value,
+      value: 'https://example.com/image.png',
+    });
+  });
+
+  it('does not resolve a URL before the computed-value stage', () => {
+    const value = parseUrl('url("image.png")')!;
+
+    expect(resolveUrl(value, ValueStage.Specified, {
+      baseUrl: new URL('https://example.com/styles/site.css'),
+    })).toBe(value);
+  });
+
+  it.each(['url("")', 'src("")', 'url("#fragment")'])(
+    'preserves the special computed URL %j',
+    (input) => {
+      const value = parseUrl(input)!;
+
+      expect(resolveUrl(value, ValueStage.Computed, {
+        baseUrl: new URL('https://example.com/styles/site.css'),
+      })).toBe(value);
+    },
+  );
+
+  it('retains a relative URL when no base URL is available', () => {
+    const value = parseUrl('url("image.png")')!;
+
+    expect(resolveUrl(value, ValueStage.Computed)).toBe(value);
+  });
+
   it('preserves substitution in src() but not in url()', () => {
     expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
       {
@@ -645,21 +728,22 @@ describe('url', () => {
   });
 
   it.each([
-    ['url(image.png)', 'url', 'image.png'],
-    ['url("image.png")', 'url', 'image.png'],
-    ['src("image.png")', 'src', 'image.png'],
-    ['URL("image.png")', 'url', 'image.png'],
-    ['SrC("image.png")', 'src', 'image.png'],
-    ['url()', 'url', ''],
-    ['url("")', 'url', ''],
-    ['src("")', 'src', ''],
-    ['url(#fragment)', 'url', '#fragment'],
-  ])('parses %j', (input, notation, value) => {
+    ['url(image.png)', 'url', 'image.png', false],
+    ['url("image.png")', 'url', 'image.png', false],
+    ['src("image.png")', 'src', 'image.png', false],
+    ['URL("image.png")', 'url', 'image.png', false],
+    ['SrC("image.png")', 'src', 'image.png', false],
+    ['url()', 'url', '', false],
+    ['url("")', 'url', '', false],
+    ['src("")', 'src', '', false],
+    ['url(#fragment)', 'url', '#fragment', true],
+  ])('parses %j', (input, notation, value, local) => {
     expect(parseUrl(input)).toEqual({
       type: 'url',
       notation,
       value,
       modifiers: {},
+      ...(local ? { local: true } : {}),
     });
   });
 

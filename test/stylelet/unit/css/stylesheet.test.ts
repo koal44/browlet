@@ -13,6 +13,16 @@ import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 
 describe('CSS stylesheet', () => {
+  it('retains its location and explicit base URL', () => {
+    const location = new URL('https://example.com/styles/site.css');
+    const baseUrl = new URL('https://cdn.example.com/assets/');
+
+    expect(parseStylesheet('* {}', { location, baseUrl })).toMatchObject({
+      location,
+      baseUrl,
+    });
+  });
+
   it('preserves the registry association in a built-in declaration', () => {
     const declaration: BuiltInPropertyDeclaration = {
       type: 'property-declaration',
@@ -51,7 +61,11 @@ describe('CSS stylesheet', () => {
       }],
     };
 
-    expect(sheet.rules[0].block.map((item) =>
+    const rule = sheet.rules[0];
+    expect(rule.type).toBe('style-rule');
+    if (rule.type !== 'style-rule') throw new Error('Expected a style rule');
+
+    expect(rule.block.map((item) =>
       item.type === 'property-declaration' ? item.name : item.type
     )).toEqual(['color', '--accent']);
   });
@@ -87,7 +101,11 @@ describe('CSS stylesheet', () => {
       }],
     });
     expect(sheet.originalText).toContain('--Accent: red !important');
-    expect(sheet.rules[0].block[1]).toMatchObject({
+    const rule = sheet.rules[0];
+    expect(rule.type).toBe('style-rule');
+    if (rule.type !== 'style-rule') throw new Error('Expected a style rule');
+
+    expect(rule.block[1]).toMatchObject({
       originalText: 'red',
     });
   });

@@ -7,15 +7,24 @@ import {
   parseSelectorList, type SelectorList,
 } from '../syntax/selector';
 import {
-  interpretPropertyDeclaration, type PropertyDeclaration,
+  interpretPropertyDeclaration, type PropertyDeclaration, type PropertyRule,
 } from './property';
 
 export type StyleSheet = {
   rules: Rule[];
+  location?: URL;
+  baseUrl?: URL;
   originalText?: string;
 };
 
-export type Rule = StyleRule;
+export type StyleSheetOptions = {
+  location?: URL;
+  baseUrl?: URL;
+};
+
+export type Rule =
+  | StyleRule
+  | PropertyRule;
 
 export type StyleRule = {
   type: 'style-rule';
@@ -23,15 +32,25 @@ export type StyleRule = {
   block: StyleBlock;
 };
 
-export type StyleBlock = Array<PropertyDeclaration | Rule>;
+export type StyleBlock = Array<PropertyDeclaration | StyleRule>;
 
-export function parseStylesheet(input: ParserInput): StyleSheet {
-  return interpretStylesheet(parseSyntaxStylesheet(input));
+export function parseStylesheet(
+  input: ParserInput,
+  options: StyleSheetOptions = {},
+): StyleSheet {
+  return interpretStylesheet(
+    parseSyntaxStylesheet(input, options.location),
+    options,
+  );
 }
 
 // CSS Syntax 3, 8.1. Parse a CSS stylesheet
-export function interpretStylesheet(sheet: SyntaxStyleSheet): StyleSheet {
+export function interpretStylesheet(
+  sheet: SyntaxStyleSheet,
+  options: StyleSheetOptions = {},
+): StyleSheet {
   const rules: Rule[] = [];
+  const location = options.location ?? sheet.location;
 
   for (const rule of sheet.rules) {
     const interpreted = interpretStylesheetRule(rule);
@@ -40,6 +59,8 @@ export function interpretStylesheet(sheet: SyntaxStyleSheet): StyleSheet {
 
   return {
     rules,
+    ...(location === undefined ? {} : { location }),
+    ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
     ...(sheet.originalText === undefined
       ? {}
       : { originalText: sheet.originalText }),
@@ -54,7 +75,7 @@ function interpretStylesheetRule(rule: SyntaxRule): Rule | null {
   }
 }
 
-function interpretStyleBlockRule(rule: SyntaxRule): Rule | null {
+function interpretStyleBlockRule(rule: SyntaxRule): StyleRule | null {
   switch (rule.type) {
     case 'qualified-rule':
       // Nested style rules are defined by CSS Nesting Level 1. Leave them

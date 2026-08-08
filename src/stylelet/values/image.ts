@@ -8,7 +8,9 @@ import {
   resolveGradient, serializeGradient, consumeGradient,
   type GradientValueContext, type GradientValue,
 } from './gradient';
-import { serializeUrl, consumeUrl, type UrlValue } from './url';
+import {
+  resolveUrl, serializeUrl, consumeUrl, type UrlContext, type UrlValue,
+} from './url';
 import type { ValueDefinition } from '../value-processing/definition';
 
 /*
@@ -17,7 +19,9 @@ import type { ValueDefinition } from '../value-processing/definition';
 
 export type ImageValue = UrlValue | GradientValue;
 
-export const imageDef: ValueDefinition<ImageValue, GradientValueContext> = {
+export type ImageValueContext = GradientValueContext & UrlContext;
+
+export const imageDef: ValueDefinition<ImageValue, ImageValueContext> = {
   consume: consumeImage,
   resolve: resolveImage,
   serialize: serializeImage,
@@ -25,7 +29,7 @@ export const imageDef: ValueDefinition<ImageValue, GradientValueContext> = {
 
 export function parseImage(
   input: ParserInput,
-  context: GradientValueContext = {},
+  context: ImageValueContext = {},
 ): ImageValue | null {
   return imageParser(input, context);
 }
@@ -39,9 +43,11 @@ export function consumeImage(
 export function resolveImage(
   value: ImageValue,
   stage: ValueStage,
-  context: GradientValueContext = {},
+  context: ImageValueContext = {},
 ): ImageValue {
-  return value.type === 'url' ? value : resolveGradient(value, stage, context);
+  return value.type === 'url'
+    ? resolveUrl(value, stage, context)
+    : resolveGradient(value, stage, context);
 }
 
 export function serializeImage(value: ImageValue): string {

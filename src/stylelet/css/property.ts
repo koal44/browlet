@@ -16,6 +16,7 @@ import type { GradientContext } from '../values/gradient';
 import type { MathContext } from '../values/math-value';
 import type { PositionContext } from '../values/position';
 import type { ParsedSyntaxValue, SyntaxValue } from '../values/syntax-value';
+import type { UrlContext } from '../values/url';
 import type { WholeValue, WholeValueDefinition } from '../values/whole-value';
 
 export type PropertyDeclaration =
@@ -60,6 +61,7 @@ export type PropertyContext =
   & ColorContext
   & GradientContext
   & PositionContext
+  & UrlContext
   & SupportsContext;
 
 export const propertyRegistry = {
@@ -81,6 +83,11 @@ export type CustomPropertyRegistration = {
   definition: WholeValueDefinition<ParsedSyntaxValue, PropertyContext>;
   inherits: boolean;
   initialValue: WholeValue<ParsedSyntaxValue, PropertyContext>;
+};
+
+export type PropertyRule = {
+  type: 'property-rule';
+  registration: CustomPropertyRegistration;
 };
 
 export type CustomPropertyRegistry = ReadonlyMap<

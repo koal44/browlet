@@ -90,6 +90,8 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
 
 function buildCSSRuleList(sheet: StyleSheet): SelectletCSSRuleList {
   return new SelectletCSSRuleList(
-    sheet.rules.map((rule) => new SelectletCSSStyleRule(rule)),
+    sheet.rules.flatMap((rule) =>
+      rule.type === 'style-rule' ? [new SelectletCSSStyleRule(rule)] : []
+    ),
   );
 }

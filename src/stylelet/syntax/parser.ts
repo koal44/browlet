@@ -9,6 +9,7 @@ import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
 
 export type SyntaxStyleSheet = {
   rules: SyntaxRule[];
+  location?: URL;
   originalText?: string;
 };
 
@@ -97,10 +98,13 @@ export function parseListAsComponentGrammar<T>(
 }
 
 // 5.4.3. Parse a stylesheet
-// The owning sheet/CSSOM layer is responsible for the optional location.
-export function parseSyntaxStylesheet(input: ParserInput): SyntaxStyleSheet {
+export function parseSyntaxStylesheet(
+  input: ParserInput,
+  location?: URL,
+): SyntaxStyleSheet {
   return {
     rules: consumeStylesheetContents(normalize(input)),
+    ...(location === undefined ? {} : { location }),
     ...(typeof input === 'string' ? { originalText: input } : {}),
   };
 }

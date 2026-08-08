@@ -89,6 +89,12 @@ function expectFunctionBlock(
 }
 
 describe('5.4 parser entry points', () => {
+  test('retains the optional stylesheet location', () => {
+    const location = new URL('https://example.com/styles/site.css');
+
+    expect(parseSyntaxStylesheet('* {}', location).location).toBe(location);
+  });
+
   test('parses a stylesheet and its contents', () => {
     const sheet = parseSyntaxStylesheet('@layer reset; .a { color: red }');
     const rules = parseSyntaxStylesheetContents('@layer reset; .a { color: red }');

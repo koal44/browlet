@@ -35,10 +35,13 @@ describe('image values', () => {
     ))).toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
   });
 
-  it('preserves and serializes URL images', () => {
+  it('resolves and serializes URL images', () => {
     const value = parseImage('url("image.png")')!;
+    const resolved = resolveImage(value, ValueStage.Computed, {
+      baseUrl: new URL('https://example.com/styles/site.css'),
+    });
 
-    expect(resolveImage(value, ValueStage.Computed)).toBe(value);
-    expect(serializeImage(value)).toBe('url("image.png")');
+    expect(serializeImage(resolved))
+      .toBe('url("https://example.com/styles/image.png")');
   });
 });
