@@ -768,7 +768,7 @@ function consumeCombinatorWhitespace(
  */
 export type WqName = {
   namespace: string | null;
-  name: string;
+  localName: string;
 };
 
 function consumeWqName(c: TokenCursor): TryConsumerResult<WqName> {
@@ -781,9 +781,9 @@ const wqNameConsumer: TryConsumer<WqName> = sequenceOf(
     one(consumeIdentToken),
   ],
 
-  ([namespace, [name]]) => ({
+  ([namespace, [localName]]) => ({
     namespace: namespace[0] ?? null,
-    name: name.value,
+    localName: localName.value,
   }),
 );
 
@@ -979,7 +979,7 @@ const classSelectorConsumer: TryConsumer<ClassSelector> = sequenceOf(
  */
 export type AttributeSelector = {
   kind: SelectorKind.AttributeSelector;
-  name: WqName;
+  wqName: WqName;
   matcher: AttrMatcher | null;
   value: string | null;
   modifier: AttrModifier | null;
@@ -1015,9 +1015,9 @@ const attributeSelectorBodyConsumer: TryConsumer<AttributeSelector> = sequenceOf
       ),
     ),
   ],
-  ([[name], tail]) => ({
+  ([[wqName], tail]) => ({
     kind: SelectorKind.AttributeSelector,
-    name,
+    wqName,
     matcher: tail[0]?.matcher ?? null,
     value: tail[0]?.value ?? null,
     modifier: tail[0]?.modifier ?? null,

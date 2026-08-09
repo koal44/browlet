@@ -79,15 +79,15 @@ const classSelector = (name: string) => ({
   name,
 });
 
-const attrName = (name: string, namespace?: string | null): WqName => ({
-  name,
+const attrName = (localName: string, namespace?: string | null): WqName => ({
+  localName,
   namespace: namespace ?? null,
 });
 
 const attrSelector = (name: WqName | string, matcher?: AttrMatcher, value?: string, modifier?: AttrModifier) => {
   const attr: Partial<AttributeSelector> = {
     kind: SelectorKind.AttributeSelector,
-    name: typeof name === 'string' ? attrName(name) : name,
+    wqName: typeof name === 'string' ? attrName(name) : name,
   };
   if (matcher !== undefined) attr.matcher = matcher;
   if (value !== undefined) attr.value = value;
@@ -1264,7 +1264,9 @@ describe('pseudo-element selectors', () => {
 
             const subclass = part.compound.subclasses[0];
 
-            expect(subclass.kind, `${css} arm ${index}`).toBe(SelectorKind.PseudoClassSelector);
+            if (subclass.kind !== SelectorKind.PseudoClassSelector) {
+              throw new Error(`Expected pseudo-class in ${css} arm ${index}`);
+            }
 
             return subclass.name;
           });
