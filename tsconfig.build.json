@@ -5,6 +5,7 @@
     "emitDeclarationOnly": false,
     "outDir": "./dist/.tmp",
     "rootDir": "./src",
+    "types": ["node"],
 
     "declaration": true,
     "declarationMap": false,

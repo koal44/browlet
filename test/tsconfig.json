@@ -17,6 +17,7 @@
     { "path": "../src/selectlet" },
     { "path": "../src/stylelet" },
     { "path": "../src/domlet" },
+    { "path": "../src/browlet" },
     { "path": "../src" }
   ]
 }

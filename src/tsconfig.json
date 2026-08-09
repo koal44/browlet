@@ -4,6 +4,7 @@
     "composite": true,
     "module": "preserve",
     "moduleResolution": "Bundler",
+    "types": ["node"],
     "outDir": "../dist/.typecheck/src",
     "tsBuildInfoFile": "../dist/.typecheck/src.tsbuildinfo"
   },
@@ -14,6 +15,7 @@
   "references": [
     { "path": "./selectlet" },
     { "path": "./stylelet" },
-    { "path": "./domlet" }
+    { "path": "./domlet" },
+    { "path": "./browlet" }
   ]
 }

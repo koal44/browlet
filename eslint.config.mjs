@@ -10,6 +10,7 @@ export default tseslint.config(
       'scratch/**',
       'test/selectlet/browser/fixtures/**',
       'test/selectlet/perf/engines/**',
+      'test/wpt/tests/**',
       'eslint.config.mjs',
     ],
   },

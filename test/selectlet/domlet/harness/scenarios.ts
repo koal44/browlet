@@ -7,7 +7,7 @@ export type {
   ContextHome, ContextRef, Expectation, RunScenariosOptions, Scenario,
   ScenariosStatus, ScenarioStep, TestCase,
 } from '../../../harness/browser/scenarios';
-import { Parser } from '../../../../src/domlet/parser/parser';
+import { DomletParser } from '../../../../src/domlet/parser/parser';
 import type { Document } from '../../../../src/domlet/nodes/document';
 import type { Element } from '../../../../src/domlet/nodes/element';
 import { isElement } from '../../../../src/domlet/nodes/node';
@@ -90,7 +90,7 @@ function initDocument(markup: string, markupMode: Scenario['markupMode']): Docum
     ? markup
     : `<!doctype html><html><body>${markup}</body></html>`;
 
-  return new Parser().parse(source);
+  return new DomletParser().parse(source);
 }
 
 function runCase(

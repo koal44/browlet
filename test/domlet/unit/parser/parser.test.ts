@@ -5,11 +5,11 @@ import {
   Document, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
 import { isComment } from '../../../../src/domlet/nodes/node';
-import { Parser } from '../../../../src/domlet/parser/parser';
+import { DomletParser } from '../../../../src/domlet/parser/parser';
 
 describe('Parser tree adapter', () => {
   it('parses a basic HTML document and derives its compatibility mode', () => {
-    const parser = new Parser();
+    const parser = new DomletParser();
     const standards = parser.parse('<!doctype html><main>content</main>');
     const quirks = parser.parse('<main>content</main>');
 
@@ -20,7 +20,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('parses comments as comment nodes', () => {
-    const document = new Parser().parse('<!--note--><main></main>');
+    const document = new DomletParser().parse('<!--note--><main></main>');
     const comment = document.firstChild;
 
     expect(isComment(comment)).toBe(true);
@@ -29,7 +29,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('parses attributes into the Domlet attribute representation', () => {
-    const document = new Parser().parse(
+    const document = new DomletParser().parse(
       '<main id="content" class="one two"></main>',
     );
     const main = document.getElementById('content');
@@ -44,7 +44,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('stores and retrieves the Parse5 document mode', () => {
-    const parser = new Parser();
+    const parser = new DomletParser();
     const document = new Document();
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
@@ -54,7 +54,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('creates and updates a document type before the document element', () => {
-    const parser = new Parser();
+    const parser = new DomletParser();
     const document = new Document();
     const element = document.createElement('html');
 

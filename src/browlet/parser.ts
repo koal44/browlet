@@ -1,0 +1,57 @@
+import { finished } from 'node:stream/promises';
+import { ParserStream } from 'parse5-parser-stream';
+import type { Document } from '../domlet/nodes/document';
+import type { Element } from '../domlet/nodes/element';
+import {
+  DomletParser, type DomletParserTreeAdapterMap,
+} from '../domlet/parser/parser';
+
+export class Parser {
+  readonly document: Document;
+  readonly #handleScript: ScriptHandler;
+  readonly #stream: ParserStream<DomletParserTreeAdapterMap>;
+
+  constructor(handleScript: ScriptHandler) {
+    this.#handleScript = handleScript;
+    this.#stream = new ParserStream<DomletParserTreeAdapterMap>({
+      sourceCodeLocationInfo: true,
+      treeAdapter: new DomletParser(),
+    });
+    this.document = this.#stream.document;
+
+    this.#stream.on('script', (element, write, resume) => {
+      void this.handleScript(element, write, resume);
+    });
+  }
+
+  async parse(source: string): Promise<void> {
+    const complete = finished(this.#stream);
+
+    this.#stream.end(source);
+    await complete;
+  }
+
+  private async handleScript(
+    element: Element,
+    write: DocumentWrite,
+    resume: () => void,
+  ): Promise<void> {
+    try {
+      await this.#handleScript(element, write);
+      resume();
+    } catch (error) {
+      this.#stream.destroy(toError(error));
+    }
+  }
+}
+
+export type ScriptHandler = (
+  element: Element,
+  write: DocumentWrite,
+) => void | Promise<void>;
+
+export type DocumentWrite = (markup: string) => void;
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}

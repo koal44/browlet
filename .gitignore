@@ -3,6 +3,7 @@ package-lock.json
 test-results/
 .last-run.json
 dist/
+/test/wpt/tests/
 
 /vendor/jsdom/
 /vendor/*/

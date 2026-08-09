@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  Document, DocumentMode,
+  Document, DocumentMode, withDocumentWriter,
 } from '../../../../src/domlet/nodes/document';
 import { DocumentType } from '../../../../src/domlet/nodes/document-type';
 import {
@@ -77,5 +77,27 @@ describe('Document', () => {
     expect(isText(text)).toBe(true);
     expect(isComment(comment)).toBe(true);
     expect(isElement(text)).toBe(false);
+  });
+
+  it('rejects document.write without an active parser', () => {
+    const document = new Document();
+
+    expect(() => document.write('<main></main>')).toThrow(
+      'Document has no active parser',
+    );
+  });
+
+  it('limits document.write to the active writer scope', () => {
+    const document = new Document();
+    const writes: string[] = [];
+
+    withDocumentWriter(document, (markup) => writes.push(markup), () => {
+      document.write('<main>', '</main>');
+    });
+
+    expect(writes).toEqual(['<main></main>']);
+    expect(() => document.write('<aside></aside>')).toThrow(
+      'Document has no active parser',
+    );
   });
 });

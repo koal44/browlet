@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "preserve",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "outDir": "../../dist/.typecheck/browlet",
+    "tsBuildInfoFile": "../../dist/.typecheck/browlet.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"],
+  "references": [
+    { "path": "../domlet" },
+    { "path": "../stylelet" }
+  ]
+}

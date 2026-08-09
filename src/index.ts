@@ -20,6 +20,15 @@ export { createDomlet } from './domlet/domlet';
 
 export type { Document as DomletDocument } from './domlet/nodes/document';
 
+export { Browlet, createBrowlet } from './browlet/browlet';
+export { Realm } from './browlet/realm';
+export { Window } from './browlet/window';
+export { WindowProxy } from './browlet/window-proxy';
+
+export type {
+  BrowletConfig, BrowletRoute, BrowletWindow,
+} from './browlet/browlet';
+
 export { createStylelet } from './stylelet/stylelet';
 
 export type { Stylelet, StyleletOptions } from './stylelet/stylelet';

@@ -70,6 +70,16 @@ export class Document extends Node {
     return true;
   }
 
+  write(...text: string[]): void {
+    const writer = documentWriters.get(this);
+
+    if (!writer) {
+      throw new Error('Document has no active parser');
+    }
+
+    writer(text.join(''));
+  }
+
   getElementById(id: string): Element | null {
     return findElementById(this, id);
   }
@@ -90,6 +100,27 @@ export class Document extends Node {
   }
 }
 
+export function withDocumentWriter<T>(
+  document: Document,
+  writer: DocumentWriter,
+  callback: () => T,
+): T {
+  const previousWriter = documentWriters.get(document);
+  documentWriters.set(document, writer);
+
+  try {
+    return callback();
+  } finally {
+    if (previousWriter) {
+      documentWriters.set(document, previousWriter);
+    } else {
+      documentWriters.delete(document);
+    }
+  }
+}
+
+export type DocumentWriter = (markup: string) => void;
+
 export enum DocumentMode {
   NoQuirks = 'no-quirks',
   Quirks = 'quirks',
@@ -97,6 +128,7 @@ export enum DocumentMode {
 }
 
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+const documentWriters = new WeakMap<Document, DocumentWriter>();
 
 function asciiLower(value: string): string {
   return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());

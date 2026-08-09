@@ -50,6 +50,10 @@
     "lint": "npm run typecheck && eslint src test scripts",
     "typecheck": "tsc -b",
     "vendor": "tsx scripts/vendor.ts",
+    "install:wpt": "tsx scripts/install-wpt.ts",
+    "test:wpt": "vitest run --project=wpt-browlet",
+    "test:wpt:browlet": "vitest run --project=wpt-browlet",
+    "test:wpt:jsdom": "vitest run --project=wpt-jsdom",
     "install:jsdom:run": "tsx scripts/install-jsdom.ts",
     "install:jsdom": "npm run build && npm run install:jsdom:run",
     "test:unit:run": "vitest run --project=unit",
@@ -83,6 +87,7 @@
     "@types/node": "^25.5.2",
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
+    "jsdom": "^29.1.1",
     "playwright": "1.61.1",
     "rollup": "^4.60.4",
     "rollup-plugin-dts": "^6.4.1",
@@ -92,6 +97,7 @@
     "vitest": "^4.1.7"
   },
   "dependencies": {
-    "parse5": "^8.0.1"
+    "parse5": "^8.0.1",
+    "parse5-parser-stream": "^8.0.0"
   }
 }

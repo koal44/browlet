@@ -1,15 +1,8 @@
-import {
-  html,
-  parse as parseHTML,
-  type Token,
-  type TreeAdapter,
-} from 'parse5';
+import { html, parse, type Token, type TreeAdapter } from 'parse5';
 
 import { Attribute } from '../nodes/attribute';
 import { Comment } from '../nodes/comment';
-import {
-  Document, DocumentMode,
-} from '../nodes/document';
+import { Document, DocumentMode } from '../nodes/document';
 import { DocumentType } from '../nodes/document-type';
 import { Element } from '../nodes/element';
 import { Text } from '../nodes/text';
@@ -18,12 +11,12 @@ import {
   type Node,
 } from '../nodes/node';
 
-export class Parser implements TreeAdapter<ParserTreeAdapterMap> {
+export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   #document: Document | null = null;
 
   parse(source: string): Document {
     this.#document = null;
-    return parseHTML<ParserTreeAdapterMap>(source, { treeAdapter: this });
+    return parse<DomletParserTreeAdapterMap>(source, { treeAdapter: this });
   }
 
   createDocument(): Document {
@@ -226,27 +219,34 @@ export class Parser implements TreeAdapter<ParserTreeAdapterMap> {
   }
 
   setNodeSourceCodeLocation(
-    _node: Node,
-    _location: Token.ElementLocation | null,
+    node: Node,
+    location: Token.ElementLocation | null,
   ): void {
-    notImplemented('setNodeSourceCodeLocation');
+    sourceCodeLocations.set(node, location);
   }
 
   getNodeSourceCodeLocation(
-    _node: Node,
+    node: Node,
   ): Token.ElementLocation | undefined | null {
-    return notImplemented('getNodeSourceCodeLocation');
+    return getSourceCodeLocation(node);
   }
 
   updateNodeSourceCodeLocation(
-    _node: Node,
-    _location: Partial<Token.ElementLocation>,
+    node: Node,
+    location: Partial<Token.ElementLocation>,
   ): void {
-    notImplemented('updateNodeSourceCodeLocation');
+    const current = getSourceCodeLocation(node);
+    if (current) Object.assign(current, location);
   }
 }
 
-type ParserTreeAdapterMap = {
+export function getSourceCodeLocation(
+  node: Node,
+): Token.ElementLocation | undefined | null {
+  return sourceCodeLocations.get(node);
+}
+
+export type DomletParserTreeAdapterMap = {
   node: Node;
   parentNode: Node;
   childNode: Node;
@@ -258,6 +258,11 @@ type ParserTreeAdapterMap = {
   template: Element;
   documentType: DocumentType;
 };
+
+const sourceCodeLocations = new WeakMap<
+  Node,
+  Token.ElementLocation | null
+>();
 
 function notImplemented(operation: string): never {
   throw new Error(`Parser tree adapter ${operation} is not implemented`);

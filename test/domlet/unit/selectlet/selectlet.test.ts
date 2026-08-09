@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSelectlet } from '../../../../src/selectlet/selectlet';
-import { Parser } from '../../../../src/domlet/parser/parser';
+import { DomletParser } from '../../../../src/domlet/parser/parser';
 
 describe('Selectlet with a Domlet host', () => {
   it('matches ordinary selectors against a parsed Domlet document', () => {
-    const document = new Parser().parse(`
+    const document = new DomletParser().parse(`
       <!doctype html>
       <main id="content" class="page">
         <span id="first" class="item"></span>
