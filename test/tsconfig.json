@@ -16,6 +16,7 @@
     { "path": "../src/shared" },
     { "path": "../src/selectlet" },
     { "path": "../src/stylelet" },
+    { "path": "../src/domlet" },
     { "path": "../src" }
   ]
 }

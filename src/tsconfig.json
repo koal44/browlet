@@ -13,6 +13,7 @@
   ],
   "references": [
     { "path": "./selectlet" },
-    { "path": "./stylelet" }
+    { "path": "./stylelet" },
+    { "path": "./domlet" }
   ]
 }

@@ -12,6 +12,7 @@ export default defineConfig({
             'test/selectlet/unit/**/*.test.ts',
             'test/shared/unit/**/*.test.ts',
             'test/stylelet/unit/**/*.test.ts',
+            'test/domlet/unit/**/*.test.ts',
           ],
         },
       },
@@ -25,6 +26,14 @@ export default defineConfig({
           ],
           exclude: ['test/selectlet/jsdom/perf/**/*.test.ts'],
           setupFiles: ['./test/selectlet/jsdom/harness/setup.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'domlet-host',
+          environment: 'node',
+          include: ['test/selectlet/browser/**/*.test.ts'],
+          setupFiles: ['./test/selectlet/domlet/harness/setup.ts'],
         },
       },
       {

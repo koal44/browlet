@@ -110,8 +110,10 @@ export default tseslint.config(
       }],
       '@stylistic/operator-linebreak': ['warn', 'after', {
         overrides: {
-          '|': 'before',
-          '&': 'before',
+          // Type unions/intersections and runtime bitwise expressions use
+          // opposite line-break styles, which this rule cannot distinguish.
+          '|': 'ignore',
+          '&': 'ignore',
           '?': 'ignore',
           ':': 'ignore',
           '+': 'ignore',

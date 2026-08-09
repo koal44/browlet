@@ -72,6 +72,7 @@
     "test:jsdom:sxonly": "cross-env HARNESS=jsdom ENGINE=selectlet ONLY=only vitest run --project=jsdom",
     "test:jsdom:nwonly": "cross-env HARNESS=jsdom ENGINE=nwsapi ONLY=only vitest run --project=jsdom",
     "test:jsdom:dsonly": "cross-env HARNESS=jsdom ENGINE=dom-selector ONLY=only vitest run --project=jsdom",
+    "test:domlet": "cross-env HARNESS=domlet vitest run --project=domlet-host",
     "test:quick": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run test:jsdom:sv",
     "test:all": "npm run lint && npm run build && npm run test:unit:run && npm run test:artifact:run && npm run vendor && npm run install:jsdom:run && npm run test:jsdom:sx && npm run test:jsdom:sv && npm run test:browser:run && npm run test:style:run"
   },
@@ -89,5 +90,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.7"
+  },
+  "dependencies": {
+    "parse5": "^8.0.1"
   }
 }
