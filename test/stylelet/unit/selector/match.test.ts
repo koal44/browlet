@@ -71,6 +71,59 @@ describe('selector matching', () => {
     expect(match('section#target', target)).toBeNull();
   });
 
+  it('restricts an unprefixed type selector to its default namespace URI', () => {
+    const document = createDomletDocument(`
+      <circle id="html"></circle>
+      <svg><circle id="svg"></circle></svg>
+    `);
+    const htmlCircle = document.getElementById('html')!;
+    const svgCircle = document.getElementById('svg')!;
+    const selectors = parseSelectorList('circle', {
+      namespacePrefixes: new Map([
+        ['svg', 'http://www.w3.org/2000/svg'],
+      ]),
+      defaultNamespace: 'http://www.w3.org/2000/svg',
+    })!;
+
+    expect(matchSelectorList(selectors, svgCircle)).not.toBeNull();
+    expect(matchSelectorList(selectors, htmlCircle)).toBeNull();
+  });
+
+  it('matches a named type selector by its resolved namespace URI', () => {
+    const document = createDomletDocument(
+      '<svg><circle id="target"></circle></svg>',
+    );
+    const target = document.getElementById('target')!;
+    const selectors = parseSelectorList('vector|circle', {
+      namespacePrefixes: new Map([
+        ['vector', 'http://www.w3.org/2000/svg'],
+      ]),
+    })!;
+
+    expect(matchSelectorList(selectors, target)).not.toBeNull();
+  });
+
+  it('matches a named attribute selector by its resolved namespace URI', () => {
+    const document = createDomletDocument(
+      '<svg><use id="target" xlink:href="#icon"></use></svg>',
+    );
+    const target = document.getElementById('target')!;
+    const context = {
+      namespacePrefixes: new Map([
+        ['link', 'http://www.w3.org/1999/xlink'],
+      ]),
+    };
+
+    expect(matchSelectorList(
+      parseSelectorList('[link|href]', context)!,
+      target,
+    )).not.toBeNull();
+    expect(matchSelectorList(
+      parseSelectorList('[link|href="#icon"]', context)!,
+      target,
+    )).not.toBeNull();
+  });
+
   it('matches attributes and structural pseudo-classes', () => {
     const document = createDomletDocument(
       '<main id="target" data-state="ready now"></main>',

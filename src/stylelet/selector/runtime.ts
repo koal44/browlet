@@ -43,21 +43,21 @@ export function checkTag(e: Element, lowerTag: string, tag: string, snap: Snapsh
 
 export function hasAttr(
   e: Element,
-  anyNs: boolean,
+  namespaceURI: string | null | undefined, // undefined means any; null means none
   name: string,
   htmlName: string | null, // null implies same as name
   hasColonName: boolean,
   snap: Snapshot
 ): boolean {
   // Fast path for non-namespaced attributes without colons, which are common in HTML and SVG
-  if (!anyNs && !hasColonName) {
+  if (namespaceURI === null && !hasColonName) {
     return snap.hasAttribute(e, name);
   }
 
   const attrs = e.attributes;
   const expected = htmlName !== null && snap.isHtml && snap.isHtmlElement(e) ? htmlName : name;
 
-  if (anyNs) {
+  if (namespaceURI === undefined) {
     for (const attr of attrs) {
       if (attr.localName === expected) return true;
     }
@@ -65,7 +65,12 @@ export function hasAttr(
   }
 
   for (const attr of attrs) {
-    if (attr.localName === expected && attr.namespaceURI === null) return true;
+    if (
+      attr.localName === expected &&
+      attr.namespaceURI === namespaceURI
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -73,7 +78,7 @@ export function hasAttr(
 
 export function matchAttribute(
   e: Element,
-  anyNs: boolean,
+  namespaceURI: string | null | undefined, // undefined means any; null means none
   name: string,
   htmlName: string | null, // null implies same as name
   hasColonName: boolean,
@@ -83,7 +88,7 @@ export function matchAttribute(
   sensitivity: number,
   snap: Snapshot
 ): boolean {
-  if (!anyNs && !hasColonName) {
+  if (namespaceURI === null && !hasColonName) {
     const attrValue = snap.getAttribute(e, name);
 
     const insensitive = sensitivity === 1 || (sensitivity === 2 && snap.isHtml && snap.isHtmlElement(e));
@@ -106,7 +111,7 @@ export function matchAttribute(
 
   const attrs = e.attributes;
 
-  if (anyNs) {
+  if (namespaceURI === undefined) {
     for (const attr of attrs) {
       if (
         attr.localName === expectedName &&
@@ -122,7 +127,7 @@ export function matchAttribute(
   for (const attr of attrs) {
     if (
       attr.localName === expectedName &&
-      attr.namespaceURI === null &&
+      attr.namespaceURI === namespaceURI &&
       matchAttrValueOp(attr.value, pattern, expected, htmlExpected, insensitive, snap)
     ) {
       return true;

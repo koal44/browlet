@@ -80,19 +80,12 @@ function emitTypeTest(
     : (element, snapshot) =>
       checkTag(element, lowerName, localName, snapshot);
 
-  let element: CandidateElementPredicate;
-
-  if (selector.namespace === '*') {
-    element = (candidate) => testName(candidate, snapshot);
-  } else if (selector.namespace === '') {
-    element = (candidate) =>
-      snapshot.getNamespaceURI(candidate) === null &&
+  const namespaceURI = selector.namespaceURI;
+  const element: CandidateElementPredicate = namespaceURI === undefined
+    ? (candidate) => testName(candidate, snapshot)
+    : (candidate) =>
+      snapshot.getNamespaceURI(candidate) === namespaceURI &&
       testName(candidate, snapshot);
-  } else if (selector.namespace !== null) {
-    element = FALSE_PREDICATE;
-  } else {
-    element = (candidate) => testName(candidate, snapshot);
-  }
 
   return createMatcher(element, localName === '*' ? 0 : 2);
 }
@@ -200,7 +193,7 @@ function emitAttributeTest(
   attr: AttributeSelector,
   snapshot: Snapshot,
 ): CompiledMatcher {
-  const anyNs = attr.wqName.namespace === '*';
+  const namespaceURI = attr.wqName.namespaceURI;
 
   const localName = attr.wqName.localName;
   const htmlName = asciiLower(localName);
@@ -213,7 +206,7 @@ function emitAttributeTest(
     return createMatcher(
       (element) => hasAttr(
         element,
-        anyNs,
+        namespaceURI,
         localName,
         htmlNameOrNull,
         hasColonName,
@@ -279,7 +272,7 @@ function emitAttributeTest(
   return createMatcher(
     (element) => matchAttribute(
       element,
-      anyNs,
+      namespaceURI,
       localName,
       htmlNameOrNull,
       hasColonName,

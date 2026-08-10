@@ -55,8 +55,11 @@ export type SelectorParserContext = Readonly<{
   // Pseudo-element on the left side of the next potential combinator.
   combinatorLeftPseudoElement?: PseudoElementName;
 
-  // Named namespace prefixes declared for this parse; absence means none are declared.
-  declaredNamespacePrefixes?: ReadonlySet<string>;
+  // Namespace name associated with each declared prefix.
+  namespacePrefixes?: ReadonlyMap<string, string>;
+
+  // Namespace name applied to unprefixed type selectors, when declared.
+  defaultNamespace?: string;
 
   // Strongest selector grammar allowed by the enclosing selector argument.
   selectorRestriction?: SelectorRestriction;
@@ -74,7 +77,8 @@ function contextForSelectorArgument(
   const pseudoElement = context.pseudoClassTailElement;
 
   return {
-    declaredNamespacePrefixes: context.declaredNamespacePrefixes,
+    namespacePrefixes: context.namespacePrefixes,
+    defaultNamespace: context.defaultNamespace,
     selectorRestriction: narrowSelectorRestriction(
       context.selectorRestriction,
       restriction,
@@ -773,6 +777,7 @@ function consumeCombinatorWhitespace(
  */
 export type WqName = {
   namespace: string | null;
+  namespaceURI?: string | null;
   localName: string;
 };
 
@@ -786,8 +791,11 @@ const wqNameConsumer: TryConsumer<WqName> = sequenceOf(
     one(consumeIdentToken),
   ],
 
-  ([namespace, [localName]]) => ({
-    namespace: namespace[0] ?? null,
+  ([namespace, [localName]], context) => ({
+    ...resolveAttributeNamespace(
+      namespace[0] ?? null,
+      context as SelectorParserContext,
+    ),
     localName: localName.value,
   }),
 );
@@ -821,7 +829,7 @@ const nsPrefixConsumer: TryConsumer<string> = sequenceOf(
     if (value === '' || value === '*') return value;
 
     return (context as SelectorParserContext)
-      .declaredNamespacePrefixes?.has(value) === true
+      .namespacePrefixes?.has(value) === true
       ? value
       : null;
   },
@@ -844,6 +852,7 @@ const nsPrefixConsumer: TryConsumer<string> = sequenceOf(
 export type TypeSelector = {
   kind: SelectorKind.TypeSelector;
   namespace: string | null;
+  namespaceURI?: string | null;
   name: string;
   specificity: Specificity;
 };
@@ -876,13 +885,70 @@ const typeSelectorConsumer: TryConsumer<TypeSelector> = sequenceOf(
     ),
   ],
 
-  ([namespace, [name]]) => ({
+  ([namespace, [name]], context) => ({
     kind: SelectorKind.TypeSelector,
-    namespace: namespace[0] ?? null,
+    ...resolveTypeNamespace(
+      namespace[0] ?? null,
+      context as SelectorParserContext,
+    ),
     name,
     specificity: name === '*' ? Specificity0 : SpecificityC,
   }),
 );
+
+function resolveTypeNamespace(
+  namespace: string | null,
+  context: SelectorParserContext,
+): Pick<TypeSelector, 'namespace' | 'namespaceURI'> {
+  if (namespace === null) {
+    return context.defaultNamespace === undefined
+      ? { namespace: null }
+      : {
+        namespace: null,
+        namespaceURI: normalizeNamespaceURI(context.defaultNamespace),
+      };
+  }
+
+  if (namespace === '*') {
+    return {
+      namespace: context.defaultNamespace === undefined ? null : '*',
+    };
+  }
+
+  if (namespace === '') return { namespace: '', namespaceURI: null };
+
+  const namespaceName = context.namespacePrefixes!.get(namespace)!;
+  const namespaceURI = normalizeNamespaceURI(namespaceName);
+  return {
+    namespace:
+      namespaceName === context.defaultNamespace ? null
+      : namespaceURI === null ? ''
+      : namespace,
+    namespaceURI,
+  };
+}
+
+function resolveAttributeNamespace(
+  namespace: string | null,
+  context: SelectorParserContext,
+): Pick<WqName, 'namespace' | 'namespaceURI'> {
+  if (namespace === null || namespace === '') {
+    return { namespace: null, namespaceURI: null };
+  }
+
+  if (namespace === '*') return { namespace: '*' };
+
+  const namespaceURI = normalizeNamespaceURI(
+    context.namespacePrefixes!.get(namespace)!,
+  );
+  return namespaceURI === null
+    ? { namespace: null, namespaceURI }
+    : { namespace, namespaceURI };
+}
+
+function normalizeNamespaceURI(namespace: string): string | null {
+  return namespace === '' ? null : namespace;
+}
 
 /*
  * <subclass-selector> =
@@ -2586,127 +2652,91 @@ function listSpecificity(arms: { specificity: Specificity; }[]): Specificity {
 // ██    ██ ██       ██    ██   ██  ██     ██ ██
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
-export type SelectorSerializationContext = Readonly<{
-  /** URI associated with the default namespace, when one is declared. */
-  defaultNamespace?: string;
-
-  /** Namespace URI associated with each declared prefix. */
-  namespacePrefixes?: ReadonlyMap<string, string>;
-}>;
-
-/*
- * CSSOM, "serialize a group of selectors".
- *
- * TODO: Stylesheet interpretation currently discards @namespace rules, while
- * selector parsing retains only the set of declared prefix names. A caller
- * serializing stylesheet selectors must supply the URI mappings above until
- * the stylesheet representation owns that namespace environment directly.
- */
-export function serializeSelectorList(
-  selectors: SelectorList,
-  context: SelectorSerializationContext = {},
-): string {
-  return serializeComplexSelectorList(selectors, context);
+// CSSOM, "serialize a group of selectors".
+export function serializeSelectorList(selectors: SelectorList): string {
+  return serializeComplexSelectorList(selectors);
 }
 
 // CSSOM, "serialize a selector".
-export function serializeSelector(
-  selector: ComplexSelector,
-  context: SelectorSerializationContext = {},
-): string {
+export function serializeSelector(selector: ComplexSelector): string {
   return selector.parts.map(({ combinator, unit }) => {
-    const serialized = serializeComplexSelectorUnit(unit, context);
+    const serialized = serializeComplexSelectorUnit(unit);
     return combinator === null
       ? serialized
       : `${serializeCombinator(combinator)}${serialized}`;
   }).join('');
 }
 
-function serializeComplexSelectorList(
-  selectors: SelectorList,
-  context: SelectorSerializationContext,
-): string {
+function serializeComplexSelectorList(selectors: SelectorList): string {
   return selectors.arms
-    .map((selector) => serializeSelector(selector, context))
+    .map(serializeSelector)
     .join(', ');
 }
 
 function serializeComplexRealSelectorList(
   selectors: ComplexRealSelectorList,
-  context: SelectorSerializationContext,
 ): string {
   return selectors.arms
-    .map((selector) => serializeComplexRealSelector(selector, context))
+    .map(serializeComplexRealSelector)
     .join(', ');
 }
 
 function serializeCompoundSelectorList(
   selectors: CompoundSelectorList,
-  context: SelectorSerializationContext,
 ): string {
   return selectors.arms
-    .map((selector) => serializeCompoundSelector(selector, context))
+    .map((selector) => serializeCompoundSelector(selector))
     .join(', ');
 }
 
 function serializeRelativeSelectorList(
   selectors: RelativeSelectorList,
-  context: SelectorSerializationContext,
 ): string {
   return selectors.arms
-    .map((selector) => serializeRelativeSelector(selector, context))
+    .map(serializeRelativeSelector)
     .join(', ');
 }
 
 function serializeComplexRealSelector(
   selector: ComplexRealSelector,
-  context: SelectorSerializationContext,
 ): string {
   return selector.parts.map(({ combinator, compound }) => {
-    const serialized = serializeCompoundSelector(compound, context);
+    const serialized = serializeCompoundSelector(compound);
     return combinator === null
       ? serialized
       : `${serializeCombinator(combinator)}${serialized}`;
   }).join('');
 }
 
-function serializeRelativeSelector(
-  selector: RelativeSelector,
-  context: SelectorSerializationContext,
-): string {
+function serializeRelativeSelector(selector: RelativeSelector): string {
   const combinator = selector.combinator === null || selector.combinator === ' '
     ? ''
     : `${selector.combinator} `;
-  return `${combinator}${serializeSelector(selector.selector, context)}`;
+  return `${combinator}${serializeSelector(selector.selector)}`;
 }
 
 function serializeCombinator(combinator: Combinator): string {
   return combinator === ' ' ? ' ' : ` ${combinator} `;
 }
 
-function serializeComplexSelectorUnit(
-  unit: ComplexSelectorUnit,
-  context: SelectorSerializationContext,
-): string {
+function serializeComplexSelectorUnit(unit: ComplexSelectorUnit): string {
   const compound = unit.compound === null
     ? ''
     : serializeCompoundSelector(
       unit.compound,
-      context,
       unit.pseudoCompounds.length > 0,
     );
   return compound + unit.pseudoCompounds
-    .map((selector) => serializePseudoCompoundSelector(selector, context))
+    .map(serializePseudoCompoundSelector)
     .join('');
 }
 
 function serializeCompoundSelector(
   selector: CompoundSelector,
-  context: SelectorSerializationContext,
   hasFollowingPseudo = false,
 ): string {
   const subclasses = selector.subclasses
-    .map((subclass) => serializeSubclassSelector(subclass, context))
+    .map(serializeSubclassSelector)
     .join('');
 
   if (selector.typeSelector === null) return subclasses;
@@ -2714,16 +2744,12 @@ function serializeCompoundSelector(
   const serializeUniversal = selector.subclasses.length === 0 && !hasFollowingPseudo;
   const type = serializeTypeSelector(
     selector.typeSelector,
-    context,
     serializeUniversal,
   );
   return type + subclasses;
 }
 
-function serializeSubclassSelector(
-  selector: SubclassSelector,
-  context: SelectorSerializationContext,
-): string {
+function serializeSubclassSelector(selector: SubclassSelector): string {
   switch (selector.kind) {
     case SelectorKind.IdSelector:
       return `#${serializeCssIdentifier(selector.name)}`;
@@ -2735,23 +2761,23 @@ function serializeSubclassSelector(
       return serializeAttributeSelector(selector);
 
     case SelectorKind.PseudoClassSelector:
-      return serializePseudoClassSelector(selector, context);
+      return serializePseudoClassSelector(selector);
   }
 }
 
 function serializeTypeSelector(
   selector: TypeSelector,
-  context: SelectorSerializationContext,
   serializeUniversal: boolean,
 ): string {
-  if (selector.name === '*' && !serializeUniversal && !universalHasMeaningfulNamespace(
-    selector.namespace,
-    context,
-  )) {
+  if (
+    selector.name === '*' &&
+    !serializeUniversal &&
+    !universalHasMeaningfulNamespace(selector.namespace)
+  ) {
     return '';
   }
 
-  return serializeTypeNamespace(selector.namespace, context) + (
+  return serializeTypeNamespace(selector.namespace) + (
     selector.name === '*' ? '*' : serializeCssIdentifier(selector.name)
   );
 }
@@ -2764,53 +2790,43 @@ function serializeAttributeSelector(selector: AttributeSelector): string {
   return `[${name}${selector.matcher}${serializeCssString(selector.value!)}${modifier}]`;
 }
 
-function serializePseudoCompoundSelector(
-  selector: PseudoCompoundSelector,
-  context: SelectorSerializationContext,
-): string {
-  return serializePseudoElementSelector(selector.pseudoElement, context) +
+function serializePseudoCompoundSelector(selector: PseudoCompoundSelector): string {
+  return serializePseudoElementSelector(selector.pseudoElement) +
     selector.pseudoClasses
-      .map((pseudoClass) => serializePseudoClassSelector(pseudoClass, context))
+      .map(serializePseudoClassSelector)
       .join('');
 }
 
-function serializePseudoClassSelector(
-  selector: PseudoClassSelector,
-  context: SelectorSerializationContext,
-): string {
+function serializePseudoClassSelector(selector: PseudoClassSelector): string {
   const name = serializeCssIdentifier(selector.name);
   return selector.argument === null
     ? `:${name}`
-    : `:${name}(${serializePseudoArgument(selector.argument, context)})`;
+    : `:${name}(${serializePseudoArgument(selector.argument)})`;
 }
 
-function serializePseudoElementSelector(
-  selector: PseudoElementSelector,
-  context: SelectorSerializationContext,
-): string {
+function serializePseudoElementSelector(selector: PseudoElementSelector): string {
   const name = serializeCssIdentifier(selector.name);
   return selector.argument === null
     ? `::${name}`
-    : `::${name}(${serializePseudoArgument(selector.argument, context)})`;
+    : `::${name}(${serializePseudoArgument(selector.argument)})`;
 }
 
 function serializePseudoArgument(
   argument: NonNullable<PseudoClassSelector['argument']>,
-  context: SelectorSerializationContext,
 ): string {
   switch (argument.kind) {
     case PseudoArgumentKind.ForgivingSelectorList:
     case PseudoArgumentKind.ComplexRealSelectorList:
-      return serializeComplexRealSelectorList(argument.selectors, context);
+      return serializeComplexRealSelectorList(argument.selectors);
 
     case PseudoArgumentKind.RelativeSelectorList:
-      return serializeRelativeSelectorList(argument.selectors, context);
+      return serializeRelativeSelectorList(argument.selectors);
 
     case PseudoArgumentKind.CompoundSelectorList:
-      return serializeCompoundSelectorList(argument.selectors, context);
+      return serializeCompoundSelectorList(argument.selectors);
 
     case PseudoArgumentKind.CompoundSelector:
-      return serializeCompoundSelector(argument.selector, context);
+      return serializeCompoundSelector(argument.selector);
 
     case PseudoArgumentKind.Direction:
       return serializeCssIdentifier(argument.value);
@@ -2825,7 +2841,7 @@ function serializePseudoArgument(
       const formula = serializeAnPlusB(argument.formula);
       return argument.of === null
         ? formula
-        : `${formula} of ${serializeComplexRealSelectorList(argument.of, context)}`;
+        : `${formula} of ${serializeComplexRealSelectorList(argument.of)}`;
     }
 
     case PseudoArgumentKind.Ident:
@@ -2848,20 +2864,9 @@ function serializePseudoArgument(
   }
 }
 
-function serializeTypeNamespace(
-  namespace: string | null,
-  context: SelectorSerializationContext,
-): string {
+function serializeTypeNamespace(namespace: string | null): string {
   if (namespace === null) return '';
   if (namespace === '') return '|';
-
-  if (
-    (namespace === '*' && context.defaultNamespace === undefined) ||
-    namespaceMapsToDefault(namespace, context)
-  ) {
-    return '';
-  }
-
   if (namespace === '*') return '*|';
   return `${serializeCssIdentifier(namespace)}|`;
 }
@@ -2875,21 +2880,6 @@ function serializeAttributeName(name: WqName): string {
   return `${namespace}${serializeCssIdentifier(name.localName)}`;
 }
 
-function universalHasMeaningfulNamespace(
-  namespace: string | null,
-  context: SelectorSerializationContext,
-): boolean {
-  if (namespace === null) return false;
-  if (namespace === '') return true;
-  if (namespace === '*') return context.defaultNamespace !== undefined;
-  return !namespaceMapsToDefault(namespace, context);
-}
-
-function namespaceMapsToDefault(
-  namespace: string,
-  context: SelectorSerializationContext,
-): boolean {
-  const defaultNamespace = context.defaultNamespace;
-  return defaultNamespace !== undefined &&
-    context.namespacePrefixes?.get(namespace) === defaultNamespace;
+function universalHasMeaningfulNamespace(namespace: string | null): boolean {
+  return namespace !== null;
 }

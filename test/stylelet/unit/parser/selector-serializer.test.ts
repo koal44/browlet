@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseSelectorList, serializeSelectorList,
-  type SelectorList, type SelectorSerializationContext,
+  type SelectorList,
 } from '../../../../src/stylelet/syntax/selector';
 
 describe('selector serialization', () => {
@@ -45,26 +45,59 @@ describe('selector serialization', () => {
     expect(serialize(serialized)).toBe(serialized);
   });
 
-  it('uses namespace mappings to omit semantically redundant prefixes', () => {
-    const declaredNamespacePrefixes = new Set(['other', 'same']);
+  it('uses the parser namespace context to omit redundant prefixes', () => {
     const selector = parse(
       '*|div.foo, |*.bar, other|*.baz, same|*.qux',
-      { declaredNamespacePrefixes },
+      {
+        namespacePrefixes: new Map([
+          ['other', 'urn:other'],
+          ['same', 'urn:default'],
+        ]),
+        defaultNamespace: 'urn:default',
+      },
     );
-    const context: SelectorSerializationContext = {
-      defaultNamespace: 'urn:default',
-      namespacePrefixes: new Map([
-        ['other', 'urn:other'],
-        ['same', 'urn:default'],
-      ]),
-    };
 
-    expect(serializeSelectorList(selector, context))
+    expect(serializeSelectorList(selector))
       .toBe('*|div.foo, |*.bar, other|*.baz, .qux');
   });
 
   it('treats an any-namespace prefix as redundant without a default namespace', () => {
     expect(serialize('*|div.foo, *|*.bar')).toBe('div.foo, .bar');
+  });
+
+  it('retains an any-namespace prefix when a default namespace exists', () => {
+    const context = { defaultNamespace: 'urn:default' };
+    expect(serializeSelectorList(parse('*|div.foo, *|*.bar', context)))
+      .toBe('*|div.foo, *|*.bar');
+  });
+
+  it('normalizes the empty attribute namespace without applying the default', () => {
+    const context = {
+      namespacePrefixes: new Map([['same', 'urn:default']]),
+      defaultNamespace: 'urn:default',
+    };
+    expect(serializeSelectorList(parse('[|href], [same|href]', context)))
+      .toBe('[href], [same|href]');
+  });
+
+  it('normalizes default namespace aliases inside selector arguments', () => {
+    const context = {
+      namespacePrefixes: new Map([
+        ['other', 'urn:other'],
+        ['same', 'urn:default'],
+      ]),
+      defaultNamespace: 'urn:default',
+    };
+    expect(serializeSelectorList(parse(':is(same|div, other|div)', context)))
+      .toBe(':is(div, other|div)');
+  });
+
+  it('normalizes prefixes bound to the null namespace', () => {
+    const context = {
+      namespacePrefixes: new Map([['empty', '']]),
+    };
+    expect(serializeSelectorList(parse('empty|div, [empty|href]', context)))
+      .toBe('|div, [href]');
   });
 });
 

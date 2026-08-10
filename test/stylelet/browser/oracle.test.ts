@@ -1453,29 +1453,155 @@ runScenarios('CSSOM selector serialization oracle', 'skip', [
     markup: '',
     setupPage: async (page) => {
       const result = await page.evaluate(() => {
+        const readSelectors = (source: string) => {
+          const style = document.createElement('style');
+          style.textContent = source;
+          document.head.append(style);
+
+          return [...style.sheet!.cssRules]
+            .filter((rule): rule is CSSStyleRule => 'selectorText' in rule)
+            .map((rule) => rule.selectorText);
+        };
+
+        return {
+          withoutDefault: readSelectors(`
+            @namespace svg url("urn:svg");
+            @namespace alias url("urn:svg");
+            *|circle.any {}
+            |circle.none {}
+            svg|circle.named {}
+            alias|circle.alias {}
+            [|href].attribute-none {}
+            [*|href].attribute-any {}
+          `),
+          withDefault: readSelectors(`
+            @namespace url("urn:default");
+            @namespace same url("urn:default");
+            @namespace other url("urn:other");
+            circle.bare {}
+            *|circle.any {}
+            |circle.none {}
+            same|circle.same {}
+            other|circle.other {}
+            [same|href].attribute {}
+          `),
+        };
+      });
+
+      expect(result).toEqual({
+        withoutDefault: [
+          'circle.any',
+          '|circle.none',
+          'svg|circle.named',
+          'alias|circle.alias',
+          '[href].attribute-none',
+          '[*|href].attribute-any',
+        ],
+        withDefault: [
+          'circle.bare',
+          '*|circle.any',
+          '|circle.none',
+          'circle.same',
+          'other|circle.other',
+          '[same|href].attribute',
+        ],
+      });
+    },
+  },
+  {
+    name: 'matches namespace aliases by namespace name rather than prefix',
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const result = await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          @namespace url("urn:default");
-          @namespace same url("urn:default");
-          @namespace other url("urn:other");
-          *|div.foo {}
-          |*.bar {}
-          other|*.baz {}
-          same|*.qux {}
+          @namespace first url("urn:shared");
+          @namespace second url("urn:shared");
+          first|item { --first-alias: yes; }
+          second|item { --second-alias: yes; }
+          *|item[first|mark] { --first-attribute-alias: yes; }
+          *|item[second|mark] { --second-attribute-alias: yes; }
         `;
         document.head.append(style);
 
-        return [...style.sheet!.cssRules]
-          .filter((rule): rule is CSSStyleRule => 'selectorText' in rule)
-          .map((rule) => rule.selectorText);
+        const shared = document.createElementNS('urn:shared', 'markup:item');
+        const other = document.createElementNS('urn:other', 'first:item');
+        shared.setAttributeNS('urn:shared', 'markup:mark', '');
+        other.setAttributeNS('urn:other', 'first:mark', '');
+        document.body.append(shared, other);
+
+        const readMatches = (element: Element) => {
+          const style = getComputedStyle(element);
+          return {
+            first: style.getPropertyValue('--first-alias'),
+            second: style.getPropertyValue('--second-alias'),
+            firstAttribute: style.getPropertyValue('--first-attribute-alias'),
+            secondAttribute: style.getPropertyValue('--second-attribute-alias'),
+          };
+        };
+
+        return {
+          shared: readMatches(shared),
+          other: readMatches(other),
+        };
       });
 
-      expect(result).toEqual([
-        '*|div.foo',
-        '|*.bar',
-        'other|*.baz',
-        '.qux',
-      ]);
+      expect(result).toEqual({
+        shared: {
+          first: 'yes',
+          second: 'yes',
+          firstAttribute: 'yes',
+          secondAttribute: 'yes',
+        },
+        other: {
+          first: '',
+          second: '',
+          firstAttribute: '',
+          secondAttribute: '',
+        },
+      });
+    },
+  },
+  {
+    name: 'uses the last declaration of a repeated namespace prefix',
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const result = await page.evaluate(() => {
+        const style = document.createElement('style');
+        style.textContent = `
+          @namespace repeated url("urn:first");
+          @namespace repeated url("urn:second");
+          @namespace url("urn:first");
+          @namespace url("urn:second");
+          repeated|item { --prefixed-match: yes; }
+          item { --default-match: yes; }
+        `;
+        document.head.append(style);
+
+        const first = document.createElementNS('urn:first', 'item');
+        const second = document.createElementNS('urn:second', 'item');
+        document.body.append(first, second);
+
+        const readMatches = (element: Element) => {
+          const style = getComputedStyle(element);
+          return {
+            prefixed: style.getPropertyValue('--prefixed-match'),
+            default: style.getPropertyValue('--default-match'),
+          };
+        };
+
+        return {
+          first: readMatches(first),
+          second: readMatches(second),
+        };
+      });
+
+      expect(result).toEqual({
+        first: { prefixed: '', default: '' },
+        second: { prefixed: 'yes', default: 'yes' },
+      });
     },
   },
 ]);

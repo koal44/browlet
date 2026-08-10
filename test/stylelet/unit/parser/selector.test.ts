@@ -64,9 +64,14 @@ function expectValidSelector(css: string, context: SelectorParserContext = {}): 
 // Expected selector AST builders
 // =============================================================================
 
-const typeSelector = (name: string, namespace?: string | null) => ({
+const typeSelector = (
+  name: string,
+  namespace?: string | null,
+  namespaceURI?: string | null,
+) => ({
   name,
   namespace: namespace ?? null,
+  ...(namespaceURI === undefined ? {} : { namespaceURI }),
 });
 
 const idSelector = (name: string) => ({
@@ -79,9 +84,14 @@ const classSelector = (name: string) => ({
   name,
 });
 
-const attrName = (localName: string, namespace?: string | null): WqName => ({
+const attrName = (
+  localName: string,
+  namespace?: string | null,
+  namespaceURI?: string | null,
+): WqName => ({
   localName,
   namespace: namespace ?? null,
+  ...(namespaceURI === undefined ? {} : { namespaceURI }),
 });
 
 const attrSelector = (name: WqName | string, matcher?: AttrMatcher, value?: string, modifier?: AttrModifier) => {
@@ -110,9 +120,14 @@ const part = (combinator: Combinator | null, compoundValue: unknown = null, pseu
   unit: unit(compoundValue, pseudoCompounds),
 });
 
-const typePart = (combinator: Combinator | null, name: string, namespace?: string | null) => part(
+const typePart = (
+  combinator: Combinator | null,
+  name: string,
+  namespace?: string | null,
+  namespaceURI?: string | null,
+) => part(
   combinator,
-  compound(typeSelector(name, namespace)),
+  compound(typeSelector(name, namespace, namespaceURI)),
 );
 
 const idPart = (combinator: Combinator | null, name: string) => part(
@@ -193,7 +208,10 @@ const specificity = (a: number, b: number, c: number) => ({
 
 // pre-defined context
 const namespaceContext: SelectorParserContext = {
-  declaredNamespacePrefixes: new Set(['svg', 'xlink']),
+  namespacePrefixes: new Map([
+    ['svg', 'http://www.w3.org/2000/svg'],
+    ['xlink', 'http://www.w3.org/1999/xlink'],
+  ]),
 };
 
 describe('selector lists', () => {
@@ -306,7 +324,7 @@ describe('namespaces', () => {
   it('parses a namespace-qualified type selector', () => {
     expect(expectComplexSelector('svg|circle', namespaceContext)).toMatchObject({
       parts: [
-        typePart(null, 'circle', 'svg'),
+        typePart(null, 'circle', 'svg', 'http://www.w3.org/2000/svg'),
       ],
     });
   });
@@ -322,7 +340,28 @@ describe('namespaces', () => {
   it('parses a wildcard namespace prefix', () => {
     expect(expectComplexSelector('*|circle')).toMatchObject({
       parts: [
+        typePart(null, 'circle'),
+      ],
+    });
+  });
+
+  it('retains a wildcard namespace prefix when a default namespace exists', () => {
+    expect(expectComplexSelector('*|circle', {
+      defaultNamespace: 'urn:default',
+    })).toMatchObject({
+      parts: [
         typePart(null, 'circle', '*'),
+      ],
+    });
+  });
+
+  it('normalizes aliases of the default namespace', () => {
+    expect(expectComplexSelector('svg|circle', {
+      namespacePrefixes: new Map([['svg', 'urn:default']]),
+      defaultNamespace: 'urn:default',
+    })).toMatchObject({
+      parts: [
+        typePart(null, 'circle', null, 'urn:default'),
       ],
     });
   });
@@ -338,7 +377,7 @@ describe('namespaces', () => {
   it('parses a wildcard namespace universal selector', () => {
     expect(expectComplexSelector('*|*')).toMatchObject({
       parts: [
-        typePart(null, '*', '*'),
+        typePart(null, '*'),
       ],
     });
   });
@@ -449,7 +488,11 @@ describe('attribute selectors', () => {
   it('parses a namespaced attribute name', () => {
     expect(expectComplexSelector('[svg|href=value]', namespaceContext)).toMatchObject({
       parts: [
-        attrPart(null, attrName('href', 'svg'), '='),
+        attrPart(
+          null,
+          attrName('href', 'svg', 'http://www.w3.org/2000/svg'),
+          '=',
+        ),
       ],
     });
   });
