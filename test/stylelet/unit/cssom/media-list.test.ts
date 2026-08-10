@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { SelectletMediaList } from '../../../../src/stylelet/cssom/media-list';
+import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 
-describe('SelectletMediaList', () => {
+describe('MediaListImpl', () => {
   it('parses and serializes mediaText', () => {
-    const list = new SelectletMediaList(' SCREEN , (WIDTH >= 10PX) ');
+    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ');
 
     expect(list.mediaText).toBe('screen, (width >= 10px)');
     expect(list.length).toBe(2);
@@ -18,7 +18,7 @@ describe('SelectletMediaList', () => {
   });
 
   it('replaces the collection and treats null as the empty string', () => {
-    const list = new SelectletMediaList('screen, print');
+    const list = new MediaListImpl('screen, print');
 
     list.mediaText = 'speech';
     expect(list.mediaText).toBe('speech');
@@ -32,7 +32,7 @@ describe('SelectletMediaList', () => {
   });
 
   it('converts item indices to Web IDL unsigned longs', () => {
-    const list = new SelectletMediaList('screen, print');
+    const list = new MediaListImpl('screen, print');
 
     expect(list.item(1.9)).toBe('print');
     expect(list.item(-1)).toBeNull();
@@ -41,13 +41,13 @@ describe('SelectletMediaList', () => {
   });
 
   it('represents an invalid list entry as not all', () => {
-    const list = new SelectletMediaList('screen, &, print');
+    const list = new MediaListImpl('screen, &, print');
 
     expect(list.mediaText).toBe('screen, not all, print');
   });
 
   it('appends one query and ignores an equivalent query', () => {
-    const list = new SelectletMediaList('screen');
+    const list = new MediaListImpl('screen');
 
     list.appendMedium('PRINT');
     list.appendMedium('print');
@@ -57,7 +57,7 @@ describe('SelectletMediaList', () => {
   });
 
   it('treats the empty query before a lone comma as not all', () => {
-    const list = new SelectletMediaList('screen');
+    const list = new MediaListImpl('screen');
 
     list.appendMedium(',');
     expect(list.mediaText).toBe('screen, not all');
@@ -67,7 +67,7 @@ describe('SelectletMediaList', () => {
   });
 
   it('deletes every equivalent query', () => {
-    const list = new SelectletMediaList('screen, SCREEN, print');
+    const list = new MediaListImpl('screen, SCREEN, print');
 
     list.deleteMedium('screen');
 
@@ -75,7 +75,7 @@ describe('SelectletMediaList', () => {
   });
 
   it('throws NotFoundError when no query is removed', () => {
-    const list = new SelectletMediaList('screen');
+    const list = new MediaListImpl('screen');
     let error: unknown;
 
     try {

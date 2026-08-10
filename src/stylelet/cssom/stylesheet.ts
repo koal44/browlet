@@ -1,100 +1,104 @@
-import { parseStylesheet, type StyleSheet } from '../css/stylesheet';
-import { SelectletMediaList } from './media-list';
-import { notImplemented } from './exceptions';
-import { SelectletCSSRuleList } from './rule-list';
-import { SelectletCSSStyleRule } from './rules';
+import { MediaListImpl } from './media-list';
+import type { CSSOMString } from './string';
 
-export class SelectletCSSStyleSheet implements CSSStyleSheet {
-  private _source = '';
-  private _rules = new SelectletCSSRuleList();
-  private _media = new SelectletMediaList();
+/*
+ * [Exposed=Window]
+ * interface StyleSheet {
+ *   readonly attribute CSSOMString type;
+ *   readonly attribute USVString? href;
+ *   readonly attribute (Element or ProcessingInstruction)? ownerNode;
+ *   readonly attribute CSSStyleSheet? parentStyleSheet;
+ *   readonly attribute DOMString? title;
+ *   [SameObject, PutForwards=mediaText] readonly attribute MediaList media;
+ *   attribute boolean disabled;
+ * };
+ */
+export abstract class StyleSheetImpl implements StyleSheet {
+  readonly #type: CSSOMString;
+  #location: string | null;
+  #ownerNode: Element | ProcessingInstruction | null;
+  #parentStyleSheet: CSSStyleSheet | null;
+  #title: string;
+  readonly #media: MediaListImpl;
+  #disabled: boolean;
 
-  constructor(source = '') {
-    if (source) {
-      this.replaceSync(source);
+  protected constructor() {
+    if (new.target === StyleSheetImpl) {
+      throw new TypeError('Illegal constructor');
     }
+
+    this.#type = 'text/css';
+    this.#location = null;
+    this.#ownerNode = null;
+    this.#parentStyleSheet = null;
+    this.#title = '';
+    this.#media = new MediaListImpl();
+    this.#disabled = false;
   }
 
-  get source(): string {
-    return this._source;
-  }
-
-  get cssRules(): CSSRuleList {
-    return this._rules;
-  }
-
-  get rules(): CSSRuleList {
-    return this._rules;
-  }
-
-  get ownerRule(): CSSRule | null {
-    return null;
-  }
-
-  get disabled(): boolean {
-    return false;
-  }
-
-  set disabled(_value: boolean) {
-    notImplemented('CSSStyleSheet.disabled');
+  get type(): CSSOMString {
+    return this.#type;
   }
 
   get href(): string | null {
-    return null;
-  }
-
-  get media(): MediaList {
-    return this._media;
+    return this.#location;
   }
 
   get ownerNode(): Element | ProcessingInstruction | null {
-    return null;
+    return this.#ownerNode;
   }
 
   get parentStyleSheet(): CSSStyleSheet | null {
-    return null;
+    return this.#parentStyleSheet;
   }
 
   get title(): string | null {
-    return null;
+    return this.#title === '' ? null : this.#title;
   }
 
-  get type(): string {
-    return 'text/css';
+  get media(): MediaList {
+    return this.#media;
   }
 
-  replaceSync(source: string): void {
-    this._source = source;
-
-    const sheet = parseStylesheet(source);
-    this._rules = buildCSSRuleList(sheet);
+  set media(mediaText: string) {
+    this.setMedia(mediaText);
   }
 
-  replace(_source: string): Promise<CSSStyleSheet> {
-    return notImplemented('CSSStyleSheet.replace');
+  get disabled(): boolean {
+    return this.#disabled;
   }
 
-  insertRule(_rule: string, _index?: number): number {
-    return notImplemented('CSSStyleSheet.insertRule');
+  set disabled(value: boolean) {
+    this.#disabled = value;
   }
 
-  deleteRule(_index: number): void {
-    return notImplemented('CSSStyleSheet.deleteRule');
+  protected setLocation(location: string | null): void {
+    this.#location = location;
   }
 
-  addRule(_selector?: string, _style?: string, _index?: number): number {
-    return notImplemented('CSSStyleSheet.addRule');
+  protected setOwnerNode(
+    ownerNode: Element | ProcessingInstruction | null,
+  ): void {
+    this.#ownerNode = ownerNode;
   }
 
-  removeRule(_index?: number): void {
-    return notImplemented('CSSStyleSheet.removeRule');
+  protected setParentStyleSheet(
+    parentStyleSheet: CSSStyleSheet | null,
+  ): void {
+    this.#parentStyleSheet = parentStyleSheet;
   }
-}
 
-function buildCSSRuleList(sheet: StyleSheet): SelectletCSSRuleList {
-  return new SelectletCSSRuleList(
-    sheet.rules.flatMap((rule) =>
-      rule.type === 'style-rule' ? [new SelectletCSSStyleRule(rule)] : []
-    ),
-  );
+  protected setTitle(title: string): void {
+    this.#title = title;
+  }
+
+  protected setDisabled(disabled: boolean): void {
+    this.#disabled = disabled;
+  }
+
+  protected setMedia(media: CSSOMString | MediaList): void {
+    this.#media.mediaText = typeof media === 'string'
+      ? media
+      : media.mediaText;
+  }
 }

@@ -1,10 +1,10 @@
-import { SelectletCSSStyleSheet } from './cssom/stylesheet';
+import { CSSStyleSheetImpl } from './cssom/css-stylesheet';
 import { Snapshot, type SnapshotOptions } from './snapshot';
 
 export type Stylelet = {
   version: string;
   snapshot: Snapshot;
-  createStyleSheet(source?: string): CSSStyleSheet;
+  createStyleSheet(options?: CSSStyleSheetInit): CSSStyleSheet;
 };
 
 export type StyleletOptions = SnapshotOptions;
@@ -18,12 +18,8 @@ export function createStylelet(
     version: 'stylelet-__VERSION__',
     snapshot,
 
-    createStyleSheet(source = ''): CSSStyleSheet {
-      const sheet = new SelectletCSSStyleSheet();
-
-      if (source !== '') sheet.replaceSync(source);
-
-      return sheet;
+    createStyleSheet(options = {}): CSSStyleSheet {
+      return new CSSStyleSheetImpl(snapshot, options);
     },
   };
 

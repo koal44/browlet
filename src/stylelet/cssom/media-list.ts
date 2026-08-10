@@ -15,43 +15,43 @@ import type { CSSOMString } from './string';
  *   undefined deleteMedium(CSSOMString medium);
  * };
  */
-export class SelectletMediaList implements MediaList {
+export class MediaListImpl implements MediaList {
   [index: number]: CSSOMString;
 
-  private _queries: MediaQuery[] = [];
-  private _indexedLength = 0;
+  #queries: MediaQuery[] = [];
+  #indexedLength = 0;
 
   constructor(text: CSSOMString | null = '') {
     this.mediaText = text;
   }
 
   get mediaText(): CSSOMString {
-    return serializeMediaQueryList(this._queries);
+    return serializeMediaQueryList(this.#queries);
   }
 
   set mediaText(value: CSSOMString | null) {
-    this._queries = value === null || value === ''
+    this.#queries = value === null || value === ''
       ? []
       : parseMediaQueryList(value);
     this.updateIndices();
   }
 
   get length(): number {
-    return this._queries.length;
+    return this.#queries.length;
   }
 
   item(index: number): CSSOMString | null {
-    const query = this._queries[index >>> 0];
+    const query = this.#queries[index >>> 0];
     return query === undefined ? null : serializeMediaQuery(query);
   }
 
   appendMedium(medium: CSSOMString): void {
     const query = parseSingleMediaQuery(medium);
-    if (query === null || this._queries.some((item) => mediaQueriesEqual(item, query))) {
+    if (query === null || this.#queries.some((item) => mediaQueriesEqual(item, query))) {
       return;
     }
 
-    this._queries.push(query);
+    this.#queries.push(query);
     this.updateIndices();
   }
 
@@ -59,10 +59,10 @@ export class SelectletMediaList implements MediaList {
     const query = parseSingleMediaQuery(medium);
     if (query === null) return;
 
-    const length = this._queries.length;
-    this._queries = this._queries.filter((item) => !mediaQueriesEqual(item, query));
+    const length = this.#queries.length;
+    this.#queries = this.#queries.filter((item) => !mediaQueriesEqual(item, query));
 
-    if (this._queries.length === length) {
+    if (this.#queries.length === length) {
       throw new DOMException(
         `"${medium}" was not found in the media list.`,
         domExceptionName.notFound,
@@ -77,15 +77,15 @@ export class SelectletMediaList implements MediaList {
   }
 
   [Symbol.iterator](): ArrayIterator<CSSOMString> {
-    return this._queries.map(serializeMediaQuery)[Symbol.iterator]();
+    return this.#queries.map(serializeMediaQuery)[Symbol.iterator]();
   }
 
   private updateIndices(): void {
-    for (let index = 0; index < this._indexedLength; index++) {
+    for (let index = 0; index < this.#indexedLength; index++) {
       Reflect.deleteProperty(this, index);
     }
 
-    for (let index = 0; index < this._queries.length; index++) {
+    for (let index = 0; index < this.#queries.length; index++) {
       Object.defineProperty(this, index, {
         configurable: true,
         enumerable: true,
@@ -93,7 +93,7 @@ export class SelectletMediaList implements MediaList {
       });
     }
 
-    this._indexedLength = this._queries.length;
+    this.#indexedLength = this.#queries.length;
   }
 }
 

@@ -3,6 +3,7 @@ export const domExceptionName = {
   domStringSize: 'DOMStringSizeError',
   hierarchyRequest: 'HierarchyRequestError',
   wrongDocument: 'WrongDocumentError',
+  notAllowed: 'NotAllowedError',
   invalidCharacter: 'InvalidCharacterError',
   noDataAllowed: 'NoDataAllowedError',
   noModificationAllowed: 'NoModificationAllowedError',

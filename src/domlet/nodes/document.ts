@@ -13,7 +13,13 @@ import {
 export class Document extends Node {
   readonly nodeType = NodeType.Document;
   readonly contentType = 'text/html';
+  readonly baseURI: string;
   mode = DocumentMode.NoQuirks;
+
+  constructor(baseURI = 'about:blank') {
+    super();
+    this.baseURI = baseURI;
+  }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
     return this.mode === DocumentMode.Quirks ? 'BackCompat' : 'CSS1Compat';

@@ -491,7 +491,9 @@ export function installBrowserHelpers(): void {
               cssom: readCssom(c.cssom, ctx, {
                 kind: 'styleText',
                 createSheet(source) {
-                  return stlt.createStyleSheet(source);
+                  const sheet = stlt.createStyleSheet();
+                  sheet.replaceSync(source);
+                  return sheet;
                 },
               }),
             };

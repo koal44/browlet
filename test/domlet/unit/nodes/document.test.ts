@@ -9,6 +9,12 @@ import {
 } from '../../../../src/domlet/nodes/node';
 
 describe('Document', () => {
+  it('always has a base URI', () => {
+    expect(new Document().baseURI).toBe('about:blank');
+    expect(new Document('https://example.com/').baseURI)
+      .toBe('https://example.com/');
+  });
+
   it('is the tree root and exposes its first element child', () => {
     const document = new Document();
     const text = document.createTextNode('before');

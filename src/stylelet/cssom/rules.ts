@@ -1,6 +1,6 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
 import { SelectletCSSStyleDeclaration } from './declaration';
-import { SelectletCSSRuleList } from './rule-list';
+import { CSSRuleListImpl } from './rule-list';
 import { notImplemented } from './exceptions';
 
 export class SelectletCSSStyleRule implements CSSStyleRule {
@@ -21,7 +21,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
   selectorText = '';
 
   private _style: CSSStyleDeclaration;
-  private _cssRules = new SelectletCSSRuleList();
+  private _cssRules = new CSSRuleListImpl();
 
   constructor(rule?: StyleRule) {
     this._style = createCSSStyleDeclaration(rule?.block);

@@ -1,0 +1,268 @@
+import {
+  interpretStylesheet, parseStylesheet,
+  type Rule, type StyleSheet as ParsedStyleSheet,
+} from '../css/stylesheet';
+import {
+  parseRule, type SyntaxRule,
+} from '../syntax/parser';
+import type { Snapshot } from '../snapshot';
+import { domExceptionName } from './exceptions';
+import { CSSRuleListImpl } from './rule-list';
+import { SelectletCSSStyleRule } from './rules';
+import { StyleSheetImpl } from './stylesheet';
+import type { CSSOMString } from './string';
+
+/*
+ * [Exposed=Window]
+ * interface CSSStyleSheet : StyleSheet {
+ *   constructor(optional CSSStyleSheetInit options = {});
+ *
+ *   readonly attribute CSSRule? ownerRule;
+ *   [SameObject] readonly attribute CSSRuleList cssRules;
+ *   unsigned long insertRule(CSSOMString rule, optional unsigned long index = 0);
+ *   undefined deleteRule(unsigned long index);
+ *
+ *   Promise<CSSStyleSheet> replace(USVString text);
+ *   undefined replaceSync(USVString text);
+ * };
+ *
+ * dictionary CSSStyleSheetInit {
+ *   DOMString? baseURL = null;
+ *   (MediaList or DOMString) media = "";
+ *   boolean disabled = false;
+ * };
+ */
+
+export class CSSStyleSheetImpl
+  extends StyleSheetImpl
+  implements CSSStyleSheet
+{
+  readonly #rules: CSSRuleListImpl;
+
+  #ownerRule: CSSRule | null;
+  #constructorDocument: Document | null;
+  #stylesheetBaseURL: string | null;
+
+  #alternate: boolean;
+  #originClean: boolean;
+  #constructed: boolean;
+  #disallowModification: boolean;
+
+  constructor(
+    snapshot: Snapshot,
+    options: CSSStyleSheetInit = {},
+  ) {
+    super();
+
+    const document = snapshot.document;
+    const {
+      baseURL = null,
+      media = '',
+      disabled = false,
+    } = options;
+
+    this.#rules = new CSSRuleListImpl();
+
+    this.#ownerRule = null;
+    this.#constructorDocument = document;
+    this.#stylesheetBaseURL = baseURL;
+
+    this.#alternate = false;
+    this.#originClean = true;
+    this.#constructed = true;
+    this.#disallowModification = false;
+
+    this.setLocation(document.baseURI);
+    this.setMedia(media);
+    this.setDisabled(disabled);
+  }
+
+  static create(
+    snapshot: Snapshot,
+    properties: CSSStyleSheetProperties,
+  ): CSSStyleSheetImpl {
+    const sheet = new CSSStyleSheetImpl(snapshot);
+
+    sheet.setLocation(properties.location);
+    sheet.setParentStyleSheet(properties.parentStyleSheet);
+    sheet.setOwnerNode(properties.ownerNode);
+    sheet.#ownerRule = properties.ownerRule;
+    sheet.setMedia(properties.media);
+    sheet.setTitle(properties.title);
+    sheet.#alternate = properties.alternate;
+    sheet.#originClean = properties.originClean;
+    sheet.#constructed = false;
+    sheet.#constructorDocument = null;
+    sheet.#stylesheetBaseURL = null;
+
+    return sheet;
+  }
+
+  get ownerRule(): CSSRule | null {
+    return this.#ownerRule;
+  }
+
+  get cssRules(): CSSRuleList {
+    this.assertOriginClean();
+    return this.#rules;
+  }
+
+  insertRule(rule: string, index = 0): number {
+    this.assertOriginClean();
+    this.assertModificationAllowed();
+
+    if (index > this.#rules.length) {
+      throw new DOMException(
+        `Index ${index} exceeds the rule-list length.`,
+        domExceptionName.indexSize,
+      );
+    }
+
+    const parsedRule = parseRule(rule);
+    if (parsedRule === null || isImportRule(parsedRule)) {
+      throw new DOMException(
+        `Failed to parse the rule: ${rule}`,
+        domExceptionName.syntax,
+      );
+    }
+
+    const cssRule = createCSSRule(parsedRule);
+    if (cssRule === null) {
+      // Remove this boundary as the remaining CSSRule interfaces are added.
+      throw new DOMException(
+        `The parsed rule is not supported: ${rule}`,
+        domExceptionName.notSupported,
+      );
+    }
+
+    this.#rules.insert(index, cssRule);
+    return index;
+  }
+
+  deleteRule(index: number): void {
+    this.assertOriginClean();
+    this.assertModificationAllowed();
+
+    if (index >= this.#rules.length) {
+      throw new DOMException(
+        `Index ${index} does not identify a rule.`,
+        domExceptionName.indexSize,
+      );
+    }
+
+    this.#rules.remove(index);
+  }
+
+  replace(text: string): Promise<CSSStyleSheet> {
+    if (!this.#constructed || this.#disallowModification) {
+      return Promise.reject(new DOMException(
+        'This stylesheet cannot be replaced.',
+        domExceptionName.notAllowed,
+      ));
+    }
+
+    this.#disallowModification = true;
+
+    return Promise.resolve().then(() => {
+      this.replaceRules(text);
+      return this;
+    }).finally(() => {
+      this.#disallowModification = false;
+    });
+  }
+
+  replaceSync(text: string): void {
+    if (!this.#constructed || this.#disallowModification) {
+      throw new DOMException(
+        'This stylesheet cannot be replaced.',
+        domExceptionName.notAllowed,
+      );
+    }
+
+    this.replaceRules(text);
+  }
+
+  // Deprecated CSSStyleSheet members ----------------------------------------
+
+  /** @deprecated Use cssRules instead. */
+  get rules(): CSSRuleList {
+    return this.cssRules;
+  }
+
+  /** @deprecated Use insertRule() instead. */
+  addRule(
+    selector = 'undefined',
+    style = 'undefined',
+    index = this.#rules.length,
+  ): number {
+    const block = style === '' ? '' : `${style} `;
+    this.insertRule(`${selector} { ${block}}`, index);
+    return -1;
+  }
+
+  /** @deprecated Use deleteRule() instead. */
+  removeRule(index = 0): void {
+    this.deleteRule(index);
+  }
+
+  // Private helpers ---------------------------------------------------------
+
+  private replaceRules(text: string): void {
+    this.#rules.replace(buildCSSRules(parseStylesheet(text)));
+  }
+
+  private assertOriginClean(): void {
+    if (!this.#originClean) {
+      throw new DOMException(
+        'The stylesheet is not origin-clean.',
+        domExceptionName.security,
+      );
+    }
+  }
+
+  private assertModificationAllowed(): void {
+    if (this.#disallowModification) {
+      throw new DOMException(
+        'The stylesheet cannot currently be modified.',
+        domExceptionName.notAllowed,
+      );
+    }
+  }
+}
+
+type CSSStyleSheetProperties = {
+  location: string | null;
+  parentStyleSheet: CSSStyleSheet | null;
+  ownerNode: Element | ProcessingInstruction | null;
+  ownerRule: CSSRule | null;
+  media: CSSOMString | MediaList;
+  title: string;
+  alternate: boolean;
+  originClean: boolean;
+};
+
+function buildCSSRules(sheet: ParsedStyleSheet): CSSRule[] {
+  return sheet.rules.flatMap((rule) => {
+    const cssRule = createCSSRuleFromSemanticRule(rule);
+    return cssRule === null ? [] : [cssRule];
+  });
+}
+
+function createCSSRule(rule: SyntaxRule): CSSRule | null {
+  const sheet = interpretStylesheet({ rules: [rule] });
+  const semanticRule = sheet.rules[0];
+  return semanticRule === undefined
+    ? null
+    : createCSSRuleFromSemanticRule(semanticRule);
+}
+
+function createCSSRuleFromSemanticRule(rule: Rule): CSSRule | null {
+  switch (rule.type) {
+    case 'style-rule': return new SelectletCSSStyleRule(rule);
+    case 'property-rule': return null;
+  }
+}
+
+function isImportRule(rule: SyntaxRule): boolean {
+  return rule.type === 'statement-at-rule' && rule.name === 'import';
+}
