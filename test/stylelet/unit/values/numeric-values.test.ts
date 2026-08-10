@@ -27,6 +27,9 @@ import {
   consumeTime,
 } from '../../../../src/stylelet/values/time';
 import {
+  parseDimension, resolveDimension, serializeDimension,
+} from '../../../../src/stylelet/values/dimension';
+import {
   accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
   resolveInteger, serializeInteger, consumeInteger,
 } from '../../../../src/stylelet/values/integer';
@@ -116,6 +119,31 @@ describe('dimensional value literals', () => {
     expect(resolveLength(value, ValueStage.Computed, {
       length: { em: 16 },
     })).toEqual({ type: 'length', value: 32, unit: 'px' });
+  });
+});
+
+describe('dimension values', () => {
+  it('delegates recognized dimension categories to their value modules', () => {
+    const length = parseDimension('1in')!;
+    const resolution = parseDimension('96dpi')!;
+    const math = parseDimension('calc(1in + 96px)')!;
+
+    expect(serializeDimension(length)).toBe('1in');
+    expect(serializeDimension(resolveDimension(length, ValueStage.Computed)))
+      .toBe('96px');
+    expect(serializeDimension(resolveDimension(resolution, ValueStage.Computed)))
+      .toBe('1dppx');
+    expect(serializeDimension(math)).toBe('calc(192px)');
+    expect(serializeDimension(resolveDimension(math, ValueStage.Computed)))
+      .toBe('192px');
+  });
+
+  it('preserves an unrecognized dimension as the generic fallback', () => {
+    const value = parseDimension('1unknown')!;
+
+    expect(value).toEqual({ type: 'dimension', value: 1, unit: 'unknown' });
+    expect(resolveDimension(value, ValueStage.Computed)).toBe(value);
+    expect(serializeDimension(value)).toBe('1unknown');
   });
 });
 

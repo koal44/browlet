@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
+stopAnnoyingColorWarning();
+
 export default defineConfig({
   testMatch: /.*\.test\.ts/,
   timeout: 60_000,
@@ -24,3 +26,12 @@ export default defineConfig({
     },
   ],
 });
+
+function stopAnnoyingColorWarning(): void {
+  const noColor = process.env.NO_COLOR;
+  if (noColor === undefined) return;
+
+  // Playwright forces color in workers, which makes Node warn when NO_COLOR is inherited.
+  if (noColor !== '') process.env.FORCE_COLOR ??= '0';
+  delete process.env.NO_COLOR;
+}

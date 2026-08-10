@@ -1,10 +1,20 @@
 import { consumeSlashDelim } from '../syntax/component-consumers';
-import { one, opt, sequenceOf, withTrivia } from '../syntax/component-grammar';
+import {
+  adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia,
+} from '../syntax/component-grammar';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,
 } from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { createNumberConsumer, serializeCssNumber } from './numeric-literal/number';
+import type { ValueDefinition } from '../value-processing/definition';
+import type { ValueStage } from '../value-processing/stage';
+import {
+  consumeNumber, resolveNumber, serializeNumber, type NumberValue,
+} from './number';
+import {
+  createNumberConsumer, numberLiteral, serializeCssNumber,
+} from './numeric-literal/number';
+import { type MathContext } from './math-value';
 
 /*
  * <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
@@ -14,6 +24,14 @@ export type RatioValue = {
   type: 'ratio';
   numerator: number;
   denominator: number;
+};
+
+export type NumberOrRatioValue = NumberValue | RatioValue;
+
+export const ratioDef: ValueDefinition<RatioValue> = {
+  consume: consumeRatio,
+  resolve: resolveRatio,
+  serialize: serializeRatio,
 };
 
 export function parseRatio(
@@ -29,8 +47,44 @@ export function consumeRatio(
   return ratioConsumer(c);
 }
 
+/*
+ * Factorization of the overlapping `<number> | <ratio>` grammar.
+ */
+export function parseNumberOrRatio(
+  input: ParserInput,
+  context: unknown = undefined,
+): NumberOrRatioValue | null {
+  return numberOrRatioParser(input, context);
+}
+
+export function consumeNumberOrRatio(
+  c: TokenCursor,
+): TryConsumerResult<NumberOrRatioValue> {
+  return numberOrRatioConsumer(c);
+}
+
+export function resolveRatio(value: RatioValue): RatioValue {
+  return value;
+}
+
+export function resolveNumberOrRatio(
+  value: NumberOrRatioValue,
+  stage: ValueStage,
+  context: MathContext = {},
+): NumberOrRatioValue {
+  return value.type === 'ratio'
+    ? resolveRatio(value)
+    : resolveNumber(value, stage, context);
+}
+
 export function serializeRatio(value: RatioValue): string {
   return `${serializeCssNumber(value.numerator)} / ${serializeCssNumber(value.denominator)}`;
+}
+
+export function serializeNumberOrRatio(value: NumberOrRatioValue): string {
+  return value.type === 'ratio'
+    ? serializeRatio(value)
+    : serializeNumber(value);
 }
 
 export function isDegenerateRatio(value: RatioValue): boolean {
@@ -81,17 +135,50 @@ const ratioDenominatorConsumer: TryConsumer<number> = sequenceOf(
   ([, [denominator]]) => denominator.value,
 );
 
-// <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
-const ratioConsumer: TryConsumer<RatioValue> = sequenceOf(
+type RatioSyntax = {
+  numerator: number;
+  denominator?: number;
+};
+
+// Shared syntax for <ratio> and the overlapping <number> | <ratio> union.
+const ratioSyntaxConsumer: TryConsumer<RatioSyntax> = sequenceOf(
   [
     one(nonnegativeNumberConsumer),
     opt(ratioDenominatorConsumer),
   ],
   ([[numerator], denominator]) => ({
-    type: 'ratio',
     numerator: numerator.value,
-    denominator: denominator[0] ?? 1,
+    ...(denominator.length === 0 ? {} : { denominator: denominator[0] }),
   }),
 );
 
+// <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
+const ratioConsumer: TryConsumer<RatioValue> = adaptConsumer(
+  ratioSyntaxConsumer,
+  ({ numerator, denominator }) => ({
+    type: 'ratio',
+    numerator,
+    denominator: denominator ?? 1,
+  }),
+);
+
+// <number> | <ratio>
+const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue> = adaptConsumer(
+  ratioSyntaxConsumer,
+  ({ numerator, denominator }) => denominator === undefined
+    ? numberLiteral(numerator)
+    : { type: 'ratio', numerator, denominator },
+);
+
+// The <number> alternative additionally accepts negative values, which cannot
+// be the numerator of <ratio>.
+const numberOrRatioConsumer: TryConsumer<NumberOrRatioValue> = oneOf(
+  [
+    one(nonnegativeNumberOrRatioConsumer),
+    one(consumeNumber),
+  ],
+  ([value]) => value,
+);
+
 const ratioParser = createComponentParser(withTrivia(ratioConsumer));
+const numberOrRatioParser = createComponentParser(withTrivia(numberOrRatioConsumer));

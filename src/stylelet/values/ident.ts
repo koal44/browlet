@@ -5,6 +5,7 @@ import {
 } from '../syntax/token-cursor';
 import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
+import type { ValueDefinition } from '../value-processing/definition';
 
 /*
  * <ident> = <ident-token>
@@ -13,6 +14,12 @@ import { createComponentParser, type ParserInput } from '../syntax/parser';
 export type IdentValue = {
   type: 'ident';
   value: string;
+};
+
+export const identDef: ValueDefinition<IdentValue> = {
+  consume: consumeIdent,
+  resolve: resolveIdent,
+  serialize: serializeIdent,
 };
 
 export function parseIdent(
@@ -26,6 +33,10 @@ export function consumeIdent(
   c: TokenCursor,
 ): TryConsumerResult<IdentValue> {
   return identConsumer(c);
+}
+
+export function resolveIdent(value: IdentValue): IdentValue {
+  return value;
 }
 
 export function serializeIdent(value: IdentValue): string {

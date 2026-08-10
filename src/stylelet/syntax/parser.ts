@@ -90,7 +90,11 @@ export function parseListAsComponentGrammar<T>(
 ): (TryConsumerResult<T>)[] {
   const lists = parseCommaSeparatedListOfComponentValues(input);
 
-  if (lists.length === 1 && lists[0]!.every(isWhitespaceToken)) {
+  if (
+    lists.length === 1 &&
+    lists[0]!.length > 0 &&
+    lists[0]!.every(isWhitespaceToken)
+  ) {
     return [];
   }
 

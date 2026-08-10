@@ -1,11 +1,14 @@
 import { parseStylesheet, type StyleSheet } from '../css/stylesheet';
-import { notImplemented } from './util';
+import { SelectletMediaList } from './media-list';
+import { notImplemented } from './exceptions';
 import { SelectletCSSRuleList } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
 
 export class SelectletCSSStyleSheet implements CSSStyleSheet {
   private _source = '';
   private _rules = new SelectletCSSRuleList();
+  private _media = new SelectletMediaList();
+
   constructor(source = '') {
     if (source) {
       this.replaceSync(source);
@@ -41,7 +44,7 @@ export class SelectletCSSStyleSheet implements CSSStyleSheet {
   }
 
   get media(): MediaList {
-    return notImplemented('CSSStyleSheet.media');
+    return this._media;
   }
 
   get ownerNode(): Element | ProcessingInstruction | null {

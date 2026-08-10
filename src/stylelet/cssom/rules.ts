@@ -1,7 +1,7 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
 import { SelectletCSSStyleDeclaration } from './declaration';
 import { SelectletCSSRuleList } from './rule-list';
-import { notImplemented } from './util';
+import { notImplemented } from './exceptions';
 
 export class SelectletCSSStyleRule implements CSSStyleRule {
   readonly STYLE_RULE = 1 as const;

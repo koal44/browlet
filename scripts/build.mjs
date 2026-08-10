@@ -11,6 +11,10 @@ const moduleInputFile = 'dist/.tmp/index.js';
 const browserInputFile = 'dist/.tmp/browser.js';
 
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const moduleExternals = [
+  /^node:/,
+  ...Object.keys(pkg.dependencies ?? {}),
+];
 const version = pkg.version;
 
 const banner = `/*
@@ -44,6 +48,7 @@ const plugins = [
 // ESM + CJS from normal named-export library entry.
 const moduleBundle = await rollup({
   input: moduleInputFile,
+  external: moduleExternals,
   plugins,
 });
 

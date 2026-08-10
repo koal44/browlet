@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
-import { runScenarios, type BrowserName, type CaseStatus } from '../../harness/browser/scenarios';
+import {
+  runScenarios, type BrowserName, type CaseStatus, type Scenario,
+} from '../../harness/browser/scenarios';
 
 runScenarios('style oracle selector prelude boundaries', 'skip', [
   {
@@ -1955,6 +1957,144 @@ runScenarios('CSSOM number serialization oracle', 'skip', [
     ],
   },
 ]);
+
+runScenarios('CSS media query declared serialization oracle', 'skip', [
+  mediaQuerySerializationScenario('chromium'),
+  mediaQuerySerializationScenario('firefox'),
+  mediaQuerySerializationScenario('webkit'),
+  {
+    name: 'escapes identifiers when required by the component value serialization',
+    engines: ['native'],
+    markup: String.raw`<style id="escaped-media-query">@media \{screen and (--\(FOO: bar) {}</style>`,
+    cases: [
+      {
+        cssom: { target: 'sheet.cssRules.item', rule: 0 },
+        ref: { by: 'id', id: 'escaped-media-query' },
+        browsers: ['firefox', 'webkit'],
+        expect: { cssom: { conditionText: '\\{screen and (--\\(FOO: bar)' } },
+      },
+      {
+        cssom: { target: 'sheet.cssRules.item', rule: 0 },
+        ref: { by: 'id', id: 'escaped-media-query' },
+        browsers: ['chromium'],
+        status: 'fail',
+        // Chromium currently emits `{screen and (--\\(FOO: bar)`, which no
+        // longer escapes the media type as required by the referenced WPT.
+        expect: { cssom: { conditionText: '\\{screen and (--\\(FOO: bar)' } },
+      },
+    ],
+  },
+]);
+
+function mediaQuerySerializationScenario(browser: BrowserName): Scenario {
+  type Serialization = {
+    matchMedia: string;
+    mediaText: string;
+    conditionText: string;
+  };
+
+  const same = (serialization: string): Serialization => ({
+    matchMedia: serialization,
+    mediaText: serialization,
+    conditionText: serialization,
+  });
+
+  const unitlessZero = browser === 'firefox' ? '0px' : '0';
+  const unknownFeature = browser === 'firefox'
+    ? {
+      matchMedia: '(unknown-feature: FOO)',
+      mediaText: '(unknown-feature: foo)',
+      conditionText: '(unknown-feature: FOO)',
+    }
+    : same('(unknown-feature: FOO)');
+  const generalEnclosed = browser === 'webkit'
+    ? 'future(foo bar)'
+    : 'future(foo  bar)';
+
+  const expectations: Array<{
+    input: string;
+    serialization: string | Serialization;
+  }> = [
+    {
+      input: 'ONLY Screen AND (800PX <= WIDTH)',
+      serialization: 'only screen and (800px <= width)',
+    },
+    { input: 'all and (COLOR)', serialization: '(color)' },
+    {
+      input: '(width >= calc(400px + 400px))',
+      serialization: '(width >= calc(800px))',
+    },
+    {
+      input: '(width >= calc(400px + 1in))',
+      serialization: '(width >= calc(496px))',
+    },
+    {
+      input: '(width >= calc(400px + 50em))',
+      serialization: '(width >= calc(50em + 400px))',
+    },
+    { input: '(width >= 50em)', serialization: '(width >= 50em)' },
+    { input: '(width >= 1in)', serialization: '(width >= 1in)' },
+    { input: '(width = 0)', serialization: `(width = ${unitlessZero})` },
+    { input: '(min-width: 0)', serialization: `(min-width: ${unitlessZero})` },
+    { input: '(MIN-WIDTH: 001.500PX)', serialization: '(min-width: 1.5px)' },
+    { input: '(aspect-ratio: 1/3)', serialization: '(aspect-ratio: 1 / 3)' },
+    { input: '(aspect-ratio: 32 / 18)', serialization: '(aspect-ratio: 32 / 18)' },
+    { input: '(resolution: 96dpi)', serialization: '(resolution: 96dpi)' },
+    { input: '(resolution: 1dppx)', serialization: '(resolution: 1dppx)' },
+    { input: '(orientation: LANDSCAPE)', serialization: '(orientation: landscape)' },
+    { input: '(unknown-feature: FOO)', serialization: unknownFeature },
+    {
+      input: String.raw`\73 creen and (\77 idth >= 800px)`,
+      serialization: 'screen and (width >= 800px)',
+    },
+    {
+      input: '(400px < width <= 1200px)',
+      serialization: '(400px < width <= 1200px)',
+    },
+    {
+      input: '(1200px >= width > 400px)',
+      serialization: '(1200px >= width > 400px)',
+    },
+    {
+      input: 'not ((color) or (monochrome))',
+      serialization: 'not ((color) or (monochrome))',
+    },
+    { input: 'future(foo  bar)', serialization: generalEnclosed },
+    { input: 'not all, speech', serialization: 'not all, speech' },
+  ];
+
+  return {
+    name: `compares declared serialization surfaces in ${browser}`,
+    browsers: [browser],
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const result = await page.evaluate((inputs) => inputs.map((input) => {
+        const style = document.createElement('style');
+        style.media = input;
+        style.textContent = `@media ${input} {}`;
+        document.head.append(style);
+
+        const sheet = style.sheet!;
+        const rule = sheet.cssRules[0] as CSSMediaRule;
+        const serialization = {
+          input,
+          matchMedia: window.matchMedia(input).media,
+          mediaText: sheet.media.mediaText,
+          conditionText: rule.conditionText,
+        };
+
+        style.remove();
+        return serialization;
+      }), expectations.map(({ input }) => input));
+
+      expect(result).toEqual(expectations.map(({ input, serialization }) => ({
+        input,
+        ...(typeof serialization === 'string' ? same(serialization) : serialization),
+      })));
+    },
+  };
+}
 
 runScenarios('CSS escaped dimension unit serialization oracle', 'skip', [
   {

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { SelectletCSSStyleSheet } from '../../../../src/stylelet/cssom/stylesheet';
 
 describe('SelectletCSSStyleSheet', () => {
+  it('owns a persistent media list', () => {
+    const sheet = new SelectletCSSStyleSheet();
+
+    sheet.media.mediaText = 'screen';
+
+    expect(sheet.media.mediaText).toBe('screen');
+    expect(sheet.media).toBe(sheet.media);
+  });
+
   it('projects semantic property declarations into CSSOM declarations', () => {
     const sheet = new SelectletCSSStyleSheet(`
       .example {

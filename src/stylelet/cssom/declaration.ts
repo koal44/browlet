@@ -3,7 +3,7 @@ import {
   type PropertyDeclaration, type SerializedPropertyDeclaration,
 } from '../css/property';
 import { type StyleBlock } from '../css/stylesheet';
-import { notImplemented } from './util';
+import { notImplemented } from './exceptions';
 
 export class SelectletCSSStyleDeclaration {
   [index: number]: string;

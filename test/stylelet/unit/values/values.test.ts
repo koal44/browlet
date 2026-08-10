@@ -70,8 +70,9 @@ import {
   parsePercentage, serializePercentage, consumePercentage,
 } from '../../../../src/stylelet/values/numeric-literal/percentage';
 import {
-  interpolateRatios, isDegenerateRatio, parseRatio, serializeRatio,
-  consumeRatio,
+  consumeNumberOrRatio, consumeRatio, interpolateRatios, isDegenerateRatio,
+  parseNumberOrRatio, parseRatio, resolveNumberOrRatio,
+  serializeNumberOrRatio, serializeRatio,
 } from '../../../../src/stylelet/values/ratio';
 import {
   canonicalizeResolution, createResolutionConsumer, parseResolution, RESOLUTION_UNITS,
@@ -1936,6 +1937,45 @@ describe('ratio', () => {
       denominator: 1,
     });
     expect(c.pos()).toBe(1);
+  });
+
+  it('distinguishes number syntax from a ratio with an explicit slash', () => {
+    expect(parseNumberOrRatio('3')).toEqual({
+      type: 'number',
+      value: 3,
+    });
+    expect(parseNumberOrRatio('3 / 1')).toEqual({
+      type: 'ratio',
+      numerator: 3,
+      denominator: 1,
+    });
+    expect(parseNumberOrRatio('-3')).toEqual({
+      type: 'number',
+      value: -3,
+    });
+    expect(serializeNumberOrRatio(parseNumberOrRatio('calc(1 + 2)')!))
+      .toBe('calc(3)');
+    expect(serializeNumberOrRatio(resolveNumberOrRatio(
+      parseNumberOrRatio('calc(1 + 2)')!,
+      ValueStage.Computed,
+    ))).toBe('3');
+  });
+
+  it('consumes the reusable number-or-ratio union', () => {
+    const numberCursor = new TokenCursor(parseListOfComponentValues('3 4'));
+    const ratioCursor = new TokenCursor(parseListOfComponentValues('3 / 1 4'));
+
+    expect(consumeNumberOrRatio(numberCursor)).toEqual({
+      type: 'number',
+      value: 3,
+    });
+    expect(numberCursor.pos()).toBe(1);
+    expect(consumeNumberOrRatio(ratioCursor)).toEqual({
+      type: 'ratio',
+      numerator: 3,
+      denominator: 1,
+    });
+    expect(ratioCursor.pos()).toBe(5);
   });
 
   it.each([
