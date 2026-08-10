@@ -1337,6 +1337,167 @@ runScenarios('logical selector argument restrictions', 'skip', [
   },
 ]);
 
+runScenarios('CSSOM selector serialization oracle', 'skip', [
+  {
+    name: 'canonicalizes modern selector structure',
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const inputs = [
+        ':dir(SIDEWAYS)',
+        ':nth-child( odd of .a>.b, #c )',
+        ':has(>.a, + #b)',
+        '[data-x=foo I]',
+        ':before',
+        '::highlight(Foo)',
+        '::part(foo active)',
+        'a>b + c~d',
+      ];
+      const expected = [
+        ':dir(SIDEWAYS)',
+        ':nth-child(2n+1 of .a > .b, #c)',
+        ':has(> .a, + #b)',
+        '[data-x="foo" i]',
+        '::before',
+        '::highlight(Foo)',
+        '::part(foo active)',
+        'a > b + c ~ d',
+      ];
+
+      expect(await readSelectorText(page, inputs)).toEqual(expected);
+    },
+  },
+  {
+    name: 'serializes lang arguments as strings in WebKit',
+    browsers: ['webkit'],
+    engines: ['native'],
+    status: 'fail',
+    // WebKit currently preserves whether each range was an identifier or string.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':lang(EN, "fr")']))
+        .toEqual([':lang("EN", "fr")']);
+    },
+  },
+  {
+    name: 'serializes lang arguments as strings in Chromium',
+    browsers: ['chromium'],
+    engines: ['native'],
+    status: 'fail',
+    // Chromium currently drops the rule entirely.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':lang(EN, "fr")']))
+        .toEqual([':lang("EN", "fr")']);
+    },
+  },
+  {
+    name: 'serializes lang arguments as strings in Firefox',
+    browsers: ['firefox'],
+    engines: ['native'],
+    status: 'fail',
+    // Firefox currently removes the string token's quotes.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':lang(EN, "fr")']))
+        .toEqual([':lang("EN", "fr")']);
+    },
+  },
+  {
+    name: 'preserves direction argument case in Chromium and WebKit',
+    browsers: ['chromium', 'webkit'],
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':dir(LTR)', ':dir(SideWays)']))
+        .toEqual([':dir(LTR)', ':dir(SideWays)']);
+    },
+  },
+  {
+    name: 'preserves direction argument case in Firefox',
+    browsers: ['firefox'],
+    engines: ['native'],
+    status: 'fail',
+    // Firefox currently lowercases the recognized ltr and rtl arguments only.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':dir(LTR)', ':dir(SideWays)']))
+        .toEqual([':dir(LTR)', ':dir(SideWays)']);
+    },
+  },
+  {
+    name: 'canonicalizes the matches legacy alias to is in WebKit',
+    browsers: ['webkit'],
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':matches(.a, .b)']))
+        .toEqual([':is(.a, .b)']);
+    },
+  },
+  {
+    name: 'canonicalizes the matches legacy alias to is in Chromium and Firefox',
+    browsers: ['chromium', 'firefox'],
+    engines: ['native'],
+    status: 'fail',
+    // Chromium and Firefox currently reject the Selectors 4 legacy alias.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readSelectorText(page, [':matches(.a, .b)']))
+        .toEqual([':is(.a, .b)']);
+    },
+  },
+  {
+    name: 'uses the stylesheet namespace environment',
+    engines: ['native'],
+    markup: '',
+    setupPage: async (page) => {
+      const result = await page.evaluate(() => {
+        const style = document.createElement('style');
+        style.textContent = `
+          @namespace url("urn:default");
+          @namespace same url("urn:default");
+          @namespace other url("urn:other");
+          *|div.foo {}
+          |*.bar {}
+          other|*.baz {}
+          same|*.qux {}
+        `;
+        document.head.append(style);
+
+        return [...style.sheet!.cssRules]
+          .filter((rule): rule is CSSStyleRule => 'selectorText' in rule)
+          .map((rule) => rule.selectorText);
+      });
+
+      expect(result).toEqual([
+        '*|div.foo',
+        '|*.bar',
+        'other|*.baz',
+        '.qux',
+      ]);
+    },
+  },
+]);
+
+async function readSelectorText(
+  page: Parameters<NonNullable<Scenario['setupPage']>>[0],
+  selectors: string[],
+): Promise<Array<string | null>> {
+  return page.evaluate((inputs) => inputs.map((selector) => {
+    const style = document.createElement('style');
+    style.textContent = `${selector} {}`;
+    document.head.append(style);
+
+    const rule = style.sheet?.cssRules[0];
+    const result = rule !== undefined && 'selectorText' in rule
+      ? (rule as CSSStyleRule).selectorText
+      : null;
+    style.remove();
+    return result;
+  }), selectors);
+}
+
 runScenarios('custom-ident default reservation oracle', 'skip', [
   {
     name: 'native parsers reserve default except in highlight arguments',

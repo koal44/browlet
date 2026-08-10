@@ -148,7 +148,7 @@ function emitPseudoClassTest(
         )
         : emitNoMatchPseudoTest();
     case 'dir':
-      return argument?.kind === PseudoArgumentKind.Direction && argument.value !== null
+      return argument?.kind === PseudoArgumentKind.Direction
         ? emitDirPseudoTest(argument.value, snapshot)
         : emitNoMatchPseudoTest();
     case 'lang':
@@ -529,7 +529,7 @@ function emitDirPseudoTest(
   argument: string,
   snapshot: Snapshot,
 ): CompiledMatcher {
-  const dir = argument.toLowerCase();
+  const dir = asciiLower(argument);
 
   if (dir !== 'ltr' && dir !== 'rtl') {
     return FALSE_MATCHER;

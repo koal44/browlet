@@ -936,7 +936,7 @@ describe('pseudo-class selectors', () => {
         parts: [
           pseudoClassPart('dir', {
             kind: PseudoArgumentKind.Direction,
-            value: 'rtl',
+            value: 'RTL',
           }),
         ],
       });
@@ -947,7 +947,7 @@ describe('pseudo-class selectors', () => {
         parts: [
           pseudoClassPart('dir', {
             kind: PseudoArgumentKind.Direction,
-            value: null,
+            value: 'sideways',
           }),
         ],
       });

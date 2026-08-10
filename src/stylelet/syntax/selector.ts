@@ -1,4 +1,5 @@
 import { asciiLower } from '../../shared/css';
+import { assertNever } from '../../shared/util';
 import {
   any, commaRepeat, one, oneOf, opt, plus, adaptConsumer, requiredSequenceOf, sequenceOf, withTrivia,
 } from './component-grammar';
@@ -10,12 +11,16 @@ import {
   consumeIntegerToken, consumePipeDelim, consumePlusDelim, consumeStringToken,
   consumeTildeDelim,
 } from './component-consumers';
-import { isDelimToken, isWhitespaceToken, type ComponentValue } from './component-value';
+import {
+  isDelimToken, isWhitespaceToken, serializeCssIdentifier, serializeCssString,
+  type ComponentValue,
+} from './component-value';
 import { type ParserInput, parseAsComponentGrammar, parseListAsComponentGrammar } from './parser';
 import { TokenKind } from './tokens';
-import { parseCustomIdent, type CustomIdentValue } from '../values/custom-ident';
-import { consumeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
+import { parseCustomIdent, serializeCustomIdent, type CustomIdentValue } from '../values/custom-ident';
+import { consumeAnPlusB, serializeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
 import { createKeywordConsumer } from '../values/keyword';
+import { serializeCssInteger } from '../values/numeric-literal/integer';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -2327,29 +2332,24 @@ const languageRangeConsumer: TryConsumer<LanguageRange> = oneOf(
 
 type DirectionPseudoArgument = {
   kind: PseudoArgumentKind.Direction;
-  value: 'ltr' | 'rtl' | null;
+  value: string;
 };
 
 function parseDirectionArgument(
   value: readonly ComponentValue[],
   context: SelectorParserContext,
 ): DirectionPseudoArgument | null {
-  const raw = parseAsComponentGrammar(value, withTrivia(directionIdentConsumer), context);
+  const parsed = parseAsComponentGrammar(value, withTrivia(consumeIdentToken), context);
 
-  if (raw === null) {
+  if (parsed === null) {
     return null;
   }
 
   return {
     kind: PseudoArgumentKind.Direction,
-    value: raw === 'ltr' || raw === 'rtl' ? raw : null,
+    value: parsed.value,
   };
 }
-
-const directionIdentConsumer = adaptConsumer(
-  consumeIdentToken,
-  (ident) => asciiLower(ident.value),
-);
 
 // --------------------------------------
 // Part-name-list arguments
@@ -2574,4 +2574,322 @@ function maxSpecificity(values: readonly Specificity[]): Specificity {
 
 function listSpecificity(arms: { specificity: Specificity; }[]): Specificity {
   return maxSpecificity(arms.map((arm) => arm.specificity));
+}
+
+
+
+//  ██████  ████████ ████████  ████    ███    ██
+// ██    ██ ██       ██     ██  ██    ██ ██   ██
+// ██       ██       ██     ██  ██   ██   ██  ██
+//  ██████  ██████   ████████   ██  ██     ██ ██
+//       ██ ██       ██   ██    ██  █████████ ██
+// ██    ██ ██       ██    ██   ██  ██     ██ ██
+//  ██████  ████████ ██     ██ ████ ██     ██ ████████
+
+export type SelectorSerializationContext = Readonly<{
+  /** URI associated with the default namespace, when one is declared. */
+  defaultNamespace?: string;
+
+  /** Namespace URI associated with each declared prefix. */
+  namespacePrefixes?: ReadonlyMap<string, string>;
+}>;
+
+/*
+ * CSSOM, "serialize a group of selectors".
+ *
+ * TODO: Stylesheet interpretation currently discards @namespace rules, while
+ * selector parsing retains only the set of declared prefix names. A caller
+ * serializing stylesheet selectors must supply the URI mappings above until
+ * the stylesheet representation owns that namespace environment directly.
+ */
+export function serializeSelectorList(
+  selectors: SelectorList,
+  context: SelectorSerializationContext = {},
+): string {
+  return serializeComplexSelectorList(selectors, context);
+}
+
+// CSSOM, "serialize a selector".
+export function serializeSelector(
+  selector: ComplexSelector,
+  context: SelectorSerializationContext = {},
+): string {
+  return selector.parts.map(({ combinator, unit }) => {
+    const serialized = serializeComplexSelectorUnit(unit, context);
+    return combinator === null
+      ? serialized
+      : `${serializeCombinator(combinator)}${serialized}`;
+  }).join('');
+}
+
+function serializeComplexSelectorList(
+  selectors: SelectorList,
+  context: SelectorSerializationContext,
+): string {
+  return selectors.arms
+    .map((selector) => serializeSelector(selector, context))
+    .join(', ');
+}
+
+function serializeComplexRealSelectorList(
+  selectors: ComplexRealSelectorList,
+  context: SelectorSerializationContext,
+): string {
+  return selectors.arms
+    .map((selector) => serializeComplexRealSelector(selector, context))
+    .join(', ');
+}
+
+function serializeCompoundSelectorList(
+  selectors: CompoundSelectorList,
+  context: SelectorSerializationContext,
+): string {
+  return selectors.arms
+    .map((selector) => serializeCompoundSelector(selector, context))
+    .join(', ');
+}
+
+function serializeRelativeSelectorList(
+  selectors: RelativeSelectorList,
+  context: SelectorSerializationContext,
+): string {
+  return selectors.arms
+    .map((selector) => serializeRelativeSelector(selector, context))
+    .join(', ');
+}
+
+function serializeComplexRealSelector(
+  selector: ComplexRealSelector,
+  context: SelectorSerializationContext,
+): string {
+  return selector.parts.map(({ combinator, compound }) => {
+    const serialized = serializeCompoundSelector(compound, context);
+    return combinator === null
+      ? serialized
+      : `${serializeCombinator(combinator)}${serialized}`;
+  }).join('');
+}
+
+function serializeRelativeSelector(
+  selector: RelativeSelector,
+  context: SelectorSerializationContext,
+): string {
+  const combinator = selector.combinator === null || selector.combinator === ' '
+    ? ''
+    : `${selector.combinator} `;
+  return `${combinator}${serializeSelector(selector.selector, context)}`;
+}
+
+function serializeCombinator(combinator: Combinator): string {
+  return combinator === ' ' ? ' ' : ` ${combinator} `;
+}
+
+function serializeComplexSelectorUnit(
+  unit: ComplexSelectorUnit,
+  context: SelectorSerializationContext,
+): string {
+  const compound = unit.compound === null
+    ? ''
+    : serializeCompoundSelector(
+      unit.compound,
+      context,
+      unit.pseudoCompounds.length > 0,
+    );
+  return compound + unit.pseudoCompounds
+    .map((selector) => serializePseudoCompoundSelector(selector, context))
+    .join('');
+}
+
+function serializeCompoundSelector(
+  selector: CompoundSelector,
+  context: SelectorSerializationContext,
+  hasFollowingPseudo = false,
+): string {
+  const subclasses = selector.subclasses
+    .map((subclass) => serializeSubclassSelector(subclass, context))
+    .join('');
+
+  if (selector.typeSelector === null) return subclasses;
+
+  const serializeUniversal = selector.subclasses.length === 0 && !hasFollowingPseudo;
+  const type = serializeTypeSelector(
+    selector.typeSelector,
+    context,
+    serializeUniversal,
+  );
+  return type + subclasses;
+}
+
+function serializeSubclassSelector(
+  selector: SubclassSelector,
+  context: SelectorSerializationContext,
+): string {
+  switch (selector.kind) {
+    case SelectorKind.IdSelector:
+      return `#${serializeCssIdentifier(selector.name)}`;
+
+    case SelectorKind.ClassSelector:
+      return `.${serializeCssIdentifier(selector.name)}`;
+
+    case SelectorKind.AttributeSelector:
+      return serializeAttributeSelector(selector);
+
+    case SelectorKind.PseudoClassSelector:
+      return serializePseudoClassSelector(selector, context);
+  }
+}
+
+function serializeTypeSelector(
+  selector: TypeSelector,
+  context: SelectorSerializationContext,
+  serializeUniversal: boolean,
+): string {
+  if (selector.name === '*' && !serializeUniversal && !universalHasMeaningfulNamespace(
+    selector.namespace,
+    context,
+  )) {
+    return '';
+  }
+
+  return serializeTypeNamespace(selector.namespace, context) + (
+    selector.name === '*' ? '*' : serializeCssIdentifier(selector.name)
+  );
+}
+
+function serializeAttributeSelector(selector: AttributeSelector): string {
+  const name = serializeAttributeName(selector.wqName);
+  if (selector.matcher === null) return `[${name}]`;
+
+  const modifier = selector.modifier === null ? '' : ` ${selector.modifier}`;
+  return `[${name}${selector.matcher}${serializeCssString(selector.value!)}${modifier}]`;
+}
+
+function serializePseudoCompoundSelector(
+  selector: PseudoCompoundSelector,
+  context: SelectorSerializationContext,
+): string {
+  return serializePseudoElementSelector(selector.pseudoElement, context) +
+    selector.pseudoClasses
+      .map((pseudoClass) => serializePseudoClassSelector(pseudoClass, context))
+      .join('');
+}
+
+function serializePseudoClassSelector(
+  selector: PseudoClassSelector,
+  context: SelectorSerializationContext,
+): string {
+  const name = serializeCssIdentifier(selector.name);
+  return selector.argument === null
+    ? `:${name}`
+    : `:${name}(${serializePseudoArgument(selector.argument, context)})`;
+}
+
+function serializePseudoElementSelector(
+  selector: PseudoElementSelector,
+  context: SelectorSerializationContext,
+): string {
+  const name = serializeCssIdentifier(selector.name);
+  return selector.argument === null
+    ? `::${name}`
+    : `::${name}(${serializePseudoArgument(selector.argument, context)})`;
+}
+
+function serializePseudoArgument(
+  argument: NonNullable<PseudoClassSelector['argument']>,
+  context: SelectorSerializationContext,
+): string {
+  switch (argument.kind) {
+    case PseudoArgumentKind.ForgivingSelectorList:
+    case PseudoArgumentKind.ComplexRealSelectorList:
+      return serializeComplexRealSelectorList(argument.selectors, context);
+
+    case PseudoArgumentKind.RelativeSelectorList:
+      return serializeRelativeSelectorList(argument.selectors, context);
+
+    case PseudoArgumentKind.CompoundSelectorList:
+      return serializeCompoundSelectorList(argument.selectors, context);
+
+    case PseudoArgumentKind.CompoundSelector:
+      return serializeCompoundSelector(argument.selector, context);
+
+    case PseudoArgumentKind.Direction:
+      return serializeCssIdentifier(argument.value);
+
+    case PseudoArgumentKind.LanguageRangeList:
+      return argument.ranges.map(serializeCssString).join(', ');
+
+    case PseudoArgumentKind.AnPlusB:
+      return serializeAnPlusB(argument);
+
+    case PseudoArgumentKind.NthChild: {
+      const formula = serializeAnPlusB(argument.formula);
+      return argument.of === null
+        ? formula
+        : `${formula} of ${serializeComplexRealSelectorList(argument.of, context)}`;
+    }
+
+    case PseudoArgumentKind.Ident:
+      return serializeCssIdentifier(argument.value);
+
+    case PseudoArgumentKind.Integer:
+      return serializeCssInteger(argument.value);
+
+    case PseudoArgumentKind.IntegerList:
+      return argument.values.map(serializeCssInteger).join(', ');
+
+    case PseudoArgumentKind.PartNameList:
+      return argument.names.map(serializeCssIdentifier).join(' ');
+
+    case PseudoArgumentKind.CustomIdent:
+      return serializeCustomIdent(argument.value);
+
+    default:
+      return assertNever(argument);
+  }
+}
+
+function serializeTypeNamespace(
+  namespace: string | null,
+  context: SelectorSerializationContext,
+): string {
+  if (namespace === null) return '';
+  if (namespace === '') return '|';
+
+  if (
+    (namespace === '*' && context.defaultNamespace === undefined) ||
+    namespaceMapsToDefault(namespace, context)
+  ) {
+    return '';
+  }
+
+  if (namespace === '*') return '*|';
+  return `${serializeCssIdentifier(namespace)}|`;
+}
+
+function serializeAttributeName(name: WqName): string {
+  const namespace = name.namespace === null || name.namespace === ''
+    ? ''
+    : name.namespace === '*'
+      ? '*|'
+      : `${serializeCssIdentifier(name.namespace)}|`;
+  return `${namespace}${serializeCssIdentifier(name.localName)}`;
+}
+
+function universalHasMeaningfulNamespace(
+  namespace: string | null,
+  context: SelectorSerializationContext,
+): boolean {
+  if (namespace === null) return false;
+  if (namespace === '') return true;
+  if (namespace === '*') return context.defaultNamespace !== undefined;
+  return !namespaceMapsToDefault(namespace, context);
+}
+
+function namespaceMapsToDefault(
+  namespace: string,
+  context: SelectorSerializationContext,
+): boolean {
+  const defaultNamespace = context.defaultNamespace;
+  return defaultNamespace !== undefined &&
+    context.namespacePrefixes?.get(namespace) === defaultNamespace;
 }
