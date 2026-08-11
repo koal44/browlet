@@ -5,6 +5,7 @@ import {
   marginBottomProperty, marginLeftProperty,
   marginRightProperty, marginTopProperty,
 } from '../props/margin';
+import { opacityProperty } from '../props/opacity';
 import {
   parseOptionalDeclarationValue, type OptionalDeclarationValue,
 } from '../syntax/declaration-value';
@@ -71,6 +72,7 @@ export const propertyRegistry = {
   'margin-left': marginLeftProperty,
   'margin-right': marginRightProperty,
   'margin-top': marginTopProperty,
+  opacity: opacityProperty,
 } as const;
 
 export type PropertyName = keyof typeof propertyRegistry;
@@ -125,6 +127,19 @@ export function serializePropertyDeclaration(
     value: declaration.value.serialize(),
     important: declaration.important,
   };
+}
+
+export function resolveBuiltInPropertyDeclaration(
+  declaration: BuiltInPropertyDeclaration,
+  stage: ValueStage,
+  context: PropertyContext = {},
+): BuiltInPropertyDeclaration | null {
+  const value = declaration.value.resolve(stage, context);
+  if (value === null) return null;
+
+  // TypeScript does not preserve the correlation between a property name and
+  // its value while resolving a union of built-in declarations.
+  return { ...declaration, value } as BuiltInPropertyDeclaration;
 }
 
 function interpretCustomPropertyDeclaration(

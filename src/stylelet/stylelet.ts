@@ -1,22 +1,12 @@
-import { CSSStyleSheetImpl } from './cssom/css-stylesheet';
-import {
-  StyleSheetCollection, type InlineStyleSheetOptions,
-} from './cssom/stylesheet-collection';
+import { CascadeEngine } from './engine/cascade-engine';
+import { DocumentOrShadowRootStyleState } from './engine/document-or-shadow-root';
 import { Snapshot, type SnapshotOptions } from './snapshot';
-
-export type { InlineStyleSheetOptions } from './cssom/stylesheet-collection';
 
 export type Stylelet = {
   version: string;
   snapshot: Snapshot;
-  readonly styleSheets: StyleSheetList;
   createStyleSheet(options?: CSSStyleSheetInit): CSSStyleSheet;
-  createInlineStyleSheet(
-    ownerNode: Element,
-    source: string,
-    options?: InlineStyleSheetOptions,
-  ): CSSStyleSheet;
-  removeStyleSheet(styleSheet: CSSStyleSheet): void;
+  getComputedStyle(element: Element): CSSStyleDeclaration;
 };
 
 export type StyleletOptions = SnapshotOptions;
@@ -25,29 +15,31 @@ export function createStylelet(
   document: Document,
   options: StyleletOptions = {},
 ): Stylelet {
+  return createStyleletEnvironment(document, options).stylelet;
+}
+
+export function createStyleletEnvironment(
+  document: Document,
+  options: StyleletOptions = {},
+) {
   const snapshot = new Snapshot(document, options);
-  const styleSheets = new StyleSheetCollection(snapshot);
-  const api = {
+  const cascade = new CascadeEngine({
+    environmentBaseUrl: new URL(document.baseURI),
+    snapshot,
+  });
+  const state = new DocumentOrShadowRootStyleState(document, cascade);
+  const stylelet: Stylelet = {
     version: 'stylelet-__VERSION__',
     snapshot,
-    styleSheets: styleSheets.list,
 
     createStyleSheet(options = {}): CSSStyleSheet {
-      return new CSSStyleSheetImpl(snapshot, options);
+      return cascade.createStyleSheet(options);
     },
 
-    createInlineStyleSheet(
-      ownerNode: Element,
-      source: string,
-      options: InlineStyleSheetOptions = {},
-    ): CSSStyleSheet {
-      return styleSheets.createInlineStyleSheet(ownerNode, source, options);
-    },
-
-    removeStyleSheet(styleSheet: CSSStyleSheet): void {
-      styleSheets.removeStyleSheet(styleSheet);
+    getComputedStyle(element: Element): CSSStyleDeclaration {
+      return cascade.getComputedStyle(element, state);
     },
   };
 
-  return api;
+  return { state, stylelet };
 }

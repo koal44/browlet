@@ -1,4 +1,4 @@
-declare const treeScopeBrand: unique symbol;
+export const treeScopeBrand: unique symbol = Symbol('TreeScope');
 
 /**
  * An opaque identity for a document or shadow-tree CSS scope.
@@ -7,9 +7,9 @@ declare const treeScopeBrand: unique symbol;
  * The style engine only compares and carries them as declaration provenance.
  */
 export type TreeScope = {
-  readonly [treeScopeBrand]: never;
+  readonly [treeScopeBrand]: true;
 };
 
 export function createTreeScope(): TreeScope {
-  return Object.freeze({}) as TreeScope;
+  return Object.freeze({ [treeScopeBrand]: true });
 }

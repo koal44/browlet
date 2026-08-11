@@ -1,42 +1,75 @@
 import type {
   HTMLLinkElementImpl, HTMLStyleElementImpl, SVGStyleElementImpl,
 } from './nodes/element';
+import type { DomletDocument } from './nodes/document';
 import { isText } from './nodes/node';
-import { createStylelet, type Stylelet } from '../stylelet/stylelet';
-
-export function withCssEngine<T extends Document>(document: T): T {
-  if (!cssEngines.has(document)) {
-    cssEngines.set(document, undefined);
-  }
-
-  return document;
-}
-
-export function getCssEngine(document: Document): Stylelet {
-  if (!cssEngines.has(document)) {
-    throw new Error('Document is not associated with a CSS engine');
-  }
-
-  let cssEngine = cssEngines.get(document);
-  if (!cssEngine) {
-    cssEngine = createStylelet(document);
-    cssEngines.set(document, cssEngine);
-  }
-
-  return cssEngine;
-}
-
-const cssEngines = new WeakMap<Document, Stylelet | undefined>();
+import {
+  createStyleletEnvironment, type Stylelet,
+} from '../stylelet/stylelet';
+import { CSSStyleDeclarationImpl } from '../stylelet/cssom/declaration';
+import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
+import type { InlineStyleSheetOptions } from '../stylelet/engine/document-or-shadow-root';
 
 /*
  * interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;
  * };
  */
-export function getStyleSheets(
-  document: Document,
-): StyleSheetList {
-  return getCssEngine(document).styleSheets;
+export class DocumentStyleState {
+  readonly #document: Document;
+  #environment: ReturnType<typeof createStyleletEnvironment> | undefined;
+
+  constructor(document: Document) {
+    this.#document = document;
+  }
+
+  get engine(): Stylelet {
+    return this.environment.stylelet;
+  }
+
+  get styleSheets(): StyleSheetList {
+    return this.environment.state.styleSheets;
+  }
+
+  createInlineStyleSheet(
+    ownerNode: Element,
+    source: string,
+    options: InlineStyleSheetOptions = {},
+  ): CSSStyleSheetImpl {
+    return this.environment.state.createInlineStyleSheet(
+      ownerNode,
+      source,
+      options,
+    );
+  }
+
+  removeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    this.environment.state.removeStyleSheet(styleSheet);
+  }
+
+  private get environment() {
+    return this.#environment ??= createStyleletEnvironment(this.#document);
+  }
+}
+
+/*
+ * interface mixin ElementCSSInlineStyle {
+ *   [SameObject, PutForwards=cssText]
+ *   readonly attribute CSSStyleProperties style;
+ * };
+ */
+export class InlineStyleState {
+  readonly style: CSSStyleDeclarationImpl;
+
+  constructor(element: Element) {
+    this.style = new CSSStyleDeclarationImpl({
+      ownerNode: element,
+    });
+  }
+
+  attributeChanged(value: string | null): void {
+    this.style.__attributeChanged('style', value);
+  }
 }
 
 /*
@@ -44,39 +77,49 @@ export function getStyleSheets(
  *   readonly attribute CSSStyleSheet? sheet;
  * };
  */
-type LinkStyleElement =
-  | HTMLLinkElementImpl
-  | HTMLStyleElementImpl
-  | SVGStyleElementImpl;
-
 export class LinkStyleState {
-  readonly #owner: LinkStyleElement;
-  #sheet: CSSStyleSheet | null = null;
+  readonly #owner;
+  readonly #behavior;
+  #sheet: CSSStyleSheetImpl | null = null;
   #deferred = false;
 
-  constructor(owner: LinkStyleElement) {
+  constructor(
+    owner: HTMLLinkElementImpl | HTMLStyleElementImpl | SVGStyleElementImpl,
+    behavior: { attributes: Set<string>; children?: boolean; }
+  ) {
     this.#owner = owner;
+    this.#behavior = behavior;
   }
 
   get sheet(): CSSStyleSheet | null {
     return this.#sheet;
   }
 
-  defer(): void {
+  beginParsingChildren(): void {
+    if (!this.#behavior.children) return;
     this.#deferred = true;
   }
 
-  finish(): void {
+  finishParsingChildren(): void {
+    if (!this.#behavior.children) return;
     this.#deferred = false;
     this.update();
+  }
+
+  childrenChanged(): void {
+    if (this.#behavior.children) this.update();
+  }
+
+  attributeChanged(qualifiedName: string): void {
+    if (this.#behavior.attributes.has(qualifiedName)) this.update();
   }
 
   update(): void {
     if (this.#deferred) return;
 
-    const document = this.#owner.ownerDocument;
-    const cssEngine = getCssEngine(document);
-    if (this.#sheet) cssEngine.removeStyleSheet(this.#sheet);
+    const document = this.#owner.ownerDocument as DomletDocument;
+    const styleState = document.__styleState;
+    if (this.#sheet) styleState.removeStyleSheet(this.#sheet);
 
     const type = this.#owner.getAttribute('type')?.toLowerCase() ?? '';
     if (
@@ -97,7 +140,7 @@ export class LinkStyleState {
       if (isText(child)) source += child.data;
     }
 
-    this.#sheet = cssEngine.createInlineStyleSheet(
+    this.#sheet = styleState.createInlineStyleSheet(
       this.#owner,
       source,
       {

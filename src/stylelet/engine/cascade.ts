@@ -1,34 +1,70 @@
 import type { PropertyDeclaration } from '../css/property';
-import type { TreeScope } from '../css/tree-scope';
-import type { StyleEngine } from './engine';
-import type { StyleSheetAssociation } from './stylesheet-association';
+import { matchSelectorList } from '../selector/match';
+import type { Specificity } from '../syntax/selector';
+import type { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
+import type { CascadeEngine } from './cascade-engine';
+import type { DocumentOrShadowRootStyleState } from './document-or-shadow-root';
 
 export type CascadedProperty = {
   declaration: PropertyDeclaration;
-  association: StyleSheetAssociation;
+  styleSheet: CSSStyleSheetImpl;
+  scope: DocumentOrShadowRootStyleState;
 };
 
-// TODO: Replace this provisional lookup with the CSS Cascade algorithm. It
-// currently treats every top-level style rule as applicable and returns the
-// first matching declaration without considering selectors or precedence.
+// This is the author-normal/important slice of cascade sorting. Origins,
+// encapsulation context, layers, animations, and transitions enter here as
+// their representations are added to the engine.
 export function getCascadedProperty(
-  engine: StyleEngine,
+  engine: CascadeEngine,
   name: PropertyDeclaration['name'],
-  treeScope: TreeScope = engine.treeScope,
+  state: DocumentOrShadowRootStyleState,
+  element?: Element,
 ): CascadedProperty | null {
-  for (const association of engine.activeStyleSheets) {
-    if (association.treeScope !== treeScope) continue;
+  let result: CascadedProperty | null = null;
+  let resultSpecificity: Specificity | null = null;
 
-    for (const rule of association.styleSheet.rules) {
+  for (const styleSheet of engine.getActiveStyleSheets(state)) {
+    for (const rule of styleSheet.__styleSheet.rules) {
       if (rule.type !== 'style-rule') continue;
 
+      const specificity = element === undefined
+        ? ZERO_SPECIFICITY
+        : matchSelectorList(rule.selectors, element, engine.snapshot);
+      if (specificity === null) continue;
+
       for (const item of rule.block) {
-        if (item.type === 'property-declaration' && item.name === name) {
-          return { declaration: item, association };
-        }
+        if (item.type !== 'property-declaration' || item.name !== name) continue;
+        if (
+          result !== null &&
+          comparePrecedence(
+            item,
+            specificity,
+            result.declaration,
+            resultSpecificity!,
+          ) < 0
+        ) continue;
+
+        result = { declaration: item, styleSheet, scope: state };
+        resultSpecificity = specificity;
       }
     }
   }
 
-  return null;
+  return result;
 }
+
+function comparePrecedence(
+  left: PropertyDeclaration,
+  leftSpecificity: Specificity,
+  right: PropertyDeclaration,
+  rightSpecificity: Specificity,
+): number {
+  return Number(left.important) - Number(right.important) ||
+    compareSpecificity(leftSpecificity, rightSpecificity);
+}
+
+function compareSpecificity(left: Specificity, right: Specificity): number {
+  return left.a - right.a || left.b - right.b || left.c - right.c;
+}
+
+const ZERO_SPECIFICITY: Specificity = { a: 0, b: 0, c: 0 };

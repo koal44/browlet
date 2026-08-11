@@ -84,6 +84,9 @@ describe('CSSStyleSheetImpl', () => {
     expect(rule.style.getPropertyValue('margin-top')).toBe('10px');
     expect(rule.style.getPropertyValue('--Brand')).toBe('A/**/B');
     expect([...rule.style]).toEqual(['color', 'margin-top', '--Brand']);
+    expect(rule.style.parentRule).toBe(rule);
+    expect(rule.style.cssText)
+      .toBe('color: red; margin-top: 10px; --Brand: A/**/B;');
   });
 
   it('selects the active declaration by source order and importance', () => {
@@ -101,6 +104,28 @@ describe('CSSStyleSheetImpl', () => {
     expect(rule.style.getPropertyValue('color')).toBe('green');
     expect(rule.style.getPropertyPriority('color')).toBe('important');
     expect(rule.style.length).toBe(1);
+  });
+
+  it('mutates declarations through the CSSStyleDeclaration interface', () => {
+    const sheet = createStyleSheet();
+    sheet.replaceSync('.example { color: red; }');
+    const style = (sheet.cssRules.item(0) as CSSStyleRule).style;
+
+    style.setProperty('opacity', '50%', 'IMPORTANT');
+
+    expect(style.opacity).toBe('0.5');
+    expect(style.getPropertyPriority('opacity')).toBe('important');
+    expect(style[1]).toBe('opacity');
+    expect(style.cssText).toBe('color: red; opacity: 0.5 !important;');
+
+    expect(style.removeProperty('color')).toBe('red');
+    expect(style[0]).toBe('opacity');
+    expect(style[1]).toBeUndefined();
+
+    style.cssText = 'margin-top: 1px; color: blue';
+
+    expect([...style]).toEqual(['margin-top', 'color']);
+    expect(style.cssText).toBe('margin-top: 1px; color: blue;');
   });
 
   it('keeps its live CSSRuleList object while replacing rules', () => {

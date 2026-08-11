@@ -38,6 +38,7 @@ export class CSSStyleSheetImpl
   implements CSSStyleSheet
 {
   readonly #rules: CSSRuleListImpl;
+  #styleSheet: ParsedStyleSheet;
 
   #ownerRule: CSSRule | null;
   // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
@@ -58,7 +59,9 @@ export class CSSStyleSheetImpl
     super();
 
     const document = snapshot.document;
+    const location = new URL(document.baseURI);
     this.#rules = new CSSRuleListImpl();
+    this.#styleSheet = { location, rules: [] };
 
     this.#ownerRule = null;
     this.#constructorDocument = document;
@@ -76,7 +79,10 @@ export class CSSStyleSheetImpl
     } = options;
 
     this.#stylesheetBaseURL = baseURL;
-    this.setLocation(document.baseURI);
+    if (baseURL !== null) {
+      this.#styleSheet.baseUrl = new URL(baseURL, location);
+    }
+    this.setLocation(location.href);
     this.setMedia(media);
     this.setDisabled(disabled);
   }
@@ -99,7 +105,7 @@ export class CSSStyleSheetImpl
     sheet.#constructed = false;
     sheet.#constructorDocument = null;
     sheet.#stylesheetBaseURL = null;
-    if (rules) sheet.#rules.replace(buildCSSRules(rules));
+    if (rules) sheet.replaceStyleSheet(rules);
 
     return sheet;
   }
@@ -132,8 +138,8 @@ export class CSSStyleSheetImpl
       );
     }
 
-    const cssRule = createCSSRule(parsedRule);
-    if (cssRule === null) {
+    const rulePair = createCSSRule(parsedRule);
+    if (rulePair === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
       throw new DOMException(
         `The parsed rule is not supported: ${rule}`,
@@ -141,7 +147,8 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.#rules.insert(index, cssRule);
+    this.#styleSheet.rules.splice(index, 0, rulePair.styleRule);
+    this.#rules.insert(index, rulePair.cssRule);
     return index;
   }
 
@@ -156,6 +163,7 @@ export class CSSStyleSheetImpl
       );
     }
 
+    this.#styleSheet.rules.splice(index, 1);
     this.#rules.remove(index);
   }
 
@@ -190,6 +198,10 @@ export class CSSStyleSheetImpl
 
   // Internal operations ----------------------------------------------------
 
+  get __styleSheet(): ParsedStyleSheet {
+    return this.#styleSheet;
+  }
+
   __clearAssociation(): void {
     this.setParentStyleSheet(null);
     this.setOwnerNode(null);
@@ -222,7 +234,19 @@ export class CSSStyleSheetImpl
   // Private helpers ---------------------------------------------------------
 
   private replaceRules(text: string): void {
-    this.#rules.replace(buildCSSRules(parseStylesheet(text)));
+    this.replaceStyleSheet(parseStylesheet(text, {
+      ...(this.#styleSheet.location === undefined
+        ? {}
+        : { location: this.#styleSheet.location }),
+      ...(this.#styleSheet.baseUrl === undefined
+        ? {}
+        : { baseUrl: this.#styleSheet.baseUrl }),
+    }));
+  }
+
+  private replaceStyleSheet(styleSheet: ParsedStyleSheet): void {
+    this.#styleSheet = styleSheet;
+    this.#rules.replace(buildCSSRules(styleSheet));
   }
 
   private assertOriginClean(): void {
@@ -262,12 +286,13 @@ function buildCSSRules(sheet: ParsedStyleSheet): CSSRule[] {
   });
 }
 
-function createCSSRule(rule: SyntaxRule): CSSRule | null {
+function createCSSRule(rule: SyntaxRule): RulePair | null {
   const sheet = interpretStylesheet({ rules: [rule] });
-  const semanticRule = sheet.rules[0];
-  return semanticRule === undefined
-    ? null
-    : createCSSRuleFromSemanticRule(semanticRule);
+  const styleRule = sheet.rules[0];
+  if (styleRule === undefined) return null;
+
+  const cssRule = createCSSRuleFromSemanticRule(styleRule);
+  return cssRule === null ? null : { cssRule, styleRule };
 }
 
 function createCSSRuleFromSemanticRule(rule: Rule): CSSRule | null {
@@ -280,3 +305,8 @@ function createCSSRuleFromSemanticRule(rule: Rule): CSSRule | null {
 function isImportRule(rule: SyntaxRule): boolean {
   return rule.type === 'statement-at-rule' && rule.name === 'import';
 }
+
+type RulePair = {
+  cssRule: CSSRule;
+  styleRule: Rule;
+};

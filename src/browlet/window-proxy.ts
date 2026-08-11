@@ -26,6 +26,10 @@ export class WindowProxyController {
         configurable: true,
         get: () => this.target.dispatchEvent,
       },
+      getComputedStyle: {
+        configurable: true,
+        get: () => this.target.getComputedStyle,
+      },
       location: {
         configurable: true,
         get: () => this.target.location,

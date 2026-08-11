@@ -7,7 +7,6 @@ import {
 import { DocumentTypeImpl } from '../nodes/document-type';
 import { createElementNode, type ElementImpl } from '../nodes/element';
 import { TextImpl } from '../nodes/text';
-import { withCssEngine } from '../css-engine';
 import { asDocument } from '../stubs/interfaces';
 import {
   isComment, isDocumentType, isElement, isText,
@@ -33,7 +32,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   createDocument(): DomletDocument {
-    const document = withCssEngine(asDocument(new DocumentImpl()));
+    const document = asDocument(new DocumentImpl());
     this.#document = document;
     return document;
   }

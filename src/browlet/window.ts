@@ -29,6 +29,17 @@ export class WindowImpl
     throw new Error('Browlet navigation is not implemented');
   }
 
+  readonly getComputedStyle = (
+    element: Element,
+    pseudoElement?: string | null,
+  ): CSSStyleDeclaration => {
+    if (pseudoElement !== null && pseudoElement !== undefined) {
+      throw new Error('Pseudo-element computed style is not implemented');
+    }
+
+    return this.document.cssEngine.getComputedStyle(element);
+  };
+
   readonly addEventListener = ((
     type: string,
     listener: EventListenerOrEventListenerObject,

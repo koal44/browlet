@@ -1,5 +1,5 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
-import { SelectletCSSStyleDeclaration } from './declaration';
+import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 import { notImplemented } from './exceptions';
 
@@ -20,11 +20,17 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
 
   selectorText = '';
 
-  private _style: CSSStyleDeclaration;
+  private _style: CSSStyleDeclarationImpl;
   private _cssRules = new CSSRuleListImpl();
 
   constructor(rule?: StyleRule) {
-    this._style = createCSSStyleDeclaration(rule?.block);
+    this._style = new CSSStyleDeclarationImpl({
+      declarations: declarationBlock(rule?.block),
+      parentRule: this,
+      onChange: (declarations) => {
+        if (rule) rule.block = [...declarations];
+      },
+    });
   }
 
   get cssRules(): CSSRuleList {
@@ -68,6 +74,6 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
   }
 }
 
-function createCSSStyleDeclaration(block?: StyleBlock): CSSStyleDeclaration {
-  return new SelectletCSSStyleDeclaration(block) as unknown as CSSStyleDeclaration;
+function declarationBlock(block?: StyleBlock) {
+  return block?.filter((item) => item.type === 'property-declaration') ?? [];
 }

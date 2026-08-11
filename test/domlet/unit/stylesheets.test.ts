@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createDomlet } from '../../../src/domlet/domlet';
 import type { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
-  isHTMLStyleElement, type HTMLStyleElementImpl,
+  isHTMLElement, isHTMLStyleElement, type HTMLStyleElementImpl,
 } from '../../../src/domlet/nodes/element';
 
 describe('stylesheet integration', () => {
@@ -102,6 +102,73 @@ describe('stylesheet integration', () => {
     expect(style.sheet?.ownerNode).toBe(style);
     expect(style.sheet?.cssRules).toHaveLength(1);
     expect(document.styleSheets.item(0)).toBe(style.sheet);
+  });
+
+  it('cascades matched sheets with inline declarations and resolves values', () => {
+    const document = createDomlet({
+      source: [
+        '<style id="style">',
+        '.other { opacity: 0.1 }',
+        '.target { opacity: 2 !important }',
+        '</style>',
+        '<main id="target" class="target" style="opacity: 0.75"></main>',
+      ].join(''),
+    });
+    const style = getStyleElement(document, 'style');
+    const target = document.getElementById('target')!;
+    const engine = document.cssEngine;
+    const computed = engine.getComputedStyle(target);
+
+    expect(computed.opacity).toBe('1');
+    expect(computed.cssText).toBe('');
+    expect(() => computed.setProperty('opacity', '0.5'))
+      .toThrow(expect.objectContaining({
+        name: 'NoModificationAllowedError',
+      }));
+
+    const rule = style.sheet?.cssRules.item(1) as CSSStyleRule;
+    rule.style.setProperty('opacity', '0.25', 'important');
+
+    expect(engine.getComputedStyle(target).opacity).toBe('0.25');
+
+    style.remove();
+
+    expect(engine.getComputedStyle(target).opacity).toBe('0.75');
+  });
+
+  it('computes from the synchronized inline declaration state', () => {
+    const document = createDomlet({
+      source: '<main id="target" style="opacity: 0.5"></main>',
+    });
+    const target = document.getElementById('target');
+    if (!target || !isHTMLElement(target)) {
+      throw new Error('Missing HTML target element');
+    }
+    void target.style;
+    const getAttribute = vi.spyOn(target, 'getAttribute');
+
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+    expect(getAttribute).not.toHaveBeenCalledWith('style');
+  });
+
+  it('keeps cascade order synchronized with document order', () => {
+    const document = createDomlet({
+      source: [
+        '<style id="first">.target { opacity: 0.1 }</style>',
+        '<style id="second">.target { opacity: 0.2 }</style>',
+        '<main id="target" class="target"></main>',
+      ].join(''),
+    });
+    const first = getStyleElement(document, 'first');
+    const second = getStyleElement(document, 'second');
+    const target = document.getElementById('target')!;
+    const engine = document.cssEngine;
+
+    expect(engine.getComputedStyle(target).opacity).toBe('0.2');
+
+    first.parentNode!.insertBefore(second, first);
+
+    expect(engine.getComputedStyle(target).opacity).toBe('0.1');
   });
 });
 

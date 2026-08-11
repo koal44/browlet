@@ -7,7 +7,9 @@ import { NodeImpl, NodeType } from './node';
 import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './collections';
 import type { DocumentImpl } from './document';
-import { LinkStyleState } from '../css-engine';
+import {
+  InlineStyleState, LinkStyleState,
+} from '../css-engine';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
@@ -16,6 +18,9 @@ export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
+  #inlineStyle: InlineStyleState | undefined;
+  protected readonly linkStyle: LinkStyleState | undefined = undefined;
+
   readonly nodeType = NodeType.Element;
   readonly attributes: NamedNodeMapImpl;
 
@@ -29,9 +34,13 @@ export class ElementImpl
     this.attributes = new NamedNodeMapImpl(...attributes);
   }
 
-  beginParsingChildren(): void {}
+  beginParsingChildren(): void {
+    this.linkStyle?.beginParsingChildren();
+  }
 
-  finishParsingChildren(): void {}
+  finishParsingChildren(): void {
+    this.linkStyle?.finishParsingChildren();
+  }
 
   getAttribute(qualifiedName: string): string | null {
     qualifiedName = this.#normalizeAttributeName(qualifiedName);
@@ -83,6 +92,9 @@ export class ElementImpl
       this.attributes.push(new AttrImpl(qualifiedName, value));
     }
 
+    if (qualifiedName === 'style') {
+      this.#inlineStyle?.attributeChanged(value);
+    }
     this.attributeChanged(qualifiedName, oldValue, value);
   }
 
@@ -96,6 +108,9 @@ export class ElementImpl
 
     const oldValue = this.attributes[index]!.value;
     this.attributes.splice(index, 1);
+    if (qualifiedName === 'style') {
+      this.#inlineStyle?.attributeChanged(null);
+    }
     this.attributeChanged(qualifiedName, oldValue, null);
   }
 
@@ -105,44 +120,22 @@ export class ElementImpl
     return findElementsByClassName(this, classNames);
   }
 
-  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof SVGElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<SVGElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof SVGElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<SVGElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
   /** @deprecated */
-  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
-  getElementsByTagName(
-    qualifiedName: string,
-  ): HTMLCollectionOf<Element>;
+  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
+  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
   getElementsByTagName(
     qualifiedName: string,
   ): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
-  getElementsByTagNameNS(
-    namespaceURI: typeof HTML_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<HTMLElement>;
-  getElementsByTagNameNS(
-    namespaceURI: typeof SVG_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<SVGElement>;
-  getElementsByTagNameNS(
-    namespaceURI: typeof MATHML_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<MathMLElement>;
-  getElementsByTagNameNS(
-    namespaceURI: string | null,
-    localName: string,
-  ): HTMLCollectionOf<Element>;
+  getElementsByTagNameNS(namespaceURI: typeof HTML_NAMESPACE, localName: string): HTMLCollectionOf<HTMLElement>;
+  getElementsByTagNameNS(namespaceURI: typeof SVG_NAMESPACE, localName: string): HTMLCollectionOf<SVGElement>;
+  getElementsByTagNameNS(namespaceURI: typeof MATHML_NAMESPACE, localName: string): HTMLCollectionOf<MathMLElement>;
+  getElementsByTagNameNS(namespaceURI: string | null, localName: string): HTMLCollectionOf<Element>;
   getElementsByTagNameNS(
     namespaceURI: string | null,
     localName: string,
@@ -151,10 +144,28 @@ export class ElementImpl
   }
 
   protected attributeChanged(
-    _qualifiedName: string,
+    qualifiedName: string,
     _oldValue: string | null,
     _newValue: string | null,
-  ): void {}
+  ): void {
+    this.linkStyle?.attributeChanged(qualifiedName);
+  }
+
+  protected insertedInto(): void {
+    this.linkStyle?.update();
+  }
+
+  protected removedFrom(): void {
+    this.linkStyle?.update();
+  }
+
+  protected childrenChanged(): void {
+    this.linkStyle?.childrenChanged();
+  }
+
+  protected get inlineStyle(): CSSStyleDeclaration {
+    return (this.#inlineStyle ??= new InlineStyleState(this)).style;
+  }
 
   #normalizeAttributeName(qualifiedName: string): string {
     return this.namespaceURI === HTML_NAMESPACE
@@ -174,13 +185,25 @@ export class HTMLElementImpl
   ) {
     super(localName, HTML_NAMESPACE, ownerDocument, attributes);
   }
+
+  get style(): CSSStyleDeclaration {
+    return this.inlineStyle;
+  }
 }
 
 export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
   implements HTMLStyleElement
 {
-  readonly #linkStyle = new LinkStyleState(this);
+  static readonly #linkStyleBehavior = {
+    attributes: new Set(['media', 'title', 'type']),
+    children: true,
+  };
+
+  protected readonly linkStyle = new LinkStyleState(
+    this,
+    HTMLStyleElementImpl.#linkStyleBehavior,
+  );
 
   constructor(
     ownerDocument: DocumentImpl,
@@ -190,33 +213,7 @@ export class HTMLStyleElementImpl
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.#linkStyle.sheet;
-  }
-
-  beginParsingChildren(): void {
-    this.#linkStyle.defer();
-  }
-
-  finishParsingChildren(): void {
-    this.#linkStyle.finish();
-  }
-
-  protected insertedInto(): void {
-    this.#linkStyle.update();
-  }
-
-  protected removedFrom(): void {
-    this.#linkStyle.update();
-  }
-
-  protected childrenChanged(): void {
-    this.#linkStyle.update();
-  }
-
-  protected attributeChanged(qualifiedName: string): void {
-    if (styleElementAttributes.has(qualifiedName)) {
-      this.#linkStyle.update();
-    }
+    return this.linkStyle.sheet;
   }
 }
 
@@ -224,7 +221,17 @@ export class HTMLLinkElementImpl
   extends withHTMLLinkElementStub(HTMLElementImpl)
   implements HTMLLinkElement
 {
-  readonly #linkStyle = new LinkStyleState(this);
+  static readonly #linkStyleBehavior = {
+    attributes: new Set([
+      'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
+      'rel', 'title', 'type',
+    ]),
+  };
+
+  protected readonly linkStyle = new LinkStyleState(
+    this,
+    HTMLLinkElementImpl.#linkStyleBehavior,
+  );
 
   constructor(
     ownerDocument: DocumentImpl,
@@ -234,21 +241,7 @@ export class HTMLLinkElementImpl
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.#linkStyle.sheet;
-  }
-
-  protected insertedInto(): void {
-    this.#linkStyle.update();
-  }
-
-  protected removedFrom(): void {
-    this.#linkStyle.update();
-  }
-
-  protected attributeChanged(qualifiedName: string): void {
-    if (linkElementAttributes.has(qualifiedName)) {
-      this.#linkStyle.update();
-    }
+    return this.linkStyle.sheet;
   }
 }
 
@@ -263,13 +256,25 @@ export class SVGElementImpl
   ) {
     super(localName, SVG_NAMESPACE, ownerDocument, attributes);
   }
+
+  get style(): CSSStyleDeclaration {
+    return this.inlineStyle;
+  }
 }
 
 export class SVGStyleElementImpl
   extends withSVGStyleElementStub(SVGElementImpl)
   implements SVGStyleElement
 {
-  readonly #linkStyle = new LinkStyleState(this);
+  static readonly #linkStyleBehavior = {
+    attributes: new Set(['media', 'title', 'type']),
+    children: true,
+  };
+
+  protected readonly linkStyle = new LinkStyleState(
+    this,
+    SVGStyleElementImpl.#linkStyleBehavior,
+  );
 
   constructor(
     ownerDocument: DocumentImpl,
@@ -279,33 +284,7 @@ export class SVGStyleElementImpl
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.#linkStyle.sheet;
-  }
-
-  beginParsingChildren(): void {
-    this.#linkStyle.defer();
-  }
-
-  finishParsingChildren(): void {
-    this.#linkStyle.finish();
-  }
-
-  protected insertedInto(): void {
-    this.#linkStyle.update();
-  }
-
-  protected removedFrom(): void {
-    this.#linkStyle.update();
-  }
-
-  protected childrenChanged(): void {
-    this.#linkStyle.update();
-  }
-
-  protected attributeChanged(qualifiedName: string): void {
-    if (styleElementAttributes.has(qualifiedName)) {
-      this.#linkStyle.update();
-    }
+    return this.linkStyle.sheet;
   }
 }
 
@@ -320,20 +299,14 @@ export class MathMLElementImpl
   ) {
     super(localName, MATHML_NAMESPACE, ownerDocument, attributes);
   }
+
+  get style(): CSSStyleDeclaration {
+    return this.inlineStyle;
+  }
 }
 
-export function createElementNode(
-  localName: string,
-  namespaceURI: typeof HTML_NAMESPACE,
-  ownerDocument: DocumentImpl,
-  attributes?: AttrImpl[],
-): HTMLElementImpl;
-export function createElementNode(
-  localName: string,
-  namespaceURI: string,
-  ownerDocument: DocumentImpl,
-  attributes?: AttrImpl[],
-): ElementImpl;
+export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, attributes?: AttrImpl[]): HTMLElementImpl;
+export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, attributes?: AttrImpl[]): ElementImpl;
 export function createElementNode(
   localName: string,
   namespaceURI: string,
@@ -416,9 +389,3 @@ function normalizeNamespace(namespaceURI: string | null): string | null {
 function asciiLower(value: string): string {
   return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
-
-const styleElementAttributes = new Set(['media', 'title', 'type']);
-const linkElementAttributes = new Set([
-  'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
-  'rel', 'title', 'type',
-]);

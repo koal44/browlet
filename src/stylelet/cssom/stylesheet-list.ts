@@ -5,16 +5,18 @@
  *   readonly attribute unsigned long length;
  * };
  */
-export class StyleSheetListImpl implements StyleSheetList {
-  [index: number]: CSSStyleSheet;
+export class StyleSheetListImpl<
+  T extends CSSStyleSheet = CSSStyleSheet,
+> implements StyleSheetList {
+  [index: number]: T;
 
-  readonly #styleSheets: CSSStyleSheet[] = [];
+  readonly #styleSheets: T[] = [];
 
   constructor() {
     styleSheetLists.set(this, this.#styleSheets);
   }
 
-  item(index: number): CSSStyleSheet | null {
+  item(index: number): T | null {
     return this.#styleSheets[index] ?? null;
   }
 
@@ -22,15 +24,15 @@ export class StyleSheetListImpl implements StyleSheetList {
     return this.#styleSheets.length;
   }
 
-  [Symbol.iterator](): ArrayIterator<CSSStyleSheet> {
+  [Symbol.iterator](): ArrayIterator<T> {
     return this.#styleSheets[Symbol.iterator]();
   }
 }
 
-export function insertStyleSheet(
-  list: StyleSheetListImpl,
+export function insertStyleSheet<T extends CSSStyleSheet>(
+  list: StyleSheetListImpl<T>,
   index: number,
-  styleSheet: CSSStyleSheet,
+  styleSheet: T,
 ): void {
   const styleSheets = getStyleSheets(list);
 
@@ -38,9 +40,9 @@ export function insertStyleSheet(
   defineIndex(list, styleSheets.length - 1);
 }
 
-export function removeStyleSheet(
-  list: StyleSheetListImpl,
-  styleSheet: CSSStyleSheet,
+export function removeStyleSheet<T extends CSSStyleSheet>(
+  list: StyleSheetListImpl<T>,
+  styleSheet: T,
 ): boolean {
   const styleSheets = getStyleSheets(list);
   const index = styleSheets.indexOf(styleSheet);
@@ -52,17 +54,22 @@ export function removeStyleSheet(
 }
 
 const styleSheetLists = new WeakMap<
-  StyleSheetListImpl,
+  StyleSheetListImpl<CSSStyleSheet>,
   CSSStyleSheet[]
 >();
 
-function getStyleSheets(list: StyleSheetListImpl): CSSStyleSheet[] {
+function getStyleSheets<T extends CSSStyleSheet>(
+  list: StyleSheetListImpl<T>,
+): T[] {
   const styleSheets = styleSheetLists.get(list);
   if (!styleSheets) throw new TypeError('Illegal invocation');
-  return styleSheets;
+  return styleSheets as T[];
 }
 
-function defineIndex(list: StyleSheetListImpl, index: number): void {
+function defineIndex<T extends CSSStyleSheet>(
+  list: StyleSheetListImpl<T>,
+  index: number,
+): void {
   Object.defineProperty(list, index, {
     configurable: true,
     enumerable: true,

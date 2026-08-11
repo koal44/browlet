@@ -1,3 +1,5 @@
+import type { Stylelet } from '../../stylelet/stylelet';
+import { DocumentStyleState } from '../css-engine';
 import { asDocument } from '../stubs/interfaces';
 import { CommentImpl } from './comment';
 import {
@@ -15,11 +17,12 @@ import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
-import { getStyleSheets } from '../css-engine';
 
 export class DocumentImpl
   extends NodeImpl
 {
+  readonly #style = new DocumentStyleState(asDocument(this));
+
   readonly nodeType = NodeType.Document;
   readonly contentType = 'text/html';
   readonly baseURI: string;
@@ -55,7 +58,15 @@ export class DocumentImpl
   }
 
   get styleSheets(): StyleSheetList {
-    return getStyleSheets(asDocument(this));
+    return this.#style.styleSheets;
+  }
+
+  get cssEngine(): Stylelet {
+    return this.#style.engine;
+  }
+
+  get __styleState(): DocumentStyleState {
+    return this.#style;
   }
 
   createElement<K extends keyof HTMLElementTagNameMap>(
