@@ -1,9 +1,13 @@
 import { isElement } from './node';
-import type { Element } from './element';
-import type { TreeNode } from '../tree/tree-node';
+import { HTMLCollectionImpl } from './collections';
+import type { ElementImpl } from './element';
+import type { NodeImpl } from './node';
 
-export function findElementById(root: TreeNode, id: string): Element | null {
-  let result: Element | null = null;
+export function findElementById(
+  root: NodeImpl,
+  id: string,
+): ElementImpl | null {
+  let result: ElementImpl | null = null;
 
   walkElements(root, (element) => {
     if (element.getAttribute('id') !== id) return true;
@@ -16,11 +20,11 @@ export function findElementById(root: TreeNode, id: string): Element | null {
 }
 
 export function findElementsByClassName(
-  root: TreeNode,
+  root: NodeImpl,
   classNames: string,
-): Element[] {
+): HTMLCollectionImpl {
   const names = splitOnAsciiWhitespace(classNames);
-  if (names.length === 0) return [];
+  if (names.length === 0) return new HTMLCollectionImpl();
 
   return collectElements(root, (element) => {
     const value = element.getAttribute('class');
@@ -32,9 +36,9 @@ export function findElementsByClassName(
 }
 
 export function findElementsByTagName(
-  root: TreeNode,
+  root: NodeImpl,
   qualifiedName: string,
-): Element[] {
+): HTMLCollectionImpl {
   return collectElements(
     root,
     (element) => qualifiedName === '*' || element.localName === qualifiedName,
@@ -42,10 +46,10 @@ export function findElementsByTagName(
 }
 
 export function findElementsByTagNameNS(
-  root: TreeNode,
+  root: NodeImpl,
   namespaceURI: string | null,
   localName: string,
-): Element[] {
+): HTMLCollectionImpl {
   return collectElements(
     root,
     (element) =>
@@ -55,10 +59,10 @@ export function findElementsByTagNameNS(
 }
 
 function collectElements(
-  root: TreeNode,
-  matches: (element: Element) => boolean,
-): Element[] {
-  const elements: Element[] = [];
+  root: NodeImpl,
+  matches: (element: ElementImpl) => boolean,
+): HTMLCollectionImpl {
+  const elements = new HTMLCollectionImpl();
 
   walkElements(root, (element) => {
     if (matches(element)) elements.push(element);
@@ -69,8 +73,8 @@ function collectElements(
 }
 
 function walkElements(
-  root: TreeNode,
-  visit: (element: Element) => boolean,
+  root: NodeImpl,
+  visit: (element: ElementImpl) => boolean,
 ): boolean {
   for (let child = root.firstChild; child; child = child.nextSibling) {
     if (isElement(child) && !visit(child)) return false;

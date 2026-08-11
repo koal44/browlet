@@ -1,22 +1,24 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
-import { Attribute } from '../nodes/attribute';
-import { Comment } from '../nodes/comment';
-import { Document, DocumentMode } from '../nodes/document';
-import { DocumentType } from '../nodes/document-type';
-import { createElementNode, type Element } from '../nodes/element';
-import { Text } from '../nodes/text';
+import { AttrImpl } from '../nodes/attribute';
+import { CommentImpl } from '../nodes/comment';
+import {
+  DocumentImpl, DocumentMode, type DomletDocument,
+} from '../nodes/document';
+import { DocumentTypeImpl } from '../nodes/document-type';
+import { createElementNode, type ElementImpl } from '../nodes/element';
+import { TextImpl } from '../nodes/text';
 import { withCssEngine } from '../css-engine';
+import { asDocument } from '../stubs/interfaces';
 import {
   isComment, isDocumentType, isElement, isText,
-  type Node,
+  type NodeImpl,
 } from '../nodes/node';
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
-  #document: Document | null = null;
-  #pendingUnpushedElement: Element | null = null;
+  #document!: DomletDocument;
+  #pendingUnpushedElement: ElementImpl | null = null;
 
-  parse(source: string): Document {
-    this.#document = null;
+  parse(source: string): DomletDocument {
     this.#pendingUnpushedElement = null;
 
     const document = parse<DomletParserTreeAdapterMap>(source, {
@@ -30,13 +32,13 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     this.#finishPendingUnpushedElement();
   }
 
-  createDocument(): Document {
-    const document = withCssEngine(new Document());
+  createDocument(): DomletDocument {
+    const document = withCssEngine(asDocument(new DocumentImpl()));
     this.#document = document;
     return document;
   }
 
-  createDocumentFragment(): Node {
+  createDocumentFragment(): NodeImpl {
     return notImplemented('createDocumentFragment');
   }
 
@@ -44,26 +46,26 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     tagName: string,
     namespaceURI: html.NS,
     attrs: Token.Attribute[],
-  ): Element {
+  ): ElementImpl {
     const element = createElementNode(
       tagName,
       namespaceURI,
-      attrs.map(fromParserAttribute),
       this.#document,
+      attrs.map(fromParserAttribute),
     );
     element.beginParsingChildren();
     return element;
   }
 
-  createCommentNode(data: string): Comment {
-    return new Comment(data, this.#document);
+  createCommentNode(data: string): CommentImpl {
+    return new CommentImpl(data, this.#document);
   }
 
-  createTextNode(value: string): Text {
-    return new Text(value, this.#document);
+  createTextNode(value: string): TextImpl {
+    return new TextImpl(value, this.#document);
   }
 
-  onItemPush(item: Element): void {
+  onItemPush(item: ElementImpl): void {
     if (this.#pendingUnpushedElement === item) {
       this.#pendingUnpushedElement = null;
     } else {
@@ -73,120 +75,120 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     item.beginParsingChildren();
   }
 
-  onItemPop(item: Element, _newTop: Node): void {
+  onItemPop(item: ElementImpl, _newTop: NodeImpl): void {
     this.#finishPendingUnpushedElement();
     item.finishParsingChildren();
   }
 
-  appendChild(parentNode: Node, newNode: Node): void {
+  appendChild(parentNode: NodeImpl, newNode: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    parentNode.appendChild(newNode);
+    parentNode.appendTreeChild(newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
   insertBefore(
-    _parentNode: Node,
-    newNode: Node,
-    referenceNode: Node,
+    parentNode: NodeImpl,
+    newNode: NodeImpl,
+    referenceNode: NodeImpl,
   ): void {
     this.#finishPendingUnpushedElement();
-    referenceNode.insertBefore(newNode);
+    referenceNode.insertTreeSiblingBefore(newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
-  detachNode(node: Node): void {
+  detachNode(node: NodeImpl): void {
     node.remove();
   }
 
-  insertText(parentNode: Node, text: string): void {
+  insertText(parentNode: NodeImpl, text: string): void {
     this.#finishPendingUnpushedElement();
     const lastChild = parentNode.lastChild;
 
     if (isText(lastChild)) {
       lastChild.data += text;
     } else {
-      parentNode.appendChild(new Text(text));
+      parentNode.appendTreeChild(new TextImpl(text));
     }
   }
 
   insertTextBefore(
-    _parentNode: Node,
+    _parentNode: NodeImpl,
     _text: string,
-    _referenceNode: Node,
+    _referenceNode: NodeImpl,
   ): void {
     notImplemented('insertTextBefore');
   }
 
-  adoptAttributes(recipient: Element, attrs: Token.Attribute[]): void {
+  adoptAttributes(recipient: ElementImpl, attrs: Token.Attribute[]): void {
     for (const attr of attrs) {
       if (recipient.hasAttributeNS(attr.namespace ?? null, attr.name)) continue;
       recipient.attributes.push(fromParserAttribute(attr));
     }
   }
 
-  getFirstChild(node: Node): Node | null {
-    return node.firstChild as Node | null;
+  getFirstChild(node: NodeImpl): NodeImpl | null {
+    return node.firstChild;
   }
 
-  getChildNodes(node: Node): Node[] {
-    const children: Node[] = [];
+  getChildNodes(node: NodeImpl): NodeImpl[] {
+    const children: NodeImpl[] = [];
 
     for (let child = node.firstChild; child; child = child.nextSibling) {
-      children.push(child as Node);
+      children.push(child);
     }
 
     return children;
   }
 
-  getParentNode(node: Node): Node | null {
-    return node.parent as Node | null;
+  getParentNode(node: NodeImpl): NodeImpl | null {
+    return node.parent;
   }
 
-  getAttrList(element: Element): Token.Attribute[] {
+  getAttrList(element: ElementImpl): Token.Attribute[] {
     return element.attributes.map(toParserAttribute);
   }
 
-  getTagName(element: Element): string {
+  getTagName(element: ElementImpl): string {
     return element.localName;
   }
 
-  getNamespaceURI(element: Element): html.NS {
+  getNamespaceURI(element: ElementImpl): html.NS {
     return element.namespaceURI as html.NS;
   }
 
-  getTextNodeContent(textNode: Text): string {
+  getTextNodeContent(textNode: TextImpl): string {
     return textNode.data;
   }
 
-  getCommentNodeContent(commentNode: Comment): string {
+  getCommentNodeContent(commentNode: CommentImpl): string {
     return commentNode.data;
   }
 
-  getDocumentTypeNodeName(doctypeNode: DocumentType): string {
+  getDocumentTypeNodeName(doctypeNode: DocumentTypeImpl): string {
     return doctypeNode.name;
   }
 
-  getDocumentTypeNodePublicId(doctypeNode: DocumentType): string {
+  getDocumentTypeNodePublicId(doctypeNode: DocumentTypeImpl): string {
     return doctypeNode.publicId;
   }
 
-  getDocumentTypeNodeSystemId(doctypeNode: DocumentType): string {
+  getDocumentTypeNodeSystemId(doctypeNode: DocumentTypeImpl): string {
     return doctypeNode.systemId;
   }
 
   setTemplateContent(
-    _templateElement: Element,
-    _contentElement: Node,
+    _templateElement: ElementImpl,
+    _contentElement: NodeImpl,
   ): void {
     notImplemented('setTemplateContent');
   }
 
-  getTemplateContent(_templateElement: Element): Node {
+  getTemplateContent(_templateElement: ElementImpl): NodeImpl {
     return notImplemented('getTemplateContent');
   }
 
   setDocumentType(
-    document: Document,
+    document: DocumentImpl,
     name: string,
     publicId: string,
     systemId: string,
@@ -200,17 +202,22 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
       return;
     }
 
-    const newDoctype = new DocumentType(name, publicId, systemId, document);
+    const newDoctype = new DocumentTypeImpl(
+      name,
+      publicId,
+      systemId,
+      document,
+    );
     const documentElement = document.documentElement;
 
     if (documentElement) {
-      documentElement.insertBefore(newDoctype);
+      documentElement.insertTreeSiblingBefore(newDoctype);
     } else {
-      document.appendChild(newDoctype);
+      document.appendTreeChild(newDoctype);
     }
   }
 
-  setDocumentMode(document: Document, mode: html.DOCUMENT_MODE): void {
+  setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {
     switch (mode) {
       case html.DOCUMENT_MODE.NO_QUIRKS:
         document.mode = DocumentMode.NoQuirks;
@@ -224,7 +231,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     }
   }
 
-  getDocumentMode(document: Document): html.DOCUMENT_MODE {
+  getDocumentMode(document: DocumentImpl): html.DOCUMENT_MODE {
     switch (document.mode) {
       case DocumentMode.NoQuirks:
         return html.DOCUMENT_MODE.NO_QUIRKS;
@@ -235,37 +242,37 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     }
   }
 
-  isElementNode(node: Node): node is Element {
+  isElementNode(node: NodeImpl): node is ElementImpl {
     return isElement(node);
   }
 
-  isTextNode(node: Node): node is Text {
+  isTextNode(node: NodeImpl): node is TextImpl {
     return isText(node);
   }
 
-  isCommentNode(node: Node): node is Comment {
+  isCommentNode(node: NodeImpl): node is CommentImpl {
     return isComment(node);
   }
 
-  isDocumentTypeNode(node: Node): node is DocumentType {
+  isDocumentTypeNode(node: NodeImpl): node is DocumentTypeImpl {
     return isDocumentType(node);
   }
 
   setNodeSourceCodeLocation(
-    node: Node,
+    node: NodeImpl,
     location: Token.ElementLocation | null,
   ): void {
     sourceCodeLocations.set(node, location);
   }
 
   getNodeSourceCodeLocation(
-    node: Node,
+    node: NodeImpl,
   ): Token.ElementLocation | undefined | null {
     return getSourceCodeLocation(node);
   }
 
   updateNodeSourceCodeLocation(
-    node: Node,
+    node: NodeImpl,
     location: Partial<Token.ElementLocation>,
   ): void {
     const current = getSourceCodeLocation(node);
@@ -282,26 +289,26 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
 }
 
 export function getSourceCodeLocation(
-  node: Node,
+  node: NodeImpl,
 ): Token.ElementLocation | undefined | null {
   return sourceCodeLocations.get(node);
 }
 
 export type DomletParserTreeAdapterMap = {
-  node: Node;
-  parentNode: Node;
-  childNode: Node;
-  document: Document;
-  documentFragment: Node;
-  element: Element;
-  commentNode: Comment;
-  textNode: Text;
-  template: Element;
-  documentType: DocumentType;
+  node: NodeImpl;
+  parentNode: NodeImpl;
+  childNode: NodeImpl;
+  document: DomletDocument;
+  documentFragment: NodeImpl;
+  element: ElementImpl;
+  commentNode: CommentImpl;
+  textNode: TextImpl;
+  template: ElementImpl;
+  documentType: DocumentTypeImpl;
 };
 
 const sourceCodeLocations = new WeakMap<
-  Node,
+  NodeImpl,
   Token.ElementLocation | null
 >();
 
@@ -309,8 +316,8 @@ function notImplemented(operation: string): never {
   throw new Error(`Parser tree adapter ${operation} is not implemented`);
 }
 
-function fromParserAttribute(attribute: Token.Attribute): Attribute {
-  return new Attribute(
+function fromParserAttribute(attribute: Token.Attribute): AttrImpl {
+  return new AttrImpl(
     attribute.name,
     attribute.value,
     attribute.namespace ?? null,
@@ -318,7 +325,7 @@ function fromParserAttribute(attribute: Token.Attribute): Attribute {
   );
 }
 
-function toParserAttribute(attribute: Attribute): Token.Attribute {
+function toParserAttribute(attribute: AttrImpl): Token.Attribute {
   const result: Token.Attribute = {
     name: attribute.localName,
     value: attribute.value,

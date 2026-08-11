@@ -1,11 +1,10 @@
-import type { Document as DomletDocument } from './nodes/document';
 import type {
-  HTMLLinkElement, HTMLStyleElement, SVGStyleElement,
+  HTMLLinkElementImpl, HTMLStyleElementImpl, SVGStyleElementImpl,
 } from './nodes/element';
 import { isText } from './nodes/node';
 import { createStylelet, type Stylelet } from '../stylelet/stylelet';
 
-export function withCssEngine<T extends DomletDocument>(document: T): T {
+export function withCssEngine<T extends Document>(document: T): T {
   if (!cssEngines.has(document)) {
     cssEngines.set(document, undefined);
   }
@@ -13,21 +12,21 @@ export function withCssEngine<T extends DomletDocument>(document: T): T {
   return document;
 }
 
-export function getCssEngine(document: DomletDocument): Stylelet {
+export function getCssEngine(document: Document): Stylelet {
   if (!cssEngines.has(document)) {
     throw new Error('Document is not associated with a CSS engine');
   }
 
   let cssEngine = cssEngines.get(document);
   if (!cssEngine) {
-    cssEngine = createStylelet(document as unknown as Document);
+    cssEngine = createStylelet(document);
     cssEngines.set(document, cssEngine);
   }
 
   return cssEngine;
 }
 
-const cssEngines = new WeakMap<DomletDocument, Stylelet | undefined>();
+const cssEngines = new WeakMap<Document, Stylelet | undefined>();
 
 /*
  * interface mixin DocumentOrShadowRoot {
@@ -35,7 +34,7 @@ const cssEngines = new WeakMap<DomletDocument, Stylelet | undefined>();
  * };
  */
 export function getStyleSheets(
-  document: DomletDocument,
+  document: Document,
 ): StyleSheetList {
   return getCssEngine(document).styleSheets;
 }
@@ -46,9 +45,9 @@ export function getStyleSheets(
  * };
  */
 type LinkStyleElement =
-  | HTMLLinkElement
-  | HTMLStyleElement
-  | SVGStyleElement;
+  | HTMLLinkElementImpl
+  | HTMLStyleElementImpl
+  | SVGStyleElementImpl;
 
 export class LinkStyleState {
   readonly #owner: LinkStyleElement;
@@ -76,11 +75,6 @@ export class LinkStyleState {
     if (this.#deferred) return;
 
     const document = this.#owner.ownerDocument;
-    if (!document) {
-      this.#sheet = null;
-      return;
-    }
-
     const cssEngine = getCssEngine(document);
     if (this.#sheet) cssEngine.removeStyleSheet(this.#sheet);
 
@@ -104,7 +98,7 @@ export class LinkStyleState {
     }
 
     this.#sheet = cssEngine.createInlineStyleSheet(
-      this.#owner as unknown as Element,
+      this.#owner,
       source,
       {
         media: this.#owner.getAttribute('media') ?? '',

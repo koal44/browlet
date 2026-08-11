@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDomlet } from '../../../src/domlet/domlet';
-import type { Document } from '../../../src/domlet/nodes/document';
+import type { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
-  isHTMLStyleElement, type HTMLStyleElement,
+  isHTMLStyleElement, type HTMLStyleElementImpl,
 } from '../../../src/domlet/nodes/element';
 
 describe('stylesheet integration', () => {
@@ -48,12 +48,12 @@ describe('stylesheet integration', () => {
     }
     first.appendChild(document.createTextNode('main { color: green }'));
 
-    second.insertBefore(first);
+    second.parentNode!.insertBefore(first, second);
 
     expect(document.styleSheets.item(0)).toBe(first.sheet);
     expect(document.styleSheets.item(1)).toBe(second.sheet);
 
-    first.insertBefore(second);
+    first.parentNode!.insertBefore(second, first);
 
     expect(document.styleSheets.item(0)).toBe(second.sheet);
     expect(document.styleSheets.item(1)).toBe(first.sheet);
@@ -106,9 +106,9 @@ describe('stylesheet integration', () => {
 });
 
 function getStyleElement(
-  document: Document,
+  document: DocumentImpl,
   id: string,
-): HTMLStyleElement {
+): HTMLStyleElementImpl {
   const element = document.getElementById(id);
   if (!element || !isHTMLStyleElement(element)) {
     throw new Error(`Missing HTML style element: ${id}`);

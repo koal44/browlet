@@ -1,12 +1,12 @@
 import { finished } from 'node:stream/promises';
 import { ParserStream } from 'parse5-parser-stream';
-import type { Document as DomletDocument } from '../domlet/nodes/document';
-import type { Element } from '../domlet/nodes/element';
+import type { DomletDocument } from '../domlet/nodes/document';
+import type { ElementImpl } from '../domlet/nodes/element';
 import {
   DomletParser, type DomletParserTreeAdapterMap,
 } from '../domlet/parser/parser';
 
-export class Parser {
+export class BrowletParser {
   readonly document: DomletDocument;
   readonly #handleScript: ScriptHandler;
   readonly #stream: ParserStream<DomletParserTreeAdapterMap>;
@@ -35,7 +35,7 @@ export class Parser {
   }
 
   private async handleScript(
-    element: Element,
+    element: ElementImpl,
     write: DocumentWrite,
     resume: () => void,
   ): Promise<void> {
@@ -49,7 +49,7 @@ export class Parser {
 }
 
 export type ScriptHandler = (
-  element: Element,
+  element: ElementImpl,
   write: DocumentWrite,
 ) => void | Promise<void>;
 

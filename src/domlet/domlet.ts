@@ -1,7 +1,7 @@
 import { DomletParser } from './parser/parser';
-import type { Document } from './nodes/document';
+import type { DomletDocument } from './nodes/document';
 
-export function createDomlet(config: DomletConfig = {}): Document {
+export function createDomlet(config: DomletConfig = {}): DomletDocument {
   return new DomletParser().parse(config.source ?? '');
 }
 

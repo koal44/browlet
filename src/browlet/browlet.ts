@@ -1,29 +1,31 @@
 import { createDomlet } from '../domlet/domlet';
 import {
-  withDocumentWriter, type Document as DomletDocument,
+  withDocumentWriter, type DomletDocument,
 } from '../domlet/nodes/document';
-import type { Element } from '../domlet/nodes/element';
+import type { ElementImpl } from '../domlet/nodes/element';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
-import { Parser, type DocumentWrite } from './parser';
+import { BrowletParser, type DocumentWrite } from './parser';
 import { Realm } from './realm';
-import { Window } from './window';
-import { WindowProxy, type WindowProxyValue } from './window-proxy';
+import { WindowImpl } from './window';
+import {
+  WindowProxyController, type WindowProxyValue,
+} from './window-proxy';
 
 export class Browlet {
   #document: DomletDocument;
   readonly #exposed = new Map<string, unknown>();
   readonly #realm: Realm;
   #route: BrowletRoute;
-  #window: Window;
-  readonly #windowProxy: WindowProxy;
+  #window: WindowImpl;
+  readonly #windowProxy: WindowProxyController;
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
     this.#document = createDomlet();
 
     this.#realm = new Realm();
-    this.#windowProxy = new WindowProxy(this.#realm);
+    this.#windowProxy = new WindowProxyController(this.#realm);
     this.#window = this.createWindow(
       this.#document,
       new URL('about:blank'),
@@ -55,7 +57,7 @@ export class Browlet {
   async navigate(url: string | URL): Promise<BrowletWindow> {
     const documentURL = new URL(url);
     const source = this.fetch(documentURL);
-    const parser = new Parser((element, write) => {
+    const parser = new BrowletParser((element, write) => {
       this.executeScript(element, documentURL, write);
     });
     const document = parser.document;
@@ -66,14 +68,14 @@ export class Browlet {
     this.#windowProxy.setWindow(window);
 
     await parser.parse(source);
-    window.dispatchEvent({ type: 'load' });
+    window.dispatchEvent(new Event('load'));
     return this.window;
   }
 
   close(): void {}
 
-  private createWindow(document: DomletDocument, url: URL): Window {
-    const window = new Window(document, url);
+  private createWindow(document: DomletDocument, url: URL): WindowImpl {
+    const window = new WindowImpl(document, url);
 
     for (const [name, value] of this.#exposed) {
       this.#windowProxy.expose(name, value);
@@ -83,7 +85,7 @@ export class Browlet {
   }
 
   private executeScript(
-    element: Element,
+    element: ElementImpl,
     documentURL: URL,
     write: DocumentWrite,
   ): void {
@@ -117,7 +119,7 @@ export function createBrowlet(config: BrowletConfig): Browlet {
   return new Browlet(config);
 }
 
-function getTextContent(element: Element): string {
+function getTextContent(element: ElementImpl): string {
   let content = '';
 
   for (let child = element.firstChild; child; child = child.nextSibling) {

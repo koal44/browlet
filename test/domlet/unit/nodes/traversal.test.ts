@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { Document } from '../../../../src/domlet/nodes/document';
+import { DocumentImpl } from '../../../../src/domlet/nodes/document';
+import { SVG_NAMESPACE } from '../../../../src/domlet/nodes/element';
 
 describe('DOM node traversal', () => {
   it('projects element traversal over the node tree', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const parent = document.createElement('parent');
     const first = document.createElement('first');
     const text = document.createTextNode('between');
@@ -28,7 +29,7 @@ describe('DOM node traversal', () => {
   });
 
   it('reports roots, connection, and ownership', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const parent = document.createElement('parent');
     const child = document.createElement('child');
 
@@ -45,8 +46,18 @@ describe('DOM node traversal', () => {
     expect(document.ownerDocument).toBeNull();
   });
 
+  it('returns a parent element without assuming its namespace', () => {
+    const document = new DocumentImpl();
+    const parent = document.createElementNS(SVG_NAMESPACE, 'svg');
+    const child = document.createElementNS(SVG_NAMESPACE, 'circle');
+
+    parent.appendChild(child);
+
+    expect(child.parentElement).toBe(parent);
+  });
+
   it('projects tree comparison into DOM position flags', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const parent = document.createElement('div');
     const first = document.createElement('span');
     const second = document.createElement('span');

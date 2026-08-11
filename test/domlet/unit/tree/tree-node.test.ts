@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TreeNode } from '../../../../src/domlet/tree/tree-node';
 
-class TestNode extends TreeNode {
+class TestNode extends TreeNode<TestNode> {
   constructor(readonly name: string) {
     super();
   }
@@ -25,9 +25,9 @@ describe('TreeNode', () => {
     const middle = new TestNode('middle');
     const last = new TestNode('last');
 
-    parent.appendChild(first);
-    parent.appendChild(last);
-    last.insertBefore(middle);
+    parent.appendTreeChild(first);
+    parent.appendTreeChild(last);
+    last.insertTreeSiblingBefore(middle);
 
     expect(parent.firstChild).toBe(first);
     expect(parent.lastChild).toBe(last);
@@ -48,9 +48,9 @@ describe('TreeNode', () => {
     const before = new TestNode('before');
     const moved = new TestNode('moved');
 
-    firstParent.appendChild(moved);
-    secondParent.appendChild(before);
-    before.insertBefore(moved);
+    firstParent.appendTreeChild(moved);
+    secondParent.appendTreeChild(before);
+    before.insertTreeSiblingBefore(moved);
 
     expect(firstParent.firstChild).toBeNull();
     expect(firstParent.lastChild).toBeNull();
@@ -59,7 +59,7 @@ describe('TreeNode', () => {
     expect(moved.nextSibling).toBe(before);
     expect(before.previousSibling).toBe(moved);
 
-    moved.insertBefore(before);
+    moved.insertTreeSiblingBefore(before);
 
     expect(secondParent.firstChild).toBe(before);
     expect(secondParent.lastChild).toBe(moved);
@@ -82,11 +82,11 @@ describe('TreeNode', () => {
     const child = new TestNode('child');
     const other = new TestNode('other');
 
-    root.appendChild(child);
+    root.appendTreeChild(child);
 
-    expect(() => other.insertBefore(new TestNode('new')))
+    expect(() => other.insertTreeSiblingBefore(new TestNode('new')))
       .toThrow('Cannot insert before a detached node');
-    expect(() => child.appendChild(root))
+    expect(() => child.appendTreeChild(root))
       .toThrow('Cannot insert a node into itself or its descendant');
   });
 
@@ -96,8 +96,8 @@ describe('TreeNode', () => {
     const child = new TestNode('child');
     const other = new TestNode('other');
 
-    root.appendChild(parent);
-    parent.appendChild(child);
+    root.appendTreeChild(parent);
+    parent.appendTreeChild(child);
 
     expect(root.getRoot()).toBe(root);
     expect(child.getRoot()).toBe(root);
@@ -116,9 +116,9 @@ describe('TreeNode', () => {
     const descendant = new TestNode('descendant');
     const last = new TestNode('last');
 
-    root.appendChild(first);
-    root.appendChild(last);
-    first.appendChild(descendant);
+    root.appendTreeChild(first);
+    root.appendTreeChild(last);
+    first.appendTreeChild(descendant);
 
     expect(first.comparePosition(first)).toBe(0);
     expect(first.comparePosition(last)).toBe(-1);

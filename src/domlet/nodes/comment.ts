@@ -1,10 +1,17 @@
-import { Node, NodeType } from './node';
-import type { Document } from './document';
+import { withCommentStub } from '../stubs/interfaces';
+import { NodeImpl, NodeType } from './node';
+import type { DocumentImpl } from './document';
 
-export class Comment extends Node {
+export class CommentImpl
+  extends withCommentStub(NodeImpl)
+  implements Comment
+{
   readonly nodeType = NodeType.Comment;
 
-  constructor(public data: string, ownerDocument: Document | null = null) {
+  constructor(
+    public data: string,
+    ownerDocument: DocumentImpl | null = null,
+  ) {
     super(ownerDocument);
   }
 }

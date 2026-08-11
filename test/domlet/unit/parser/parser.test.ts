@@ -2,11 +2,11 @@ import { html } from 'parse5';
 import { describe, expect, it } from 'vitest';
 
 import {
-  Document, DocumentMode,
+  DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
 import {
-  HTMLElement, HTMLLinkElement, HTMLStyleElement,
-  MathMLElement, SVGElement, SVGStyleElement,
+  HTMLElementImpl, HTMLLinkElementImpl, HTMLStyleElementImpl,
+  MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
 } from '../../../../src/domlet/nodes/element';
 import { isComment } from '../../../../src/domlet/nodes/node';
 import { DomletParser } from '../../../../src/domlet/parser/parser';
@@ -19,7 +19,7 @@ describe('Parser tree adapter', () => {
 
     expect(standards.mode).toBe(DocumentMode.NoQuirks);
     expect(standards.doctype?.name).toBe('html');
-    expect(standards.documentElement?.localName).toBe('html');
+    expect(standards.documentElement.localName).toBe('html');
     expect(quirks.mode).toBe(DocumentMode.Quirks);
   });
 
@@ -57,19 +57,19 @@ describe('Parser tree adapter', () => {
       '<math id="math"><mi id="mi"></mi></math>',
     ].join(''));
 
-    expect(document.getElementById('style')).toBeInstanceOf(HTMLStyleElement);
-    expect(document.getElementById('link')).toBeInstanceOf(HTMLLinkElement);
-    expect(document.getElementById('svg')).toBeInstanceOf(SVGElement);
-    expect(document.getElementById('svg-style')).toBeInstanceOf(SVGStyleElement);
-    expect(document.getElementById('circle')).toBeInstanceOf(SVGElement);
-    expect(document.getElementById('html')).toBeInstanceOf(HTMLElement);
-    expect(document.getElementById('math')).toBeInstanceOf(MathMLElement);
-    expect(document.getElementById('mi')).toBeInstanceOf(MathMLElement);
+    expect(document.getElementById('style')).toBeInstanceOf(HTMLStyleElementImpl);
+    expect(document.getElementById('link')).toBeInstanceOf(HTMLLinkElementImpl);
+    expect(document.getElementById('svg')).toBeInstanceOf(SVGElementImpl);
+    expect(document.getElementById('svg-style')).toBeInstanceOf(SVGStyleElementImpl);
+    expect(document.getElementById('circle')).toBeInstanceOf(SVGElementImpl);
+    expect(document.getElementById('html')).toBeInstanceOf(HTMLElementImpl);
+    expect(document.getElementById('math')).toBeInstanceOf(MathMLElementImpl);
+    expect(document.getElementById('mi')).toBeInstanceOf(MathMLElementImpl);
   });
 
   it('stores and retrieves the Parse5 document mode', () => {
     const parser = new DomletParser();
-    const document = new Document();
+    const document = new DocumentImpl();
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
 
@@ -79,7 +79,7 @@ describe('Parser tree adapter', () => {
 
   it('creates and updates a document type before the document element', () => {
     const parser = new DomletParser();
-    const document = new Document();
+    const document = new DocumentImpl();
     const element = document.createElement('html');
 
     document.appendChild(element);

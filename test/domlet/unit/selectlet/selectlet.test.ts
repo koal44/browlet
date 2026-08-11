@@ -13,7 +13,7 @@ describe('Selectlet with a Domlet host', () => {
         <span id="second" class="item selected"></span>
       </main>
     `);
-    const selectlet = createSelectlet(document as unknown as Document);
+    const selectlet = createSelectlet(document);
 
     expect(selectlet.select('main.page > span.item'))
       .toEqual(document.getElementsByTagName('span'));
@@ -21,7 +21,7 @@ describe('Selectlet with a Domlet host', () => {
       .toBe(document.getElementById('second'));
     expect(selectlet.matches(
       '.item + .item',
-      document.getElementById('second') as unknown as Element,
+      document.getElementById('second')!,
     )).toBe(true);
   });
 });

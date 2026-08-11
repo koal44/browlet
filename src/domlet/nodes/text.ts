@@ -1,11 +1,15 @@
-import { Node, NodeType } from './node';
-import type { Document } from './document';
+import { withTextStub } from '../stubs/interfaces';
+import { NodeImpl, NodeType } from './node';
+import type { DocumentImpl } from './document';
 
-export class Text extends Node {
+export class TextImpl
+  extends withTextStub(NodeImpl)
+  implements Text
+{
   readonly nodeType = NodeType.Text;
   #data: string;
 
-  constructor(data: string, ownerDocument: Document | null = null) {
+  constructor(data: string, ownerDocument: DocumentImpl | null = null) {
     super(ownerDocument);
     this.#data = data;
   }

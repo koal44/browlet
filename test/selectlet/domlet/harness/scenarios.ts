@@ -8,9 +8,8 @@ export type {
   ScenariosStatus, ScenarioStep, TestCase,
 } from '../../../harness/browser/scenarios';
 import { DomletParser } from '../../../../src/domlet/parser/parser';
-import type { Document } from '../../../../src/domlet/nodes/document';
-import type { Element } from '../../../../src/domlet/nodes/element';
-import { isElement } from '../../../../src/domlet/nodes/node';
+import type { DomletDocument } from '../../../../src/domlet/nodes/document';
+import { isElement } from '../../../../src/shared/dom';
 import { createSelectlet, type Selectlet } from '../../../../src/selectlet/selectlet';
 
 const STACK_TRACE = false;
@@ -57,7 +56,7 @@ function runScenario(scenario: Scenario): void {
     (step) => step.cases.some((testCase) => testCase.status === 'only'),
   );
   const document = initDocument(scenario.markup, scenario.markupMode);
-  const selectlet = createSelectlet(asBrowserDocument(document));
+  const selectlet = createSelectlet(document);
 
   for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
     const step = steps[stepIndex];
@@ -85,7 +84,10 @@ function runScenario(scenario: Scenario): void {
   }
 }
 
-function initDocument(markup: string, markupMode: Scenario['markupMode']): Document {
+function initDocument(
+  markup: string,
+  markupMode: Scenario['markupMode'],
+): DomletDocument {
   const source = markupMode === 'html-document'
     ? markup
     : `<!doctype html><html><body>${markup}</body></html>`;
@@ -94,7 +96,7 @@ function initDocument(markup: string, markupMode: Scenario['markupMode']): Docum
 }
 
 function runCase(
-  document: Document,
+  document: DomletDocument,
   selectlet: Selectlet,
   testCase: TestCase,
 ): void {
@@ -107,36 +109,36 @@ function runCase(
     if (!context) throw new Error('No context provided');
 
     if ('select' in testCase) {
-      nodes = asDomletElements(selectlet.select(testCase.select, asQueryContext(context)));
+      nodes = [...selectlet.select(testCase.select, context)];
     } else if ('first' in testCase) {
-      const element = selectlet.first(testCase.first, asQueryContext(context));
-      nodes = element ? [asDomletElement(element)] : [];
+      const element = selectlet.first(testCase.first, context);
+      nodes = element ? [element] : [];
     } else if ('byTag' in testCase) {
-      nodes = asDomletElements(selectlet.byTag(testCase.byTag, asQueryContext(context)));
+      nodes = [...selectlet.byTag(testCase.byTag, context)];
     } else if ('byTagNs' in testCase) {
-      nodes = asDomletElements(selectlet.byTagNs(
+      nodes = [...selectlet.byTagNs(
         testCase.byTagNs.ns,
         testCase.byTagNs.local,
-        asQueryContext(context),
-      ));
+        context,
+      )];
     } else if ('byClass' in testCase) {
-      nodes = asDomletElements(selectlet.byClass(testCase.byClass, asQueryContext(context)));
+      nodes = [...selectlet.byClass(testCase.byClass, context)];
     } else if ('byId' in testCase) {
-      const element = selectlet.byId(testCase.byId, asQueryContext(context));
-      nodes = element ? [asDomletElement(element)] : [];
+      const element = selectlet.byId(testCase.byId, context);
+      nodes = element ? [element] : [];
     } else if ('match' in testCase) {
       if (!isElement(context)) {
         throw new Error(`Context for 'match' case must be an Element`);
       }
-      nodes = selectlet.matches(testCase.match, asBrowserElement(context))
+      nodes = selectlet.matches(testCase.match, context)
         ? [context]
         : [];
     } else if ('closest' in testCase) {
       if (!isElement(context)) {
         throw new Error(`Context for 'closest' case must be an Element`);
       }
-      const element = selectlet.closest(testCase.closest, asBrowserElement(context));
-      nodes = element ? [asDomletElement(element)] : [];
+      const element = selectlet.closest(testCase.closest, context);
+      nodes = element ? [element] : [];
     } else {
       throw new Error('Domlet harness does not support this case');
     }
@@ -151,7 +153,7 @@ function runCase(
 type QueryContext = Document | Element;
 
 function resolveContext(
-  document: Document,
+  document: DomletDocument,
   selectlet: Selectlet,
   ref?: ContextRef,
 ): QueryContext | null {
@@ -163,16 +165,16 @@ function resolveContext(
   if (!base) return null;
 
   if (ref.by === 'id') {
-    const result = selectlet.byId(ref.id, asQueryContext(base));
-    return result ? asDomletElement(result) : null;
+    return selectlet.byId(ref.id, base);
   }
 
   if (ref.by === 'first') {
-    const result = selectlet.first(ref.selector, asQueryContext(base));
-    return result ? asDomletElement(result) : null;
+    return selectlet.first(ref.selector, base);
   }
 
-  if (ref.by === 'documentElement') return document.documentElement;
+  if (ref.by === 'documentElement') {
+    return document.documentElement;
+  }
   return null;
 }
 
@@ -343,24 +345,4 @@ function thrownMessage(error: unknown, stackTrace: boolean): string {
 
 function splitOnAsciiWhitespace(value: string): string[] {
   return value.match(/[^\t\n\f\r ]+/g) ?? [];
-}
-
-function asBrowserDocument(document: Document): globalThis.Document {
-  return document as unknown as globalThis.Document;
-}
-
-function asBrowserElement(element: Element): globalThis.Element {
-  return element as unknown as globalThis.Element;
-}
-
-function asQueryContext(context: QueryContext) {
-  return context as unknown as globalThis.Document | globalThis.Element;
-}
-
-function asDomletElement(element: globalThis.Element): Element {
-  return element as unknown as Element;
-}
-
-function asDomletElements(elements: Iterable<globalThis.Element>): Element[] {
-  return [...elements].map(asDomletElement);
 }

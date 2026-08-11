@@ -15,7 +15,7 @@ describe('createDomlet', () => {
     expect(cssEngine.snapshot.root).toBe(document.documentElement);
     expect(cssEngine.snapshot.isQuirksMode).toBe(true);
     expect(cssEngine.version).toBe('stylelet-__VERSION__');
-    expect(document.documentElement?.localName).toBe('html');
+    expect(document.documentElement.localName).toBe('html');
     expect(document.getElementById('target')?.localName).toBe('main');
   });
 });

@@ -1,36 +1,39 @@
+import { asDocument } from '../stubs/interfaces';
 import { TreeNode } from '../tree/tree-node';
-import type { Comment } from './comment';
-import type { Document } from './document';
-import type { DocumentType } from './document-type';
-import type { Element } from './element';
-import type { Text } from './text';
+import type { CommentImpl } from './comment';
+import type { DocumentImpl } from './document';
+import type { DocumentTypeImpl } from './document-type';
+import type { ElementImpl } from './element';
+import type { TextImpl } from './text';
+import { HTMLCollectionImpl } from './collections';
 
-export abstract class Node extends TreeNode {
-  readonly #document: Document | null;
+export abstract class NodeImpl
+  extends TreeNode<NodeImpl>
+{
+  readonly #document: DocumentImpl | null;
 
   abstract readonly nodeType: NodeType;
 
-  constructor(ownerDocument: Document | null = null) {
+  constructor(ownerDocument: DocumentImpl | null = null) {
     super();
     this.#document = ownerDocument;
   }
 
   get ownerDocument(): Document | null {
-    if (isDocument(this)) return null;
-
     const root = this.getRoot();
-    return isDocument(root) ? root : this.#document;
+    const document = isDocument(root) ? root : this.#document;
+    return document ? asDocument(document) : null;
   }
 
-  get parentNode(): Node | null {
-    return isNode(this.parent) ? this.parent : null;
+  get parentNode(): NodeImpl | null {
+    return this.parent;
   }
 
-  get parentElement(): Element | null {
+  get parentElement(): ElementImpl | null {
     return isElement(this.parent) ? this.parent : null;
   }
 
-  get firstElementChild(): Element | null {
+  get firstElementChild(): ElementImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (isElement(child)) return child;
     }
@@ -38,7 +41,7 @@ export abstract class Node extends TreeNode {
     return null;
   }
 
-  get lastElementChild(): Element | null {
+  get lastElementChild(): ElementImpl | null {
     for (let child = this.lastChild; child; child = child.previousSibling) {
       if (isElement(child)) return child;
     }
@@ -46,7 +49,7 @@ export abstract class Node extends TreeNode {
     return null;
   }
 
-  get previousElementSibling(): Element | null {
+  get previousElementSibling(): ElementImpl | null {
     for (
       let sibling = this.previousSibling;
       sibling;
@@ -58,7 +61,7 @@ export abstract class Node extends TreeNode {
     return null;
   }
 
-  get nextElementSibling(): Element | null {
+  get nextElementSibling(): ElementImpl | null {
     for (
       let sibling = this.nextSibling;
       sibling;
@@ -80,8 +83,8 @@ export abstract class Node extends TreeNode {
     return count;
   }
 
-  get children(): Element[] {
-    const children: Element[] = [];
+  get children(): HTMLCollectionOf<Element> {
+    const children = new HTMLCollectionImpl();
 
     for (let child = this.firstElementChild; child; child = child.nextElementSibling) {
       children.push(child);
@@ -94,13 +97,43 @@ export abstract class Node extends TreeNode {
     return isDocument(this.getRoot());
   }
 
-  getRootNode(): Node {
-    const root = this.getRoot();
-    if (!isNode(root)) throw new Error('Domlet node has a non-node tree root');
-    return root;
+  getRootNode(_options?: GetRootNodeOptions): NodeImpl {
+    return this.getRoot();
+  }
+
+  appendChild<T extends Node>(node: T): T {
+    if (!(node instanceof NodeImpl)) {
+      throw new DOMException('', 'HierarchyRequestError');
+    }
+
+    super.appendTreeChild(node);
+    return node;
+  }
+
+  insertBefore<T extends Node>(node: T, child: Node | null): T {
+    if (!(node instanceof NodeImpl)) {
+      throw new DOMException('', 'HierarchyRequestError');
+    }
+
+    if (child === null) {
+      super.appendTreeChild(node);
+      return node;
+    }
+
+    if (!(child instanceof NodeImpl) || child.parent !== this) {
+      throw new DOMException('', 'NotFoundError');
+    }
+
+    child.insertTreeSiblingBefore(node);
+    return node;
   }
 
   compareDocumentPosition(other: Node): number {
+    if (!(other instanceof NodeImpl)) {
+      return DOCUMENT_POSITION_DISCONNECTED |
+        DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
+    }
+
     const position = this.comparePosition(other);
 
     if (position === null) {
@@ -130,28 +163,26 @@ export enum NodeType {
   DocumentType = 10,
 }
 
-export function isNode(node: TreeNode | null): node is Node {
-  return node !== null && 'nodeType' in node;
+export function isElement(node: NodeImpl | null): node is ElementImpl {
+  return node?.nodeType === NodeType.Element;
 }
 
-export function isElement(node: TreeNode | null): node is Element {
-  return isNode(node) && node.nodeType === NodeType.Element;
+export function isText(node: NodeImpl | null): node is TextImpl {
+  return node?.nodeType === NodeType.Text;
 }
 
-export function isText(node: TreeNode | null): node is Text {
-  return isNode(node) && node.nodeType === NodeType.Text;
+export function isComment(node: NodeImpl | null): node is CommentImpl {
+  return node?.nodeType === NodeType.Comment;
 }
 
-export function isComment(node: TreeNode | null): node is Comment {
-  return isNode(node) && node.nodeType === NodeType.Comment;
+export function isDocument(node: NodeImpl | null): node is DocumentImpl {
+  return node?.nodeType === NodeType.Document;
 }
 
-export function isDocument(node: TreeNode | null): node is Document {
-  return isNode(node) && node.nodeType === NodeType.Document;
-}
-
-export function isDocumentType(node: TreeNode | null): node is DocumentType {
-  return isNode(node) && node.nodeType === NodeType.DocumentType;
+export function isDocumentType(
+  node: NodeImpl | null,
+): node is DocumentTypeImpl {
+  return node?.nodeType === NodeType.DocumentType;
 }
 
 const DOCUMENT_POSITION_DISCONNECTED = 0x01;

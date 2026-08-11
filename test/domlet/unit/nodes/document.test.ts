@@ -1,24 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  Document, DocumentMode, withDocumentWriter,
+  DocumentImpl, DocumentMode, withDocumentWriter,
 } from '../../../../src/domlet/nodes/document';
-import { DocumentType } from '../../../../src/domlet/nodes/document-type';
+import { DocumentTypeImpl } from '../../../../src/domlet/nodes/document-type';
+import { HTMLElementImpl } from '../../../../src/domlet/nodes/element';
 import {
   isComment, isDocument, isDocumentType, isElement, isText, NodeType,
 } from '../../../../src/domlet/nodes/node';
 
 describe('Document', () => {
   it('always has a base URI', () => {
-    expect(new Document().baseURI).toBe('about:blank');
-    expect(new Document('https://example.com/').baseURI)
+    expect(new DocumentImpl().baseURI).toBe('about:blank');
+    expect(new DocumentImpl('https://example.com/').baseURI)
       .toBe('https://example.com/');
   });
 
   it('is the tree root and exposes its first element child', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const text = document.createTextNode('before');
     const element = document.createElement('html');
+
+    expect(document.documentElement).toBeNull();
 
     document.appendChild(text);
     document.appendChild(element);
@@ -26,12 +29,12 @@ describe('Document', () => {
     expect(document.nodeType).toBe(NodeType.Document);
     expect(document.documentElement).toBe(element);
     expect(element.nodeType).toBe(NodeType.Element);
-    expect(element.parent).toBe(document);
+    expect(element.parentNode).toBe(document);
   });
 
   it('exposes its doctype separately from its document element', () => {
-    const document = new Document();
-    const doctype = new DocumentType('html', '', '');
+    const document = new DocumentImpl();
+    const doctype = new DocumentTypeImpl('html', '', '');
     const element = document.createElement('html');
 
     document.appendChild(doctype);
@@ -43,7 +46,7 @@ describe('Document', () => {
   });
 
   it('creates HTML elements and text nodes', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const element = document.createElement('MaIn');
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -60,7 +63,7 @@ describe('Document', () => {
   });
 
   it('identifies HTML and compatibility mode', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
 
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');
@@ -71,9 +74,9 @@ describe('Document', () => {
   });
 
   it('discriminates its node types without constructor identity', () => {
-    const document = new Document();
-    const doctype = new DocumentType('html', '', '');
-    const element = document.createElement('main');
+    const document = new DocumentImpl();
+    const doctype = new DocumentTypeImpl('html', '', '');
+    const element = new HTMLElementImpl('main', document);
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
 
@@ -86,7 +89,7 @@ describe('Document', () => {
   });
 
   it('rejects document.write without an active parser', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
 
     expect(() => document.write('<main></main>')).toThrow(
       'Document has no active parser',
@@ -94,7 +97,7 @@ describe('Document', () => {
   });
 
   it('limits document.write to the active writer scope', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const writes: string[] = [];
 
     withDocumentWriter(document, (markup) => writes.push(markup), () => {

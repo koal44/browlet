@@ -1,14 +1,18 @@
-import { Node, NodeType } from './node';
-import type { Document } from './document';
+import { withDocumentTypeStub } from '../stubs/interfaces';
+import { NodeImpl, NodeType } from './node';
+import type { DocumentImpl } from './document';
 
-export class DocumentType extends Node {
+export class DocumentTypeImpl
+  extends withDocumentTypeStub(NodeImpl)
+  implements DocumentType
+{
   readonly nodeType = NodeType.DocumentType;
 
   constructor(
     public name: string,
     public publicId: string,
     public systemId: string,
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl | null = null,
   ) {
     super(ownerDocument);
   }

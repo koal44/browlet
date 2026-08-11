@@ -1,32 +1,32 @@
-export abstract class TreeNode {
-  #parent: TreeNode | null = null;
-  #firstChild: TreeNode | null = null;
-  #lastChild: TreeNode | null = null;
-  #previousSibling: TreeNode | null = null;
-  #nextSibling: TreeNode | null = null;
+export abstract class TreeNode<TNode extends TreeNode<TNode>> {
+  #parent: TNode | null = null;
+  #firstChild: TNode | null = null;
+  #lastChild: TNode | null = null;
+  #previousSibling: TNode | null = null;
+  #nextSibling: TNode | null = null;
 
-  get parent(): TreeNode | null {
+  get parent(): TNode | null {
     return this.#parent;
   }
 
-  get firstChild(): TreeNode | null {
+  get firstChild(): TNode | null {
     return this.#firstChild;
   }
 
-  get lastChild(): TreeNode | null {
+  get lastChild(): TNode | null {
     return this.#lastChild;
   }
 
-  get previousSibling(): TreeNode | null {
+  get previousSibling(): TNode | null {
     return this.#previousSibling;
   }
 
-  get nextSibling(): TreeNode | null {
+  get nextSibling(): TNode | null {
     return this.#nextSibling;
   }
 
-  getRoot(): TreeNode {
-    if (!this.#parent) return this;
+  getRoot(): TNode {
+    if (!this.#parent) return this.#node;
 
     let root = this.#parent;
     while (root.#parent) root = root.#parent;
@@ -37,21 +37,21 @@ export abstract class TreeNode {
     return this.#firstChild !== null;
   }
 
-  contains(other: TreeNode | null): boolean {
+  contains(other: TNode | null): boolean {
     if (!other) return false;
-    if (other === this) return true;
+    if (other === this.#node) return true;
 
     for (let ancestor = other.#parent; ancestor; ancestor = ancestor.#parent) {
-      if (ancestor === this) return true;
+      if (ancestor === this.#node) return true;
     }
 
     return false;
   }
 
-  comparePosition(other: TreeNode): -1 | 0 | 1 | null {
-    if (other === this) return 0;
+  comparePosition(other: TNode): -1 | 0 | 1 | null {
+    if (other === this.#node) return 0;
 
-    const thisChain: TreeNode[] = [this];
+    const thisChain: TNode[] = [this.#node];
     for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
       thisChain.push(ancestor);
     }
@@ -91,25 +91,25 @@ export abstract class TreeNode {
     return 1;
   }
 
-  insertBefore(node: TreeNode): void {
+  insertTreeSiblingBefore(node: TNode): void {
     const parent = this.#parent;
     if (!parent) throw new Error('Cannot insert before a detached node');
 
-    parent.#insertChild(node, this);
+    parent.#insertChild(node, this.#node);
   }
 
-  insertAfter(node: TreeNode): void {
+  insertTreeSiblingAfter(node: TNode): void {
     const parent = this.#parent;
     if (!parent) throw new Error('Cannot insert after a detached node');
 
     parent.#insertChild(node, this.#nextSibling);
   }
 
-  prependChild(node: TreeNode): void {
+  prependChild(node: TNode): void {
     this.#insertChild(node, this.#firstChild);
   }
 
-  appendChild(node: TreeNode): void {
+  appendTreeChild(node: TNode): void {
     this.#insertChild(node, null);
   }
 
@@ -119,9 +119,9 @@ export abstract class TreeNode {
     this.#detach();
   }
 
-  protected insertedInto(_parent: TreeNode): void {}
+  protected insertedInto(_parent: TNode): void {}
 
-  protected removedFrom(_parent: TreeNode): void {}
+  protected removedFrom(_parent: TNode): void {}
 
   protected childrenChanged(): void {}
 
@@ -129,8 +129,8 @@ export abstract class TreeNode {
     this.#parent?.childrenChanged();
   }
 
-  #insertChild(node: TreeNode, reference: TreeNode | null): void {
-    if (node === this) {
+  #insertChild(node: TNode, reference: TNode | null): void {
+    if (node === this.#node) {
       throw new Error('Cannot insert a node into itself or its descendant');
     }
 
@@ -142,7 +142,7 @@ export abstract class TreeNode {
 
     if (
       reference === node ||
-      (node.#parent === this && node.#nextSibling === reference)
+      (node.#parent === this.#node && node.#nextSibling === reference)
     ) {
       return;
     }
@@ -151,7 +151,7 @@ export abstract class TreeNode {
 
     const previous = reference ? reference.#previousSibling : this.#lastChild;
 
-    node.#parent = this;
+    node.#parent = this.#node;
     node.#previousSibling = previous;
     node.#nextSibling = reference;
 
@@ -167,7 +167,7 @@ export abstract class TreeNode {
       this.#lastChild = node;
     }
 
-    node.#notifyInsertedSubtree(this);
+    node.#notifyInsertedSubtree(this.#node);
     this.childrenChanged();
   }
 
@@ -198,19 +198,24 @@ export abstract class TreeNode {
     parent.childrenChanged();
   }
 
-  #notifyInsertedSubtree(parent: TreeNode): void {
+  #notifyInsertedSubtree(parent: TNode): void {
     this.insertedInto(parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
-      child.#notifyInsertedSubtree(this);
+      child.#notifyInsertedSubtree(this.#node);
     }
   }
 
-  #notifyRemovedSubtree(parent: TreeNode): void {
+  #notifyRemovedSubtree(parent: TNode): void {
     this.removedFrom(parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
-      child.#notifyRemovedSubtree(this);
+      child.#notifyRemovedSubtree(this.#node);
     }
+  }
+
+  // TypeScript cannot express that an F-bounded base instance is its node type.
+  get #node(): TNode {
+    return this as unknown as TNode;
   }
 }

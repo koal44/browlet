@@ -1,15 +1,37 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBrowlet } from '../../../src/browlet/browlet';
+import {
+  Browlet, createBrowlet,
+} from '../../../src/browlet/browlet';
 
 describe('createBrowlet', () => {
   it('coordinates a Domlet document and window', () => {
     const browlet = createBrowlet({ route: () => '' });
 
-    expect(browlet.document.documentElement?.localName).toBe('html');
+    expect(browlet).toBeInstanceOf(Browlet);
+    expect(browlet.document.documentElement.localName).toBe('html');
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);
+  });
+
+  it('exposes window events and browser timer IDs', async () => {
+    const browlet = createBrowlet({ route: () => '' });
+    const events: Event[] = [];
+    const event = new Event('custom');
+
+    browlet.window.addEventListener('custom', (received) => {
+      events.push(received);
+    });
+
+    expect(browlet.window.dispatchEvent(event)).toBe(true);
+    expect(events).toEqual([event]);
+
+    const fired = Promise.withResolvers<void>();
+    const timer = browlet.window.setTimeout(() => fired.resolve());
+
+    expect(typeof timer).toBe('number');
+    await fired.promise;
   });
 
   it('fetches through one replaceable local route', () => {

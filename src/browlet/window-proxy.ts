@@ -1,13 +1,13 @@
-import type { Document } from '../domlet/nodes/document';
+import type { DomletDocument } from '../domlet/nodes/document';
 import type { Realm } from './realm';
-import type { Window } from './window';
+import type { WindowImpl } from './window';
 
-export class WindowProxy {
+export class WindowProxyController {
   readonly value: WindowProxyValue;
-  #target?: Window;
+  #target?: WindowImpl;
 
   constructor(realm: Realm) {
-    this.value = realm.global as WindowProxyValue;
+    this.value = realm.global as unknown as WindowProxyValue;
 
     Object.defineProperties(this.value, {
       document: {
@@ -61,7 +61,7 @@ export class WindowProxy {
     });
   }
 
-  setWindow(window: Window): void {
+  setWindow(window: WindowImpl): void {
     this.#target = window;
   }
 
@@ -73,7 +73,7 @@ export class WindowProxy {
     });
   }
 
-  updateNamedProperties(document: Document): void {
+  updateNamedProperties(document: DomletDocument): void {
     for (const element of document.getElementsByTagName('*')) {
       const name = element.getAttribute('id');
 
@@ -86,7 +86,7 @@ export class WindowProxy {
     }
   }
 
-  private get target(): Window {
+  private get target(): WindowImpl {
     if (!this.#target) {
       throw new Error('WindowProxy has no associated Window');
     }
@@ -95,10 +95,8 @@ export class WindowProxy {
   }
 }
 
-export type WindowProxyValue = {
-  readonly document: Document;
-  readonly location: URL;
+export type WindowProxyValue = Window & {
+  readonly document: DomletDocument;
   readonly self: WindowProxyValue;
   readonly window: WindowProxyValue;
-  [name: string]: unknown;
 };

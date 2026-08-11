@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { Attribute } from '../../../../src/domlet/nodes/attribute';
-import { Document } from '../../../../src/domlet/nodes/document';
+import { DocumentImpl } from '../../../../src/domlet/nodes/document';
 
 describe('element lookups', () => {
   it('finds the first matching ID in document order', () => {
     const { document, first, nested, last } = createFixture();
 
-    first.attributes.push(new Attribute('id', 'match'));
-    nested.attributes.push(new Attribute('id', 'match'));
-    last.attributes.push(new Attribute('id', 'match'));
+    first.setAttribute('id', 'match');
+    nested.setAttribute('id', 'match');
+    last.setAttribute('id', 'match');
 
     expect(document.getElementById('match')).toBe(first);
     expect(document.getElementById('missing')).toBeNull();
@@ -18,9 +17,9 @@ describe('element lookups', () => {
   it('matches every requested class and preserves document order', () => {
     const { document, root, first, nested, last } = createFixture();
 
-    first.attributes.push(new Attribute('class', 'one two'));
-    nested.attributes.push(new Attribute('class', 'two\tthree one'));
-    last.attributes.push(new Attribute('class', 'one'));
+    first.setAttribute('class', 'one two');
+    nested.setAttribute('class', 'two\tthree one');
+    last.setAttribute('class', 'one');
 
     expect(document.getElementsByClassName('one two')).toEqual([first, nested]);
     expect(root.getElementsByClassName('one')).toEqual([first, nested, last]);
@@ -36,11 +35,11 @@ describe('element lookups', () => {
   });
 
   it('matches namespace and local-name wildcards', () => {
-    const { document, first, nested, last } = createFixture();
+    const { document, root, first, nested, last } = createFixture();
     const svg = 'http://www.w3.org/2000/svg';
 
-    const svgItem = document.createElement('item', svg);
-    document.documentElement!.appendChild(svgItem);
+    const svgItem = document.createElementNS(svg, 'item');
+    root.appendChild(svgItem);
 
     expect(document.getElementsByTagNameNS(svg, 'item')).toEqual([svgItem]);
     expect(document.getElementsByTagNameNS('*', 'item'))
@@ -50,7 +49,7 @@ describe('element lookups', () => {
 });
 
 function createFixture() {
-  const document = new Document();
+  const document = new DocumentImpl();
   const root = document.createElement('root');
   const first = document.createElement('item');
   const nested = document.createElement('item');

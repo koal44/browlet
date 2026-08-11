@@ -1,21 +1,32 @@
-import { Node, NodeType } from './node';
-import { Attribute } from './attribute';
-import type { Document } from './document';
+import {
+  withElementStub, withHTMLElementStub, withHTMLLinkElementStub,
+  withHTMLStyleElementStub, withMathMLElementStub, withSVGElementStub,
+  withSVGStyleElementStub,
+} from '../stubs/interfaces';
+import { NodeImpl, NodeType } from './node';
+import { AttrImpl } from './attribute';
+import { NamedNodeMapImpl } from './collections';
+import type { DocumentImpl } from './document';
 import { LinkStyleState } from '../css-engine';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
 
-export class Element extends Node {
+export class ElementImpl
+  extends withElementStub(NodeImpl)
+  implements Element
+{
   readonly nodeType = NodeType.Element;
+  readonly attributes: NamedNodeMapImpl;
 
   constructor(
     readonly localName: string,
     readonly namespaceURI: string,
-    readonly attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
     super(ownerDocument);
+    this.attributes = new NamedNodeMapImpl(...attributes);
   }
 
   beginParsingChildren(): void {}
@@ -69,7 +80,7 @@ export class Element extends Node {
     if (attribute) {
       attribute.value = value;
     } else {
-      this.attributes.push(new Attribute(qualifiedName, value));
+      this.attributes.push(new AttrImpl(qualifiedName, value));
     }
 
     this.attributeChanged(qualifiedName, oldValue, value);
@@ -88,18 +99,54 @@ export class Element extends Node {
     this.attributeChanged(qualifiedName, oldValue, null);
   }
 
-  getElementsByClassName(classNames: string): Element[] {
+  getElementsByClassName(
+    classNames: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByClassName(this, classNames);
   }
 
-  getElementsByTagName(qualifiedName: string): Element[] {
+  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof SVGElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<SVGElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
+  /** @deprecated */
+  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
+  getElementsByTagName(
+    qualifiedName: string,
+  ): HTMLCollectionOf<Element>;
+  getElementsByTagName(
+    qualifiedName: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
   getElementsByTagNameNS(
+    namespaceURI: typeof HTML_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<HTMLElement>;
+  getElementsByTagNameNS(
+    namespaceURI: typeof SVG_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<SVGElement>;
+  getElementsByTagNameNS(
+    namespaceURI: typeof MATHML_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<MathMLElement>;
+  getElementsByTagNameNS(
     namespaceURI: string | null,
     localName: string,
-  ): Element[] {
+  ): HTMLCollectionOf<Element>;
+  getElementsByTagNameNS(
+    namespaceURI: string | null,
+    localName: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
@@ -116,24 +163,30 @@ export class Element extends Node {
   }
 }
 
-export class HTMLElement extends Element {
+export class HTMLElementImpl
+  extends withHTMLElementStub(ElementImpl)
+  implements HTMLElement
+{
   constructor(
     localName: string,
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super(localName, HTML_NAMESPACE, attributes, ownerDocument);
+    super(localName, HTML_NAMESPACE, ownerDocument, attributes);
   }
 }
 
-export class HTMLStyleElement extends HTMLElement {
+export class HTMLStyleElementImpl
+  extends withHTMLStyleElementStub(HTMLElementImpl)
+  implements HTMLStyleElement
+{
   readonly #linkStyle = new LinkStyleState(this);
 
   constructor(
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super('style', attributes, ownerDocument);
+    super('style', ownerDocument, attributes);
   }
 
   get sheet(): CSSStyleSheet | null {
@@ -167,14 +220,17 @@ export class HTMLStyleElement extends HTMLElement {
   }
 }
 
-export class HTMLLinkElement extends HTMLElement {
+export class HTMLLinkElementImpl
+  extends withHTMLLinkElementStub(HTMLElementImpl)
+  implements HTMLLinkElement
+{
   readonly #linkStyle = new LinkStyleState(this);
 
   constructor(
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super('link', attributes, ownerDocument);
+    super('link', ownerDocument, attributes);
   }
 
   get sheet(): CSSStyleSheet | null {
@@ -196,24 +252,30 @@ export class HTMLLinkElement extends HTMLElement {
   }
 }
 
-export class SVGElement extends Element {
+export class SVGElementImpl
+  extends withSVGElementStub(ElementImpl)
+  implements SVGElement
+{
   constructor(
     localName: string,
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super(localName, SVG_NAMESPACE, attributes, ownerDocument);
+    super(localName, SVG_NAMESPACE, ownerDocument, attributes);
   }
 }
 
-export class SVGStyleElement extends SVGElement {
+export class SVGStyleElementImpl
+  extends withSVGStyleElementStub(SVGElementImpl)
+  implements SVGStyleElement
+{
   readonly #linkStyle = new LinkStyleState(this);
 
   constructor(
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super('style', attributes, ownerDocument);
+    super('style', ownerDocument, attributes);
   }
 
   get sheet(): CSSStyleSheet | null {
@@ -247,78 +309,99 @@ export class SVGStyleElement extends SVGElement {
   }
 }
 
-export class MathMLElement extends Element {
+export class MathMLElementImpl
+  extends withMathMLElementStub(ElementImpl)
+  implements MathMLElement
+{
   constructor(
     localName: string,
-    attributes: Attribute[] = [],
-    ownerDocument: Document | null = null,
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
   ) {
-    super(localName, MATHML_NAMESPACE, attributes, ownerDocument);
+    super(localName, MATHML_NAMESPACE, ownerDocument, attributes);
   }
 }
 
 export function createElementNode(
   localName: string,
+  namespaceURI: typeof HTML_NAMESPACE,
+  ownerDocument: DocumentImpl,
+  attributes?: AttrImpl[],
+): HTMLElementImpl;
+export function createElementNode(
+  localName: string,
   namespaceURI: string,
-  attributes: Attribute[] = [],
-  ownerDocument: Document | null = null,
-): Element {
+  ownerDocument: DocumentImpl,
+  attributes?: AttrImpl[],
+): ElementImpl;
+export function createElementNode(
+  localName: string,
+  namespaceURI: string,
+  ownerDocument: DocumentImpl,
+  attributes: AttrImpl[] = [],
+): ElementImpl {
   if (namespaceURI === HTML_NAMESPACE) {
     localName = asciiLower(localName);
 
     if (localName === 'style') {
-      return new HTMLStyleElement(attributes, ownerDocument);
+      return new HTMLStyleElementImpl(ownerDocument, attributes);
     }
 
     if (localName === 'link') {
-      return new HTMLLinkElement(attributes, ownerDocument);
+      return new HTMLLinkElementImpl(ownerDocument, attributes);
     }
 
-    return new HTMLElement(localName, attributes, ownerDocument);
+    return new HTMLElementImpl(localName, ownerDocument, attributes);
   }
 
   if (namespaceURI === SVG_NAMESPACE) {
     if (localName === 'style') {
-      return new SVGStyleElement(attributes, ownerDocument);
+      return new SVGStyleElementImpl(ownerDocument, attributes);
     }
 
-    return new SVGElement(localName, attributes, ownerDocument);
+    return new SVGElementImpl(localName, ownerDocument, attributes);
   }
 
   if (namespaceURI === MATHML_NAMESPACE) {
-    return new MathMLElement(localName, attributes, ownerDocument);
+    return new MathMLElementImpl(localName, ownerDocument, attributes);
   }
 
-  return new Element(localName, namespaceURI, attributes, ownerDocument);
+  return new ElementImpl(localName, namespaceURI, ownerDocument, attributes);
 }
 
-export function isHTMLElement(element: Element): element is HTMLElement {
+export function isHTMLElement(
+  element: Element,
+): element is HTMLElementImpl {
   return element.namespaceURI === HTML_NAMESPACE;
 }
 
 export function isHTMLStyleElement(
   element: Element,
-): element is HTMLStyleElement {
+): element is HTMLStyleElementImpl {
   return isHTMLElement(element) && element.localName === 'style';
 }
 
 export function isHTMLLinkElement(
   element: Element,
-): element is HTMLLinkElement {
+): element is HTMLLinkElementImpl {
   return isHTMLElement(element) && element.localName === 'link';
 }
 
-export function isSVGElement(element: Element): element is SVGElement {
+export function isSVGElement(
+  element: Element,
+): element is SVGElementImpl {
   return element.namespaceURI === SVG_NAMESPACE;
 }
 
 export function isSVGStyleElement(
   element: Element,
-): element is SVGStyleElement {
+): element is SVGStyleElementImpl {
   return isSVGElement(element) && element.localName === 'style';
 }
 
-export function isMathMLElement(element: Element): element is MathMLElement {
+export function isMathMLElement(
+  element: Element,
+): element is MathMLElementImpl {
   return element.namespaceURI === MATHML_NAMESPACE;
 }
 

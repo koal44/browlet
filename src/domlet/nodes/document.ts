@@ -1,19 +1,25 @@
-import { Comment } from './comment';
+import { asDocument } from '../stubs/interfaces';
+import { CommentImpl } from './comment';
 import {
-  createElementNode, HTML_NAMESPACE, type Element,
+  createElementNode, HTML_NAMESPACE,
+} from './element';
+import type {
+  ElementImpl, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
 import {
-  isDocumentType, isElement, Node, NodeType,
+  isDocumentType, isElement, NodeImpl, NodeType,
 } from './node';
-import { Text } from './text';
-import type { DocumentType } from './document-type';
+import { TextImpl } from './text';
+import type { DocumentTypeImpl } from './document-type';
 import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
 import { getStyleSheets } from '../css-engine';
 
-export class Document extends Node {
+export class DocumentImpl
+  extends NodeImpl
+{
   readonly nodeType = NodeType.Document;
   readonly contentType = 'text/html';
   readonly baseURI: string;
@@ -24,11 +30,15 @@ export class Document extends Node {
     this.baseURI = baseURI;
   }
 
+  get ownerDocument(): null {
+    return null;
+  }
+
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
     return this.mode === DocumentMode.Quirks ? 'BackCompat' : 'CSS1Compat';
   }
 
-  get doctype(): DocumentType | null {
+  get doctype(): DocumentTypeImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (isDocumentType(child)) return child;
     }
@@ -36,7 +46,7 @@ export class Document extends Node {
     return null;
   }
 
-  get documentElement(): Element | null {
+  get documentElement(): ElementImpl | null {
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (isElement(child)) return child;
     }
@@ -45,22 +55,80 @@ export class Document extends Node {
   }
 
   get styleSheets(): StyleSheetList {
-    return getStyleSheets(this);
+    return getStyleSheets(asDocument(this));
   }
 
+  createElement<K extends keyof HTMLElementTagNameMap>(
+    tagName: K,
+    options?: ElementCreationOptions,
+  ): HTMLElementTagNameMap[K];
+  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(
+    tagName: K,
+    options?: ElementCreationOptions,
+  ): HTMLElementDeprecatedTagNameMap[K];
+  createElement(
+    tagName: string,
+    options?: ElementCreationOptions,
+  ): HTMLElement;
   createElement(
     localName: string,
-    namespaceURI = HTML_NAMESPACE,
+    _options?: ElementCreationOptions,
+  ): HTMLElement {
+    return createElementNode(
+      localName,
+      HTML_NAMESPACE,
+      this,
+    );
+  }
+
+  createElementNS(
+    namespaceURI: typeof HTML_NAMESPACE,
+    qualifiedName: string,
+  ): HTMLElement;
+  createElementNS<K extends keyof SVGElementTagNameMap>(
+    namespaceURI: typeof SVG_NAMESPACE,
+    qualifiedName: K,
+  ): SVGElementTagNameMap[K];
+  createElementNS(
+    namespaceURI: typeof SVG_NAMESPACE,
+    qualifiedName: string,
+  ): SVGElement;
+  createElementNS<K extends keyof MathMLElementTagNameMap>(
+    namespaceURI: typeof MATHML_NAMESPACE,
+    qualifiedName: K,
+  ): MathMLElementTagNameMap[K];
+  createElementNS(
+    namespaceURI: typeof MATHML_NAMESPACE,
+    qualifiedName: string,
+  ): MathMLElement;
+  createElementNS(
+    namespaceURI: string | null,
+    qualifiedName: string,
+    options?: ElementCreationOptions,
+  ): Element;
+  createElementNS(
+    namespaceURI: string | null,
+    qualifiedName: string,
+    options?: string | ElementCreationOptions,
+  ): Element;
+  createElementNS(
+    namespaceURI: string | null,
+    qualifiedName: string,
+    _options?: string | ElementCreationOptions,
   ): Element {
-    return createElementNode(localName, namespaceURI, [], this);
+    return createElementNode(
+      qualifiedName,
+      namespaceURI ?? '',
+      this,
+    );
   }
 
-  createTextNode(data: string): Text {
-    return new Text(data, this);
+  createTextNode(data: string): TextImpl {
+    return new TextImpl(data, this);
   }
 
-  createComment(data: string): Comment {
-    return new Comment(data, this);
+  createComment(data: string): CommentImpl {
+    return new CommentImpl(data, this);
   }
 
   addEventListener(
@@ -89,28 +157,66 @@ export class Document extends Node {
     writer(text.join(''));
   }
 
-  getElementById(id: string): Element | null {
+  getElementById(id: string): ElementImpl | null {
     return findElementById(this, id);
   }
 
-  getElementsByClassName(classNames: string): Element[] {
+  getElementsByClassName(
+    classNames: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByClassName(this, classNames);
   }
 
-  getElementsByTagName(qualifiedName: string): Element[] {
+  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof SVGElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<SVGElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
+  /** @deprecated */
+  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(
+    qualifiedName: K,
+  ): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
+  getElementsByTagName(
+    qualifiedName: string,
+  ): HTMLCollectionOf<Element>;
+  getElementsByTagName(
+    qualifiedName: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
   getElementsByTagNameNS(
+    namespaceURI: typeof HTML_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<HTMLElement>;
+  getElementsByTagNameNS(
+    namespaceURI: typeof SVG_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<SVGElement>;
+  getElementsByTagNameNS(
+    namespaceURI: typeof MATHML_NAMESPACE,
+    localName: string,
+  ): HTMLCollectionOf<MathMLElement>;
+  getElementsByTagNameNS(
     namespaceURI: string | null,
     localName: string,
-  ): Element[] {
+  ): HTMLCollectionOf<Element>;
+  getElementsByTagNameNS(
+    namespaceURI: string | null,
+    localName: string,
+  ): HTMLCollectionOf<Element> {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 }
 
+export type DomletDocument = DocumentImpl & Document;
+
 export function withDocumentWriter<T>(
-  document: Document,
+  document: DocumentImpl,
   writer: DocumentWriter,
   callback: () => T,
 ): T {
@@ -136,4 +242,4 @@ export enum DocumentMode {
   LimitedQuirks = 'limited-quirks',
 }
 
-const documentWriters = new WeakMap<Document, DocumentWriter>();
+const documentWriters = new WeakMap<DocumentImpl, DocumentWriter>();

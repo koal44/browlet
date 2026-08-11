@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { Attribute } from '../../../../src/domlet/nodes/attribute';
-import { Document } from '../../../../src/domlet/nodes/document';
+import { AttrImpl } from '../../../../src/domlet/nodes/attribute';
+import { DocumentImpl } from '../../../../src/domlet/nodes/document';
 import {
-  Element, HTMLElement, HTMLLinkElement, HTMLStyleElement,
-  MathMLElement, SVGElement, SVGStyleElement,
+  ElementImpl, HTMLElementImpl, HTMLLinkElementImpl, HTMLStyleElementImpl,
+  MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
   isHTMLElement, isHTMLLinkElement, isHTMLStyleElement,
   isMathMLElement, isSVGElement, isSVGStyleElement,
@@ -14,9 +14,10 @@ const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 
 describe('Element attributes', () => {
   it('looks up unnamespaced attributes by qualified name', () => {
-    const element = new Element('main', HTML_NAMESPACE, [
-      new Attribute('id', 'content'),
-      new Attribute('class', ''),
+    const document = new DocumentImpl();
+    const element = new ElementImpl('main', HTML_NAMESPACE, document, [
+      new AttrImpl('id', 'content'),
+      new AttrImpl('class', ''),
     ]);
 
     expect(element.getAttribute('id')).toBe('content');
@@ -26,9 +27,10 @@ describe('Element attributes', () => {
   });
 
   it('looks up namespaced attributes by namespace and local name', () => {
-    const element = new Element('main', HTML_NAMESPACE, [
-      new Attribute('lang', 'en', XML_NAMESPACE, 'xml'),
-      new Attribute('plain', 'value'),
+    const document = new DocumentImpl();
+    const element = new ElementImpl('main', HTML_NAMESPACE, document, [
+      new AttrImpl('lang', 'en', XML_NAMESPACE, 'xml'),
+      new AttrImpl('plain', 'value'),
     ]);
 
     expect(element.getAttribute('xml:lang')).toBe('en');
@@ -40,7 +42,7 @@ describe('Element attributes', () => {
   });
 
   it('adds, changes, and removes attributes', () => {
-    const element = new HTMLElement('main');
+    const element = new HTMLElementImpl('main', new DocumentImpl());
 
     element.setAttribute('DATA-STATE', 'first');
     expect(element.getAttribute('data-state')).toBe('first');
@@ -57,43 +59,46 @@ describe('Element attributes', () => {
 
 describe('Element interfaces', () => {
   it('creates HTML elements and specialized stylesheet elements', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const main = document.createElement('MAIN');
     const style = document.createElement('STYLE');
     const link = document.createElement('LINK');
 
-    expect(main).toBeInstanceOf(HTMLElement);
+    expect(main).toBeInstanceOf(HTMLElementImpl);
     expect(main.localName).toBe('main');
     expect(isHTMLElement(main)).toBe(true);
 
-    expect(style).toBeInstanceOf(HTMLStyleElement);
+    expect(style).toBeInstanceOf(HTMLStyleElementImpl);
     expect(isHTMLStyleElement(style)).toBe(true);
 
-    expect(link).toBeInstanceOf(HTMLLinkElement);
+    expect(link).toBeInstanceOf(HTMLLinkElementImpl);
     expect(isHTMLLinkElement(link)).toBe(true);
   });
 
   it('uses namespaces rather than local names to choose an interface', () => {
-    const document = new Document();
+    const document = new DocumentImpl();
     const htmlSvg = document.createElement('svg');
-    const svg = document.createElement('svg', SVG_NAMESPACE);
-    const svgStyle = document.createElement('style', SVG_NAMESPACE);
-    const math = document.createElement('math', MATHML_NAMESPACE);
-    const other = document.createElement('style', 'https://example.test/ns');
+    const svg = document.createElementNS(SVG_NAMESPACE, 'svg');
+    const svgStyle = document.createElementNS(SVG_NAMESPACE, 'style');
+    const math = document.createElementNS(MATHML_NAMESPACE, 'math');
+    const other = document.createElementNS(
+      'https://example.test/ns',
+      'style',
+    );
 
-    expect(htmlSvg).toBeInstanceOf(HTMLElement);
+    expect(htmlSvg).toBeInstanceOf(HTMLElementImpl);
     expect(htmlSvg.namespaceURI).toBe(HTML_NAMESPACE);
 
-    expect(svg).toBeInstanceOf(SVGElement);
+    expect(svg).toBeInstanceOf(SVGElementImpl);
     expect(isSVGElement(svg)).toBe(true);
 
-    expect(svgStyle).toBeInstanceOf(SVGStyleElement);
+    expect(svgStyle).toBeInstanceOf(SVGStyleElementImpl);
     expect(isSVGStyleElement(svgStyle)).toBe(true);
 
-    expect(math).toBeInstanceOf(MathMLElement);
+    expect(math).toBeInstanceOf(MathMLElementImpl);
     expect(isMathMLElement(math)).toBe(true);
 
-    expect(other.constructor).toBe(Element);
+    expect(other.constructor).toBe(ElementImpl);
     expect(isHTMLStyleElement(other)).toBe(false);
   });
 });

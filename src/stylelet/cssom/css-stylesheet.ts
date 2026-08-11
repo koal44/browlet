@@ -40,9 +40,12 @@ export class CSSStyleSheetImpl
   readonly #rules: CSSRuleListImpl;
 
   #ownerRule: CSSRule | null;
+  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #constructorDocument: Document | null;
+  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #stylesheetBaseURL: string | null;
 
+  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #alternate: boolean;
   #originClean: boolean;
   #constructed: boolean;
