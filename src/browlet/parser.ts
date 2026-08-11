@@ -1,21 +1,23 @@
 import { finished } from 'node:stream/promises';
 import { ParserStream } from 'parse5-parser-stream';
-import type { Document } from '../domlet/nodes/document';
+import type { Document as DomletDocument } from '../domlet/nodes/document';
 import type { Element } from '../domlet/nodes/element';
 import {
   DomletParser, type DomletParserTreeAdapterMap,
 } from '../domlet/parser/parser';
 
 export class Parser {
-  readonly document: Document;
+  readonly document: DomletDocument;
   readonly #handleScript: ScriptHandler;
   readonly #stream: ParserStream<DomletParserTreeAdapterMap>;
+  readonly #treeAdapter: DomletParser;
 
   constructor(handleScript: ScriptHandler) {
     this.#handleScript = handleScript;
+    this.#treeAdapter = new DomletParser();
     this.#stream = new ParserStream<DomletParserTreeAdapterMap>({
       sourceCodeLocationInfo: true,
-      treeAdapter: new DomletParser(),
+      treeAdapter: this.#treeAdapter,
     });
     this.document = this.#stream.document;
 
@@ -29,6 +31,7 @@ export class Parser {
 
     this.#stream.end(source);
     await complete;
+    this.#treeAdapter.finishParsing();
   }
 
   private async handleScript(

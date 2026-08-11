@@ -3,9 +3,7 @@ import { RuntimeCache } from './selector/runtimeCache';
 
 export class Snapshot {
   readonly document: Document;
-  readonly root: Element | null;
   readonly isHtml: boolean;
-  readonly isQuirksMode: boolean;
   readonly options: Readonly<SnapshotOptions>;
 
   readonly documentDesignMode: (document: Document) => string | undefined;
@@ -51,9 +49,7 @@ export class Snapshot {
     const treeCaps = caps.tree;
 
     this.document = document;
-    this.root = document.documentElement;
     this.isHtml = document.contentType.includes('/html');
-    this.isQuirksMode = document.compatMode !== 'CSS1Compat';
     this.options = options;
 
     this.documentDesignMode = documentCaps?.designMode ?? defaultDocumentDesignMode;
@@ -69,6 +65,14 @@ export class Snapshot {
     this.hasAttribute = elementCaps?.hasAttribute ?? defaultHasAttribute;
     this.hasAttributeNS = elementCaps?.hasAttributeNS ?? defaultHasAttributeNS;
     this.hasCustomState = elementCaps?.hasCustomState ?? defaultHasCustomState;
+  }
+
+  get root(): Element | null {
+    return this.document.documentElement;
+  }
+
+  get isQuirksMode(): boolean {
+    return this.document.compatMode !== 'CSS1Compat';
   }
 
   getCompiledSelector<T>(selector: object): T | undefined {

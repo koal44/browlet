@@ -5,7 +5,6 @@ import {
 import type { Element } from '../domlet/nodes/element';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
-import { createStylelet, type Stylelet } from '../stylelet/stylelet';
 import { Parser, type DocumentWrite } from './parser';
 import { Realm } from './realm';
 import { Window } from './window';
@@ -16,16 +15,12 @@ export class Browlet {
   readonly #exposed = new Map<string, unknown>();
   readonly #realm: Realm;
   #route: BrowletRoute;
-  #stylelet: Stylelet;
   #window: Window;
   readonly #windowProxy: WindowProxy;
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
     this.#document = createDomlet();
-    this.#stylelet = createStylelet(
-      this.#document as unknown as Document,
-    );
 
     this.#realm = new Realm();
     this.#windowProxy = new WindowProxy(this.#realm);
@@ -38,10 +33,6 @@ export class Browlet {
 
   get document(): DomletDocument {
     return this.#document;
-  }
-
-  get stylelet(): Stylelet {
-    return this.#stylelet;
   }
 
   get window(): BrowletWindow {
@@ -68,13 +59,9 @@ export class Browlet {
       this.executeScript(element, documentURL, write);
     });
     const document = parser.document;
-    const stylelet = createStylelet(
-      document as unknown as Document,
-    );
     const window = this.createWindow(document, documentURL);
 
     this.#document = document;
-    this.#stylelet = stylelet;
     this.#window = window;
     this.#windowProxy.setWindow(window);
 

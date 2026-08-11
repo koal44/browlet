@@ -46,7 +46,7 @@ describe('CSSStyleSheetImpl', () => {
   it('creates a stylesheet from specified properties', () => {
     const document = createDomletDocument('');
     const stylelet = createStylelet(document);
-    const sheet = CSSStyleSheetImpl.create(stylelet.snapshot, {
+    const sheet = CSSStyleSheetImpl.__create(stylelet.snapshot, {
       location: 'https://example.com/style.css',
       parentStyleSheet: null,
       ownerNode: null,

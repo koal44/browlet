@@ -119,6 +119,16 @@ export abstract class TreeNode {
     this.#detach();
   }
 
+  protected insertedInto(_parent: TreeNode): void {}
+
+  protected removedFrom(_parent: TreeNode): void {}
+
+  protected childrenChanged(): void {}
+
+  protected notifyParentChildrenChanged(): void {
+    this.#parent?.childrenChanged();
+  }
+
   #insertChild(node: TreeNode, reference: TreeNode | null): void {
     if (node === this) {
       throw new Error('Cannot insert a node into itself or its descendant');
@@ -156,6 +166,9 @@ export abstract class TreeNode {
     } else {
       this.#lastChild = node;
     }
+
+    node.#notifyInsertedSubtree(this);
+    this.childrenChanged();
   }
 
   #detach(): void {
@@ -180,5 +193,24 @@ export abstract class TreeNode {
     this.#parent = null;
     this.#previousSibling = null;
     this.#nextSibling = null;
+
+    this.#notifyRemovedSubtree(parent);
+    parent.childrenChanged();
+  }
+
+  #notifyInsertedSubtree(parent: TreeNode): void {
+    this.insertedInto(parent);
+
+    for (let child = this.#firstChild; child; child = child.#nextSibling) {
+      child.#notifyInsertedSubtree(this);
+    }
+  }
+
+  #notifyRemovedSubtree(parent: TreeNode): void {
+    this.removedFrom(parent);
+
+    for (let child = this.#firstChild; child; child = child.#nextSibling) {
+      child.#notifyRemovedSubtree(this);
+    }
   }
 }

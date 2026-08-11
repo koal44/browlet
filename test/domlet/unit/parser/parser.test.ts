@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   Document, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
+import {
+  HTMLElement, HTMLLinkElement, HTMLStyleElement,
+  MathMLElement, SVGElement, SVGStyleElement,
+} from '../../../../src/domlet/nodes/element';
 import { isComment } from '../../../../src/domlet/nodes/node';
 import { DomletParser } from '../../../../src/domlet/parser/parser';
 
@@ -41,6 +45,26 @@ describe('Parser tree adapter', () => {
       prefix: null,
       value: 'content',
     });
+  });
+
+  it('creates element interfaces from parser namespaces', () => {
+    const document = new DomletParser().parse([
+      '<style id="style"></style>',
+      '<link id="link">',
+      '<svg id="svg"><style id="svg-style"></style>',
+      '<circle id="circle"></circle>',
+      '<foreignObject><main id="html"></main></foreignObject></svg>',
+      '<math id="math"><mi id="mi"></mi></math>',
+    ].join(''));
+
+    expect(document.getElementById('style')).toBeInstanceOf(HTMLStyleElement);
+    expect(document.getElementById('link')).toBeInstanceOf(HTMLLinkElement);
+    expect(document.getElementById('svg')).toBeInstanceOf(SVGElement);
+    expect(document.getElementById('svg-style')).toBeInstanceOf(SVGStyleElement);
+    expect(document.getElementById('circle')).toBeInstanceOf(SVGElement);
+    expect(document.getElementById('html')).toBeInstanceOf(HTMLElement);
+    expect(document.getElementById('math')).toBeInstanceOf(MathMLElement);
+    expect(document.getElementById('mi')).toBeInstanceOf(MathMLElement);
   });
 
   it('stores and retrieves the Parse5 document mode', () => {

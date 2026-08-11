@@ -1,11 +1,11 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
-
 import { Attribute } from '../nodes/attribute';
 import { Comment } from '../nodes/comment';
 import { Document, DocumentMode } from '../nodes/document';
 import { DocumentType } from '../nodes/document-type';
-import { Element } from '../nodes/element';
+import { createElementNode, type Element } from '../nodes/element';
 import { Text } from '../nodes/text';
+import { withCssEngine } from '../css-engine';
 import {
   isComment, isDocumentType, isElement, isText,
   type Node,
@@ -13,14 +13,25 @@ import {
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   #document: Document | null = null;
+  #pendingUnpushedElement: Element | null = null;
 
   parse(source: string): Document {
     this.#document = null;
-    return parse<DomletParserTreeAdapterMap>(source, { treeAdapter: this });
+    this.#pendingUnpushedElement = null;
+
+    const document = parse<DomletParserTreeAdapterMap>(source, {
+      treeAdapter: this,
+    });
+    this.finishParsing();
+    return document;
+  }
+
+  finishParsing(): void {
+    this.#finishPendingUnpushedElement();
   }
 
   createDocument(): Document {
-    const document = new Document();
+    const document = withCssEngine(new Document());
     this.#document = document;
     return document;
   }
@@ -34,12 +45,14 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     namespaceURI: html.NS,
     attrs: Token.Attribute[],
   ): Element {
-    return new Element(
+    const element = createElementNode(
       tagName,
       namespaceURI,
       attrs.map(fromParserAttribute),
       this.#document,
     );
+    element.beginParsingChildren();
+    return element;
   }
 
   createCommentNode(data: string): Comment {
@@ -50,8 +63,25 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     return new Text(value, this.#document);
   }
 
+  onItemPush(item: Element): void {
+    if (this.#pendingUnpushedElement === item) {
+      this.#pendingUnpushedElement = null;
+    } else {
+      this.#finishPendingUnpushedElement();
+    }
+
+    item.beginParsingChildren();
+  }
+
+  onItemPop(item: Element, _newTop: Node): void {
+    this.#finishPendingUnpushedElement();
+    item.finishParsingChildren();
+  }
+
   appendChild(parentNode: Node, newNode: Node): void {
+    this.#finishPendingUnpushedElement();
     parentNode.appendChild(newNode);
+    if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
   insertBefore(
@@ -59,7 +89,9 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     newNode: Node,
     referenceNode: Node,
   ): void {
+    this.#finishPendingUnpushedElement();
     referenceNode.insertBefore(newNode);
+    if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
   detachNode(node: Node): void {
@@ -67,6 +99,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   insertText(parentNode: Node, text: string): void {
+    this.#finishPendingUnpushedElement();
     const lastChild = parentNode.lastChild;
 
     if (isText(lastChild)) {
@@ -237,6 +270,14 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   ): void {
     const current = getSourceCodeLocation(node);
     if (current) Object.assign(current, location);
+  }
+
+  #finishPendingUnpushedElement(): void {
+    const element = this.#pendingUnpushedElement;
+    if (!element) return;
+
+    this.#pendingUnpushedElement = null;
+    element.finishParsingChildren();
   }
 }
 

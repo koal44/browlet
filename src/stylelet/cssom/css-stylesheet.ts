@@ -55,31 +55,33 @@ export class CSSStyleSheetImpl
     super();
 
     const document = snapshot.document;
-    const {
-      baseURL = null,
-      media = '',
-      disabled = false,
-    } = options;
-
     this.#rules = new CSSRuleListImpl();
 
     this.#ownerRule = null;
     this.#constructorDocument = document;
-    this.#stylesheetBaseURL = baseURL;
+    this.#stylesheetBaseURL = null;
 
     this.#alternate = false;
     this.#originClean = true;
     this.#constructed = true;
     this.#disallowModification = false;
 
+    const {
+      baseURL = null,
+      media = '',
+      disabled = false,
+    } = options;
+
+    this.#stylesheetBaseURL = baseURL;
     this.setLocation(document.baseURI);
     this.setMedia(media);
     this.setDisabled(disabled);
   }
 
-  static create(
+  static __create(
     snapshot: Snapshot,
     properties: CSSStyleSheetProperties,
+    rules?: ParsedStyleSheet,
   ): CSSStyleSheetImpl {
     const sheet = new CSSStyleSheetImpl(snapshot);
 
@@ -94,6 +96,7 @@ export class CSSStyleSheetImpl
     sheet.#constructed = false;
     sheet.#constructorDocument = null;
     sheet.#stylesheetBaseURL = null;
+    if (rules) sheet.#rules.replace(buildCSSRules(rules));
 
     return sheet;
   }
@@ -180,6 +183,14 @@ export class CSSStyleSheetImpl
     }
 
     this.replaceRules(text);
+  }
+
+  // Internal operations ----------------------------------------------------
+
+  __clearAssociation(): void {
+    this.setParentStyleSheet(null);
+    this.setOwnerNode(null);
+    this.#ownerRule = null;
   }
 
   // Deprecated CSSStyleSheet members ----------------------------------------

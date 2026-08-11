@@ -1,5 +1,7 @@
 import { Comment } from './comment';
-import { Element } from './element';
+import {
+  createElementNode, HTML_NAMESPACE, type Element,
+} from './element';
 import {
   isDocumentType, isElement, Node, NodeType,
 } from './node';
@@ -9,6 +11,7 @@ import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
+import { getStyleSheets } from '../css-engine';
 
 export class Document extends Node {
   readonly nodeType = NodeType.Document;
@@ -41,15 +44,15 @@ export class Document extends Node {
     return null;
   }
 
+  get styleSheets(): StyleSheetList {
+    return getStyleSheets(this);
+  }
+
   createElement(
     localName: string,
     namespaceURI = HTML_NAMESPACE,
   ): Element {
-    const normalizedName = namespaceURI === HTML_NAMESPACE
-      ? asciiLower(localName)
-      : localName;
-
-    return new Element(normalizedName, namespaceURI, [], this);
+    return createElementNode(localName, namespaceURI, [], this);
   }
 
   createTextNode(data: string): Text {
@@ -133,9 +136,4 @@ export enum DocumentMode {
   LimitedQuirks = 'limited-quirks',
 }
 
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 const documentWriters = new WeakMap<Document, DocumentWriter>();
-
-function asciiLower(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
-}

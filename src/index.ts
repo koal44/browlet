@@ -18,6 +18,7 @@ export type { IndexedNodeList } from './selectlet/node-list';
 
 export { createDomlet } from './domlet/domlet';
 
+export type { DomletConfig } from './domlet/domlet';
 export type { Document as DomletDocument } from './domlet/nodes/document';
 
 export { Browlet, createBrowlet } from './browlet/browlet';

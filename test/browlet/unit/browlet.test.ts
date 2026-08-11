@@ -3,11 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { createBrowlet } from '../../../src/browlet/browlet';
 
 describe('createBrowlet', () => {
-  it('coordinates a Domlet document and Stylelet instance', () => {
+  it('coordinates a Domlet document and window', () => {
     const browlet = createBrowlet({ route: () => '' });
 
     expect(browlet.document.documentElement?.localName).toBe('html');
-    expect(browlet.stylelet.version).toBe('stylelet-__VERSION__');
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);

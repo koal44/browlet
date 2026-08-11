@@ -134,4 +134,5 @@ describe('TreeNode', () => {
     expect(first.comparePosition(second)).toBeNull();
     expect(second.comparePosition(first)).toBeNull();
   });
+
 });
