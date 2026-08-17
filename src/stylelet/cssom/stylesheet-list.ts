@@ -12,10 +12,6 @@ export class StyleSheetListImpl<
 
   readonly #styleSheets: T[] = [];
 
-  constructor() {
-    styleSheetLists.set(this, this.#styleSheets);
-  }
-
   item(index: number): T | null {
     return this.#styleSheets[index] ?? null;
   }
@@ -27,52 +23,26 @@ export class StyleSheetListImpl<
   [Symbol.iterator](): ArrayIterator<T> {
     return this.#styleSheets[Symbol.iterator]();
   }
-}
 
-export function insertStyleSheet<T extends CSSStyleSheet>(
-  list: StyleSheetListImpl<T>,
-  index: number,
-  styleSheet: T,
-): void {
-  const styleSheets = getStyleSheets(list);
+  __insert(index: number, styleSheet: T): void {
+    this.#styleSheets.splice(index, 0, styleSheet);
+    this.#defineIndex(this.#styleSheets.length - 1);
+  }
 
-  styleSheets.splice(index, 0, styleSheet);
-  defineIndex(list, styleSheets.length - 1);
-}
+  __remove(styleSheet: T): boolean {
+    const index = this.#styleSheets.indexOf(styleSheet);
+    if (index < 0) return false;
 
-export function removeStyleSheet<T extends CSSStyleSheet>(
-  list: StyleSheetListImpl<T>,
-  styleSheet: T,
-): boolean {
-  const styleSheets = getStyleSheets(list);
-  const index = styleSheets.indexOf(styleSheet);
-  if (index < 0) return false;
+    this.#styleSheets.splice(index, 1);
+    Reflect.deleteProperty(this, String(this.#styleSheets.length));
+    return true;
+  }
 
-  styleSheets.splice(index, 1);
-  Reflect.deleteProperty(list, String(styleSheets.length));
-  return true;
-}
-
-const styleSheetLists = new WeakMap<
-  StyleSheetListImpl<CSSStyleSheet>,
-  CSSStyleSheet[]
->();
-
-function getStyleSheets<T extends CSSStyleSheet>(
-  list: StyleSheetListImpl<T>,
-): T[] {
-  const styleSheets = styleSheetLists.get(list);
-  if (!styleSheets) throw new TypeError('Illegal invocation');
-  return styleSheets as T[];
-}
-
-function defineIndex<T extends CSSStyleSheet>(
-  list: StyleSheetListImpl<T>,
-  index: number,
-): void {
-  Object.defineProperty(list, index, {
-    configurable: true,
-    enumerable: true,
-    get: () => list.item(index),
-  });
+  #defineIndex(index: number): void {
+    Object.defineProperty(this, index, {
+      configurable: true,
+      enumerable: true,
+      get: () => this.item(index),
+    });
+  }
 }

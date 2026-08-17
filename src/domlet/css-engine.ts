@@ -1,54 +1,21 @@
 import type {
   HTMLLinkElementImpl, HTMLStyleElementImpl, SVGStyleElementImpl,
 } from './nodes/element';
-import type { DomletDocument } from './nodes/document';
 import { isText } from './nodes/node';
-import {
-  createStyleletEnvironment, type Stylelet,
-} from '../stylelet/stylelet';
 import { CSSStyleDeclarationImpl } from '../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
-import type { InlineStyleSheetOptions } from '../stylelet/engine/document-or-shadow-root';
+import type { TreeScope } from '../stylelet/engine/tree-scope';
 
 /*
  * interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;
  * };
  */
-export class DocumentStyleState {
-  readonly #document: Document;
-  #environment: ReturnType<typeof createStyleletEnvironment> | undefined;
-
-  constructor(document: Document) {
-    this.#document = document;
-  }
-
-  get engine(): Stylelet {
-    return this.environment.stylelet;
-  }
+export class DocumentOrShadowRootMixin {
+  constructor(readonly scope: TreeScope) {}
 
   get styleSheets(): StyleSheetList {
-    return this.environment.state.styleSheets;
-  }
-
-  createInlineStyleSheet(
-    ownerNode: Element,
-    source: string,
-    options: InlineStyleSheetOptions = {},
-  ): CSSStyleSheetImpl {
-    return this.environment.state.createInlineStyleSheet(
-      ownerNode,
-      source,
-      options,
-    );
-  }
-
-  removeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    this.environment.state.removeStyleSheet(styleSheet);
-  }
-
-  private get environment() {
-    return this.#environment ??= createStyleletEnvironment(this.#document);
+    return this.scope.styleSheets;
   }
 }
 
@@ -58,7 +25,7 @@ export class DocumentStyleState {
  *   readonly attribute CSSStyleProperties style;
  * };
  */
-export class InlineStyleState {
+export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 
   constructor(element: Element) {
@@ -77,10 +44,11 @@ export class InlineStyleState {
  *   readonly attribute CSSStyleSheet? sheet;
  * };
  */
-export class LinkStyleState {
+export class LinkStyleMixin {
   readonly #owner;
   readonly #behavior;
   #sheet: CSSStyleSheetImpl | null = null;
+  #scope: TreeScope | null = null;
   #deferred = false;
 
   constructor(
@@ -117,9 +85,11 @@ export class LinkStyleState {
   update(): void {
     if (this.#deferred) return;
 
-    const document = this.#owner.ownerDocument as DomletDocument;
-    const styleState = document.__styleState;
-    if (this.#sheet) styleState.removeStyleSheet(this.#sheet);
+    if (this.#sheet && this.#scope) {
+      this.#scope.removeStyleSheet(this.#sheet);
+    }
+    this.#sheet = null;
+    this.#scope = null;
 
     const type = this.#owner.getAttribute('type')?.toLowerCase() ?? '';
     if (
@@ -127,9 +97,10 @@ export class LinkStyleState {
       this.#owner.localName === 'link' ||
       (type !== '' && type !== 'text/css')
     ) {
-      this.#sheet = null;
       return;
     }
+
+    const scope = getTreeScope(this.#owner);
 
     let source = '';
     for (
@@ -140,7 +111,7 @@ export class LinkStyleState {
       if (isText(child)) source += child.data;
     }
 
-    this.#sheet = styleState.createInlineStyleSheet(
+    const sheet = scope.createStyleElementStyleSheet(
       this.#owner,
       source,
       {
@@ -148,5 +119,15 @@ export class LinkStyleState {
         title: this.#owner.getAttribute('title') ?? '',
       },
     );
+    this.#scope = scope;
+    this.#sheet = sheet;
   }
+}
+
+type TreeScopeRoot = Node & {
+  readonly __treeScope: TreeScope;
+};
+
+function getTreeScope(element: Element): TreeScope {
+  return (element.getRootNode() as TreeScopeRoot).__treeScope;
 }

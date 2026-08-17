@@ -10,8 +10,8 @@ if (typeof mod.createSelectlet !== "function") {
   throw new Error(`Expected createSelectlet export to be function, got ${typeof mod.createSelectlet}`);
 }
 
-if (typeof mod.createStylelet !== "function") {
-  throw new Error(`Expected createStylelet export to be function, got ${typeof mod.createStylelet}`);
+if (typeof mod.Stylelet !== "function") {
+  throw new Error(`Expected Stylelet export to be class, got ${typeof mod.Stylelet}`);
 }
 
 if (!mod.DEFAULT_CONFIG || typeof mod.DEFAULT_CONFIG !== "object") {

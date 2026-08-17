@@ -1,5 +1,6 @@
-import type { Stylelet } from '../../stylelet/stylelet';
-import { DocumentStyleState } from '../css-engine';
+import { Stylelet } from '../../stylelet/stylelet';
+import type { TreeScope } from '../../stylelet/engine/tree-scope';
+import { DocumentOrShadowRootMixin } from '../css-engine';
 import { asDocument } from '../stubs/interfaces';
 import { CommentImpl } from './comment';
 import {
@@ -21,7 +22,8 @@ import {
 export class DocumentImpl
   extends NodeImpl
 {
-  readonly #style = new DocumentStyleState(asDocument(this));
+  #stylelet: Stylelet | undefined;
+  #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
 
   readonly nodeType = NodeType.Document;
   readonly contentType = 'text/html';
@@ -58,29 +60,20 @@ export class DocumentImpl
   }
 
   get styleSheets(): StyleSheetList {
-    return this.#style.styleSheets;
+    return this.documentOrShadowRoot.styleSheets;
   }
 
   get cssEngine(): Stylelet {
-    return this.#style.engine;
+    return this.#stylelet ??= new Stylelet(asDocument(this));
   }
 
-  get __styleState(): DocumentStyleState {
-    return this.#style;
+  get __treeScope(): TreeScope {
+    return this.documentOrShadowRoot.scope;
   }
 
-  createElement<K extends keyof HTMLElementTagNameMap>(
-    tagName: K,
-    options?: ElementCreationOptions,
-  ): HTMLElementTagNameMap[K];
-  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(
-    tagName: K,
-    options?: ElementCreationOptions,
-  ): HTMLElementDeprecatedTagNameMap[K];
-  createElement(
-    tagName: string,
-    options?: ElementCreationOptions,
-  ): HTMLElement;
+  createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K];
+  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementDeprecatedTagNameMap[K];
+  createElement(tagName: string, options?: ElementCreationOptions): HTMLElement;
   createElement(
     localName: string,
     _options?: ElementCreationOptions,
@@ -92,36 +85,13 @@ export class DocumentImpl
     );
   }
 
-  createElementNS(
-    namespaceURI: typeof HTML_NAMESPACE,
-    qualifiedName: string,
-  ): HTMLElement;
-  createElementNS<K extends keyof SVGElementTagNameMap>(
-    namespaceURI: typeof SVG_NAMESPACE,
-    qualifiedName: K,
-  ): SVGElementTagNameMap[K];
-  createElementNS(
-    namespaceURI: typeof SVG_NAMESPACE,
-    qualifiedName: string,
-  ): SVGElement;
-  createElementNS<K extends keyof MathMLElementTagNameMap>(
-    namespaceURI: typeof MATHML_NAMESPACE,
-    qualifiedName: K,
-  ): MathMLElementTagNameMap[K];
-  createElementNS(
-    namespaceURI: typeof MATHML_NAMESPACE,
-    qualifiedName: string,
-  ): MathMLElement;
-  createElementNS(
-    namespaceURI: string | null,
-    qualifiedName: string,
-    options?: ElementCreationOptions,
-  ): Element;
-  createElementNS(
-    namespaceURI: string | null,
-    qualifiedName: string,
-    options?: string | ElementCreationOptions,
-  ): Element;
+  createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement;
+  createElementNS<K extends keyof SVGElementTagNameMap>(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: K): SVGElementTagNameMap[K];
+  createElementNS(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: string): SVGElement;
+  createElementNS<K extends keyof MathMLElementTagNameMap>(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: K): MathMLElementTagNameMap[K];
+  createElementNS(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: string): MathMLElement;
+  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: ElementCreationOptions): Element;
+  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: string | ElementCreationOptions): Element;
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
@@ -178,49 +148,32 @@ export class DocumentImpl
     return findElementsByClassName(this, classNames);
   }
 
-  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof SVGElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<SVGElementTagNameMap[K]>;
-  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof HTMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof SVGElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<SVGElementTagNameMap[K]>;
+  getElementsByTagName<K extends keyof MathMLElementTagNameMap>(qualifiedName: K): HTMLCollectionOf<MathMLElementTagNameMap[K]>;
   /** @deprecated */
-  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(
-    qualifiedName: K,
-  ): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
-  getElementsByTagName(
-    qualifiedName: string,
-  ): HTMLCollectionOf<Element>;
+  getElementsByTagName<K extends keyof HTMLElementDeprecatedTagNameMap>(qualifiedName: K): HTMLCollectionOf<HTMLElementDeprecatedTagNameMap[K]>;
+  getElementsByTagName(qualifiedName: string): HTMLCollectionOf<Element>;
   getElementsByTagName(
     qualifiedName: string,
   ): HTMLCollectionOf<Element> {
     return findElementsByTagName(this, qualifiedName);
   }
 
-  getElementsByTagNameNS(
-    namespaceURI: typeof HTML_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<HTMLElement>;
-  getElementsByTagNameNS(
-    namespaceURI: typeof SVG_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<SVGElement>;
-  getElementsByTagNameNS(
-    namespaceURI: typeof MATHML_NAMESPACE,
-    localName: string,
-  ): HTMLCollectionOf<MathMLElement>;
-  getElementsByTagNameNS(
-    namespaceURI: string | null,
-    localName: string,
-  ): HTMLCollectionOf<Element>;
+  getElementsByTagNameNS(namespaceURI: typeof HTML_NAMESPACE, localName: string): HTMLCollectionOf<HTMLElement>;
+  getElementsByTagNameNS(namespaceURI: typeof SVG_NAMESPACE, localName: string): HTMLCollectionOf<SVGElement>;
+  getElementsByTagNameNS(namespaceURI: typeof MATHML_NAMESPACE, localName: string): HTMLCollectionOf<MathMLElement>;
+  getElementsByTagNameNS(namespaceURI: string | null, localName: string): HTMLCollectionOf<Element>;
   getElementsByTagNameNS(
     namespaceURI: string | null,
     localName: string,
   ): HTMLCollectionOf<Element> {
     return findElementsByTagNameNS(this, namespaceURI, localName);
+  }
+
+  private get documentOrShadowRoot(): DocumentOrShadowRootMixin {
+    return this.#documentOrShadowRoot ??=
+      new DocumentOrShadowRootMixin(this.cssEngine.documentScope);
   }
 }
 

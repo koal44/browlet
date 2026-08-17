@@ -8,7 +8,7 @@ import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './collections';
 import type { DocumentImpl } from './document';
 import {
-  InlineStyleState, LinkStyleState,
+  ElementCSSInlineStyleMixin, LinkStyleMixin,
 } from '../css-engine';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
@@ -18,8 +18,8 @@ export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
-  #inlineStyle: InlineStyleState | undefined;
-  protected readonly linkStyle: LinkStyleState | undefined = undefined;
+  #inlineStyle: ElementCSSInlineStyleMixin | undefined;
+  protected readonly linkStyle: LinkStyleMixin | undefined = undefined;
 
   readonly nodeType = NodeType.Element;
   readonly attributes: NamedNodeMapImpl;
@@ -164,7 +164,8 @@ export class ElementImpl
   }
 
   protected get inlineStyle(): CSSStyleDeclaration {
-    return (this.#inlineStyle ??= new InlineStyleState(this)).style;
+    return (this.#inlineStyle ??=
+      new ElementCSSInlineStyleMixin(this)).style;
   }
 
   #normalizeAttributeName(qualifiedName: string): string {
@@ -200,7 +201,7 @@ export class HTMLStyleElementImpl
     children: true,
   };
 
-  protected readonly linkStyle = new LinkStyleState(
+  protected readonly linkStyle = new LinkStyleMixin(
     this,
     HTMLStyleElementImpl.#linkStyleBehavior,
   );
@@ -228,7 +229,7 @@ export class HTMLLinkElementImpl
     ]),
   };
 
-  protected readonly linkStyle = new LinkStyleState(
+  protected readonly linkStyle = new LinkStyleMixin(
     this,
     HTMLLinkElementImpl.#linkStyleBehavior,
   );
@@ -271,7 +272,7 @@ export class SVGStyleElementImpl
     children: true,
   };
 
-  protected readonly linkStyle = new LinkStyleState(
+  protected readonly linkStyle = new LinkStyleMixin(
     this,
     SVGStyleElementImpl.#linkStyleBehavior,
   );

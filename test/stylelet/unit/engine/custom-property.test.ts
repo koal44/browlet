@@ -12,7 +12,7 @@ import type { CascadedProperty } from '../../../../src/stylelet/engine/cascade';
 import {
   CascadeEngine, type CascadeEngineOptions,
 } from '../../../../src/stylelet/engine/cascade-engine';
-import { DocumentOrShadowRootStyleState } from '../../../../src/stylelet/engine/document-or-shadow-root';
+import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
@@ -23,12 +23,12 @@ describe('custom property registration', () => {
   it('prefers the registered property set over stylesheet rules', () => {
     const declared = registration('--accent', 'red');
     const registered = registration('--accent', 'blue');
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(state, styleSheet(declared));
+    addStyleSheet(scope, styleSheet(declared));
 
-    expect(engine.getCustomPropertyRegistration('--accent', state))
+    expect(engine.getCustomPropertyRegistration('--accent', scope))
       .toBe(registered);
   });
 
@@ -36,31 +36,31 @@ describe('custom property registration', () => {
     const first = registration('--accent', 'red');
     const second = registration('--accent', 'green');
     const last = registration('--accent', 'blue');
-    const { engine, state } = createCascade();
-    addStyleSheet(state, styleSheet(first, second));
-    addStyleSheet(state, styleSheet(last));
+    const { engine, scope } = createCascade();
+    addStyleSheet(scope, styleSheet(first, second));
+    addStyleSheet(scope, styleSheet(last));
 
-    expect(engine.getCustomPropertyRegistration('--accent', state)).toBe(last);
+    expect(engine.getCustomPropertyRegistration('--accent', scope)).toBe(last);
   });
 
   it('returns null when the custom property is unregistered', () => {
-    const { engine, state } = createCascade();
+    const { engine, scope } = createCascade();
 
-    expect(engine.getCustomPropertyRegistration('--accent', state)).toBeNull();
+    expect(engine.getCustomPropertyRegistration('--accent', scope)).toBeNull();
   });
 
   // CSS Properties and Values API 1, 2.2. Parse-Time Behavior
   it('retains a declaration that violates a later registration', () => {
     const sheet = parseStylesheet('* { --accent: 10px }');
     const registered = registration('--accent', 'red');
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    const cssStyleSheet = addStyleSheet(state, sheet);
+    const cssStyleSheet = addStyleSheet(scope, sheet);
 
-    expect(engine.getCustomPropertyRegistration('--accent', state))
+    expect(engine.getCustomPropertyRegistration('--accent', scope))
       .toBe(registered);
-    expect(engine.getCascadedProperty('--accent', state)).toMatchObject({
+    expect(engine.getCascadedProperty('--accent', scope)).toMatchObject({
       declaration: {
         type: 'property-declaration',
         custom: true,
@@ -68,7 +68,7 @@ describe('custom property registration', () => {
         originalText: '10px',
       },
       styleSheet: cssStyleSheet,
-      scope: state,
+      scope,
     });
   });
 
@@ -82,17 +82,17 @@ describe('custom property registration', () => {
     'resolves %s using a registration whose inherit flag is %s',
     (keyword, inherits, expected) => {
       const registered = registration('--accent', 'red', inherits);
-      const { engine, state } = createCascade({
+      const { engine, scope } = createCascade({
         registeredPropertySet: new Map([[registered.name, registered]]),
       });
       addStyleSheet(
-        state,
+        scope,
         parseStylesheet(`* { --accent: ${keyword} }`),
       );
 
       expect(resolveSpecifiedCustomProperty(
         engine,
-        state,
+        scope,
         '--accent',
         'blue',
       ))
@@ -109,18 +109,18 @@ describe('custom property registration', () => {
       '<url>',
     );
     const location = new URL('https://example.com/styles/site.css');
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/document/'),
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(state, parseStylesheet(
+    addStyleSheet(scope, parseStylesheet(
       '* { --image: url("image.png") }',
       { location },
     ));
 
     expect(resolveCustomProperty(
       engine,
-      state,
+      scope,
       '--image',
       'url("inherited.png")',
       ValueStage.Computed,
@@ -138,19 +138,19 @@ describe('custom property registration', () => {
       registeredPropertySet: new Map([[registered.name, registered]]),
       snapshot: new Snapshot(document),
     });
-    const documentState = new DocumentOrShadowRootStyleState(document, engine);
-    const shadowState = new DocumentOrShadowRootStyleState(shadowRoot, engine);
+    const documentScope = new TreeScope(document, engine);
+    const shadowScope = new TreeScope(shadowRoot, engine);
     const sheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     sheet.replaceSync('* { --image: url("#paint") }');
-    documentState.adoptStyleSheet(sheet);
-    shadowState.adoptStyleSheet(sheet);
+    documentScope.adoptStyleSheet(sheet);
+    shadowScope.adoptStyleSheet(sheet);
     const documentProperty = engine.getCascadedProperty(
       '--image',
-      documentState,
+      documentScope,
     )!;
     const shadowProperty = engine.getCascadedProperty(
       '--image',
-      shadowState,
+      shadowScope,
     )!;
 
     expect(resolveRegisteredCustomProperty(
@@ -160,7 +160,7 @@ describe('custom property registration', () => {
     )).toMatchObject({
       value: {
         name: 'url',
-        value: { local: true, treeScope: documentState },
+        value: { local: true, treeScope: documentScope },
       },
     });
     expect(resolveRegisteredCustomProperty(
@@ -170,7 +170,7 @@ describe('custom property registration', () => {
     )).toMatchObject({
       value: {
         name: 'url',
-        value: { local: true, treeScope: shadowState },
+        value: { local: true, treeScope: shadowScope },
       },
     });
   });
@@ -182,14 +182,14 @@ describe('custom property registration', () => {
     'defaults a syntax-invalid computed value when inherit is %s',
     (inherits, expected) => {
       const registered = registration('--accent', 'red', inherits);
-      const { engine, state } = createCascade({
+      const { engine, scope } = createCascade({
         registeredPropertySet: new Map([[registered.name, registered]]),
       });
-      addStyleSheet(state, parseStylesheet('* { --accent: 10px }'));
+      addStyleSheet(scope, parseStylesheet('* { --accent: 10px }'));
 
       expect(resolveCustomProperty(
         engine,
-        state,
+        scope,
         '--accent',
         'blue',
         ValueStage.Computed,
@@ -199,10 +199,10 @@ describe('custom property registration', () => {
 
   it.skip('substitutes variables in a property with universal syntax', () => {
     const registered = registration('--accent', 'red', false, '*');
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(state, parseStylesheet(`
+    addStyleSheet(scope, parseStylesheet(`
       * {
         --base: red;
         --accent: var(--base);
@@ -211,7 +211,7 @@ describe('custom property registration', () => {
 
     expect(resolveCustomProperty(
       engine,
-      state,
+      scope,
       '--accent',
       'blue',
       ValueStage.Computed,
@@ -239,13 +239,13 @@ function registration(
 
 function resolveSpecifiedCustomProperty(
   engine: CascadeEngine,
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
   name: CustomPropertyName,
   inherited: string,
 ): string | null {
   return resolveCustomProperty(
     engine,
-    state,
+    scope,
     name,
     inherited,
     ValueStage.Specified,
@@ -265,13 +265,13 @@ function resolveRegisteredCustomProperty(
 
 function resolveCustomProperty(
   engine: CascadeEngine,
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
   name: CustomPropertyName,
   inherited: string,
   stage: ValueStage,
 ): string | null {
-  const registration = engine.getCustomPropertyRegistration(name, state);
-  const cascaded = engine.getCascadedProperty(name, state);
+  const registration = engine.getCustomPropertyRegistration(name, scope);
+  const cascaded = engine.getCascadedProperty(name, scope);
 
   if (
     registration === null ||
@@ -317,16 +317,16 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
   return {
     engine,
-    state: new DocumentOrShadowRootStyleState(snapshot.document, engine),
+    scope: new TreeScope(snapshot.document, engine),
   };
 }
 
 function addStyleSheet(
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
   sheet: StyleSheet,
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.__create(
-    state.cascade.snapshot,
+    scope.cascade.snapshot,
     {
       location: sheet.location?.href ?? null,
       parentStyleSheet: null,
@@ -340,6 +340,6 @@ function addStyleSheet(
     sheet,
   );
 
-  state.addStyleSheet(styleSheet);
+  scope.addStyleSheet(styleSheet);
   return styleSheet;
 }

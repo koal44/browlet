@@ -1,45 +1,33 @@
 import { CascadeEngine } from './engine/cascade-engine';
-import { DocumentOrShadowRootStyleState } from './engine/document-or-shadow-root';
+import { TreeScope } from './engine/tree-scope';
 import { Snapshot, type SnapshotOptions } from './snapshot';
-
-export type Stylelet = {
-  version: string;
-  snapshot: Snapshot;
-  createStyleSheet(options?: CSSStyleSheetInit): CSSStyleSheet;
-  getComputedStyle(element: Element): CSSStyleDeclaration;
-};
 
 export type StyleletOptions = SnapshotOptions;
 
-export function createStylelet(
-  document: Document,
-  options: StyleletOptions = {},
-): Stylelet {
-  return createStyleletEnvironment(document, options).stylelet;
-}
+export class Stylelet {
+  readonly version = 'stylelet-__VERSION__';
+  readonly snapshot: Snapshot;
+  readonly documentScope: TreeScope;
 
-export function createStyleletEnvironment(
-  document: Document,
-  options: StyleletOptions = {},
-) {
-  const snapshot = new Snapshot(document, options);
-  const cascade = new CascadeEngine({
-    environmentBaseUrl: new URL(document.baseURI),
-    snapshot,
-  });
-  const state = new DocumentOrShadowRootStyleState(document, cascade);
-  const stylelet: Stylelet = {
-    version: 'stylelet-__VERSION__',
-    snapshot,
+  readonly #cascade: CascadeEngine;
 
-    createStyleSheet(options = {}): CSSStyleSheet {
-      return cascade.createStyleSheet(options);
-    },
+  constructor(
+    document: Document,
+    options: StyleletOptions = {},
+  ) {
+    this.snapshot = new Snapshot(document, options);
+    this.#cascade = new CascadeEngine({
+      environmentBaseUrl: new URL(document.baseURI),
+      snapshot: this.snapshot,
+    });
+    this.documentScope = new TreeScope(document, this.#cascade);
+  }
 
-    getComputedStyle(element: Element): CSSStyleDeclaration {
-      return cascade.getComputedStyle(element, state);
-    },
-  };
+  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheet {
+    return this.#cascade.createStyleSheet(options);
+  }
 
-  return { state, stylelet };
+  getComputedStyle(element: Element): CSSStyleDeclaration {
+    return this.#cascade.getComputedStyle(element, this.documentScope);
+  }
 }

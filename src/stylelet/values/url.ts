@@ -13,7 +13,7 @@ import {
 } from './url-modifier';
 import type { ValueDefinition } from '../value-processing/definition';
 import { ValueStage } from '../value-processing/stage';
-import type { TreeScope } from '../css/tree-scope';
+import type { TreeScope } from '../engine/tree-scope';
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  insertStyleSheet, removeStyleSheet, StyleSheetListImpl,
-} from '../../../../src/stylelet/cssom/stylesheet-list';
+import { StyleSheetListImpl } from '../../../../src/stylelet/cssom/stylesheet-list';
 
 describe('StyleSheetListImpl', () => {
   it('exposes its stylesheets by item and supported index', () => {
@@ -10,8 +8,8 @@ describe('StyleSheetListImpl', () => {
     const second = {} as CSSStyleSheet;
     const list = new StyleSheetListImpl();
 
-    insertStyleSheet(list, 0, first);
-    insertStyleSheet(list, 1, second);
+    list.__insert(0, first);
+    list.__insert(1, second);
 
     expect(list).toHaveLength(2);
     expect(list.item(0)).toBe(first);
@@ -26,24 +24,24 @@ describe('StyleSheetListImpl', () => {
     const third = {} as CSSStyleSheet;
     const list = new StyleSheetListImpl();
 
-    insertStyleSheet(list, 0, first);
-    insertStyleSheet(list, 1, third);
+    list.__insert(0, first);
+    list.__insert(1, third);
 
-    insertStyleSheet(list, 1, second);
+    list.__insert(1, second);
 
     expect(list).toHaveLength(3);
     expect(list[1]).toBe(second);
     expect(list[2]).toBe(third);
     expect([...list]).toEqual([first, second, third]);
 
-    expect(removeStyleSheet(list, second)).toBe(true);
-    expect(removeStyleSheet(list, second)).toBe(false);
+    expect(list.__remove(second)).toBe(true);
+    expect(list.__remove(second)).toBe(false);
     expect(list).toHaveLength(2);
     expect(list[1]).toBe(third);
     expect(list[2]).toBeUndefined();
   });
 
-  it('does not expose the CSS engine mutation operations', () => {
+  it('does not expose internal mutations as Web IDL members', () => {
     const list = new StyleSheetListImpl() as unknown as Record<string, unknown>;
 
     expect(list.insert).toBeUndefined();

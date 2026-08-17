@@ -3,12 +3,12 @@ import { matchSelectorList } from '../selector/match';
 import type { Specificity } from '../syntax/selector';
 import type { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
 import type { CascadeEngine } from './cascade-engine';
-import type { DocumentOrShadowRootStyleState } from './document-or-shadow-root';
+import type { TreeScope } from './tree-scope';
 
 export type CascadedProperty = {
   declaration: PropertyDeclaration;
   styleSheet: CSSStyleSheetImpl;
-  scope: DocumentOrShadowRootStyleState;
+  scope: TreeScope;
 };
 
 // This is the author-normal/important slice of cascade sorting. Origins,
@@ -17,13 +17,13 @@ export type CascadedProperty = {
 export function getCascadedProperty(
   engine: CascadeEngine,
   name: PropertyDeclaration['name'],
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
   element?: Element,
 ): CascadedProperty | null {
   let result: CascadedProperty | null = null;
   let resultSpecificity: Specificity | null = null;
 
-  for (const styleSheet of engine.getActiveStyleSheets(state)) {
+  for (const styleSheet of engine.getActiveStyleSheets(scope)) {
     for (const rule of styleSheet.__styleSheet.rules) {
       if (rule.type !== 'style-rule') continue;
 
@@ -44,7 +44,7 @@ export function getCascadedProperty(
           ) < 0
         ) continue;
 
-        result = { declaration: item, styleSheet, scope: state };
+        result = { declaration: item, styleSheet, scope };
         resultSpecificity = specificity;
       }
     }

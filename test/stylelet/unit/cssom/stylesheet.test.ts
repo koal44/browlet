@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
-import { createStylelet } from '../../../../src/stylelet/stylelet';
+import { Stylelet } from '../../../../src/stylelet/stylelet';
 import { createDomletDocument } from '../selector/domlet';
 
 describe('StyleSheetImpl', () => {
@@ -45,7 +45,7 @@ describe('CSSStyleSheetImpl', () => {
 
   it('creates a stylesheet from specified properties', () => {
     const document = createDomletDocument('');
-    const stylelet = createStylelet(document);
+    const stylelet = new Stylelet(document);
     const sheet = CSSStyleSheetImpl.__create(stylelet.snapshot, {
       location: 'https://example.com/style.css',
       parentStyleSheet: null,
@@ -196,5 +196,5 @@ function createStyleSheet(
     value: 'https://example.com/document/',
   });
 
-  return createStylelet(document).createStyleSheet(options);
+  return new Stylelet(document).createStyleSheet(options);
 }

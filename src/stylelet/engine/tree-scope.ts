@@ -1,18 +1,11 @@
 import { parseStylesheet } from '../css/stylesheet';
-import {
-  treeScopeBrand, type TreeScope,
-} from '../css/tree-scope';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import {
-  insertStyleSheet, removeStyleSheet, StyleSheetListImpl,
-} from '../cssom/stylesheet-list';
+import { StyleSheetListImpl } from '../cssom/stylesheet-list';
 import type { CascadeEngine } from './cascade-engine';
 
-export class DocumentOrShadowRootStyleState implements TreeScope {
+export class TreeScope {
   readonly #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
   readonly #adoptedStyleSheets: CSSStyleSheetImpl[] = [];
-
-  readonly [treeScopeBrand] = true;
 
   constructor(
     readonly root: Document | ShadowRoot,
@@ -34,20 +27,20 @@ export class DocumentOrShadowRootStyleState implements TreeScope {
       ? this.#styleSheets.length
       : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode);
 
-    insertStyleSheet(this.#styleSheets, index, styleSheet);
+    this.#styleSheets.__insert(index, styleSheet);
   }
 
   adoptStyleSheet(styleSheet: CSSStyleSheetImpl): void {
     this.#adoptedStyleSheets.push(styleSheet);
   }
 
-  createInlineStyleSheet(
+  createStyleElementStyleSheet(
     ownerNode: Element,
     source: string,
     {
       media = '',
       title = '',
-    }: InlineStyleSheetOptions = {},
+    }: StyleElementStyleSheetOptions = {},
   ): CSSStyleSheetImpl {
     const snapshot = this.cascade.snapshot;
 
@@ -72,12 +65,12 @@ export class DocumentOrShadowRootStyleState implements TreeScope {
   }
 
   removeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    if (!removeStyleSheet(this.#styleSheets, styleSheet)) return;
+    if (!this.#styleSheets.__remove(styleSheet)) return;
     styleSheet.__clearAssociation();
   }
 }
 
-export type InlineStyleSheetOptions = {
+export type StyleElementStyleSheetOptions = {
   media?: string;
   title?: string;
 };

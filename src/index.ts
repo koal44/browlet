@@ -32,9 +32,10 @@ export type {
   BrowletConfig, BrowletRoute, BrowletWindow,
 } from './browlet/browlet';
 
-export { createStylelet } from './stylelet/stylelet';
+export { Stylelet } from './stylelet/stylelet';
+export { TreeScope } from './stylelet/engine/tree-scope';
 
-export type { Stylelet, StyleletOptions } from './stylelet/stylelet';
+export type { StyleletOptions } from './stylelet/stylelet';
 export type {
   DocumentCaps as StyleletDocumentCaps,
   ElementCaps as StyleletElementCaps,

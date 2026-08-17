@@ -9,41 +9,41 @@ import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet
 import {
   CascadeEngine, type CascadeEngineOptions,
 } from '../../../../src/stylelet/engine/cascade-engine';
-import { DocumentOrShadowRootStyleState } from '../../../../src/stylelet/engine/document-or-shadow-root';
+import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
 import { createDomletDocument } from '../selector/domlet';
 
 describe('cascade engine', () => {
   it('reads the root-owned final stylesheets in document order', () => {
-    const { engine, state } = createCascade();
-    const first = addStyleSheet(state, '* { color: red }');
-    const second = addStyleSheet(state, '* { color: blue }');
+    const { engine, scope } = createCascade();
+    const first = addStyleSheet(scope, '* { color: red }');
+    const second = addStyleSheet(scope, '* { color: blue }');
 
-    expect([...state.styleSheets]).toEqual([first, second]);
-    expect([...state.finalStyleSheets()]).toEqual([first, second]);
-    expect([...engine.getActiveStyleSheets(state)]).toEqual([first, second]);
+    expect([...scope.styleSheets]).toEqual([first, second]);
+    expect([...scope.finalStyleSheets()]).toEqual([first, second]);
+    expect([...engine.getActiveStyleSheets(scope)]).toEqual([first, second]);
   });
 
   it('derives active stylesheets from the final stylesheet list', () => {
-    const { engine, state } = createCascade();
-    const disabled = addStyleSheet(state, '* { color: red }');
-    const enabled = addStyleSheet(state, '* { color: blue }');
+    const { engine, scope } = createCascade();
+    const disabled = addStyleSheet(scope, '* { color: red }');
+    const enabled = addStyleSheet(scope, '* { color: blue }');
     disabled.disabled = true;
 
-    expect([...state.finalStyleSheets()]).toEqual([disabled, enabled]);
-    expect([...engine.getActiveStyleSheets(state)]).toEqual([enabled]);
+    expect([...scope.finalStyleSheets()]).toEqual([disabled, enabled]);
+    expect([...engine.getActiveStyleSheets(scope)]).toEqual([enabled]);
   });
 
   it('finds an unambiguous property through the cascade boundary', () => {
-    const { engine, state } = createCascade();
-    const styleSheet = addStyleSheet(state, `
+    const { engine, scope } = createCascade();
+    const styleSheet = addStyleSheet(scope, `
       * {
         --accent: red;
         color: var(--accent);
       }
     `);
 
-    expect(engine.getCascadedProperty('color', state)).toMatchObject({
+    expect(engine.getCascadedProperty('color', scope)).toMatchObject({
       declaration: {
         type: 'property-declaration',
         custom: false,
@@ -51,16 +51,16 @@ describe('cascade engine', () => {
         value: { type: 'substitution-value' },
       },
       styleSheet,
-      scope: state,
+      scope,
     });
-    expect(engine.getCascadedProperty('--accent', state)).toMatchObject({
+    expect(engine.getCascadedProperty('--accent', scope)).toMatchObject({
       declaration: {
         type: 'property-declaration',
         custom: true,
         name: '--accent',
       },
       styleSheet,
-      scope: state,
+      scope,
     });
   });
 
@@ -69,11 +69,11 @@ describe('cascade engine', () => {
     const location = new URL('https://example.com/styles/site.css');
     const explicitBaseUrl = new URL('https://cdn.example.com/assets/');
     const context = (options: StyleSheetOptions = {}) => {
-      const { engine, state } = createCascade({ environmentBaseUrl });
-      addStyleSheet(state, '* { color: red }', options);
+      const { engine, scope } = createCascade({ environmentBaseUrl });
+      addStyleSheet(scope, '* { color: red }', options);
 
       return engine.getPropertyContext(
-        engine.getCascadedProperty('color', state)!,
+        engine.getCascadedProperty('color', scope)!,
       );
     };
 
@@ -92,15 +92,15 @@ describe('cascade engine', () => {
     const document = createDomletDocument('');
     const location = new URL('https://example.com/constructed/');
     Object.defineProperty(document, 'baseURI', { value: location.href });
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
       snapshot: new Snapshot(document),
     });
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     styleSheet.replaceSync('* { color: red }');
-    state.adoptStyleSheet(styleSheet);
+    scope.adoptStyleSheet(styleSheet);
 
-    const property = engine.getCascadedProperty('color', state)!;
+    const property = engine.getCascadedProperty('color', scope)!;
 
     expect(engine.getPropertyContext(property).baseUrl).toEqual(location);
   });
@@ -109,14 +109,14 @@ describe('cascade engine', () => {
     const document = createDomletDocument('');
     const baseUrl = new URL('https://example.com/embedded/');
     Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       environmentBaseUrl: new URL('https://example.com/environment/'),
       snapshot: new Snapshot(document),
     });
     const ownerNode = document.createElement('style');
-    state.createInlineStyleSheet(ownerNode, '* { color: red }');
+    scope.createStyleElementStyleSheet(ownerNode, '* { color: red }');
 
-    const property = engine.getCascadedProperty('color', state)!;
+    const property = engine.getCascadedProperty('color', scope)!;
 
     expect(engine.getPropertyContext(property).baseUrl).toEqual(baseUrl);
   });
@@ -128,50 +128,50 @@ describe('cascade engine', () => {
     const shadowRoot = document.querySelector('main')!
       .attachShadow({ mode: 'open' });
     const { engine } = createCascade({ snapshot: new Snapshot(document) });
-    const documentState = new DocumentOrShadowRootStyleState(document, engine);
-    const shadowState = new DocumentOrShadowRootStyleState(shadowRoot, engine);
+    const documentScope = new TreeScope(document, engine);
+    const shadowScope = new TreeScope(shadowRoot, engine);
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     styleSheet.replaceSync('* { color: red }');
-    documentState.adoptStyleSheet(styleSheet);
-    shadowState.adoptStyleSheet(styleSheet);
+    documentScope.adoptStyleSheet(styleSheet);
+    shadowScope.adoptStyleSheet(styleSheet);
 
     const documentProperty = engine.getCascadedProperty(
       'color',
-      documentState,
+      documentScope,
     )!;
-    const shadowProperty = engine.getCascadedProperty('color', shadowState)!;
+    const shadowProperty = engine.getCascadedProperty('color', shadowScope)!;
 
     expect(documentProperty.styleSheet).toBe(styleSheet);
     expect(shadowProperty.styleSheet).toBe(styleSheet);
     expect(engine.getPropertyContext(documentProperty).treeScope)
-      .toBe(documentState);
+      .toBe(documentScope);
     expect(engine.getPropertyContext(shadowProperty).treeScope)
-      .toBe(shadowState);
-    expect(documentState.root).toBe(document);
-    expect(shadowState.root).toBe(shadowRoot);
+      .toBe(shadowScope);
+    expect(documentScope.root).toBe(document);
+    expect(shadowScope.root).toBe(shadowRoot);
   });
 
   it('observes CSSOM rule replacement, insertion, and deletion', () => {
-    const { engine, state } = createCascade();
+    const { engine, scope } = createCascade();
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
-    state.adoptStyleSheet(styleSheet);
+    scope.adoptStyleSheet(styleSheet);
 
     styleSheet.replaceSync('* { color: red }');
-    expect(engine.getCascadedProperty('color', state)?.declaration)
+    expect(engine.getCascadedProperty('color', scope)?.declaration)
       .toMatchObject({ name: 'color' });
 
     const rule = styleSheet.cssRules.item(0) as CSSStyleRule;
     rule.style.setProperty('color', 'blue');
     expect(serializePropertyDeclaration(
-      engine.getCascadedProperty('color', state)!.declaration,
+      engine.getCascadedProperty('color', scope)!.declaration,
     ).value).toBe('blue');
 
     styleSheet.insertRule('* { opacity: 0.5 }');
-    expect(engine.getCascadedProperty('opacity', state)?.declaration)
+    expect(engine.getCascadedProperty('opacity', scope)?.declaration)
       .toMatchObject({ name: 'opacity' });
 
     styleSheet.deleteRule(0);
-    expect(engine.getCascadedProperty('opacity', state)).toBeNull();
+    expect(engine.getCascadedProperty('opacity', scope)).toBeNull();
   });
 
   it('matches a target and sorts author declarations by cascade precedence', () => {
@@ -179,10 +179,10 @@ describe('cascade engine', () => {
       '<main id="target" class="target"></main>',
     );
     const target = document.getElementById('target')!;
-    const { engine, state } = createCascade({
+    const { engine, scope } = createCascade({
       snapshot: new Snapshot(document),
     });
-    addStyleSheet(state, `
+    addStyleSheet(scope, `
       .target { color: red !important }
       #target { color: green }
       main { color: black !important }
@@ -193,7 +193,7 @@ describe('cascade engine', () => {
     const result = engine.getCascadedPropertyForElement(
       'color',
       target,
-      state,
+      scope,
     );
 
     expect(result).not.toBeNull();
@@ -208,17 +208,17 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
   return {
     engine,
-    state: new DocumentOrShadowRootStyleState(snapshot.document, engine),
+    scope: new TreeScope(snapshot.document, engine),
   };
 }
 
 function addStyleSheet(
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
   source: string,
   options: StyleSheetOptions = {},
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.__create(
-    state.cascade.snapshot,
+    scope.cascade.snapshot,
     {
       location: options.location?.href ?? null,
       parentStyleSheet: null,
@@ -232,6 +232,6 @@ function addStyleSheet(
     parseStylesheet(source, options),
   );
 
-  state.addStyleSheet(styleSheet);
+  scope.addStyleSheet(styleSheet);
   return styleSheet;
 }

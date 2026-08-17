@@ -1,10 +1,10 @@
 import { createSelectlet } from './selectlet/selectlet';
-import { createStylelet } from './stylelet/stylelet';
+import { Stylelet } from './stylelet/stylelet';
 
 const root = globalThis as typeof globalThis & {
-  createStylelet?: typeof createStylelet;
+  Stylelet?: typeof Stylelet;
 };
 
-root.createStylelet = createStylelet;
+root.Stylelet = Stylelet;
 
 export default createSelectlet;

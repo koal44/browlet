@@ -4,7 +4,6 @@ import type {
   QueryContext as _QueryContext,
 } from '../src/selectlet/selectlet';
 import type {
-  createStylelet as _createStylelet,
   Stylelet as _Stylelet,
 } from '../src/stylelet/stylelet';
 import type { PwHelpers } from './harness/browser/browser';
@@ -21,7 +20,7 @@ declare global {
   var selectlet: undefined | (Selectlet & { snapshot: Snapshot; });
   var stylelet: undefined | Stylelet;
   var createSelectlet: typeof _createSelectlet;
-  var createStylelet: typeof _createStylelet;
+  var Stylelet: typeof _Stylelet;
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface Window {

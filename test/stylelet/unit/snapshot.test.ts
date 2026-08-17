@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createStylelet } from '../../../src/stylelet/stylelet';
+import { Stylelet } from '../../../src/stylelet/stylelet';
 import { Snapshot } from '../../../src/stylelet/snapshot';
 import { createDomletDocument } from './selector/domlet';
 
@@ -41,7 +41,7 @@ describe('style snapshot', () => {
 
   it('is created and retained by the public Stylelet API', () => {
     const document = createDomletDocument('<main></main>');
-    const stylelet = createStylelet(document);
+    const stylelet = new Stylelet(document);
 
     expect(stylelet.snapshot.document).toBe(document);
   });

@@ -4,7 +4,7 @@ import {
   type PropertyContext, type PropertyDeclaration, type PropertyName,
 } from '../css/property';
 import type { CascadeEngine } from './cascade-engine';
-import type { DocumentOrShadowRootStyleState } from './document-or-shadow-root';
+import type { TreeScope } from './tree-scope';
 import { ValueStage } from '../value-processing/stage';
 import {
   CSSStyleDeclarationImpl, parseDeclarationBlock,
@@ -13,7 +13,7 @@ import {
 export function computeStyle(
   engine: CascadeEngine,
   element: Element,
-  state: DocumentOrShadowRootStyleState,
+  scope: TreeScope,
 ): CSSStyleDeclaration {
   const declarations = 'style' in element &&
     element.style instanceof CSSStyleDeclarationImpl
@@ -25,11 +25,11 @@ export function computeStyle(
     const inline = declarations.find(
       (declaration) => declaration.name === name,
     );
-    const cascaded = engine.getCascadedPropertyForElement(name, element, state);
+    const cascaded = engine.getCascadedPropertyForElement(name, element, scope);
 
     let selected: PropertyDeclaration | undefined;
     let context: PropertyContext = {
-      treeScope: state,
+      treeScope: scope,
       ...(engine.environmentBaseUrl === undefined
         ? {}
         : { baseUrl: engine.environmentBaseUrl }),

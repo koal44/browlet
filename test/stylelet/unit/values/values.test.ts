@@ -1,3 +1,4 @@
+import { JSDOM } from 'jsdom';
 import {
   type ComponentValue, serializeCssIdentifier, serializeCssString,
 } from '../../../../src/stylelet/syntax/component-value';
@@ -7,7 +8,9 @@ import {
   it,
 } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { createTreeScope } from '../../../../src/stylelet/css/tree-scope';
+import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
+import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
+import { Snapshot } from '../../../../src/stylelet/snapshot';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
@@ -637,8 +640,7 @@ describe('url', () => {
 
   it('captures the active tree scope independently for each use', () => {
     const value = parseUrl('url("#paint")')!;
-    const documentScope = createTreeScope();
-    const shadowScope = createTreeScope();
+    const { documentScope, shadowScope } = createUrlTreeScopes();
     const documentValue = resolveUrl(
       value,
       ValueStage.Specified,
@@ -655,8 +657,7 @@ describe('url', () => {
   });
 
   it('retains the captured tree scope through inheritance', () => {
-    const documentScope = createTreeScope();
-    const shadowScope = createTreeScope();
+    const { documentScope, shadowScope } = createUrlTreeScopes();
     const specified = resolveUrl(
       parseUrl('url("#paint")')!,
       ValueStage.Specified,
@@ -902,6 +903,24 @@ describe('url', () => {
     expect(c.pos()).toBe(0);
   });
 });
+
+function createUrlTreeScopes(): {
+  documentScope: TreeScope;
+  shadowScope: TreeScope;
+} {
+  const document = new JSDOM('<main></main>', {
+    url: 'https://example.com/',
+  }).window.document;
+  const snapshot = new Snapshot(document);
+  const cascade = new CascadeEngine({ snapshot });
+  const shadowRoot = document.querySelector('main')!
+    .attachShadow({ mode: 'open' });
+
+  return {
+    documentScope: new TreeScope(document, cascade),
+    shadowScope: new TreeScope(shadowRoot, cascade),
+  };
+}
 
 // Numeric data types
 

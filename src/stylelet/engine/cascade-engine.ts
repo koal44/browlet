@@ -11,7 +11,7 @@ import {
 import {
   getCustomPropertyRegistration as findCustomPropertyRegistration,
 } from './custom-property';
-import type { DocumentOrShadowRootStyleState } from './document-or-shadow-root';
+import type { TreeScope } from './tree-scope';
 
 export class CascadeEngine {
   // A stand-in for the associated Document's [[registeredPropertySet]],
@@ -35,36 +35,36 @@ export class CascadeEngine {
   }
 
   *getActiveStyleSheets(
-    state: DocumentOrShadowRootStyleState,
+    scope: TreeScope,
   ): IterableIterator<CSSStyleSheetImpl> {
-    for (const styleSheet of state.finalStyleSheets()) {
+    for (const styleSheet of scope.finalStyleSheets()) {
       if (!styleSheet.disabled) yield styleSheet;
     }
   }
 
   getComputedStyle(
     element: Element,
-    state: DocumentOrShadowRootStyleState,
+    scope: TreeScope,
   ): CSSStyleDeclaration {
-    return computeStyle(this, element, state);
+    return computeStyle(this, element, scope);
   }
 
   getCascadedProperty(
     name: PropertyDeclaration['name'],
-    state: DocumentOrShadowRootStyleState,
+    scope: TreeScope,
   ): CascadedProperty | null {
-    return findCascadedProperty(this, name, state);
+    return findCascadedProperty(this, name, scope);
   }
 
   getCascadedPropertyForElement(
     name: PropertyDeclaration['name'],
     element: Element,
-    state: DocumentOrShadowRootStyleState,
+    scope: TreeScope,
   ): CascadedProperty | null {
     return findCascadedProperty(
       this,
       name,
-      state,
+      scope,
       element,
     );
   }
@@ -84,9 +84,9 @@ export class CascadeEngine {
 
   getCustomPropertyRegistration(
     name: CustomPropertyName,
-    state: DocumentOrShadowRootStyleState,
+    scope: TreeScope,
   ): CustomPropertyRegistration | null {
-    return findCustomPropertyRegistration(this, name, state);
+    return findCustomPropertyRegistration(this, name, scope);
   }
 }
 

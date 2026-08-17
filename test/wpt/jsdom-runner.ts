@@ -4,7 +4,7 @@ import { extname } from 'node:path';
 import {
   JSDOM, requestInterceptor, VirtualConsole, type DOMWindow,
 } from 'jsdom';
-import { createStylelet } from '../../src/stylelet/stylelet';
+import { Stylelet } from '../../src/stylelet/stylelet';
 import {
   reporterSource, resolveWptPath, withWptTimeout, wptOrigin,
   type WptReport,
@@ -55,7 +55,7 @@ export async function runTest(testPath: string): Promise<WptReport> {
 }
 
 function installStylelet(window: WptWindow): void {
-  const stylelet = createStylelet(window.document);
+  const stylelet = new Stylelet(window.document);
 
   window.getComputedStyle = () => {
     throw new Error(
