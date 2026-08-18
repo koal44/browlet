@@ -5,8 +5,9 @@ import {
   DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
 import {
-  HTMLElementImpl, HTMLLinkElementImpl, HTMLStyleElementImpl,
-  MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
+  HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
+  HTMLStyleElementImpl, isHTMLElement, MathMLElementImpl, SVGElementImpl,
+  SVGStyleElementImpl,
 } from '../../../../src/domlet/nodes/element';
 import { isComment } from '../../../../src/domlet/nodes/node';
 import { DomletParser } from '../../../../src/domlet/parser/parser';
@@ -57,6 +58,7 @@ describe('Parser tree adapter', () => {
       '<math id="math"><mi id="mi"></mi></math>',
     ].join(''));
 
+    expect(document.head).toBeInstanceOf(HTMLHeadElementImpl);
     expect(document.getElementById('style')).toBeInstanceOf(HTMLStyleElementImpl);
     expect(document.getElementById('link')).toBeInstanceOf(HTMLLinkElementImpl);
     expect(document.getElementById('svg')).toBeInstanceOf(SVGElementImpl);
@@ -65,6 +67,19 @@ describe('Parser tree adapter', () => {
     expect(document.getElementById('html')).toBeInstanceOf(HTMLElementImpl);
     expect(document.getElementById('math')).toBeInstanceOf(MathMLElementImpl);
     expect(document.getElementById('mi')).toBeInstanceOf(MathMLElementImpl);
+  });
+
+  it('distinguishes parser-created elements from DOM-created elements', () => {
+    const document = new DomletParser().parse('<main id="parsed"></main>');
+    const parsed = document.getElementById('parsed');
+    const created = document.createElement('main');
+
+    if (!isHTMLElement(created)) {
+      throw new Error('Expected an HTML element');
+    }
+
+    expect(parsed?.__wasCreatedByParser).toBe(true);
+    expect(created.__wasCreatedByParser).toBe(false);
   });
 
   it('stores and retrieves the Parse5 document mode', () => {

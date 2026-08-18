@@ -45,7 +45,6 @@ export class CSSStyleSheetImpl
   // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #stylesheetBaseURL: string | null;
 
-  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #alternate: boolean;
   #originClean: boolean;
   #constructed: boolean;
@@ -201,6 +200,10 @@ export class CSSStyleSheetImpl
     return this.#styleSheet;
   }
 
+  __isAlternate(): boolean {
+    return this.#alternate;
+  }
+
   __isConstructedFor(document: Document): boolean {
     return this.#constructed && this.#constructorDocument === document;
   }
@@ -209,6 +212,14 @@ export class CSSStyleSheetImpl
     this.setParentStyleSheet(null);
     this.setOwnerNode(null);
     this.#ownerRule = null;
+  }
+
+  __setAssociatedMedia(media: CSSOMString): void {
+    this.setMedia(media);
+  }
+
+  __setAssociatedTitle(title: string): void {
+    this.setTitle(title);
   }
 
   // Deprecated CSSStyleSheet members ----------------------------------------

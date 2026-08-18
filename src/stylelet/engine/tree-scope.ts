@@ -9,7 +9,10 @@ import type { CascadeEngine } from './cascade-engine';
 
 export class TreeScope {
   readonly #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
+  #headerStyleSheetCount = 0;
   readonly #adoptedStyleSheets: ObservableArrayHandle<CSSStyleSheetImpl>;
+  #lastStyleSheetSetName: string | null = null;
+  #preferredStyleSheetSetName = '';
 
   constructor(
     readonly root: Document | ShadowRoot,
@@ -45,13 +48,20 @@ export class TreeScope {
     yield* this.#adoptedStyleSheets.value;
   }
 
-  addStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+  addHeaderStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    this.#styleSheets.__insert(this.#headerStyleSheetCount, styleSheet);
+    this.#headerStyleSheetCount++;
+    this.#configureAddedStyleSheet(styleSheet);
+  }
+
+  addTreeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
     const ownerNode = styleSheet.ownerNode;
     const index = ownerNode === null
       ? this.#styleSheets.length
       : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode);
 
     this.#styleSheets.__insert(index, styleSheet);
+    this.#configureAddedStyleSheet(styleSheet);
   }
 
   createStyleElementStyleSheet(
@@ -80,13 +90,71 @@ export class TreeScope {
         baseUrl: new URL((this.root.ownerDocument ?? this.root).baseURI),
       }),
     );
-    this.addStyleSheet(styleSheet);
+    this.addTreeStyleSheet(styleSheet);
     return styleSheet;
   }
 
   removeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    const index = findStyleSheetIndex(this.#styleSheets, styleSheet);
+    if (index < 0) return;
+
+    if (index < this.#headerStyleSheetCount) {
+      this.#headerStyleSheetCount--;
+    }
     if (!this.#styleSheets.__remove(styleSheet)) return;
     styleSheet.__clearAssociation();
+  }
+
+  // Internal operations ----------------------------------------------------
+
+  __selectStyleSheetSet(name: string): void {
+    this.#enableStyleSheetSet(name);
+    this.#lastStyleSheetSetName = name;
+  }
+
+  __changePreferredStyleSheetSetName(name: string): void {
+    const prev = this.#preferredStyleSheetSetName;
+    this.#preferredStyleSheetSetName = name;
+
+    if (name !== prev && this.#lastStyleSheetSetName === null) {
+      this.#enableStyleSheetSet(name);
+    }
+  }
+
+  // Private helpers ---------------------------------------------------------
+
+  #configureAddedStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    if (styleSheet.disabled) return;
+
+    const title = styleSheet.title ?? '';
+    if (
+      title !== '' &&
+      !styleSheet.__isAlternate() &&
+      this.#preferredStyleSheetSetName === ''
+    ) {
+      this.__changePreferredStyleSheetSetName(title);
+    }
+
+    const matchesPreferred =
+      this.#lastStyleSheetSetName === null &&
+      title === this.#preferredStyleSheetSetName;
+    if (
+      title === '' ||
+      matchesPreferred ||
+      title === this.#lastStyleSheetSetName
+    ) {
+      styleSheet.disabled = false;
+      return;
+    }
+
+    styleSheet.disabled = true;
+  }
+
+  #enableStyleSheetSet(name: string): void {
+    for (const styleSheet of this.#styleSheets) {
+      const title = styleSheet.title ?? '';
+      if (title !== '') styleSheet.disabled = name !== title;
+    }
   }
 }
 
@@ -123,3 +191,15 @@ function findStyleSheetInsertionIndex(
 }
 
 const DOCUMENT_POSITION_FOLLOWING = 0x04;
+
+function findStyleSheetIndex(
+  styleSheets: StyleSheetList,
+  target: CSSStyleSheet,
+): number {
+  let index = 0;
+  for (const styleSheet of styleSheets) {
+    if (styleSheet === target) return index;
+    index++;
+  }
+  return -1;
+}

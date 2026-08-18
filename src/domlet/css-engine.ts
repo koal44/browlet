@@ -7,7 +7,7 @@ import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../stylelet/engine/tree-scope';
 
 /*
- * interface mixin DocumentOrShadowRoot {
+ * partial interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;
  *   attribute ObservableArray<CSSStyleSheet> adoptedStyleSheets;
  * };
@@ -52,6 +52,12 @@ export class ElementCSSInlineStyleMixin {
  * interface mixin LinkStyle {
  *   readonly attribute CSSStyleSheet? sheet;
  * };
+ *
+ * Deferred association hosts:
+ * - external HTML links require the CSSOM fetch-a-CSS-style-sheet algorithm
+ *   and HTML's linked-resource processing;
+ * - XML processing instructions require an XML DOM host;
+ * - HTTP Link headers require navigation response metadata.
  */
 export class LinkStyleMixin {
   readonly #owner;
@@ -88,7 +94,25 @@ export class LinkStyleMixin {
   }
 
   attributeChanged(qualifiedName: string): void {
-    if (this.#behavior.attributes.has(qualifiedName)) this.update();
+    if (!this.#behavior.attributes.has(qualifiedName)) return;
+
+    if (this.#sheet) {
+      if (qualifiedName === 'media') {
+        this.#sheet.__setAssociatedMedia(
+          this.#owner.getAttribute('media') ?? '',
+        );
+        return;
+      }
+
+      if (qualifiedName === 'title') {
+        this.#sheet.__setAssociatedTitle(
+          this.#owner.getAttribute('title') ?? '',
+        );
+        return;
+      }
+    }
+
+    this.update();
   }
 
   update(): void {
@@ -101,11 +125,13 @@ export class LinkStyleMixin {
     this.#scope = null;
 
     const type = this.#owner.getAttribute('type')?.toLowerCase() ?? '';
-    if (
-      !this.#owner.isConnected ||
-      this.#owner.localName === 'link' ||
-      (type !== '' && type !== 'text/css')
-    ) {
+    if (!this.#owner.isConnected) return;
+
+    // External links remain unassociated until Browlet exposes a response-
+    // bearing resource loader to HTML's linked-resource processing model.
+    if (this.#owner.localName === 'link') return;
+
+    if (type !== '' && type !== 'text/css') {
       return;
     }
 

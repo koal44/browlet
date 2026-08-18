@@ -1,3 +1,6 @@
 # Add WPT test paths as needed, one per line.
 
 css/css-cascade/important-vs-inline-001.html
+css/cssom/preferred-stylesheet-order.html
+css/cssom/preferred-stylesheet-reversed-order.html
+css/cssom/StyleSheetList.html

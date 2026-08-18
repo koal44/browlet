@@ -40,6 +40,8 @@ export class BrowletParser {
     resume: () => void,
   ): Promise<void> {
     try {
+      // Browlet has no nested navigables, so only this Document can block.
+      await this.document.__waitForScriptBlockingStyleSheets();
       await this.#handleScript(element, write);
       resume();
     } catch (error) {

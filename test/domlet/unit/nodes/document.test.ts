@@ -4,7 +4,9 @@ import {
   DocumentImpl, DocumentMode, withDocumentWriter,
 } from '../../../../src/domlet/nodes/document';
 import { DocumentTypeImpl } from '../../../../src/domlet/nodes/document-type';
-import { HTMLElementImpl } from '../../../../src/domlet/nodes/element';
+import {
+  HTMLElementImpl, HTMLHeadElementImpl,
+} from '../../../../src/domlet/nodes/element';
 import {
   isComment, isDocument, isDocumentType, isElement, isText, NodeType,
 } from '../../../../src/domlet/nodes/node';
@@ -43,6 +45,21 @@ describe('Document', () => {
     expect(document.doctype).toBe(doctype);
     expect(document.documentElement).toBe(element);
     expect(document.mode).toBe(DocumentMode.NoQuirks);
+  });
+
+  it('derives its head from the HTML document tree', () => {
+    const document = new DocumentImpl();
+    const html = document.createElement('html');
+    const head = document.createElement('head');
+
+    expect(head).toBeInstanceOf(HTMLHeadElementImpl);
+    expect(document.head).toBeNull();
+
+    document.appendChild(html);
+    expect(document.head).toBeNull();
+
+    html.appendChild(head);
+    expect(document.head).toBe(head);
   });
 
   it('creates HTML elements and text nodes', () => {

@@ -52,6 +52,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
       this.#document,
       attrs.map(fromParserAttribute),
     );
+    element.__markAsParserCreated();
     element.beginParsingChildren();
     return element;
   }

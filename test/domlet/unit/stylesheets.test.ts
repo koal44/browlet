@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDomlet } from '../../../src/domlet/domlet';
 import type { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
-  isHTMLElement, isHTMLStyleElement, type HTMLStyleElementImpl,
+  isHTMLElement, isHTMLStyleElement, isSVGStyleElement,
+  type HTMLStyleElementImpl,
 } from '../../../src/domlet/nodes/element';
 
 describe('stylesheet integration', () => {
@@ -18,6 +19,65 @@ describe('stylesheet integration', () => {
     expect(sheet).not.toBeNull();
     expect(sheet?.ownerNode).toBe(style);
     expect(sheet?.cssRules).toHaveLength(1);
+  });
+
+  it('associates SVG style elements with the document tree scope', () => {
+    const document = createDomlet({
+      source: [
+        '<svg><style id="style">circle { opacity: 0.5 }</style></svg>',
+      ].join(''),
+    });
+    const style = document.getElementById('style');
+    if (!style || !isSVGStyleElement(style)) {
+      throw new Error('Expected an SVG style element');
+    }
+
+    expect(style.sheet).not.toBeNull();
+    expect(style.sheet?.ownerNode).toBe(style);
+    expect(document.styleSheets.item(0)).toBe(style.sheet);
+  });
+
+  it('keeps media and title synchronized without replacing the sheet', () => {
+    const document = createDomlet({
+      source: '<style id="style">main { opacity: 0.5 }</style>',
+    });
+    const style = getStyleElement(document, 'style');
+    const sheet = style.sheet;
+
+    style.setAttribute('media', 'screen');
+    style.setAttribute('title', 'theme');
+
+    expect(style.sheet).toBe(sheet);
+    expect(sheet?.media.mediaText).toBe('screen');
+    expect(sheet?.title).toBe('theme');
+
+    style.removeAttribute('media');
+    style.removeAttribute('title');
+
+    expect(style.sheet).toBe(sheet);
+    expect(sheet?.media.mediaText).toBe('');
+    expect(sheet?.title).toBeNull();
+  });
+
+  it('removes and recreates an association when its type changes', () => {
+    const document = createDomlet({
+      source: '<style id="style">main { opacity: 0.5 }</style>',
+    });
+    const style = getStyleElement(document, 'style');
+    const sheet = style.sheet;
+
+    style.setAttribute('type', 'text/example');
+
+    expect(style.sheet).toBeNull();
+    expect(sheet?.ownerNode).toBeNull();
+    expect(document.styleSheets).toHaveLength(0);
+
+    style.setAttribute('type', 'TEXT/CSS');
+
+    expect(style.sheet).not.toBeNull();
+    expect(style.sheet).not.toBe(sheet);
+    expect(style.sheet?.ownerNode).toBe(style);
+    expect(document.styleSheets.item(0)).toBe(style.sheet);
   });
 
   it('exposes inline style sheets in tree order', () => {
@@ -169,6 +229,23 @@ describe('stylesheet integration', () => {
     first.parentNode!.insertBefore(second, first);
 
     expect(engine.getComputedStyle(target).opacity).toBe('0.1');
+  });
+
+  it('enables the first titled stylesheet set', () => {
+    const document = createDomlet({
+      source: [
+        '<style title="alpha">.target { opacity: 0.25 }</style>',
+        '<style title="beta">.target { opacity: 0.5 }</style>',
+        '<main id="target" class="target"></main>',
+      ].join(''),
+    });
+    const target = document.getElementById('target')!;
+    const alpha = document.styleSheets.item(0)!;
+    const beta = document.styleSheets.item(1)!;
+
+    expect(alpha.disabled).toBe(false);
+    expect(beta.disabled).toBe(true);
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
   });
 
   it('exposes observable adopted stylesheets without replacing the array', () => {

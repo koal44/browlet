@@ -1,7 +1,7 @@
 import {
-  withElementStub, withHTMLElementStub, withHTMLLinkElementStub,
-  withHTMLStyleElementStub, withMathMLElementStub, withSVGElementStub,
-  withSVGStyleElementStub,
+  withElementStub, withHTMLElementStub, withHTMLHeadElementStub,
+  withHTMLLinkElementStub, withHTMLStyleElementStub, withMathMLElementStub,
+  withSVGElementStub, withSVGStyleElementStub,
 } from '../stubs/interfaces';
 import { NodeImpl, NodeType } from './node';
 import { AttrImpl } from './attribute';
@@ -18,6 +18,7 @@ export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
+  #wasCreatedByParser = false;
   #inlineStyle: ElementCSSInlineStyleMixin | undefined;
   protected readonly linkStyle: LinkStyleMixin | undefined = undefined;
 
@@ -32,6 +33,14 @@ export class ElementImpl
   ) {
     super(ownerDocument);
     this.attributes = new NamedNodeMapImpl(...attributes);
+  }
+
+  get __wasCreatedByParser(): boolean {
+    return this.#wasCreatedByParser;
+  }
+
+  __markAsParserCreated(): void {
+    this.#wasCreatedByParser = true;
   }
 
   beginParsingChildren(): void {
@@ -192,6 +201,18 @@ export class HTMLElementImpl
   }
 }
 
+export class HTMLHeadElementImpl
+  extends withHTMLHeadElementStub(HTMLElementImpl)
+  implements HTMLHeadElement
+{
+  constructor(
+    ownerDocument: DocumentImpl,
+    attributes: AttrImpl[] = [],
+  ) {
+    super('head', ownerDocument, attributes);
+  }
+}
+
 export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
   implements HTMLStyleElement
@@ -317,6 +338,10 @@ export function createElementNode(
   if (namespaceURI === HTML_NAMESPACE) {
     localName = asciiLower(localName);
 
+    if (localName === 'head') {
+      return new HTMLHeadElementImpl(ownerDocument, attributes);
+    }
+
     if (localName === 'style') {
       return new HTMLStyleElementImpl(ownerDocument, attributes);
     }
@@ -347,6 +372,12 @@ export function isHTMLElement(
   element: Element,
 ): element is HTMLElementImpl {
   return element.namespaceURI === HTML_NAMESPACE;
+}
+
+export function isHTMLHeadElement(
+  element: Element,
+): element is HTMLHeadElementImpl {
+  return isHTMLElement(element) && element.localName === 'head';
 }
 
 export function isHTMLStyleElement(

@@ -232,6 +232,6 @@ function addStyleSheet(
     parseStylesheet(source, options),
   );
 
-  scope.addStyleSheet(styleSheet);
+  scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
 }

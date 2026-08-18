@@ -4,10 +4,10 @@ import { DocumentOrShadowRootMixin } from '../css-engine';
 import { asDocument } from '../stubs/interfaces';
 import { CommentImpl } from './comment';
 import {
-  createElementNode, HTML_NAMESPACE,
+  createElementNode, HTML_NAMESPACE, isHTMLElement, isHTMLHeadElement,
 } from './element';
 import type {
-  ElementImpl, MATHML_NAMESPACE, SVG_NAMESPACE,
+  ElementImpl, HTMLHeadElementImpl, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
 import {
   isDocumentType, isElement, NodeImpl, NodeType,
@@ -24,6 +24,11 @@ export class DocumentImpl
 {
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
+
+  // HTML: a Document's script-blocking style sheet set is an ordered set.
+  readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
+  #scriptBlockingStyleSheetsReady = Promise.resolve();
+  #resolveScriptBlockingStyleSheets: (() => void) | null = null;
 
   readonly nodeType = NodeType.Document;
   readonly contentType = 'text/html';
@@ -59,6 +64,19 @@ export class DocumentImpl
     return null;
   }
 
+  get head(): HTMLHeadElementImpl | null {
+    const html = this.documentElement;
+    if (!html || !isHTMLElement(html) || html.localName !== 'html') {
+      return null;
+    }
+
+    for (let child = html.firstChild; child; child = child.nextSibling) {
+      if (isElement(child) && isHTMLHeadElement(child)) return child;
+    }
+
+    return null;
+  }
+
   get styleSheets(): StyleSheetList {
     return this.documentOrShadowRoot.styleSheets;
   }
@@ -77,6 +95,32 @@ export class DocumentImpl
 
   get __treeScope(): TreeScope {
     return this.documentOrShadowRoot.scope;
+  }
+
+  __addScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
+    if (this.#scriptBlockingStyleSheets.has(ownerNode)) return;
+
+    if (this.#scriptBlockingStyleSheets.size === 0) {
+      this.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
+        this.#resolveScriptBlockingStyleSheets = resolve;
+      });
+    }
+
+    this.#scriptBlockingStyleSheets.add(ownerNode);
+  }
+
+  __removeScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
+    if (!this.#scriptBlockingStyleSheets.delete(ownerNode)) return;
+    if (this.#scriptBlockingStyleSheets.size > 0) return;
+
+    this.#resolveScriptBlockingStyleSheets?.();
+    this.#resolveScriptBlockingStyleSheets = null;
+  }
+
+  async __waitForScriptBlockingStyleSheets(): Promise<void> {
+    while (this.#scriptBlockingStyleSheets.size > 0) {
+      await this.#scriptBlockingStyleSheetsReady;
+    }
   }
 
   createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K];

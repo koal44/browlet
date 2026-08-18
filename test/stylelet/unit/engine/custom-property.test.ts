@@ -340,6 +340,6 @@ function addStyleSheet(
     sheet,
   );
 
-  scope.addStyleSheet(styleSheet);
+  scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
 }

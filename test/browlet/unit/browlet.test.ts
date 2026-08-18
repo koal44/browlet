@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   Browlet, createBrowlet,
 } from '../../../src/browlet/browlet';
+import { isHTMLLinkElement } from '../../../src/domlet/nodes/element';
 
 describe('createBrowlet', () => {
   it('coordinates a Domlet document and window', () => {
@@ -110,6 +111,33 @@ describe('createBrowlet', () => {
       'https://example.test/script.js',
     ]);
     expect(observations).toEqual([null]);
+  });
+
+  it.skip('associates externally linked style sheets after fetching', async () => {
+    const requests: string[] = [];
+    const browlet = createBrowlet({
+      route: (url) => {
+        requests.push(url);
+        if (url === 'https://example.test/style.css') {
+          return 'main { opacity: 0.5 }';
+        }
+        return '<link id="style" rel="stylesheet" href="/style.css">';
+      },
+    });
+
+    await browlet.navigate('https://example.test/page');
+    const link = browlet.document.getElementById('style');
+    if (!link || !isHTMLLinkElement(link)) {
+      throw new Error('Expected an HTML link element');
+    }
+
+    expect(requests).toEqual([
+      'https://example.test/page',
+      'https://example.test/style.css',
+    ]);
+    expect(link.sheet).not.toBeNull();
+    expect(link.sheet?.ownerNode).toBe(link);
+    expect(browlet.document.styleSheets.item(0)).toBe(link.sheet);
   });
 
   it('exposes parsed element IDs as named window properties', async () => {
