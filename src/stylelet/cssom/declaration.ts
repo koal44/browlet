@@ -6,7 +6,7 @@ import {
 import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
-import { domExceptionName } from './exceptions';
+import { domExceptionName } from '../../shared/dom-exception';
 import { withCSSStyleDeclaration } from './stubs/extensions';
 
 /*

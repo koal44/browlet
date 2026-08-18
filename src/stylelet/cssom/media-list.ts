@@ -2,7 +2,7 @@ import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,
 } from '../values/media-query';
-import { domExceptionName } from './exceptions';
+import { domExceptionName } from '../../shared/dom-exception';
 import type { CSSOMString } from './string';
 
 /*

@@ -1,3 +1,4 @@
+import { domExceptionName } from '../../shared/dom-exception';
 import { AttrImpl } from './attribute';
 
 export class HTMLCollectionImpl<T extends Element = Element>
@@ -59,13 +60,13 @@ export class NamedNodeMapImpl
 
   #remove(matches: (attribute: AttrImpl) => boolean): AttrImpl {
     const index = this.findIndex(matches);
-    if (index < 0) throw new DOMException('', 'NotFoundError');
+    if (index < 0) throw new DOMException('', domExceptionName.notFound);
     return this.splice(index, 1)[0]!;
   }
 
   #set(attribute: Attr): AttrImpl | null {
     if (!(attribute instanceof AttrImpl)) {
-      throw new DOMException('', 'WrongDocumentError');
+      throw new DOMException('', domExceptionName.wrongDocument);
     }
 
     const previous = attribute.namespaceURI === null

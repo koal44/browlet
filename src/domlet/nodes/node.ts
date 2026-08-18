@@ -1,3 +1,4 @@
+import { domExceptionName } from '../../shared/dom-exception';
 import { asDocument } from '../stubs/interfaces';
 import { TreeNode } from '../tree/tree-node';
 import type { CommentImpl } from './comment';
@@ -103,7 +104,7 @@ export abstract class NodeImpl
 
   appendChild<T extends Node>(node: T): T {
     if (!(node instanceof NodeImpl)) {
-      throw new DOMException('', 'HierarchyRequestError');
+      throw new DOMException('', domExceptionName.hierarchyRequest);
     }
 
     super.appendTreeChild(node);
@@ -112,7 +113,7 @@ export abstract class NodeImpl
 
   insertBefore<T extends Node>(node: T, child: Node | null): T {
     if (!(node instanceof NodeImpl)) {
-      throw new DOMException('', 'HierarchyRequestError');
+      throw new DOMException('', domExceptionName.hierarchyRequest);
     }
 
     if (child === null) {
@@ -121,7 +122,7 @@ export abstract class NodeImpl
     }
 
     if (!(child instanceof NodeImpl) || child.parent !== this) {
-      throw new DOMException('', 'NotFoundError');
+      throw new DOMException('', domExceptionName.notFound);
     }
 
     child.insertTreeSiblingBefore(node);

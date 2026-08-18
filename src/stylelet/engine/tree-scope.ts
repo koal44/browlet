@@ -1,6 +1,6 @@
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import { domExceptionName } from '../cssom/exceptions';
+import { domExceptionName } from '../../shared/dom-exception';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
 import {
   createObservableArray, type ObservableArrayHandle,

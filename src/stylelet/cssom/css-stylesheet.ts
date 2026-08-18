@@ -6,7 +6,7 @@ import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
 import type { Snapshot } from '../snapshot';
-import { domExceptionName } from './exceptions';
+import { domExceptionName } from '../../shared/dom-exception';
 import { CSSRuleListImpl } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
 import { StyleSheetImpl } from './stylesheet';

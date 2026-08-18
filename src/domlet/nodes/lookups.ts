@@ -2,6 +2,7 @@ import { isElement } from './node';
 import { HTMLCollectionImpl } from './collections';
 import type { ElementImpl } from './element';
 import type { NodeImpl } from './node';
+import { parseOrderedSet } from '../util';
 
 export function findElementById(
   root: NodeImpl,
@@ -23,15 +24,18 @@ export function findElementsByClassName(
   root: NodeImpl,
   classNames: string,
 ): HTMLCollectionImpl {
-  const names = splitOnAsciiWhitespace(classNames);
-  if (names.length === 0) return new HTMLCollectionImpl();
+  const names = parseOrderedSet(classNames);
+  if (names.size === 0) return new HTMLCollectionImpl();
 
   return collectElements(root, (element) => {
     const value = element.getAttribute('class');
     if (value === null) return false;
 
-    const classes = new Set(splitOnAsciiWhitespace(value));
-    return names.every((name) => classes.has(name));
+    const classes = parseOrderedSet(value);
+    for (const name of names) {
+      if (!classes.has(name)) return false;
+    }
+    return true;
   });
 }
 
@@ -82,8 +86,4 @@ function walkElements(
   }
 
   return true;
-}
-
-function splitOnAsciiWhitespace(value: string): string[] {
-  return value.match(/[^\t\n\f\r ]+/g) ?? [];
 }
