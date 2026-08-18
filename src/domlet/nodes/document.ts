@@ -63,6 +63,14 @@ export class DocumentImpl
     return this.documentOrShadowRoot.styleSheets;
   }
 
+  get adoptedStyleSheets(): CSSStyleSheet[] {
+    return this.documentOrShadowRoot.adoptedStyleSheets;
+  }
+
+  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+    this.documentOrShadowRoot.adoptedStyleSheets = styleSheets;
+  }
+
   get cssEngine(): Stylelet {
     return this.#stylelet ??= new Stylelet(asDocument(this));
   }

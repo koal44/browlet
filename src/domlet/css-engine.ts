@@ -9,6 +9,7 @@ import type { TreeScope } from '../stylelet/engine/tree-scope';
 /*
  * interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;
+ *   attribute ObservableArray<CSSStyleSheet> adoptedStyleSheets;
  * };
  */
 export class DocumentOrShadowRootMixin {
@@ -16,6 +17,14 @@ export class DocumentOrShadowRootMixin {
 
   get styleSheets(): StyleSheetList {
     return this.scope.styleSheets;
+  }
+
+  get adoptedStyleSheets(): CSSStyleSheet[] {
+    return this.scope.adoptedStyleSheets;
+  }
+
+  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+    this.scope.setAdoptedStyleSheets(styleSheets);
   }
 }
 

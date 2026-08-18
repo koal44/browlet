@@ -98,7 +98,7 @@ describe('cascade engine', () => {
     });
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     styleSheet.replaceSync('* { color: red }');
-    scope.adoptStyleSheet(styleSheet);
+    scope.adoptedStyleSheets.push(styleSheet);
 
     const property = engine.getCascadedProperty('color', scope)!;
 
@@ -132,8 +132,8 @@ describe('cascade engine', () => {
     const shadowScope = new TreeScope(shadowRoot, engine);
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     styleSheet.replaceSync('* { color: red }');
-    documentScope.adoptStyleSheet(styleSheet);
-    shadowScope.adoptStyleSheet(styleSheet);
+    documentScope.adoptedStyleSheets.push(styleSheet);
+    shadowScope.adoptedStyleSheets.push(styleSheet);
 
     const documentProperty = engine.getCascadedProperty(
       'color',
@@ -154,7 +154,7 @@ describe('cascade engine', () => {
   it('observes CSSOM rule replacement, insertion, and deletion', () => {
     const { engine, scope } = createCascade();
     const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
-    scope.adoptStyleSheet(styleSheet);
+    scope.adoptedStyleSheets.push(styleSheet);
 
     styleSheet.replaceSync('* { color: red }');
     expect(engine.getCascadedProperty('color', scope)?.declaration)

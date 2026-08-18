@@ -41,7 +41,6 @@ export class CSSStyleSheetImpl
   #styleSheet: ParsedStyleSheet;
 
   #ownerRule: CSSRule | null;
-  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #constructorDocument: Document | null;
   // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
   #stylesheetBaseURL: string | null;
@@ -200,6 +199,10 @@ export class CSSStyleSheetImpl
 
   get __styleSheet(): ParsedStyleSheet {
     return this.#styleSheet;
+  }
+
+  __isConstructedFor(document: Document): boolean {
+    return this.#constructed && this.#constructorDocument === document;
   }
 
   __clearAssociation(): void {

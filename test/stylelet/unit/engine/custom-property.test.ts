@@ -142,8 +142,8 @@ describe('custom property registration', () => {
     const shadowScope = new TreeScope(shadowRoot, engine);
     const sheet = engine.createStyleSheet() as CSSStyleSheetImpl;
     sheet.replaceSync('* { --image: url("#paint") }');
-    documentScope.adoptStyleSheet(sheet);
-    shadowScope.adoptStyleSheet(sheet);
+    documentScope.adoptedStyleSheets.push(sheet);
+    shadowScope.adoptedStyleSheets.push(sheet);
     const documentProperty = engine.getCascadedProperty(
       '--image',
       documentScope,

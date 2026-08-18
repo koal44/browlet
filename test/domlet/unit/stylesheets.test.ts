@@ -170,6 +170,58 @@ describe('stylesheet integration', () => {
 
     expect(engine.getComputedStyle(target).opacity).toBe('0.1');
   });
+
+  it('exposes observable adopted stylesheets without replacing the array', () => {
+    const document = createDomlet({
+      source: '<main id="target" class="target"></main>',
+    });
+    const target = document.getElementById('target')!;
+    const styleSheets = document.adoptedStyleSheets;
+    const first = document.cssEngine.createStyleSheet();
+    const second = document.cssEngine.createStyleSheet();
+    first.replaceSync('.target { opacity: 0.25 }');
+    second.replaceSync('.target { opacity: 0.5 }');
+
+    document.adoptedStyleSheets = [first];
+
+    expect(document.adoptedStyleSheets).toBe(styleSheets);
+    expect(styleSheets).toEqual([first]);
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+
+    styleSheets.push(second);
+
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+
+    styleSheets.reverse();
+
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+
+    styleSheets.splice(1, 1);
+
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+
+    styleSheets.splice(0, 1, first);
+
+    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+  });
+
+  it('only adopts constructed stylesheets from the same document', () => {
+    const document = createDomlet({
+      source: '<style id="style">main { opacity: 0.5 }</style>',
+    });
+    const embedded = getStyleElement(document, 'style').sheet!;
+    const otherDocument = createDomlet();
+    const foreign = otherDocument.cssEngine.createStyleSheet();
+
+    expect(() => document.adoptedStyleSheets.push(embedded))
+      .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
+    expect(() => document.adoptedStyleSheets.push(foreign))
+      .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
+    expect(() => document.adoptedStyleSheets.push(
+      'not a stylesheet' as unknown as CSSStyleSheet,
+    )).toThrow(TypeError);
+    expect(document.adoptedStyleSheets).toHaveLength(0);
+  });
 });
 
 function getStyleElement(

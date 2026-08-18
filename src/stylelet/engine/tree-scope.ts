@@ -1,24 +1,48 @@
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
+import { domExceptionName } from '../cssom/exceptions';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
+import {
+  createObservableArray, type ObservableArrayHandle,
+} from '../../shared/observable-array';
 import type { CascadeEngine } from './cascade-engine';
 
 export class TreeScope {
   readonly #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
-  readonly #adoptedStyleSheets: CSSStyleSheetImpl[] = [];
+  readonly #adoptedStyleSheets: ObservableArrayHandle<CSSStyleSheetImpl>;
 
   constructor(
     readonly root: Document | ShadowRoot,
     readonly cascade: CascadeEngine,
-  ) {}
+  ) {
+    const document = root.ownerDocument ?? root;
+    this.#adoptedStyleSheets = createObservableArray({
+      convert: toCSSStyleSheet,
+      set(styleSheet) {
+        if (styleSheet.__isConstructedFor(document)) return;
+        throw new DOMException(
+          'The stylesheet was not constructed for this document.',
+          domExceptionName.notAllowed,
+        );
+      },
+    });
+  }
 
   get styleSheets(): StyleSheetList {
     return this.#styleSheets;
   }
 
+  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
+    return this.#adoptedStyleSheets.value;
+  }
+
+  setAdoptedStyleSheets(styleSheets: unknown): void {
+    this.#adoptedStyleSheets.replace(styleSheets);
+  }
+
   *finalStyleSheets(): IterableIterator<CSSStyleSheetImpl> {
     yield* this.#styleSheets;
-    yield* this.#adoptedStyleSheets;
+    yield* this.#adoptedStyleSheets.value;
   }
 
   addStyleSheet(styleSheet: CSSStyleSheetImpl): void {
@@ -28,10 +52,6 @@ export class TreeScope {
       : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode);
 
     this.#styleSheets.__insert(index, styleSheet);
-  }
-
-  adoptStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    this.#adoptedStyleSheets.push(styleSheet);
   }
 
   createStyleElementStyleSheet(
@@ -68,6 +88,11 @@ export class TreeScope {
     if (!this.#styleSheets.__remove(styleSheet)) return;
     styleSheet.__clearAssociation();
   }
+}
+
+function toCSSStyleSheet(value: unknown): CSSStyleSheetImpl {
+  if (value instanceof CSSStyleSheetImpl) return value;
+  throw new TypeError('Expected a CSSStyleSheet');
 }
 
 export type StyleElementStyleSheetOptions = {
