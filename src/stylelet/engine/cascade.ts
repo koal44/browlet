@@ -24,7 +24,7 @@ export function getCascadedProperty(
   let resultSpecificity: Specificity | null = null;
 
   for (const styleSheet of engine.getActiveStyleSheets(scope)) {
-    for (const rule of styleSheet.__styleSheet.rules) {
+    for (const rule of styleSheet.__interpretedStyleSheet.rules) {
       if (rule.type !== 'style-rule') continue;
 
       const specificity = element === undefined

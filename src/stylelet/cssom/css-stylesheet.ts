@@ -1,6 +1,6 @@
 import {
   interpretStylesheet, parseStylesheet,
-  type Rule, type StyleSheet as ParsedStyleSheet,
+  type InterpretedRule, type InterpretedStyleSheet,
 } from '../css/stylesheet';
 import {
   parseRule, type SyntaxRule,
@@ -38,7 +38,7 @@ export class CSSStyleSheetImpl
   implements CSSStyleSheet
 {
   readonly #rules: CSSRuleListImpl;
-  #styleSheet: ParsedStyleSheet;
+  #interpretedStyleSheet: InterpretedStyleSheet;
 
   #ownerRule: CSSRule | null;
   #constructorDocument: Document | null;
@@ -59,7 +59,7 @@ export class CSSStyleSheetImpl
     const document = snapshot.document;
     const location = new URL(document.baseURI);
     this.#rules = new CSSRuleListImpl();
-    this.#styleSheet = { location, rules: [] };
+    this.#interpretedStyleSheet = { location, rules: [] };
 
     this.#ownerRule = null;
     this.#constructorDocument = document;
@@ -78,7 +78,7 @@ export class CSSStyleSheetImpl
 
     this.#stylesheetBaseURL = baseURL;
     if (baseURL !== null) {
-      this.#styleSheet.baseUrl = new URL(baseURL, location);
+      this.#interpretedStyleSheet.baseUrl = new URL(baseURL, location);
     }
     this.setLocation(location.href);
     this.setMedia(media);
@@ -88,7 +88,7 @@ export class CSSStyleSheetImpl
   static __create(
     snapshot: Snapshot,
     properties: CSSStyleSheetProperties,
-    rules?: ParsedStyleSheet,
+    rules?: InterpretedStyleSheet,
   ): CSSStyleSheetImpl {
     const sheet = new CSSStyleSheetImpl(snapshot);
 
@@ -103,7 +103,7 @@ export class CSSStyleSheetImpl
     sheet.#constructed = false;
     sheet.#constructorDocument = null;
     sheet.#stylesheetBaseURL = null;
-    if (rules) sheet.replaceStyleSheet(rules);
+    if (rules) sheet.replaceInterpretedStyleSheet(rules);
 
     return sheet;
   }
@@ -145,7 +145,7 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.#styleSheet.rules.splice(index, 0, rulePair.styleRule);
+    this.#interpretedStyleSheet.rules.splice(index, 0, rulePair.interpretedRule);
     this.#rules.insert(index, rulePair.cssRule);
     return index;
   }
@@ -161,7 +161,7 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.#styleSheet.rules.splice(index, 1);
+    this.#interpretedStyleSheet.rules.splice(index, 1);
     this.#rules.remove(index);
   }
 
@@ -196,8 +196,8 @@ export class CSSStyleSheetImpl
 
   // Internal operations ----------------------------------------------------
 
-  get __styleSheet(): ParsedStyleSheet {
-    return this.#styleSheet;
+  get __interpretedStyleSheet(): InterpretedStyleSheet {
+    return this.#interpretedStyleSheet;
   }
 
   __isAlternate(): boolean {
@@ -248,18 +248,20 @@ export class CSSStyleSheetImpl
   // Private helpers ---------------------------------------------------------
 
   private replaceRules(text: string): void {
-    this.replaceStyleSheet(parseStylesheet(text, {
-      ...(this.#styleSheet.location === undefined
+    this.replaceInterpretedStyleSheet(parseStylesheet(text, {
+      ...(this.#interpretedStyleSheet.location === undefined
         ? {}
-        : { location: this.#styleSheet.location }),
-      ...(this.#styleSheet.baseUrl === undefined
+        : { location: this.#interpretedStyleSheet.location }),
+      ...(this.#interpretedStyleSheet.baseUrl === undefined
         ? {}
-        : { baseUrl: this.#styleSheet.baseUrl }),
+        : { baseUrl: this.#interpretedStyleSheet.baseUrl }),
     }));
   }
 
-  private replaceStyleSheet(styleSheet: ParsedStyleSheet): void {
-    this.#styleSheet = styleSheet;
+  private replaceInterpretedStyleSheet(
+    styleSheet: InterpretedStyleSheet,
+  ): void {
+    this.#interpretedStyleSheet = styleSheet;
     this.#rules.replace(buildCSSRules(styleSheet));
   }
 
@@ -293,23 +295,23 @@ type CSSStyleSheetProperties = {
   originClean: boolean;
 };
 
-function buildCSSRules(sheet: ParsedStyleSheet): CSSRule[] {
+function buildCSSRules(sheet: InterpretedStyleSheet): CSSRule[] {
   return sheet.rules.flatMap((rule) => {
-    const cssRule = createCSSRuleFromSemanticRule(rule);
+    const cssRule = createCSSRuleFromInterpretedRule(rule);
     return cssRule === null ? [] : [cssRule];
   });
 }
 
 function createCSSRule(rule: SyntaxRule): RulePair | null {
   const sheet = interpretStylesheet({ rules: [rule] });
-  const styleRule = sheet.rules[0];
-  if (styleRule === undefined) return null;
+  const interpretedRule = sheet.rules[0];
+  if (interpretedRule === undefined) return null;
 
-  const cssRule = createCSSRuleFromSemanticRule(styleRule);
-  return cssRule === null ? null : { cssRule, styleRule };
+  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule);
+  return cssRule === null ? null : { cssRule, interpretedRule };
 }
 
-function createCSSRuleFromSemanticRule(rule: Rule): CSSRule | null {
+function createCSSRuleFromInterpretedRule(rule: InterpretedRule): CSSRule | null {
   switch (rule.type) {
     case 'style-rule': return new SelectletCSSStyleRule(rule);
     case 'property-rule': return null;
@@ -322,5 +324,5 @@ function isImportRule(rule: SyntaxRule): boolean {
 
 type RulePair = {
   cssRule: CSSRule;
-  styleRule: Rule;
+  interpretedRule: InterpretedRule;
 };

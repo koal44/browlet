@@ -4,7 +4,8 @@ import {
   PseudoArgumentKind, SelectorKind,
   type Combinator, type ComplexRealSelector, type ComplexRealSelectorList,
   type ComplexSelector, type ComplexSelectorList, type ComplexSelectorUnit,
-  type CompoundSelector, type PseudoClassSelector, type RelativeSelectorList,
+  type CompoundSelector, type ForgivingSelectorList, type PseudoClassSelector,
+  type RelativeSelectorList,
   type SelectorList, type Specificity,
 } from '../syntax/selector';
 import {
@@ -19,7 +20,10 @@ import {
 } from './candidate';
 import { emitMatcher } from './emit';
 
-type MatchSelectorList = ComplexSelectorList | ComplexRealSelectorList;
+type MatchSelectorList =
+  | ComplexSelectorList
+  | ComplexRealSelectorList
+  | ForgivingSelectorList;
 type MatchSelector = ComplexSelector | ComplexRealSelector;
 
 export function matchSelectorList(
@@ -97,8 +101,10 @@ function compileSelectorListMatcher(
   snapshot: Snapshot,
 ): CompiledMatcher {
   return buildSelectorListMatcher(
-    selectors.arms.map((selector) =>
-      compileComplexSelector(selector, snapshot)),
+    selectors.arms.flatMap((selector) =>
+      selector.kind === SelectorKind.UnparsedSelector
+        ? []
+        : compileComplexSelector(selector, snapshot)),
   );
 }
 
@@ -145,9 +151,13 @@ function compileCompound(
 
   for (const selector of compound.subclasses) {
     matchers.push(
-      selector.kind === SelectorKind.PseudoClassSelector
-        ? compilePseudoClass(selector, snapshot)
-        : emitMatcher(selector, snapshot),
+      selector.kind === SelectorKind.NestingSelector
+        ? selector.expanded === null
+          ? emitMatcher(selector, snapshot)
+          : compilePseudoClass(selector.expanded, snapshot)
+        : selector.kind === SelectorKind.PseudoClassSelector
+          ? compilePseudoClass(selector, snapshot)
+          : emitMatcher(selector, snapshot),
     );
   }
 
@@ -322,6 +332,7 @@ function costCompound(compound: CompoundSelector | null): number {
 
   for (const selector of compound.subclasses) {
     switch (selector.kind) {
+      case SelectorKind.NestingSelector: cost += 8; break;
       case SelectorKind.IdSelector: cost += 1; break;
       case SelectorKind.ClassSelector: cost += 2; break;
       case SelectorKind.AttributeSelector: cost += 4; break;

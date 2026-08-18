@@ -5,17 +5,23 @@ import {
 } from './component-grammar';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import {
-  consumeAnyValueFunctionBlock, consumeAsteriskDelim, consumeBracketBlock,
+  consumeAmpersandDelim, consumeAnyValueFunctionBlock,
+  consumeAsteriskDelim, consumeBracketBlock,
   consumeCaretDelim, consumeColon, consumeDollarDelim, consumeDotDelim,
   consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeIdHashToken,
   consumeIntegerToken, consumePipeDelim, consumePlusDelim, consumeStringToken,
   consumeTildeDelim,
 } from './component-consumers';
 import {
-  isDelimToken, isWhitespaceToken, serializeCssIdentifier, serializeCssString,
+  isComponentBlock, isDelimToken, isWhitespaceToken,
+  serializeComponentValues, serializeCssIdentifier, serializeCssString,
   type ComponentValue,
 } from './component-value';
-import { type ParserInput, parseAsComponentGrammar, parseListAsComponentGrammar } from './parser';
+import {
+  parseAsComponentGrammar, parseCommaSeparatedListOfComponentValues,
+  parseListAsComponentGrammar,
+  type ParserInput,
+} from './parser';
 import { TokenKind } from './tokens';
 import { parseCustomIdent, serializeCustomIdent, type CustomIdentValue } from '../values/custom-ident';
 import { consumeAnPlusB, serializeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
@@ -32,10 +38,12 @@ export enum SelectorKind {
   ComplexSelector = 'complex-selector',
   ComplexSelectorUnit = 'complex-selector-unit',
   ComplexRealSelector = 'complex-real-selector',
+  UnparsedSelector = 'unparsed-selector',
   RelativeSelector = 'relative-selector',
   RelativeRealSelector = 'relative-real-selector',
   CompoundSelector = 'compound-selector',
   PseudoCompoundSelector = 'pseudo-compound-selector',
+  NestingSelector = 'nesting-selector',
   TypeSelector = 'type-selector',
   IdSelector = 'id-selector',
   ClassSelector = 'class-selector',
@@ -64,6 +72,9 @@ export type SelectorParserContext = Readonly<{
   // Strongest selector grammar allowed by the enclosing selector argument.
   selectorRestriction?: SelectorRestriction;
 
+  // Parent selector expansion represented by `&`.
+  nestingSelectorExpansion?: PseudoClassSelector;
+
   // Whether this selector is nested anywhere inside a :has() argument.
   insideHas?: boolean;
 }>;
@@ -83,6 +94,7 @@ function contextForSelectorArgument(
       context.selectorRestriction,
       restriction,
     ),
+    nestingSelectorExpansion: context.nestingSelectorExpansion,
     insideHas: context.insideHas,
     pseudoClassTailElement:
       pseudoElement !== undefined && !isElementBackedPseudoElement(pseudoElement)
@@ -123,6 +135,74 @@ export function parseRelativeSelector(
   context: SelectorParserContext = {},
 ): RelativeSelectorList | null {
   return parseRelativeSelectorList(input, context);
+}
+
+/*
+ * CSS Nesting 1, "Nesting Style Rules"
+ *
+ * Nested style-rule preludes accept <relative-selector-list>. The resulting
+ * selectors are absolutized by inserting an implied `&` where required.
+ */
+export function parseNestedSelectorList(
+  input: ParserInput,
+  parentSelectors: SelectorList,
+  context: SelectorParserContext = {},
+): SelectorList | null {
+  const expansion = createNestingSelectorExpansion(parentSelectors);
+  const relative = parseRelativeSelectorList(input, {
+    ...context,
+    nestingSelectorExpansion: expansion,
+  });
+
+  if (relative === null) return null;
+
+  const inputArms = parseCommaSeparatedListOfComponentValues(input);
+  const arms = relative.arms.map((arm, index): ComplexSelector => {
+    const containsNesting = containsAmpersand(inputArms[index] ?? []);
+
+    if (arm.combinator === null && containsNesting) {
+      return arm.selector;
+    }
+
+    const nesting: NestingSelector = {
+      kind: SelectorKind.NestingSelector,
+      expanded: expansion,
+      specificity: expansion.specificity,
+    };
+    const compound: CompoundSelector = {
+      kind: SelectorKind.CompoundSelector,
+      typeSelector: null,
+      subclasses: [nesting],
+      specificity: nesting.specificity,
+    };
+    const unit: ComplexSelectorUnit = {
+      kind: SelectorKind.ComplexSelectorUnit,
+      compound,
+      pseudoCompounds: [],
+      specificity: compound.specificity,
+    };
+    const combinator = arm.combinator ?? ' ';
+
+    return {
+      kind: SelectorKind.ComplexSelector,
+      parts: [
+        { combinator: null, unit },
+        ...arm.selector.parts.map((part, partIndex) => partIndex === 0
+          ? { ...part, combinator }
+          : part),
+      ],
+      specificity: addSpecificity(
+        nesting.specificity,
+        arm.selector.specificity,
+      ),
+    };
+  });
+
+  return {
+    kind: SelectorKind.ComplexSelectorList,
+    arms,
+    specificity: listSpecificity(arms),
+  };
 }
 
 /*
@@ -951,11 +1031,103 @@ function normalizeNamespaceURI(namespace: string): string | null {
 }
 
 /*
+ * CSS Nesting 1, "Nesting Selector: the '&' selector"
+ */
+export type NestingSelector = {
+  kind: SelectorKind.NestingSelector;
+  expanded: PseudoClassSelector | null;
+  specificity: Specificity;
+};
+
+function consumeNestingSelector(c: TokenCursor): TryConsumerResult<NestingSelector> {
+  const context = c.context as SelectorParserContext;
+
+  if (
+    context.pseudoClassTailElement !== undefined ||
+    consumeAmpersandDelim(c) === null
+  ) {
+    return null;
+  }
+
+  const expanded = context.nestingSelectorExpansion ?? null;
+
+  return {
+    kind: SelectorKind.NestingSelector,
+    expanded,
+    specificity: expanded?.specificity ?? Specificity0,
+  };
+}
+
+function createNestingSelectorExpansion(
+  parent: SelectorList,
+): PseudoClassSelector {
+  const arms: ComplexRealSelector[] = [];
+
+  for (const selector of parent.arms) {
+    const parts: ComplexRealSelector['parts'] = [];
+
+    for (const part of selector.parts) {
+      if (
+        part.unit.compound === null ||
+        part.unit.pseudoCompounds.length > 0
+      ) {
+        parts.length = 0;
+        break;
+      }
+
+      parts.push({
+        combinator: part.combinator,
+        compound: part.unit.compound,
+      });
+    }
+
+    if (parts.length > 0) {
+      arms.push({
+        kind: SelectorKind.ComplexRealSelector,
+        parts,
+        specificity: selector.specificity,
+      });
+    }
+  }
+
+  const selectors: ComplexRealSelectorList = {
+    kind: SelectorKind.ComplexRealSelectorList,
+    arms,
+    specificity: listSpecificity(arms),
+  };
+
+  return {
+    kind: SelectorKind.PseudoClassSelector,
+    name: 'is',
+    argument: {
+      kind: PseudoArgumentKind.ForgivingSelectorList,
+      selectors,
+    },
+    // `&` inherits the maximum specificity of the complete parent list,
+    // including parent arms that cannot be represented by :is().
+    specificity: parent.specificity,
+  };
+}
+
+function containsAmpersand(values: readonly ComponentValue[]): boolean {
+  for (const value of values) {
+    if (isDelimToken(value, '&')) return true;
+    if (isComponentBlock(value) && containsAmpersand(value.value)) return true;
+  }
+
+  return false;
+}
+
+/*
  * <subclass-selector> =
  *   <id-selector> | <class-selector> |
  *   <attribute-selector> | <pseudo-class-selector>
+ *
+ * The nesting selector shares the subclass position because its parent
+ * selector expansion behaves like :is().
  */
 export type SubclassSelector =
+  | NestingSelector
   | IdSelector
   | ClassSelector
   | AttributeSelector
@@ -967,6 +1139,7 @@ function consumeSubclassSelector(c: TokenCursor): TryConsumerResult<SubclassSele
 
 const subclassSelectorConsumer: TryConsumer<SubclassSelector> = oneOf(
   [
+    one(consumeNestingSelector),
     one(consumeIdSelector),
     one(consumeClassSelector),
     one(consumeAttributeSelector),
@@ -2006,7 +2179,21 @@ type PseudoArgumentParser<T extends PseudoArgument> = (
 
 type ForgivingSelectorListPseudoArgument = {
   kind: PseudoArgumentKind.ForgivingSelectorList;
-  selectors: ComplexRealSelectorList;
+  selectors: ForgivingSelectorList;
+};
+
+export type ForgivingSelectorList = {
+  kind: SelectorKind.ComplexRealSelectorList;
+  arms: ForgivingSelectorArm[];
+  specificity: Specificity;
+};
+
+type ForgivingSelectorArm = ComplexRealSelector | UnparsedSelector;
+
+export type UnparsedSelector = {
+  kind: SelectorKind.UnparsedSelector;
+  value: readonly ComponentValue[];
+  hasAmpersand: boolean;
 };
 
 type RelativeSelectorListPseudoArgument = {
@@ -2044,21 +2231,30 @@ function parseForgivingSelectorListArgument(
 ): ForgivingSelectorListPseudoArgument {
   const argumentContext = contextForSelectorArgument(context);
   const parseSelector = parserForSelectorRestriction(argumentContext);
+  const values = parseCommaSeparatedListOfComponentValues(arg);
+  const arms: ForgivingSelectorArm[] = values.map((value) => {
+    const selector = parseAsComponentGrammar(
+      value,
+      withTrivia(parseSelector),
+      argumentContext,
+    );
 
-  const parsed = parseListAsComponentGrammar(
-    arg,
-    withTrivia(parseSelector),
-    argumentContext,
-  );
-
-  const arms = parsed.filter((result) => result !== null);
+    return selector ?? {
+      kind: SelectorKind.UnparsedSelector,
+      value,
+      hasAmpersand: containsAmpersand(value),
+    };
+  });
 
   return {
     kind: PseudoArgumentKind.ForgivingSelectorList,
     selectors: {
       kind: SelectorKind.ComplexRealSelectorList,
       arms,
-      specificity: listSpecificity(arms),
+      specificity: listSpecificity(arms.filter(
+        (arm): arm is ComplexRealSelector =>
+          arm.kind !== SelectorKind.UnparsedSelector,
+      )),
     },
   };
 }
@@ -2681,6 +2877,24 @@ function serializeComplexRealSelectorList(
     .join(', ');
 }
 
+function serializeForgivingSelectorList(
+  selectors: ForgivingSelectorList,
+): string {
+  const serialized: string[] = [];
+
+  for (const selector of selectors.arms) {
+    if (selector.kind === SelectorKind.UnparsedSelector) {
+      if (selector.hasAmpersand) {
+        serialized.push(serializeComponentValues(selector.value).trim());
+      }
+    } else {
+      serialized.push(serializeComplexRealSelector(selector));
+    }
+  }
+
+  return serialized.join(', ');
+}
+
 function serializeCompoundSelectorList(
   selectors: CompoundSelectorList,
 ): string {
@@ -2751,6 +2965,9 @@ function serializeCompoundSelector(
 
 function serializeSubclassSelector(selector: SubclassSelector): string {
   switch (selector.kind) {
+    case SelectorKind.NestingSelector:
+      return '&';
+
     case SelectorKind.IdSelector:
       return `#${serializeCssIdentifier(selector.name)}`;
 
@@ -2816,6 +3033,8 @@ function serializePseudoArgument(
 ): string {
   switch (argument.kind) {
     case PseudoArgumentKind.ForgivingSelectorList:
+      return serializeForgivingSelectorList(argument.selectors);
+
     case PseudoArgumentKind.ComplexRealSelectorList:
       return serializeComplexRealSelectorList(argument.selectors);
 

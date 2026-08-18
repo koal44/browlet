@@ -4,14 +4,14 @@ import {
   type SyntaxRule, type SyntaxStyleSheet,
 } from '../syntax/parser';
 import {
-  parseSelectorList, type SelectorList,
+  parseNestedSelectorList, parseSelectorList, type SelectorList,
 } from '../syntax/selector';
 import {
   interpretPropertyDeclaration, type PropertyDeclaration, type PropertyRule,
 } from './property';
 
-export type StyleSheet = {
-  rules: Rule[];
+export type InterpretedStyleSheet = {
+  rules: InterpretedRule[];
   location?: URL;
   baseUrl?: URL;
   originalText?: string;
@@ -22,7 +22,7 @@ export type StyleSheetOptions = {
   baseUrl?: URL;
 };
 
-export type Rule =
+export type InterpretedRule =
   | StyleRule
   | PropertyRule;
 
@@ -37,7 +37,7 @@ export type StyleBlock = Array<PropertyDeclaration | StyleRule>;
 export function parseStylesheet(
   input: ParserInput,
   options: StyleSheetOptions = {},
-): StyleSheet {
+): InterpretedStyleSheet {
   return interpretStylesheet(
     parseSyntaxStylesheet(input, options.location),
     options,
@@ -48,8 +48,8 @@ export function parseStylesheet(
 export function interpretStylesheet(
   sheet: SyntaxStyleSheet,
   options: StyleSheetOptions = {},
-): StyleSheet {
-  const rules: Rule[] = [];
+): InterpretedStyleSheet {
+  const rules: InterpretedRule[] = [];
   const location = options.location ?? sheet.location;
 
   for (const rule of sheet.rules) {
@@ -67,7 +67,7 @@ export function interpretStylesheet(
   };
 }
 
-function interpretStylesheetRule(rule: SyntaxRule): Rule | null {
+function interpretStylesheetRule(rule: SyntaxRule): InterpretedRule | null {
   switch (rule.type) {
     case 'qualified-rule': return interpretStyleRule(rule);
     case 'statement-at-rule':
@@ -75,16 +75,28 @@ function interpretStylesheetRule(rule: SyntaxRule): Rule | null {
   }
 }
 
-function interpretStyleBlockRule(rule: SyntaxRule): StyleRule | null {
+function interpretStyleBlockRule(
+  rule: SyntaxRule,
+  parentSelectors: SelectorList,
+): StyleRule | null {
   switch (rule.type) {
-    case 'qualified-rule':
-      // Nested style rules are defined by CSS Nesting Level 1. Leave them
-      // uninterpreted until that module supplies the required selector context.
-      return null;
+    case 'qualified-rule': {
+      const selectors = parseNestedSelectorList(
+        rule.prelude,
+        parentSelectors,
+      );
+      if (selectors === null) return null;
+
+      return {
+        type: 'style-rule',
+        selectors,
+        block: interpretStyleBlock(rule.block, selectors),
+      };
+    }
 
     case 'statement-at-rule':
     case 'block-at-rule':
-      // No at-rules have semantic representations yet. Section 8.1 requires
+      // No at-rules have interpreted representations yet. Section 8.1 requires
       // unrecognized at-rules to be discarded.
       return null;
   }
@@ -98,11 +110,14 @@ function interpretStyleRule(rule: SyntaxQualifiedRule): StyleRule | null {
   return {
     type: 'style-rule',
     selectors,
-    block: interpretStyleBlock(rule.block),
+    block: interpretStyleBlock(rule.block, selectors),
   };
 }
 
-function interpretStyleBlock(block: SyntaxBlockContents): StyleBlock {
+function interpretStyleBlock(
+  block: SyntaxBlockContents,
+  parentSelectors: SelectorList,
+): StyleBlock {
   const result: StyleBlock = [];
 
   for (const item of block) {
@@ -114,7 +129,7 @@ function interpretStyleBlock(block: SyntaxBlockContents): StyleBlock {
       continue;
     }
 
-    const rule = interpretStyleBlockRule(item);
+    const rule = interpretStyleBlockRule(item, parentSelectors);
     if (rule !== null) result.push(rule);
   }
 

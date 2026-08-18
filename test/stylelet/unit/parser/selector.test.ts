@@ -4,7 +4,7 @@ import type {
   SelectorParserContext, WqName,
 } from '../../../../src/stylelet/syntax/selector';
 import {
-  parseComplexSelectorList, parseSelectorList, PseudoArgumentKind,
+  parseComplexSelectorList, parseNestedSelectorList, parseSelectorList, PseudoArgumentKind,
   SelectorKind,
 } from '../../../../src/stylelet/syntax/selector';
 
@@ -82,6 +82,15 @@ const idSelector = (name: string) => ({
 const classSelector = (name: string) => ({
   kind: SelectorKind.ClassSelector,
   name,
+});
+
+const nestingSelector = () => ({
+  kind: SelectorKind.NestingSelector,
+});
+
+const unparsedSelector = (hasAmpersand = false) => ({
+  kind: SelectorKind.UnparsedSelector,
+  hasAmpersand,
 });
 
 const attrName = (
@@ -219,12 +228,13 @@ describe('selector lists', () => {
     expectInvalidSelector('');
   });
 
-  it('drops invalid arms from forgiving selector-list pseudo-class arguments', () => {
+  it('retains invalid arms in forgiving selector-list pseudo-class arguments', () => {
     expect(expectComplexSelector(':is(.foo ???, #bar)')).toMatchObject({
       parts: [
         pseudoClassPart('is', {
           kind: PseudoArgumentKind.ForgivingSelectorList,
           selectors: selectorList([
+            unparsedSelector(),
             {
               parts: [
                 realIdPart(null, 'bar'),
@@ -236,12 +246,15 @@ describe('selector lists', () => {
     });
   });
 
-  it('allows forgiving selector-list pseudo-class arguments to become empty', () => {
+  it('retains all-invalid forgiving selector-list pseudo-class arguments', () => {
     expect(expectComplexSelector(':is(???, !!!)')).toMatchObject({
       parts: [
         pseudoClassPart('is', {
           kind: PseudoArgumentKind.ForgivingSelectorList,
-          selectors: selectorList([]),
+          selectors: selectorList([
+            unparsedSelector(),
+            unparsedSelector(),
+          ]),
         }),
       ],
     });
@@ -298,6 +311,24 @@ describe('simple and compound selectors', () => {
         ),
       ],
     });
+  });
+
+  it('parses the nesting selector in the subclass position of a compound', () => {
+    expect(expectComplexSelector('article&.featured')).toMatchObject({
+      parts: [
+        part(
+          null,
+          compound(
+            typeSelector('article'),
+            [nestingSelector(), classSelector('featured')],
+          ),
+        ),
+      ],
+    });
+  });
+
+  it('requires a type selector to precede the nesting selector', () => {
+    expectInvalidSelector('&article');
   });
 
   it('rejects a bare class delimiter', () => {
@@ -711,7 +742,7 @@ describe('pseudo-class selectors', () => {
       expectInvalidSelector(css);
     });
 
-    it('drops nested :has() and pseudo-elements from forgiving arms inside :has()', () => {
+    it('retains invalid forgiving arms inside :has()', () => {
       expect(expectComplexSelector(':has(:is(:has(.b), ::before, .a))')).toMatchObject({
         parts: [
           pseudoClassPart('has', {
@@ -725,6 +756,8 @@ describe('pseudo-class selectors', () => {
                       pseudoClass('is', {
                         kind: PseudoArgumentKind.ForgivingSelectorList,
                         selectors: selectorList([
+                          unparsedSelector(),
+                          unparsedSelector(),
                           {
                             parts: [
                               realClassPart(null, 'a'),
@@ -745,7 +778,7 @@ describe('pseudo-class selectors', () => {
     it.each([
       ':has(:is(:has(.b)))',
       ':has(:is(::before))',
-    ])('accepts %s after its forgiving selector list becomes empty', (css) => {
+    ])('accepts %s when its forgiving selector list has no valid arms', (css) => {
       expectValidSelector(css);
     });
   });
@@ -1298,7 +1331,9 @@ describe('pseudo-element selectors', () => {
             throw new Error(`Expected :is() forgiving argument for ${css}`);
           }
 
-          const names = argument.selectors.arms.map((arm, index) => {
+          const names = argument.selectors.arms.flatMap((arm, index) => {
+            if (arm.kind === SelectorKind.UnparsedSelector) return [];
+
             expect(arm.parts, `${css} arm ${index}`).toHaveLength(1);
 
             const part = arm.parts[0];
@@ -1311,7 +1346,7 @@ describe('pseudo-element selectors', () => {
               throw new Error(`Expected pseudo-class in ${css} arm ${index}`);
             }
 
-            return subclass.name;
+            return [subclass.name];
           });
 
           expect(names, css).toEqual(expectedNames);
@@ -1360,7 +1395,7 @@ describe('pseudo-element selectors', () => {
       }
 
       // Forgiving logical arguments inherit pseudo-element-tail restrictions.
-      // Invalid ordinary selector arms are dropped, leaving only valid tail pseudos.
+      // Invalid ordinary selector arms remain internal and do not contribute names.
       expectForgivingTailIsNames(
         '::before:is(*, div, #id, .foo, [hidden], :hover)',
         ['hover'],
@@ -1392,6 +1427,8 @@ describe('pseudo-element selectors', () => {
                       pseudoClass('where', {
                         kind: PseudoArgumentKind.ForgivingSelectorList,
                         selectors: selectorList([
+                          unparsedSelector(),
+                          unparsedSelector(),
                           {
                             parts: [
                               realPart(null, compound(null, [
@@ -1681,7 +1718,7 @@ describe('contextual selector restrictions', () => {
     expectValidSelector('::slotted(:nth-child(2n of .a.b))');
   });
 
-  it('drops complex forgiving arms under compound-only shadow arguments', () => {
+  it('retains invalid forgiving arms under compound-only shadow arguments', () => {
     expect(expectComplexSelector('::slotted(:is(.a > .b, .a.b))')).toMatchObject({
       parts: [
         pseudoElementPart(null, 'slotted', [], {
@@ -1690,6 +1727,7 @@ describe('contextual selector restrictions', () => {
             pseudoClass('is', {
               kind: PseudoArgumentKind.ForgivingSelectorList,
               selectors: selectorList([
+                unparsedSelector(),
                 {
                   parts: [
                     realPart(null, compound(null, [
@@ -1774,6 +1812,7 @@ describe('AST representation', () => {
 
 describe('specificity', () => {
   it('computes the simple selector columns', () => {
+    expect(expectComplexSelector('&').specificity).toEqual(specificity(0, 0, 0));
     expect(expectComplexSelector('*').specificity).toEqual(specificity(0, 0, 0));
     expect(expectComplexSelector('div').specificity).toEqual(specificity(0, 0, 1));
     expect(expectComplexSelector('#foo').specificity).toEqual(specificity(1, 0, 0));
@@ -1781,6 +1820,13 @@ describe('specificity', () => {
     expect(expectComplexSelector('[href]').specificity).toEqual(specificity(0, 1, 0));
     expect(expectComplexSelector(':hover').specificity).toEqual(specificity(0, 1, 0));
     expect(expectComplexSelector('::before').specificity).toEqual(specificity(0, 0, 1));
+  });
+
+  it('inherits nesting-selector specificity from its parent selectors', () => {
+    const parent = parseSelectorList('article, #featured')!;
+    const nested = parseNestedSelectorList('&.active', parent)!;
+
+    expect(nested.specificity).toEqual(specificity(1, 1, 0));
   });
 
   it('sums specificity across compound and complex selectors', () => {

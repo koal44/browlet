@@ -30,6 +30,8 @@ export function emitMatcher(
   compiledArgument?: CompiledMatcher,
 ): CompiledMatcher {
   switch (selector.kind) {
+    // Without a parent selector expansion, `&` behaves like :scope.
+    case SelectorKind.NestingSelector: return emitScopePseudoTest(snapshot);
     case SelectorKind.TypeSelector: return emitTypeTest(selector, snapshot);
     case SelectorKind.IdSelector: return emitIdTest(selector, snapshot);
     case SelectorKind.ClassSelector: return emitClassTest(selector, snapshot);

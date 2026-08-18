@@ -5,7 +5,7 @@ import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
 import {
-  parseStylesheet, type StyleSheet,
+  parseStylesheet, type InterpretedStyleSheet,
 } from '../../../../src/stylelet/css/stylesheet';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import type { CascadedProperty } from '../../../../src/stylelet/engine/cascade';
@@ -302,7 +302,7 @@ function resolveCustomProperty(
 
 function styleSheet(
   ...registrations: CustomPropertyRegistration[]
-): StyleSheet {
+): InterpretedStyleSheet {
   return {
     rules: registrations.map((registration) => ({
       type: 'property-rule',
@@ -323,7 +323,7 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
 function addStyleSheet(
   scope: TreeScope,
-  sheet: StyleSheet,
+  sheet: InterpretedStyleSheet,
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.__create(
     scope.cascade.snapshot,

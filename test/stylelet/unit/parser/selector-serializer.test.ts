@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  parseSelectorList, serializeSelectorList,
+  parseNestedSelectorList, parseSelectorList, serializeSelectorList,
   type SelectorList,
 } from '../../../../src/stylelet/syntax/selector';
 
@@ -11,6 +11,7 @@ describe('selector serialization', () => {
     ['*.foo', '.foo'],
     [':before', '::before'],
     ['::before::marker', '::before::marker'],
+    ['&, article&, &.featured', '&, article&, &.featured'],
     [String.raw`.\31 foo, #\@`, String.raw`.\31 foo, #\@`],
   ])('serializes %s canonically', (input, expected) => {
     expect(serialize(input)).toBe(expected);
@@ -18,6 +19,8 @@ describe('selector serialization', () => {
 
   it.each([
     [':is(.a, :bogus, .b)', ':is(.a, .b)'],
+    [':is(   )', ':is()'],
+    [':is( ??? )', ':is()'],
     [':not(.a>.b,#target)', ':not(.a > .b, #target)'],
     [':has(>.a,+#target)', ':has(> .a, + #target)'],
     [':nth-child(odd of .a>.b,#target)', ':nth-child(2n+1 of .a > .b, #target)'],
@@ -43,6 +46,42 @@ describe('selector serialization', () => {
   ])('is idempotent after serializing %s once', (input) => {
     const serialized = serialize(input);
     expect(serialize(serialized)).toBe(serialized);
+  });
+
+  it.each([
+    ['.child', '& .child'],
+    ['> .child', '& > .child'],
+    ['&.active', '&.active'],
+  ])('absolutizes the nested selector %s as %s', (input, expected) => {
+    const parent = parse('.parent');
+    const selector = parseNestedSelectorList(input, parent);
+
+    expect(selector).not.toBeNull();
+    expect(serializeSelectorList(selector!)).toBe(expected);
+  });
+
+  it('preserves an invalid forgiving arm that contains the nesting selector', () => {
+    const parent = parse('.parent');
+    const selector = parseNestedSelectorList(
+      ':is(:unknown(&), .bar)',
+      parent,
+    );
+
+    expect(selector).not.toBeNull();
+    expect(serializeSelectorList(selector!))
+      .toBe(':is(:unknown(&), .bar)');
+  });
+
+  it('preserves trailing whitespace in an invalid nesting arm', () => {
+    const parent = parse('.parent');
+    const selector = parseNestedSelectorList(
+      ':is( :unknown( & ) , .bar )',
+      parent,
+    );
+
+    expect(selector).not.toBeNull();
+    expect(serializeSelectorList(selector!))
+      .toBe(':is(:unknown( & ) , .bar)');
   });
 
   it('uses the parser namespace context to omit redundant prefixes', () => {

@@ -16,7 +16,7 @@ export function getCustomPropertyRegistration(
   let declared = null;
 
   for (const styleSheet of engine.getActiveStyleSheets(scope)) {
-    for (const rule of styleSheet.__styleSheet.rules) {
+    for (const rule of styleSheet.__interpretedStyleSheet.rules) {
       if (rule.type === 'property-rule' && rule.registration.name === name) {
         declared = rule.registration;
       }

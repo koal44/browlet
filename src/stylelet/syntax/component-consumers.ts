@@ -246,6 +246,9 @@ export function consumeUrlToken(
   return component;
 }
 
+// <delim-token matching '&'>
+export const consumeAmpersandDelim = createDelimConsumer('&');
+
 // <delim-token matching '*'>
 export const consumeAsteriskDelim = createDelimConsumer('*');
 

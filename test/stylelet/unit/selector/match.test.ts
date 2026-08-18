@@ -4,10 +4,48 @@ import { Snapshot } from '../../../../src/stylelet/snapshot';
 import {
   compileSelectorList, matchSelectorList,
 } from '../../../../src/stylelet/selector/match';
-import { parseSelectorList } from '../../../../src/stylelet/syntax/selector';
+import {
+  parseNestedSelectorList, parseSelectorList,
+} from '../../../../src/stylelet/syntax/selector';
 import { createDomletDocument } from './domlet';
 
 describe('selector matching', () => {
+  it('matches a top-level nesting selector like :scope', () => {
+    const document = createDomletDocument('<main id="target"></main>');
+    const root = document.documentElement;
+    const target = document.getElementById('target')!;
+
+    expect(match('&', root)).toEqual({ a: 0, b: 0, c: 0 });
+    expect(match('&', target)).toBeNull();
+  });
+
+  it('matches a nested selector through its bound parent selector', () => {
+    const document = createDomletDocument(`
+      <main class="parent">
+        <span id="target" class="child"></span>
+      </main>
+      <span id="other" class="child"></span>
+    `);
+    const parent = parseSelectorList('.parent')!;
+    const nested = parseNestedSelectorList('.child', parent)!;
+
+    expect(matchSelectorList(nested, document.getElementById('target')!))
+      .toEqual({ a: 0, b: 2, c: 0 });
+    expect(matchSelectorList(nested, document.getElementById('other')!))
+      .toBeNull();
+  });
+
+  it('uses the strongest parent-arm specificity for nested matching', () => {
+    const document = createDomletDocument(`
+      <main><span id="target" class="child"></span></main>
+    `);
+    const parent = parseSelectorList('#missing, main')!;
+    const nested = parseNestedSelectorList('> .child', parent)!;
+
+    expect(matchSelectorList(nested, document.getElementById('target')!))
+      .toEqual({ a: 1, b: 1, c: 0 });
+  });
+
   it('matches a compound selector through child and descendant combinators', () => {
     const document = createDomletDocument(`
       <main class="warning">

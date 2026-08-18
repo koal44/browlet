@@ -71,9 +71,9 @@ export class CascadeEngine {
 
   getPropertyContext(property: CascadedProperty): PropertyContext {
     const { styleSheet, scope } = property;
-    const semanticStyleSheet = styleSheet.__styleSheet;
-    const baseUrl = semanticStyleSheet.baseUrl ??
-      semanticStyleSheet.location ??
+    const interpretedStyleSheet = styleSheet.__interpretedStyleSheet;
+    const baseUrl = interpretedStyleSheet.baseUrl ??
+      interpretedStyleSheet.location ??
       this.environmentBaseUrl;
 
     return {

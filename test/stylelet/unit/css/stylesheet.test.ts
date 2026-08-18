@@ -5,10 +5,12 @@ import {
   type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
 } from '../../../../src/stylelet/css/property';
 import {
-  parseStylesheet, type StyleSheet,
+  parseStylesheet, type InterpretedStyleSheet,
 } from '../../../../src/stylelet/css/stylesheet';
 import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
-import { parseSelectorList } from '../../../../src/stylelet/syntax/selector';
+import {
+  parseSelectorList, serializeSelectorList,
+} from '../../../../src/stylelet/syntax/selector';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 
@@ -47,7 +49,7 @@ describe('CSS stylesheet', () => {
       value: parseOptionalDeclarationValue('red')!,
       important: false,
     };
-    const sheet: StyleSheet = {
+    const sheet: InterpretedStyleSheet = {
       rules: [{
         type: 'style-rule',
         selectors: parseSelectorList('*')!,
@@ -141,7 +143,7 @@ describe('CSS stylesheet', () => {
 
   // CSS Nesting Level 1 defines nested style-rule parsing, including the `&`
   // selector and its parent-dependent semantics.
-  it.skip('interprets qualified rules inside a style block as nested style rules', () => {
+  it('interprets qualified rules inside a style block as nested style rules', () => {
     const sheet = parseStylesheet(`
       .parent {
         color: blue;
@@ -161,5 +163,33 @@ describe('CSS stylesheet', () => {
         name: '--accent',
       }],
     });
+
+    const parent = sheet.rules[0];
+    if (parent.type !== 'style-rule') throw new Error('Expected a style rule');
+    const nested = parent.block[1];
+    if (nested.type !== 'style-rule') throw new Error('Expected a nested style rule');
+
+    expect(serializeSelectorList(nested.selectors)).toBe('&:hover');
+  });
+
+  it('binds nested selectors recursively to their parent style rules', () => {
+    const sheet = parseStylesheet(`
+      #featured, article {
+        .item {
+          > .label { color: red }
+        }
+      }
+    `);
+    const parent = sheet.rules[0];
+    if (parent.type !== 'style-rule') throw new Error('Expected a style rule');
+    const child = parent.block[0];
+    if (child.type !== 'style-rule') throw new Error('Expected a nested style rule');
+    const grandchild = child.block[0];
+    if (grandchild.type !== 'style-rule') throw new Error('Expected a nested style rule');
+
+    expect(serializeSelectorList(child.selectors)).toBe('& .item');
+    expect(child.selectors.specificity).toEqual({ a: 1, b: 1, c: 0 });
+    expect(serializeSelectorList(grandchild.selectors)).toBe('& > .label');
+    expect(grandchild.selectors.specificity).toEqual({ a: 1, b: 2, c: 0 });
   });
 });
