@@ -87,7 +87,7 @@ export const linkStyleIDL = defineMixin({
 export class LinkStyleMixin {
   readonly #owner;
   readonly #options;
-  readonly #resolveTreeScope;
+  readonly #treeScopeResolver;
   #sheet: CSSStyleSheetImpl | null = null;
   #scope: TreeScope | null = null;
   #deferred = false;
@@ -95,11 +95,11 @@ export class LinkStyleMixin {
   constructor(
     owner: ElementImpl,
     options: LinkStyleOptions,
-    resolveTreeScope: TreeScopeResolver,
+    treeScopeResolver: TreeScopeResolver,
   ) {
     this.#owner = owner;
     this.#options = options;
-    this.#resolveTreeScope = resolveTreeScope;
+    this.#treeScopeResolver = treeScopeResolver;
   }
 
   get sheet(): CSSStyleSheet | null {
@@ -163,7 +163,7 @@ export class LinkStyleMixin {
       return;
     }
 
-    const scope = this.#resolveTreeScope(this.#owner.getRootNode());
+    const scope = this.#treeScopeResolver.resolve(this.#owner.getRootNode());
     if (!scope) return;
 
     let source = '';
@@ -193,4 +193,6 @@ export type LinkStyleOptions = {
   readonly children?: boolean;
 };
 
-export type TreeScopeResolver = (root: NodeImpl) => TreeScope | null;
+export type TreeScopeResolver = {
+  resolve(root: NodeImpl): TreeScope | null;
+};

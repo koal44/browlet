@@ -1,41 +1,60 @@
 import { withTextStub } from '../stubs/interfaces';
 import {
-  defineInterface, attribute,
+  defineInterface,
 } from '../../web-idl/binding';
-import { TreeNode } from '../tree/tree-node';
 import {
-  childNodeIDL, nodeIDL, NodeImpl, NodeType, nonDocumentTypeChildNodeIDL,
+  isText, NodeImpl, type NodeOptions, NodeType,
 } from './node';
+import { characterDataIDL, CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
+import type { ElementImpl } from './element';
+import { SlottableMixin } from './slottable';
 
 export const textIDL = defineInterface({
   name: 'Text',
-  parent: nodeIDL,
+  parent: characterDataIDL,
   exposed: ['Window'],
   constructible: true,
-  includes: [childNodeIDL, nonDocumentTypeChildNodeIDL],
-  members: {
-    data: attribute(),
-  },
+  members: {},
 });
 
 export class TextImpl
-  extends withTextStub(NodeImpl)
+  extends withTextStub(CharacterDataImpl)
   implements Text
 {
-  #data: string;
+  readonly #slottable = new SlottableMixin();
 
   constructor(data = '', ownerDocument: DocumentImpl | null = null) {
-    super(NodeType.Text, ownerDocument);
-    this.#data = data;
+    super(NodeType.Text, data, ownerDocument, TextImpl.#nodeOptions);
   }
 
-  get data(): string {
-    return this.#data;
+  // -- Virtual ----------------------------------------------------------
+
+  static readonly #nodeOptions: NodeOptions = {
+    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
+      getParent: (target, event) => NodeImpl.is(target) && isText(target)
+        ? TextImpl.getEventParent(target, event)
+        : null,
+      getAssignedSlot: (target) => NodeImpl.is(target) && isText(target)
+        ? TextImpl.getAssignedSlot(target)
+        : null,
+    }),
+  };
+
+  // -- Friends ----------------------------------------------------------
+
+  static setAssignedSlot(text: TextImpl, slot: ElementImpl | null): void {
+    text.#slottable.setAssignedSlot(slot);
   }
 
-  set data(value: string) {
-    this.#data = value;
-    TreeNode.notifyParentChildrenChanged(this);
+  static getAssignedSlot(text: TextImpl): ElementImpl | null {
+    return text.#slottable.assignedSlot;
+  }
+
+  static getEventParent(
+    text: TextImpl,
+    _event: Event,
+  ): NodeImpl | null {
+    return text.#slottable.assignedSlot ?? text.parentNode;
   }
 }

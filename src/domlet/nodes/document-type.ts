@@ -37,17 +37,6 @@ export class DocumentTypeImpl
     this.#systemId = systemId;
   }
 
-  static setIdentifiers(
-    doctype: DocumentTypeImpl,
-    name: string,
-    publicId: string,
-    systemId: string,
-  ): void {
-    doctype.#name = name;
-    doctype.#publicId = publicId;
-    doctype.#systemId = systemId;
-  }
-
   get name(): string {
     return this.#name;
   }
@@ -58,5 +47,18 @@ export class DocumentTypeImpl
 
   get systemId(): string {
     return this.#systemId;
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static setIdentifiers(
+    doctype: DocumentTypeImpl,
+    name: string,
+    publicId: string,
+    systemId: string,
+  ): void {
+    doctype.#name = name;
+    doctype.#publicId = publicId;
+    doctype.#systemId = systemId;
   }
 }

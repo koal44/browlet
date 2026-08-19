@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   Browlet,
@@ -53,7 +53,11 @@ describe('Browlet', () => {
   it('exposes window events and browser timer IDs', async () => {
     const browlet = new Browlet({ route: () => '' });
     const events: Event[] = [];
-    const event = new Event('custom');
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    const event = new EventConstructor('custom');
 
     browlet.window.addEventListener('custom', (received) => {
       events.push(received);
@@ -71,8 +75,12 @@ describe('Browlet', () => {
 
   it('tracks and restores the legacy current window event', () => {
     const browlet = new Browlet({ route: () => '' });
-    const outer = new Event('outer');
-    const inner = new Event('inner');
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    const outer = new EventConstructor('outer');
+    const inner = new EventConstructor('inner');
     const observations: (Event | undefined)[] = [];
 
     browlet.window.addEventListener('outer', () => {
@@ -88,6 +96,28 @@ describe('Browlet', () => {
     browlet.window.dispatchEvent(outer);
     expect(browlet.window.event).toBeUndefined();
     expect(observations).toEqual([outer, inner, outer]);
+  });
+
+  it('reports listener exceptions without interrupting dispatch', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    const reported = new Error('reported listener failure');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const following = vi.fn();
+
+    browlet.window.addEventListener('ready', () => { throw reported; });
+    browlet.window.addEventListener('ready', following);
+
+    expect(() => {
+      browlet.window.dispatchEvent(new EventConstructor('ready'));
+    }).not.toThrow();
+    expect(consoleError).toHaveBeenCalledWith(reported);
+    expect(following).toHaveBeenCalledOnce();
+
+    consoleError.mockRestore();
   });
 
   it('allows the legacy current event attribute to be replaced', () => {

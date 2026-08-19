@@ -3,7 +3,9 @@ import {
   withHTMLLinkElementStub, withHTMLStyleElementStub, withMathMLElementStub,
   withSVGElementStub, withSVGStyleElementStub,
 } from '../stubs/interfaces';
-import { NodeImpl, NodeType } from './node';
+import {
+  isElement, NodeImpl, type NodeOptions, NodeType,
+} from './node';
 import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './collections';
 import type { DocumentImpl } from './document';
@@ -13,7 +15,6 @@ import {
   linkStyleIDL, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
 } from '../css-engine';
-import type { TreeNodeHooks } from '../tree/tree-node';
 import {
   defineInterface, operation, readonlyAttribute,
 } from '../../web-idl/binding';
@@ -23,6 +24,7 @@ import {
 import {
   childNodeIDL, nodeIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL,
 } from './node';
+import { SlottableMixin } from './slottable';
 
 export const elementIDL = defineInterface({
   name: 'Element',
@@ -97,24 +99,12 @@ export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
-  static readonly #treeHooks: TreeNodeHooks<NodeImpl> = {
-    insertedInto: (node) => {
-      (node as ElementImpl).#linkStyle?.update();
-    },
-    removedFrom: (node) => {
-      (node as ElementImpl).#linkStyle?.update();
-    },
-    childrenChanged: (node) => {
-      (node as ElementImpl).#linkStyle?.childrenChanged();
-    },
-  };
-
-  #wasCreatedByParser = false;
   #inlineStyle: ElementCSSInlineStyleMixin | undefined;
   readonly #linkStyle: LinkStyleMixin | undefined;
   readonly #attributes: NamedNodeMapImpl;
   readonly #localName: string;
   readonly #namespaceURI: string;
+  readonly #slottable = new SlottableMixin();
 
   constructor(
     localName: string,
@@ -123,7 +113,7 @@ export class ElementImpl
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
   ) {
-    super(NodeType.Element, ownerDocument, ElementImpl.#treeHooks);
+    super(NodeType.Element, ownerDocument, ElementImpl.#nodeOptions);
     this.#attributes = new NamedNodeMapImpl(...attributes);
     this.#localName = localName;
     this.#namespaceURI = namespaceURI;
@@ -131,34 +121,9 @@ export class ElementImpl
       ? new LinkStyleMixin(
         this,
         linkStyle.options,
-        linkStyle.resolveTreeScope,
+        linkStyle.treeScopeResolver,
       )
       : undefined;
-  }
-
-  static wasCreatedByParser(element: ElementImpl): boolean {
-    return element.#wasCreatedByParser;
-  }
-
-  static markAsParserCreated(element: ElementImpl): void {
-    element.#wasCreatedByParser = true;
-  }
-
-  static beginParsingChildren(element: ElementImpl): void {
-    element.#linkStyle?.beginParsingChildren();
-  }
-
-  static finishParsingChildren(element: ElementImpl): void {
-    element.#linkStyle?.finishParsingChildren();
-  }
-
-  static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
-    return (element.#inlineStyle ??=
-      new ElementCSSInlineStyleMixin(element)).style;
-  }
-
-  static getStyleSheet(element: ElementImpl): CSSStyleSheet | null {
-    return element.#linkStyle?.sheet ?? null;
   }
 
   get attributes(): NamedNodeMapImpl {
@@ -274,6 +239,69 @@ export class ElementImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
+  // -- Virtual ----------------------------------------------------------
+
+  static readonly #nodeOptions: NodeOptions = {
+    eventTargetVirtuals: NodeImpl.createEventTargetVirtuals({
+      getParent: (target, event) => NodeImpl.is(target) && isElement(target)
+        ? ElementImpl.getEventParent(target, event)
+        : null,
+      getAssignedSlot: (target) => NodeImpl.is(target) && isElement(target)
+        ? ElementImpl.getAssignedSlot(target)
+        : null,
+    }),
+    treeVirtuals: {
+      insertedInto: (node) => {
+        (node as ElementImpl).#linkStyle?.update();
+      },
+      removedFrom: (node) => {
+        (node as ElementImpl).#linkStyle?.update();
+      },
+      childrenChanged: (node) => {
+        (node as ElementImpl).#linkStyle?.childrenChanged();
+      },
+    },
+  };
+
+  // -- Friends ----------------------------------------------------------
+
+  static setAssignedSlot(
+    element: ElementImpl,
+    slot: ElementImpl | null,
+  ): void {
+    element.#slottable.setAssignedSlot(slot);
+  }
+
+  static getAssignedSlot(element: ElementImpl): ElementImpl | null {
+    return element.#slottable.assignedSlot;
+  }
+
+  static getEventParent(
+    element: ElementImpl,
+    _event: Event,
+  ): NodeImpl | null {
+    return element.#slottable.assignedSlot ?? element.parentNode;
+  }
+
+  static beginParsingChildren(element: ElementImpl): void {
+    element.#linkStyle?.beginParsingChildren();
+  }
+
+  static finishParsingChildren(element: ElementImpl): void {
+    element.#linkStyle?.finishParsingChildren();
+  }
+
+  static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
+    return (element.#inlineStyle ??=
+      new ElementCSSInlineStyleMixin(element)).style;
+  }
+
+  static getStyleSheet(element: ElementImpl): CSSStyleSheet | null {
+    return element.#linkStyle?.sheet ?? null;
+  }
+
+  // -- Private ----------------------------------------------------------
+
   #attributeChanged(
     qualifiedName: string,
     _oldValue: string | null,
@@ -336,7 +364,7 @@ export class HTMLStyleElementImpl
 
   constructor(
     ownerDocument: DocumentImpl,
-    resolveTreeScope: TreeScopeResolver,
+    treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
     super(
@@ -345,7 +373,7 @@ export class HTMLStyleElementImpl
       attributes,
       {
         options: HTMLStyleElementImpl.#linkStyleOptions,
-        resolveTreeScope,
+        treeScopeResolver,
       },
     );
   }
@@ -368,7 +396,7 @@ export class HTMLLinkElementImpl
 
   constructor(
     ownerDocument: DocumentImpl,
-    resolveTreeScope: TreeScopeResolver,
+    treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
     super(
@@ -377,7 +405,7 @@ export class HTMLLinkElementImpl
       attributes,
       {
         options: HTMLLinkElementImpl.#linkStyleOptions,
-        resolveTreeScope,
+        treeScopeResolver,
       },
     );
   }
@@ -422,7 +450,7 @@ export class SVGStyleElementImpl
 
   constructor(
     ownerDocument: DocumentImpl,
-    resolveTreeScope: TreeScopeResolver,
+    treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
     super(
@@ -431,7 +459,7 @@ export class SVGStyleElementImpl
       attributes,
       {
         options: SVGStyleElementImpl.#linkStyleOptions,
-        resolveTreeScope,
+        treeScopeResolver,
       },
     );
   }
@@ -458,13 +486,13 @@ export class MathMLElementImpl
   }
 }
 
-export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, resolveTreeScope: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): HTMLElementImpl;
-export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, resolveTreeScope: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): ElementImpl;
+export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, treeScopeResolver: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): HTMLElementImpl;
+export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, treeScopeResolver: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): ElementImpl;
 export function createElementNode(
   localName: string,
   namespaceURI: string,
   ownerDocument: DocumentImpl,
-  resolveTreeScope: TreeScopeResolver,
+  treeScopeResolver: TreeScopeResolver,
   attributes: AttrImpl[],
   nodeFactory: DOMNodeFactory,
 ): ElementImpl {
@@ -481,14 +509,14 @@ export function createElementNode(
     if (localName === 'style') {
       return nodeFactory.construct(
         HTMLStyleElementImpl,
-        [ownerDocument, resolveTreeScope, attributes],
+        [ownerDocument, treeScopeResolver, attributes],
       );
     }
 
     if (localName === 'link') {
       return nodeFactory.construct(
         HTMLLinkElementImpl,
-        [ownerDocument, resolveTreeScope, attributes],
+        [ownerDocument, treeScopeResolver, attributes],
       );
     }
 
@@ -502,7 +530,7 @@ export function createElementNode(
     if (localName === 'style') {
       return nodeFactory.construct(
         SVGStyleElementImpl,
-        [ownerDocument, resolveTreeScope, attributes],
+        [ownerDocument, treeScopeResolver, attributes],
       );
     }
 
@@ -581,5 +609,5 @@ function asciiLower(value: string): string {
 
 type LinkStyleInit = {
   readonly options: LinkStyleOptions;
-  readonly resolveTreeScope: TreeScopeResolver;
+  readonly treeScopeResolver: TreeScopeResolver;
 };

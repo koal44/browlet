@@ -22,5 +22,13 @@ export class Domlet {
 
 const defaultDOMRealmHost: DOMRealmHost = {
   exposure: 'Window',
+  global: globalThis,
   eventTimeStamp: () => performance.now(),
+  isWindow: () => false,
+  getCurrentEvent: () => undefined,
+  setCurrentEvent: () => {},
+  recordTimingInfo: () => {},
+  reportException: (exception) => {
+    console.error(exception);
+  },
 };

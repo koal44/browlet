@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ServiceWorkerGlobalScopeImpl } from '../../../src/browlet/workers/service-worker-global-scope';
+import {
+  legacyObtainServiceWorkerFetchEventListenerCallbacks,
+  ServiceWorkerGlobalScopeImpl,
+} from '../../../src/browlet/workers/service-worker-global-scope';
 
 class TestServiceWorkerGlobalScope extends ServiceWorkerGlobalScopeImpl
 {
@@ -49,5 +52,19 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
     expect(worker.warnings).toEqual([
       'Removing a handled fetch event listener might not have the expected result',
     ]);
+  });
+
+  it('obtains fetch callbacks in event listener order', () => {
+    const worker = new TestServiceWorkerGlobalScope();
+    const first = () => {};
+    const ignored = () => {};
+    const second = { handleEvent: () => {} };
+
+    worker.addEventListener('fetch', first);
+    worker.addEventListener('install', ignored);
+    worker.addEventListener('fetch', second);
+
+    expect(legacyObtainServiceWorkerFetchEventListenerCallbacks(worker))
+      .toEqual([first, second]);
   });
 });

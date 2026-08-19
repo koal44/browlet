@@ -1,10 +1,10 @@
 import { domExceptionName } from '../../shared/dom-exception';
 import {
-  eventTargetIDL, type EventTargetHooks,
+  eventTargetIDL, type EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
 import {
-  TreeNode, type TreeNodeHooks,
+  TreeNode, type TreeNodeVirtuals,
 } from '../tree/tree-node';
 import {
   defineInterface, defineMixin, operation, readonlyAttribute,
@@ -73,36 +73,21 @@ export abstract class NodeImpl
   extends TreeNode<NodeImpl>
 {
   readonly #nodeType: NodeType;
-  readonly #document: DocumentImpl | null;
+  #document: DocumentImpl | null;
   readonly #baseURI: string | undefined;
-
-  static is(value: unknown): value is NodeImpl {
-    return typeof value === 'object' &&
-      value !== null &&
-      #document in value;
-  }
 
   constructor(
     nodeType: NodeType,
     ownerDocument: DocumentImpl | null = null,
-    hooks: TreeNodeHooks<NodeImpl> = {},
-    baseURI?: string,
+    options: NodeOptions = {},
   ) {
-    super(nodeEventTargetHooks, hooks);
+    super(
+      options.eventTargetVirtuals ?? nodeEventTargetVirtuals,
+      options.treeVirtuals,
+    );
     this.#nodeType = nodeType;
     this.#document = ownerDocument;
-    this.#baseURI = baseURI;
-  }
-
-  static isDefaultPassiveTarget(node: NodeImpl): boolean {
-    const root = node.getRoot();
-    const document = isDocument(root) ? root : node.#document;
-
-    return document !== null && (
-      node === document ||
-      node === document.documentElement ||
-      node === document.body
-    );
+    this.#baseURI = options.baseURI;
   }
 
   get nodeType(): NodeType {
@@ -191,11 +176,13 @@ export abstract class NodeImpl
   }
 
   get isConnected(): boolean {
-    return isDocument(super.getRoot());
+    return isDocument(NodeImpl.getShadowIncludingRoot(this));
   }
 
-  getRootNode(_options?: GetRootNodeOptions): NodeImpl {
-    return super.getRoot();
+  getRootNode(options?: GetRootNodeOptions): NodeImpl {
+    return options?.composed
+      ? NodeImpl.getShadowIncludingRoot(this)
+      : super.getRoot();
   }
 
   appendChild<T extends Node>(node: T): T {
@@ -253,11 +240,100 @@ export abstract class NodeImpl
       ? DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS
       : DOCUMENT_POSITION_PRECEDING;
   }
+
+  // -- Friends ----------------------------------------------------------
+
+  static is(value: unknown): value is NodeImpl {
+    return typeof value === 'object' &&
+      value !== null &&
+      #document in value;
+  }
+
+  static isDefaultPassiveTarget(node: NodeImpl): boolean {
+    const root = node.getRoot();
+    const document = isDocument(root) ? root : node.#document;
+
+    return document !== null && (
+      node === document ||
+      node === document.documentElement ||
+      node === document.body
+    );
+  }
+
+  static getEventParent(
+    node: NodeImpl,
+    _event: Event,
+  ): EventTargetImpl | null {
+    return node.parentNode;
+  }
+
+  static createEventTargetVirtuals(
+    overrides: EventTargetVirtuals,
+  ): EventTargetVirtuals {
+    return { ...nodeEventTargetVirtuals, ...overrides };
+  }
+
+  static getNodeDocument(node: NodeImpl): DocumentImpl | null {
+    return node.#document;
+  }
+
+  static setNodeDocument(
+    node: NodeImpl,
+    document: DocumentImpl,
+  ): void {
+    node.#document = document;
+  }
+
+  static getShadowIncludingRoot(node: NodeImpl): NodeImpl {
+    let root = TreeNode.getRoot(node);
+    let host = EventTargetImpl.getShadowRootHost(root);
+
+    while (NodeImpl.is(host)) {
+      root = TreeNode.getRoot(host);
+      host = EventTargetImpl.getShadowRootHost(root);
+    }
+
+    return root;
+  }
+
+  static isShadowIncludingInclusiveAncestor(
+    ancestor: NodeImpl,
+    node: NodeImpl,
+  ): boolean {
+    let current = node;
+
+    while (true) {
+      if (ancestor.contains(current)) return true;
+
+      const host = EventTargetImpl.getShadowRootHost(
+        TreeNode.getRoot(current),
+      );
+      if (!NodeImpl.is(host)) return false;
+      current = host;
+    }
+  }
 }
 
-const nodeEventTargetHooks: EventTargetHooks = {
+// -- Virtual ------------------------------------------------------------
+const nodeEventTargetVirtuals: EventTargetVirtuals = {
+  isNode: (target) => NodeImpl.is(target),
+  getTreeRoot: (target) => NodeImpl.is(target)
+    ? TreeNode.getRoot(target)
+    : null,
+  isShadowIncludingInclusiveAncestor: (ancestor, target) =>
+    NodeImpl.is(ancestor) &&
+    NodeImpl.is(target) &&
+    NodeImpl.isShadowIncludingInclusiveAncestor(ancestor, target),
+  getParent: (target, event) =>
+    NodeImpl.is(target) ? NodeImpl.getEventParent(target, event) : null,
   isDefaultPassiveTarget: (target) =>
     NodeImpl.is(target) && NodeImpl.isDefaultPassiveTarget(target),
+};
+
+export type NodeOptions = {
+  readonly treeVirtuals?: TreeNodeVirtuals<NodeImpl>;
+  readonly eventTargetVirtuals?: EventTargetVirtuals;
+  readonly baseURI?: string;
 };
 
 export enum NodeType {
@@ -266,6 +342,7 @@ export enum NodeType {
   Comment = 8,
   Document = 9,
   DocumentType = 10,
+  DocumentFragment = 11,
 }
 
 export function isElement(node: NodeImpl | null): node is ElementImpl {

@@ -1,40 +1,25 @@
 import { withCommentStub } from '../stubs/interfaces';
-import { attribute, defineInterface } from '../../web-idl/binding';
-import {
-  childNodeIDL, nodeIDL, NodeImpl, NodeType, nonDocumentTypeChildNodeIDL,
-} from './node';
+import { defineInterface } from '../../web-idl/binding';
+import { NodeType } from './node';
+import { characterDataIDL, CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
 
 export const commentIDL = defineInterface({
   name: 'Comment',
-  parent: nodeIDL,
+  parent: characterDataIDL,
   exposed: ['Window'],
   constructible: true,
-  includes: [childNodeIDL, nonDocumentTypeChildNodeIDL],
-  members: {
-    data: attribute(),
-  },
+  members: {},
 });
 
 export class CommentImpl
-  extends withCommentStub(NodeImpl)
+  extends withCommentStub(CharacterDataImpl)
   implements Comment
 {
-  #data: string;
-
   constructor(
     data = '',
     ownerDocument: DocumentImpl | null = null,
   ) {
-    super(NodeType.Comment, ownerDocument);
-    this.#data = data;
-  }
-
-  get data(): string {
-    return this.#data;
-  }
-
-  set data(value: string) {
-    this.#data = value;
+    super(NodeType.Comment, data, ownerDocument);
   }
 }

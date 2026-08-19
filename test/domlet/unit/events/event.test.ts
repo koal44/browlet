@@ -117,7 +117,6 @@ describe('EventImpl', () => {
       .toThrow(TypeError);
   });
 
-  it.todo('creates a trusted event in its relevant realm');
 });
 
 describe('CustomEventImpl', () => {

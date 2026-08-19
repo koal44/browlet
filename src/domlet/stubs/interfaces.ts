@@ -18,6 +18,8 @@ type StubbedConstructor<
 
 export const withNodeStub = stub<Node>();
 export const withDocumentTypeStub = stub<DocumentType>();
+export const withDocumentFragmentStub = stub<DocumentFragment>();
+export const withShadowRootStub = stub<ShadowRoot>();
 export const withElementStub = stub<Element>();
 export const withHTMLElementStub = stub<HTMLElement>();
 export const withHTMLHeadElementStub = stub<HTMLHeadElement>();
@@ -26,6 +28,7 @@ export const withHTMLStyleElementStub = stub<HTMLStyleElement>();
 export const withSVGElementStub = stub<SVGElement>();
 export const withSVGStyleElementStub = stub<SVGStyleElement>();
 export const withMathMLElementStub = stub<MathMLElement>();
+export const withCharacterDataStub = stub<CharacterData>();
 export const withTextStub = stub<Text>();
 export const withCommentStub = stub<Comment>();
 

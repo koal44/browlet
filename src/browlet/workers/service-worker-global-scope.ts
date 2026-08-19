@@ -1,5 +1,5 @@
 import {
-  EventTargetImpl, type EventTargetHooks,
+  EventTargetImpl, type EventTargetVirtuals,
 } from '../../domlet/events/event-target';
 
 // Service Workers §4.7 and DOM §2.7. This is the event-listener portion of a
@@ -7,7 +7,18 @@ import {
 // service-worker registration, script resources, and worker event types.
 export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
 {
-  static readonly #eventTargetHooks: EventTargetHooks = {
+  protected abstract readonly scriptResourceHasEverBeenEvaluated: boolean;
+  protected abstract readonly eventTypesToHandle: ReadonlySet<string>;
+  protected abstract isServiceWorkerEventType(type: string): boolean;
+  protected abstract reportWarning(message: string): void;
+
+  constructor() {
+    super(ServiceWorkerGlobalScopeImpl.#eventTargetVirtuals);
+  }
+
+  // -- Virtual ----------------------------------------------------------
+
+  static readonly #eventTargetVirtuals: EventTargetVirtuals = {
     addingEventListener: (target, type) => {
       (target as ServiceWorkerGlobalScopeImpl).#addingEventListener(type);
     },
@@ -16,14 +27,7 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
     },
   };
 
-  protected abstract readonly scriptResourceHasEverBeenEvaluated: boolean;
-  protected abstract readonly eventTypesToHandle: ReadonlySet<string>;
-  protected abstract isServiceWorkerEventType(type: string): boolean;
-  protected abstract reportWarning(message: string): void;
-
-  constructor() {
-    super(ServiceWorkerGlobalScopeImpl.#eventTargetHooks);
-  }
+  // -- Private ----------------------------------------------------------
 
   #addingEventListener(type: string): void {
     if (
@@ -43,4 +47,11 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
       );
     }
   }
+}
+
+// DOM section 2.8.
+export function legacyObtainServiceWorkerFetchEventListenerCallbacks(
+  global: ServiceWorkerGlobalScopeImpl,
+): EventListenerOrEventListenerObject[] {
+  return EventTargetImpl.getEventListenerCallbacks(global, 'fetch');
 }

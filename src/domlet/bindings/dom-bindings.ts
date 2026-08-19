@@ -1,8 +1,14 @@
 import {
   CustomEventImpl, customEventIDL, eventIDL, EventImpl, toDOMString,
 } from '../events/event';
-import { eventTargetIDL, EventTargetImpl } from '../events/event-target';
+import {
+  eventTargetIDL, EventTargetImpl, type EventImplementationConstructor,
+  type EventListenerInvocationHost,
+} from '../events/event-target';
 import { cssomDocumentOrShadowRootIDL } from '../css-engine';
+import {
+  characterDataIDL, CharacterDataImpl,
+} from '../nodes/character-data';
 import { CommentImpl, commentIDL } from '../nodes/comment';
 import {
   DocumentImpl, documentIDL, htmlDocumentIDL,
@@ -27,7 +33,10 @@ import {
   type ImplementationConstructor,
 } from '../../web-idl/binding';
 
-export class DOMBindings implements DOMNodeFactory {
+export class DOMBindings
+implements DOMNodeFactory, EventListenerInvocationHost
+{
+  readonly CharacterData: typeof globalThis.CharacterData;
   readonly Comment: typeof globalThis.Comment;
   readonly CustomEvent: typeof globalThis.CustomEvent;
   readonly Document: typeof globalThis.Document;
@@ -54,9 +63,11 @@ export class DOMBindings implements DOMNodeFactory {
     InterfaceConstructor
   >();
   readonly #exposure: string;
+  readonly #host: DOMRealmHost;
 
   constructor(host: DOMRealmHost) {
     this.#exposure = host.exposure;
+    this.#host = host;
 
     this.Event = this.bind<typeof globalThis.Event>({
       interface: eventIDL,
@@ -89,6 +100,15 @@ export class DOMBindings implements DOMNodeFactory {
       interface: nodeIDL,
       implementation: NodeImpl,
       prototypeSources: [NodeImpl.prototype, TreeNode.prototype],
+    });
+    this.CharacterData = this.bind<typeof globalThis.CharacterData>({
+      interface: characterDataIDL,
+      implementation: CharacterDataImpl,
+      prototypeSources: [
+        CharacterDataImpl.prototype,
+        NodeImpl.prototype,
+        TreeNode.prototype,
+      ],
     });
     this.Document = this.bind<typeof globalThis.Document>({
       interface: documentIDL,
@@ -172,15 +192,76 @@ export class DOMBindings implements DOMNodeFactory {
     return this.#exposed;
   }
 
+  createEvent(
+    eventConstructor: EventImplementationConstructor = EventImpl,
+  ): EventImpl {
+    const event = this.construct(eventConstructor, [
+      '',
+      {},
+      this.#host.eventTimeStamp(),
+    ]);
+    EventImpl.setTrusted(event, true);
+    return event;
+  }
+
+  getAssociatedGlobal(
+    _callback: EventListenerOrEventListenerObject,
+  ): object {
+    // TODO(Web IDL callback values): Resolve this from the callback's
+    // associated realm when callbacks can cross Domlet realm boundaries.
+    return this.#host.global;
+  }
+
+  isWindow(global: object): boolean {
+    return this.#host.isWindow(global);
+  }
+
+  getCurrentEvent(global: object): Event | undefined {
+    return this.#host.getCurrentEvent(global);
+  }
+
+  setCurrentEvent(global: object, event: Event | undefined): void {
+    this.#host.setCurrentEvent(global, event);
+  }
+
+  recordTimingInfo(
+    global: object,
+    event: Event,
+    callback: EventListenerOrEventListenerObject,
+  ): void {
+    this.#host.recordTimingInfo(global, event, callback);
+  }
+
+  callUserObjectOperation(
+    callback: EventListenerOrEventListenerObject,
+    _operation: 'handleEvent',
+    [event]: readonly [Event],
+    thisArgument: EventTarget,
+  ): void {
+    if (typeof callback === 'function') {
+      callback.call(thisArgument, event);
+    } else {
+      callback.handleEvent.call(callback, event);
+    }
+  }
+
+  reportException(exception: unknown, global: object): void {
+    this.#host.reportException(exception, global);
+  }
+
+  associateEventTarget(target: EventTargetImpl): void {
+    EventTargetImpl.associateInvocationHost(target, this);
+  }
+
   construct<T extends object>(
     implementation: ImplementationConstructor<T>,
     argumentsList: readonly unknown[],
   ): T {
-    return Reflect.construct(
+    return this.#associate(Reflect.construct(
       implementation,
       argumentsList,
       this.#implementations.get(implementation) ?? implementation,
-    ) as T;
+    ) as T);
   }
 
   private bind<TConstructor extends InterfaceConstructor>(
@@ -196,7 +277,19 @@ export class DOMBindings implements DOMNodeFactory {
       );
     }
 
-    const Interface = bindInterface(binding, parent, domPartials);
+    const construction = binding.construct;
+    const Interface = bindInterface(
+      construction
+        ? {
+          ...binding,
+          construct: (argumentsList, newTarget) => this.#associate(
+            construction(argumentsList, newTarget),
+          ),
+        }
+        : binding,
+      parent,
+      domPartials,
+    );
     this.#interfaces.set(binding.interface, Interface);
     this.#implementations.set(binding.implementation, Interface);
 
@@ -209,11 +302,26 @@ export class DOMBindings implements DOMNodeFactory {
 
     return Interface as TConstructor;
   }
+
+  #associate<T extends object>(value: T): T {
+    if (EventTargetImpl.is(value)) this.associateEventTarget(value);
+    return value;
+  }
 }
 
 export type DOMRealmHost = {
   readonly exposure: string;
+  readonly global: object;
   eventTimeStamp(): DOMHighResTimeStamp;
+  isWindow(global: object): boolean;
+  getCurrentEvent(global: object): Event | undefined;
+  setCurrentEvent(global: object, event: Event | undefined): void;
+  recordTimingInfo(
+    global: object,
+    event: Event,
+    callback: EventListenerOrEventListenerObject,
+  ): void;
+  reportException(exception: unknown, global: object): void;
 };
 
 const domPartials = [htmlDocumentIDL, cssomDocumentOrShadowRootIDL];

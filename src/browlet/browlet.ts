@@ -30,6 +30,8 @@ export class Browlet {
       this.#document,
       new URL('about:blank'),
     );
+    this.#domlet.bindings.associateEventTarget(this.#window);
+    this.#realm.setWindow(this.#window);
     this.#windowProxy.setWindow(this.#window);
 
     for (const [name, constructor] of this.#domlet.bindings.exposed) {
@@ -71,6 +73,8 @@ export class Browlet {
 
     this.#document = document;
     this.#window = window;
+    this.#domlet.bindings.associateEventTarget(window);
+    this.#realm.setWindow(window);
     this.#windowProxy.setWindow(window);
 
     await parser.parse(source);

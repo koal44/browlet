@@ -5,6 +5,7 @@ import {
   DocumentImpl, DocumentMode, type DomletDocument,
 } from '../nodes/document';
 import { DocumentTypeImpl } from '../nodes/document-type';
+import { DocumentFragmentImpl } from '../nodes/document-fragment';
 import { ElementImpl } from '../nodes/element';
 import {
   directDOMNodeFactory, type DOMNodeFactory,
@@ -49,8 +50,11 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     return document;
   }
 
-  createDocumentFragment(): NodeImpl {
-    return notImplemented('createDocumentFragment');
+  createDocumentFragment(): DocumentFragmentImpl {
+    return this.#documentFactory.construct(
+      DocumentFragmentImpl,
+      [this.#document],
+    );
   }
 
   createElement(
@@ -67,7 +71,6 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
         this.#document,
       )),
     );
-    ElementImpl.markAsParserCreated(element);
     ElementImpl.beginParsingChildren(element);
     return element;
   }
@@ -196,12 +199,12 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
 
   setTemplateContent(
     _templateElement: ElementImpl,
-    _contentElement: NodeImpl,
+    _contentElement: DocumentFragmentImpl,
   ): void {
     notImplemented('setTemplateContent');
   }
 
-  getTemplateContent(_templateElement: ElementImpl): NodeImpl {
+  getTemplateContent(_templateElement: ElementImpl): DocumentFragmentImpl {
     return notImplemented('getTemplateContent');
   }
 
@@ -320,7 +323,7 @@ export type DomletParserTreeAdapterMap = {
   parentNode: NodeImpl;
   childNode: NodeImpl;
   document: DomletDocument;
-  documentFragment: NodeImpl;
+  documentFragment: DocumentFragmentImpl;
   element: ElementImpl;
   commentNode: CommentImpl;
   textNode: TextImpl;

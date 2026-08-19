@@ -1,3 +1,12 @@
+import { domExceptionName } from '../../shared/dom-exception';
+import {
+  EventImpl, type EventPathItem, toDOMString,
+} from './event';
+import { MouseEventImpl } from './ui-event';
+import {
+  defineInterface, operation,
+} from '../../web-idl/binding';
+
 /*
  * [Exposed=*]
  * interface EventTarget {
@@ -22,10 +31,6 @@
  *   AbortSignal signal;
  * };
  */
-import { toDOMString } from './event';
-import {
-  defineInterface, operation,
-} from '../../web-idl/binding';
 
 export const eventTargetIDL = defineInterface({
   name: 'EventTarget',
@@ -41,10 +46,11 @@ export const eventTargetIDL = defineInterface({
 export class EventTargetImpl implements EventTarget
 {
   #eventListenerList: EventListenerRecord[] = [];
-  readonly #hooks: EventTargetHooks;
+  readonly #virtuals: EventTargetVirtuals;
+  #invocationHost = defaultEventListenerInvocationHost;
 
-  constructor(hooks: EventTargetHooks = {}) {
-    this.#hooks = hooks;
+  constructor(virtuals: EventTargetVirtuals = {}) {
+    this.#virtuals = virtuals;
   }
 
   addEventListener(
@@ -62,6 +68,7 @@ export class EventTargetImpl implements EventTarget
       once,
       signal,
       removed: false,
+      invocationHost: this.#invocationHost,
     };
 
     this.#addListener(listener);
@@ -82,11 +89,38 @@ export class EventTargetImpl implements EventTarget
     if (listener) this.#removeListener(listener);
   }
 
-  // TODO(DOM section 2.9): Replace this deliberate failure with the dispatch
-  // algorithm. Listener invocation cannot be implemented faithfully as a
-  // second, target-only dispatch loop.
-  dispatchEvent(_event: Event): boolean {
-    throw new Error('DOM section 2.9 event dispatch is not implemented');
+  dispatchEvent(event: Event): boolean {
+    if (!EventImpl.is(event)) {
+      throw new TypeError('The event is not a DOM Event implementation');
+    }
+
+    if (EventImpl.isDispatching(event) || !EventImpl.isInitialized(event)) {
+      throw new DOMException('', domExceptionName.invalidState);
+    }
+
+    EventImpl.setTrusted(event, false);
+    return dispatch(event, this);
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static is(value: unknown): value is EventTargetImpl {
+    return typeof value === 'object' &&
+      value !== null &&
+      #eventListenerList in value;
+  }
+
+  static associateInvocationHost(
+    target: EventTargetImpl,
+    host: EventListenerInvocationHost,
+  ): void {
+    target.#invocationHost = host;
+  }
+
+  static getInvocationHost(
+    target: EventTargetImpl,
+  ): EventListenerInvocationHost {
+    return target.#invocationHost;
   }
 
   static removeAllEventListeners(target: EventTargetImpl): void {
@@ -95,13 +129,217 @@ export class EventTargetImpl implements EventTarget
     }
   }
 
+  static getParent(
+    target: EventTargetImpl,
+    event: Event,
+  ): EventTargetImpl | null {
+    return target.#virtuals.getParent?.(target, event) ?? null;
+  }
+
+  static getEventListenerCallbacks(
+    target: EventTargetImpl,
+    type: string,
+  ): EventListenerOrEventListenerObject[] {
+    const callbacks: EventListenerOrEventListenerObject[] = [];
+
+    for (const listener of target.#eventListenerList) {
+      if (listener.type === type && listener.callback !== null) {
+        callbacks.push(listener.callback);
+      }
+    }
+
+    return callbacks;
+  }
+
+  static getTreeRoot(target: EventTargetImpl): EventTargetImpl | null {
+    return target.#virtuals.getTreeRoot?.(target) ?? null;
+  }
+
+  static getShadowRootHost(
+    target: EventTargetImpl,
+  ): EventTargetImpl | null {
+    return target.#virtuals.getShadowRootHost?.(target) ?? null;
+  }
+
+  static getShadowRootMode(
+    target: EventTargetImpl,
+  ): ShadowRootMode | null {
+    return target.#virtuals.getShadowRootMode?.(target) ?? null;
+  }
+
+  static getAssignedSlot(
+    target: EventTargetImpl,
+  ): EventTargetImpl | null {
+    return target.#virtuals.getAssignedSlot?.(target) ?? null;
+  }
+
+  static isNode(target: EventTargetImpl): boolean {
+    return target.#virtuals.isNode?.(target) ?? false;
+  }
+
+  static isWindow(target: EventTargetImpl): boolean {
+    return target.#virtuals.isWindow?.(target) ?? false;
+  }
+
+  static getLegacyTargetOverride(
+    target: EventTargetImpl,
+  ): EventTargetImpl {
+    return target.#virtuals.getLegacyTargetOverride?.(target) ?? target;
+  }
+
+  static isShadowIncludingInclusiveAncestor(
+    ancestor: EventTargetImpl,
+    target: EventTargetImpl,
+  ): boolean {
+    return target.#virtuals.isShadowIncludingInclusiveAncestor?.(
+      ancestor,
+      target,
+    ) ?? false;
+  }
+
+  static invoke(
+    pathItem: EventPathItem,
+    event: EventImpl,
+    phase: EventPhase,
+  ): void {
+    const path = EventImpl.getPath(event);
+    let targetItemIndex = path.indexOf(pathItem);
+
+    while (path[targetItemIndex]?.shadowAdjustedTarget === null) {
+      targetItemIndex--;
+    }
+
+    const targetItem = path[targetItemIndex];
+    if (!targetItem) throw new Error('An event path has no adjusted target');
+
+    EventImpl.setTarget(event, targetItem.shadowAdjustedTarget);
+    EventImpl.setRelatedTarget(event, pathItem.relatedTarget);
+    EventImpl.setTouchTargetList(event, pathItem.touchTargetList);
+
+    if (EventImpl.propagationStopped(event)) return;
+
+    const currentTarget = pathItem.invocationTarget;
+    if (!EventTargetImpl.is(currentTarget)) {
+      throw new Error('An event path target must be an EventTarget implementation');
+    }
+
+    EventImpl.setCurrentTarget(event, currentTarget);
+    const listeners = [...currentTarget.#eventListenerList];
+    const found = EventTargetImpl.#innerInvoke(
+      event,
+      listeners,
+      phase,
+      pathItem.invocationTargetInShadowTree,
+    );
+
+    if (found || !event.isTrusted) return;
+
+    const legacyType = LEGACY_EVENT_TYPES.get(event.type);
+    if (!legacyType) return;
+
+    const originalType = event.type;
+    EventImpl.setType(event, legacyType);
+    EventTargetImpl.#innerInvoke(
+      event,
+      listeners,
+      phase,
+      pathItem.invocationTargetInShadowTree,
+    );
+    EventImpl.setType(event, originalType);
+  }
+
+  static hasActivationBehavior(target: EventTargetImpl): boolean {
+    return target.#virtuals.activationBehavior !== undefined;
+  }
+
+  static runActivationBehavior(
+    target: EventTargetImpl,
+    event: Event,
+  ): void {
+    target.#virtuals.activationBehavior?.(target, event);
+  }
+
+  static hasLegacyPreActivationBehavior(target: EventTargetImpl): boolean {
+    return target.#virtuals.legacyPreActivationBehavior !== undefined;
+  }
+
+  static runLegacyPreActivationBehavior(target: EventTargetImpl): void {
+    target.#virtuals.legacyPreActivationBehavior?.(target);
+  }
+
+  static hasLegacyCanceledActivationBehavior(
+    target: EventTargetImpl,
+  ): boolean {
+    return target.#virtuals.legacyCanceledActivationBehavior !== undefined;
+  }
+
+  static runLegacyCanceledActivationBehavior(target: EventTargetImpl): void {
+    target.#virtuals.legacyCanceledActivationBehavior?.(target);
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  static #innerInvoke(
+    event: EventImpl,
+    listeners: readonly EventListenerRecord[],
+    phase: EventPhase,
+    invocationTargetInShadowTree: boolean,
+  ): boolean {
+    let found = false;
+
+    for (const listener of listeners) {
+      if (listener.removed || event.type !== listener.type) continue;
+
+      found = true;
+      if (phase === 'capturing' && !listener.capture) continue;
+      if (phase === 'bubbling' && listener.capture) continue;
+
+      const currentTarget = event.currentTarget;
+      const callback = listener.callback;
+      if (!EventTargetImpl.is(currentTarget) || callback === null) continue;
+
+      if (listener.once) currentTarget.#removeListener(listener);
+
+      const host = listener.invocationHost;
+      const global = host.getAssociatedGlobal(callback);
+      const window = host.isWindow(global);
+      const currentEvent = window
+        ? host.getCurrentEvent(global)
+        : undefined;
+
+      if (window && !invocationTargetInShadowTree) {
+        host.setCurrentEvent(global, event);
+      }
+      if (listener.passive) EventImpl.setInPassiveListener(event, true);
+      if (window) host.recordTimingInfo(global, event, callback);
+
+      try {
+        host.callUserObjectOperation(
+          callback,
+          'handleEvent',
+          [event],
+          currentTarget,
+        );
+      } catch (exception) {
+        host.reportException(exception, global);
+      } finally {
+        EventImpl.setInPassiveListener(event, false);
+        if (window) host.setCurrentEvent(global, currentEvent);
+      }
+
+      if (EventImpl.immediatePropagationStopped(event)) break;
+    }
+
+    return found;
+  }
+
   #getDefaultPassiveValue(type: string): boolean {
     return DEFAULT_PASSIVE_EVENT_TYPES.has(type) &&
-      (this.#hooks.isDefaultPassiveTarget?.(this) ?? false);
+      (this.#virtuals.isDefaultPassiveTarget?.(this) ?? false);
   }
 
   #addListener(listener: EventListenerRecord): void {
-    this.#hooks.addingEventListener?.(this, listener.type);
+    this.#virtuals.addingEventListener?.(this, listener.type);
 
     if (listener.signal?.aborted || listener.callback === null) return;
 
@@ -122,7 +360,7 @@ export class EventTargetImpl implements EventTarget
   }
 
   #removeListener(listener: EventListenerRecord): void {
-    this.#hooks.removingEventListener?.(this, listener.type);
+    this.#virtuals.removingEventListener?.(this, listener.type);
 
     listener.removed = true;
 
@@ -131,8 +369,283 @@ export class EventTargetImpl implements EventTarget
   }
 }
 
-export type EventTargetHooks = {
+export function fireEvent(
+  name: string,
+  target: EventTargetImpl,
+  eventConstructor?: EventImplementationConstructor,
+  initialize?: (event: EventImpl) => void,
+  legacyTargetOverride = false,
+): boolean {
+  const event = EventTargetImpl.getInvocationHost(target)
+    .createEvent(eventConstructor);
+
+  EventImpl.setType(event, name);
+  initialize?.(event);
+  return dispatch(event, target, legacyTargetOverride);
+}
+
+function dispatch(
+  event: EventImpl,
+  initialTarget: EventTargetImpl,
+  legacyTargetOverride = false,
+): boolean {
+  EventImpl.beginDispatch(event);
+
+  let target = initialTarget;
+  const targetOverride = legacyTargetOverride
+    ? EventTargetImpl.getLegacyTargetOverride(target)
+    : target;
+  let activationTarget: EventTargetImpl | null = null;
+  let relatedTarget = retarget(EventImpl.getRelatedTarget(event), target);
+  let clearTargets = false;
+
+  if (
+    target !== relatedTarget ||
+    target === EventImpl.getRelatedTarget(event)
+  ) {
+    let touchTargets = EventImpl.getTouchTargetList(event)
+      .map((touchTarget) => retarget(touchTarget, target));
+    appendToEventPath(
+      event,
+      target,
+      targetOverride,
+      relatedTarget,
+      touchTargets,
+      false,
+    );
+
+    const isActivationEvent = MouseEventImpl.is(event) &&
+      event.type === 'click';
+
+    if (
+      isActivationEvent &&
+      EventTargetImpl.hasActivationBehavior(target)
+    ) {
+      activationTarget = target;
+    }
+
+    let slottable = EventTargetImpl.getAssignedSlot(target) === null
+      ? null
+      : target;
+    let slotInClosedTree = false;
+    let parent = EventTargetImpl.getParent(target, event);
+
+    while (parent !== null) {
+      if (slottable !== null) {
+        slottable = null;
+        const parentRoot = EventTargetImpl.getTreeRoot(parent);
+        if (
+          parentRoot !== null &&
+          EventTargetImpl.getShadowRootMode(parentRoot) === 'closed'
+        ) {
+          slotInClosedTree = true;
+        }
+      }
+
+      if (EventTargetImpl.getAssignedSlot(parent) !== null) {
+        slottable = parent;
+      }
+
+      relatedTarget = retarget(EventImpl.getRelatedTarget(event), parent);
+      const parentForRetarget = parent;
+      touchTargets = EventImpl.getTouchTargetList(event)
+        .map((touchTarget) => retarget(touchTarget, parentForRetarget));
+
+      const targetRoot = EventTargetImpl.getTreeRoot(target);
+      const sameShadowIncludingTree = EventTargetImpl.isWindow(parent) || (
+        targetRoot !== null &&
+        EventTargetImpl.isNode(parent) &&
+        EventTargetImpl.isShadowIncludingInclusiveAncestor(
+          targetRoot,
+          parent,
+        )
+      );
+
+      if (sameShadowIncludingTree) {
+        if (
+          isActivationEvent &&
+          event.bubbles &&
+          activationTarget === null &&
+          EventTargetImpl.hasActivationBehavior(parent)
+        ) {
+          activationTarget = parent;
+        }
+
+        appendToEventPath(
+          event,
+          parent,
+          null,
+          relatedTarget,
+          touchTargets,
+          slotInClosedTree,
+        );
+      } else if (parent === relatedTarget) {
+        parent = null;
+      } else {
+        target = parent;
+
+        if (
+          isActivationEvent &&
+          activationTarget === null &&
+          EventTargetImpl.hasActivationBehavior(target)
+        ) {
+          activationTarget = target;
+        }
+
+        appendToEventPath(
+          event,
+          parent,
+          target,
+          relatedTarget,
+          touchTargets,
+          slotInClosedTree,
+        );
+      }
+
+      if (parent !== null) {
+        parent = EventTargetImpl.getParent(parent, event);
+      }
+      slotInClosedTree = false;
+    }
+
+    const clearTargetsItem = EventImpl.getPath(event)
+      .findLast((item) => item.shadowAdjustedTarget !== null);
+
+    if (clearTargetsItem) {
+      clearTargets = isNodeInShadowTree(clearTargetsItem.shadowAdjustedTarget) ||
+        isNodeInShadowTree(clearTargetsItem.relatedTarget) ||
+        clearTargetsItem.touchTargetList.some(isNodeInShadowTree);
+    }
+
+    if (
+      activationTarget !== null &&
+      EventTargetImpl.hasLegacyPreActivationBehavior(activationTarget)
+    ) {
+      EventTargetImpl.runLegacyPreActivationBehavior(activationTarget);
+    }
+
+    for (const item of [...EventImpl.getPath(event)].reverse()) {
+      EventImpl.setPhase(
+        event,
+        item.shadowAdjustedTarget === null
+          ? EventImpl.CAPTURING_PHASE
+          : EventImpl.AT_TARGET,
+      );
+      EventTargetImpl.invoke(item, event, 'capturing');
+    }
+
+    for (const item of EventImpl.getPath(event)) {
+      if (item.shadowAdjustedTarget !== null) {
+        EventImpl.setPhase(event, EventImpl.AT_TARGET);
+      } else {
+        if (!event.bubbles) continue;
+        EventImpl.setPhase(event, EventImpl.BUBBLING_PHASE);
+      }
+
+      EventTargetImpl.invoke(item, event, 'bubbling');
+    }
+  }
+
+  EventImpl.finishDispatch(event, clearTargets);
+
+  if (activationTarget !== null) {
+    if (!EventImpl.isCanceled(event)) {
+      EventTargetImpl.runActivationBehavior(activationTarget, event);
+    } else if (
+      EventTargetImpl.hasLegacyCanceledActivationBehavior(activationTarget)
+    ) {
+      EventTargetImpl.runLegacyCanceledActivationBehavior(activationTarget);
+    }
+  }
+
+  return !EventImpl.isCanceled(event);
+}
+
+function appendToEventPath(
+  event: EventImpl,
+  invocationTarget: EventTargetImpl,
+  shadowAdjustedTarget: EventTargetImpl | null,
+  relatedTarget: EventTarget | null,
+  touchTargetList: readonly (EventTarget | null)[],
+  slotInClosedTree: boolean,
+): void {
+  const root = EventTargetImpl.getTreeRoot(invocationTarget);
+
+  EventImpl.appendToPath(event, {
+    invocationTarget,
+    invocationTargetInShadowTree: root !== null &&
+      EventTargetImpl.getShadowRootHost(root) !== null,
+    shadowAdjustedTarget,
+    relatedTarget,
+    touchTargetList,
+    rootOfClosedTree: EventTargetImpl.getShadowRootMode(invocationTarget) ===
+      'closed',
+    slotInClosedTree,
+  });
+}
+
+function retarget(
+  initialTarget: EventTarget | null,
+  against: EventTargetImpl,
+): EventTarget | null {
+  let target = initialTarget;
+
+  while (EventTargetImpl.is(target) && EventTargetImpl.isNode(target)) {
+    const root = EventTargetImpl.getTreeRoot(target);
+    if (root === null) return target;
+
+    const host = EventTargetImpl.getShadowRootHost(root);
+    if (host === null) return target;
+
+    if (
+      EventTargetImpl.isNode(against) &&
+      EventTargetImpl.isShadowIncludingInclusiveAncestor(root, against)
+    ) {
+      return target;
+    }
+
+    target = host;
+  }
+
+  return target;
+}
+
+function isNodeInShadowTree(target: EventTarget | null): boolean {
+  if (!EventTargetImpl.is(target) || !EventTargetImpl.isNode(target)) {
+    return false;
+  }
+
+  const root = EventTargetImpl.getTreeRoot(target);
+  return root !== null && EventTargetImpl.getShadowRootHost(root) !== null;
+}
+
+export type EventTargetVirtuals = {
+  readonly getParent?: (
+    target: EventTargetImpl,
+    event: Event,
+  ) => EventTargetImpl | null;
   readonly isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
+  readonly isNode?: (target: EventTargetImpl) => boolean;
+  readonly isWindow?: (target: EventTargetImpl) => boolean;
+  readonly getLegacyTargetOverride?: (
+    target: EventTargetImpl,
+  ) => EventTargetImpl;
+  readonly getTreeRoot?: (
+    target: EventTargetImpl,
+  ) => EventTargetImpl | null;
+  readonly getShadowRootHost?: (
+    target: EventTargetImpl,
+  ) => EventTargetImpl | null;
+  readonly getShadowRootMode?: (
+    target: EventTargetImpl,
+  ) => ShadowRootMode | null;
+  readonly getAssignedSlot?: (
+    target: EventTargetImpl,
+  ) => EventTargetImpl | null;
+  readonly isShadowIncludingInclusiveAncestor?: (
+    ancestor: EventTargetImpl,
+    target: EventTargetImpl,
+  ) => boolean;
   readonly addingEventListener?: (
     target: EventTargetImpl,
     type: string,
@@ -141,6 +654,41 @@ export type EventTargetHooks = {
     target: EventTargetImpl,
     type: string,
   ) => void;
+  readonly activationBehavior?: (
+    target: EventTargetImpl,
+    event: Event,
+  ) => void;
+  readonly legacyPreActivationBehavior?: (
+    target: EventTargetImpl,
+  ) => void;
+  readonly legacyCanceledActivationBehavior?: (
+    target: EventTargetImpl,
+  ) => void;
+};
+
+// DOM section 2.9 crosses into Web IDL and HTML here. A realm host supplies
+// these operations; dispatch must not infer a callback's realm or invoke it
+// directly in the EventTarget implementation.
+export type EventListenerInvocationHost = {
+  createEvent(eventConstructor?: EventImplementationConstructor): EventImpl;
+  getAssociatedGlobal(
+    callback: EventListenerOrEventListenerObject,
+  ): object;
+  isWindow(global: object): boolean;
+  getCurrentEvent(global: object): Event | undefined;
+  setCurrentEvent(global: object, event: Event | undefined): void;
+  recordTimingInfo(
+    global: object,
+    event: Event,
+    callback: EventListenerOrEventListenerObject,
+  ): void;
+  callUserObjectOperation(
+    callback: EventListenerOrEventListenerObject,
+    operation: 'handleEvent',
+    argumentsList: readonly [Event],
+    thisArgument: EventTarget,
+  ): void;
+  reportException(exception: unknown, global: object): void;
 };
 
 type EventListenerRecord = {
@@ -151,7 +699,16 @@ type EventListenerRecord = {
   readonly once: boolean;
   readonly signal: AbortSignal | null;
   removed: boolean;
+  readonly invocationHost: EventListenerInvocationHost;
 };
+
+export type EventImplementationConstructor = abstract new (
+  type: string,
+  init?: EventInit,
+  timeStamp?: DOMHighResTimeStamp,
+) => EventImpl;
+
+type EventPhase = 'capturing' | 'bubbling';
 
 function flatten(
   options: EventListenerOptions | boolean | null,
@@ -194,3 +751,41 @@ const DEFAULT_PASSIVE_EVENT_TYPES = new Set([
   'wheel',
   'mousewheel',
 ]);
+
+const LEGACY_EVENT_TYPES = new Map([
+  ['animationend', 'webkitAnimationEnd'],
+  ['animationiteration', 'webkitAnimationIteration'],
+  ['animationstart', 'webkitAnimationStart'],
+  ['transitionend', 'webkitTransitionEnd'],
+]);
+
+const defaultEventListenerInvocationHost: EventListenerInvocationHost = {
+  createEvent: (EventConstructor = EventImpl) => {
+    const event = Reflect.construct(
+      EventConstructor,
+      ['', {}, performance.now()],
+    ) as EventImpl;
+    EventImpl.setTrusted(event, true);
+    return event;
+  },
+  getAssociatedGlobal: () => globalThis,
+  isWindow: () => false,
+  getCurrentEvent: () => undefined,
+  setCurrentEvent: () => {},
+  recordTimingInfo: () => {},
+  callUserObjectOperation: (
+    callback,
+    _operation,
+    [event],
+    thisArgument,
+  ) => {
+    if (typeof callback === 'function') {
+      callback.call(thisArgument, event);
+    } else {
+      callback.handleEvent.call(callback, event);
+    }
+  },
+  reportException: (exception) => {
+    console.error(exception);
+  },
+};

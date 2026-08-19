@@ -5,6 +5,22 @@ import type { WindowImpl } from './window';
 export class WindowProxyController {
   readonly value: WindowProxyValue;
   #target?: WindowImpl;
+  readonly #addEventListener = ((
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions | boolean,
+  ) => {
+    this.target.addEventListener(type, callback, options);
+  }) as Window['addEventListener'];
+  readonly #dispatchEvent = (event: Event): boolean =>
+    this.target.dispatchEvent(event);
+  readonly #removeEventListener = ((
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions | boolean,
+  ) => {
+    this.target.removeEventListener(type, callback, options);
+  }) as Window['removeEventListener'];
 
   constructor(realm: Realm) {
     this.value = realm.global as unknown as WindowProxyValue;
@@ -28,7 +44,7 @@ export class WindowProxyController {
       },
       addEventListener: {
         configurable: true,
-        get: () => this.target.addEventListener,
+        get: () => this.#addEventListener,
       },
       clearTimeout: {
         configurable: true,
@@ -36,7 +52,7 @@ export class WindowProxyController {
       },
       dispatchEvent: {
         configurable: true,
-        get: () => this.target.dispatchEvent,
+        get: () => this.#dispatchEvent,
       },
       getComputedStyle: {
         configurable: true,
@@ -56,7 +72,7 @@ export class WindowProxyController {
       },
       removeEventListener: {
         configurable: true,
-        get: () => this.target.removeEventListener,
+        get: () => this.#removeEventListener,
       },
       self: {
         configurable: true,

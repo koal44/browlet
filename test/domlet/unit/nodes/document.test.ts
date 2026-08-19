@@ -3,19 +3,93 @@ import { describe, expect, it } from 'vitest';
 import {
   DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
+import { DocumentFragmentImpl } from '../../../../src/domlet/nodes/document-fragment';
 import { DocumentTypeImpl } from '../../../../src/domlet/nodes/document-type';
 import {
-  HTMLElementImpl, HTMLHeadElementImpl,
+  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl,
 } from '../../../../src/domlet/nodes/element';
 import {
-  isComment, isDocument, isDocumentType, isElement, isText, NodeType,
+  isComment, isDocument, isDocumentType, isElement, isText, NodeImpl, NodeType,
 } from '../../../../src/domlet/nodes/node';
+import { ShadowRootImpl } from '../../../../src/domlet/nodes/shadow-root';
+import { TextImpl } from '../../../../src/domlet/nodes/text';
+import { EventImpl } from '../../../../src/domlet/events/event';
+import { EventTargetImpl } from '../../../../src/domlet/events/event-target';
 
 describe('Document', () => {
   it('always has a base URI', () => {
+    const document = new DocumentImpl('https://example.com/');
+    const text = document.createTextNode('content');
+
     expect(new DocumentImpl().baseURI).toBe('about:blank');
-    expect(new DocumentImpl('https://example.com/').baseURI)
-      .toBe('https://example.com/');
+    expect(document.baseURI).toBe('https://example.com/');
+    expect(text.baseURI).toBe(document.baseURI);
+    expect(NodeImpl.getNodeDocument(document)).toBe(document);
+    expect(NodeImpl.getNodeDocument(text)).toBe(document);
+  });
+
+  it('can update a node document during a future adoption operation', () => {
+    const first = new DocumentImpl('https://first.example/');
+    const second = new DocumentImpl('https://second.example/');
+    const text = first.createTextNode('content');
+
+    NodeImpl.setNodeDocument(text, second);
+
+    expect(text.ownerDocument).toBe(second);
+    expect(text.baseURI).toBe(second.baseURI);
+  });
+
+  it('uses the relevant global as its event parent except for load', () => {
+    const document = new DocumentImpl();
+    const global = new EventTargetImpl();
+    DocumentImpl.setBrowsingContextWindow(document, global);
+
+    expect(EventTargetImpl.getParent(document, new EventImpl('ready')))
+      .toBe(global);
+    expect(EventTargetImpl.getParent(document, new EventImpl('load')))
+      .toBeNull();
+  });
+
+  it('represents document fragments and shadow-root event topology', () => {
+    const document = new DocumentImpl();
+    const host = document.createElement('main') as HTMLElementImpl;
+    const fragment = new DocumentFragmentImpl(document);
+    const root = new ShadowRootImpl(host, 'closed');
+
+    expect(fragment.nodeType).toBe(NodeType.DocumentFragment);
+    expect(DocumentFragmentImpl.getHost(fragment)).toBeNull();
+    expect(root.nodeType).toBe(NodeType.DocumentFragment);
+    expect(root.host).toBe(host);
+    expect(root.mode).toBe('closed');
+    expect(root.getRootNode()).toBe(root);
+    expect(root.getRootNode({ composed: true })).toBe(host);
+    expect(EventTargetImpl.getParent(
+      root,
+      new EventImpl('ready', { composed: true }),
+    )).toBe(host);
+  });
+
+  it('uses an assigned slot before a node tree parent', () => {
+    const document = new DocumentImpl();
+    const parent = new HTMLElementImpl('main', document);
+    const slot = new HTMLElementImpl('slot', document);
+    const element = new HTMLElementImpl('span', document);
+    const text = document.createTextNode('content');
+    parent.appendChild(element);
+    parent.appendChild(text);
+
+    expect(EventTargetImpl.getParent(element, new EventImpl('ready')))
+      .toBe(parent);
+    expect(EventTargetImpl.getParent(text, new EventImpl('ready')))
+      .toBe(parent);
+
+    ElementImpl.setAssignedSlot(element, slot);
+    TextImpl.setAssignedSlot(text, slot);
+
+    expect(EventTargetImpl.getParent(element, new EventImpl('ready')))
+      .toBe(slot);
+    expect(EventTargetImpl.getParent(text, new EventImpl('ready')))
+      .toBe(slot);
   });
 
   it('is the tree root and exposes its first element child', () => {

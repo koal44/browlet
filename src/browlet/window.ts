@@ -2,7 +2,7 @@ import {
   DocumentImpl, type DomletDocument,
 } from '../domlet/nodes/document';
 import {
-  EventTargetImpl, type EventTargetHooks,
+  EventTargetImpl, type EventTargetVirtuals,
 } from '../domlet/events/event-target';
 import { LocationImpl } from './location';
 import { withWindowStub } from './stubs/interfaces';
@@ -18,18 +18,15 @@ export class WindowImpl
 {
   readonly document: DomletDocument;
   #currentEvent: Event | undefined;
-  readonly #listeners = new Map<
-    string,
-    Set<EventListenerOrEventListenerObject>
-  >();
   readonly #location: LocationImpl;
   readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
   #nextTimer = 1;
 
   constructor(document: DomletDocument, url: URL) {
-    super(windowEventTargetHooks);
+    super(windowEventTargetVirtuals);
     this.document = document;
     this.#location = new LocationImpl(url);
+    DocumentImpl.setBrowsingContextWindow(document, this);
   }
 
   get location(): Location {
@@ -65,50 +62,6 @@ export class WindowImpl
     return DocumentImpl.getCSSEngine(this.document).getComputedStyle(element);
   };
 
-  readonly addEventListener = ((
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    _options?: boolean | AddEventListenerOptions,
-  ): void => {
-    let listeners = this.#listeners.get(type);
-
-    if (!listeners) {
-      listeners = new Set();
-      this.#listeners.set(type, listeners);
-    }
-
-    listeners.add(listener);
-  }) as Window['addEventListener'];
-
-  readonly removeEventListener = ((
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    _options?: boolean | EventListenerOptions,
-  ): void => {
-    this.#listeners.get(type)?.delete(listener);
-  }) as Window['removeEventListener'];
-
-  readonly dispatchEvent = (event: Event): boolean => {
-    // TODO(DOM section 2.9): The invoke algorithm must move this current-event
-    // scoping to the Window associated with every listener callback.
-    for (const listener of this.#listeners.get(event.type) ?? []) {
-      const previousEvent = this.#currentEvent;
-      this.#currentEvent = event;
-
-      try {
-        if (typeof listener === 'function') {
-          listener.call(this, event);
-        } else {
-          listener.handleEvent(event);
-        }
-      } finally {
-        this.#currentEvent = previousEvent;
-      }
-    }
-
-    return true;
-  };
-
   readonly setTimeout = (
     handler: TimerHandler,
     timeout?: number,
@@ -138,8 +91,23 @@ export class WindowImpl
     clearTimeout(timer);
     this.#timers.delete(id);
   };
+
+  // -- Friends ----------------------------------------------------------
+
+  static getCurrentEvent(window: WindowImpl): Event | undefined {
+    return window.#currentEvent;
+  }
+
+  static setCurrentEvent(window: WindowImpl, event: Event | undefined): void {
+    window.#currentEvent = event;
+  }
 }
 
-const windowEventTargetHooks: EventTargetHooks = {
+// -- Virtual ------------------------------------------------------------
+const windowEventTargetVirtuals: EventTargetVirtuals = {
   isDefaultPassiveTarget: () => true,
+  isWindow: () => true,
+  getLegacyTargetOverride: (target) => target instanceof WindowImpl
+    ? target.document
+    : target,
 };

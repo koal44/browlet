@@ -1,7 +1,9 @@
+import type { TreeScope } from '../../stylelet/engine/tree-scope';
 import { Stylelet } from '../../stylelet/stylelet';
 import {
   DocumentOrShadowRootMixin, type TreeScopeResolver,
 } from '../css-engine';
+import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
 import {
   defineInterface, definePartialInterface, operation, readonlyAttribute,
@@ -18,7 +20,7 @@ import type {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
 import {
-  documentOrShadowRootIDL, isDocumentType, isElement, nodeIDL,
+  documentOrShadowRootIDL, isDocument, isDocumentType, isElement, nodeIDL,
   NodeImpl, NodeType, parentNodeIDL,
 } from './node';
 import { TextImpl } from './text';
@@ -66,8 +68,8 @@ export class DocumentImpl
 {
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
-  readonly #resolveTreeScope: TreeScopeResolver = (root) =>
-    root === this ? DocumentImpl.getCSSEngine(this).documentScope : null;
+  #browsingContextWindow: EventTargetImpl | null = null;
+  readonly #treeScopeResolver: TreeScopeResolver;
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
   readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
@@ -82,84 +84,21 @@ export class DocumentImpl
     baseURI = 'about:blank',
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
-    super(NodeType.Document, null, {}, baseURI);
+    super(
+      NodeType.Document,
+      null,
+      {
+        baseURI,
+        eventTargetVirtuals: DocumentImpl.#eventTargetVirtuals,
+      },
+    );
+    NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
+    this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
   }
 
   get contentType(): 'text/html' {
     return 'text/html';
-  }
-
-  static getMode(document: DocumentImpl): DocumentMode {
-    return document.#mode;
-  }
-
-  static setMode(document: DocumentImpl, mode: DocumentMode): void {
-    document.#mode = mode;
-  }
-
-  static getCSSEngine(document: DocumentImpl): Stylelet {
-    return document.#stylelet ??= new Stylelet(asDocument(document));
-  }
-
-  static withWriter<T>(
-    document: DocumentImpl,
-    writer: DocumentWriter,
-    callback: () => T,
-  ): T {
-    const previousWriter = document.#writer;
-    document.#writer = writer;
-
-    try {
-      return callback();
-    } finally {
-      document.#writer = previousWriter;
-    }
-  }
-
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE, attributes?: AttrImpl[]): HTMLElementImpl;
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string, attributes?: AttrImpl[]): ElementImpl;
-  static createElementNode(
-    document: DocumentImpl,
-    localName: string,
-    namespaceURI: string,
-    attributes: AttrImpl[] = [],
-  ): ElementImpl {
-    return constructElementNode(
-      localName,
-      namespaceURI,
-      document,
-      document.#resolveTreeScope,
-      attributes,
-      document.#nodeFactory,
-    );
-  }
-
-  static createAttribute(
-    document: DocumentImpl,
-    localName: string,
-    value: string,
-    namespaceURI: string | null,
-    prefix: string | null,
-  ): AttrImpl {
-    return document.#nodeFactory.construct(AttrImpl, [
-      localName,
-      value,
-      namespaceURI,
-      prefix,
-    ]);
-  }
-
-  static createDocumentType(
-    document: DocumentImpl,
-    name: string,
-    publicId: string,
-    systemId: string,
-  ): DocumentTypeImpl {
-    return document.#nodeFactory.construct(
-      DocumentTypeImpl,
-      [name, publicId, systemId, document],
-    );
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
@@ -215,49 +154,16 @@ export class DocumentImpl
   }
 
   get styleSheets(): StyleSheetList {
-    return this.#documentOrShadowRootMixin.styleSheets;
+    return DocumentImpl.#getDocumentOrShadowRootMixin(this).styleSheets;
   }
 
   get adoptedStyleSheets(): CSSStyleSheet[] {
-    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
+    return DocumentImpl.#getDocumentOrShadowRootMixin(this).adoptedStyleSheets;
   }
 
   set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
-    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
-  }
-
-  static addScriptBlockingStyleSheet(
-    document: DocumentImpl,
-    ownerNode: ElementImpl,
-  ): void {
-    if (document.#scriptBlockingStyleSheets.has(ownerNode)) return;
-
-    if (document.#scriptBlockingStyleSheets.size === 0) {
-      document.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
-        document.#resolveScriptBlockingStyleSheets = resolve;
-      });
-    }
-
-    document.#scriptBlockingStyleSheets.add(ownerNode);
-  }
-
-  static removeScriptBlockingStyleSheet(
-    document: DocumentImpl,
-    ownerNode: ElementImpl,
-  ): void {
-    if (!document.#scriptBlockingStyleSheets.delete(ownerNode)) return;
-    if (document.#scriptBlockingStyleSheets.size > 0) return;
-
-    document.#resolveScriptBlockingStyleSheets?.();
-    document.#resolveScriptBlockingStyleSheets = null;
-  }
-
-  static async waitForScriptBlockingStyleSheets(
-    document: DocumentImpl,
-  ): Promise<void> {
-    while (document.#scriptBlockingStyleSheets.size > 0) {
-      await document.#scriptBlockingStyleSheetsReady;
-    }
+    DocumentImpl.#getDocumentOrShadowRootMixin(this).adoptedStyleSheets =
+      styleSheets;
   }
 
   createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K];
@@ -340,11 +246,159 @@ export class DocumentImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  get #documentOrShadowRootMixin(): DocumentOrShadowRootMixin {
-    return this.#documentOrShadowRoot ??=
+  // -- Virtual ----------------------------------------------------------
+
+  static readonly #eventTargetVirtuals = NodeImpl.createEventTargetVirtuals({
+    getParent: (target, event) => NodeImpl.is(target) && isDocument(target)
+      ? DocumentImpl.getEventParent(target, event)
+      : null,
+  });
+
+  // -- Friends ----------------------------------------------------------
+
+  static getMode(document: DocumentImpl): DocumentMode {
+    return document.#mode;
+  }
+
+  static setMode(document: DocumentImpl, mode: DocumentMode): void {
+    document.#mode = mode;
+  }
+
+  static getEventParent(
+    document: DocumentImpl,
+    event: Event,
+  ): EventTargetImpl | null {
+    return event.type === 'load' ? null : document.#browsingContextWindow;
+  }
+
+  static setBrowsingContextWindow(
+    document: DocumentImpl,
+    window: EventTargetImpl | null,
+  ): void {
+    document.#browsingContextWindow = window;
+  }
+
+  static getCSSEngine(document: DocumentImpl): Stylelet {
+    return document.#stylelet ??= new Stylelet(asDocument(document));
+  }
+
+  static withWriter<T>(
+    document: DocumentImpl,
+    writer: DocumentWriter,
+    callback: () => T,
+  ): T {
+    const previousWriter = document.#writer;
+    document.#writer = writer;
+
+    try {
+      return callback();
+    } finally {
+      document.#writer = previousWriter;
+    }
+  }
+
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE, attributes?: AttrImpl[]): HTMLElementImpl;
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string, attributes?: AttrImpl[]): ElementImpl;
+  static createElementNode(
+    document: DocumentImpl,
+    localName: string,
+    namespaceURI: string,
+    attributes: AttrImpl[] = [],
+  ): ElementImpl {
+    return constructElementNode(
+      localName,
+      namespaceURI,
+      document,
+      document.#treeScopeResolver,
+      attributes,
+      document.#nodeFactory,
+    );
+  }
+
+  static createAttribute(
+    document: DocumentImpl,
+    localName: string,
+    value: string,
+    namespaceURI: string | null,
+    prefix: string | null,
+  ): AttrImpl {
+    return document.#nodeFactory.construct(AttrImpl, [
+      localName,
+      value,
+      namespaceURI,
+      prefix,
+    ]);
+  }
+
+  static createDocumentType(
+    document: DocumentImpl,
+    name: string,
+    publicId: string,
+    systemId: string,
+  ): DocumentTypeImpl {
+    return document.#nodeFactory.construct(
+      DocumentTypeImpl,
+      [name, publicId, systemId, document],
+    );
+  }
+
+  static addScriptBlockingStyleSheet(
+    document: DocumentImpl,
+    ownerNode: ElementImpl,
+  ): void {
+    if (document.#scriptBlockingStyleSheets.has(ownerNode)) return;
+
+    if (document.#scriptBlockingStyleSheets.size === 0) {
+      document.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
+        document.#resolveScriptBlockingStyleSheets = resolve;
+      });
+    }
+
+    document.#scriptBlockingStyleSheets.add(ownerNode);
+  }
+
+  static removeScriptBlockingStyleSheet(
+    document: DocumentImpl,
+    ownerNode: ElementImpl,
+  ): void {
+    if (!document.#scriptBlockingStyleSheets.delete(ownerNode)) return;
+    if (document.#scriptBlockingStyleSheets.size > 0) return;
+
+    document.#resolveScriptBlockingStyleSheets?.();
+    document.#resolveScriptBlockingStyleSheets = null;
+  }
+
+  static async waitForScriptBlockingStyleSheets(
+    document: DocumentImpl,
+  ): Promise<void> {
+    while (document.#scriptBlockingStyleSheets.size > 0) {
+      await document.#scriptBlockingStyleSheetsReady;
+    }
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  static #getDocumentOrShadowRootMixin(
+    document: DocumentImpl,
+  ): DocumentOrShadowRootMixin {
+    return document.#documentOrShadowRoot ??=
       new DocumentOrShadowRootMixin(
-        DocumentImpl.getCSSEngine(this).documentScope,
+        DocumentImpl.getCSSEngine(document).documentScope,
       );
+  }
+}
+
+class DocumentTreeScopeResolver implements TreeScopeResolver {
+  readonly #document: DocumentImpl;
+
+  constructor(document: DocumentImpl) {
+    this.#document = document;
+  }
+
+  resolve(root: NodeImpl): TreeScope | null {
+    return root === this.#document
+      ? DocumentImpl.getCSSEngine(this.#document).documentScope
+      : null;
   }
 }
 

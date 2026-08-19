@@ -4,15 +4,24 @@ import { describe, expect, it } from 'vitest';
 import {
   DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
+import { DocumentFragmentImpl } from '../../../../src/domlet/nodes/document-fragment';
 import {
-  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
-  HTMLStyleElementImpl, isHTMLElement, MathMLElementImpl, SVGElementImpl,
-  SVGStyleElementImpl,
+  HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
+  HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
 } from '../../../../src/domlet/nodes/element';
 import { isComment } from '../../../../src/domlet/nodes/node';
 import { DomletParser } from '../../../../src/domlet/parser/parser';
 
 describe('Parser tree adapter', () => {
+  it('creates document fragments in its current document', () => {
+    const parser = new DomletParser();
+    const document = parser.createDocument();
+    const fragment = parser.createDocumentFragment();
+
+    expect(fragment).toBeInstanceOf(DocumentFragmentImpl);
+    expect(fragment.ownerDocument).toBe(document);
+  });
+
   it('parses a basic HTML document and derives its compatibility mode', () => {
     const parser = new DomletParser();
     const standards = parser.parse('<!doctype html><main>content</main>');
@@ -67,19 +76,6 @@ describe('Parser tree adapter', () => {
     expect(document.getElementById('html')).toBeInstanceOf(HTMLElementImpl);
     expect(document.getElementById('math')).toBeInstanceOf(MathMLElementImpl);
     expect(document.getElementById('mi')).toBeInstanceOf(MathMLElementImpl);
-  });
-
-  it('distinguishes parser-created elements from DOM-created elements', () => {
-    const document = new DomletParser().parse('<main id="parsed"></main>');
-    const parsed = document.getElementById('parsed');
-    const created = document.createElement('main');
-
-    if (!isHTMLElement(created)) {
-      throw new Error('Expected an HTML element');
-    }
-
-    expect(parsed && ElementImpl.wasCreatedByParser(parsed)).toBe(true);
-    expect(ElementImpl.wasCreatedByParser(created)).toBe(false);
   });
 
   it('stores and retrieves the Parse5 document mode', () => {

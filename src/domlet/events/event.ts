@@ -1,3 +1,7 @@
+import {
+  attribute, constant, defineInterface, operation, readonlyAttribute,
+} from '../../web-idl/binding';
+
 /*
  * [Exposed=*]
  * interface Event {
@@ -38,9 +42,6 @@
  *   boolean composed = false;
  * };
  */
-import {
-  attribute, constant, defineInterface, operation, readonlyAttribute,
-} from '../../web-idl/binding';
 
 export const eventIDL = defineInterface({
   name: 'Event',
@@ -74,27 +75,15 @@ export const eventIDL = defineInterface({
 
 export class EventImpl implements Event
 {
-  static get NONE(): 0 { return 0; }
-  static get CAPTURING_PHASE(): 1 { return 1; }
-  static get AT_TARGET(): 2 { return 2; }
-  static get BUBBLING_PHASE(): 3 { return 3; }
-
-  static isDispatching(event: EventImpl): boolean {
-    return event.#dispatching;
-  }
-
   #type = '';
   #target: EventTarget | null = null;
-  // eslint-disable-next-line no-unused-private-class-members -- DOM section 2.2 state consumed by dispatch
   #relatedTarget: EventTarget | null = null;
-  // eslint-disable-next-line no-unused-private-class-members -- DOM section 2.2 state consumed by dispatch
   #touchTargetList: (EventTarget | null)[] = [];
   #currentTarget: EventTarget | null = null;
   #path: EventPathItem[] = [];
   #eventPhase: 0 | 1 | 2 | 3 = EventImpl.NONE;
 
   #stopPropagation = false;
-  // eslint-disable-next-line no-unused-private-class-members -- DOM section 2.2 state consumed by dispatch
   #stopImmediatePropagation = false;
   #canceled = false;
   #inPassiveListener = false;
@@ -102,17 +91,11 @@ export class EventImpl implements Event
   #cancelable = false;
   #composed = false;
 
-  // eslint-disable-next-line no-unused-private-class-members -- DOM section 2.2 state consumed by dispatchEvent
   #initialized = false;
   #dispatching = false;
   #isTrusted = false;
   #timeStamp: DOMHighResTimeStamp;
 
-  // TODO(DOM section 2.9): Dispatch will populate the target, current target,
-  // path, phase, passive-listener, and dispatch state declared above.
-  // TODO(DOM section 2.5): The user-agent create-an-event operation needs
-  // realm-owned interface constructors, a realm-relative coarse time, and a
-  // private trusted-event construction path. This constructor uses its host realm.
   constructor(
     type: string,
     eventInitDict: EventInit | null = {},
@@ -302,6 +285,121 @@ export class EventImpl implements Event
 
     this.#initialize(convertedType, convertedBubbles, convertedCancelable);
   }
+
+  static get NONE(): 0 { return 0; }
+  static get CAPTURING_PHASE(): 1 { return 1; }
+  static get AT_TARGET(): 2 { return 2; }
+  static get BUBBLING_PHASE(): 3 { return 3; }
+
+  // -- Friends ----------------------------------------------------------
+
+  static isDispatching(event: EventImpl): boolean {
+    return event.#dispatching;
+  }
+
+  static is(value: unknown): value is EventImpl {
+    return typeof value === 'object' && value !== null && #initialized in value;
+  }
+
+  static isInitialized(event: EventImpl): boolean {
+    return event.#initialized;
+  }
+
+  static setTrusted(event: EventImpl, trusted: boolean): void {
+    event.#isTrusted = trusted;
+  }
+
+  static beginDispatch(event: EventImpl): void {
+    event.#dispatching = true;
+  }
+
+  static getRelatedTarget(event: EventImpl): EventTarget | null {
+    return event.#relatedTarget;
+  }
+
+  static getTouchTargetList(event: EventImpl): readonly (EventTarget | null)[] {
+    return event.#touchTargetList;
+  }
+
+  static getPath(event: EventImpl): readonly EventPathItem[] {
+    return event.#path;
+  }
+
+  static appendToPath(event: EventImpl, item: EventPathItem): void {
+    event.#path.push(item);
+  }
+
+  static setTarget(event: EventImpl, target: EventTarget | null): void {
+    event.#target = target;
+  }
+
+  static setRelatedTarget(
+    event: EventImpl,
+    relatedTarget: EventTarget | null,
+  ): void {
+    event.#relatedTarget = relatedTarget;
+  }
+
+  static setTouchTargetList(
+    event: EventImpl,
+    targets: readonly (EventTarget | null)[],
+  ): void {
+    event.#touchTargetList = [...targets];
+  }
+
+  static setCurrentTarget(
+    event: EventImpl,
+    target: EventTarget | null,
+  ): void {
+    event.#currentTarget = target;
+  }
+
+  static setPhase(event: EventImpl, phase: 0 | 1 | 2 | 3): void {
+    event.#eventPhase = phase;
+  }
+
+  static propagationStopped(event: EventImpl): boolean {
+    return event.#stopPropagation;
+  }
+
+  static immediatePropagationStopped(event: EventImpl): boolean {
+    return event.#stopImmediatePropagation;
+  }
+
+  static setInPassiveListener(event: EventImpl, passive: boolean): void {
+    event.#inPassiveListener = passive;
+  }
+
+  static isCanceled(event: EventImpl): boolean {
+    return event.#canceled;
+  }
+
+  static setType(event: EventImpl, type: string): void {
+    event.#type = type;
+  }
+
+  static finishDispatch(event: EventImpl, clearTargets: boolean): void {
+    event.#eventPhase = EventImpl.NONE;
+    event.#currentTarget = null;
+    event.#path = [];
+    event.#dispatching = false;
+    event.#stopPropagation = false;
+    event.#stopImmediatePropagation = false;
+
+    if (clearTargets) {
+      event.#target = null;
+      event.#relatedTarget = null;
+      event.#touchTargetList = [];
+    }
+  }
+
+  static getFirstPathInvocationTarget(
+    event: EventImpl,
+  ): EventTarget | null {
+    return event.#path[0]?.invocationTarget ?? null;
+  }
+
+  // -- Private ----------------------------------------------------------
 
   #initialize(
     type: string,

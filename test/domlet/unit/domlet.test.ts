@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { Domlet } from '../../../src/domlet/domlet';
+import type { DOMRealmHost } from '../../../src/domlet/bindings/dom-bindings';
 import { EventImpl } from '../../../src/domlet/events/event';
 import { DocumentImpl } from '../../../src/domlet/nodes/document';
 
 describe('Domlet', () => {
   it('binds DOM constructors to one realm host', () => {
     let timeStamp = 10;
-    const domlet = new Domlet({
-      exposure: 'Window',
-      eventTimeStamp: () => ++timeStamp,
-    });
+    const domlet = new Domlet(createRealmHost(
+      'Window',
+      () => ++timeStamp,
+    ));
     const { CustomEvent, Event, EventTarget } = domlet.bindings;
     const event = new Event('ready');
     const customEvent = new CustomEvent('answer', { detail: 42 });
@@ -40,6 +41,8 @@ describe('Domlet', () => {
     expect(first.bindings.CustomEvent).not.toBe(second.bindings.CustomEvent);
     expect(first.bindings.EventTarget).not.toBe(second.bindings.EventTarget);
     expect(first.bindings.Node).not.toBe(second.bindings.Node);
+    expect(first.bindings.CharacterData)
+      .not.toBe(second.bindings.CharacterData);
     expect(first.bindings.Document).not.toBe(second.bindings.Document);
     expect(document).toBeInstanceOf(first.bindings.Document);
     expect(document).toBeInstanceOf(first.bindings.Node);
@@ -53,10 +56,15 @@ describe('Domlet', () => {
     expect(createdDocument).toBeInstanceOf(first.bindings.Document);
     expect(createdElement).toBeInstanceOf(first.bindings.HTMLElement);
     expect(createdText).toBeInstanceOf(first.bindings.Text);
+    expect(createdText).toBeInstanceOf(first.bindings.CharacterData);
     expect(Object.getPrototypeOf(first.bindings.Document.prototype))
       .toBe(first.bindings.Node.prototype);
     expect(Object.getPrototypeOf(first.bindings.Node.prototype))
       .toBe(first.bindings.EventTarget.prototype);
+    expect(Object.getPrototypeOf(first.bindings.Text.prototype))
+      .toBe(first.bindings.CharacterData.prototype);
+    expect(Object.getPrototypeOf(first.bindings.CharacterData.prototype))
+      .toBe(first.bindings.Node.prototype);
   });
 
   it('exposes only described Web IDL members on DOM prototypes', () => {
@@ -140,20 +148,15 @@ describe('Domlet', () => {
       'constructor',
       'sheet',
     ]);
-    expect(ownKeys(bindings.Text.prototype)).toEqual([
+    expect(ownKeys(bindings.CharacterData.prototype)).toEqual([
       'constructor',
       'data',
       'nextElementSibling',
       'previousElementSibling',
       'remove',
     ]);
-    expect(ownKeys(bindings.Comment.prototype)).toEqual([
-      'constructor',
-      'data',
-      'nextElementSibling',
-      'previousElementSibling',
-      'remove',
-    ]);
+    expect(ownKeys(bindings.Text.prototype)).toEqual(['constructor']);
+    expect(ownKeys(bindings.Comment.prototype)).toEqual(['constructor']);
     expect(ownKeys(bindings.DocumentType.prototype)).toEqual([
       'constructor',
       'name',
@@ -200,6 +203,8 @@ describe('Domlet', () => {
       .toThrow("use the 'new' operator");
     expect(() => { Reflect.construct(bindings.Node, []); })
       .toThrow('Illegal constructor');
+    expect(() => { Reflect.construct(bindings.CharacterData, []); })
+      .toThrow('Illegal constructor');
     expect(() => { Reflect.construct(bindings.Element, []); })
       .toThrow('Illegal constructor');
     expect(Reflect.construct(bindings.EventTarget, []))
@@ -212,10 +217,7 @@ describe('Domlet', () => {
   });
 
   it('filters exposed constructors for the host global', () => {
-    const domlet = new Domlet({
-      exposure: 'Worker',
-      eventTimeStamp: () => 0,
-    });
+    const domlet = new Domlet(createRealmHost('Worker', () => 0));
 
     expect([...domlet.bindings.exposed.keys()]).toEqual([
       'Event',
@@ -237,6 +239,22 @@ describe('Domlet', () => {
     expect(document.getElementById('target')?.localName).toBe('main');
   });
 });
+
+function createRealmHost(
+  exposure: string,
+  eventTimeStamp: () => number,
+): DOMRealmHost {
+  return {
+    exposure,
+    global: globalThis,
+    eventTimeStamp,
+    isWindow: () => false,
+    getCurrentEvent: () => undefined,
+    setCurrentEvent: () => {},
+    recordTimingInfo: () => {},
+    reportException: () => {},
+  };
+}
 
 function ownKeys(prototype: object): PropertyKey[] {
   return Reflect.ownKeys(prototype)
