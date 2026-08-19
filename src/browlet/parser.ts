@@ -1,7 +1,9 @@
 import { finished } from 'node:stream/promises';
 import { ParserStream } from 'parse5-parser-stream';
 import type { Domlet } from '../domlet/domlet';
-import type { DomletDocument } from '../domlet/nodes/document';
+import {
+  DocumentImpl, type DomletDocument,
+} from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
 import type {
   DomletParser, DomletParserTreeAdapterMap,
@@ -42,7 +44,7 @@ export class BrowletParser {
   ): Promise<void> {
     try {
       // Browlet has no nested navigables, so only this Document can block.
-      await this.document.__waitForScriptBlockingStyleSheets();
+      await DocumentImpl.waitForScriptBlockingStyleSheets(this.document);
       await this.#handleScript(element, write);
       resume();
     } catch (error) {

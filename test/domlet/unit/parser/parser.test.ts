@@ -5,7 +5,7 @@ import {
   DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
 import {
-  HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
+  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
   HTMLStyleElementImpl, isHTMLElement, MathMLElementImpl, SVGElementImpl,
   SVGStyleElementImpl,
 } from '../../../../src/domlet/nodes/element';
@@ -18,10 +18,10 @@ describe('Parser tree adapter', () => {
     const standards = parser.parse('<!doctype html><main>content</main>');
     const quirks = parser.parse('<main>content</main>');
 
-    expect(standards.mode).toBe(DocumentMode.NoQuirks);
+    expect(DocumentImpl.getMode(standards)).toBe(DocumentMode.NoQuirks);
     expect(standards.doctype?.name).toBe('html');
     expect(standards.documentElement.localName).toBe('html');
-    expect(quirks.mode).toBe(DocumentMode.Quirks);
+    expect(DocumentImpl.getMode(quirks)).toBe(DocumentMode.Quirks);
   });
 
   it('parses comments as comment nodes', () => {
@@ -78,8 +78,8 @@ describe('Parser tree adapter', () => {
       throw new Error('Expected an HTML element');
     }
 
-    expect(parsed?.__wasCreatedByParser).toBe(true);
-    expect(created.__wasCreatedByParser).toBe(false);
+    expect(parsed && ElementImpl.wasCreatedByParser(parsed)).toBe(true);
+    expect(ElementImpl.wasCreatedByParser(created)).toBe(false);
   });
 
   it('stores and retrieves the Parse5 document mode', () => {
@@ -88,7 +88,7 @@ describe('Parser tree adapter', () => {
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
 
-    expect(document.mode).toBe(DocumentMode.Quirks);
+    expect(DocumentImpl.getMode(document)).toBe(DocumentMode.Quirks);
     expect(parser.getDocumentMode(document)).toBe(html.DOCUMENT_MODE.QUIRKS);
   });
 

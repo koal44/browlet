@@ -1,10 +1,13 @@
-import type {
-  HTMLLinkElementImpl, HTMLStyleElementImpl, SVGStyleElementImpl,
-} from './nodes/element';
-import { isText } from './nodes/node';
+import type { ElementImpl } from './nodes/element';
+import {
+  documentOrShadowRootIDL, isText, type NodeImpl,
+} from './nodes/node';
 import { CSSStyleDeclarationImpl } from '../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../stylelet/engine/tree-scope';
+import {
+  attribute, defineMixin, definePartialInterface, readonlyAttribute,
+} from '../web-idl/binding';
 
 /*
  * partial interface mixin DocumentOrShadowRoot {
@@ -12,6 +15,14 @@ import type { TreeScope } from '../stylelet/engine/tree-scope';
  *   attribute ObservableArray<CSSStyleSheet> adoptedStyleSheets;
  * };
  */
+export const cssomDocumentOrShadowRootIDL = definePartialInterface({
+  target: documentOrShadowRootIDL,
+  members: {
+    styleSheets: readonlyAttribute(),
+    adoptedStyleSheets: attribute(),
+  },
+});
+
 export class DocumentOrShadowRootMixin {
   constructor(readonly scope: TreeScope) {}
 
@@ -34,6 +45,13 @@ export class DocumentOrShadowRootMixin {
  *   readonly attribute CSSStyleProperties style;
  * };
  */
+export const elementCSSInlineStyleIDL = defineMixin({
+  name: 'ElementCSSInlineStyle',
+  members: {
+    style: readonlyAttribute(),
+  },
+});
+
 export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 
@@ -52,8 +70,15 @@ export class ElementCSSInlineStyleMixin {
  * interface mixin LinkStyle {
  *   readonly attribute CSSStyleSheet? sheet;
  * };
- *
- * Deferred association hosts:
+ */
+export const linkStyleIDL = defineMixin({
+  name: 'LinkStyle',
+  members: {
+    sheet: readonlyAttribute(),
+  },
+});
+
+/* Deferred association hosts:
  * - external HTML links require the CSSOM fetch-a-CSS-style-sheet algorithm
  *   and HTML's linked-resource processing;
  * - XML processing instructions require an XML DOM host;
@@ -61,17 +86,20 @@ export class ElementCSSInlineStyleMixin {
  */
 export class LinkStyleMixin {
   readonly #owner;
-  readonly #behavior;
+  readonly #options;
+  readonly #resolveTreeScope;
   #sheet: CSSStyleSheetImpl | null = null;
   #scope: TreeScope | null = null;
   #deferred = false;
 
   constructor(
-    owner: HTMLLinkElementImpl | HTMLStyleElementImpl | SVGStyleElementImpl,
-    behavior: { attributes: Set<string>; children?: boolean; }
+    owner: ElementImpl,
+    options: LinkStyleOptions,
+    resolveTreeScope: TreeScopeResolver,
   ) {
     this.#owner = owner;
-    this.#behavior = behavior;
+    this.#options = options;
+    this.#resolveTreeScope = resolveTreeScope;
   }
 
   get sheet(): CSSStyleSheet | null {
@@ -79,22 +107,22 @@ export class LinkStyleMixin {
   }
 
   beginParsingChildren(): void {
-    if (!this.#behavior.children) return;
+    if (!this.#options.children) return;
     this.#deferred = true;
   }
 
   finishParsingChildren(): void {
-    if (!this.#behavior.children) return;
+    if (!this.#options.children) return;
     this.#deferred = false;
     this.update();
   }
 
   childrenChanged(): void {
-    if (this.#behavior.children) this.update();
+    if (this.#options.children) this.update();
   }
 
   attributeChanged(qualifiedName: string): void {
-    if (!this.#behavior.attributes.has(qualifiedName)) return;
+    if (!this.#options.attributes.has(qualifiedName)) return;
 
     if (this.#sheet) {
       if (qualifiedName === 'media') {
@@ -135,7 +163,8 @@ export class LinkStyleMixin {
       return;
     }
 
-    const scope = getTreeScope(this.#owner);
+    const scope = this.#resolveTreeScope(this.#owner.getRootNode());
+    if (!scope) return;
 
     let source = '';
     for (
@@ -159,10 +188,9 @@ export class LinkStyleMixin {
   }
 }
 
-type TreeScopeRoot = Node & {
-  readonly __treeScope: TreeScope;
+export type LinkStyleOptions = {
+  readonly attributes: ReadonlySet<string>;
+  readonly children?: boolean;
 };
 
-function getTreeScope(element: Element): TreeScope {
-  return (element.getRootNode() as TreeScopeRoot).__treeScope;
-}
+export type TreeScopeResolver = (root: NodeImpl) => TreeScope | null;

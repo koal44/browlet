@@ -1,13 +1,17 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
-import { AttrImpl } from '../nodes/attribute';
-import { CommentImpl } from '../nodes/comment';
+import type { AttrImpl } from '../nodes/attribute';
+import type { CommentImpl } from '../nodes/comment';
 import {
   DocumentImpl, DocumentMode, type DomletDocument,
 } from '../nodes/document';
 import { DocumentTypeImpl } from '../nodes/document-type';
-import { createElementNode, type ElementImpl } from '../nodes/element';
-import { TextImpl } from '../nodes/text';
+import { ElementImpl } from '../nodes/element';
+import {
+  directDOMNodeFactory, type DOMNodeFactory,
+} from '../nodes/factory';
+import type { TextImpl } from '../nodes/text';
 import { asDocument } from '../stubs/interfaces';
+import { TreeNode } from '../tree/tree-node';
 import {
   isComment, isDocumentType, isElement, isText,
   type NodeImpl,
@@ -15,7 +19,12 @@ import {
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   #document!: DomletDocument;
+  readonly #documentFactory: DOMNodeFactory;
   #pendingUnpushedElement: ElementImpl | null = null;
+
+  constructor(documentFactory: DOMNodeFactory = directDOMNodeFactory) {
+    this.#documentFactory = documentFactory;
+  }
 
   parse(source: string): DomletDocument {
     this.#pendingUnpushedElement = null;
@@ -32,7 +41,10 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   createDocument(): DomletDocument {
-    const document = asDocument(new DocumentImpl());
+    const document = asDocument(this.#documentFactory.construct(
+      DocumentImpl,
+      [undefined, this.#documentFactory],
+    ));
     this.#document = document;
     return document;
   }
@@ -46,23 +58,26 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     namespaceURI: html.NS,
     attrs: Token.Attribute[],
   ): ElementImpl {
-    const element = createElementNode(
+    const element = DocumentImpl.createElementNode(
+      this.#document,
       tagName,
       namespaceURI,
-      this.#document,
-      attrs.map(fromParserAttribute),
+      attrs.map((attribute) => fromParserAttribute(
+        attribute,
+        this.#document,
+      )),
     );
-    element.__markAsParserCreated();
-    element.beginParsingChildren();
+    ElementImpl.markAsParserCreated(element);
+    ElementImpl.beginParsingChildren(element);
     return element;
   }
 
   createCommentNode(data: string): CommentImpl {
-    return new CommentImpl(data, this.#document);
+    return this.#document.createComment(data);
   }
 
   createTextNode(value: string): TextImpl {
-    return new TextImpl(value, this.#document);
+    return this.#document.createTextNode(value);
   }
 
   onItemPush(item: ElementImpl): void {
@@ -72,17 +87,17 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
       this.#finishPendingUnpushedElement();
     }
 
-    item.beginParsingChildren();
+    ElementImpl.beginParsingChildren(item);
   }
 
   onItemPop(item: ElementImpl, _newTop: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    item.finishParsingChildren();
+    ElementImpl.finishParsingChildren(item);
   }
 
   appendChild(parentNode: NodeImpl, newNode: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    parentNode.appendTreeChild(newNode);
+    TreeNode.appendChild(parentNode, newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
@@ -92,7 +107,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     referenceNode: NodeImpl,
   ): void {
     this.#finishPendingUnpushedElement();
-    referenceNode.insertTreeSiblingBefore(newNode);
+    TreeNode.insertSiblingBefore(referenceNode, newNode);
     if (isElement(newNode)) this.#pendingUnpushedElement = newNode;
   }
 
@@ -107,7 +122,10 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     if (isText(lastChild)) {
       lastChild.data += text;
     } else {
-      parentNode.appendTreeChild(new TextImpl(text));
+      TreeNode.appendChild(
+        parentNode,
+        this.#document.createTextNode(text),
+      );
     }
   }
 
@@ -122,7 +140,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   adoptAttributes(recipient: ElementImpl, attrs: Token.Attribute[]): void {
     for (const attr of attrs) {
       if (recipient.hasAttributeNS(attr.namespace ?? null, attr.name)) continue;
-      recipient.attributes.push(fromParserAttribute(attr));
+      recipient.attributes.push(fromParserAttribute(attr, this.#document));
     }
   }
 
@@ -141,7 +159,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   getParentNode(node: NodeImpl): NodeImpl | null {
-    return node.parent;
+    return node.parentNode;
   }
 
   getAttrList(element: ElementImpl): Token.Attribute[] {
@@ -196,43 +214,46 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     const doctype = document.doctype;
 
     if (doctype) {
-      doctype.name = name;
-      doctype.publicId = publicId;
-      doctype.systemId = systemId;
+      DocumentTypeImpl.setIdentifiers(
+        doctype,
+        name,
+        publicId,
+        systemId,
+      );
       return;
     }
 
-    const newDoctype = new DocumentTypeImpl(
+    const newDoctype = DocumentImpl.createDocumentType(
+      document,
       name,
       publicId,
       systemId,
-      document,
     );
     const documentElement = document.documentElement;
 
     if (documentElement) {
-      documentElement.insertTreeSiblingBefore(newDoctype);
+      TreeNode.insertSiblingBefore(documentElement, newDoctype);
     } else {
-      document.appendTreeChild(newDoctype);
+      TreeNode.appendChild(document, newDoctype);
     }
   }
 
   setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {
     switch (mode) {
       case html.DOCUMENT_MODE.NO_QUIRKS:
-        document.mode = DocumentMode.NoQuirks;
+        DocumentImpl.setMode(document, DocumentMode.NoQuirks);
         break;
       case html.DOCUMENT_MODE.QUIRKS:
-        document.mode = DocumentMode.Quirks;
+        DocumentImpl.setMode(document, DocumentMode.Quirks);
         break;
       case html.DOCUMENT_MODE.LIMITED_QUIRKS:
-        document.mode = DocumentMode.LimitedQuirks;
+        DocumentImpl.setMode(document, DocumentMode.LimitedQuirks);
         break;
     }
   }
 
   getDocumentMode(document: DocumentImpl): html.DOCUMENT_MODE {
-    switch (document.mode) {
+    switch (DocumentImpl.getMode(document)) {
       case DocumentMode.NoQuirks:
         return html.DOCUMENT_MODE.NO_QUIRKS;
       case DocumentMode.Quirks:
@@ -284,7 +305,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     if (!element) return;
 
     this.#pendingUnpushedElement = null;
-    element.finishParsingChildren();
+    ElementImpl.finishParsingChildren(element);
   }
 }
 
@@ -316,8 +337,12 @@ function notImplemented(operation: string): never {
   throw new Error(`Parser tree adapter ${operation} is not implemented`);
 }
 
-function fromParserAttribute(attribute: Token.Attribute): AttrImpl {
-  return new AttrImpl(
+function fromParserAttribute(
+  attribute: Token.Attribute,
+  document: DocumentImpl,
+): AttrImpl {
+  return DocumentImpl.createAttribute(
+    document,
     attribute.name,
     attribute.value,
     attribute.namespace ?? null,

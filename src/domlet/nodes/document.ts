@@ -1,52 +1,169 @@
 import { Stylelet } from '../../stylelet/stylelet';
-import type { TreeScope } from '../../stylelet/engine/tree-scope';
-import { DocumentOrShadowRootMixin } from '../css-engine';
-import { asDocument } from '../stubs/interfaces';
-import { CommentImpl } from './comment';
 import {
-  createElementNode, HTML_NAMESPACE, isHTMLElement, isHTMLHeadElement,
+  DocumentOrShadowRootMixin, type TreeScopeResolver,
+} from '../css-engine';
+import { asDocument } from '../stubs/interfaces';
+import {
+  defineInterface, definePartialInterface, operation, readonlyAttribute,
+} from '../../web-idl/binding';
+import { AttrImpl } from './attribute';
+import { CommentImpl } from './comment';
+import { DocumentTypeImpl } from './document-type';
+import {
+  createElementNode as constructElementNode, HTML_NAMESPACE,
+  isHTMLElement, isHTMLHeadElement,
 } from './element';
 import type {
   ElementImpl, HTMLElementImpl, HTMLHeadElementImpl,
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
 import {
-  isDocumentType, isElement, NodeImpl, NodeType,
+  documentOrShadowRootIDL, isDocumentType, isElement, nodeIDL,
+  NodeImpl, NodeType, parentNodeIDL,
 } from './node';
 import { TextImpl } from './text';
-import type { DocumentTypeImpl } from './document-type';
+import {
+  directDOMNodeFactory, type DOMNodeFactory,
+} from './factory';
 import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
+
+export const documentIDL = defineInterface({
+  name: 'Document',
+  parent: nodeIDL,
+  exposed: ['Window'],
+  constructible: true,
+  includes: [parentNodeIDL, documentOrShadowRootIDL],
+  members: {
+    doctype: readonlyAttribute(),
+    documentElement: readonlyAttribute(),
+    contentType: readonlyAttribute(),
+    compatMode: readonlyAttribute(),
+    getElementsByClassName: operation(),
+    getElementsByTagName: operation(),
+    getElementsByTagNameNS: operation(),
+    createElement: operation(),
+    createElementNS: operation(),
+    createTextNode: operation(),
+    createComment: operation(),
+    getElementById: operation(),
+  },
+});
+
+export const htmlDocumentIDL = definePartialInterface({
+  target: documentIDL,
+  members: {
+    head: readonlyAttribute(),
+    body: readonlyAttribute(),
+    write: operation(),
+  },
+});
 
 export class DocumentImpl
   extends NodeImpl
 {
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
+  readonly #resolveTreeScope: TreeScopeResolver = (root) =>
+    root === this ? DocumentImpl.getCSSEngine(this).documentScope : null;
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
   readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
   #scriptBlockingStyleSheetsReady = Promise.resolve();
   #resolveScriptBlockingStyleSheets: (() => void) | null = null;
+  readonly #nodeFactory: DOMNodeFactory;
+  #writer: DocumentWriter | undefined;
 
-  readonly nodeType = NodeType.Document;
-  readonly contentType = 'text/html';
-  readonly baseURI: string;
-  mode = DocumentMode.NoQuirks;
+  #mode = DocumentMode.NoQuirks;
 
-  constructor(baseURI = 'about:blank') {
-    super();
-    this.baseURI = baseURI;
+  constructor(
+    baseURI = 'about:blank',
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
+  ) {
+    super(NodeType.Document, null, {}, baseURI);
+    this.#nodeFactory = nodeFactory;
   }
 
-  get ownerDocument(): null {
-    return null;
+  get contentType(): 'text/html' {
+    return 'text/html';
+  }
+
+  static getMode(document: DocumentImpl): DocumentMode {
+    return document.#mode;
+  }
+
+  static setMode(document: DocumentImpl, mode: DocumentMode): void {
+    document.#mode = mode;
+  }
+
+  static getCSSEngine(document: DocumentImpl): Stylelet {
+    return document.#stylelet ??= new Stylelet(asDocument(document));
+  }
+
+  static withWriter<T>(
+    document: DocumentImpl,
+    writer: DocumentWriter,
+    callback: () => T,
+  ): T {
+    const previousWriter = document.#writer;
+    document.#writer = writer;
+
+    try {
+      return callback();
+    } finally {
+      document.#writer = previousWriter;
+    }
+  }
+
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE, attributes?: AttrImpl[]): HTMLElementImpl;
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string, attributes?: AttrImpl[]): ElementImpl;
+  static createElementNode(
+    document: DocumentImpl,
+    localName: string,
+    namespaceURI: string,
+    attributes: AttrImpl[] = [],
+  ): ElementImpl {
+    return constructElementNode(
+      localName,
+      namespaceURI,
+      document,
+      document.#resolveTreeScope,
+      attributes,
+      document.#nodeFactory,
+    );
+  }
+
+  static createAttribute(
+    document: DocumentImpl,
+    localName: string,
+    value: string,
+    namespaceURI: string | null,
+    prefix: string | null,
+  ): AttrImpl {
+    return document.#nodeFactory.construct(AttrImpl, [
+      localName,
+      value,
+      namespaceURI,
+      prefix,
+    ]);
+  }
+
+  static createDocumentType(
+    document: DocumentImpl,
+    name: string,
+    publicId: string,
+    systemId: string,
+  ): DocumentTypeImpl {
+    return document.#nodeFactory.construct(
+      DocumentTypeImpl,
+      [name, publicId, systemId, document],
+    );
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
-    return this.mode === DocumentMode.Quirks ? 'BackCompat' : 'CSS1Compat';
+    return this.#mode === DocumentMode.Quirks ? 'BackCompat' : 'CSS1Compat';
   }
 
   get doctype(): DocumentTypeImpl | null {
@@ -97,55 +214,49 @@ export class DocumentImpl
     return null;
   }
 
-  __isDefaultPassiveEventTarget(node: NodeImpl): boolean {
-    return node === this ||
-      node === this.documentElement ||
-      node === this.body;
-  }
-
   get styleSheets(): StyleSheetList {
-    return this.documentOrShadowRoot.styleSheets;
+    return this.#documentOrShadowRootMixin.styleSheets;
   }
 
   get adoptedStyleSheets(): CSSStyleSheet[] {
-    return this.documentOrShadowRoot.adoptedStyleSheets;
+    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
   set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
-    this.documentOrShadowRoot.adoptedStyleSheets = styleSheets;
+    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
-  get cssEngine(): Stylelet {
-    return this.#stylelet ??= new Stylelet(asDocument(this));
-  }
+  static addScriptBlockingStyleSheet(
+    document: DocumentImpl,
+    ownerNode: ElementImpl,
+  ): void {
+    if (document.#scriptBlockingStyleSheets.has(ownerNode)) return;
 
-  get __treeScope(): TreeScope {
-    return this.documentOrShadowRoot.scope;
-  }
-
-  __addScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
-    if (this.#scriptBlockingStyleSheets.has(ownerNode)) return;
-
-    if (this.#scriptBlockingStyleSheets.size === 0) {
-      this.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
-        this.#resolveScriptBlockingStyleSheets = resolve;
+    if (document.#scriptBlockingStyleSheets.size === 0) {
+      document.#scriptBlockingStyleSheetsReady = new Promise((resolve) => {
+        document.#resolveScriptBlockingStyleSheets = resolve;
       });
     }
 
-    this.#scriptBlockingStyleSheets.add(ownerNode);
+    document.#scriptBlockingStyleSheets.add(ownerNode);
   }
 
-  __removeScriptBlockingStyleSheet(ownerNode: ElementImpl): void {
-    if (!this.#scriptBlockingStyleSheets.delete(ownerNode)) return;
-    if (this.#scriptBlockingStyleSheets.size > 0) return;
+  static removeScriptBlockingStyleSheet(
+    document: DocumentImpl,
+    ownerNode: ElementImpl,
+  ): void {
+    if (!document.#scriptBlockingStyleSheets.delete(ownerNode)) return;
+    if (document.#scriptBlockingStyleSheets.size > 0) return;
 
-    this.#resolveScriptBlockingStyleSheets?.();
-    this.#resolveScriptBlockingStyleSheets = null;
+    document.#resolveScriptBlockingStyleSheets?.();
+    document.#resolveScriptBlockingStyleSheets = null;
   }
 
-  async __waitForScriptBlockingStyleSheets(): Promise<void> {
-    while (this.#scriptBlockingStyleSheets.size > 0) {
-      await this.#scriptBlockingStyleSheetsReady;
+  static async waitForScriptBlockingStyleSheets(
+    document: DocumentImpl,
+  ): Promise<void> {
+    while (document.#scriptBlockingStyleSheets.size > 0) {
+      await document.#scriptBlockingStyleSheetsReady;
     }
   }
 
@@ -156,11 +267,7 @@ export class DocumentImpl
     localName: string,
     _options?: ElementCreationOptions,
   ): HTMLElement {
-    return createElementNode(
-      localName,
-      HTML_NAMESPACE,
-      this,
-    );
+    return DocumentImpl.createElementNode(this, localName, HTML_NAMESPACE);
   }
 
   createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement;
@@ -175,23 +282,23 @@ export class DocumentImpl
     qualifiedName: string,
     _options?: string | ElementCreationOptions,
   ): Element {
-    return createElementNode(
+    return DocumentImpl.createElementNode(
+      this,
       qualifiedName,
       namespaceURI ?? '',
-      this,
     );
   }
 
   createTextNode(data: string): TextImpl {
-    return new TextImpl(data, this);
+    return this.#nodeFactory.construct(TextImpl, [data, this]);
   }
 
   createComment(data: string): CommentImpl {
-    return new CommentImpl(data, this);
+    return this.#nodeFactory.construct(CommentImpl, [data, this]);
   }
 
   write(...text: string[]): void {
-    const writer = documentWriters.get(this);
+    const writer = this.#writer;
 
     if (!writer) {
       throw new Error('Document has no active parser');
@@ -233,32 +340,15 @@ export class DocumentImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  private get documentOrShadowRoot(): DocumentOrShadowRootMixin {
+  get #documentOrShadowRootMixin(): DocumentOrShadowRootMixin {
     return this.#documentOrShadowRoot ??=
-      new DocumentOrShadowRootMixin(this.cssEngine.documentScope);
+      new DocumentOrShadowRootMixin(
+        DocumentImpl.getCSSEngine(this).documentScope,
+      );
   }
 }
 
 export type DomletDocument = DocumentImpl & Document;
-
-export function withDocumentWriter<T>(
-  document: DocumentImpl,
-  writer: DocumentWriter,
-  callback: () => T,
-): T {
-  const previousWriter = documentWriters.get(document);
-  documentWriters.set(document, writer);
-
-  try {
-    return callback();
-  } finally {
-    if (previousWriter) {
-      documentWriters.set(document, previousWriter);
-    } else {
-      documentWriters.delete(document);
-    }
-  }
-}
 
 export type DocumentWriter = (markup: string) => void;
 
@@ -267,5 +357,3 @@ export enum DocumentMode {
   Quirks = 'quirks',
   LimitedQuirks = 'limited-quirks',
 }
-
-const documentWriters = new WeakMap<DocumentImpl, DocumentWriter>();

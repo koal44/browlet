@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Domlet } from '../../../src/domlet/domlet';
-import type { DocumentImpl } from '../../../src/domlet/nodes/document';
+import { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
   isHTMLElement, isHTMLStyleElement, isSVGStyleElement,
   type HTMLStyleElementImpl,
@@ -176,7 +176,7 @@ describe('stylesheet integration', () => {
     });
     const style = getStyleElement(document, 'style');
     const target = document.getElementById('target')!;
-    const engine = document.cssEngine;
+    const engine = DocumentImpl.getCSSEngine(document);
     const computed = engine.getComputedStyle(target);
 
     expect(computed.opacity).toBe('1');
@@ -207,7 +207,8 @@ describe('stylesheet integration', () => {
     void target.style;
     const getAttribute = vi.spyOn(target, 'getAttribute');
 
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.5');
     expect(getAttribute).not.toHaveBeenCalledWith('style');
   });
 
@@ -222,7 +223,7 @@ describe('stylesheet integration', () => {
     const first = getStyleElement(document, 'first');
     const second = getStyleElement(document, 'second');
     const target = document.getElementById('target')!;
-    const engine = document.cssEngine;
+    const engine = DocumentImpl.getCSSEngine(document);
 
     expect(engine.getComputedStyle(target).opacity).toBe('0.2');
 
@@ -245,7 +246,8 @@ describe('stylesheet integration', () => {
 
     expect(alpha.disabled).toBe(false);
     expect(beta.disabled).toBe(true);
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.25');
   });
 
   it('exposes observable adopted stylesheets without replacing the array', () => {
@@ -254,8 +256,8 @@ describe('stylesheet integration', () => {
     });
     const target = document.getElementById('target')!;
     const styleSheets = document.adoptedStyleSheets;
-    const first = document.cssEngine.createStyleSheet();
-    const second = document.cssEngine.createStyleSheet();
+    const first = DocumentImpl.getCSSEngine(document).createStyleSheet();
+    const second = DocumentImpl.getCSSEngine(document).createStyleSheet();
     first.replaceSync('.target { opacity: 0.25 }');
     second.replaceSync('.target { opacity: 0.5 }');
 
@@ -263,23 +265,28 @@ describe('stylesheet integration', () => {
 
     expect(document.adoptedStyleSheets).toBe(styleSheets);
     expect(styleSheets).toEqual([first]);
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.25');
 
     styleSheets.push(second);
 
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.5');
 
     styleSheets.reverse();
 
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.25');
 
     styleSheets.splice(1, 1);
 
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.5');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.5');
 
     styleSheets.splice(0, 1, first);
 
-    expect(document.cssEngine.getComputedStyle(target).opacity).toBe('0.25');
+    expect(DocumentImpl.getCSSEngine(document).getComputedStyle(target).opacity)
+      .toBe('0.25');
   });
 
   it('only adopts constructed stylesheets from the same document', () => {
@@ -288,7 +295,7 @@ describe('stylesheet integration', () => {
     });
     const embedded = getStyleElement(document, 'style').sheet!;
     const otherDocument = createDomlet();
-    const foreign = otherDocument.cssEngine.createStyleSheet();
+    const foreign = DocumentImpl.getCSSEngine(otherDocument).createStyleSheet();
 
     expect(() => document.adoptedStyleSheets.push(embedded))
       .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));

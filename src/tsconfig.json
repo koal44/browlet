@@ -13,6 +13,7 @@
     "browser.ts"
   ],
   "references": [
+    { "path": "./web-idl" },
     { "path": "./selectlet" },
     { "path": "./stylelet" },
     { "path": "./domlet" },

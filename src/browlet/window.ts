@@ -1,5 +1,9 @@
-import type { DomletDocument } from '../domlet/nodes/document';
-import { EventTargetImpl } from '../domlet/events/event-target';
+import {
+  DocumentImpl, type DomletDocument,
+} from '../domlet/nodes/document';
+import {
+  EventTargetImpl, type EventTargetHooks,
+} from '../domlet/events/event-target';
 import { LocationImpl } from './location';
 import { withWindowStub } from './stubs/interfaces';
 
@@ -23,7 +27,7 @@ export class WindowImpl
   #nextTimer = 1;
 
   constructor(document: DomletDocument, url: URL) {
-    super();
+    super(windowEventTargetHooks);
     this.document = document;
     this.#location = new LocationImpl(url);
   }
@@ -50,10 +54,6 @@ export class WindowImpl
     });
   }
 
-  protected override get isDefaultPassiveTarget(): boolean {
-    return true;
-  }
-
   readonly getComputedStyle = (
     element: Element,
     pseudoElement?: string | null,
@@ -62,7 +62,7 @@ export class WindowImpl
       throw new Error('Pseudo-element computed style is not implemented');
     }
 
-    return this.document.cssEngine.getComputedStyle(element);
+    return DocumentImpl.getCSSEngine(this.document).getComputedStyle(element);
   };
 
   readonly addEventListener = ((
@@ -139,3 +139,7 @@ export class WindowImpl
     this.#timers.delete(id);
   };
 }
+
+const windowEventTargetHooks: EventTargetHooks = {
+  isDefaultPassiveTarget: () => true,
+};

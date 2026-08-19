@@ -2,7 +2,7 @@ import { isElement } from './node';
 import { HTMLCollectionImpl } from './collections';
 import type { ElementImpl } from './element';
 import type { NodeImpl } from './node';
-import { parseOrderedSet } from '../util';
+import { parseOrderedSet } from '../algorithms/ordered-set';
 
 export function findElementById(
   root: NodeImpl,

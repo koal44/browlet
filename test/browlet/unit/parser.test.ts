@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BrowletParser } from '../../../src/browlet/parser';
 import { Domlet } from '../../../src/domlet/domlet';
+import { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
   isHTMLLinkElement, isHTMLStyleElement,
 } from '../../../src/domlet/nodes/element';
@@ -21,9 +22,9 @@ describe('BrowletParser', () => {
       throw new Error('Expected stylesheet owner elements');
     }
 
-    parser.document.__addScriptBlockingStyleSheet(first);
-    parser.document.__addScriptBlockingStyleSheet(second);
-    parser.document.__addScriptBlockingStyleSheet(first);
+    DocumentImpl.addScriptBlockingStyleSheet(parser.document, first);
+    DocumentImpl.addScriptBlockingStyleSheet(parser.document, second);
+    DocumentImpl.addScriptBlockingStyleSheet(parser.document, first);
 
     const parsing = parser.parse('<script></script>');
     try {
@@ -31,13 +32,13 @@ describe('BrowletParser', () => {
 
       expect(scripts).toHaveLength(0);
 
-      parser.document.__removeScriptBlockingStyleSheet(first);
+      DocumentImpl.removeScriptBlockingStyleSheet(parser.document, first);
       await nextTurn();
 
       expect(scripts).toHaveLength(0);
     } finally {
-      parser.document.__removeScriptBlockingStyleSheet(first);
-      parser.document.__removeScriptBlockingStyleSheet(second);
+      DocumentImpl.removeScriptBlockingStyleSheet(parser.document, first);
+      DocumentImpl.removeScriptBlockingStyleSheet(parser.document, second);
     }
 
     await parsing;

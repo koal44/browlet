@@ -38,12 +38,50 @@
  *   boolean composed = false;
  * };
  */
+import {
+  attribute, constant, defineInterface, operation, readonlyAttribute,
+} from '../../web-idl/binding';
+
+export const eventIDL = defineInterface({
+  name: 'Event',
+  exposed: '*',
+  constructible: true,
+  members: {
+    type: readonlyAttribute(),
+    target: readonlyAttribute(),
+    srcElement: readonlyAttribute(),
+    currentTarget: readonlyAttribute(),
+    composedPath: operation(),
+    NONE: constant(),
+    CAPTURING_PHASE: constant(),
+    AT_TARGET: constant(),
+    BUBBLING_PHASE: constant(),
+    eventPhase: readonlyAttribute(),
+    stopPropagation: operation(),
+    cancelBubble: attribute(),
+    stopImmediatePropagation: operation(),
+    bubbles: readonlyAttribute(),
+    cancelable: readonlyAttribute(),
+    returnValue: attribute(),
+    preventDefault: operation(),
+    defaultPrevented: readonlyAttribute(),
+    composed: readonlyAttribute(),
+    isTrusted: readonlyAttribute(),
+    timeStamp: readonlyAttribute(),
+    initEvent: operation(),
+  },
+});
+
 export class EventImpl implements Event
 {
   static get NONE(): 0 { return 0; }
   static get CAPTURING_PHASE(): 1 { return 1; }
   static get AT_TARGET(): 2 { return 2; }
   static get BUBBLING_PHASE(): 3 { return 3; }
+
+  static isDispatching(event: EventImpl): boolean {
+    return event.#dispatching;
+  }
 
   #type = '';
   #target: EventTarget | null = null;
@@ -75,15 +113,19 @@ export class EventImpl implements Event
   // TODO(DOM section 2.5): The user-agent create-an-event operation needs
   // realm-owned interface constructors, a realm-relative coarse time, and a
   // private trusted-event construction path. This constructor uses its host realm.
-  constructor(type: string, eventInitDict: EventInit | null = {}) {
+  constructor(
+    type: string,
+    eventInitDict: EventInit | null = {},
+    timeStamp = performance.now(),
+  ) {
     const convertedType = toDOMString(type);
     const init = eventInitDict ?? {};
     const bubbles = Boolean(init.bubbles);
     const cancelable = Boolean(init.cancelable);
     const composed = Boolean(init.composed);
 
-    this.#timeStamp = this.initialTimeStamp;
-    this.initialize(convertedType, bubbles, cancelable);
+    this.#timeStamp = timeStamp;
+    this.#initialize(convertedType, bubbles, cancelable);
     this.#composed = composed;
   }
 
@@ -225,11 +267,11 @@ export class EventImpl implements Event
   }
 
   set returnValue(value: boolean) {
-    if (!value) this.setCanceled();
+    if (!value) this.#setCanceled();
   }
 
   preventDefault(): void {
-    this.setCanceled();
+    this.#setCanceled();
   }
 
   get defaultPrevented(): boolean {
@@ -258,18 +300,10 @@ export class EventImpl implements Event
 
     if (this.#dispatching) return;
 
-    this.initialize(convertedType, convertedBubbles, convertedCancelable);
+    this.#initialize(convertedType, convertedBubbles, convertedCancelable);
   }
 
-  protected get dispatchFlag(): boolean {
-    return this.#dispatching;
-  }
-
-  protected get initialTimeStamp(): DOMHighResTimeStamp {
-    return performance.now();
-  }
-
-  private initialize(
+  #initialize(
     type: string,
     bubbles: boolean,
     cancelable: boolean,
@@ -285,7 +319,7 @@ export class EventImpl implements Event
     this.#cancelable = cancelable;
   }
 
-  private setCanceled(): void {
+  #setCanceled(): void {
     if (this.#cancelable && !this.#inPassiveListener) {
       this.#canceled = true;
     }
@@ -306,11 +340,55 @@ export class EventImpl implements Event
  *   any detail = null;
  * };
  */
-const CustomEventImplementation = createCustomEventImplementation(EventImpl);
+export const customEventIDL = defineInterface({
+  name: 'CustomEvent',
+  parent: eventIDL,
+  exposed: '*',
+  constructible: true,
+  members: {
+    detail: readonlyAttribute(),
+    initCustomEvent: operation(),
+  },
+});
 
 export class CustomEventImpl<T = unknown>
-  extends CustomEventImplementation<T>
-{}
+  extends EventImpl
+  implements CustomEvent<T>
+{
+  #detail: T;
+
+  constructor(
+    type: string,
+    eventInitDict: CustomEventInit<T> | null = {},
+    timeStamp = performance.now(),
+  ) {
+    const init = eventInitDict ?? {};
+
+    super(type, init, timeStamp);
+    this.#detail = (init.detail === undefined ? null : init.detail) as T;
+  }
+
+  get detail(): T {
+    return this.#detail;
+  }
+
+  /** @deprecated */
+  initCustomEvent(
+    type: string,
+    bubbles = false,
+    cancelable = false,
+    detail: T = null as T,
+  ): void {
+    const convertedType = toDOMString(type);
+    const convertedBubbles = Boolean(bubbles);
+    const convertedCancelable = Boolean(cancelable);
+
+    if (EventImpl.isDispatching(this)) return;
+
+    this.initEvent(convertedType, convertedBubbles, convertedCancelable);
+    this.#detail = detail;
+  }
+}
 
 export type EventPathItem = {
   readonly invocationTarget: EventTarget;
@@ -329,57 +407,3 @@ export function toDOMString(value: unknown): string {
 
   return String(value);
 }
-
-export function createCustomEventImplementation(
-  EventBase: EventImplementationConstructor,
-): CustomEventImplementationConstructor {
-  return class CustomEventImpl<T = unknown>
-    extends EventBase
-    implements CustomEvent<T>
-  {
-    #detail: T;
-
-    constructor(
-      type: string,
-      eventInitDict: CustomEventInit<T> | null = {},
-    ) {
-      const init = eventInitDict ?? {};
-
-      super(type, init);
-      this.#detail = (init.detail === undefined ? null : init.detail) as T;
-    }
-
-    get detail(): T {
-      return this.#detail;
-    }
-
-    /** @deprecated */
-    initCustomEvent(
-      type: string,
-      bubbles = false,
-      cancelable = false,
-      detail: T = null as T,
-    ): void {
-      const convertedType = toDOMString(type);
-      const convertedBubbles = Boolean(bubbles);
-      const convertedCancelable = Boolean(cancelable);
-
-      if (this.dispatchFlag) return;
-
-      this.initEvent(convertedType, convertedBubbles, convertedCancelable);
-      this.#detail = detail;
-    }
-  };
-}
-
-type EventImplementationConstructor = new (
-  type: string,
-  eventInitDict?: EventInit | null,
-) => EventImpl;
-
-export type CustomEventImplementationConstructor = {
-  new<T = unknown>(
-    type: string,
-    eventInitDict?: CustomEventInit<T> | null,
-  ): EventImpl & CustomEvent<T>;
-};

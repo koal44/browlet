@@ -1,4 +1,6 @@
-import { EventTargetImpl } from '../events/event-target';
+import {
+  EventTargetImpl, type EventTargetHooks,
+} from '../events/event-target';
 
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
@@ -8,6 +10,39 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   #lastChild: TNode | null = null;
   #previousSibling: TNode | null = null;
   #nextSibling: TNode | null = null;
+  readonly #hooks: TreeNodeHooks<TNode>;
+
+  constructor(
+    eventTargetHooks: EventTargetHooks = {},
+    hooks: TreeNodeHooks<TNode> = {},
+  ) {
+    super(eventTargetHooks);
+    this.#hooks = hooks;
+  }
+
+  static insertSiblingBefore<TNode extends TreeNode<TNode>>(
+    reference: TreeNode<TNode>,
+    node: TNode,
+  ): void {
+    const parent = reference.#parent;
+    if (!parent) throw new Error('Cannot insert before a detached node');
+
+    parent.#insertChild(node, reference.#node);
+  }
+
+  static notifyParentChildrenChanged<TNode extends TreeNode<TNode>>(
+    node: TreeNode<TNode>,
+  ): void {
+    const parent = node.#parent;
+    if (parent) parent.#hooks.childrenChanged?.(parent);
+  }
+
+  static appendChild<TNode extends TreeNode<TNode>>(
+    parent: TreeNode<TNode>,
+    node: TNode,
+  ): void {
+    parent.#insertChild(node, null);
+  }
 
   get parent(): TNode | null {
     return this.#parent;
@@ -96,10 +131,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   }
 
   insertTreeSiblingBefore(node: TNode): void {
-    const parent = this.#parent;
-    if (!parent) throw new Error('Cannot insert before a detached node');
-
-    parent.#insertChild(node, this.#node);
+    TreeNode.insertSiblingBefore(this.#node, node);
   }
 
   insertTreeSiblingAfter(node: TNode): void {
@@ -121,16 +153,6 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     if (!this.#parent) return;
 
     this.#detach();
-  }
-
-  protected insertedInto(_parent: TNode): void {}
-
-  protected removedFrom(_parent: TNode): void {}
-
-  protected childrenChanged(): void {}
-
-  protected notifyParentChildrenChanged(): void {
-    this.#parent?.childrenChanged();
   }
 
   #insertChild(node: TNode, reference: TNode | null): void {
@@ -172,7 +194,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     }
 
     node.#notifyInsertedSubtree(this.#node);
-    this.childrenChanged();
+    this.#hooks.childrenChanged?.(this.#node);
   }
 
   #detach(): void {
@@ -199,11 +221,11 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     this.#nextSibling = null;
 
     this.#notifyRemovedSubtree(parent);
-    parent.childrenChanged();
+    parent.#hooks.childrenChanged?.(parent);
   }
 
   #notifyInsertedSubtree(parent: TNode): void {
-    this.insertedInto(parent);
+    this.#hooks.insertedInto?.(this.#node, parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
       child.#notifyInsertedSubtree(this.#node);
@@ -211,7 +233,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   }
 
   #notifyRemovedSubtree(parent: TNode): void {
-    this.removedFrom(parent);
+    this.#hooks.removedFrom?.(this.#node, parent);
 
     for (let child = this.#firstChild; child; child = child.#nextSibling) {
       child.#notifyRemovedSubtree(this.#node);
@@ -223,3 +245,9 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return this as unknown as TNode;
   }
 }
+
+export type TreeNodeHooks<TNode> = {
+  readonly insertedInto?: (node: TNode, parent: TNode) => void;
+  readonly removedFrom?: (node: TNode, parent: TNode) => void;
+  readonly childrenChanged?: (node: TNode) => void;
+};

@@ -72,7 +72,7 @@ describe('selector serialization', () => {
       .toBe(':is(:unknown(&), .bar)');
   });
 
-  it('preserves trailing whitespace in an invalid nesting arm', () => {
+  it('preserves whitespace in an invalid nesting arm', () => {
     const parent = parse('.parent');
     const selector = parseNestedSelectorList(
       ':is( :unknown( & ) , .bar )',
@@ -81,7 +81,7 @@ describe('selector serialization', () => {
 
     expect(selector).not.toBeNull();
     expect(serializeSelectorList(selector!))
-      .toBe(':is(:unknown( & ) , .bar)');
+      .toBe(':is( :unknown( & ) , .bar)');
   });
 
   it('uses the parser namespace context to omit redundant prefixes', () => {

@@ -4,7 +4,7 @@ import {
   isValidAttributeLocalName, isValidDoctypeName, isValidElementLocalName,
   isValidNamespacePrefix, validateAndExtract,
   XML_NAMESPACE, XMLNS_NAMESPACE,
-} from '../../../src/domlet/name-validation';
+} from '../../../../src/domlet/algorithms/name-validation';
 
 describe('DOM name validation', () => {
   it('validates namespace prefixes', () => {

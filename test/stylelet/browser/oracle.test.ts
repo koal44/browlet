@@ -1339,6 +1339,34 @@ runScenarios('logical selector argument restrictions', 'skip', [
 
 runScenarios('CSSOM selector serialization oracle', 'skip', [
   {
+    name: 'preserves an invalid nested forgiving arm exactly in Chromium and WebKit',
+    browsers: ['chromium', 'webkit'],
+    engines: ['native'],
+    status: 'fail',
+    // Chromium and WebKit currently remove the arm's leading whitespace.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readNestedSelectorText(
+        page,
+        '.parent { :is( :unknown( & ) , .bar ) {} }',
+      )).toBe(':is( :unknown( & ) , .bar)');
+    },
+  },
+  {
+    name: 'preserves an invalid nested forgiving arm exactly in Firefox',
+    browsers: ['firefox'],
+    engines: ['native'],
+    status: 'fail',
+    // Firefox currently removes the arm's leading and trailing whitespace.
+    markup: '',
+    setupPage: async (page) => {
+      expect(await readNestedSelectorText(
+        page,
+        '.parent { :is( :unknown( & ) , .bar ) {} }',
+      )).toBe(':is( :unknown( & ) , .bar)');
+    },
+  },
+  {
     name: 'canonicalizes modern selector structure',
     engines: ['native'],
     markup: '',
@@ -1605,6 +1633,27 @@ runScenarios('CSSOM selector serialization oracle', 'skip', [
     },
   },
 ]);
+
+async function readNestedSelectorText(
+  page: Parameters<NonNullable<Scenario['setupPage']>>[0],
+  source: string,
+): Promise<string | null> {
+  return page.evaluate((input) => {
+    const style = document.createElement('style');
+    style.textContent = input;
+    document.head.append(style);
+
+    const outer = style.sheet?.cssRules[0] as
+      | (CSSStyleRule & { readonly cssRules: CSSRuleList; })
+      | undefined;
+    const nested = outer?.cssRules[0];
+    const result = nested !== undefined && 'selectorText' in nested
+      ? (nested as CSSStyleRule).selectorText
+      : null;
+    style.remove();
+    return result;
+  }, source);
+}
 
 async function readSelectorText(
   page: Parameters<NonNullable<Scenario['setupPage']>>[0],

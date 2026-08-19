@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { createBrowlet, type BrowletRoute } from '../../src/browlet/browlet';
+import { Browlet, type BrowletRoute } from '../../src/browlet/browlet';
 import {
   reporterSource, resolveWptPath, withWptTimeout, wptOrigin,
   type WptReport,
 } from './harness';
 
 export async function runTest(testPath: string): Promise<WptReport> {
-  const browlet = createBrowlet({ route: createWptRoute() });
+  const browlet = new Browlet({ route: createWptRoute() });
   const testUrl = new URL(testPath, wptOrigin); // http://web-platform.test/css/css-cascade/example.html
 
   const { promise: report, resolve: complete } =

@@ -1,6 +1,6 @@
 // DOM §1.4 Name validation
 
-import { domExceptionName } from '../shared/dom-exception';
+import { domExceptionName } from '../../shared/dom-exception';
 
 const INVALID_NAMESPACE_PREFIX_RE = /[\t\n\f\r \0/>]/;
 const INVALID_ATTRIBUTE_LOCAL_NAME_RE = /[\t\n\f\r \0/=>]/;

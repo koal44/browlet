@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  Browlet, createBrowlet,
+  Browlet,
 } from '../../../src/browlet/browlet';
 import { isHTMLLinkElement } from '../../../src/domlet/nodes/element';
 
-describe('createBrowlet', () => {
+describe('Browlet', () => {
   it('coordinates a Domlet document and window', () => {
-    const browlet = createBrowlet({ route: () => '' });
+    const browlet = new Browlet({ route: () => '' });
 
     expect(browlet).toBeInstanceOf(Browlet);
     expect(browlet.document.documentElement.localName).toBe('html');
@@ -17,8 +17,8 @@ describe('createBrowlet', () => {
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
-    const first = createBrowlet({ route: () => '' });
-    const second = createBrowlet({ route: () => '' });
+    const first = new Browlet({ route: () => '' });
+    const second = new Browlet({ route: () => '' });
     const EventConstructor = Reflect.get(first.window, 'Event') as typeof Event;
     const CustomEventConstructor = Reflect.get(
       first.window,
@@ -28,6 +28,11 @@ describe('createBrowlet', () => {
       first.window,
       'EventTarget',
     ) as typeof EventTarget;
+    const NodeConstructor = Reflect.get(first.window, 'Node') as typeof Node;
+    const DocumentConstructor = Reflect.get(
+      first.window,
+      'Document',
+    ) as typeof Document;
     const event = new EventConstructor('ready');
     const customEvent = new CustomEventConstructor('answer', { detail: 42 });
 
@@ -38,10 +43,15 @@ describe('createBrowlet', () => {
     expect(customEvent.detail).toBe(42);
     expect(new EventTargetConstructor()).toBeInstanceOf(EventTargetConstructor);
     expect(first.document).toBeInstanceOf(EventTargetConstructor);
+    expect(first.document).toBeInstanceOf(NodeConstructor);
+    expect(first.document).toBeInstanceOf(DocumentConstructor);
+    expect(first.document).not.toBeInstanceOf(
+      Reflect.get(second.window, 'Document') as typeof Document,
+    );
   });
 
   it('exposes window events and browser timer IDs', async () => {
-    const browlet = createBrowlet({ route: () => '' });
+    const browlet = new Browlet({ route: () => '' });
     const events: Event[] = [];
     const event = new Event('custom');
 
@@ -60,7 +70,7 @@ describe('createBrowlet', () => {
   });
 
   it('tracks and restores the legacy current window event', () => {
-    const browlet = createBrowlet({ route: () => '' });
+    const browlet = new Browlet({ route: () => '' });
     const outer = new Event('outer');
     const inner = new Event('inner');
     const observations: (Event | undefined)[] = [];
@@ -81,7 +91,7 @@ describe('createBrowlet', () => {
   });
 
   it('allows the legacy current event attribute to be replaced', () => {
-    const browlet = createBrowlet({ route: () => '' });
+    const browlet = new Browlet({ route: () => '' });
     const replacement = new Event('replacement');
 
     Object.assign(browlet.window, { event: replacement });
@@ -97,7 +107,7 @@ describe('createBrowlet', () => {
   });
 
   it('fetches through one replaceable local route', () => {
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: (url) => `first: ${url}`,
     });
 
@@ -113,7 +123,7 @@ describe('createBrowlet', () => {
   });
 
   it('exposes and replaces host values', () => {
-    const browlet = createBrowlet({ route: () => '' });
+    const browlet = new Browlet({ route: () => '' });
 
     browlet.expose('bridge', 'first');
     browlet.expose('bridge', 'second');
@@ -123,7 +133,7 @@ describe('createBrowlet', () => {
 
   it('executes inline scripts against the partial document', async () => {
     const observations: unknown[] = [];
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: () => [
         '<main id="before"></main>',
         '<script>',
@@ -152,7 +162,7 @@ describe('createBrowlet', () => {
   it('routes and executes external scripts before parsing continues', async () => {
     const requests: string[] = [];
     const observations: unknown[] = [];
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: (url) => {
         requests.push(url);
 
@@ -176,7 +186,7 @@ describe('createBrowlet', () => {
 
   it.skip('associates externally linked style sheets after fetching', async () => {
     const requests: string[] = [];
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: (url) => {
         requests.push(url);
         if (url === 'https://example.test/style.css') {
@@ -203,7 +213,7 @@ describe('createBrowlet', () => {
 
   it('exposes parsed element IDs as named window properties', async () => {
     const observations: unknown[] = [];
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: () => [
         '<main id="named"></main>',
         '<script>observe(named)</script>',
@@ -219,7 +229,7 @@ describe('createBrowlet', () => {
   });
 
   it('inserts document.write markup in call order', async () => {
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: () => [
         '<script>',
         'document.write("<main id=first></main>");',
@@ -240,7 +250,7 @@ describe('createBrowlet', () => {
   });
 
   it('rejects navigation when script execution fails', async () => {
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: () => '<script>throw new Error("distinctive failure")</script>',
     });
 
@@ -251,7 +261,7 @@ describe('createBrowlet', () => {
 
   it('reports inline script positions relative to the document source', async () => {
     const stacks: string[] = [];
-    const browlet = createBrowlet({
+    const browlet = new Browlet({
       route: () => [
         '<main></main>',
         '<script>',

@@ -7,48 +7,170 @@ import { NodeImpl, NodeType } from './node';
 import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './collections';
 import type { DocumentImpl } from './document';
+import type { DOMNodeFactory } from './factory';
 import {
-  ElementCSSInlineStyleMixin, LinkStyleMixin,
+  elementCSSInlineStyleIDL, ElementCSSInlineStyleMixin,
+  linkStyleIDL, LinkStyleMixin, type LinkStyleOptions,
+  type TreeScopeResolver,
 } from '../css-engine';
+import type { TreeNodeHooks } from '../tree/tree-node';
+import {
+  defineInterface, operation, readonlyAttribute,
+} from '../../web-idl/binding';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
+import {
+  childNodeIDL, nodeIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL,
+} from './node';
+
+export const elementIDL = defineInterface({
+  name: 'Element',
+  parent: nodeIDL,
+  exposed: ['Window'],
+  includes: [parentNodeIDL, childNodeIDL, nonDocumentTypeChildNodeIDL],
+  members: {
+    namespaceURI: readonlyAttribute(),
+    localName: readonlyAttribute(),
+    attributes: readonlyAttribute(),
+    getAttribute: operation(),
+    getAttributeNS: operation(),
+    getElementsByClassName: operation(),
+    getElementsByTagName: operation(),
+    getElementsByTagNameNS: operation(),
+    hasAttribute: operation(),
+    hasAttributeNS: operation(),
+    setAttribute: operation(),
+    removeAttribute: operation(),
+  },
+});
+
+export const htmlElementIDL = defineInterface({
+  name: 'HTMLElement',
+  parent: elementIDL,
+  exposed: ['Window'],
+  includes: [elementCSSInlineStyleIDL],
+});
+
+export const htmlHeadElementIDL = defineInterface({
+  name: 'HTMLHeadElement',
+  parent: htmlElementIDL,
+  exposed: ['Window'],
+});
+
+export const htmlStyleElementIDL = defineInterface({
+  name: 'HTMLStyleElement',
+  parent: htmlElementIDL,
+  exposed: ['Window'],
+  includes: [linkStyleIDL],
+});
+
+export const htmlLinkElementIDL = defineInterface({
+  name: 'HTMLLinkElement',
+  parent: htmlElementIDL,
+  exposed: ['Window'],
+  includes: [linkStyleIDL],
+});
+
+export const svgElementIDL = defineInterface({
+  name: 'SVGElement',
+  parent: elementIDL,
+  exposed: ['Window'],
+  includes: [elementCSSInlineStyleIDL],
+});
+
+export const svgStyleElementIDL = defineInterface({
+  name: 'SVGStyleElement',
+  parent: svgElementIDL,
+  exposed: ['Window'],
+  includes: [linkStyleIDL],
+});
+
+export const mathMLElementIDL = defineInterface({
+  name: 'MathMLElement',
+  parent: elementIDL,
+  exposed: ['Window'],
+  includes: [elementCSSInlineStyleIDL],
+});
 
 export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
+  static readonly #treeHooks: TreeNodeHooks<NodeImpl> = {
+    insertedInto: (node) => {
+      (node as ElementImpl).#linkStyle?.update();
+    },
+    removedFrom: (node) => {
+      (node as ElementImpl).#linkStyle?.update();
+    },
+    childrenChanged: (node) => {
+      (node as ElementImpl).#linkStyle?.childrenChanged();
+    },
+  };
+
   #wasCreatedByParser = false;
   #inlineStyle: ElementCSSInlineStyleMixin | undefined;
-  protected readonly linkStyle: LinkStyleMixin | undefined = undefined;
-
-  readonly nodeType = NodeType.Element;
-  readonly attributes: NamedNodeMapImpl;
+  readonly #linkStyle: LinkStyleMixin | undefined;
+  readonly #attributes: NamedNodeMapImpl;
+  readonly #localName: string;
+  readonly #namespaceURI: string;
 
   constructor(
-    readonly localName: string,
-    readonly namespaceURI: string,
+    localName: string,
+    namespaceURI: string,
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
+    linkStyle?: LinkStyleInit,
   ) {
-    super(ownerDocument);
-    this.attributes = new NamedNodeMapImpl(...attributes);
+    super(NodeType.Element, ownerDocument, ElementImpl.#treeHooks);
+    this.#attributes = new NamedNodeMapImpl(...attributes);
+    this.#localName = localName;
+    this.#namespaceURI = namespaceURI;
+    this.#linkStyle = linkStyle
+      ? new LinkStyleMixin(
+        this,
+        linkStyle.options,
+        linkStyle.resolveTreeScope,
+      )
+      : undefined;
   }
 
-  get __wasCreatedByParser(): boolean {
-    return this.#wasCreatedByParser;
+  static wasCreatedByParser(element: ElementImpl): boolean {
+    return element.#wasCreatedByParser;
   }
 
-  __markAsParserCreated(): void {
-    this.#wasCreatedByParser = true;
+  static markAsParserCreated(element: ElementImpl): void {
+    element.#wasCreatedByParser = true;
   }
 
-  beginParsingChildren(): void {
-    this.linkStyle?.beginParsingChildren();
+  static beginParsingChildren(element: ElementImpl): void {
+    element.#linkStyle?.beginParsingChildren();
   }
 
-  finishParsingChildren(): void {
-    this.linkStyle?.finishParsingChildren();
+  static finishParsingChildren(element: ElementImpl): void {
+    element.#linkStyle?.finishParsingChildren();
+  }
+
+  static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
+    return (element.#inlineStyle ??=
+      new ElementCSSInlineStyleMixin(element)).style;
+  }
+
+  static getStyleSheet(element: ElementImpl): CSSStyleSheet | null {
+    return element.#linkStyle?.sheet ?? null;
+  }
+
+  get attributes(): NamedNodeMapImpl {
+    return this.#attributes;
+  }
+
+  get localName(): string {
+    return this.#localName;
+  }
+
+  get namespaceURI(): string {
+    return this.#namespaceURI;
   }
 
   getAttribute(qualifiedName: string): string | null {
@@ -104,7 +226,7 @@ export class ElementImpl
     if (qualifiedName === 'style') {
       this.#inlineStyle?.attributeChanged(value);
     }
-    this.attributeChanged(qualifiedName, oldValue, value);
+    this.#attributeChanged(qualifiedName, oldValue, value);
   }
 
   removeAttribute(qualifiedName: string): void {
@@ -120,7 +242,7 @@ export class ElementImpl
     if (qualifiedName === 'style') {
       this.#inlineStyle?.attributeChanged(null);
     }
-    this.attributeChanged(qualifiedName, oldValue, null);
+    this.#attributeChanged(qualifiedName, oldValue, null);
   }
 
   getElementsByClassName(
@@ -152,29 +274,12 @@ export class ElementImpl
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  protected attributeChanged(
+  #attributeChanged(
     qualifiedName: string,
     _oldValue: string | null,
     _newValue: string | null,
   ): void {
-    this.linkStyle?.attributeChanged(qualifiedName);
-  }
-
-  protected insertedInto(): void {
-    this.linkStyle?.update();
-  }
-
-  protected removedFrom(): void {
-    this.linkStyle?.update();
-  }
-
-  protected childrenChanged(): void {
-    this.linkStyle?.childrenChanged();
-  }
-
-  protected get inlineStyle(): CSSStyleDeclaration {
-    return (this.#inlineStyle ??=
-      new ElementCSSInlineStyleMixin(this)).style;
+    this.#linkStyle?.attributeChanged(qualifiedName);
   }
 
   #normalizeAttributeName(qualifiedName: string): string {
@@ -192,12 +297,19 @@ export class HTMLElementImpl
     localName: string,
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
+    linkStyle?: LinkStyleInit,
   ) {
-    super(localName, HTML_NAMESPACE, ownerDocument, attributes);
+    super(
+      localName,
+      HTML_NAMESPACE,
+      ownerDocument,
+      attributes,
+      linkStyle,
+    );
   }
 
   get style(): CSSStyleDeclaration {
-    return this.inlineStyle;
+    return ElementImpl.getInlineStyle(this);
   }
 }
 
@@ -217,25 +329,29 @@ export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
   implements HTMLStyleElement
 {
-  static readonly #linkStyleBehavior = {
+  static readonly #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };
 
-  protected readonly linkStyle = new LinkStyleMixin(
-    this,
-    HTMLStyleElementImpl.#linkStyleBehavior,
-  );
-
   constructor(
     ownerDocument: DocumentImpl,
+    resolveTreeScope: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
-    super('style', ownerDocument, attributes);
+    super(
+      'style',
+      ownerDocument,
+      attributes,
+      {
+        options: HTMLStyleElementImpl.#linkStyleOptions,
+        resolveTreeScope,
+      },
+    );
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.linkStyle.sheet;
+    return ElementImpl.getStyleSheet(this);
   }
 }
 
@@ -243,27 +359,31 @@ export class HTMLLinkElementImpl
   extends withHTMLLinkElementStub(HTMLElementImpl)
   implements HTMLLinkElement
 {
-  static readonly #linkStyleBehavior = {
+  static readonly #linkStyleOptions = {
     attributes: new Set([
       'crossorigin', 'href', 'integrity', 'media', 'referrerpolicy',
       'rel', 'title', 'type',
     ]),
   };
 
-  protected readonly linkStyle = new LinkStyleMixin(
-    this,
-    HTMLLinkElementImpl.#linkStyleBehavior,
-  );
-
   constructor(
     ownerDocument: DocumentImpl,
+    resolveTreeScope: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
-    super('link', ownerDocument, attributes);
+    super(
+      'link',
+      ownerDocument,
+      attributes,
+      {
+        options: HTMLLinkElementImpl.#linkStyleOptions,
+        resolveTreeScope,
+      },
+    );
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.linkStyle.sheet;
+    return ElementImpl.getStyleSheet(this);
   }
 }
 
@@ -275,12 +395,19 @@ export class SVGElementImpl
     localName: string,
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
+    linkStyle?: LinkStyleInit,
   ) {
-    super(localName, SVG_NAMESPACE, ownerDocument, attributes);
+    super(
+      localName,
+      SVG_NAMESPACE,
+      ownerDocument,
+      attributes,
+      linkStyle,
+    );
   }
 
   get style(): CSSStyleDeclaration {
-    return this.inlineStyle;
+    return ElementImpl.getInlineStyle(this);
   }
 }
 
@@ -288,25 +415,29 @@ export class SVGStyleElementImpl
   extends withSVGStyleElementStub(SVGElementImpl)
   implements SVGStyleElement
 {
-  static readonly #linkStyleBehavior = {
+  static readonly #linkStyleOptions = {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };
 
-  protected readonly linkStyle = new LinkStyleMixin(
-    this,
-    SVGStyleElementImpl.#linkStyleBehavior,
-  );
-
   constructor(
     ownerDocument: DocumentImpl,
+    resolveTreeScope: TreeScopeResolver,
     attributes: AttrImpl[] = [],
   ) {
-    super('style', ownerDocument, attributes);
+    super(
+      'style',
+      ownerDocument,
+      attributes,
+      {
+        options: SVGStyleElementImpl.#linkStyleOptions,
+        resolveTreeScope,
+      },
+    );
   }
 
   get sheet(): CSSStyleSheet | null {
-    return this.linkStyle.sheet;
+    return ElementImpl.getStyleSheet(this);
   }
 }
 
@@ -323,49 +454,75 @@ export class MathMLElementImpl
   }
 
   get style(): CSSStyleDeclaration {
-    return this.inlineStyle;
+    return ElementImpl.getInlineStyle(this);
   }
 }
 
-export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, attributes?: AttrImpl[]): HTMLElementImpl;
-export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, attributes?: AttrImpl[]): ElementImpl;
+export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, resolveTreeScope: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): HTMLElementImpl;
+export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, resolveTreeScope: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): ElementImpl;
 export function createElementNode(
   localName: string,
   namespaceURI: string,
   ownerDocument: DocumentImpl,
-  attributes: AttrImpl[] = [],
+  resolveTreeScope: TreeScopeResolver,
+  attributes: AttrImpl[],
+  nodeFactory: DOMNodeFactory,
 ): ElementImpl {
   if (namespaceURI === HTML_NAMESPACE) {
     localName = asciiLower(localName);
 
     if (localName === 'head') {
-      return new HTMLHeadElementImpl(ownerDocument, attributes);
+      return nodeFactory.construct(
+        HTMLHeadElementImpl,
+        [ownerDocument, attributes],
+      );
     }
 
     if (localName === 'style') {
-      return new HTMLStyleElementImpl(ownerDocument, attributes);
+      return nodeFactory.construct(
+        HTMLStyleElementImpl,
+        [ownerDocument, resolveTreeScope, attributes],
+      );
     }
 
     if (localName === 'link') {
-      return new HTMLLinkElementImpl(ownerDocument, attributes);
+      return nodeFactory.construct(
+        HTMLLinkElementImpl,
+        [ownerDocument, resolveTreeScope, attributes],
+      );
     }
 
-    return new HTMLElementImpl(localName, ownerDocument, attributes);
+    return nodeFactory.construct(
+      HTMLElementImpl,
+      [localName, ownerDocument, attributes],
+    );
   }
 
   if (namespaceURI === SVG_NAMESPACE) {
     if (localName === 'style') {
-      return new SVGStyleElementImpl(ownerDocument, attributes);
+      return nodeFactory.construct(
+        SVGStyleElementImpl,
+        [ownerDocument, resolveTreeScope, attributes],
+      );
     }
 
-    return new SVGElementImpl(localName, ownerDocument, attributes);
+    return nodeFactory.construct(
+      SVGElementImpl,
+      [localName, ownerDocument, attributes],
+    );
   }
 
   if (namespaceURI === MATHML_NAMESPACE) {
-    return new MathMLElementImpl(localName, ownerDocument, attributes);
+    return nodeFactory.construct(
+      MathMLElementImpl,
+      [localName, ownerDocument, attributes],
+    );
   }
 
-  return new ElementImpl(localName, namespaceURI, ownerDocument, attributes);
+  return nodeFactory.construct(
+    ElementImpl,
+    [localName, namespaceURI, ownerDocument, attributes],
+  );
 }
 
 export function isHTMLElement(
@@ -421,3 +578,8 @@ function normalizeNamespace(namespaceURI: string | null): string | null {
 function asciiLower(value: string): string {
   return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
+
+type LinkStyleInit = {
+  readonly options: LinkStyleOptions;
+  readonly resolveTreeScope: TreeScopeResolver;
+};

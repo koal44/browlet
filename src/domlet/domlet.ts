@@ -1,6 +1,6 @@
 import {
-  createDOMBindings, type DOMBindings, type DOMRealmHost,
-} from './bindings';
+  DOMBindings, type DOMRealmHost,
+} from './bindings/dom-bindings';
 import { DomletParser } from './parser/parser';
 import type { DomletDocument } from './nodes/document';
 
@@ -8,7 +8,7 @@ export class Domlet {
   readonly bindings: DOMBindings;
 
   constructor(host: DOMRealmHost = defaultDOMRealmHost) {
-    this.bindings = createDOMBindings(host);
+    this.bindings = new DOMBindings(host);
   }
 
   parse(source = ''): DomletDocument {
@@ -16,10 +16,11 @@ export class Domlet {
   }
 
   createParser(): DomletParser {
-    return new DomletParser();
+    return new DomletParser(this.bindings);
   }
 }
 
 const defaultDOMRealmHost: DOMRealmHost = {
+  exposure: 'Window',
   eventTimeStamp: () => performance.now(),
 };

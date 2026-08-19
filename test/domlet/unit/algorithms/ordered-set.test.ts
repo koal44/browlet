@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseOrderedSet, serializeOrderedSet, splitOnAsciiWhitespace,
-} from '../../../src/domlet/util';
+} from '../../../../src/domlet/algorithms/ordered-set';
 
 describe('DOM ordered sets', () => {
   it('splits on ASCII whitespace only', () => {

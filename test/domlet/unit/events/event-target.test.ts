@@ -5,11 +5,13 @@ import { EventImpl } from '../../../../src/domlet/events/event';
 
 describe('EventTargetImpl', () => {
   it('is the event target base for DOM nodes', () => {
-    const document = new Domlet().parse('<main id="target"></main>');
+    const domlet = new Domlet();
+    const document = domlet.parse('<main id="target"></main>');
+    const { EventTarget } = domlet.bindings;
 
-    expect(document).toBeInstanceOf(EventTargetImpl);
-    expect(document.documentElement).toBeInstanceOf(EventTargetImpl);
-    expect(document.getElementById('target')).toBeInstanceOf(EventTargetImpl);
+    expect(document).toBeInstanceOf(EventTarget);
+    expect(document.documentElement).toBeInstanceOf(EventTarget);
+    expect(document.getElementById('target')).toBeInstanceOf(EventTarget);
   });
 
   it('performs the immediately observable Web IDL conversions', () => {

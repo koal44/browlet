@@ -1,9 +1,10 @@
 import {
   constants, createContext, runInContext, type Context,
 } from 'node:vm';
-import type { DOMRealmHost } from '../domlet/bindings';
+import type { DOMRealmHost } from '../domlet/bindings/dom-bindings';
 
 export class Realm implements DOMRealmHost {
+  readonly exposure = 'Window';
   readonly global: RealmGlobal;
   readonly #context: Context;
 

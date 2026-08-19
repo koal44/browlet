@@ -21,7 +21,7 @@ export type {
   DocumentImpl, DomletDocument,
 } from './domlet/nodes/document';
 
-export { Browlet, createBrowlet } from './browlet/browlet';
+export { Browlet } from './browlet/browlet';
 export { Realm } from './browlet/realm';
 export { WindowImpl } from './browlet/window';
 export { WindowProxyController } from './browlet/window-proxy';

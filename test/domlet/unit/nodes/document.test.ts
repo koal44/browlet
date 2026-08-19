@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  DocumentImpl, DocumentMode, withDocumentWriter,
+  DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
 import { DocumentTypeImpl } from '../../../../src/domlet/nodes/document-type';
 import {
@@ -44,7 +44,7 @@ describe('Document', () => {
 
     expect(document.doctype).toBe(doctype);
     expect(document.documentElement).toBe(element);
-    expect(document.mode).toBe(DocumentMode.NoQuirks);
+    expect(DocumentImpl.getMode(document)).toBe(DocumentMode.NoQuirks);
   });
 
   it('derives its head from the HTML document tree', () => {
@@ -85,7 +85,7 @@ describe('Document', () => {
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');
 
-    document.mode = DocumentMode.Quirks;
+    DocumentImpl.setMode(document, DocumentMode.Quirks);
 
     expect(document.compatMode).toBe('BackCompat');
   });
@@ -117,7 +117,7 @@ describe('Document', () => {
     const document = new DocumentImpl();
     const writes: string[] = [];
 
-    withDocumentWriter(document, (markup) => writes.push(markup), () => {
+    DocumentImpl.withWriter(document, (markup) => writes.push(markup), () => {
       document.write('<main>', '</main>');
     });
 

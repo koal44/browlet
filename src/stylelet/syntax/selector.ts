@@ -2885,7 +2885,7 @@ function serializeForgivingSelectorList(
   for (const selector of selectors.arms) {
     if (selector.kind === SelectorKind.UnparsedSelector) {
       if (selector.hasAmpersand) {
-        serialized.push(serializeComponentValues(selector.value).trim());
+        serialized.push(serializeComponentValues(selector.value));
       }
     } else {
       serialized.push(serializeComplexRealSelector(selector));

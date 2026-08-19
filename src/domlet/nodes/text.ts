@@ -1,16 +1,32 @@
 import { withTextStub } from '../stubs/interfaces';
-import { NodeImpl, NodeType } from './node';
+import {
+  defineInterface, attribute,
+} from '../../web-idl/binding';
+import { TreeNode } from '../tree/tree-node';
+import {
+  childNodeIDL, nodeIDL, NodeImpl, NodeType, nonDocumentTypeChildNodeIDL,
+} from './node';
 import type { DocumentImpl } from './document';
+
+export const textIDL = defineInterface({
+  name: 'Text',
+  parent: nodeIDL,
+  exposed: ['Window'],
+  constructible: true,
+  includes: [childNodeIDL, nonDocumentTypeChildNodeIDL],
+  members: {
+    data: attribute(),
+  },
+});
 
 export class TextImpl
   extends withTextStub(NodeImpl)
   implements Text
 {
-  readonly nodeType = NodeType.Text;
   #data: string;
 
-  constructor(data: string, ownerDocument: DocumentImpl | null = null) {
-    super(ownerDocument);
+  constructor(data = '', ownerDocument: DocumentImpl | null = null) {
+    super(NodeType.Text, ownerDocument);
     this.#data = data;
   }
 
@@ -20,6 +36,6 @@ export class TextImpl
 
   set data(value: string) {
     this.#data = value;
-    this.notifyParentChildrenChanged();
+    TreeNode.notifyParentChildrenChanged(this);
   }
 }

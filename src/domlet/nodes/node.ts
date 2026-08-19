@@ -1,6 +1,14 @@
 import { domExceptionName } from '../../shared/dom-exception';
+import {
+  eventTargetIDL, type EventTargetHooks,
+} from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
-import { TreeNode } from '../tree/tree-node';
+import {
+  TreeNode, type TreeNodeHooks,
+} from '../tree/tree-node';
+import {
+  defineInterface, defineMixin, operation, readonlyAttribute,
+} from '../../web-idl/binding';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';
@@ -8,30 +16,118 @@ import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
 import { HTMLCollectionImpl } from './collections';
 
+export const parentNodeIDL = defineMixin({
+  name: 'ParentNode',
+  members: {
+    children: readonlyAttribute(),
+    firstElementChild: readonlyAttribute(),
+    lastElementChild: readonlyAttribute(),
+    childElementCount: readonlyAttribute(),
+  },
+});
+
+export const documentOrShadowRootIDL = defineMixin({
+  name: 'DocumentOrShadowRoot',
+  members: {},
+});
+
+export const childNodeIDL = defineMixin({
+  name: 'ChildNode',
+  members: {
+    remove: operation(),
+  },
+});
+
+export const nonDocumentTypeChildNodeIDL = defineMixin({
+  name: 'NonDocumentTypeChildNode',
+  members: {
+    previousElementSibling: readonlyAttribute(),
+    nextElementSibling: readonlyAttribute(),
+  },
+});
+
+export const nodeIDL = defineInterface({
+  name: 'Node',
+  parent: eventTargetIDL,
+  exposed: ['Window'],
+  members: {
+    nodeType: readonlyAttribute(),
+    baseURI: readonlyAttribute(),
+    ownerDocument: readonlyAttribute(),
+    parentNode: readonlyAttribute(),
+    parentElement: readonlyAttribute(),
+    firstChild: readonlyAttribute(),
+    lastChild: readonlyAttribute(),
+    previousSibling: readonlyAttribute(),
+    nextSibling: readonlyAttribute(),
+    isConnected: readonlyAttribute(),
+    getRootNode: operation(),
+    appendChild: operation(),
+    insertBefore: operation(),
+    contains: operation(),
+    compareDocumentPosition: operation(),
+  },
+});
+
 export abstract class NodeImpl
   extends TreeNode<NodeImpl>
 {
+  readonly #nodeType: NodeType;
   readonly #document: DocumentImpl | null;
+  readonly #baseURI: string | undefined;
 
-  abstract readonly nodeType: NodeType;
+  static is(value: unknown): value is NodeImpl {
+    return typeof value === 'object' &&
+      value !== null &&
+      #document in value;
+  }
 
-  constructor(ownerDocument: DocumentImpl | null = null) {
-    super();
+  constructor(
+    nodeType: NodeType,
+    ownerDocument: DocumentImpl | null = null,
+    hooks: TreeNodeHooks<NodeImpl> = {},
+    baseURI?: string,
+  ) {
+    super(nodeEventTargetHooks, hooks);
+    this.#nodeType = nodeType;
     this.#document = ownerDocument;
+    this.#baseURI = baseURI;
+  }
+
+  static isDefaultPassiveTarget(node: NodeImpl): boolean {
+    const root = node.getRoot();
+    const document = isDocument(root) ? root : node.#document;
+
+    return document !== null && (
+      node === document ||
+      node === document.documentElement ||
+      node === document.body
+    );
+  }
+
+  get nodeType(): NodeType {
+    return this.#nodeType;
+  }
+
+  get baseURI(): string {
+    return this.#baseURI ?? this.#document?.baseURI ?? 'about:blank';
   }
 
   get ownerDocument(): Document | null {
-    const root = this.getRoot();
+    if (isDocument(this)) return null;
+
+    const root = super.getRoot();
     const document = isDocument(root) ? root : this.#document;
     return document ? asDocument(document) : null;
   }
 
   get parentNode(): NodeImpl | null {
-    return this.parent;
+    return super.parent;
   }
 
   get parentElement(): ElementImpl | null {
-    return isElement(this.parent) ? this.parent : null;
+    const parent = super.parent;
+    return isElement(parent) ? parent : null;
   }
 
   get firstElementChild(): ElementImpl | null {
@@ -95,22 +191,15 @@ export abstract class NodeImpl
   }
 
   get isConnected(): boolean {
-    return isDocument(this.getRoot());
-  }
-
-  protected override get isDefaultPassiveTarget(): boolean {
-    const root = this.getRoot();
-    const document = isDocument(root) ? root : this.#document;
-
-    return document?.__isDefaultPassiveEventTarget(this) ?? false;
+    return isDocument(super.getRoot());
   }
 
   getRootNode(_options?: GetRootNodeOptions): NodeImpl {
-    return this.getRoot();
+    return super.getRoot();
   }
 
   appendChild<T extends Node>(node: T): T {
-    if (!(node instanceof NodeImpl)) {
+    if (!NodeImpl.is(node)) {
       throw new DOMException('', domExceptionName.hierarchyRequest);
     }
 
@@ -119,7 +208,7 @@ export abstract class NodeImpl
   }
 
   insertBefore<T extends Node>(node: T, child: Node | null): T {
-    if (!(node instanceof NodeImpl)) {
+    if (!NodeImpl.is(node)) {
       throw new DOMException('', domExceptionName.hierarchyRequest);
     }
 
@@ -128,21 +217,24 @@ export abstract class NodeImpl
       return node;
     }
 
-    if (!(child instanceof NodeImpl) || child.parent !== this) {
+    if (!NodeImpl.is(child) || (child.parentNode as unknown) !== this) {
       throw new DOMException('', domExceptionName.notFound);
     }
 
-    child.insertTreeSiblingBefore(node);
+    TreeNode.insertSiblingBefore<NodeImpl>(
+      child,
+      node,
+    );
     return node;
   }
 
   compareDocumentPosition(other: Node): number {
-    if (!(other instanceof NodeImpl)) {
+    if (!NodeImpl.is(other)) {
       return DOCUMENT_POSITION_DISCONNECTED |
         DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
     }
 
-    const position = this.comparePosition(other);
+    const position = super.comparePosition(other);
 
     if (position === null) {
       return DOCUMENT_POSITION_DISCONNECTED |
@@ -162,6 +254,11 @@ export abstract class NodeImpl
       : DOCUMENT_POSITION_PRECEDING;
   }
 }
+
+const nodeEventTargetHooks: EventTargetHooks = {
+  isDefaultPassiveTarget: (target) =>
+    NodeImpl.is(target) && NodeImpl.isDefaultPassiveTarget(target),
+};
 
 export enum NodeType {
   Element = 1,

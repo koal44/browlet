@@ -23,10 +23,29 @@
  * };
  */
 import { toDOMString } from './event';
+import {
+  defineInterface, operation,
+} from '../../web-idl/binding';
+
+export const eventTargetIDL = defineInterface({
+  name: 'EventTarget',
+  exposed: '*',
+  constructible: true,
+  members: {
+    addEventListener: operation(),
+    removeEventListener: operation(),
+    dispatchEvent: operation(),
+  },
+});
 
 export class EventTargetImpl implements EventTarget
 {
   #eventListenerList: EventListenerRecord[] = [];
+  readonly #hooks: EventTargetHooks;
+
+  constructor(hooks: EventTargetHooks = {}) {
+    this.#hooks = hooks;
+  }
 
   addEventListener(
     type: string,
@@ -45,7 +64,7 @@ export class EventTargetImpl implements EventTarget
       removed: false,
     };
 
-    this.addListener(listener);
+    this.#addListener(listener);
   }
 
   removeEventListener(
@@ -60,7 +79,7 @@ export class EventTargetImpl implements EventTarget
       candidate.callback === callback &&
       candidate.capture === capture);
 
-    if (listener) this.removeListener(listener);
+    if (listener) this.#removeListener(listener);
   }
 
   // TODO(DOM section 2.9): Replace this deliberate failure with the dispatch
@@ -70,31 +89,23 @@ export class EventTargetImpl implements EventTarget
     throw new Error('DOM section 2.9 event dispatch is not implemented');
   }
 
-  protected removeAllEventListeners(): void {
-    for (const listener of [...this.#eventListenerList]) {
-      this.removeListener(listener);
+  static removeAllEventListeners(target: EventTargetImpl): void {
+    for (const listener of [...target.#eventListenerList]) {
+      target.#removeListener(listener);
     }
   }
 
-  protected get isDefaultPassiveTarget(): boolean {
-    return false;
-  }
-
-  protected addingEventListener(_type: string): void {}
-
-  protected removingEventListener(_type: string): void {}
-
-  private getDefaultPassiveValue(type: string): boolean {
+  #getDefaultPassiveValue(type: string): boolean {
     return DEFAULT_PASSIVE_EVENT_TYPES.has(type) &&
-      this.isDefaultPassiveTarget;
+      (this.#hooks.isDefaultPassiveTarget?.(this) ?? false);
   }
 
-  private addListener(listener: EventListenerRecord): void {
-    this.addingEventListener(listener.type);
+  #addListener(listener: EventListenerRecord): void {
+    this.#hooks.addingEventListener?.(this, listener.type);
 
     if (listener.signal?.aborted || listener.callback === null) return;
 
-    listener.passive ??= this.getDefaultPassiveValue(listener.type);
+    listener.passive ??= this.#getDefaultPassiveValue(listener.type);
 
     const duplicate = this.#eventListenerList.some((candidate) =>
       candidate.type === listener.type &&
@@ -105,13 +116,13 @@ export class EventTargetImpl implements EventTarget
 
     listener.signal?.addEventListener(
       'abort',
-      () => this.removeListener(listener),
+      () => this.#removeListener(listener),
       { once: true },
     );
   }
 
-  private removeListener(listener: EventListenerRecord): void {
-    this.removingEventListener(listener.type);
+  #removeListener(listener: EventListenerRecord): void {
+    this.#hooks.removingEventListener?.(this, listener.type);
 
     listener.removed = true;
 
@@ -119,6 +130,18 @@ export class EventTargetImpl implements EventTarget
     if (index !== -1) this.#eventListenerList.splice(index, 1);
   }
 }
+
+export type EventTargetHooks = {
+  readonly isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
+  readonly addingEventListener?: (
+    target: EventTargetImpl,
+    type: string,
+  ) => void;
+  readonly removingEventListener?: (
+    target: EventTargetImpl,
+    type: string,
+  ) => void;
+};
 
 type EventListenerRecord = {
   readonly type: string;

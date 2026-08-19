@@ -13,6 +13,7 @@
   ],
   "references": [
     { "path": "./src/shared" },
+    { "path": "./src/web-idl" },
     { "path": "./src/selectlet" },
     { "path": "./src/stylelet" },
     { "path": "./src/domlet" },
