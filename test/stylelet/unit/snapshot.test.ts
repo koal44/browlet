@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { Domlet } from '../../../src/domlet/domlet';
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { Snapshot } from '../../../src/stylelet/snapshot';
-import { createDomletDocument } from './selector/domlet';
 
 describe('style snapshot', () => {
   it('normalizes document and element host capabilities', () => {
@@ -46,3 +46,7 @@ describe('style snapshot', () => {
     expect(stylelet.snapshot.document).toBe(document);
   });
 });
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
+}

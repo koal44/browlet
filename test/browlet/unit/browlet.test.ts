@@ -16,6 +16,30 @@ describe('createBrowlet', () => {
     expect(browlet.window.self).toBe(browlet.window);
   });
 
+  it('installs realm-specific DOM constructors on the window', () => {
+    const first = createBrowlet({ route: () => '' });
+    const second = createBrowlet({ route: () => '' });
+    const EventConstructor = Reflect.get(first.window, 'Event') as typeof Event;
+    const CustomEventConstructor = Reflect.get(
+      first.window,
+      'CustomEvent',
+    ) as typeof CustomEvent;
+    const EventTargetConstructor = Reflect.get(
+      first.window,
+      'EventTarget',
+    ) as typeof EventTarget;
+    const event = new EventConstructor('ready');
+    const customEvent = new CustomEventConstructor('answer', { detail: 42 });
+
+    expect(EventConstructor).not.toBe(Event);
+    expect(EventConstructor).not.toBe(Reflect.get(second.window, 'Event'));
+    expect(event).toBeInstanceOf(EventConstructor);
+    expect(customEvent).toBeInstanceOf(EventConstructor);
+    expect(customEvent.detail).toBe(42);
+    expect(new EventTargetConstructor()).toBeInstanceOf(EventTargetConstructor);
+    expect(first.document).toBeInstanceOf(EventTargetConstructor);
+  });
+
   it('exposes window events and browser timer IDs', async () => {
     const browlet = createBrowlet({ route: () => '' });
     const events: Event[] = [];
@@ -33,6 +57,43 @@ describe('createBrowlet', () => {
 
     expect(typeof timer).toBe('number');
     await fired.promise;
+  });
+
+  it('tracks and restores the legacy current window event', () => {
+    const browlet = createBrowlet({ route: () => '' });
+    const outer = new Event('outer');
+    const inner = new Event('inner');
+    const observations: (Event | undefined)[] = [];
+
+    browlet.window.addEventListener('outer', () => {
+      observations.push(browlet.window.event);
+      browlet.window.dispatchEvent(inner);
+      observations.push(browlet.window.event);
+    });
+    browlet.window.addEventListener('inner', () => {
+      observations.push(browlet.window.event);
+    });
+
+    expect(browlet.window.event).toBeUndefined();
+    browlet.window.dispatchEvent(outer);
+    expect(browlet.window.event).toBeUndefined();
+    expect(observations).toEqual([outer, inner, outer]);
+  });
+
+  it('allows the legacy current event attribute to be replaced', () => {
+    const browlet = createBrowlet({ route: () => '' });
+    const replacement = new Event('replacement');
+
+    Object.assign(browlet.window, { event: replacement });
+
+    expect(browlet.window.event).toBe(replacement);
+    expect(Object.getOwnPropertyDescriptor(browlet.window, 'event'))
+      .toMatchObject({
+        configurable: true,
+        enumerable: true,
+        value: replacement,
+        writable: true,
+      });
   });
 
   it('fetches through one replaceable local route', () => {

@@ -1,4 +1,8 @@
-export abstract class TreeNode<TNode extends TreeNode<TNode>> {
+import { EventTargetImpl } from '../events/event-target';
+
+export abstract class TreeNode<TNode extends TreeNode<TNode>>
+  extends EventTargetImpl
+{
   #parent: TNode | null = null;
   #firstChild: TNode | null = null;
   #lastChild: TNode | null = null;

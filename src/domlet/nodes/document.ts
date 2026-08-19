@@ -7,7 +7,8 @@ import {
   createElementNode, HTML_NAMESPACE, isHTMLElement, isHTMLHeadElement,
 } from './element';
 import type {
-  ElementImpl, HTMLHeadElementImpl, MATHML_NAMESPACE, SVG_NAMESPACE,
+  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl,
+  MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
 import {
   isDocumentType, isElement, NodeImpl, NodeType,
@@ -75,6 +76,31 @@ export class DocumentImpl
     }
 
     return null;
+  }
+
+  get body(): HTMLElementImpl | null {
+    const html = this.documentElement;
+    if (!html || !isHTMLElement(html) || html.localName !== 'html') {
+      return null;
+    }
+
+    for (let child = html.firstChild; child; child = child.nextSibling) {
+      if (
+        isElement(child) &&
+        isHTMLElement(child) &&
+        (child.localName === 'body' || child.localName === 'frameset')
+      ) {
+        return child;
+      }
+    }
+
+    return null;
+  }
+
+  __isDefaultPassiveEventTarget(node: NodeImpl): boolean {
+    return node === this ||
+      node === this.documentElement ||
+      node === this.body;
   }
 
   get styleSheets(): StyleSheetList {
@@ -162,22 +188,6 @@ export class DocumentImpl
 
   createComment(data: string): CommentImpl {
     return new CommentImpl(data, this);
-  }
-
-  addEventListener(
-    _type: string,
-    _listener: unknown,
-    _options?: unknown,
-  ): void {}
-
-  removeEventListener(
-    _type: string,
-    _listener: unknown,
-    _options?: unknown,
-  ): void {}
-
-  dispatchEvent(_event: unknown): boolean {
-    return true;
   }
 
   write(...text: string[]): void {

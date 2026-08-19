@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
@@ -17,7 +18,6 @@ import { Snapshot } from '../../../../src/stylelet/snapshot';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { defineCustomProperty } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
-import { createDomletDocument } from '../selector/domlet';
 
 describe('custom property registration', () => {
   it('prefers the registered property set over stylesheet rules', () => {
@@ -342,4 +342,8 @@ function addStyleSheet(
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
+}
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
 }

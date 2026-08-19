@@ -1,4 +1,4 @@
-import { createDomlet } from '../domlet/domlet';
+import { Domlet } from '../domlet/domlet';
 import {
   withDocumentWriter, type DomletDocument,
 } from '../domlet/nodes/document';
@@ -13,6 +13,7 @@ import {
 } from './window-proxy';
 
 export class Browlet {
+  readonly #domlet: Domlet;
   #document: DomletDocument;
   readonly #exposed = new Map<string, unknown>();
   readonly #realm: Realm;
@@ -22,15 +23,20 @@ export class Browlet {
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
-    this.#document = createDomlet();
-
     this.#realm = new Realm();
+    this.#domlet = new Domlet(this.#realm);
+    this.#document = this.#domlet.parse();
     this.#windowProxy = new WindowProxyController(this.#realm);
     this.#window = this.createWindow(
       this.#document,
       new URL('about:blank'),
     );
     this.#windowProxy.setWindow(this.#window);
+
+    const { CustomEvent, Event, EventTarget } = this.#domlet.bindings;
+    this.#windowProxy.expose('CustomEvent', CustomEvent);
+    this.#windowProxy.expose('Event', Event);
+    this.#windowProxy.expose('EventTarget', EventTarget);
   }
 
   get document(): DomletDocument {
@@ -57,9 +63,12 @@ export class Browlet {
   async navigate(url: string | URL): Promise<BrowletWindow> {
     const documentURL = new URL(url);
     const source = this.fetch(documentURL);
-    const parser = new BrowletParser((element, write) => {
-      this.executeScript(element, documentURL, write);
-    });
+    const parser = new BrowletParser(
+      this.#domlet,
+      (element, write) => {
+        this.executeScript(element, documentURL, write);
+      },
+    );
     const document = parser.document;
     const window = this.createWindow(document, documentURL);
 
@@ -68,7 +77,7 @@ export class Browlet {
     this.#windowProxy.setWindow(window);
 
     await parser.parse(source);
-    window.dispatchEvent(new Event('load'));
+    window.dispatchEvent(new this.#domlet.bindings.Event('load'));
     return this.window;
   }
 

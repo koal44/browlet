@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
-import { createDomletDocument } from '../selector/domlet';
 
 describe('tree scope', () => {
   it('orders header stylesheets before tree-ordered stylesheets', () => {
@@ -160,3 +160,7 @@ type StyleSheetOptions = {
   ownerNode?: Element | null;
   title?: string;
 };
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
+}

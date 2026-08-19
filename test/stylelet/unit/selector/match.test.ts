@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
 import {
   compileSelectorList, matchSelectorList,
@@ -7,7 +8,6 @@ import {
 import {
   parseNestedSelectorList, parseSelectorList,
 } from '../../../../src/stylelet/syntax/selector';
-import { createDomletDocument } from './domlet';
 
 describe('selector matching', () => {
   it('matches a top-level nesting selector like :scope', () => {
@@ -265,4 +265,8 @@ describe('selector matching', () => {
 
 function match(selector: string, element: Element) {
   return matchSelectorList(parseSelectorList(selector)!, element);
+}
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDomlet } from '../../../src/domlet/domlet';
+import { Domlet } from '../../../src/domlet/domlet';
 import type { DocumentImpl } from '../../../src/domlet/nodes/document';
 import {
   isHTMLElement, isHTMLStyleElement, isSVGStyleElement,
@@ -310,4 +310,8 @@ function getStyleElement(
     throw new Error(`Missing HTML style element: ${id}`);
   }
   return element;
+}
+
+function createDomlet(config: { source?: string; } = {}): DocumentImpl {
+  return new Domlet().parse(config.source);
 }

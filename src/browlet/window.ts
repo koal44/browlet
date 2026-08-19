@@ -1,12 +1,19 @@
 import type { DomletDocument } from '../domlet/nodes/document';
+import { EventTargetImpl } from '../domlet/events/event-target';
 import { LocationImpl } from './location';
 import { withWindowStub } from './stubs/interfaces';
 
+/*
+ * partial interface Window {
+ *   [Replaceable] readonly attribute (Event or undefined) event; // legacy
+ * };
+ */
 export class WindowImpl
-  extends withWindowStub(class {})
+  extends withWindowStub(EventTargetImpl)
   implements Window
 {
   readonly document: DomletDocument;
+  #currentEvent: Event | undefined;
   readonly #listeners = new Map<
     string,
     Set<EventListenerOrEventListenerObject>
@@ -27,6 +34,24 @@ export class WindowImpl
 
   set location(_href: string) {
     throw new Error('Browlet navigation is not implemented');
+  }
+
+  /** @deprecated */
+  get event(): Event | undefined {
+    return this.#currentEvent;
+  }
+
+  set event(value: Event | undefined) {
+    Object.defineProperty(this, 'event', {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true,
+    });
+  }
+
+  protected override get isDefaultPassiveTarget(): boolean {
+    return true;
   }
 
   readonly getComputedStyle = (
@@ -64,11 +89,20 @@ export class WindowImpl
   }) as Window['removeEventListener'];
 
   readonly dispatchEvent = (event: Event): boolean => {
+    // TODO(DOM section 2.9): The invoke algorithm must move this current-event
+    // scoping to the Window associated with every listener callback.
     for (const listener of this.#listeners.get(event.type) ?? []) {
-      if (typeof listener === 'function') {
-        listener.call(this, event);
-      } else {
-        listener.handleEvent(event);
+      const previousEvent = this.#currentEvent;
+      this.#currentEvent = event;
+
+      try {
+        if (typeof listener === 'function') {
+          listener.call(this, event);
+        } else {
+          listener.handleEvent(event);
+        }
+      } finally {
+        this.#currentEvent = previousEvent;
       }
     }
 

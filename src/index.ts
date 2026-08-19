@@ -16,9 +16,7 @@ export type {
 
 export type { IndexedNodeList } from './selectlet/node-list';
 
-export { createDomlet } from './domlet/domlet';
-
-export type { DomletConfig } from './domlet/domlet';
+export { Domlet } from './domlet/domlet';
 export type {
   DocumentImpl, DomletDocument,
 } from './domlet/nodes/document';

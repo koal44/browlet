@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import { Stylelet } from '../../../../src/stylelet/stylelet';
-import { createDomletDocument } from '../selector/domlet';
 
 describe('StyleSheetImpl', () => {
   it('is an exposed prototype but not a directly constructible interface', () => {
@@ -197,4 +197,8 @@ function createStyleSheet(
   });
 
   return new Stylelet(document).createStyleSheet(options);
+}
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
 }

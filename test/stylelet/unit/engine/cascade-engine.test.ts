@@ -1,6 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
 import {
   parseStylesheet, type StyleSheetOptions,
@@ -11,7 +12,6 @@ import {
 } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
-import { createDomletDocument } from '../selector/domlet';
 
 describe('cascade engine', () => {
   it('reads the root-owned final stylesheets in document order', () => {
@@ -234,4 +234,8 @@ function addStyleSheet(
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
+}
+
+function createDomletDocument(source: string): Document {
+  return new Domlet().parse(source);
 }

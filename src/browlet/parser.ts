@@ -1,9 +1,10 @@
 import { finished } from 'node:stream/promises';
 import { ParserStream } from 'parse5-parser-stream';
+import type { Domlet } from '../domlet/domlet';
 import type { DomletDocument } from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
-import {
-  DomletParser, type DomletParserTreeAdapterMap,
+import type {
+  DomletParser, DomletParserTreeAdapterMap,
 } from '../domlet/parser/parser';
 
 export class BrowletParser {
@@ -12,9 +13,9 @@ export class BrowletParser {
   readonly #stream: ParserStream<DomletParserTreeAdapterMap>;
   readonly #treeAdapter: DomletParser;
 
-  constructor(handleScript: ScriptHandler) {
+  constructor(domlet: Domlet, handleScript: ScriptHandler) {
     this.#handleScript = handleScript;
-    this.#treeAdapter = new DomletParser();
+    this.#treeAdapter = domlet.createParser();
     this.#stream = new ParserStream<DomletParserTreeAdapterMap>({
       sourceCodeLocationInfo: true,
       treeAdapter: this.#treeAdapter,

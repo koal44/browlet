@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDomlet } from '../../../src/domlet/domlet';
+import { Domlet } from '../../../src/domlet/domlet';
 import {
   isHTMLElement, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/domlet/nodes/element';
@@ -58,3 +58,7 @@ describe('ElementCSSInlineStyle', () => {
     expect(math.getAttribute('style')).toBe('opacity: 0.3;');
   });
 });
+
+function createDomlet(config: { source?: string; } = {}) {
+  return new Domlet().parse(config.source);
+}

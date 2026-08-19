@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BrowletParser } from '../../../src/browlet/parser';
+import { Domlet } from '../../../src/domlet/domlet';
 import {
   isHTMLLinkElement, isHTMLStyleElement,
 } from '../../../src/domlet/nodes/element';
@@ -8,9 +9,12 @@ import {
 describe('BrowletParser', () => {
   it('waits for script-blocking style sheets before executing a script', async () => {
     const scripts: Element[] = [];
-    const parser = new BrowletParser((script) => {
-      scripts.push(script);
-    });
+    const parser = new BrowletParser(
+      new Domlet(),
+      (script) => {
+        scripts.push(script);
+      },
+    );
     const first = parser.document.createElement('style');
     const second = parser.document.createElement('link');
     if (!isHTMLStyleElement(first) || !isHTMLLinkElement(second)) {

@@ -98,6 +98,13 @@ export abstract class NodeImpl
     return isDocument(this.getRoot());
   }
 
+  protected override get isDefaultPassiveTarget(): boolean {
+    const root = this.getRoot();
+    const document = isDocument(root) ? root : this.#document;
+
+    return document?.__isDefaultPassiveEventTarget(this) ?? false;
+  }
+
   getRootNode(_options?: GetRootNodeOptions): NodeImpl {
     return this.getRoot();
   }

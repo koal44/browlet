@@ -14,6 +14,18 @@ export class WindowProxyController {
         configurable: true,
         get: () => this.target.document,
       },
+      event: {
+        configurable: true,
+        get: () => this.target.event,
+        set: (value: Event | undefined) => {
+          Object.defineProperty(this.value, 'event', {
+            configurable: true,
+            enumerable: true,
+            value,
+            writable: true,
+          });
+        },
+      },
       addEventListener: {
         configurable: true,
         get: () => this.target.addEventListener,

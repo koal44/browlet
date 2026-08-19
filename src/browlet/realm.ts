@@ -1,8 +1,9 @@
 import {
   constants, createContext, runInContext, type Context,
 } from 'node:vm';
+import type { DOMRealmHost } from '../domlet/bindings';
 
-export class Realm {
+export class Realm implements DOMRealmHost {
   readonly global: RealmGlobal;
   readonly #context: Context;
 
@@ -17,6 +18,12 @@ export class Realm {
       filename,
       lineOffset,
     });
+  }
+
+  eventTimeStamp(): DOMHighResTimeStamp {
+    // TODO(High Resolution Time): Apply the realm's time origin and coarse
+    // resolution rather than borrowing the surrounding Node.js realm.
+    return performance.now();
   }
 }
 
