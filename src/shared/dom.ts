@@ -1,3 +1,7 @@
+import {
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
+} from './namespaces';
+
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
@@ -40,15 +44,15 @@ export function isQuirksMode(doc: Document): boolean {
 }
 
 export function isHtmlElement(e: Element): e is HTMLElement {
-  return e.namespaceURI === 'http://www.w3.org/1999/xhtml';
+  return e.namespaceURI === HTML_NAMESPACE;
 }
 
 export function isSvgElement(e: Element): e is SVGElement {
-  return e.namespaceURI === 'http://www.w3.org/2000/svg';
+  return e.namespaceURI === SVG_NAMESPACE;
 }
 
 export function isMathElement(e: Element): e is MathMLElement {
-  return e.namespaceURI === 'http://www.w3.org/1998/Math/MathML';
+  return e.namespaceURI === MATHML_NAMESPACE;
 }
 
 export function isHtmlSvgOrMathElement(e: Element): e is HTMLElement | SVGElement | MathMLElement {

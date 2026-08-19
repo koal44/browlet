@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DocumentImpl } from '../../../../src/domlet/nodes/document';
-import { SVG_NAMESPACE } from '../../../../src/domlet/nodes/element';
+import { SVG_NAMESPACE } from '../../../../src/shared/namespaces';
 
 describe('DOM node traversal', () => {
   it('projects element traversal over the node tree', () => {

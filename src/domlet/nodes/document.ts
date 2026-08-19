@@ -12,13 +12,15 @@ import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentTypeImpl } from './document-type';
 import {
-  createElementNode as constructElementNode, HTML_NAMESPACE,
-  isHTMLElement, isHTMLHeadElement,
+  createElementNode as constructElementNode, isHTMLElement, isHTMLHeadElement,
 } from './element';
 import type {
   ElementImpl, HTMLElementImpl, HTMLHeadElementImpl,
-  MATHML_NAMESPACE, SVG_NAMESPACE,
 } from './element';
+import { HTML_NAMESPACE } from '../../shared/namespaces';
+import type {
+  MATHML_NAMESPACE, SVG_NAMESPACE,
+} from '../../shared/namespaces';
 import {
   documentOrShadowRootIDL, isDocument, isDocumentType, isElement, nodeIDL,
   NodeImpl, NodeType, parentNodeIDL,

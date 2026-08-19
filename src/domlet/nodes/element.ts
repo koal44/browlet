@@ -19,6 +19,9 @@ import {
   defineInterface, operation, readonlyAttribute,
 } from '../../web-idl/binding';
 import {
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
+} from '../../shared/namespaces';
+import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
 import {
@@ -594,10 +597,6 @@ export function isMathMLElement(
 ): element is MathMLElementImpl {
   return element.namespaceURI === MATHML_NAMESPACE;
 }
-
-export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
-export const MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
 
 function normalizeNamespace(namespaceURI: string | null): string | null {
   return namespaceURI === '' ? null : namespaceURI;

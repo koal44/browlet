@@ -5,12 +5,12 @@ import { DocumentImpl } from '../../../../src/domlet/nodes/document';
 import {
   ElementImpl, HTMLElementImpl, HTMLLinkElementImpl, HTMLStyleElementImpl,
   MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
-  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
   isHTMLElement, isHTMLLinkElement, isHTMLStyleElement,
   isMathMLElement, isSVGElement, isSVGStyleElement,
 } from '../../../../src/domlet/nodes/element';
-
-const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+import {
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE,
+} from '../../../../src/shared/namespaces';
 
 describe('Element attributes', () => {
   it('looks up unnamespaced attributes by qualified name', () => {

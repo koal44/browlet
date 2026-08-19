@@ -7,6 +7,7 @@ import type {
 } from './selectlet';
 import { escapeRegExp } from '../shared/css';
 import { isDocument, isElement, isHtmlDoc, isQuirksMode } from '../shared/dom';
+import { HTML_NAMESPACE } from '../shared/namespaces';
 import { TextCursorError } from '../shared/text-cursor';
 import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
@@ -278,7 +279,7 @@ export class Snapshot {
   // -------- Runtime matchers used by emitted selector functions --------
 
   isHtmlElement(e: Element): e is HTMLElement {
-    return this.getNamespaceURI(e) === 'http://www.w3.org/1999/xhtml';
+    return this.getNamespaceURI(e) === HTML_NAMESPACE;
   }
 
   // debugging

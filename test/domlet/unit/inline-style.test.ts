@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { Domlet } from '../../../src/domlet/domlet';
+import { isHTMLElement } from '../../../src/domlet/nodes/element';
 import {
-  isHTMLElement, MATHML_NAMESPACE, SVG_NAMESPACE,
-} from '../../../src/domlet/nodes/element';
+  MATHML_NAMESPACE, SVG_NAMESPACE,
+} from '../../../src/shared/namespaces';
 
 describe('ElementCSSInlineStyle', () => {
   it('exposes a same-object declaration block initialized from the attribute', () => {

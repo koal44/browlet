@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   isValidAttributeLocalName, isValidDoctypeName, isValidElementLocalName,
   isValidNamespacePrefix, validateAndExtract,
-  XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../../../src/domlet/algorithms/name-validation';
+import {
+  XML_NAMESPACE, XMLNS_NAMESPACE,
+} from '../../../../src/shared/namespaces';
 
 describe('DOM name validation', () => {
   it('validates namespace prefixes', () => {

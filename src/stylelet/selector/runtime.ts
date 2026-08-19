@@ -7,6 +7,7 @@ import {
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
 } from '../../shared/dom';
+import { XML_NAMESPACE } from '../../shared/namespaces';
 import type { Snapshot } from '../snapshot';
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,
@@ -531,13 +532,11 @@ function langParent(element: Element): Element | null {
   return null;
 }
 
-const XML_NS = 'http://www.w3.org/XML/1998/namespace';
-
 function elementLanguage(element: Element, snap: Snapshot): string | null {
   const lang = snap.getAttribute(element, 'lang');
   if (lang !== null) return lang;
 
-  return snap.getAttributeNS(element, XML_NS, 'lang');
+  return snap.getAttributeNS(element, XML_NAMESPACE, 'lang');
 }
 
 export function matchDir(wanted: string, element: Element, snap: Snapshot): boolean {

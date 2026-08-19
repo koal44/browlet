@@ -1,4 +1,5 @@
 import { escapeRegExp } from '../shared/css';
+import { HTML_NAMESPACE } from '../shared/namespaces';
 import { RuntimeCache } from './selector/runtimeCache';
 
 export class Snapshot {
@@ -236,5 +237,3 @@ function defaultHasAttributeNS(
 function defaultHasCustomState(_element: Element, _name: string): boolean {
   return false;
 }
-
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';

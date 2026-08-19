@@ -1,6 +1,9 @@
 // DOM §1.4 Name validation
 
 import { domExceptionName } from '../../shared/dom-exception';
+import {
+  XML_NAMESPACE, XMLNS_NAMESPACE,
+} from '../../shared/namespaces';
 
 const INVALID_NAMESPACE_PREFIX_RE = /[\t\n\f\r \0/>]/;
 const INVALID_ATTRIBUTE_LOCAL_NAME_RE = /[\t\n\f\r \0/=>]/;
@@ -82,9 +85,6 @@ export function validateAndExtract(
 
   return [namespace, prefix, localName];
 }
-
-export const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
-export const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 
 function throwNamespaceError(
   qualifiedName: string,
