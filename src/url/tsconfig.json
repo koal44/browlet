@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "preserve",
+    "moduleResolution": "Bundler",
+    "outDir": "../../dist/.typecheck/url",
+    "tsBuildInfoFile": "../../dist/.typecheck/url.tsbuildinfo"
+  },
+  "include": ["./**/*.ts"]
+}

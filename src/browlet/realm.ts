@@ -5,6 +5,7 @@ import type { DOMRealmHost } from '../domlet/bindings/dom-bindings';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../web-idl/javascript-realm';
+import { type Agent, WindowAgent } from './agents';
 import { WindowImpl } from './window';
 
 /*
@@ -13,6 +14,7 @@ import { WindowImpl } from './window';
  * once Browlet has HTML's realm and environment-settings machinery.
  */
 export class Realm implements DOMRealmHost, WebIDLRealmHost {
+  readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
   readonly exposure: string;
@@ -32,6 +34,7 @@ export class Realm implements DOMRealmHost, WebIDLRealmHost {
   static #objectRealms = new WeakMap<object, Realm>();
 
   constructor(options: RealmOptions = {}) {
+    this.agent = options.agent ?? new WindowAgent();
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.exposure = options.exposure ?? 'Window';
     this.isGlobalPrototypeChainMutable =
@@ -253,7 +256,7 @@ export class Realm implements DOMRealmHost, WebIDLRealmHost {
   }
 
   queueMicrotask(steps: () => void): void {
-    queueMicrotask(steps);
+    this.agent.eventLoop.queueMicrotask(steps);
   }
 
   setWindow(window: WindowImpl): void {
@@ -305,6 +308,7 @@ export class Realm implements DOMRealmHost, WebIDLRealmHost {
 export type RealmGlobal = Record<PropertyKey, unknown>;
 
 export type RealmOptions = {
+  agent?: Agent;
   crossOriginIsolated?: boolean;
   exposure?: string;
   isGlobalPrototypeChainMutable?: boolean;

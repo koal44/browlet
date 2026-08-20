@@ -1,0 +1,152 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
+  ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
+} from '../../../src/browlet/agents';
+import { BrowsingContextGroup } from '../../../src/browlet/browsing-context';
+import { Realm } from '../../../src/browlet/realm';
+import type { Host } from '../../../src/url/host';
+import type { TupleOrigin } from '../../../src/url/origin';
+
+describe('WindowAgent', () => {
+  it('contains window objects and cannot block', () => {
+    const agent = new WindowAgent();
+
+    expect(agent.canBlock).toBe(false);
+    expect(agent.windowObjects).toEqual([]);
+  });
+});
+
+describe('worker and worklet agents', () => {
+  it('fixes each agent type\'s blocking policy', () => {
+    expect(new DedicatedWorkerAgent().canBlock).toBe(true);
+    expect(new SharedWorkerAgent().canBlock).toBe(true);
+    expect(new ServiceWorkerAgent().canBlock).toBe(false);
+    expect(new WorkletAgent().canBlock).toBe(false);
+  });
+
+  it('reserves each agent\'s single global scope association', () => {
+    expect(new DedicatedWorkerAgent().globalScope).toBeUndefined();
+    expect(new SharedWorkerAgent().globalScope).toBeUndefined();
+    expect(new ServiceWorkerAgent().globalScope).toBeUndefined();
+    expect(new WorkletAgent().globalScope).toBeUndefined();
+  });
+});
+
+describe('Agent', () => {
+  it('has a unique signifier and event loop', () => {
+    const first = new WindowAgent();
+    const second = new WindowAgent();
+
+    expect(first.signifier).not.toBe(second.signifier);
+    expect(first.eventLoop).not.toBe(second.eventLoop);
+  });
+});
+
+describe('obtainSimilarOriginWindowAgent', () => {
+  it('creates a site-keyed cluster by default', () => {
+    const origin = createTupleOrigin('https', createHost('example.com'));
+    const group = new BrowsingContextGroup();
+
+    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const key = group.historicalAgentClusterKeyMap.get(origin)!;
+    const agentCluster = group.agentClusterMap.get(key)!;
+
+    expect(agent).toBeInstanceOf(WindowAgent);
+    expect(agentCluster.crossOriginIsolationMode).toBe('none');
+    expect(agentCluster.isOriginKeyed).toBe(false);
+    expect(agentCluster.agents).toEqual(new Set([agent]));
+  });
+
+  it('retains the historical site key when OAC is requested later', () => {
+    const origin = createTupleOrigin('https', createHost('example.com'));
+    const group = new BrowsingContextGroup();
+
+    const first = obtainSimilarOriginWindowAgent(origin, group, false);
+    const second = obtainSimilarOriginWindowAgent(origin, group, true);
+
+    expect(second).toBe(first);
+  });
+
+  it('creates an origin-keyed cluster when OAC is requested first', () => {
+    const origin = createTupleOrigin('https', createHost('example.com'));
+    const group = new BrowsingContextGroup();
+
+    const agent = obtainSimilarOriginWindowAgent(origin, group, true);
+    const agentCluster = group.agentClusterMap.get(origin)!;
+
+    expect(agentCluster.isOriginKeyed).toBe(true);
+    expect(agentCluster.agents).toContain(agent);
+  });
+
+  it('creates an origin-keyed cluster for a cross-origin-isolated group', () => {
+    const origin = createTupleOrigin('https', createHost('example.com'));
+    const group = new BrowsingContextGroup();
+    group.crossOriginIsolationMode = 'logical';
+
+    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const agentCluster = group.agentClusterMap.get(origin)!;
+
+    expect(agentCluster.crossOriginIsolationMode).toBe('logical');
+    expect(agentCluster.isOriginKeyed).toBe(true);
+    expect(agentCluster.agents).toContain(agent);
+  });
+
+  it.fails('shares a site-keyed agent between different same-site origins', () => {
+    const registrableDomain = createHost('example.com');
+    const firstOrigin = createTupleOrigin(
+      'https', createHost('www.example.com', registrableDomain),
+    );
+    const secondOrigin = createTupleOrigin(
+      'https', createHost('shop.example.com', registrableDomain),
+    );
+    const group = new BrowsingContextGroup();
+
+    const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
+    const second = obtainSimilarOriginWindowAgent(secondOrigin, group, false);
+
+    expect(second).toBe(first);
+  });
+});
+
+describe('Realm agent', () => {
+  it('retains the agent in which it was created', () => {
+    const agent = new WindowAgent();
+    const realm = new Realm({ agent });
+
+    expect(realm.agent).toBe(agent);
+  });
+
+  it('queues microtasks through its agent', () => {
+    const agent = new TestAgent();
+    const realm = new Realm({ agent });
+    const steps = vi.fn();
+    const queueMicrotask = vi.spyOn(agent.eventLoop, 'queueMicrotask')
+      .mockImplementation(() => {});
+
+    realm.queueMicrotask(steps);
+
+    expect(queueMicrotask).toHaveBeenCalledWith(steps);
+  });
+});
+
+class TestAgent extends Agent {
+  constructor() {
+    super(false);
+  }
+}
+
+function createTupleOrigin(scheme: string, host: Host): TupleOrigin {
+  return {
+    kind: 'tuple',
+    scheme,
+    host,
+    port: null,
+    domain: null,
+  };
+}
+
+function createHost(value: string, registrableDomain: Host | null = null): Host {
+  return { value, registrableDomain };
+}
