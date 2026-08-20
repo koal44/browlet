@@ -220,6 +220,8 @@ describe('Domlet', () => {
     const domlet = new Domlet(createRealmHost('Worker', () => 0));
 
     expect([...domlet.bindings.exposed.keys()]).toEqual([
+      'DOMException',
+      'QuotaExceededError',
       'Event',
       'CustomEvent',
       'EventTarget',
@@ -252,7 +254,6 @@ function createRealmHost(
     getCurrentEvent: () => undefined,
     setCurrentEvent: () => {},
     recordTimingInfo: () => {},
-    reportException: () => {},
   };
 }
 

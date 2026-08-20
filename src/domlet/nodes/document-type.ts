@@ -1,20 +1,35 @@
 import { withDocumentTypeStub } from '../stubs/interfaces';
 import {
-  defineInterface, readonlyAttribute,
-} from '../../web-idl/binding';
-import { childNodeIDL, nodeIDL, NodeImpl, NodeType } from './node';
+  defineIncludes, defineInterface, idlType,
+} from '../../web-idl/definition';
+import { childNodeIDL, NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 
+/*
+ * [Exposed=Window]
+ * interface DocumentType : Node {
+ *   readonly attribute DOMString name;
+ *   readonly attribute DOMString publicId;
+ *   readonly attribute DOMString systemId;
+ * };
+ */
 export const documentTypeIDL = defineInterface({
-  name: 'DocumentType',
-  parent: nodeIDL,
   exposed: ['Window'],
-  includes: [childNodeIDL],
-  members: {
-    name: readonlyAttribute(),
-    publicId: readonlyAttribute(),
-    systemId: readonlyAttribute(),
-  },
+  inherits: 'Node',
+  members: [
+    { kind: 'attribute', name: 'name', readonly: true, type: idlType.DOMString },
+    { kind: 'attribute', name: 'publicId', readonly: true, type: idlType.DOMString },
+    { kind: 'attribute', name: 'systemId', readonly: true, type: idlType.DOMString },
+  ],
+  name: 'DocumentType',
+});
+
+/*
+ * DocumentType includes ChildNode;
+ */
+export const documentTypeIncludesChildNodeIDL = defineIncludes({
+  interface: 'DocumentType',
+  mixin: childNodeIDL.name,
 });
 
 export class DocumentTypeImpl

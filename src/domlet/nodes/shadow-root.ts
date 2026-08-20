@@ -2,10 +2,10 @@ import { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../stubs/interfaces';
 import {
-  defineInterface, readonlyAttribute,
-} from '../../web-idl/binding';
+  defineEnumeration, defineInterface, idlType, reference,
+} from '../../web-idl/definition';
 import {
-  documentFragmentIDL, DocumentFragmentImpl,
+  DocumentFragmentImpl,
 } from './document-fragment';
 import type { ElementImpl } from './element';
 import { NodeImpl } from './node';
@@ -27,19 +27,44 @@ import { NodeImpl } from './node';
  * enum SlotAssignmentMode { "manual", "named" };
  */
 
+export const shadowRootModeIDL = defineEnumeration({
+  name: 'ShadowRootMode',
+  values: ['open', 'closed'],
+});
+
+export const slotAssignmentModeIDL = defineEnumeration({
+  name: 'SlotAssignmentMode',
+  values: ['manual', 'named'],
+});
+
 export const shadowRootIDL = defineInterface({
-  name: 'ShadowRoot',
-  parent: documentFragmentIDL,
   exposed: ['Window'],
-  members: {
-    mode: readonlyAttribute(),
-    delegatesFocus: readonlyAttribute(),
-    slotAssignment: readonlyAttribute(),
-    clonable: readonlyAttribute(),
-    serializable: readonlyAttribute(),
-    host: readonlyAttribute(),
+  inherits: 'DocumentFragment',
+  members: [
+    {
+      kind: 'attribute', name: 'mode', readonly: true,
+      type: reference('ShadowRootMode'),
+    },
+    {
+      kind: 'attribute', name: 'delegatesFocus', readonly: true,
+      type: idlType.boolean,
+    },
+    {
+      kind: 'attribute', name: 'slotAssignment', readonly: true,
+      type: reference('SlotAssignmentMode'),
+    },
+    { kind: 'attribute', name: 'clonable', readonly: true, type: idlType.boolean },
+    {
+      kind: 'attribute', name: 'serializable', readonly: true,
+      type: idlType.boolean,
+    },
+    {
+      kind: 'attribute', name: 'host', readonly: true,
+      type: reference('Element'),
+    },
     // EventHandler binding awaits the HTML event-handler infrastructure.
-  },
+  ],
+  name: 'ShadowRoot',
 });
 
 export class ShadowRootImpl
@@ -81,9 +106,7 @@ export class ShadowRootImpl
   }
 
   get host(): ElementImpl {
-    const host = DocumentFragmentImpl.getHost(this);
-    if (!host) throw new Error('A shadow root must have a host');
-    return host;
+    return ShadowRootImpl.getHost(this);
   }
 
   // -- Virtual ----------------------------------------------------------
@@ -93,10 +116,10 @@ export class ShadowRootImpl
       ? ShadowRootImpl.getEventParent(target, event)
       : null,
     getShadowRootHost: (target) => ShadowRootImpl.is(target)
-      ? target.host
+      ? ShadowRootImpl.getHost(target)
       : null,
     getShadowRootMode: (target) => ShadowRootImpl.is(target)
-      ? target.mode
+      ? ShadowRootImpl.getMode(target)
       : null,
   });
 
@@ -106,6 +129,16 @@ export class ShadowRootImpl
     return NodeImpl.is(value) && #mode in value;
   }
 
+  static getHost(root: ShadowRootImpl): ElementImpl {
+    const host = DocumentFragmentImpl.getHost(root);
+    if (!host) throw new Error('A shadow root must have a host');
+    return host;
+  }
+
+  static getMode(root: ShadowRootImpl): ShadowRootMode {
+    return root.#mode;
+  }
+
   static getEventParent(
     root: ShadowRootImpl,
     event: Event,
@@ -113,15 +146,18 @@ export class ShadowRootImpl
     const firstTarget = EventImpl.is(event)
       ? EventImpl.getFirstPathInvocationTarget(event)
       : null;
+    const composed = EventImpl.is(event)
+      ? EventImpl.isComposed(event)
+      : event.composed;
 
     if (
-      !event.composed &&
+      !composed &&
       NodeImpl.is(firstTarget) &&
-      firstTarget.getRootNode() === root
+      NodeImpl.getRootNode(firstTarget) === root
     ) {
       return null;
     }
 
-    return root.host;
+    return ShadowRootImpl.getHost(root);
   }
 }

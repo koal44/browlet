@@ -1,8 +1,11 @@
 import {
-  attribute, constant, defineInterface, operation, readonlyAttribute,
-} from '../../web-idl/binding';
+  defineDictionary, defineInterface, defineTypedef, emptyDictionary, idlType,
+  integer, nullable, reference, sequence,
+} from '../../web-idl/definition';
 
 /*
+ * typedef double DOMHighResTimeStamp;
+ *
  * [Exposed=*]
  * interface Event {
  *   constructor(DOMString type, optional EventInit eventInitDict = {});
@@ -43,34 +46,117 @@ import {
  * };
  */
 
+export const domHighResTimeStampIDL = defineTypedef({
+  name: 'DOMHighResTimeStamp',
+  type: idlType.double,
+});
+
+export const eventInitIDL = defineDictionary({
+  members: [
+    { default: false, name: 'bubbles', type: idlType.boolean },
+    { default: false, name: 'cancelable', type: idlType.boolean },
+    { default: false, name: 'composed', type: idlType.boolean },
+  ],
+  name: 'EventInit',
+});
+
 export const eventIDL = defineInterface({
-  name: 'Event',
   exposed: '*',
-  constructible: true,
-  members: {
-    type: readonlyAttribute(),
-    target: readonlyAttribute(),
-    srcElement: readonlyAttribute(),
-    currentTarget: readonlyAttribute(),
-    composedPath: operation(),
-    NONE: constant(),
-    CAPTURING_PHASE: constant(),
-    AT_TARGET: constant(),
-    BUBBLING_PHASE: constant(),
-    eventPhase: readonlyAttribute(),
-    stopPropagation: operation(),
-    cancelBubble: attribute(),
-    stopImmediatePropagation: operation(),
-    bubbles: readonlyAttribute(),
-    cancelable: readonlyAttribute(),
-    returnValue: attribute(),
-    preventDefault: operation(),
-    defaultPrevented: readonlyAttribute(),
-    composed: readonlyAttribute(),
-    isTrusted: readonlyAttribute(),
-    timeStamp: readonlyAttribute(),
-    initEvent: operation(),
-  },
+  members: [
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        {
+          default: emptyDictionary,
+          name: 'eventInitDict',
+          optional: true,
+          type: reference('EventInit'),
+        },
+      ],
+      kind: 'constructor',
+    },
+    { kind: 'attribute', name: 'type', readonly: true, type: idlType.DOMString },
+    {
+      kind: 'attribute', name: 'target', readonly: true,
+      type: nullable(reference('EventTarget')),
+    },
+    {
+      kind: 'attribute', name: 'srcElement', readonly: true,
+      type: nullable(reference('EventTarget')),
+    },
+    {
+      kind: 'attribute', name: 'currentTarget', readonly: true,
+      type: nullable(reference('EventTarget')),
+    },
+    {
+      arguments: [], kind: 'operation', name: 'composedPath',
+      returns: sequence(reference('EventTarget')),
+    },
+    {
+      kind: 'constant', name: 'NONE', type: idlType.unsignedShort,
+      value: integer(0),
+    },
+    {
+      kind: 'constant', name: 'CAPTURING_PHASE', type: idlType.unsignedShort,
+      value: integer(1),
+    },
+    {
+      kind: 'constant', name: 'AT_TARGET', type: idlType.unsignedShort,
+      value: integer(2),
+    },
+    {
+      kind: 'constant', name: 'BUBBLING_PHASE', type: idlType.unsignedShort,
+      value: integer(3),
+    },
+    {
+      kind: 'attribute', name: 'eventPhase', readonly: true,
+      type: idlType.unsignedShort,
+    },
+    {
+      arguments: [], kind: 'operation', name: 'stopPropagation',
+      returns: idlType.undefined,
+    },
+    { kind: 'attribute', name: 'cancelBubble', type: idlType.boolean },
+    {
+      arguments: [], kind: 'operation', name: 'stopImmediatePropagation',
+      returns: idlType.undefined,
+    },
+    { kind: 'attribute', name: 'bubbles', readonly: true, type: idlType.boolean },
+    { kind: 'attribute', name: 'cancelable', readonly: true, type: idlType.boolean },
+    { kind: 'attribute', name: 'returnValue', type: idlType.boolean },
+    {
+      arguments: [], kind: 'operation', name: 'preventDefault',
+      returns: idlType.undefined,
+    },
+    {
+      kind: 'attribute', name: 'defaultPrevented', readonly: true,
+      type: idlType.boolean,
+    },
+    { kind: 'attribute', name: 'composed', readonly: true, type: idlType.boolean },
+    {
+      extendedAttributes: [{ kind: 'no-arguments', name: 'LegacyUnforgeable' }],
+      kind: 'attribute', name: 'isTrusted', readonly: true,
+      type: idlType.boolean,
+    },
+    {
+      kind: 'attribute', name: 'timeStamp', readonly: true,
+      type: reference('DOMHighResTimeStamp'),
+    },
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        { default: false, name: 'bubbles', optional: true, type: idlType.boolean },
+        {
+          default: false, name: 'cancelable', optional: true,
+          type: idlType.boolean,
+        },
+      ],
+      kind: 'operation',
+      name: 'initEvent',
+      returns: idlType.undefined,
+    },
+  ],
+  name: 'Event',
 });
 
 export class EventImpl implements Event
@@ -305,6 +391,17 @@ export class EventImpl implements Event
     return event.#initialized;
   }
 
+  static initializeForBinding(
+    event: EventImpl,
+    type: string,
+    bubbles: boolean,
+    cancelable: boolean,
+    composed: boolean,
+  ): void {
+    event.#initialize(type, bubbles, cancelable);
+    event.#composed = composed;
+  }
+
   static setTrusted(event: EventImpl, trusted: boolean): void {
     event.#isTrusted = trusted;
   }
@@ -315,6 +412,14 @@ export class EventImpl implements Event
 
   static getRelatedTarget(event: EventImpl): EventTarget | null {
     return event.#relatedTarget;
+  }
+
+  static getCurrentTarget(event: EventImpl): EventTarget | null {
+    return event.#currentTarget;
+  }
+
+  static isComposed(event: EventImpl): boolean {
+    return event.#composed;
   }
 
   static getTouchTargetList(event: EventImpl): readonly (EventTarget | null)[] {
@@ -438,15 +543,45 @@ export class EventImpl implements Event
  *   any detail = null;
  * };
  */
+export const customEventInitIDL = defineDictionary({
+  inherits: 'EventInit',
+  members: [{ default: null, name: 'detail', type: idlType.any }],
+  name: 'CustomEventInit',
+});
+
 export const customEventIDL = defineInterface({
-  name: 'CustomEvent',
-  parent: eventIDL,
   exposed: '*',
-  constructible: true,
-  members: {
-    detail: readonlyAttribute(),
-    initCustomEvent: operation(),
-  },
+  inherits: 'Event',
+  members: [
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        {
+          default: emptyDictionary,
+          name: 'eventInitDict',
+          optional: true,
+          type: reference('CustomEventInit'),
+        },
+      ],
+      kind: 'constructor',
+    },
+    { kind: 'attribute', name: 'detail', readonly: true, type: idlType.any },
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        { default: false, name: 'bubbles', optional: true, type: idlType.boolean },
+        {
+          default: false, name: 'cancelable', optional: true,
+          type: idlType.boolean,
+        },
+        { default: null, name: 'detail', optional: true, type: idlType.any },
+      ],
+      kind: 'operation',
+      name: 'initCustomEvent',
+      returns: idlType.undefined,
+    },
+  ],
+  name: 'CustomEvent',
 });
 
 export class CustomEventImpl<T = unknown>
@@ -485,6 +620,26 @@ export class CustomEventImpl<T = unknown>
 
     this.initEvent(convertedType, convertedBubbles, convertedCancelable);
     this.#detail = detail;
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static initializeCustomForBinding<T>(
+    event: CustomEventImpl<T>,
+    type: string,
+    bubbles: boolean,
+    cancelable: boolean,
+    composed: boolean,
+    detail: T,
+  ): void {
+    EventImpl.initializeForBinding(
+      event,
+      type,
+      bubbles,
+      cancelable,
+      composed,
+    );
+    event.#detail = detail;
   }
 }
 

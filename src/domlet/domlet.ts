@@ -28,7 +28,4 @@ const defaultDOMRealmHost: DOMRealmHost = {
   getCurrentEvent: () => undefined,
   setCurrentEvent: () => {},
   recordTimingInfo: () => {},
-  reportException: (exception) => {
-    console.error(exception);
-  },
 };

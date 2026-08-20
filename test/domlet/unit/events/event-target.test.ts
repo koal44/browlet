@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Realm } from '../../../../src/browlet/realm';
 import { Domlet } from '../../../../src/domlet/domlet';
 import {
   EventTargetImpl, fireEvent,
@@ -146,6 +147,67 @@ describe('EventTargetImpl', () => {
     expect(fireEvent('ready', target as EventTargetImpl)).toBe(true);
     expect(received).toBeInstanceOf(domlet.bindings.Event);
     expect(received?.isTrusted).toBe(true);
+  });
+
+  it('invokes listeners through their captured Web IDL callback context', () => {
+    const realm = new Realm();
+    const context = {};
+    const order: string[] = [];
+    vi.spyOn(realm.callbacks, 'captureContext').mockReturnValue(context);
+    vi.spyOn(realm.callbacks, 'prepareToRunScript')
+      .mockImplementation(() => { order.push('prepare script'); });
+    vi.spyOn(realm.callbacks, 'prepareToRunCallback')
+      .mockImplementation((received) => {
+        expect(received).toBe(context);
+        order.push('prepare callback');
+      });
+    vi.spyOn(realm.callbacks, 'cleanUpAfterRunningCallback')
+      .mockImplementation(() => { order.push('clean callback'); });
+    vi.spyOn(realm.callbacks, 'cleanUpAfterRunningScript')
+      .mockImplementation(() => { order.push('clean script'); });
+    const domlet = new Domlet(realm);
+    const target = new domlet.bindings.EventTarget();
+    const callback = vi.fn();
+
+    target.addEventListener('ready', callback);
+    target.dispatchEvent(new domlet.bindings.Event('ready'));
+
+    expect(callback).toHaveBeenCalledOnce();
+    expect(order).toEqual([
+      'prepare script',
+      'prepare callback',
+      'clean callback',
+      'clean script',
+    ]);
+  });
+
+  it('preserves listener identity across Web IDL callback conversions', () => {
+    const domlet = new Domlet();
+    const target = new domlet.bindings.EventTarget();
+    const callback = vi.fn();
+
+    target.addEventListener('ready', callback);
+    target.addEventListener('ready', callback);
+    target.removeEventListener('ready', callback);
+    target.dispatchEvent(new domlet.bindings.Event('ready'));
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('reports listener exceptions through the callback realm', () => {
+    const realm = new Realm();
+    const report = vi.spyOn(realm.callbacks, 'reportException')
+      .mockImplementation(() => {});
+    const domlet = new Domlet(realm);
+    const target = new domlet.bindings.EventTarget();
+    const exception = new Error('listener failed');
+
+    target.addEventListener('ready', () => { throw exception; });
+
+    expect(() => target.dispatchEvent(
+      new domlet.bindings.Event('ready'),
+    )).not.toThrow();
+    expect(report).toHaveBeenCalledWith(exception);
   });
 
   it('exposes dispatch topology and activation through internal hooks', () => {

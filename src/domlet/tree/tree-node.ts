@@ -165,6 +165,12 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return root;
   }
 
+  static getParent<TNode extends TreeNode<TNode>>(
+    node: TreeNode<TNode>,
+  ): TNode | null {
+    return node.#parent;
+  }
+
   // -- Private ----------------------------------------------------------
 
   #insertChild(node: TNode, reference: TNode | null): void {

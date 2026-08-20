@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import {
+  annotated, defineTypedef, idlType, nullable, reference, sequence, union,
+} from '../../../src/web-idl/definition';
+import { serializeType } from '../../../src/web-idl/serialize';
+import {
+  getFlattenedMemberTypes, getNumberOfNullableMemberTypes,
+  includesNullableType, includesUndefined,
+} from '../../../src/web-idl/types';
+
+describe('Web IDL types', () => {
+  it('gets flattened member types from nested unions', () => {
+    const definitions = assembleDefinitions([]);
+    const type = annotated(
+      union(
+        reference('Node'),
+        union(sequence(idlType.long), reference('Event')),
+        nullable(union(reference('XMLHttpRequest'), idlType.DOMString)),
+        sequence(union(sequence(idlType.double), reference('NodeList'))),
+      ),
+      [{ kind: 'no-arguments', name: 'XAttr' }],
+    );
+
+    expect(
+      getFlattenedMemberTypes(type, definitions).map(serializeType),
+    ).toEqual([
+      'Node',
+      'sequence<long>',
+      'Event',
+      'XMLHttpRequest',
+      'DOMString',
+      'sequence<(sequence<double> or NodeList)>',
+    ]);
+  });
+
+  it('counts nullable members through annotations, unions, and typedefs', () => {
+    const definitions = assembleDefinitions([
+      defineTypedef({
+        name: 'MaybeEvent',
+        type: annotated(nullable(reference('Event')), [{
+          kind: 'no-arguments', name: 'XAttr',
+        }]),
+      }),
+    ]);
+    const type = union(
+      idlType.long,
+      union(reference('MaybeEvent'), idlType.DOMString),
+    );
+
+    expect(getNumberOfNullableMemberTypes(type, definitions)).toBe(1);
+    expect(includesNullableType(type, definitions)).toBe(true);
+    expect(includesNullableType(reference('MaybeEvent'), definitions)).toBe(true);
+    expect(includesNullableType(idlType.DOMString, definitions)).toBe(false);
+  });
+
+  it('detects undefined through annotations, nullable types, unions, and typedefs', () => {
+    const definitions = assembleDefinitions([
+      defineTypedef({ name: 'Nothing', type: idlType.undefined }),
+    ]);
+    const type = annotated(
+      nullable(union(idlType.DOMString, reference('Nothing'))),
+      [{ kind: 'no-arguments', name: 'XAttr' }],
+    );
+
+    expect(includesUndefined(type, definitions)).toBe(true);
+    expect(includesUndefined(nullable(idlType.long), definitions)).toBe(false);
+  });
+});

@@ -1,11 +1,15 @@
 import { domExceptionName } from '../../shared/dom-exception';
 import {
+  isCallbackInterfaceValue, type CallbackInterfaceValue,
+} from '../../web-idl/callback-value';
+import {
+  defineCallbackInterface, defineDictionary, defineInterface, emptyDictionary,
+  idlType, nullable, reference, union,
+} from '../../web-idl/definition';
+import {
   EventImpl, type EventPathItem, toDOMString,
 } from './event';
 import { MouseEventImpl } from './ui-event';
-import {
-  defineInterface, operation,
-} from '../../web-idl/binding';
 
 /*
  * [Exposed=*]
@@ -32,15 +36,74 @@ import {
  * };
  */
 
+export const eventListenerIDL = defineCallbackInterface({
+  members: [{
+    arguments: [{ name: 'event', type: reference('Event') }],
+    kind: 'operation',
+    name: 'handleEvent',
+    returns: idlType.undefined,
+  }],
+  name: 'EventListener',
+});
+
+export const eventListenerOptionsIDL = defineDictionary({
+  members: [{ default: false, name: 'capture', type: idlType.boolean }],
+  name: 'EventListenerOptions',
+});
+
+export const addEventListenerOptionsIDL = defineDictionary({
+  inherits: 'EventListenerOptions',
+  members: [
+    { name: 'passive', type: idlType.boolean },
+    { default: false, name: 'once', type: idlType.boolean },
+    // TODO(DOM section 3): Use AbortSignal once its interface is bound.
+    { name: 'signal', type: idlType.object },
+  ],
+  name: 'AddEventListenerOptions',
+});
+
 export const eventTargetIDL = defineInterface({
-  name: 'EventTarget',
   exposed: '*',
-  constructible: true,
-  members: {
-    addEventListener: operation(),
-    removeEventListener: operation(),
-    dispatchEvent: operation(),
-  },
+  members: [
+    { arguments: [], kind: 'constructor' },
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        { name: 'callback', type: nullable(reference('EventListener')) },
+        {
+          default: emptyDictionary,
+          name: 'options',
+          optional: true,
+          type: union(reference('AddEventListenerOptions'), idlType.boolean),
+        },
+      ],
+      kind: 'operation',
+      name: 'addEventListener',
+      returns: idlType.undefined,
+    },
+    {
+      arguments: [
+        { name: 'type', type: idlType.DOMString },
+        { name: 'callback', type: nullable(reference('EventListener')) },
+        {
+          default: emptyDictionary,
+          name: 'options',
+          optional: true,
+          type: union(reference('EventListenerOptions'), idlType.boolean),
+        },
+      ],
+      kind: 'operation',
+      name: 'removeEventListener',
+      returns: idlType.undefined,
+    },
+    {
+      arguments: [{ name: 'event', type: reference('Event') }],
+      kind: 'operation',
+      name: 'dispatchEvent',
+      returns: idlType.boolean,
+    },
+  ],
+  name: 'EventTarget',
 });
 
 export class EventTargetImpl implements EventTarget
@@ -55,14 +118,17 @@ export class EventTargetImpl implements EventTarget
 
   addEventListener(
     type: string,
-    callback: EventListenerOrEventListenerObject | null,
+    callback: EventListenerCallback | null,
     options: AddEventListenerOptions | boolean | null = {},
   ): void {
     const convertedType = toDOMString(type);
     const { capture, passive, once, signal } = flattenMore(options);
+    const convertedCallback = callback === null
+      ? null
+      : this.#invocationHost.convertEventListener(callback);
     const listener: EventListenerRecord = {
       type: convertedType,
-      callback,
+      callback: convertedCallback,
       capture,
       passive,
       once,
@@ -76,14 +142,17 @@ export class EventTargetImpl implements EventTarget
 
   removeEventListener(
     type: string,
-    callback: EventListenerOrEventListenerObject | null,
+    callback: EventListenerCallback | null,
     options: EventListenerOptions | boolean | null = {},
   ): void {
     const convertedType = toDOMString(type);
     const capture = flatten(options);
+    const convertedCallback = callback === null
+      ? null
+      : this.#invocationHost.convertEventListener(callback);
     const listener = this.#eventListenerList.find((candidate) =>
       candidate.type === convertedType &&
-      candidate.callback === callback &&
+      sameEventListener(candidate.callback, convertedCallback) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
@@ -144,7 +213,7 @@ export class EventTargetImpl implements EventTarget
 
     for (const listener of target.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
-        callbacks.push(listener.callback);
+        callbacks.push(getEventListenerObject(listener.callback));
       }
     }
 
@@ -294,7 +363,7 @@ export class EventTargetImpl implements EventTarget
       if (phase === 'capturing' && !listener.capture) continue;
       if (phase === 'bubbling' && listener.capture) continue;
 
-      const currentTarget = event.currentTarget;
+      const currentTarget = EventImpl.getCurrentTarget(event);
       const callback = listener.callback;
       if (!EventTargetImpl.is(currentTarget) || callback === null) continue;
 
@@ -302,13 +371,13 @@ export class EventTargetImpl implements EventTarget
 
       const host = listener.invocationHost;
       const global = host.getAssociatedGlobal(callback);
-      const window = host.isWindow(global);
+      const window = host.isWindow(global, callback);
       const currentEvent = window
-        ? host.getCurrentEvent(global)
+        ? host.getCurrentEvent(global, callback)
         : undefined;
 
       if (window && !invocationTargetInShadowTree) {
-        host.setCurrentEvent(global, event);
+        host.setCurrentEvent(global, event, callback);
       }
       if (listener.passive) EventImpl.setInPassiveListener(event, true);
       if (window) host.recordTimingInfo(global, event, callback);
@@ -321,10 +390,10 @@ export class EventTargetImpl implements EventTarget
           currentTarget,
         );
       } catch (exception) {
-        host.reportException(exception, global);
+        host.reportException(exception, callback);
       } finally {
         EventImpl.setInPassiveListener(event, false);
-        if (window) host.setCurrentEvent(global, currentEvent);
+        if (window) host.setCurrentEvent(global, currentEvent, callback);
       }
 
       if (EventImpl.immediatePropagationStopped(event)) break;
@@ -347,7 +416,7 @@ export class EventTargetImpl implements EventTarget
 
     const duplicate = this.#eventListenerList.some((candidate) =>
       candidate.type === listener.type &&
-      candidate.callback === listener.callback &&
+      sameEventListener(candidate.callback, listener.callback) &&
       candidate.capture === listener.capture);
 
     if (!duplicate) this.#eventListenerList.push(listener);
@@ -671,29 +740,41 @@ export type EventTargetVirtuals = {
 // directly in the EventTarget implementation.
 export type EventListenerInvocationHost = {
   createEvent(eventConstructor?: EventImplementationConstructor): EventImpl;
+  convertEventListener(callback: EventListenerCallback): EventListenerCallback;
   getAssociatedGlobal(
-    callback: EventListenerOrEventListenerObject,
+    callback: EventListenerCallback,
   ): object;
-  isWindow(global: object): boolean;
-  getCurrentEvent(global: object): Event | undefined;
-  setCurrentEvent(global: object, event: Event | undefined): void;
+  isWindow(global: object, callback: EventListenerCallback): boolean;
+  getCurrentEvent(
+    global: object,
+    callback: EventListenerCallback,
+  ): Event | undefined;
+  setCurrentEvent(
+    global: object,
+    event: Event | undefined,
+    callback: EventListenerCallback,
+  ): void;
   recordTimingInfo(
     global: object,
     event: Event,
-    callback: EventListenerOrEventListenerObject,
+    callback: EventListenerCallback,
   ): void;
   callUserObjectOperation(
-    callback: EventListenerOrEventListenerObject,
+    callback: EventListenerCallback,
     operation: 'handleEvent',
     argumentsList: readonly [Event],
     thisArgument: EventTarget,
   ): void;
-  reportException(exception: unknown, global: object): void;
+  reportException(exception: unknown, callback: EventListenerCallback): void;
 };
+
+export type EventListenerCallback =
+  | EventListenerOrEventListenerObject
+  | CallbackInterfaceValue;
 
 type EventListenerRecord = {
   readonly type: string;
-  readonly callback: EventListenerOrEventListenerObject | null;
+  readonly callback: EventListenerCallback | null;
   readonly capture: boolean;
   passive: boolean | null;
   readonly once: boolean;
@@ -702,11 +783,13 @@ type EventListenerRecord = {
   readonly invocationHost: EventListenerInvocationHost;
 };
 
-export type EventImplementationConstructor = abstract new (
+export type EventImplementationConstructor = {
+  readonly prototype: EventImpl;
+} & (abstract new (
   type: string,
   init?: EventInit,
   timeStamp?: DOMHighResTimeStamp,
-) => EventImpl;
+) => EventImpl);
 
 type EventPhase = 'capturing' | 'bubbling';
 
@@ -768,6 +851,7 @@ const defaultEventListenerInvocationHost: EventListenerInvocationHost = {
     EventImpl.setTrusted(event, true);
     return event;
   },
+  convertEventListener: (callback) => callback,
   getAssociatedGlobal: () => globalThis,
   isWindow: () => false,
   getCurrentEvent: () => undefined,
@@ -779,13 +863,30 @@ const defaultEventListenerInvocationHost: EventListenerInvocationHost = {
     [event],
     thisArgument,
   ) => {
-    if (typeof callback === 'function') {
-      callback.call(thisArgument, event);
+    const object = getEventListenerObject(callback);
+    if (typeof object === 'function') {
+      object.call(thisArgument, event);
     } else {
-      callback.handleEvent.call(callback, event);
+      object.handleEvent.call(object, event);
     }
   },
   reportException: (exception) => {
     console.error(exception);
   },
 };
+
+function getEventListenerObject(
+  callback: EventListenerCallback,
+): EventListenerOrEventListenerObject {
+  return (isCallbackInterfaceValue(callback)
+    ? callback.object
+    : callback) as EventListenerOrEventListenerObject;
+}
+
+function sameEventListener(
+  left: EventListenerCallback | null,
+  right: EventListenerCallback | null,
+): boolean {
+  if (left === null || right === null) return left === right;
+  return getEventListenerObject(left) === getEventListenerObject(right);
+}

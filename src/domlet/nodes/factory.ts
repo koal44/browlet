@@ -1,4 +1,4 @@
-import type { ImplementationConstructor } from '../../web-idl/binding';
+import type { ImplementationConstructor } from '../../web-idl/implementation';
 
 export type DOMNodeFactory = {
   construct<T extends object>(

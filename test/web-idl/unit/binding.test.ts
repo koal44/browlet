@@ -1,141 +1,142 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  assembleInterfaceMembers, attribute, bindInterface, constant,
-  defineInterface, defineMixin, definePartialInterface, operation,
-  readonlyAttribute,
-} from '../../../src/web-idl/binding';
+import { Realm } from '../../../src/browlet/realm';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { defineInterface } from '../../../src/web-idl/definition';
+import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
-describe('Web IDL interface binding', () => {
-  it('assembles interface, mixin, and partial members explicitly', () => {
-    const mixin = defineMixin({
-      name: 'Shared',
-      members: {
-        shared: readonlyAttribute(),
-      },
-    });
-    const interface_ = defineInterface({
-      name: 'Example',
-      includes: [mixin],
-      members: {
-        run: operation(),
-      },
-    });
-    const mixinPartial = definePartialInterface({
-      target: mixin,
-      members: {
-        mutable: attribute(),
-      },
-    });
-    const interfacePartial = definePartialInterface({
-      target: interface_,
-      members: {
-        extended: operation(),
-      },
-    });
+describe('Web IDL JavaScript binding foundation', () => {
+  it('creates callable and constructible functions in the target realm', () => {
+    const realm = new Realm();
+    const binding = createBinding(realm);
+    const receiver = {};
+    const callable = binding.realm.createFunction(
+      (thisArgument, argumentsList, newTarget) => ({
+        argumentsList,
+        newTarget,
+        thisArgument,
+      }),
+      { length: 2, name: 'perform' },
+    );
+    const constructible = binding.realm.createFunction(
+      (_thisArgument, argumentsList, newTarget) => ({
+        argumentsList,
+        newTarget,
+      }),
+      { constructible: true, length: 1, name: 'Example' },
+    );
 
-    expect([
-      ...assembleInterfaceMembers(
-        interface_,
-        [mixinPartial, interfacePartial],
-      ),
-    ]).toEqual([
-      ['shared', { kind: 'attribute', readonly: true }],
-      ['mutable', { kind: 'attribute', readonly: false }],
-      ['run', { kind: 'operation' }],
-      ['extended', { kind: 'operation' }],
-    ]);
+    expect(callable).toBeInstanceOf(realm.intrinsics.function);
+    expect(callable).not.toBeInstanceOf(Function);
+    expect(Object.hasOwn(callable, 'prototype')).toBe(false);
+    expect({ length: callable.length, name: callable.name }).toEqual({
+      length: 2,
+      name: 'perform',
+    });
+    expect(Reflect.apply(callable, receiver, ['a', 'b'])).toEqual({
+      argumentsList: ['a', 'b'],
+      newTarget: undefined,
+      thisArgument: receiver,
+    });
+    const unboundResult = Reflect.apply(callable, undefined, []) as {
+      thisArgument: unknown;
+    };
+    expect(unboundResult.thisArgument).toBeUndefined();
+
+    const instance = Reflect.construct(constructible, ['value']) as {
+      argumentsList: unknown[];
+      newTarget: unknown;
+    };
+    expect(constructible).toBeInstanceOf(realm.intrinsics.function);
+    expect(Object.hasOwn(constructible, 'prototype')).toBe(true);
+    expect(Object.getPrototypeOf(constructible))
+      .toBe(realm.intrinsics.functionPrototype);
+    expect(Reflect.get(constructible, 'prototype'))
+      .toBeInstanceOf(realm.intrinsics.object);
+    expect(instance.argumentsList).toEqual(['value']);
+    expect(instance.newTarget).toBe(constructible);
   });
 
-  it('installs interface members with Web IDL property attributes', () => {
-    class ExampleImpl {
-      static get ANSWER(): number { return 42; }
+  it('captures core intrinsics before realm globals can change', () => {
+    const realm = new Realm();
+    const Array_ = realm.intrinsics.array;
+    const BigInt_ = realm.intrinsics.bigInt;
+    const Number_ = realm.intrinsics.number;
+    const Object_ = realm.intrinsics.object;
+    const String_ = realm.intrinsics.string;
+    const TypeError_ = realm.intrinsics.typeError;
 
-      get value(): string { return 'value'; }
-      set value(_value: string) {}
-      get fixed(): string { return 'fixed'; }
-      run(): void {}
-    }
+    expect(Array_).toBe(Reflect.get(realm.global, 'Array'));
+    expect(BigInt_).toBe(Reflect.get(realm.global, 'BigInt'));
+    expect(Number_).toBe(Reflect.get(realm.global, 'Number'));
+    expect(Object_).toBe(Reflect.get(realm.global, 'Object'));
+    expect(Object_).not.toBe(Object);
+    expect(String_).toBe(Reflect.get(realm.global, 'String'));
+    expect(realm.intrinsics.objectPrototype).toBe(Object_.prototype);
+    expect(realm.intrinsics.functionPrototype)
+      .toBe(realm.intrinsics.function.prototype);
 
-    const interface_ = defineInterface({
-      name: 'Example',
-      members: {
-        ANSWER: constant(),
-        value: attribute(),
-        fixed: readonlyAttribute(),
-        run: operation(),
-      },
-    });
-    const Interface = bindInterface({
-      interface: interface_,
-      implementation: ExampleImpl,
-    }, undefined);
-    const operationDescriptor = Object.getOwnPropertyDescriptor(
-      Interface.prototype,
-      'run',
-    );
-    const attributeDescriptor = Object.getOwnPropertyDescriptor(
-      Interface.prototype,
-      'value',
-    );
-    const readonlyDescriptor = Object.getOwnPropertyDescriptor(
-      Interface.prototype,
-      'fixed',
-    );
-    const constantDescriptor = {
-      configurable: false,
-      enumerable: true,
-      value: 42,
-      writable: false,
-    };
+    Reflect.set(realm.global, 'Array', Array);
+    Reflect.set(realm.global, 'BigInt', BigInt);
+    Reflect.set(realm.global, 'Number', Number);
+    Reflect.set(realm.global, 'Object', Object);
+    Reflect.set(realm.global, 'String', String);
+    Reflect.set(realm.global, 'TypeError', TypeError);
 
-    expect({
-      configurable: operationDescriptor?.configurable,
-      enumerable: operationDescriptor?.enumerable,
-      function: typeof operationDescriptor?.value === 'function',
-      writable: operationDescriptor?.writable,
-    }).toEqual({
-      configurable: true,
-      enumerable: true,
-      function: true,
-      writable: true,
+    expect(realm.intrinsics.array).toBe(Array_);
+    expect(realm.intrinsics.bigInt).toBe(BigInt_);
+    expect(realm.intrinsics.number).toBe(Number_);
+    expect(realm.intrinsics.object).toBe(Object_);
+    expect(realm.intrinsics.string).toBe(String_);
+    expect(realm.intrinsics.typeError).toBe(TypeError_);
+  });
+
+  it('recognizes platform objects and inherited interfaces across realms', () => {
+    const baseIDL = defineInterface({ name: 'Base', members: [] });
+    const derivedIDL = defineInterface({
+      name: 'Derived',
+      inherits: 'Base',
+      members: [],
     });
-    expect({
-      configurable: attributeDescriptor?.configurable,
-      enumerable: attributeDescriptor?.enumerable,
-      getter: typeof attributeDescriptor?.get === 'function',
-      setter: typeof attributeDescriptor?.set === 'function',
-    }).toEqual({
-      configurable: true,
-      enumerable: true,
-      getter: true,
-      setter: true,
-    });
-    expect({
-      configurable: readonlyDescriptor?.configurable,
-      enumerable: readonlyDescriptor?.enumerable,
-      getter: typeof readonlyDescriptor?.get === 'function',
-      readonly: readonlyDescriptor?.set === undefined,
-    }).toEqual({
-      configurable: true,
-      enumerable: true,
-      getter: true,
-      readonly: true,
-    });
-    expect(Object.getOwnPropertyDescriptor(Interface, 'ANSWER'))
-      .toEqual(constantDescriptor);
-    expect(Object.getOwnPropertyDescriptor(Interface.prototype, 'ANSWER'))
-      .toEqual(constantDescriptor);
-    expect(Object.getOwnPropertyDescriptor(
-      Interface.prototype,
-      Symbol.toStringTag,
-    )).toEqual({
-      configurable: true,
-      enumerable: false,
-      value: 'Example',
-      writable: false,
-    });
-    expect(Object.prototype.toString.call(Object.create(Interface.prototype)))
-      .toBe('[object Example]');
+    const definitions = assembleDefinitions([derivedIDL, baseIDL]);
+    const base = definitions.getInterface('Base');
+    const derived = definitions.getInterface('Derived');
+    const platformObjects = new PlatformObjectRegistry();
+    const first = new JavaScriptBinding(
+      definitions,
+      new Realm(),
+      platformObjects,
+    );
+    const second = new JavaScriptBinding(
+      definitions,
+      new Realm(),
+      platformObjects,
+    );
+    const object = {};
+
+    if (!base || !derived) throw new Error('Missing assembled interface');
+
+    const record = first.associatePlatformObject(object, derived);
+
+    expect(first.isPlatformObject(object)).toBe(true);
+    expect(second.isPlatformObject(object)).toBe(true);
+    expect(second.implements(object, derived)).toBe(true);
+    expect(second.implements(object, base)).toBe(true);
+    expect(second.getPlatformObjectRecord(object)).toBe(record);
+    expect(record.implementation).toBe(object);
+    expect(record.object).toBe(object);
+    expect(record.primaryInterface).toBe(derived);
+    expect(record.realm).toBe(first.realm);
+    expect(Reflect.ownKeys(object)).toEqual([]);
+    expect(second.isPlatformObject({})).toBe(false);
   });
 });
+
+function createBinding(realm: Realm): JavaScriptBinding {
+  return new JavaScriptBinding(
+    assembleDefinitions([]),
+    realm,
+    new PlatformObjectRegistry(),
+  );
+}

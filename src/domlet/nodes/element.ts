@@ -11,13 +11,12 @@ import { NamedNodeMapImpl } from './collections';
 import type { DocumentImpl } from './document';
 import type { DOMNodeFactory } from './factory';
 import {
-  elementCSSInlineStyleIDL, ElementCSSInlineStyleMixin,
-  linkStyleIDL, LinkStyleMixin, type LinkStyleOptions,
+  ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
 } from '../css-engine';
 import {
-  defineInterface, operation, readonlyAttribute,
-} from '../../web-idl/binding';
+  defineIncludes, defineInterface, idlType, nullable,
+} from '../../web-idl/definition';
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../shared/namespaces';
@@ -25,77 +24,340 @@ import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
 import {
-  childNodeIDL, nodeIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL,
+  childNodeIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL,
 } from './node';
 import { SlottableMixin } from './slottable';
 
+/*
+ * [Exposed=Window]
+ * interface Element : Node {
+ *   readonly attribute DOMString? namespaceURI;
+ *   readonly attribute DOMString? prefix;
+ *   readonly attribute DOMString localName;
+ *   readonly attribute DOMString tagName;
+ *
+ *   [CEReactions] attribute DOMString id;
+ *   [CEReactions] attribute DOMString className;
+ *   [SameObject, PutForwards=value] readonly attribute DOMTokenList classList;
+ *   [CEReactions, Unscopable] attribute DOMString slot;
+ *
+ *   boolean hasAttributes();
+ *   [SameObject] readonly attribute NamedNodeMap attributes;
+ *   sequence<DOMString> getAttributeNames();
+ *   DOMString? getAttribute(DOMString qualifiedName);
+ *   DOMString? getAttributeNS(DOMString? namespace, DOMString localName);
+ *   [CEReactions] undefined setAttribute(DOMString qualifiedName, (TrustedType or DOMString) value);
+ *   [CEReactions] undefined setAttributeNS(DOMString? namespace, DOMString qualifiedName, (TrustedType or DOMString) value);
+ *   [CEReactions] undefined removeAttribute(DOMString qualifiedName);
+ *   [CEReactions] undefined removeAttributeNS(DOMString? namespace, DOMString localName);
+ *   [CEReactions] boolean toggleAttribute(DOMString qualifiedName, optional boolean force);
+ *   boolean hasAttribute(DOMString qualifiedName);
+ *   boolean hasAttributeNS(DOMString? namespace, DOMString localName);
+ *
+ *   Attr? getAttributeNode(DOMString qualifiedName);
+ *   Attr? getAttributeNodeNS(DOMString? namespace, DOMString localName);
+ *   [CEReactions] Attr? setAttributeNode(Attr attr);
+ *   [CEReactions] Attr? setAttributeNodeNS(Attr attr);
+ *   [CEReactions] Attr removeAttributeNode(Attr attr);
+ *
+ *   ShadowRoot attachShadow(ShadowRootInit init);
+ *   readonly attribute ShadowRoot? shadowRoot;
+ *
+ *   readonly attribute CustomElementRegistry? customElementRegistry;
+ *
+ *   Element? closest(DOMString selectors);
+ *   boolean matches(DOMString selectors);
+ *   boolean webkitMatchesSelector(DOMString selectors); // legacy alias of .matches
+ *
+ *   HTMLCollection getElementsByTagName(DOMString qualifiedName);
+ *   HTMLCollection getElementsByTagNameNS(DOMString? namespace, DOMString localName);
+ *   HTMLCollection getElementsByClassName(DOMString classNames);
+ *
+ *   [CEReactions] Element? insertAdjacentElement(DOMString where, Element element); // legacy
+ *   undefined insertAdjacentText(DOMString where, DOMString data); // legacy
+ * };
+ */
 export const elementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'Node',
+  members: [
+    {
+      kind: 'attribute', name: 'namespaceURI', readonly: true,
+      type: nullable(idlType.DOMString),
+    },
+    { kind: 'attribute', name: 'localName', readonly: true, type: idlType.DOMString },
+    { kind: 'attribute', name: 'attributes', readonly: true, type: idlType.object },
+    {
+      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
+      kind: 'operation', name: 'getAttribute',
+      returns: nullable(idlType.DOMString),
+    },
+    {
+      arguments: [
+        { name: 'namespace', type: nullable(idlType.DOMString) },
+        { name: 'localName', type: idlType.DOMString },
+      ],
+      kind: 'operation', name: 'getAttributeNS',
+      returns: nullable(idlType.DOMString),
+    },
+    {
+      arguments: [{ name: 'classNames', type: idlType.DOMString }],
+      kind: 'operation', name: 'getElementsByClassName',
+      returns: idlType.object,
+    },
+    {
+      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
+      kind: 'operation', name: 'getElementsByTagName',
+      returns: idlType.object,
+    },
+    {
+      arguments: [
+        { name: 'namespace', type: nullable(idlType.DOMString) },
+        { name: 'localName', type: idlType.DOMString },
+      ],
+      kind: 'operation', name: 'getElementsByTagNameNS',
+      returns: idlType.object,
+    },
+    {
+      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
+      kind: 'operation', name: 'hasAttribute', returns: idlType.boolean,
+    },
+    {
+      arguments: [
+        { name: 'namespace', type: nullable(idlType.DOMString) },
+        { name: 'localName', type: idlType.DOMString },
+      ],
+      kind: 'operation', name: 'hasAttributeNS', returns: idlType.boolean,
+    },
+    {
+      arguments: [
+        { name: 'qualifiedName', type: idlType.DOMString },
+        { name: 'value', type: idlType.DOMString },
+      ],
+      kind: 'operation', name: 'setAttribute', returns: idlType.undefined,
+    },
+    {
+      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
+      kind: 'operation', name: 'removeAttribute', returns: idlType.undefined,
+    },
+  ],
   name: 'Element',
-  parent: nodeIDL,
-  exposed: ['Window'],
-  includes: [parentNodeIDL, childNodeIDL, nonDocumentTypeChildNodeIDL],
-  members: {
-    namespaceURI: readonlyAttribute(),
-    localName: readonlyAttribute(),
-    attributes: readonlyAttribute(),
-    getAttribute: operation(),
-    getAttributeNS: operation(),
-    getElementsByClassName: operation(),
-    getElementsByTagName: operation(),
-    getElementsByTagNameNS: operation(),
-    hasAttribute: operation(),
-    hasAttributeNS: operation(),
-    setAttribute: operation(),
-    removeAttribute: operation(),
-  },
 });
 
+/*
+ * Element includes ParentNode;
+ */
+export const elementIncludesParentNodeIDL = defineIncludes({
+  interface: 'Element', mixin: parentNodeIDL.name,
+});
+
+/*
+ * Element includes ChildNode;
+ */
+export const elementIncludesChildNodeIDL = defineIncludes({
+  interface: 'Element', mixin: childNodeIDL.name,
+});
+
+/*
+ * Element includes NonDocumentTypeChildNode;
+ */
+export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
+  interface: 'Element', mixin: nonDocumentTypeChildNodeIDL.name,
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLElement : Element {
+ *   [HTMLConstructor] constructor();
+ *
+ *   // metadata attributes
+ *   [CEReactions, Reflect] attribute DOMString title;
+ *   [CEReactions, Reflect] attribute DOMString lang;
+ *   [CEReactions] attribute boolean translate;
+ *   [CEReactions] attribute DOMString dir;
+ *
+ *   // user interaction
+ *   [CEReactions] attribute (boolean or unrestricted double or DOMString)? hidden;
+ *   [CEReactions, Reflect] attribute boolean inert;
+ *   undefined click();
+ *   [CEReactions, Reflect] attribute DOMString accessKey;
+ *   readonly attribute DOMString accessKeyLabel;
+ *   [CEReactions] attribute boolean draggable;
+ *   [CEReactions] attribute boolean spellcheck;
+ *   [CEReactions, ReflectSetter] attribute DOMString writingSuggestions;
+ *   [CEReactions, ReflectSetter] attribute DOMString autocapitalize;
+ *   [CEReactions] attribute boolean autocorrect;
+ *
+ *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString innerText;
+ *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString outerText;
+ *
+ *   ElementInternals attachInternals();
+ *
+ *   // The popover API
+ *   undefined showPopover(optional ShowPopoverOptions options = {});
+ *   undefined hidePopover();
+ *   boolean togglePopover(optional (TogglePopoverOptions or boolean) options = {});
+ *   [CEReactions] attribute DOMString? popover;
+ *
+ *   [CEReactions, Reflect, ReflectRange=(0, 8)] attribute unsigned long headingOffset;
+ *   [CEReactions, Reflect] attribute boolean headingReset;
+ * };
+ * HTMLElement includes GlobalEventHandlers;
+ * HTMLElement includes ElementContentEditable;
+ * HTMLElement includes HTMLOrSVGOrMathMLElement;
+ */
 export const htmlElementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'Element',
+  members: [],
   name: 'HTMLElement',
-  parent: elementIDL,
-  exposed: ['Window'],
-  includes: [elementCSSInlineStyleIDL],
 });
 
+/*
+ * HTMLElement includes ElementCSSInlineStyle;
+ */
+export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'HTMLElement', mixin: 'ElementCSSInlineStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLHeadElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ * };
+ */
 export const htmlHeadElementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'HTMLElement',
+  members: [],
   name: 'HTMLHeadElement',
-  parent: htmlElementIDL,
-  exposed: ['Window'],
 });
 
+/*
+ * [Exposed=Window]
+ * interface HTMLStyleElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   attribute boolean disabled;
+ *   [CEReactions, Reflect] attribute DOMString media;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
+ *
+ *   // also has obsolete members
+ * };
+ * HTMLStyleElement includes LinkStyle;
+ */
 export const htmlStyleElementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'HTMLElement',
+  members: [],
   name: 'HTMLStyleElement',
-  parent: htmlElementIDL,
-  exposed: ['Window'],
-  includes: [linkStyleIDL],
 });
 
+export const htmlStyleElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'HTMLStyleElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLLinkElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectURL] attribute USVString href;
+ *   [CEReactions] attribute DOMString? crossOrigin;
+ *   [CEReactions, Reflect] attribute DOMString rel;
+ *   [CEReactions] attribute DOMString as;
+ *   [SameObject, PutForwards=value, Reflect="rel"] readonly attribute DOMTokenList relList;
+ *   [CEReactions, Reflect] attribute DOMString media;
+ *   [CEReactions, Reflect] attribute DOMString integrity;
+ *   [CEReactions, Reflect] attribute DOMString hreflang;
+ *   [CEReactions, Reflect] attribute DOMString type;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList sizes;
+ *   [CEReactions, Reflect] attribute USVString imageSrcset;
+ *   [CEReactions, Reflect] attribute DOMString imageSizes;
+ *   [CEReactions] attribute DOMString referrerPolicy;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   [CEReactions] attribute DOMString fetchPriority;
+ *
+ *   // also has obsolete members
+ * };
+ * HTMLLinkElement includes LinkStyle;
+ */
 export const htmlLinkElementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'HTMLElement',
+  members: [],
   name: 'HTMLLinkElement',
-  parent: htmlElementIDL,
-  exposed: ['Window'],
-  includes: [linkStyleIDL],
 });
 
+export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'HTMLLinkElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface SVGElement : Element {
+ *   [SameObject] readonly attribute SVGAnimatedString className;
+ *
+ *   readonly attribute SVGSVGElement? ownerSVGElement;
+ *   readonly attribute SVGElement? viewportElement;
+ * };
+ * SVGElement includes GlobalEventHandlers;
+ * SVGElement includes SVGElementInstance;
+ * SVGElement includes HTMLOrSVGElement;
+ */
 export const svgElementIDL = defineInterface({
+  exposed: ['Window'],
+  inherits: 'Element',
+  members: [],
   name: 'SVGElement',
-  parent: elementIDL,
-  exposed: ['Window'],
-  includes: [elementCSSInlineStyleIDL],
 });
 
+/*
+ * SVGElement includes ElementCSSInlineStyle;
+ */
+export const svgElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'SVGElement', mixin: 'ElementCSSInlineStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface SVGStyleElement : SVGElement {
+ *   attribute DOMString type;
+ *   attribute DOMString media;
+ *   attribute DOMString title;
+ *   attribute boolean disabled;
+ * };
+ * SVGStyleElement includes LinkStyle;
+ */
 export const svgStyleElementIDL = defineInterface({
-  name: 'SVGStyleElement',
-  parent: svgElementIDL,
   exposed: ['Window'],
-  includes: [linkStyleIDL],
+  inherits: 'SVGElement',
+  members: [],
+  name: 'SVGStyleElement',
 });
 
+export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'SVGStyleElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface MathMLElement : Element { };
+ * MathMLElement includes GlobalEventHandlers;
+ */
 export const mathMLElementIDL = defineInterface({
-  name: 'MathMLElement',
-  parent: elementIDL,
   exposed: ['Window'],
-  includes: [elementCSSInlineStyleIDL],
+  inherits: 'Element',
+  members: [],
+  name: 'MathMLElement',
+});
+
+/*
+ * MathMLElement includes ElementCSSInlineStyle;
+ */
+export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'MathMLElement', mixin: 'ElementCSSInlineStyle',
 });
 
 export class ElementImpl
@@ -283,7 +545,7 @@ export class ElementImpl
     element: ElementImpl,
     _event: Event,
   ): NodeImpl | null {
-    return element.#slottable.assignedSlot ?? element.parentNode;
+    return element.#slottable.assignedSlot ?? NodeImpl.getParentNode(element);
   }
 
   static beginParsingChildren(element: ElementImpl): void {

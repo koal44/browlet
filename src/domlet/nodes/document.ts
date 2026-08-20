@@ -6,8 +6,9 @@ import {
 import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
 import {
-  defineInterface, definePartialInterface, operation, readonlyAttribute,
-} from '../../web-idl/binding';
+  defineDictionary, defineIncludes, defineInterface, definePartialInterface,
+  emptyDictionary, idlType, nullable, reference, union,
+} from '../../web-idl/definition';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentTypeImpl } from './document-type';
@@ -22,7 +23,7 @@ import type {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../shared/namespaces';
 import {
-  documentOrShadowRootIDL, isDocument, isDocumentType, isElement, nodeIDL,
+  documentOrShadowRootIDL, isDocument, isDocumentType, isElement,
   NodeImpl, NodeType, parentNodeIDL,
 } from './node';
 import { TextImpl } from './text';
@@ -34,35 +35,223 @@ import {
   findElementsByTagNameNS,
 } from './lookups';
 
+/*
+ * [Exposed=Window]
+ * interface Document : Node {
+ *   constructor();
+ *
+ *   [SameObject] readonly attribute DOMImplementation implementation;
+ *   readonly attribute USVString URL;
+ *   readonly attribute USVString documentURI;
+ *   readonly attribute DOMString compatMode;
+ *   readonly attribute DOMString characterSet;
+ *   readonly attribute DOMString charset; // legacy alias of .characterSet
+ *   readonly attribute DOMString inputEncoding; // legacy alias of .characterSet
+ *   readonly attribute DOMString contentType;
+ *
+ *   readonly attribute DocumentType? doctype;
+ *   readonly attribute Element? documentElement;
+ *   HTMLCollection getElementsByTagName(DOMString qualifiedName);
+ *   HTMLCollection getElementsByTagNameNS(DOMString? namespace, DOMString localName);
+ *   HTMLCollection getElementsByClassName(DOMString classNames);
+ *
+ *   [CEReactions, NewObject] Element createElement(DOMString localName, optional (DOMString or ElementCreationOptions) options = {});
+ *   [CEReactions, NewObject] Element createElementNS(DOMString? namespace, DOMString qualifiedName, optional (DOMString or ElementCreationOptions) options = {});
+ *   [NewObject] DocumentFragment createDocumentFragment();
+ *   [NewObject] Text createTextNode(DOMString data);
+ *   [NewObject] CDATASection createCDATASection(DOMString data);
+ *   [NewObject] Comment createComment(DOMString data);
+ *   [NewObject] ProcessingInstruction createProcessingInstruction(DOMString target, DOMString data);
+ *
+ *   [CEReactions, NewObject] Node importNode(Node node, optional (boolean or ImportNodeOptions) options = false);
+ *   [CEReactions] Node adoptNode(Node node);
+ *
+ *   [NewObject] Attr createAttribute(DOMString localName);
+ *   [NewObject] Attr createAttributeNS(DOMString? namespace, DOMString qualifiedName);
+ *
+ *   [NewObject] Event createEvent(DOMString interface); // legacy
+ *
+ *   [NewObject] Range createRange();
+ *
+ *   // NodeFilter.SHOW_ALL = 0xFFFFFFFF
+ *   [NewObject] NodeIterator createNodeIterator(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
+ *   [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
+ * };
+ */
 export const documentIDL = defineInterface({
-  name: 'Document',
-  parent: nodeIDL,
   exposed: ['Window'],
-  constructible: true,
-  includes: [parentNodeIDL, documentOrShadowRootIDL],
-  members: {
-    doctype: readonlyAttribute(),
-    documentElement: readonlyAttribute(),
-    contentType: readonlyAttribute(),
-    compatMode: readonlyAttribute(),
-    getElementsByClassName: operation(),
-    getElementsByTagName: operation(),
-    getElementsByTagNameNS: operation(),
-    createElement: operation(),
-    createElementNS: operation(),
-    createTextNode: operation(),
-    createComment: operation(),
-    getElementById: operation(),
-  },
+  inherits: 'Node',
+  members: [
+    { arguments: [], kind: 'constructor' },
+    {
+      kind: 'attribute', name: 'doctype', readonly: true,
+      type: nullable(reference('DocumentType')),
+    },
+    {
+      kind: 'attribute', name: 'documentElement', readonly: true,
+      type: nullable(reference('Element')),
+    },
+    { kind: 'attribute', name: 'contentType', readonly: true, type: idlType.DOMString },
+    { kind: 'attribute', name: 'compatMode', readonly: true, type: idlType.DOMString },
+    {
+      arguments: [{ name: 'classNames', type: idlType.DOMString }],
+      kind: 'operation', name: 'getElementsByClassName', returns: idlType.object,
+    },
+    {
+      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
+      kind: 'operation', name: 'getElementsByTagName', returns: idlType.object,
+    },
+    {
+      arguments: [
+        { name: 'namespace', type: nullable(idlType.DOMString) },
+        { name: 'localName', type: idlType.DOMString },
+      ],
+      kind: 'operation', name: 'getElementsByTagNameNS', returns: idlType.object,
+    },
+    {
+      arguments: [
+        { name: 'localName', type: idlType.DOMString },
+        {
+          default: emptyDictionary,
+          name: 'options',
+          optional: true,
+          type: union(idlType.DOMString, reference('ElementCreationOptions')),
+        },
+      ],
+      kind: 'operation', name: 'createElement', returns: reference('Element'),
+    },
+    {
+      arguments: [
+        { name: 'namespace', type: nullable(idlType.DOMString) },
+        { name: 'qualifiedName', type: idlType.DOMString },
+        {
+          default: emptyDictionary,
+          name: 'options',
+          optional: true,
+          type: union(idlType.DOMString, reference('ElementCreationOptions')),
+        },
+      ],
+      kind: 'operation', name: 'createElementNS', returns: reference('Element'),
+    },
+    {
+      arguments: [{ name: 'data', type: idlType.DOMString }],
+      kind: 'operation', name: 'createTextNode', returns: reference('Text'),
+    },
+    {
+      arguments: [{ name: 'data', type: idlType.DOMString }],
+      kind: 'operation', name: 'createComment', returns: reference('Comment'),
+    },
+    {
+      arguments: [{ name: 'elementId', type: idlType.DOMString }],
+      kind: 'operation', name: 'getElementById',
+      returns: nullable(reference('Element')),
+    },
+  ],
+  name: 'Document',
 });
 
+/*
+ * dictionary ElementCreationOptions {
+ *   CustomElementRegistry? customElementRegistry;
+ *   DOMString is;
+ * };
+ */
+export const elementCreationOptionsIDL = defineDictionary({
+  members: [{ name: 'is', type: idlType.DOMString }],
+  name: 'ElementCreationOptions',
+});
+
+/*
+ * Document includes ParentNode;
+ */
+export const documentIncludesParentNodeIDL = defineIncludes({
+  interface: 'Document', mixin: parentNodeIDL.name,
+});
+
+/*
+ * Document includes DocumentOrShadowRoot;
+ */
+export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
+  interface: 'Document', mixin: documentOrShadowRootIDL.name,
+});
+
+/*
+ * enum DocumentReadyState { "loading", "interactive", "complete" };
+ * enum DocumentVisibilityState { "visible", "hidden" };
+ * typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
+ *
+ * [LegacyOverrideBuiltIns]
+ * partial interface Document {
+ *   static Document parseHTMLUnsafe((TrustedHTML or DOMString) html, optional ParseHTMLUnsafeOptions options = {});
+ *   static Document parseHTML(DOMString html, optional SetHTMLOptions options = {});
+ *
+ *   // resource metadata management
+ *   [PutForwards=href, LegacyUnforgeable] readonly attribute Location? location;
+ *   attribute USVString domain;
+ *   readonly attribute USVString referrer;
+ *   attribute USVString cookie;
+ *   readonly attribute DOMString lastModified;
+ *   readonly attribute DocumentReadyState readyState;
+ *
+ *   // DOM tree accessors
+ *   getter object (DOMString name);
+ *   [CEReactions] attribute DOMString title;
+ *   [CEReactions] attribute DOMString dir;
+ *   [CEReactions] attribute HTMLElement? body;
+ *   readonly attribute HTMLHeadElement? head;
+ *   [SameObject] readonly attribute HTMLCollection images;
+ *   [SameObject] readonly attribute HTMLCollection embeds;
+ *   [SameObject] readonly attribute HTMLCollection plugins;
+ *   [SameObject] readonly attribute HTMLCollection links;
+ *   [SameObject] readonly attribute HTMLCollection forms;
+ *   [SameObject] readonly attribute HTMLCollection scripts;
+ *   NodeList getElementsByName(DOMString elementName);
+ *   readonly attribute HTMLOrSVGScriptElement? currentScript; // classic scripts in a document tree only
+ *
+ *   // dynamic markup insertion
+ *   [CEReactions] Document open(optional DOMString unused1, optional DOMString unused2); // both arguments are ignored
+ *   WindowProxy? open(USVString url, DOMString name, DOMString features);
+ *   [CEReactions] undefined close();
+ *   [CEReactions] undefined write((TrustedHTML or DOMString)... text);
+ *   [CEReactions] undefined writeln((TrustedHTML or DOMString)... text);
+ *
+ *   // user interaction
+ *   readonly attribute WindowProxy? defaultView;
+ *   boolean hasFocus();
+ *   [CEReactions] attribute DOMString designMode;
+ *   [CEReactions] boolean execCommand(DOMString commandId, optional boolean showUI = false, optional DOMString value = "");
+ *   boolean queryCommandEnabled(DOMString commandId);
+ *   boolean queryCommandIndeterm(DOMString commandId);
+ *   boolean queryCommandState(DOMString commandId);
+ *   boolean queryCommandSupported(DOMString commandId);
+ *   DOMString queryCommandValue(DOMString commandId);
+ *   readonly attribute boolean hidden;
+ *   readonly attribute DocumentVisibilityState visibilityState;
+ *
+ *   // special event handler IDL attributes that only apply to Document objects
+ *   [LegacyLenientThis] attribute EventHandler onreadystatechange;
+ *   attribute EventHandler onvisibilitychange;
+ *
+ *   // also has obsolete members
+ * };
+ * Document includes GlobalEventHandlers;
+ */
 export const htmlDocumentIDL = definePartialInterface({
-  target: documentIDL,
-  members: {
-    head: readonlyAttribute(),
-    body: readonlyAttribute(),
-    write: operation(),
-  },
+  members: [
+    {
+      kind: 'attribute', name: 'head', readonly: true,
+      type: nullable(reference('HTMLHeadElement')),
+    },
+    {
+      kind: 'attribute', name: 'body', readonly: true,
+      type: nullable(reference('HTMLElement')),
+    },
+    {
+      arguments: [{ name: 'text', type: idlType.DOMString, variadic: true }],
+      kind: 'operation', name: 'write', returns: idlType.undefined,
+    },
+  ],
+  name: 'Document',
 });
 
 export class DocumentImpl

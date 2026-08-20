@@ -1,13 +1,11 @@
 import type { ElementImpl } from './nodes/element';
-import {
-  documentOrShadowRootIDL, isText, type NodeImpl,
-} from './nodes/node';
+import { isText, type NodeImpl } from './nodes/node';
 import { CSSStyleDeclarationImpl } from '../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../stylelet/engine/tree-scope';
 import {
-  attribute, defineMixin, definePartialInterface, readonlyAttribute,
-} from '../web-idl/binding';
+  defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
+} from '../web-idl/definition';
 
 /*
  * partial interface mixin DocumentOrShadowRoot {
@@ -15,12 +13,18 @@ import {
  *   attribute ObservableArray<CSSStyleSheet> adoptedStyleSheets;
  * };
  */
-export const cssomDocumentOrShadowRootIDL = definePartialInterface({
-  target: documentOrShadowRootIDL,
-  members: {
-    styleSheets: readonlyAttribute(),
-    adoptedStyleSheets: attribute(),
-  },
+export const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
+  members: [
+    {
+      extendedAttributes: [{ kind: 'no-arguments', name: 'SameObject' }],
+      kind: 'attribute', name: 'styleSheets', readonly: true,
+      type: idlType.object,
+    },
+    // TODO(Web IDL observable arrays): Restore ObservableArray<CSSStyleSheet>
+    // when the specialized attribute proxy is available.
+    { kind: 'attribute', name: 'adoptedStyleSheets', type: idlType.any },
+  ],
+  name: 'DocumentOrShadowRoot',
 });
 
 export class DocumentOrShadowRootMixin {
@@ -45,11 +49,18 @@ export class DocumentOrShadowRootMixin {
  *   readonly attribute CSSStyleProperties style;
  * };
  */
-export const elementCSSInlineStyleIDL = defineMixin({
+export const elementCSSInlineStyleIDL = defineInterfaceMixin({
+  members: [{
+    extendedAttributes: [
+      { kind: 'no-arguments', name: 'SameObject' },
+      { kind: 'identifier', name: 'PutForwards', value: 'cssText' },
+    ],
+    kind: 'attribute',
+    name: 'style',
+    readonly: true,
+    type: idlType.object,
+  }],
   name: 'ElementCSSInlineStyle',
-  members: {
-    style: readonlyAttribute(),
-  },
 });
 
 export class ElementCSSInlineStyleMixin {
@@ -71,11 +82,12 @@ export class ElementCSSInlineStyleMixin {
  *   readonly attribute CSSStyleSheet? sheet;
  * };
  */
-export const linkStyleIDL = defineMixin({
+export const linkStyleIDL = defineInterfaceMixin({
+  members: [{
+    kind: 'attribute', name: 'sheet', readonly: true,
+    type: nullable(idlType.object),
+  }],
   name: 'LinkStyle',
-  members: {
-    sheet: readonlyAttribute(),
-  },
 });
 
 /* Deferred association hosts:

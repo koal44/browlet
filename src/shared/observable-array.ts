@@ -1,27 +1,51 @@
-export type ObservableArrayOptions<T> = {
-  convert: (value: unknown) => T;
-  set?: (value: T, index: number) => void;
-  delete?: (value: T, index: number) => void;
+/*
+ * TODO(CSSOM Web IDL integration): Stylelet currently consumes this complete
+ * proxy factory because its CSSStyleSheet objects are not Web IDL-bound yet.
+ * The intended boundary is for Stylelet to own only a neutral backing
+ * collection and its semantic mutation steps, while the host Web IDL binding
+ * owns the author-facing observable-array proxy. Once CSSStyleSheet crosses
+ * that boundary, move the proxy machinery into web-idl and remove this shared
+ * module.
+ */
+
+export type ObservableArrayOptions<IDLValue, JavaScriptValue = IDLValue> = {
+  convert: (value: unknown) => IDLValue;
+  toJavaScript?: (value: IDLValue) => JavaScriptValue;
+  array?: ArrayConstructor;
+  rangeError?: typeof RangeError;
+  toNumber?: (value: unknown) => number;
+  set?: (value: IDLValue, index: number) => void;
+  delete?: (value: IDLValue, index: number) => void;
 };
 
-export type ObservableArrayHandle<T> = {
-  readonly value: T[];
+export type ObservableArrayHandle<IDLValue, JavaScriptValue = IDLValue> = {
+  readonly backingList: IDLValue[];
+  readonly value: JavaScriptValue[];
   replace: (value: unknown) => void;
+  replaceValues: (values: readonly IDLValue[]) => void;
 };
 
-export function createObservableArray<T>({
+export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   convert,
+  toJavaScript = identity as (value: IDLValue) => JavaScriptValue,
+  array: Array_ = Array,
+  rangeError: RangeError_ = RangeError,
+  toNumber: convertToNumber = toNumber,
   set: setAlgorithm = noop,
   delete: deleteAlgorithm = noop,
-}: ObservableArrayOptions<T>): ObservableArrayHandle<T> {
-  const backingList: T[] = [];
-  Object.setPrototypeOf(backingList, null);
-  const target: T[] = [];
+}: ObservableArrayOptions<IDLValue, JavaScriptValue>): ObservableArrayHandle<
+  IDLValue,
+  JavaScriptValue
+> {
+  const backingList: IDLValue[] = [];
+  const target = Reflect.construct(Array_, []) as JavaScriptValue[];
 
   const setLength = (value: unknown): boolean => {
-    const numberLength = toNumber(value);
+    const numberLength = convertToNumber(value);
     const uint32Length = numberLength >>> 0;
-    if (uint32Length !== numberLength) throw new RangeError('Invalid array length');
+    if (uint32Length !== numberLength) {
+      throw new RangeError_('Invalid array length');
+    }
     if (uint32Length > backingList.length) return false;
 
     for (let index = backingList.length - 1; index >= uint32Length; index--) {
@@ -39,12 +63,11 @@ export function createObservableArray<T>({
     if (index < length) deleteAlgorithm(backingList[index]!, index);
     setAlgorithm(converted, index);
 
-    if (index === length) backingList[length] = converted;
-    else backingList[index] = converted;
+    setBackingValue(backingList, index, converted);
     return true;
   };
 
-  const handler: ProxyHandler<T[]> = {
+  const handler: ProxyHandler<JavaScriptValue[]> = {
     defineProperty(target, property, descriptor) {
       if (property === 'length') {
         if (
@@ -96,7 +119,9 @@ export function createObservableArray<T>({
       const index = getArrayIndex(property);
       return index === null
         ? Reflect.get(target, property, receiver) as unknown
-        : backingList[index];
+        : index < backingList.length
+          ? toJavaScript(backingList[index]!)
+          : undefined;
     },
 
     getOwnPropertyDescriptor(target, property) {
@@ -116,7 +141,7 @@ export function createObservableArray<T>({
             configurable: true,
             enumerable: true,
             writable: true,
-            value: backingList[index],
+            value: toJavaScript(backingList[index]!),
           }
           : undefined;
       }
@@ -158,18 +183,25 @@ export function createObservableArray<T>({
 
   const observable = new Proxy(target, handler);
 
+  const replaceValues = (values: readonly IDLValue[]): void => {
+    setLength(0);
+    for (let index = 0; index < values.length; index++) {
+      const item = values[index]!;
+      setAlgorithm(item, index);
+      setBackingValue(backingList, index, item);
+    }
+  };
+
   return {
+    backingList,
     value: observable,
 
     replace(value: unknown): void {
       const converted = convertSequence(value, convert);
-      setLength(0);
-      for (let index = 0; index < converted.length; index++) {
-        const item = converted[index]!;
-        setAlgorithm(item, index);
-        backingList[index] = item;
-      }
+      replaceValues(converted);
     },
+
+    replaceValues,
   };
 }
 
@@ -208,6 +240,19 @@ function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
 
 function toNumber(value: unknown): number {
   return +(value as number);
+}
+
+function setBackingValue<T>(values: T[], index: number, value: T): void {
+  Object.defineProperty(values, index, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
+}
+
+function identity<T>(value: T): T {
+  return value;
 }
 
 function noop(): void {}

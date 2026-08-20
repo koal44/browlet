@@ -1,37 +1,42 @@
+import type { AssembledInterface } from '../../web-idl/assembly';
 import {
-  CustomEventImpl, customEventIDL, eventIDL, EventImpl, toDOMString,
+  callUserObjectOperation as callWebIDLUserObjectOperation,
+} from '../../web-idl/callback';
+import {
+  isCallbackInterfaceValue, type CallbackInterfaceValue,
+} from '../../web-idl/callback-value';
+import { convertToIDL } from '../../web-idl/conversion';
+import type {
+  AttributeMember, ConstructorMember, InterfaceDefinition, OperationMember,
+} from '../../web-idl/definition';
+import {
+  registerDOMExceptionImplementations,
+} from '../../web-idl/dom-exception';
+import {
+  ImplementationRegistry, type ImplementationConstructor,
+} from '../../web-idl/implementation';
+import { JavaScriptBinding } from '../../web-idl/binding';
+import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
+import { PlatformObjectRegistry } from '../../web-idl/platform-object';
+import {
+  CustomEventImpl, customEventIDL, eventIDL, EventImpl,
 } from '../events/event';
 import {
   eventTargetIDL, EventTargetImpl, type EventImplementationConstructor,
-  type EventListenerInvocationHost,
+  type EventListenerCallback, type EventListenerInvocationHost,
 } from '../events/event-target';
-import { cssomDocumentOrShadowRootIDL } from '../css-engine';
-import {
-  characterDataIDL, CharacterDataImpl,
-} from '../nodes/character-data';
+import { CharacterDataImpl } from '../nodes/character-data';
 import { CommentImpl, commentIDL } from '../nodes/comment';
+import { DocumentImpl, documentIDL } from '../nodes/document';
+import { DocumentTypeImpl } from '../nodes/document-type';
 import {
-  DocumentImpl, documentIDL, htmlDocumentIDL,
-} from '../nodes/document';
-import { DocumentTypeImpl, documentTypeIDL } from '../nodes/document-type';
-import {
-  ElementImpl, elementIDL, HTMLElementImpl, htmlElementIDL,
-  HTMLHeadElementImpl, htmlHeadElementIDL,
-  HTMLLinkElementImpl, htmlLinkElementIDL,
-  HTMLStyleElementImpl, htmlStyleElementIDL,
-  MathMLElementImpl, mathMLElementIDL,
-  SVGElementImpl, svgElementIDL,
-  SVGStyleElementImpl, svgStyleElementIDL,
+  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
+  HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
 } from '../nodes/element';
 import type { DOMNodeFactory } from '../nodes/factory';
-import { NodeImpl, nodeIDL } from '../nodes/node';
+import { NodeImpl } from '../nodes/node';
 import { TextImpl, textIDL } from '../nodes/text';
-import { TreeNode } from '../tree/tree-node';
-import {
-  bindInterface, type InterfaceBinding, type InterfaceConstruction,
-  type InterfaceConstructor, type InterfaceDefinition,
-  type ImplementationConstructor,
-} from '../../web-idl/binding';
+import { domDefinitions } from './dom-definitions';
 
 export class DOMBindings
 implements DOMNodeFactory, EventListenerInvocationHost
@@ -41,6 +46,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
   readonly CustomEvent: typeof globalThis.CustomEvent;
   readonly Document: typeof globalThis.Document;
   readonly DocumentType: typeof globalThis.DocumentType;
+  readonly DOMException: typeof globalThis.DOMException;
   readonly Element: typeof globalThis.Element;
   readonly Event: typeof globalThis.Event;
   readonly EventTarget: typeof globalThis.EventTarget;
@@ -53,200 +59,179 @@ implements DOMNodeFactory, EventListenerInvocationHost
   readonly SVGElement: typeof globalThis.SVGElement;
   readonly SVGStyleElement: typeof globalThis.SVGStyleElement;
   readonly Text: typeof globalThis.Text;
-  readonly #exposed = new Map<string, InterfaceConstructor>();
+  readonly #binding: JavaScriptBinding;
+  readonly #exposed: ReadonlyMap<string, object>;
+  readonly #host: DOMRealmHost;
   readonly #implementations = new Map<
     ImplementationConstructor<object>,
-    InterfaceConstructor
+    AssembledInterface
   >();
-  readonly #interfaces = new Map<
-    InterfaceDefinition,
-    InterfaceConstructor
-  >();
-  readonly #exposure: string;
-  readonly #host: DOMRealmHost;
 
   constructor(host: DOMRealmHost) {
-    this.#exposure = host.exposure;
     this.#host = host;
+    const realm = getWebIDLRealmHost(host);
+    const implementations = new ImplementationRegistry();
 
-    this.Event = this.bind<typeof globalThis.Event>({
-      interface: eventIDL,
-      implementation: EventImpl,
-      construct: (argumentsList, newTarget) => Reflect.construct(
-        EventImpl,
-        [argumentsList[0], argumentsList[1], host.eventTimeStamp()],
-        newTarget,
-      ) as object,
-    });
-    this.CustomEvent = this.bind<typeof globalThis.CustomEvent>({
-      interface: customEventIDL,
-      implementation: CustomEventImpl,
-      construct: (argumentsList, newTarget) => Reflect.construct(
-        CustomEventImpl,
-        [argumentsList[0], argumentsList[1], host.eventTimeStamp()],
-        newTarget,
-      ) as object,
-    });
-    this.EventTarget = this.bind<typeof globalThis.EventTarget>({
-      interface: eventTargetIDL,
-      implementation: EventTargetImpl,
-      construct: (_argumentsList, newTarget) => Reflect.construct(
-        EventTargetImpl,
-        [],
-        newTarget,
-      ) as object,
-    });
-    this.Node = this.bind<typeof globalThis.Node>({
-      interface: nodeIDL,
-      implementation: NodeImpl,
-      prototypeSources: [NodeImpl.prototype, TreeNode.prototype],
-    });
-    this.CharacterData = this.bind<typeof globalThis.CharacterData>({
-      interface: characterDataIDL,
-      implementation: CharacterDataImpl,
-      prototypeSources: [
-        CharacterDataImpl.prototype,
-        NodeImpl.prototype,
-        TreeNode.prototype,
-      ],
-    });
-    this.Document = this.bind<typeof globalThis.Document>({
-      interface: documentIDL,
-      implementation: DocumentImpl,
-      prototypeSources: [
-        DocumentImpl.prototype,
-        NodeImpl.prototype,
-        TreeNode.prototype,
-      ],
-      construct: (_argumentsList, newTarget) => Reflect.construct(
-        DocumentImpl,
-        [undefined, this],
-        newTarget,
-      ) as object,
-    });
-    this.Element = this.bind<typeof globalThis.Element>({
-      interface: elementIDL,
-      implementation: ElementImpl,
-      prototypeSources: [
-        ElementImpl.prototype,
-        NodeImpl.prototype,
-        TreeNode.prototype,
-      ],
-    });
-    this.HTMLElement = this.bind<typeof globalThis.HTMLElement>({
-      interface: htmlElementIDL,
-      implementation: HTMLElementImpl,
-    });
-    this.HTMLHeadElement = this.bind<typeof globalThis.HTMLHeadElement>({
-      interface: htmlHeadElementIDL,
-      implementation: HTMLHeadElementImpl,
-    });
-    this.HTMLLinkElement = this.bind<typeof globalThis.HTMLLinkElement>({
-      interface: htmlLinkElementIDL,
-      implementation: HTMLLinkElementImpl,
-    });
-    this.HTMLStyleElement = this.bind<typeof globalThis.HTMLStyleElement>({
-      interface: htmlStyleElementIDL,
-      implementation: HTMLStyleElementImpl,
-    });
-    this.SVGElement = this.bind<typeof globalThis.SVGElement>({
-      interface: svgElementIDL,
-      implementation: SVGElementImpl,
-    });
-    this.SVGStyleElement = this.bind<typeof globalThis.SVGStyleElement>({
-      interface: svgStyleElementIDL,
-      implementation: SVGStyleElementImpl,
-    });
-    this.MathMLElement = this.bind<typeof globalThis.MathMLElement>({
-      interface: mathMLElementIDL,
-      implementation: MathMLElementImpl,
-    });
-    this.Text = this.bind<typeof globalThis.Text>({
-      interface: textIDL,
-      implementation: TextImpl,
-      prototypeSources: [
-        TextImpl.prototype,
-        NodeImpl.prototype,
-        TreeNode.prototype,
-      ],
-      construct: constructCharacterData(TextImpl),
-    });
-    this.Comment = this.bind<typeof globalThis.Comment>({
-      interface: commentIDL,
-      implementation: CommentImpl,
-      prototypeSources: [
-        CommentImpl.prototype,
-        NodeImpl.prototype,
-        TreeNode.prototype,
-      ],
-      construct: constructCharacterData(CommentImpl),
-    });
-    this.DocumentType = this.bind<typeof globalThis.DocumentType>({
-      interface: documentTypeIDL,
-      implementation: DocumentTypeImpl,
-      prototypeSources: [DocumentTypeImpl.prototype, TreeNode.prototype],
-    });
+    for (const [name, implementation] of domImplementationClasses) {
+      const interface_ = requireInterface(name);
+      this.#implementations.set(implementation, interface_);
+      registerInterfaceMembers(
+        implementations,
+        interface_,
+        implementation,
+        (exception) => this.#normalizeException(exception),
+      );
+    }
+    registerDOMExceptionImplementations(implementations, realm);
+
+    this.#binding = new JavaScriptBinding(
+      domDefinitions,
+      realm,
+      domPlatformObjects,
+      implementations,
+    );
+    this.#registerConstructors(implementations);
+
+    this.Event = this.#getInterface<typeof globalThis.Event>('Event');
+    this.CustomEvent = this.#getInterface<typeof globalThis.CustomEvent>(
+      'CustomEvent',
+    );
+    this.EventTarget = this.#getInterface<typeof globalThis.EventTarget>(
+      'EventTarget',
+    );
+    this.Node = this.#getInterface<typeof globalThis.Node>('Node');
+    this.CharacterData = this.#getInterface<typeof globalThis.CharacterData>(
+      'CharacterData',
+    );
+    this.Document = this.#getInterface<typeof globalThis.Document>('Document');
+    this.Element = this.#getInterface<typeof globalThis.Element>('Element');
+    this.HTMLElement = this.#getInterface<typeof globalThis.HTMLElement>(
+      'HTMLElement',
+    );
+    this.HTMLHeadElement = this.#getInterface<
+      typeof globalThis.HTMLHeadElement
+    >('HTMLHeadElement');
+    this.HTMLLinkElement = this.#getInterface<
+      typeof globalThis.HTMLLinkElement
+    >('HTMLLinkElement');
+    this.HTMLStyleElement = this.#getInterface<
+      typeof globalThis.HTMLStyleElement
+    >('HTMLStyleElement');
+    this.SVGElement = this.#getInterface<typeof globalThis.SVGElement>(
+      'SVGElement',
+    );
+    this.SVGStyleElement = this.#getInterface<
+      typeof globalThis.SVGStyleElement
+    >('SVGStyleElement');
+    this.MathMLElement = this.#getInterface<typeof globalThis.MathMLElement>(
+      'MathMLElement',
+    );
+    this.Text = this.#getInterface<typeof globalThis.Text>('Text');
+    this.Comment = this.#getInterface<typeof globalThis.Comment>('Comment');
+    this.DocumentType = this.#getInterface<typeof globalThis.DocumentType>(
+      'DocumentType',
+    );
+    this.DOMException = this.#getInterface<typeof globalThis.DOMException>(
+      'DOMException',
+    );
+
+    this.#exposed = this.#binding.getExposedInitialObjects();
   }
 
-  get exposed(): ReadonlyMap<string, InterfaceConstructor> {
+  get exposed(): ReadonlyMap<string, object> {
     return this.#exposed;
   }
 
   createEvent(
     eventConstructor: EventImplementationConstructor = EventImpl,
   ): EventImpl {
-    const event = this.construct(eventConstructor, [
-      '',
-      {},
-      this.#host.eventTimeStamp(),
-    ]);
+    const event = this.#construct(
+      eventConstructor,
+      ['', {}, this.#host.eventTimeStamp()],
+      requireInterface('Event'),
+    );
     EventImpl.setTrusted(event, true);
     return event;
   }
 
+  createDOMException(message = '', name = 'Error'): DOMException {
+    return new this.DOMException(message, name);
+  }
+
   getAssociatedGlobal(
-    _callback: EventListenerOrEventListenerObject,
+    callback: EventListenerCallback,
   ): object {
-    // TODO(Web IDL callback values): Resolve this from the callback's
-    // associated realm when callbacks can cross Domlet realm boundaries.
-    return this.#host.global;
+    return requireEventListenerValue(callback).realm.global;
   }
 
-  isWindow(global: object): boolean {
-    return this.#host.isWindow(global);
+  convertEventListener(
+    callback: EventListenerCallback,
+  ): CallbackInterfaceValue {
+    if (isCallbackInterfaceValue(callback)) return callback;
+    const value = convertToIDL(
+      callback,
+      { kind: 'reference', name: 'EventListener' },
+      this.#binding,
+    );
+    return requireEventListenerValue(value);
   }
 
-  getCurrentEvent(global: object): Event | undefined {
-    return this.#host.getCurrentEvent(global);
+  isWindow(
+    global: object,
+    callback: EventListenerCallback,
+  ): boolean {
+    return this.#getCallbackHost(callback).isWindow(global);
   }
 
-  setCurrentEvent(global: object, event: Event | undefined): void {
-    this.#host.setCurrentEvent(global, event);
+  getCurrentEvent(
+    global: object,
+    callback: EventListenerCallback,
+  ): Event | undefined {
+    return this.#getCallbackHost(callback).getCurrentEvent(global);
+  }
+
+  setCurrentEvent(
+    global: object,
+    event: Event | undefined,
+    callback: EventListenerCallback,
+  ): void {
+    this.#getCallbackHost(callback).setCurrentEvent(global, event);
   }
 
   recordTimingInfo(
     global: object,
     event: Event,
-    callback: EventListenerOrEventListenerObject,
+    callback: EventListenerCallback,
   ): void {
-    this.#host.recordTimingInfo(global, event, callback);
+    this.#getCallbackHost(callback).recordTimingInfo(
+      global,
+      event,
+      requireEventListenerValue(callback).object as
+        EventListenerOrEventListenerObject,
+    );
   }
 
   callUserObjectOperation(
-    callback: EventListenerOrEventListenerObject,
-    _operation: 'handleEvent',
+    callback: EventListenerCallback,
+    operation: 'handleEvent',
     [event]: readonly [Event],
     thisArgument: EventTarget,
   ): void {
-    if (typeof callback === 'function') {
-      callback.call(thisArgument, event);
-    } else {
-      callback.handleEvent.call(callback, event);
-    }
+    callWebIDLUserObjectOperation(
+      requireEventListenerValue(callback),
+      operation,
+      [event],
+      this.#binding,
+      thisArgument,
+    );
   }
 
-  reportException(exception: unknown, global: object): void {
-    this.#host.reportException(exception, global);
+  reportException(
+    exception: unknown,
+    callback: EventListenerCallback,
+  ): void {
+    requireEventListenerValue(callback).realm.callbacks
+      .reportException(exception);
   }
 
   associateEventTarget(target: EventTargetImpl): void {
@@ -257,55 +242,125 @@ implements DOMNodeFactory, EventListenerInvocationHost
     implementation: ImplementationConstructor<T>,
     argumentsList: readonly unknown[],
   ): T {
-    return this.#associate(Reflect.construct(
+    const interface_ = this.#implementations.get(implementation);
+    if (!interface_) {
+      return Reflect.construct(implementation, argumentsList) as T;
+    }
+    return this.#construct(implementation, argumentsList, interface_);
+  }
+
+  #getCallbackHost(callback: EventListenerCallback): DOMRealmHost {
+    const realm = requireEventListenerValue(callback).realm;
+    return isDOMRealmHost(realm) ? realm : this.#host;
+  }
+
+  #normalizeException(exception: unknown): unknown {
+    const interface_ = requireInterface('DOMException');
+    if (this.#binding.implements(exception, interface_)) return exception;
+    return exception instanceof DOMException
+      ? this.createDOMException(exception.message, exception.name)
+      : exception;
+  }
+
+  #getInterface<TConstructor extends InterfaceConstructor>(
+    name: string,
+  ): TConstructor {
+    return this.#binding.getInterfaceObject(name) as unknown as TConstructor;
+  }
+
+  #construct<T extends object>(
+    implementation: ImplementationConstructor<T>,
+    argumentsList: readonly unknown[],
+    interface_: AssembledInterface,
+  ): T {
+    const value = Reflect.construct(
       implementation,
       argumentsList,
-      this.#implementations.get(implementation) ?? implementation,
-    ) as T);
-  }
-
-  private bind<TConstructor extends InterfaceConstructor>(
-    binding: InterfaceBinding,
-  ): TConstructor {
-    const parent = binding.interface.parent
-      ? this.#interfaces.get(binding.interface.parent)
-      : undefined;
-
-    if (binding.interface.parent && !parent) {
-      throw new Error(
-        `Bind ${binding.interface.parent.name} before ${binding.interface.name}`,
-      );
-    }
-
-    const construction = binding.construct;
-    const Interface = bindInterface(
-      construction
-        ? {
-          ...binding,
-          construct: (argumentsList, newTarget) => this.#associate(
-            construction(argumentsList, newTarget),
-          ),
-        }
-        : binding,
-      parent,
-      domPartials,
-    );
-    this.#interfaces.set(binding.interface, Interface);
-    this.#implementations.set(binding.implementation, Interface);
-
-    if (
-      binding.interface.exposed === '*' ||
-      binding.interface.exposed?.includes(this.#exposure)
-    ) {
-      this.#exposed.set(binding.interface.name, Interface);
-    }
-
-    return Interface as TConstructor;
-  }
-
-  #associate<T extends object>(value: T): T {
+      this.#binding.getInterfaceObject(interface_),
+    ) as T;
+    const record = this.#binding.projectPlatformObject(value, interface_);
     if (EventTargetImpl.is(value)) this.associateEventTarget(value);
-    return value;
+    return record.object as T;
+  }
+
+  #registerConstructors(implementations: ImplementationRegistry): void {
+    registerObjectCreation(
+      implementations,
+      eventTargetIDL,
+      EventTargetImpl,
+      [],
+      (value) => this.associateEventTarget(value as EventTargetImpl),
+    );
+    implementations.setConstructorSteps(
+      requireConstructor(eventTargetIDL),
+      () => undefined,
+    );
+
+    registerObjectCreation(
+      implementations,
+      eventIDL,
+      EventImpl,
+      ['', {}, this.#host.eventTimeStamp()],
+    );
+    implementations.setConstructorSteps(
+      requireConstructor(eventIDL),
+      function(type, init) {
+        const dictionary = asDictionary(init);
+        EventImpl.initializeForBinding(
+          this as EventImpl,
+          type as string,
+          Boolean(dictionary.bubbles),
+          Boolean(dictionary.cancelable),
+          Boolean(dictionary.composed),
+        );
+      },
+    );
+
+    registerObjectCreation(
+      implementations,
+      customEventIDL,
+      CustomEventImpl,
+      ['', {}, this.#host.eventTimeStamp()],
+    );
+    implementations.setConstructorSteps(
+      requireConstructor(customEventIDL),
+      function(type, init) {
+        const dictionary = asDictionary(init);
+        CustomEventImpl.initializeCustomForBinding(
+          this as CustomEventImpl,
+          type as string,
+          Boolean(dictionary.bubbles),
+          Boolean(dictionary.cancelable),
+          Boolean(dictionary.composed),
+          dictionary.detail,
+        );
+      },
+    );
+
+    registerObjectCreation(
+      implementations,
+      documentIDL,
+      DocumentImpl,
+      [undefined, this],
+      (value) => this.associateEventTarget(value as EventTargetImpl),
+    );
+    implementations.setConstructorSteps(
+      requireConstructor(documentIDL),
+      () => undefined,
+    );
+
+    registerCharacterDataConstructor(
+      implementations,
+      textIDL,
+      TextImpl,
+      (value) => this.associateEventTarget(value),
+    );
+    registerCharacterDataConstructor(
+      implementations,
+      commentIDL,
+      CommentImpl,
+      (value) => this.associateEventTarget(value),
+    );
   }
 }
 
@@ -321,19 +376,375 @@ export type DOMRealmHost = {
     event: Event,
     callback: EventListenerOrEventListenerObject,
   ): void;
-  reportException(exception: unknown, global: object): void;
 };
 
-const domPartials = [htmlDocumentIDL, cssomDocumentOrShadowRootIDL];
+type InterfaceConstructor = object & { readonly prototype: object; };
 
-function constructCharacterData(
+const domPlatformObjects = new PlatformObjectRegistry();
+
+const domImplementationClasses: [
+  string,
+  ImplementationConstructor<object>,
+][] = [
+  ['EventTarget', EventTargetImpl],
+  ['Event', EventImpl],
+  ['CustomEvent', CustomEventImpl],
+  ['Node', NodeImpl],
+  ['CharacterData', CharacterDataImpl],
+  ['Document', DocumentImpl],
+  ['Element', ElementImpl],
+  ['HTMLElement', HTMLElementImpl],
+  ['HTMLHeadElement', HTMLHeadElementImpl],
+  ['HTMLLinkElement', HTMLLinkElementImpl],
+  ['HTMLStyleElement', HTMLStyleElementImpl],
+  ['SVGElement', SVGElementImpl],
+  ['SVGStyleElement', SVGStyleElementImpl],
+  ['MathMLElement', MathMLElementImpl],
+  ['Text', TextImpl],
+  ['Comment', CommentImpl],
+  ['DocumentType', DocumentTypeImpl],
+];
+
+type ExceptionNormalizer = (exception: unknown) => unknown;
+
+function registerInterfaceMembers(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
   implementation: ImplementationConstructor<object>,
-): InterfaceConstruction {
-  return (argumentsList, newTarget) => {
-    const data = argumentsList[0] === undefined
-      ? ''
-      : toDOMString(argumentsList[0]);
+  normalizeException: ExceptionNormalizer,
+): void {
+  for (const { member } of interface_.members) {
+    if (member.kind === 'attribute') {
+      registerAttribute(
+        registry,
+        member,
+        implementation.prototype,
+        normalizeException,
+      );
+    } else if (member.kind === 'operation') {
+      registerOperation(
+        registry,
+        member,
+        implementation.prototype,
+        normalizeException,
+      );
+    }
+  }
+}
 
-    return Reflect.construct(implementation, [data], newTarget) as object;
+function registerAttribute(
+  registry: ImplementationRegistry,
+  member: AttributeMember,
+  prototype: object,
+  normalizeException: ExceptionNormalizer,
+): void {
+  const descriptor = findDescriptor(prototype, member.name);
+  if (!descriptor?.get) {
+    throw new TypeError(`Web IDL attribute ${member.name} has no implementation`);
+  }
+
+  const getterValue: unknown = Reflect.get(descriptor, 'get');
+  const setterValue: unknown = Reflect.get(descriptor, 'set');
+  const get = getterValue as (this: object) => unknown;
+  const set = setterValue as
+    ((this: object, value: unknown) => void) | undefined;
+  registry.setAttributeSteps(member, {
+    get() {
+      return callImplementation(get, this, [], normalizeException);
+    },
+    ...(set && !member.readonly
+      ? {
+        set(value: unknown) {
+          callImplementation(
+            set,
+            this,
+            [toImplementationValue(value)],
+            normalizeException,
+          );
+        },
+      }
+      : {}),
+  });
+}
+
+function registerOperation(
+  registry: ImplementationRegistry,
+  member: OperationMember,
+  prototype: object,
+  normalizeException: ExceptionNormalizer,
+): void {
+  const value: unknown = findDescriptor(prototype, member.name ?? '')?.value;
+  if (typeof value !== 'function') {
+    throw new TypeError(
+      `Web IDL operation ${member.name ?? ''} has no implementation`,
+    );
+  }
+  const method = value as (this: object, ...values: unknown[]) => unknown;
+
+  registry.setOperationSteps(member, function(...values) {
+    return callImplementation(
+      method,
+      this,
+      values.map(toImplementationValue),
+      normalizeException,
+    );
+  });
+}
+
+function callImplementation(
+  implementation: (this: object, ...values: unknown[]) => unknown,
+  thisArgument: object | null,
+  values: unknown[],
+  normalizeException: ExceptionNormalizer,
+): unknown {
+  try {
+    return Reflect.apply(implementation, thisArgument, values);
+  } catch (exception) {
+    throw normalizeException(exception);
+  }
+}
+
+function registerObjectCreation(
+  registry: ImplementationRegistry,
+  interface_: InterfaceDefinition,
+  implementation: ImplementationConstructor<object>,
+  argumentsList: readonly unknown[],
+  created?: (value: object) => void,
+): void {
+  registry.setObjectCreationSteps(interface_, (newTarget) => {
+    const value = Reflect.construct(
+      implementation,
+      argumentsList,
+      newTarget as unknown as ImplementationConstructor<object>,
+    ) as object;
+    created?.(value);
+    return value;
+  });
+}
+
+function registerCharacterDataConstructor(
+  registry: ImplementationRegistry,
+  interface_: InterfaceDefinition,
+  implementation: ImplementationConstructor<CharacterDataImpl>,
+  created: (value: CharacterDataImpl) => void,
+): void {
+  registerObjectCreation(
+    registry,
+    interface_,
+    implementation,
+    [''],
+    (value) => created(value as CharacterDataImpl),
+  );
+  registry.setConstructorSteps(
+    requireConstructor(interface_),
+    function(data) {
+      (this as CharacterDataImpl).data = data as string;
+    },
+  );
+}
+
+function requireConstructor(
+  interface_: InterfaceDefinition,
+): ConstructorMember {
+  const constructor = interface_.members.find(
+    (member): member is ConstructorMember => member.kind === 'constructor',
+  );
+  if (!constructor) {
+    throw new Error(`${interface_.name} has no constructor declaration`);
+  }
+  return constructor;
+}
+
+function requireInterface(name: string): AssembledInterface {
+  const interface_ = domDefinitions.getInterface(name);
+  if (!interface_) throw new Error(`Missing DOM interface ${name}`);
+  return interface_;
+}
+
+function findDescriptor(
+  prototype: object,
+  property: PropertyKey,
+): PropertyDescriptor | undefined {
+  for (
+    let current: object | null = prototype;
+    current && current !== Object.prototype;
+    current = Reflect.getPrototypeOf(current)
+  ) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
+    if (descriptor) return descriptor;
+  }
+}
+
+function toImplementationValue(value: unknown): unknown {
+  if (!(value instanceof Map)) return value;
+
+  const object: Record<PropertyKey, unknown> = {};
+  const dictionary = value as Map<PropertyKey, unknown>;
+  for (const [name, memberValue] of dictionary) {
+    object[name] = toImplementationValue(memberValue);
+  }
+  return object;
+}
+
+function asDictionary(value: unknown): Record<PropertyKey, unknown> {
+  return toImplementationValue(value) as Record<PropertyKey, unknown>;
+}
+
+function getWebIDLRealmHost(host: DOMRealmHost): WebIDLRealmHost {
+  return isWebIDLRealmHost(host) ? host : createAmbientWebIDLRealmHost(host);
+}
+
+function isWebIDLRealmHost(
+  host: DOMRealmHost,
+): host is DOMRealmHost & WebIDLRealmHost {
+  return 'callbacks' in host &&
+    'intrinsics' in host &&
+    'createFunction' in host;
+}
+
+function isDOMRealmHost(value: object): value is DOMRealmHost {
+  return 'eventTimeStamp' in value &&
+    'getCurrentEvent' in value &&
+    'isWindow' in value;
+}
+
+function createAmbientWebIDLRealmHost(host: DOMRealmHost): WebIDLRealmHost {
+  const arrayValues = Reflect.get(
+    Array.prototype,
+    'values',
+  ) as WebIDLRealmHost['intrinsics']['iteration']['arrayValues'];
+  const arrayIterator = Reflect.apply(arrayValues, [], []) as object;
+  const arrayIteratorPrototype = Reflect.getPrototypeOf(arrayIterator);
+  const iteratorPrototype = arrayIteratorPrototype &&
+    Reflect.getPrototypeOf(arrayIteratorPrototype);
+  if (!iteratorPrototype) {
+    throw new Error('Could not obtain the ambient Iterator prototype');
+  }
+  const asyncIterator = (async function* () {})();
+  const asyncGeneratorFunctionPrototype = Reflect.getPrototypeOf(
+    asyncIterator,
+  );
+  const asyncGeneratorPrototype = asyncGeneratorFunctionPrototype &&
+    Reflect.getPrototypeOf(asyncGeneratorFunctionPrototype);
+  const asyncIteratorPrototype = asyncGeneratorPrototype &&
+    Reflect.getPrototypeOf(asyncGeneratorPrototype);
+  if (!asyncIteratorPrototype) {
+    throw new Error('Could not obtain the ambient AsyncIterator prototype');
+  }
+  const mapIteratorPrototype = Reflect.getPrototypeOf(
+    new Map().entries(),
+  );
+  const setIteratorPrototype = Reflect.getPrototypeOf(
+    new Set().values(),
+  );
+  if (!mapIteratorPrototype || !setIteratorPrototype) {
+    throw new Error('Could not obtain the ambient collection iterator prototypes');
+  }
+
+  const realm: WebIDLRealmHost = {
+    callbacks: {
+      captureContext: () => realm,
+      cleanUpAfterRunningCallback: () => {},
+      cleanUpAfterRunningScript: () => {},
+      getAssociatedRealm: () => realm,
+      prepareToRunCallback: () => {},
+      prepareToRunScript: () => {},
+      reportException: (exception) => console.error(exception),
+    },
+    crossOriginIsolated: false,
+    exposure: host.exposure,
+    global: host.global,
+    isGlobalPrototypeChainMutable: false,
+    intrinsics: {
+      array: Array,
+      bigInt: BigInt,
+      bufferSource: {
+        arrayBuffer: ArrayBuffer,
+        arrayBufferTransfer: Reflect.get(
+          ArrayBuffer.prototype,
+          'transfer',
+        ) as WebIDLRealmHost['intrinsics']['bufferSource']['arrayBufferTransfer'],
+        sharedArrayBuffer: typeof SharedArrayBuffer === 'undefined'
+          ? undefined
+          : SharedArrayBuffer,
+        views: {
+          BigInt64Array,
+          BigUint64Array,
+          DataView,
+          Float32Array,
+          Float64Array,
+          Int16Array,
+          Int32Array,
+          Int8Array,
+          Uint16Array,
+          Uint32Array,
+          Uint8Array,
+          Uint8ClampedArray,
+        },
+      },
+      error: Error,
+      errorPrototype: Error.prototype,
+      function: Function,
+      functionPrototype: Function.prototype,
+      iteration: {
+        arrayEntries: Reflect.get(
+          Array.prototype,
+          'entries',
+        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayEntries'],
+        arrayForEach: Reflect.get(
+          Array.prototype,
+          'forEach',
+        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayForEach'],
+        arrayKeys: Reflect.get(
+          Array.prototype,
+          'keys',
+        ),
+        arrayValues,
+        asyncIteratorPrototype,
+        iteratorPrototype,
+        mapIteratorPrototype,
+        setIteratorPrototype,
+      },
+      number: Number,
+      object: Object,
+      objectPrototype: Object.prototype,
+      promise: {
+        constructor: Promise,
+        reject: Reflect.get(Promise, 'reject') as WebIDLRealmHost[
+          'intrinsics'
+        ]['promise']['reject'],
+        then: Reflect.get(Promise.prototype, 'then') as WebIDLRealmHost[
+          'intrinsics'
+        ]['promise']['then'],
+      },
+      rangeError: RangeError,
+      string: String,
+      typeError: TypeError,
+    },
+    secureContext: false,
+    createFunction: (steps, options) => {
+      const function_ = options.constructible
+        ? function(this: unknown, ...argumentsList: unknown[]) {
+          return steps(this, argumentsList, new.target);
+        }
+        : function(this: unknown, ...argumentsList: unknown[]) {
+          return steps(this, argumentsList, undefined);
+        };
+      Object.defineProperties(function_, {
+        length: { configurable: true, value: options.length },
+        name: { configurable: true, value: options.name },
+      });
+      return function_;
+    },
+    performSecurityCheck: () => {},
+    queueMicrotask,
   };
+  return realm;
+}
+
+function requireEventListenerValue(
+  value: unknown,
+): CallbackInterfaceValue {
+  if (isCallbackInterfaceValue(value)) return value;
+  throw new TypeError('EventListener is not a Web IDL callback value');
 }

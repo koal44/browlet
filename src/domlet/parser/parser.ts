@@ -14,8 +14,7 @@ import type { TextImpl } from '../nodes/text';
 import { asDocument } from '../stubs/interfaces';
 import { TreeNode } from '../tree/tree-node';
 import {
-  isComment, isDocumentType, isElement, isText,
-  type NodeImpl,
+  isComment, isDocumentType, isElement, isText, NodeImpl,
 } from '../nodes/node';
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
@@ -162,7 +161,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   getParentNode(node: NodeImpl): NodeImpl | null {
-    return node.parentNode;
+    return NodeImpl.getParentNode(node);
   }
 
   getAttrList(element: ElementImpl): Token.Attribute[] {
