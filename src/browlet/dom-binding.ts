@@ -1,79 +1,61 @@
-import type { AssembledInterface } from '../../web-idl/assembly';
+import type { AssembledInterface } from '../web-idl/assembly';
 import {
   callUserObjectOperation as callWebIDLUserObjectOperation,
-} from '../../web-idl/callback';
+} from '../web-idl/callback';
 import {
   isCallbackInterfaceValue, type CallbackInterfaceValue,
-} from '../../web-idl/callback-value';
-import { convertToIDL } from '../../web-idl/conversion';
+} from '../web-idl/callback-value';
+import { convertToIDL } from '../web-idl/conversion';
 import type {
   AttributeMember, ConstructorMember, InterfaceDefinition, OperationMember,
-} from '../../web-idl/definition';
+} from '../web-idl/definition';
 import {
   registerDOMExceptionImplementations,
-} from '../../web-idl/dom-exception';
-import {
-  ImplementationRegistry, type ImplementationConstructor,
-} from '../../web-idl/implementation';
-import { JavaScriptBinding } from '../../web-idl/binding';
-import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
-import { PlatformObjectRegistry } from '../../web-idl/platform-object';
+} from '../web-idl/dom-exception';
+import type {
+  ImplementationConstructor, ImplementationRegistry,
+} from '../web-idl/implementation';
+import type { JavaScriptBinding } from '../web-idl/binding';
 import {
   CustomEventImpl, customEventIDL, eventIDL, EventImpl,
-} from '../events/event';
+} from '../domlet/events/event';
 import {
   eventTargetIDL, EventTargetImpl, type EventImplementationConstructor,
   type EventListenerCallback, type EventListenerInvocationHost,
-} from '../events/event-target';
-import { CharacterDataImpl } from '../nodes/character-data';
-import { CommentImpl, commentIDL } from '../nodes/comment';
-import { DocumentImpl, documentIDL } from '../nodes/document';
-import { DocumentTypeImpl } from '../nodes/document-type';
+} from '../domlet/events/event-target';
+import { CharacterDataImpl } from '../domlet/nodes/character-data';
+import { CommentImpl, commentIDL } from '../domlet/nodes/comment';
+import { DocumentImpl, documentIDL } from '../domlet/nodes/document';
+import { DocumentTypeImpl } from '../domlet/nodes/document-type';
 import {
   ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
   HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
-} from '../nodes/element';
-import type { DOMNodeFactory } from '../nodes/factory';
-import { NodeImpl } from '../nodes/node';
-import { TextImpl, textIDL } from '../nodes/text';
-import { domDefinitions } from './dom-definitions';
+} from '../domlet/nodes/element';
+import type { DOMNodeFactory } from '../domlet/nodes/factory';
+import { NodeImpl } from '../domlet/nodes/node';
+import { TextImpl, textIDL } from '../domlet/nodes/text';
+import type { Realm } from './realm';
 
-export class DOMBindings
+export class DOMBinding
 implements DOMNodeFactory, EventListenerInvocationHost
 {
-  readonly CharacterData: typeof globalThis.CharacterData;
-  readonly Comment: typeof globalThis.Comment;
-  readonly CustomEvent: typeof globalThis.CustomEvent;
-  readonly Document: typeof globalThis.Document;
-  readonly DocumentType: typeof globalThis.DocumentType;
-  readonly DOMException: typeof globalThis.DOMException;
-  readonly Element: typeof globalThis.Element;
-  readonly Event: typeof globalThis.Event;
-  readonly EventTarget: typeof globalThis.EventTarget;
-  readonly HTMLElement: typeof globalThis.HTMLElement;
-  readonly HTMLHeadElement: typeof globalThis.HTMLHeadElement;
-  readonly HTMLLinkElement: typeof globalThis.HTMLLinkElement;
-  readonly HTMLStyleElement: typeof globalThis.HTMLStyleElement;
-  readonly MathMLElement: typeof globalThis.MathMLElement;
-  readonly Node: typeof globalThis.Node;
-  readonly SVGElement: typeof globalThis.SVGElement;
-  readonly SVGStyleElement: typeof globalThis.SVGStyleElement;
-  readonly Text: typeof globalThis.Text;
   readonly #binding: JavaScriptBinding;
-  readonly #exposed: ReadonlyMap<string, object>;
-  readonly #host: DOMRealmHost;
+  readonly #host: Realm;
   readonly #implementations = new Map<
     ImplementationConstructor<object>,
     AssembledInterface
   >();
 
-  constructor(host: DOMRealmHost) {
+  constructor(host: Realm, binding: JavaScriptBinding) {
     this.#host = host;
-    const realm = getWebIDLRealmHost(host);
-    const implementations = new ImplementationRegistry();
+    if (binding.realm !== host) {
+      throw new TypeError('DOM bindings and host must use the same realm');
+    }
+    const implementations = binding.implementations;
+    this.#binding = binding;
 
     for (const [name, implementation] of domImplementationClasses) {
-      const interface_ = requireInterface(name);
+      const interface_ = this.#requireInterface(name);
       this.#implementations.set(implementation, interface_);
       registerInterfaceMembers(
         implementations,
@@ -82,64 +64,8 @@ implements DOMNodeFactory, EventListenerInvocationHost
         (exception) => this.#normalizeException(exception),
       );
     }
-    registerDOMExceptionImplementations(implementations, realm);
-
-    this.#binding = new JavaScriptBinding(
-      domDefinitions,
-      realm,
-      domPlatformObjects,
-      implementations,
-    );
+    registerDOMExceptionImplementations(implementations, host);
     this.#registerConstructors(implementations);
-
-    this.Event = this.#getInterface<typeof globalThis.Event>('Event');
-    this.CustomEvent = this.#getInterface<typeof globalThis.CustomEvent>(
-      'CustomEvent',
-    );
-    this.EventTarget = this.#getInterface<typeof globalThis.EventTarget>(
-      'EventTarget',
-    );
-    this.Node = this.#getInterface<typeof globalThis.Node>('Node');
-    this.CharacterData = this.#getInterface<typeof globalThis.CharacterData>(
-      'CharacterData',
-    );
-    this.Document = this.#getInterface<typeof globalThis.Document>('Document');
-    this.Element = this.#getInterface<typeof globalThis.Element>('Element');
-    this.HTMLElement = this.#getInterface<typeof globalThis.HTMLElement>(
-      'HTMLElement',
-    );
-    this.HTMLHeadElement = this.#getInterface<
-      typeof globalThis.HTMLHeadElement
-    >('HTMLHeadElement');
-    this.HTMLLinkElement = this.#getInterface<
-      typeof globalThis.HTMLLinkElement
-    >('HTMLLinkElement');
-    this.HTMLStyleElement = this.#getInterface<
-      typeof globalThis.HTMLStyleElement
-    >('HTMLStyleElement');
-    this.SVGElement = this.#getInterface<typeof globalThis.SVGElement>(
-      'SVGElement',
-    );
-    this.SVGStyleElement = this.#getInterface<
-      typeof globalThis.SVGStyleElement
-    >('SVGStyleElement');
-    this.MathMLElement = this.#getInterface<typeof globalThis.MathMLElement>(
-      'MathMLElement',
-    );
-    this.Text = this.#getInterface<typeof globalThis.Text>('Text');
-    this.Comment = this.#getInterface<typeof globalThis.Comment>('Comment');
-    this.DocumentType = this.#getInterface<typeof globalThis.DocumentType>(
-      'DocumentType',
-    );
-    this.DOMException = this.#getInterface<typeof globalThis.DOMException>(
-      'DOMException',
-    );
-
-    this.#exposed = this.#binding.getExposedInitialObjects();
-  }
-
-  get exposed(): ReadonlyMap<string, object> {
-    return this.#exposed;
   }
 
   createEvent(
@@ -148,14 +74,17 @@ implements DOMNodeFactory, EventListenerInvocationHost
     const event = this.#construct(
       eventConstructor,
       ['', {}, this.#host.eventTimeStamp()],
-      requireInterface('Event'),
+      this.#requireInterface('Event'),
     );
     EventImpl.setTrusted(event, true);
     return event;
   }
 
   createDOMException(message = '', name = 'Error'): DOMException {
-    return new this.DOMException(message, name);
+    const DOMException_ = this.#binding.getInterfaceObject(
+      'DOMException',
+    ) as unknown as typeof DOMException;
+    return new DOMException_(message, name);
   }
 
   getAssociatedGlobal(
@@ -249,23 +178,23 @@ implements DOMNodeFactory, EventListenerInvocationHost
     return this.#construct(implementation, argumentsList, interface_);
   }
 
-  #getCallbackHost(callback: EventListenerCallback): DOMRealmHost {
+  #getCallbackHost(callback: EventListenerCallback): DOMEventRealmHost {
     const realm = requireEventListenerValue(callback).realm;
-    return isDOMRealmHost(realm) ? realm : this.#host;
+    return isDOMEventRealmHost(realm) ? realm : this.#host;
   }
 
   #normalizeException(exception: unknown): unknown {
-    const interface_ = requireInterface('DOMException');
+    const interface_ = this.#requireInterface('DOMException');
     if (this.#binding.implements(exception, interface_)) return exception;
     return exception instanceof DOMException
       ? this.createDOMException(exception.message, exception.name)
       : exception;
   }
 
-  #getInterface<TConstructor extends InterfaceConstructor>(
-    name: string,
-  ): TConstructor {
-    return this.#binding.getInterfaceObject(name) as unknown as TConstructor;
+  #requireInterface(name: string): AssembledInterface {
+    const interface_ = this.#binding.definitions.getInterface(name);
+    if (!interface_) throw new Error(`Missing DOM interface ${name}`);
+    return interface_;
   }
 
   #construct<T extends object>(
@@ -364,7 +293,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
   }
 }
 
-export type DOMRealmHost = {
+type DOMEventRealmHost = {
   readonly exposure: string;
   readonly global: object;
   eventTimeStamp(): DOMHighResTimeStamp;
@@ -377,10 +306,6 @@ export type DOMRealmHost = {
     callback: EventListenerOrEventListenerObject,
   ): void;
 };
-
-type InterfaceConstructor = object & { readonly prototype: object; };
-
-const domPlatformObjects = new PlatformObjectRegistry();
 
 const domImplementationClasses: [
   string,
@@ -555,12 +480,6 @@ function requireConstructor(
   return constructor;
 }
 
-function requireInterface(name: string): AssembledInterface {
-  const interface_ = domDefinitions.getInterface(name);
-  if (!interface_) throw new Error(`Missing DOM interface ${name}`);
-  return interface_;
-}
-
 function findDescriptor(
   prototype: object,
   property: PropertyKey,
@@ -590,156 +509,10 @@ function asDictionary(value: unknown): Record<PropertyKey, unknown> {
   return toImplementationValue(value) as Record<PropertyKey, unknown>;
 }
 
-function getWebIDLRealmHost(host: DOMRealmHost): WebIDLRealmHost {
-  return isWebIDLRealmHost(host) ? host : createAmbientWebIDLRealmHost(host);
-}
-
-function isWebIDLRealmHost(
-  host: DOMRealmHost,
-): host is DOMRealmHost & WebIDLRealmHost {
-  return 'callbacks' in host &&
-    'intrinsics' in host &&
-    'createFunction' in host;
-}
-
-function isDOMRealmHost(value: object): value is DOMRealmHost {
+function isDOMEventRealmHost(value: object): value is DOMEventRealmHost {
   return 'eventTimeStamp' in value &&
     'getCurrentEvent' in value &&
     'isWindow' in value;
-}
-
-function createAmbientWebIDLRealmHost(host: DOMRealmHost): WebIDLRealmHost {
-  const arrayValues = Reflect.get(
-    Array.prototype,
-    'values',
-  ) as WebIDLRealmHost['intrinsics']['iteration']['arrayValues'];
-  const arrayIterator = Reflect.apply(arrayValues, [], []) as object;
-  const arrayIteratorPrototype = Reflect.getPrototypeOf(arrayIterator);
-  const iteratorPrototype = arrayIteratorPrototype &&
-    Reflect.getPrototypeOf(arrayIteratorPrototype);
-  if (!iteratorPrototype) {
-    throw new Error('Could not obtain the ambient Iterator prototype');
-  }
-  const asyncIterator = (async function* () {})();
-  const asyncGeneratorFunctionPrototype = Reflect.getPrototypeOf(
-    asyncIterator,
-  );
-  const asyncGeneratorPrototype = asyncGeneratorFunctionPrototype &&
-    Reflect.getPrototypeOf(asyncGeneratorFunctionPrototype);
-  const asyncIteratorPrototype = asyncGeneratorPrototype &&
-    Reflect.getPrototypeOf(asyncGeneratorPrototype);
-  if (!asyncIteratorPrototype) {
-    throw new Error('Could not obtain the ambient AsyncIterator prototype');
-  }
-  const mapIteratorPrototype = Reflect.getPrototypeOf(
-    new Map().entries(),
-  );
-  const setIteratorPrototype = Reflect.getPrototypeOf(
-    new Set().values(),
-  );
-  if (!mapIteratorPrototype || !setIteratorPrototype) {
-    throw new Error('Could not obtain the ambient collection iterator prototypes');
-  }
-
-  const realm: WebIDLRealmHost = {
-    callbacks: {
-      captureContext: () => realm,
-      cleanUpAfterRunningCallback: () => {},
-      cleanUpAfterRunningScript: () => {},
-      getAssociatedRealm: () => realm,
-      prepareToRunCallback: () => {},
-      prepareToRunScript: () => {},
-      reportException: (exception) => console.error(exception),
-    },
-    crossOriginIsolated: false,
-    exposure: host.exposure,
-    global: host.global,
-    isGlobalPrototypeChainMutable: false,
-    intrinsics: {
-      array: Array,
-      bigInt: BigInt,
-      bufferSource: {
-        arrayBuffer: ArrayBuffer,
-        arrayBufferTransfer: Reflect.get(
-          ArrayBuffer.prototype,
-          'transfer',
-        ) as WebIDLRealmHost['intrinsics']['bufferSource']['arrayBufferTransfer'],
-        sharedArrayBuffer: typeof SharedArrayBuffer === 'undefined'
-          ? undefined
-          : SharedArrayBuffer,
-        views: {
-          BigInt64Array,
-          BigUint64Array,
-          DataView,
-          Float32Array,
-          Float64Array,
-          Int16Array,
-          Int32Array,
-          Int8Array,
-          Uint16Array,
-          Uint32Array,
-          Uint8Array,
-          Uint8ClampedArray,
-        },
-      },
-      error: Error,
-      errorPrototype: Error.prototype,
-      function: Function,
-      functionPrototype: Function.prototype,
-      iteration: {
-        arrayEntries: Reflect.get(
-          Array.prototype,
-          'entries',
-        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayEntries'],
-        arrayForEach: Reflect.get(
-          Array.prototype,
-          'forEach',
-        ) as WebIDLRealmHost['intrinsics']['iteration']['arrayForEach'],
-        arrayKeys: Reflect.get(
-          Array.prototype,
-          'keys',
-        ),
-        arrayValues,
-        asyncIteratorPrototype,
-        iteratorPrototype,
-        mapIteratorPrototype,
-        setIteratorPrototype,
-      },
-      number: Number,
-      object: Object,
-      objectPrototype: Object.prototype,
-      promise: {
-        constructor: Promise,
-        reject: Reflect.get(Promise, 'reject') as WebIDLRealmHost[
-          'intrinsics'
-        ]['promise']['reject'],
-        then: Reflect.get(Promise.prototype, 'then') as WebIDLRealmHost[
-          'intrinsics'
-        ]['promise']['then'],
-      },
-      rangeError: RangeError,
-      string: String,
-      typeError: TypeError,
-    },
-    secureContext: false,
-    createFunction: (steps, options) => {
-      const function_ = options.constructible
-        ? function(this: unknown, ...argumentsList: unknown[]) {
-          return steps(this, argumentsList, new.target);
-        }
-        : function(this: unknown, ...argumentsList: unknown[]) {
-          return steps(this, argumentsList, undefined);
-        };
-      Object.defineProperties(function_, {
-        length: { configurable: true, value: options.length },
-        name: { configurable: true, value: options.name },
-      });
-      return function_;
-    },
-    performSecurityCheck: () => {},
-    queueMicrotask,
-  };
-  return realm;
 }
 
 function requireEventListenerValue(

@@ -3,8 +3,10 @@ import {
   DocumentImpl, type DomletDocument,
 } from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
+import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
+import { BrowletBindings } from './bindings';
 import { BrowletParser, type DocumentWrite } from './parser';
 import { Realm } from './realm';
 import { WindowImpl } from './window';
@@ -13,6 +15,7 @@ import {
 } from './window-proxy';
 
 export class Browlet {
+  readonly #bindings: BrowletBindings;
   readonly #domlet: Domlet;
   #document: DomletDocument;
   readonly #realm: Realm;
@@ -23,20 +26,19 @@ export class Browlet {
   constructor(config: BrowletConfig) {
     this.#route = config.route;
     this.#realm = new Realm();
-    this.#domlet = new Domlet(this.#realm);
+    this.#bindings = new BrowletBindings(this.#realm);
+    this.#domlet = new Domlet(this.#bindings.dom);
     this.#document = this.#domlet.parse();
     this.#windowProxy = new WindowProxyController(this.#realm);
     this.#window = new WindowImpl(
       this.#document,
       new URL('about:blank'),
     );
-    this.#domlet.bindings.associateEventTarget(this.#window);
+    this.#bindings.dom.associateEventTarget(this.#window);
     this.#realm.setWindow(this.#window);
     this.#windowProxy.setWindow(this.#window);
 
-    for (const [name, constructor] of this.#domlet.bindings.exposed) {
-      this.#windowProxy.expose(name, constructor);
-    }
+    this.#bindings.install(this.#windowProxy.value);
   }
 
   get document(): DomletDocument {
@@ -73,12 +75,12 @@ export class Browlet {
 
     this.#document = document;
     this.#window = window;
-    this.#domlet.bindings.associateEventTarget(window);
+    this.#bindings.dom.associateEventTarget(window);
     this.#realm.setWindow(window);
     this.#windowProxy.setWindow(window);
 
     await parser.parse(source);
-    window.dispatchEvent(new this.#domlet.bindings.Event('load'));
+    fireEvent('load', window);
     return this.window;
   }
 

@@ -1,14 +1,14 @@
-import {
-  DOMBindings, type DOMRealmHost,
-} from './bindings/dom-bindings';
 import { DomletParser } from './parser/parser';
 import type { DomletDocument } from './nodes/document';
+import {
+  directDOMNodeFactory, type DOMNodeFactory,
+} from './nodes/factory';
 
 export class Domlet {
-  readonly bindings: DOMBindings;
+  readonly #nodeFactory: DOMNodeFactory;
 
-  constructor(host: DOMRealmHost = defaultDOMRealmHost) {
-    this.bindings = new DOMBindings(host);
+  constructor(nodeFactory: DOMNodeFactory = directDOMNodeFactory) {
+    this.#nodeFactory = nodeFactory;
   }
 
   parse(source = ''): DomletDocument {
@@ -16,16 +16,6 @@ export class Domlet {
   }
 
   createParser(): DomletParser {
-    return new DomletParser(this.bindings);
+    return new DomletParser(this.#nodeFactory);
   }
 }
-
-const defaultDOMRealmHost: DOMRealmHost = {
-  exposure: 'Window',
-  global: globalThis,
-  eventTimeStamp: () => performance.now(),
-  isWindow: () => false,
-  getCurrentEvent: () => undefined,
-  setCurrentEvent: () => {},
-  recordTimingInfo: () => {},
-};

@@ -99,29 +99,33 @@ describe('Web IDL JavaScript binding foundation', () => {
       inherits: 'Base',
       members: [],
     });
-    const definitions = assembleDefinitions([derivedIDL, baseIDL]);
-    const base = definitions.getInterface('Base');
-    const derived = definitions.getInterface('Derived');
+    const firstDefinitions = assembleDefinitions([derivedIDL, baseIDL]);
+    const secondDefinitions = assembleDefinitions([derivedIDL, baseIDL]);
+    const base = secondDefinitions.getInterface('Base');
+    const derived = firstDefinitions.getInterface('Derived');
+    const secondDerived = secondDefinitions.getInterface('Derived');
     const platformObjects = new PlatformObjectRegistry();
     const first = new JavaScriptBinding(
-      definitions,
+      firstDefinitions,
       new Realm(),
       platformObjects,
     );
     const second = new JavaScriptBinding(
-      definitions,
+      secondDefinitions,
       new Realm(),
       platformObjects,
     );
     const object = {};
 
-    if (!base || !derived) throw new Error('Missing assembled interface');
+    if (!base || !derived || !secondDerived) {
+      throw new Error('Missing assembled interface');
+    }
 
     const record = first.associatePlatformObject(object, derived);
 
     expect(first.isPlatformObject(object)).toBe(true);
     expect(second.isPlatformObject(object)).toBe(true);
-    expect(second.implements(object, derived)).toBe(true);
+    expect(second.implements(object, secondDerived)).toBe(true);
     expect(second.implements(object, base)).toBe(true);
     expect(second.getPlatformObjectRecord(object)).toBe(record);
     expect(record.implementation).toBe(object);

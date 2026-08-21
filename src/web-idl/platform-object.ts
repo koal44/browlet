@@ -62,13 +62,21 @@ export class PlatformObjectRegistry {
     let current: AssembledInterface | undefined = record.primaryInterface;
 
     while (current) {
-      if (current === interface_) return true;
+      if (current.definition === interface_.definition) return true;
       current = current.parent;
     }
 
     return false;
   }
 }
+
+/*
+ * Platform-object identity crosses realm bindings. Production bindings share
+ * this registry so methods borrowed from one realm can recognize platform
+ * objects created in another. Isolated binding tests can still provide their
+ * own registry explicitly.
+ */
+export const sharedPlatformObjects = new PlatformObjectRegistry();
 
 export type PlatformObjectRecord = {
   implementation: object;

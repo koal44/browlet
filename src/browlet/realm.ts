@@ -1,7 +1,6 @@
 import {
   constants, createContext, runInContext, type Context,
 } from 'node:vm';
-import type { DOMRealmHost } from '../domlet/bindings/dom-bindings';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../web-idl/javascript-realm';
@@ -13,7 +12,7 @@ import { WindowImpl } from './window';
  * implement a shared realm model beneath the DOM and Web IDL host contracts
  * once Browlet has HTML's realm and environment-settings machinery.
  */
-export class Realm implements DOMRealmHost, WebIDLRealmHost {
+export class Realm implements WebIDLRealmHost {
   readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;

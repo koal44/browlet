@@ -88,7 +88,7 @@ export class JavaScriptBinding {
   install(
     target: object = this.#globalObject?.object ?? this.realm.global,
   ): Map<string, object> {
-    const installed = this.getExposedInitialObjects();
+    const installed = this.getExposedGlobalProperties();
 
     for (const [name, object] of installed) {
       defineProperty(target, name, {
@@ -153,6 +153,47 @@ export class JavaScriptBinding {
       );
     }
     return installed;
+  }
+
+  getExposedGlobalProperties(
+    isWindow = this.realm.exposure === 'Window',
+  ): Map<string, object> {
+    const exposed = this.getExposedInitialObjects();
+    const ordered = new Map<string, object>();
+    const interfaces = orderInterfacesByInheritance(
+      this.definitions.getInterfaces()
+        .filter((interface_) => this.isExposed(interface_)),
+    );
+    const handledNames = new Set<string>();
+
+    for (const interface_ of interfaces) {
+      const definition = interface_.definition;
+      if (
+        !hasExtendedAttribute(definition, 'LegacyNoInterfaceObject') &&
+        getIdentifierAttribute(definition, 'LegacyNamespace') === undefined
+      ) {
+        const object = this.getInterfaceObject(interface_);
+        handledNames.add(definition.name);
+        ordered.set(definition.name, object);
+        if (isWindow) {
+          for (const alias of getIdentifierListAttribute(
+            definition,
+            'LegacyWindowAlias',
+          )) {
+            handledNames.add(alias);
+            ordered.set(alias, object);
+          }
+        }
+      }
+      for (const id of getLegacyFactoryFunctionIdentifiers(definition)) {
+        handledNames.add(id);
+        ordered.set(id, this.getLegacyFactoryFunction(interface_, id));
+      }
+    }
+    for (const [name, object] of exposed) {
+      if (!handledNames.has(name)) ordered.set(name, object);
+    }
+    return ordered;
   }
 
   getExposedInterfaceObjects(): Map<string, object> {
@@ -1277,12 +1318,6 @@ export class JavaScriptBinding {
   #defineGlobalPropertyReferences(
     target: object,
   ): void {
-    const exposed = this.getExposedInitialObjects();
-    const ordered = new Map<string, object>();
-    const interfaces = orderInterfacesByInheritance(
-      this.definitions.getInterfaces()
-        .filter((interface_) => this.isExposed(interface_)),
-    );
     const window = this.definitions.getInterface('Window');
     const record = this.platformObjects.getRecord(target);
     const isWindow = Boolean(
@@ -1291,35 +1326,7 @@ export class JavaScriptBinding {
       this.platformObjects.recordImplements(record, window),
     );
 
-    const handledNames = new Set<string>();
-    for (const interface_ of interfaces) {
-      const definition = interface_.definition;
-      if (
-        !hasExtendedAttribute(definition, 'LegacyNoInterfaceObject') &&
-        getIdentifierAttribute(definition, 'LegacyNamespace') === undefined
-      ) {
-        const object = this.getInterfaceObject(interface_);
-        handledNames.add(definition.name);
-        ordered.set(definition.name, object);
-        if (isWindow) {
-          for (const alias of getIdentifierListAttribute(
-            definition,
-            'LegacyWindowAlias',
-          )) {
-            handledNames.add(alias);
-            ordered.set(alias, object);
-          }
-        }
-      }
-      for (const id of getLegacyFactoryFunctionIdentifiers(definition)) {
-        handledNames.add(id);
-        ordered.set(id, this.getLegacyFactoryFunction(interface_, id));
-      }
-    }
-    for (const [name, object] of exposed) {
-      if (!handledNames.has(name)) ordered.set(name, object);
-    }
-    for (const [name, object] of ordered) {
+    for (const [name, object] of this.getExposedGlobalProperties(isWindow)) {
       defineProperty(target, name, {
         configurable: true,
         enumerable: false,

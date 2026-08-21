@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/realm';
-import { Domlet } from '../../../src/domlet/domlet';
+import { Browlet } from '../../../src/browlet/browlet';
 
-describe('Web IDL DOMException binding', () => {
+describe('Browlet DOMException binding', () => {
   it('creates Error-like platform objects in their binding realm', () => {
-    const realm = new Realm();
-    const domlet = new Domlet(realm);
-    const DOMException_ = domlet.bindings.DOMException;
+    const browlet = createBrowlet();
+    const DOMException_ = getConstructor<typeof DOMException>(
+      browlet,
+      'DOMException',
+    );
+    const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
     const exception = new DOMException_('failed', 'SyntaxError');
 
     expect(exception).toBeInstanceOf(DOMException_);
-    expect(exception).toBeInstanceOf(realm.intrinsics.error);
+    expect(exception).toBeInstanceOf(Error_);
     expect(exception).not.toBeInstanceOf(DOMException);
     expect(exception.name).toBe('SyntaxError');
     expect(exception.message).toBe('failed');
@@ -24,15 +26,21 @@ describe('Web IDL DOMException binding', () => {
       'SyntaxError: failed',
     );
     expect(Reflect.getPrototypeOf(DOMException_.prototype)).toBe(
-      realm.intrinsics.errorPrototype,
+      Error_.prototype,
     );
   });
 
   it('uses constructor defaults, legacy codes, and realm-specific identity', () => {
-    const first = new Domlet(new Realm());
-    const second = new Domlet(new Realm());
-    const FirstDOMException = first.bindings.DOMException;
-    const SecondDOMException = second.bindings.DOMException;
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const FirstDOMException = getConstructor<typeof DOMException>(
+      first,
+      'DOMException',
+    );
+    const SecondDOMException = getConstructor<typeof DOMException>(
+      second,
+      'DOMException',
+    );
     const defaults = new FirstDOMException();
     const quota = new FirstDOMException('', 'QuotaExceededError');
     const custom = new FirstDOMException('', 'CustomError');
@@ -47,7 +55,10 @@ describe('Web IDL DOMException binding', () => {
   });
 
   it('defines every legacy constant on the constructor and prototype', () => {
-    const { DOMException: DOMException_ } = new Domlet().bindings;
+    const DOMException_ = getConstructor<typeof DOMException>(
+      createBrowlet(),
+      'DOMException',
+    );
 
     expect(DOMException_.INDEX_SIZE_ERR).toBe(1);
     expect(DOMException_.DOMSTRING_SIZE_ERR).toBe(2);
@@ -65,9 +76,19 @@ describe('Web IDL DOMException binding', () => {
   });
 
   it('implements the predefined QuotaExceededError derived interface', () => {
-    const realm = new Realm();
-    const domlet = new Domlet(realm);
-    const QuotaExceededError_ = getQuotaExceededError(domlet);
+    const browlet = createBrowlet();
+    const DOMException_ = getConstructor<typeof DOMException>(
+      browlet,
+      'DOMException',
+    );
+    const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
+    const RangeError_ = getConstructor<RangeErrorConstructor>(
+      browlet,
+      'RangeError',
+    );
+    const QuotaExceededError_ = getConstructor<
+      BoundQuotaExceededErrorConstructor
+    >(browlet, 'QuotaExceededError');
     const defaults = new QuotaExceededError_();
     const exception = new QuotaExceededError_('full', {
       quota: 10,
@@ -80,8 +101,8 @@ describe('Web IDL DOMException binding', () => {
     expect(defaults.quota).toBeNull();
     expect(defaults.requested).toBeNull();
     expect(exception).toBeInstanceOf(QuotaExceededError_);
-    expect(exception).toBeInstanceOf(domlet.bindings.DOMException);
-    expect(exception).toBeInstanceOf(realm.intrinsics.error);
+    expect(exception).toBeInstanceOf(DOMException_);
+    expect(exception).toBeInstanceOf(Error_);
     expect(exception.name).toBe('QuotaExceededError');
     expect(exception.message).toBe('full');
     expect(exception.code).toBe(22);
@@ -91,19 +112,22 @@ describe('Web IDL DOMException binding', () => {
       '[object QuotaExceededError]',
     );
 
-    expect(() => new QuotaExceededError_('', { quota: -1 })).toThrow(
-      realm.intrinsics.rangeError,
-    );
+    expect(() => new QuotaExceededError_('', { quota: -1 }))
+      .toThrow(RangeError_);
     expect(() => new QuotaExceededError_('', {
       quota: 10,
       requested: 9,
-    })).toThrow(realm.intrinsics.rangeError);
+    })).toThrow(RangeError_);
   });
 
   it('realizes implementation DOMExceptions in the invoking realm', () => {
-    const realm = new Realm();
-    const domlet = new Domlet(realm);
-    const document = domlet.parse('<html></html>');
+    const browlet = createBrowlet();
+    const DOMException_ = getConstructor<typeof DOMException>(
+      browlet,
+      'DOMException',
+    );
+    const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
+    const document = browlet.document;
     let exception: unknown;
 
     try {
@@ -115,8 +139,8 @@ describe('Web IDL DOMException binding', () => {
       exception = error;
     }
 
-    expect(exception).toBeInstanceOf(domlet.bindings.DOMException);
-    expect(exception).toBeInstanceOf(realm.intrinsics.error);
+    expect(exception).toBeInstanceOf(DOMException_);
+    expect(exception).toBeInstanceOf(Error_);
     expect(exception).not.toBeInstanceOf(DOMException);
     expect((exception as DOMException).name).toBe('NotFoundError');
   });
@@ -135,12 +159,17 @@ type BoundQuotaExceededErrorConstructor = {
   readonly prototype: BoundQuotaExceededError;
 };
 
-function getQuotaExceededError(
-  domlet: Domlet,
-): BoundQuotaExceededErrorConstructor {
-  const constructor = domlet.bindings.exposed.get('QuotaExceededError');
+function createBrowlet(): Browlet {
+  return new Browlet({ route: () => '' });
+}
+
+function getConstructor<TConstructor>(
+  browlet: Browlet,
+  name: string,
+): TConstructor {
+  const constructor: unknown = Reflect.get(browlet.window, name);
   if (typeof constructor !== 'function') {
-    throw new Error('QuotaExceededError was not exposed');
+    throw new Error(`${name} was not exposed`);
   }
-  return constructor as unknown as BoundQuotaExceededErrorConstructor;
+  return constructor as TConstructor;
 }

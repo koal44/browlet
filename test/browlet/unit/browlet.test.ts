@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../../src/browlet/browlet';
+import { fireEvent } from '../../../src/domlet/events/event-target';
+import type { EventTargetImpl } from '../../../src/domlet/events/event-target';
 import { isHTMLLinkElement } from '../../../src/domlet/nodes/element';
 
 describe('Browlet', () => {
@@ -14,6 +16,17 @@ describe('Browlet', () => {
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);
+  });
+
+  it('resolves computed style through the current window document', async () => {
+    const browlet = new Browlet({
+      route: () => '<main id="target" style="opacity: 0.25"></main>',
+    });
+    await browlet.navigate('https://example.test/');
+    const target = browlet.document.getElementById('target');
+    if (!target) throw new Error('Expected target element');
+
+    expect(browlet.window.getComputedStyle(target).opacity).toBe('0.25');
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
@@ -29,12 +42,27 @@ describe('Browlet', () => {
       'EventTarget',
     ) as typeof EventTarget;
     const NodeConstructor = Reflect.get(first.window, 'Node') as typeof Node;
+    const CharacterDataConstructor = Reflect.get(
+      first.window,
+      'CharacterData',
+    ) as typeof CharacterData;
     const DocumentConstructor = Reflect.get(
       first.window,
       'Document',
     ) as typeof Document;
+    const ElementConstructor = Reflect.get(
+      first.window,
+      'Element',
+    ) as typeof Element;
+    const HTMLElementConstructor = Reflect.get(
+      first.window,
+      'HTMLElement',
+    ) as typeof HTMLElement;
+    const TextConstructor = Reflect.get(first.window, 'Text') as typeof Text;
     const event = new EventConstructor('ready');
     const customEvent = new CustomEventConstructor('answer', { detail: 42 });
+    const element = first.document.createElement('main');
+    const text = first.document.createTextNode('content');
 
     expect(EventConstructor).not.toBe(Event);
     expect(EventConstructor).not.toBe(Reflect.get(second.window, 'Event'));
@@ -48,6 +76,20 @@ describe('Browlet', () => {
     expect(first.document).not.toBeInstanceOf(
       Reflect.get(second.window, 'Document') as typeof Document,
     );
+    expect(element).toBeInstanceOf(HTMLElementConstructor);
+    expect(element).toBeInstanceOf(ElementConstructor);
+    expect(element).toBeInstanceOf(NodeConstructor);
+    expect(text).toBeInstanceOf(TextConstructor);
+    expect(text).toBeInstanceOf(CharacterDataConstructor);
+    expect(text).toBeInstanceOf(NodeConstructor);
+    expect(Reflect.getPrototypeOf(DocumentConstructor.prototype))
+      .toBe(NodeConstructor.prototype);
+    expect(Reflect.getPrototypeOf(NodeConstructor.prototype))
+      .toBe(EventTargetConstructor.prototype);
+    expect(Reflect.getPrototypeOf(TextConstructor.prototype))
+      .toBe(CharacterDataConstructor.prototype);
+    expect(Reflect.getPrototypeOf(CharacterDataConstructor.prototype))
+      .toBe(NodeConstructor.prototype);
   });
 
   it('exposes window events and browser timer IDs', async () => {
@@ -71,6 +113,42 @@ describe('Browlet', () => {
 
     expect(typeof timer).toBe('number');
     await fired.promise;
+  });
+
+  it('fires trusted events using the target realm interface family', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    let received: Event | undefined;
+
+    browlet.document.addEventListener('ready', (event) => {
+      received = event;
+    });
+
+    expect(fireEvent(
+      'ready',
+      browlet.document as unknown as EventTargetImpl,
+    )).toBe(true);
+    expect(received).toBeInstanceOf(EventConstructor);
+    expect(received?.isTrusted).toBe(true);
+  });
+
+  it('preserves listener identity through Web IDL callback conversion', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    const callback = vi.fn();
+
+    browlet.window.addEventListener('ready', callback);
+    browlet.window.addEventListener('ready', callback);
+    browlet.window.removeEventListener('ready', callback);
+    browlet.window.dispatchEvent(new EventConstructor('ready'));
+
+    expect(callback).not.toHaveBeenCalled();
   });
 
   it('tracks and restores the legacy current window event', () => {

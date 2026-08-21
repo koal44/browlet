@@ -11,6 +11,39 @@ import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL initial objects', () => {
+  it('installs legacy window aliases only in Window realms', () => {
+    const interfaceIDL = defineInterface({
+      exposed: '*',
+      extendedAttributes: [{
+        kind: 'identifier-list',
+        name: 'LegacyWindowAlias',
+        values: ['LegacyWidget'],
+      }],
+      members: [],
+      name: 'Widget',
+    });
+    const definitions = assembleDefinitions([interfaceIDL]);
+    const windowRealm = new Realm({ exposure: 'Window' });
+    const workerRealm = new Realm({ exposure: 'Worker' });
+    const windowBinding = new JavaScriptBinding(
+      definitions,
+      windowRealm,
+      new PlatformObjectRegistry(),
+    );
+    const workerBinding = new JavaScriptBinding(
+      definitions,
+      workerRealm,
+      new PlatformObjectRegistry(),
+    );
+
+    windowBinding.install();
+    workerBinding.install();
+
+    expect(Reflect.get(windowRealm.global, 'LegacyWidget'))
+      .toBe(Reflect.get(windowRealm.global, 'Widget'));
+    expect(Reflect.has(workerRealm.global, 'LegacyWidget')).toBe(false);
+  });
+
   it('creates legacy factory functions in the realm', () => {
     const factory = legacyFactory('LegacyWidget', idlType.unsignedLong);
     const interfaceIDL = defineInterface({

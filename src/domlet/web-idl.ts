@@ -1,28 +1,28 @@
-import { assembleDefinitions } from '../../web-idl/assembly';
-import { webIDLCommonDefinitions } from '../../web-idl/common-definitions';
+import type { Definition } from '../web-idl/definition';
+import { webIDLCommonDefinitions } from '../web-idl/common-definitions';
 import {
   cssomDocumentOrShadowRootIDL, elementCSSInlineStyleIDL, linkStyleIDL,
-} from '../css-engine';
+} from './css-engine';
 import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL,
   eventTargetIDL,
-} from '../events/event-target';
+} from './events/event-target';
 import {
   customEventIDL, customEventInitIDL, domHighResTimeStampIDL, eventIDL,
   eventInitIDL,
-} from '../events/event';
+} from './events/event';
 import {
   characterDataIDL, characterDataIncludesChildNodeIDL,
   characterDataIncludesNonDocumentTypeChildNodeIDL,
-} from '../nodes/character-data';
-import { commentIDL } from '../nodes/comment';
+} from './nodes/character-data';
+import { commentIDL } from './nodes/comment';
 import {
   documentIDL, documentIncludesDocumentOrShadowRootIDL,
   documentIncludesParentNodeIDL, elementCreationOptionsIDL, htmlDocumentIDL,
-} from '../nodes/document';
+} from './nodes/document';
 import {
   documentTypeIDL, documentTypeIncludesChildNodeIDL,
-} from '../nodes/document-type';
+} from './nodes/document-type';
 import {
   elementIDL, elementIncludesChildNodeIDL,
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL,
@@ -33,14 +33,14 @@ import {
   mathMLElementIncludesElementCSSInlineStyleIDL, svgElementIDL,
   svgElementIncludesElementCSSInlineStyleIDL, svgStyleElementIDL,
   svgStyleElementIncludesLinkStyleIDL,
-} from '../nodes/element';
+} from './nodes/element';
 import {
   childNodeIDL, documentOrShadowRootIDL, getRootNodeOptionsIDL, nodeIDL,
   nonDocumentTypeChildNodeIDL, parentNodeIDL,
-} from '../nodes/node';
-import { textIDL } from '../nodes/text';
+} from './nodes/node';
+import { textIDL } from './nodes/text';
 
-export const domDefinitions = assembleDefinitions([
+export const domIDLDefinitions: Definition[] = [
   ...webIDLCommonDefinitions,
   domHighResTimeStampIDL,
   eventListenerIDL,
@@ -91,4 +91,4 @@ export const domDefinitions = assembleDefinitions([
   svgStyleElementIncludesLinkStyleIDL,
   mathMLElementIDL,
   mathMLElementIncludesElementCSSInlineStyleIDL,
-]);
+];
