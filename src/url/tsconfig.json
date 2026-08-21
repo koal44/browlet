@@ -7,5 +7,8 @@
     "outDir": "../../dist/.typecheck/url",
     "tsBuildInfoFile": "../../dist/.typecheck/url.tsbuildinfo"
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts"],
+  "references": [
+    { "path": "../web-idl" }
+  ]
 }

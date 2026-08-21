@@ -67,8 +67,8 @@ export class GlobalPlatformObjectBinding {
         }
         if (isDataDescriptor(descriptor)) return descriptor.value as unknown;
         if (!descriptor.get) return undefined;
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- the descriptor's receiver is supplied explicitly
-        return Reflect.apply(descriptor.get, receiver, []) as unknown;
+        const getter = Reflect.get(descriptor, 'get') as CallableFunction;
+        return Reflect.apply(getter, receiver, []) as unknown;
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),
       has: (target_, property) =>

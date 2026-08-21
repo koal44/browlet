@@ -7,7 +7,7 @@ import { urlConstructors } from './contract';
  * corpus carried by jsdom and Firefox's independently authored regressions.
  */
 describe('URLSearchParams reference implementation cases', () => {
-  it.fails('preserves malformed percent escapes as literal data', () => {
+  it('preserves malformed percent escapes as literal data', () => {
     const { URLSearchParams } = urlConstructors();
 
     for (const [input, value, serialization] of [
@@ -22,7 +22,7 @@ describe('URLSearchParams reference implementation cases', () => {
     }
   });
 
-  it.fails('copies another URLSearchParams list independently', () => {
+  it('copies another URLSearchParams list independently', () => {
     const { URLSearchParams } = urlConstructors();
     const source = new URLSearchParams('a=1');
     const copy = new URLSearchParams(source);
@@ -34,7 +34,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(copy.toString()).toBe('a=1&c=3');
   });
 
-  it.fails('constructs sequences through their iterator protocol', () => {
+  it('constructs sequences through their iterator protocol', () => {
     const { URLSearchParams } = urlConstructors();
     const input = {
       *[Symbol.iterator]() {
@@ -48,7 +48,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(params.toString()).toBe('a=1&b=2');
   });
 
-  it.fails('converts record values to USVStrings', () => {
+  it('converts record values to USVStrings', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams({
       boolean: true,
@@ -59,7 +59,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(params.toString()).toBe('boolean=true&null=null&number=42');
   });
 
-  it.fails('collapses record keys that become the same USVString', () => {
+  it('collapses record keys that become the same USVString', () => {
     const { URLSearchParams } = urlConstructors();
     const leading = new URLSearchParams({
       '\uD835x': '1',
@@ -76,7 +76,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect([...trailing]).toEqual([['x�', '3']]);
   });
 
-  it.fails('treats an undefined optional value as omitted', () => {
+  it('treats an undefined optional value as omitted', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&a=2&b=3');
 
@@ -86,7 +86,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(params.toString()).toBe('b=3');
   });
 
-  it.fails('removes a bare query marker after list mutation', () => {
+  it('removes a bare query marker after list mutation', () => {
     const { URL } = urlConstructors();
     const populated = new URL('https://example.com/?a=1');
     const empty = new URL('https://example.com/?');
@@ -98,7 +98,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(empty.href).toBe('https://example.com/');
   });
 
-  it.fails('iterates the live list while it is mutated', () => {
+  it('iterates the live list while it is mutated', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&b=2&c=3');
     const visited: [string, string][] = [];
@@ -111,7 +111,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(visited).toEqual([['a', '1'], ['c', '3']]);
   });
 
-  it.fails('sorts by UTF-16 code units without normalizing strings', () => {
+  it('sorts by UTF-16 code units without normalizing strings', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams();
 
@@ -125,14 +125,14 @@ describe('URLSearchParams reference implementation cases', () => {
     expect([...params.keys()]).toEqual(['é', 'e�', 'é', '🌈', 'ﬃ']);
   });
 
-  it.fails('replaces malformed UTF-8 decoded from form data', () => {
+  it('replaces malformed UTF-8 decoded from form data', () => {
     const { URLSearchParams } = urlConstructors();
 
     expect(new URLSearchParams('%e2').toString()).toBe('%EF%BF%BD=');
     expect(new URLSearchParams('a%e2b').toString()).toBe('a%EF%BF%BDb=');
   });
 
-  it.fails('does not normalize newlines before form serialization', () => {
+  it('does not normalize newlines before form serialization', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams();
 
@@ -142,7 +142,7 @@ describe('URLSearchParams reference implementation cases', () => {
     expect(params.toString()).toBe('a%0Ab=c%0Dd&e%0A%0Df=g%0D%0Ah');
   });
 
-  it.fails('rewrites a connected URL with form percent-encoding', () => {
+  it('rewrites a connected URL with form percent-encoding', () => {
     const { URL } = urlConstructors();
     const url = new URL('https://example.com/?a=b,c');
 

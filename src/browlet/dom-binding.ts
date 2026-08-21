@@ -7,7 +7,7 @@ import {
 } from '../web-idl/callback-value';
 import { convertToIDL } from '../web-idl/conversion';
 import type {
-  AttributeMember, ConstructorMember, InterfaceDefinition, OperationMember,
+  ConstructorMember, InterfaceDefinition,
 } from '../web-idl/definition';
 import {
   registerDOMExceptionImplementations,
@@ -15,6 +15,7 @@ import {
 import type {
   ImplementationConstructor, ImplementationRegistry,
 } from '../web-idl/implementation';
+import { registerInterfaceImplementation } from '../web-idl/implementation';
 import type { JavaScriptBinding } from '../web-idl/binding';
 import {
   CustomEventImpl, customEventIDL, eventIDL, EventImpl,
@@ -57,7 +58,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
     for (const [name, implementation] of domImplementationClasses) {
       const interface_ = this.#requireInterface(name);
       this.#implementations.set(implementation, interface_);
-      registerInterfaceMembers(
+      registerInterfaceImplementation(
         implementations,
         interface_,
         implementation,
@@ -330,105 +331,6 @@ const domImplementationClasses: [
   ['DocumentType', DocumentTypeImpl],
 ];
 
-type ExceptionNormalizer = (exception: unknown) => unknown;
-
-function registerInterfaceMembers(
-  registry: ImplementationRegistry,
-  interface_: AssembledInterface,
-  implementation: ImplementationConstructor<object>,
-  normalizeException: ExceptionNormalizer,
-): void {
-  for (const { member } of interface_.members) {
-    if (member.kind === 'attribute') {
-      registerAttribute(
-        registry,
-        member,
-        implementation.prototype,
-        normalizeException,
-      );
-    } else if (member.kind === 'operation') {
-      registerOperation(
-        registry,
-        member,
-        implementation.prototype,
-        normalizeException,
-      );
-    }
-  }
-}
-
-function registerAttribute(
-  registry: ImplementationRegistry,
-  member: AttributeMember,
-  prototype: object,
-  normalizeException: ExceptionNormalizer,
-): void {
-  const descriptor = findDescriptor(prototype, member.name);
-  if (!descriptor?.get) {
-    throw new TypeError(`Web IDL attribute ${member.name} has no implementation`);
-  }
-
-  const getterValue: unknown = Reflect.get(descriptor, 'get');
-  const setterValue: unknown = Reflect.get(descriptor, 'set');
-  const get = getterValue as (this: object) => unknown;
-  const set = setterValue as
-    ((this: object, value: unknown) => void) | undefined;
-  registry.setAttributeSteps(member, {
-    get() {
-      return callImplementation(get, this, [], normalizeException);
-    },
-    ...(set && !member.readonly
-      ? {
-        set(value: unknown) {
-          callImplementation(
-            set,
-            this,
-            [toImplementationValue(value)],
-            normalizeException,
-          );
-        },
-      }
-      : {}),
-  });
-}
-
-function registerOperation(
-  registry: ImplementationRegistry,
-  member: OperationMember,
-  prototype: object,
-  normalizeException: ExceptionNormalizer,
-): void {
-  const value: unknown = findDescriptor(prototype, member.name ?? '')?.value;
-  if (typeof value !== 'function') {
-    throw new TypeError(
-      `Web IDL operation ${member.name ?? ''} has no implementation`,
-    );
-  }
-  const method = value as (this: object, ...values: unknown[]) => unknown;
-
-  registry.setOperationSteps(member, function(...values) {
-    return callImplementation(
-      method,
-      this,
-      values.map(toImplementationValue),
-      normalizeException,
-    );
-  });
-}
-
-function callImplementation(
-  implementation: (this: object, ...values: unknown[]) => unknown,
-  thisArgument: object | null,
-  values: unknown[],
-  normalizeException: ExceptionNormalizer,
-): unknown {
-  try {
-    return Reflect.apply(implementation, thisArgument, values);
-  } catch (exception) {
-    throw normalizeException(exception);
-  }
-}
-
 function registerObjectCreation(
   registry: ImplementationRegistry,
   interface_: InterfaceDefinition,
@@ -478,20 +380,6 @@ function requireConstructor(
     throw new Error(`${interface_.name} has no constructor declaration`);
   }
   return constructor;
-}
-
-function findDescriptor(
-  prototype: object,
-  property: PropertyKey,
-): PropertyDescriptor | undefined {
-  for (
-    let current: object | null = prototype;
-    current && current !== Object.prototype;
-    current = Reflect.getPrototypeOf(current)
-  ) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
-    if (descriptor) return descriptor;
-  }
 }
 
 function toImplementationValue(value: unknown): unknown {

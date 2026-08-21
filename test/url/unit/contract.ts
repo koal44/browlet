@@ -1,4 +1,5 @@
 import { parseHost, serializeHost } from '../../../src/url/host';
+import { URLImpl, URLSearchParamsImpl } from '../../../src/url/api';
 import { serializeOrigin, type Origin } from '../../../src/url/origin';
 import {
   percentDecodeBytes,
@@ -70,7 +71,10 @@ export function urlAlgorithms(): URLAlgorithms {
 }
 
 export function urlConstructors(): URLConstructors {
-  throw new Error('URL API bindings are not implemented');
+  return {
+    URL: URLImpl as unknown as typeof URL,
+    URLSearchParams: URLSearchParamsImpl,
+  };
 }
 
 export type URLAlgorithms = {

@@ -974,7 +974,7 @@ function shortenURLPath(url: URLRecord): void {
   path.pop();
 }
 
-function serializeURLPath(url: URLRecord): string {
+export function serializeURLPath(url: URLRecord): string {
   if (hasOpaquePath(url)) return url.path;
   return (url.path as string[]).map((segment) => `/${segment}`).join('');
 }

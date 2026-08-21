@@ -1,9 +1,11 @@
 import { domIDLDefinitions } from '../domlet/web-idl';
+import { urlIDLDefinitions } from '../url/web-idl';
 import { assembleDefinitions } from '../web-idl/assembly';
 import { JavaScriptBinding } from '../web-idl/binding';
 import { ImplementationRegistry } from '../web-idl/implementation';
 import { sharedPlatformObjects } from '../web-idl/platform-object';
 import { DOMBinding } from './dom-binding';
+import { URLBinding } from './url-binding';
 import type { Realm } from './realm';
 
 /*
@@ -14,6 +16,7 @@ import type { Realm } from './realm';
  */
 export class BrowletBindings {
   readonly dom: DOMBinding;
+  readonly url: URLBinding;
   readonly #binding: JavaScriptBinding;
 
   constructor(realm: Realm) {
@@ -25,6 +28,7 @@ export class BrowletBindings {
       implementations,
     );
     this.dom = new DOMBinding(realm, this.#binding);
+    this.url = new URLBinding(this.#binding);
   }
 
   install(target: object): void {
@@ -34,4 +38,5 @@ export class BrowletBindings {
 
 const browletDefinitions = assembleDefinitions([
   ...domIDLDefinitions,
+  ...urlIDLDefinitions,
 ]);

@@ -1,9 +1,38 @@
 import type {
+  AssembledInterface,
+} from './assembly';
+import type {
   AsyncIterableMember, AttributeMember, ConstructorMember,
   InterfaceDefinition, IterableMember, NamedArgumentsExtendedAttribute,
   OperationMember, StringifierMember,
 } from './definition';
 import type { IDLPromise } from './promise-value';
+import { missingArgument } from './overload';
+
+export function registerInterfaceImplementation(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
+  implementation: ImplementationConstructor<object>,
+  normalizeException: ExceptionNormalizer = identity,
+): void {
+  for (const { member } of interface_.members) {
+    if (member.kind === 'attribute') {
+      registerAttribute(
+        registry,
+        member,
+        member.static ? implementation : implementation.prototype,
+        normalizeException,
+      );
+    } else if (member.kind === 'operation') {
+      registerOperation(
+        registry,
+        member,
+        member.static ? implementation : implementation.prototype,
+        normalizeException,
+      );
+    }
+  }
+}
 
 export class ImplementationRegistry {
   #attributes = new WeakMap<AttributeMember, AttributeSteps>();
@@ -218,3 +247,107 @@ export type ValuePairsSteps = (
 export type ImplementationConstructor<T extends object> = {
   readonly prototype: T;
 } & (abstract new (...argumentsList: never[]) => T);
+
+type ExceptionNormalizer = (exception: unknown) => unknown;
+
+function registerAttribute(
+  registry: ImplementationRegistry,
+  member: AttributeMember,
+  target: object,
+  normalizeException: ExceptionNormalizer,
+): void {
+  const descriptor = findDescriptor(target, member.name);
+  if (!descriptor?.get) {
+    throw new TypeError(`Web IDL attribute ${member.name} has no implementation`);
+  }
+
+  const getterValue: unknown = Reflect.get(descriptor, 'get');
+  const setterValue: unknown = Reflect.get(descriptor, 'set');
+  const get = getterValue as (this: object) => unknown;
+  const set = setterValue as
+    ((this: object, value: unknown) => void) | undefined;
+  registry.setAttributeSteps(member, {
+    get() {
+      return callImplementation(get, this, [], normalizeException);
+    },
+    ...(set && !member.readonly
+      ? {
+        set(value: unknown) {
+          callImplementation(
+            set,
+            this,
+            [toImplementationValue(value)],
+            normalizeException,
+          );
+        },
+      }
+      : {}),
+  });
+}
+
+function registerOperation(
+  registry: ImplementationRegistry,
+  member: OperationMember,
+  target: object,
+  normalizeException: ExceptionNormalizer,
+): void {
+  const value: unknown = findDescriptor(target, member.name ?? '')?.value;
+  if (typeof value !== 'function') {
+    throw new TypeError(
+      `Web IDL operation ${member.name ?? ''} has no implementation`,
+    );
+  }
+  const method = value as (this: object, ...values: unknown[]) => unknown;
+
+  registry.setOperationSteps(member, function(...values) {
+    return callImplementation(
+      method,
+      this,
+      values.map(toImplementationValue),
+      normalizeException,
+    );
+  });
+}
+
+function callImplementation(
+  implementation: (this: object, ...values: unknown[]) => unknown,
+  thisArgument: object | null,
+  values: unknown[],
+  normalizeException: ExceptionNormalizer,
+): unknown {
+  try {
+    return Reflect.apply(implementation, thisArgument, values);
+  } catch (exception) {
+    throw normalizeException(exception);
+  }
+}
+
+function findDescriptor(
+  target: object,
+  property: PropertyKey,
+): PropertyDescriptor | undefined {
+  for (
+    let current: object | null = target;
+    current && current !== Object.prototype;
+    current = Reflect.getPrototypeOf(current)
+  ) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
+    if (descriptor) return descriptor;
+  }
+}
+
+function toImplementationValue(value: unknown): unknown {
+  if (value === missingArgument) return undefined;
+  if (!(value instanceof Map)) return value;
+
+  const object: Record<PropertyKey, unknown> = {};
+  const dictionary = value as Map<PropertyKey, unknown>;
+  for (const [name, memberValue] of dictionary) {
+    object[name] = toImplementationValue(memberValue);
+  }
+  return object;
+}
+
+function identity<T>(value: T): T {
+  return value;
+}

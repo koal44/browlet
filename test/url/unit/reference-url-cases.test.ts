@@ -9,7 +9,7 @@ import { urlConstructors } from './contract';
  */
 describe('URL reference implementation cases', () => {
   describe('URL WPT cases carried by jsdom', () => {
-    it.fails('applies component-specific control-character handling', () => {
+    it('applies component-specific control-character handling', () => {
       const { URL } = urlConstructors();
       const url = new URL(
         'https://user:password@example.com:8000/path?query#fragment',
@@ -26,7 +26,7 @@ describe('URL reference implementation cases', () => {
       expect(url.hash).toBe('#ab%00c');
     });
 
-    it.fails('leaves the previous host after an invalid host setter', () => {
+    it('leaves the previous host after an invalid host setter', () => {
       const { URL } = urlConstructors();
       const url = new URL('https://example.com:8443/');
 
@@ -38,7 +38,7 @@ describe('URL reference implementation cases', () => {
   });
 
   describe('Firefox URL regression cases', () => {
-    it.fails('terminates hostname setters at URL delimiters', () => {
+    it('terminates hostname setters at URL delimiters', () => {
       const { URL } = urlConstructors();
 
       for (const [input, hostname] of [
@@ -55,7 +55,7 @@ describe('URL reference implementation cases', () => {
       }
     });
 
-    it.fails('requires brackets around an IPv6 hostname setter', () => {
+    it('requires brackets around an IPv6 hostname setter', () => {
       const { URL } = urlConstructors();
       const url = new URL('http://example.com/');
 
@@ -69,7 +69,7 @@ describe('URL reference implementation cases', () => {
       expect(url.host).toBe('[2001::1]:30');
     });
 
-    it.fails('treats reverse solidus as a separator for special URLs', () => {
+    it('treats reverse solidus as a separator for special URLs', () => {
       const { URL } = urlConstructors();
       const base = 'http:\\test.com\\path/to\\file?query\\backslash#hash\\';
 
@@ -79,7 +79,7 @@ describe('URL reference implementation cases', () => {
       expect(new URL('ftp:\\tmp\\test', base).href).toBe('ftp://tmp/test');
     });
 
-    it.fails('distinguishes incomplete special URLs from file URLs', () => {
+    it('distinguishes incomplete special URLs from file URLs', () => {
       const { URL } = urlConstructors();
 
       expect(() => new URL('http:')).toThrow(TypeError);
@@ -88,7 +88,7 @@ describe('URL reference implementation cases', () => {
       expect(new URL('file:///').href).toBe('file:///');
     });
 
-    it.fails('preserves nulls but strips ASCII newlines in opaque URLs', () => {
+    it('preserves nulls but strips ASCII newlines in opaque URLs', () => {
       const { URL } = urlConstructors();
       const url = new URL(
         'scheme:pa\0\nth/to/fi\0\nle?qu\0\nery#ha\0\nsh',
@@ -98,7 +98,7 @@ describe('URL reference implementation cases', () => {
         .toBe('scheme:pa%00th/to/fi%00le?qu%00ery#ha%00sh');
     });
 
-    it.fails('derives only one level of a blob URL origin', () => {
+    it('derives only one level of a blob URL origin', () => {
       const { URL } = urlConstructors();
 
       expect(new URL('blob:http://foo.com/bar').origin)
@@ -106,7 +106,7 @@ describe('URL reference implementation cases', () => {
       expect(new URL('blob:blob:http://foo.com/bar').origin).toBe('null');
     });
 
-    it.fails('keeps a question mark after the fragment delimiter in the hash', () => {
+    it('keeps a question mark after the fragment delimiter in the hash', () => {
       const { URL } = urlConstructors();
       const url = new URL('https://example.com/#ahash?asearch');
 
@@ -114,14 +114,14 @@ describe('URL reference implementation cases', () => {
       expect(url.hash).toBe('#ahash?asearch');
     });
 
-    it.fails('applies IDNA processing to non-ASCII hostnames', () => {
+    it('applies IDNA processing to non-ASCII hostnames', () => {
       const { URL } = urlConstructors();
       const url = new URL('http://sub2.ält.mochi.test:8888/foo');
 
       expect(url.hostname).toBe('sub2.xn--lt-uia.mochi.test');
     });
 
-    it.fails('ignores an empty special hostname and supports port zero', () => {
+    it('ignores an empty special hostname and supports port zero', () => {
       const { URL } = urlConstructors();
       const url = new URL('http://localhost:8080/');
 

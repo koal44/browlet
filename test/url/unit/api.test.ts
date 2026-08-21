@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { urlConstructors } from './contract';
 
 describe('URL Standard section 6.1: URL class', () => {
-  it.fails('constructs with and without a base URL', () => {
+  it('constructs with and without a base URL', () => {
     const { URL } = urlConstructors();
 
     expect(new URL('https://example.org/path').href)
@@ -12,14 +12,14 @@ describe('URL Standard section 6.1: URL class', () => {
       .toBe('https://example.org/base/child');
   });
 
-  it.fails('throws TypeError when construction fails', () => {
+  it('throws TypeError when construction fails', () => {
     const { URL } = urlConstructors();
 
     expect(() => new URL('relative')).toThrow(TypeError);
     expect(() => new URL('relative', 'invalid base')).toThrow(TypeError);
   });
 
-  it.fails('parse returns null where the constructor throws', () => {
+  it('parse returns null where the constructor throws', () => {
     const { URL } = urlConstructors();
 
     expect(URL.parse('relative')).toBeNull();
@@ -27,7 +27,7 @@ describe('URL Standard section 6.1: URL class', () => {
       .toBe('https://example.org/base/child');
   });
 
-  it.fails('canParse reports whether parsing succeeds', () => {
+  it('canParse reports whether parsing succeeds', () => {
     const { URL } = urlConstructors();
 
     expect(URL.canParse('https://example.org/')).toBe(true);
@@ -35,7 +35,7 @@ describe('URL Standard section 6.1: URL class', () => {
     expect(URL.canParse('relative', 'https://example.org/')).toBe(true);
   });
 
-  it.fails('exposes all URL component getters', () => {
+  it('exposes all URL component getters', () => {
     const { URL } = urlConstructors();
     const url = new URL(
       'https://user:password@example.org:8443/a?q=x#fragment',
@@ -72,7 +72,7 @@ describe('URL Standard section 6.1: URL class', () => {
     });
   });
 
-  it.fails('setters parse and serialize component values', () => {
+  it('setters parse and serialize component values', () => {
     const { URL } = urlConstructors();
     const url = new URL('https://example.org/base');
 
@@ -90,7 +90,7 @@ describe('URL Standard section 6.1: URL class', () => {
     );
   });
 
-  it.fails('host setter preserves an existing port when none is supplied', () => {
+  it('host setter preserves an existing port when none is supplied', () => {
     const { URL } = urlConstructors();
     const url = new URL('https://example.org:8443/');
 
@@ -99,7 +99,7 @@ describe('URL Standard section 6.1: URL class', () => {
     expect(url.host).toBe('other.example:8443');
   });
 
-  it.fails('searchParams is the same object and updates its URL', () => {
+  it('searchParams is the same object and updates its URL', () => {
     const { URL } = urlConstructors();
     const url = new URL('https://example.org/?a=1');
 
@@ -111,7 +111,7 @@ describe('URL Standard section 6.1: URL class', () => {
     expect([...url.searchParams]).toEqual([['c', '3']]);
   });
 
-  it.fails('uses different query and form-urlencoded encode sets', () => {
+  it('uses different query and form-urlencoded encode sets', () => {
     const { URL } = urlConstructors();
     const url = new URL('https://example.com/?a=b ~');
 
@@ -122,7 +122,7 @@ describe('URL Standard section 6.1: URL class', () => {
 });
 
 describe('URL Standard section 6.2: URLSearchParams class', () => {
-  it.fails('constructs from strings, records, and sequences', () => {
+  it('constructs from strings, records, and sequences', () => {
     const { URLSearchParams } = urlConstructors();
 
     expect(String(new URLSearchParams('?a=1&a=2'))).toBe('a=1&a=2');
@@ -130,14 +130,14 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     expect(String(new URLSearchParams([['a', '1'], ['b', '2']]))).toBe('a=1&b=2');
   });
 
-  it.fails('removes only one leading question mark from string input', () => {
+  it('removes only one leading question mark from string input', () => {
     const { URLSearchParams } = urlConstructors();
 
     expect(String(new URLSearchParams('?a=1'))).toBe('a=1');
     expect(String(new URLSearchParams('??a=1'))).toBe('%3Fa=1');
   });
 
-  it.fails('rejects sequence entries whose size is not two', () => {
+  it('rejects sequence entries whose size is not two', () => {
     const { URLSearchParams } = urlConstructors();
 
     expect(() => new URLSearchParams([['a']] as string[][])).toThrow(TypeError);
@@ -145,7 +145,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
       .toThrow(TypeError);
   });
 
-  it.fails('implements append, size, get, getAll, has, and iteration', () => {
+  it('implements append, size, get, getAll, has, and iteration', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&a=2');
 
@@ -161,7 +161,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     expect([...params]).toEqual([['a', '1'], ['a', '2'], ['b', '3']]);
   });
 
-  it.fails('deletes by name or by name and value', () => {
+  it('deletes by name or by name and value', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&a=2&b=3');
 
@@ -171,7 +171,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     expect(String(params)).toBe('b=3');
   });
 
-  it.fails('set replaces the first matching tuple and removes the rest', () => {
+  it('set replaces the first matching tuple and removes the rest', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&b=2&a=3');
 
@@ -180,7 +180,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     expect(String(params)).toBe('a=4&b=2');
   });
 
-  it.fails('sorts stably by UTF-16 code units', () => {
+  it('sorts stably by UTF-16 code units', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('z=1&a=first&a=second&b=2');
 
@@ -191,7 +191,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     ]);
   });
 
-  it.fails('provides keys, values, entries, and forEach in list order', () => {
+  it('provides keys, values, entries, and forEach in list order', () => {
     const { URLSearchParams } = urlConstructors();
     const params = new URLSearchParams('a=1&a=2&b=3');
     const visited: [string, string][] = [];
@@ -206,7 +206,7 @@ describe('URL Standard section 6.2: URLSearchParams class', () => {
     expect(visited).toEqual([['a', '1'], ['a', '2'], ['b', '3']]);
   });
 
-  it.fails('sort updates an associated URL', () => {
+  it('sort updates an associated URL', () => {
     const { URL } = urlConstructors();
     const url = new URL(
       'https://example.org/?q=🏳️‍🌈&key=e1f7bc78',
