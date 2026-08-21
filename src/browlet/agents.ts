@@ -1,8 +1,8 @@
 import { EventLoop } from './event-loop';
 import type { BrowsingContextGroup } from './browsing-context';
 import {
-  isOrigin, obtainSite, type Site,
-} from './site';
+  areSameOrigin, isOrigin, obtainSite, type Site,
+} from './origin';
 import type { Origin } from '../url/origin';
 
 /*
@@ -104,7 +104,7 @@ export function obtainSimilarOriginWindowAgent(
     agentCluster.crossOriginIsolationMode = group.crossOriginIsolationMode;
 
     if (isOrigin(key)) {
-      if (key !== origin) {
+      if (!areSameOrigin(key, origin)) {
         throw new Error('An origin agent cluster key must be the given origin');
       }
 

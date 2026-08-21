@@ -4,6 +4,9 @@ import { assembleDefinitions } from '../../web-idl/assembly';
 import { JavaScriptBinding } from '../../web-idl/binding';
 import { ImplementationRegistry } from '../../web-idl/implementation';
 import { sharedPlatformObjects } from '../../web-idl/platform-object';
+import {
+  originIDL, registerOriginImplementation,
+} from '../origin';
 import type { Realm } from '../realm';
 import { DOMBinding } from './dom';
 import { URLBinding } from './url';
@@ -29,6 +32,7 @@ export class BrowletBindings {
     );
     this.dom = new DOMBinding(realm, this.#binding);
     this.url = new URLBinding(this.#binding);
+    registerOriginImplementation(this.#binding);
   }
 
   install(target: object): void {
@@ -37,6 +41,7 @@ export class BrowletBindings {
 }
 
 const browletDefinitions = assembleDefinitions([
+  originIDL,
   ...domIDLDefinitions,
   ...urlIDLDefinitions,
 ]);

@@ -93,7 +93,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     expect(agentCluster.agents).toContain(agent);
   });
 
-  it.fails('shares a site-keyed agent between different same-site origins', () => {
+  it('shares a site-keyed agent between different same-site origins', () => {
     const firstOrigin = createTupleOrigin(
       'https', createHost('www.example.com'),
     );
@@ -106,6 +106,63 @@ describe('obtainSimilarOriginWindowAgent', () => {
     const second = obtainSimilarOriginWindowAgent(secondOrigin, group, false);
 
     expect(second).toBe(first);
+  });
+
+  it('uses structural origin equality for historical agent-cluster keys', () => {
+    const firstOrigin = createTupleOrigin(
+      'https', createHost('example.com'),
+    );
+    const equivalentOrigin = createTupleOrigin(
+      'https', createHost('example.com'),
+    );
+    const group = new BrowsingContextGroup();
+
+    const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
+    const second = obtainSimilarOriginWindowAgent(
+      equivalentOrigin,
+      group,
+      true,
+    );
+
+    expect(second).toBe(first);
+  });
+
+  it('ignores ports for site-keyed agent clusters', () => {
+    const firstOrigin = createTupleOrigin(
+      'https', createHost('example.com'), 8000,
+    );
+    const secondOrigin = createTupleOrigin(
+      'https', createHost('example.com'), 9000,
+    );
+    const group = new BrowsingContextGroup();
+
+    const first = obtainSimilarOriginWindowAgent(firstOrigin, group, false);
+    const second = obtainSimilarOriginWindowAgent(secondOrigin, group, false);
+
+    expect(second).toBe(first);
+  });
+
+  it('keeps equally serialized site and origin keys distinct', () => {
+    const siteOrigin = createTupleOrigin(
+      'https', createHost('www.example.com'),
+    );
+    const originKey = createTupleOrigin(
+      'https', createHost('example.com'),
+    );
+    const group = new BrowsingContextGroup();
+
+    const siteAgent = obtainSimilarOriginWindowAgent(
+      siteOrigin,
+      group,
+      false,
+    );
+    const originAgent = obtainSimilarOriginWindowAgent(
+      originKey,
+      group,
+      true,
+    );
+
+    expect(originAgent).not.toBe(siteAgent);
   });
 });
 
@@ -136,12 +193,16 @@ class TestAgent extends Agent {
   }
 }
 
-function createTupleOrigin(scheme: string, host: Host): TupleOrigin {
+function createTupleOrigin(
+  scheme: string,
+  host: Host,
+  port: number | null = null,
+): TupleOrigin {
   return {
     kind: 'tuple',
     scheme,
     host,
-    port: null,
+    port,
     domain: null,
   };
 }

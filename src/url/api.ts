@@ -1,5 +1,5 @@
 import { serializeHost } from './host';
-import { serializeOrigin } from './origin';
+import { serializeOrigin, type Origin } from './origin';
 import {
   parseFormUrlEncodedString, serializeFormUrlEncoded, type FormTuple,
 } from './form-url-encoded';
@@ -249,6 +249,10 @@ export class URLImpl {
 
   static getQueryObject(url: URLImpl): URLSearchParamsImpl {
     return url.#queryObject;
+  }
+
+  static extractOrigin(url: URLImpl): Origin {
+    return obtainURLOrigin(url.#url);
   }
 
   #initialize(record: URLRecord): void {
