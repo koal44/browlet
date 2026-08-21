@@ -121,6 +121,14 @@ describe('URL reference implementation cases', () => {
       expect(url.hostname).toBe('sub2.xn--lt-uia.mochi.test');
     });
 
+    it('uses current nontransitional IDNA mappings', () => {
+      const { URL } = urlConstructors();
+
+      expect(new URL('https://FAẞ.de/x').hostname).toBe('xn--fa-hia.de');
+      expect(new URL('https://陋㛼当𤎫竮䗗/x').hostname)
+        .toBe('xn--snl253bgitxhzwu2arn60c');
+    });
+
     it('ignores an empty special hostname and supports port zero', () => {
       const { URL } = urlConstructors();
       const url = new URL('http://localhost:8080/');

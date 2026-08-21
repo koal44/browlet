@@ -1,41 +1,39 @@
-import type { AssembledInterface } from '../web-idl/assembly';
+import type { AssembledInterface } from '../../web-idl/assembly';
 import {
   callUserObjectOperation as callWebIDLUserObjectOperation,
-} from '../web-idl/callback';
+} from '../../web-idl/callback';
 import {
   isCallbackInterfaceValue, type CallbackInterfaceValue,
-} from '../web-idl/callback-value';
-import { convertToIDL } from '../web-idl/conversion';
-import type {
-  ConstructorMember, InterfaceDefinition,
-} from '../web-idl/definition';
+} from '../../web-idl/callback-value';
+import { convertToIDL } from '../../web-idl/conversion';
 import {
   registerDOMExceptionImplementations,
-} from '../web-idl/dom-exception';
+} from '../../web-idl/dom-exception';
 import type {
   ImplementationConstructor, ImplementationRegistry,
-} from '../web-idl/implementation';
-import { registerInterfaceImplementation } from '../web-idl/implementation';
-import type { JavaScriptBinding } from '../web-idl/binding';
+  InterfaceImplementationOptions,
+} from '../../web-idl/implementation';
+import { registerInterfaceImplementation } from '../../web-idl/implementation';
+import type { JavaScriptBinding } from '../../web-idl/binding';
 import {
-  CustomEventImpl, customEventIDL, eventIDL, EventImpl,
-} from '../domlet/events/event';
+  CustomEventImpl, EventImpl,
+} from '../../domlet/events/event';
 import {
-  eventTargetIDL, EventTargetImpl, type EventImplementationConstructor,
+  EventTargetImpl, type EventImplementationConstructor,
   type EventListenerCallback, type EventListenerInvocationHost,
-} from '../domlet/events/event-target';
-import { CharacterDataImpl } from '../domlet/nodes/character-data';
-import { CommentImpl, commentIDL } from '../domlet/nodes/comment';
-import { DocumentImpl, documentIDL } from '../domlet/nodes/document';
-import { DocumentTypeImpl } from '../domlet/nodes/document-type';
+} from '../../domlet/events/event-target';
+import { CharacterDataImpl } from '../../domlet/nodes/character-data';
+import { CommentImpl } from '../../domlet/nodes/comment';
+import { DocumentImpl } from '../../domlet/nodes/document';
+import { DocumentTypeImpl } from '../../domlet/nodes/document-type';
 import {
   ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
   HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
-} from '../domlet/nodes/element';
-import type { DOMNodeFactory } from '../domlet/nodes/factory';
-import { NodeImpl } from '../domlet/nodes/node';
-import { TextImpl, textIDL } from '../domlet/nodes/text';
-import type { Realm } from './realm';
+} from '../../domlet/nodes/element';
+import type { DOMNodeFactory } from '../../domlet/nodes/factory';
+import { NodeImpl } from '../../domlet/nodes/node';
+import { TextImpl } from '../../domlet/nodes/text';
+import type { Realm } from '../realm';
 
 export class DOMBinding
 implements DOMNodeFactory, EventListenerInvocationHost
@@ -55,18 +53,8 @@ implements DOMNodeFactory, EventListenerInvocationHost
     const implementations = binding.implementations;
     this.#binding = binding;
 
-    for (const [name, implementation] of domImplementationClasses) {
-      const interface_ = this.#requireInterface(name);
-      this.#implementations.set(implementation, interface_);
-      registerInterfaceImplementation(
-        implementations,
-        interface_,
-        implementation,
-        (exception) => this.#normalizeException(exception),
-      );
-    }
+    this.#registerImplementations(implementations);
     registerDOMExceptionImplementations(implementations, host);
-    this.#registerConstructors(implementations);
   }
 
   createEvent(
@@ -213,84 +201,125 @@ implements DOMNodeFactory, EventListenerInvocationHost
     return record.object as T;
   }
 
-  #registerConstructors(implementations: ImplementationRegistry): void {
-    registerObjectCreation(
-      implementations,
-      eventTargetIDL,
-      EventTargetImpl,
-      [],
-      (value) => this.associateEventTarget(value as EventTargetImpl),
-    );
-    implementations.setConstructorSteps(
-      requireConstructor(eventTargetIDL),
-      () => undefined,
-    );
-
-    registerObjectCreation(
-      implementations,
-      eventIDL,
-      EventImpl,
-      ['', {}, this.#host.eventTimeStamp()],
-    );
-    implementations.setConstructorSteps(
-      requireConstructor(eventIDL),
-      function(type, init) {
-        const dictionary = asDictionary(init);
-        EventImpl.initializeForBinding(
-          this as EventImpl,
-          type as string,
-          Boolean(dictionary.bubbles),
-          Boolean(dictionary.cancelable),
-          Boolean(dictionary.composed),
-        );
+  #registerImplementations(registry: ImplementationRegistry): void {
+    const registrations: DOMImplementationRegistration[] = [
+      {
+        implementation: EventTargetImpl,
+        name: 'EventTarget',
+        options: {
+          construct() {},
+          create: {
+            created: (value) => {
+              this.associateEventTarget(value as EventTargetImpl);
+            },
+          },
+        },
       },
-    );
-
-    registerObjectCreation(
-      implementations,
-      customEventIDL,
-      CustomEventImpl,
-      ['', {}, this.#host.eventTimeStamp()],
-    );
-    implementations.setConstructorSteps(
-      requireConstructor(customEventIDL),
-      function(type, init) {
-        const dictionary = asDictionary(init);
-        CustomEventImpl.initializeCustomForBinding(
-          this as CustomEventImpl,
-          type as string,
-          Boolean(dictionary.bubbles),
-          Boolean(dictionary.cancelable),
-          Boolean(dictionary.composed),
-          dictionary.detail,
-        );
+      {
+        implementation: EventImpl,
+        name: 'Event',
+        options: {
+          construct(type, init) {
+            const dictionary = asDictionary(init);
+            EventImpl.initializeForBinding(
+              this as EventImpl,
+              type as string,
+              Boolean(dictionary.bubbles),
+              Boolean(dictionary.cancelable),
+              Boolean(dictionary.composed),
+            );
+          },
+          create: {
+            arguments: () => ['', {}, this.#host.eventTimeStamp()],
+          },
+        },
       },
-    );
+      {
+        implementation: CustomEventImpl,
+        name: 'CustomEvent',
+        options: {
+          construct(type, init) {
+            const dictionary = asDictionary(init);
+            CustomEventImpl.initializeCustomForBinding(
+              this as CustomEventImpl,
+              type as string,
+              Boolean(dictionary.bubbles),
+              Boolean(dictionary.cancelable),
+              Boolean(dictionary.composed),
+              dictionary.detail,
+            );
+          },
+          create: {
+            arguments: () => ['', {}, this.#host.eventTimeStamp()],
+          },
+        },
+      },
+      { implementation: NodeImpl, name: 'Node' },
+      { implementation: CharacterDataImpl, name: 'CharacterData' },
+      {
+        implementation: DocumentImpl,
+        name: 'Document',
+        options: {
+          construct() {},
+          create: {
+            arguments: [undefined, this],
+            created: (value) => {
+              this.associateEventTarget(value as EventTargetImpl);
+            },
+          },
+        },
+      },
+      { implementation: ElementImpl, name: 'Element' },
+      { implementation: HTMLElementImpl, name: 'HTMLElement' },
+      { implementation: HTMLHeadElementImpl, name: 'HTMLHeadElement' },
+      { implementation: HTMLLinkElementImpl, name: 'HTMLLinkElement' },
+      { implementation: HTMLStyleElementImpl, name: 'HTMLStyleElement' },
+      { implementation: SVGElementImpl, name: 'SVGElement' },
+      { implementation: SVGStyleElementImpl, name: 'SVGStyleElement' },
+      { implementation: MathMLElementImpl, name: 'MathMLElement' },
+      {
+        implementation: TextImpl,
+        name: 'Text',
+        options: {
+          construct(data) { (this as TextImpl).data = data as string; },
+          create: {
+            arguments: [''],
+            created: (value) => {
+              this.associateEventTarget(value as TextImpl);
+            },
+          },
+        },
+      },
+      {
+        implementation: CommentImpl,
+        name: 'Comment',
+        options: {
+          construct(data) { (this as CommentImpl).data = data as string; },
+          create: {
+            arguments: [''],
+            created: (value) => {
+              this.associateEventTarget(value as CommentImpl);
+            },
+          },
+        },
+      },
+      { implementation: DocumentTypeImpl, name: 'DocumentType' },
+    ];
 
-    registerObjectCreation(
-      implementations,
-      documentIDL,
-      DocumentImpl,
-      [undefined, this],
-      (value) => this.associateEventTarget(value as EventTargetImpl),
-    );
-    implementations.setConstructorSteps(
-      requireConstructor(documentIDL),
-      () => undefined,
-    );
-
-    registerCharacterDataConstructor(
-      implementations,
-      textIDL,
-      TextImpl,
-      (value) => this.associateEventTarget(value),
-    );
-    registerCharacterDataConstructor(
-      implementations,
-      commentIDL,
-      CommentImpl,
-      (value) => this.associateEventTarget(value),
-    );
+    for (const { implementation, name, options } of registrations) {
+      const interface_ = this.#requireInterface(name);
+      this.#implementations.set(implementation, interface_);
+      registerInterfaceImplementation(
+        registry,
+        interface_,
+        implementation,
+        {
+          ...options,
+          normalizeException: (exception) =>
+            this.#normalizeException(exception),
+        },
+      );
+    }
   }
 }
 
@@ -308,79 +337,11 @@ type DOMEventRealmHost = {
   ): void;
 };
 
-const domImplementationClasses: [
-  string,
-  ImplementationConstructor<object>,
-][] = [
-  ['EventTarget', EventTargetImpl],
-  ['Event', EventImpl],
-  ['CustomEvent', CustomEventImpl],
-  ['Node', NodeImpl],
-  ['CharacterData', CharacterDataImpl],
-  ['Document', DocumentImpl],
-  ['Element', ElementImpl],
-  ['HTMLElement', HTMLElementImpl],
-  ['HTMLHeadElement', HTMLHeadElementImpl],
-  ['HTMLLinkElement', HTMLLinkElementImpl],
-  ['HTMLStyleElement', HTMLStyleElementImpl],
-  ['SVGElement', SVGElementImpl],
-  ['SVGStyleElement', SVGStyleElementImpl],
-  ['MathMLElement', MathMLElementImpl],
-  ['Text', TextImpl],
-  ['Comment', CommentImpl],
-  ['DocumentType', DocumentTypeImpl],
-];
-
-function registerObjectCreation(
-  registry: ImplementationRegistry,
-  interface_: InterfaceDefinition,
-  implementation: ImplementationConstructor<object>,
-  argumentsList: readonly unknown[],
-  created?: (value: object) => void,
-): void {
-  registry.setObjectCreationSteps(interface_, (newTarget) => {
-    const value = Reflect.construct(
-      implementation,
-      argumentsList,
-      newTarget as unknown as ImplementationConstructor<object>,
-    ) as object;
-    created?.(value);
-    return value;
-  });
-}
-
-function registerCharacterDataConstructor(
-  registry: ImplementationRegistry,
-  interface_: InterfaceDefinition,
-  implementation: ImplementationConstructor<CharacterDataImpl>,
-  created: (value: CharacterDataImpl) => void,
-): void {
-  registerObjectCreation(
-    registry,
-    interface_,
-    implementation,
-    [''],
-    (value) => created(value as CharacterDataImpl),
-  );
-  registry.setConstructorSteps(
-    requireConstructor(interface_),
-    function(data) {
-      (this as CharacterDataImpl).data = data as string;
-    },
-  );
-}
-
-function requireConstructor(
-  interface_: InterfaceDefinition,
-): ConstructorMember {
-  const constructor = interface_.members.find(
-    (member): member is ConstructorMember => member.kind === 'constructor',
-  );
-  if (!constructor) {
-    throw new Error(`${interface_.name} has no constructor declaration`);
-  }
-  return constructor;
-}
+type DOMImplementationRegistration = {
+  implementation: ImplementationConstructor<object>;
+  name: string;
+  options?: InterfaceImplementationOptions;
+};
 
 function toImplementationValue(value: unknown): unknown {
   if (!(value instanceof Map)) return value;

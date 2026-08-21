@@ -13,8 +13,9 @@ export function registerInterfaceImplementation(
   registry: ImplementationRegistry,
   interface_: AssembledInterface,
   implementation: ImplementationConstructor<object>,
-  normalizeException: ExceptionNormalizer = identity,
+  options: InterfaceImplementationOptions = {},
 ): void {
+  const normalizeException = options.normalizeException ?? identity;
   for (const { member } of interface_.members) {
     if (member.kind === 'attribute') {
       registerAttribute(
@@ -24,14 +25,66 @@ export function registerInterfaceImplementation(
         normalizeException,
       );
     } else if (member.kind === 'operation') {
-      registerOperation(
-        registry,
-        member,
-        member.static ? implementation : implementation.prototype,
-        normalizeException,
-      );
+      const override = getOperationOverride(options.operations, member);
+      if (override) {
+        registry.setOperationSteps(member, override);
+      } else {
+        registerOperation(
+          registry,
+          member,
+          member.static ? implementation : implementation.prototype,
+          normalizeException,
+        );
+      }
     }
   }
+
+  if (options.create) {
+    registry.setObjectCreationSteps(
+      interface_.definition,
+      typeof options.create === 'function'
+        ? options.create
+        : createImplementationObject(
+          interface_,
+          implementation,
+          options.create,
+        ),
+    );
+  }
+  if (options.construct) {
+    registerMemberKind(
+      registry,
+      interface_,
+      'constructor',
+      options.construct,
+    );
+  }
+  if (options.valuePairs) {
+    registerMemberKind(
+      registry,
+      interface_,
+      'iterable',
+      options.valuePairs,
+    );
+  }
+  if (options.stringify) {
+    registerMemberKind(
+      registry,
+      interface_,
+      'stringifier',
+      options.stringify,
+    );
+  }
+  validateOperationOverrides(
+    interface_,
+    options.operations?.instance,
+    false,
+  );
+  validateOperationOverrides(
+    interface_,
+    options.operations?.static,
+    true,
+  );
 }
 
 export class ImplementationRegistry {
@@ -185,6 +238,23 @@ export type AttributeSteps = {
   set?(this: object | null, value: unknown): void;
 };
 
+export type InterfaceImplementationOptions = {
+  construct?: ConstructorSteps;
+  create?: ObjectCreationSteps | ImplementationObjectCreation;
+  normalizeException?: ExceptionNormalizer;
+  operations?: {
+    instance?: Record<string, OperationSteps>;
+    static?: Record<string, OperationSteps>;
+  };
+  stringify?: StringificationBehavior;
+  valuePairs?: ValuePairsSteps;
+};
+
+export type ImplementationObjectCreation = {
+  arguments?: readonly unknown[] | (() => readonly unknown[]);
+  created?(value: object): void;
+};
+
 export type AsyncIteratorSteps = {
   getNext(target: object, iterator: object): IDLPromise;
   initialize?(
@@ -248,7 +318,114 @@ export type ImplementationConstructor<T extends object> = {
   readonly prototype: T;
 } & (abstract new (...argumentsList: never[]) => T);
 
-type ExceptionNormalizer = (exception: unknown) => unknown;
+export type ExceptionNormalizer = (exception: unknown) => unknown;
+
+function createImplementationObject(
+  interface_: AssembledInterface,
+  implementation: ImplementationConstructor<object>,
+  creation: ImplementationObjectCreation,
+): ObjectCreationSteps {
+  return (newTarget) => {
+    if (!newTarget) {
+      throw new Error(
+        `${interface_.definition.name} implementation creation requires newTarget`,
+      );
+    }
+    const value = Reflect.construct(
+      implementation,
+      typeof creation.arguments === 'function'
+        ? creation.arguments()
+        : creation.arguments ?? [],
+      newTarget as unknown as ImplementationConstructor<object>,
+    ) as object;
+    creation.created?.(value);
+    return value;
+  };
+}
+
+function registerMemberKind(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
+  kind: 'constructor',
+  steps: ConstructorSteps,
+): void;
+function registerMemberKind(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
+  kind: 'iterable',
+  steps: ValuePairsSteps,
+): void;
+function registerMemberKind(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
+  kind: 'stringifier',
+  steps: StringificationBehavior,
+): void;
+function registerMemberKind(
+  registry: ImplementationRegistry,
+  interface_: AssembledInterface,
+  kind: 'constructor' | 'iterable' | 'stringifier',
+  steps: ConstructorSteps | ValuePairsSteps | StringificationBehavior,
+): void {
+  let found = false;
+  for (const { member } of interface_.members) {
+    if (member.kind !== kind) continue;
+    found = true;
+    if (member.kind === 'constructor') {
+      registry.setConstructorSteps(member, steps);
+    } else if (member.kind === 'iterable') {
+      registry.setValuePairsSteps(member, steps as ValuePairsSteps);
+    } else {
+      registry.setStringificationBehavior(
+        member,
+        steps,
+      );
+    }
+  }
+  if (!found) {
+    throw new Error(
+      `${interface_.definition.name} has no ${kind} declaration`,
+    );
+  }
+}
+
+function validateOperationOverrides(
+  interface_: AssembledInterface,
+  operations: Record<string, OperationSteps> | undefined,
+  static_: boolean,
+): void {
+  if (!operations) return;
+  for (const name of Object.keys(operations)) {
+    let found = false;
+    for (const { member } of interface_.members) {
+      if (
+        member.kind !== 'operation' ||
+        member.name !== name ||
+        Boolean(member.static) !== static_
+      ) continue;
+      found = true;
+    }
+    if (!found) {
+      const modifier = static_ ? 'static ' : '';
+      throw new Error(
+        `${interface_.definition.name} has no ${modifier}${name} operation`,
+      );
+    }
+  }
+}
+
+function getOperationOverride(
+  operations: InterfaceImplementationOptions['operations'],
+  member: OperationMember,
+): OperationSteps | undefined {
+  const implementations = member.static
+    ? operations?.static
+    : operations?.instance;
+  const name = member.name;
+  return name && implementations && Object.hasOwn(implementations, name)
+    ? implementations[name]
+    : undefined;
+}
 
 function registerAttribute(
   registry: ImplementationRegistry,

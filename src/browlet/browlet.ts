@@ -6,7 +6,7 @@ import type { ElementImpl } from '../domlet/nodes/element';
 import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
-import { BrowletBindings } from './bindings';
+import { BrowletBindings } from './bindings/browlet';
 import { BrowletParser, type DocumentWrite } from './parser';
 import { Realm } from './realm';
 import { WindowImpl } from './window';

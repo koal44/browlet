@@ -1,12 +1,12 @@
-import { domIDLDefinitions } from '../domlet/web-idl';
-import { urlIDLDefinitions } from '../url/web-idl';
-import { assembleDefinitions } from '../web-idl/assembly';
-import { JavaScriptBinding } from '../web-idl/binding';
-import { ImplementationRegistry } from '../web-idl/implementation';
-import { sharedPlatformObjects } from '../web-idl/platform-object';
-import { DOMBinding } from './dom-binding';
-import { URLBinding } from './url-binding';
-import type { Realm } from './realm';
+import { domIDLDefinitions } from '../../domlet/web-idl';
+import { urlIDLDefinitions } from '../../url/web-idl';
+import { assembleDefinitions } from '../../web-idl/assembly';
+import { JavaScriptBinding } from '../../web-idl/binding';
+import { ImplementationRegistry } from '../../web-idl/implementation';
+import { sharedPlatformObjects } from '../../web-idl/platform-object';
+import type { Realm } from '../realm';
+import { DOMBinding } from './dom';
+import { URLBinding } from './url';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.

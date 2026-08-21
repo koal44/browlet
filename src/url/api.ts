@@ -9,6 +9,14 @@ import {
 } from './url';
 
 /*
+ * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this
+ * implementation independent for now: current IDNA behavior would raise the
+ * minimum Node version, URL semantics vary between runtime releases, and the
+ * native API does not expose URL records or validation errors. It also cannot
+ * replace public-suffix lookup or non-UTF-8 encoding.
+ */
+
+/*
  * [Exposed=*,
  *  LegacyWindowAlias=webkitURL]
  * interface URL {
