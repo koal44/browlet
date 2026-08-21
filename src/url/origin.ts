@@ -1,4 +1,4 @@
-import type { Host } from './host';
+import { serializeHost, type Domain, type Host } from './host';
 
 /*
  * Origins are defined by HTML, while the URL Standard defines how a URL's
@@ -18,5 +18,27 @@ export type TupleOrigin = {
   scheme: string;
   host: Host;
   port: number | null;
-  domain: Host | null;
+  domain: Domain | null;
 };
+
+/*
+ * New opaque origin.
+ *
+ * https://html.spec.whatwg.org/multipage/browsers.html#concept-origin-opaque
+ */
+export function createOpaqueOrigin(): OpaqueOrigin {
+  return { kind: 'opaque', identity: Symbol('opaque origin') };
+}
+
+/*
+ * Serialization of an origin.
+ *
+ * https://html.spec.whatwg.org/multipage/browsers.html#ascii-serialisation-of-an-origin
+ */
+export function serializeOrigin(origin: Origin): string {
+  if (origin.kind === 'opaque') return 'null';
+
+  let result = `${origin.scheme}://${serializeHost(origin.host)}`;
+  if (origin.port !== null) result += `:${origin.port}`;
+  return result;
+}

@@ -85,6 +85,7 @@
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^25.5.2",
+    "@types/tr46": "^5.0.1",
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
     "jsdom": "^29.1.1",
@@ -97,7 +98,10 @@
     "vitest": "^4.1.7"
   },
   "dependencies": {
+    "@exodus/bytes": "^1.15.1",
     "parse5": "^8.0.1",
-    "parse5-parser-stream": "^8.0.0"
+    "parse5-parser-stream": "^8.0.0",
+    "tldts": "^7.4.10",
+    "tr46": "^6.0.0"
   }
 }

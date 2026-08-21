@@ -6,7 +6,7 @@ import {
 } from '../../../src/browlet/agents';
 import { BrowsingContextGroup } from '../../../src/browlet/browsing-context';
 import { Realm } from '../../../src/browlet/realm';
-import type { Host } from '../../../src/url/host';
+import type { Domain, Host } from '../../../src/url/host';
 import type { TupleOrigin } from '../../../src/url/origin';
 
 describe('WindowAgent', () => {
@@ -94,12 +94,11 @@ describe('obtainSimilarOriginWindowAgent', () => {
   });
 
   it.fails('shares a site-keyed agent between different same-site origins', () => {
-    const registrableDomain = createHost('example.com');
     const firstOrigin = createTupleOrigin(
-      'https', createHost('www.example.com', registrableDomain),
+      'https', createHost('www.example.com'),
     );
     const secondOrigin = createTupleOrigin(
-      'https', createHost('shop.example.com', registrableDomain),
+      'https', createHost('shop.example.com'),
     );
     const group = new BrowsingContextGroup();
 
@@ -147,6 +146,6 @@ function createTupleOrigin(scheme: string, host: Host): TupleOrigin {
   };
 }
 
-function createHost(value: string, registrableDomain: Host | null = null): Host {
-  return { value, registrableDomain };
+function createHost(value: string): Domain {
+  return { kind: 'domain', value };
 }

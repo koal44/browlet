@@ -1,4 +1,4 @@
-import type { Host } from '../url/host';
+import { obtainRegistrableDomain, type Host } from '../url/host';
 import type { OpaqueOrigin, Origin } from '../url/origin';
 
 export type Site = OpaqueOrigin | SchemeAndHost;
@@ -17,7 +17,7 @@ export function obtainSite(origin: Origin): Site {
   return {
     kind: 'scheme-and-host',
     scheme: origin.scheme,
-    host: origin.host.registrableDomain ?? origin.host,
+    host: obtainRegistrableDomain(origin.host) ?? origin.host,
   };
 }
 
