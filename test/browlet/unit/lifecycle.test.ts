@@ -116,9 +116,8 @@ describe('browsing context groups', () => {
 
 describe('navigables', () => {
   it('initializes one pending current and active history entry', () => {
-    const document = new DocumentImpl({
-      url: requireURL('https://example.test/page'),
-    }) as DomletDocument;
+    const document = new DocumentImpl() as DomletDocument;
+    DocumentImpl.setURL(document, requireURL('https://example.test/page'));
     const documentState = createDocumentState(document);
     const traversable = new TopLevelTraversable();
 
@@ -166,10 +165,9 @@ describe('environment settings objects', () => {
       creationURL,
       origin,
     );
-    const document = new DocumentImpl({
-      origin,
-      url: creationURL,
-    }) as DomletDocument;
+    const document = new DocumentImpl() as DomletDocument;
+    DocumentImpl.setOrigin(document, origin);
+    DocumentImpl.setURL(document, creationURL);
     WindowImpl.setAssociatedDocument(window, document);
 
     expect(settings.realmExecutionContext).toBe(executionContext);

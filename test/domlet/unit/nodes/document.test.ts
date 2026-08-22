@@ -51,9 +51,8 @@ describe('Document', () => {
   });
 
   it('always has a base URI', () => {
-    const document = new DocumentImpl({
-      url: documentURL('https://example.com/'),
-    });
+    const document = new DocumentImpl();
+    DocumentImpl.setURL(document, documentURL('https://example.com/'));
     const text = document.createTextNode('content');
 
     expect(new DocumentImpl().baseURI).toBe('about:blank');
@@ -64,12 +63,10 @@ describe('Document', () => {
   });
 
   it('can update a node document during a future adoption operation', () => {
-    const first = new DocumentImpl({
-      url: documentURL('https://first.example/'),
-    });
-    const second = new DocumentImpl({
-      url: documentURL('https://second.example/'),
-    });
+    const first = new DocumentImpl();
+    const second = new DocumentImpl();
+    DocumentImpl.setURL(first, documentURL('https://first.example/'));
+    DocumentImpl.setURL(second, documentURL('https://second.example/'));
     const text = first.createTextNode('content');
 
     NodeImpl.setNodeDocument(text, second);
@@ -176,10 +173,9 @@ describe('Document', () => {
   });
 
   it('creates HTML elements and text nodes', () => {
-    const document = new DocumentImpl({
-      contentType: 'text/html',
-      type: 'html',
-    });
+    const document = new DocumentImpl();
+    DocumentImpl.setType(document, 'html');
+    DocumentImpl.setContentType(document, 'text/html');
     const element = document.createElement('MaIn');
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -196,10 +192,9 @@ describe('Document', () => {
   });
 
   it('identifies HTML and compatibility mode', () => {
-    const document = new DocumentImpl({
-      contentType: 'text/html',
-      type: 'html',
-    });
+    const document = new DocumentImpl();
+    DocumentImpl.setType(document, 'html');
+    DocumentImpl.setContentType(document, 'text/html');
 
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');

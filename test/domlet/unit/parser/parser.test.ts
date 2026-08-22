@@ -1,6 +1,7 @@
 import { html } from 'parse5';
 import { describe, expect, it } from 'vitest';
 
+import { Domlet } from '../../../../src/domlet/domlet';
 import {
   DocumentImpl, DocumentMode,
 } from '../../../../src/domlet/nodes/document';
@@ -10,11 +11,11 @@ import {
   HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
 } from '../../../../src/domlet/nodes/element';
 import { isComment } from '../../../../src/domlet/nodes/node';
-import { DomletParser } from '../../../../src/domlet/parser/parser';
+import type { DomletParser } from '../../../../src/domlet/parser/parser';
 
 describe('Parser tree adapter', () => {
   it('creates document fragments in its current document', () => {
-    const parser = new DomletParser();
+    const parser = createParser();
     const document = parser.createDocument();
     const fragment = parser.createDocumentFragment();
 
@@ -23,9 +24,9 @@ describe('Parser tree adapter', () => {
   });
 
   it('parses a basic HTML document and derives its compatibility mode', () => {
-    const parser = new DomletParser();
-    const standards = parser.parse('<!doctype html><main>content</main>');
-    const quirks = parser.parse('<main>content</main>');
+    const standards = createParser()
+      .parse('<!doctype html><main>content</main>');
+    const quirks = createParser().parse('<main>content</main>');
 
     expect(DocumentImpl.getMode(standards)).toBe(DocumentMode.NoQuirks);
     expect(DocumentImpl.getType(standards)).toBe('html');
@@ -38,7 +39,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('parses comments as comment nodes', () => {
-    const document = new DomletParser().parse('<!--note--><main></main>');
+    const document = createParser().parse('<!--note--><main></main>');
     const comment = document.firstChild;
 
     expect(isComment(comment)).toBe(true);
@@ -47,7 +48,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('parses attributes into the Domlet attribute representation', () => {
-    const document = new DomletParser().parse(
+    const document = createParser().parse(
       '<main id="content" class="one two"></main>',
     );
     const main = document.getElementById('content');
@@ -62,7 +63,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('creates element interfaces from parser namespaces', () => {
-    const document = new DomletParser().parse([
+    const document = createParser().parse([
       '<style id="style"></style>',
       '<link id="link">',
       '<svg id="svg"><style id="svg-style"></style>',
@@ -83,7 +84,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('stores and retrieves the Parse5 document mode', () => {
-    const parser = new DomletParser();
+    const parser = createParser();
     const document = new DocumentImpl();
 
     parser.setDocumentMode(document, html.DOCUMENT_MODE.QUIRKS);
@@ -93,7 +94,7 @@ describe('Parser tree adapter', () => {
   });
 
   it('creates and updates a document type before the document element', () => {
-    const parser = new DomletParser();
+    const parser = createParser();
     const document = new DocumentImpl();
     const element = document.createElement('html');
 
@@ -116,3 +117,11 @@ describe('Parser tree adapter', () => {
     });
   });
 });
+
+function createParser(): DomletParser {
+  const domlet = new Domlet();
+  const document = domlet.createDocument();
+  DocumentImpl.setType(document, 'html');
+  DocumentImpl.setContentType(document, 'text/html');
+  return domlet.createParser(document);
+}

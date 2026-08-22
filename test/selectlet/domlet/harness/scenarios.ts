@@ -7,7 +7,7 @@ export type {
   ContextHome, ContextRef, Expectation, RunScenariosOptions, Scenario,
   ScenariosStatus, ScenarioStep, TestCase,
 } from '../../../harness/browser/scenarios';
-import { DomletParser } from '../../../../src/domlet/parser/parser';
+import { Domlet } from '../../../../src/domlet/domlet';
 import type { DomletDocument } from '../../../../src/domlet/nodes/document';
 import { isElement } from '../../../../src/shared/dom';
 import { createSelectlet, type Selectlet } from '../../../../src/selectlet/selectlet';
@@ -92,7 +92,7 @@ function initDocument(
     ? markup
     : `<!doctype html><html><body>${markup}</body></html>`;
 
-  return new DomletParser().parse(source);
+  return new Domlet().parse(source);
 }
 
 function runCase(

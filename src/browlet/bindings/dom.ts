@@ -267,7 +267,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
             // yet model.
           },
           create: {
-            arguments: [undefined, this],
+            arguments: [this],
             created: (value) => {
               this.associateEventTarget(value as EventTargetImpl);
             },

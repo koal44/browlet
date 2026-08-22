@@ -44,6 +44,8 @@ describe('Browlet', () => {
     expect(serializeOrigin(DocumentImpl.getOrigin(browlet.document))).toBe(
       'https://example.test',
     );
+    expect(DocumentImpl.allowsDeclarativeShadowRoots(browlet.document))
+      .toBe(true);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {

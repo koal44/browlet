@@ -11,6 +11,17 @@ describe('Domlet', () => {
     expect(document.getElementById('target')?.localName).toBe('main');
   });
 
+  it('associates a parser with an existing host-created document', () => {
+    const domlet = new Domlet();
+    const document = domlet.createDocument();
+    const parsed = domlet.createParser(document).parse(
+      '<main id="target"></main>',
+    );
+
+    expect(parsed).toBe(document);
+    expect(document.getElementById('target')?.localName).toBe('main');
+  });
+
   it('lazily associates one CSS engine with its document', () => {
     const document = new Domlet().parse('<main id="target"></main>');
     const cssEngine = DocumentImpl.getCSSEngine(document);

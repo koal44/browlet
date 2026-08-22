@@ -10,12 +10,16 @@ import {
 describe('BrowletParser', () => {
   it('waits for script-blocking style sheets before executing a script', async () => {
     const scripts: Element[] = [];
+    const domlet = new Domlet();
+    const document = domlet.createDocument();
     const parser = new BrowletParser(
-      new Domlet(),
+      domlet,
+      document,
       (script) => {
         scripts.push(script);
       },
     );
+    expect(parser.document).toBe(document);
     const first = parser.document.createElement('style');
     const second = parser.document.createElement('link');
     if (!isHTMLStyleElement(first) || !isHTMLLinkElement(second)) {

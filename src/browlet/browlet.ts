@@ -1,7 +1,5 @@
 import { Domlet } from '../domlet/domlet';
-import {
-  DocumentImpl, type DocumentInitialization, type DomletDocument,
-} from '../domlet/nodes/document';
+import { DocumentImpl, type DomletDocument } from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
 import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
@@ -103,17 +101,24 @@ export class Browlet {
   async navigate(url: string | URL): Promise<BrowletWindow> {
     const documentURL = new URL(url);
     const source = this.fetch(documentURL);
-    const parser = new BrowletParser(
-      this.#domlet,
-      (element, write) => {
-        this.executeScript(element, documentURL, write);
-      },
-      documentInitialization(documentURL),
-    );
-    const document = parser.document;
+    const document = this.#domlet.createDocument();
+    const documentURLRecord = requireURLRecord(documentURL.href);
+    DocumentImpl.setType(document, 'html');
+    DocumentImpl.setContentType(document, 'text/html');
+    DocumentImpl.setOrigin(document, obtainURLOrigin(documentURLRecord));
+    DocumentImpl.setURL(document, documentURLRecord);
+    DocumentImpl.setAllowsDeclarativeShadowRoots(document, true);
 
     this.#document = document;
     WindowImpl.setAssociatedDocument(this.#window, document);
+
+    const parser = new BrowletParser(
+      this.#domlet,
+      document,
+      (element, write) => {
+        this.executeScript(element, documentURL, write);
+      },
+    );
 
     await parser.parse(source);
     fireEvent('load', this.#window);
@@ -161,19 +166,6 @@ function getTextContent(element: ElementImpl): string {
   }
 
   return content;
-}
-
-// Transitional parser input removed by phase two's Document-first lifecycle.
-function documentInitialization(url: URL): DocumentInitialization {
-  const record = parseURL(url.href).url;
-  if (record === null) {
-    throw new Error(`Could not parse navigation URL ${url.href}`);
-  }
-
-  return {
-    origin: obtainURLOrigin(record),
-    url: record,
-  };
 }
 
 function requireURLRecord(input: string) {

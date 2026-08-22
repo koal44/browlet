@@ -279,7 +279,39 @@ export const htmlDocumentIDL = definePartialInterface({
 export class DocumentImpl
   extends NodeImpl
 {
-  readonly #state: DocumentSlots;
+  #allowDeclarativeShadowRoots = false;
+  #contentType = 'application/xml';
+  #customElementRegistry: CustomElementRegistry | null = null;
+  #encoding = 'UTF-8';
+  #isInitialAboutBlank = false;
+  #loadTimingInfo: DocumentLoadTimingInfo = {
+    navigationStartTime: 0,
+    domInteractiveTime: 0,
+    domContentLoadedEventStartTime: 0,
+    domContentLoadedEventEndTime: 0,
+    domCompleteTime: 0,
+    loadEventStartTime: 0,
+    loadEventEndTime: 0,
+  };
+  #mode = DocumentMode.NoQuirks;
+  #moduleMap: ModuleMap = { entries: [] };
+  #openerPolicy: OpenerPolicy = {
+    value: 'unsafe-none',
+    reportingEndpoint: null,
+    reportOnlyValue: 'unsafe-none',
+    reportOnlyReportingEndpoint: null,
+  };
+  #origin: Origin = createOpaqueOrigin();
+  #permissionsPolicy: PermissionsPolicy = {};
+  #policyContainer: PolicyContainer = {
+    cspList: [],
+    embedderPolicy: {},
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    integrityPolicy: {},
+    reportOnlyIntegrityPolicy: {},
+  };
+  #type: DocumentType = 'xml';
+  #url = parseDocumentURL('about:blank');
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
   #browsingContextWindow: EventTargetImpl | null = null;
@@ -293,7 +325,6 @@ export class DocumentImpl
   #writer: DocumentWriter | undefined;
 
   constructor(
-    initialization: DocumentInitialization = {},
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
@@ -304,7 +335,6 @@ export class DocumentImpl
         virtuals: DocumentImpl.#nodeVirtuals,
       },
     );
-    this.#state = createDocumentSlots(initialization);
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
@@ -326,7 +356,7 @@ export class DocumentImpl
   }
 
   get characterSet(): string {
-    return this.#state.encoding;
+    return this.#encoding;
   }
 
   get charset(): string {
@@ -338,17 +368,17 @@ export class DocumentImpl
   }
 
   get contentType(): string {
-    return this.#state.contentType;
+    return this.#contentType;
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
-    return this.#state.mode === DocumentMode.Quirks
+    return this.#mode === DocumentMode.Quirks
       ? 'BackCompat'
       : 'CSS1Compat';
   }
 
   get customElementRegistry(): CustomElementRegistry | null {
-    return this.#state.customElementRegistry;
+    return this.#customElementRegistry;
   }
 
   get doctype(): DocumentTypeImpl | null {
@@ -509,53 +539,76 @@ export class DocumentImpl
   // -- Friends ----------------------------------------------------------
 
   static getURL(document: DocumentImpl): string {
-    return serializeURL(document.#state.url);
+    return serializeURL(document.#url);
+  }
+
+  static setURL(document: DocumentImpl, url: URLRecord): void {
+    document.#url = url;
+  }
+
+  static setContentType(document: DocumentImpl, contentType: string): void {
+    document.#contentType = contentType;
   }
 
   static getMode(document: DocumentImpl): DocumentMode {
-    return document.#state.mode;
+    return document.#mode;
   }
 
   static setMode(document: DocumentImpl, mode: DocumentMode): void {
-    document.#state.mode = mode;
+    document.#mode = mode;
   }
 
   static getType(document: DocumentImpl): DocumentType {
-    return document.#state.type;
+    return document.#type;
+  }
+
+  static setType(document: DocumentImpl, type: DocumentType): void {
+    document.#type = type;
   }
 
   static getOrigin(document: DocumentImpl): Origin {
-    return document.#state.origin;
+    return document.#origin;
+  }
+
+  static setOrigin(document: DocumentImpl, origin: Origin): void {
+    document.#origin = origin;
   }
 
   static getModuleMap(document: DocumentImpl): ModuleMap {
-    return document.#state.moduleMap;
+    return document.#moduleMap;
   }
 
   static getPolicyContainer(document: DocumentImpl): PolicyContainer {
-    return document.#state.policyContainer;
+    return document.#policyContainer;
   }
 
   static getPermissionsPolicy(document: DocumentImpl): PermissionsPolicy {
-    return document.#state.permissionsPolicy;
+    return document.#permissionsPolicy;
   }
 
   static getOpenerPolicy(document: DocumentImpl): OpenerPolicy {
-    return document.#state.openerPolicy;
+    return document.#openerPolicy;
   }
 
   static getLoadTimingInfo(
     document: DocumentImpl,
   ): DocumentLoadTimingInfo {
-    return document.#state.loadTimingInfo;
+    return document.#loadTimingInfo;
   }
 
   static isInitialAboutBlank(document: DocumentImpl): boolean {
-    return document.#state.isInitialAboutBlank;
+    return document.#isInitialAboutBlank;
   }
 
   static allowsDeclarativeShadowRoots(document: DocumentImpl): boolean {
-    return document.#state.allowDeclarativeShadowRoots;
+    return document.#allowDeclarativeShadowRoots;
+  }
+
+  static setAllowsDeclarativeShadowRoots(
+    document: DocumentImpl,
+    allow: boolean,
+  ): void {
+    document.#allowDeclarativeShadowRoots = allow;
   }
 
   static getEventParent(
@@ -700,21 +753,6 @@ export type DomletDocument = DocumentImpl & Document;
 
 export type DocumentWriter = (markup: string) => void;
 
-/*
- * Transitional parser-construction input. HTML must create and initialize the
- * Document before phase two hands that existing object to the parser.
- */
-export type DocumentInitialization = {
-  allowDeclarativeShadowRoots?: boolean;
-  contentType?: string;
-  customElementRegistry?: CustomElementRegistry | null;
-  encoding?: string;
-  mode?: DocumentMode;
-  origin?: Origin;
-  type?: DocumentType;
-  url?: URLRecord;
-};
-
 export type DocumentType = 'xml' | 'html';
 
 export enum DocumentMode {
@@ -722,28 +760,6 @@ export enum DocumentMode {
   Quirks = 'quirks',
   LimitedQuirks = 'limited-quirks',
 }
-
-/*
- * Storage for slots that DOM and HTML associate directly with a Document.
- * This is not HTML's session-history "document state". Phase two removes the
- * initialization bag above and can then inline these slots if that is clearer.
- */
-type DocumentSlots = {
-  allowDeclarativeShadowRoots: boolean;
-  contentType: string;
-  customElementRegistry: CustomElementRegistry | null;
-  encoding: string;
-  isInitialAboutBlank: boolean;
-  loadTimingInfo: DocumentLoadTimingInfo;
-  mode: DocumentMode;
-  moduleMap: ModuleMap;
-  openerPolicy: OpenerPolicy;
-  origin: Origin;
-  permissionsPolicy: PermissionsPolicy;
-  policyContainer: PolicyContainer;
-  type: DocumentType;
-  url: URLRecord;
-};
 
 export type ModuleMap = {
   entries: ModuleMapEntry[];
@@ -791,47 +807,6 @@ export type DocumentLoadTimingInfo = {
 };
 
 type EmptyPolicy = Record<never, never>;
-
-function createDocumentSlots(
-  initialization: DocumentInitialization,
-): DocumentSlots {
-  return {
-    allowDeclarativeShadowRoots:
-      initialization.allowDeclarativeShadowRoots ?? false,
-    contentType: initialization.contentType ?? 'application/xml',
-    customElementRegistry: initialization.customElementRegistry ?? null,
-    encoding: initialization.encoding ?? 'UTF-8',
-    isInitialAboutBlank: false,
-    loadTimingInfo: {
-      navigationStartTime: 0,
-      domInteractiveTime: 0,
-      domContentLoadedEventStartTime: 0,
-      domContentLoadedEventEndTime: 0,
-      domCompleteTime: 0,
-      loadEventStartTime: 0,
-      loadEventEndTime: 0,
-    },
-    mode: initialization.mode ?? DocumentMode.NoQuirks,
-    moduleMap: { entries: [] },
-    openerPolicy: {
-      value: 'unsafe-none',
-      reportingEndpoint: null,
-      reportOnlyValue: 'unsafe-none',
-      reportOnlyReportingEndpoint: null,
-    },
-    origin: initialization.origin ?? createOpaqueOrigin(),
-    permissionsPolicy: {},
-    policyContainer: {
-      cspList: [],
-      embedderPolicy: {},
-      referrerPolicy: 'strict-origin-when-cross-origin',
-      integrityPolicy: {},
-      reportOnlyIntegrityPolicy: {},
-    },
-    type: initialization.type ?? 'xml',
-    url: initialization.url ?? parseDocumentURL('about:blank'),
-  };
-}
 
 function parseDocumentURL(input: string): URLRecord {
   const url = parseURL(input).url;

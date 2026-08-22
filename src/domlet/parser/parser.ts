@@ -2,8 +2,7 @@ import { html, parse, type Token, type TreeAdapter } from 'parse5';
 import type { AttrImpl } from '../nodes/attribute';
 import type { CommentImpl } from '../nodes/comment';
 import {
-  DocumentImpl, type DocumentInitialization, DocumentMode,
-  type DomletDocument,
+  DocumentImpl, DocumentMode, type DomletDocument,
 } from '../nodes/document';
 import { DocumentTypeImpl } from '../nodes/document-type';
 import { DocumentFragmentImpl } from '../nodes/document-fragment';
@@ -12,23 +11,21 @@ import {
   directDOMNodeFactory, type DOMNodeFactory,
 } from '../nodes/factory';
 import type { TextImpl } from '../nodes/text';
-import { asDocument } from '../stubs/interfaces';
 import { TreeNode } from '../tree/tree-node';
 import {
   isComment, isDocumentType, isElement, isText, NodeImpl,
 } from '../nodes/node';
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
-  #document!: DomletDocument;
-  readonly #documentInitialization: DocumentInitialization;
+  readonly #document: DomletDocument;
   readonly #documentFactory: DOMNodeFactory;
   #pendingUnpushedElement: ElementImpl | null = null;
 
   constructor(
+    document: DomletDocument,
     documentFactory: DOMNodeFactory = directDOMNodeFactory,
-    documentInitialization: DocumentInitialization = {},
   ) {
-    this.#documentInitialization = documentInitialization;
+    this.#document = document;
     this.#documentFactory = documentFactory;
   }
 
@@ -47,19 +44,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   createDocument(): DomletDocument {
-    const document = asDocument(this.#documentFactory.construct(
-      DocumentImpl,
-      [
-        {
-          ...this.#documentInitialization,
-          contentType: 'text/html',
-          type: 'html',
-        },
-        this.#documentFactory,
-      ],
-    ));
-    this.#document = document;
-    return document;
+    return this.#document;
   }
 
   createDocumentFragment(): DocumentFragmentImpl {
