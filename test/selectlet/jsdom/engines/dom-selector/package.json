@@ -1,9 +1,0 @@
-{
-  "private": true,
-  "name": "jsdom-dom-selector",
-  "version": "0.0.0",
-  "type": "commonjs",
-  "dependencies": {
-    "jsdom": "23.2.0"
-  }
-}

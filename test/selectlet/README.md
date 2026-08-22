@@ -20,20 +20,21 @@ npx playwright install
 Run the full browser harness:
 
 ```sh
-npm run test:browser
+npm run build
+npm run test:oracle:selectlet
 ```
 
 Run only cases marked `fixme`:
 
 ```sh
-npm run test:browser:fixme
+npm run test:oracle:selectlet:fixme
 ```
 
 Run a subset by label, for example:
 
 ```sh
-npm run test:browser jquery
-npm run test:browser:fixme w3c
+npm run test:oracle:selectlet jquery
+npm run test:oracle:selectlet:fixme w3c
 ```
 
 For faster iteration, run a subset by label or mark a scenario/case `only`.

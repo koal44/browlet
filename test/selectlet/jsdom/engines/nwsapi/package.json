@@ -1,9 +1,0 @@
-{
-  "private": true,
-  "name": "jsdom-nwsapi",
-  "version": "0.0.0",
-  "type": "commonjs",
-  "dependencies": {
-    "jsdom": "23.1.0"
-  }
-}

@@ -125,7 +125,7 @@ function syncSelectletIntoJsdom(jsdomDir: string): void {
     'index.d.ts',
     'selectlet.js',
   ]) {
-    const src = resolve('dist', file);
+    const src = resolve('packages/selectlet/dist', file);
     const dest = resolve(destDir, file);
 
     if (!existsSync(src)) {

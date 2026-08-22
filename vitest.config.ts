@@ -21,18 +21,6 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'jsdom',
-          environment: 'node',
-          include: [
-            'test/selectlet/jsdom/**/*.test.ts',
-            'test/selectlet/browser/**/*.test.ts',
-          ],
-          exclude: ['test/selectlet/jsdom/perf/**/*.test.ts'],
-          setupFiles: ['./test/selectlet/jsdom/harness/setup.ts'],
-        },
-      },
-      {
-        test: {
           name: 'domlet-host',
           environment: 'node',
           include: ['test/selectlet/browser/**/*.test.ts'],
@@ -41,25 +29,9 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'jsdom-perf',
-          environment: 'node',
-          include: ['test/selectlet/jsdom/perf/**/*.test.ts'],
-          testTimeout: 120_000,
-        },
-      },
-      {
-        test: {
-          name: 'wpt-browlet',
+          name: 'wpt',
           environment: 'node',
           include: ['test/wpt/browlet.test.ts'],
-          testTimeout: 70_000,
-        },
-      },
-      {
-        test: {
-          name: 'wpt-jsdom',
-          environment: 'node',
-          include: ['test/wpt/jsdom.test.ts'],
           testTimeout: 70_000,
         },
       },

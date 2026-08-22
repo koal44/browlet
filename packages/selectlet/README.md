@@ -2,7 +2,7 @@
 
 A TypeScript CSS selector engine for JavaScript DOM implementations.
 
-Selectlet provides selector APIs such as `matches()`, `closest()`, `querySelector()`, and `querySelectorAll()` for DOM environments outside browser engines. It is developed against browser-oracle tests for Chromium, Firefox, and WebKit, including translated WPT cases and jsdom integration scenarios.
+Selectlet provides selector APIs such as `matches()`, `closest()`, `querySelector()`, and `querySelectorAll()` for DOM environments outside browser engines. It is developed against Playwright oracle tests for Chromium, Firefox, and WebKit, including translated WPT cases.
 
 ## Installation
 
@@ -108,7 +108,7 @@ const sx = createSelectlet(documentImpl, {
 
 ## Status
 
-Selectlet is under active development, with ongoing browser/WPT conformance work, jsdom integration testing, and selector API performance work.
+Selectlet is under active development, with ongoing Playwright/WPT conformance and selector API performance work.
 
 ## License
 

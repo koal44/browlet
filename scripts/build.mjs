@@ -11,6 +11,9 @@ const browserGlobalNames = {
   selectlet: 'createSelectlet',
   stylelet: 'Stylelet',
 };
+
+// Pass package names to build a subset, for example:
+// node scripts/build.mjs stylelet selectlet
 const requestedNames = process.argv.slice(2);
 const selectedNames = requestedNames.length === 0 ? packageNames : requestedNames;
 
@@ -116,8 +119,6 @@ async function buildPackage(name) {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
   console.log(`built ${name} v${manifest.version}`);
-
-  if (name === 'selectlet') syncSelectletArtifacts(distDir);
 }
 
 function createBanner(name, version) {
@@ -129,57 +130,4 @@ function createBanner(name, version) {
     : ['Copyright (c) 2026 Eric Knowlton'];
 
   return `/*\n * ${name} v${version} | MIT\n * ${copyrights.join('\n * ')}\n */\n`;
-}
-
-function syncSelectletArtifacts(distDir) {
-  syncFile(
-    path.join(distDir, 'index.cjs'),
-    path.join(
-      rootDir,
-      'test/selectlet/jsdom/engines/selectlet/node_modules/nwsapi/src/nwsapi.js',
-    ),
-  );
-
-  syncSelectletPackageDist(
-    distDir,
-    path.join(rootDir, 'vendor/jsdom/node_modules/selectlet/dist'),
-  );
-}
-
-function syncFile(from, to) {
-  if (!fs.existsSync(from)) {
-    console.warn(`skipped '${to}'; missing source '${from}'`);
-    return;
-  }
-
-  if (!fs.existsSync(to)) {
-    console.warn(`skipped '${to}'; file does not exist`);
-    return;
-  }
-
-  fs.copyFileSync(from, to);
-}
-
-function syncSelectletPackageDist(fromDir, destDir) {
-  if (!fs.existsSync(destDir)) {
-    console.warn(`skipped '${destDir}'; directory does not exist`);
-    return;
-  }
-
-  for (const file of [
-    'index.mjs',
-    'index.cjs',
-    'index.d.ts',
-    'selectlet.js',
-  ]) {
-    const from = path.join(fromDir, file);
-    const to = path.join(destDir, file);
-
-    if (!fs.existsSync(from)) {
-      console.warn(`skipped '${to}'; missing source '${from}'`);
-      continue;
-    }
-
-    fs.copyFileSync(from, to);
-  }
 }
