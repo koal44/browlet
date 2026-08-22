@@ -47,6 +47,7 @@ describe('Browlet DOM binding', () => {
       'createElementNS',
       'createTextNode',
       'customElementRegistry',
+      'defaultView',
       'doctype',
       'documentElement',
       'documentURI',

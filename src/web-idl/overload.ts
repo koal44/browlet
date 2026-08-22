@@ -2,8 +2,8 @@ import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
 import { getBufferTypeName } from './buffer-source';
 import {
-  convertToIDL, createSequenceFromIterable, getMethod, materializeDefaultValue,
-  type ConversionContext, type JavaScriptMethod,
+  convertToIDL, createSequenceFromIterable, getMethod, isPlatformObject,
+  materializeDefaultValue, type ConversionContext, type JavaScriptMethod,
 } from './conversion';
 import type {
   ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
@@ -238,7 +238,7 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
     if (matches) return { candidates: matches };
   }
 
-  if (context.platformObjects.isPlatformObject(value)) {
+  if (isPlatformObject(value, context)) {
     matches = retain(candidates, ({ types }) => {
       const type = types[index] as WebIDLType;
       return containsImplementedInterface(type, value, context) ||
@@ -508,8 +508,8 @@ function containsImplementedInterface(
   return getContainedTypes(type, context.definitions).some((candidate) => {
     if (candidate.kind !== 'reference') return false;
     const interface_ = context.definitions.getInterface(candidate.name);
-    return interface_ !== undefined &&
-      context.platformObjects.implements(value, interface_);
+    if (interface_) return context.platformObjects.implements(value, interface_);
+    return context.hostDefinedInterfaces.get(candidate.name)?.is(value) ?? false;
   });
 }
 

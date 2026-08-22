@@ -8,6 +8,7 @@ import {
 } from './collection';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
+  type HostDefinedInterface,
 } from './conversion';
 import type {
   AttributeMember, CallbackInterfaceDefinition, ConstantMember,
@@ -31,6 +32,7 @@ import { getUnannotatedType } from './types';
 
 export class JavaScriptBinding {
   readonly definitions: DefinitionAssembly;
+  readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   readonly implementations: ImplementationRegistry;
   readonly platformObjects: PlatformObjectRegistry;
   readonly realm: WebIDLRealmHost;
@@ -48,8 +50,12 @@ export class JavaScriptBinding {
     realm: WebIDLRealmHost,
     platformObjects: PlatformObjectRegistry,
     implementations = new ImplementationRegistry(),
+    hostDefinedInterfaces: HostDefinedInterface[] = [],
   ) {
     this.definitions = definitions;
+    this.hostDefinedInterfaces = new Map(
+      hostDefinedInterfaces.map((interface_) => [interface_.name, interface_]),
+    );
     this.implementations = implementations;
     this.realm = realm;
     this.platformObjects = platformObjects;

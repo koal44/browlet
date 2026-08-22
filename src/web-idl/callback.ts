@@ -262,6 +262,7 @@ function withCallbackRealm(
 ): ConversionContext {
   return {
     definitions: context.definitions,
+    hostDefinedInterfaces: context.hostDefinedInterfaces,
     platformObjects: context.platformObjects,
     realm: value.realm,
   };

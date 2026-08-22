@@ -272,6 +272,10 @@ export const htmlDocumentIDL = definePartialInterface({
       arguments: [{ name: 'text', type: idlType.DOMString, variadic: true }],
       kind: 'operation', name: 'write', returns: idlType.undefined,
     },
+    {
+      kind: 'attribute', name: 'defaultView', readonly: true,
+      type: nullable(reference('WindowProxy')),
+    },
   ],
   name: 'Document',
 });
@@ -380,6 +384,10 @@ export class DocumentImpl
 
   get contentType(): string {
     return this.#contentType;
+  }
+
+  get defaultView(): Window | null {
+    return this.#browsingContext?.windowProxy ?? null;
   }
 
   get readyState(): DocumentReadyState {

@@ -15,6 +15,11 @@ export function createWindowProxy(): WindowProxy {
   return handler.windowProxy;
 }
 
+export function isWindowProxy(value: unknown): value is WindowProxy {
+  return typeof value === 'object' && value !== null &&
+    windowProxyHandlers.has(value as WindowProxy);
+}
+
 export function getWindowProxyWindow(
   windowProxy: WindowProxy,
 ): WindowImpl | null {

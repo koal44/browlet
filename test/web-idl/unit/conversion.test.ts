@@ -5,6 +5,7 @@ import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import {
   convertToIDL, convertToJavaScript, createFrozenArray,
   createFrozenArrayFromIterable, type ConversionContext,
+  type HostDefinedInterface,
 } from '../../../src/web-idl/conversion';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
@@ -12,9 +13,32 @@ import {
   frozenArray, idlType, nullable, record, reference, sequence, union,
 } from '../../../src/web-idl/definition';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL value conversion', () => {
+  it('preserves the identity of host-defined interface values', () => {
+    const object = {};
+    const interface_: HostDefinedInterface = {
+      is: (value) => value === object,
+      name: 'HostObject',
+    };
+    const { binding, realm } = createBinding([], [interface_]);
+    const type = reference('HostObject');
+
+    expect(convertToIDL(object, type, binding)).toBe(object);
+    expect(convertToJavaScript(object, type, binding)).toBe(object);
+    expect(convertToIDL(
+      object,
+      union(type, idlType.DOMString),
+      binding,
+    )).toBe(object);
+    expectRealmTypeError(
+      () => convertToIDL({}, type, binding),
+      realm,
+    );
+  });
+
   it('converts primitive values and integer annotations', () => {
     const { binding, realm } = createBinding();
     const clamp = { kind: 'no-arguments', name: 'Clamp' } as const;
@@ -438,12 +462,15 @@ describe('Web IDL value conversion', () => {
 
 function createBinding(
   definitions: Parameters<typeof assembleDefinitions>[0] = [],
+  hostDefinedInterfaces: HostDefinedInterface[] = [],
 ): { binding: JavaScriptBinding & ConversionContext; realm: Realm; } {
   const realm = new Realm();
   const binding = new JavaScriptBinding(
     assembleDefinitions(definitions),
     realm,
     new PlatformObjectRegistry(),
+    new ImplementationRegistry(),
+    hostDefinedInterfaces,
   );
   return { binding, realm };
 }

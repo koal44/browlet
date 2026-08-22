@@ -118,6 +118,17 @@ export function getMethod(
   return method as JavaScriptMethod;
 }
 
+export function isPlatformObject(
+  value: unknown,
+  context: ConversionContext,
+): boolean {
+  if (context.platformObjects.isPlatformObject(value)) return true;
+  for (const interface_ of context.hostDefinedInterfaces.values()) {
+    if (interface_.is(value)) return true;
+  }
+  return false;
+}
+
 export function materializeDefaultValue(
   value: DefaultValue,
   type: WebIDLType,
@@ -149,8 +160,14 @@ export function materializeDefaultValue(
 
 export type ConversionContext = {
   definitions: DefinitionAssembly;
+  hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   platformObjects: PlatformObjectRegistry;
   realm: WebIDLRealmHost;
+};
+
+export type HostDefinedInterface = {
+  is(value: unknown): boolean;
+  name: string;
 };
 
 export type ConversionOptions = {
@@ -468,8 +485,15 @@ function convertJavaScriptValueToReference(
         context.realm.callbacks.captureContext(),
       );
     }
-    case undefined:
+    case undefined: {
+      const interface_ = context.hostDefinedInterfaces.get(name);
+      if (interface_) {
+        return interface_.is(value)
+          ? value
+          : throwTypeError(context, `Value does not implement ${name}`);
+      }
       throw new Error(`Unknown Web IDL type ${name}`);
+    }
     default:
       throw new Error(`${name} is not a value type`);
   }
@@ -508,8 +532,14 @@ function convertReferenceToJavaScript(
         throw new Error(`IDL callback interface ${name} is not a callback value`);
       }
       return value.object;
-    case undefined:
+    case undefined: {
+      const interface_ = context.hostDefinedInterfaces.get(name);
+      if (interface_) {
+        if (interface_.is(value)) return value;
+        throw new Error(`IDL interface value does not implement ${name}`);
+      }
       throw new Error(`Unknown Web IDL type ${name}`);
+    }
     default:
       throw new Error(`${name} is not a value type`);
   }
@@ -653,7 +683,7 @@ function convertJavaScriptValueToUnion(
     if (dictionary) return convertResolvedJavaScriptValue(value, dictionary, context);
   }
 
-  if (context.platformObjects.isPlatformObject(value)) {
+  if (isPlatformObject(value, context)) {
     const interface_ = types.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interface_) return value;
@@ -799,7 +829,7 @@ function convertUnionToJavaScript(
   if (value === null && includesNullableType(type, context.definitions)) {
     return null;
   }
-  if (context.platformObjects.isPlatformObject(value)) {
+  if (isPlatformObject(value, context)) {
     const interface_ = types.find((candidate) =>
       isImplementedInterfaceType(candidate, value, context));
     if (interface_) return value;
@@ -1057,8 +1087,8 @@ function isImplementedInterfaceType(
 ): boolean {
   if (type.type.kind !== 'reference') return false;
   const interface_ = context.definitions.getInterface(type.type.name);
-  return interface_ !== undefined &&
-    context.platformObjects.implements(value, interface_);
+  if (interface_) return context.platformObjects.implements(value, interface_);
+  return context.hostDefinedInterfaces.get(type.type.name)?.is(value) ?? false;
 }
 
 function isDefinitionType(

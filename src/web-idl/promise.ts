@@ -222,6 +222,7 @@ function withPromiseRealm(
 ): ConversionContext {
   return {
     definitions: context.definitions,
+    hostDefinedInterfaces: context.hostDefinedInterfaces,
     platformObjects: context.platformObjects,
     realm: promise.realm,
   };

@@ -7,6 +7,8 @@ import {
 import { Realm } from '../../../src/browlet/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import type { HostDefinedInterface } from '../../../src/web-idl/conversion';
+import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../../src/web-idl/overload';
@@ -123,6 +125,17 @@ describe('Web IDL effective overload sets', () => {
       callable: node,
       values: [platformObject],
     });
+
+    const hostObject = {};
+    const hostBinding = createBinding([], [{
+      is: (value) => value === hostObject,
+      name: 'HostObject',
+    }]);
+    const host = namedOperation('host', reference('HostObject'));
+    expect(resolve([host, string], [hostObject], hostBinding)).toEqual({
+      callable: host,
+      values: [hostObject],
+    });
   });
 
   it('fills omitted optional arguments after selecting the callable', () => {
@@ -169,11 +182,14 @@ function namedOperation(
 
 function createBinding(
   definitions: Parameters<typeof assembleDefinitions>[0],
+  hostDefinedInterfaces: HostDefinedInterface[] = [],
 ): JavaScriptBinding {
   return new JavaScriptBinding(
     assembleDefinitions(definitions),
     new Realm(),
     new PlatformObjectRegistry(),
+    new ImplementationRegistry(),
+    hostDefinedInterfaces,
   );
 }
 
