@@ -259,19 +259,59 @@ describe('environment settings objects', () => {
 });
 
 describe('navigation lifecycle', () => {
-  it.fails(
-    'keeps the WindowProxy while replacing a cross-origin realm',
-    async () => {
-      const browlet = new Browlet({ route: () => '' });
-      const windowProxy = browlet.window;
-      const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
+  it('keeps the WindowProxy while replacing the Window and realm', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const windowProxy = browlet.window;
+    const initialDocument = browlet.document;
+    const initialWindow = getWindowProxyWindow(windowProxy);
+    const initialRealm = getRelevantRealm(initialDocument);
+    const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
 
-      await browlet.navigate('https://example.test/');
+    await browlet.navigate('https://example.test/');
 
-      expect(browlet.window).toBe(windowProxy);
-      expect(Reflect.get(browlet.window, 'Event')).not.toBe(InitialEvent);
-    },
-  );
+    const document = browlet.document;
+    const window = getWindowProxyWindow(windowProxy);
+    const realm = getRelevantRealm(document);
+    expect(browlet.window).toBe(windowProxy);
+    expect(document).not.toBe(initialDocument);
+    expect(window).not.toBe(initialWindow);
+    expect(realm).not.toBe(initialRealm);
+    expect(realm.globalObject).toBe(window);
+    expect(realm.globalThis).toBe(windowProxy);
+    expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
+    expect(window?.document).toBe(document);
+    expect(DocumentImpl.getBrowsingContext(document)?.windowProxy)
+      .toBe(windowProxy);
+  });
+
+  it('replaces initial history and pushes later navigation entries', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const traversable = Browlet.getTopLevelTraversable(browlet);
+    const initialEntry = traversable.activeSessionHistoryEntry;
+
+    await browlet.navigate('https://example.test/first');
+
+    const firstEntry = traversable.activeSessionHistoryEntry;
+    const firstRealm = getRelevantRealm(browlet.document);
+    expect(firstEntry).not.toBe(initialEntry);
+    expect(firstEntry.step).toBe(0);
+    expect(traversable.currentSessionHistoryEntry).toBe(firstEntry);
+    expect(traversable.currentSessionHistoryStep).toBe(0);
+    expect(traversable.sessionHistoryEntries).toEqual([firstEntry]);
+
+    await browlet.navigate('https://example.test/second');
+
+    const secondEntry = traversable.activeSessionHistoryEntry;
+    expect(secondEntry).not.toBe(firstEntry);
+    expect(getRelevantRealm(browlet.document)).not.toBe(firstRealm);
+    expect(secondEntry.step).toBe(1);
+    expect(traversable.currentSessionHistoryEntry).toBe(secondEntry);
+    expect(traversable.currentSessionHistoryStep).toBe(1);
+    expect(traversable.sessionHistoryEntries).toEqual([
+      firstEntry,
+      secondEntry,
+    ]);
+  });
 });
 
 class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {

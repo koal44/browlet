@@ -28,14 +28,30 @@ foundation. Indexed child navigables, cross-origin access checks, and the
 remaining specified WindowProxy internal methods enter with navigation and
 nested browsing-context support.
 
-## Transitional ownership
+## Bounded cross-document navigation
 
-Browlet still retains the active Realm, Window, Document, bindings, and parser
-services directly. Initial creation now places the Document under its
-top-level traversable, browsing context, Window, realm, and environment as
-specified; navigation and parser inversion must still make Browlet derive the
-active services from that graph. `updateWindowNamedProperties()` remains only
-until Window uses Web IDL's global named-properties projection.
+Browlet now derives the active Document, Window, realm, and bindings from its
+top-level traversable. Cross-document navigation preserves the browsing
+context and WindowProxy, creates the usual fresh Window/realm/Document graph,
+commits it through session history, and only then feeds the local response body
+to the parser. The first navigation replaces the initial `about:blank` entry;
+later ordinary navigations push entries.
+
+The local route represents an already-obtained, headerless HTML response. The
+request, fetch controller, early hints, and reserved environment slots remain
+explicitly null. COOP browsing-context-group switching, nested navigables,
+Permissions-Policy/OAC/Refresh/Link/Speculation-Rules header processing, CSP,
+Navigation Timing entries, deferred-fetch quota, unload, and navigation
+cancelation are named boundaries rather than silently approximated behavior.
+The readiness/load completion path is synchronous and does not yet model the
+HTML event loop or the separate `DOMContentLoaded` steps.
+Fragment and `javascript:` navigation still take the cross-document host path;
+their specified same-document and script-URL branches remain to be connected.
+
+`updateWindowNamedProperties()` remains only until Window uses Web IDL's
+global named-properties projection. Browlet's host exposures are intentionally
+reinstalled on each new Window; they are host configuration, not Document or
+Window lifecycle state.
 
 ## Initial browsing-context dependencies
 

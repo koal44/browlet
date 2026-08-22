@@ -288,6 +288,7 @@ export class DocumentImpl
   #contentType = 'application/xml';
   #currentDocumentReadiness: DocumentReadyState = 'complete';
   #customElementRegistry: CustomElementRegistry | null = null;
+  #duringLoadingNavigationID: string | null = null;
   #encoding = 'UTF-8';
   #internalAncestorOriginObjectsList: readonly Origin[] | null = null;
   #isInitialAboutBlank = false;
@@ -319,6 +320,7 @@ export class DocumentImpl
   };
   #type: DocumentType = 'xml';
   #url = parseDocumentURL('about:blank');
+  #wasCreatedViaCrossOriginRedirects = false;
   #readyForPostLoadTasks = false;
   #referrer = '';
   #stylelet: Stylelet | undefined;
@@ -612,6 +614,13 @@ export class DocumentImpl
     return document.#policyContainer;
   }
 
+  static setPolicyContainer(
+    document: DocumentImpl,
+    policyContainer: PolicyContainer,
+  ): void {
+    document.#policyContainer = policyContainer;
+  }
+
   static getPermissionsPolicy(document: DocumentImpl): PermissionsPolicy {
     return document.#permissionsPolicy;
   }
@@ -641,6 +650,13 @@ export class DocumentImpl
 
   static getOpenerPolicy(document: DocumentImpl): OpenerPolicy {
     return document.#openerPolicy;
+  }
+
+  static setOpenerPolicy(
+    document: DocumentImpl,
+    openerPolicy: OpenerPolicy,
+  ): void {
+    document.#openerPolicy = openerPolicy;
   }
 
   static getLoadTimingInfo(
@@ -740,6 +756,43 @@ export class DocumentImpl
     document: DocumentImpl,
   ): DocumentReadyState {
     return document.#currentDocumentReadiness;
+  }
+
+  static setCurrentDocumentReadiness(
+    document: DocumentImpl,
+    readiness: DocumentReadyState,
+  ): void {
+    document.#currentDocumentReadiness = readiness;
+  }
+
+  static setReferrer(document: DocumentImpl, referrer: string): void {
+    document.#referrer = referrer;
+  }
+
+  static wasCreatedViaCrossOriginRedirects(
+    document: DocumentImpl,
+  ): boolean {
+    return document.#wasCreatedViaCrossOriginRedirects;
+  }
+
+  static setWasCreatedViaCrossOriginRedirects(
+    document: DocumentImpl,
+    value: boolean,
+  ): void {
+    document.#wasCreatedViaCrossOriginRedirects = value;
+  }
+
+  static getDuringLoadingNavigationID(
+    document: DocumentImpl,
+  ): string | null {
+    return document.#duringLoadingNavigationID;
+  }
+
+  static setDuringLoadingNavigationID(
+    document: DocumentImpl,
+    id: string | null,
+  ): void {
+    document.#duringLoadingNavigationID = id;
   }
 
   static getCompletelyLoadedTime(document: DocumentImpl): number | null {

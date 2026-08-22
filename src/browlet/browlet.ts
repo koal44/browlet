@@ -1,14 +1,20 @@
 import { Domlet } from '../domlet/domlet';
 import { DocumentImpl, type DomletDocument } from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
-import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
-import { obtainURLOrigin, parseURL } from '../url/url';
+import { parseURL } from '../url/url';
 import { BrowletBindings } from './bindings/browlet';
+import {
+  completelyFinishLoading, createAndInitializeDocument,
+} from './document-lifecycle';
 import {
   createNewTopLevelTraversable, type TopLevelTraversable,
 } from './navigable';
+import {
+  createNavigationHistoryEntry, createNavigationParams,
+  finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
+} from './navigation';
 import { BrowletParser, type DocumentWrite } from './parser';
 import { getRelevantRealm, type Realm } from './realm';
 import type { WindowProxy } from './window-proxy';
@@ -16,24 +22,10 @@ import { updateWindowNamedProperties, WindowImpl } from './window';
 import { UserAgent } from './user-agent';
 
 export class Browlet {
-  // Transitional direct services: the parser/navigation phase will obtain
-  // these from the active Document's environment rather than Browlet fields.
-  readonly #bindings: BrowletBindings;
-  readonly #domlet: Domlet;
-  #document: DomletDocument;
-  readonly #realm: Realm;
+  readonly #exposures = new Map<string, unknown>();
   #route: BrowletRoute;
   readonly #traversable: TopLevelTraversable;
   readonly #userAgent: UserAgent;
-  #window: WindowImpl;
-
-  /*
-   * TODO(HTML navigation): Browlet temporarily preserves this Realm and Window
-   * across navigation. HTML instead preserves only the WindowProxy when a new
-   * Window is required. Node's VM cannot use that existing WindowProxy as a
-   * replacement context's actual global-this, so the host bridge remains an
-   * explicit lifecycle limitation.
-   */
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
@@ -43,21 +35,20 @@ export class Browlet {
       null,
       '',
     );
-    const document = this.#traversable.activeDocument;
-    const window = this.#traversable.activeWindow;
-    if (document === null || window === null) {
+    if (
+      this.#traversable.activeDocument === null ||
+      this.#traversable.activeWindow === null
+    ) {
       throw new Error('Initial top-level traversable is incomplete');
     }
-
-    this.#document = document;
-    this.#window = window;
-    this.#realm = getRelevantRealm(document);
-    this.#bindings = BrowletBindings.forRealm(this.#realm);
-    this.#domlet = new Domlet(this.#bindings.dom);
   }
 
   get document(): DomletDocument {
-    return this.#document;
+    const document = this.#traversable.activeDocument;
+    if (document === null) {
+      throw new Error('Top-level traversable has no active Document');
+    }
+    return document;
   }
 
   get window(): BrowletWindow {
@@ -77,7 +68,8 @@ export class Browlet {
   }
 
   expose(name: string, value: unknown): void {
-    Object.defineProperty(this.#window, name, {
+    this.#exposures.set(name, value);
+    Object.defineProperty(this.requireActiveWindow(), name, {
       configurable: true,
       writable: true,
       value,
@@ -87,36 +79,77 @@ export class Browlet {
   async navigate(url: string | URL): Promise<BrowletWindow> {
     const documentURL = new URL(url);
     const source = this.fetch(documentURL);
-    const document = this.#domlet.createDocument();
     const documentURLRecord = requireURLRecord(documentURL.href);
-    DocumentImpl.setType(document, 'html');
-    DocumentImpl.setContentType(document, 'text/html');
-    DocumentImpl.setOrigin(document, obtainURLOrigin(documentURLRecord));
-    DocumentImpl.setURL(document, documentURLRecord);
-    DocumentImpl.setAllowsDeclarativeShadowRoots(document, true);
+    const navigationParams = createNavigationParams(
+      this.#traversable,
+      documentURLRecord,
+      source,
+    );
+    const historyHandling = resolveNavigationHistoryBehavior(
+      this.#traversable,
+      documentURLRecord,
+      navigationParams.origin,
+    );
+    const document = createAndInitializeDocument(
+      'html',
+      'text/html',
+      navigationParams,
+    );
+    const realm = getRelevantRealm(document);
+    const window = realm.globalObject;
+    if (!(window instanceof WindowImpl)) {
+      throw new Error('Navigation Document global object is not a Window');
+    }
+    this.installExposures(window);
+    const historyEntry = createNavigationHistoryEntry(
+      document,
+      navigationParams,
+    );
+    finalizeCrossDocumentNavigation(
+      this.#traversable,
+      historyHandling,
+      navigationParams.userInvolvement,
+      historyEntry,
+    );
 
-    this.#document = document;
-    WindowImpl.setAssociatedDocument(this.#window, document);
+    const bindings = BrowletBindings.forRealm(realm);
+    const domlet = new Domlet(bindings.dom);
 
     const parser = new BrowletParser(
-      this.#domlet,
+      domlet,
       document,
       (element, write) => {
-        this.executeScript(element, documentURL, write);
+        this.executeScript(
+          element,
+          documentURL,
+          write,
+          document,
+          window,
+          realm,
+        );
       },
     );
 
     await parser.parse(source);
-    fireEvent('load', this.#window);
+    completelyFinishLoading(document);
     return this.window;
   }
 
   close(): void {}
 
+  // -- Friends ----------------------------------------------------------
+
+  static getTopLevelTraversable(browlet: Browlet): TopLevelTraversable {
+    return browlet.#traversable;
+  }
+
   private executeScript(
     element: ElementImpl,
     documentURL: URL,
     write: DocumentWrite,
+    document: DomletDocument,
+    window: WindowImpl,
+    realm: Realm,
   ): void {
     const sourceURL = element.getAttribute('src');
     const scriptURL = sourceURL === null
@@ -129,10 +162,28 @@ export class Browlet {
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
 
-    updateWindowNamedProperties(this.#window, this.#document);
-    DocumentImpl.withWriter(this.#document, write, () => {
-      this.#realm.evaluate(source, scriptURL.href, lineOffset);
+    updateWindowNamedProperties(window, document);
+    DocumentImpl.withWriter(document, write, () => {
+      realm.evaluate(source, scriptURL.href, lineOffset);
     });
+  }
+
+  private installExposures(window: WindowImpl): void {
+    for (const [name, value] of this.#exposures) {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        writable: true,
+        value,
+      });
+    }
+  }
+
+  private requireActiveWindow(): WindowImpl {
+    const window = this.#traversable.activeWindow;
+    if (window === null) {
+      throw new Error('Top-level traversable has no active Window');
+    }
+    return window;
   }
 }
 

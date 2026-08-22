@@ -46,6 +46,20 @@ describe('Browlet', () => {
     );
     expect(DocumentImpl.allowsDeclarativeShadowRoots(browlet.document))
       .toBe(true);
+    expect(DocumentImpl.getCurrentDocumentReadiness(browlet.document))
+      .toBe('complete');
+    expect(DocumentImpl.isReadyForPostLoadTasks(browlet.document)).toBe(true);
+    expect(DocumentImpl.getCompletelyLoadedTime(browlet.document))
+      .not.toBeNull();
+    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(browlet.document))
+      .toBe(false);
+    expect(DocumentImpl.getDuringLoadingNavigationID(browlet.document))
+      .toBeNull();
+    expect(DocumentImpl.getCustomElementRegistry(browlet.document))
+      .not.toBeNull();
+    expect(DocumentImpl.getInternalAncestorOriginObjectsList(browlet.document))
+      .toEqual([]);
+    expect(DocumentImpl.getAncestorOriginsList(browlet.document)).toEqual([]);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
