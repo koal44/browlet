@@ -31,7 +31,23 @@ nested browsing-context support.
 ## Transitional ownership
 
 Browlet still retains the active Realm, Window, Document, bindings, and parser
-services directly. Document/parser inversion, initial navigable construction,
-and navigation must move those objects under their specification-defined
-owners. `updateWindowNamedProperties()` remains only until Window uses Web
-IDL's global named-properties projection.
+services directly. Initial creation now places the Document under its
+top-level traversable, browsing context, Window, realm, and environment as
+specified; navigation and parser inversion must still make Browlet derive the
+active services from that graph. `updateWindowNamedProperties()` remains only
+until Window uses Web IDL's global named-properties projection.
+
+## Initial browsing-context dependencies
+
+The null-opener top-level `about:blank` path is connected. Nested and auxiliary
+creation deliberately stop at named gaps until Browlet has iframe sandboxing,
+permissions-policy inheritance, referrer-policy lookup, ancestor navigables,
+and storage-shed cloning. The initial `CustomElementRegistry` preserves the
+specified actor and identity, but its Web IDL projection and upgrade behavior
+enter with HTML custom elements. The WebDriver BiDi notification is likewise
+deferred until Browlet exposes that integration.
+
+Initial navigation timing currently uses Node's monotonic `performance.now()`
+without High Resolution Time's implementation-defined coarsening and jitter.
+The coarsening boundary is explicit in browsing-context creation so the clock
+backend can replace that identity operation later.

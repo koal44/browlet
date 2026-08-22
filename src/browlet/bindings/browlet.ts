@@ -23,6 +23,10 @@ export class BrowletBindings {
   readonly #binding: JavaScriptBinding;
 
   constructor(realm: Realm) {
+    if (bindingsByRealm.has(realm)) {
+      throw new Error('A Realm can have only one Browlet binding');
+    }
+
     const implementations = new ImplementationRegistry();
     this.#binding = new JavaScriptBinding(
       browletDefinitions,
@@ -33,12 +37,21 @@ export class BrowletBindings {
     this.dom = new DOMBinding(realm, this.#binding);
     this.url = new URLBinding(this.#binding);
     registerOriginImplementation(this.#binding);
+    bindingsByRealm.set(realm, this);
+  }
+
+  static forRealm(realm: Realm): BrowletBindings {
+    const bindings = bindingsByRealm.get(realm);
+    if (!bindings) throw new Error('Realm has no Browlet binding');
+    return bindings;
   }
 
   install(target: object): void {
     this.#binding.install(target);
   }
 }
+
+const bindingsByRealm = new WeakMap<Realm, BrowletBindings>();
 
 const browletDefinitions = assembleDefinitions([
   originIDL,

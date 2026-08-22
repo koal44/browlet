@@ -18,4 +18,5 @@ type StubbedConstructor<
     : never;
 
 export const withLocationStub = stub<Location>();
+export const withCustomElementRegistryStub = stub<CustomElementRegistry>();
 export const withWindowStub = stub<Window>();

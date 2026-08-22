@@ -279,10 +279,17 @@ export const htmlDocumentIDL = definePartialInterface({
 export class DocumentImpl
   extends NodeImpl
 {
+  #aboutBaseURL: URLRecord | null = null;
+  readonly #activeSandboxingFlagSet: SandboxingFlagSet = new Set();
   #allowDeclarativeShadowRoots = false;
+  #ancestorOriginsList: readonly string[] | null = null;
+  #browsingContext: DocumentBrowsingContext | null = null;
+  #completelyLoadedTime: number | null = null;
   #contentType = 'application/xml';
+  #currentDocumentReadiness: DocumentReadyState = 'complete';
   #customElementRegistry: CustomElementRegistry | null = null;
   #encoding = 'UTF-8';
+  #internalAncestorOriginObjectsList: readonly Origin[] | null = null;
   #isInitialAboutBlank = false;
   #loadTimingInfo: DocumentLoadTimingInfo = {
     navigationStartTime: 0,
@@ -312,6 +319,8 @@ export class DocumentImpl
   };
   #type: DocumentType = 'xml';
   #url = parseDocumentURL('about:blank');
+  #readyForPostLoadTasks = false;
+  #referrer = '';
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
   #browsingContextWindow: EventTargetImpl | null = null;
@@ -350,9 +359,9 @@ export class DocumentImpl
 
   override get baseURI(): string {
     // HTML's full document base URL algorithm additionally consults the first
-    // applicable <base href> element. Until that element behavior exists, the
-    // document URL is the specified fallback for ordinary documents.
-    return this.URL;
+    // applicable <base href> element. Until that element behavior exists, an
+    // about base URL takes precedence over the document URL.
+    return serializeURL(this.#aboutBaseURL ?? this.#url);
   }
 
   get characterSet(): string {
@@ -369,6 +378,14 @@ export class DocumentImpl
 
   get contentType(): string {
     return this.#contentType;
+  }
+
+  get readyState(): DocumentReadyState {
+    return this.#currentDocumentReadiness;
+  }
+
+  get referrer(): string {
+    return this.#referrer;
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
@@ -550,6 +567,19 @@ export class DocumentImpl
     document.#contentType = contentType;
   }
 
+  static getBrowsingContext(
+    document: DocumentImpl,
+  ): DocumentBrowsingContext | null {
+    return document.#browsingContext;
+  }
+
+  static setBrowsingContext(
+    document: DocumentImpl,
+    browsingContext: DocumentBrowsingContext | null,
+  ): void {
+    document.#browsingContext = browsingContext;
+  }
+
   static getMode(document: DocumentImpl): DocumentMode {
     return document.#mode;
   }
@@ -586,6 +616,29 @@ export class DocumentImpl
     return document.#permissionsPolicy;
   }
 
+  static setPermissionsPolicy(
+    document: DocumentImpl,
+    permissionsPolicy: PermissionsPolicy,
+  ): void {
+    document.#permissionsPolicy = permissionsPolicy;
+  }
+
+  static getActiveSandboxingFlagSet(
+    document: DocumentImpl,
+  ): SandboxingFlagSet {
+    return document.#activeSandboxingFlagSet;
+  }
+
+  static setActiveSandboxingFlagSet(
+    document: DocumentImpl,
+    sandboxingFlagSet: ReadonlySet<SandboxingFlag>,
+  ): void {
+    document.#activeSandboxingFlagSet.clear();
+    for (const flag of sandboxingFlagSet) {
+      document.#activeSandboxingFlagSet.add(flag);
+    }
+  }
+
   static getOpenerPolicy(document: DocumentImpl): OpenerPolicy {
     return document.#openerPolicy;
   }
@@ -596,8 +649,33 @@ export class DocumentImpl
     return document.#loadTimingInfo;
   }
 
+  static setLoadTimingInfo(
+    document: DocumentImpl,
+    loadTimingInfo: DocumentLoadTimingInfo,
+  ): void {
+    document.#loadTimingInfo = loadTimingInfo;
+  }
+
   static isInitialAboutBlank(document: DocumentImpl): boolean {
     return document.#isInitialAboutBlank;
+  }
+
+  static setIsInitialAboutBlank(
+    document: DocumentImpl,
+    isInitialAboutBlank: boolean,
+  ): void {
+    document.#isInitialAboutBlank = isInitialAboutBlank;
+  }
+
+  static getAboutBaseURL(document: DocumentImpl): URLRecord | null {
+    return document.#aboutBaseURL;
+  }
+
+  static setAboutBaseURL(
+    document: DocumentImpl,
+    aboutBaseURL: URLRecord | null,
+  ): void {
+    document.#aboutBaseURL = aboutBaseURL;
   }
 
   static allowsDeclarativeShadowRoots(document: DocumentImpl): boolean {
@@ -609,6 +687,70 @@ export class DocumentImpl
     allow: boolean,
   ): void {
     document.#allowDeclarativeShadowRoots = allow;
+  }
+
+  static getCustomElementRegistry(
+    document: DocumentImpl,
+  ): CustomElementRegistry | null {
+    return document.#customElementRegistry;
+  }
+
+  static setCustomElementRegistry(
+    document: DocumentImpl,
+    registry: CustomElementRegistry,
+  ): void {
+    document.#customElementRegistry = registry;
+  }
+
+  static getInternalAncestorOriginObjectsList(
+    document: DocumentImpl,
+  ): readonly Origin[] | null {
+    return document.#internalAncestorOriginObjectsList;
+  }
+
+  static setInternalAncestorOriginObjectsList(
+    document: DocumentImpl,
+    origins: readonly Origin[],
+  ): void {
+    document.#internalAncestorOriginObjectsList = origins;
+  }
+
+  static getAncestorOriginsList(
+    document: DocumentImpl,
+  ): readonly string[] | null {
+    return document.#ancestorOriginsList;
+  }
+
+  static setAncestorOriginsList(
+    document: DocumentImpl,
+    origins: readonly string[],
+  ): void {
+    document.#ancestorOriginsList = origins;
+  }
+
+  static isReadyForPostLoadTasks(document: DocumentImpl): boolean {
+    return document.#readyForPostLoadTasks;
+  }
+
+  static markReadyForPostLoadTasks(document: DocumentImpl): void {
+    document.#readyForPostLoadTasks = true;
+  }
+
+  static getCurrentDocumentReadiness(
+    document: DocumentImpl,
+  ): DocumentReadyState {
+    return document.#currentDocumentReadiness;
+  }
+
+  static getCompletelyLoadedTime(document: DocumentImpl): number | null {
+    return document.#completelyLoadedTime;
+  }
+
+  static setCompletelyLoadedTime(
+    document: DocumentImpl,
+    time: number,
+  ): void {
+    document.#completelyLoadedTime = time;
   }
 
   static getEventParent(
@@ -755,6 +897,15 @@ export type DocumentWriter = (markup: string) => void;
 
 export type DocumentType = 'xml' | 'html';
 
+/*
+ * Domlet remains independent of any one HTML host. This is the narrow shape
+ * required by HTML's Document browsing-context slot; Browlet's concrete
+ * BrowsingContext supplies it.
+ */
+export type DocumentBrowsingContext = {
+  readonly windowProxy: Window;
+};
+
 export enum DocumentMode {
   NoQuirks = 'no-quirks',
   Quirks = 'quirks',
@@ -781,6 +932,26 @@ export type PolicyContainer = {
 };
 
 export type PermissionsPolicy = EmptyPolicy;
+
+export type SandboxingFlagSet = Set<SandboxingFlag>;
+
+export type SandboxingFlag =
+  | 'sandboxed-navigation'
+  | 'sandboxed-auxiliary-navigation'
+  | 'sandboxed-top-level-navigation-without-user-activation'
+  | 'sandboxed-top-level-navigation-with-user-activation'
+  | 'sandboxed-origin'
+  | 'sandboxed-forms'
+  | 'sandboxed-pointer-lock'
+  | 'sandboxed-scripts'
+  | 'sandboxed-automatic-features'
+  | 'sandboxed-document-domain'
+  | 'sandbox-propagates-to-auxiliary-browsing-contexts'
+  | 'sandboxed-modals'
+  | 'sandboxed-orientation-lock'
+  | 'sandboxed-presentation'
+  | 'sandboxed-downloads'
+  | 'sandboxed-custom-protocols-navigation';
 
 export type OpenerPolicy = {
   value: OpenerPolicyValue;

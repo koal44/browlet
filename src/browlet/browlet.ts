@@ -4,29 +4,27 @@ import type { ElementImpl } from '../domlet/nodes/element';
 import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
-import { createOpaqueOrigin } from '../url/origin';
 import { obtainURLOrigin, parseURL } from '../url/url';
-import { obtainSimilarOriginWindowAgent } from './agents';
 import { BrowletBindings } from './bindings/browlet';
-import { BrowsingContext } from './browsing-context';
-import { setupWindowEnvironmentSettingsObject } from './environment';
-import { BrowletParser, type DocumentWrite } from './parser';
-import { createRealm, type Realm } from './realm';
 import {
-  setWindowProxyWindow, type WindowProxy,
-} from './window-proxy';
+  createNewTopLevelTraversable, type TopLevelTraversable,
+} from './navigable';
+import { BrowletParser, type DocumentWrite } from './parser';
+import { getRelevantRealm, type Realm } from './realm';
+import type { WindowProxy } from './window-proxy';
 import { updateWindowNamedProperties, WindowImpl } from './window';
 import { UserAgent } from './user-agent';
 
 export class Browlet {
-  // Transitional ownership: phases two through four move active lifecycle
-  // objects under the user agent, traversable, browsing context, and realm.
+  // Transitional direct services: the parser/navigation phase will obtain
+  // these from the active Document's environment rather than Browlet fields.
   readonly #bindings: BrowletBindings;
-  readonly #browsingContext: BrowsingContext;
   readonly #domlet: Domlet;
   #document: DomletDocument;
   readonly #realm: Realm;
   #route: BrowletRoute;
+  readonly #traversable: TopLevelTraversable;
+  readonly #userAgent: UserAgent;
   #window: WindowImpl;
 
   /*
@@ -39,39 +37,23 @@ export class Browlet {
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
-    const userAgent = new UserAgent();
-    const group = userAgent.createBrowsingContextGroup();
-    this.#browsingContext = new BrowsingContext();
-    group.append(this.#browsingContext);
-
-    const initialURL = requireURLRecord('about:blank');
-    const initialOrigin = createOpaqueOrigin();
-    const agent = obtainSimilarOriginWindowAgent(
-      initialOrigin,
-      group,
-      false,
-    );
-    this.#window = new WindowImpl(new URL('about:blank'));
-    const executionContext = createRealm(agent, {
-      createGlobalObject: () => this.#window,
-      createGlobalThisValue: () => this.#browsingContext.windowProxy,
-    });
-    this.#realm = executionContext.realm;
-    setupWindowEnvironmentSettingsObject(
-      initialURL,
-      executionContext,
+    this.#userAgent = new UserAgent();
+    this.#traversable = createNewTopLevelTraversable(
+      this.#userAgent,
       null,
-      initialURL,
-      initialOrigin,
+      '',
     );
-    this.#bindings = new BrowletBindings(this.#realm);
-    this.#domlet = new Domlet(this.#bindings.dom);
-    this.#document = this.#domlet.parse();
-    WindowImpl.setAssociatedDocument(this.#window, this.#document);
-    this.#bindings.dom.associateEventTarget(this.#window);
-    setWindowProxyWindow(this.#browsingContext.windowProxy, this.#window);
+    const document = this.#traversable.activeDocument;
+    const window = this.#traversable.activeWindow;
+    if (document === null || window === null) {
+      throw new Error('Initial top-level traversable is incomplete');
+    }
 
-    this.#bindings.install(this.#window);
+    this.#document = document;
+    this.#window = window;
+    this.#realm = getRelevantRealm(document);
+    this.#bindings = BrowletBindings.forRealm(this.#realm);
+    this.#domlet = new Domlet(this.#bindings.dom);
   }
 
   get document(): DomletDocument {
@@ -79,7 +61,11 @@ export class Browlet {
   }
 
   get window(): BrowletWindow {
-    return this.#browsingContext.windowProxy;
+    const browsingContext = this.#traversable.activeBrowsingContext;
+    if (browsingContext === null) {
+      throw new Error('Top-level traversable has no active browsing context');
+    }
+    return browsingContext.windowProxy;
   }
 
   route(route: BrowletRoute): void {

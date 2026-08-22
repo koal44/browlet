@@ -4,6 +4,7 @@ import {
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../web-idl/javascript-realm';
+import { sharedPlatformObjects } from '../web-idl/platform-object';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
 import { WindowImpl } from './window';
@@ -33,6 +34,18 @@ export function createRealm(
     agent.windowObjects.add(globalObject as Window);
   }
   return { realm };
+}
+
+export function getRelevantRealm(value: object): Realm {
+  const platformObjectRecord = sharedPlatformObjects.getRecord(value) ??
+    sharedPlatformObjects.getImplementationRecord(value);
+  if (platformObjectRecord?.realm instanceof Realm) {
+    return platformObjectRecord.realm;
+  }
+
+  const realm = Realm.getAssociatedRealm(value);
+  if (!realm) throw new Error('Object has no relevant Realm');
+  return realm;
 }
 
 export class Realm implements WebIDLRealmHost {
@@ -358,6 +371,10 @@ export class Realm implements WebIDLRealmHost {
     settings: EnvironmentSettingsObject,
   ): void {
     realm.#hostDefined = settings;
+  }
+
+  static getAssociatedRealm(value: object): Realm | undefined {
+    return Realm.#getAssociatedRealm(value);
   }
 
   get #windowImplementation(): WindowImpl | undefined {

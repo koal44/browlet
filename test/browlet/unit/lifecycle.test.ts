@@ -9,9 +9,11 @@ import {
   EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../src/browlet/environment';
 import {
-  initializeNavigable, TopLevelTraversable,
+  createNewTopLevelTraversable, initializeNavigable, TopLevelTraversable,
 } from '../../../src/browlet/navigable';
-import { createRealm, Realm } from '../../../src/browlet/realm';
+import {
+  createRealm, getRelevantRealm, Realm,
+} from '../../../src/browlet/realm';
 import { createDocumentState } from '../../../src/browlet/session-history';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import {
@@ -132,6 +134,79 @@ describe('navigables', () => {
     expect(serializeURL(traversable.activeSessionHistoryEntry.url))
       .toBe(document.URL);
     expect(traversable.activeDocument).toBe(document);
+  });
+
+  it('creates the complete initial top-level about:blank graph', () => {
+    const userAgent = new UserAgent();
+
+    const traversable = createNewTopLevelTraversable(
+      userAgent,
+      null,
+      '',
+    );
+    const document = traversable.activeDocument;
+    const browsingContext = traversable.activeBrowsingContext;
+    const window = traversable.activeWindow;
+    if (document === null || browsingContext === null || window === null) {
+      throw new Error('Expected a complete initial browsing context graph');
+    }
+    const realm = getRelevantRealm(document);
+    const settings = realm.hostDefined;
+    if (settings === null) throw new Error('Expected Window environment settings');
+
+    expect(userAgent.topLevelTraversableSet).toEqual(new Set([traversable]));
+    expect(userAgent.browsingContextGroupSet)
+      .toEqual(new Set([browsingContext.group]));
+    expect(browsingContext.group?.browsingContextSet)
+      .toEqual(new Set([browsingContext]));
+    expect(browsingContext.popupSandboxingFlagSet).toEqual(new Set());
+    expect(browsingContext.activeDocument).toBe(document);
+    expect(browsingContext.activeWindow).toBe(window);
+    expect(getWindowProxyWindow(browsingContext.windowProxy)).toBe(window);
+
+    expect(realm.globalObject).toBe(window);
+    expect(realm.globalThis).toBe(browsingContext.windowProxy);
+    expect(realm.agent.agentCluster).not.toBeNull();
+    expect(window.document).toBe(document);
+
+    expect(DocumentImpl.getType(document)).toBe('html');
+    expect(DocumentImpl.getMode(document)).toBe('quirks');
+    expect(document.contentType).toBe('text/html');
+    expect(document.URL).toBe('about:blank');
+    expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
+    expect(DocumentImpl.getBrowsingContext(document)).toBe(browsingContext);
+    expect(DocumentImpl.getActiveSandboxingFlagSet(document)).toEqual(new Set());
+    expect(DocumentImpl.getAboutBaseURL(document)).toBeNull();
+    expect(DocumentImpl.isInitialAboutBlank(document)).toBe(true);
+    expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(true);
+    expect(DocumentImpl.getCustomElementRegistry(document)).not.toBeNull();
+    expect(DocumentImpl.getInternalAncestorOriginObjectsList(document))
+      .toEqual([]);
+    expect(DocumentImpl.getAncestorOriginsList(document)).toEqual([]);
+    expect(DocumentImpl.isReadyForPostLoadTasks(document)).toBe(true);
+    expect(DocumentImpl.getCurrentDocumentReadiness(document)).toBe('complete');
+    expect(DocumentImpl.getCompletelyLoadedTime(document)).not.toBeNull();
+    expect(document.documentElement.localName).toBe('html');
+    expect(document.head.localName).toBe('head');
+    expect(document.body.localName).toBe('body');
+
+    expect(settings.executionReady).toBe(true);
+    expect(serializeURL(settings.creationURL)).toBe('about:blank');
+    expect(serializeURL(settings.topLevelCreationURL!)).toBe('about:blank');
+    expect(settings.topLevelOrigin).toBe(DocumentImpl.getOrigin(document));
+    expect(settings.timeOrigin)
+      .toBe(DocumentImpl.getLoadTimingInfo(document).navigationStartTime);
+
+    const initialEntry = traversable.activeSessionHistoryEntry;
+    expect(traversable.currentSessionHistoryEntry).toBe(initialEntry);
+    expect(initialEntry.step).toBe(0);
+    expect(traversable.sessionHistoryEntries).toEqual([initialEntry]);
+    expect(initialEntry.documentState.document).toBe(document);
+    expect(initialEntry.documentState.initiatorOrigin).toBeNull();
+    expect(initialEntry.documentState.origin)
+      .toBe(DocumentImpl.getOrigin(document));
+    expect(initialEntry.documentState.navigableTargetName).toBe('');
+    expect(initialEntry.documentState.aboutBaseURL).toBeNull();
   });
 });
 

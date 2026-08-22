@@ -1,7 +1,15 @@
-import type { DomletDocument } from '../domlet/nodes/document';
 import {
-  createSessionHistoryEntry, type DocumentState, type SessionHistoryEntry,
+  DocumentImpl, type DomletDocument,
+} from '../domlet/nodes/document';
+import {
+  BrowsingContext, createNewTopLevelBrowsingContextAndDocument,
+} from './browsing-context';
+import {
+  createDocumentState, createSessionHistoryEntry, type DocumentState,
+  type SessionHistoryEntry,
 } from './session-history';
+import type { UserAgent } from './user-agent';
+import type { WindowImpl } from './window';
 
 export class Navigable {
   readonly id = Symbol('Navigable');
@@ -13,6 +21,19 @@ export class Navigable {
 
   get activeDocument(): DomletDocument | null {
     return this.activeSessionHistoryEntry.documentState.document;
+  }
+
+  get activeBrowsingContext(): BrowsingContext | null {
+    const document = this.activeDocument;
+    if (document === null) return null;
+    const browsingContext = DocumentImpl.getBrowsingContext(document);
+    return browsingContext instanceof BrowsingContext
+      ? browsingContext
+      : null;
+  }
+
+  get activeWindow(): WindowImpl | null {
+    return this.activeBrowsingContext?.activeWindow ?? null;
   }
 
   allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
@@ -57,4 +78,57 @@ export function initializeNavigable(
 
   // TODO(HTML page visibility): Set the Document's initial visibility state
   // to the traversable navigable's system visibility state.
+}
+
+export function createNewTopLevelTraversable(
+  userAgent: UserAgent,
+  opener: BrowsingContext | null,
+  targetName: string,
+  openerNavigableForWebDriver?: Navigable,
+): TopLevelTraversable {
+  let document: DomletDocument;
+
+  if (opener === null) {
+    [, document] = createNewTopLevelBrowsingContextAndDocument(userAgent);
+  } else {
+    document = createNewAuxiliaryBrowsingContextAndDocument(opener);
+  }
+
+  const documentState = createDocumentState(document);
+  documentState.initiatorOrigin = opener === null
+    ? null
+    : DocumentImpl.getOrigin(document);
+  documentState.origin = DocumentImpl.getOrigin(document);
+  documentState.navigableTargetName = targetName;
+  documentState.aboutBaseURL = DocumentImpl.getAboutBaseURL(document);
+
+  const traversable = new TopLevelTraversable();
+  initializeNavigable(traversable, documentState);
+  const initialHistoryEntry = traversable.activeSessionHistoryEntry;
+  initialHistoryEntry.step = 0;
+  traversable.sessionHistoryEntries.push(initialHistoryEntry);
+
+  if (opener !== null) {
+    legacyCloneTraversableStorageShed(opener, traversable);
+  }
+
+  userAgent.appendTopLevelTraversable(traversable);
+
+  // TODO(WebDriver BiDi): Invoke "navigable created" with the traversable and
+  // openerNavigableForWebDriver once Browlet exposes the BiDi integration.
+  void openerNavigableForWebDriver;
+  return traversable;
+}
+
+function createNewAuxiliaryBrowsingContextAndDocument(
+  _opener: BrowsingContext,
+): DomletDocument {
+  throw new Error('Auxiliary browsing-context creation is not implemented');
+}
+
+function legacyCloneTraversableStorageShed(
+  _opener: BrowsingContext,
+  _traversable: TopLevelTraversable,
+): void {
+  throw new Error('Traversable storage cloning is not implemented');
 }
