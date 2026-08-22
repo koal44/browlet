@@ -6,48 +6,74 @@ import type { ElementImpl } from '../domlet/nodes/element';
 import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
+import { createOpaqueOrigin } from '../url/origin';
 import { obtainURLOrigin, parseURL } from '../url/url';
+import { obtainSimilarOriginWindowAgent } from './agents';
 import { BrowletBindings } from './bindings/browlet';
+import { BrowsingContext } from './browsing-context';
+import { setupWindowEnvironmentSettingsObject } from './environment';
 import { BrowletParser, type DocumentWrite } from './parser';
-import { Realm } from './realm';
-import { WindowImpl } from './window';
+import { createRealm, type Realm } from './realm';
 import {
-  WindowProxyController, type WindowProxyValue,
+  setWindowProxyWindow, type WindowProxy,
 } from './window-proxy';
+import { updateWindowNamedProperties, WindowImpl } from './window';
+import { UserAgent } from './user-agent';
 
 export class Browlet {
+  // Transitional ownership: phases two through four move active lifecycle
+  // objects under the user agent, traversable, browsing context, and realm.
   readonly #bindings: BrowletBindings;
+  readonly #browsingContext: BrowsingContext;
   readonly #domlet: Domlet;
   #document: DomletDocument;
   readonly #realm: Realm;
   #route: BrowletRoute;
   #window: WindowImpl;
-  readonly #windowProxy: WindowProxyController;
 
   /*
-   * TODO(HTML browsing-context creation): navigation currently preserves both
-   * this realm and its VM global. HTML instead preserves the WindowProxy while
-   * replacing the realm for a cross-origin Document. Node's vm API cannot use
-   * an existing external WindowProxy as a new context's actual global-this
-   * object, so that host bridge remains an explicit lifecycle limitation.
+   * TODO(HTML navigation): Browlet temporarily preserves this Realm and Window
+   * across navigation. HTML instead preserves only the WindowProxy when a new
+   * Window is required. Node's VM cannot use that existing WindowProxy as a
+   * replacement context's actual global-this, so the host bridge remains an
+   * explicit lifecycle limitation.
    */
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
-    this.#realm = new Realm();
+    const userAgent = new UserAgent();
+    const group = userAgent.createBrowsingContextGroup();
+    this.#browsingContext = new BrowsingContext();
+    group.append(this.#browsingContext);
+
+    const initialURL = requireURLRecord('about:blank');
+    const initialOrigin = createOpaqueOrigin();
+    const agent = obtainSimilarOriginWindowAgent(
+      initialOrigin,
+      group,
+      false,
+    );
+    this.#window = new WindowImpl(new URL('about:blank'));
+    const executionContext = createRealm(agent, {
+      createGlobalObject: () => this.#window,
+      createGlobalThisValue: () => this.#browsingContext.windowProxy,
+    });
+    this.#realm = executionContext.realm;
+    setupWindowEnvironmentSettingsObject(
+      initialURL,
+      executionContext,
+      null,
+      initialURL,
+      initialOrigin,
+    );
     this.#bindings = new BrowletBindings(this.#realm);
     this.#domlet = new Domlet(this.#bindings.dom);
     this.#document = this.#domlet.parse();
-    this.#windowProxy = new WindowProxyController(this.#realm);
-    this.#window = new WindowImpl(
-      this.#document,
-      new URL('about:blank'),
-    );
+    WindowImpl.setAssociatedDocument(this.#window, this.#document);
     this.#bindings.dom.associateEventTarget(this.#window);
-    this.#realm.setWindow(this.#window);
-    this.#windowProxy.setWindow(this.#window);
+    setWindowProxyWindow(this.#browsingContext.windowProxy, this.#window);
 
-    this.#bindings.install(this.#windowProxy.value);
+    this.#bindings.install(this.#window);
   }
 
   get document(): DomletDocument {
@@ -55,7 +81,7 @@ export class Browlet {
   }
 
   get window(): BrowletWindow {
-    return this.#windowProxy.value;
+    return this.#browsingContext.windowProxy;
   }
 
   route(route: BrowletRoute): void {
@@ -67,7 +93,11 @@ export class Browlet {
   }
 
   expose(name: string, value: unknown): void {
-    this.#windowProxy.expose(name, value);
+    Object.defineProperty(this.#window, name, {
+      configurable: true,
+      writable: true,
+      value,
+    });
   }
 
   async navigate(url: string | URL): Promise<BrowletWindow> {
@@ -81,16 +111,12 @@ export class Browlet {
       documentInitialization(documentURL),
     );
     const document = parser.document;
-    const window = new WindowImpl(document, documentURL);
 
     this.#document = document;
-    this.#window = window;
-    this.#bindings.dom.associateEventTarget(window);
-    this.#realm.setWindow(window);
-    this.#windowProxy.setWindow(window);
+    WindowImpl.setAssociatedDocument(this.#window, document);
 
     await parser.parse(source);
-    fireEvent('load', window);
+    fireEvent('load', this.#window);
     return this.window;
   }
 
@@ -112,14 +138,14 @@ export class Browlet {
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
 
-    this.#windowProxy.updateNamedProperties(this.#document);
+    updateWindowNamedProperties(this.#window, this.#document);
     DocumentImpl.withWriter(this.#document, write, () => {
       this.#realm.evaluate(source, scriptURL.href, lineOffset);
     });
   }
 }
 
-export type BrowletWindow = WindowProxyValue;
+export type BrowletWindow = WindowProxy;
 
 export type BrowletRoute = (url: string) => string;
 
@@ -137,6 +163,7 @@ function getTextContent(element: ElementImpl): string {
   return content;
 }
 
+// Transitional parser input removed by phase two's Document-first lifecycle.
 function documentInitialization(url: URL): DocumentInitialization {
   const record = parseURL(url.href).url;
   if (record === null) {
@@ -147,4 +174,10 @@ function documentInitialization(url: URL): DocumentInitialization {
     origin: obtainURLOrigin(record),
     url: record,
   };
+}
+
+function requireURLRecord(input: string) {
+  const record = parseURL(input).url;
+  if (record === null) throw new Error(`Could not parse ${input}`);
+  return record;
 }

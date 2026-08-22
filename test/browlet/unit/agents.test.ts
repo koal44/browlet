@@ -14,7 +14,7 @@ describe('WindowAgent', () => {
     const agent = new WindowAgent();
 
     expect(agent.canBlock).toBe(false);
-    expect(agent.windowObjects).toEqual([]);
+    expect(agent.windowObjects).toEqual(new Set());
   });
 });
 

@@ -1,15 +1,19 @@
 import type { BrowsingContext } from './browsing-context';
 import type { EventLoop } from './event-loop';
-import type { Realm } from './realm';
+import { Realm, type JavaScriptExecutionContext } from './realm';
+import {
+  DocumentImpl, type ModuleMap, type PolicyContainer,
+} from '../domlet/nodes/document';
+import type { WindowImpl } from './window';
 import type { Origin } from '../url/origin';
-import type { URLRecord } from '../url/url';
+import { parseURL, type URLRecord } from '../url/url';
 
 /*
  * An environment carries navigation/client state before a realm, global
  * object, or environment settings object necessarily exists.
  */
 export class Environment {
-  readonly id = crypto.randomUUID();
+  id: string = crypto.randomUUID();
   creationURL: URLRecord;
   topLevelCreationURL: URLRecord | null;
   topLevelOrigin: Origin | null;
@@ -35,8 +39,7 @@ export class Environment {
 }
 
 export abstract class EnvironmentSettingsObject extends Environment {
-  readonly realmExecutionContext: Realm;
-  readonly moduleMap = new Map<string, unknown>();
+  readonly realmExecutionContext: JavaScriptExecutionContext;
 
   constructor(initialization: EnvironmentSettingsInitialization) {
     super(initialization);
@@ -44,15 +47,99 @@ export abstract class EnvironmentSettingsObject extends Environment {
   }
 
   abstract get apiBaseURL(): URLRecord;
+  abstract get moduleMap(): ModuleMap;
   abstract get origin(): Origin;
   abstract get hasCrossSiteAncestor(): boolean;
-  abstract get policyContainer(): object | null;
+  abstract get policyContainer(): PolicyContainer;
   abstract get crossOriginIsolatedCapability(): boolean;
   abstract get timeOrigin(): DOMHighResTimeStamp;
 
   get responsibleEventLoop(): EventLoop {
-    return this.realmExecutionContext.agent.eventLoop;
+    return this.realmExecutionContext.realm.agent.eventLoop;
   }
+}
+
+export class WindowEnvironmentSettingsObject
+  extends EnvironmentSettingsObject
+{
+  readonly #window: WindowImpl;
+
+  constructor(
+    window: WindowImpl,
+    initialization: EnvironmentSettingsInitialization,
+  ) {
+    super(initialization);
+    this.#window = window;
+  }
+
+  get apiBaseURL(): URLRecord {
+    const url = parseURL(this.#window.document.baseURI).url;
+    if (url === null) throw new Error('Window Document has an invalid base URL');
+    return url;
+  }
+
+  get moduleMap(): ModuleMap {
+    return DocumentImpl.getModuleMap(this.#window.document);
+  }
+
+  get origin(): Origin {
+    return DocumentImpl.getOrigin(this.#window.document);
+  }
+
+  get hasCrossSiteAncestor(): boolean {
+    throw new Error(
+      'Window navigable ancestry is not implemented',
+    );
+  }
+
+  get policyContainer(): PolicyContainer {
+    return DocumentImpl.getPolicyContainer(this.#window.document);
+  }
+
+  get crossOriginIsolatedCapability(): boolean {
+    const mode = this.realmExecutionContext.realm.agent.agentCluster
+      ?.crossOriginIsolationMode;
+    if (mode !== 'concrete') return false;
+
+    void DocumentImpl.getPermissionsPolicy(this.#window.document);
+    throw new Error(
+      'The cross-origin-isolated permissions-policy check is not implemented',
+    );
+  }
+
+  get timeOrigin(): DOMHighResTimeStamp {
+    return DocumentImpl.getLoadTimingInfo(this.#window.document)
+      .navigationStartTime;
+  }
+}
+
+export function setupWindowEnvironmentSettingsObject(
+  creationURL: URLRecord,
+  executionContext: JavaScriptExecutionContext,
+  reservedEnvironment: Environment | null,
+  topLevelCreationURL: URLRecord,
+  topLevelOrigin: Origin,
+): WindowEnvironmentSettingsObject {
+  const realm = executionContext.realm;
+  const settings = new WindowEnvironmentSettingsObject(
+    realm.globalObject as WindowImpl,
+    {
+      activeServiceWorker: reservedEnvironment?.activeServiceWorker ?? null,
+      creationURL,
+      realmExecutionContext: executionContext,
+      targetBrowsingContext:
+        reservedEnvironment?.targetBrowsingContext ?? null,
+      topLevelCreationURL,
+      topLevelOrigin,
+    },
+  );
+
+  if (reservedEnvironment) {
+    settings.id = reservedEnvironment.id;
+    reservedEnvironment.id = '';
+  }
+  Realm.setHostDefined(realm, settings);
+  return settings;
 }
 
 export type EnvironmentInitialization = {
@@ -64,5 +151,5 @@ export type EnvironmentInitialization = {
 };
 
 export type EnvironmentSettingsInitialization = EnvironmentInitialization & {
-  realmExecutionContext: Realm;
+  realmExecutionContext: JavaScriptExecutionContext;
 };

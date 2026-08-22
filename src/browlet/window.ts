@@ -16,17 +16,22 @@ export class WindowImpl
   extends withWindowStub(EventTargetImpl)
   implements Window
 {
-  readonly document: DomletDocument;
+  #document: DomletDocument | null = null;
   #currentEvent: Event | undefined;
   readonly #location: LocationImpl;
   readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
   #nextTimer = 1;
 
-  constructor(document: DomletDocument, url: URL) {
+  constructor(url: URL) {
     super(windowEventTargetVirtuals);
-    this.document = document;
     this.#location = new LocationImpl(url);
-    DocumentImpl.setBrowsingContextWindow(document, this);
+  }
+
+  get document(): DomletDocument {
+    if (!this.#document) {
+      throw new Error('Window has no associated Document');
+    }
+    return this.#document;
   }
 
   get location(): Location {
@@ -98,8 +103,38 @@ export class WindowImpl
     return window.#currentEvent;
   }
 
+  static setAssociatedDocument(
+    window: WindowImpl,
+    document: DomletDocument,
+  ): void {
+    if (window.#document && window.#document !== document) {
+      DocumentImpl.setBrowsingContextWindow(window.#document, null);
+    }
+    window.#document = document;
+    DocumentImpl.setBrowsingContextWindow(document, window);
+  }
+
   static setCurrentEvent(window: WindowImpl, event: Event | undefined): void {
     window.#currentEvent = event;
+  }
+}
+
+/*
+ * Transitional direct-Window named-property shim. Remove this when Browlet
+ * projects Window through Web IDL's global named-properties machinery.
+ */
+export function updateWindowNamedProperties(
+  window: Window,
+  document: DomletDocument,
+): void {
+  for (const element of document.getElementsByTagName('*')) {
+    const name = element.getAttribute('id');
+    if (!name || name in window) continue;
+
+    Object.defineProperty(window, name, {
+      configurable: true,
+      get: () => window.document.getElementById(name) ?? undefined,
+    });
   }
 }
 

@@ -45,7 +45,7 @@ export abstract class Agent {
  * potentially reach each other, either directly or through document.domain.
  */
 export class WindowAgent extends Agent {
-  windowObjects: unknown[] = [];
+  readonly windowObjects = new Set<Window>();
 
   constructor() {
     super(false);

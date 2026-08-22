@@ -279,7 +279,7 @@ export const htmlDocumentIDL = definePartialInterface({
 export class DocumentImpl
   extends NodeImpl
 {
-  readonly #state: DocumentState;
+  readonly #state: DocumentSlots;
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
   #browsingContextWindow: EventTargetImpl | null = null;
@@ -304,7 +304,7 @@ export class DocumentImpl
         virtuals: DocumentImpl.#nodeVirtuals,
       },
     );
-    this.#state = createDocumentState(initialization);
+    this.#state = createDocumentSlots(initialization);
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
@@ -528,6 +528,32 @@ export class DocumentImpl
     return document.#state.origin;
   }
 
+  static getModuleMap(document: DocumentImpl): ModuleMap {
+    return document.#state.moduleMap;
+  }
+
+  static getPolicyContainer(document: DocumentImpl): PolicyContainer {
+    return document.#state.policyContainer;
+  }
+
+  static getPermissionsPolicy(document: DocumentImpl): PermissionsPolicy {
+    return document.#state.permissionsPolicy;
+  }
+
+  static getOpenerPolicy(document: DocumentImpl): OpenerPolicy {
+    return document.#state.openerPolicy;
+  }
+
+  static getLoadTimingInfo(
+    document: DocumentImpl,
+  ): DocumentLoadTimingInfo {
+    return document.#state.loadTimingInfo;
+  }
+
+  static isInitialAboutBlank(document: DocumentImpl): boolean {
+    return document.#state.isInitialAboutBlank;
+  }
+
   static allowsDeclarativeShadowRoots(document: DocumentImpl): boolean {
     return document.#state.allowDeclarativeShadowRoots;
   }
@@ -674,6 +700,10 @@ export type DomletDocument = DocumentImpl & Document;
 
 export type DocumentWriter = (markup: string) => void;
 
+/*
+ * Transitional parser-construction input. HTML must create and initialize the
+ * Document before phase two hands that existing object to the parser.
+ */
 export type DocumentInitialization = {
   allowDeclarativeShadowRoots?: boolean;
   contentType?: string;
@@ -693,28 +723,111 @@ export enum DocumentMode {
   LimitedQuirks = 'limited-quirks',
 }
 
-type DocumentState = {
+/*
+ * Storage for slots that DOM and HTML associate directly with a Document.
+ * This is not HTML's session-history "document state". Phase two removes the
+ * initialization bag above and can then inline these slots if that is clearer.
+ */
+type DocumentSlots = {
   allowDeclarativeShadowRoots: boolean;
   contentType: string;
   customElementRegistry: CustomElementRegistry | null;
   encoding: string;
+  isInitialAboutBlank: boolean;
+  loadTimingInfo: DocumentLoadTimingInfo;
   mode: DocumentMode;
+  moduleMap: ModuleMap;
+  openerPolicy: OpenerPolicy;
   origin: Origin;
+  permissionsPolicy: PermissionsPolicy;
+  policyContainer: PolicyContainer;
   type: DocumentType;
   url: URLRecord;
 };
 
-function createDocumentState(
+export type ModuleMap = {
+  entries: ModuleMapEntry[];
+};
+
+export type ModuleMapKey = readonly [URLRecord, string];
+
+export type ModuleMapEntry = {
+  key: ModuleMapKey;
+  value: unknown;
+};
+
+export type PolicyContainer = {
+  cspList: object[];
+  embedderPolicy: EmptyPolicy;
+  referrerPolicy: string;
+  integrityPolicy: EmptyPolicy;
+  reportOnlyIntegrityPolicy: EmptyPolicy;
+};
+
+export type PermissionsPolicy = EmptyPolicy;
+
+export type OpenerPolicy = {
+  value: OpenerPolicyValue;
+  reportingEndpoint: string | null;
+  reportOnlyValue: OpenerPolicyValue;
+  reportOnlyReportingEndpoint: string | null;
+};
+
+export type OpenerPolicyValue =
+  | 'unsafe-none'
+  | 'same-origin-allow-popups'
+  | 'same-origin'
+  | 'same-origin-plus-COEP'
+  | 'noopener-allow-popups';
+
+export type DocumentLoadTimingInfo = {
+  navigationStartTime: DOMHighResTimeStamp;
+  domInteractiveTime: DOMHighResTimeStamp;
+  domContentLoadedEventStartTime: DOMHighResTimeStamp;
+  domContentLoadedEventEndTime: DOMHighResTimeStamp;
+  domCompleteTime: DOMHighResTimeStamp;
+  loadEventStartTime: DOMHighResTimeStamp;
+  loadEventEndTime: DOMHighResTimeStamp;
+};
+
+type EmptyPolicy = Record<never, never>;
+
+function createDocumentSlots(
   initialization: DocumentInitialization,
-): DocumentState {
+): DocumentSlots {
   return {
     allowDeclarativeShadowRoots:
       initialization.allowDeclarativeShadowRoots ?? false,
     contentType: initialization.contentType ?? 'application/xml',
     customElementRegistry: initialization.customElementRegistry ?? null,
     encoding: initialization.encoding ?? 'UTF-8',
+    isInitialAboutBlank: false,
+    loadTimingInfo: {
+      navigationStartTime: 0,
+      domInteractiveTime: 0,
+      domContentLoadedEventStartTime: 0,
+      domContentLoadedEventEndTime: 0,
+      domCompleteTime: 0,
+      loadEventStartTime: 0,
+      loadEventEndTime: 0,
+    },
     mode: initialization.mode ?? DocumentMode.NoQuirks,
+    moduleMap: { entries: [] },
+    openerPolicy: {
+      value: 'unsafe-none',
+      reportingEndpoint: null,
+      reportOnlyValue: 'unsafe-none',
+      reportOnlyReportingEndpoint: null,
+    },
     origin: initialization.origin ?? createOpaqueOrigin(),
+    permissionsPolicy: {},
+    policyContainer: {
+      cspList: [],
+      embedderPolicy: {},
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      integrityPolicy: {},
+      reportOnlyIntegrityPolicy: {},
+    },
     type: initialization.type ?? 'xml',
     url: initialization.url ?? parseDocumentURL('about:blank'),
   };

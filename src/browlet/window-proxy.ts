@@ -1,138 +1,170 @@
-import type { DomletDocument } from '../domlet/nodes/document';
-import type { Realm } from './realm';
 import type { WindowImpl } from './window';
 
-export class WindowProxyController {
-  readonly value: WindowProxyValue;
-  #target?: WindowImpl;
-  readonly #addEventListener = ((
-    type: string,
-    callback: EventListenerOrEventListenerObject | null,
-    options?: AddEventListenerOptions | boolean,
-  ) => {
-    this.target.addEventListener(type, callback, options);
-  }) as Window['addEventListener'];
-  readonly #dispatchEvent = (event: Event): boolean =>
-    this.target.dispatchEvent(event);
-  readonly #removeEventListener = ((
-    type: string,
-    callback: EventListenerOrEventListenerObject | null,
-    options?: EventListenerOptions | boolean,
-  ) => {
-    this.target.removeEventListener(type, callback, options);
-  }) as Window['removeEventListener'];
+/*
+ * A WindowProxy is an exotic object with a [[Window]] internal slot. It has
+ * no interface object of its own and is the stable global-this identity for
+ * one browsing context while its wrapped Window can change on navigation.
+ *
+ * The forwarding below is the host-neutral shape of that object. Node cannot
+ * currently install this object as a replacement VM realm's actual global
+ * proxy; that execution-host limitation is documented separately.
+ */
+export function createWindowProxy(): WindowProxy {
+  const handler = new WindowProxyHandler();
+  windowProxyHandlers.set(handler.windowProxy, handler);
+  return handler.windowProxy;
+}
 
-  constructor(realm: Realm) {
-    this.value = realm.global as unknown as WindowProxyValue;
+export function getWindowProxyWindow(
+  windowProxy: WindowProxy,
+): WindowImpl | null {
+  return requireWindowProxyHandler(windowProxy).window;
+}
 
-    Object.defineProperties(this.value, {
-      document: {
-        configurable: true,
-        get: () => this.target.document,
-      },
-      event: {
-        configurable: true,
-        get: () => this.target.event,
-        set: (value: Event | undefined) => {
-          Object.defineProperty(this.value, 'event', {
-            configurable: true,
-            enumerable: true,
-            value,
-            writable: true,
-          });
-        },
-      },
-      addEventListener: {
-        configurable: true,
-        get: () => this.#addEventListener,
-      },
-      clearTimeout: {
-        configurable: true,
-        get: () => this.target.clearTimeout,
-      },
-      dispatchEvent: {
-        configurable: true,
-        get: () => this.#dispatchEvent,
-      },
-      getComputedStyle: {
-        configurable: true,
-        get: () => this.target.getComputedStyle,
-      },
-      location: {
-        configurable: true,
-        get: () => this.target.location,
-      },
-      opener: {
-        configurable: true,
-        get: () => null,
-      },
-      parent: {
-        configurable: true,
-        get: () => this.value,
-      },
-      removeEventListener: {
-        configurable: true,
-        get: () => this.#removeEventListener,
-      },
-      self: {
-        configurable: true,
-        get: () => this.value,
-      },
-      setTimeout: {
-        configurable: true,
-        get: () => this.target.setTimeout,
-      },
-      top: {
-        configurable: true,
-        get: () => this.value,
-      },
-      window: {
-        configurable: true,
-        get: () => this.value,
-      },
-    });
+export function setWindowProxyWindow(
+  windowProxy: WindowProxy,
+  window: WindowImpl,
+): void {
+  requireWindowProxyHandler(windowProxy).setWindow(window);
+}
+
+export type WindowProxy = Window & {
+  readonly frames: WindowProxy;
+  readonly parent: WindowProxy;
+  readonly self: WindowProxy;
+  readonly top: WindowProxy;
+  readonly window: WindowProxy;
+};
+
+const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
+
+/*
+ * The handler supplies the WindowProxy exotic internal methods while the
+ * Proxy it creates remains the actual WindowProxy owned by BrowsingContext.
+ */
+class WindowProxyHandler implements ProxyHandler<object> {
+  readonly windowProxy: WindowProxy;
+  readonly #methods = new Map<PropertyKey, CallableFunction>();
+  #window: WindowImpl | null = null;
+
+  constructor() {
+    this.windowProxy = new Proxy({}, this) as WindowProxy;
   }
 
   get window(): WindowImpl | null {
-    return this.#target ?? null;
+    return this.#window;
   }
 
   setWindow(window: WindowImpl): void {
-    this.#target = window;
+    this.#window = window;
+    this.#methods.clear();
   }
 
-  expose(name: string, value: unknown): void {
-    Object.defineProperty(this.value, name, {
-      configurable: true,
-      writable: true,
-      value,
-    });
+  defineProperty(
+    _target: object,
+    property: string | symbol,
+    attributes: PropertyDescriptor,
+  ): boolean {
+    return Reflect.defineProperty(
+      this.requireWindow(),
+      property,
+      attributes,
+    );
   }
 
-  updateNamedProperties(document: DomletDocument): void {
-    for (const element of document.getElementsByTagName('*')) {
-      const name = element.getAttribute('id');
+  deleteProperty(_target: object, property: string | symbol): boolean {
+    return Reflect.deleteProperty(
+      this.requireWindow(),
+      property,
+    );
+  }
 
-      if (!name || name in this.value) continue;
+  get(_target: object, property: string | symbol): unknown {
+    if (windowProxyReferences.has(property)) return this.windowProxy;
 
-      Object.defineProperty(this.value, name, {
-        configurable: true,
-        get: () => this.target.document.getElementById(name) ?? undefined,
-      });
+    if (eventTargetMethods.has(property)) {
+      let method = this.#methods.get(property);
+      if (!method) {
+        method = this.createEventTargetMethod(property);
+        this.#methods.set(property, method);
+      }
+      return method;
     }
+    const window = this.requireWindow();
+    const value: unknown = Reflect.get(window, property, window);
+    return value;
   }
 
-  private get target(): WindowImpl {
-    if (!this.#target) {
+  getOwnPropertyDescriptor(
+    _target: object,
+    property: string | symbol,
+  ): PropertyDescriptor | undefined {
+    const descriptor = Reflect.getOwnPropertyDescriptor(
+      this.requireWindow(),
+      property,
+    );
+    return descriptor && { ...descriptor, configurable: true };
+  }
+
+  getPrototypeOf(_target: object): object | null {
+    return Reflect.getPrototypeOf(this.requireWindow());
+  }
+
+  has(_target: object, property: string | symbol): boolean {
+    if (windowProxyReferences.has(property)) return true;
+    return Reflect.has(this.requireWindow(), property);
+  }
+
+  ownKeys(_target: object): (string | symbol)[] {
+    return Reflect.ownKeys(this.requireWindow());
+  }
+
+  set(_target: object, property: string | symbol, value: unknown): boolean {
+    const window = this.requireWindow();
+    return Reflect.set(window, property, value, window);
+  }
+
+  setPrototypeOf(_target: object, prototype: object | null): boolean {
+    return Reflect.setPrototypeOf(
+      this.requireWindow(),
+      prototype,
+    );
+  }
+
+  private requireWindow(): WindowImpl {
+    if (!this.#window) {
       throw new Error('WindowProxy has no associated Window');
     }
+    return this.#window;
+  }
 
-    return this.#target;
+  private createEventTargetMethod(property: PropertyKey): CallableFunction {
+    if (property === 'addEventListener') {
+      return (...argumentsList: Parameters<Window['addEventListener']>) => {
+        this.requireWindow().addEventListener(...argumentsList);
+      };
+    }
+    if (property === 'dispatchEvent') {
+      return (event: Event) => this.requireWindow().dispatchEvent(event);
+    }
+    return (...argumentsList: Parameters<Window['removeEventListener']>) => {
+      this.requireWindow().removeEventListener(...argumentsList);
+    };
   }
 }
 
-export type WindowProxyValue = Window & {
-  readonly document: DomletDocument;
-  readonly self: WindowProxyValue;
-  readonly window: WindowProxyValue;
-};
+const windowProxyReferences = new Set<PropertyKey>([
+  'frames', 'parent', 'self', 'top', 'window',
+]);
+
+const eventTargetMethods = new Set<PropertyKey>([
+  'addEventListener', 'dispatchEvent', 'removeEventListener',
+]);
+
+function requireWindowProxyHandler(
+  windowProxy: WindowProxy,
+): WindowProxyHandler {
+  const handler = windowProxyHandlers.get(windowProxy);
+  if (!handler) throw new TypeError('Object is not a WindowProxy');
+  return handler;
+}

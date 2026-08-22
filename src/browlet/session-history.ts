@@ -1,5 +1,5 @@
 import {
-  DocumentImpl, type DomletDocument,
+  DocumentImpl, type DomletDocument, type PolicyContainer,
 } from '../domlet/nodes/document';
 import type { Origin } from '../url/origin';
 import { parseURL, type URLRecord } from '../url/url';
@@ -10,7 +10,7 @@ import { parseURL, type URLRecord } from '../url/url';
  */
 export type DocumentState = {
   document: DomletDocument | null;
-  historyPolicyContainer: object | null;
+  historyPolicyContainer: PolicyContainer | null;
   requestReferrer: 'no-referrer' | 'client' | URLRecord;
   requestReferrerPolicy: string;
   initiatorOrigin: Origin | null;

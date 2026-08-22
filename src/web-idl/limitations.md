@@ -55,17 +55,11 @@ eventually provides the underlying ECMAScript operations.
 
 ## Platform integration
 
-Global platform objects and their named-properties prototype objects are
-implemented, including immutable prototype behavior, member placement,
-property visibility, and legacy Window aliases. `projectGlobalObject()` returns
-the public global proxy separately from its implementation target. Browlet does
-not project `Window` through that path yet: Node's VM establishes its own
-`globalThis` before Web IDL runs, and it cannot be retroactively replaced with
-the proxy. HTML section 8.1 realm construction must eventually adopt the public
-global object while constructing the realm and place the separate
-`WindowProxy` in the global-this binding. Until that host integration exists,
-the generic Web IDL behavior is testable but Browlet's Window remains on its
-provisional direct projection.
+Browlet-specific realm, Window, and WindowProxy integration gaps are tracked in
+[Browlet's limitations](../browlet/limitations.md). Generic global platform
+objects and named-properties prototype objects are implemented here, including
+immutable prototype behavior, member placement, property visibility, and
+legacy Window aliases.
 
 Observable array exotic objects and their specialized attribute behavior are
 implemented. CSSOM's `adoptedStyleSheets` declaration remains temporarily typed

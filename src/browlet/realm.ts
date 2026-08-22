@@ -5,26 +5,51 @@ import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../web-idl/javascript-realm';
 import { type Agent, WindowAgent } from './agents';
+import type { EnvironmentSettingsObject } from './environment';
 import { WindowImpl } from './window';
 
 /*
- * TODO(HTML section 8.1.2): Reassess whether this concrete realm should
- * implement a shared realm model beneath the DOM and Web IDL host contracts
- * once Browlet has HTML's realm and environment-settings machinery.
+ * HTML owns the Realm's agent, global-object, global-this, and host-defined
+ * associations. This concrete Realm also supplies Browlet's narrow Web IDL
+ * host capabilities; the private Node VM context is only its execution backend.
  */
+export function createRealm(
+  agent: Agent,
+  customizations: RealmCustomizations,
+  options: RealmCreationOptions = {},
+): JavaScriptExecutionContext {
+  const realm = new Realm({ ...options, agent });
+  const globalObject = customizations.createGlobalObject(realm);
+  const globalThis = customizations.createGlobalThisValue
+    ? customizations.createGlobalThisValue(realm, globalObject)
+    : globalObject;
+
+  Realm.setGlobalObjects(realm, globalObject, globalThis);
+  if (agent.agentCluster?.crossOriginIsolationMode === 'none') {
+    const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
+    if (!status) throw new Error('Could not remove SharedArrayBuffer');
+  }
+  if (agent instanceof WindowAgent) {
+    agent.windowObjects.add(globalObject as Window);
+  }
+  return { realm };
+}
+
 export class Realm implements WebIDLRealmHost {
   readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
   readonly exposure: string;
-  readonly global: RealmGlobal;
   readonly isGlobalPrototypeChainMutable: boolean;
   readonly intrinsics: WebIDLRealmHost['intrinsics'];
   readonly secureContext: boolean;
   readonly #callableFunctionFactory: RealmFunctionFactory;
   readonly #context: Context;
   readonly #constructibleFunctionFactory: RealmFunctionFactory;
-  #window: WindowImpl | undefined;
+  #globalObject: object;
+  #globalThis: object;
+  #hostDefined: EnvironmentSettingsObject | null = null;
+  readonly #hostGlobal: RealmGlobal;
   static #callbackContexts: unknown[] = [];
   static #evaluatingRealm: Realm | undefined;
   // Provisional userland substitute for ECMAScript's inaccessible [[Realm]].
@@ -40,21 +65,23 @@ export class Realm implements WebIDLRealmHost {
       options.isGlobalPrototypeChainMutable ?? false;
     this.secureContext = options.secureContext ?? false;
     this.#context = createContext(constants.DONT_CONTEXTIFY);
-    this.global = runInContext('this', this.#context) as RealmGlobal;
+    this.#hostGlobal = runInContext('this', this.#context) as RealmGlobal;
+    this.#globalObject = this.#hostGlobal;
+    this.#globalThis = this.#hostGlobal;
     const Function_ = Reflect.get(
-      this.global,
+      this.#hostGlobal,
       'Function',
     ) as FunctionConstructor;
     const ArrayBuffer_ = Reflect.get(
-      this.global,
+      this.#hostGlobal,
       'ArrayBuffer',
     ) as ArrayBufferConstructor;
-    const Error_ = Reflect.get(this.global, 'Error') as ErrorConstructor;
-    const Array_ = Reflect.get(this.global, 'Array') as ArrayConstructor;
-    const Object_ = Reflect.get(this.global, 'Object') as ObjectConstructor;
-    const Promise_ = Reflect.get(this.global, 'Promise') as PromiseConstructor;
-    const Map_ = Reflect.get(this.global, 'Map') as MapConstructor;
-    const Set_ = Reflect.get(this.global, 'Set') as SetConstructor;
+    const Error_ = Reflect.get(this.#hostGlobal, 'Error') as ErrorConstructor;
+    const Array_ = Reflect.get(this.#hostGlobal, 'Array') as ArrayConstructor;
+    const Object_ = Reflect.get(this.#hostGlobal, 'Object') as ObjectConstructor;
+    const Promise_ = Reflect.get(this.#hostGlobal, 'Promise') as PromiseConstructor;
+    const Map_ = Reflect.get(this.#hostGlobal, 'Map') as MapConstructor;
+    const Set_ = Reflect.get(this.#hostGlobal, 'Set') as SetConstructor;
     const arrayPrototype = Array_.prototype;
     const arrayValues = Reflect.get(
       arrayPrototype,
@@ -101,7 +128,7 @@ export class Realm implements WebIDLRealmHost {
 
     this.intrinsics = {
       array: Array_,
-      bigInt: Reflect.get(this.global, 'BigInt') as BigIntConstructor,
+      bigInt: Reflect.get(this.#hostGlobal, 'BigInt') as BigIntConstructor,
       bufferSource: {
         arrayBuffer: ArrayBuffer_,
         arrayBufferTransfer: Reflect.get(
@@ -109,11 +136,11 @@ export class Realm implements WebIDLRealmHost {
           'transfer',
         ) as WebIDLRealmHost['intrinsics']['bufferSource']['arrayBufferTransfer'],
         sharedArrayBuffer: Reflect.get(
-          this.global,
+          this.#hostGlobal,
           'SharedArrayBuffer',
         ) as SharedArrayBufferConstructor | undefined,
         views: Object.fromEntries(bufferViewTypeNames.flatMap((name) => {
-          const constructor: unknown = Reflect.get(this.global, name);
+          const constructor: unknown = Reflect.get(this.#hostGlobal, name);
           return typeof constructor === 'function'
             ? [[name, constructor]]
             : [];
@@ -142,7 +169,7 @@ export class Realm implements WebIDLRealmHost {
         mapIteratorPrototype,
         setIteratorPrototype,
       },
-      number: Reflect.get(this.global, 'Number') as NumberConstructor,
+      number: Reflect.get(this.#hostGlobal, 'Number') as NumberConstructor,
       object: Object_,
       objectPrototype: Object_.prototype,
       promise: {
@@ -154,9 +181,9 @@ export class Realm implements WebIDLRealmHost {
           'intrinsics'
         ]['promise']['then'],
       },
-      rangeError: Reflect.get(this.global, 'RangeError') as typeof RangeError,
-      string: Reflect.get(this.global, 'String') as StringConstructor,
-      typeError: Reflect.get(this.global, 'TypeError') as typeof TypeError,
+      rangeError: Reflect.get(this.#hostGlobal, 'RangeError') as typeof RangeError,
+      string: Reflect.get(this.#hostGlobal, 'String') as StringConstructor,
+      typeError: Reflect.get(this.#hostGlobal, 'TypeError') as typeof TypeError,
     };
     // TODO(HTML sections 8.1.4 and 8.1.5): Replace the synchronous
     // callback-context model and script no-ops with environment-settings and
@@ -191,13 +218,29 @@ export class Realm implements WebIDLRealmHost {
       constructibleFunctionFactorySource,
       this.#context,
     ) as RealmFunctionFactory;
-    Realm.#objectRealms.set(this.global, this);
+    Realm.#objectRealms.set(this.#hostGlobal, this);
     Realm.#objectRealms.set(this.intrinsics.functionPrototype, this);
     Realm.#objectRealms.set(this.intrinsics.objectPrototype, this);
     Realm.#objectRealms.set(
       this.intrinsics.iteration.asyncIteratorPrototype,
       this,
     );
+  }
+
+  get global(): object {
+    return this.#globalObject;
+  }
+
+  get globalObject(): object {
+    return this.#globalObject;
+  }
+
+  get globalThis(): object {
+    return this.#globalThis;
+  }
+
+  get hostDefined(): EnvironmentSettingsObject | null {
+    return this.#hostDefined;
   }
 
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
@@ -258,22 +301,20 @@ export class Realm implements WebIDLRealmHost {
     this.agent.eventLoop.queueMicrotask(steps);
   }
 
-  setWindow(window: WindowImpl): void {
-    this.#window = window;
-  }
-
   isWindow(global: object): boolean {
-    return global === this.global;
+    return global === this.#globalObject;
   }
 
   getCurrentEvent(_global: object): Event | undefined {
-    return this.#window
-      ? WindowImpl.getCurrentEvent(this.#window)
+    const window = this.#windowImplementation;
+    return window
+      ? WindowImpl.getCurrentEvent(window)
       : undefined;
   }
 
   setCurrentEvent(_global: object, event: Event | undefined): void {
-    if (this.#window) WindowImpl.setCurrentEvent(this.#window, event);
+    const window = this.#windowImplementation;
+    if (window) WindowImpl.setCurrentEvent(window, event);
   }
 
   recordTimingInfo(
@@ -283,6 +324,71 @@ export class Realm implements WebIDLRealmHost {
   ): void {
     // TODO(Long Animation Frames section 3.2.2): Record event-listener timing
     // once Browlet has the HTML performance timeline machinery.
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static setGlobalObjects(
+    realm: Realm,
+    globalObject: object,
+    globalThis: object,
+  ): void {
+    if (realm.#globalObject !== realm.#hostGlobal) {
+      throw new Error('Realm global objects are already initialized');
+    }
+    realm.#globalObject = globalObject;
+    realm.#globalThis = globalThis;
+    Realm.#installDefaultGlobalBindings(realm);
+    // Node cannot make an existing WindowProxy the VM context's actual
+    // global-this. Inherit through the specified global-this so free global
+    // names still reach the modeled Window graph; top-level `this` remains
+    // the documented host limitation.
+    Reflect.setPrototypeOf(realm.#hostGlobal, globalThis);
+    Object.defineProperty(realm.#hostGlobal, 'globalThis', {
+      configurable: true,
+      value: globalThis,
+      writable: true,
+    });
+    Realm.#objectRealms.set(globalObject, realm);
+    Realm.#objectRealms.set(globalThis, realm);
+  }
+
+  static setHostDefined(
+    realm: Realm,
+    settings: EnvironmentSettingsObject,
+  ): void {
+    realm.#hostDefined = settings;
+  }
+
+  get #windowImplementation(): WindowImpl | undefined {
+    return this.#globalObject instanceof WindowImpl
+      ? this.#globalObject
+      : undefined;
+  }
+
+  static #installDefaultGlobalBindings(realm: Realm): void {
+    for (const property of Reflect.ownKeys(realm.#hostGlobal)) {
+      if (
+        property === 'globalThis' ||
+        Object.hasOwn(realm.#globalObject, property)
+      ) continue;
+
+      const descriptor = Reflect.getOwnPropertyDescriptor(
+        realm.#hostGlobal,
+        property,
+      );
+      if (
+        descriptor &&
+        !Reflect.defineProperty(realm.#globalObject, property, descriptor)
+      ) {
+        throw new Error(`Could not install global binding ${String(property)}`);
+      }
+    }
+    Object.defineProperty(realm.#globalObject, 'globalThis', {
+      configurable: true,
+      value: realm.#globalThis,
+      writable: true,
+    });
   }
 
   static #getAssociatedRealm(value: object): Realm | undefined {
@@ -303,6 +409,22 @@ export class Realm implements WebIDLRealmHost {
     return Realm.#evaluatingRealm;
   }
 }
+
+/*
+ * The host-visible component of an ECMAScript execution context. Node/V8 owns
+ * its evaluation state and execution-context stack; HTML currently needs us
+ * to retain only the Realm component returned by "create a new realm".
+ */
+export type JavaScriptExecutionContext = {
+  realm: Realm;
+};
+
+export type RealmCustomizations = {
+  createGlobalObject(realm: Realm): object;
+  createGlobalThisValue?(realm: Realm, globalObject: object): object;
+};
+
+export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
 
 export type RealmGlobal = Record<PropertyKey, unknown>;
 

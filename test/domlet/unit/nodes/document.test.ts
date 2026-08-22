@@ -33,6 +33,21 @@ describe('Document', () => {
     expect(DocumentImpl.getType(document)).toBe('xml');
     expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
     expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(false);
+    expect(DocumentImpl.getModuleMap(document)).toEqual({ entries: [] });
+    expect(DocumentImpl.getPolicyContainer(document)).toMatchObject({
+      cspList: [],
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    });
+    expect(DocumentImpl.getPermissionsPolicy(document)).toEqual({});
+    expect(DocumentImpl.getOpenerPolicy(document)).toEqual({
+      value: 'unsafe-none',
+      reportingEndpoint: null,
+      reportOnlyValue: 'unsafe-none',
+      reportOnlyReportingEndpoint: null,
+    });
+    expect(DocumentImpl.getLoadTimingInfo(document).navigationStartTime)
+      .toBe(0);
+    expect(DocumentImpl.isInitialAboutBlank(document)).toBe(false);
   });
 
   it('always has a base URI', () => {

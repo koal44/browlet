@@ -24,7 +24,7 @@ export type {
 export { Browlet } from './browlet/browlet';
 export { Realm } from './browlet/realm';
 export { WindowImpl } from './browlet/window';
-export { WindowProxyController } from './browlet/window-proxy';
+export type { WindowProxy } from './browlet/window-proxy';
 
 export type {
   BrowletConfig, BrowletRoute, BrowletWindow,

@@ -3,18 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { BrowsingContext } from '../../../src/browlet/browsing-context';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
-  EnvironmentSettingsObject,
+  obtainSimilarOriginWindowAgent, WindowAgent,
+} from '../../../src/browlet/agents';
+import {
+  EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../src/browlet/environment';
 import {
   initializeNavigable, TopLevelTraversable,
 } from '../../../src/browlet/navigable';
-import { Realm } from '../../../src/browlet/realm';
+import { createRealm, Realm } from '../../../src/browlet/realm';
 import { createDocumentState } from '../../../src/browlet/session-history';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { WindowProxyController } from '../../../src/browlet/window-proxy';
+import {
+  getWindowProxyWindow, setWindowProxyWindow,
+} from '../../../src/browlet/window-proxy';
 import { WindowImpl } from '../../../src/browlet/window';
 import {
-  DocumentImpl, type DomletDocument,
+  DocumentImpl, type DomletDocument, type ModuleMap, type PolicyContainer,
 } from '../../../src/domlet/nodes/document';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../../src/url/url';
@@ -23,9 +28,7 @@ describe('browsing context groups', () => {
   it('keeps the user-agent and browsing-context associations reciprocal', () => {
     const userAgent = new UserAgent();
     const group = userAgent.createBrowsingContextGroup();
-    const context = new BrowsingContext(
-      new WindowProxyController(new Realm()),
-    );
+    const context = new BrowsingContext();
 
     group.append(context);
 
@@ -41,10 +44,9 @@ describe('browsing context groups', () => {
   });
 
   it('starts a browsing context with HTML\'s scalar defaults', () => {
-    const windowProxy = new WindowProxyController(new Realm());
-    const context = new BrowsingContext(windowProxy);
+    const context = new BrowsingContext();
 
-    expect(context.windowProxy).toBe(windowProxy.value);
+    expect(getWindowProxyWindow(context.windowProxy)).toBeNull();
     expect(context.openerBrowsingContext).toBeNull();
     expect(context.openerOriginAtCreation).toBeNull();
     expect(context.isPopup).toBe(false);
@@ -55,11 +57,60 @@ describe('browsing context groups', () => {
     expect(context.activeDocument).toBeNull();
 
     const document = new DocumentImpl() as DomletDocument;
-    const window = new WindowImpl(document, new URL('about:blank'));
-    windowProxy.setWindow(window);
+    const window = new WindowImpl(new URL('about:blank'));
+    WindowImpl.setAssociatedDocument(window, document);
+    setWindowProxyWindow(context.windowProxy, window);
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);
+    expect(Reflect.get(context.windowProxy, 'addEventListener'))
+      .toBe(Reflect.get(context.windowProxy, 'addEventListener'));
+  });
+
+  it('gives a Window realm its Window and WindowProxy identities', () => {
+    const context = new BrowsingContext();
+    const agent = new WindowAgent();
+    const window = new WindowImpl(new URL('about:blank'));
+    const executionContext = createRealm(agent, {
+      createGlobalObject: () => window,
+      createGlobalThisValue: () => context.windowProxy,
+    });
+
+    expect(executionContext.realm.agent).toBe(agent);
+    expect(executionContext.realm.globalObject).toBe(window);
+    expect(executionContext.realm.globalThis).toBe(context.windowProxy);
+    expect(Reflect.get(window, 'Object'))
+      .toBe(executionContext.realm.intrinsics.object);
+    expect(Reflect.get(window, 'globalThis')).toBe(context.windowProxy);
+    expect(agent.windowObjects).toEqual(new Set([window]));
+  });
+
+  it('hides SharedArrayBuffer in a non-isolated Window realm', () => {
+    const userAgent = new UserAgent();
+    const group = userAgent.createBrowsingContextGroup();
+    const origin = createOpaqueOrigin();
+    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const context = new BrowsingContext();
+    const window = new WindowImpl(new URL('about:blank'));
+    const executionContext = createRealm(agent, {
+      createGlobalObject: () => window,
+      createGlobalThisValue: () => context.windowProxy,
+    });
+
+    expect(Reflect.has(window, 'SharedArrayBuffer')).toBe(false);
+    expect(executionContext.realm.intrinsics.bufferSource.sharedArrayBuffer)
+      .toBeTypeOf('function');
+  });
+
+  it.fails('uses the WindowProxy as the VM realm\'s actual global this', () => {
+    const context = new BrowsingContext();
+    const executionContext = createRealm(new WindowAgent(), {
+      createGlobalObject: () => new WindowImpl(new URL('about:blank')),
+      createGlobalThisValue: () => context.windowProxy,
+    });
+
+    expect(executionContext.realm.evaluate('this', 'global-this.js'))
+      .toBe(context.windowProxy);
   });
 });
 
@@ -98,6 +149,40 @@ describe('environment settings objects', () => {
 
     expect(settings.executionReady).toBe(true);
   });
+
+  it('associates Window settings with their realm execution context', () => {
+    const creationURL = requireURL('https://example.test/');
+    const origin = createOpaqueOrigin();
+    const window = new WindowImpl(new URL('about:blank'));
+    const executionContext = createRealm(new WindowAgent(), {
+      createGlobalObject: () => window,
+      createGlobalThisValue: () => new BrowsingContext().windowProxy,
+    });
+
+    const settings = setupWindowEnvironmentSettingsObject(
+      creationURL,
+      executionContext,
+      null,
+      creationURL,
+      origin,
+    );
+    const document = new DocumentImpl({
+      origin,
+      url: creationURL,
+    }) as DomletDocument;
+    WindowImpl.setAssociatedDocument(window, document);
+
+    expect(settings.realmExecutionContext).toBe(executionContext);
+    expect(executionContext.realm.hostDefined).toBe(settings);
+    expect(settings.moduleMap).toBe(DocumentImpl.getModuleMap(document));
+    expect(settings.policyContainer)
+      .toBe(DocumentImpl.getPolicyContainer(document));
+    expect(settings.timeOrigin).toBe(0);
+    expect(serializeURL(settings.apiBaseURL)).toBe('https://example.test/');
+    expect(settings.crossOriginIsolatedCapability).toBe(false);
+    expect(() => settings.hasCrossSiteAncestor)
+      .toThrow('Window navigable ancestry is not implemented');
+  });
 });
 
 describe('navigation lifecycle', () => {
@@ -118,12 +203,20 @@ describe('navigation lifecycle', () => {
 
 class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
   readonly #apiBaseURL: URLRecord;
+  readonly #moduleMap: ModuleMap = { entries: [] };
   readonly #origin = createOpaqueOrigin();
+  readonly #policyContainer: PolicyContainer = {
+    cspList: [],
+    embedderPolicy: {},
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    integrityPolicy: {},
+    reportOnlyIntegrityPolicy: {},
+  };
 
   constructor(realm: Realm, creationURL: URLRecord) {
     super({
       creationURL,
-      realmExecutionContext: realm,
+      realmExecutionContext: { realm },
       targetBrowsingContext: null,
       topLevelCreationURL: creationURL,
       topLevelOrigin: null,
@@ -139,6 +232,10 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
     return false;
   }
 
+  get moduleMap(): ModuleMap {
+    return this.#moduleMap;
+  }
+
   get hasCrossSiteAncestor(): boolean {
     return false;
   }
@@ -147,8 +244,8 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
     return this.#origin;
   }
 
-  get policyContainer(): object | null {
-    return null;
+  get policyContainer(): PolicyContainer {
+    return this.#policyContainer;
   }
 
   get timeOrigin(): DOMHighResTimeStamp {

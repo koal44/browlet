@@ -3,8 +3,8 @@ import type {
 } from './agents';
 import { serializeSite } from './origin';
 import type { UserAgent } from './user-agent';
-import type {
-  WindowProxyController, WindowProxyValue,
+import {
+  createWindowProxy, getWindowProxyWindow,
 } from './window-proxy';
 import type { WindowImpl } from './window';
 import type { DomletDocument } from '../domlet/nodes/document';
@@ -16,7 +16,7 @@ import type { URLRecord } from '../url/url';
  * documents. HTML section 7.3.2 supplies its remaining state and lifecycle.
  */
 export class BrowsingContext {
-  readonly windowProxy: WindowProxyValue;
+  readonly windowProxy = createWindowProxy();
   openerBrowsingContext: BrowsingContext | null = null;
   openerOriginAtCreation: Origin | null = null;
   isPopup = false;
@@ -24,19 +24,12 @@ export class BrowsingContext {
   initialURL: URLRecord | null = null;
   virtualBrowsingContextGroupID = 0;
   #group: BrowsingContextGroup | null = null;
-  readonly #windowProxyController: WindowProxyController;
-
-  constructor(windowProxy: WindowProxyController) {
-    this.#windowProxyController = windowProxy;
-    this.windowProxy = windowProxy.value;
-  }
-
   get group(): BrowsingContextGroup | null {
     return this.#group;
   }
 
   get activeWindow(): WindowImpl | null {
-    return this.#windowProxyController.window;
+    return getWindowProxyWindow(this.windowProxy);
   }
 
   get activeDocument(): DomletDocument | null {
