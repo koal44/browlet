@@ -15,10 +15,30 @@ import { ShadowRootImpl } from '../../../../src/domlet/nodes/shadow-root';
 import { TextImpl } from '../../../../src/domlet/nodes/text';
 import { EventImpl } from '../../../../src/domlet/events/event';
 import { EventTargetImpl } from '../../../../src/domlet/events/event-target';
+import { parseURL, type URLRecord } from '../../../../src/url/url';
 
 describe('Document', () => {
+  it('uses the DOM document defaults', () => {
+    const document = new DocumentImpl();
+
+    expect(document.URL).toBe('about:blank');
+    expect(document.documentURI).toBe('about:blank');
+    expect(document.baseURI).toBe('about:blank');
+    expect(document.characterSet).toBe('UTF-8');
+    expect(document.charset).toBe('UTF-8');
+    expect(document.inputEncoding).toBe('UTF-8');
+    expect(document.contentType).toBe('application/xml');
+    expect(document.compatMode).toBe('CSS1Compat');
+    expect(document.customElementRegistry).toBeNull();
+    expect(DocumentImpl.getType(document)).toBe('xml');
+    expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
+    expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(false);
+  });
+
   it('always has a base URI', () => {
-    const document = new DocumentImpl('https://example.com/');
+    const document = new DocumentImpl({
+      url: documentURL('https://example.com/'),
+    });
     const text = document.createTextNode('content');
 
     expect(new DocumentImpl().baseURI).toBe('about:blank');
@@ -29,8 +49,12 @@ describe('Document', () => {
   });
 
   it('can update a node document during a future adoption operation', () => {
-    const first = new DocumentImpl('https://first.example/');
-    const second = new DocumentImpl('https://second.example/');
+    const first = new DocumentImpl({
+      url: documentURL('https://first.example/'),
+    });
+    const second = new DocumentImpl({
+      url: documentURL('https://second.example/'),
+    });
     const text = first.createTextNode('content');
 
     NodeImpl.setNodeDocument(text, second);
@@ -137,7 +161,10 @@ describe('Document', () => {
   });
 
   it('creates HTML elements and text nodes', () => {
-    const document = new DocumentImpl();
+    const document = new DocumentImpl({
+      contentType: 'text/html',
+      type: 'html',
+    });
     const element = document.createElement('MaIn');
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
@@ -154,7 +181,10 @@ describe('Document', () => {
   });
 
   it('identifies HTML and compatibility mode', () => {
-    const document = new DocumentImpl();
+    const document = new DocumentImpl({
+      contentType: 'text/html',
+      type: 'html',
+    });
 
     expect(document.contentType).toBe('text/html');
     expect(document.compatMode).toBe('CSS1Compat');
@@ -201,3 +231,9 @@ describe('Document', () => {
     );
   });
 });
+
+function documentURL(input: string): URLRecord {
+  const url = parseURL(input).url;
+  if (url === null) throw new Error(`Could not parse document URL ${input}`);
+  return url;
+}

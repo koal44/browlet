@@ -2,7 +2,8 @@ import { html, parse, type Token, type TreeAdapter } from 'parse5';
 import type { AttrImpl } from '../nodes/attribute';
 import type { CommentImpl } from '../nodes/comment';
 import {
-  DocumentImpl, DocumentMode, type DomletDocument,
+  DocumentImpl, type DocumentInitialization, DocumentMode,
+  type DomletDocument,
 } from '../nodes/document';
 import { DocumentTypeImpl } from '../nodes/document-type';
 import { DocumentFragmentImpl } from '../nodes/document-fragment';
@@ -19,10 +20,15 @@ import {
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   #document!: DomletDocument;
+  readonly #documentInitialization: DocumentInitialization;
   readonly #documentFactory: DOMNodeFactory;
   #pendingUnpushedElement: ElementImpl | null = null;
 
-  constructor(documentFactory: DOMNodeFactory = directDOMNodeFactory) {
+  constructor(
+    documentFactory: DOMNodeFactory = directDOMNodeFactory,
+    documentInitialization: DocumentInitialization = {},
+  ) {
+    this.#documentInitialization = documentInitialization;
     this.#documentFactory = documentFactory;
   }
 
@@ -43,7 +49,14 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   createDocument(): DomletDocument {
     const document = asDocument(this.#documentFactory.construct(
       DocumentImpl,
-      [undefined, this.#documentFactory],
+      [
+        {
+          ...this.#documentInitialization,
+          contentType: 'text/html',
+          type: 'html',
+        },
+        this.#documentFactory,
+      ],
     ));
     this.#document = document;
     return document;

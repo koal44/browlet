@@ -64,7 +64,10 @@ export const parentNodeIDL = defineInterfaceMixin({
  * ShadowRoot includes DocumentOrShadowRoot;
  */
 export const documentOrShadowRootIDL = defineInterfaceMixin({
-  members: [],
+  members: [{
+    kind: 'attribute', name: 'customElementRegistry', readonly: true,
+    type: nullable(reference('CustomElementRegistry')),
+  }],
   name: 'DocumentOrShadowRoot',
 });
 
@@ -248,12 +251,14 @@ export const nodeIDL = defineInterface({
   name: 'Node',
 });
 
+// ---------------------------------------------------------------------------------------
+
 export abstract class NodeImpl
   extends TreeNode<NodeImpl>
 {
   readonly #nodeType: NodeType;
+  readonly #virtuals: NodeVirtuals;
   #document: DocumentImpl | null;
-  readonly #baseURI: string | undefined;
 
   constructor(
     nodeType: NodeType,
@@ -265,8 +270,8 @@ export abstract class NodeImpl
       options.treeVirtuals,
     );
     this.#nodeType = nodeType;
+    this.#virtuals = options.virtuals ?? {};
     this.#document = ownerDocument;
-    this.#baseURI = options.baseURI;
   }
 
   get nodeType(): NodeType {
@@ -274,7 +279,11 @@ export abstract class NodeImpl
   }
 
   get baseURI(): string {
-    return this.#baseURI ?? this.#document?.baseURI ?? 'about:blank';
+    if (this.#virtuals.getBaseURI) {
+      return this.#virtuals.getBaseURI(this);
+    }
+
+    return this.#document?.baseURI ?? 'about:blank';
   }
 
   get ownerDocument(): Document | null {
@@ -520,7 +529,11 @@ const nodeEventTargetVirtuals: EventTargetVirtuals = {
 export type NodeOptions = {
   readonly treeVirtuals?: TreeNodeVirtuals<NodeImpl>;
   readonly eventTargetVirtuals?: EventTargetVirtuals;
-  readonly baseURI?: string;
+  readonly virtuals?: NodeVirtuals;
+};
+
+export type NodeVirtuals = {
+  getBaseURI?(node: NodeImpl): string;
 };
 
 export enum NodeType {

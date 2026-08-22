@@ -260,7 +260,12 @@ implements DOMNodeFactory, EventListenerInvocationHost
         implementation: DocumentImpl,
         name: 'Document',
         options: {
-          construct() {},
+          construct() {
+            // DOM requires a constructed Document to inherit the current
+            // global object's associated Document origin. That association
+            // belongs to HTML's environment lifecycle, which Browlet does not
+            // yet model.
+          },
           create: {
             arguments: [undefined, this],
             created: (value) => {

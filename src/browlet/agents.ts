@@ -17,11 +17,26 @@ export abstract class Agent {
   readonly canBlock: boolean;
   readonly eventLoop: EventLoop;
   readonly signifier: symbol;
+  #agentCluster: AgentCluster | null = null;
 
   protected constructor(canBlock: boolean) {
     this.canBlock = canBlock;
     this.eventLoop = new EventLoop();
     this.signifier = Symbol('Agent');
+  }
+
+  get agentCluster(): AgentCluster | null {
+    return this.#agentCluster;
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static associateWithCluster(agent: Agent, cluster: AgentCluster): void {
+    if (agent.#agentCluster !== null && agent.#agentCluster !== cluster) {
+      throw new Error('An agent cannot move between agent clusters');
+    }
+
+    agent.#agentCluster = cluster;
   }
 }
 
@@ -96,12 +111,7 @@ export function obtainSimilarOriginWindowAgent(
   let agentCluster = group.agentClusterMap.get(key);
 
   if (agentCluster === undefined) {
-    agentCluster = {
-      crossOriginIsolationMode: 'none',
-      isOriginKeyed: false,
-      agents: new Set(),
-    };
-    agentCluster.crossOriginIsolationMode = group.crossOriginIsolationMode;
+    agentCluster = new AgentCluster(group.crossOriginIsolationMode);
 
     if (isOrigin(key)) {
       if (!areSameOrigin(key, origin)) {
@@ -111,7 +121,7 @@ export function obtainSimilarOriginWindowAgent(
       agentCluster.isOriginKeyed = true;
     }
 
-    agentCluster.agents.add(new WindowAgent());
+    agentCluster.add(new WindowAgent());
     group.agentClusterMap.set(key, agentCluster);
   }
 
@@ -130,11 +140,20 @@ export function obtainSimilarOriginWindowAgent(
  *
  * https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
  */
-export type AgentCluster = {
-  crossOriginIsolationMode: CrossOriginIsolationMode;
-  isOriginKeyed: boolean;
-  agents: Set<Agent>;
-};
+export class AgentCluster {
+  readonly agents = new Set<Agent>();
+  readonly crossOriginIsolationMode: CrossOriginIsolationMode;
+  isOriginKeyed = false;
+
+  constructor(crossOriginIsolationMode: CrossOriginIsolationMode) {
+    this.crossOriginIsolationMode = crossOriginIsolationMode;
+  }
+
+  add(agent: Agent): void {
+    Agent.associateWithCluster(agent, this);
+    this.agents.add(agent);
+  }
+}
 
 export type AgentClusterKey = Origin | Site;
 

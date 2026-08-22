@@ -1,11 +1,12 @@
 import { Domlet } from '../domlet/domlet';
 import {
-  DocumentImpl, type DomletDocument,
+  DocumentImpl, type DocumentInitialization, type DomletDocument,
 } from '../domlet/nodes/document';
 import type { ElementImpl } from '../domlet/nodes/element';
 import { fireEvent } from '../domlet/events/event-target';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
+import { obtainURLOrigin, parseURL } from '../url/url';
 import { BrowletBindings } from './bindings/browlet';
 import { BrowletParser, type DocumentWrite } from './parser';
 import { Realm } from './realm';
@@ -22,6 +23,14 @@ export class Browlet {
   #route: BrowletRoute;
   #window: WindowImpl;
   readonly #windowProxy: WindowProxyController;
+
+  /*
+   * TODO(HTML browsing-context creation): navigation currently preserves both
+   * this realm and its VM global. HTML instead preserves the WindowProxy while
+   * replacing the realm for a cross-origin Document. Node's vm API cannot use
+   * an existing external WindowProxy as a new context's actual global-this
+   * object, so that host bridge remains an explicit lifecycle limitation.
+   */
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
@@ -69,6 +78,7 @@ export class Browlet {
       (element, write) => {
         this.executeScript(element, documentURL, write);
       },
+      documentInitialization(documentURL),
     );
     const document = parser.document;
     const window = new WindowImpl(document, documentURL);
@@ -125,4 +135,16 @@ function getTextContent(element: ElementImpl): string {
   }
 
   return content;
+}
+
+function documentInitialization(url: URL): DocumentInitialization {
+  const record = parseURL(url.href).url;
+  if (record === null) {
+    throw new Error(`Could not parse navigation URL ${url.href}`);
+  }
+
+  return {
+    origin: obtainURLOrigin(record),
+    url: record,
+  };
 }

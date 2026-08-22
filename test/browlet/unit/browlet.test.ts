@@ -5,7 +5,9 @@ import {
 } from '../../../src/browlet/browlet';
 import { fireEvent } from '../../../src/domlet/events/event-target';
 import type { EventTargetImpl } from '../../../src/domlet/events/event-target';
+import { DocumentImpl } from '../../../src/domlet/nodes/document';
 import { isHTMLLinkElement } from '../../../src/domlet/nodes/element';
+import { serializeOrigin } from '../../../src/url/origin';
 
 describe('Browlet', () => {
   it('coordinates a Domlet document and window', () => {
@@ -27,6 +29,21 @@ describe('Browlet', () => {
     if (!target) throw new Error('Expected target element');
 
     expect(browlet.window.getComputedStyle(target).opacity).toBe('0.25');
+  });
+
+  it('initializes a navigated document from its response URL', async () => {
+    const browlet = new Browlet({ route: () => '' });
+
+    await browlet.navigate('https://example.test/path?query#fragment');
+
+    expect(browlet.document.URL).toBe(
+      'https://example.test/path?query#fragment',
+    );
+    expect(browlet.document.baseURI).toBe(browlet.document.URL);
+    expect(browlet.document.contentType).toBe('text/html');
+    expect(serializeOrigin(DocumentImpl.getOrigin(browlet.document))).toBe(
+      'https://example.test',
+    );
   });
 
   it('installs realm-specific DOM constructors on the window', () => {

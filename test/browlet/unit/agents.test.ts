@@ -57,6 +57,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
     expect(agentCluster.crossOriginIsolationMode).toBe('none');
     expect(agentCluster.isOriginKeyed).toBe(false);
     expect(agentCluster.agents).toEqual(new Set([agent]));
+    expect(agent.agentCluster).toBe(agentCluster);
   });
 
   it('retains the historical site key when OAC is requested later', () => {

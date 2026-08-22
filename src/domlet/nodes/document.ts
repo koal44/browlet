@@ -9,6 +9,8 @@ import {
   defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   emptyDictionary, idlType, nullable, reference, union,
 } from '../../web-idl/definition';
+import { createOpaqueOrigin, type Origin } from '../../url/origin';
+import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentTypeImpl } from './document-type';
@@ -24,7 +26,7 @@ import type {
 } from '../../shared/namespaces';
 import {
   documentOrShadowRootIDL, isDocument, isDocumentType, isElement,
-  NodeImpl, NodeType, parentNodeIDL,
+  NodeImpl, type NodeVirtuals, NodeType, parentNodeIDL,
 } from './node';
 import { TextImpl } from './text';
 import {
@@ -83,6 +85,26 @@ export const documentIDL = defineInterface({
   inherits: 'Node',
   members: [
     { arguments: [], kind: 'constructor' },
+    {
+      kind: 'attribute', name: 'URL', readonly: true,
+      type: idlType.USVString,
+    },
+    {
+      kind: 'attribute', name: 'documentURI', readonly: true,
+      type: idlType.USVString,
+    },
+    {
+      kind: 'attribute', name: 'characterSet', readonly: true,
+      type: idlType.DOMString,
+    },
+    {
+      kind: 'attribute', name: 'charset', readonly: true,
+      type: idlType.DOMString,
+    },
+    {
+      kind: 'attribute', name: 'inputEncoding', readonly: true,
+      type: idlType.DOMString,
+    },
     {
       kind: 'attribute', name: 'doctype', readonly: true,
       type: nullable(reference('DocumentType')),
@@ -257,6 +279,7 @@ export const htmlDocumentIDL = definePartialInterface({
 export class DocumentImpl
   extends NodeImpl
 {
+  readonly #state: DocumentState;
   #stylelet: Stylelet | undefined;
   #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
   #browsingContextWindow: EventTargetImpl | null = null;
@@ -269,31 +292,63 @@ export class DocumentImpl
   readonly #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
-  #mode = DocumentMode.NoQuirks;
-
   constructor(
-    baseURI = 'about:blank',
+    initialization: DocumentInitialization = {},
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       NodeType.Document,
       null,
       {
-        baseURI,
         eventTargetVirtuals: DocumentImpl.#eventTargetVirtuals,
+        virtuals: DocumentImpl.#nodeVirtuals,
       },
     );
+    this.#state = createDocumentState(initialization);
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
   }
 
-  get contentType(): 'text/html' {
-    return 'text/html';
+  get URL(): string {
+    return DocumentImpl.getURL(this);
+  }
+
+  get documentURI(): string {
+    return this.URL;
+  }
+
+  override get baseURI(): string {
+    // HTML's full document base URL algorithm additionally consults the first
+    // applicable <base href> element. Until that element behavior exists, the
+    // document URL is the specified fallback for ordinary documents.
+    return this.URL;
+  }
+
+  get characterSet(): string {
+    return this.#state.encoding;
+  }
+
+  get charset(): string {
+    return this.characterSet;
+  }
+
+  get inputEncoding(): string {
+    return this.characterSet;
+  }
+
+  get contentType(): string {
+    return this.#state.contentType;
   }
 
   get compatMode(): 'BackCompat' | 'CSS1Compat' {
-    return this.#mode === DocumentMode.Quirks ? 'BackCompat' : 'CSS1Compat';
+    return this.#state.mode === DocumentMode.Quirks
+      ? 'BackCompat'
+      : 'CSS1Compat';
+  }
+
+  get customElementRegistry(): CustomElementRegistry | null {
+    return this.#state.customElementRegistry;
   }
 
   get doctype(): DocumentTypeImpl | null {
@@ -445,14 +500,36 @@ export class DocumentImpl
       : null,
   });
 
+  static readonly #nodeVirtuals: NodeVirtuals = {
+    getBaseURI: (node) => isDocument(node)
+      ? DocumentImpl.getURL(node)
+      : 'about:blank',
+  };
+
   // -- Friends ----------------------------------------------------------
 
+  static getURL(document: DocumentImpl): string {
+    return serializeURL(document.#state.url);
+  }
+
   static getMode(document: DocumentImpl): DocumentMode {
-    return document.#mode;
+    return document.#state.mode;
   }
 
   static setMode(document: DocumentImpl, mode: DocumentMode): void {
-    document.#mode = mode;
+    document.#state.mode = mode;
+  }
+
+  static getType(document: DocumentImpl): DocumentType {
+    return document.#state.type;
+  }
+
+  static getOrigin(document: DocumentImpl): Origin {
+    return document.#state.origin;
+  }
+
+  static allowsDeclarativeShadowRoots(document: DocumentImpl): boolean {
+    return document.#state.allowDeclarativeShadowRoots;
   }
 
   static getEventParent(
@@ -597,8 +674,54 @@ export type DomletDocument = DocumentImpl & Document;
 
 export type DocumentWriter = (markup: string) => void;
 
+export type DocumentInitialization = {
+  allowDeclarativeShadowRoots?: boolean;
+  contentType?: string;
+  customElementRegistry?: CustomElementRegistry | null;
+  encoding?: string;
+  mode?: DocumentMode;
+  origin?: Origin;
+  type?: DocumentType;
+  url?: URLRecord;
+};
+
+export type DocumentType = 'xml' | 'html';
+
 export enum DocumentMode {
   NoQuirks = 'no-quirks',
   Quirks = 'quirks',
   LimitedQuirks = 'limited-quirks',
+}
+
+type DocumentState = {
+  allowDeclarativeShadowRoots: boolean;
+  contentType: string;
+  customElementRegistry: CustomElementRegistry | null;
+  encoding: string;
+  mode: DocumentMode;
+  origin: Origin;
+  type: DocumentType;
+  url: URLRecord;
+};
+
+function createDocumentState(
+  initialization: DocumentInitialization,
+): DocumentState {
+  return {
+    allowDeclarativeShadowRoots:
+      initialization.allowDeclarativeShadowRoots ?? false,
+    contentType: initialization.contentType ?? 'application/xml',
+    customElementRegistry: initialization.customElementRegistry ?? null,
+    encoding: initialization.encoding ?? 'UTF-8',
+    mode: initialization.mode ?? DocumentMode.NoQuirks,
+    origin: initialization.origin ?? createOpaqueOrigin(),
+    type: initialization.type ?? 'xml',
+    url: initialization.url ?? parseDocumentURL('about:blank'),
+  };
+}
+
+function parseDocumentURL(input: string): URLRecord {
+  const url = parseURL(input).url;
+  if (url === null) throw new Error(`Could not parse document URL ${input}`);
+  return url;
 }

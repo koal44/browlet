@@ -93,6 +93,10 @@ export class WindowProxyController {
     });
   }
 
+  get window(): WindowImpl | null {
+    return this.#target ?? null;
+  }
+
   setWindow(window: WindowImpl): void {
     this.#target = window;
   }

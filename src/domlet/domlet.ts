@@ -1,5 +1,7 @@
 import { DomletParser } from './parser/parser';
-import type { DomletDocument } from './nodes/document';
+import type {
+  DocumentInitialization, DomletDocument,
+} from './nodes/document';
 import {
   directDOMNodeFactory, type DOMNodeFactory,
 } from './nodes/factory';
@@ -11,11 +13,14 @@ export class Domlet {
     this.#nodeFactory = nodeFactory;
   }
 
-  parse(source = ''): DomletDocument {
-    return this.createParser().parse(source);
+  parse(
+    source = '',
+    initialization: DocumentInitialization = {},
+  ): DomletDocument {
+    return this.createParser(initialization).parse(source);
   }
 
-  createParser(): DomletParser {
-    return new DomletParser(this.#nodeFactory);
+  createParser(initialization: DocumentInitialization = {}): DomletParser {
+    return new DomletParser(this.#nodeFactory, initialization);
   }
 }

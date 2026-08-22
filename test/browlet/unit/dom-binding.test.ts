@@ -35,6 +35,8 @@ describe('Browlet DOM binding', () => {
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
       'adoptedStyleSheets',
       'body',
+      'characterSet',
+      'charset',
       'childElementCount',
       'children',
       'compatMode',
@@ -44,16 +46,20 @@ describe('Browlet DOM binding', () => {
       'createElement',
       'createElementNS',
       'createTextNode',
+      'customElementRegistry',
       'doctype',
       'documentElement',
+      'documentURI',
       'firstElementChild',
       'getElementById',
       'getElementsByClassName',
       'getElementsByTagName',
       'getElementsByTagNameNS',
       'head',
+      'inputEncoding',
       'lastElementChild',
       'styleSheets',
+      'URL',
       'write',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Element'))).toEqual([
@@ -126,6 +132,10 @@ describe('Browlet DOM binding', () => {
     expect(Reflect.set(element, 'attributes', null)).toBe(false);
     expect(Reflect.set(attribute, 'localName', 'changed')).toBe(false);
     expect(Reflect.set(document.doctype!, 'name', 'changed')).toBe(false);
+    expect(document.URL).toBe('https://example.test/');
+    expect(document.documentURI).toBe('https://example.test/');
+    expect(document.characterSet).toBe('UTF-8');
+    expect(document.contentType).toBe('text/html');
   });
 
   it('enforces each interface construction declaration', () => {
@@ -160,6 +170,7 @@ describe('Browlet DOM binding', () => {
     eventTarget.addEventListener('test', () => {});
     expect(internalHookWasCalled).toBe(false);
     expect(text.ownerDocument).toBeNull();
+    expect(foreignDocument.contentType).toBe('application/xml');
     expect((Reflect.construct(Text_, []) as Text).data).toBe('');
     expect((Reflect.construct(Comment_, []) as Comment).data).toBe('');
   });
