@@ -2,7 +2,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(path.resolve(__dirname, "../../dist/selectlet.js"), "utf8");
+const selectletSource = fs.readFileSync(
+  path.resolve(__dirname, '../../packages/selectlet/dist/selectlet.js'),
+  'utf8',
+);
+const styleletSource = fs.readFileSync(
+  path.resolve(__dirname, '../../packages/stylelet/dist/stylelet.js'),
+  'utf8',
+);
 
 const document = {
   nodeType: 9,
@@ -23,7 +30,12 @@ const context = vm.createContext({
   URL,
 });
 
-vm.runInContext(source, context, { filename: "dist/selectlet.js" });
+vm.runInContext(selectletSource, context, {
+  filename: 'packages/selectlet/dist/selectlet.js',
+});
+vm.runInContext(styleletSource, context, {
+  filename: 'packages/stylelet/dist/stylelet.js',
+});
 
 if (typeof context.createSelectlet !== "function") {
   throw new Error(`Expected global createSelectlet function, got ${typeof context.createSelectlet}`);

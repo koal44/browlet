@@ -1,53 +1,29 @@
 {
-  "name": "selectlet",
-  "version": "0.1.5",
-  "description": "A JavaScript CSS selector engine",
-  "homepage": "https://github.com/koal44/selectlet",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "browser": "./dist/selectlet.js",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs",
-      "browser": "./dist/selectlet.js",
-      "default": "./dist/index.mjs"
-    }
-  },
-  "files": [
-    "dist/",
-    "README.md",
-    "LICENSE"
-  ],
-  "keywords": [
-    "css",
-    "selector",
-    "selectors",
-    "dom",
-    "queryselector",
-    "matcher"
+  "name": "browlet-monorepo",
+  "private": true,
+  "description": "Development workspace for Browlet, Stylelet, and Selectlet",
+  "homepage": "https://github.com/koal44/browlet",
+  "workspaces": [
+    "packages/*"
   ],
   "license": "MIT",
   "author": {
     "name": "Eric Knowlton"
   },
-  "contributors": [
-    {
-      "name": "Diego Perini"
-    }
-  ],
   "bugs": {
-    "url": "https://github.com/koal44/selectlet/issues"
+    "url": "https://github.com/koal44/browlet/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/koal44/selectlet.git"
+    "url": "git+https://github.com/koal44/browlet.git"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "lint": "npm run typecheck && eslint src test scripts",
+    "build:browlet": "node scripts/build.mjs browlet",
+    "build:stylelet": "node scripts/build.mjs stylelet",
+    "build:selectlet": "node scripts/build.mjs selectlet",
+    "build:browser": "node scripts/build.mjs selectlet stylelet",
+    "lint": "npm run typecheck && eslint src test scripts packages",
     "typecheck": "tsc -b",
     "vendor": "tsx scripts/vendor.ts",
     "install:wpt": "tsx scripts/install-wpt.ts",
@@ -55,18 +31,18 @@
     "test:wpt:browlet": "vitest run --project=wpt-browlet",
     "test:wpt:jsdom": "vitest run --project=wpt-jsdom",
     "install:jsdom:run": "tsx scripts/install-jsdom.ts",
-    "install:jsdom": "npm run build && npm run install:jsdom:run",
+    "install:jsdom": "npm run build:selectlet && npm run install:jsdom:run",
     "test:unit:run": "vitest run --project=unit",
     "test:unit": "npm run build && npm run test:unit:run",
     "test:artifact:run": "node test/artifact/cjs.test.cjs && node test/artifact/esm.test.mjs && node test/artifact/global.test.cjs",
     "test:artifact": "npm run build && npm run test:artifact:run",
     "test:browser:run": "cross-env HARNESS_MODE=normal playwright test --project=selector",
-    "test:browser": "npm run build && npm run test:browser:run",
-    "test:browser:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=selector",
+    "test:browser": "npm run build:browser && npm run test:browser:run",
+    "test:browser:fixme": "npm run build:browser && cross-env HARNESS_MODE=fixme playwright test --project=selector",
     "test:style:run": "cross-env HARNESS_MODE=normal playwright test --project=style",
-    "test:style": "npm run build && npm run test:style:run",
-    "test:style:fixme": "npm run build && cross-env HARNESS_MODE=fixme playwright test --project=style",
-    "test:perf": "npm run build && playwright test --project=perf --workers=1",
+    "test:style": "npm run build:browser && npm run test:style:run",
+    "test:style:fixme": "npm run build:browser && cross-env HARNESS_MODE=fixme playwright test --project=style",
+    "test:perf": "npm run build:browser && playwright test --project=perf --workers=1",
     "test:jsdom:perf": "vitest run --project=jsdom-perf",
     "test:jsdom:sv": "cross-env HARNESS=jsdom ENGINE=sx-vendor vitest run --project=jsdom",
     "test:jsdom:sx": "cross-env HARNESS=jsdom ENGINE=selectlet vitest run --project=jsdom",
@@ -96,12 +72,5 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.7"
-  },
-  "dependencies": {
-    "@exodus/bytes": "^1.15.1",
-    "parse5": "^8.0.1",
-    "parse5-parser-stream": "^8.0.0",
-    "tldts": "^7.4.10",
-    "tr46": "^6.0.0"
   }
 }

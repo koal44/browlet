@@ -1,19 +1,40 @@
-import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const mod = await import(pathToFileURL(path.resolve(__dirname, "../../dist/index.mjs")));
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+const importArtifact = name => import(pathToFileURL(path.resolve(
+  dirname,
+  `../../packages/${name}/dist/index.mjs`,
+)));
 
-if (typeof mod.createSelectlet !== "function") {
-  throw new Error(`Expected createSelectlet export to be function, got ${typeof mod.createSelectlet}`);
+const [selectlet, stylelet, browlet] = await Promise.all([
+  importArtifact('selectlet'),
+  importArtifact('stylelet'),
+  importArtifact('browlet'),
+]);
+
+if (typeof selectlet.createSelectlet !== 'function') {
+  throw new Error(
+    `Expected createSelectlet export to be function, got ${typeof selectlet.createSelectlet}`,
+  );
 }
 
-if (typeof mod.Stylelet !== "function") {
-  throw new Error(`Expected Stylelet export to be class, got ${typeof mod.Stylelet}`);
+if (!selectlet.DEFAULT_CONFIG || typeof selectlet.DEFAULT_CONFIG !== 'object') {
+  throw new Error(
+    `Expected DEFAULT_CONFIG export to be object, got ${typeof selectlet.DEFAULT_CONFIG}`,
+  );
 }
 
-if (!mod.DEFAULT_CONFIG || typeof mod.DEFAULT_CONFIG !== "object") {
-  throw new Error(`Expected DEFAULT_CONFIG export to be object, got ${typeof mod.DEFAULT_CONFIG}`);
+if (typeof stylelet.Stylelet !== 'function') {
+  throw new Error(
+    `Expected Stylelet export to be class, got ${typeof stylelet.Stylelet}`,
+  );
 }
 
-console.log("esm artifact passed");
+if (typeof browlet.Browlet !== 'function') {
+  throw new Error(
+    `Expected Browlet export to be class, got ${typeof browlet.Browlet}`,
+  );
+}
+
+console.log('esm artifacts passed');

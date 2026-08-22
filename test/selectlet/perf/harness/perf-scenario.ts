@@ -11,7 +11,7 @@ const DEFAULT_ENGINES: EngineTarget[] = [
     name: 'nw-2.2.23',
     script: 'test/selectlet/perf/engines/nwsapi-2.2.23.js',
   },
-  { name: 'selectlet', script: 'dist/selectlet.js' },
+  { name: 'selectlet', script: 'packages/selectlet/dist/selectlet.js' },
 ];
 
 export type PerfHelpers = {

@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "noEmit": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "../..",
+    "outDir": "./dist/.tmp",
+
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "files": [
+    "./index.ts",
+    "./browser.ts"
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "name": "browlet",
+  "version": "0.1.0-alpha.0",
+  "description": "A browser-like TypeScript runtime for JavaScript",
+  "homepage": "https://github.com/koal44/browlet/tree/main/packages/browlet",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "browser",
+    "dom",
+    "html",
+    "css",
+    "webidl"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Eric Knowlton"
+  },
+  "bugs": {
+    "url": "https://github.com/koal44/browlet/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koal44/browlet.git",
+    "directory": "packages/browlet"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs browlet",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@exodus/bytes": "^1.15.1",
+    "parse5": "^8.0.1",
+    "parse5-parser-stream": "^8.0.0",
+    "tldts": "^7.4.10",
+    "tr46": "^6.0.0"
+  }
+}

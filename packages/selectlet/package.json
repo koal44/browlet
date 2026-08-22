@@ -1,0 +1,48 @@
+{
+  "name": "selectlet",
+  "version": "0.2.0",
+  "description": "A TypeScript CSS selector engine for JavaScript DOM implementations",
+  "homepage": "https://github.com/koal44/browlet/tree/main/packages/selectlet",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "browser": "./dist/selectlet.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "browser": "./dist/selectlet.js",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "css",
+    "selector",
+    "selectors",
+    "dom",
+    "queryselector",
+    "matcher"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Eric Knowlton"
+  },
+  "bugs": {
+    "url": "https://github.com/koal44/browlet/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koal44/browlet.git",
+    "directory": "packages/selectlet"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs selectlet",
+    "prepack": "npm run build"
+  }
+}

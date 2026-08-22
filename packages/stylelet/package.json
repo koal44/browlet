@@ -1,0 +1,51 @@
+{
+  "name": "stylelet",
+  "version": "0.1.0-alpha.0",
+  "description": "A TypeScript CSS style engine for JavaScript DOM implementations",
+  "homepage": "https://github.com/koal44/browlet/tree/main/packages/stylelet",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "browser": "./dist/stylelet.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "browser": "./dist/stylelet.js",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "css",
+    "style",
+    "cssom",
+    "cascade",
+    "dom"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Eric Knowlton"
+  },
+  "bugs": {
+    "url": "https://github.com/koal44/browlet/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koal44/browlet.git",
+    "directory": "packages/stylelet"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs stylelet",
+    "prepack": "npm run build"
+  }
+}

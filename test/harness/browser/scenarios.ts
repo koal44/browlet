@@ -466,11 +466,17 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
     await page.evaluate(installBrowserHelpers);
   }
 
-  if (!state.hasCreateSelectlet || !state.hasStylelet) {
-    const script = await page.addScriptTag({ path: 'dist/selectlet.js' });
+  if (!state.hasCreateSelectlet) {
+    const script = await page.addScriptTag({
+      path: 'packages/selectlet/dist/selectlet.js',
+    });
     await script.evaluate((el) => {
       (el as HTMLScriptElement).id = 'selectlet-bootstrap' satisfies SelectletId;
     });
+  }
+
+  if (!state.hasStylelet) {
+    await page.addScriptTag({ path: 'packages/stylelet/dist/stylelet.js' });
   }
 
   if (!state.hasSxlt || !state.hasStlt) {

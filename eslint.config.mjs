@@ -1,12 +1,14 @@
 import eslint from '@eslint/js';
+import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       'dist/**',
+      'packages/*/dist/**',
       'scratch/**',
       'test/selectlet/browser/fixtures/**',
       'test/selectlet/perf/engines/**',

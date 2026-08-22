@@ -9,7 +9,13 @@
   },
   "files": [
     "vitest.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    // Public package entries belong here for typechecking and type-aware linting.
+    "packages/browlet/index.ts",
+    "packages/stylelet/index.ts",
+    "packages/stylelet/browser.ts",
+    "packages/selectlet/index.ts",
+    "packages/selectlet/browser.ts"
   ],
   "references": [
     { "path": "./src/shared" },
@@ -19,7 +25,6 @@
     { "path": "./src/stylelet" },
     { "path": "./src/domlet" },
     { "path": "./src/browlet" },
-    { "path": "./src" },
     { "path": "./scripts" },
     { "path": "./test" }
   ]

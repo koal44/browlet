@@ -23,7 +23,7 @@ const engines: EngineConfig[] = [
     expectedEngineVersion: '2.2.23',
     postInstall(dir) {
       copyFileSync(
-        'dist/index.cjs',
+        'packages/selectlet/dist/index.cjs',
         `${dir}/node_modules/nwsapi/src/nwsapi.js`,
       );
       writeFileSync(
@@ -85,7 +85,7 @@ const engines: EngineConfig[] = [
           '',
         ].join('\n'),
       );
-      console.log('[selectlet] copied dist/index.cjs into jsdom nwsapi backend');
+      console.log('[selectlet] copied packages/selectlet/dist/index.cjs into jsdom nwsapi backend');
       console.log('[selectlet] patched jsdom selectors helper for selectlet');
     },
   },
