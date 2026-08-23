@@ -4,7 +4,8 @@ import { Realm } from '../../../src/browlet/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
-  defineInterface, idlType, type ConstructorMember, type OperationMember,
+  defineDictionary, defineInterface, idlType, reference,
+  type ConstructorMember, type OperationMember,
 } from '../../../src/web-idl/definition';
 import {
   ImplementationRegistry, registerInterfaceImplementation, type ValuePair,
@@ -110,7 +111,75 @@ describe('Web IDL implementation registration', () => {
       ['input'],
     )).toBe('bound:input');
   });
+
+  it('adapts dictionary values for explicit implementation steps', () => {
+    const settings = defineDictionary({
+      members: [{ name: 'enabled', type: idlType.boolean }],
+      name: 'Settings',
+    });
+    const interfaceIDL = defineInterface({
+      exposed: ['Window'],
+      members: [
+        {
+          arguments: [{ name: 'settings', type: reference('Settings') }],
+          kind: 'constructor',
+        },
+        {
+          arguments: [{ name: 'settings', type: reference('Settings') }],
+          kind: 'operation',
+          name: 'apply',
+          returns: idlType.undefined,
+        },
+      ],
+      name: 'DictionaryAdapter',
+    });
+    const definitions = assembleDefinitions([settings, interfaceIDL]);
+    const interface_ = definitions.getInterface('DictionaryAdapter');
+    if (!interface_) throw new Error('DictionaryAdapter was not assembled');
+    const implementations = new ImplementationRegistry();
+    const received: unknown[] = [];
+
+    registerInterfaceImplementation(
+      implementations,
+      interface_,
+      DictionaryAdapterImpl,
+      {
+        construct(settingsValue) { received.push(settingsValue); },
+        create: {},
+        operations: {
+          instance: {
+            apply(settingsValue) { received.push(settingsValue); },
+          },
+        },
+      },
+    );
+
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      definitions,
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    binding.install();
+    const DictionaryAdapter = Reflect.get(
+      realm.global,
+      'DictionaryAdapter',
+    ) as InterfaceConstructor;
+    const object = new DictionaryAdapter({ enabled: true });
+
+    Reflect.apply(
+      Reflect.get(object, 'apply') as CallableFunction,
+      object,
+      [{ enabled: false }],
+    );
+
+    expect(received).toEqual([{ enabled: true }, { enabled: false }]);
+    expect(received.every((value) => !(value instanceof Map))).toBe(true);
+  });
 });
+
+type InterfaceConstructor = new (...argumentsList: unknown[]) => object;
 
 const constructionToken = Symbol('DeclarativeExample construction');
 
@@ -147,3 +216,5 @@ class DeclarativeExampleImpl {
     return [{ key: 'value', value: value.#value }];
   }
 }
+
+class DictionaryAdapterImpl {}

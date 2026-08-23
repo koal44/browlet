@@ -27,6 +27,8 @@ export const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
   name: 'DocumentOrShadowRoot',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class DocumentOrShadowRootMixin {
   constructor(readonly scope: TreeScope) {}
 
@@ -63,6 +65,8 @@ export const elementCSSInlineStyleIDL = defineInterfaceMixin({
   name: 'ElementCSSInlineStyle',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 
@@ -89,6 +93,8 @@ export const linkStyleIDL = defineInterfaceMixin({
   }],
   name: 'LinkStyle',
 });
+
+// -- Implementation -----------------------------------------------------
 
 /* Deferred association hosts:
  * - external HTML links require the CSSOM fetch-a-CSS-style-sheet algorithm

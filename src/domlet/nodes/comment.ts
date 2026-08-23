@@ -22,6 +22,8 @@ export const commentIDL = defineInterface({
   name: 'Comment',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class CommentImpl
   extends withCommentStub(CharacterDataImpl)
   implements Comment

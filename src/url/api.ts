@@ -42,6 +42,8 @@ import {
  * };
  */
 
+// -- Implementation -----------------------------------------------------
+
 export class URLImpl {
   #queryObject: URLSearchParamsImpl;
   #url: URLRecord;
@@ -286,6 +288,9 @@ export class URLImpl {
  *   stringifier;
  * };
  */
+
+// -- Implementation -----------------------------------------------------
+
 export class URLSearchParamsImpl implements URLSearchParams {
   #list: FormTuple[] = [];
   #urlObject: URLImpl | null = null;

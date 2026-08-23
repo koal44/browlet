@@ -159,6 +159,8 @@ export const eventIDL = defineInterface({
   name: 'Event',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class EventImpl implements Event
 {
   #type = '';
@@ -583,6 +585,8 @@ export const customEventIDL = defineInterface({
   ],
   name: 'CustomEvent',
 });
+
+// -- Implementation -----------------------------------------------------
 
 export class CustomEventImpl<T = unknown>
   extends EventImpl

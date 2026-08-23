@@ -106,6 +106,8 @@ export const eventTargetIDL = defineInterface({
   name: 'EventTarget',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class EventTargetImpl implements EventTarget
 {
   #eventListenerList: EventListenerRecord[] = [];

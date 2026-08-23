@@ -331,7 +331,7 @@ describe('Web IDL initial objects', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    binding.getExposedInitialObjects();
+    binding.install();
 
     const declared = project(binding, 'DeclaredStringifier', {
       text: 'declared',

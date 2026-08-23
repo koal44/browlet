@@ -27,7 +27,10 @@ export function registerInterfaceImplementation(
     } else if (member.kind === 'operation') {
       const override = getOperationOverride(options.operations, member);
       if (override) {
-        registry.setOperationSteps(member, override);
+        registry.setOperationSteps(
+          member,
+          createOperationSteps(override, normalizeException),
+        );
       } else {
         registerOperation(
           registry,
@@ -52,11 +55,20 @@ export function registerInterfaceImplementation(
     );
   }
   if (options.construct) {
+    const construct = options.construct;
+    const steps: ConstructorSteps = function(...values) {
+      callImplementation(
+        construct,
+        this,
+        values.map(toImplementationValue),
+        normalizeException,
+      );
+    };
     registerMemberKind(
       registry,
       interface_,
       'constructor',
-      options.construct,
+      steps,
     );
   }
   if (options.valuePairs) {
@@ -497,16 +509,26 @@ function registerOperation(
       `Web IDL operation ${member.name ?? ''} has no implementation`,
     );
   }
-  const method = value as (this: object, ...values: unknown[]) => unknown;
+  const method = value as OperationSteps;
 
-  registry.setOperationSteps(member, function(...values) {
+  registry.setOperationSteps(
+    member,
+    createOperationSteps(method, normalizeException),
+  );
+}
+
+function createOperationSteps(
+  implementation: OperationSteps,
+  normalizeException: ExceptionNormalizer,
+): OperationSteps {
+  return function(...values) {
     return callImplementation(
-      method,
+      implementation,
       this,
       values.map(toImplementationValue),
       normalizeException,
     );
-  });
+  };
 }
 
 function callImplementation(

@@ -12,6 +12,9 @@ import { withWindowStub } from './stubs/interfaces';
  *   [Replaceable] readonly attribute (Event or undefined) event; // legacy
  * };
  */
+
+// -- Implementation -----------------------------------------------------
+
 export class WindowImpl
   extends withWindowStub(EventTargetImpl)
   implements Window

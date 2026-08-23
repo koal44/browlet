@@ -109,6 +109,35 @@ describe('Browlet DOM binding', () => {
       'remove',
       'systemId',
     ]);
+    expect(ownKeys(getPrototype(browlet, 'DocumentFragment'))).toEqual([
+      'childElementCount',
+      'children',
+      'constructor',
+      'firstElementChild',
+      'lastElementChild',
+    ]);
+    expect(ownKeys(getPrototype(browlet, 'ShadowRoot'))).toEqual([
+      'adoptedStyleSheets',
+      'clonable',
+      'constructor',
+      'customElementRegistry',
+      'delegatesFocus',
+      'host',
+      'mode',
+      'serializable',
+      'slotAssignment',
+      'styleSheets',
+    ]);
+    expect(ownKeys(getPrototype(browlet, 'Attr'))).toEqual([
+      'constructor',
+      'localName',
+      'name',
+      'namespaceURI',
+      'ownerElement',
+      'prefix',
+      'specified',
+      'value',
+    ]);
   });
 
   it('implements attributes through the realm prototypes', async () => {
@@ -129,6 +158,11 @@ describe('Browlet DOM binding', () => {
     expect(Object.keys(comment)).toEqual([]);
     expect(Object.keys(attribute)).toEqual([]);
     expect(Object.keys(document.doctype!)).toEqual([]);
+    expect(attribute).toBeInstanceOf(Reflect.get(browlet.window, 'Attr'));
+    expect(attribute).toBeInstanceOf(Reflect.get(browlet.window, 'Node'));
+    expect(attribute.ownerDocument).toBe(document);
+    expect(attribute.ownerElement).toBe(element);
+    expect(attribute.specified).toBe(true);
     expect(Reflect.set(document, 'nodeType', 0)).toBe(false);
     expect(Reflect.set(element, 'attributes', null)).toBe(false);
     expect(Reflect.set(attribute, 'localName', 'changed')).toBe(false);
@@ -148,6 +182,8 @@ describe('Browlet DOM binding', () => {
     const Document_ = getConstructor(browlet, 'Document');
     const Text_ = getConstructor(browlet, 'Text');
     const Comment_ = getConstructor(browlet, 'Comment');
+    const DocumentFragment_ = getConstructor(browlet, 'DocumentFragment');
+    const ShadowRoot_ = getConstructor(browlet, 'ShadowRoot');
     let internalHookWasCalled = false;
     const eventTarget = Reflect.construct(EventTarget_, [{
       addingEventListener: () => { internalHookWasCalled = true; },
@@ -174,6 +210,23 @@ describe('Browlet DOM binding', () => {
     expect(foreignDocument.contentType).toBe('application/xml');
     expect((Reflect.construct(Text_, []) as Text).data).toBe('');
     expect((Reflect.construct(Comment_, []) as Comment).data).toBe('');
+    const fragment = Reflect.construct(
+      DocumentFragment_,
+      [],
+    ) as DocumentFragment;
+    expect(fragment).toBeInstanceOf(DocumentFragment_);
+    expect(fragment).toBeInstanceOf(Node_);
+    expect(fragment.ownerDocument).toBe(browlet.document);
+    expect(() => { Reflect.construct(ShadowRoot_, []); })
+      .toThrow('Illegal constructor');
+  });
+
+  it('rejects DOM implementations without an assembled interface', () => {
+    const realm = new Realm();
+    const bindings = new BrowletBindings(realm);
+
+    expect(() => bindings.dom.construct(UnboundDOMImplementation, []))
+      .toThrow('No DOM interface is registered');
   });
 
   it('filters DOM constructors for the host exposure set', () => {
@@ -235,3 +288,5 @@ type InterfaceConstructor = {
   new(...arguments_: unknown[]): object;
   readonly prototype: object;
 };
+
+class UnboundDOMImplementation {}

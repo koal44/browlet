@@ -143,6 +143,8 @@ export class Browlet {
     return browlet.#traversable;
   }
 
+  // -- Private ----------------------------------------------------------
+
   private executeScript(
     element: ElementImpl,
     documentURL: URL,

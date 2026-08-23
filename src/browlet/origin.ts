@@ -54,7 +54,7 @@ export const originIDL = defineInterface({
   name: 'Origin',
 });
 
-// -----------------------------------------------------------------------------
+// -- Implementation -----------------------------------------------------
 
 export class OriginImpl {
   #origin: Origin = createOpaqueOrigin();

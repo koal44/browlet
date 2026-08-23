@@ -251,7 +251,7 @@ export const nodeIDL = defineInterface({
   name: 'Node',
 });
 
-// ---------------------------------------------------------------------------------------
+// -- Implementation -----------------------------------------------------
 
 export abstract class NodeImpl
   extends TreeNode<NodeImpl>
@@ -538,6 +538,7 @@ export type NodeVirtuals = {
 
 export enum NodeType {
   Element = 1,
+  Attribute = 2,
   Text = 3,
   Comment = 8,
   Document = 9,

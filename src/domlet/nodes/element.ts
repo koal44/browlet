@@ -7,9 +7,11 @@ import {
   isElement, NodeImpl, type NodeOptions, NodeType,
 } from './node';
 import { AttrImpl } from './attribute';
-import { NamedNodeMapImpl } from './collections';
+import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
-import type { DOMNodeFactory } from './factory';
+import {
+  directDOMNodeFactory, type DOMNodeFactory,
+} from './factory';
 import {
   ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
@@ -360,6 +362,8 @@ export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
   interface: 'MathMLElement', mixin: 'ElementCSSInlineStyle',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
@@ -369,6 +373,7 @@ export class ElementImpl
   readonly #attributes: NamedNodeMapImpl;
   readonly #localName: string;
   readonly #namespaceURI: string;
+  readonly #nodeFactory: DOMNodeFactory;
   readonly #slottable = new SlottableMixin();
 
   constructor(
@@ -377,11 +382,14 @@ export class ElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(NodeType.Element, ownerDocument, ElementImpl.#nodeOptions);
     this.#attributes = new NamedNodeMapImpl(...attributes);
+    NamedNodeMapImpl.associateElement(this.#attributes, this);
     this.#localName = localName;
     this.#namespaceURI = namespaceURI;
+    this.#nodeFactory = nodeFactory;
     this.#linkStyle = linkStyle
       ? new LinkStyleMixin(
         this,
@@ -450,7 +458,19 @@ export class ElementImpl
     if (attribute) {
       attribute.value = value;
     } else {
-      this.attributes.push(new AttrImpl(qualifiedName, value));
+      const ownerDocument = NodeImpl.getNodeDocument(this);
+      if (!ownerDocument) {
+        throw new Error('Element has no node document');
+      }
+      const created = this.#nodeFactory.construct(AttrImpl, [
+        qualifiedName,
+        value,
+        null,
+        null,
+        ownerDocument,
+      ]);
+      AttrImpl.setOwnerElement(created, this);
+      this.attributes.push(created);
     }
 
     if (qualifiedName === 'style') {
@@ -468,7 +488,8 @@ export class ElementImpl
     if (index < 0) return;
 
     const oldValue = this.attributes[index]!.value;
-    this.attributes.splice(index, 1);
+    const [removed] = this.attributes.splice(index, 1);
+    if (removed) AttrImpl.setOwnerElement(removed, null);
     if (qualifiedName === 'style') {
       this.#inlineStyle?.attributeChanged(null);
     }
@@ -591,6 +612,7 @@ export class HTMLElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       localName,
@@ -598,6 +620,7 @@ export class HTMLElementImpl
       ownerDocument,
       attributes,
       linkStyle,
+      nodeFactory,
     );
   }
 
@@ -613,8 +636,9 @@ export class HTMLHeadElementImpl
   constructor(
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
-    super('head', ownerDocument, attributes);
+    super('head', ownerDocument, attributes, undefined, nodeFactory);
   }
 }
 
@@ -631,6 +655,7 @@ export class HTMLStyleElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'style',
@@ -640,6 +665,7 @@ export class HTMLStyleElementImpl
         options: HTMLStyleElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
+      nodeFactory,
     );
   }
 
@@ -663,6 +689,7 @@ export class HTMLLinkElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'link',
@@ -672,6 +699,7 @@ export class HTMLLinkElementImpl
         options: HTMLLinkElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
+      nodeFactory,
     );
   }
 
@@ -689,6 +717,7 @@ export class SVGElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       localName,
@@ -696,6 +725,7 @@ export class SVGElementImpl
       ownerDocument,
       attributes,
       linkStyle,
+      nodeFactory,
     );
   }
 
@@ -717,6 +747,7 @@ export class SVGStyleElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'style',
@@ -726,6 +757,7 @@ export class SVGStyleElementImpl
         options: SVGStyleElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
+      nodeFactory,
     );
   }
 
@@ -742,8 +774,16 @@ export class MathMLElementImpl
     localName: string,
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
+    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
-    super(localName, MATHML_NAMESPACE, ownerDocument, attributes);
+    super(
+      localName,
+      MATHML_NAMESPACE,
+      ownerDocument,
+      attributes,
+      undefined,
+      nodeFactory,
+    );
   }
 
   get style(): CSSStyleDeclaration {
@@ -767,27 +807,27 @@ export function createElementNode(
     if (localName === 'head') {
       return nodeFactory.construct(
         HTMLHeadElementImpl,
-        [ownerDocument, attributes],
+        [ownerDocument, attributes, nodeFactory],
       );
     }
 
     if (localName === 'style') {
       return nodeFactory.construct(
         HTMLStyleElementImpl,
-        [ownerDocument, treeScopeResolver, attributes],
+        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
       );
     }
 
     if (localName === 'link') {
       return nodeFactory.construct(
         HTMLLinkElementImpl,
-        [ownerDocument, treeScopeResolver, attributes],
+        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
       );
     }
 
     return nodeFactory.construct(
       HTMLElementImpl,
-      [localName, ownerDocument, attributes],
+      [localName, ownerDocument, attributes, undefined, nodeFactory],
     );
   }
 
@@ -795,26 +835,26 @@ export function createElementNode(
     if (localName === 'style') {
       return nodeFactory.construct(
         SVGStyleElementImpl,
-        [ownerDocument, treeScopeResolver, attributes],
+        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
       );
     }
 
     return nodeFactory.construct(
       SVGElementImpl,
-      [localName, ownerDocument, attributes],
+      [localName, ownerDocument, attributes, undefined, nodeFactory],
     );
   }
 
   if (namespaceURI === MATHML_NAMESPACE) {
     return nodeFactory.construct(
       MathMLElementImpl,
-      [localName, ownerDocument, attributes],
+      [localName, ownerDocument, attributes, nodeFactory],
     );
   }
 
   return nodeFactory.construct(
     ElementImpl,
-    [localName, namespaceURI, ownerDocument, attributes],
+    [localName, namespaceURI, ownerDocument, attributes, undefined, nodeFactory],
   );
 }
 

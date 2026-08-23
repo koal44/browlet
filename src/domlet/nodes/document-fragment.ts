@@ -1,6 +1,6 @@
 import { withDocumentFragmentStub } from '../stubs/interfaces';
 import type { EventTargetVirtuals } from '../events/event-target';
-import { defineInterface } from '../../web-idl/definition';
+import { defineIncludes, defineInterface } from '../../web-idl/definition';
 import { NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
@@ -18,6 +18,13 @@ export const documentFragmentIDL = defineInterface({
   members: [{ arguments: [], kind: 'constructor' }],
   name: 'DocumentFragment',
 });
+
+export const documentFragmentIncludesParentNodeIDL = defineIncludes({
+  interface: 'DocumentFragment',
+  mixin: 'ParentNode',
+});
+
+// -- Implementation -----------------------------------------------------
 
 export class DocumentFragmentImpl
   extends withDocumentFragmentStub(NodeImpl)

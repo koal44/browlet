@@ -23,15 +23,18 @@ import {
   type EventListenerCallback, type EventListenerInvocationHost,
 } from '../../domlet/events/event-target';
 import { CharacterDataImpl } from '../../domlet/nodes/character-data';
+import { AttrImpl } from '../../domlet/nodes/attribute';
 import { CommentImpl } from '../../domlet/nodes/comment';
 import { DocumentImpl } from '../../domlet/nodes/document';
+import { DocumentFragmentImpl } from '../../domlet/nodes/document-fragment';
 import { DocumentTypeImpl } from '../../domlet/nodes/document-type';
 import {
   ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
   HTMLStyleElementImpl, MathMLElementImpl, SVGElementImpl, SVGStyleElementImpl,
 } from '../../domlet/nodes/element';
 import type { DOMNodeFactory } from '../../domlet/nodes/factory';
-import { NodeImpl } from '../../domlet/nodes/node';
+import { isDocument, NodeImpl } from '../../domlet/nodes/node';
+import { ShadowRootImpl } from '../../domlet/nodes/shadow-root';
 import { TextImpl } from '../../domlet/nodes/text';
 import type { Realm } from '../realm';
 
@@ -162,10 +165,12 @@ implements DOMNodeFactory, EventListenerInvocationHost
   ): T {
     const interface_ = this.#implementations.get(implementation);
     if (!interface_) {
-      return Reflect.construct(implementation, argumentsList) as T;
+      throw new Error('No DOM interface is registered for this implementation');
     }
     return this.#construct(implementation, argumentsList, interface_);
   }
+
+  // -- Private ----------------------------------------------------------
 
   #getCallbackHost(callback: EventListenerCallback): DOMEventRealmHost {
     const realm = requireEventListenerValue(callback).realm;
@@ -178,6 +183,14 @@ implements DOMNodeFactory, EventListenerInvocationHost
     return exception instanceof DOMException
       ? this.createDOMException(exception.message, exception.name)
       : exception;
+  }
+
+  #getAssociatedDocument(): DocumentImpl {
+    const document = Reflect.get(this.#host.globalObject, 'document') as unknown;
+    if (!NodeImpl.is(document) || !isDocument(document)) {
+      throw new Error('Realm global object has no associated Document');
+    }
+    return document;
   }
 
   #requireInterface(name: string): AssembledInterface {
@@ -220,7 +233,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
         name: 'Event',
         options: {
           construct(type, init) {
-            const dictionary = asDictionary(init);
+            const dictionary = init as Record<PropertyKey, unknown>;
             EventImpl.initializeForBinding(
               this as EventImpl,
               type as string,
@@ -239,7 +252,7 @@ implements DOMNodeFactory, EventListenerInvocationHost
         name: 'CustomEvent',
         options: {
           construct(type, init) {
-            const dictionary = asDictionary(init);
+            const dictionary = init as Record<PropertyKey, unknown>;
             CustomEventImpl.initializeCustomForBinding(
               this as CustomEventImpl,
               type as string,
@@ -255,7 +268,22 @@ implements DOMNodeFactory, EventListenerInvocationHost
         },
       },
       { implementation: NodeImpl, name: 'Node' },
+      { implementation: AttrImpl, name: 'Attr' },
       { implementation: CharacterDataImpl, name: 'CharacterData' },
+      {
+        implementation: DocumentFragmentImpl,
+        name: 'DocumentFragment',
+        options: {
+          construct() {},
+          create: {
+            arguments: () => [this.#getAssociatedDocument()],
+            created: (value) => {
+              this.associateEventTarget(value as DocumentFragmentImpl);
+            },
+          },
+        },
+      },
+      { implementation: ShadowRootImpl, name: 'ShadowRoot' },
       {
         implementation: DocumentImpl,
         name: 'Document',
@@ -346,21 +374,6 @@ type DOMImplementationRegistration = {
   name: string;
   options?: InterfaceImplementationOptions;
 };
-
-function toImplementationValue(value: unknown): unknown {
-  if (!(value instanceof Map)) return value;
-
-  const object: Record<PropertyKey, unknown> = {};
-  const dictionary = value as Map<PropertyKey, unknown>;
-  for (const [name, memberValue] of dictionary) {
-    object[name] = toImplementationValue(memberValue);
-  }
-  return object;
-}
-
-function asDictionary(value: unknown): Record<PropertyKey, unknown> {
-  return toImplementationValue(value) as Record<PropertyKey, unknown>;
-}
 
 function isDOMEventRealmHost(value: object): value is DOMEventRealmHost {
   return 'eventTimeStamp' in value &&

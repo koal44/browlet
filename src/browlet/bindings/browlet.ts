@@ -2,6 +2,7 @@ import { domIDLDefinitions } from '../../domlet/web-idl';
 import { urlIDLDefinitions } from '../../url/web-idl';
 import { assembleDefinitions } from '../../web-idl/assembly';
 import { JavaScriptBinding } from '../../web-idl/binding';
+import { webIDLCommonDefinitions } from '../../web-idl/common-definitions';
 import type { HostDefinedInterface } from '../../web-idl/conversion';
 import { ImplementationRegistry } from '../../web-idl/implementation';
 import { sharedPlatformObjects } from '../../web-idl/platform-object';
@@ -62,6 +63,7 @@ const hostDefinedInterfaces: HostDefinedInterface[] = [{
 }];
 
 const browletDefinitions = assembleDefinitions([
+  ...webIDLCommonDefinitions,
   originIDL,
   ...domIDLDefinitions,
   ...urlIDLDefinitions,

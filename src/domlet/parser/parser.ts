@@ -300,6 +300,8 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
     if (current) Object.assign(current, location);
   }
 
+  // -- Private ----------------------------------------------------------
+
   #finishPendingUnpushedElement(): void {
     const element = this.#pendingUnpushedElement;
     if (!element) return;

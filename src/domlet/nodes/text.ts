@@ -29,6 +29,8 @@ export const textIDL = defineInterface({
   name: 'Text',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class TextImpl
   extends withTextStub(CharacterDataImpl)
   implements Text

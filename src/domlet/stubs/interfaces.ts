@@ -31,8 +31,7 @@ export const withMathMLElementStub = stub<MathMLElement>();
 export const withCharacterDataStub = stub<CharacterData>();
 export const withTextStub = stub<Text>();
 export const withCommentStub = stub<Comment>();
-
-export const AttrStub = stub<Attr>()(class {});
+export const withAttrStub = stub<Attr>();
 
 export function asDocument<T extends object>(document: T): T & Document {
   return document as T & Document;

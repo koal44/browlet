@@ -136,6 +136,8 @@ class WindowProxyHandler implements ProxyHandler<object> {
     );
   }
 
+  // -- Private ----------------------------------------------------------
+
   private requireWindow(): WindowImpl {
     if (!this.#window) {
       throw new Error('WindowProxy has no associated Window');

@@ -54,6 +54,8 @@ export const characterDataIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
   mixin: nonDocumentTypeChildNodeIDL.name,
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class CharacterDataImpl
   extends withCharacterDataStub(NodeImpl)
   implements CharacterData

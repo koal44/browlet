@@ -280,6 +280,8 @@ export const htmlDocumentIDL = definePartialInterface({
   name: 'Document',
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class DocumentImpl
   extends NodeImpl
 {
@@ -877,6 +879,7 @@ export class DocumentImpl
       value,
       namespaceURI,
       prefix,
+      document,
     ]);
   }
 

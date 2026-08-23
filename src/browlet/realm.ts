@@ -377,6 +377,8 @@ export class Realm implements WebIDLRealmHost {
     return Realm.#getAssociatedRealm(value);
   }
 
+  // -- Private ----------------------------------------------------------
+
   get #windowImplementation(): WindowImpl | undefined {
     return this.#globalObject instanceof WindowImpl
       ? this.#globalObject

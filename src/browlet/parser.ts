@@ -38,6 +38,8 @@ export class BrowletParser {
     this.#treeAdapter.finishParsing();
   }
 
+  // -- Private ----------------------------------------------------------
+
   private async handleScript(
     element: ElementImpl,
     write: DocumentWrite,

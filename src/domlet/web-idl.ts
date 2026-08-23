@@ -1,5 +1,4 @@
 import type { Definition } from '../web-idl/definition';
-import { webIDLCommonDefinitions } from '../web-idl/common-definitions';
 import {
   cssomDocumentOrShadowRootIDL, elementCSSInlineStyleIDL, linkStyleIDL,
 } from './css-engine';
@@ -15,7 +14,11 @@ import {
   characterDataIDL, characterDataIncludesChildNodeIDL,
   characterDataIncludesNonDocumentTypeChildNodeIDL,
 } from './nodes/character-data';
+import { attrIDL } from './nodes/attribute';
 import { commentIDL } from './nodes/comment';
+import {
+  documentFragmentIDL, documentFragmentIncludesParentNodeIDL,
+} from './nodes/document-fragment';
 import {
   documentIDL, documentIncludesDocumentOrShadowRootIDL,
   documentIncludesParentNodeIDL, elementCreationOptionsIDL, htmlDocumentIDL,
@@ -38,10 +41,13 @@ import {
   childNodeIDL, documentOrShadowRootIDL, getRootNodeOptionsIDL, nodeIDL,
   nonDocumentTypeChildNodeIDL, parentNodeIDL,
 } from './nodes/node';
+import {
+  shadowRootIDL, shadowRootIncludesDocumentOrShadowRootIDL,
+  shadowRootModeIDL, slotAssignmentModeIDL,
+} from './nodes/shadow-root';
 import { textIDL } from './nodes/text';
 
 export const domIDLDefinitions: Definition[] = [
-  ...webIDLCommonDefinitions,
   domHighResTimeStampIDL,
   eventListenerIDL,
   eventListenerOptionsIDL,
@@ -58,6 +64,7 @@ export const domIDLDefinitions: Definition[] = [
   childNodeIDL,
   nonDocumentTypeChildNodeIDL,
   nodeIDL,
+  attrIDL,
   characterDataIDL,
   characterDataIncludesChildNodeIDL,
   characterDataIncludesNonDocumentTypeChildNodeIDL,
@@ -65,6 +72,12 @@ export const domIDLDefinitions: Definition[] = [
   documentTypeIncludesChildNodeIDL,
   textIDL,
   commentIDL,
+  documentFragmentIDL,
+  documentFragmentIncludesParentNodeIDL,
+  shadowRootModeIDL,
+  slotAssignmentModeIDL,
+  shadowRootIDL,
+  shadowRootIncludesDocumentOrShadowRootIDL,
 
   elementCSSInlineStyleIDL,
   linkStyleIDL,

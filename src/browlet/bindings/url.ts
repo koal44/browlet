@@ -84,6 +84,8 @@ export class URLBinding {
     );
   }
 
+  // -- Private ----------------------------------------------------------
+
   #projectSearchParams(value: URLSearchParamsImpl): void {
     if (this.#binding.getPlatformObjectRecord(value)) return;
     const prototype = this.#binding.getInterfacePrototypeObject(

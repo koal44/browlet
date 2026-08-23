@@ -32,6 +32,8 @@ export const documentTypeIncludesChildNodeIDL = defineIncludes({
   mixin: childNodeIDL.name,
 });
 
+// -- Implementation -----------------------------------------------------
+
 export class DocumentTypeImpl
   extends withDocumentTypeStub(NodeImpl)
   implements DocumentType

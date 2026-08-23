@@ -107,33 +107,35 @@ export class JavaScriptBinding {
     return installed;
   }
 
-  getExposedInitialObjects(): Map<string, object> {
+  getExposedGlobalProperties(
+    isWindow = this.realm.globalNames.has('Window'),
+  ): Map<string, object> {
     const installed = new Map<string, object>();
     const interfaces = orderInterfacesByInheritance(
       this.definitions.getInterfaces()
         .filter((interface_) => this.isExposed(interface_)),
     );
+
     for (const interface_ of interfaces) {
+      const definition = interface_.definition;
       this.getInterfacePrototypeObject(interface_);
       this.#initializeMemberObjects(interface_);
       if (
-        !hasExtendedAttribute(
-          interface_.definition,
-          'LegacyNoInterfaceObject',
-        ) &&
-        getIdentifierAttribute(
-          interface_.definition,
-          'LegacyNamespace',
-        ) === undefined
+        !hasExtendedAttribute(definition, 'LegacyNoInterfaceObject') &&
+        getIdentifierAttribute(definition, 'LegacyNamespace') === undefined
       ) {
-        installed.set(
-          interface_.definition.name,
-          this.getInterfaceObject(interface_),
-        );
+        const object = this.getInterfaceObject(interface_);
+        installed.set(definition.name, object);
+        if (isWindow) {
+          for (const alias of getIdentifierListAttribute(
+            definition,
+            'LegacyWindowAlias',
+          )) {
+            installed.set(alias, object);
+          }
+        }
       }
-      for (const id of getLegacyFactoryFunctionIdentifiers(
-        interface_,
-      )) {
+      for (const id of getLegacyFactoryFunctionIdentifiers(interface_)) {
         installed.set(id, this.getLegacyFactoryFunction(interface_, id));
       }
     }
@@ -157,66 +159,6 @@ export class JavaScriptBinding {
         namespace.definition.name,
         this.getNamespaceObject(namespace),
       );
-    }
-    return installed;
-  }
-
-  getExposedGlobalProperties(
-    isWindow = this.realm.globalNames.has('Window'),
-  ): Map<string, object> {
-    const exposed = this.getExposedInitialObjects();
-    const ordered = new Map<string, object>();
-    const interfaces = orderInterfacesByInheritance(
-      this.definitions.getInterfaces()
-        .filter((interface_) => this.isExposed(interface_)),
-    );
-    const handledNames = new Set<string>();
-
-    for (const interface_ of interfaces) {
-      const definition = interface_.definition;
-      if (
-        !hasExtendedAttribute(definition, 'LegacyNoInterfaceObject') &&
-        getIdentifierAttribute(definition, 'LegacyNamespace') === undefined
-      ) {
-        const object = this.getInterfaceObject(interface_);
-        handledNames.add(definition.name);
-        ordered.set(definition.name, object);
-        if (isWindow) {
-          for (const alias of getIdentifierListAttribute(
-            definition,
-            'LegacyWindowAlias',
-          )) {
-            handledNames.add(alias);
-            ordered.set(alias, object);
-          }
-        }
-      }
-      for (const id of getLegacyFactoryFunctionIdentifiers(interface_)) {
-        handledNames.add(id);
-        ordered.set(id, this.getLegacyFactoryFunction(interface_, id));
-      }
-    }
-    for (const [name, object] of exposed) {
-      if (!handledNames.has(name)) ordered.set(name, object);
-    }
-    return ordered;
-  }
-
-  getExposedInterfaceObjects(): Map<string, object> {
-    const installed = new Map<string, object>();
-
-    for (const interface_ of this.definitions.getInterfaces()) {
-      if (
-        !this.isExposed(interface_) ||
-        hasExtendedAttribute(interface_.definition, 'LegacyNoInterfaceObject') ||
-        getIdentifierAttribute(
-          interface_.definition,
-          'LegacyNamespace',
-        ) !== undefined
-      ) continue;
-
-      const object = this.getInterfaceObject(interface_);
-      installed.set(interface_.definition.name, object);
     }
     return installed;
   }

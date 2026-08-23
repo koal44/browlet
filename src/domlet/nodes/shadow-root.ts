@@ -2,7 +2,7 @@ import { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../stubs/interfaces';
 import {
-  defineEnumeration, defineInterface, idlType, reference,
+  defineEnumeration, defineIncludes, defineInterface, idlType, reference,
 } from '../../web-idl/definition';
 import {
   DocumentFragmentImpl,
@@ -67,6 +67,13 @@ export const shadowRootIDL = defineInterface({
   name: 'ShadowRoot',
 });
 
+export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({
+  interface: 'ShadowRoot',
+  mixin: 'DocumentOrShadowRoot',
+});
+
+// -- Implementation -----------------------------------------------------
+
 export class ShadowRootImpl
   extends withShadowRootStub(DocumentFragmentImpl)
   implements ShadowRoot
@@ -107,6 +114,22 @@ export class ShadowRootImpl
 
   get host(): ElementImpl {
     return ShadowRootImpl.getHost(this);
+  }
+
+  get customElementRegistry(): CustomElementRegistry | null {
+    return null;
+  }
+
+  get styleSheets(): never {
+    throw new Error('Shadow-root style scopes are not implemented');
+  }
+
+  get adoptedStyleSheets(): never {
+    throw new Error('Shadow-root style scopes are not implemented');
+  }
+
+  set adoptedStyleSheets(_styleSheets: CSSStyleSheet[]) {
+    throw new Error('Shadow-root style scopes are not implemented');
   }
 
   // -- Virtual ----------------------------------------------------------
