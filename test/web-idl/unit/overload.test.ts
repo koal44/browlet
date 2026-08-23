@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  defineDictionary, defineInterface, idlType, reference, sequence,
+  defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
   type OperationMember,
 } from '../../../src/web-idl/definition';
 import { Realm } from '../../../src/browlet/realm';
@@ -96,6 +96,57 @@ describe('Web IDL effective overload sets', () => {
       values: [[1, 2]],
     });
     expect(iteratorGets).toBe(1);
+  });
+
+  it('associates applicable argument attributes with their types', () => {
+    const binding = createBinding([]);
+    const callable = operation([{
+      extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
+      name: 'value',
+      type: idlType.byte,
+    }]);
+
+    expect(resolve([callable], [300], binding)).toEqual({
+      callable,
+      values: [127],
+    });
+  });
+
+  it('selects and converts a frozen-array overload for an iterable object', () => {
+    const binding = createBinding([]);
+    const string = namedOperation('string', idlType.DOMString);
+    const frozen = namedOperation('frozen', frozenArray(idlType.long));
+    let iteratorGets = 0;
+    const iterable = {
+      get [Symbol.iterator]() {
+        iteratorGets++;
+        return function*() {
+          yield '1';
+          yield 2;
+        };
+      },
+    };
+
+    const result = resolve([string, frozen], [iterable], binding);
+
+    expect(result.callable).toBe(frozen);
+    expect(result.values).toEqual([[1, 2]]);
+    expect(Object.isFrozen(result.values[0])).toBe(true);
+    expect(iteratorGets).toBe(1);
+  });
+
+  it.fails('selects a symbol overload for a symbol value', () => {
+    const binding = createBinding([]);
+    const symbol = namedOperation('symbol', idlType.symbol);
+    const string = namedOperation('string', idlType.DOMString);
+    const value = Symbol('value');
+
+    // Web IDL declares symbol and DOMString distinguishable, but its overload
+    // selection ladder currently has no branch for a JavaScript Symbol value.
+    expect(resolve([symbol, string], [value], binding)).toEqual({
+      callable: symbol,
+      values: [value],
+    });
   });
 
   it('selects optional and platform-object overloads', () => {

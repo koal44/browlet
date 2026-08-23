@@ -1,7 +1,29 @@
 import type { DefinitionAssembly } from './assembly';
 import type {
-  AnnotatedType, UnionType, WebIDLType,
+  AnnotatedType, ExtendedAttribute, UnionType, WebIDLType,
 } from './definition';
+
+export function getTypeWithApplicableExtendedAttributes(
+  type: WebIDLType,
+  extendedAttributes: ExtendedAttribute[] | undefined,
+): WebIDLType {
+  const applicable = extendedAttributes?.filter((attribute) =>
+    attribute.kind !== 'raw' &&
+    typeExtendedAttributeNames.has(attribute.name)
+  );
+  if (!applicable || applicable.length === 0) return type;
+
+  // Attributes written directly on a type precede applicable attributes from
+  // its argument or dictionary-member production, while both precede any
+  // attributes inherited through a typedef.
+  if (type.kind === 'annotated') {
+    return {
+      ...type,
+      type: getTypeWithApplicableExtendedAttributes(type.type, applicable),
+    };
+  }
+  return { extendedAttributes: applicable, kind: 'annotated', type };
+}
 
 export function getFlattenedMemberTypes(
   type: UnionType | AnnotatedUnionType,
@@ -106,3 +128,11 @@ export function resolveTypedef(
 }
 
 type AnnotatedUnionType = AnnotatedType & { type: UnionType; };
+
+const typeExtendedAttributeNames = new Set([
+  'AllowResizable',
+  'AllowShared',
+  'Clamp',
+  'EnforceRange',
+  'LegacyNullToEmptyString',
+]);

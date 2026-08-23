@@ -329,7 +329,6 @@ implements DOMNodeFactory, EventListenerInvocationHost
 }
 
 type DOMEventRealmHost = {
-  readonly exposure: string;
   readonly global: object;
   eventTimeStamp(): DOMHighResTimeStamp;
   isWindow(global: object): boolean;

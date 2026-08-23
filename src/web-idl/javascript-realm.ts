@@ -11,8 +11,8 @@ export type WebIDLRealmHost = {
     reportException(exception: unknown): void;
   };
   readonly crossOriginIsolated: boolean;
-  readonly exposure: string;
   global: object;
+  readonly globalNames: ReadonlySet<string>;
   readonly isGlobalPrototypeChainMutable: boolean;
   intrinsics: {
     array: ArrayConstructor;

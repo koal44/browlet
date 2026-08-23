@@ -62,6 +62,11 @@ describe('Web IDL asynchronously iterable declarations', () => {
 
     const iterator = Reflect.apply(entries, object, [undefined, undefined]) as object;
     expect(initialized).toEqual([[missingArgument, 'fallback']]);
+    Reflect.apply(entries, object, [300, undefined]);
+    expect(initialized).toEqual([
+      [missingArgument, 'fallback'],
+      [127, 'fallback'],
+    ]);
     const iteratorPrototype = Object.getPrototypeOf(iterator) as object;
     expect(Object.getPrototypeOf(iteratorPrototype))
       .toBe(realm.intrinsics.iteration.asyncIteratorPrototype);
@@ -123,6 +128,41 @@ describe('Web IDL asynchronously iterable declarations', () => {
     expect(calls).toEqual(['next', 'next', 'return:stop']);
   });
 
+  it('keeps later calls serialized after return settles', async () => {
+    const { binding, declaration, implementations, realm } = createPairBinding();
+    implementations.setAsyncIteratorSteps(declaration, {
+      getNext: () => createResolvedPromise(
+        endOfIteration,
+        idlType.any,
+        binding,
+      ),
+      return: () => createResolvedPromise(
+        undefined,
+        idlType.any,
+        binding,
+      ),
+    });
+    const object = binding.createPlatformObject('AsyncPairs');
+    const iterator = Reflect.apply(
+      getMethod(object, 'entries'),
+      object,
+      [],
+    ) as object;
+    await callIterator(iterator, 'return');
+
+    const order: string[] = [];
+    const next = Reflect.apply(
+      getMethod(iterator, 'next'),
+      iterator,
+      [],
+    ) as Promise<unknown>;
+    void next.then(() => { order.push('next'); });
+    realm.queueMicrotask(() => { order.push('microtask'); });
+
+    await next;
+    expect(order).toEqual(['microtask', 'next']);
+  });
+
   it('uses value iteration methods and rejects invalid iterator receivers', async () => {
     const declaration = {
       kind: 'async-iterable',
@@ -168,7 +208,12 @@ function createPairBinding(): {
 } {
   const declaration = {
     arguments: [
-      { name: 'limit', optional: true, type: idlType.long },
+      {
+        extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
+        name: 'limit',
+        optional: true,
+        type: idlType.byte,
+      },
       {
         default: 'fallback',
         name: 'label',

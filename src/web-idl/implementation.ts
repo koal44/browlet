@@ -105,6 +105,10 @@ export class ImplementationRegistry {
     ObservableArraySteps
   >();
   #operations = new WeakMap<OperationMember, OperationSteps>();
+  #overriddenConstructors = new WeakMap<
+    InterfaceDefinition,
+    OverriddenConstructorSteps
+  >();
   #stringifiers = new WeakMap<StringifierMember, StringificationBehavior>();
   #valuePairs = new WeakMap<IterableMember, ValuePairsSteps>();
 
@@ -127,6 +131,13 @@ export class ImplementationRegistry {
     steps: ConstructorSteps,
   ): void {
     this.#constructors.set(constructor, steps);
+  }
+
+  setOverriddenConstructorSteps(
+    interface_: InterfaceDefinition,
+    steps: OverriddenConstructorSteps,
+  ): void {
+    this.#overriddenConstructors.set(interface_, steps);
   }
 
   setStringificationBehavior(
@@ -192,6 +203,12 @@ export class ImplementationRegistry {
     constructor: ConstructorMember | NamedArgumentsExtendedAttribute,
   ): ConstructorSteps | undefined {
     return this.#constructors.get(constructor);
+  }
+
+  getOverriddenConstructorSteps(
+    interface_: InterfaceDefinition,
+  ): OverriddenConstructorSteps | undefined {
+    return this.#overriddenConstructors.get(interface_);
   }
 
   getStringificationBehavior(
@@ -299,6 +316,12 @@ export type OperationSteps = (
 export type ObjectCreationSteps = (
   newTarget: object | undefined,
 ) => object;
+
+export type OverriddenConstructorSteps = (
+  argumentsList: unknown[],
+  newTarget: object | undefined,
+  activeFunction: object,
+) => unknown;
 
 export type ObservableArraySteps = {
   delete?(this: object, value: unknown, index: number): void;

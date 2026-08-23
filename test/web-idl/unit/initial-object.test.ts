@@ -3,7 +3,7 @@ import { Realm } from '../../../src/browlet/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
-  defineInterface, idlType, type AttributeMember,
+  defineInterface, definePartialInterface, idlType, type AttributeMember,
   type NamedArgumentsExtendedAttribute, type OperationMember,
   type StringifierMember,
 } from '../../../src/web-idl/definition';
@@ -11,6 +11,97 @@ import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL initial objects', () => {
+  it('uses an interface\'s overridden constructor steps', () => {
+    const interfaceIDL = defineInterface({
+      exposed: '*', members: [], name: 'OverriddenConstructor',
+    });
+    const implementations = new ImplementationRegistry();
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interfaceIDL]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    implementations.setOverriddenConstructorSteps(
+      interfaceIDL,
+      (argumentsList, newTarget, activeFunction) => ({
+        activeFunction,
+        argumentsList,
+        newTarget,
+      }),
+    );
+
+    binding.install();
+    const Interface = requireFunction(
+      Reflect.get(realm.global, 'OverriddenConstructor'),
+    );
+    const Derived = class extends Interface {};
+
+    expect(Reflect.apply(Interface, undefined, ['called'])).toEqual({
+      activeFunction: Interface,
+      argumentsList: ['called'],
+      newTarget: undefined,
+    });
+    expect(Reflect.construct(Interface, ['constructed'], Derived)).toEqual({
+      activeFunction: Interface,
+      argumentsList: ['constructed'],
+      newTarget: Derived,
+    });
+  });
+
+  it('rejects calls and construction without a constructor operation', () => {
+    const interfaceIDL = defineInterface({
+      exposed: '*', members: [], name: 'IllegalConstructor',
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interfaceIDL]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+
+    binding.install();
+    const Interface = requireFunction(
+      Reflect.get(realm.global, 'IllegalConstructor'),
+    );
+
+    expect(() => Reflect.apply(Interface, undefined, []))
+      .toThrow(realm.intrinsics.typeError);
+    expect(() => Reflect.construct(Interface, []))
+      .toThrow(realm.intrinsics.typeError);
+  });
+
+  it('keeps a legacy-hidden interface prototype accessible through instances', () => {
+    const interfaceIDL = defineInterface({
+      exposed: '*',
+      extendedAttributes: [{
+        kind: 'no-arguments', name: 'LegacyNoInterfaceObject',
+      }],
+      members: [],
+      name: 'HiddenInterface',
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interfaceIDL]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+
+    const installed = binding.install();
+    const object = binding.createPlatformObject('HiddenInterface');
+    const prototype = Reflect.getPrototypeOf(object);
+
+    expect(installed.has('HiddenInterface')).toBe(false);
+    expect(Reflect.has(realm.global, 'HiddenInterface')).toBe(false);
+    expect(prototype).toBe(
+      binding.getInterfacePrototypeObject('HiddenInterface'),
+    );
+    expect(Object.hasOwn(prototype as object, 'constructor')).toBe(false);
+    expect(Object.prototype.toString.call(prototype))
+      .toBe('[object HiddenInterface]');
+  });
+
   it('installs legacy window aliases only in Window realms', () => {
     const interfaceIDL = defineInterface({
       exposed: '*',
@@ -23,8 +114,8 @@ describe('Web IDL initial objects', () => {
       name: 'Widget',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
-    const windowRealm = new Realm({ exposure: 'Window' });
-    const workerRealm = new Realm({ exposure: 'Worker' });
+    const windowRealm = new Realm({ globalNames: ['Window'] });
+    const workerRealm = new Realm({ globalNames: ['Worker'] });
     const windowBinding = new JavaScriptBinding(
       definitions,
       windowRealm,
@@ -97,6 +188,43 @@ describe('Web IDL initial objects', () => {
       Reflect.apply(LegacyWidget, undefined, [7]);
     })
       .toThrow(realm.intrinsics.typeError);
+  });
+
+  it('includes legacy factory functions declared on partial interfaces', () => {
+    const factory = legacyFactory('LegacyPartialWidget', idlType.DOMString);
+    const interfaceIDL = defineInterface({
+      exposed: '*', members: [], name: 'PartialWidget',
+    });
+    const partial = definePartialInterface({
+      extendedAttributes: [factory],
+      members: [],
+      name: 'PartialWidget',
+    });
+    const implementations = new ImplementationRegistry();
+    implementations.setObjectCreationSteps(interfaceIDL, (newTarget) => {
+      if (!newTarget) throw new Error('Missing legacy factory newTarget');
+      return Object.create(
+        Reflect.get(newTarget, 'prototype') as object,
+      ) as object;
+    });
+    implementations.setConstructorSteps(factory, function(value) {
+      Reflect.set(this, 'value', value);
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interfaceIDL, partial]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+
+    binding.install();
+    const LegacyPartialWidget = requireFunction(
+      Reflect.get(realm.global, 'LegacyPartialWidget'),
+    );
+    const object = Reflect.construct(LegacyPartialWidget, ['partial']);
+
+    expect(Reflect.get(object, 'value')).toBe('partial');
   });
 
   it('preserves initial-object identities across installation', () => {

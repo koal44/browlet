@@ -8,7 +8,9 @@ import type {
   ArgumentDefinition, OperationMember, WebIDLType,
 } from './definition';
 import { isPromiseValue, type IDLPromise } from './promise-value';
-import { getUnannotatedType } from './types';
+import {
+  getTypeWithApplicableExtendedAttributes, getUnannotatedType,
+} from './types';
 
 export function callUserObjectOperation(
   value: CallbackInterfaceValue,
@@ -105,7 +107,7 @@ export function constructCallbackFunction(
 ): unknown {
   const constructor = callable.object;
   if (!isConstructor(constructor)) {
-    throw new callable.realm.intrinsics.typeError(
+    throw new context.realm.intrinsics.typeError(
       `${callable.definition.name} is not a constructor`,
     );
   }
@@ -147,7 +149,14 @@ export function convertWebIDLArguments(
     if (!definition) {
       throw new Error(`Web IDL argument ${index} has no declared type`);
     }
-    result.push(convertToJavaScript(value, definition.type, context));
+    result.push(convertToJavaScript(
+      value,
+      getTypeWithApplicableExtendedAttributes(
+        definition.type,
+        definition.extendedAttributes,
+      ),
+      context,
+    ));
     count = index + 1;
   }
 
@@ -269,9 +278,11 @@ function withCallbackRealm(
 }
 
 function isConstructor(value: object): value is new (...args: unknown[]) => object {
-  if (typeof value !== 'function') return false;
+  const probe = new Proxy(value, {
+    construct: () => ({}),
+  });
   try {
-    Reflect.construct(Object, [], value);
+    Reflect.construct(probe as CallableFunction, []);
     return true;
   } catch {
     return false;

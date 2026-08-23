@@ -63,8 +63,25 @@ describe('Web IDL maplike declarations', () => {
     expect(readIterator(getMethod(object, 'keys'), object)).toEqual([1, 2]);
     expect(readIterator(getMethod(object, 'values'), object))
       .toEqual(['42', 'two']);
+    expect([...(object as Iterable<unknown>)]).toEqual([
+      [1, '42'],
+      [2, 'two'],
+    ]);
     expect(() => { Reflect.apply(entries, {}, []); })
       .toThrow(realm.intrinsics.typeError);
+  });
+
+  it.fails('has native Map iterator internal slots', () => {
+    const { object, realm } = createMaplikeBinding();
+    call(object, 'set', [1, 'one']);
+    const iterator = call(object, 'entries') as object;
+    const nativeNext = getMethod(
+      realm.intrinsics.iteration.mapIteratorPrototype,
+      'next',
+    );
+
+    expect(Reflect.apply(nativeNext, iterator, []))
+      .toEqual({ done: false, value: [1, 'one'] });
   });
 
   it('keeps iteration and forEach live while preserving the entries object', () => {
@@ -163,22 +180,42 @@ describe('Web IDL maplike declarations', () => {
     call(object, 'clear');
     expect(calls).toBe(1);
   });
+
+  it('keeps defaults when a static operation has the same name', () => {
+    const staticSet = {
+      arguments: [],
+      kind: 'operation',
+      name: 'set',
+      returns: idlType.undefined,
+      static: true,
+    } satisfies OperationMember;
+    const declaration = {
+      key: idlType.DOMString,
+      kind: 'maplike',
+      value: idlType.long,
+    } satisfies MaplikeMember;
+    const interface_ = defineInterface({
+      exposed: ['Window'],
+      members: [staticSet, declaration],
+      name: 'StaticMaplike',
+    });
+    const implementations = new ImplementationRegistry();
+    let staticCalls = 0;
+    implementations.setOperationSteps(staticSet, () => { staticCalls++; });
+    const binding = createBinding(interface_, implementations);
+    const object = binding.createPlatformObject(interface_.name);
+    const Interface = binding.getInterfaceObject(interface_.name);
+
+    Reflect.apply(getMethod(Interface, 'set'), Interface, []);
+    expect(staticCalls).toBe(1);
+    expect(call(object, 'set', ['key', 1])).toBe(object);
+    expect(call(object, 'get', ['key'])).toBe(1);
+  });
 });
 
 describe('Web IDL setlike declarations', () => {
   it('projects ordered-set querying, mutation, and Set-shaped iterators', () => {
-    const declaration = {
-      kind: 'setlike',
-      value: idlType.long,
-    } satisfies SetlikeMember;
-    const interface_ = defineInterface({
-      exposed: ['Window'],
-      members: [declaration],
-      name: 'NumberSetlike',
-    });
-    const realm = new Realm();
-    const binding = createBinding(interface_, undefined, realm);
-    const object = binding.createPlatformObject(interface_.name);
+    const { binding, object, realm } = createSetlikeBinding();
 
     expect(call(object, 'add', [1.8])).toBe(object);
     binding.getSetEntries(object).add(2);
@@ -187,6 +224,7 @@ describe('Web IDL setlike declarations', () => {
     expect(getMethod(object, Symbol.iterator)).toBe(getMethod(object, 'values'));
     expect(getMethod(object, 'keys')).toBe(getMethod(object, 'values'));
     expect(readIterator(getMethod(object, 'values'), object)).toEqual([1, 2]);
+    expect([...(object as Iterable<unknown>)]).toEqual([1, 2]);
 
     const entries = call(object, 'entries') as object;
     expect(Object.getPrototypeOf(entries))
@@ -210,6 +248,19 @@ describe('Web IDL setlike declarations', () => {
     call(object, 'clear');
     expect(binding.getSetEntries(object)).toBe(entriesObject);
     expect(Reflect.get(object, 'size')).toBe(0);
+  });
+
+  it.fails('has native Set iterator internal slots', () => {
+    const { object, realm } = createSetlikeBinding();
+    call(object, 'add', [1]);
+    const iterator = call(object, 'values') as object;
+    const nativeNext = getMethod(
+      realm.intrinsics.iteration.setIteratorPrototype,
+      'next',
+    );
+
+    expect(Reflect.apply(nativeNext, iterator, []))
+      .toEqual({ done: false, value: 1 });
   });
 
   it('omits mutation methods from readonly maplike and setlike interfaces', () => {
@@ -247,6 +298,36 @@ describe('Web IDL setlike declarations', () => {
     expect(call(map, 'get', ['specification'])).toBe(1);
     expect(call(set, 'has', [2])).toBe(true);
   });
+
+  it('keeps defaults when a static operation has the same name', () => {
+    const staticAdd = {
+      arguments: [],
+      kind: 'operation',
+      name: 'add',
+      returns: idlType.undefined,
+      static: true,
+    } satisfies OperationMember;
+    const declaration = {
+      kind: 'setlike',
+      value: idlType.long,
+    } satisfies SetlikeMember;
+    const interface_ = defineInterface({
+      exposed: ['Window'],
+      members: [staticAdd, declaration],
+      name: 'StaticSetlike',
+    });
+    const implementations = new ImplementationRegistry();
+    let staticCalls = 0;
+    implementations.setOperationSteps(staticAdd, () => { staticCalls++; });
+    const binding = createBinding(interface_, implementations);
+    const object = binding.createPlatformObject(interface_.name);
+    const Interface = binding.getInterfaceObject(interface_.name);
+
+    Reflect.apply(getMethod(Interface, 'add'), Interface, []);
+    expect(staticCalls).toBe(1);
+    expect(call(object, 'add', [1])).toBe(object);
+    expect(call(object, 'has', [1])).toBe(true);
+  });
 });
 
 function createMaplikeBinding(): {
@@ -263,6 +344,29 @@ function createMaplikeBinding(): {
     exposed: ['Window'],
     members: [declaration],
     name: 'NumberMaplike',
+  });
+  const realm = new Realm();
+  const binding = createBinding(interface_, undefined, realm);
+  return {
+    binding,
+    object: binding.createPlatformObject(interface_.name),
+    realm,
+  };
+}
+
+function createSetlikeBinding(): {
+  binding: JavaScriptBinding;
+  object: object;
+  realm: Realm;
+} {
+  const declaration = {
+    kind: 'setlike',
+    value: idlType.long,
+  } satisfies SetlikeMember;
+  const interface_ = defineInterface({
+    exposed: ['Window'],
+    members: [declaration],
+    name: 'NumberSetlike',
   });
   const realm = new Realm();
   const binding = createBinding(interface_, undefined, realm);

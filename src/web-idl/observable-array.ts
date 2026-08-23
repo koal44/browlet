@@ -13,10 +13,6 @@ import type { ImplementationRegistry } from './implementation';
 export class ObservableArrayBinding {
   readonly #context: ConversionContext;
   readonly #implementations: ImplementationRegistry;
-  #objects = new WeakMap<
-    object,
-    WeakMap<AttributeMember, ObservableArrayHandle<unknown, unknown>>
-  >();
 
   constructor(
     context: ConversionContext,
@@ -61,10 +57,15 @@ export class ObservableArrayBinding {
     attribute: AttributeMember,
     elementType: WebIDLType,
   ): ObservableArrayHandle<unknown, unknown> {
-    let attributes = this.#objects.get(object);
+    const record = this.#context.platformObjects.getImplementationRecord(
+      object,
+    );
+    if (!record) throw new Error('Observable array object is not associated');
+
+    let attributes = record.observableArrays;
     if (!attributes) {
       attributes = new WeakMap();
-      this.#objects.set(object, attributes);
+      record.observableArrays = attributes;
     }
 
     const existing = attributes.get(attribute);
@@ -86,6 +87,7 @@ export class ObservableArrayBinding {
         )
         : undefined,
       rangeError: this.#context.realm.intrinsics.rangeError,
+      typeError: this.#context.realm.intrinsics.typeError,
       set: setSteps
         ? (value, index) => Reflect.apply(
           setSteps,

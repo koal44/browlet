@@ -3,11 +3,14 @@ import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import type { ExtendedAttribute, OperationMember } from './definition';
+import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
 } from './implementation';
 import { ordinarySetWithOwnDescriptor } from './platform-object';
-import { getUnannotatedType } from './types';
+import {
+  getTypeWithApplicableExtendedAttributes, getUnannotatedType,
+} from './types';
 
 export class LegacyPlatformObjectBinding {
   readonly #context: ConversionContext;
@@ -345,21 +348,13 @@ export class LegacyPlatformObjectBinding {
   ): void {
     const { setter } = properties;
     if (!setter) throw new Error('Indexed property has no setter');
-    const valueArgument = setter.arguments[1];
-    if (!valueArgument) {
-      throw new Error('Indexed property setter has no value argument');
-    }
 
     const index = toArrayIndex(property);
     const creating = !this.#getSupportedIndices(
       target,
       properties,
     ).has(index);
-    const converted = convertToIDL(
-      value,
-      valueArgument.type,
-      this.#context,
-    );
+    const converted = this.#convertSetterValue(setter, value);
 
     if (setter.name) {
       const steps = this.#implementations.getOperationSteps(setter);
@@ -388,17 +383,9 @@ export class LegacyPlatformObjectBinding {
   ): void {
     const { setter } = properties;
     if (!setter) throw new Error('Named property has no setter');
-    const valueArgument = setter.arguments[1];
-    if (!valueArgument) {
-      throw new Error('Named property setter has no value argument');
-    }
 
     const creating = !this.#getSupportedNames(target, properties).has(property);
-    const converted = convertToIDL(
-      value,
-      valueArgument.type,
-      this.#context,
-    );
+    const converted = this.#convertSetterValue(setter, value);
     if (setter.name) {
       const steps = this.#implementations.getOperationSteps(setter);
       if (!steps) {
@@ -416,6 +403,21 @@ export class LegacyPlatformObjectBinding {
       );
     }
     Reflect.apply(steps, target, [property, converted]);
+  }
+
+  #convertSetterValue(setter: OperationMember, value: unknown): unknown {
+    const valueArgument = setter.arguments[1];
+    if (!valueArgument) {
+      throw new Error('Legacy property setter has no value argument');
+    }
+    return convertToIDL(
+      value,
+      getTypeWithApplicableExtendedAttributes(
+        valueArgument.type,
+        valueArgument.extendedAttributes,
+      ),
+      this.#context,
+    );
   }
 
   #invokeNamedDeleter(
@@ -458,7 +460,10 @@ export class LegacyPlatformObjectBinding {
 
     let prototype = Reflect.getPrototypeOf(target);
     while (prototype) {
-      if (Reflect.getOwnPropertyDescriptor(prototype, property)) return false;
+      if (
+        !isNamedPropertiesObject(prototype) &&
+        Reflect.getOwnPropertyDescriptor(prototype, property)
+      ) return false;
       prototype = Reflect.getPrototypeOf(prototype);
     }
     return true;
@@ -650,10 +655,14 @@ function getUnforgeablePropertyNames(
   let current: AssembledInterface | undefined = interface_;
   while (current) {
     for (const { member } of current.members) {
+      if (!hasExtendedAttribute(member, 'LegacyUnforgeable')) continue;
+      if (
+        member.kind === 'stringifier' ||
+        (member.kind === 'attribute' && member.stringifier === true)
+      ) names.add('toString');
       if (
         (member.kind === 'attribute' || member.kind === 'operation') &&
-        member.name &&
-        hasExtendedAttribute(member, 'LegacyUnforgeable')
+        member.name
       ) names.add(member.name);
     }
     current = current.parent;

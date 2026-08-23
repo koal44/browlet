@@ -2,14 +2,16 @@ import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
 import { getBufferTypeName } from './buffer-source';
 import {
-  convertToIDL, createSequenceFromIterable, getMethod, isPlatformObject,
-  materializeDefaultValue, type ConversionContext, type JavaScriptMethod,
+  convertToIDL, createFrozenArrayFromIterable, createSequenceFromIterable,
+  getMethod, isPlatformObject, materializeDefaultValue,
+  type ConversionContext, type JavaScriptMethod,
 } from './conversion';
 import type {
   ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
 } from './definition';
 import {
-  getFlattenedMemberTypes, getUnannotatedType, includesNullableType,
+  getFlattenedMemberTypes, getTypeWithApplicableExtendedAttributes,
+  getUnannotatedType, includesNullableType,
 } from './types';
 
 export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
@@ -27,7 +29,7 @@ export function computeEffectiveOverloadSet<Callable extends IDLCallable>(
   for (const callable of callables) {
     const argumentsList = callable.arguments;
     const n = argumentsList.length;
-    const types = argumentsList.map(({ type }) => type);
+    const types = argumentsList.map(getArgumentType);
     const optionalityValues = argumentsList.map(getOptionality);
 
     effectiveOverloadSet.push({
@@ -145,20 +147,32 @@ export function resolveOverload<Callable extends IDLCallable>(
 
   if (i === distinguishingIndex && method) {
     const type = selected.types[i];
-    const sequence = type && findContainedType(
+    const sequenceLike = type && findContainedType(
       type,
       context.definitions,
-      (candidate) => candidate.kind === 'sequence',
+      (candidate) =>
+        candidate.kind === 'sequence' || candidate.kind === 'frozen-array',
     );
-    if (!sequence || sequence.kind !== 'sequence') {
-      throw new Error('Iterator method selected a non-sequence overload');
+    if (
+      !sequenceLike ||
+      (sequenceLike.kind !== 'sequence' &&
+        sequenceLike.kind !== 'frozen-array')
+    ) {
+      throw new Error('Iterator method selected a non-sequence-like overload');
     }
-    values.push(createSequenceFromIterable(
-      argumentsList[i] as object,
-      sequence.type,
-      method,
-      context,
-    ));
+    values.push(sequenceLike.kind === 'sequence'
+      ? createSequenceFromIterable(
+        argumentsList[i] as object,
+        sequenceLike.type,
+        method,
+        context,
+      )
+      : createFrozenArrayFromIterable(
+        argumentsList[i] as object,
+        sequenceLike.type,
+        method,
+        context,
+      ));
     i++;
   }
 
@@ -177,7 +191,7 @@ export function resolveOverload<Callable extends IDLCallable>(
     if (argument.default !== undefined) {
       values.push(materializeDefaultValue(
         argument.default,
-        argument.type,
+        getArgumentType(argument),
         context,
       ));
     } else if (!argument.variadic) {
@@ -213,6 +227,13 @@ function getOptionality(argument: ArgumentDefinition): Optionality {
   if (argument.variadic) return 'variadic';
   if (argument.optional) return 'optional';
   return 'required';
+}
+
+function getArgumentType(argument: ArgumentDefinition): WebIDLType {
+  return getTypeWithApplicableExtendedAttributes(
+    argument.type,
+    argument.extendedAttributes,
+  );
 }
 
 function resolveDistinguishingArgument<Callable extends IDLCallable>(
@@ -320,19 +341,17 @@ function resolveDistinguishingArgument<Callable extends IDLCallable>(
       }
     }
 
-    const hasSequence = candidates.some(({ types }) =>
-      containsKind(
+    const hasSequenceLike = candidates.some(({ types }) =>
+      containsSequenceLikeType(
         types[index] as WebIDLType,
-        'sequence',
         context.definitions,
       ));
-    if (hasSequence) {
+    if (hasSequenceLike) {
       const iteratorMethod = getMethod(value, Symbol.iterator, context);
       if (iteratorMethod) {
         matches = retain(candidates, ({ types }) =>
-          containsKind(
+          containsSequenceLikeType(
             types[index] as WebIDLType,
-            'sequence',
             context.definitions,
           ));
         if (matches) {
@@ -576,6 +595,14 @@ function containsKind(
 ): boolean {
   return getContainedTypes(type, definitions).some((candidate) =>
     candidate.kind === kind);
+}
+
+function containsSequenceLikeType(
+  type: WebIDLType,
+  definitions: DefinitionAssembly,
+): boolean {
+  return getContainedTypes(type, definitions).some((candidate) =>
+    candidate.kind === 'sequence' || candidate.kind === 'frozen-array');
 }
 
 function findContainedType(

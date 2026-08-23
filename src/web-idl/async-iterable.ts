@@ -14,6 +14,7 @@ import { missingArgument } from './overload';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
 } from './promise-value';
+import { getTypeWithApplicableExtendedAttributes } from './types';
 
 export class AsynchronousIterableBinding {
   readonly #context: ConversionContext;
@@ -223,6 +224,7 @@ export class AsynchronousIterableBinding {
     return this.#react(
       nextPromise,
       (next) => {
+        state.ongoing = null;
         if (next === endOfIteration) {
           state.finished = true;
           return createIteratorResult(this.#context, undefined, true);
@@ -234,6 +236,7 @@ export class AsynchronousIterableBinding {
         );
       },
       (reason) => {
+        state.ongoing = null;
         state.finished = true;
         throw reason;
       },
@@ -277,7 +280,6 @@ export class AsynchronousIterableBinding {
     const ongoing = state.ongoing;
     if (!ongoing) {
       state.ongoing = action();
-      this.#clearOngoingWhenSettled(state, state.ongoing);
       return state.ongoing;
     }
 
@@ -298,25 +300,7 @@ export class AsynchronousIterableBinding {
       [onSettled, onSettled],
     );
     state.ongoing = afterOngoing;
-    this.#clearOngoingWhenSettled(state, afterOngoing);
     return afterOngoing;
-  }
-
-  #clearOngoingWhenSettled(
-    state: DefaultAsyncIterator,
-    promise: IDLPromise,
-  ): void {
-    const onSettled = this.#context.realm.createFunction(
-      () => {
-        if (state.ongoing === promise) state.ongoing = null;
-      },
-      { length: 0, name: '' },
-    );
-    Reflect.apply(
-      this.#context.realm.intrinsics.promise.then,
-      promise.promise,
-      [onSettled, onSettled],
-    );
   }
 
   #react(
@@ -362,17 +346,21 @@ export class AsynchronousIterableBinding {
     argumentsList: unknown[],
   ): unknown[] {
     return definitions.map((argument, index) => {
+      const argumentType = getTypeWithApplicableExtendedAttributes(
+        argument.type,
+        argument.extendedAttributes,
+      );
       const value = argumentsList[index];
       if (index >= argumentsList.length || value === undefined) {
         return argument.default === undefined
           ? missingArgument
           : materializeDefaultValue(
             argument.default,
-            argument.type,
+            argumentType,
             this.#context,
           );
       }
-      return convertToIDL(value, argument.type, this.#context);
+      return convertToIDL(value, argumentType, this.#context);
     });
   }
 

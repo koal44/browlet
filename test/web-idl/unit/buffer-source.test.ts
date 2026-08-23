@@ -70,4 +70,27 @@ describe('Web IDL buffer source algorithms', () => {
     );
     expect(getBufferSourceCopy(transferred)).toEqual(Uint8Array.from([3, 4]));
   });
+
+  it.fails('reads the internal byte length of detached views', () => {
+    const realm = new Realm();
+    const buffer = createArrayBuffer([1, 2, 3, 4], realm);
+    const DataView_ = realm.intrinsics.bufferSource.views.DataView;
+    const Uint8Array_ = realm.intrinsics.bufferSource.views.Uint8Array;
+    if (!DataView_ || !Uint8Array_) throw new Error('Missing view intrinsics');
+
+    const views = [
+      Reflect.construct(DataView_, [buffer, 1, 2]) as object,
+      Reflect.construct(Uint8Array_, [buffer, 1, 2]) as object,
+    ];
+    detachArrayBuffer(buffer, realm);
+    const lengths = views.map((view) => {
+      try {
+        return getBufferSourceByteLength(view);
+      } catch {
+        return undefined;
+      }
+    });
+
+    expect(lengths).toEqual([2, 2]);
+  });
 });

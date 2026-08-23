@@ -177,7 +177,7 @@ describe('Browlet DOM binding', () => {
   });
 
   it('filters DOM constructors for the host exposure set', () => {
-    const realm = new Realm({ exposure: 'Worker' });
+    const realm = new Realm({ globalNames: ['Worker'] });
     const bindings = new BrowletBindings(realm);
 
     bindings.install(realm.global);

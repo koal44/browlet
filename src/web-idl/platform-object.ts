@@ -1,4 +1,6 @@
+import type { ObservableArrayHandle } from '../shared/observable-array';
 import type { AssembledInterface } from './assembly';
+import type { AttributeMember } from './definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export class PlatformObjectRegistry {
@@ -46,6 +48,15 @@ export class PlatformObjectRegistry {
     return this.getImplementationRecord(value)?.object;
   }
 
+  changeRealm(
+    value: object,
+    realm: WebIDLRealmHost,
+  ): void {
+    const record = this.getRecord(value);
+    if (!record) throw new TypeError('Value is not a platform object');
+    record.realm = realm;
+  }
+
   isPlatformObject(value: unknown): boolean {
     return this.getRecord(value) !== undefined;
   }
@@ -80,9 +91,16 @@ export const sharedPlatformObjects = new PlatformObjectRegistry();
 
 export type PlatformObjectRecord = {
   implementation: object;
+  // Per-object IDL state follows the object when its associated realm changes.
+  mapEntries?: Map<unknown, unknown>;
   object: object;
+  observableArrays?: WeakMap<
+    AttributeMember,
+    ObservableArrayHandle<unknown, unknown>
+  >;
   primaryInterface: AssembledInterface;
   realm: WebIDLRealmHost;
+  setEntries?: Set<unknown>;
 };
 
 export function ordinarySetWithOwnDescriptor(

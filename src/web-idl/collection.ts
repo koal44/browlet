@@ -8,11 +8,9 @@ import type {
 
 export class CollectionBinding {
   readonly #context: ConversionContext;
-  readonly #mapEntries = new WeakMap<object, IDLMapEntries>();
   readonly #mapIterators = new WeakMap<object, MaplikeIterator>();
   readonly #mapNativeNext: unknown;
   readonly #mapNext: JavaScriptFunction;
-  readonly #setEntries = new WeakMap<object, IDLSetEntries>();
   readonly #setIterators = new WeakMap<object, SetlikeIterator>();
   readonly #setNativeNext: unknown;
   readonly #setNext: JavaScriptFunction;
@@ -38,21 +36,22 @@ export class CollectionBinding {
   }
 
   initialize(object: object, interface_: AssembledInterface): void {
+    const record = this.#context.platformObjects.getImplementationRecord(
+      object,
+    );
+    if (!record) throw new Error('Collection object is not associated');
+
     for (let current: AssembledInterface | undefined = interface_;
       current;
       current = current.parent) {
       const declaration = current.members.find(({ member }) =>
         member.kind === 'maplike' || member.kind === 'setlike')?.member;
       if (declaration?.kind === 'maplike') {
-        if (!this.#mapEntries.has(object)) {
-          this.#mapEntries.set(object, new Map());
-        }
+        record.mapEntries ??= new Map();
         return;
       }
       if (declaration?.kind === 'setlike') {
-        if (!this.#setEntries.has(object)) {
-          this.#setEntries.set(object, new Set());
-        }
+        record.setEntries ??= new Set();
         return;
       }
     }
@@ -108,21 +107,21 @@ export class CollectionBinding {
     );
 
     if (declaration.readonly) return;
-    if (!hasDeclaredMember(interface_, 'set')) {
+    if (!hasRegularOperation(interface_, 'set')) {
       defineDataProperty(
         target,
         'set',
         this.#createMapSet(interface_, declaration),
       );
     }
-    if (!hasDeclaredMember(interface_, 'delete')) {
+    if (!hasRegularOperation(interface_, 'delete')) {
       defineDataProperty(
         target,
         'delete',
         this.#createMapDelete(interface_, declaration),
       );
     }
-    if (!hasDeclaredMember(interface_, 'clear')) {
+    if (!hasRegularOperation(interface_, 'clear')) {
       defineDataProperty(target, 'clear', this.#createClear(interface_, 'map'));
     }
   }
@@ -166,33 +165,35 @@ export class CollectionBinding {
     );
 
     if (declaration.readonly) return;
-    if (!hasDeclaredMember(interface_, 'add')) {
+    if (!hasRegularOperation(interface_, 'add')) {
       defineDataProperty(
         target,
         'add',
         this.#createSetAdd(interface_, declaration),
       );
     }
-    if (!hasDeclaredMember(interface_, 'delete')) {
+    if (!hasRegularOperation(interface_, 'delete')) {
       defineDataProperty(
         target,
         'delete',
         this.#createSetDelete(interface_, declaration),
       );
     }
-    if (!hasDeclaredMember(interface_, 'clear')) {
+    if (!hasRegularOperation(interface_, 'clear')) {
       defineDataProperty(target, 'clear', this.#createClear(interface_, 'set'));
     }
   }
 
   getMapEntries(object: object): IDLMapEntries {
-    const entries = this.#mapEntries.get(object);
+    const entries = this.#context.platformObjects
+      .getImplementationRecord(object)?.mapEntries;
     if (!entries) throw new Error('Object does not have Web IDL map entries');
     return entries;
   }
 
   getSetEntries(object: object): IDLSetEntries {
-    const entries = this.#setEntries.get(object);
+    const entries = this.#context.platformObjects
+      .getImplementationRecord(object)?.setEntries;
     if (!entries) throw new Error('Object does not have Web IDL set entries');
     return entries;
   }
@@ -669,12 +670,14 @@ function convertCollectionValue(
     : converted;
 }
 
-function hasDeclaredMember(
+function hasRegularOperation(
   interface_: AssembledInterface,
   name: string,
 ): boolean {
   return interface_.members.some(({ member }) =>
-    'name' in member && member.name === name);
+    member.kind === 'operation' &&
+    member.name === name &&
+    member.static !== true);
 }
 
 function createIteratorResult(

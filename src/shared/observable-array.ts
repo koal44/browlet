@@ -13,6 +13,7 @@ export type ObservableArrayOptions<IDLValue, JavaScriptValue = IDLValue> = {
   toJavaScript?: (value: IDLValue) => JavaScriptValue;
   array?: ArrayConstructor;
   rangeError?: typeof RangeError;
+  typeError?: typeof TypeError;
   toNumber?: (value: unknown) => number;
   set?: (value: IDLValue, index: number) => void;
   delete?: (value: IDLValue, index: number) => void;
@@ -30,6 +31,7 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   toJavaScript = identity as (value: IDLValue) => JavaScriptValue,
   array: Array_ = Array,
   rangeError: RangeError_ = RangeError,
+  typeError: TypeError_ = TypeError,
   toNumber: convertToNumber = toNumber,
   set: setAlgorithm = noop,
   delete: deleteAlgorithm = noop,
@@ -41,8 +43,8 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   const target = Reflect.construct(Array_, []) as JavaScriptValue[];
 
   const setLength = (value: unknown): boolean => {
+    const uint32Length = convertToNumber(value) >>> 0;
     const numberLength = convertToNumber(value);
-    const uint32Length = numberLength >>> 0;
     if (uint32Length !== numberLength) {
       throw new RangeError_('Invalid array length');
     }
@@ -68,7 +70,8 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   };
 
   const handler: ProxyHandler<JavaScriptValue[]> = {
-    defineProperty(target, property, descriptor) {
+    defineProperty(target, property, descriptorObject) {
+      const descriptor = toPropertyDescriptor(descriptorObject, TypeError_);
       if (property === 'length') {
         if (
           isAccessorDescriptor(descriptor) ||
@@ -236,6 +239,51 @@ function getArrayIndex(property: PropertyKey): number | null {
 
 function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
   return 'get' in descriptor || 'set' in descriptor;
+}
+
+function toPropertyDescriptor(
+  object: PropertyDescriptor,
+  TypeError_: typeof TypeError,
+): PropertyDescriptor {
+  const descriptor = Object.create(null) as PropertyDescriptor;
+  let accessor = false;
+  let data = false;
+
+  if ('enumerable' in object) {
+    descriptor.enumerable = Boolean(object.enumerable);
+  }
+  if ('configurable' in object) {
+    descriptor.configurable = Boolean(object.configurable);
+  }
+  if ('value' in object) {
+    const value: unknown = Reflect.get(object, 'value') as unknown;
+    descriptor.value = value;
+    data = true;
+  }
+  if ('writable' in object) {
+    descriptor.writable = Boolean(object.writable);
+    data = true;
+  }
+  if ('get' in object) {
+    const getter = Reflect.get(object, 'get') as unknown;
+    if (getter !== undefined && typeof getter !== 'function') {
+      throw new TypeError_('Getter must be callable');
+    }
+    descriptor.get = getter as (() => unknown) | undefined;
+    accessor = true;
+  }
+  if ('set' in object) {
+    const setter = Reflect.get(object, 'set') as unknown;
+    if (setter !== undefined && typeof setter !== 'function') {
+      throw new TypeError_('Setter must be callable');
+    }
+    descriptor.set = setter as ((value: unknown) => void) | undefined;
+    accessor = true;
+  }
+  if (accessor && data) {
+    throw new TypeError_('Property descriptor cannot be both data and accessor');
+  }
+  return descriptor;
 }
 
 function toNumber(value: unknown): number {

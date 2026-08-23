@@ -5,6 +5,7 @@ import { idlType, sequence, type WebIDLType } from './definition';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
 } from './promise-value';
+import { getUnannotatedType } from './types';
 
 export function createPromise(
   type: WebIDLType,
@@ -18,8 +19,9 @@ export function createResolvedPromise(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromise {
+  const javaScriptValue = convertToJavaScript(value, type, context);
   const promise = createPromise(type, context);
-  resolvePromise(promise, value, context);
+  promise.resolve(javaScriptValue);
   return promise;
 }
 
@@ -65,7 +67,15 @@ export function reactToPromise(
       try {
         const idlValue = convertToIDL(value, promise.type, reactionContext);
         settleReaction(
-          steps.fulfilled ? steps.fulfilled(idlValue) : idlValue,
+          steps.fulfilled
+            ? Reflect.apply(
+              steps.fulfilled,
+              undefined,
+              isUndefinedType(promise.type, reactionContext)
+                ? []
+                : [idlValue],
+            )
+            : idlValue,
           resultPromise,
           resultType,
           reactionContext,
@@ -78,13 +88,15 @@ export function reactToPromise(
   );
   const onRejected = promise.realm.createFunction(
     (_thisArgument, [reason]) => {
-      if (!steps.rejected) {
-        resultPromise.reject(reason);
-        return;
-      }
       try {
         settleReaction(
-          steps.rejected(reason),
+          steps.rejected
+            ? Reflect.apply(steps.rejected, undefined, [reason])
+            : createRejectedPromise(
+              reason,
+              resultType,
+              reactionContext,
+            ),
           resultPromise,
           resultType,
           reactionContext,
@@ -96,11 +108,7 @@ export function reactToPromise(
     { length: 1, name: '' },
   );
 
-  Reflect.apply(
-    promise.realm.intrinsics.promise.then,
-    promise.promise,
-    [onFulfilled, onRejected],
-  );
+  performPromiseThen(promise, onFulfilled, onRejected);
   return resultPromise;
 }
 
@@ -163,11 +171,7 @@ export function waitForAll(
       },
       { length: 1, name: '' },
     );
-    Reflect.apply(
-      promise.realm.intrinsics.promise.then,
-      promise.promise,
-      [onFulfilled, onRejected],
-    );
+    performPromiseThen(promise, onFulfilled, onRejected);
   });
 }
 
@@ -193,16 +197,12 @@ export function markPromiseAsHandled(promise: IDLPromise): void {
     () => undefined,
     { length: 1, name: '' },
   );
-  Reflect.apply(
-    promise.realm.intrinsics.promise.then,
-    promise.promise,
-    [undefined, onRejected],
-  );
+  performPromiseThen(promise, undefined, onRejected);
 }
 
 export type PromiseReactionSteps = {
-  fulfilled?(value: unknown): unknown;
-  rejected?(reason: unknown): unknown;
+  fulfilled?(this: void, value: unknown): unknown;
+  rejected?(this: void, reason: unknown): unknown;
 };
 
 function settleReaction(
@@ -227,3 +227,28 @@ function withPromiseRealm(
     realm: promise.realm,
   };
 }
+
+function isUndefinedType(
+  type: WebIDLType,
+  context: ConversionContext,
+): boolean {
+  const resolved = getUnannotatedType(type, context.definitions);
+  return resolved.kind === 'simple' && resolved.name === 'undefined';
+}
+
+function performPromiseThen(
+  promise: IDLPromise,
+  onFulfilled: PromiseReaction | undefined,
+  onRejected: PromiseReaction | undefined,
+): void {
+  // JavaScript does not expose PerformPromiseThen without a result
+  // capability. This call has the same reaction behavior, but also creates an
+  // unreachable derived promise and can observe an overridden constructor.
+  Reflect.apply(
+    promise.realm.intrinsics.promise.then,
+    promise.promise,
+    [onFulfilled, onRejected],
+  );
+}
+
+type PromiseReaction = (...argumentsList: unknown[]) => unknown;

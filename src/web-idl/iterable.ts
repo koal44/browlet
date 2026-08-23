@@ -156,7 +156,19 @@ export class SynchronousIterableBinding {
           const pair = pairs[index]!;
           invokeCallbackFunction(
             callback,
-            [pair.value, pair.key, platformObject],
+            [
+              convertToJavaScript(
+                pair.value,
+                iterable.value,
+                this.#context,
+              ),
+              convertToJavaScript(
+                pair.key,
+                iterable.key!,
+                this.#context,
+              ),
+              platformObject,
+            ],
             'rethrow',
             this.#context,
             argumentsList[1],

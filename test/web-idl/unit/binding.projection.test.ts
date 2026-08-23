@@ -7,8 +7,9 @@ import {
   convertToIDL, convertToJavaScript,
 } from '../../../src/web-idl/conversion';
 import {
-  defineEnumeration, defineIncludes, defineInterface, defineInterfaceMixin,
-  definePartialInterface, frozenArray, idlType, integer, reference,
+  decimal, defineEnumeration, defineIncludes, defineInterface,
+  defineInterfaceMixin, definePartialInterface, frozenArray, idlType, integer,
+  negativeInfinity, notANumber, positiveInfinity, reference,
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../../src/web-idl/definition';
 import { ImplementationRegistry } from '../../../src/web-idl/implementation';
@@ -154,6 +155,131 @@ describe('Web IDL ordinary interface projection', () => {
     expect({ length: describe.length, name: describe.name }).toEqual({
       length: 1, name: 'describe',
     });
+  });
+
+  it('copies mixin members with distinct host-interface identities', () => {
+    const firstConstructor = constructorMember([]);
+    const secondConstructor = constructorMember([]);
+    const value = attributeMember('value', idlType.long, true);
+    const read = operationMember('read', [], idlType.long);
+    const mixin = defineInterfaceMixin({
+      members: [value, read],
+      name: 'SharedMembers',
+    });
+    const first = defineInterface({
+      exposed: '*', members: [firstConstructor], name: 'FirstHost',
+    });
+    const second = defineInterface({
+      exposed: '*', members: [secondConstructor], name: 'SecondHost',
+    });
+    const implementations = new ImplementationRegistry();
+    implementations.setConstructorSteps(firstConstructor, () => undefined);
+    implementations.setConstructorSteps(secondConstructor, () => undefined);
+    implementations.setAttributeSteps(value, { get: () => 1 });
+    implementations.setOperationSteps(read, () => 2);
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([
+        first,
+        second,
+        mixin,
+        defineIncludes({ interface: 'FirstHost', mixin: 'SharedMembers' }),
+        defineIncludes({ interface: 'SecondHost', mixin: 'SharedMembers' }),
+      ]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const First = binding.getInterfaceObject('FirstHost');
+    const Second = binding.getInterfaceObject('SecondHost');
+    const firstPrototype = getPrototype(First);
+    const secondPrototype = getPrototype(Second);
+    const firstObject = construct(First, []);
+    const secondObject = construct(Second, []);
+    const firstRead = Reflect.get(firstPrototype, 'read') as CallableFunction;
+    const secondRead = Reflect.get(secondPrototype, 'read') as CallableFunction;
+    const firstGetter = Reflect.getOwnPropertyDescriptor(
+      firstPrototype,
+      'value',
+    )?.get;
+    const secondGetter = Reflect.getOwnPropertyDescriptor(
+      secondPrototype,
+      'value',
+    )?.get;
+
+    expect(firstRead).not.toBe(secondRead);
+    expect(firstGetter).not.toBe(secondGetter);
+    expect(Reflect.apply(firstRead, firstObject, [])).toBe(2);
+    expect(Reflect.apply(secondRead, secondObject, [])).toBe(2);
+    expect(Reflect.apply(firstGetter!, firstObject, [])).toBe(1);
+    expect(Reflect.apply(secondGetter!, secondObject, [])).toBe(1);
+    expect(() => { Reflect.apply(firstRead, secondObject, []); })
+      .toThrow(realm.intrinsics.typeError);
+    expect(() => { Reflect.apply(secondRead, firstObject, []); })
+      .toThrow(realm.intrinsics.typeError);
+  });
+
+  it('materializes constant tokens as their declared IDL values', () => {
+    const constants = defineInterface({
+      exposed: '*',
+      members: [
+        {
+          kind: 'constant',
+          name: 'MAX_SIGNED',
+          type: idlType.longLong,
+          value: integer('9223372036854775807'),
+        },
+        {
+          kind: 'constant',
+          name: 'MAX_UNSIGNED',
+          type: idlType.unsignedLongLong,
+          value: integer('18446744073709551615'),
+        },
+        {
+          kind: 'constant', name: 'MASK', type: idlType.unsignedLong,
+          value: integer('0x0000fc00'),
+        },
+        {
+          kind: 'constant', name: 'OCTAL', type: idlType.octet,
+          value: integer('017'),
+        },
+        {
+          kind: 'constant', name: 'SINGLE', type: idlType.float,
+          value: decimal('1.337'),
+        },
+        {
+          kind: 'constant', name: 'POSITIVE_INFINITY',
+          type: idlType.unrestrictedDouble, value: positiveInfinity,
+        },
+        {
+          kind: 'constant', name: 'NEGATIVE_INFINITY',
+          type: idlType.unrestrictedFloat, value: negativeInfinity,
+        },
+        {
+          kind: 'constant', name: 'NOT_A_NUMBER',
+          type: idlType.unrestrictedDouble, value: notANumber,
+        },
+      ],
+      name: 'ConstantValues',
+    });
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([constants]),
+      new Realm(),
+      new PlatformObjectRegistry(),
+      new ImplementationRegistry(),
+    );
+    const Constants = binding.getInterfaceObject('ConstantValues');
+
+    expect(Reflect.get(Constants, 'MAX_SIGNED'))
+      .toBe(Number(9223372036854775807n));
+    expect(Reflect.get(Constants, 'MAX_UNSIGNED'))
+      .toBe(Number(18446744073709551615n));
+    expect(Reflect.get(Constants, 'MASK')).toBe(0x0000fc00);
+    expect(Reflect.get(Constants, 'OCTAL')).toBe(0o17);
+    expect(Reflect.get(Constants, 'SINGLE')).toBe(Math.fround(1.337));
+    expect(Reflect.get(Constants, 'POSITIVE_INFINITY')).toBe(Infinity);
+    expect(Reflect.get(Constants, 'NEGATIVE_INFINITY')).toBe(-Infinity);
+    expect(Reflect.get(Constants, 'NOT_A_NUMBER')).toBeNaN();
   });
 
   it('brands receivers across realms and performs the security-check callsite', () => {
@@ -315,6 +441,58 @@ describe('Web IDL ordinary interface projection', () => {
     expect(json).toBeInstanceOf(realm.intrinsics.object);
     expect(json).toEqual({ inheritedValue: 12, ownValue: 'value' });
     expect(Reflect.ownKeys(json as object)).not.toContain('nonJSONValue');
+  });
+
+  it('creates default toJSON results in the function realm', () => {
+    const pointToJSON = operationMember('toJSON', [], idlType.object);
+    const point = defineInterface({
+      exposed: '*', members: [pointToJSON], name: 'JSONPoint',
+    });
+    const pointAttribute = attributeMember(
+      'point',
+      reference('JSONPoint'),
+      true,
+    );
+    const toJSON = {
+      ...operationMember('toJSON', [], idlType.object),
+      extendedAttributes: [noArguments('Default')],
+    } satisfies OperationMember;
+    const holder = defineInterface({
+      exposed: '*',
+      members: [pointAttribute, toJSON],
+      name: 'JSONHolder',
+    });
+    const definitions = assembleDefinitions([holder, point]);
+    const implementations = new ImplementationRegistry();
+    const platformObjects = new PlatformObjectRegistry();
+    const local = new JavaScriptBinding(
+      definitions,
+      new Realm(),
+      platformObjects,
+      implementations,
+    );
+    const foreign = new JavaScriptBinding(
+      definitions,
+      new Realm(),
+      platformObjects,
+      implementations,
+    );
+    const pointObject = local.createPlatformObject('JSONPoint');
+    const pointRecord = local.getPlatformObjectRecord(pointObject);
+    if (!pointRecord) throw new Error('Missing JSONPoint platform record');
+    implementations.setAttributeSteps(pointAttribute, {
+      get() { return pointRecord.implementation; },
+    });
+    const holderObject = local.createPlatformObject('JSONHolder');
+
+    const json = call(
+      foreign.getInterfacePrototypeObject('JSONHolder'),
+      'toJSON',
+      holderObject,
+    );
+
+    expect(json).toBeInstanceOf(foreign.realm.intrinsics.object);
+    expect(Reflect.get(json as object, 'point')).toBe(pointObject);
   });
 
   it('converts frozen array attributes once and returns them by identity', () => {
@@ -480,6 +658,9 @@ describe('Web IDL ordinary interface projection', () => {
     expect(Reflect.set(first, 'replaceable', 'shadow')).toBe(true);
     expect(Reflect.get(first, 'replaceable')).toBe('shadow');
     expect(Object.hasOwn(first, 'replaceable')).toBe(true);
+    Object.preventExtensions(second);
+    expect(() => Reflect.set(second, 'replaceable', 'blocked'))
+      .toThrow(binding.realm.intrinsics.typeError);
     expect(Reflect.set(first, 'forwarded', 'forwarded value')).toBe(true);
     expect(forwarded.value).toBe('forwarded value');
 
@@ -580,6 +761,29 @@ describe('Web IDL ordinary interface projection', () => {
     expect(Reflect.ownKeys(privilegedPrototype)).toEqual(expect.arrayContaining([
       'normal', 'secureMember', 'partialMember', 'mixinMember',
     ]));
+  });
+
+  it('matches exposure against every global name implemented by the realm', () => {
+    const workerInterface = defineInterface({
+      exposed: ['Worker'], members: [], name: 'WorkerInterface',
+    });
+    const workletInterface = defineInterface({
+      exposed: ['Worklet'], members: [], name: 'WorkletInterface',
+    });
+    const windowInterface = defineInterface({
+      exposed: ['Window'], members: [], name: 'WindowInterface',
+    });
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([
+        workerInterface, workletInterface, windowInterface,
+      ]),
+      new Realm({ globalNames: ['Worker', 'Worklet'] }),
+      new PlatformObjectRegistry(),
+    );
+
+    expect([...binding.install().keys()]).toEqual([
+      'WorkerInterface', 'WorkletInterface',
+    ]);
   });
 });
 

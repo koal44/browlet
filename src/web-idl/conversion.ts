@@ -4,7 +4,7 @@ import type {
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
-  createAsyncSequenceValue,
+  createAsyncSequenceValue, isAsyncSequence,
 } from './async-sequence';
 import {
   createCallbackFunctionValue, createCallbackInterfaceValue,
@@ -23,7 +23,10 @@ import type { PlatformObjectRegistry } from './platform-object';
 import {
   convertJavaScriptValueToPromise, convertPromiseToJavaScript,
 } from './promise-value';
-import { includesNullableType, includesUndefined } from './types';
+import {
+  getTypeWithApplicableExtendedAttributes, includesNullableType,
+  includesUndefined,
+} from './types';
 
 export function convertToIDL(
   value: unknown,
@@ -139,16 +142,21 @@ export function materializeDefaultValue(
   }
 
   switch (value.kind) {
-    case 'integer':
-      return parseInteger(value.value);
+    case 'integer': {
+      const integer = parseBigInteger(value.value);
+      const numericType = getSoleNumericTypeName(type, context.definitions);
+      if (numericType === 'bigint') return integer;
+      if (numericType && integerTypes[numericType]) return Number(integer);
+      return convertToIDL(Number(integer), type, context);
+    }
     case 'decimal':
-      return Number(value.value);
+      return convertToIDL(Number(value.value), type, context);
     case 'positive-infinity':
-      return Infinity;
+      return convertToIDL(Infinity, type, context);
     case 'negative-infinity':
-      return -Infinity;
+      return convertToIDL(-Infinity, type, context);
     case 'not-a-number':
-      return NaN;
+      return convertToIDL(NaN, type, context);
     case 'undefined':
       return undefined;
     case 'empty-sequence':
@@ -325,9 +333,6 @@ function convertIDLValue(
         context,
       );
     case 'frozen-array':
-      if (!Array.isArray(value) || !Object.isFrozen(value)) {
-        throw new Error('IDL frozen array is not a frozen array');
-      }
       return value;
     case 'promise':
       return convertPromiseToJavaScript(value);
@@ -402,6 +407,10 @@ function convertJavaScriptValueToSimpleType(
       return string;
     }
     case 'USVString':
+      if (
+        value === null &&
+        hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
+      ) return '';
       return toString(value, context).toWellFormed();
     case 'object':
       if (!isObject(value)) {
@@ -556,6 +565,10 @@ function convertJavaScriptValueToDictionary(
 
   const result: IDLDictionaryValue = new Map();
   for (const member of dictionary.members) {
+    const memberType = getTypeWithApplicableExtendedAttributes(
+      member.type,
+      member.extendedAttributes,
+    );
     const memberValue = value === undefined || value === null
       ? undefined
       : Reflect.get(value, member.name) as unknown;
@@ -563,12 +576,12 @@ function convertJavaScriptValueToDictionary(
     if (memberValue !== undefined) {
       result.set(
         member.name,
-        convertToIDL(memberValue, member.type, context),
+        convertToIDL(memberValue, memberType, context),
       );
     } else if (member.default !== undefined) {
       result.set(
         member.name,
-        materializeDefaultValue(member.default, member.type, context),
+        materializeDefaultValue(member.default, memberType, context),
       );
     } else if (member.required) {
       throwTypeError(context, `Required dictionary member ${member.name} is missing`);
@@ -589,10 +602,14 @@ function convertDictionaryToJavaScript(
   const result = createOrdinaryObject(context);
   for (const member of dictionary.members) {
     if (!value.has(member.name)) continue;
+    const memberType = getTypeWithApplicableExtendedAttributes(
+      member.type,
+      member.extendedAttributes,
+    );
     defineDataProperty(
       result,
       member.name,
-      convertToJavaScript(value.get(member.name), member.type, context),
+      convertToJavaScript(value.get(member.name), memberType, context),
     );
   }
   return result;
@@ -845,6 +862,11 @@ function convertUnionToJavaScript(
     const callback = types.find((candidate) =>
       isDefinitionType(candidate, 'callback-interface', context.definitions));
     if (callback) return convertResolvedIDLValue(value, callback, context);
+  }
+  if (isAsyncSequence(value)) {
+    const sequence = types.find((candidate) =>
+      candidate.type.kind === 'async-sequence');
+    if (sequence) return convertResolvedIDLValue(value, sequence, context);
   }
   if (Array.isArray(value)) {
     const array = types.find((candidate) =>
@@ -1211,17 +1233,33 @@ function isMap(value: unknown): value is Map<string, unknown> {
   }
 }
 
-function parseInteger(value: string): number {
+function parseBigInteger(value: string): bigint {
   const negative = value.startsWith('-');
   const unsigned = negative ? value.slice(1) : value;
-  const sign = negative ? -1 : 1;
+  let result: bigint;
   if (/^0[xX][0-9a-fA-F]+$/.test(unsigned)) {
-    return sign * Number.parseInt(unsigned.slice(2), 16);
+    result = BigInt(unsigned);
+  } else if (/^0[0-7]+$/.test(unsigned)) {
+    result = BigInt(`0o${unsigned.slice(1)}`);
+  } else {
+    result = BigInt(unsigned);
   }
-  if (/^0[0-7]+$/.test(unsigned)) {
-    return sign * Number.parseInt(unsigned.slice(1), 8);
-  }
-  return Number(value);
+  return negative ? -result : result;
+}
+
+function getSoleNumericTypeName(
+  type: WebIDLType,
+  definitions: DefinitionAssembly,
+): SimpleTypeName | undefined {
+  const numericTypes = flattenRuntimeTypes(type, definitions, [])
+    .filter((candidate) => candidate.type.kind === 'simple' && (
+      candidate.type.name === 'bigint' ||
+      numericTypeNames.has(candidate.type.name)
+    ));
+  const numericType = numericTypes.length === 1
+    ? numericTypes[0]?.type
+    : undefined;
+  return numericType?.kind === 'simple' ? numericType.name : undefined;
 }
 
 function roundToEven(value: number): number {

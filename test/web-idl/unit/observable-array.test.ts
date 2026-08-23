@@ -69,6 +69,25 @@ describe('Web IDL observable arrays', () => {
     ]);
   });
 
+  it('preserves deletions completed before a later delete step throws', () => {
+    const deleted: number[] = [];
+    const exception = new Error('stop deleting');
+    const implementations = new ImplementationRegistry();
+    const fixture = createNumberArrayBinding(implementations);
+    implementations.setObservableArraySteps(fixture.attribute, {
+      delete(_value, index) {
+        deleted.push(index);
+        if (index === 1) throw exception;
+      },
+    });
+    const values = getValues(fixture.object);
+    values.push(1, 2, 3);
+
+    expect(() => Reflect.set(values, 'length', 0)).toThrow(exception);
+    expect(deleted).toEqual([2, 1]);
+    expect(values).toEqual([1, 2]);
+  });
+
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
     const implementations = new ImplementationRegistry();
@@ -131,6 +150,57 @@ describe('Web IDL observable arrays', () => {
     values.label = 'numbers';
     expect(values.label).toBe('numbers');
     expect(Reflect.ownKeys(values)).toEqual(['length', 'label']);
+  });
+
+  it('coerces an assigned length through ToUint32 and then ToNumber', () => {
+    const fixture = createNumberArrayBinding();
+    const values = getValues(fixture.object);
+    let coercions = 0;
+    const length = {
+      valueOf() {
+        coercions++;
+        return 0;
+      },
+    };
+    values.push(1);
+
+    expect(Reflect.set(values, 'length', length)).toBe(true);
+    expect(coercions).toBe(2);
+    expect(values).toEqual([]);
+  });
+
+  it('converts proxy property descriptors before applying invariants', () => {
+    const fixture = createNumberArrayBinding();
+    const values = getValues(fixture.object);
+    const descriptor = Object.assign(Object.create(null) as object, {
+      value: 0,
+    });
+
+    Object.defineProperty(Object.prototype, 'configurable', {
+      configurable: true,
+      value: 1,
+    });
+    let result: boolean | undefined;
+    try {
+      result = Reflect.defineProperty(values, 'length', descriptor);
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'configurable');
+    }
+    expect(result).toBe(false);
+
+    Object.defineProperty(Object.prototype, 'get', {
+      configurable: true,
+      value: 0,
+    });
+    let exception: unknown;
+    try {
+      Reflect.defineProperty(values, '0', descriptor);
+    } catch (error) {
+      exception = error;
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'get');
+    }
+    expect(exception).toBeInstanceOf(fixture.realm.intrinsics.typeError);
   });
 
   it('converts interface elements and reflects specification list changes', () => {

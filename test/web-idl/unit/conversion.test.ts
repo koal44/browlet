@@ -9,8 +9,9 @@ import {
 } from '../../../src/web-idl/conversion';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
-  annotated, defineDictionary, defineEnumeration, defineInterface,
-  frozenArray, idlType, nullable, record, reference, sequence, union,
+  annotated, asyncSequence, decimal, defineDictionary, defineEnumeration,
+  defineInterface, frozenArray, idlType, integer, nullable, record, reference,
+  sequence, union,
 } from '../../../src/web-idl/definition';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { ImplementationRegistry } from '../../../src/web-idl/implementation';
@@ -88,6 +89,11 @@ describe('Web IDL value conversion', () => {
     expect(convertToIDL(
       null,
       annotated(idlType.DOMString, [legacyNull]),
+      binding,
+    )).toBe('');
+    expect(convertToIDL(
+      null,
+      annotated(idlType.USVString, [legacyNull]),
       binding,
     )).toBe('');
     expect(convertToIDL('\uD800', idlType.USVString, binding)).toBe('\uFFFD');
@@ -178,6 +184,48 @@ describe('Web IDL value conversion', () => {
       () => convertToIDL(undefined, reference('Options'), binding),
       realm,
     );
+  });
+
+  it('associates applicable dictionary-member attributes with their types', () => {
+    const options = defineDictionary({
+      members: [{
+        extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
+        name: 'value',
+        type: idlType.byte,
+      }],
+      name: 'Options',
+    });
+    const { binding } = createBinding([options]);
+
+    expect(convertToIDL(
+      { value: 300 },
+      reference('Options'),
+      binding,
+    )).toEqual(new Map([['value', 127]]));
+  });
+
+  it('materializes numeric dictionary defaults in their declared IDL types', () => {
+    const options = defineDictionary({
+      members: [
+        { default: decimal('1.337'), name: 'single', type: idlType.float },
+        {
+          default: integer('9007199254740993'),
+          name: 'integer',
+          type: idlType.bigint,
+        },
+      ],
+      name: 'Options',
+    });
+    const { binding } = createBinding([options]);
+
+    expect(convertToIDL(
+      undefined,
+      reference('Options'),
+      binding,
+    )).toEqual(new Map<string, unknown>([
+      ['integer', 9007199254740993n],
+      ['single', Math.fround(1.337)],
+    ]));
   });
 
   it('copies sequences and records without losing observable ordering', () => {
@@ -403,6 +451,15 @@ describe('Web IDL value conversion', () => {
       () => convertToIDL(shared, reference('BufferSource'), binding),
       realm,
     );
+    expectRealmTypeError(
+      () => convertToIDL(sharedView, reference('BufferSource'), binding),
+      realm,
+    );
+    expect(convertToIDL(
+      shared,
+      reference('AllowSharedBufferSource'),
+      binding,
+    )).toBe(shared);
     expect(convertToIDL(
       sharedView,
       reference('AllowSharedBufferSource'),
@@ -457,6 +514,24 @@ describe('Web IDL value conversion', () => {
       union(nullable(idlType.DOMString), idlType.boolean),
       binding,
     )).toBeNull();
+  });
+
+  it('converts a union through its selected async sequence member', () => {
+    const { binding } = createBinding();
+    const asyncIterable = {
+      [Symbol.asyncIterator]() {
+        return { next: () => ({ done: true }) };
+      },
+    };
+    const asyncSequenceUnion = union(
+      asyncSequence(idlType.long),
+      idlType.DOMString,
+    );
+    expect(convertToJavaScript(
+      convertToIDL(asyncIterable, asyncSequenceUnion, binding),
+      asyncSequenceUnion,
+      binding,
+    )).toBe(asyncIterable);
   });
 });
 

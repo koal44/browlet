@@ -32,7 +32,6 @@ describe('Web IDL async sequences', () => {
       binding,
     );
 
-    expect(isAsyncSequence(sequence)).toBe(true);
     expect(convertAsyncSequenceToJavaScript(sequence)).toBe(source);
     expect(gets).toBe(1);
     openAsyncSequence(requireAsyncSequence(sequence), binding.realm);
@@ -104,6 +103,29 @@ describe('Web IDL async sequences', () => {
     await expect(nextValue(iterator, binding)).resolves.toBe(8);
     await expect(nextValue(iterator, binding)).rejects
       .toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it('rejects abrupt IteratorNext completions before later microtasks', async () => {
+    const { binding, realm } = createBinding();
+    const source = {
+      [Symbol.asyncIterator]() {
+        return { next: () => 42 };
+      },
+    };
+    const iterator = openAsyncSequence(requireAsyncSequence(convertToIDL(
+      source,
+      asyncSequence(idlType.long),
+      binding,
+    )), realm);
+    const order: string[] = [];
+    const rejection = nextValue(iterator, binding).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(realm.intrinsics.typeError);
+      order.push('rejected');
+    });
+    realm.queueMicrotask(() => { order.push('queued'); });
+
+    await rejection;
+    expect(order).toEqual(['rejected', 'queued']);
   });
 
   it('captures the distinguishing iterator method once during overload resolution', () => {

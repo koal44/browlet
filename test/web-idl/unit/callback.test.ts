@@ -32,22 +32,23 @@ describe('Web IDL callbacks', () => {
         binding,
       ),
     );
-    const value = callbackRealm.evaluate(
-      'convertCallback((value) => value + 1)',
+    const [callback, value] = callbackRealm.evaluate(
+      `(() => {
+        const callback = (value) => value + 1;
+        return [callback, convertCallback(callback)];
+      })()`,
       'callback-function.js',
-    );
+    ) as [object, unknown];
     if (!isCallbackFunctionValue(value)) {
       throw new Error('Increment did not convert to a callback value');
     }
     recordLifecycle(callbackRealm, order);
 
-    expect(value.callbackContext).toBe(callbackRealm);
-    expect(value.realm).toBe(callbackRealm);
     expect(convertToJavaScript(
       value,
       reference('Increment'),
       binding,
-    )).toBe(value.object);
+    )).toBe(callback);
     expect(invokeCallbackFunction(
       value,
       [4],
@@ -60,6 +61,58 @@ describe('Web IDL callbacks', () => {
       'clean callback',
       'clean script',
     ]);
+  });
+
+  it('round-trips and invokes callback-interface objects in their associated realm', () => {
+    const { binding, callbackRealm, targetRealm } = createCallbackBinding();
+    const callbackContext = {};
+    vi.spyOn(targetRealm.callbacks, 'captureContext')
+      .mockReturnValue(callbackContext);
+    const prepareCallback = vi.spyOn(
+      callbackRealm.callbacks,
+      'prepareToRunCallback',
+    ).mockImplementation(() => {});
+    const cleanUpCallback = vi.spyOn(
+      callbackRealm.callbacks,
+      'cleanUpAfterRunningCallback',
+    ).mockImplementation(() => {});
+    const prepareTargetCallback = vi.spyOn(
+      targetRealm.callbacks,
+      'prepareToRunCallback',
+    ).mockImplementation(() => {});
+    const object = callbackRealm.evaluate(
+      '({ handleEvent(value) { return value + 1; } })',
+      'callback-interface.js',
+    ) as object;
+
+    const value = convertToIDL(
+      object,
+      reference('NumberHandler'),
+      binding,
+    );
+    if (!isCallbackInterfaceValue(value)) {
+      throw new Error('NumberHandler did not convert to a callback value');
+    }
+
+    expect(convertToJavaScript(
+      value,
+      reference('NumberHandler'),
+      binding,
+    )).toBe(object);
+    expect(callUserObjectOperation(
+      value,
+      'handleEvent',
+      [2],
+      binding,
+    )).toBe(3);
+    expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
+    expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
+    expect(prepareTargetCallback).not.toHaveBeenCalled();
+    expect(() => convertToIDL(
+      1,
+      reference('NumberHandler'),
+      binding,
+    )).toThrow(targetRealm.intrinsics.typeError);
   });
 
   it('calls callback-interface objects and callable objects with distinct receivers', () => {
@@ -240,10 +293,20 @@ describe('Web IDL callbacks', () => {
     expect(order).toEqual(['queued', 'rejected']);
   });
 
-  it('constructs constructor callbacks and rejects non-constructors in their realm', () => {
+  it('constructs constructor callbacks without observing the constructor check', () => {
     const { binding, callbackRealm } = createCallbackBinding();
+    const prototypeReads = { count: 0 };
+    Reflect.set(callbackRealm.global, 'prototypeReads', prototypeReads);
     const constructor = callbackRealm.evaluate(
-      '(function Build(value) { this.value = value; })',
+      `new Proxy(
+        function Build(value) { this.value = value; },
+        {
+          get(target, property, receiver) {
+            if (property === "prototype") prototypeReads.count++;
+            return Reflect.get(target, property, receiver);
+          }
+        }
+      )`,
       'callback-constructor.js',
     ) as object;
     const constructorValue = convertToIDL(
@@ -260,7 +323,11 @@ describe('Web IDL callbacks', () => {
       [7],
       binding,
     )).toMatchObject({ value: 7 });
+    expect(prototypeReads.count).toBe(1);
+  });
 
+  it('rejects non-constructor callbacks in the current realm', () => {
+    const { binding, callbackRealm, targetRealm } = createCallbackBinding();
     const arrow = callbackRealm.evaluate(
       '() => ({})',
       'callback-arrow.js',
@@ -277,7 +344,7 @@ describe('Web IDL callbacks', () => {
       arrowValue,
       [7],
       binding,
-    )).toThrow(callbackRealm.intrinsics.typeError);
+    )).toThrow(targetRealm.intrinsics.typeError);
   });
 
   it('applies LegacyTreatNonObjectAsNull only during nullable attribute assignment', () => {
@@ -291,7 +358,6 @@ describe('Web IDL callbacks', () => {
     const value = convertToIDL(object, type, binding, {
       attributeAssignment: true,
     });
-    expect(isCallbackFunctionValue(value)).toBe(true);
     expect(convertToJavaScript(value, type, binding)).toBe(object);
     expect(() => convertToIDL(object, type, binding))
       .toThrow(targetRealm.intrinsics.typeError);
@@ -332,11 +398,10 @@ describe('Web IDL callbacks', () => {
     const object = binding.createPlatformObject('CallbackOwner');
 
     Reflect.set(object, 'handler', 1);
-    expect(stored).toBeNull();
+    expect(Reflect.get(object, 'handler')).toBeNull();
 
     const handler = {};
     Reflect.set(object, 'handler', handler);
-    expect(isCallbackFunctionValue(stored)).toBe(true);
     expect(Reflect.get(object, 'handler')).toBe(handler);
   });
 
@@ -344,22 +409,58 @@ describe('Web IDL callbacks', () => {
     const { binding, targetRealm } = createCallbackBinding();
     const installed = binding.install();
     const Handler = installed.get('ConstantHandler');
+    if (!Handler) throw new Error('ConstantHandler was not installed');
 
     expect(typeof Handler).toBe('function');
     expect(Handler).toBeInstanceOf(targetRealm.intrinsics.function);
-    expect(Reflect.get(Handler!, 'READY')).toBe(7);
-    expect(Reflect.getOwnPropertyDescriptor(Handler!, 'READY')).toEqual({
+    expect(Reflect.getPrototypeOf(Handler))
+      .toBe(targetRealm.intrinsics.functionPrototype);
+    expect(Reflect.get(targetRealm.global, 'ConstantHandler')).toBe(Handler);
+    expect(Reflect.getOwnPropertyDescriptor(
+      targetRealm.global,
+      'ConstantHandler',
+    )).toEqual({
+      configurable: true,
+      enumerable: false,
+      value: Handler,
+      writable: true,
+    });
+    expect(Reflect.get(Handler, 'READY')).toBe(7);
+    expect(Reflect.getOwnPropertyDescriptor(Handler, 'READY')).toEqual({
       configurable: false,
       enumerable: true,
       value: 7,
       writable: false,
     });
+    expect(Reflect.getOwnPropertyDescriptor(Handler, 'name')).toEqual({
+      configurable: true,
+      enumerable: false,
+      value: 'ConstantHandler',
+      writable: false,
+    });
+    expect(Reflect.getOwnPropertyDescriptor(Handler, 'length')).toEqual({
+      configurable: true,
+      enumerable: false,
+      value: 0,
+      writable: false,
+    });
+    expect(Object.hasOwn(Handler, 'prototype')).toBe(false);
     expect(() => {
       Reflect.apply(Handler as CallableFunction, undefined, []);
     })
       .toThrow(targetRealm.intrinsics.typeError);
-    expect(binding.getLegacyCallbackInterfaceObject('ConstantHandler'))
-      .toBe(Handler);
+    expect(() => targetRealm.evaluate(
+      'new ConstantHandler()',
+      'legacy-callback-interface-object.js',
+    )).toThrow(targetRealm.intrinsics.typeError);
+    expect(targetRealm.evaluate(
+      '5 instanceof ConstantHandler',
+      'legacy-callback-interface-instanceof-primitive.js',
+    )).toBe(false);
+    expect(() => targetRealm.evaluate(
+      '({}) instanceof ConstantHandler',
+      'legacy-callback-interface-instanceof-object.js',
+    )).toThrow(targetRealm.intrinsics.typeError);
   });
 });
 

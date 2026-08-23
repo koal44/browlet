@@ -52,7 +52,7 @@ export class Realm implements WebIDLRealmHost {
   readonly agent: Agent;
   readonly callbacks: WebIDLRealmHost['callbacks'];
   readonly crossOriginIsolated: boolean;
-  readonly exposure: string;
+  readonly globalNames: ReadonlySet<string>;
   readonly isGlobalPrototypeChainMutable: boolean;
   readonly intrinsics: WebIDLRealmHost['intrinsics'];
   readonly secureContext: boolean;
@@ -73,7 +73,7 @@ export class Realm implements WebIDLRealmHost {
   constructor(options: RealmOptions = {}) {
     this.agent = options.agent ?? new WindowAgent();
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
-    this.exposure = options.exposure ?? 'Window';
+    this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
       options.isGlobalPrototypeChainMutable ?? false;
     this.secureContext = options.secureContext ?? false;
@@ -448,7 +448,7 @@ export type RealmGlobal = Record<PropertyKey, unknown>;
 export type RealmOptions = {
   agent?: Agent;
   crossOriginIsolated?: boolean;
-  exposure?: string;
+  globalNames?: readonly string[];
   isGlobalPrototypeChainMutable?: boolean;
   secureContext?: boolean;
 };

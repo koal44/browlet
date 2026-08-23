@@ -5,7 +5,7 @@ import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
-  type InterfaceDefinition, type OperationMember,
+  type InterfaceDefinition, type OperationMember, type StringifierMember,
 } from '../../../src/web-idl/definition';
 import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
@@ -83,7 +83,11 @@ describe('Web IDL legacy platform objects', () => {
   it('converts values and invokes a named indexed setter', () => {
     const constructor = constructorMember();
     const getter = indexedGetter('item', idlType.long);
-    const setter = indexedSetter('setItem', idlType.long);
+    const setter = indexedSetter(
+      'setItem',
+      idlType.byte,
+      [noArguments('Clamp')],
+    );
     const interfaceIDL = legacyInterface(
       'WritableIndexed',
       [constructor, getter, setter],
@@ -113,10 +117,10 @@ describe('Web IDL legacy platform objects', () => {
     );
     if (!implementation) throw new Error('Missing implementation target');
 
-    expect(Reflect.set(object, '0', 3.9)).toBe(true);
+    expect(Reflect.set(object, '0', 300)).toBe(true);
     expect(Reflect.set(object, '2', '8.7')).toBe(true);
-    expect(Reflect.get(object, '0')).toBe(3);
-    expect(Reflect.get(object, '2')).toBe(8);
+    expect(Reflect.get(object, '0')).toBe(127);
+    expect(Reflect.get(object, '2')).toBe(9);
     expect(Reflect.ownKeys(object)).toEqual(['0', '2']);
 
     expect(Reflect.defineProperty(object, '1', { writable: true })).toBe(true);
@@ -128,7 +132,7 @@ describe('Web IDL legacy platform objects', () => {
     const child = Object.create(object) as object;
     expect(Reflect.set(child, '0', 11)).toBe(true);
     expect(Reflect.getOwnPropertyDescriptor(child, '0')?.value).toBe(11);
-    expect(values.get(implementation)?.get(0)).toBe(3);
+    expect(values.get(implementation)?.get(0)).toBe(127);
   });
 
   it('distinguishes new and existing anonymous indexed assignments', () => {
@@ -264,6 +268,57 @@ describe('Web IDL legacy platform objects', () => {
     expect(Reflect.deleteProperty(object, 'ordinary')).toBe(true);
   });
 
+  it('ignores named properties objects when checking prototype shadowing', () => {
+    const constructor = constructorMember();
+    const globalGetter = namedGetter('globalItem', idlType.DOMString);
+    const legacyGetter = namedGetter('legacyItem', idlType.DOMString);
+    const window = defineInterface({
+      exposed: ['Window'],
+      extendedAttributes: [{
+        kind: 'identifier', name: 'Global', value: 'Window',
+      }],
+      members: [globalGetter],
+      name: 'Window',
+    });
+    const legacy = legacyInterface(
+      'LegacyNamed',
+      [constructor, legacyGetter],
+    );
+    const implementations = new ImplementationRegistry();
+    implementations.setConstructorSteps(constructor, () => undefined);
+    implementations.setNamedPropertySteps(globalGetter, {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    });
+    implementations.setNamedPropertySteps(legacyGetter, {
+      getSupportedPropertyNames: () => new Set(['shared']),
+    });
+    implementations.setOperationSteps(globalGetter, () => 'global');
+    implementations.setOperationSteps(legacyGetter, () => 'legacy');
+
+    const definitions = assembleDefinitions([window, legacy]);
+    const globalBinding = new JavaScriptBinding(
+      definitions,
+      new Realm({ globalNames: ['Window'] }),
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const legacyBinding = new JavaScriptBinding(
+      definitions,
+      new Realm({ globalNames: ['Window'] }),
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const global = globalBinding.projectGlobalObject({}, 'Window').object;
+    const globalPrototype = Reflect.getPrototypeOf(global);
+    const namedProperties = globalPrototype &&
+      Reflect.getPrototypeOf(globalPrototype);
+    if (!namedProperties) throw new Error('Missing named properties object');
+
+    const object = construct(legacyBinding.getInterfaceObject('LegacyNamed'));
+    expect(Reflect.setPrototypeOf(object, namedProperties)).toBe(true);
+    expect(Reflect.get(object, 'shared')).toBe('legacy');
+  });
+
   it('applies override-built-ins, unenumerable names, and named methods', () => {
     const constructor = constructorMember();
     const getter = namedGetter('namedItem', idlType.any);
@@ -344,6 +399,45 @@ describe('Web IDL legacy platform objects', () => {
     expect(Reflect.deleteProperty(object, 'created')).toBe(true);
     expect(Reflect.has(object, 'created')).toBe(false);
     expect(Reflect.deleteProperty(object, 'locked')).toBe(false);
+  });
+
+  it('installs an unforgeable stringifier over a supported named property', () => {
+    const constructor = constructorMember();
+    const getter = namedGetter('namedItem', idlType.DOMString);
+    const stringifier = {
+      extendedAttributes: [noArguments('LegacyUnforgeable')],
+      kind: 'stringifier',
+    } satisfies StringifierMember;
+    const interfaceIDL = legacyInterface(
+      'StringifyingNamed',
+      [constructor, getter, stringifier],
+    );
+    const implementations = new ImplementationRegistry();
+    implementations.setConstructorSteps(constructor, () => undefined);
+    implementations.setNamedPropertySteps(getter, {
+      getSupportedPropertyNames: () => new Set(['toString']),
+    });
+    implementations.setOperationSteps(getter, () => 'named');
+    implementations.setStringificationBehavior(
+      stringifier,
+      () => 'stringified',
+    );
+
+    const { binding } = createBinding(interfaceIDL, implementations);
+    const object = construct(binding.getInterfaceObject('StringifyingNamed'));
+    const descriptor = Reflect.getOwnPropertyDescriptor(object, 'toString');
+
+    expect(descriptor).toMatchObject({
+      configurable: false,
+      enumerable: true,
+      writable: false,
+    });
+    expect(typeof descriptor?.value).toBe('function');
+    expect(Reflect.apply(
+      descriptor?.value as CallableFunction,
+      object,
+      [],
+    )).toBe('stringified');
   });
 
   it('distinguishes anonymous named-property mutation steps', () => {
@@ -473,11 +567,12 @@ function indexedGetter(
 function indexedSetter(
   name: string | undefined,
   valueType: OperationMember['returns'],
+  extendedAttributes?: OperationMember['extendedAttributes'],
 ): OperationMember {
   return {
     arguments: [
       { name: 'index', type: idlType.unsignedLong },
-      { name: 'value', type: valueType },
+      { extendedAttributes, name: 'value', type: valueType },
     ],
     kind: 'operation',
     name,

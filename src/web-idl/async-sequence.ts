@@ -73,6 +73,9 @@ export function getAsyncIteratorNextValue(
       iterator.record.iterator,
       [],
     );
+    if (!isObject(nextResult)) {
+      throw new realm.intrinsics.typeError('Iterator result is not an object');
+    }
   } catch (exception) {
     return createRejectedPromise(exception, realm);
   }

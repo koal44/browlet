@@ -132,7 +132,7 @@ export class JavaScriptBinding {
         );
       }
       for (const id of getLegacyFactoryFunctionIdentifiers(
-        interface_.definition,
+        interface_,
       )) {
         installed.set(id, this.getLegacyFactoryFunction(interface_, id));
       }
@@ -162,7 +162,7 @@ export class JavaScriptBinding {
   }
 
   getExposedGlobalProperties(
-    isWindow = this.realm.exposure === 'Window',
+    isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
     const exposed = this.getExposedInitialObjects();
     const ordered = new Map<string, object>();
@@ -191,7 +191,7 @@ export class JavaScriptBinding {
           }
         }
       }
-      for (const id of getLegacyFactoryFunctionIdentifiers(definition)) {
+      for (const id of getLegacyFactoryFunctionIdentifiers(interface_)) {
         handledNames.add(id);
         ordered.set(id, this.getLegacyFactoryFunction(interface_, id));
       }
@@ -229,15 +229,21 @@ export class JavaScriptBinding {
     if (initial.interfaceObject) return initial.interfaceObject;
 
     const constructors = this.#getConstructors(assembled);
+    const overridden = this.implementations.getOverriddenConstructorSteps(
+      assembled.definition,
+    );
     const object = this.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
+        if (overridden) {
+          return overridden(argumentsList, newTarget, object);
+        }
+        if (constructors.length === 0) {
+          return this.#throwTypeError('Illegal constructor');
+        }
         if (!newTarget) {
           return this.#throwTypeError(
             `Failed to construct '${assembled.definition.name}': use the 'new' operator.`,
           );
-        }
-        if (constructors.length === 0) {
-          return this.#throwTypeError('Illegal constructor');
         }
 
         const overload = resolveOverload(
@@ -269,7 +275,7 @@ export class JavaScriptBinding {
         length: getCallableLength(constructors),
         name: assembled.definition.name,
       },
-    ) as InterfaceObject;
+    );
 
     initial.interfaceObject = object;
     this.#getUnforgeableObject(assembled);
@@ -332,7 +338,7 @@ export class JavaScriptBinding {
   ): JavaScriptFunction {
     const assembled = this.#resolveInterface(interface_);
     const declarations = getLegacyFactoryFunctionDeclarations(
-      assembled.definition,
+      assembled,
       id,
     );
     const source = declarations[0];
@@ -450,7 +456,7 @@ export class JavaScriptBinding {
 
     this.#assertOrdinaryProjection(assembled);
 
-    const global = hasExtendedAttribute(assembled.definition, 'Global');
+    const global = isGlobalInterface(assembled);
     const parentPrototype = global &&
       this.#globalPlatformObjects.supportsNamedProperties(assembled)
       ? this.#getNamedPropertiesObject(assembled)
@@ -459,11 +465,9 @@ export class JavaScriptBinding {
         : assembled.definition.name === 'DOMException'
           ? this.realm.intrinsics.errorPrototype
           : this.realm.intrinsics.objectPrototype;
-    const prototype = assembled.definition.name === 'DOMException'
-      ? createRealmErrorObject(this.realm, parentPrototype)
-      : this.#hasImmutableGlobalPrototype(assembled)
-        ? this.#globalPlatformObjects.createPrototypeObject(parentPrototype)
-        : createRealmObject(this.realm, parentPrototype);
+    const prototype = this.#hasImmutableGlobalPrototype(assembled)
+      ? this.#globalPlatformObjects.createPrototypeObject(parentPrototype)
+      : createRealmObject(this.realm, parentPrototype);
     initial.interfacePrototypeObject = prototype;
 
     this.#defineUnscopables(prototype, assembled);
@@ -471,8 +475,8 @@ export class JavaScriptBinding {
       this.#defineAttributes(prototype, assembled, 'regular');
       this.#defineOperations(prototype, assembled, 'regular');
       this.#defineStringifier(prototype, assembled, 'regular');
-      this.#defineAsyncIterationMethods(prototype, assembled);
       this.#defineIterationMethods(prototype, assembled);
+      this.#defineAsyncIterationMethods(prototype, assembled);
       this.#defineCollectionMembers(prototype, assembled);
     }
     this.#defineConstants(prototype, assembled);
@@ -491,7 +495,7 @@ export class JavaScriptBinding {
     defineProperty(prototype, Symbol.toStringTag, {
       configurable: true,
       enumerable: false,
-      value: assembled.definition.name,
+      value: getQualifiedName(assembled.definition),
       writable: false,
     });
     return prototype;
@@ -507,7 +511,7 @@ export class JavaScriptBinding {
         `Interface ${assembled.definition.name} is not exposed in this realm`,
       );
     }
-    if (hasExtendedAttribute(assembled.definition, 'Global')) {
+    if (isGlobalInterface(assembled)) {
       throw new Error(
         `Global interface ${assembled.definition.name} requires global exotic object machinery`,
       );
@@ -551,7 +555,7 @@ export class JavaScriptBinding {
     implementation: object,
     primaryInterface: AssembledInterface,
   ): PlatformObjectRecord {
-    if (hasExtendedAttribute(primaryInterface.definition, 'Global')) {
+    if (isGlobalInterface(primaryInterface)) {
       throw new Error(
         `Use projectGlobalObject for ${primaryInterface.definition.name}`,
       );
@@ -571,7 +575,7 @@ export class JavaScriptBinding {
     primaryInterface: string | AssembledInterface,
   ): PlatformObjectRecord {
     const interface_ = this.#resolveInterface(primaryInterface);
-    if (!hasExtendedAttribute(interface_.definition, 'Global')) {
+    if (!isGlobalInterface(interface_)) {
       throw new Error(`${interface_.definition.name} is not a global interface`);
     }
     if (!this.isExposed(interface_)) {
@@ -605,9 +609,35 @@ export class JavaScriptBinding {
     this.#defineIterationMethods(object, interface_);
     this.#defineAsyncIterationMethods(object, interface_);
     this.#defineCollectionMembers(object, interface_);
-    this.#defineConstants(object, interface_);
     this.#defineGlobalPropertyReferences(object);
     return record;
+  }
+
+  changePlatformObjectRealm(object: object): void {
+    const record = this.platformObjects.getRecord(object);
+    if (!record) throw new TypeError('Value is not a platform object');
+
+    const primaryInterface = this.#resolveInterface(
+      record.primaryInterface.definition.name,
+    );
+    if (primaryInterface.definition !== record.primaryInterface.definition) {
+      throw new TypeError(
+        'Target realm does not contain the platform object interface',
+      );
+    }
+
+    const prototype = this.getInterfacePrototypeObject(primaryInterface);
+    if (!Reflect.setPrototypeOf(record.implementation, prototype)) {
+      throw new TypeError('Could not change the platform object prototype');
+    }
+    if (
+      record.object !== record.implementation &&
+      Reflect.getPrototypeOf(record.object) !== prototype &&
+      !Reflect.setPrototypeOf(record.object, prototype)
+    ) {
+      throw new TypeError('Could not change the public platform object prototype');
+    }
+    this.platformObjects.changeRealm(object, this.realm);
   }
 
   associatePlatformObject(
@@ -807,6 +837,11 @@ export class JavaScriptBinding {
       stringifier,
       () => this.realm.createFunction(
         (thisArgument) => {
+          if (thisArgument === null || thisArgument === undefined) {
+            return this.#throwTypeError(
+              'Cannot convert null or undefined to an object',
+            );
+          }
           const identifier = stringifier.kind === 'attribute'
             ? stringifier.name
             : 'toString';
@@ -845,7 +880,7 @@ export class JavaScriptBinding {
             }
             value = Reflect.apply(behavior, object, []);
           }
-          return convertToIDL(
+          return convertToJavaScript(
             value,
             { kind: 'simple', name: 'DOMString' },
             this,
@@ -1026,10 +1061,11 @@ export class JavaScriptBinding {
       attribute,
       () => this.realm.createFunction((thisArgument, argumentsList) => {
         const value = argumentsList[0];
+        const jsValue = this.#resolveThisValue(thisArgument);
         const object = attribute.static
           ? null
           : this.#implementationObject(
-            thisArgument,
+            jsValue,
             interface_,
             attribute.name,
             'setter',
@@ -1037,25 +1073,27 @@ export class JavaScriptBinding {
           );
 
         if (replaceable) {
-          const receiver = thisArgument ?? this.realm.global;
-          if (!isObject(receiver)) return this.#throwTypeError('Invalid receiver');
-          defineProperty(receiver, attribute.name, {
+          if (!isObject(jsValue)) return this.#throwTypeError('Invalid receiver');
+          if (!Reflect.defineProperty(jsValue, attribute.name, {
             configurable: true,
             enumerable: true,
             value,
             writable: true,
-          });
+          })) {
+            return this.#throwTypeError(
+              `Could not replace attribute ${attribute.name}`,
+            );
+          }
           return undefined;
         }
         if (object === invalidReceiver || lenientSetter) return undefined;
 
         if (putForwards) {
           if (!object) throw new Error('PutForwards used on a static attribute');
-          const receiver = thisArgument ?? this.realm.global;
-          if (!isObject(receiver)) {
+          if (!isObject(jsValue)) {
             return this.#throwTypeError('Invalid receiver');
           }
-          const forwarded = Reflect.get(receiver, attribute.name) as unknown;
+          const forwarded = Reflect.get(jsValue, attribute.name) as unknown;
           if (!isObject(forwarded)) {
             return this.#throwTypeError(
               `${attribute.name} does not reference an object`,
@@ -1311,7 +1349,7 @@ export class JavaScriptBinding {
   #hasImmutableGlobalPrototype(interface_: AssembledInterface): boolean {
     if (this.realm.isGlobalPrototypeChainMutable) return false;
     for (const candidate of this.definitions.getInterfaces()) {
-      if (!hasExtendedAttribute(candidate.definition, 'Global')) continue;
+      if (!isGlobalInterface(candidate)) continue;
       let current: AssembledInterface | undefined = candidate;
       while (current) {
         if (current === interface_) return true;
@@ -1380,18 +1418,20 @@ export class JavaScriptBinding {
     type: 'getter' | 'method' | 'setter',
     lenient: boolean,
   ): object | typeof invalidReceiver {
-    const value = thisArgument ??
-      this.#globalObject?.object ??
-      this.realm.global;
+    const value = this.#resolveThisValue(thisArgument);
     const record = this.platformObjects.getRecord(value);
     if (record) {
-      this.realm.performSecurityCheck(value, identifier, type);
+      this.realm.performSecurityCheck(record.object, identifier, type);
     }
     if (!record || !this.platformObjects.recordImplements(record, interface_)) {
       if (lenient) return invalidReceiver;
       return this.#throwTypeError('Illegal invocation');
     }
     return record.implementation;
+  }
+
+  #resolveThisValue(thisArgument: unknown): unknown {
+    return thisArgument ?? this.#globalObject?.object ?? this.realm.global;
   }
 
   #findInheritedAttribute(
@@ -1454,7 +1494,7 @@ export class JavaScriptBinding {
     if (
       construct.exposed !== undefined &&
       construct.exposed !== '*' &&
-      !construct.exposed.includes(this.realm.exposure)
+      !construct.exposed.some((name) => this.realm.globalNames.has(name))
     ) return false;
     if (
       hasExtendedAttribute(construct, 'CrossOriginIsolated') &&
@@ -1571,26 +1611,33 @@ function getCallableLength(
 }
 
 function getLegacyFactoryFunctionDeclarations(
-  interface_: { extendedAttributes?: ExtendedAttribute[]; },
+  interface_: AssembledInterface,
   id: string,
 ): NamedArgumentsExtendedAttribute[] {
-  return interface_.extendedAttributes?.filter(
-    (attribute): attribute is NamedArgumentsExtendedAttribute =>
-      attribute.kind === 'named-arguments' &&
-      attribute.name === 'LegacyFactoryFunction' &&
-      attribute.value === id,
-  ) ?? [];
+  const declarations: NamedArgumentsExtendedAttribute[] = [];
+  for (const definition of [interface_.definition, ...interface_.partials]) {
+    for (const attribute of definition.extendedAttributes ?? []) {
+      if (
+        attribute.kind === 'named-arguments' &&
+        attribute.name === 'LegacyFactoryFunction' &&
+        attribute.value === id
+      ) declarations.push(attribute);
+    }
+  }
+  return declarations;
 }
 
 function getLegacyFactoryFunctionIdentifiers(
-  interface_: { extendedAttributes?: ExtendedAttribute[]; },
+  interface_: AssembledInterface,
 ): string[] {
   const identifiers = new Set<string>();
-  for (const attribute of interface_.extendedAttributes ?? []) {
-    if (
-      attribute.kind === 'named-arguments' &&
-      attribute.name === 'LegacyFactoryFunction'
-    ) identifiers.add(attribute.value);
+  for (const definition of [interface_.definition, ...interface_.partials]) {
+    for (const attribute of definition.extendedAttributes ?? []) {
+      if (
+        attribute.kind === 'named-arguments' &&
+        attribute.name === 'LegacyFactoryFunction'
+      ) identifiers.add(attribute.value);
+    }
   }
   return [...identifiers];
 }
@@ -1654,6 +1701,12 @@ function hasExtendedAttribute(
   ) ?? false;
 }
 
+function isGlobalInterface(interface_: AssembledInterface): boolean {
+  return [interface_.definition, ...interface_.partials].some(
+    (definition) => hasExtendedAttribute(definition, 'Global'),
+  );
+}
+
 function getIdentifierAttribute(
   construct: { extendedAttributes?: ExtendedAttribute[]; },
   name: string,
@@ -1663,6 +1716,15 @@ function getIdentifierAttribute(
       candidate.kind === 'identifier' && candidate.name === name,
   );
   return attribute?.kind === 'identifier' ? attribute.value : undefined;
+}
+
+function getQualifiedName(
+  interface_: { extendedAttributes?: ExtendedAttribute[]; name: string; },
+): string {
+  const namespace = getIdentifierAttribute(interface_, 'LegacyNamespace');
+  return namespace
+    ? `${namespace}.${interface_.name}`
+    : interface_.name;
 }
 
 function getIdentifierListAttribute(
@@ -1702,17 +1764,6 @@ function createRealmObject(
   const object = Reflect.construct(realm.intrinsics.object, []);
   if (!Reflect.setPrototypeOf(object, prototype)) {
     throw new Error('Could not set a Web IDL object prototype');
-  }
-  return object;
-}
-
-function createRealmErrorObject(
-  realm: WebIDLRealmHost,
-  prototype: object,
-): object {
-  const object = Reflect.construct(realm.intrinsics.error, []);
-  if (!Reflect.setPrototypeOf(object, prototype)) {
-    throw new Error('Could not set a Web IDL error object prototype');
   }
   return object;
 }

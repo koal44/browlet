@@ -4,8 +4,8 @@ import { Realm } from '../../../src/browlet/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
-  defineInterface, idlType, integer, type AttributeMember,
-  type OperationMember,
+  defineInterface, definePartialInterface, idlType, integer,
+  type AttributeMember, type OperationMember, type StringifierMember,
 } from '../../../src/web-idl/definition';
 import { ImplementationRegistry } from '../../../src/web-idl/implementation';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
@@ -97,6 +97,7 @@ describe('Web IDL global platform objects', () => {
     expect(call(global, 'ping', undefined)).toBe('pong');
     expect(call(global, 'baseMethod', global)).toBe('base');
     expect(Reflect.get(global, 'ANSWER')).toBe(42);
+    expect(Object.hasOwn(global, 'ANSWER')).toBe(false);
     expect(Reflect.get(globalPrototype, 'ANSWER')).toBe(42);
 
     expect(Reflect.get(global, 'Window')).toBe(Window);
@@ -134,6 +135,149 @@ describe('Web IDL global platform objects', () => {
     expect(Reflect.deleteProperty(namedProperties, 'absent')).toBe(false);
     expect(Reflect.preventExtensions(namedProperties)).toBe(false);
     expect(Reflect.isExtensible(namedProperties)).toBe(true);
+  });
+
+  it('inherits unenumerable named properties', () => {
+    const namedItem = namedGetter('namedItem');
+    const base = defineInterface({
+      exposed: ['Window'],
+      extendedAttributes: [
+        noArguments('LegacyUnenumerableNamedProperties'),
+      ],
+      members: [namedItem],
+      name: 'NamedBase',
+    });
+    const window = defineInterface({
+      exposed: ['Window'],
+      extendedAttributes: [identifier('Global', 'Window')],
+      inherits: 'NamedBase',
+      members: [],
+      name: 'Window',
+    });
+    const implementations = new ImplementationRegistry();
+    implementations.setOperationSteps(namedItem, () => 'named value');
+    implementations.setNamedPropertySteps(namedItem, {
+      getSupportedPropertyNames: () => new Set(['named']),
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([window, base]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const global = binding.projectGlobalObject(
+      Reflect.construct(realm.intrinsics.object, []),
+      'Window',
+    ).object;
+    const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
+    const namedProperties = requireObject(
+      Reflect.getPrototypeOf(globalPrototype),
+    );
+
+    expect(Reflect.get(global, 'named')).toBe('named value');
+    expect(Object.getOwnPropertyDescriptor(namedProperties, 'named'))
+      .toEqual({
+        configurable: true,
+        enumerable: false,
+        value: 'named value',
+        writable: true,
+      });
+  });
+
+  it('uses the projected global for nullish attribute receivers', () => {
+    const value = attribute('value', idlType.DOMString);
+    const replaceable = attribute('replaceable', idlType.DOMString, true, [
+      noArguments('Replaceable'),
+    ]);
+    const forwarded = attribute('forwarded', idlType.object, true, [{
+      kind: 'identifier', name: 'PutForwards', value: 'value',
+    }]);
+    const interface_ = defineInterface({
+      exposed: ['Window'],
+      extendedAttributes: [identifier('Global', 'Window')],
+      members: [value, replaceable, forwarded],
+      name: 'Window',
+    });
+    const values = new WeakMap<object, string>();
+    const forwardedTarget = { value: 'original' };
+    const implementations = new ImplementationRegistry();
+    implementations.setAttributeSteps(value, {
+      get() { return values.get(this as object) ?? ''; },
+      set(next) { values.set(this as object, next as string); },
+    });
+    implementations.setAttributeSteps(replaceable, {
+      get: () => 'original',
+    });
+    implementations.setAttributeSteps(forwarded, {
+      get: () => forwardedTarget,
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interface_]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const implementation = Reflect.construct(realm.intrinsics.object, []);
+    values.set(implementation, 'initial');
+    const global = binding.projectGlobalObject(
+      implementation,
+      'Window',
+    ).object;
+    const valueDescriptor = requireAccessor(global, 'value');
+    const replaceableDescriptor = requireAccessor(global, 'replaceable');
+    const forwardedDescriptor = requireAccessor(global, 'forwarded');
+
+    expect(Reflect.apply(valueDescriptor.get, undefined, []))
+      .toBe('initial');
+    Reflect.apply(valueDescriptor.set, null, ['updated']);
+    expect(Reflect.apply(valueDescriptor.get, null, []))
+      .toBe('updated');
+
+    Reflect.apply(replaceableDescriptor.set, undefined, ['shadowed']);
+    expect(Object.getOwnPropertyDescriptor(global, 'replaceable'))
+      .toMatchObject({ value: 'shadowed' });
+    expect(Object.hasOwn(realm.global, 'replaceable')).toBe(false);
+
+    Reflect.apply(forwardedDescriptor.set, null, ['forwarded']);
+    expect(forwardedTarget.value).toBe('forwarded');
+  });
+
+  it('rejects nullish global stringifier receivers', () => {
+    const stringifier = { kind: 'stringifier' } satisfies StringifierMember;
+    const interface_ = defineInterface({
+      exposed: ['Window'],
+      extendedAttributes: [identifier('Global', 'Window')],
+      members: [stringifier],
+      name: 'Window',
+    });
+    const implementations = new ImplementationRegistry();
+    implementations.setStringificationBehavior(
+      stringifier,
+      () => 'global stringifier',
+    );
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interface_]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const global = binding.projectGlobalObject(
+      Reflect.construct(realm.intrinsics.object, []),
+      'Window',
+    ).object;
+    const toString = Reflect.get(global, 'toString') as unknown;
+    if (typeof toString !== 'function') {
+      throw new Error('Missing global stringifier');
+    }
+
+    expect(Reflect.apply(toString, global, [])).toBe('global stringifier');
+    expect(() => { Reflect.apply(toString, null, []); })
+      .toThrow(realm.intrinsics.typeError);
+    expect(() => { Reflect.apply(toString, undefined, []); })
+      .toThrow(realm.intrinsics.typeError);
   });
 
   it('uses immutable prototype exotics by default', () => {
@@ -184,6 +328,39 @@ describe('Web IDL global platform objects', () => {
 
     expect(Reflect.getPrototypeOf(globalPrototype))
       .toBe(binding.getInterfacePrototypeObject('PlainBase'));
+  });
+
+  it('projects a global declared by the partial containing its named getter', () => {
+    const getter = namedGetter(undefined);
+    const interface_ = defineInterface({
+      exposed: ['PartialGlobal'],
+      members: [],
+      name: 'PartialGlobal',
+    });
+    const partial = definePartialInterface({
+      extendedAttributes: [identifier('Global', 'PartialGlobal')],
+      members: [getter],
+      name: 'PartialGlobal',
+    });
+    const implementations = new ImplementationRegistry();
+    implementations.setOperationSteps(getter, (name) =>
+      name === 'answer' ? 'named answer' : undefined);
+    implementations.setNamedPropertySteps(getter, {
+      getSupportedPropertyNames: () => new Set(['answer']),
+    });
+    const realm = new Realm({ globalNames: ['PartialGlobal'] });
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([interface_, partial]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    const global = binding.projectGlobalObject(
+      Reflect.construct(realm.intrinsics.object, []),
+      'PartialGlobal',
+    ).object;
+
+    expect(Reflect.get(global, 'answer')).toBe('named answer');
   });
 
   it('allows prototype changes when the realm opts into them', () => {
@@ -245,6 +422,15 @@ function operation(
   return { arguments: [], kind: 'operation', name, returns };
 }
 
+function attribute(
+  name: string,
+  type: AttributeMember['type'],
+  readonly = false,
+  extendedAttributes?: AttributeMember['extendedAttributes'],
+): AttributeMember {
+  return { extendedAttributes, kind: 'attribute', name, readonly, type };
+}
+
 function namedGetter(name: string | undefined): OperationMember {
   return {
     arguments: [{ name: 'name', type: idlType.DOMString }],
@@ -257,6 +443,10 @@ function namedGetter(name: string | undefined): OperationMember {
 
 function identifier(name: string, value: string) {
   return { kind: 'identifier', name, value } as const;
+}
+
+function noArguments(name: string) {
+  return { kind: 'no-arguments', name } as const;
 }
 
 function call(
@@ -273,6 +463,17 @@ function call(
 function requireObject(value: object | null): object {
   if (!value) throw new Error('Expected an object');
   return value;
+}
+
+function requireAccessor(
+  object: object,
+  name: string,
+): { get: CallableFunction; set: CallableFunction; } {
+  const descriptor = Object.getOwnPropertyDescriptor(object, name);
+  if (!descriptor?.get || !descriptor.set) {
+    throw new Error(`Expected ${name} accessor`);
+  }
+  return descriptor as { get: CallableFunction; set: CallableFunction; };
 }
 
 function classString(realm: Realm, value: object): string {

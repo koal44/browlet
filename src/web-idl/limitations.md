@@ -18,10 +18,21 @@ machinery or Web IDL feature is implemented.
   no-op until HTML's cross-origin `WindowProxy` and `Location` behavior exists.
 - **Constructor realm fallback:** A non-object `newTarget.prototype` currently
   stops with an explicit error. Completing that path requires ECMAScript's
-  `GetFunctionRealm` behavior from the host.
+  `GetFunctionRealm` behavior and the corresponding target-realm binding from
+  the host. The expected-failure contract covers the cross-realm fallback.
+- **DOMException error internals:** The supported Node.js runtime predates the
+  standardized inherited `Error.prototype.stack` accessor and `Error.isError`.
+  Constructing `DOMException` through the realm's native `Error` gives it the
+  engine's error data, but V8 currently exposes `stack` as an own property and
+  provides no public `Error.isError` observation. Expected-failure tests record
+  both host gaps; do not emulate them by weakening the platform-object model.
 
 ## Buffer sources
 
+- **Detached view byte length:** Web IDL reads a buffer view's internal
+  `[[ByteLength]]`, while JavaScript's public view accessors return zero or
+  throw after detachment. The original length cannot be recovered for an
+  arbitrary incoming detached view without a native host capability.
 - **Transferability predicate:** JavaScript provides no non-destructive way to
   inspect `[[ArrayBufferDetachKey]]`. The binding can authoritatively perform a
   transfer, but cannot expose the Web IDL "is transferable" predicate for an
@@ -33,13 +44,27 @@ machinery or Web IDL feature is implemented.
 - **Promise reactions:** JavaScript exposes `Promise.prototype.then`, not
   `PerformPromiseThen` with a caller-supplied or omitted capability. Reactions
   therefore create unreachable derived promises in a few internal algorithms.
+  They can also consult an author-overridden `constructor` or `@@species`,
+  whereas `PerformPromiseThen` would not.
 - **Handled flag:** JavaScript does not expose `[[PromiseIsHandled]]` directly.
   Attaching a rejection reaction marks the original promise handled while also
-  creating one unreachable fulfilled promise.
+  creating one unreachable fulfilled promise and sharing the same observable
+  `constructor`/`@@species` limitation.
 
-These Promise substitutions preserve the relevant observable settlement,
-realm, conversion, and unhandled-rejection behavior; revisit them if the host
-eventually provides the underlying ECMAScript operations.
+These substitutions preserve settlement, realm, conversion, and handled-state
+behavior for ordinary promises. The expected-failure tests record the
+remaining author-property observability; revisit them if the host eventually
+provides the underlying ECMAScript operations. Known future consumers include
+Web IDL async iterators and HTML navigation, module, and service-worker promise
+reactions; exact unhandled-rejection tracking and APIs that mark promises
+handled depend on the same inaccessible machinery.
+
+## Overload resolution
+
+- **Symbol values:** Web IDL declares `symbol` distinguishable from string
+  types, but its overload resolution ladder has no branch for selecting a
+  `symbol` overload from a JavaScript Symbol value. The expected-failure test
+  records this dormant specification gap without inventing a binding rule.
 
 ## Collection iterators
 
@@ -48,10 +73,14 @@ eventually provides the underlying ECMAScript operations.
   `%SetIteratorPrototype%`. Maplike and setlike iterators therefore use proxy
   shells with the correct realm prototype, class string, inherited surface,
   live ordering, conversions, and iterator results. Ordinary `iterator.next()`
-  is conforming, but explicitly applying the realm's native iterator-prototype
-  `next` function to one of these shells fails its inaccessible native brand
-  check. Replace the shell if the host eventually provides iterator creation
-  with a supplied closure.
+  and normal iterator-protocol consumers such as `for...of`, spread, and
+  `Array.from()` are conforming. The limitation is observable only when code
+  explicitly applies the realm's native iterator-prototype `next` function to
+  one of these shells, or when native host code performs the equivalent brand
+  check. No current Selectlet caller does so; the only normative references to
+  these intrinsics in the local web-platform specifications are Web IDL's
+  iterator-creation steps themselves. Replace the shell if the host eventually
+  provides iterator creation with a supplied closure.
 
 ## Platform integration
 
@@ -60,6 +89,13 @@ Browlet-specific realm, Window, and WindowProxy integration gaps are tracked in
 objects and named-properties prototype objects are implemented here, including
 immutable prototype behavior, member placement, property visibility, and
 legacy Window aliases.
+
+- **Serializable platform objects:** Declarative definitions preserve the
+  `[Serializable]` extended attribute, but Browlet does not yet expose HTML's
+  structured-clone machinery or dispatch to interface serialization and
+  deserialization steps. The `DOMException` expected-failure test records the
+  missing public contract. Implement this at HTML's structured serialization
+  boundary rather than special-casing cloning in the Web IDL binding.
 
 Observable array exotic objects and their specialized attribute behavior are
 implemented. CSSOM's `adoptedStyleSheets` declaration remains temporarily typed

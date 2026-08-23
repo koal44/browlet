@@ -9,10 +9,16 @@ import type {
 import { ordinarySetWithOwnDescriptor } from './platform-object';
 import { getUnannotatedType } from './types';
 
+// The Web IDL object kind is shared across realms and binding instances.
+const namedPropertiesObjects = new WeakSet<object>();
+
+export function isNamedPropertiesObject(object: object): boolean {
+  return namedPropertiesObjects.has(object);
+}
+
 export class GlobalPlatformObjectBinding {
   readonly #context: ConversionContext;
   readonly #implementations: ImplementationRegistry;
-  readonly #namedPropertiesObjects = new WeakSet<object>();
 
   constructor(
     context: ConversionContext,
@@ -85,7 +91,7 @@ export class GlobalPlatformObjectBinding {
       setPrototypeOf: (target_, value) =>
         this.#setPrototypeOf(target_, value),
     });
-    this.#namedPropertiesObjects.add(object);
+    namedPropertiesObjects.add(object);
     return object;
   }
 
@@ -130,7 +136,7 @@ export class GlobalPlatformObjectBinding {
     const value = Reflect.apply(steps, target, [property]);
     return {
       configurable: true,
-      enumerable: true,
+      enumerable: !properties.unenumerable,
       value: convertToJavaScript(
         value,
         properties.getter.returns,
@@ -155,7 +161,7 @@ export class GlobalPlatformObjectBinding {
     let prototype = Reflect.getPrototypeOf(global);
     while (prototype) {
       if (
-        !this.#namedPropertiesObjects.has(prototype) &&
+        !isNamedPropertiesObject(prototype) &&
         Reflect.getOwnPropertyDescriptor(prototype, property)
       ) return false;
       prototype = Reflect.getPrototypeOf(prototype);
@@ -184,14 +190,36 @@ export class GlobalPlatformObjectBinding {
     if (!steps) {
       throw new Error('Missing supported property names implementation');
     }
-    return { getter, steps };
+    return {
+      getter,
+      steps,
+      unenumerable: implementsExtendedAttribute(
+        interface_,
+        'LegacyUnenumerableNamedProperties',
+      ),
+    };
   }
 }
 
 type NamedProperties = {
   getter: OperationMember;
   steps: NamedPropertySteps;
+  unenumerable: boolean;
 };
+
+function implementsExtendedAttribute(
+  interface_: AssembledInterface,
+  name: string,
+): boolean {
+  let current: AssembledInterface | undefined = interface_;
+  while (current) {
+    if (current.definition.extendedAttributes?.some(
+      (attribute) => attribute.kind !== 'raw' && attribute.name === name,
+    )) return true;
+    current = current.parent;
+  }
+  return false;
+}
 
 function findNamedGetter(
   interface_: AssembledInterface,
