@@ -10,12 +10,12 @@ export default defineConfig({
   projects: [
     {
       name: 'selectlet',
-      testDir: 'test/selectlet/browser',
+      testDir: 'test/selectlet/scenarios',
       workers: 8,
     },
     {
       name: 'stylelet',
-      testDir: 'test/stylelet/browser',
+      testDir: 'test/stylelet/scenarios',
       workers: 8,
     },
     {

@@ -1,8 +1,8 @@
-# Selector browser harness (Playwright)
+# Selectlet scenarios
 
-Browser-based tests for `selectlet`, migrated from older selector suites and run under Playwright.
+Reusable selector scenarios, migrated from older selector suites and newer regression and WPT coverage.
 
-The harness compares `selectlet` against native DOM behavior in Chromium, Firefox, and WebKit. Tests run inside the page via `page.evaluate()`, which makes it possible to measure native browser results directly and compare them against `selectlet` under the same fixture and context.
+The Playwright runner compares Selectlet against native DOM behavior in Chromium, Firefox, and WebKit. The Browlet runner exercises the supported subset directly in Browlet; its remaining failures expose Browlet host behavior that has not been implemented yet.
 
 ## Install
 
@@ -17,24 +17,30 @@ npx playwright install
 
 ## Run
 
-Run the full browser harness:
+Run the Playwright oracle:
 
 ```sh
 npm run build
-npm run test:oracle:selectlet
+npm run test:selectlet:oracle
+```
+
+Run the same corpus through Browlet:
+
+```sh
+npm run test:selectlet:browlet
 ```
 
 Run only cases marked `fixme`:
 
 ```sh
-npm run test:oracle:selectlet:fixme
+npm run test:selectlet:oracle:fixme
 ```
 
 Run a subset by label, for example:
 
 ```sh
-npm run test:oracle:selectlet jquery
-npm run test:oracle:selectlet:fixme w3c
+npm run test:selectlet:oracle jquery
+npm run test:selectlet:oracle:fixme w3c
 ```
 
 For faster iteration, run a subset by label or mark a scenario/case `only`.
@@ -48,7 +54,7 @@ Tests are written as scenario collections and run through the shared harness.
 A typical test file looks like this:
 
 ```ts
-import { runScenarios } from '../dispatch';
+import { runScenarios } from '../../scenario/dispatch';
 
 runScenarios('jquery', 'normal', [
   {

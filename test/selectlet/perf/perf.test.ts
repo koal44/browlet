@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { runPerfScenarios } from './harness/perf-scenario';
 
 const htmlStandard = readFileSync(
-  'test/selectlet/browser/fixtures/slick/template-standard.html',
+  'test/selectlet/scenarios/fixtures/slick/template-standard.html',
   'utf8',
 );
 

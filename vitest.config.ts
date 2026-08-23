@@ -21,10 +21,10 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'domlet-host',
+          name: 'browlet-host',
           environment: 'node',
-          include: ['test/selectlet/browser/**/*.test.ts'],
-          setupFiles: ['./test/selectlet/domlet/harness/setup.ts'],
+          include: ['test/selectlet/scenarios/**/*.test.ts'],
+          setupFiles: ['./test/scenario/browlet/setup.ts'],
         },
       },
       {

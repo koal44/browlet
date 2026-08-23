@@ -10,7 +10,7 @@ export default defineConfig(
       'dist/**',
       'packages/*/dist/**',
       'scratch/**',
-      'test/selectlet/browser/fixtures/**',
+      'test/selectlet/scenarios/fixtures/**',
       'test/selectlet/perf/engines/**',
       'test/wpt/tests/**',
       'eslint.config.mjs',

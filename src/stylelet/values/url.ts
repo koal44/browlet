@@ -21,7 +21,7 @@ import type { TreeScope } from '../engine/tree-scope';
  * value parsing, while src(var(--x)) remains a function block that can support
  * later substitution. We retain src() even though the browser results recorded
  * by the "CSS.supports URL modifier oracle" and "CSSOM URL modifier oracle"
- * scenarios in test/stylelet/browser/oracle.test.ts show no current browser support for
+ * scenarios in test/stylelet/scenarios/oracle.test.ts show no current browser support for
  * it.
  */
 

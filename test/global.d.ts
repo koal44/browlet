@@ -6,7 +6,7 @@ import type {
 import type {
   Stylelet as _Stylelet,
 } from '../src/stylelet/stylelet';
-import type { PwHelpers } from './harness/browser/browser';
+import type { PwHelpers } from './scenario/playwright/page';
 import type { PerfHelpers } from './selectlet/perf/harness/perf-scenario';
 
 export {};

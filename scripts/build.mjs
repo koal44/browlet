@@ -6,22 +6,25 @@ import { rollup } from 'rollup';
 import dts from 'rollup-plugin-dts';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const packageNames = ['browlet', 'stylelet', 'selectlet'];
+const packageNames = ['selectlet', 'stylelet', 'browlet'];
 const browserGlobalNames = {
   selectlet: 'createSelectlet',
   stylelet: 'Stylelet',
 };
 
-// Pass package names to build a subset, for example:
+// Pass package names to build a subset; selected packages retain dependency order.
 // node scripts/build.mjs stylelet selectlet
 const requestedNames = process.argv.slice(2);
-const selectedNames = requestedNames.length === 0 ? packageNames : requestedNames;
 
-for (const name of selectedNames) {
+for (const name of requestedNames) {
   if (!packageNames.includes(name)) {
     throw new Error(`Unknown package '${name}'. Expected ${packageNames.join(', ')}`);
   }
 }
+
+const selectedNames = requestedNames.length === 0
+  ? packageNames
+  : packageNames.filter((name) => requestedNames.includes(name));
 
 for (const name of selectedNames) {
   await buildPackage(name);
