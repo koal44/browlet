@@ -6,7 +6,9 @@ import {
 import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import { withCSSStyleDeclaration } from './stubs/extensions';
 
 /*
@@ -256,9 +258,9 @@ export class CSSStyleDeclarationImpl
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throw new DOMException(
-      'The CSS declaration block is read-only.',
+    throwDOMException(
       domExceptionName.noModificationAllowed,
+      'The CSS declaration block is read-only.',
     );
   }
 }

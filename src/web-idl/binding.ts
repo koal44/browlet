@@ -1,3 +1,4 @@
+import { getDOMExceptionRequest } from '../shared/dom-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,
@@ -38,6 +39,7 @@ export class JavaScriptBinding {
   readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   readonly implementations: ImplementationRegistry;
   readonly platformObjects: PlatformObjectRegistry;
+  readonly realizeException: (value: unknown) => unknown;
   readonly realm: WebIDLRealmHost;
   readonly #collections: CollectionBinding;
   readonly #asyncIterables: AsynchronousIterableBinding;
@@ -62,6 +64,14 @@ export class JavaScriptBinding {
     this.implementations = implementations;
     this.realm = realm;
     this.platformObjects = platformObjects;
+    this.realizeException = (value) => {
+      const request = getDOMExceptionRequest(value);
+      if (!request) return value;
+      const DOMException_ = this.getInterfaceObject(
+        'DOMException',
+      ) as unknown as typeof DOMException;
+      return new DOMException_(request.message, request.name);
+    };
     this.#asyncIterables = new AsynchronousIterableBinding(
       this,
       implementations,

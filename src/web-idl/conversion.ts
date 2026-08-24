@@ -170,6 +170,7 @@ export type ConversionContext = {
   definitions: DefinitionAssembly;
   hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   platformObjects: PlatformObjectRegistry;
+  realizeException?: (value: unknown) => unknown;
   realm: WebIDLRealmHost;
 };
 
@@ -271,6 +272,7 @@ function convertJavaScriptValue(
         value,
         resolved.type.type,
         context.realm,
+        context.realizeException,
       );
     case 'async-sequence':
       return convertJavaScriptValueToAsyncSequence(

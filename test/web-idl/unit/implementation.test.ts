@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
+import { throwDOMException } from '../../../src/shared/dom-exception';
 import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, idlType, iterable, op,
   reference, stringifier,
@@ -284,6 +286,57 @@ describe('Web IDL implementation registration', () => {
     expect(object).toBeInstanceOf(ChildLifecycle);
     expect(lifecycle).toEqual(['parent', 'child']);
   });
+
+  it('materializes only requested DOMExceptions in the binding realm', () => {
+    const arbitrary = new DOMException('arbitrary', 'AbortError');
+    const interfaceIDL = defineInterface({
+      binding: bind(ExceptionSourceImpl),
+      exposed: ['Window'],
+      members: [
+        ctor([], bind({ invoke() {} })),
+        op('requested', idlType.undefined, [], bind({
+          invoke() {
+            throwDOMException('InvalidStateError', 'requested');
+          },
+        }, { static: true })),
+        op('arbitrary', idlType.undefined, [], bind({
+          invoke() { throw arbitrary; },
+        }, { static: true })),
+      ],
+      name: 'ExceptionSource',
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+    registerInterfaceBindings(binding, webIDLCommonDefinitions);
+    registerInterfaceBindings(binding, [interfaceIDL]);
+    binding.install();
+    const ExceptionSource = Reflect.get(realm.global, 'ExceptionSource') as {
+      new(): object;
+      arbitrary(): void;
+      requested(): void;
+    };
+    const DOMException_ = Reflect.get(realm.global, 'DOMException') as
+      typeof DOMException;
+
+    const requested = getThrown(() => ExceptionSource.requested());
+    expect(requested).toBeInstanceOf(DOMException_);
+    expect(requested).not.toBeInstanceOf(DOMException);
+    expect(requested).toMatchObject({
+      message: 'requested',
+      name: 'InvalidStateError',
+    });
+    const creation = getThrown(() => new ExceptionSource());
+    expect(creation).toBeInstanceOf(DOMException_);
+    expect(creation).toMatchObject({
+      message: 'creation requested',
+      name: 'NotSupportedError',
+    });
+    expect(getThrown(() => ExceptionSource.arbitrary())).toBe(arbitrary);
+  });
 });
 
 type InterfaceConstructor = new (...argumentsList: unknown[]) => object;
@@ -329,3 +382,18 @@ class DictionaryAdapterImpl {}
 class ParentLifecycleImpl {}
 
 class ChildLifecycleImpl extends ParentLifecycleImpl {}
+
+class ExceptionSourceImpl {
+  constructor() {
+    throwDOMException('NotSupportedError', 'creation requested');
+  }
+}
+
+function getThrown(callback: () => unknown): unknown {
+  try {
+    callback();
+  } catch (exception) {
+    return exception;
+  }
+  throw new Error('Expected callback to throw');
+}

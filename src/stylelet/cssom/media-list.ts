@@ -2,7 +2,9 @@ import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,
 } from '../values/media-query';
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import type { CSSOMString } from './string';
 
 /*
@@ -63,9 +65,9 @@ export class MediaListImpl implements MediaList {
     this.#queries = this.#queries.filter((item) => !mediaQueriesEqual(item, query));
 
     if (this.#queries.length === length) {
-      throw new DOMException(
-        `"${medium}" was not found in the media list.`,
+      throwDOMException(
         domExceptionName.notFound,
+        `"${medium}" was not found in the media list.`,
       );
     }
 

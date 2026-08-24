@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
+import { createDOMException } from '../../../src/shared/dom-exception';
 import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, promise as promiseType,
   type AttributeMember, type OperationMember,
 } from '../../../src/web-idl/adapter/definition';
+import { registerInterfaceBindings } from '../../../src/web-idl/adapter/projection';
 import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
-import { createResolvedPromise } from '../../../src/web-idl/promise';
+import {
+  createRejectedPromise, createResolvedPromise,
+} from '../../../src/web-idl/promise';
 
 describe('Web IDL promise member binding', () => {
   it('projects promise-valued attributes and operations into their realm', async () => {
@@ -95,6 +100,55 @@ describe('Web IDL promise member binding', () => {
 
     expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
     await expect(promise).rejects.toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it('realizes only requested DOMException rejections in the operation realm', async () => {
+    const reject = operation('reject', promiseType(idlType.undefined));
+    const rejectArbitrary = operation(
+      'rejectArbitrary',
+      promiseType(idlType.undefined),
+    );
+    const interface_ = defineInterface({
+      exposed: ['Window'],
+      members: [reject, rejectArbitrary],
+      name: 'PromiseExceptionSource',
+    });
+    const realm = new Realm();
+    const implementations = new ImplementationRegistry();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([...webIDLCommonDefinitions, interface_]),
+      realm,
+      new PlatformObjectRegistry(),
+      implementations,
+    );
+    registerInterfaceBindings(binding, webIDLCommonDefinitions);
+    implementations.setOperationSteps(reject, () => createRejectedPromise(
+      createDOMException('NotAllowedError', 'requested rejection'),
+      idlType.undefined,
+      binding,
+    ));
+    const arbitraryReason = { arbitrary: true };
+    implementations.setOperationSteps(
+      rejectArbitrary,
+      () => createRejectedPromise(
+        arbitraryReason,
+        idlType.undefined,
+        binding,
+      ),
+    );
+    const object = binding.createPlatformObject('PromiseExceptionSource');
+    const promise = call(object, 'reject') as Promise<unknown>;
+    const DOMException_ = binding.getInterfaceObject(
+      'DOMException',
+    ) as unknown as typeof DOMException;
+
+    expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    await expect(promise).rejects.toMatchObject({
+      message: 'requested rejection',
+      name: 'NotAllowedError',
+    });
+    await expect(promise).rejects.toBeInstanceOf(DOMException_);
+    await expect(call(object, 'rejectArbitrary')).rejects.toBe(arbitraryReason);
   });
 });
 

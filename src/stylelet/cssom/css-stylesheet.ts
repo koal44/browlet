@@ -6,7 +6,9 @@ import {
   parseRule, type SyntaxRule,
 } from '../syntax/parser';
 import type { Snapshot } from '../snapshot';
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  createDOMException, domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import { CSSRuleListImpl } from './rule-list';
 import { SelectletCSSStyleRule } from './rules';
 import { StyleSheetImpl } from './stylesheet';
@@ -121,26 +123,26 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index > this.#rules.length) {
-      throw new DOMException(
-        `Index ${index} exceeds the rule-list length.`,
+      throwDOMException(
         domExceptionName.indexSize,
+        `Index ${index} exceeds the rule-list length.`,
       );
     }
 
     const parsedRule = parseRule(rule);
     if (parsedRule === null || isImportRule(parsedRule)) {
-      throw new DOMException(
-        `Failed to parse the rule: ${rule}`,
+      throwDOMException(
         domExceptionName.syntax,
+        `Failed to parse the rule: ${rule}`,
       );
     }
 
     const rulePair = createCSSRule(parsedRule);
     if (rulePair === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
-      throw new DOMException(
-        `The parsed rule is not supported: ${rule}`,
+      throwDOMException(
         domExceptionName.notSupported,
+        `The parsed rule is not supported: ${rule}`,
       );
     }
 
@@ -154,9 +156,9 @@ export class CSSStyleSheetImpl
     this.assertModificationAllowed();
 
     if (index >= this.#rules.length) {
-      throw new DOMException(
-        `Index ${index} does not identify a rule.`,
+      throwDOMException(
         domExceptionName.indexSize,
+        `Index ${index} does not identify a rule.`,
       );
     }
 
@@ -166,9 +168,9 @@ export class CSSStyleSheetImpl
 
   replace(text: string): Promise<CSSStyleSheet> {
     if (!this.#constructed || this.#disallowModification) {
-      return Promise.reject(new DOMException(
-        'This stylesheet cannot be replaced.',
+      return Promise.reject(createDOMException(
         domExceptionName.notAllowed,
+        'This stylesheet cannot be replaced.',
       ));
     }
 
@@ -184,9 +186,9 @@ export class CSSStyleSheetImpl
 
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
-      throw new DOMException(
-        'This stylesheet cannot be replaced.',
+      throwDOMException(
         domExceptionName.notAllowed,
+        'This stylesheet cannot be replaced.',
       );
     }
 
@@ -266,18 +268,18 @@ export class CSSStyleSheetImpl
 
   private assertOriginClean(): void {
     if (!this.#originClean) {
-      throw new DOMException(
-        'The stylesheet is not origin-clean.',
+      throwDOMException(
         domExceptionName.security,
+        'The stylesheet is not origin-clean.',
       );
     }
   }
 
   private assertModificationAllowed(): void {
     if (this.#disallowModification) {
-      throw new DOMException(
-        'The stylesheet cannot currently be modified.',
+      throwDOMException(
         domExceptionName.notAllowed,
+        'The stylesheet cannot currently be modified.',
       );
     }
   }

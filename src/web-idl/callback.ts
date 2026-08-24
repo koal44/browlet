@@ -272,6 +272,7 @@ function withCallbackRealm(
     definitions: context.definitions,
     hostDefinedInterfaces: context.hostDefinedInterfaces,
     platformObjects: context.platformObjects,
+    realizeException: context.realizeException,
     realm: value.realm,
   };
 }

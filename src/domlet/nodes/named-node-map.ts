@@ -1,4 +1,6 @@
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
 
@@ -61,7 +63,7 @@ export class NamedNodeMapImpl
 
   #remove(matches: (attribute: AttrImpl) => boolean): AttrImpl {
     const index = this.findIndex(matches);
-    if (index < 0) throw new DOMException('', domExceptionName.notFound);
+    if (index < 0) throwDOMException(domExceptionName.notFound);
     const attribute = this.splice(index, 1)[0]!;
     AttrImpl.setOwnerElement(attribute, null);
     return attribute;
@@ -69,13 +71,13 @@ export class NamedNodeMapImpl
 
   #set(attribute: Attr): AttrImpl | null {
     if (!AttrImpl.is(attribute)) {
-      throw new DOMException('', domExceptionName.wrongDocument);
+      throwDOMException(domExceptionName.wrongDocument);
     }
     if (
       attribute.ownerElement !== null &&
       attribute.ownerElement !== this.#element
     ) {
-      throw new DOMException('', domExceptionName.inUseAttribute);
+      throwDOMException(domExceptionName.inUseAttribute);
     }
 
     const previous = attribute.namespaceURI === null

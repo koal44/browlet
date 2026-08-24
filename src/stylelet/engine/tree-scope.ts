@@ -1,6 +1,8 @@
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
 import {
   createObservableArray, type ObservableArrayHandle,
@@ -23,9 +25,9 @@ export class TreeScope {
       convert: toCSSStyleSheet,
       set(styleSheet) {
         if (styleSheet.__isConstructedFor(document)) return;
-        throw new DOMException(
-          'The stylesheet was not constructed for this document.',
+        throwDOMException(
           domExceptionName.notAllowed,
+          'The stylesheet was not constructed for this document.',
         );
       },
     });

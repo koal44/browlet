@@ -4,6 +4,7 @@ import type { WebIDLRealmHost } from './javascript-realm';
 export function createPromiseValue(
   type: WebIDLType,
   realm: WebIDLRealmHost,
+  realizeException?: ExceptionRealizer,
 ): IDLPromise {
   let resolve: PromiseSettlement | undefined;
   let reject: PromiseSettlement | undefined;
@@ -14,11 +15,14 @@ export function createPromiseValue(
   if (!resolve || !reject) {
     throw new Error('Promise constructor did not initialize its capability');
   }
+  const reject_ = reject;
   return {
     [promiseValueBrand]: true,
     promise,
     realm,
-    reject,
+    reject: realizeException
+      ? (reason) => reject_(realizeException(reason))
+      : reject_,
     resolve,
     type,
   };
@@ -28,8 +32,9 @@ export function convertJavaScriptValueToPromise(
   value: unknown,
   type: WebIDLType,
   realm: WebIDLRealmHost,
+  realizeException?: ExceptionRealizer,
 ): IDLPromise {
-  const promise = createPromiseValue(type, realm);
+  const promise = createPromiseValue(type, realm, realizeException);
   promise.resolve(value);
   return promise;
 }
@@ -57,5 +62,7 @@ export type IDLPromise = {
 };
 
 type PromiseSettlement = (value?: unknown) => void;
+
+type ExceptionRealizer = (value: unknown) => unknown;
 
 const promiseValueBrand: unique symbol = Symbol('Web IDL promise value');

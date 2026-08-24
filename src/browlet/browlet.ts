@@ -4,7 +4,7 @@ import type { ElementImpl } from '../domlet/nodes/element';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
 import { parseURL } from '../url/url';
-import { BrowletBindings } from './bindings/browlet';
+import { BrowletBindings } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
 } from './document-lifecycle';

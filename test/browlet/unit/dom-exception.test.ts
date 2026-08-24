@@ -198,7 +198,7 @@ describe('Browlet DOMException binding', () => {
     expect((exception as DOMException).name).toBe('NotFoundError');
   });
 
-  it('normalizes declaratively bound operation exceptions', () => {
+  it('realizes declaratively bound operation exceptions', () => {
     const first = createBrowlet();
     const second = createBrowlet();
     const FirstEventTarget = getConstructor<typeof EventTarget>(

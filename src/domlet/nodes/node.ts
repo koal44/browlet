@@ -1,4 +1,6 @@
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import {
   type EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';
@@ -281,7 +283,7 @@ export abstract class NodeImpl
 
   appendChild<T extends Node>(node: T): T {
     if (!NodeImpl.is(node)) {
-      throw new DOMException('', domExceptionName.hierarchyRequest);
+      throwDOMException(domExceptionName.hierarchyRequest);
     }
 
     super.appendTreeChild(node);
@@ -290,7 +292,7 @@ export abstract class NodeImpl
 
   insertBefore<T extends Node>(node: T, child: Node | null): T {
     if (!NodeImpl.is(node)) {
-      throw new DOMException('', domExceptionName.hierarchyRequest);
+      throwDOMException(domExceptionName.hierarchyRequest);
     }
 
     if (child === null) {
@@ -299,7 +301,7 @@ export abstract class NodeImpl
     }
 
     if (!NodeImpl.is(child) || NodeImpl.getParentNode(child) !== this) {
-      throw new DOMException('', domExceptionName.notFound);
+      throwDOMException(domExceptionName.notFound);
     }
 
     TreeNode.insertSiblingBefore<NodeImpl>(

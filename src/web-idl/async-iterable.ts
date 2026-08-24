@@ -283,7 +283,7 @@ export class AsynchronousIterableBinding {
       return state.ongoing;
     }
 
-    const afterOngoing = createPromiseValue(idlType.any, this.#context.realm);
+    const afterOngoing = this.#promiseCapability();
     const onSettled = this.#context.realm.createFunction(
       () => {
         try {
@@ -308,7 +308,7 @@ export class AsynchronousIterableBinding {
     fulfilled: (value: unknown) => unknown,
     rejected?: (reason: unknown) => unknown,
   ): IDLPromise {
-    const result = createPromiseValue(idlType.any, this.#context.realm);
+    const result = this.#promiseCapability();
     const onFulfilled = this.#context.realm.createFunction(
       (_thisArgument, [value]) => {
         try {
@@ -440,15 +440,23 @@ export class AsynchronousIterableBinding {
   }
 
   #resolvedPromise(value: unknown): IDLPromise {
-    const promise = createPromiseValue(idlType.any, this.#context.realm);
+    const promise = this.#promiseCapability();
     promise.resolve(value);
     return promise;
   }
 
   #rejectedCapability(reason: unknown): IDLPromise {
-    const promise = createPromiseValue(idlType.any, this.#context.realm);
+    const promise = this.#promiseCapability();
     promise.reject(reason);
     return promise;
+  }
+
+  #promiseCapability(): IDLPromise {
+    return createPromiseValue(
+      idlType.any,
+      this.#context.realm,
+      this.#context.realizeException,
+    );
   }
 
   #rejectedPromise(reason: unknown): Promise<unknown> {

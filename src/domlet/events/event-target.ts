@@ -1,4 +1,6 @@
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import {
   isCallbackInterfaceValue, type CallbackInterfaceValue,
 } from '../../web-idl/callback-value';
@@ -89,7 +91,7 @@ export class EventTargetImpl implements EventTarget
     }
 
     if (EventImpl.isDispatching(event) || !EventImpl.isInitialized(event)) {
-      throw new DOMException('', domExceptionName.invalidState);
+      throwDOMException(domExceptionName.invalidState);
     }
 
     EventImpl.setTrusted(event, false);

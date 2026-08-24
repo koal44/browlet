@@ -274,5 +274,3 @@ export type ObservableArraySteps = {
 export type ValuePairsSteps = (
   this: object,
 ) => readonly ValuePair[];
-
-export type ExceptionNormalizer = (exception: unknown) => unknown;

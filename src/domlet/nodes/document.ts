@@ -7,7 +7,9 @@ import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
 import { isValidAttributeLocalName } from '../algorithms/name-validation';
 import { asciiLower } from '../../shared/css';
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   definePartialInterface, dictMember, emptyDictionary, idlType, nullable, op,
@@ -315,9 +317,9 @@ export class DocumentImpl
 
   createAttribute(localName: string): AttrImpl {
     if (!isValidAttributeLocalName(localName)) {
-      throw new DOMException(
-        `Invalid attribute local name ${JSON.stringify(localName)}`,
+      throwDOMException(
         domExceptionName.invalidCharacter,
+        `Invalid attribute local name ${JSON.stringify(localName)}`,
       );
     }
     if (this.#type === 'html') localName = asciiLower(localName);

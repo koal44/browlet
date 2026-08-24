@@ -11,7 +11,7 @@ export function createPromise(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromise {
-  return createPromiseValue(type, context.realm);
+  return createPromiseValue(type, context.realm, context.realizeException);
 }
 
 export function createResolvedPromise(
@@ -61,7 +61,7 @@ export function reactToPromise(
   context: ConversionContext,
 ): IDLPromise {
   const reactionContext = withPromiseRealm(context, promise);
-  const resultPromise = createPromiseValue(resultType, promise.realm);
+  const resultPromise = createPromise(resultType, reactionContext);
   const onFulfilled = promise.realm.createFunction(
     (_thisArgument, [value]) => {
       try {
@@ -224,6 +224,7 @@ function withPromiseRealm(
     definitions: context.definitions,
     hostDefinedInterfaces: context.hostDefinedInterfaces,
     platformObjects: context.platformObjects,
+    realizeException: context.realizeException,
     realm: promise.realm,
   };
 }

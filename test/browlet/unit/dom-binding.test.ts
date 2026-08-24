@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { BrowletBindings } from '../../../src/browlet/bindings/browlet';
+import { BrowletBindings } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { Realm } from '../../../src/browlet/realm';
 

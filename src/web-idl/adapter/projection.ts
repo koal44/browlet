@@ -4,9 +4,9 @@ import type {
   AttributeMember, Definition, OperationMember,
 } from './definition';
 import type {
-  AttributeSteps, ConstructorSteps, ExceptionNormalizer,
-  ImplementationConstructor, ImplementationRegistry, OperationSteps,
-  StringificationBehavior, ValuePairsSteps,
+  AttributeSteps, ConstructorSteps, ImplementationConstructor,
+  ImplementationRegistry, OperationSteps, StringificationBehavior,
+  ValuePairsSteps,
 } from './registry';
 import type { ValuePair } from '../iterable';
 import type { WebIDLRealmHost } from '../javascript-realm';
@@ -215,7 +215,6 @@ export function createPlatformObjectAdapter(
 export function registerInterfaceBindings(
   binding: JavaScriptBinding,
   definitions: readonly Definition[],
-  options: InterfaceBindingRegistrationOptions = {},
 ): void {
   const objects = createPlatformObjectAdapter(binding);
   for (const definition of definitions) {
@@ -232,27 +231,23 @@ export function registerInterfaceBindings(
       realm: binding.realm,
     };
     registerDefinedInterface(
+      binding,
       binding.implementations,
       interface_,
       definition.binding,
       context,
-      options.normalizeException ?? identity,
     );
   }
 }
 
-export type InterfaceBindingRegistrationOptions = {
-  normalizeException?: ExceptionNormalizer;
-};
-
 function registerDefinedInterface(
+  javaScriptBinding: JavaScriptBinding,
   registry: ImplementationRegistry,
   interface_: AssembledInterface,
-  binding: InterfaceBindingDefinition,
+  interfaceBinding: InterfaceBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
 ): void {
-  const implementation = binding.implementation;
+  const implementation = interfaceBinding.implementation;
   if (implementation) {
     registry.setInterfaceForImplementation(implementation, interface_);
   }
@@ -266,7 +261,7 @@ function registerDefinedInterface(
             member,
             member.binding,
             context,
-            normalizeException,
+            javaScriptBinding,
           );
         } else {
           if (!implementation) {
@@ -276,7 +271,7 @@ function registerDefinedInterface(
             registry,
             member,
             member.static ? implementation : implementation.prototype,
-            normalizeException,
+            javaScriptBinding,
           );
         }
         break;
@@ -287,7 +282,7 @@ function registerDefinedInterface(
             createDefinedConstructorSteps(
               member.binding,
               context,
-              normalizeException,
+              javaScriptBinding,
             ),
           );
         } else if (!implementation) {
@@ -301,7 +296,7 @@ function registerDefinedInterface(
             createDefinedOperationSteps(
               member.binding,
               context,
-              normalizeException,
+              javaScriptBinding,
             ),
           );
           const getSupportedPropertyNames =
@@ -313,7 +308,7 @@ function registerDefinedInterface(
                   getSupportedPropertyNames,
                   this,
                   [context],
-                  normalizeException,
+                  javaScriptBinding,
                 );
               },
             });
@@ -326,7 +321,7 @@ function registerDefinedInterface(
             registry,
             member,
             member.static ? implementation : implementation.prototype,
-            normalizeException,
+            javaScriptBinding,
           );
         }
         break;
@@ -337,7 +332,7 @@ function registerDefinedInterface(
             createDefinedValuePairsSteps(
               member.binding,
               context,
-              normalizeException,
+              javaScriptBinding,
             ),
           );
         } else if (!implementation) {
@@ -351,7 +346,7 @@ function registerDefinedInterface(
             createDefinedStringifierSteps(
               member.binding,
               context,
-              normalizeException,
+              javaScriptBinding,
             ),
           );
         } else if (!implementation) {
@@ -361,19 +356,25 @@ function registerDefinedInterface(
     }
   }
 
-  const create = binding.create;
+  const create = interfaceBinding.create;
   if (create) {
     registry.setObjectCreationSteps(
       interface_.definition,
-      (newTarget) => create(context, newTarget),
+      (newTarget) => callImplementation(
+        create,
+        undefined,
+        [context, newTarget],
+        javaScriptBinding,
+      ),
     );
   } else if (implementation) {
     registry.setObjectCreationSteps(
       interface_.definition,
-      (newTarget) => createDefaultImplementationObject(
-        interface_,
-        implementation,
-        newTarget,
+      (newTarget) => callImplementation(
+        createDefaultImplementationObject,
+        undefined,
+        [interface_, implementation, newTarget],
+        javaScriptBinding,
       ),
     );
   } else {
@@ -381,10 +382,16 @@ function registerDefinedInterface(
       `Web IDL ${interface_.definition.name} has no object creation binding`,
     );
   }
-  if (binding.initialize) {
+  const initialize = interfaceBinding.initialize;
+  if (initialize) {
     registry.setObjectInitializationSteps(
       interface_.definition,
-      (value) => binding.initialize?.(context, value),
+      (value) => callImplementation(
+        initialize,
+        undefined,
+        [context, value],
+        javaScriptBinding,
+      ),
     );
   }
 }
@@ -420,7 +427,7 @@ function registerDefinedAttribute(
   member: AttributeMember,
   binding: AttributeBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): void {
   const steps: AttributeSteps = {
     get() {
@@ -433,7 +440,7 @@ function registerDefinedAttribute(
         binding.get,
         this,
         [context],
-        normalizeException,
+        javaScriptBinding,
       );
     },
   };
@@ -444,7 +451,7 @@ function registerDefinedAttribute(
         set,
         this,
         [context, toImplementationValue(value)],
-        normalizeException,
+        javaScriptBinding,
       );
     };
   }
@@ -454,14 +461,14 @@ function registerDefinedAttribute(
 function createDefinedConstructorSteps(
   binding: ConstructorBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): ConstructorSteps {
   return function(...values) {
     callImplementation(
       binding.invoke,
       this,
       [context, ...values.map(toImplementationValue)],
-      normalizeException,
+      javaScriptBinding,
     );
   };
 }
@@ -469,14 +476,14 @@ function createDefinedConstructorSteps(
 function createDefinedOperationSteps(
   binding: OperationBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): OperationSteps {
   return function(...values) {
     return callImplementation(
       binding.invoke,
       this,
       [context, ...values.map(toImplementationValue)],
-      normalizeException,
+      javaScriptBinding,
     );
   };
 }
@@ -484,14 +491,14 @@ function createDefinedOperationSteps(
 function createDefinedStringifierSteps(
   binding: StringifierBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): StringificationBehavior {
   return function() {
     return callImplementation(
       binding.invoke,
       this,
       [context],
-      normalizeException,
+      javaScriptBinding,
     );
   };
 }
@@ -499,14 +506,14 @@ function createDefinedStringifierSteps(
 function createDefinedValuePairsSteps(
   binding: IterableBindingDefinition,
   context: InterfaceBindingContext,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): ValuePairsSteps {
   return function() {
     return callImplementation(
       binding.invoke,
       this,
       [context],
-      normalizeException,
+      javaScriptBinding,
     );
   };
 }
@@ -515,7 +522,7 @@ function registerAttribute(
   registry: ImplementationRegistry,
   member: AttributeMember,
   target: object,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): void {
   const descriptor = findDescriptor(target, member.name);
   if (!descriptor?.get) {
@@ -529,7 +536,7 @@ function registerAttribute(
     ((this: object | null, value: unknown) => void) | undefined;
   registry.setAttributeSteps(member, {
     get() {
-      return callImplementation(get, this, [], normalizeException);
+      return callImplementation(get, this, [], javaScriptBinding);
     },
     ...(set && !member.readonly
       ? {
@@ -538,7 +545,7 @@ function registerAttribute(
             set,
             this,
             [toImplementationValue(value)],
-            normalizeException,
+            javaScriptBinding,
           );
         },
       }
@@ -550,7 +557,7 @@ function registerOperation(
   registry: ImplementationRegistry,
   member: OperationMember,
   target: object,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): void {
   const value: unknown = findDescriptor(target, member.name ?? '')?.value;
   if (typeof value !== 'function') {
@@ -562,20 +569,20 @@ function registerOperation(
 
   registry.setOperationSteps(
     member,
-    createOperationSteps(method, normalizeException),
+    createOperationSteps(method, javaScriptBinding),
   );
 }
 
 function createOperationSteps(
   implementation: OperationSteps,
-  normalizeException: ExceptionNormalizer,
+  javaScriptBinding: JavaScriptBinding,
 ): OperationSteps {
   return function(...values) {
     return callImplementation(
       implementation,
       this,
       values.map(toImplementationValue),
-      normalizeException,
+      javaScriptBinding,
     );
   };
 }
@@ -584,12 +591,12 @@ function callImplementation<This, Values extends unknown[], Result>(
   implementation: (this: This, ...values: Values) => Result,
   thisArgument: This,
   values: Values,
-  normalizeException: ExceptionNormalizer,
+  binding: JavaScriptBinding,
 ): Result {
   try {
     return Reflect.apply(implementation, thisArgument, values);
   } catch (exception) {
-    throw normalizeException(exception);
+    throw binding.realizeException(exception);
   }
 }
 
@@ -626,8 +633,4 @@ function isMemberBindingDefinition(
     'set' in definition ||
     'invoke' in definition ||
     'getSupportedPropertyNames' in definition;
-}
-
-function identity<T>(value: T): T {
-  return value;
 }

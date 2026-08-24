@@ -71,3 +71,50 @@ export const domExceptionCode = {
   notAllowed: 0,
   optOut: 0,
 } as const satisfies Record<keyof typeof domExceptionName, number>;
+
+export type DOMExceptionName = typeof domExceptionName[
+  keyof typeof domExceptionName
+];
+
+type DOMExceptionRequest = {
+  message: string;
+  name: DOMExceptionName;
+};
+
+/*
+ * Keep one request table across specification implementations and every realm
+ * binding in this runtime. A per-realm table would break borrowed cross-realm
+ * calls; moving ownership to a host would require injecting that same table
+ * into every implementation package that can request a DOMException.
+ */
+const domExceptionRequests = new WeakMap<object, DOMExceptionRequest>();
+
+/*
+ * Keep specification-requested DOMExceptions distinguishable from arbitrary
+ * exceptions thrown by implementation or author code. An unbound caller still
+ * receives a native DOMException; a Web IDL binding can use the invisible
+ * request record to recreate it in the function's current realm.
+ */
+export function throwDOMException(
+  name: DOMExceptionName,
+  message = '',
+): never {
+  throw createDOMException(name, message);
+}
+
+export function createDOMException(
+  name: DOMExceptionName,
+  message = '',
+): DOMException {
+  const exception = new DOMException(message, name);
+  domExceptionRequests.set(exception, { message, name });
+  return exception;
+}
+
+export function getDOMExceptionRequest(
+  value: unknown,
+): DOMExceptionRequest | undefined {
+  return typeof value === 'object' && value !== null
+    ? domExceptionRequests.get(value)
+    : undefined;
+}

@@ -2,7 +2,7 @@ import type {
   AgentCluster, AgentClusterKey, CrossOriginIsolationMode,
 } from './agents';
 import { obtainSimilarOriginWindowAgent } from './agents';
-import { BrowletBindings } from './bindings/browlet';
+import { BrowletBindings } from './bindings';
 import { CustomElementRegistryImpl } from './custom-element-registry';
 import { setupWindowEnvironmentSettingsObject } from './environment';
 import { serializeSite } from './origin';

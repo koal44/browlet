@@ -1,6 +1,8 @@
 // DOM §1.4 Name validation
 
-import { domExceptionName } from '../../shared/dom-exception';
+import {
+  domExceptionName, throwDOMException,
+} from '../../shared/dom-exception';
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../shared/namespaces';
@@ -42,9 +44,9 @@ export function validateAndExtract(
     localName = qualifiedName.slice(colon + 1);
 
     if (!isValidNamespacePrefix(prefix)) {
-      throw new DOMException(
-        `Invalid namespace prefix ${JSON.stringify(prefix)}`,
+      throwDOMException(
         domExceptionName.invalidCharacter,
+        `Invalid namespace prefix ${JSON.stringify(prefix)}`,
       );
     }
   }
@@ -54,9 +56,9 @@ export function validateAndExtract(
     : isValidElementLocalName(localName);
 
   if (!validLocalName) {
-    throw new DOMException(
-      `Invalid ${context} local name ${JSON.stringify(localName)}`,
+    throwDOMException(
       domExceptionName.invalidCharacter,
+      `Invalid ${context} local name ${JSON.stringify(localName)}`,
     );
   }
 
@@ -90,8 +92,8 @@ function throwNamespaceError(
   qualifiedName: string,
   namespace: string | null,
 ): never {
-  throw new DOMException(
-    `Qualified name ${JSON.stringify(qualifiedName)} is not valid for namespace ${JSON.stringify(namespace)}`,
+  throwDOMException(
     domExceptionName.namespace,
+    `Qualified name ${JSON.stringify(qualifiedName)} is not valid for namespace ${JSON.stringify(namespace)}`,
   );
 }
