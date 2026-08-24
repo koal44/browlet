@@ -1,7 +1,7 @@
 import {
   annotated, arg, defineCallbackFunction, defineTypedef, idlType, reference,
   union, xattr,
-} from './adapter/definition';
+} from './declaration/definition';
 import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';

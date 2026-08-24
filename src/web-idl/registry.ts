@@ -3,9 +3,9 @@ import type {
   AsyncIterableMember, AttributeMember, ConstructorMember,
   InterfaceDefinition, IterableMember, NamedArgumentsExtendedAttribute,
   OperationMember, StringifierMember,
-} from './definition';
-import type { ValuePair } from '../iterable';
-import type { IDLPromise } from '../promise-value';
+} from './declaration/definition';
+import type { ValuePair } from './iterable';
+import type { IDLPromise } from './promise-value';
 
 export type ImplementationConstructor<T extends object = object> = {
   readonly prototype: T;

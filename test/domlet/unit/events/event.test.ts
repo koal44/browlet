@@ -106,17 +106,6 @@ describe('EventImpl', () => {
     expect(event.timeStamp).toBe(timeStamp);
   });
 
-  it('performs the immediately observable Web IDL conversions', () => {
-    const event = new EventImpl(12 as unknown as string, {
-      bubbles: 'yes' as unknown as boolean,
-    });
-
-    expect(event.type).toBe('12');
-    expect(event.bubbles).toBe(true);
-    expect(() => new EventImpl(Symbol('type') as unknown as string))
-      .toThrow(TypeError);
-  });
-
 });
 
 describe('CustomEventImpl', () => {

@@ -1,18 +1,14 @@
 import { domIDLDefinitions } from '../domlet/web-idl';
-import type { DOMNodeFactory } from '../domlet/nodes/document';
 import { urlIDLDefinitions } from '../url/api';
-import { assembleDefinitions } from '../web-idl/adapter/assembly';
-import { JavaScriptBinding } from '../web-idl/binding';
-import { webIDLCommonDefinitions } from '../web-idl/common-definitions';
-import type { HostDefinedInterface } from '../web-idl/conversion';
 import {
-  createPlatformObjectAdapter, registerInterfaceBindings,
-} from '../web-idl/adapter/projection';
-import { ImplementationRegistry } from '../web-idl/adapter/registry';
-import { sharedPlatformObjects } from '../web-idl/platform-object';
-import type { Realm } from './realm';
+  registerInterfaceBindings, type InterfaceBindingDomain,
+  type RegisteredRealmInterfaceBindings,
+} from '../web-idl/index';
+import { Realm } from './realm';
 import type { WindowImpl } from './window';
-import { isWindowProxy } from './window-proxy';
+import {
+  isWindowProxy, setWindowProxyWindow, type WindowProxy,
+} from './window-proxy';
 import { browletIDLDefinitions } from './web-idl';
 
 /*
@@ -22,56 +18,68 @@ import { browletIDLDefinitions } from './web-idl';
  * installed on its Window environment.
  */
 export class BrowletBindings {
-  readonly nodeFactory: DOMNodeFactory;
-  readonly #binding: JavaScriptBinding;
+  readonly #domain: InterfaceBindingDomain;
 
-  constructor(realm: Realm) {
-    if (bindingsByRealm.has(realm)) {
-      throw new Error('A Realm can have only one Browlet binding');
-    }
-
-    const implementations = new ImplementationRegistry();
-    this.#binding = new JavaScriptBinding(
+  constructor() {
+    this.#domain = registerInterfaceBindings(
       browletDefinitions,
-      realm,
-      sharedPlatformObjects,
-      implementations,
-      hostDefinedInterfaces,
+      { hostDefinedInterfaces },
     );
-    const objects = createPlatformObjectAdapter(this.#binding);
-    this.nodeFactory = objects;
-    registerInterfaceBindings(this.#binding, webIDLCommonDefinitions);
-    registerInterfaceBindings(this.#binding, domIDLDefinitions);
-    registerInterfaceBindings(this.#binding, urlIDLDefinitions);
-    registerInterfaceBindings(this.#binding, browletIDLDefinitions);
-    bindingsByRealm.set(realm, this);
   }
 
-  static forRealm(realm: Realm): BrowletBindings {
-    const bindings = bindingsByRealm.get(realm);
+  register(realm: Realm): RegisteredRealmInterfaceBindings {
+    return this.#domain.register(realm);
+  }
+
+  forRealm(realm: Realm): RegisteredRealmInterfaceBindings {
+    const bindings = this.#domain.forRealm(realm);
     if (!bindings) throw new Error('Realm has no Browlet binding');
     return bindings;
   }
 
-  install(target: object): void {
-    this.#binding.install(target);
+  retargetWindowProxy(
+    windowProxy: WindowProxy,
+    window: WindowImpl,
+  ): void {
+    const windowObject = this.#domain.getPlatformObject(window);
+    if (!windowObject) throw new Error('Window has not been projected');
+    setWindowProxyWindow(
+      windowProxy,
+      window,
+      windowObject as Window,
+    );
   }
 
-  projectWindow(window: WindowImpl): Window {
-    return this.#binding.projectGlobalObject(window, 'Window').object as Window;
+  getRelevantRealm(value: object): Realm {
+    const platformRealm = this.#domain.getRealm(value);
+    if (platformRealm instanceof Realm) return platformRealm;
+
+    const realm = Realm.getAssociatedRealm(value);
+    if (!realm) throw new Error('Object has no relevant Realm');
+    return realm;
   }
 }
 
-const bindingsByRealm = new WeakMap<Realm, BrowletBindings>();
+export function projectWindow(
+  bindings: RegisteredRealmInterfaceBindings,
+  window: WindowImpl,
+): Window {
+  return bindings.projectGlobalObject(window, 'Window') as Window;
+}
 
-const hostDefinedInterfaces: HostDefinedInterface[] = [{
+export function getRelevantRealm(value: object): Realm {
+  return browletBindings.getRelevantRealm(value);
+}
+
+const hostDefinedInterfaces = [{
   is: isWindowProxy,
   name: 'WindowProxy',
 }];
 
-const browletDefinitions = assembleDefinitions([
-  ...webIDLCommonDefinitions,
+const browletDefinitions = [
   ...browletIDLDefinitions,
   ...domIDLDefinitions,
   ...urlIDLDefinitions,
-]);
+] as const;
+
+export const browletBindings = new BrowletBindings();

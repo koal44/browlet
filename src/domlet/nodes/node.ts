@@ -11,8 +11,8 @@ import {
 import {
   arg, defineDictionary, defineInterface, defineInterfaceMixin, dictMember,
   emptyDictionary, idlType, nullable, op, readonlyAttr, reference,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';

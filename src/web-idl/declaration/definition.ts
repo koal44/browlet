@@ -1,9 +1,3 @@
-import type {
-  AttributeBindingDefinition, ConstructorBindingDefinition,
-  InterfaceBindingDefinition, IterableBindingDefinition,
-  OperationBindingDefinition, StringifierBindingDefinition,
-} from './projection';
-
 export function defineInterface(
   definition: InterfaceDefinitionInit,
 ): InterfaceDefinition {
@@ -329,8 +323,21 @@ export type Definition =
   | TypedefDefinition
   | IncludesDefinition;
 
+/*
+ * Language bindings may augment this map with metadata carried alongside IDL
+ * declarations. Declaration and serialization deliberately do not interpret
+ * that metadata.
+ */
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions, @typescript-eslint/no-empty-object-type
+export interface LanguageBindingDefinitions {}
+
+type LanguageBinding<Name extends PropertyKey> =
+  Name extends keyof LanguageBindingDefinitions
+    ? LanguageBindingDefinitions[Name]
+    : object;
+
 export type InterfaceDefinition = Attributed & {
-  binding?: InterfaceBindingDefinition;
+  binding?: LanguageBinding<'interface'>;
   kind: 'interface';
   name: string;
   inherits?: string;
@@ -356,6 +363,7 @@ export type PartialInterfaceMixinDefinition = Attributed & {
 };
 
 export type CallbackInterfaceDefinition = Attributed & {
+  binding?: LanguageBinding<'callback-interface'>;
   kind: 'callback-interface';
   name: string;
   members: CallbackInterfaceMember[];
@@ -476,7 +484,7 @@ export type ConstantMember = Member & {
 };
 
 export type AttributeMember = Member & {
-  binding?: AttributeBindingDefinition;
+  binding?: LanguageBinding<'attribute'>;
   kind: 'attribute';
   name: string;
   type: WebIDLType;
@@ -487,7 +495,7 @@ export type AttributeMember = Member & {
 };
 
 export type OperationMember = Member & {
-  binding?: OperationBindingDefinition;
+  binding?: LanguageBinding<'operation'>;
   kind: 'operation';
   name?: string;
   returns: WebIDLType;
@@ -497,18 +505,18 @@ export type OperationMember = Member & {
 };
 
 export type ConstructorMember = Member & {
-  binding?: ConstructorBindingDefinition;
+  binding?: LanguageBinding<'constructor'>;
   kind: 'constructor';
   arguments: ArgumentDefinition[];
 };
 
 export type StringifierMember = Member & {
-  binding?: StringifierBindingDefinition;
+  binding?: LanguageBinding<'stringifier'>;
   kind: 'stringifier';
 };
 
 export type IterableMember = Member & {
-  binding?: IterableBindingDefinition;
+  binding?: LanguageBinding<'iterable'>;
   kind: 'iterable';
   key?: WebIDLType;
   value: WebIDLType;

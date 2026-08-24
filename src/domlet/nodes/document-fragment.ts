@@ -1,8 +1,7 @@
 import { withDocumentFragmentStub } from '../stubs/interfaces';
 import type { EventTargetVirtuals } from '../events/event-target';
-import { ctor, defineIncludes, defineInterface } from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
-import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
+import { ctor, defineIncludes, defineInterface } from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
@@ -51,7 +50,7 @@ export const documentFragmentIDL = defineInterface({
       return Reflect.construct(
         DocumentFragmentImpl,
         [
-          (context.realm as DocumentFragmentRealm)
+          (context.realm as typeof context.realm & DocumentFragmentRealm)
             .getAssociatedDocument(),
         ],
         newTarget as NewTarget,
@@ -69,7 +68,7 @@ export const documentFragmentIncludesParentNodeIDL = defineIncludes({
   mixin: 'ParentNode',
 });
 
-type DocumentFragmentRealm = WebIDLRealmHost & {
+type DocumentFragmentRealm = {
   getAssociatedDocument(): DocumentImpl;
 };
 

@@ -4,8 +4,8 @@ import {
 import {
   arg, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, integer, nullable, readonlyAttr, reference, xattr,
-} from './adapter/definition';
-import { bind } from './adapter/projection';
+} from './declaration/index';
+import { bind } from './projection';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 /*

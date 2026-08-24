@@ -1,4 +1,3 @@
-import { sharedPlatformObjects } from '../web-idl/platform-object';
 import { WindowImpl } from './window';
 
 /*
@@ -30,8 +29,9 @@ export function getWindowProxyWindow(
 export function setWindowProxyWindow(
   windowProxy: WindowProxy,
   window: WindowImpl,
+  windowObject: Window,
 ): void {
-  requireWindowProxyHandler(windowProxy).setWindow(window);
+  requireWindowProxyHandler(windowProxy).setWindow(window, windowObject);
 }
 
 export type WindowProxy = Window & {
@@ -51,27 +51,21 @@ const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
 class WindowProxyHandler implements ProxyHandler<object> {
   readonly windowProxy: WindowProxy;
   readonly #methods = new Map<PropertyKey, CallableFunction>();
-  #window: Window | null = null;
+  #window: WindowAssociation | null = null;
 
   constructor() {
     this.windowProxy = new Proxy({}, this) as WindowProxy;
   }
 
   get window(): WindowImpl | null {
-    if (!this.#window) return null;
-    const implementation =
-      sharedPlatformObjects.getImplementationObject(this.#window) ??
-      this.#window;
-    if (!WindowImpl.is(implementation)) {
-      throw new TypeError('WindowProxy target is not a Window implementation');
-    }
-    return implementation;
+    return this.#window?.implementation ?? null;
   }
 
-  setWindow(window: WindowImpl): void {
-    this.#window = (
-      sharedPlatformObjects.getPlatformObject(window) ?? window
-    ) as Window;
+  setWindow(window: WindowImpl, object: Window): void {
+    if (!WindowImpl.is(window)) {
+      throw new TypeError('WindowProxy target is not a Window implementation');
+    }
+    this.#window = { implementation: window, object };
     this.#methods.clear();
   }
 
@@ -155,7 +149,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
     if (!this.#window) {
       throw new Error('WindowProxy has no associated Window');
     }
-    return this.#window;
+    return this.#window.object;
   }
 
   private createEventTargetMethod(property: PropertyKey): CallableFunction {
@@ -169,6 +163,11 @@ class WindowProxyHandler implements ProxyHandler<object> {
     };
   }
 }
+
+type WindowAssociation = {
+  readonly implementation: WindowImpl;
+  readonly object: Window;
+};
 
 const windowProxyReferences = new Set<PropertyKey>([
   'frames', 'parent', 'self', 'top', 'window',

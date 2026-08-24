@@ -1,11 +1,11 @@
-import type { AssembledInterface, DefinitionAssembly } from './adapter/assembly';
+import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type { OperationMember } from './adapter/definition';
+import type { OperationMember } from './declaration/index';
 import type {
   ImplementationRegistry, NamedPropertySteps,
-} from './adapter/registry';
+} from './registry';
 import { ordinarySetWithOwnDescriptor } from './platform-object';
 import { getUnannotatedType } from './types';
 

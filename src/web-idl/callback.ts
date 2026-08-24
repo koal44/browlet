@@ -6,7 +6,7 @@ import {
 } from './conversion';
 import type {
   ArgumentDefinition, OperationMember, WebIDLType,
-} from './adapter/definition';
+} from './declaration/index';
 import { isPromiseValue, type IDLPromise } from './promise-value';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,

@@ -1,6 +1,6 @@
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
-} from './adapter/definition';
+} from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 import {
   createPromiseValue, type IDLPromise,

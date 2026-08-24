@@ -1,4 +1,4 @@
-import type { AssembledInterface } from './adapter/assembly';
+import type { AssembledInterface } from './assembly';
 import { endOfIteration } from './async-sequence';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
@@ -6,10 +6,10 @@ import {
 } from './conversion';
 import {
   idlType, type ArgumentDefinition, type AsyncIterableMember,
-} from './adapter/definition';
+} from './declaration/index';
 import type {
   AsyncIteratorSteps, ImplementationRegistry,
-} from './adapter/registry';
+} from './registry';
 import { missingArgument } from './overload';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,

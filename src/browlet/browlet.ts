@@ -4,7 +4,7 @@ import type { ElementImpl } from '../domlet/nodes/element';
 import { isText } from '../domlet/nodes/node';
 import { getSourceCodeLocation } from '../domlet/parser/parser';
 import { parseURL } from '../url/url';
-import { BrowletBindings } from './bindings';
+import { browletBindings, getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
 } from './document-lifecycle';
@@ -16,7 +16,7 @@ import {
   finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
 } from './navigation';
 import { BrowletParser, type DocumentWrite } from './parser';
-import { getRelevantRealm, type Realm } from './realm';
+import type { Realm } from './realm';
 import type { WindowProxy } from './window-proxy';
 import { WindowImpl } from './window';
 import { UserAgent } from './user-agent';
@@ -112,8 +112,8 @@ export class Browlet {
       historyEntry,
     );
 
-    const bindings = BrowletBindings.forRealm(realm);
-    const domlet = new Domlet(bindings.nodeFactory);
+    const bindings = browletBindings.forRealm(realm);
+    const domlet = new Domlet(bindings.objects);
 
     const parser = new BrowletParser(
       domlet,

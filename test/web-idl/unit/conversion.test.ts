@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import {
   convertToIDL, convertToJavaScript, createFrozenArray,
   createFrozenArrayFromIterable, type ConversionContext,
@@ -12,9 +12,9 @@ import {
   annotated, asyncSequence, decimal, defineDictionary, defineEnumeration,
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
   sequence, union, xattr,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
-import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
+import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL value conversion', () => {

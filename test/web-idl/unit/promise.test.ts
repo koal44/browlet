@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { convertToIDL, convertToJavaScript } from '../../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,

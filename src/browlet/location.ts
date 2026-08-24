@@ -1,7 +1,7 @@
 import {
   arg, attr, defineInterface, idlType, op, readonlyAttr, xattr,
-} from '../web-idl/adapter/definition';
-import { bind } from '../web-idl/adapter/projection';
+} from '../web-idl/declaration/index';
+import { bind } from '../web-idl/index';
 import { withLocationStub } from './stubs/interfaces';
 
 /*

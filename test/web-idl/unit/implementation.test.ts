@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
 import { throwDOMException } from '../../../src/shared/dom-exception';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, idlType, iterable, op,
   reference, stringifier,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 import {
-  bind, registerInterfaceBindings,
-} from '../../../src/web-idl/adapter/projection';
-import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
+  bind, registerDefinitionBindings,
+} from '../../../src/web-idl/projection';
+import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import type { ValuePair } from '../../../src/web-idl/iterable';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
@@ -83,7 +83,7 @@ describe('Web IDL implementation registration', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    registerInterfaceBindings(binding, [interfaceIDL]);
+    registerDefinitionBindings(binding);
     const installed = binding.install();
     const DeclarativeExample = installed.get('DeclarativeExample');
     if (typeof DeclarativeExample !== 'function') {
@@ -151,7 +151,7 @@ describe('Web IDL implementation registration', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    registerInterfaceBindings(binding, [interfaceIDL]);
+    registerDefinitionBindings(binding);
     binding.install();
     const DictionaryAdapter = Reflect.get(
       realm.global,
@@ -218,7 +218,7 @@ describe('Web IDL implementation registration', () => {
       realm,
       new PlatformObjectRegistry(),
     );
-    registerInterfaceBindings(binding, [interfaceIDL]);
+    registerDefinitionBindings(binding);
     binding.install();
     const Product = Reflect.get(realm.global, 'Product') as {
       new(value: string): { value: string; };
@@ -274,7 +274,7 @@ describe('Web IDL implementation registration', () => {
       realm,
       new PlatformObjectRegistry(),
     );
-    registerInterfaceBindings(binding, [parentIDL, childIDL]);
+    registerDefinitionBindings(binding);
     binding.install();
     const ChildLifecycle = Reflect.get(
       realm.global,
@@ -311,8 +311,7 @@ describe('Web IDL implementation registration', () => {
       realm,
       new PlatformObjectRegistry(),
     );
-    registerInterfaceBindings(binding, webIDLCommonDefinitions);
-    registerInterfaceBindings(binding, [interfaceIDL]);
+    registerDefinitionBindings(binding);
     binding.install();
     const ExceptionSource = Reflect.get(realm.global, 'ExceptionSource') as {
       new(): object;

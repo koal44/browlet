@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
   defineCallbackFunction, defineEnumeration, defineInterface, defineTypedef,
   idlType, observableArray, type AttributeMember, type MaplikeMember,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL JavaScript binding foundation', () => {

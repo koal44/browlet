@@ -1,6 +1,6 @@
 import type { ObservableArrayHandle } from '../shared/observable-array';
-import type { AssembledInterface } from './adapter/assembly';
-import type { AttributeMember } from './adapter/definition';
+import type { AssembledInterface } from './assembly';
+import type { AttributeMember } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export class PlatformObjectRegistry {
@@ -80,14 +80,6 @@ export class PlatformObjectRegistry {
     return false;
   }
 }
-
-/*
- * Platform-object identity crosses realm bindings. Production bindings share
- * this registry so methods borrowed from one realm can recognize platform
- * objects created in another. Isolated binding tests can still provide their
- * own registry explicitly.
- */
-export const sharedPlatformObjects = new PlatformObjectRegistry();
 
 export type PlatformObjectRecord = {
   implementation: object;

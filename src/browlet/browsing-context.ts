@@ -2,14 +2,16 @@ import type {
   AgentCluster, AgentClusterKey, CrossOriginIsolationMode,
 } from './agents';
 import { obtainSimilarOriginWindowAgent } from './agents';
-import { BrowletBindings } from './bindings';
+import {
+  browletBindings, getRelevantRealm, projectWindow,
+} from './bindings';
 import { CustomElementRegistryImpl } from './custom-element-registry';
 import { setupWindowEnvironmentSettingsObject } from './environment';
 import { serializeSite } from './origin';
-import { createRealm, getRelevantRealm } from './realm';
+import { createRealm } from './realm';
 import type { UserAgent } from './user-agent';
 import {
-  createWindowProxy, getWindowProxyWindow, setWindowProxyWindow,
+  createWindowProxy, getWindowProxyWindow,
 } from './window-proxy';
 import { WindowImpl } from './window';
 import { Domlet } from '../domlet/domlet';
@@ -106,8 +108,8 @@ export function createNewBrowsingContextAndDocument(
     unsafeContextCreationTime,
     settings.crossOriginIsolatedCapability,
   ));
-  const bindings = new BrowletBindings(realmExecutionContext.realm);
-  const domlet = new Domlet(bindings.nodeFactory);
+  const bindings = browletBindings.register(realmExecutionContext.realm);
+  const domlet = new Domlet(bindings.objects);
   const document = domlet.createDocument();
 
   DocumentImpl.setType(document, 'html');
@@ -152,7 +154,7 @@ export function createNewBrowsingContextAndDocument(
   }
 
   WindowImpl.setAssociatedDocument(window, document);
-  bindings.projectWindow(window);
+  projectWindow(bindings, window);
   DocumentImpl.markReadyForPostLoadTasks(document);
   populateWithHTMLHeadBody(document);
   makeActive(document);
@@ -390,7 +392,7 @@ function makeActive(
     throw new Error('Document has no Browlet browsing context');
   }
 
-  setWindowProxyWindow(browsingContext.windowProxy, window);
+  browletBindings.retargetWindowProxy(browsingContext.windowProxy, window);
   const settings = realm.hostDefined;
   if (settings === null) throw new Error('Window has no environment settings');
   settings.markExecutionReady();

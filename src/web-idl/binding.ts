@@ -2,7 +2,7 @@ import { getDOMExceptionRequest } from '../shared/dom-exception';
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,
-} from './adapter/assembly';
+} from './assembly';
 import { AsynchronousIterableBinding } from './async-iterable';
 import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
@@ -16,11 +16,11 @@ import type {
   ConstructorMember, Exposure, ExtendedAttribute,
   NamedArgumentsExtendedAttribute,
   OperationMember, StringifierMember, WebIDLType,
-} from './adapter/definition';
+} from './declaration/index';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
 import {
   ImplementationRegistry, type ImplementationConstructor,
-} from './adapter/registry';
+} from './registry';
 import { SynchronousIterableBinding } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { LegacyPlatformObjectBinding } from './legacy-platform-object';

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import {
   annotated, defineTypedef, idlType, nullable, reference, sequence, union,
   xattr,
-} from '../../../src/web-idl/adapter/definition';
-import { serializeType } from '../../../src/web-idl/adapter/serialize';
+} from '../../../src/web-idl/declaration/index';
+import { serializeType } from '../../../src/web-idl/declaration/index';
 import {
   getFlattenedMemberTypes, getNumberOfNullableMemberTypes,
   includesNullableType, includesUndefined,

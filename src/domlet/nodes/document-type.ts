@@ -1,8 +1,8 @@
 import { withDocumentTypeStub } from '../stubs/interfaces';
 import {
   defineIncludes, defineInterface, idlType, readonlyAttr,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import { childNodeIDL, NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 

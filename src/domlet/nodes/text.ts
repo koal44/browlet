@@ -1,6 +1,6 @@
 import { withTextStub } from '../stubs/interfaces';
-import { arg, ctor, defineInterface, idlType } from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+import { arg, ctor, defineInterface, idlType } from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import {
   isText, NodeImpl, type NodeOptions, NodeType,
 } from './node';

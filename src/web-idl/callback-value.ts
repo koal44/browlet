@@ -1,6 +1,6 @@
 import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
-} from './adapter/definition';
+} from './declaration/index';
 import type { ConversionContext } from './conversion';
 import type { WebIDLRealmHost } from './javascript-realm';
 

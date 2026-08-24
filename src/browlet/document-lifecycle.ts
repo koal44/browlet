@@ -7,7 +7,9 @@ import {
 import { serializeURL } from '../url/url';
 import { areSameOriginDomain } from './origin';
 import { obtainSimilarOriginWindowAgent } from './agents';
-import { BrowletBindings } from './bindings';
+import {
+  browletBindings, getRelevantRealm, projectWindow,
+} from './bindings';
 import { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from './custom-element-registry';
 import { setupWindowEnvironmentSettingsObject } from './environment';
@@ -15,7 +17,7 @@ import type {
   NavigationParams, NavigationRequest, NavigationResponse,
 } from './navigation';
 import { TopLevelTraversable } from './navigable';
-import { createRealm, getRelevantRealm } from './realm';
+import { createRealm } from './realm';
 import { WindowImpl } from './window';
 
 export function createAndInitializeDocument(
@@ -37,7 +39,7 @@ export function createAndInitializeDocument(
   }
 
   let window: WindowImpl;
-  let bindings: BrowletBindings;
+  let bindings: ReturnType<typeof browletBindings.register>;
   let installBindings = false;
   if (
     DocumentImpl.isInitialAboutBlank(activeDocument) &&
@@ -51,7 +53,7 @@ export function createAndInitializeDocument(
       throw new Error('Navigation browsing context has no active Window');
     }
     window = activeWindow;
-    bindings = BrowletBindings.forRealm(getRelevantRealm(window));
+    bindings = browletBindings.forRealm(getRelevantRealm(window));
   } else {
     const group = browsingContext.group;
     if (group === null) {
@@ -77,11 +79,11 @@ export function createAndInitializeDocument(
       creationURL,
       navigationParams.origin,
     );
-    bindings = new BrowletBindings(realmExecutionContext.realm);
+    bindings = browletBindings.register(realmExecutionContext.realm);
     installBindings = true;
   }
 
-  const domlet = new Domlet(bindings.nodeFactory);
+  const domlet = new Domlet(bindings.objects);
   const document = domlet.createDocument();
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,
@@ -118,7 +120,7 @@ export function createAndInitializeDocument(
 
   WindowImpl.setAssociatedDocument(window, document);
   if (installBindings) {
-    bindings.projectWindow(window);
+    projectWindow(bindings, window);
   }
   initializeDocumentAncestry(document, navigationParams);
   initializeDocumentCSP(document);

@@ -1,16 +1,11 @@
 import {
   domExceptionName, throwDOMException,
 } from '../../shared/dom-exception';
-import {
-  isCallbackInterfaceValue, type CallbackInterfaceValue,
-} from '../../web-idl/callback-value';
-import { callUserObjectOperation } from '../../web-idl/callback';
+import { bind } from '../../web-idl/index';
 import {
   arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, nullable, op, reference, union,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
-import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
+} from '../../web-idl/declaration/index';
 import {
   EventImpl, type EventPathItem, toDOMString,
 } from './event';
@@ -59,7 +54,9 @@ export class EventTargetImpl implements EventTarget
     const { capture, passive, once, signal } = flattenMore(options);
     const listener: EventListenerRecord = {
       type: convertedType,
-      callback,
+      callback: callback === null
+        ? null
+        : EventListenerValue.from(callback),
       capture,
       passive,
       once,
@@ -77,9 +74,12 @@ export class EventTargetImpl implements EventTarget
   ): void {
     const convertedType = toDOMString(type);
     const capture = flatten(options);
+    const callbackValue = callback === null
+      ? null
+      : EventListenerValue.from(callback);
     const listener = this.#eventListenerList.find((candidate) =>
       candidate.type === convertedType &&
-      sameEventListener(candidate.callback, callback) &&
+      sameEventListener(candidate.callback, callbackValue) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
@@ -141,7 +141,7 @@ export class EventTargetImpl implements EventTarget
 
     for (const listener of target.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
-        callbacks.push(getEventListenerObject(listener.callback));
+        callbacks.push(listener.callback.object);
       }
     }
 
@@ -297,10 +297,7 @@ export class EventTargetImpl implements EventTarget
 
       if (listener.once) currentTarget.#removeListener(listener);
 
-      const callbackValue = isCallbackInterfaceValue(callback)
-        ? callback
-        : undefined;
-      const callbackRealm = callbackValue?.realm;
+      const callbackRealm = callback.realm;
       const global = callbackRealm?.global;
       const windowRealm = callbackRealm?.globalNames.has('Window')
         ? callbackRealm as WindowEventListenerRealm
@@ -313,19 +310,19 @@ export class EventTargetImpl implements EventTarget
         windowRealm.setCurrentEvent(global, event);
       }
       if (listener.passive) EventImpl.setInPassiveListener(event, true);
-      if (windowRealm && global && callbackValue) {
+      if (windowRealm && global) {
         windowRealm.recordTimingInfo(
           global,
           event,
-          callbackValue.object as EventListenerOrEventListenerObject,
+          callback.object,
         );
       }
 
       try {
-        callEventListener(callback, event, currentTarget);
+        callback.invoke(event, currentTarget);
       } catch (exception) {
-        if (callbackValue) {
-          callbackValue.realm.callbacks.reportException(exception);
+        if (callbackRealm) {
+          callbackRealm.callbacks.reportException(exception);
         } else {
           console.error(exception);
         }
@@ -383,7 +380,7 @@ export class EventTargetImpl implements EventTarget
 export const eventTargetIDL = defineInterface({
   binding: bind(EventTargetImpl, {
     initialize(context, value) {
-      const realm = context.realm as EventRealm;
+      const realm = context.realm as typeof context.realm & EventRealm;
       EventTargetImpl.setEventFactory(
         value as EventTargetImpl,
         (EventConstructor = EventImpl) => {
@@ -432,6 +429,21 @@ export const eventTargetIDL = defineInterface({
 });
 
 export const eventListenerIDL = defineCallbackInterface({
+  binding: bind({
+    adapt(_context, callback) {
+      return new EventListenerValue(
+        callback.object as EventListenerOrEventListenerObject,
+        callback.realm,
+        (event, currentTarget) => {
+          callback.callUserObjectOperation(
+            'handleEvent',
+            [event],
+            currentTarget,
+          );
+        },
+      );
+    },
+  }),
   members: [op('handleEvent', idlType.undefined, [
     arg('event', reference('Event')),
   ])],
@@ -750,13 +762,13 @@ export type EventTargetVirtuals = {
   ) => void;
 };
 
-export type EventListenerCallback =
+type EventListenerCallback =
   | EventListenerOrEventListenerObject
-  | CallbackInterfaceValue;
+  | EventListenerValue;
 
 type EventListenerRecord = {
   readonly type: string;
-  readonly callback: EventListenerCallback | null;
+  readonly callback: EventListenerValue | null;
   readonly capture: boolean;
   passive: boolean | null;
   readonly once: boolean;
@@ -778,11 +790,19 @@ type EventFactory = (
   eventConstructor?: EventImplementationConstructor,
 ) => EventImpl;
 
-type EventRealm = WebIDLRealmHost & {
+type EventRealm = {
   eventTimeStamp(): DOMHighResTimeStamp;
 };
 
-type WindowEventListenerRealm = WebIDLRealmHost & {
+type EventListenerRealm = {
+  readonly callbacks: {
+    reportException(exception: unknown): void;
+  };
+  readonly global: object;
+  readonly globalNames: ReadonlySet<string>;
+};
+
+type WindowEventListenerRealm = EventListenerRealm & {
   getCurrentEvent(global: object): Event | undefined;
   recordTimingInfo(
     global: object,
@@ -852,41 +872,46 @@ function createStandaloneEvent(
   return event;
 }
 
-function callEventListener(
-  callback: EventListenerCallback,
-  event: Event,
-  currentTarget: EventTarget,
-): void {
-  if (isCallbackInterfaceValue(callback)) {
-    callUserObjectOperation(
+class EventListenerValue {
+  readonly object: EventListenerOrEventListenerObject;
+  readonly realm: EventListenerRealm | undefined;
+  readonly #invoke: (event: Event, currentTarget: EventTarget) => void;
+
+  constructor(
+    object: EventListenerOrEventListenerObject,
+    realm: EventListenerRealm | undefined,
+    invoke: (event: Event, currentTarget: EventTarget) => void,
+  ) {
+    this.object = object;
+    this.realm = realm;
+    this.#invoke = invoke;
+  }
+
+  invoke(event: Event, currentTarget: EventTarget): void {
+    this.#invoke(event, currentTarget);
+  }
+
+  static from(callback: EventListenerCallback): EventListenerValue {
+    if (callback instanceof EventListenerValue) return callback;
+
+    return new EventListenerValue(
       callback,
-      'handleEvent',
-      [event],
-      currentTarget,
+      undefined,
+      (event, currentTarget) => {
+        if (typeof callback === 'function') {
+          callback.call(currentTarget, event);
+        } else {
+          callback.handleEvent.call(callback, event);
+        }
+      },
     );
-    return;
   }
-
-  const object = getEventListenerObject(callback);
-  if (typeof object === 'function') {
-    object.call(currentTarget, event);
-  } else {
-    object.handleEvent.call(object, event);
-  }
-}
-
-function getEventListenerObject(
-  callback: EventListenerCallback,
-): EventListenerOrEventListenerObject {
-  return (isCallbackInterfaceValue(callback)
-    ? callback.object
-    : callback) as EventListenerOrEventListenerObject;
 }
 
 function sameEventListener(
-  left: EventListenerCallback | null,
-  right: EventListenerCallback | null,
+  left: EventListenerValue | null,
+  right: EventListenerValue | null,
 ): boolean {
   if (left === null || right === null) return left === right;
-  return getEventListenerObject(left) === getEventListenerObject(right);
+  return left.object === right.object;
 }

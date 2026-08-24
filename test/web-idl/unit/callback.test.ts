@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
   callUserObjectOperation, constructCallbackFunction,
@@ -14,8 +14,8 @@ import { convertToIDL, convertToJavaScript } from '../../../src/web-idl/conversi
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
   integer, nullable, promise as promiseType, reference,
-} from '../../../src/web-idl/adapter/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
+} from '../../../src/web-idl/declaration/index';
+import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import { isPromiseValue } from '../../../src/web-idl/promise-value';
 

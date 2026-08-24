@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import {
   defineCallbackInterface, defineDictionary, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, idlType,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 
 describe('Web IDL definition assembly', () => {
   it('resolves inheritance and partial interfaces independently of order', () => {

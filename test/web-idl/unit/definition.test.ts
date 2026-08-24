@@ -10,11 +10,11 @@ import {
   emptyDictionary, emptySequence, frozenArray, idlType, integer, iterable,
   maplike, nullable, observableArray, op, promise, readonlyAttr, record,
   reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
-} from '../../../src/web-idl/adapter/definition';
+} from '../../../src/web-idl/declaration/index';
 import {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute,
   serializeType,
-} from '../../../src/web-idl/adapter/serialize';
+} from '../../../src/web-idl/declaration/index';
 
 describe('Web IDL definitions', () => {
   it('represents the EventTarget fragment as structurally lossless data', () => {

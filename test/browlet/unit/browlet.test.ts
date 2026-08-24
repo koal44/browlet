@@ -174,14 +174,56 @@ describe('Browlet', () => {
       browlet.window,
       'Event',
     ) as typeof Event;
-    const callback = vi.fn();
+    const handleEvent = vi.fn();
+    const callback = { handleEvent };
 
     browlet.window.addEventListener('ready', callback);
     browlet.window.addEventListener('ready', callback);
     browlet.window.removeEventListener('ready', callback);
     browlet.window.dispatchEvent(new EventConstructor('ready'));
 
-    expect(callback).not.toHaveBeenCalled();
+    expect(handleEvent).not.toHaveBeenCalled();
+  });
+
+  it('invokes callback-interface objects with their object as receiver', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const EventConstructor = Reflect.get(
+      browlet.window,
+      'Event',
+    ) as typeof Event;
+    const callback = {
+      receiver: undefined as unknown,
+      handleEvent(this: { receiver: unknown; }) {
+        this.receiver = this;
+      },
+    };
+
+    browlet.window.addEventListener('ready', callback);
+    browlet.window.dispatchEvent(new EventConstructor('ready'));
+
+    expect(callback.receiver).toBe(callback);
+  });
+
+  it('converts event listener option dictionaries at the Web IDL boundary', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const accesses: string[] = [];
+    const signal = new AbortController().signal;
+    const listener = () => {};
+    const options = {
+      get capture() { accesses.push('capture'); return 1; },
+      get once() { accesses.push('once'); return 1; },
+      get passive() { accesses.push('passive'); return 0; },
+      get signal() { accesses.push('signal'); return signal; },
+    } as unknown as AddEventListenerOptions;
+
+    browlet.window.addEventListener('ready', listener, options);
+
+    expect(accesses).toEqual(['capture', 'once', 'passive', 'signal']);
+    accesses.length = 0;
+
+    browlet.window.removeEventListener('ready', listener, options);
+
+    expect(accesses).toEqual(['capture']);
   });
 
   it('tracks and restores the legacy current window event', () => {

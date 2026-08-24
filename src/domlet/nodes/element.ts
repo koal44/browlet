@@ -16,8 +16,8 @@ import {
 import {
   arg, defineIncludes, defineInterface, idlType, nullable, op,
   readonlyAttr,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../shared/namespaces';

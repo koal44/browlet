@@ -7,8 +7,8 @@ import {
 import {
   arg, defineInterface, definePartialInterface, idlType, op, readonlyAttr,
   reference, union, xattr,
-} from '../web-idl/adapter/definition';
-import { bind } from '../web-idl/adapter/projection';
+} from '../web-idl/declaration/index';
+import { bind } from '../web-idl/index';
 import { LocationImpl } from './location';
 import { withWindowStub } from './stubs/interfaces';
 

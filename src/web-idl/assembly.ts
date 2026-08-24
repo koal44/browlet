@@ -5,7 +5,7 @@ import type {
   NamespaceDefinition, NamespaceMember,
   PartialDictionaryDefinition, PartialInterfaceDefinition,
   PartialInterfaceMixinDefinition, PartialNamespaceDefinition,
-} from './definition';
+} from './declaration/definition';
 
 export function assembleDefinitions(
   definitions: Definition[],

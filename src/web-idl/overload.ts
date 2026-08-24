@@ -1,4 +1,4 @@
-import type { DefinitionAssembly } from './adapter/assembly';
+import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
 import { getBufferTypeName } from './buffer-source';
 import {
@@ -8,7 +8,7 @@ import {
 } from './conversion';
 import type {
   ArgumentDefinition, BufferTypeName, SimpleTypeName, WebIDLType,
-} from './adapter/definition';
+} from './declaration/index';
 import {
   getFlattenedMemberTypes, getTypeWithApplicableExtendedAttributes,
   getUnannotatedType, includesNullableType,

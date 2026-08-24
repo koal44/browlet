@@ -1,11 +1,11 @@
-import type { AssembledInterface } from './adapter/assembly';
+import type { AssembledInterface } from './assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { reference, type IterableMember } from './adapter/definition';
-import type { ImplementationRegistry } from './adapter/registry';
+import { reference, type IterableMember } from './declaration/index';
+import type { ImplementationRegistry } from './registry';
 
 export type ValuePair<Key = unknown, Value = unknown> = {
   key: Key;

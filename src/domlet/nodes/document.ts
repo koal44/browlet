@@ -14,9 +14,8 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   definePartialInterface, dictMember, emptyDictionary, idlType, nullable, op,
   readonlyAttr, reference, union,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
-import type { ImplementationConstructor } from '../../web-idl/adapter/registry';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import { createOpaqueOrigin, type Origin } from '../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import { AttrImpl } from './attribute';
@@ -1022,6 +1021,10 @@ export type DOMNodeFactory = {
     argumentsList: readonly unknown[],
   ): T;
 };
+
+type ImplementationConstructor<T extends object> = {
+  readonly prototype: T;
+} & (abstract new (...argumentsList: never[]) => T);
 
 export const directDOMNodeFactory: DOMNodeFactory = {
   construct: <T extends object>(

@@ -2,9 +2,8 @@ import {
   arg, attr, constant, ctor, defineDictionary, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, integer, nullable, op, readonlyAttr,
   reference, sequence, xattr,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
-import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 
 /*
  * typedef double DOMHighResTimeStamp;
@@ -433,7 +432,12 @@ export const eventIDL = defineInterface({
       if (!newTarget) throw new Error('Event construction requires newTarget');
       return Reflect.construct(
         EventImpl,
-        ['', {}, (context.realm as EventRealm).eventTimeStamp()],
+        [
+          '',
+          {},
+          (context.realm as typeof context.realm & EventRealm)
+            .eventTimeStamp(),
+        ],
         newTarget as NewTarget,
       );
     },
@@ -583,7 +587,12 @@ export const customEventIDL = defineInterface({
       }
       return Reflect.construct(
         CustomEventImpl,
-        ['', {}, (context.realm as EventRealm).eventTimeStamp()],
+        [
+          '',
+          {},
+          (context.realm as typeof context.realm & EventRealm)
+            .eventTimeStamp(),
+        ],
         newTarget as NewTarget,
       );
     },
@@ -648,7 +657,7 @@ export function toDOMString(value: unknown): string {
   return String(value);
 }
 
-type EventRealm = WebIDLRealmHost & {
+type EventRealm = {
   eventTimeStamp(): DOMHighResTimeStamp;
 };
 

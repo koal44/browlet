@@ -1,6 +1,6 @@
 import type {
   AssembledDictionary, DefinitionAssembly,
-} from './adapter/assembly';
+} from './assembly';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -17,7 +17,7 @@ import {
 import type {
   AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute,
   SimpleTypeName, WebIDLType,
-} from './adapter/definition';
+} from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 import type { PlatformObjectRegistry } from './platform-object';
 import {

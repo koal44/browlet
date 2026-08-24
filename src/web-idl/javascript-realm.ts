@@ -1,4 +1,4 @@
-import type { BufferViewTypeName } from './adapter/definition';
+import type { BufferViewTypeName } from './declaration/index';
 
 export type WebIDLRealmHost = {
   callbacks: {

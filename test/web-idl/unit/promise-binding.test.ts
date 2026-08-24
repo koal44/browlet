@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
 import { createDOMException } from '../../../src/shared/dom-exception';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, promise as promiseType,
   type AttributeMember, type OperationMember,
-} from '../../../src/web-idl/adapter/definition';
-import { registerInterfaceBindings } from '../../../src/web-idl/adapter/projection';
-import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
+} from '../../../src/web-idl/declaration/index';
+import { registerDefinitionBindings } from '../../../src/web-idl/projection';
+import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import {
   createRejectedPromise, createResolvedPromise,
@@ -121,7 +121,7 @@ describe('Web IDL promise member binding', () => {
       new PlatformObjectRegistry(),
       implementations,
     );
-    registerInterfaceBindings(binding, webIDLCommonDefinitions);
+    registerDefinitionBindings(binding);
     implementations.setOperationSteps(reject, () => createRejectedPromise(
       createDOMException('NotAllowedError', 'requested rejection'),
       idlType.undefined,

@@ -1,10 +1,7 @@
 import {
   constants, createContext, runInContext, type Context,
 } from 'node:vm';
-import type {
-  SecurityCheckType, WebIDLRealmHost,
-} from '../web-idl/javascript-realm';
-import { sharedPlatformObjects } from '../web-idl/platform-object';
+import type { WebIDLRealmHost } from '../web-idl/index';
 import type { DocumentImpl } from '../domlet/nodes/document';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
@@ -35,18 +32,6 @@ export function createRealm(
     agent.windowObjects.add(globalObject as Window);
   }
   return { realm };
-}
-
-export function getRelevantRealm(value: object): Realm {
-  const platformObjectRecord = sharedPlatformObjects.getRecord(value) ??
-    sharedPlatformObjects.getImplementationRecord(value);
-  if (platformObjectRecord?.realm instanceof Realm) {
-    return platformObjectRecord.realm;
-  }
-
-  const realm = Realm.getAssociatedRealm(value);
-  if (!realm) throw new Error('Object has no relevant Realm');
-  return realm;
 }
 
 export class Realm implements WebIDLRealmHost {
@@ -465,6 +450,10 @@ type RealmFunctionSteps = Parameters<CreateFunction>[0];
 type RealmFunctionFactory = (
   steps: RealmFunctionSteps,
 ) => JavaScriptFunction;
+
+type SecurityCheckType = Parameters<
+  WebIDLRealmHost['performSecurityCheck']
+>[2];
 
 const callableFunctionFactorySource = `
   (steps) => ({

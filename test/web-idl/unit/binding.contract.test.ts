@@ -75,10 +75,15 @@ describe('Web IDL JavaScript binding contract', () => {
     }) as EventInit;
 
     const event = new EventConstructor('ready', init);
+    const converted = new EventConstructor(12 as unknown as string);
 
     expect(reads).toEqual(['bubbles', 'cancelable', 'composed']);
     expect([event.bubbles, event.cancelable, event.composed])
       .toEqual([true, true, true]);
+    expect(converted.type).toBe('12');
+    expect(() => {
+      new EventConstructor(Symbol('type') as unknown as string);
+    }).toThrow(RealmTypeError);
     expect(() => {
       new EventConstructor(
         'ready',

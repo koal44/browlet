@@ -1,4 +1,4 @@
-import type { WebIDLType } from './adapter/definition';
+import type { WebIDLType } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export function createPromiseValue(

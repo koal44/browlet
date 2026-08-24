@@ -4,8 +4,8 @@ import { withShadowRootStub } from '../stubs/interfaces';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType,
   readonlyAttr, reference,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import {
   DocumentFragmentImpl,
 } from './document-fragment';

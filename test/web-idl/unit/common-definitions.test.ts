@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { invokeCallbackFunction } from '../../../src/web-idl/callback';
 import { isCallbackFunctionValue } from '../../../src/web-idl/callback-value';
@@ -10,9 +10,9 @@ import {
   voidFunctionIDL, webIDLCommonDefinitions,
 } from '../../../src/web-idl/common-definitions';
 import { convertToIDL } from '../../../src/web-idl/conversion';
-import { reference } from '../../../src/web-idl/adapter/definition';
+import { reference } from '../../../src/web-idl/declaration/index';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
-import { serializeDefinitions } from '../../../src/web-idl/adapter/serialize';
+import { serializeDefinitions } from '../../../src/web-idl/declaration/index';
 
 describe('Web IDL common definitions', () => {
   it('represents the common typedefs and callbacks losslessly', () => {

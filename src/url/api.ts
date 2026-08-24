@@ -11,8 +11,8 @@ import {
   arg, attr, ctor, defineInterface, idlType, iterable, nullable, op,
   readonlyAttr, record, reference, sequence, stringifier, union, xattr,
   type Definition,
-} from '../web-idl/adapter/definition';
-import { bind } from '../web-idl/adapter/projection';
+} from '../web-idl/declaration/index';
+import { bind } from '../web-idl/index';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this

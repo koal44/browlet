@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { BrowletBindings } from '../../../src/browlet/bindings';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import { Realm } from '../../../src/browlet/realm';
 
@@ -281,7 +283,7 @@ describe('Browlet DOM binding', () => {
 
   it('filters DOM constructors for the host exposure set', () => {
     const realm = new Realm({ globalNames: ['Worker'] });
-    const bindings = new BrowletBindings(realm);
+    const bindings = browletBindings.register(realm);
 
     bindings.install(realm.global);
 
@@ -306,7 +308,7 @@ describe('Browlet DOM binding', () => {
   it('takes constructed event timestamps from the owning realm', () => {
     const realm = new Realm();
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123.5);
-    const bindings = new BrowletBindings(realm);
+    const bindings = browletBindings.register(realm);
     bindings.install(realm.global);
     const Event_ = Reflect.get(realm.global, 'Event') as typeof Event;
     const CustomEvent_ = Reflect.get(
@@ -347,6 +349,17 @@ describe('Browlet DOM binding', () => {
 
     expect(currentEvent).toBe(event);
     expect(browlet.window.event).toBeUndefined();
+  });
+
+  it('retains a platform object\'s relevant Realm after prototype mutation', () => {
+    const browlet = createBrowlet();
+    const EventTarget_ = getConstructor(browlet, 'EventTarget');
+    const target = Reflect.construct(EventTarget_, []);
+    const realm = getRelevantRealm(target);
+
+    Reflect.setPrototypeOf(target, null);
+
+    expect(getRelevantRealm(target)).toBe(realm);
   });
 });
 

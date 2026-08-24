@@ -1,8 +1,8 @@
 import { withCharacterDataStub } from '../stubs/interfaces';
 import {
   annotated, attr, defineIncludes, defineInterface, idlType, xattr,
-} from '../../web-idl/adapter/definition';
-import { bind } from '../../web-idl/adapter/projection';
+} from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import { TreeNode } from '../tree/tree-node';
 import {
   childNodeIDL, NodeImpl, type NodeOptions, type NodeType,

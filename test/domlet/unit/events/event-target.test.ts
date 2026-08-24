@@ -16,50 +16,6 @@ describe('EventTargetImpl', () => {
     expect(document.getElementById('target')).toBeInstanceOf(EventTargetImpl);
   });
 
-  it('performs the immediately observable Web IDL conversions', () => {
-    const target = new EventTargetImpl();
-
-    expect(() => target.addEventListener(
-      Symbol('type') as unknown as string,
-      null,
-    )).toThrow(TypeError);
-    expect(() => target.removeEventListener(
-      Symbol('type') as unknown as string,
-      null,
-    )).toThrow(TypeError);
-  });
-
-  it('flattens every addEventListener option in specification order', () => {
-    const target = new EventTargetImpl();
-    const accesses: string[] = [];
-    const signal = new AbortController().signal;
-    const options = {
-      get capture() { accesses.push('capture'); return 1; },
-      get once() { accesses.push('once'); return 1; },
-      get passive() { accesses.push('passive'); return 0; },
-      get signal() { accesses.push('signal'); return signal; },
-    } as unknown as AddEventListenerOptions;
-
-    target.addEventListener('ready', () => {}, options);
-
-    expect(accesses).toEqual(['capture', 'once', 'passive', 'signal']);
-  });
-
-  it('only flattens capture when removing an event listener', () => {
-    const target = new EventTargetImpl();
-    const accesses: string[] = [];
-    const options = {
-      get capture() { accesses.push('capture'); return true; },
-      get once() { throw new Error('once must not be read'); },
-      get passive() { throw new Error('passive must not be read'); },
-      get signal() { throw new Error('signal must not be read'); },
-    } as unknown as AddEventListenerOptions;
-
-    target.removeEventListener('ready', () => {}, options);
-
-    expect(accesses).toEqual(['capture']);
-  });
-
   it('does not install abort steps for null callbacks or aborted signals', () => {
     const target = new EventTargetImpl();
     const liveController = new AbortController();

@@ -1,4 +1,4 @@
-import type { Definition } from '../web-idl/adapter/definition';
+import type { Definition } from '../web-idl/declaration/index';
 import {
   cssomDocumentOrShadowRootIDL, elementCSSInlineStyleIDL, linkStyleIDL,
 } from './css-engine';

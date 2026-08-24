@@ -6,7 +6,7 @@ import type { TreeScope } from '../stylelet/engine/tree-scope';
 import {
   attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
   readonlyAttr, xattr,
-} from '../web-idl/adapter/definition';
+} from '../web-idl/declaration/index';
 
 /*
  * partial interface mixin DocumentOrShadowRoot {

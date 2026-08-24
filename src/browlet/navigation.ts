@@ -5,17 +5,16 @@ import {
 import type { Origin } from '../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../url/url';
 import { areSameOrigin } from './origin';
+import { browletBindings, getRelevantRealm } from './bindings';
 import { BrowsingContext } from './browsing-context';
 import type { Environment } from './environment';
 import {
   TopLevelTraversable, type Navigable, type TraversableNavigable,
 } from './navigable';
-import { getRelevantRealm } from './realm';
 import {
   createDocumentState, createSessionHistoryEntry,
   type SessionHistoryEntry,
 } from './session-history';
-import { setWindowProxyWindow } from './window-proxy';
 import { WindowImpl } from './window';
 
 /*
@@ -230,7 +229,10 @@ function applyPushOrReplaceHistoryStep(
   navigable.currentSessionHistoryEntry = historyEntry;
   navigable.activeSessionHistoryEntry = historyEntry;
   traversable.currentSessionHistoryStep = targetStep;
-  setWindowProxyWindow(browsingContext.windowProxy, realm.globalObject);
+  browletBindings.retargetWindowProxy(
+    browsingContext.windowProxy,
+    realm.globalObject,
+  );
   const settings = realm.hostDefined;
   if (settings === null) throw new Error('Navigation Window has no settings');
   settings.markExecutionReady();

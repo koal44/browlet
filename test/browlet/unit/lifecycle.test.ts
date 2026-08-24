@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BrowsingContext } from '../../../src/browlet/browsing-context';
+import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
@@ -11,9 +12,7 @@ import {
 import {
   createNewTopLevelTraversable, initializeNavigable, TopLevelTraversable,
 } from '../../../src/browlet/navigable';
-import {
-  createRealm, getRelevantRealm, Realm,
-} from '../../../src/browlet/realm';
+import { createRealm, Realm } from '../../../src/browlet/realm';
 import { createDocumentState } from '../../../src/browlet/session-history';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import {
@@ -61,7 +60,7 @@ describe('browsing context groups', () => {
     const document = new DocumentImpl() as DomletDocument;
     const window = new WindowImpl(new URL('about:blank'));
     WindowImpl.setAssociatedDocument(window, document);
-    setWindowProxyWindow(context.windowProxy, window);
+    setWindowProxyWindow(context.windowProxy, window, window);
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);

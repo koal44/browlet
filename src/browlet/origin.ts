@@ -1,7 +1,7 @@
 import {
   arg, ctor, defineInterface, idlType, op, readonlyAttr, reference,
-} from '../web-idl/adapter/definition';
-import { bind } from '../web-idl/adapter/projection';
+} from '../web-idl/declaration/index';
+import { bind } from '../web-idl/index';
 import {
   hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost,
   serializeHost, type Host,

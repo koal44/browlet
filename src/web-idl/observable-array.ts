@@ -7,8 +7,8 @@ import {
 } from './conversion';
 import {
   idlType, sequence, type AttributeMember, type WebIDLType,
-} from './adapter/definition';
-import type { ImplementationRegistry } from './adapter/registry';
+} from './declaration/index';
+import type { ImplementationRegistry } from './registry';
 
 export class ObservableArrayBinding {
   readonly #context: ConversionContext;
