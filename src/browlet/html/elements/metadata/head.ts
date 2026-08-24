@@ -1,5 +1,7 @@
-import type { AttrImpl } from '../../../dom/nodes/attribute';
-import type { DocumentImpl } from '../../../dom/nodes/document';
+import { HTML_NAMESPACE } from '../../../../shared/namespaces';
+import {
+  defineElementInterface, type ElementCreationContext,
+} from '../../../dom/nodes/element';
 import { defineInterface } from '../../../../web-idl/declaration/index';
 import { bind } from '../../../../web-idl/index';
 import { withHTMLHeadElementStub } from '../../../stubs';
@@ -15,11 +17,8 @@ export class HTMLHeadElementImpl
   extends withHTMLHeadElementStub(HTMLElementImpl)
   implements HTMLHeadElement
 {
-  constructor(
-    ownerDocument: DocumentImpl,
-    attributes: AttrImpl[] = [],
-  ) {
-    super('head', ownerDocument, attributes);
+  constructor(context: ElementCreationContext) {
+    super(context);
   }
 }
 
@@ -31,4 +30,10 @@ export const htmlHeadElementIDL = defineInterface({
   inherits: 'HTMLElement',
   members: [],
   name: 'HTMLHeadElement',
+});
+
+export const htmlHeadElementInterface = defineElementInterface({
+  definition: htmlHeadElementIDL,
+  localNames: ['head'],
+  namespaceURI: HTML_NAMESPACE,
 });

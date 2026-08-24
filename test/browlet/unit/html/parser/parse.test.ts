@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDocument } from '../../../../../src/browlet/ctor';
 import {
   parseHTMLDocument,
 } from '../../../../../src/browlet/html/parser/parse';
 import {
-  DocumentImpl,
+  createDocument, DocumentImpl,
 } from '../../../../../src/browlet/dom/nodes/document';
 import {
   HTMLTreeAdapter,

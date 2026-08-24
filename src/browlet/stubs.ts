@@ -32,6 +32,7 @@ export const withHTMLElementStub = stub<HTMLElement>();
 export const withHTMLHeadElementStub = stub<HTMLHeadElement>();
 export const withHTMLLinkElementStub = stub<HTMLLinkElement>();
 export const withHTMLStyleElementStub = stub<HTMLStyleElement>();
+export const withHTMLUnknownElementStub = stub<HTMLUnknownElement>();
 export const withSVGElementStub = stub<SVGElement>();
 export const withSVGStyleElementStub = stub<SVGStyleElement>();
 export const withMathMLElementStub = stub<MathMLElement>();

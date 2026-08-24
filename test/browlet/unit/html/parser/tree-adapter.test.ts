@@ -2,10 +2,7 @@ import { html } from 'parse5';
 import { describe, expect, it } from 'vitest';
 
 import {
-  createDocument,
-} from '../../../../../src/browlet/ctor';
-import {
-  DocumentImpl, DocumentMode,
+  createDocument, DocumentImpl, DocumentMode,
 } from '../../../../../src/browlet/dom/nodes/document';
 import {
   DocumentFragmentImpl,

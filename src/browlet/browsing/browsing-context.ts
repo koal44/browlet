@@ -6,9 +6,6 @@ import {
   browletBindings, getRelevantRealm, projectWindow,
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
-import {
-  createDocument, resolveBrowletElementConstruction,
-} from '../ctor';
 import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
 import { serializeSite } from './origin';
 import { createRealm } from '../scripting/realm';
@@ -18,7 +15,7 @@ import {
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
 import {
-  DocumentImpl, DocumentMode, type DocumentLoadTimingInfo,
+  createDocument, DocumentImpl, DocumentMode, type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
@@ -114,7 +111,6 @@ export function createNewBrowsingContextAndDocument(
   const bindings = browletBindings.register(realmExecutionContext.realm);
   const document = createDocument({
     nodeFactory: bindings.objects,
-    resolveElementConstruction: resolveBrowletElementConstruction,
   });
 
   DocumentImpl.setType(document, 'html');

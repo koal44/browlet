@@ -1,6 +1,7 @@
-import { type LinkStyleInit, ElementImpl } from '../../dom/nodes/element';
-import type { AttrImpl } from '../../dom/nodes/attribute';
-import type { DocumentImpl } from '../../dom/nodes/document';
+import {
+  defineElementInterface, type ElementCreationContext, ElementImpl,
+  type LinkStyleInit,
+} from '../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
@@ -54,18 +55,10 @@ export class HTMLElementImpl
   implements HTMLElement
 {
   constructor(
-    localName: string,
-    ownerDocument: DocumentImpl,
-    attributes: AttrImpl[] = [],
+    context: ElementCreationContext,
     linkStyle?: LinkStyleInit,
   ) {
-    super(
-      localName,
-      HTML_NAMESPACE,
-      ownerDocument,
-      attributes,
-      linkStyle,
-    );
+    super(context, linkStyle);
   }
 
   get style(): CSSStyleDeclaration {
@@ -81,6 +74,11 @@ export const htmlElementIDL = defineInterface({
   inherits: 'Element',
   members: [],
   name: 'HTMLElement',
+});
+
+export const htmlElementInterface = defineElementInterface({
+  definition: htmlElementIDL,
+  namespaceURI: HTML_NAMESPACE,
 });
 
 /*

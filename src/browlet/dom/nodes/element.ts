@@ -11,7 +11,7 @@ import {
 } from '../../style/integration';
 import {
   arg, defineIncludes, defineInterface, idlType, nullable, op,
-  readonlyAttr,
+  readonlyAttr, type InterfaceDefinition,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import {
@@ -87,17 +87,14 @@ export class ElementImpl
   readonly #slottable = new SlottableMixin();
 
   constructor(
-    localName: string,
-    namespaceURI: string,
-    ownerDocument: DocumentImpl,
-    attributes: AttrImpl[] = [],
+    context: ElementCreationContext,
     linkStyle?: LinkStyleInit,
   ) {
-    super(NodeType.Element, ownerDocument, ElementImpl.#nodeOptions);
-    this.#attributes = new NamedNodeMapImpl(...attributes);
+    super(NodeType.Element, context.document, ElementImpl.#nodeOptions);
+    this.#attributes = new NamedNodeMapImpl();
     NamedNodeMapImpl.associateElement(this.#attributes, this);
-    this.#localName = localName;
-    this.#namespaceURI = namespaceURI;
+    this.#localName = context.localName;
+    this.#namespaceURI = context.namespaceURI;
     this.#linkStyle = linkStyle
       ? new LinkStyleMixin(
         this,
@@ -280,6 +277,22 @@ export class ElementImpl
     element.#linkStyle?.finishParsingChildren();
   }
 
+  static appendAttribute(
+    element: ElementImpl,
+    attribute: AttrImpl,
+  ): void {
+    if (attribute.ownerElement !== null) {
+      throw new TypeError('Cannot append an attribute owned by another element');
+    }
+
+    element.#attributes.push(attribute);
+    AttrImpl.setOwnerElement(attribute, element);
+    if (attribute.localName === 'style') {
+      element.#inlineStyle?.attributeChanged(attribute.value);
+    }
+    element.#attributeChanged(attribute.localName, null, attribute.value);
+  }
+
   static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
     return (element.#inlineStyle ??=
       new ElementCSSInlineStyleMixin(element)).style;
@@ -351,6 +364,29 @@ export const elementIDL = defineInterface({
   name: 'Element',
 });
 
+export function defineElementInterface(
+  options: ElementInterfaceOptions,
+): ElementInterface {
+  const implementation = options.definition.binding?.implementation;
+  if (!implementation) {
+    throw new TypeError(
+      `Element interface ${options.definition.name} has no implementation`,
+    );
+  }
+
+  return {
+    definition: options.definition,
+    implementation: implementation as ElementImplementation,
+    localNames: options.localNames ?? [],
+    namespaceURI: options.namespaceURI,
+  };
+}
+
+export const elementInterface = defineElementInterface({
+  definition: elementIDL,
+  namespaceURI: '',
+});
+
 /*
  * Element includes ParentNode;
  */
@@ -392,3 +428,27 @@ export type LinkStyleInit = {
   readonly options: LinkStyleOptions;
   readonly treeScopeResolver: TreeScopeResolver;
 };
+
+export type ElementCreationContext = {
+  readonly document: DocumentImpl;
+  readonly localName: string;
+  readonly namespaceURI: string;
+  readonly treeScopeResolver: TreeScopeResolver;
+};
+
+export type ElementInterface = {
+  readonly definition: InterfaceDefinition;
+  readonly implementation: ElementImplementation;
+  readonly localNames: readonly string[];
+  readonly namespaceURI: string;
+};
+
+type ElementInterfaceOptions = {
+  readonly definition: InterfaceDefinition;
+  readonly localNames?: readonly string[];
+  readonly namespaceURI: string;
+};
+
+type ElementImplementation = abstract new (
+  context: ElementCreationContext,
+) => ElementImpl;

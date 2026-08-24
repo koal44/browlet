@@ -1,7 +1,7 @@
-import type { AttrImpl } from '../dom/nodes/attribute';
-import type { DocumentImpl } from '../dom/nodes/document';
-import { ElementImpl } from '../dom/nodes/element';
-import type { TreeScopeResolver } from '../style/integration';
+import {
+  defineElementInterface, type ElementCreationContext, ElementImpl,
+} from '../dom/nodes/element';
+import { SVG_NAMESPACE } from '../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../web-idl/declaration/index';
@@ -28,18 +28,12 @@ export class SVGStyleElementImpl
     children: true,
   };
 
-  constructor(
-    ownerDocument: DocumentImpl,
-    treeScopeResolver: TreeScopeResolver,
-    attributes: AttrImpl[] = [],
-  ) {
+  constructor(context: ElementCreationContext) {
     super(
-      'style',
-      ownerDocument,
-      attributes,
+      context,
       {
         options: SVGStyleElementImpl.#linkStyleOptions,
-        treeScopeResolver,
+        treeScopeResolver: context.treeScopeResolver,
       },
     );
   }
@@ -57,6 +51,12 @@ export const svgStyleElementIDL = defineInterface({
   inherits: 'SVGElement',
   members: [],
   name: 'SVGStyleElement',
+});
+
+export const svgStyleElementInterface = defineElementInterface({
+  definition: svgStyleElementIDL,
+  localNames: ['style'],
+  namespaceURI: SVG_NAMESPACE,
 });
 
 export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({

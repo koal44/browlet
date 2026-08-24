@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  resolveBrowletElementConstruction,
-} from '../../../../src/browlet/ctor';
-import {
   isHTMLElement,
 } from '../../../../src/browlet/html/elements/html-element';
 import {
@@ -332,7 +329,5 @@ function getStyleElement(
 function createTestDocument(
   config: { source?: string; } = {},
 ): DocumentImpl {
-  return parseHTMLDocument(config.source, {
-    resolveElementConstruction: resolveBrowletElementConstruction,
-  });
+  return parseHTMLDocument(config.source);
 }

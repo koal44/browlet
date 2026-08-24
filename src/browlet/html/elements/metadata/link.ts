@@ -1,7 +1,6 @@
-import type { TreeScopeResolver } from '../../../style/integration';
-import type { AttrImpl } from '../../../dom/nodes/attribute';
-import type { DocumentImpl } from '../../../dom/nodes/document';
-import { ElementImpl } from '../../../dom/nodes/element';
+import {
+  defineElementInterface, type ElementCreationContext, ElementImpl,
+} from '../../../dom/nodes/element';
 import { HTML_NAMESPACE } from '../../../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
@@ -47,18 +46,12 @@ export class HTMLLinkElementImpl
     ]),
   };
 
-  constructor(
-    ownerDocument: DocumentImpl,
-    treeScopeResolver: TreeScopeResolver,
-    attributes: AttrImpl[] = [],
-  ) {
+  constructor(context: ElementCreationContext) {
     super(
-      'link',
-      ownerDocument,
-      attributes,
+      context,
       {
         options: HTMLLinkElementImpl.#linkStyleOptions,
-        treeScopeResolver,
+        treeScopeResolver: context.treeScopeResolver,
       },
     );
   }
@@ -76,6 +69,12 @@ export const htmlLinkElementIDL = defineInterface({
   inherits: 'HTMLElement',
   members: [],
   name: 'HTMLLinkElement',
+});
+
+export const htmlLinkElementInterface = defineElementInterface({
+  definition: htmlLinkElementIDL,
+  localNames: ['link'],
+  namespaceURI: HTML_NAMESPACE,
 });
 
 export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({

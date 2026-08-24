@@ -1,6 +1,7 @@
-import type { AttrImpl } from '../dom/nodes/attribute';
-import type { DocumentImpl } from '../dom/nodes/document';
-import { type LinkStyleInit, ElementImpl } from '../dom/nodes/element';
+import {
+  defineElementInterface, type ElementCreationContext, ElementImpl,
+  type LinkStyleInit,
+} from '../dom/nodes/element';
 import { SVG_NAMESPACE } from '../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
@@ -25,18 +26,10 @@ export class SVGElementImpl
   implements SVGElement
 {
   constructor(
-    localName: string,
-    ownerDocument: DocumentImpl,
-    attributes: AttrImpl[] = [],
+    context: ElementCreationContext,
     linkStyle?: LinkStyleInit,
   ) {
-    super(
-      localName,
-      SVG_NAMESPACE,
-      ownerDocument,
-      attributes,
-      linkStyle,
-    );
+    super(context, linkStyle);
   }
 
   get style(): CSSStyleDeclaration {
@@ -52,6 +45,11 @@ export const svgElementIDL = defineInterface({
   inherits: 'Element',
   members: [],
   name: 'SVGElement',
+});
+
+export const svgElementInterface = defineElementInterface({
+  definition: svgElementIDL,
+  namespaceURI: SVG_NAMESPACE,
 });
 
 /*

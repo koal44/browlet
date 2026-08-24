@@ -87,7 +87,11 @@ describe('Document', () => {
 
   it('represents document fragments and shadow-root event topology', () => {
     const document = new DocumentImpl();
-    const host = new ElementImpl('main', HTML_NAMESPACE, document);
+    const host = DocumentImpl.createElementNode(
+      document,
+      'main',
+      HTML_NAMESPACE,
+    );
     const fragment = new DocumentFragmentImpl(document);
     const root = new ShadowRootImpl(host, 'closed');
 
@@ -106,9 +110,21 @@ describe('Document', () => {
 
   it('uses an assigned slot before a node tree parent', () => {
     const document = new DocumentImpl();
-    const parent = new ElementImpl('main', HTML_NAMESPACE, document);
-    const slot = new ElementImpl('slot', HTML_NAMESPACE, document);
-    const element = new ElementImpl('span', HTML_NAMESPACE, document);
+    const parent = DocumentImpl.createElementNode(
+      document,
+      'main',
+      HTML_NAMESPACE,
+    );
+    const slot = DocumentImpl.createElementNode(
+      document,
+      'slot',
+      HTML_NAMESPACE,
+    );
+    const element = DocumentImpl.createElementNode(
+      document,
+      'span',
+      HTML_NAMESPACE,
+    );
     const text = document.createTextNode('content');
     parent.appendChild(element);
     parent.appendChild(text);
@@ -205,7 +221,11 @@ describe('Document', () => {
   it('discriminates its node types without constructor identity', () => {
     const document = new DocumentImpl();
     const doctype = new DocumentTypeImpl('html', '', '');
-    const element = new ElementImpl('main', HTML_NAMESPACE, document);
+    const element = DocumentImpl.createElementNode(
+      document,
+      'main',
+      HTML_NAMESPACE,
+    );
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
 

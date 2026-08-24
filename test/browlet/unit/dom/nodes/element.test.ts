@@ -2,18 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { AttrImpl } from '../../../../../src/browlet/dom/nodes/attribute';
 import { DocumentImpl } from '../../../../../src/browlet/dom/nodes/document';
-import { ElementImpl } from '../../../../../src/browlet/dom/nodes/element';
-import {
-  HTML_NAMESPACE, XML_NAMESPACE,
-} from '../../../../../src/shared/namespaces';
+import { XML_NAMESPACE } from '../../../../../src/shared/namespaces';
 
 describe('Element attributes', () => {
   it('looks up unnamespaced attributes by qualified name', () => {
     const document = new DocumentImpl();
-    const element = new ElementImpl('main', HTML_NAMESPACE, document, [
-      new AttrImpl('id', 'content'),
-      new AttrImpl('class', ''),
-    ]);
+    const element = document.createElement('main');
+    element.attributes.setNamedItem(new AttrImpl('id', 'content'));
+    element.attributes.setNamedItem(new AttrImpl('class', ''));
 
     expect(element.getAttribute('id')).toBe('content');
     expect(element.getAttribute('missing')).toBeNull();
@@ -23,10 +19,11 @@ describe('Element attributes', () => {
 
   it('looks up namespaced attributes by namespace and local name', () => {
     const document = new DocumentImpl();
-    const element = new ElementImpl('main', HTML_NAMESPACE, document, [
+    const element = document.createElement('main');
+    element.attributes.setNamedItemNS(
       new AttrImpl('lang', 'en', XML_NAMESPACE, 'xml'),
-      new AttrImpl('plain', 'value'),
-    ]);
+    );
+    element.attributes.setNamedItem(new AttrImpl('plain', 'value'));
 
     expect(element.getAttribute('xml:lang')).toBe('en');
     expect(element.getAttributeNS(XML_NAMESPACE, 'lang')).toBe('en');
@@ -37,11 +34,7 @@ describe('Element attributes', () => {
   });
 
   it('adds, changes, and removes attributes', () => {
-    const element = new ElementImpl(
-      'main',
-      HTML_NAMESPACE,
-      new DocumentImpl(),
-    );
+    const element = new DocumentImpl().createElement('main');
 
     element.setAttribute('DATA-STATE', 'first');
     expect(element.getAttribute('data-state')).toBe('first');

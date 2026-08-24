@@ -36,7 +36,7 @@ import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
 import {
-  ElementImpl, isHTMLElement, isHTMLHeadElement,
+  isHTMLElement, isHTMLHeadElement, type ElementImpl,
 } from './element';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
@@ -50,6 +50,18 @@ import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
+import { resolveElementInterface } from '../../element-interfaces';
+
+export function createDocument(
+  options: DocumentConstructionOptions = {},
+): DocumentImpl {
+  const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
+  return nodeFactory.construct(DocumentImpl, [nodeFactory]);
+}
+
+export type DocumentConstructionOptions = {
+  readonly nodeFactory?: DOMNodeFactory;
+};
 
 /*
  * [Exposed=Window]
@@ -144,13 +156,11 @@ export class DocumentImpl
   readonly #scriptBlockingStyleSheets = new Set<ElementImpl>();
   #scriptBlockingStyleSheetsReady = Promise.resolve();
   #resolveScriptBlockingStyleSheets: (() => void) | null = null;
-  readonly #resolveElementConstruction: ElementConstructionResolver | undefined;
   readonly #nodeFactory: DOMNodeFactory;
   #writer: DocumentWriter | undefined;
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
-    resolveElementConstruction?: ElementConstructionResolver,
   ) {
     super(
       NodeType.Document,
@@ -162,7 +172,6 @@ export class DocumentImpl
     );
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
-    this.#resolveElementConstruction = resolveElementConstruction;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
   }
 
@@ -676,26 +685,22 @@ export class DocumentImpl
     }
   }
 
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE, attributes?: AttrImpl[]): ElementImpl & HTMLElement;
-  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string, attributes?: AttrImpl[]): ElementImpl;
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: typeof HTML_NAMESPACE): ElementImpl & HTMLElement;
+  static createElementNode(document: DocumentImpl, localName: string, namespaceURI: string): ElementImpl;
   static createElementNode(
     document: DocumentImpl,
     localName: string,
     namespaceURI: string,
-    attributes: AttrImpl[] = [],
   ): ElementImpl {
-    const construction = document.#resolveElementConstruction?.(
-      document,
-      localName,
-      namespaceURI,
-      attributes,
-    ) ?? {
-      implementation: ElementImpl,
-      argumentsList: [localName, namespaceURI, document, attributes],
-    };
-    return document.#nodeFactory.construct(
-      construction.implementation,
-      construction.argumentsList,
+    const interface_ = resolveElementInterface(namespaceURI, localName);
+    return document.#nodeFactory.construct<ElementImpl>(
+      interface_.implementation,
+      [{
+        document,
+        localName,
+        namespaceURI,
+        treeScopeResolver: document.#treeScopeResolver,
+      }],
     );
   }
 
@@ -983,18 +988,6 @@ export const directDOMNodeFactory: DOMNodeFactory = {
     argumentsList: readonly unknown[],
   ) => Reflect.construct(implementation, argumentsList) as T,
 };
-
-export type ElementConstruction = {
-  implementation: ImplementationConstructor<ElementImpl>;
-  argumentsList: readonly unknown[];
-};
-
-export type ElementConstructionResolver = (
-  document: DocumentImpl,
-  localName: string,
-  namespaceURI: string,
-  attributes: AttrImpl[],
-) => ElementConstruction | undefined;
 
 export type DocumentWriter = (markup: string) => void;
 

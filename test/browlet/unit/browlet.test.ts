@@ -152,6 +152,27 @@ describe('Browlet', () => {
       .toBeInstanceOf(HTMLLinkElementConstructor);
   });
 
+  it('distinguishes known, unknown, and potential custom HTML elements', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const HTMLElementConstructor = Reflect.get(
+      browlet.window,
+      'HTMLElement',
+    ) as typeof HTMLElement;
+    const HTMLUnknownElementConstructor = Reflect.get(
+      browlet.window,
+      'HTMLUnknownElement',
+    ) as typeof HTMLUnknownElement;
+    const known = browlet.document.createElement('main');
+    const unknown = browlet.document.createElement('notanelement');
+    const potentialCustom = browlet.document.createElement('x-example');
+
+    expect(known).toBeInstanceOf(HTMLElementConstructor);
+    expect(known).not.toBeInstanceOf(HTMLUnknownElementConstructor);
+    expect(unknown).toBeInstanceOf(HTMLUnknownElementConstructor);
+    expect(potentialCustom).toBeInstanceOf(HTMLElementConstructor);
+    expect(potentialCustom).not.toBeInstanceOf(HTMLUnknownElementConstructor);
+  });
+
   it('selects element interfaces from parser namespaces', () => {
     const browlet = new Browlet({ route: () => '' });
     const SVGElementConstructor = Reflect.get(

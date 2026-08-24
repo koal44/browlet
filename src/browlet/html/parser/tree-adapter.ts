@@ -50,11 +50,13 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
       this.#document,
       tagName,
       namespaceURI,
-      attrs.map((attribute) => fromParserAttribute(
-        attribute,
-        this.#document,
-      )),
     );
+    for (const attribute of attrs) {
+      ElementImpl.appendAttribute(
+        element,
+        fromParserAttribute(attribute, this.#document),
+      );
+    }
     ElementImpl.beginParsingChildren(element);
     return element;
   }
@@ -127,7 +129,10 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   adoptAttributes(recipient: ElementImpl, attrs: Token.Attribute[]): void {
     for (const attr of attrs) {
       if (recipient.hasAttributeNS(attr.namespace ?? null, attr.name)) continue;
-      recipient.attributes.push(fromParserAttribute(attr, this.#document));
+      ElementImpl.appendAttribute(
+        recipient,
+        fromParserAttribute(attr, this.#document),
+      );
     }
   }
 

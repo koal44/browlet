@@ -1,8 +1,7 @@
-import {
-  createDocument, resolveBrowletElementConstruction,
-} from '../ctor';
 import { fireEvent } from '../dom/events/event-target';
-import { DocumentImpl, type DocumentLoadTimingInfo } from '../dom/nodes/document';
+import {
+  createDocument, DocumentImpl, type DocumentLoadTimingInfo,
+} from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
 import { serializeURL } from '../../url/url';
 import { areSameOriginDomain } from './origin';
@@ -85,7 +84,6 @@ export function createAndInitializeDocument(
 
   const document = createDocument({
     nodeFactory: bindings.objects,
-    resolveElementConstruction: resolveBrowletElementConstruction,
   });
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,

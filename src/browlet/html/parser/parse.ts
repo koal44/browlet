@@ -1,5 +1,6 @@
-import { createDocument, type DocumentConstructionOptions } from '../../ctor';
-import { DocumentImpl } from '../../dom/nodes/document';
+import {
+  createDocument, type DocumentConstructionOptions, DocumentImpl,
+} from '../../dom/nodes/document';
 import { asDocument } from '../../stubs';
 import { HTMLTreeAdapter } from './tree-adapter';
 

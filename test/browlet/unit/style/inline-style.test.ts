@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  resolveBrowletElementConstruction,
-} from '../../../../src/browlet/ctor';
-import {
   parseHTMLDocument,
 } from '../../../../src/browlet/html/parser/parse';
 import {
@@ -68,7 +65,5 @@ describe('ElementCSSInlineStyle', () => {
 });
 
 function createTestDocument(config: { source?: string; } = {}) {
-  return parseHTMLDocument(config.source, {
-    resolveElementConstruction: resolveBrowletElementConstruction,
-  });
+  return parseHTMLDocument(config.source);
 }

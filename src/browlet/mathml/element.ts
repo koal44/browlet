@@ -1,6 +1,6 @@
-import type { AttrImpl } from '../dom/nodes/attribute';
-import type { DocumentImpl } from '../dom/nodes/document';
-import { ElementImpl } from '../dom/nodes/element';
+import {
+  defineElementInterface, type ElementCreationContext, ElementImpl,
+} from '../dom/nodes/element';
 import { MATHML_NAMESPACE } from '../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
@@ -17,18 +17,8 @@ export class MathMLElementImpl
   extends withMathMLElementStub(ElementImpl)
   implements MathMLElement
 {
-  constructor(
-    localName: string,
-    ownerDocument: DocumentImpl,
-    attributes: AttrImpl[] = [],
-  ) {
-    super(
-      localName,
-      MATHML_NAMESPACE,
-      ownerDocument,
-      attributes,
-      undefined,
-    );
+  constructor(context: ElementCreationContext) {
+    super(context);
   }
 
   get style(): CSSStyleDeclaration {
@@ -44,6 +34,11 @@ export const mathMLElementIDL = defineInterface({
   inherits: 'Element',
   members: [],
   name: 'MathMLElement',
+});
+
+export const mathMLElementInterface = defineElementInterface({
+  definition: mathMLElementIDL,
+  namespaceURI: MATHML_NAMESPACE,
 });
 
 /*
