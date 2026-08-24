@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseHTMLDocument,
-} from '../../../../src/browlet/parser/document-construction';
+} from '../../../../src/browlet/html/parser/parse';
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';

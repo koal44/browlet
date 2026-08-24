@@ -6,7 +6,7 @@ import {
 } from '../events/event-target';
 import {
   TreeNode, type TreeNodeVirtuals,
-} from '../tree/tree-node';
+} from '../infra/tree';
 import {
   arg, defineDictionary, defineInterface, defineInterfaceMixin, dictMember,
   emptyDictionary, idlType, nullable, op, readonlyAttr, reference,

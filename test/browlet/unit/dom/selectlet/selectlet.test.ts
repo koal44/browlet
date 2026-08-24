@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createSelectlet } from '../../../../../src/selectlet/selectlet';
 import {
   parseHTMLDocument,
-} from '../../../../../src/browlet/parser/document-construction';
+} from '../../../../../src/browlet/html/parser/parse';
 
 describe('Selectlet with a Browlet DOM host', () => {
   it('matches ordinary selectors against a parsed DOM document', () => {

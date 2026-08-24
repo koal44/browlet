@@ -4,7 +4,7 @@ import type {
   ScenarioStep, TestCase,
 } from '../harness';
 import { Browlet } from '../../../src/browlet/browlet';
-import { asDocument } from '../../../src/browlet/stubs/interfaces';
+import { asDocument } from '../../../src/browlet/stubs';
 import { isElement } from '../../../src/shared/dom';
 import { createSelectlet, type Selectlet } from '../../../src/selectlet/selectlet';
 

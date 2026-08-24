@@ -1,8 +1,8 @@
 import { EventLoop } from './event-loop';
-import type { BrowsingContextGroup } from '../navigation/browsing-context';
+import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
-} from '../origin';
+} from '../browsing/origin';
 import type { Origin } from '../../url/origin';
 
 /*

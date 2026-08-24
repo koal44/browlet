@@ -1,4 +1,4 @@
-import { withElementStub } from '../../stubs/interfaces';
+import { withElementStub } from '../../stubs';
 import {
   isElement, NodeImpl, type NodeOptions, NodeType,
 } from './node';
@@ -8,7 +8,7 @@ import type { DocumentImpl } from './document';
 import {
   ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
-} from '../../css-engine';
+} from '../../style/integration';
 import {
   arg, defineIncludes, defineInterface, idlType, nullable, op,
   readonlyAttr,

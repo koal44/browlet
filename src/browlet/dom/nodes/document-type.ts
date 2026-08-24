@@ -1,4 +1,4 @@
-import { withDocumentTypeStub } from '../../stubs/interfaces';
+import { withDocumentTypeStub } from '../../stubs';
 import {
   defineIncludes, defineInterface, idlType, readonlyAttr,
 } from '../../../web-idl/declaration/index';

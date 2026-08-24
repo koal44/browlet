@@ -1,4 +1,4 @@
-import { withTextStub } from '../../stubs/interfaces';
+import { withTextStub } from '../../stubs';
 import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import {

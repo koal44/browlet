@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   parseHTMLDocument,
-} from '../../../../../src/browlet/parser/document-construction';
+} from '../../../../../src/browlet/html/parser/parse';
 import {
   EventTargetImpl,
 } from '../../../../../src/browlet/dom/events/event-target';

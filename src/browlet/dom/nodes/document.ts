@@ -2,10 +2,23 @@ import type { TreeScope } from '../../../stylelet/engine/tree-scope';
 import { Stylelet } from '../../../stylelet/stylelet';
 import {
   DocumentOrShadowRootMixin, type TreeScopeResolver,
-} from '../../css-engine';
+} from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
-import { asDocument } from '../../stubs/interfaces';
-import { isValidAttributeLocalName } from '../algorithms/name-validation';
+import { asDocument } from '../../stubs';
+import { isValidAttributeLocalName } from '../infra/name-validation';
+import {
+  createPolicyContainer, type PolicyContainer,
+} from '../../browsing/policy/container';
+import {
+  createOpenerPolicy, type OpenerPolicy,
+} from '../../browsing/policy/coop';
+import {
+  createPermissionsPolicy, type PermissionsPolicy,
+} from '../../browsing/policy/permissions';
+import {
+  createSandboxingFlagSet, type SandboxingFlag,
+  type SandboxingFlagSet,
+} from '../../browsing/policy/sandbox';
 import { asciiLower } from '../../../shared/css';
 import {
   domExceptionName, throwDOMException,
@@ -90,7 +103,7 @@ export class DocumentImpl
   extends NodeImpl
 {
   #aboutBaseURL: URLRecord | null = null;
-  readonly #activeSandboxingFlagSet: SandboxingFlagSet = new Set();
+  readonly #activeSandboxingFlagSet = createSandboxingFlagSet();
   #allowDeclarativeShadowRoots = false;
   #ancestorOriginsList: readonly string[] | null = null;
   #browsingContext: DocumentBrowsingContext | null = null;
@@ -113,21 +126,10 @@ export class DocumentImpl
   };
   #mode = DocumentMode.NoQuirks;
   #moduleMap: ModuleMap = { entries: [] };
-  #openerPolicy: OpenerPolicy = {
-    value: 'unsafe-none',
-    reportingEndpoint: null,
-    reportOnlyValue: 'unsafe-none',
-    reportOnlyReportingEndpoint: null,
-  };
+  #openerPolicy = createOpenerPolicy();
   #origin: Origin = createOpaqueOrigin();
-  #permissionsPolicy: PermissionsPolicy = {};
-  #policyContainer: PolicyContainer = {
-    cspList: [],
-    embedderPolicy: {},
-    referrerPolicy: 'strict-origin-when-cross-origin',
-    integrityPolicy: {},
-    reportOnlyIntegrityPolicy: {},
-  };
+  #permissionsPolicy = createPermissionsPolicy();
+  #policyContainer = createPolicyContainer();
   #type: DocumentType = 'xml';
   #url = parseDocumentURL('about:blank');
   #wasCreatedViaCrossOriginRedirects = false;
@@ -1026,50 +1028,6 @@ export type ModuleMapEntry = {
   value: unknown;
 };
 
-export type PolicyContainer = {
-  cspList: object[];
-  embedderPolicy: EmptyPolicy;
-  referrerPolicy: string;
-  integrityPolicy: EmptyPolicy;
-  reportOnlyIntegrityPolicy: EmptyPolicy;
-};
-
-export type PermissionsPolicy = EmptyPolicy;
-
-export type SandboxingFlagSet = Set<SandboxingFlag>;
-
-export type SandboxingFlag =
-  | 'sandboxed-navigation'
-  | 'sandboxed-auxiliary-navigation'
-  | 'sandboxed-top-level-navigation-without-user-activation'
-  | 'sandboxed-top-level-navigation-with-user-activation'
-  | 'sandboxed-origin'
-  | 'sandboxed-forms'
-  | 'sandboxed-pointer-lock'
-  | 'sandboxed-scripts'
-  | 'sandboxed-automatic-features'
-  | 'sandboxed-document-domain'
-  | 'sandbox-propagates-to-auxiliary-browsing-contexts'
-  | 'sandboxed-modals'
-  | 'sandboxed-orientation-lock'
-  | 'sandboxed-presentation'
-  | 'sandboxed-downloads'
-  | 'sandboxed-custom-protocols-navigation';
-
-export type OpenerPolicy = {
-  value: OpenerPolicyValue;
-  reportingEndpoint: string | null;
-  reportOnlyValue: OpenerPolicyValue;
-  reportOnlyReportingEndpoint: string | null;
-};
-
-export type OpenerPolicyValue =
-  | 'unsafe-none'
-  | 'same-origin-allow-popups'
-  | 'same-origin'
-  | 'same-origin-plus-COEP'
-  | 'noopener-allow-popups';
-
 export type DocumentLoadTimingInfo = {
   navigationStartTime: DOMHighResTimeStamp;
   domInteractiveTime: DOMHighResTimeStamp;
@@ -1079,8 +1037,6 @@ export type DocumentLoadTimingInfo = {
   loadEventStartTime: DOMHighResTimeStamp;
   loadEventEndTime: DOMHighResTimeStamp;
 };
-
-type EmptyPolicy = Record<never, never>;
 
 function parseDocumentURL(input: string): URLRecord {
   const url = parseURL(input).url;

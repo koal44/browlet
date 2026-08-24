@@ -1,4 +1,4 @@
-import { withCommentStub } from '../../stubs/interfaces';
+import { withCommentStub } from '../../stubs';
 import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { NodeType } from './node';

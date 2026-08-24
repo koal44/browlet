@@ -1,25 +1,25 @@
 import { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
-import { getSourceCodeLocation } from './parser/html-tree-adapter';
+import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
 import { getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
-} from './navigation/document-lifecycle';
+} from './browsing/document-lifecycle';
 import {
   createNewTopLevelTraversable, type TopLevelTraversable,
-} from './navigation/navigable';
+} from './browsing/navigable';
 import {
   createNavigationHistoryEntry, createNavigationParams,
   finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
-} from './navigation/navigation';
+} from './browsing/navigation/navigation';
 import {
   BrowletParser, type DocumentWrite,
-} from './parser/streaming-parser';
+} from './html/parser/document-parser';
 import type { Realm } from './scripting/realm';
-import type { WindowProxy } from './window/window-proxy';
-import { WindowImpl } from './window/window';
+import type { WindowProxy } from './browsing/window/window-proxy';
+import { WindowImpl } from './browsing/window/window';
 import { UserAgent } from './user-agent';
 
 export class Browlet {

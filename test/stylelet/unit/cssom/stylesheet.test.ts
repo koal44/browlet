@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseHTMLDocument,
-} from '../../../../src/browlet/parser/document-construction';
+} from '../../../../src/browlet/html/parser/parse';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';

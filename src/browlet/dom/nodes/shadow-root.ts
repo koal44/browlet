@@ -1,6 +1,6 @@
 import { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
-import { withShadowRootStub } from '../../stubs/interfaces';
+import { withShadowRootStub } from '../../stubs';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType,
   readonlyAttr, reference,

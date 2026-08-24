@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseHTMLDocument,
-} from '../../../../src/browlet/parser/document-construction';
+} from '../../../../src/browlet/html/parser/parse';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';

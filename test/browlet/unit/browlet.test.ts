@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../../src/browlet/browlet';
-import { isHTMLLinkElement } from '../../../src/browlet/elements/metadata/html-link-element';
+import {
+  isHTMLLinkElement,
+} from '../../../src/browlet/html/elements/metadata/link';
 import { fireEvent } from '../../../src/browlet/dom/events/event-target';
 import type { EventTargetImpl } from '../../../src/browlet/dom/events/event-target';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';

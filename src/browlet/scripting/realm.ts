@@ -5,7 +5,7 @@ import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
-import { WindowImpl } from '../window/window';
+import { WindowImpl } from '../browsing/window/window';
 
 /*
  * HTML owns the Realm's agent, global-object, global-this, and host-defined

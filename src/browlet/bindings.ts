@@ -5,10 +5,10 @@ import {
   type RegisteredRealmInterfaceBindings,
 } from '../web-idl/index';
 import { Realm } from './scripting/realm';
-import type { WindowImpl } from './window/window';
+import type { WindowImpl } from './browsing/window/window';
 import {
   isWindowProxy, setWindowProxyWindow, type WindowProxy,
-} from './window/window-proxy';
+} from './browsing/window/window-proxy';
 import { browletIDLDefinitions } from './web-idl';
 
 /*

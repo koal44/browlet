@@ -1,4 +1,4 @@
-import { withDocumentFragmentStub } from '../../stubs/interfaces';
+import { withDocumentFragmentStub } from '../../stubs';
 import type { EventTargetVirtuals } from '../events/event-target';
 import { ctor, defineIncludes, defineInterface } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';

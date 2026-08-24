@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   parseHTMLDocument,
-} from '../../../src/browlet/parser/document-construction';
+} from '../../../src/browlet/html/parser/parse';
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { Snapshot } from '../../../src/stylelet/snapshot';
 

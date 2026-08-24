@@ -1,10 +1,9 @@
-import type { BrowsingContext } from '../navigation/browsing-context';
+import type { BrowsingContext } from '../browsing/browsing-context';
 import type { EventLoop } from './event-loop';
 import { Realm, type JavaScriptExecutionContext } from './realm';
-import {
-  DocumentImpl, type ModuleMap, type PolicyContainer,
-} from '../dom/nodes/document';
-import { WindowImpl } from '../window/window';
+import { DocumentImpl, type ModuleMap } from '../dom/nodes/document';
+import type { PolicyContainer } from '../browsing/policy/container';
+import { WindowImpl } from '../browsing/window/window';
 import type { Origin } from '../../url/origin';
 import { parseURL, type URLRecord } from '../../url/url';
 

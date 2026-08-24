@@ -1,4 +1,4 @@
-import { withAttrStub } from '../../stubs/interfaces';
+import { withAttrStub } from '../../stubs';
 import {
   attr, defineInterface, idlType, nullable, readonlyAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
