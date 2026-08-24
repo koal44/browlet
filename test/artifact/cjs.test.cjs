@@ -37,4 +37,10 @@ if (typeof browlet.Browlet !== 'function') {
   );
 }
 
+if (Object.keys(browlet).join(',') !== 'Browlet') {
+  throw new Error(
+    `Expected only Browlet export, got ${Object.keys(browlet).join(', ')}`,
+  );
+}
+
 console.log('cjs artifacts passed');

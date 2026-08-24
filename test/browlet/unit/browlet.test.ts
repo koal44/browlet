@@ -19,7 +19,7 @@ describe('Browlet', () => {
     const browlet = new Browlet({ route: () => '' });
 
     expect(browlet).toBeInstanceOf(Browlet);
-    expect(browlet.document.documentElement?.localName).toBe('html');
+    expect(browlet.document.documentElement.localName).toBe('html');
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);
@@ -40,31 +40,32 @@ describe('Browlet', () => {
     const browlet = new Browlet({ route: () => '' });
 
     await browlet.navigate('https://example.test/path?query#fragment');
+    const document = browlet.document as unknown as DocumentImpl;
 
-    expect(browlet.document.URL).toBe(
+    expect(document.URL).toBe(
       'https://example.test/path?query#fragment',
     );
-    expect(browlet.document.baseURI).toBe(browlet.document.URL);
-    expect(browlet.document.contentType).toBe('text/html');
-    expect(serializeOrigin(DocumentImpl.getOrigin(browlet.document))).toBe(
+    expect(document.baseURI).toBe(document.URL);
+    expect(document.contentType).toBe('text/html');
+    expect(serializeOrigin(DocumentImpl.getOrigin(document))).toBe(
       'https://example.test',
     );
-    expect(DocumentImpl.allowsDeclarativeShadowRoots(browlet.document))
+    expect(DocumentImpl.allowsDeclarativeShadowRoots(document))
       .toBe(true);
-    expect(DocumentImpl.getCurrentDocumentReadiness(browlet.document))
+    expect(DocumentImpl.getCurrentDocumentReadiness(document))
       .toBe('complete');
-    expect(DocumentImpl.isReadyForPostLoadTasks(browlet.document)).toBe(true);
-    expect(DocumentImpl.getCompletelyLoadedTime(browlet.document))
+    expect(DocumentImpl.isReadyForPostLoadTasks(document)).toBe(true);
+    expect(DocumentImpl.getCompletelyLoadedTime(document))
       .not.toBeNull();
-    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(browlet.document))
+    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(document))
       .toBe(false);
-    expect(DocumentImpl.getDuringLoadingNavigationID(browlet.document))
+    expect(DocumentImpl.getDuringLoadingNavigationID(document))
       .toBeNull();
-    expect(DocumentImpl.getCustomElementRegistry(browlet.document))
+    expect(DocumentImpl.getCustomElementRegistry(document))
       .not.toBeNull();
-    expect(DocumentImpl.getInternalAncestorOriginObjectsList(browlet.document))
+    expect(DocumentImpl.getInternalAncestorOriginObjectsList(document))
       .toEqual([]);
-    expect(DocumentImpl.getAncestorOriginsList(browlet.document)).toEqual([]);
+    expect(DocumentImpl.getAncestorOriginsList(document)).toEqual([]);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
@@ -394,20 +395,31 @@ describe('Browlet', () => {
       });
   });
 
-  it('fetches through one replaceable local route', () => {
+  it('navigates through one replaceable local route', async () => {
+    const requests: string[] = [];
     const browlet = new Browlet({
-      route: (url) => `first: ${url}`,
+      route: (url) => {
+        requests.push(url);
+        return '<main id="first"></main>';
+      },
     });
 
-    expect(browlet.fetch('https://example.test/one')).toBe(
-      'first: https://example.test/one',
-    );
+    await browlet.navigate('https://example.test/one');
+    expect(browlet.window.document.getElementById('first')?.localName)
+      .toBe('main');
 
-    browlet.route((url) => `second: ${url}`);
+    browlet.route((url) => {
+      requests.push(url);
+      return '<main id="second"></main>';
+    });
 
-    expect(browlet.fetch(new URL('https://example.test/two'))).toBe(
-      'second: https://example.test/two',
-    );
+    await browlet.navigate(new URL('https://example.test/two'));
+    expect(browlet.window.document.getElementById('second')?.localName)
+      .toBe('main');
+    expect(requests).toEqual([
+      'https://example.test/one',
+      'https://example.test/two',
+    ]);
   });
 
   it('exposes and replaces host values', () => {

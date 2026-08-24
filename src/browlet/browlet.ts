@@ -1,6 +1,7 @@
 import { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
+import { asDocument } from './stubs';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
 import { getRelevantRealm } from './bindings';
@@ -18,7 +19,6 @@ import {
   BrowletParser, type DocumentWrite,
 } from './html/parser/document-parser';
 import type { Realm } from './scripting/realm';
-import type { WindowProxy } from './browsing/window/window-proxy';
 import { WindowImpl } from './browsing/window/window';
 import { UserAgent } from './user-agent';
 
@@ -44,15 +44,15 @@ export class Browlet {
     }
   }
 
-  get document(): DocumentImpl {
+  get document(): Document {
     const document = this.#traversable.activeDocument;
     if (document === null) {
       throw new Error('Top-level traversable has no active Document');
     }
-    return document;
+    return asDocument(document);
   }
 
-  get window(): BrowletWindow {
+  get window(): WindowProxy {
     const browsingContext = this.#traversable.activeBrowsingContext;
     if (browsingContext === null) {
       throw new Error('Top-level traversable has no active browsing context');
@@ -64,10 +64,6 @@ export class Browlet {
     this.#route = route;
   }
 
-  fetch(url: string | URL): string {
-    return this.#route(String(url));
-  }
-
   expose(name: string, value: unknown): void {
     this.#exposures.set(name, value);
     Object.defineProperty(this.requireActiveWindow(), name, {
@@ -77,9 +73,9 @@ export class Browlet {
     });
   }
 
-  async navigate(url: string | URL): Promise<BrowletWindow> {
+  async navigate(url: string | URL): Promise<WindowProxy> {
     const documentURL = new URL(url);
-    const source = this.fetch(documentURL);
+    const source = this.getRouteSource(documentURL);
     const documentURLRecord = requireURLRecord(documentURL.href);
     const navigationParams = createNavigationParams(
       this.#traversable,
@@ -132,14 +128,6 @@ export class Browlet {
     return this.window;
   }
 
-  close(): void {}
-
-  // -- Friends ----------------------------------------------------------
-
-  static getTopLevelTraversable(browlet: Browlet): TopLevelTraversable {
-    return browlet.#traversable;
-  }
-
   // -- Private ----------------------------------------------------------
 
   private executeScript(
@@ -156,7 +144,7 @@ export class Browlet {
       : new URL(sourceURL, documentURL);
     const source = sourceURL === null
       ? getTextContent(element)
-      : this.fetch(scriptURL);
+      : this.getRouteSource(scriptURL);
     const lineOffset = sourceURL === null
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
@@ -176,6 +164,10 @@ export class Browlet {
     }
   }
 
+  private getRouteSource(url: string | URL): string {
+    return this.#route(String(url));
+  }
+
   private requireActiveWindow(): WindowImpl {
     const window = this.#traversable.activeWindow;
     if (window === null) {
@@ -184,8 +176,6 @@ export class Browlet {
     return window;
   }
 }
-
-export type BrowletWindow = WindowProxy;
 
 export type BrowletRoute = (url: string) => string;
 

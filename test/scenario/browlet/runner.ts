@@ -59,33 +59,29 @@ async function runScenario(scenario: Scenario): Promise<void> {
   const document = asDocument(browlet.document);
   const selectlet = createSelectlet(document);
 
-  try {
-    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-      const step = steps[stepIndex];
+  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+    const step = steps[stepIndex];
 
-      for (let caseIndex = 0; caseIndex < step.cases.length; caseIndex++) {
-        const testCase = step.cases[caseIndex];
-        if (hasOnlyCases && testCase.status !== 'only') continue;
-        if (shouldSkipCase(testCase)) continue;
+    for (let caseIndex = 0; caseIndex < step.cases.length; caseIndex++) {
+      const testCase = step.cases[caseIndex];
+      if (hasOnlyCases && testCase.status !== 'only') continue;
+      if (shouldSkipCase(testCase)) continue;
 
-        const info: CaseInfo = {
-          scenario,
-          testCase,
-          stepIndex,
-          caseIndex,
-        };
+      const info: CaseInfo = {
+        scenario,
+        testCase,
+        stepIndex,
+        caseIndex,
+      };
 
-        try {
-          runCase(document, selectlet, testCase);
-        } catch (error) {
-          throw new Error(
-            `${formatCaseHeader(info)}\n${thrownMessage(error, STACK_TRACE)}`,
-          );
-        }
+      try {
+        runCase(document, selectlet, testCase);
+      } catch (error) {
+        throw new Error(
+          `${formatCaseHeader(info)}\n${thrownMessage(error, STACK_TRACE)}`,
+        );
       }
     }
-  } finally {
-    browlet.close();
   }
 }
 

@@ -12,15 +12,11 @@ export async function runTest(testPath: string): Promise<WptReport> {
   const { promise: report, resolve: complete } =
     Promise.withResolvers<WptReport>();
 
-  try {
-    browlet.expose('__wptComplete', complete);
+  browlet.expose('__wptComplete', complete);
 
-    await browlet.navigate(testUrl);
+  await browlet.navigate(testUrl);
 
-    return await withWptTimeout(report, testPath);
-  } finally {
-    browlet.close();
-  }
+  return await withWptTimeout(report, testPath);
 }
 
 function createWptRoute(): BrowletRoute {
