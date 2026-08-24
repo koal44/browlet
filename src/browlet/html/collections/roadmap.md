@@ -10,7 +10,18 @@ DOM collection machinery underneath.
 | `form-controls.ts` | `HTMLFormControlsCollection` and `RadioNodeList` | HTML §2.6.4.2 |
 | `options.ts` | `HTMLOptionsCollection` indexed setter/add/remove behavior | HTML §2.6.4.3 |
 | `dom-string-list.ts` | Read-only indexed string-list surface over its owner's associated list | HTML §2.6.5 |
-| `web-idl.ts` | Legacy indexed/named/callable projection contributions | HTML §2.6 and Web IDL legacy platform objects |
+| `web-idl.ts` | Legacy indexed/named projection contributions and the HTML-owned callable `HTMLAllCollection` shell | HTML §2.6 and Web IDL legacy platform objects |
+
+Begin after DOM's projected, identity-stable live `NodeList` and
+`HTMLCollection` machinery. `HTMLFormControlsCollection` and `RadioNodeList`
+also depend on form controls, radio-button checkedness, and live filtering;
+`HTMLOptionsCollection` depends on `select`/`option` state and the normative DOM
+mutation spine. Add `DOMStringList` with its first real consumer rather than as
+an otherwise unowned list.
+
+Web IDL supplies the reusable legacy indexed and named property algorithms.
+`HTMLAllCollection`'s additional `[[Call]]` behavior is an HTML-specific exotic
+surface and must not broaden every legacy platform object into a callable one.
 
 `HTMLAllCollection` requires JavaScript's engine-internal [[IsHTMLDDA]]
 behavior (`typeof document.all`, falsiness, and loose equality). Userland

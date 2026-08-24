@@ -1,8 +1,5 @@
 import type { Definition } from '../../web-idl/declaration/index';
 import {
-  cssomDocumentOrShadowRootIDL, elementCSSInlineStyleIDL, linkStyleIDL,
-} from '../style/integration';
-import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL,
   eventTargetIDL,
 } from './events/event-target';
@@ -72,9 +69,6 @@ export const domIDLDefinitions: Definition[] = [
   shadowRootIDL,
   shadowRootIncludesDocumentOrShadowRootIDL,
 
-  elementCSSInlineStyleIDL,
-  linkStyleIDL,
-  cssomDocumentOrShadowRootIDL,
   documentIDL,
   elementCreationOptionsIDL,
   documentIncludesParentNodeIDL,

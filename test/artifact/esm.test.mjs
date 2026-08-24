@@ -31,6 +31,12 @@ if (typeof stylelet.Stylelet !== 'function') {
   );
 }
 
+if (!Array.isArray(stylelet.styleletIDLDefinitions)) {
+  throw new Error(
+    'Expected styleletIDLDefinitions export to be an array',
+  );
+}
+
 if (typeof browlet.Browlet !== 'function') {
   throw new Error(
     `Expected Browlet export to be class, got ${typeof browlet.Browlet}`,

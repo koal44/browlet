@@ -18,12 +18,20 @@
 | `custom-state-set.ts` | `CustomStateSet` and custom-state pseudo-class state | HTML §4.13.7.5 |
 | existing `registry.ts` | Scoped registries, `whenDefined()`, upgrade candidates, and definition bookkeeping | HTML §§4.13.4–4.13.5 |
 
-The first integration target is Web IDL `[CEReactions]`, followed by
-`Document.createElement*`, attribute mutation, and tree connection/disconnection
-callbacks. HTML parsing then consumes the same machinery through "create an
-element for the token": it needs the intended parent and scoped registry,
-synchronous constructor decision, parser-inserted state, and a parser-owned
-reaction queue. The registry alone must not pretend those reactions exist.
+The first vertical slice joins the relevant `WindowAgent`'s reaction stack,
+Web IDL `[CEReactions]` entry/exit, and the Priority 2 attribute-mutation path.
+The Web IDL wrapper must surround the originally specified implementation
+steps, invoke the popped queue, and then return or rethrow the original outcome.
+It remains Browlet-supplied rather than becoming generic Web IDL behavior. Do
+not install a no-op wrapper merely because declarations already retain the
+extended attribute.
+
+Continue with `Document.createElement*`, definitions and upgrade, then tree
+connection/disconnection callbacks. HTML parsing consumes the same machinery
+through "create an element for the token": it needs the intended parent and
+scoped registry, synchronous constructor decision, parser-inserted state, and
+a parser-owned reaction queue. The registry alone must not pretend those
+reactions exist.
 
 DOM's mutation spine owns pointer changes and the ordering of insertion,
 removal, adoption, attribute, and post-connection extension points. This

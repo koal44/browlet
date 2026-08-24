@@ -17,6 +17,16 @@ const styles = new Stylelet(document);
 const sheet = styles.createStyleSheet();
 ```
 
+## Host integration
+
+```js
+import { styleletIDLDefinitions } from 'stylelet';
+```
+
+`styleletIDLDefinitions` is Stylelet's declaration-only Web IDL contribution.
+A DOM host can assemble it with its own interfaces and bind the resulting
+CSSOM mixins to that host's platform objects.
+
 Stylelet is under active development. Its public surface and implemented specification coverage are not yet complete.
 
 ## License

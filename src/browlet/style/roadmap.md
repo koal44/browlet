@@ -5,15 +5,18 @@
 - `integration.ts` connects Browlet Documents/elements/tree scopes to Stylelet
   state and implements the current `DocumentOrShadowRoot`,
   `ElementCSSInlineStyle`, and `LinkStyle` host behavior.
+- Stylelet exports those mixins' neutral declarations through
+  `styleletIDLDefinitions`; Browlet contributes only their host behavior and
+  assembles the declarations into its binding domain.
 
 ## Next boundary change
 
-- [ ] Move host-neutral Web IDL declaration contributions for Stylelet-owned
+- [x] Move host-neutral Web IDL declaration contributions for Stylelet-owned
   CSSOM objects and mixins into the Stylelet package.
-- [ ] Let Browlet bind those declarations to Browlet-specific implementation
+- [x] Let Browlet bind those declarations to Browlet-specific implementation
   adapters; let jsdom generate or bind its own wrappers from the same semantic
   contribution.
-- [ ] Keep style-sheet fetching and HTML `<link>` processing in `loader/` and
+- [x] Keep style-sheet fetching and HTML `<link>` processing in `loader/` and
   HTML; keep semantic sheet/declaration mutation in Stylelet.
 - [ ] Add adopted-style-sheet observable-array projection when the Web IDL
   binding supports that specialized public object.
