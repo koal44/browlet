@@ -1,18 +1,19 @@
 import { domIDLDefinitions } from '../../domlet/web-idl';
-import { urlIDLDefinitions } from '../../url/web-idl';
-import { assembleDefinitions } from '../../web-idl/assembly';
+import type { DOMNodeFactory } from '../../domlet/nodes/document';
+import { urlIDLDefinitions } from '../../url/api';
+import { assembleDefinitions } from '../../web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../web-idl/binding';
 import { webIDLCommonDefinitions } from '../../web-idl/common-definitions';
 import type { HostDefinedInterface } from '../../web-idl/conversion';
-import { ImplementationRegistry } from '../../web-idl/implementation';
-import { sharedPlatformObjects } from '../../web-idl/platform-object';
 import {
-  originIDL, registerOriginImplementation,
-} from '../origin';
+  createPlatformObjectAdapter, registerInterfaceBindings,
+} from '../../web-idl/adapter/projection';
+import { ImplementationRegistry } from '../../web-idl/adapter/registry';
+import { sharedPlatformObjects } from '../../web-idl/platform-object';
 import type { Realm } from '../realm';
+import type { WindowImpl } from '../window';
 import { isWindowProxy } from '../window-proxy';
-import { DOMBinding } from './dom';
-import { URLBinding } from './url';
+import { browletIDLDefinitions } from '../web-idl';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -21,8 +22,7 @@ import { URLBinding } from './url';
  * installed on its Window environment.
  */
 export class BrowletBindings {
-  readonly dom: DOMBinding;
-  readonly url: URLBinding;
+  readonly nodeFactory: DOMNodeFactory;
   readonly #binding: JavaScriptBinding;
 
   constructor(realm: Realm) {
@@ -38,9 +38,14 @@ export class BrowletBindings {
       implementations,
       hostDefinedInterfaces,
     );
-    this.dom = new DOMBinding(realm, this.#binding);
-    this.url = new URLBinding(this.#binding);
-    registerOriginImplementation(this.#binding);
+    const objects = createPlatformObjectAdapter(this.#binding);
+    this.nodeFactory = objects;
+    registerInterfaceBindings(this.#binding, webIDLCommonDefinitions);
+    registerInterfaceBindings(this.#binding, domIDLDefinitions, {
+      normalizeException: (exception) => this.#normalizeDOMException(exception),
+    });
+    registerInterfaceBindings(this.#binding, urlIDLDefinitions);
+    registerInterfaceBindings(this.#binding, browletIDLDefinitions);
     bindingsByRealm.set(realm, this);
   }
 
@@ -53,6 +58,22 @@ export class BrowletBindings {
   install(target: object): void {
     this.#binding.install(target);
   }
+
+  projectWindow(window: WindowImpl): Window {
+    return this.#binding.projectGlobalObject(window, 'Window').object as Window;
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  #normalizeDOMException(exception: unknown): unknown {
+    if (this.#binding.implements(exception, 'DOMException')) return exception;
+    if (!(exception instanceof DOMException)) return exception;
+
+    const DOMException_ = this.#binding.getInterfaceObject(
+      'DOMException',
+    ) as unknown as typeof DOMException;
+    return new DOMException_(exception.message, exception.name);
+  }
 }
 
 const bindingsByRealm = new WeakMap<Realm, BrowletBindings>();
@@ -64,7 +85,7 @@ const hostDefinedInterfaces: HostDefinedInterface[] = [{
 
 const browletDefinitions = assembleDefinitions([
   ...webIDLCommonDefinitions,
-  originIDL,
+  ...browletIDLDefinitions,
   ...domIDLDefinitions,
   ...urlIDLDefinitions,
 ]);

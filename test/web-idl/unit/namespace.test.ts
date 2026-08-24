@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
-} from '../../../src/web-idl/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL namespace objects', () => {

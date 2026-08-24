@@ -3,11 +3,12 @@
 ## Realm, Window, and WindowProxy integration
 
 Browlet's HTML realm model records a distinct Window global object and stable
-WindowProxy global-this value, but Window still uses its direct implementation
-surface rather than Web IDL's `projectGlobalObject()`. The global projection
-must eventually wrap `WindowImpl`, place the projected public Window in the
-WindowProxy's `[[Window]]` slot, and remove the direct named-property and event
-method shims.
+WindowProxy global-this value. The existing `WindowImpl` is projected through
+Web IDL's global-object machinery, and WindowProxy forwards its public surface
+to that projected Window while lifecycle code derives the implementation
+through their shared platform-object association. WindowProxy still supplies
+stable event-method forwarding because the userland outer proxy cannot itself
+carry the Window platform-object brand.
 
 Node's VM creates an inaccessible global proxy for every context and cannot
 currently reuse Browlet's WindowProxy as a replacement context's actual
@@ -20,13 +21,18 @@ test records the mismatch.
 The provisional JavaScript WindowProxy must report forwarded own descriptors
 as configurable to satisfy `Proxy` target invariants while its Window can be
 replaced. Exact nonconfigurable `[LegacyUnforgeable]` descriptors across
-retargeting require native global-proxy machinery. Add a focused expected
-failure when Window's Web IDL projection reaches those descriptors.
+retargeting require native global-proxy machinery. A focused expected-failure
+test records that mismatch.
 
 The current handler implements only the same-origin, top-level lifecycle
 foundation. Indexed child navigables, cross-origin access checks, and the
 remaining specified WindowProxy internal methods enter with navigation and
 nested browsing-context support.
+
+Window named properties currently preserve Browlet's implemented ID-based
+surface, now dynamically through Web IDL's named-properties object. Element
+`name` contributions, child navigables, and the multiple-match HTMLCollection
+result remain for their corresponding HTML machinery.
 
 ## Bounded cross-document navigation
 
@@ -48,10 +54,8 @@ HTML event loop or the separate `DOMContentLoaded` steps.
 Fragment and `javascript:` navigation still take the cross-document host path;
 their specified same-document and script-URL branches remain to be connected.
 
-`updateWindowNamedProperties()` remains only until Window uses Web IDL's
-global named-properties projection. Browlet's host exposures are intentionally
-reinstalled on each new Window; they are host configuration, not Document or
-Window lifecycle state.
+Browlet's host exposures are intentionally reinstalled on each new Window;
+they are host configuration, not Document or Window lifecycle state.
 
 ## Initial browsing-context dependencies
 

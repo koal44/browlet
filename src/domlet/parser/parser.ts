@@ -5,11 +5,8 @@ import {
   DocumentImpl, DocumentMode, type DomletDocument,
 } from '../nodes/document';
 import { DocumentTypeImpl } from '../nodes/document-type';
-import { DocumentFragmentImpl } from '../nodes/document-fragment';
+import type { DocumentFragmentImpl } from '../nodes/document-fragment';
 import { ElementImpl } from '../nodes/element';
-import {
-  directDOMNodeFactory, type DOMNodeFactory,
-} from '../nodes/factory';
 import type { TextImpl } from '../nodes/text';
 import { TreeNode } from '../tree/tree-node';
 import {
@@ -18,15 +15,10 @@ import {
 
 export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   readonly #document: DomletDocument;
-  readonly #documentFactory: DOMNodeFactory;
   #pendingUnpushedElement: ElementImpl | null = null;
 
-  constructor(
-    document: DomletDocument,
-    documentFactory: DOMNodeFactory = directDOMNodeFactory,
-  ) {
+  constructor(document: DomletDocument) {
     this.#document = document;
-    this.#documentFactory = documentFactory;
   }
 
   parse(source: string): DomletDocument {
@@ -48,10 +40,7 @@ export class DomletParser implements TreeAdapter<DomletParserTreeAdapterMap> {
   }
 
   createDocumentFragment(): DocumentFragmentImpl {
-    return this.#documentFactory.construct(
-      DocumentFragmentImpl,
-      [this.#document],
-    );
+    return DocumentImpl.createDocumentFragment(this.#document);
   }
 
   createElement(

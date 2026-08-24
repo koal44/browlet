@@ -1,12 +1,12 @@
-import type { AssembledInterface, DefinitionAssembly } from './assembly';
+import type { AssembledInterface, DefinitionAssembly } from './adapter/assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type { ExtendedAttribute, OperationMember } from './definition';
+import type { ExtendedAttribute, OperationMember } from './adapter/definition';
 import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
-} from './implementation';
+} from './adapter/registry';
 import { ordinarySetWithOwnDescriptor } from './platform-object';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,

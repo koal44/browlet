@@ -4,7 +4,7 @@ import { Realm, type JavaScriptExecutionContext } from './realm';
 import {
   DocumentImpl, type ModuleMap, type PolicyContainer,
 } from '../domlet/nodes/document';
-import type { WindowImpl } from './window';
+import { WindowImpl } from './window';
 import type { Origin } from '../url/origin';
 import { parseURL, type URLRecord } from '../url/url';
 
@@ -73,17 +73,23 @@ export class WindowEnvironmentSettingsObject
   }
 
   get apiBaseURL(): URLRecord {
-    const url = parseURL(this.#window.document.baseURI).url;
+    const url = parseURL(
+      WindowImpl.getAssociatedDocument(this.#window).baseURI,
+    ).url;
     if (url === null) throw new Error('Window Document has an invalid base URL');
     return url;
   }
 
   get moduleMap(): ModuleMap {
-    return DocumentImpl.getModuleMap(this.#window.document);
+    return DocumentImpl.getModuleMap(
+      WindowImpl.getAssociatedDocument(this.#window),
+    );
   }
 
   get origin(): Origin {
-    return DocumentImpl.getOrigin(this.#window.document);
+    return DocumentImpl.getOrigin(
+      WindowImpl.getAssociatedDocument(this.#window),
+    );
   }
 
   get hasCrossSiteAncestor(): boolean {
@@ -93,7 +99,9 @@ export class WindowEnvironmentSettingsObject
   }
 
   get policyContainer(): PolicyContainer {
-    return DocumentImpl.getPolicyContainer(this.#window.document);
+    return DocumentImpl.getPolicyContainer(
+      WindowImpl.getAssociatedDocument(this.#window),
+    );
   }
 
   get crossOriginIsolatedCapability(): boolean {
@@ -101,14 +109,18 @@ export class WindowEnvironmentSettingsObject
       ?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
 
-    void DocumentImpl.getPermissionsPolicy(this.#window.document);
+    void DocumentImpl.getPermissionsPolicy(
+      WindowImpl.getAssociatedDocument(this.#window),
+    );
     throw new Error(
       'The cross-origin-isolated permissions-policy check is not implemented',
     );
   }
 
   get timeOrigin(): DOMHighResTimeStamp {
-    return DocumentImpl.getLoadTimingInfo(this.#window.document)
+    return DocumentImpl.getLoadTimingInfo(
+      WindowImpl.getAssociatedDocument(this.#window),
+    )
       .navigationStartTime;
   }
 }

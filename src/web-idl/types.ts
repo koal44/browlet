@@ -1,7 +1,7 @@
-import type { DefinitionAssembly } from './assembly';
+import type { DefinitionAssembly } from './adapter/assembly';
 import type {
   AnnotatedType, ExtendedAttribute, UnionType, WebIDLType,
-} from './definition';
+} from './adapter/definition';
 
 export function getTypeWithApplicableExtendedAttributes(
   type: WebIDLType,

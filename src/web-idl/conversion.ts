@@ -1,6 +1,6 @@
 import type {
   AssembledDictionary, DefinitionAssembly,
-} from './assembly';
+} from './adapter/assembly';
 import {
   convertAsyncSequenceToJavaScript,
   convertJavaScriptValueToAsyncSequence,
@@ -17,7 +17,7 @@ import {
 import type {
   AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute,
   SimpleTypeName, WebIDLType,
-} from './definition';
+} from './adapter/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 import type { PlatformObjectRegistry } from './platform-object';
 import {
@@ -481,6 +481,7 @@ function convertJavaScriptValueToReference(
         value,
         getCallbackRealm(value, context),
         context.realm.callbacks.captureContext(),
+        context,
       );
     }
     case 'callback-interface': {
@@ -492,6 +493,7 @@ function convertJavaScriptValueToReference(
         value,
         getCallbackRealm(value, context),
         context.realm.callbacks.captureContext(),
+        context,
       );
     }
     case undefined: {

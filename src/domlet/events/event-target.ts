@@ -2,10 +2,13 @@ import { domExceptionName } from '../../shared/dom-exception';
 import {
   isCallbackInterfaceValue, type CallbackInterfaceValue,
 } from '../../web-idl/callback-value';
+import { callUserObjectOperation } from '../../web-idl/callback';
 import {
-  defineCallbackInterface, defineDictionary, defineInterface, emptyDictionary,
-  idlType, nullable, reference, union,
-} from '../../web-idl/definition';
+  arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
+  dictMember, emptyDictionary, idlType, nullable, op, reference, union,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
+import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
 import {
   EventImpl, type EventPathItem, toDOMString,
 } from './event';
@@ -35,84 +38,11 @@ import { MouseEventImpl } from './ui-event';
  *   AbortSignal signal;
  * };
  */
-
-export const eventListenerIDL = defineCallbackInterface({
-  members: [{
-    arguments: [{ name: 'event', type: reference('Event') }],
-    kind: 'operation',
-    name: 'handleEvent',
-    returns: idlType.undefined,
-  }],
-  name: 'EventListener',
-});
-
-export const eventListenerOptionsIDL = defineDictionary({
-  members: [{ default: false, name: 'capture', type: idlType.boolean }],
-  name: 'EventListenerOptions',
-});
-
-export const addEventListenerOptionsIDL = defineDictionary({
-  inherits: 'EventListenerOptions',
-  members: [
-    { name: 'passive', type: idlType.boolean },
-    { default: false, name: 'once', type: idlType.boolean },
-    // TODO(DOM section 3): Use AbortSignal once its interface is bound.
-    { name: 'signal', type: idlType.object },
-  ],
-  name: 'AddEventListenerOptions',
-});
-
-export const eventTargetIDL = defineInterface({
-  exposed: '*',
-  members: [
-    { arguments: [], kind: 'constructor' },
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        { name: 'callback', type: nullable(reference('EventListener')) },
-        {
-          default: emptyDictionary,
-          name: 'options',
-          optional: true,
-          type: union(reference('AddEventListenerOptions'), idlType.boolean),
-        },
-      ],
-      kind: 'operation',
-      name: 'addEventListener',
-      returns: idlType.undefined,
-    },
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        { name: 'callback', type: nullable(reference('EventListener')) },
-        {
-          default: emptyDictionary,
-          name: 'options',
-          optional: true,
-          type: union(reference('EventListenerOptions'), idlType.boolean),
-        },
-      ],
-      kind: 'operation',
-      name: 'removeEventListener',
-      returns: idlType.undefined,
-    },
-    {
-      arguments: [{ name: 'event', type: reference('Event') }],
-      kind: 'operation',
-      name: 'dispatchEvent',
-      returns: idlType.boolean,
-    },
-  ],
-  name: 'EventTarget',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class EventTargetImpl implements EventTarget
 {
   #eventListenerList: EventListenerRecord[] = [];
+  #createEvent: EventFactory = createStandaloneEvent;
   readonly #virtuals: EventTargetVirtuals;
-  #invocationHost = defaultEventListenerInvocationHost;
 
   constructor(virtuals: EventTargetVirtuals = {}) {
     this.#virtuals = virtuals;
@@ -125,18 +55,14 @@ export class EventTargetImpl implements EventTarget
   ): void {
     const convertedType = toDOMString(type);
     const { capture, passive, once, signal } = flattenMore(options);
-    const convertedCallback = callback === null
-      ? null
-      : this.#invocationHost.convertEventListener(callback);
     const listener: EventListenerRecord = {
       type: convertedType,
-      callback: convertedCallback,
+      callback,
       capture,
       passive,
       once,
       signal,
       removed: false,
-      invocationHost: this.#invocationHost,
     };
 
     this.#addListener(listener);
@@ -149,12 +75,9 @@ export class EventTargetImpl implements EventTarget
   ): void {
     const convertedType = toDOMString(type);
     const capture = flatten(options);
-    const convertedCallback = callback === null
-      ? null
-      : this.#invocationHost.convertEventListener(callback);
     const listener = this.#eventListenerList.find((candidate) =>
       candidate.type === convertedType &&
-      sameEventListener(candidate.callback, convertedCallback) &&
+      sameEventListener(candidate.callback, callback) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
@@ -181,17 +104,18 @@ export class EventTargetImpl implements EventTarget
       #eventListenerList in value;
   }
 
-  static associateInvocationHost(
+  static setEventFactory(
     target: EventTargetImpl,
-    host: EventListenerInvocationHost,
+    createEvent: EventFactory,
   ): void {
-    target.#invocationHost = host;
+    target.#createEvent = createEvent;
   }
 
-  static getInvocationHost(
+  static createEvent(
     target: EventTargetImpl,
-  ): EventListenerInvocationHost {
-    return target.#invocationHost;
+    eventConstructor?: EventImplementationConstructor,
+  ): EventImpl {
+    return target.#createEvent(eventConstructor);
   }
 
   static removeAllEventListeners(target: EventTargetImpl): void {
@@ -371,31 +295,43 @@ export class EventTargetImpl implements EventTarget
 
       if (listener.once) currentTarget.#removeListener(listener);
 
-      const host = listener.invocationHost;
-      const global = host.getAssociatedGlobal(callback);
-      const window = host.isWindow(global, callback);
-      const currentEvent = window
-        ? host.getCurrentEvent(global, callback)
+      const callbackValue = isCallbackInterfaceValue(callback)
+        ? callback
+        : undefined;
+      const callbackRealm = callbackValue?.realm;
+      const global = callbackRealm?.global;
+      const windowRealm = callbackRealm?.globalNames.has('Window')
+        ? callbackRealm as WindowEventListenerRealm
+        : undefined;
+      const currentEvent = windowRealm && global
+        ? windowRealm.getCurrentEvent(global)
         : undefined;
 
-      if (window && !invocationTargetInShadowTree) {
-        host.setCurrentEvent(global, event, callback);
+      if (windowRealm && global && !invocationTargetInShadowTree) {
+        windowRealm.setCurrentEvent(global, event);
       }
       if (listener.passive) EventImpl.setInPassiveListener(event, true);
-      if (window) host.recordTimingInfo(global, event, callback);
+      if (windowRealm && global && callbackValue) {
+        windowRealm.recordTimingInfo(
+          global,
+          event,
+          callbackValue.object as EventListenerOrEventListenerObject,
+        );
+      }
 
       try {
-        host.callUserObjectOperation(
-          callback,
-          'handleEvent',
-          [event],
-          currentTarget,
-        );
+        callEventListener(callback, event, currentTarget);
       } catch (exception) {
-        host.reportException(exception, callback);
+        if (callbackValue) {
+          callbackValue.realm.callbacks.reportException(exception);
+        } else {
+          console.error(exception);
+        }
       } finally {
         EventImpl.setInPassiveListener(event, false);
-        if (window) host.setCurrentEvent(global, currentEvent, callback);
+        if (windowRealm && global) {
+          windowRealm.setCurrentEvent(global, currentEvent);
+        }
       }
 
       if (EventImpl.immediatePropagationStopped(event)) break;
@@ -440,6 +376,82 @@ export class EventTargetImpl implements EventTarget
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const eventTargetIDL = defineInterface({
+  binding: bind(EventTargetImpl, {
+    initialize(context, value) {
+      const realm = context.realm as EventRealm;
+      EventTargetImpl.setEventFactory(
+        value as EventTargetImpl,
+        (EventConstructor = EventImpl) => {
+          const event = context.objects.construct(
+            EventConstructor,
+            ['', {}, realm.eventTimeStamp()],
+          );
+          EventImpl.setTrusted(event, true);
+          return event;
+        },
+      );
+    },
+  }),
+  exposed: '*',
+  members: [
+    ctor(bind({ invoke() {} })),
+    op('addEventListener', idlType.undefined, [
+      arg('type', idlType.DOMString),
+      arg('callback', nullable(reference('EventListener'))),
+      arg(
+        'options',
+        union(reference('AddEventListenerOptions'), idlType.boolean),
+        {
+          default: emptyDictionary,
+          optional: true,
+        },
+      ),
+    ]),
+    op('removeEventListener', idlType.undefined, [
+      arg('type', idlType.DOMString),
+      arg('callback', nullable(reference('EventListener'))),
+      arg(
+        'options',
+        union(reference('EventListenerOptions'), idlType.boolean),
+        {
+          default: emptyDictionary,
+          optional: true,
+        },
+      ),
+    ]),
+    op('dispatchEvent', idlType.boolean, [
+      arg('event', reference('Event')),
+    ]),
+  ],
+  name: 'EventTarget',
+});
+
+export const eventListenerIDL = defineCallbackInterface({
+  members: [op('handleEvent', idlType.undefined, [
+    arg('event', reference('Event')),
+  ])],
+  name: 'EventListener',
+});
+
+export const eventListenerOptionsIDL = defineDictionary({
+  members: [dictMember('capture', idlType.boolean, { default: false })],
+  name: 'EventListenerOptions',
+});
+
+export const addEventListenerOptionsIDL = defineDictionary({
+  inherits: 'EventListenerOptions',
+  members: [
+    dictMember('passive', idlType.boolean),
+    dictMember('once', idlType.boolean, { default: false }),
+    // TODO(DOM section 3): Use AbortSignal once its interface is bound.
+    dictMember('signal', idlType.object),
+  ],
+  name: 'AddEventListenerOptions',
+});
+
 export function fireEvent(
   name: string,
   target: EventTargetImpl,
@@ -447,8 +459,7 @@ export function fireEvent(
   initialize?: (event: EventImpl) => void,
   legacyTargetOverride = false,
 ): boolean {
-  const event = EventTargetImpl.getInvocationHost(target)
-    .createEvent(eventConstructor);
+  const event = EventTargetImpl.createEvent(target, eventConstructor);
 
   EventImpl.setType(event, name);
   initialize?.(event);
@@ -737,39 +748,6 @@ export type EventTargetVirtuals = {
   ) => void;
 };
 
-// DOM section 2.9 crosses into Web IDL and HTML here. A realm host supplies
-// these operations; dispatch must not infer a callback's realm or invoke it
-// directly in the EventTarget implementation.
-export type EventListenerInvocationHost = {
-  createEvent(eventConstructor?: EventImplementationConstructor): EventImpl;
-  convertEventListener(callback: EventListenerCallback): EventListenerCallback;
-  getAssociatedGlobal(
-    callback: EventListenerCallback,
-  ): object;
-  isWindow(global: object, callback: EventListenerCallback): boolean;
-  getCurrentEvent(
-    global: object,
-    callback: EventListenerCallback,
-  ): Event | undefined;
-  setCurrentEvent(
-    global: object,
-    event: Event | undefined,
-    callback: EventListenerCallback,
-  ): void;
-  recordTimingInfo(
-    global: object,
-    event: Event,
-    callback: EventListenerCallback,
-  ): void;
-  callUserObjectOperation(
-    callback: EventListenerCallback,
-    operation: 'handleEvent',
-    argumentsList: readonly [Event],
-    thisArgument: EventTarget,
-  ): void;
-  reportException(exception: unknown, callback: EventListenerCallback): void;
-};
-
 export type EventListenerCallback =
   | EventListenerOrEventListenerObject
   | CallbackInterfaceValue;
@@ -782,7 +760,6 @@ type EventListenerRecord = {
   readonly once: boolean;
   readonly signal: AbortSignal | null;
   removed: boolean;
-  readonly invocationHost: EventListenerInvocationHost;
 };
 
 export type EventImplementationConstructor = {
@@ -794,6 +771,24 @@ export type EventImplementationConstructor = {
 ) => EventImpl);
 
 type EventPhase = 'capturing' | 'bubbling';
+
+type EventFactory = (
+  eventConstructor?: EventImplementationConstructor,
+) => EventImpl;
+
+type EventRealm = WebIDLRealmHost & {
+  eventTimeStamp(): DOMHighResTimeStamp;
+};
+
+type WindowEventListenerRealm = WebIDLRealmHost & {
+  getCurrentEvent(global: object): Event | undefined;
+  recordTimingInfo(
+    global: object,
+    event: Event,
+    callback: EventListenerOrEventListenerObject,
+  ): void;
+  setCurrentEvent(global: object, event: Event | undefined): void;
+};
 
 function flatten(
   options: EventListenerOptions | boolean | null,
@@ -844,38 +839,39 @@ const LEGACY_EVENT_TYPES = new Map([
   ['transitionend', 'webkitTransitionEnd'],
 ]);
 
-const defaultEventListenerInvocationHost: EventListenerInvocationHost = {
-  createEvent: (EventConstructor = EventImpl) => {
-    const event = Reflect.construct(
-      EventConstructor,
-      ['', {}, performance.now()],
-    ) as EventImpl;
-    EventImpl.setTrusted(event, true);
-    return event;
-  },
-  convertEventListener: (callback) => callback,
-  getAssociatedGlobal: () => globalThis,
-  isWindow: () => false,
-  getCurrentEvent: () => undefined,
-  setCurrentEvent: () => {},
-  recordTimingInfo: () => {},
-  callUserObjectOperation: (
-    callback,
-    _operation,
-    [event],
-    thisArgument,
-  ) => {
-    const object = getEventListenerObject(callback);
-    if (typeof object === 'function') {
-      object.call(thisArgument, event);
-    } else {
-      object.handleEvent.call(object, event);
-    }
-  },
-  reportException: (exception) => {
-    console.error(exception);
-  },
-};
+function createStandaloneEvent(
+  EventConstructor: EventImplementationConstructor = EventImpl,
+): EventImpl {
+  const event = Reflect.construct(
+    EventConstructor,
+    ['', {}, performance.now()],
+  ) as EventImpl;
+  EventImpl.setTrusted(event, true);
+  return event;
+}
+
+function callEventListener(
+  callback: EventListenerCallback,
+  event: Event,
+  currentTarget: EventTarget,
+): void {
+  if (isCallbackInterfaceValue(callback)) {
+    callUserObjectOperation(
+      callback,
+      'handleEvent',
+      [event],
+      currentTarget,
+    );
+    return;
+  }
+
+  const object = getEventListenerObject(callback);
+  if (typeof object === 'function') {
+    object.call(currentTarget, event);
+  } else {
+    object.handleEvent.call(object, event);
+  }
+}
 
 function getEventListenerObject(
   callback: EventListenerCallback,

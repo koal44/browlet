@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import {
   callUserObjectOperation, constructCallbackFunction,
@@ -14,8 +14,8 @@ import { convertToIDL, convertToJavaScript } from '../../../src/web-idl/conversi
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, idlType,
   integer, nullable, promise as promiseType, reference,
-} from '../../../src/web-idl/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import { isPromiseValue } from '../../../src/web-idl/promise-value';
 
@@ -53,7 +53,6 @@ describe('Web IDL callbacks', () => {
       value,
       [4],
       'rethrow',
-      binding,
     )).toBe(5);
     expect(order).toEqual([
       'prepare script',
@@ -103,7 +102,6 @@ describe('Web IDL callbacks', () => {
       value,
       'handleEvent',
       [2],
-      binding,
     )).toBe(3);
     expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
     expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
@@ -137,7 +135,6 @@ describe('Web IDL callbacks', () => {
       objectValue,
       'handleEvent',
       [2],
-      binding,
       {},
     )).toBe(3);
     expect(object.receiver).toBe(object);
@@ -160,7 +157,6 @@ describe('Web IDL callbacks', () => {
       callbackValue,
       'handleEvent',
       [2],
-      binding,
       thisArgument,
     )).toBe(4);
     expect(receivedExpectedThis).toBe(true);
@@ -209,14 +205,12 @@ describe('Web IDL callbacks', () => {
       value,
       [],
       'report',
-      binding,
     )).toBeUndefined();
     expect(report).toHaveBeenCalledWith(exception);
     expect(() => invokeCallbackFunction(
       value,
       [],
       'rethrow',
-      binding,
     )).toThrow(exception);
   });
 
@@ -257,13 +251,11 @@ describe('Web IDL callbacks', () => {
       functionValue,
       [],
       undefined,
-      binding,
     );
     const interfaceResult = callUserObjectOperation(
       interfaceValue,
       'handleEvent',
       [],
-      binding,
     );
     if (!isPromiseValue(functionResult) || !isPromiseValue(interfaceResult)) {
       throw new Error('Promise callback did not return an IDL promise');
@@ -321,7 +313,6 @@ describe('Web IDL callbacks', () => {
     expect(constructCallbackFunction(
       constructorValue,
       [7],
-      binding,
     )).toMatchObject({ value: 7 });
     expect(prototypeReads.count).toBe(1);
   });
@@ -343,7 +334,6 @@ describe('Web IDL callbacks', () => {
     expect(() => constructCallbackFunction(
       arrowValue,
       [7],
-      binding,
     )).toThrow(targetRealm.intrinsics.typeError);
   });
 

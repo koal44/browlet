@@ -7,9 +7,10 @@ import {
   TreeNode, type TreeNodeVirtuals,
 } from '../tree/tree-node';
 import {
-  defineDictionary, defineInterface, defineInterfaceMixin, emptyDictionary,
-  idlType, nullable, reference,
-} from '../../web-idl/definition';
+  arg, defineDictionary, defineInterface, defineInterfaceMixin, dictMember,
+  emptyDictionary, idlType, nullable, op, readonlyAttr, reference,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';
@@ -39,19 +40,10 @@ import { HTMLCollectionImpl } from './collections';
  */
 export const parentNodeIDL = defineInterfaceMixin({
   members: [
-    { kind: 'attribute', name: 'children', readonly: true, type: idlType.object },
-    {
-      kind: 'attribute', name: 'firstElementChild', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    {
-      kind: 'attribute', name: 'lastElementChild', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    {
-      kind: 'attribute', name: 'childElementCount', readonly: true,
-      type: idlType.unsignedLong,
-    },
+    readonlyAttr('children', idlType.object),
+    readonlyAttr('firstElementChild', nullable(reference('Element'))),
+    readonlyAttr('lastElementChild', nullable(reference('Element'))),
+    readonlyAttr('childElementCount', idlType.unsignedLong),
   ],
   name: 'ParentNode',
 });
@@ -64,10 +56,10 @@ export const parentNodeIDL = defineInterfaceMixin({
  * ShadowRoot includes DocumentOrShadowRoot;
  */
 export const documentOrShadowRootIDL = defineInterfaceMixin({
-  members: [{
-    kind: 'attribute', name: 'customElementRegistry', readonly: true,
-    type: nullable(reference('CustomElementRegistry')),
-  }],
+  members: [readonlyAttr(
+    'customElementRegistry',
+    nullable(reference('CustomElementRegistry')),
+  )],
   name: 'DocumentOrShadowRoot',
 });
 
@@ -83,10 +75,7 @@ export const documentOrShadowRootIDL = defineInterfaceMixin({
  * CharacterData includes ChildNode;
  */
 export const childNodeIDL = defineInterfaceMixin({
-  members: [{
-    arguments: [], kind: 'operation', name: 'remove',
-    returns: idlType.undefined,
-  }],
+  members: [op('remove', idlType.undefined)],
   name: 'ChildNode',
 });
 
@@ -100,26 +89,13 @@ export const childNodeIDL = defineInterfaceMixin({
  */
 export const nonDocumentTypeChildNodeIDL = defineInterfaceMixin({
   members: [
-    {
-      kind: 'attribute', name: 'previousElementSibling', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    {
-      kind: 'attribute', name: 'nextElementSibling', readonly: true,
-      type: nullable(reference('Element')),
-    },
+    readonlyAttr(
+      'previousElementSibling',
+      nullable(reference('Element')),
+    ),
+    readonlyAttr('nextElementSibling', nullable(reference('Element'))),
   ],
   name: 'NonDocumentTypeChildNode',
-});
-
-/*
- * dictionary GetRootNodeOptions {
- *   boolean composed = false;
- * };
- */
-export const getRootNodeOptionsIDL = defineDictionary({
-  members: [{ default: false, name: 'composed', type: idlType.boolean }],
-  name: 'GetRootNodeOptions',
 });
 
 /*
@@ -180,79 +156,11 @@ export const getRootNodeOptionsIDL = defineDictionary({
  *   [CEReactions] Node replaceChild(Node node, Node child);
  *   [CEReactions] Node removeChild(Node child);
  * };
+ *
+ * dictionary GetRootNodeOptions {
+ *   boolean composed = false;
+ * };
  */
-export const nodeIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'EventTarget',
-  members: [
-    { kind: 'attribute', name: 'nodeType', readonly: true, type: idlType.unsignedShort },
-    { kind: 'attribute', name: 'baseURI', readonly: true, type: idlType.DOMString },
-    {
-      kind: 'attribute', name: 'ownerDocument', readonly: true,
-      type: nullable(reference('Document')),
-    },
-    {
-      kind: 'attribute', name: 'parentNode', readonly: true,
-      type: nullable(reference('Node')),
-    },
-    {
-      kind: 'attribute', name: 'parentElement', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    {
-      kind: 'attribute', name: 'firstChild', readonly: true,
-      type: nullable(reference('Node')),
-    },
-    {
-      kind: 'attribute', name: 'lastChild', readonly: true,
-      type: nullable(reference('Node')),
-    },
-    {
-      kind: 'attribute', name: 'previousSibling', readonly: true,
-      type: nullable(reference('Node')),
-    },
-    {
-      kind: 'attribute', name: 'nextSibling', readonly: true,
-      type: nullable(reference('Node')),
-    },
-    { kind: 'attribute', name: 'isConnected', readonly: true, type: idlType.boolean },
-    {
-      arguments: [{
-        default: emptyDictionary,
-        name: 'options',
-        optional: true,
-        type: reference('GetRootNodeOptions'),
-      }],
-      kind: 'operation',
-      name: 'getRootNode',
-      returns: reference('Node'),
-    },
-    {
-      arguments: [{ name: 'node', type: reference('Node') }],
-      kind: 'operation', name: 'appendChild', returns: reference('Node'),
-    },
-    {
-      arguments: [
-        { name: 'node', type: reference('Node') },
-        { name: 'child', type: nullable(reference('Node')) },
-      ],
-      kind: 'operation', name: 'insertBefore', returns: reference('Node'),
-    },
-    {
-      arguments: [{ name: 'other', type: nullable(reference('Node')) }],
-      kind: 'operation', name: 'contains', returns: idlType.boolean,
-    },
-    {
-      arguments: [{ name: 'other', type: reference('Node') }],
-      kind: 'operation', name: 'compareDocumentPosition',
-      returns: idlType.unsignedShort,
-    },
-  ],
-  name: 'Node',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export abstract class NodeImpl
   extends TreeNode<NodeImpl>
 {
@@ -509,6 +417,53 @@ export abstract class NodeImpl
     }
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const nodeIDL = defineInterface({
+  binding: bind(NodeImpl),
+  exposed: 'Window',
+  inherits: 'EventTarget',
+  members: [
+    readonlyAttr('nodeType', idlType.unsignedShort),
+    readonlyAttr('baseURI', idlType.DOMString),
+    readonlyAttr('ownerDocument', nullable(reference('Document'))),
+    readonlyAttr('parentNode', nullable(reference('Node'))),
+    readonlyAttr('parentElement', nullable(reference('Element'))),
+    readonlyAttr('firstChild', nullable(reference('Node'))),
+    readonlyAttr('lastChild', nullable(reference('Node'))),
+    readonlyAttr('previousSibling', nullable(reference('Node'))),
+    readonlyAttr('nextSibling', nullable(reference('Node'))),
+    readonlyAttr('isConnected', idlType.boolean),
+    op('getRootNode', reference('Node'), [arg(
+      'options',
+      reference('GetRootNodeOptions'),
+      {
+        default: emptyDictionary,
+        optional: true,
+      },
+    )]),
+    op('appendChild', reference('Node'), [
+      arg('node', reference('Node')),
+    ]),
+    op('insertBefore', reference('Node'), [
+      arg('node', reference('Node')),
+      arg('child', nullable(reference('Node'))),
+    ]),
+    op('contains', idlType.boolean, [
+      arg('other', nullable(reference('Node'))),
+    ]),
+    op('compareDocumentPosition', idlType.unsignedShort, [
+      arg('other', reference('Node')),
+    ]),
+  ],
+  name: 'Node',
+});
+
+export const getRootNodeOptionsIDL = defineDictionary({
+  members: [dictMember('composed', idlType.boolean, { default: false })],
+  name: 'GetRootNodeOptions',
+});
 
 // -- Virtual ------------------------------------------------------------
 const nodeEventTargetVirtuals: EventTargetVirtuals = {

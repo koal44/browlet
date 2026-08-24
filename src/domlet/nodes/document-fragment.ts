@@ -1,6 +1,8 @@
 import { withDocumentFragmentStub } from '../stubs/interfaces';
 import type { EventTargetVirtuals } from '../events/event-target';
-import { defineIncludes, defineInterface } from '../../web-idl/definition';
+import { ctor, defineIncludes, defineInterface } from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
+import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
 import { NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
@@ -10,22 +12,8 @@ import type { ElementImpl } from './element';
  * interface DocumentFragment : Node {
  *   constructor();
  * };
+ * DocumentFragment includes ParentNode;
  */
-
-export const documentFragmentIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [{ arguments: [], kind: 'constructor' }],
-  name: 'DocumentFragment',
-});
-
-export const documentFragmentIncludesParentNodeIDL = defineIncludes({
-  interface: 'DocumentFragment',
-  mixin: 'ParentNode',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class DocumentFragmentImpl
   extends withDocumentFragmentStub(NodeImpl)
   implements DocumentFragment
@@ -51,3 +39,38 @@ export class DocumentFragmentImpl
     return fragment.#host;
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const documentFragmentIDL = defineInterface({
+  binding: bind(DocumentFragmentImpl, {
+    create(context, newTarget) {
+      if (!newTarget) {
+        throw new Error('DocumentFragment construction requires newTarget');
+      }
+      return Reflect.construct(
+        DocumentFragmentImpl,
+        [
+          (context.realm as DocumentFragmentRealm)
+            .getAssociatedDocument(),
+        ],
+        newTarget as NewTarget,
+      );
+    },
+  }),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [ctor(bind({ invoke() {} }))],
+  name: 'DocumentFragment',
+});
+
+export const documentFragmentIncludesParentNodeIDL = defineIncludes({
+  interface: 'DocumentFragment',
+  mixin: 'ParentNode',
+});
+
+type DocumentFragmentRealm = WebIDLRealmHost & {
+  getAssociatedDocument(): DocumentImpl;
+};
+
+type NewTarget = new (...argumentsList: never[]) => object;

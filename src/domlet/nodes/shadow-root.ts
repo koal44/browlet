@@ -2,8 +2,10 @@ import { EventImpl } from '../events/event';
 import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../stubs/interfaces';
 import {
-  defineEnumeration, defineIncludes, defineInterface, idlType, reference,
-} from '../../web-idl/definition';
+  defineEnumeration, defineIncludes, defineInterface, idlType,
+  readonlyAttr, reference,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import {
   DocumentFragmentImpl,
 } from './document-fragment';
@@ -11,18 +13,6 @@ import type { ElementImpl } from './element';
 import { NodeImpl } from './node';
 
 /*
- * [Exposed=Window]
- * interface ShadowRoot : DocumentFragment {
- *   readonly attribute ShadowRootMode mode;
- *   readonly attribute boolean delegatesFocus;
- *   readonly attribute SlotAssignmentMode slotAssignment;
- *   readonly attribute boolean clonable;
- *   readonly attribute boolean serializable;
- *   readonly attribute Element host;
- *
- *   attribute EventHandler onslotchange;
- * };
- *
  * enum ShadowRootMode { "open", "closed" };
  * enum SlotAssignmentMode { "manual", "named" };
  */
@@ -37,43 +27,20 @@ export const slotAssignmentModeIDL = defineEnumeration({
   values: ['manual', 'named'],
 });
 
-export const shadowRootIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'DocumentFragment',
-  members: [
-    {
-      kind: 'attribute', name: 'mode', readonly: true,
-      type: reference('ShadowRootMode'),
-    },
-    {
-      kind: 'attribute', name: 'delegatesFocus', readonly: true,
-      type: idlType.boolean,
-    },
-    {
-      kind: 'attribute', name: 'slotAssignment', readonly: true,
-      type: reference('SlotAssignmentMode'),
-    },
-    { kind: 'attribute', name: 'clonable', readonly: true, type: idlType.boolean },
-    {
-      kind: 'attribute', name: 'serializable', readonly: true,
-      type: idlType.boolean,
-    },
-    {
-      kind: 'attribute', name: 'host', readonly: true,
-      type: reference('Element'),
-    },
-    // EventHandler binding awaits the HTML event-handler infrastructure.
-  ],
-  name: 'ShadowRoot',
-});
-
-export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({
-  interface: 'ShadowRoot',
-  mixin: 'DocumentOrShadowRoot',
-});
-
-// -- Implementation -----------------------------------------------------
-
+/*
+ * [Exposed=Window]
+ * interface ShadowRoot : DocumentFragment {
+ *   readonly attribute ShadowRootMode mode;
+ *   readonly attribute boolean delegatesFocus;
+ *   readonly attribute SlotAssignmentMode slotAssignment;
+ *   readonly attribute boolean clonable;
+ *   readonly attribute boolean serializable;
+ *   readonly attribute Element host;
+ *
+ *   attribute EventHandler onslotchange;
+ * };
+ * ShadowRoot includes DocumentOrShadowRoot;
+ */
 export class ShadowRootImpl
   extends withShadowRootStub(DocumentFragmentImpl)
   implements ShadowRoot
@@ -184,3 +151,26 @@ export class ShadowRootImpl
     return ShadowRootImpl.getHost(root);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const shadowRootIDL = defineInterface({
+  binding: bind(ShadowRootImpl),
+  exposed: 'Window',
+  inherits: 'DocumentFragment',
+  members: [
+    readonlyAttr('mode', reference('ShadowRootMode')),
+    readonlyAttr('delegatesFocus', idlType.boolean),
+    readonlyAttr('slotAssignment', reference('SlotAssignmentMode')),
+    readonlyAttr('clonable', idlType.boolean),
+    readonlyAttr('serializable', idlType.boolean),
+    readonlyAttr('host', reference('Element')),
+    // EventHandler binding awaits the HTML event-handler infrastructure.
+  ],
+  name: 'ShadowRoot',
+});
+
+export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({
+  interface: 'ShadowRoot',
+  mixin: 'DocumentOrShadowRoot',
+});

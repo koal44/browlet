@@ -1,7 +1,7 @@
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { idlType, sequence, type WebIDLType } from './definition';
+import { idlType, sequence, type WebIDLType } from './adapter/definition';
 import {
   createPromiseValue, isPromiseValue, type IDLPromise,
 } from './promise-value';

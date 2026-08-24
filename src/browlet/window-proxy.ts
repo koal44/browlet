@@ -1,4 +1,5 @@
-import type { WindowImpl } from './window';
+import { sharedPlatformObjects } from '../web-idl/platform-object';
+import { WindowImpl } from './window';
 
 /*
  * A WindowProxy is an exotic object with a [[Window]] internal slot. It has
@@ -50,18 +51,27 @@ const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
 class WindowProxyHandler implements ProxyHandler<object> {
   readonly windowProxy: WindowProxy;
   readonly #methods = new Map<PropertyKey, CallableFunction>();
-  #window: WindowImpl | null = null;
+  #window: Window | null = null;
 
   constructor() {
     this.windowProxy = new Proxy({}, this) as WindowProxy;
   }
 
   get window(): WindowImpl | null {
-    return this.#window;
+    if (!this.#window) return null;
+    const implementation =
+      sharedPlatformObjects.getImplementationObject(this.#window) ??
+      this.#window;
+    if (!WindowImpl.is(implementation)) {
+      throw new TypeError('WindowProxy target is not a Window implementation');
+    }
+    return implementation;
   }
 
   setWindow(window: WindowImpl): void {
-    this.#window = window;
+    this.#window = (
+      sharedPlatformObjects.getPlatformObject(window) ?? window
+    ) as Window;
     this.#methods.clear();
   }
 
@@ -71,7 +81,7 @@ class WindowProxyHandler implements ProxyHandler<object> {
     attributes: PropertyDescriptor,
   ): boolean {
     return Reflect.defineProperty(
-      this.requireWindow(),
+      this.requireWindowObject(),
       property,
       attributes,
     );
@@ -79,13 +89,17 @@ class WindowProxyHandler implements ProxyHandler<object> {
 
   deleteProperty(_target: object, property: string | symbol): boolean {
     return Reflect.deleteProperty(
-      this.requireWindow(),
+      this.requireWindowObject(),
       property,
     );
   }
 
   get(_target: object, property: string | symbol): unknown {
-    if (windowProxyReferences.has(property)) return this.windowProxy;
+    const window = this.requireWindowObject();
+    if (
+      windowProxyReferences.has(property) &&
+      !Reflect.has(window, property)
+    ) return this.windowProxy;
 
     if (eventTargetMethods.has(property)) {
       let method = this.#methods.get(property);
@@ -95,7 +109,6 @@ class WindowProxyHandler implements ProxyHandler<object> {
       }
       return method;
     }
-    const window = this.requireWindow();
     const value: unknown = Reflect.get(window, property, window);
     return value;
   }
@@ -105,40 +118,40 @@ class WindowProxyHandler implements ProxyHandler<object> {
     property: string | symbol,
   ): PropertyDescriptor | undefined {
     const descriptor = Reflect.getOwnPropertyDescriptor(
-      this.requireWindow(),
+      this.requireWindowObject(),
       property,
     );
     return descriptor && { ...descriptor, configurable: true };
   }
 
   getPrototypeOf(_target: object): object | null {
-    return Reflect.getPrototypeOf(this.requireWindow());
+    return Reflect.getPrototypeOf(this.requireWindowObject());
   }
 
   has(_target: object, property: string | symbol): boolean {
-    if (windowProxyReferences.has(property)) return true;
-    return Reflect.has(this.requireWindow(), property);
+    return windowProxyReferences.has(property) ||
+      Reflect.has(this.requireWindowObject(), property);
   }
 
   ownKeys(_target: object): (string | symbol)[] {
-    return Reflect.ownKeys(this.requireWindow());
+    return Reflect.ownKeys(this.requireWindowObject());
   }
 
   set(_target: object, property: string | symbol, value: unknown): boolean {
-    const window = this.requireWindow();
+    const window = this.requireWindowObject();
     return Reflect.set(window, property, value, window);
   }
 
   setPrototypeOf(_target: object, prototype: object | null): boolean {
     return Reflect.setPrototypeOf(
-      this.requireWindow(),
+      this.requireWindowObject(),
       prototype,
     );
   }
 
   // -- Private ----------------------------------------------------------
 
-  private requireWindow(): WindowImpl {
+  private requireWindowObject(): Window {
     if (!this.#window) {
       throw new Error('WindowProxy has no associated Window');
     }
@@ -146,16 +159,13 @@ class WindowProxyHandler implements ProxyHandler<object> {
   }
 
   private createEventTargetMethod(property: PropertyKey): CallableFunction {
-    if (property === 'addEventListener') {
-      return (...argumentsList: Parameters<Window['addEventListener']>) => {
-        this.requireWindow().addEventListener(...argumentsList);
-      };
-    }
-    if (property === 'dispatchEvent') {
-      return (event: Event) => this.requireWindow().dispatchEvent(event);
-    }
-    return (...argumentsList: Parameters<Window['removeEventListener']>) => {
-      this.requireWindow().removeEventListener(...argumentsList);
+    return (...argumentsList: unknown[]) => {
+      const window = this.requireWindowObject();
+      const method = Reflect.get(window, property) as unknown;
+      if (typeof method !== 'function') {
+        throw new TypeError(`${String(property)} is not callable`);
+      }
+      return Reflect.apply(method, window, argumentsList) as unknown;
     };
   }
 }

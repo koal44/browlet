@@ -5,33 +5,35 @@ import {
 } from '../css-engine';
 import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../stubs/interfaces';
+import { isValidAttributeLocalName } from '../algorithms/name-validation';
+import { asciiLower } from '../../shared/css';
+import { domExceptionName } from '../../shared/dom-exception';
 import {
-  defineDictionary, defineIncludes, defineInterface, definePartialInterface,
-  emptyDictionary, idlType, nullable, reference, union,
-} from '../../web-idl/definition';
+  arg, ctor, defineDictionary, defineIncludes, defineInterface,
+  definePartialInterface, dictMember, emptyDictionary, idlType, nullable, op,
+  readonlyAttr, reference, union,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
+import type { ImplementationConstructor } from '../../web-idl/adapter/registry';
 import { createOpaqueOrigin, type Origin } from '../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../url/url';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
+import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
 import {
-  createElementNode as constructElementNode, isHTMLElement, isHTMLHeadElement,
+  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl, HTMLLinkElementImpl,
+  HTMLStyleElementImpl, isHTMLElement, isHTMLHeadElement, MathMLElementImpl,
+  SVGElementImpl, SVGStyleElementImpl,
 } from './element';
-import type {
-  ElementImpl, HTMLElementImpl, HTMLHeadElementImpl,
-} from './element';
-import { HTML_NAMESPACE } from '../../shared/namespaces';
-import type {
-  MATHML_NAMESPACE, SVG_NAMESPACE,
+import {
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../shared/namespaces';
 import {
   documentOrShadowRootIDL, isDocument, isDocumentType, isElement,
   NodeImpl, type NodeVirtuals, NodeType, parentNodeIDL,
 } from './node';
 import { TextImpl } from './text';
-import {
-  directDOMNodeFactory, type DOMNodeFactory,
-} from './factory';
 import {
   findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
@@ -79,209 +81,12 @@ import {
  *   [NewObject] NodeIterator createNodeIterator(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
  *   [NewObject] TreeWalker createTreeWalker(Node root, optional unsigned long whatToShow = 0xFFFFFFFF, optional NodeFilter? filter = null);
  * };
- */
-export const documentIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [
-    { arguments: [], kind: 'constructor' },
-    {
-      kind: 'attribute', name: 'URL', readonly: true,
-      type: idlType.USVString,
-    },
-    {
-      kind: 'attribute', name: 'documentURI', readonly: true,
-      type: idlType.USVString,
-    },
-    {
-      kind: 'attribute', name: 'characterSet', readonly: true,
-      type: idlType.DOMString,
-    },
-    {
-      kind: 'attribute', name: 'charset', readonly: true,
-      type: idlType.DOMString,
-    },
-    {
-      kind: 'attribute', name: 'inputEncoding', readonly: true,
-      type: idlType.DOMString,
-    },
-    {
-      kind: 'attribute', name: 'doctype', readonly: true,
-      type: nullable(reference('DocumentType')),
-    },
-    {
-      kind: 'attribute', name: 'documentElement', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    { kind: 'attribute', name: 'contentType', readonly: true, type: idlType.DOMString },
-    { kind: 'attribute', name: 'compatMode', readonly: true, type: idlType.DOMString },
-    {
-      arguments: [{ name: 'classNames', type: idlType.DOMString }],
-      kind: 'operation', name: 'getElementsByClassName', returns: idlType.object,
-    },
-    {
-      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
-      kind: 'operation', name: 'getElementsByTagName', returns: idlType.object,
-    },
-    {
-      arguments: [
-        { name: 'namespace', type: nullable(idlType.DOMString) },
-        { name: 'localName', type: idlType.DOMString },
-      ],
-      kind: 'operation', name: 'getElementsByTagNameNS', returns: idlType.object,
-    },
-    {
-      arguments: [
-        { name: 'localName', type: idlType.DOMString },
-        {
-          default: emptyDictionary,
-          name: 'options',
-          optional: true,
-          type: union(idlType.DOMString, reference('ElementCreationOptions')),
-        },
-      ],
-      kind: 'operation', name: 'createElement', returns: reference('Element'),
-    },
-    {
-      arguments: [
-        { name: 'namespace', type: nullable(idlType.DOMString) },
-        { name: 'qualifiedName', type: idlType.DOMString },
-        {
-          default: emptyDictionary,
-          name: 'options',
-          optional: true,
-          type: union(idlType.DOMString, reference('ElementCreationOptions')),
-        },
-      ],
-      kind: 'operation', name: 'createElementNS', returns: reference('Element'),
-    },
-    {
-      arguments: [{ name: 'data', type: idlType.DOMString }],
-      kind: 'operation', name: 'createTextNode', returns: reference('Text'),
-    },
-    {
-      arguments: [{ name: 'data', type: idlType.DOMString }],
-      kind: 'operation', name: 'createComment', returns: reference('Comment'),
-    },
-    {
-      arguments: [{ name: 'elementId', type: idlType.DOMString }],
-      kind: 'operation', name: 'getElementById',
-      returns: nullable(reference('Element')),
-    },
-  ],
-  name: 'Document',
-});
-
-/*
+ *
  * dictionary ElementCreationOptions {
  *   CustomElementRegistry? customElementRegistry;
  *   DOMString is;
  * };
  */
-export const elementCreationOptionsIDL = defineDictionary({
-  members: [{ name: 'is', type: idlType.DOMString }],
-  name: 'ElementCreationOptions',
-});
-
-/*
- * Document includes ParentNode;
- */
-export const documentIncludesParentNodeIDL = defineIncludes({
-  interface: 'Document', mixin: parentNodeIDL.name,
-});
-
-/*
- * Document includes DocumentOrShadowRoot;
- */
-export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
-  interface: 'Document', mixin: documentOrShadowRootIDL.name,
-});
-
-/*
- * enum DocumentReadyState { "loading", "interactive", "complete" };
- * enum DocumentVisibilityState { "visible", "hidden" };
- * typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
- *
- * [LegacyOverrideBuiltIns]
- * partial interface Document {
- *   static Document parseHTMLUnsafe((TrustedHTML or DOMString) html, optional ParseHTMLUnsafeOptions options = {});
- *   static Document parseHTML(DOMString html, optional SetHTMLOptions options = {});
- *
- *   // resource metadata management
- *   [PutForwards=href, LegacyUnforgeable] readonly attribute Location? location;
- *   attribute USVString domain;
- *   readonly attribute USVString referrer;
- *   attribute USVString cookie;
- *   readonly attribute DOMString lastModified;
- *   readonly attribute DocumentReadyState readyState;
- *
- *   // DOM tree accessors
- *   getter object (DOMString name);
- *   [CEReactions] attribute DOMString title;
- *   [CEReactions] attribute DOMString dir;
- *   [CEReactions] attribute HTMLElement? body;
- *   readonly attribute HTMLHeadElement? head;
- *   [SameObject] readonly attribute HTMLCollection images;
- *   [SameObject] readonly attribute HTMLCollection embeds;
- *   [SameObject] readonly attribute HTMLCollection plugins;
- *   [SameObject] readonly attribute HTMLCollection links;
- *   [SameObject] readonly attribute HTMLCollection forms;
- *   [SameObject] readonly attribute HTMLCollection scripts;
- *   NodeList getElementsByName(DOMString elementName);
- *   readonly attribute HTMLOrSVGScriptElement? currentScript; // classic scripts in a document tree only
- *
- *   // dynamic markup insertion
- *   [CEReactions] Document open(optional DOMString unused1, optional DOMString unused2); // both arguments are ignored
- *   WindowProxy? open(USVString url, DOMString name, DOMString features);
- *   [CEReactions] undefined close();
- *   [CEReactions] undefined write((TrustedHTML or DOMString)... text);
- *   [CEReactions] undefined writeln((TrustedHTML or DOMString)... text);
- *
- *   // user interaction
- *   readonly attribute WindowProxy? defaultView;
- *   boolean hasFocus();
- *   [CEReactions] attribute DOMString designMode;
- *   [CEReactions] boolean execCommand(DOMString commandId, optional boolean showUI = false, optional DOMString value = "");
- *   boolean queryCommandEnabled(DOMString commandId);
- *   boolean queryCommandIndeterm(DOMString commandId);
- *   boolean queryCommandState(DOMString commandId);
- *   boolean queryCommandSupported(DOMString commandId);
- *   DOMString queryCommandValue(DOMString commandId);
- *   readonly attribute boolean hidden;
- *   readonly attribute DocumentVisibilityState visibilityState;
- *
- *   // special event handler IDL attributes that only apply to Document objects
- *   [LegacyLenientThis] attribute EventHandler onreadystatechange;
- *   attribute EventHandler onvisibilitychange;
- *
- *   // also has obsolete members
- * };
- * Document includes GlobalEventHandlers;
- */
-export const htmlDocumentIDL = definePartialInterface({
-  members: [
-    {
-      kind: 'attribute', name: 'head', readonly: true,
-      type: nullable(reference('HTMLHeadElement')),
-    },
-    {
-      kind: 'attribute', name: 'body', readonly: true,
-      type: nullable(reference('HTMLElement')),
-    },
-    {
-      arguments: [{ name: 'text', type: idlType.DOMString, variadic: true }],
-      kind: 'operation', name: 'write', returns: idlType.undefined,
-    },
-    {
-      kind: 'attribute', name: 'defaultView', readonly: true,
-      type: nullable(reference('WindowProxy')),
-    },
-  ],
-  name: 'Document',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class DocumentImpl
   extends NodeImpl
 {
@@ -506,6 +311,17 @@ export class DocumentImpl
 
   createComment(data: string): CommentImpl {
     return this.#nodeFactory.construct(CommentImpl, [data, this]);
+  }
+
+  createAttribute(localName: string): AttrImpl {
+    if (!isValidAttributeLocalName(localName)) {
+      throw new DOMException(
+        `Invalid attribute local name ${JSON.stringify(localName)}`,
+        domExceptionName.invalidCharacter,
+      );
+    }
+    if (this.#type === 'html') localName = asciiLower(localName);
+    return DocumentImpl.createAttribute(this, localName, '', null, null);
   }
 
   write(...text: string[]): void {
@@ -857,13 +673,21 @@ export class DocumentImpl
     namespaceURI: string,
     attributes: AttrImpl[] = [],
   ): ElementImpl {
-    return constructElementNode(
-      localName,
-      namespaceURI,
-      document,
-      document.#treeScopeResolver,
-      attributes,
-      document.#nodeFactory,
+    const construction = DocumentImpl.#resolveElementConstruction(
+      document, localName, namespaceURI, attributes,
+    );
+    return document.#nodeFactory.construct(
+      construction.implementation,
+      construction.argumentsList,
+    );
+  }
+
+  static createDocumentFragment(
+    document: DocumentImpl,
+  ): DocumentFragmentImpl {
+    return document.#nodeFactory.construct(
+      DocumentFragmentImpl,
+      [document],
     );
   }
 
@@ -939,7 +763,240 @@ export class DocumentImpl
         DocumentImpl.getCSSEngine(document).documentScope,
       );
   }
+
+  /*
+   * This is currently the joint DOM/HTML/SVG/MathML contribution table used
+   * by Domlet. Keep its ownership with the creating Document; the individual
+   * specification contributions can later be separated without exposing the
+   * realm-aware node factory to Element.
+   */
+  static #resolveElementConstruction(
+    document: DocumentImpl,
+    localName: string,
+    namespaceURI: string,
+    attributes: AttrImpl[],
+  ): ElementConstruction {
+    if (namespaceURI === HTML_NAMESPACE) {
+      localName = asciiLower(localName);
+
+      if (localName === 'head') {
+        return {
+          implementation: HTMLHeadElementImpl,
+          argumentsList: [document, attributes],
+        };
+      }
+      if (localName === 'style') {
+        return {
+          implementation: HTMLStyleElementImpl,
+          argumentsList: [document, document.#treeScopeResolver, attributes],
+        };
+      }
+      if (localName === 'link') {
+        return {
+          implementation: HTMLLinkElementImpl,
+          argumentsList: [document, document.#treeScopeResolver, attributes],
+        };
+      }
+      return {
+        implementation: HTMLElementImpl,
+        argumentsList: [localName, document, attributes],
+      };
+    }
+
+    if (namespaceURI === SVG_NAMESPACE) {
+      return localName === 'style'
+        ? {
+          implementation: SVGStyleElementImpl,
+          argumentsList: [document, document.#treeScopeResolver, attributes],
+        }
+        : {
+          implementation: SVGElementImpl,
+          argumentsList: [localName, document, attributes],
+        };
+    }
+
+    if (namespaceURI === MATHML_NAMESPACE) {
+      return {
+        implementation: MathMLElementImpl,
+        argumentsList: [localName, document, attributes],
+      };
+    }
+
+    return {
+      implementation: ElementImpl,
+      argumentsList: [localName, namespaceURI, document, attributes],
+    };
+  }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const documentIDL = defineInterface({
+  binding: bind(DocumentImpl, {
+    create(context, newTarget) {
+      if (!newTarget) {
+        throw new Error('Document construction requires newTarget');
+      }
+      return Reflect.construct(
+        DocumentImpl,
+        [context.objects],
+        newTarget as NewTarget,
+      );
+    },
+  }),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [
+    ctor(bind({ invoke() {} })),
+    readonlyAttr('URL', idlType.USVString),
+    readonlyAttr('documentURI', idlType.USVString),
+    readonlyAttr('characterSet', idlType.DOMString),
+    readonlyAttr('charset', idlType.DOMString),
+    readonlyAttr('inputEncoding', idlType.DOMString),
+    readonlyAttr('doctype', nullable(reference('DocumentType'))),
+    readonlyAttr('documentElement', nullable(reference('Element'))),
+    readonlyAttr('contentType', idlType.DOMString),
+    readonlyAttr('compatMode', idlType.DOMString),
+    op('getElementsByClassName', idlType.object, [
+      arg('classNames', idlType.DOMString),
+    ]),
+    op('getElementsByTagName', idlType.object, [
+      arg('qualifiedName', idlType.DOMString),
+    ]),
+    op('getElementsByTagNameNS', idlType.object, [
+      arg('namespace', nullable(idlType.DOMString)),
+      arg('localName', idlType.DOMString),
+    ]),
+    op('createElement', reference('Element'), [
+      arg('localName', idlType.DOMString),
+      arg(
+        'options',
+        union(idlType.DOMString, reference('ElementCreationOptions')),
+        {
+          default: emptyDictionary,
+          optional: true,
+        },
+      ),
+    ]),
+    op('createElementNS', reference('Element'), [
+      arg('namespace', nullable(idlType.DOMString)),
+      arg('qualifiedName', idlType.DOMString),
+      arg(
+        'options',
+        union(idlType.DOMString, reference('ElementCreationOptions')),
+        {
+          default: emptyDictionary,
+          optional: true,
+        },
+      ),
+    ]),
+    op('createTextNode', reference('Text'), [
+      arg('data', idlType.DOMString),
+    ]),
+    op('createComment', reference('Comment'), [
+      arg('data', idlType.DOMString),
+    ]),
+    op('createAttribute', reference('Attr'), [
+      arg('localName', idlType.DOMString),
+    ]),
+    op('getElementById', nullable(reference('Element')), [
+      arg('elementId', idlType.DOMString),
+    ]),
+  ],
+  name: 'Document',
+});
+
+export const elementCreationOptionsIDL = defineDictionary({
+  members: [dictMember('is', idlType.DOMString)],
+  name: 'ElementCreationOptions',
+});
+
+/*
+ * Document includes ParentNode;
+ */
+export const documentIncludesParentNodeIDL = defineIncludes({
+  interface: 'Document', mixin: parentNodeIDL.name,
+});
+
+/*
+ * Document includes DocumentOrShadowRoot;
+ */
+export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
+  interface: 'Document', mixin: documentOrShadowRootIDL.name,
+});
+
+/*
+ * enum DocumentReadyState { "loading", "interactive", "complete" };
+ * enum DocumentVisibilityState { "visible", "hidden" };
+ * typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
+ *
+ * [LegacyOverrideBuiltIns]
+ * partial interface Document {
+ *   static Document parseHTMLUnsafe((TrustedHTML or DOMString) html, optional ParseHTMLUnsafeOptions options = {});
+ *   static Document parseHTML(DOMString html, optional SetHTMLOptions options = {});
+ *
+ *   // resource metadata management
+ *   [PutForwards=href, LegacyUnforgeable] readonly attribute Location? location;
+ *   attribute USVString domain;
+ *   readonly attribute USVString referrer;
+ *   attribute USVString cookie;
+ *   readonly attribute DOMString lastModified;
+ *   readonly attribute DocumentReadyState readyState;
+ *
+ *   // DOM tree accessors
+ *   getter object (DOMString name);
+ *   [CEReactions] attribute DOMString title;
+ *   [CEReactions] attribute DOMString dir;
+ *   [CEReactions] attribute HTMLElement? body;
+ *   readonly attribute HTMLHeadElement? head;
+ *   [SameObject] readonly attribute HTMLCollection images;
+ *   [SameObject] readonly attribute HTMLCollection embeds;
+ *   [SameObject] readonly attribute HTMLCollection plugins;
+ *   [SameObject] readonly attribute HTMLCollection links;
+ *   [SameObject] readonly attribute HTMLCollection forms;
+ *   [SameObject] readonly attribute HTMLCollection scripts;
+ *   NodeList getElementsByName(DOMString elementName);
+ *   readonly attribute HTMLOrSVGScriptElement? currentScript; // classic scripts in a document tree only
+ *
+ *   // dynamic markup insertion
+ *   [CEReactions] Document open(optional DOMString unused1, optional DOMString unused2); // both arguments are ignored
+ *   WindowProxy? open(USVString url, DOMString name, DOMString features);
+ *   [CEReactions] undefined close();
+ *   [CEReactions] undefined write((TrustedHTML or DOMString)... text);
+ *   [CEReactions] undefined writeln((TrustedHTML or DOMString)... text);
+ *
+ *   // user interaction
+ *   readonly attribute WindowProxy? defaultView;
+ *   boolean hasFocus();
+ *   [CEReactions] attribute DOMString designMode;
+ *   [CEReactions] boolean execCommand(DOMString commandId, optional boolean showUI = false, optional DOMString value = "");
+ *   boolean queryCommandEnabled(DOMString commandId);
+ *   boolean queryCommandIndeterm(DOMString commandId);
+ *   boolean queryCommandState(DOMString commandId);
+ *   boolean queryCommandSupported(DOMString commandId);
+ *   DOMString queryCommandValue(DOMString commandId);
+ *   readonly attribute boolean hidden;
+ *   readonly attribute DocumentVisibilityState visibilityState;
+ *
+ *   // special event handler IDL attributes that only apply to Document objects
+ *   [LegacyLenientThis] attribute EventHandler onreadystatechange;
+ *   attribute EventHandler onvisibilitychange;
+ *
+ *   // also has obsolete members
+ * };
+ * Document includes GlobalEventHandlers;
+ */
+export const htmlDocumentIDL = definePartialInterface({
+  members: [
+    readonlyAttr('head', nullable(reference('HTMLHeadElement'))),
+    readonlyAttr('body', nullable(reference('HTMLElement'))),
+    op('write', idlType.undefined, [
+      arg('text', idlType.DOMString, { variadic: true }),
+    ]),
+    readonlyAttr('defaultView', nullable(reference('WindowProxy'))),
+  ],
+  name: 'Document',
+});
 
 class DocumentTreeScopeResolver implements TreeScopeResolver {
   readonly #document: DocumentImpl;
@@ -957,7 +1014,28 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 
 export type DomletDocument = DocumentImpl & Document;
 
+export type DOMNodeFactory = {
+  construct<T extends object>(
+    implementation: ImplementationConstructor<T>,
+    argumentsList: readonly unknown[],
+  ): T;
+};
+
+export const directDOMNodeFactory: DOMNodeFactory = {
+  construct: <T extends object>(
+    implementation: ImplementationConstructor<T>,
+    argumentsList: readonly unknown[],
+  ) => Reflect.construct(implementation, argumentsList) as T,
+};
+
+type ElementConstruction = {
+  implementation: ImplementationConstructor<ElementImpl>;
+  argumentsList: readonly unknown[];
+};
+
 export type DocumentWriter = (markup: string) => void;
+
+type NewTarget = new (...argumentsList: never[]) => object;
 
 export type DocumentType = 'xml' | 'html';
 

@@ -1,5 +1,29 @@
+import {
+  arg, attr, defineInterface, idlType, op, readonlyAttr, xattr,
+} from '../web-idl/adapter/definition';
+import { bind } from '../web-idl/adapter/projection';
 import { withLocationStub } from './stubs/interfaces';
 
+/*
+ * [Exposed=Window]
+ * interface Location { // but see also additional creation steps and overridden internal methods
+ *   [LegacyUnforgeable] stringifier attribute USVString href;
+ *   [LegacyUnforgeable] readonly attribute USVString origin;
+ *   [LegacyUnforgeable] attribute USVString protocol;
+ *   [LegacyUnforgeable] attribute USVString host;
+ *   [LegacyUnforgeable] attribute USVString hostname;
+ *   [LegacyUnforgeable] attribute USVString port;
+ *   [LegacyUnforgeable] attribute USVString pathname;
+ *   [LegacyUnforgeable] attribute USVString search;
+ *   [LegacyUnforgeable] attribute USVString hash;
+ *
+ *   [LegacyUnforgeable] undefined assign(USVString url);
+ *   [LegacyUnforgeable] undefined replace(USVString url);
+ *   [LegacyUnforgeable] undefined reload();
+ *
+ *   [LegacyUnforgeable] readonly attribute DOMStringList ancestorOrigins;
+ * };
+ */
 export class LocationImpl
   extends withLocationStub(class {})
   implements Location
@@ -95,6 +119,35 @@ export class LocationImpl
     navigationNotImplemented();
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const locationIDL = defineInterface({
+  binding: bind(LocationImpl),
+  exposed: 'Window',
+  members: [
+    attr('href', idlType.USVString, {
+      ...xattr('LegacyUnforgeable'),
+      stringifier: true,
+    }),
+    readonlyAttr('origin', idlType.USVString, xattr('LegacyUnforgeable')),
+    ...[
+      'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash',
+    ].map((name) => attr(
+      name,
+      idlType.USVString,
+      xattr('LegacyUnforgeable'),
+    )),
+    ...['assign', 'replace'].map((name) => op(
+      name,
+      idlType.undefined,
+      [arg('url', idlType.USVString)],
+      xattr('LegacyUnforgeable'),
+    )),
+    op('reload', idlType.undefined, [], xattr('LegacyUnforgeable')),
+  ],
+  name: 'Location',
+});
 
 function navigationNotImplemented(): never {
   throw new Error('Browlet navigation is not implemented');

@@ -5,6 +5,7 @@ import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../web-idl/javascript-realm';
 import { sharedPlatformObjects } from '../web-idl/platform-object';
+import type { DocumentImpl } from '../domlet/nodes/document';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
 import { WindowImpl } from './window';
@@ -278,6 +279,12 @@ export class Realm implements WebIDLRealmHost {
     return performance.now();
   }
 
+  getAssociatedDocument(): DocumentImpl {
+    const window = this.#windowImplementation;
+    if (!window) throw new Error('Realm global object has no associated Document');
+    return WindowImpl.getAssociatedDocument(window);
+  }
+
   createFunction(
     steps: RealmFunctionSteps,
     options: RealmFunctionOptions,
@@ -312,10 +319,6 @@ export class Realm implements WebIDLRealmHost {
 
   queueMicrotask(steps: () => void): void {
     this.agent.eventLoop.queueMicrotask(steps);
-  }
-
-  isWindow(global: object): boolean {
-    return global === this.#globalObject;
   }
 
   getCurrentEvent(_global: object): Event | undefined {
@@ -380,7 +383,7 @@ export class Realm implements WebIDLRealmHost {
   // -- Private ----------------------------------------------------------
 
   get #windowImplementation(): WindowImpl | undefined {
-    return this.#globalObject instanceof WindowImpl
+    return WindowImpl.is(this.#globalObject)
       ? this.#globalObject
       : undefined;
   }

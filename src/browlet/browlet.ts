@@ -18,7 +18,7 @@ import {
 import { BrowletParser, type DocumentWrite } from './parser';
 import { getRelevantRealm, type Realm } from './realm';
 import type { WindowProxy } from './window-proxy';
-import { updateWindowNamedProperties, WindowImpl } from './window';
+import { WindowImpl } from './window';
 import { UserAgent } from './user-agent';
 
 export class Browlet {
@@ -97,7 +97,7 @@ export class Browlet {
     );
     const realm = getRelevantRealm(document);
     const window = realm.globalObject;
-    if (!(window instanceof WindowImpl)) {
+    if (!WindowImpl.is(window)) {
       throw new Error('Navigation Document global object is not a Window');
     }
     this.installExposures(window);
@@ -113,7 +113,7 @@ export class Browlet {
     );
 
     const bindings = BrowletBindings.forRealm(realm);
-    const domlet = new Domlet(bindings.dom);
+    const domlet = new Domlet(bindings.nodeFactory);
 
     const parser = new BrowletParser(
       domlet,
@@ -164,7 +164,6 @@ export class Browlet {
       ? (getSourceCodeLocation(element)?.startTag?.endLine ?? 1) - 1
       : 0;
 
-    updateWindowNamedProperties(window, document);
     DocumentImpl.withWriter(document, write, () => {
       realm.evaluate(source, scriptURL.href, lineOffset);
     });

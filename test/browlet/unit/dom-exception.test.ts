@@ -198,6 +198,43 @@ describe('Browlet DOMException binding', () => {
     expect((exception as DOMException).name).toBe('NotFoundError');
   });
 
+  it('normalizes declaratively bound operation exceptions', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const FirstEventTarget = getConstructor<typeof EventTarget>(
+      first,
+      'EventTarget',
+    );
+    const FirstEvent = getConstructor<typeof Event>(first, 'Event');
+    const SecondEventTarget = getConstructor<typeof EventTarget>(
+      second,
+      'EventTarget',
+    );
+    const SecondDOMException = getConstructor<typeof DOMException>(
+      second,
+      'DOMException',
+    );
+    const dispatchEvent = Reflect.get(
+      SecondEventTarget.prototype,
+      'dispatchEvent',
+    ) as CallableFunction;
+    const target = new FirstEventTarget();
+    const event = new FirstEvent('ready');
+    let exception: unknown;
+
+    target.addEventListener('ready', () => {
+      try {
+        Reflect.apply(dispatchEvent, target, [event]);
+      } catch (error) {
+        exception = error;
+      }
+    });
+    target.dispatchEvent(event);
+
+    expect(exception).toBeInstanceOf(SecondDOMException);
+    expect((exception as DOMException).name).toBe('InvalidStateError');
+  });
+
   it.fails('serializes and deserializes DOMException through structuredClone', () => {
     const browlet = createBrowlet();
     const DOMException_ = getConstructor<typeof DOMException>(

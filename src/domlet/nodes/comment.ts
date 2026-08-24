@@ -1,5 +1,6 @@
 import { withCommentStub } from '../stubs/interfaces';
-import { defineInterface, idlType } from '../../web-idl/definition';
+import { arg, ctor, defineInterface, idlType } from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import { NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
@@ -10,20 +11,6 @@ import type { DocumentImpl } from './document';
  *   constructor(optional DOMString data = "");
  * };
  */
-export const commentIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'CharacterData',
-  members: [{
-    arguments: [{
-      default: '', name: 'data', optional: true, type: idlType.DOMString,
-    }],
-    kind: 'constructor',
-  }],
-  name: 'Comment',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class CommentImpl
   extends withCommentStub(CharacterDataImpl)
   implements Comment
@@ -35,3 +22,19 @@ export class CommentImpl
     super(NodeType.Comment, data, ownerDocument);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const commentIDL = defineInterface({
+  binding: bind(CommentImpl),
+  exposed: 'Window',
+  inherits: 'CharacterData',
+  members: [ctor([
+    arg('data', idlType.DOMString, { default: '', optional: true }),
+  ], bind({
+    invoke(_context, data) {
+      (this as CommentImpl).data = data as string;
+    },
+  }))],
+  name: 'Comment',
+});

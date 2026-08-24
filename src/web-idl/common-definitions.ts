@@ -1,6 +1,7 @@
 import {
-  annotated, defineCallbackFunction, defineTypedef, idlType, reference, union,
-} from './definition';
+  annotated, arg, defineCallbackFunction, defineTypedef, idlType, reference,
+  union, xattr,
+} from './adapter/definition';
 import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
@@ -10,7 +11,7 @@ import {
  */
 
 export const functionIDL = defineCallbackFunction({
-  arguments: [{ name: 'arguments', type: idlType.any, variadic: true }],
+  arguments: [arg('arguments', idlType.any, { variadic: true })],
   name: 'Function',
   returns: idlType.any,
 });
@@ -71,10 +72,7 @@ export const allowSharedBufferSourceIDL = defineTypedef({
   type: union(
     idlType.ArrayBuffer,
     idlType.SharedArrayBuffer,
-    annotated(reference('ArrayBufferView'), [{
-      kind: 'no-arguments',
-      name: 'AllowShared',
-    }]),
+    annotated(reference('ArrayBufferView'), xattr('AllowShared')),
   ),
 });
 
@@ -83,8 +81,8 @@ export const webIDLCommonDefinitions = [
   bufferSourceIDL,
   allowSharedBufferSourceIDL,
   domExceptionIDL,
-  quotaExceededErrorOptionsIDL,
   quotaExceededErrorIDL,
+  quotaExceededErrorOptionsIDL,
   functionIDL,
   voidFunctionIDL,
 ];

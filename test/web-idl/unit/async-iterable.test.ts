@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { endOfIteration } from '../../../src/web-idl/async-sequence';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, type AsyncIterableMember,
-} from '../../../src/web-idl/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { missingArgument } from '../../../src/web-idl/overload';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import {

@@ -1,5 +1,6 @@
 import { withTextStub } from '../stubs/interfaces';
-import { defineInterface, idlType } from '../../web-idl/definition';
+import { arg, ctor, defineInterface, idlType } from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import {
   isText, NodeImpl, type NodeOptions, NodeType,
 } from './node';
@@ -17,20 +18,6 @@ import { SlottableMixin } from './slottable';
  *   readonly attribute DOMString wholeText;
  * };
  */
-export const textIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'CharacterData',
-  members: [{
-    arguments: [{
-      default: '', name: 'data', optional: true, type: idlType.DOMString,
-    }],
-    kind: 'constructor',
-  }],
-  name: 'Text',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class TextImpl
   extends withTextStub(CharacterDataImpl)
   implements Text
@@ -71,3 +58,19 @@ export class TextImpl
     return text.#slottable.assignedSlot ?? NodeImpl.getParentNode(text);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const textIDL = defineInterface({
+  binding: bind(TextImpl),
+  exposed: 'Window',
+  inherits: 'CharacterData',
+  members: [ctor([
+    arg('data', idlType.DOMString, { default: '', optional: true }),
+  ], bind({
+    invoke(_context, data) {
+      (this as TextImpl).data = data as string;
+    },
+  }))],
+  name: 'Text',
+});

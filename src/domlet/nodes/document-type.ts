@@ -1,7 +1,8 @@
 import { withDocumentTypeStub } from '../stubs/interfaces';
 import {
-  defineIncludes, defineInterface, idlType,
-} from '../../web-idl/definition';
+  defineIncludes, defineInterface, idlType, readonlyAttr,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import { childNodeIDL, NodeImpl, NodeType } from './node';
 import type { DocumentImpl } from './document';
 
@@ -13,27 +14,6 @@ import type { DocumentImpl } from './document';
  *   readonly attribute DOMString systemId;
  * };
  */
-export const documentTypeIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [
-    { kind: 'attribute', name: 'name', readonly: true, type: idlType.DOMString },
-    { kind: 'attribute', name: 'publicId', readonly: true, type: idlType.DOMString },
-    { kind: 'attribute', name: 'systemId', readonly: true, type: idlType.DOMString },
-  ],
-  name: 'DocumentType',
-});
-
-/*
- * DocumentType includes ChildNode;
- */
-export const documentTypeIncludesChildNodeIDL = defineIncludes({
-  interface: 'DocumentType',
-  mixin: childNodeIDL.name,
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class DocumentTypeImpl
   extends withDocumentTypeStub(NodeImpl)
   implements DocumentType
@@ -79,3 +59,25 @@ export class DocumentTypeImpl
     doctype.#systemId = systemId;
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const documentTypeIDL = defineInterface({
+  binding: bind(DocumentTypeImpl),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [
+    readonlyAttr('name', idlType.DOMString),
+    readonlyAttr('publicId', idlType.DOMString),
+    readonlyAttr('systemId', idlType.DOMString),
+  ],
+  name: 'DocumentType',
+});
+
+/*
+ * DocumentType includes ChildNode;
+ */
+export const documentTypeIncludesChildNodeIDL = defineIncludes({
+  interface: 'DocumentType',
+  mixin: childNodeIDL.name,
+});

@@ -1,13 +1,16 @@
-import type { AssembledInterface } from './assembly';
+import type { AssembledInterface } from './adapter/assembly';
 import { isCallbackFunctionValue } from './callback-value';
 import { invokeCallbackFunction } from './callback';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import { reference, type IterableMember } from './definition';
-import type {
-  ImplementationRegistry, ValuePair,
-} from './implementation';
+import { reference, type IterableMember } from './adapter/definition';
+import type { ImplementationRegistry } from './adapter/registry';
+
+export type ValuePair<Key = unknown, Value = unknown> = {
+  key: Key;
+  value: Value;
+};
 
 export class SynchronousIterableBinding {
   readonly #context: ConversionContext;
@@ -170,7 +173,6 @@ export class SynchronousIterableBinding {
               platformObject,
             ],
             'rethrow',
-            this.#context,
             argumentsList[1],
           );
           pairs = this.#getValuePairs(object, interface_, iterable);

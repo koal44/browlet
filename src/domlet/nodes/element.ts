@@ -10,18 +10,18 @@ import { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
 import {
-  directDOMNodeFactory, type DOMNodeFactory,
-} from './factory';
-import {
   ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
   type TreeScopeResolver,
 } from '../css-engine';
 import {
-  defineIncludes, defineInterface, idlType, nullable,
-} from '../../web-idl/definition';
+  arg, defineIncludes, defineInterface, idlType, nullable, op,
+  readonlyAttr,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../shared/namespaces';
+import { asciiLower } from '../../shared/css';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
@@ -79,291 +79,6 @@ import { SlottableMixin } from './slottable';
  *   undefined insertAdjacentText(DOMString where, DOMString data); // legacy
  * };
  */
-export const elementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [
-    {
-      kind: 'attribute', name: 'namespaceURI', readonly: true,
-      type: nullable(idlType.DOMString),
-    },
-    { kind: 'attribute', name: 'localName', readonly: true, type: idlType.DOMString },
-    { kind: 'attribute', name: 'attributes', readonly: true, type: idlType.object },
-    {
-      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
-      kind: 'operation', name: 'getAttribute',
-      returns: nullable(idlType.DOMString),
-    },
-    {
-      arguments: [
-        { name: 'namespace', type: nullable(idlType.DOMString) },
-        { name: 'localName', type: idlType.DOMString },
-      ],
-      kind: 'operation', name: 'getAttributeNS',
-      returns: nullable(idlType.DOMString),
-    },
-    {
-      arguments: [{ name: 'classNames', type: idlType.DOMString }],
-      kind: 'operation', name: 'getElementsByClassName',
-      returns: idlType.object,
-    },
-    {
-      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
-      kind: 'operation', name: 'getElementsByTagName',
-      returns: idlType.object,
-    },
-    {
-      arguments: [
-        { name: 'namespace', type: nullable(idlType.DOMString) },
-        { name: 'localName', type: idlType.DOMString },
-      ],
-      kind: 'operation', name: 'getElementsByTagNameNS',
-      returns: idlType.object,
-    },
-    {
-      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
-      kind: 'operation', name: 'hasAttribute', returns: idlType.boolean,
-    },
-    {
-      arguments: [
-        { name: 'namespace', type: nullable(idlType.DOMString) },
-        { name: 'localName', type: idlType.DOMString },
-      ],
-      kind: 'operation', name: 'hasAttributeNS', returns: idlType.boolean,
-    },
-    {
-      arguments: [
-        { name: 'qualifiedName', type: idlType.DOMString },
-        { name: 'value', type: idlType.DOMString },
-      ],
-      kind: 'operation', name: 'setAttribute', returns: idlType.undefined,
-    },
-    {
-      arguments: [{ name: 'qualifiedName', type: idlType.DOMString }],
-      kind: 'operation', name: 'removeAttribute', returns: idlType.undefined,
-    },
-  ],
-  name: 'Element',
-});
-
-/*
- * Element includes ParentNode;
- */
-export const elementIncludesParentNodeIDL = defineIncludes({
-  interface: 'Element', mixin: parentNodeIDL.name,
-});
-
-/*
- * Element includes ChildNode;
- */
-export const elementIncludesChildNodeIDL = defineIncludes({
-  interface: 'Element', mixin: childNodeIDL.name,
-});
-
-/*
- * Element includes NonDocumentTypeChildNode;
- */
-export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
-  interface: 'Element', mixin: nonDocumentTypeChildNodeIDL.name,
-});
-
-/*
- * [Exposed=Window]
- * interface HTMLElement : Element {
- *   [HTMLConstructor] constructor();
- *
- *   // metadata attributes
- *   [CEReactions, Reflect] attribute DOMString title;
- *   [CEReactions, Reflect] attribute DOMString lang;
- *   [CEReactions] attribute boolean translate;
- *   [CEReactions] attribute DOMString dir;
- *
- *   // user interaction
- *   [CEReactions] attribute (boolean or unrestricted double or DOMString)? hidden;
- *   [CEReactions, Reflect] attribute boolean inert;
- *   undefined click();
- *   [CEReactions, Reflect] attribute DOMString accessKey;
- *   readonly attribute DOMString accessKeyLabel;
- *   [CEReactions] attribute boolean draggable;
- *   [CEReactions] attribute boolean spellcheck;
- *   [CEReactions, ReflectSetter] attribute DOMString writingSuggestions;
- *   [CEReactions, ReflectSetter] attribute DOMString autocapitalize;
- *   [CEReactions] attribute boolean autocorrect;
- *
- *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString innerText;
- *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString outerText;
- *
- *   ElementInternals attachInternals();
- *
- *   // The popover API
- *   undefined showPopover(optional ShowPopoverOptions options = {});
- *   undefined hidePopover();
- *   boolean togglePopover(optional (TogglePopoverOptions or boolean) options = {});
- *   [CEReactions] attribute DOMString? popover;
- *
- *   [CEReactions, Reflect, ReflectRange=(0, 8)] attribute unsigned long headingOffset;
- *   [CEReactions, Reflect] attribute boolean headingReset;
- * };
- * HTMLElement includes GlobalEventHandlers;
- * HTMLElement includes ElementContentEditable;
- * HTMLElement includes HTMLOrSVGOrMathMLElement;
- */
-export const htmlElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Element',
-  members: [],
-  name: 'HTMLElement',
-});
-
-/*
- * HTMLElement includes ElementCSSInlineStyle;
- */
-export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
-  interface: 'HTMLElement', mixin: 'ElementCSSInlineStyle',
-});
-
-/*
- * [Exposed=Window]
- * interface HTMLHeadElement : HTMLElement {
- *   [HTMLConstructor] constructor();
- * };
- */
-export const htmlHeadElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'HTMLElement',
-  members: [],
-  name: 'HTMLHeadElement',
-});
-
-/*
- * [Exposed=Window]
- * interface HTMLStyleElement : HTMLElement {
- *   [HTMLConstructor] constructor();
- *
- *   attribute boolean disabled;
- *   [CEReactions, Reflect] attribute DOMString media;
- *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
- *
- *   // also has obsolete members
- * };
- * HTMLStyleElement includes LinkStyle;
- */
-export const htmlStyleElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'HTMLElement',
-  members: [],
-  name: 'HTMLStyleElement',
-});
-
-export const htmlStyleElementIncludesLinkStyleIDL = defineIncludes({
-  interface: 'HTMLStyleElement', mixin: 'LinkStyle',
-});
-
-/*
- * [Exposed=Window]
- * interface HTMLLinkElement : HTMLElement {
- *   [HTMLConstructor] constructor();
- *
- *   [CEReactions, ReflectURL] attribute USVString href;
- *   [CEReactions] attribute DOMString? crossOrigin;
- *   [CEReactions, Reflect] attribute DOMString rel;
- *   [CEReactions] attribute DOMString as;
- *   [SameObject, PutForwards=value, Reflect="rel"] readonly attribute DOMTokenList relList;
- *   [CEReactions, Reflect] attribute DOMString media;
- *   [CEReactions, Reflect] attribute DOMString integrity;
- *   [CEReactions, Reflect] attribute DOMString hreflang;
- *   [CEReactions, Reflect] attribute DOMString type;
- *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList sizes;
- *   [CEReactions, Reflect] attribute USVString imageSrcset;
- *   [CEReactions, Reflect] attribute DOMString imageSizes;
- *   [CEReactions] attribute DOMString referrerPolicy;
- *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
- *   [CEReactions, Reflect] attribute boolean disabled;
- *   [CEReactions] attribute DOMString fetchPriority;
- *
- *   // also has obsolete members
- * };
- * HTMLLinkElement includes LinkStyle;
- */
-export const htmlLinkElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'HTMLElement',
-  members: [],
-  name: 'HTMLLinkElement',
-});
-
-export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
-  interface: 'HTMLLinkElement', mixin: 'LinkStyle',
-});
-
-/*
- * [Exposed=Window]
- * interface SVGElement : Element {
- *   [SameObject] readonly attribute SVGAnimatedString className;
- *
- *   readonly attribute SVGSVGElement? ownerSVGElement;
- *   readonly attribute SVGElement? viewportElement;
- * };
- * SVGElement includes GlobalEventHandlers;
- * SVGElement includes SVGElementInstance;
- * SVGElement includes HTMLOrSVGElement;
- */
-export const svgElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Element',
-  members: [],
-  name: 'SVGElement',
-});
-
-/*
- * SVGElement includes ElementCSSInlineStyle;
- */
-export const svgElementIncludesElementCSSInlineStyleIDL = defineIncludes({
-  interface: 'SVGElement', mixin: 'ElementCSSInlineStyle',
-});
-
-/*
- * [Exposed=Window]
- * interface SVGStyleElement : SVGElement {
- *   attribute DOMString type;
- *   attribute DOMString media;
- *   attribute DOMString title;
- *   attribute boolean disabled;
- * };
- * SVGStyleElement includes LinkStyle;
- */
-export const svgStyleElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'SVGElement',
-  members: [],
-  name: 'SVGStyleElement',
-});
-
-export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({
-  interface: 'SVGStyleElement', mixin: 'LinkStyle',
-});
-
-/*
- * [Exposed=Window]
- * interface MathMLElement : Element { };
- * MathMLElement includes GlobalEventHandlers;
- */
-export const mathMLElementIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Element',
-  members: [],
-  name: 'MathMLElement',
-});
-
-/*
- * MathMLElement includes ElementCSSInlineStyle;
- */
-export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
-  interface: 'MathMLElement', mixin: 'ElementCSSInlineStyle',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
@@ -373,7 +88,6 @@ export class ElementImpl
   readonly #attributes: NamedNodeMapImpl;
   readonly #localName: string;
   readonly #namespaceURI: string;
-  readonly #nodeFactory: DOMNodeFactory;
   readonly #slottable = new SlottableMixin();
 
   constructor(
@@ -382,14 +96,12 @@ export class ElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(NodeType.Element, ownerDocument, ElementImpl.#nodeOptions);
     this.#attributes = new NamedNodeMapImpl(...attributes);
     NamedNodeMapImpl.associateElement(this.#attributes, this);
     this.#localName = localName;
     this.#namespaceURI = namespaceURI;
-    this.#nodeFactory = nodeFactory;
     this.#linkStyle = linkStyle
       ? new LinkStyleMixin(
         this,
@@ -462,13 +174,8 @@ export class ElementImpl
       if (!ownerDocument) {
         throw new Error('Element has no node document');
       }
-      const created = this.#nodeFactory.construct(AttrImpl, [
-        qualifiedName,
-        value,
-        null,
-        null,
-        ownerDocument,
-      ]);
+      const created = ownerDocument.createAttribute(qualifiedName);
+      created.value = value;
       AttrImpl.setOwnerElement(created, this);
       this.attributes.push(created);
     }
@@ -603,6 +310,113 @@ export class ElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const elementIDL = defineInterface({
+  binding: bind(ElementImpl),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [
+    readonlyAttr('namespaceURI', nullable(idlType.DOMString)),
+    readonlyAttr('localName', idlType.DOMString),
+    readonlyAttr('attributes', idlType.object),
+    op('getAttribute', nullable(idlType.DOMString), [
+      arg('qualifiedName', idlType.DOMString),
+    ]),
+    op('getAttributeNS', nullable(idlType.DOMString), [
+      arg('namespace', nullable(idlType.DOMString)),
+      arg('localName', idlType.DOMString),
+    ]),
+    op('getElementsByClassName', idlType.object, [
+      arg('classNames', idlType.DOMString),
+    ]),
+    op('getElementsByTagName', idlType.object, [
+      arg('qualifiedName', idlType.DOMString),
+    ]),
+    op('getElementsByTagNameNS', idlType.object, [
+      arg('namespace', nullable(idlType.DOMString)),
+      arg('localName', idlType.DOMString),
+    ]),
+    op('hasAttribute', idlType.boolean, [
+      arg('qualifiedName', idlType.DOMString),
+    ]),
+    op('hasAttributeNS', idlType.boolean, [
+      arg('namespace', nullable(idlType.DOMString)),
+      arg('localName', idlType.DOMString),
+    ]),
+    op('setAttribute', idlType.undefined, [
+      arg('qualifiedName', idlType.DOMString),
+      arg('value', idlType.DOMString),
+    ]),
+    op('removeAttribute', idlType.undefined, [
+      arg('qualifiedName', idlType.DOMString),
+    ]),
+  ],
+  name: 'Element',
+});
+
+/*
+ * Element includes ParentNode;
+ */
+export const elementIncludesParentNodeIDL = defineIncludes({
+  interface: 'Element', mixin: parentNodeIDL.name,
+});
+
+/*
+ * Element includes ChildNode;
+ */
+export const elementIncludesChildNodeIDL = defineIncludes({
+  interface: 'Element', mixin: childNodeIDL.name,
+});
+
+/*
+ * Element includes NonDocumentTypeChildNode;
+ */
+export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
+  interface: 'Element', mixin: nonDocumentTypeChildNodeIDL.name,
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLElement : Element {
+ *   [HTMLConstructor] constructor();
+ *
+ *   // metadata attributes
+ *   [CEReactions, Reflect] attribute DOMString title;
+ *   [CEReactions, Reflect] attribute DOMString lang;
+ *   [CEReactions] attribute boolean translate;
+ *   [CEReactions] attribute DOMString dir;
+ *
+ *   // user interaction
+ *   [CEReactions] attribute (boolean or unrestricted double or DOMString)? hidden;
+ *   [CEReactions, Reflect] attribute boolean inert;
+ *   undefined click();
+ *   [CEReactions, Reflect] attribute DOMString accessKey;
+ *   readonly attribute DOMString accessKeyLabel;
+ *   [CEReactions] attribute boolean draggable;
+ *   [CEReactions] attribute boolean spellcheck;
+ *   [CEReactions, ReflectSetter] attribute DOMString writingSuggestions;
+ *   [CEReactions, ReflectSetter] attribute DOMString autocapitalize;
+ *   [CEReactions] attribute boolean autocorrect;
+ *
+ *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString innerText;
+ *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString outerText;
+ *
+ *   ElementInternals attachInternals();
+ *
+ *   // The popover API
+ *   undefined showPopover(optional ShowPopoverOptions options = {});
+ *   undefined hidePopover();
+ *   boolean togglePopover(optional (TogglePopoverOptions or boolean) options = {});
+ *   [CEReactions] attribute DOMString? popover;
+ *
+ *   [CEReactions, Reflect, ReflectRange=(0, 8)] attribute unsigned long headingOffset;
+ *   [CEReactions, Reflect] attribute boolean headingReset;
+ * };
+ * HTMLElement includes GlobalEventHandlers;
+ * HTMLElement includes ElementContentEditable;
+ * HTMLElement includes HTMLOrSVGOrMathMLElement;
+ */
 export class HTMLElementImpl
   extends withHTMLElementStub(ElementImpl)
   implements HTMLElement
@@ -612,7 +426,6 @@ export class HTMLElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       localName,
@@ -620,7 +433,6 @@ export class HTMLElementImpl
       ownerDocument,
       attributes,
       linkStyle,
-      nodeFactory,
     );
   }
 
@@ -629,6 +441,29 @@ export class HTMLElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const htmlElementIDL = defineInterface({
+  binding: bind(HTMLElementImpl),
+  exposed: 'Window',
+  inherits: 'Element',
+  members: [],
+  name: 'HTMLElement',
+});
+
+/*
+ * HTMLElement includes ElementCSSInlineStyle;
+ */
+export const htmlElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'HTMLElement', mixin: 'ElementCSSInlineStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLHeadElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ * };
+ */
 export class HTMLHeadElementImpl
   extends withHTMLHeadElementStub(HTMLElementImpl)
   implements HTMLHeadElement
@@ -636,12 +471,34 @@ export class HTMLHeadElementImpl
   constructor(
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
-    super('head', ownerDocument, attributes, undefined, nodeFactory);
+    super('head', ownerDocument, attributes);
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const htmlHeadElementIDL = defineInterface({
+  binding: bind(HTMLHeadElementImpl),
+  exposed: 'Window',
+  inherits: 'HTMLElement',
+  members: [],
+  name: 'HTMLHeadElement',
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLStyleElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   attribute boolean disabled;
+ *   [CEReactions, Reflect] attribute DOMString media;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
+ *
+ *   // also has obsolete members
+ * };
+ * HTMLStyleElement includes LinkStyle;
+ */
 export class HTMLStyleElementImpl
   extends withHTMLStyleElementStub(HTMLElementImpl)
   implements HTMLStyleElement
@@ -655,7 +512,6 @@ export class HTMLStyleElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'style',
@@ -665,7 +521,6 @@ export class HTMLStyleElementImpl
         options: HTMLStyleElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
-      nodeFactory,
     );
   }
 
@@ -674,6 +529,46 @@ export class HTMLStyleElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const htmlStyleElementIDL = defineInterface({
+  binding: bind(HTMLStyleElementImpl),
+  exposed: 'Window',
+  inherits: 'HTMLElement',
+  members: [],
+  name: 'HTMLStyleElement',
+});
+
+export const htmlStyleElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'HTMLStyleElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface HTMLLinkElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectURL] attribute USVString href;
+ *   [CEReactions] attribute DOMString? crossOrigin;
+ *   [CEReactions, Reflect] attribute DOMString rel;
+ *   [CEReactions] attribute DOMString as;
+ *   [SameObject, PutForwards=value, Reflect="rel"] readonly attribute DOMTokenList relList;
+ *   [CEReactions, Reflect] attribute DOMString media;
+ *   [CEReactions, Reflect] attribute DOMString integrity;
+ *   [CEReactions, Reflect] attribute DOMString hreflang;
+ *   [CEReactions, Reflect] attribute DOMString type;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList sizes;
+ *   [CEReactions, Reflect] attribute USVString imageSrcset;
+ *   [CEReactions, Reflect] attribute DOMString imageSizes;
+ *   [CEReactions] attribute DOMString referrerPolicy;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList blocking;
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   [CEReactions] attribute DOMString fetchPriority;
+ *
+ *   // also has obsolete members
+ * };
+ * HTMLLinkElement includes LinkStyle;
+ */
 export class HTMLLinkElementImpl
   extends withHTMLLinkElementStub(HTMLElementImpl)
   implements HTMLLinkElement
@@ -689,7 +584,6 @@ export class HTMLLinkElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'link',
@@ -699,7 +593,6 @@ export class HTMLLinkElementImpl
         options: HTMLLinkElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
-      nodeFactory,
     );
   }
 
@@ -708,6 +601,32 @@ export class HTMLLinkElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const htmlLinkElementIDL = defineInterface({
+  binding: bind(HTMLLinkElementImpl),
+  exposed: 'Window',
+  inherits: 'HTMLElement',
+  members: [],
+  name: 'HTMLLinkElement',
+});
+
+export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'HTMLLinkElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface SVGElement : Element {
+ *   [SameObject] readonly attribute SVGAnimatedString className;
+ *
+ *   readonly attribute SVGSVGElement? ownerSVGElement;
+ *   readonly attribute SVGElement? viewportElement;
+ * };
+ * SVGElement includes GlobalEventHandlers;
+ * SVGElement includes SVGElementInstance;
+ * SVGElement includes HTMLOrSVGElement;
+ */
 export class SVGElementImpl
   extends withSVGElementStub(ElementImpl)
   implements SVGElement
@@ -717,7 +636,6 @@ export class SVGElementImpl
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
     linkStyle?: LinkStyleInit,
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       localName,
@@ -725,7 +643,6 @@ export class SVGElementImpl
       ownerDocument,
       attributes,
       linkStyle,
-      nodeFactory,
     );
   }
 
@@ -734,6 +651,33 @@ export class SVGElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const svgElementIDL = defineInterface({
+  binding: bind(SVGElementImpl),
+  exposed: 'Window',
+  inherits: 'Element',
+  members: [],
+  name: 'SVGElement',
+});
+
+/*
+ * SVGElement includes ElementCSSInlineStyle;
+ */
+export const svgElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'SVGElement', mixin: 'ElementCSSInlineStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface SVGStyleElement : SVGElement {
+ *   attribute DOMString type;
+ *   attribute DOMString media;
+ *   attribute DOMString title;
+ *   attribute boolean disabled;
+ * };
+ * SVGStyleElement includes LinkStyle;
+ */
 export class SVGStyleElementImpl
   extends withSVGStyleElementStub(SVGElementImpl)
   implements SVGStyleElement
@@ -747,7 +691,6 @@ export class SVGStyleElementImpl
     ownerDocument: DocumentImpl,
     treeScopeResolver: TreeScopeResolver,
     attributes: AttrImpl[] = [],
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       'style',
@@ -757,7 +700,6 @@ export class SVGStyleElementImpl
         options: SVGStyleElementImpl.#linkStyleOptions,
         treeScopeResolver,
       },
-      nodeFactory,
     );
   }
 
@@ -766,6 +708,25 @@ export class SVGStyleElementImpl
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const svgStyleElementIDL = defineInterface({
+  binding: bind(SVGStyleElementImpl),
+  exposed: 'Window',
+  inherits: 'SVGElement',
+  members: [],
+  name: 'SVGStyleElement',
+});
+
+export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({
+  interface: 'SVGStyleElement', mixin: 'LinkStyle',
+});
+
+/*
+ * [Exposed=Window]
+ * interface MathMLElement : Element { };
+ * MathMLElement includes GlobalEventHandlers;
+ */
 export class MathMLElementImpl
   extends withMathMLElementStub(ElementImpl)
   implements MathMLElement
@@ -774,7 +735,6 @@ export class MathMLElementImpl
     localName: string,
     ownerDocument: DocumentImpl,
     attributes: AttrImpl[] = [],
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
   ) {
     super(
       localName,
@@ -782,7 +742,6 @@ export class MathMLElementImpl
       ownerDocument,
       attributes,
       undefined,
-      nodeFactory,
     );
   }
 
@@ -791,72 +750,22 @@ export class MathMLElementImpl
   }
 }
 
-export function createElementNode(localName: string, namespaceURI: typeof HTML_NAMESPACE, ownerDocument: DocumentImpl, treeScopeResolver: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): HTMLElementImpl;
-export function createElementNode(localName: string, namespaceURI: string, ownerDocument: DocumentImpl, treeScopeResolver: TreeScopeResolver, attributes: AttrImpl[], nodeFactory: DOMNodeFactory): ElementImpl;
-export function createElementNode(
-  localName: string,
-  namespaceURI: string,
-  ownerDocument: DocumentImpl,
-  treeScopeResolver: TreeScopeResolver,
-  attributes: AttrImpl[],
-  nodeFactory: DOMNodeFactory,
-): ElementImpl {
-  if (namespaceURI === HTML_NAMESPACE) {
-    localName = asciiLower(localName);
+// -- Web IDL ------------------------------------------------------------
 
-    if (localName === 'head') {
-      return nodeFactory.construct(
-        HTMLHeadElementImpl,
-        [ownerDocument, attributes, nodeFactory],
-      );
-    }
+export const mathMLElementIDL = defineInterface({
+  binding: bind(MathMLElementImpl),
+  exposed: 'Window',
+  inherits: 'Element',
+  members: [],
+  name: 'MathMLElement',
+});
 
-    if (localName === 'style') {
-      return nodeFactory.construct(
-        HTMLStyleElementImpl,
-        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
-      );
-    }
-
-    if (localName === 'link') {
-      return nodeFactory.construct(
-        HTMLLinkElementImpl,
-        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
-      );
-    }
-
-    return nodeFactory.construct(
-      HTMLElementImpl,
-      [localName, ownerDocument, attributes, undefined, nodeFactory],
-    );
-  }
-
-  if (namespaceURI === SVG_NAMESPACE) {
-    if (localName === 'style') {
-      return nodeFactory.construct(
-        SVGStyleElementImpl,
-        [ownerDocument, treeScopeResolver, attributes, nodeFactory],
-      );
-    }
-
-    return nodeFactory.construct(
-      SVGElementImpl,
-      [localName, ownerDocument, attributes, undefined, nodeFactory],
-    );
-  }
-
-  if (namespaceURI === MATHML_NAMESPACE) {
-    return nodeFactory.construct(
-      MathMLElementImpl,
-      [localName, ownerDocument, attributes, nodeFactory],
-    );
-  }
-
-  return nodeFactory.construct(
-    ElementImpl,
-    [localName, namespaceURI, ownerDocument, attributes, undefined, nodeFactory],
-  );
-}
+/*
+ * MathMLElement includes ElementCSSInlineStyle;
+ */
+export const mathMLElementIncludesElementCSSInlineStyleIDL = defineIncludes({
+  interface: 'MathMLElement', mixin: 'ElementCSSInlineStyle',
+});
 
 export function isHTMLElement(
   element: Element,
@@ -902,10 +811,6 @@ export function isMathMLElement(
 
 function normalizeNamespace(namespaceURI: string | null): string | null {
   return namespaceURI === '' ? null : namespaceURI;
-}
-
-function asciiLower(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 type LinkStyleInit = {

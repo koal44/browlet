@@ -1,6 +1,6 @@
 import type {
   BufferTypeName, BufferViewTypeName, ExtendedAttribute,
-} from './definition';
+} from './adapter/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export function convertBufferSourceToIDL(

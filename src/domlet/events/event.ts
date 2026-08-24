@@ -1,11 +1,21 @@
 import {
-  defineDictionary, defineInterface, defineTypedef, emptyDictionary, idlType,
-  integer, nullable, reference, sequence,
-} from '../../web-idl/definition';
+  arg, attr, constant, ctor, defineDictionary, defineInterface, defineTypedef,
+  dictMember, emptyDictionary, idlType, integer, nullable, op, readonlyAttr,
+  reference, sequence, xattr,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
+import type { WebIDLRealmHost } from '../../web-idl/javascript-realm';
 
 /*
  * typedef double DOMHighResTimeStamp;
- *
+ */
+
+export const domHighResTimeStampIDL = defineTypedef({
+  name: 'DOMHighResTimeStamp',
+  type: idlType.double,
+});
+
+/*
  * [Exposed=*]
  * interface Event {
  *   constructor(DOMString type, optional EventInit eventInitDict = {});
@@ -45,122 +55,6 @@ import {
  *   boolean composed = false;
  * };
  */
-
-export const domHighResTimeStampIDL = defineTypedef({
-  name: 'DOMHighResTimeStamp',
-  type: idlType.double,
-});
-
-export const eventInitIDL = defineDictionary({
-  members: [
-    { default: false, name: 'bubbles', type: idlType.boolean },
-    { default: false, name: 'cancelable', type: idlType.boolean },
-    { default: false, name: 'composed', type: idlType.boolean },
-  ],
-  name: 'EventInit',
-});
-
-export const eventIDL = defineInterface({
-  exposed: '*',
-  members: [
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        {
-          default: emptyDictionary,
-          name: 'eventInitDict',
-          optional: true,
-          type: reference('EventInit'),
-        },
-      ],
-      kind: 'constructor',
-    },
-    { kind: 'attribute', name: 'type', readonly: true, type: idlType.DOMString },
-    {
-      kind: 'attribute', name: 'target', readonly: true,
-      type: nullable(reference('EventTarget')),
-    },
-    {
-      kind: 'attribute', name: 'srcElement', readonly: true,
-      type: nullable(reference('EventTarget')),
-    },
-    {
-      kind: 'attribute', name: 'currentTarget', readonly: true,
-      type: nullable(reference('EventTarget')),
-    },
-    {
-      arguments: [], kind: 'operation', name: 'composedPath',
-      returns: sequence(reference('EventTarget')),
-    },
-    {
-      kind: 'constant', name: 'NONE', type: idlType.unsignedShort,
-      value: integer(0),
-    },
-    {
-      kind: 'constant', name: 'CAPTURING_PHASE', type: idlType.unsignedShort,
-      value: integer(1),
-    },
-    {
-      kind: 'constant', name: 'AT_TARGET', type: idlType.unsignedShort,
-      value: integer(2),
-    },
-    {
-      kind: 'constant', name: 'BUBBLING_PHASE', type: idlType.unsignedShort,
-      value: integer(3),
-    },
-    {
-      kind: 'attribute', name: 'eventPhase', readonly: true,
-      type: idlType.unsignedShort,
-    },
-    {
-      arguments: [], kind: 'operation', name: 'stopPropagation',
-      returns: idlType.undefined,
-    },
-    { kind: 'attribute', name: 'cancelBubble', type: idlType.boolean },
-    {
-      arguments: [], kind: 'operation', name: 'stopImmediatePropagation',
-      returns: idlType.undefined,
-    },
-    { kind: 'attribute', name: 'bubbles', readonly: true, type: idlType.boolean },
-    { kind: 'attribute', name: 'cancelable', readonly: true, type: idlType.boolean },
-    { kind: 'attribute', name: 'returnValue', type: idlType.boolean },
-    {
-      arguments: [], kind: 'operation', name: 'preventDefault',
-      returns: idlType.undefined,
-    },
-    {
-      kind: 'attribute', name: 'defaultPrevented', readonly: true,
-      type: idlType.boolean,
-    },
-    { kind: 'attribute', name: 'composed', readonly: true, type: idlType.boolean },
-    {
-      extendedAttributes: [{ kind: 'no-arguments', name: 'LegacyUnforgeable' }],
-      kind: 'attribute', name: 'isTrusted', readonly: true,
-      type: idlType.boolean,
-    },
-    {
-      kind: 'attribute', name: 'timeStamp', readonly: true,
-      type: reference('DOMHighResTimeStamp'),
-    },
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        { default: false, name: 'bubbles', optional: true, type: idlType.boolean },
-        {
-          default: false, name: 'cancelable', optional: true,
-          type: idlType.boolean,
-        },
-      ],
-      kind: 'operation',
-      name: 'initEvent',
-      returns: idlType.undefined,
-    },
-  ],
-  name: 'Event',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class EventImpl implements Event
 {
   #type = '';
@@ -531,6 +425,81 @@ export class EventImpl implements Event
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const eventIDL = defineInterface({
+  binding: bind(EventImpl, {
+    create(context, newTarget) {
+      if (!newTarget) throw new Error('Event construction requires newTarget');
+      return Reflect.construct(
+        EventImpl,
+        ['', {}, (context.realm as EventRealm).eventTimeStamp()],
+        newTarget as NewTarget,
+      );
+    },
+  }),
+  exposed: '*',
+  members: [
+    ctor([
+      arg('type', idlType.DOMString),
+      arg('eventInitDict', reference('EventInit'), {
+        default: emptyDictionary,
+        optional: true,
+      }),
+    ], bind({
+      invoke(_context, type, init) {
+        const dictionary = init as Record<PropertyKey, unknown>;
+        EventImpl.initializeForBinding(
+          this as EventImpl,
+          type as string,
+          Boolean(dictionary.bubbles),
+          Boolean(dictionary.cancelable),
+          Boolean(dictionary.composed),
+        );
+      },
+    })),
+    readonlyAttr('type', idlType.DOMString),
+    readonlyAttr('target', nullable(reference('EventTarget'))),
+    readonlyAttr('srcElement', nullable(reference('EventTarget'))),
+    readonlyAttr('currentTarget', nullable(reference('EventTarget'))),
+    op('composedPath', sequence(reference('EventTarget'))),
+    constant('NONE', idlType.unsignedShort, integer(0)),
+    constant('CAPTURING_PHASE', idlType.unsignedShort, integer(1)),
+    constant('AT_TARGET', idlType.unsignedShort, integer(2)),
+    constant('BUBBLING_PHASE', idlType.unsignedShort, integer(3)),
+    readonlyAttr('eventPhase', idlType.unsignedShort),
+    op('stopPropagation', idlType.undefined),
+    attr('cancelBubble', idlType.boolean),
+    op('stopImmediatePropagation', idlType.undefined),
+    readonlyAttr('bubbles', idlType.boolean),
+    readonlyAttr('cancelable', idlType.boolean),
+    attr('returnValue', idlType.boolean),
+    op('preventDefault', idlType.undefined),
+    readonlyAttr('defaultPrevented', idlType.boolean),
+    readonlyAttr('composed', idlType.boolean),
+    readonlyAttr('isTrusted', idlType.boolean, xattr('LegacyUnforgeable')),
+    readonlyAttr('timeStamp', reference('DOMHighResTimeStamp')),
+    op('initEvent', idlType.undefined, [
+      arg('type', idlType.DOMString),
+      arg('bubbles', idlType.boolean, { default: false, optional: true }),
+      arg('cancelable', idlType.boolean, {
+        default: false,
+        optional: true,
+      }),
+    ]),
+  ],
+  name: 'Event',
+});
+
+export const eventInitIDL = defineDictionary({
+  members: [
+    dictMember('bubbles', idlType.boolean, { default: false }),
+    dictMember('cancelable', idlType.boolean, { default: false }),
+    dictMember('composed', idlType.boolean, { default: false }),
+  ],
+  name: 'EventInit',
+});
+
 /*
  * [Exposed=*]
  * interface CustomEvent : Event {
@@ -545,49 +514,6 @@ export class EventImpl implements Event
  *   any detail = null;
  * };
  */
-export const customEventInitIDL = defineDictionary({
-  inherits: 'EventInit',
-  members: [{ default: null, name: 'detail', type: idlType.any }],
-  name: 'CustomEventInit',
-});
-
-export const customEventIDL = defineInterface({
-  exposed: '*',
-  inherits: 'Event',
-  members: [
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        {
-          default: emptyDictionary,
-          name: 'eventInitDict',
-          optional: true,
-          type: reference('CustomEventInit'),
-        },
-      ],
-      kind: 'constructor',
-    },
-    { kind: 'attribute', name: 'detail', readonly: true, type: idlType.any },
-    {
-      arguments: [
-        { name: 'type', type: idlType.DOMString },
-        { default: false, name: 'bubbles', optional: true, type: idlType.boolean },
-        {
-          default: false, name: 'cancelable', optional: true,
-          type: idlType.boolean,
-        },
-        { default: null, name: 'detail', optional: true, type: idlType.any },
-      ],
-      kind: 'operation',
-      name: 'initCustomEvent',
-      returns: idlType.undefined,
-    },
-  ],
-  name: 'CustomEvent',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class CustomEventImpl<T = unknown>
   extends EventImpl
   implements CustomEvent<T>
@@ -647,6 +573,63 @@ export class CustomEventImpl<T = unknown>
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const customEventIDL = defineInterface({
+  binding: bind(CustomEventImpl, {
+    create(context, newTarget) {
+      if (!newTarget) {
+        throw new Error('CustomEvent construction requires newTarget');
+      }
+      return Reflect.construct(
+        CustomEventImpl,
+        ['', {}, (context.realm as EventRealm).eventTimeStamp()],
+        newTarget as NewTarget,
+      );
+    },
+  }),
+  exposed: '*',
+  inherits: 'Event',
+  members: [
+    ctor([
+      arg('type', idlType.DOMString),
+      arg('eventInitDict', reference('CustomEventInit'), {
+        default: emptyDictionary,
+        optional: true,
+      }),
+    ], bind({
+      invoke(_context, type, init) {
+        const dictionary = init as Record<PropertyKey, unknown>;
+        CustomEventImpl.initializeCustomForBinding(
+          this as CustomEventImpl,
+          type as string,
+          Boolean(dictionary.bubbles),
+          Boolean(dictionary.cancelable),
+          Boolean(dictionary.composed),
+          dictionary.detail,
+        );
+      },
+    })),
+    readonlyAttr('detail', idlType.any),
+    op('initCustomEvent', idlType.undefined, [
+      arg('type', idlType.DOMString),
+      arg('bubbles', idlType.boolean, { default: false, optional: true }),
+      arg('cancelable', idlType.boolean, {
+        default: false,
+        optional: true,
+      }),
+      arg('detail', idlType.any, { default: null, optional: true }),
+    ]),
+  ],
+  name: 'CustomEvent',
+});
+
+export const customEventInitIDL = defineDictionary({
+  inherits: 'EventInit',
+  members: [dictMember('detail', idlType.any, { default: null })],
+  name: 'CustomEventInit',
+});
+
 export type EventPathItem = {
   readonly invocationTarget: EventTarget;
   readonly invocationTargetInShadowTree: boolean;
@@ -664,3 +647,9 @@ export function toDOMString(value: unknown): string {
 
   return String(value);
 }
+
+type EventRealm = WebIDLRealmHost & {
+  eventTimeStamp(): DOMHighResTimeStamp;
+};
+
+type NewTarget = new (...argumentsList: never[]) => object;

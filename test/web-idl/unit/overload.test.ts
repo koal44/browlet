@@ -3,17 +3,17 @@ import { describe, expect, it } from 'vitest';
 import {
   defineDictionary, defineInterface, frozenArray, idlType, reference, sequence,
   type OperationMember,
-} from '../../../src/web-idl/definition';
+} from '../../../src/web-idl/adapter/definition';
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import type { HostDefinedInterface } from '../../../src/web-idl/conversion';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import {
   computeEffectiveOverloadSet, missingArgument, resolveOverload,
 } from '../../../src/web-idl/overload';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
-import { serializeType } from '../../../src/web-idl/serialize';
+import { serializeType } from '../../../src/web-idl/adapter/serialize';
 
 describe('Web IDL effective overload sets', () => {
   it('expands optional and variadic operation arguments', () => {

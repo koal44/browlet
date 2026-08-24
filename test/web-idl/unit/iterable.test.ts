@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, reference, type IterableMember,
-} from '../../../src/web-idl/definition';
-import {
-  ImplementationRegistry, type ValuePair,
-} from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
+import type { ValuePair } from '../../../src/web-idl/iterable';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL synchronous iterable declarations', () => {

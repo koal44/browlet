@@ -4,8 +4,9 @@ import { CSSStyleDeclarationImpl } from '../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../stylelet/engine/tree-scope';
 import {
-  defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
-} from '../web-idl/definition';
+  attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
+  readonlyAttr, xattr,
+} from '../web-idl/adapter/definition';
 
 /*
  * partial interface mixin DocumentOrShadowRoot {
@@ -13,22 +14,6 @@ import {
  *   attribute ObservableArray<CSSStyleSheet> adoptedStyleSheets;
  * };
  */
-export const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
-  members: [
-    {
-      extendedAttributes: [{ kind: 'no-arguments', name: 'SameObject' }],
-      kind: 'attribute', name: 'styleSheets', readonly: true,
-      type: idlType.object,
-    },
-    // TODO(Web IDL observable arrays): Restore ObservableArray<CSSStyleSheet>
-    // when the specialized attribute proxy is available.
-    { kind: 'attribute', name: 'adoptedStyleSheets', type: idlType.any },
-  ],
-  name: 'DocumentOrShadowRoot',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class DocumentOrShadowRootMixin {
   constructor(readonly scope: TreeScope) {}
 
@@ -45,28 +30,24 @@ export class DocumentOrShadowRootMixin {
   }
 }
 
+// -- Web IDL ------------------------------------------------------------
+
+export const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
+  members: [
+    readonlyAttr('styleSheets', idlType.object, xattr('SameObject')),
+    // TODO(Web IDL observable arrays): Restore ObservableArray<CSSStyleSheet>
+    // when the specialized attribute proxy is available.
+    attr('adoptedStyleSheets', idlType.any),
+  ],
+  name: 'DocumentOrShadowRoot',
+});
+
 /*
  * interface mixin ElementCSSInlineStyle {
  *   [SameObject, PutForwards=cssText]
  *   readonly attribute CSSStyleProperties style;
  * };
  */
-export const elementCSSInlineStyleIDL = defineInterfaceMixin({
-  members: [{
-    extendedAttributes: [
-      { kind: 'no-arguments', name: 'SameObject' },
-      { kind: 'identifier', name: 'PutForwards', value: 'cssText' },
-    ],
-    kind: 'attribute',
-    name: 'style',
-    readonly: true,
-    type: idlType.object,
-  }],
-  name: 'ElementCSSInlineStyle',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 
@@ -81,26 +62,26 @@ export class ElementCSSInlineStyleMixin {
   }
 }
 
-/*
- * interface mixin LinkStyle {
- *   readonly attribute CSSStyleSheet? sheet;
- * };
- */
-export const linkStyleIDL = defineInterfaceMixin({
-  members: [{
-    kind: 'attribute', name: 'sheet', readonly: true,
-    type: nullable(idlType.object),
-  }],
-  name: 'LinkStyle',
-});
+// -- Web IDL ------------------------------------------------------------
 
-// -- Implementation -----------------------------------------------------
+export const elementCSSInlineStyleIDL = defineInterfaceMixin({
+  members: [readonlyAttr('style', idlType.object, xattr(
+    'SameObject',
+    ['PutForwards', 'cssText'],
+  ))],
+  name: 'ElementCSSInlineStyle',
+});
 
 /* Deferred association hosts:
  * - external HTML links require the CSSOM fetch-a-CSS-style-sheet algorithm
  *   and HTML's linked-resource processing;
  * - XML processing instructions require an XML DOM host;
  * - HTTP Link headers require navigation response metadata.
+ */
+/*
+ * interface mixin LinkStyle {
+ *   readonly attribute CSSStyleSheet? sheet;
+ * };
  */
 export class LinkStyleMixin {
   readonly #owner;
@@ -205,6 +186,13 @@ export class LinkStyleMixin {
     this.#sheet = sheet;
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const linkStyleIDL = defineInterfaceMixin({
+  members: [readonlyAttr('sheet', nullable(idlType.object))],
+  name: 'LinkStyle',
+});
 
 export type LinkStyleOptions = {
   readonly attributes: ReadonlySet<string>;

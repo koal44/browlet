@@ -223,7 +223,7 @@ function applyPushOrReplaceHistoryStep(
   if (!(browsingContext instanceof BrowsingContext)) {
     throw new Error('Navigation Document has no Browlet browsing context');
   }
-  if (!(realm.globalObject instanceof WindowImpl)) {
+  if (!WindowImpl.is(realm.globalObject)) {
     throw new Error('Navigation Document global object is not a Window');
   }
 

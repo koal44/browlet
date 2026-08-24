@@ -81,7 +81,7 @@ export function createAndInitializeDocument(
     installBindings = true;
   }
 
-  const domlet = new Domlet(bindings.dom);
+  const domlet = new Domlet(bindings.nodeFactory);
   const document = domlet.createDocument();
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,
@@ -118,8 +118,7 @@ export function createAndInitializeDocument(
 
   WindowImpl.setAssociatedDocument(window, document);
   if (installBindings) {
-    bindings.dom.associateEventTarget(window);
-    bindings.install(window);
+    bindings.projectWindow(window);
   }
   initializeDocumentAncestry(document, navigationParams);
   initializeDocumentCSP(document);
@@ -137,7 +136,7 @@ export function completelyFinishLoading(
     throw new Error('A completely loaded Document needs a browsing context');
   }
   const window = browsingContext.activeWindow;
-  if (window?.document !== document) {
+  if (!window || WindowImpl.getAssociatedDocument(window) !== document) {
     throw new Error('Only an active Document can finish loading');
   }
 

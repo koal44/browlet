@@ -6,7 +6,7 @@ import {
 } from './conversion';
 import type {
   ArgumentDefinition, OperationMember, WebIDLType,
-} from './definition';
+} from './adapter/definition';
 import { isPromiseValue, type IDLPromise } from './promise-value';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
@@ -16,11 +16,10 @@ export function callUserObjectOperation(
   value: CallbackInterfaceValue,
   operationName: string,
   argumentsList: WebIDLArgumentsList,
-  context: ConversionContext,
   thisArgument?: unknown,
 ): unknown {
   const operation = getCallbackOperation(value, operationName);
-  const callbackContext = withCallbackRealm(context, value);
+  const callbackContext = withCallbackRealm(value.conversionContext, value);
 
   try {
     return runCallback(value, () => {
@@ -61,10 +60,10 @@ export function invokeCallbackFunction(
   callable: CallbackFunctionValue,
   argumentsList: WebIDLArgumentsList,
   exceptionBehavior: CallbackExceptionBehavior | undefined,
-  context: ConversionContext,
   thisArgument?: unknown,
 ): unknown {
   const { definition } = callable;
+  const context = callable.conversionContext;
   validateExceptionBehavior(definition.returns, exceptionBehavior, context);
   const callbackContext = withCallbackRealm(context, callable);
   const function_ = callable.object;
@@ -103,8 +102,8 @@ export function invokeCallbackFunction(
 export function constructCallbackFunction(
   callable: CallbackFunctionValue,
   argumentsList: WebIDLArgumentsList,
-  context: ConversionContext,
 ): unknown {
+  const context = callable.conversionContext;
   const constructor = callable.object;
   if (!isConstructor(constructor)) {
     throw new context.realm.intrinsics.typeError(

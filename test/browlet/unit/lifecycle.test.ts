@@ -167,7 +167,7 @@ describe('navigables', () => {
     expect(realm.globalObject).toBe(window);
     expect(realm.globalThis).toBe(browsingContext.windowProxy);
     expect(realm.agent.agentCluster).not.toBeNull();
-    expect(window.document).toBe(document);
+    expect(WindowImpl.getAssociatedDocument(window)).toBe(document);
 
     expect(DocumentImpl.getType(document)).toBe('html');
     expect(DocumentImpl.getMode(document)).toBe('quirks');
@@ -289,12 +289,12 @@ describe('navigation lifecycle', () => {
     const realm = getRelevantRealm(document);
     expect(browlet.window).toBe(windowProxy);
     expect(document).not.toBe(initialDocument);
-    expect(window).not.toBe(initialWindow);
+    expect(window === initialWindow).toBe(false);
     expect(realm).not.toBe(initialRealm);
     expect(realm.globalObject).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
-    expect(window?.document).toBe(document);
+    expect(window && WindowImpl.getAssociatedDocument(window)).toBe(document);
     expect(DocumentImpl.getBrowsingContext(document)?.windowProxy)
       .toBe(windowProxy);
   });

@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  annotated, asyncSequence, decimal, defineCallbackFunction,
+  annotated, arg, asyncIterable, asyncSequence, attr, constant, ctor, decimal,
+  defineCallbackFunction,
   defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin,
   defineNamespace, definePartialDictionary, definePartialInterface,
-  definePartialInterfaceMixin, definePartialNamespace, defineTypedef,
-  emptyDictionary, emptySequence, frozenArray, idlType, integer, nullable,
-  observableArray, promise, record, reference, sequence, undefinedDefault,
-  union, type ExtendedAttribute,
-} from '../../../src/web-idl/definition';
+  definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
+  emptyDictionary, emptySequence, frozenArray, idlType, integer, iterable,
+  maplike, nullable, observableArray, op, promise, readonlyAttr, record,
+  reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
+} from '../../../src/web-idl/adapter/definition';
 import {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute,
   serializeType,
-} from '../../../src/web-idl/serialize';
+} from '../../../src/web-idl/adapter/serialize';
 
 describe('Web IDL definitions', () => {
   it('represents the EventTarget fragment as structurally lossless data', () => {
@@ -21,78 +22,47 @@ describe('Web IDL definitions', () => {
       defineInterface({
         exposed: '*',
         members: [
-          { kind: 'constructor', arguments: [] },
-          {
-            kind: 'operation',
-            name: 'addEventListener',
-            returns: idlType.undefined,
-            arguments: [
-              { name: 'type', type: idlType.DOMString },
-              {
-                name: 'callback',
-                type: nullable(reference('EventListener')),
-              },
-              {
-                name: 'options',
-                type: union(
-                  reference('AddEventListenerOptions'),
-                  idlType.boolean,
-                ),
-                optional: true,
-                default: emptyDictionary,
-              },
-            ],
-          },
-          {
-            kind: 'operation',
-            name: 'removeEventListener',
-            returns: idlType.undefined,
-            arguments: [
-              { name: 'type', type: idlType.DOMString },
-              {
-                name: 'callback',
-                type: nullable(reference('EventListener')),
-              },
-              {
-                name: 'options',
-                type: union(reference('EventListenerOptions'), idlType.boolean),
-                optional: true,
-                default: emptyDictionary,
-              },
-            ],
-          },
-          {
-            kind: 'operation',
-            name: 'dispatchEvent',
-            returns: idlType.boolean,
-            arguments: [{ name: 'event', type: reference('Event') }],
-          },
+          ctor(),
+          op('addEventListener', idlType.undefined, [
+            arg('type', idlType.DOMString),
+            arg('callback', nullable(reference('EventListener'))),
+            arg(
+              'options',
+              union(reference('AddEventListenerOptions'), idlType.boolean),
+              { default: emptyDictionary, optional: true },
+            ),
+          ]),
+          op('removeEventListener', idlType.undefined, [
+            arg('type', idlType.DOMString),
+            arg('callback', nullable(reference('EventListener'))),
+            arg(
+              'options',
+              union(reference('EventListenerOptions'), idlType.boolean),
+              { default: emptyDictionary, optional: true },
+            ),
+          ]),
+          op('dispatchEvent', idlType.boolean, [
+            arg('event', reference('Event')),
+          ]),
         ],
         name: 'EventTarget',
       }),
       defineCallbackInterface({
-        members: [{
-          kind: 'operation',
-          name: 'handleEvent',
-          returns: idlType.undefined,
-          arguments: [{ name: 'event', type: reference('Event') }],
-        }],
+        members: [op('handleEvent', idlType.undefined, [
+          arg('event', reference('Event')),
+        ])],
         name: 'EventListener',
       }),
       defineDictionary({
-        members: [{
-          name: 'capture',
-          type: idlType.boolean,
-          default: false,
-        }],
+        members: [dictMember('capture', idlType.boolean, { default: false })],
         name: 'EventListenerOptions',
       }),
       defineDictionary({
         inherits: 'EventListenerOptions',
         members: [
-          { name: 'passive', type: idlType.boolean },
-          { name: 'once', type: idlType.boolean, default: false },
-          { name: 'signal', type: reference('AbortSignal') },
+          dictMember('passive', idlType.boolean),
+          dictMember('once', idlType.boolean, { default: false }),
+          dictMember('signal', reference('AbortSignal')),
         ],
         name: 'AddEventListenerOptions',
       }),
@@ -134,8 +104,12 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       definePartialInterface({ members: [], name: 'Interface' }),
       defineInterfaceMixin({ members: [], name: 'Mixin' }),
       definePartialInterfaceMixin({ members: [], name: 'Mixin' }),
-      defineCallbackInterface({ members: [], name: 'CallbackInterface' }),
-      defineNamespace({ members: [], name: 'Namespace' }),
+      defineCallbackInterface({
+        exposed: 'Window', members: [], name: 'CallbackInterface',
+      }),
+      defineNamespace({
+        exposed: ['Window'], members: [], name: 'Namespace',
+      }),
       definePartialNamespace({ members: [], name: 'Namespace' }),
       defineDictionary({ inherits: 'ParentDictionary', members: [], name: 'D' }),
       definePartialDictionary({ members: [], name: 'D' }),
@@ -154,8 +128,8 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       'partial interface Interface {\n};',
       'interface mixin Mixin {\n};',
       'partial interface mixin Mixin {\n};',
-      'callback interface CallbackInterface {\n};',
-      'namespace Namespace {\n};',
+      '[Exposed=Window]\ncallback interface CallbackInterface {\n};',
+      '[Exposed=(Window)]\nnamespace Namespace {\n};',
       'partial namespace Namespace {\n};',
       'dictionary D : ParentDictionary {\n};',
       'partial dictionary D {\n};',
@@ -169,51 +143,26 @@ dictionary AddEventListenerOptions : EventListenerOptions {
   it('serializes every interface member form without losing ordered overloads', () => {
     const definition = defineInterface({
       members: [
-        { kind: 'constructor', arguments: [] },
-        { kind: 'constant', name: 'ANSWER', type: idlType.long, value: integer(42) },
-        { kind: 'attribute', name: 'value', type: idlType.DOMString },
-        {
-          kind: 'attribute', name: 'fixed', readonly: true,
-          type: idlType.DOMString,
-        },
-        {
-          kind: 'attribute', inherit: true, name: 'inherited',
-          type: idlType.DOMString,
-        },
-        {
-          kind: 'attribute', name: 'shared', static: true,
-          type: idlType.DOMString,
-        },
-        {
-          kind: 'attribute', name: 'text', stringifier: true,
-          type: idlType.DOMString,
-        },
-        {
-          arguments: [], kind: 'operation', name: 'run',
-          returns: idlType.undefined,
-        },
-        {
-          arguments: [{ name: 'value', type: idlType.long }],
-          kind: 'operation', name: 'run', returns: idlType.undefined,
-        },
-        {
-          arguments: [{ name: 'name', type: idlType.DOMString }],
-          kind: 'operation', returns: idlType.object, special: 'getter',
-        },
-        {
-          arguments: [], kind: 'operation', name: 'create',
-          returns: reference('Interface'), static: true,
-        },
-        { kind: 'stringifier' },
-        { kind: 'iterable', value: idlType.DOMString },
-        { kind: 'iterable', key: idlType.DOMString, value: idlType.long },
-        { kind: 'async-iterable', value: idlType.DOMString },
-        { arguments: [], kind: 'async-iterable', value: idlType.DOMString },
-        {
-          kind: 'maplike', key: idlType.DOMString, readonly: true,
-          value: idlType.long,
-        },
-        { kind: 'setlike', value: idlType.DOMString },
+        ctor(),
+        constant('ANSWER', idlType.long, integer(42)),
+        attr('value', idlType.DOMString),
+        readonlyAttr('fixed', idlType.DOMString),
+        attr('inherited', idlType.DOMString, { inherit: true }),
+        attr('shared', idlType.DOMString, { static: true }),
+        attr('text', idlType.DOMString, { stringifier: true }),
+        op('run', idlType.undefined),
+        op('run', idlType.undefined, [arg('value', idlType.long)]),
+        op(undefined, idlType.object, [arg('name', idlType.DOMString)], {
+          special: 'getter',
+        }),
+        op('create', reference('Interface'), [], { static: true }),
+        stringifier(),
+        iterable(idlType.DOMString),
+        iterable(idlType.long, { key: idlType.DOMString }),
+        asyncIterable(idlType.DOMString),
+        asyncIterable(idlType.DOMString, { arguments: [] }),
+        maplike(idlType.DOMString, idlType.long, { readonly: true }),
+        setlike(idlType.DOMString),
       ],
       name: 'Interface',
     });
@@ -252,7 +201,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       promise(idlType.undefined),
       frozenArray(idlType.long),
       observableArray(idlType.long),
-      annotated(idlType.long, [{ kind: 'no-arguments', name: 'Clamp' }]),
+      annotated(idlType.long, xattr('Clamp')),
     ].map(serializeType)).toEqual([
       'Thing?',
       '(DOMString or long)',
@@ -267,22 +216,22 @@ dictionary AddEventListenerOptions : EventListenerOptions {
   });
 
   it('preserves arguments, dictionary defaults, and extended attribute forms', () => {
-    const attributes = [
-      { kind: 'no-arguments', name: 'SameObject' },
+    const { extendedAttributes: attributes } = xattr(
+      'SameObject',
       { arguments: [], kind: 'arguments', name: 'Constructor' },
-      { kind: 'identifier', name: 'PutForwards', value: 'value' },
+      ['PutForwards', 'value'],
       { kind: 'string', name: 'Description', value: 'quoted' },
       { kind: 'integer', name: 'Minimum', value: '-1' },
       { kind: 'decimal', name: 'Scale', value: '1.5' },
-      { kind: 'wildcard', name: 'Exposed' },
-      { kind: 'identifier-list', name: 'Exposed', values: ['Window', 'Worker'] },
+      ['Exposed', '*'],
+      ['Exposed', ['Window', 'Worker']],
       { kind: 'integer-list', name: 'Codes', values: ['1', '2'] },
       {
-        arguments: [{ name: 'width', type: idlType.unsignedLong }],
+        arguments: [arg('width', idlType.unsignedLong)],
         kind: 'named-arguments', name: 'LegacyFactoryFunction', value: 'Image',
       },
       { kind: 'raw', value: 'Future={balanced(tokens)}' },
-    ] satisfies ExtendedAttribute[];
+    );
 
     expect(attributes.map(serializeExtendedAttribute)).toEqual([
       'SameObject',

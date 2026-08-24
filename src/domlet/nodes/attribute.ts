@@ -1,7 +1,8 @@
 import { withAttrStub } from '../stubs/interfaces';
 import {
-  defineInterface, idlType, nullable, reference,
-} from '../../web-idl/definition';
+  attr, defineInterface, idlType, nullable, readonlyAttr, reference, xattr,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';
@@ -20,45 +21,6 @@ import { NodeImpl, NodeType } from './node';
  *   readonly attribute boolean specified; // historical; always returns true
  * };
  */
-
-export const attrIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [
-    {
-      kind: 'attribute', name: 'namespaceURI', readonly: true,
-      type: nullable(idlType.DOMString),
-    },
-    {
-      kind: 'attribute', name: 'prefix', readonly: true,
-      type: nullable(idlType.DOMString),
-    },
-    {
-      kind: 'attribute', name: 'localName', readonly: true,
-      type: idlType.DOMString,
-    },
-    {
-      kind: 'attribute', name: 'name', readonly: true,
-      type: idlType.DOMString,
-    },
-    {
-      extendedAttributes: [{ kind: 'no-arguments', name: 'CEReactions' }],
-      kind: 'attribute', name: 'value', type: idlType.DOMString,
-    },
-    {
-      kind: 'attribute', name: 'ownerElement', readonly: true,
-      type: nullable(reference('Element')),
-    },
-    {
-      kind: 'attribute', name: 'specified', readonly: true,
-      type: idlType.boolean,
-    },
-  ],
-  name: 'Attr',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class AttrImpl
   extends withAttrStub(NodeImpl)
   implements Attr
@@ -128,3 +90,21 @@ export class AttrImpl
     attribute.#element = element;
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const attrIDL = defineInterface({
+  binding: bind(AttrImpl),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [
+    readonlyAttr('namespaceURI', nullable(idlType.DOMString)),
+    readonlyAttr('prefix', nullable(idlType.DOMString)),
+    readonlyAttr('localName', idlType.DOMString),
+    readonlyAttr('name', idlType.DOMString),
+    attr('value', idlType.DOMString, xattr('CEReactions')),
+    readonlyAttr('ownerElement', nullable(reference('Element'))),
+    readonlyAttr('specified', idlType.boolean),
+  ],
+  name: 'Attr',
+});

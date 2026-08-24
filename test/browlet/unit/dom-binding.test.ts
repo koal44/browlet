@@ -1,10 +1,57 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { BrowletBindings } from '../../../src/browlet/bindings/browlet';
 import { Browlet } from '../../../src/browlet/browlet';
 import { Realm } from '../../../src/browlet/realm';
 
 describe('Browlet DOM binding', () => {
+  it('projects the Window global through its Web IDL interface', () => {
+    const browlet = createBrowlet();
+    const window = browlet.window;
+    const Window_ = getConstructor(browlet, 'Window');
+    const EventTarget_ = getConstructor(browlet, 'EventTarget');
+    const Location_ = getConstructor(browlet, 'Location');
+
+    expect(window).toBeInstanceOf(Window_);
+    expect(window).toBeInstanceOf(EventTarget_);
+    expect(Object.getPrototypeOf(window)).toBe(Window_.prototype);
+    expect(ownKeys(Window_.prototype)).toEqual(['constructor']);
+    expect(window.document).toBe(browlet.document);
+    expect(window.location).toBeInstanceOf(Location_);
+    expect(window.location.href).toBe('about:blank');
+    expect(String(window.location)).toBe('about:blank');
+    expect(window.window).toBe(window);
+    expect(window.self).toBe(window);
+    expect(Reflect.deleteProperty(window, 'document')).toBe(false);
+    expect(Reflect.deleteProperty(window.location, 'href')).toBe(false);
+    expect(() => { Reflect.construct(Window_, []); })
+      .toThrow('Illegal constructor');
+
+    expect(Reflect.set(window, 'self', 'replacement')).toBe(true);
+    expect(Reflect.get(window, 'self')).toBe('replacement');
+  });
+
+  it.fails('reports Window unforgeable descriptors through WindowProxy', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      createBrowlet().window,
+      'document',
+    );
+
+    expect(descriptor?.configurable).toBe(false);
+  });
+
+  it('resolves dynamic Window named properties through Web IDL', () => {
+    const browlet = createBrowlet();
+    const element = browlet.document.createElement('main');
+    element.setAttribute('id', 'named');
+    browlet.document.body.appendChild(element);
+
+    expect(Reflect.get(browlet.window, 'named')).toBe(element);
+
+    element.remove();
+    expect(Reflect.has(browlet.window, 'named')).toBe(false);
+  });
+
   it('projects only described Web IDL members onto DOM prototypes', () => {
     const browlet = createBrowlet();
 
@@ -42,6 +89,7 @@ describe('Browlet DOM binding', () => {
       'compatMode',
       'constructor',
       'contentType',
+      'createAttribute',
       'createComment',
       'createElement',
       'createElementNS',
@@ -149,6 +197,7 @@ describe('Browlet DOM binding', () => {
     const element = document.documentElement;
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
+    const detachedAttribute = document.createAttribute('DATA-detached');
     element.setAttribute('id', 'target');
     const attribute = element.attributes[0];
 
@@ -156,9 +205,18 @@ describe('Browlet DOM binding', () => {
     expect(Object.keys(element)).toEqual([]);
     expect(Object.keys(text)).toEqual([]);
     expect(Object.keys(comment)).toEqual([]);
+    expect(Object.keys(detachedAttribute)).toEqual([]);
     expect(Object.keys(attribute)).toEqual([]);
     expect(Object.keys(document.doctype!)).toEqual([]);
     expect(attribute).toBeInstanceOf(Reflect.get(browlet.window, 'Attr'));
+    expect(detachedAttribute).toBeInstanceOf(Reflect.get(browlet.window, 'Attr'));
+    expect(detachedAttribute.ownerDocument).toBe(document);
+    expect(detachedAttribute.ownerElement).toBeNull();
+    expect(detachedAttribute.localName).toBe('data-detached');
+    expect(detachedAttribute.value).toBe('');
+    expect(() => document.createAttribute('bad name')).toThrowError(
+      expect.objectContaining({ name: 'InvalidCharacterError' }),
+    );
     expect(attribute).toBeInstanceOf(Reflect.get(browlet.window, 'Node'));
     expect(attribute.ownerDocument).toBe(document);
     expect(attribute.ownerElement).toBe(element);
@@ -221,14 +279,6 @@ describe('Browlet DOM binding', () => {
       .toThrow('Illegal constructor');
   });
 
-  it('rejects DOM implementations without an assembled interface', () => {
-    const realm = new Realm();
-    const bindings = new BrowletBindings(realm);
-
-    expect(() => bindings.dom.construct(UnboundDOMImplementation, []))
-      .toThrow('No DOM interface is registered');
-  });
-
   it('filters DOM constructors for the host exposure set', () => {
     const realm = new Realm({ globalNames: ['Worker'] });
     const bindings = new BrowletBindings(realm);
@@ -251,6 +301,52 @@ describe('Browlet DOM binding', () => {
       'CustomEvent',
       'EventTarget',
     ]);
+  });
+
+  it('takes constructed event timestamps from the owning realm', () => {
+    const realm = new Realm();
+    vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123.5);
+    const bindings = new BrowletBindings(realm);
+    bindings.install(realm.global);
+    const Event_ = Reflect.get(realm.global, 'Event') as typeof Event;
+    const CustomEvent_ = Reflect.get(
+      realm.global,
+      'CustomEvent',
+    ) as typeof CustomEvent;
+
+    expect(new Event_('ready').timeStamp).toBe(123.5);
+    expect(new CustomEvent_('ready').timeStamp).toBe(123.5);
+  });
+
+  it('applies inherited event invocation to internally created nodes', () => {
+    const browlet = createBrowlet();
+    const Event_ = Reflect.get(browlet.window, 'Event') as typeof Event;
+    const event = new Event_('ready');
+    const text = browlet.document.createTextNode('content');
+    let currentEvent: Event | undefined;
+
+    text.addEventListener('ready', () => {
+      currentEvent = browlet.window.event;
+    });
+    text.dispatchEvent(event);
+
+    expect(currentEvent).toBe(event);
+    expect(browlet.window.event).toBeUndefined();
+  });
+
+  it('applies inherited event invocation to the projected Window', () => {
+    const browlet = createBrowlet();
+    const Event_ = Reflect.get(browlet.window, 'Event') as typeof Event;
+    const event = new Event_('ready');
+    let currentEvent: Event | undefined;
+
+    browlet.window.addEventListener('ready', () => {
+      currentEvent = browlet.window.event;
+    });
+    browlet.window.dispatchEvent(event);
+
+    expect(currentEvent).toBe(event);
+    expect(browlet.window.event).toBeUndefined();
   });
 });
 
@@ -288,5 +384,3 @@ type InterfaceConstructor = {
   new(...arguments_: unknown[]): object;
   readonly prototype: object;
 };
-
-class UnboundDOMImplementation {}

@@ -1,6 +1,6 @@
 import type { ObservableArrayHandle } from '../shared/observable-array';
-import type { AssembledInterface } from './assembly';
-import type { AttributeMember } from './definition';
+import type { AssembledInterface } from './adapter/assembly';
+import type { AttributeMember } from './adapter/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export class PlatformObjectRegistry {

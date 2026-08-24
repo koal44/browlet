@@ -7,6 +7,12 @@ import {
   basicURLParse, obtainURLOrigin, parseURL, serializeURL, serializeURLPath,
   setURLPassword, setURLUsername, type URLRecord,
 } from './url';
+import {
+  arg, attr, ctor, defineInterface, idlType, iterable, nullable, op,
+  readonlyAttr, record, reference, sequence, stringifier, union, xattr,
+  type Definition,
+} from '../web-idl/adapter/definition';
+import { bind } from '../web-idl/adapter/projection';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this
@@ -41,9 +47,6 @@ import {
  *   USVString toJSON();
  * };
  */
-
-// -- Implementation -----------------------------------------------------
-
 export class URLImpl {
   #queryObject: URLSearchParamsImpl;
   #url: URLRecord;
@@ -253,8 +256,8 @@ export class URLImpl {
     return url.#queryObject;
   }
 
-  static extractOrigin(url: URLImpl): Origin {
-    return obtainURLOrigin(url.#url);
+  static extractOrigin(url?: URLImpl): Origin | undefined {
+    return url && obtainURLOrigin(url.#url);
   }
 
   #initialize(record: URLRecord): void {
@@ -267,6 +270,77 @@ export class URLImpl {
     URLSearchParamsImpl.associateURL(this.#queryObject, this);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const urlIDL = defineInterface({
+  binding: bind(URLImpl, {
+    create(_context, newTarget) {
+      if (!newTarget) throw new Error('URL construction requires newTarget');
+      return URLImpl.createForBinding(newTarget);
+    },
+    initialize(context, value) {
+      context.objects.project(
+        URLSearchParamsImpl,
+        URLImpl.getQueryObject(value as URLImpl),
+      );
+    },
+  }),
+  exposed: '*',
+  ...xattr(['LegacyWindowAlias', 'webkitURL']),
+  members: [
+    ctor([
+      arg('url', idlType.USVString),
+      arg('base', idlType.USVString, { optional: true }),
+    ], bind({
+      invoke(_context, input, base) {
+        URLImpl.initializeForBinding(
+          this as URLImpl,
+          input as string,
+          base as string | undefined,
+        );
+      },
+    })),
+    op('parse', nullable(reference('URL')), [
+      arg('url', idlType.USVString),
+      arg('base', idlType.USVString, { optional: true }),
+    ], bind({
+      invoke(context, input, base) {
+        const record = parseAPIURL(
+          input as string,
+          base as string | undefined,
+        );
+        if (record === null) return null;
+
+        const implementation = context.objects.create(URLImpl);
+        URLImpl.initializeRecordForBinding(implementation, record);
+        return implementation;
+      },
+    }, {
+      static: true,
+    })),
+    op('canParse', idlType.boolean, [
+      arg('url', idlType.USVString),
+      arg('base', idlType.USVString, { optional: true }),
+    ], {
+      static: true,
+    }),
+    attr('href', idlType.USVString, { stringifier: true }),
+    readonlyAttr('origin', idlType.USVString),
+    ...[
+      'protocol', 'username', 'password', 'host', 'hostname', 'port',
+      'pathname', 'search',
+    ].map((name) => attr(name, idlType.USVString)),
+    readonlyAttr(
+      'searchParams',
+      reference('URLSearchParams'),
+      xattr('SameObject'),
+    ),
+    attr('hash', idlType.USVString),
+    op('toJSON', idlType.USVString),
+  ],
+  name: 'URL',
+});
 
 /*
  * [Exposed=*]
@@ -288,9 +362,6 @@ export class URLImpl {
  *   stringifier;
  * };
  */
-
-// -- Implementation -----------------------------------------------------
-
 export class URLSearchParamsImpl implements URLSearchParams {
   #list: FormTuple[] = [];
   #urlObject: URLImpl | null = null;
@@ -465,6 +536,82 @@ export class URLSearchParamsImpl implements URLSearchParams {
     URLImpl.setQuery(this.#urlObject, serialized === '' ? null : serialized);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const urlSearchParamsIDL = defineInterface({
+  binding: bind(URLSearchParamsImpl),
+  exposed: '*',
+  members: [
+    ctor([
+      arg(
+        'init',
+        union(
+          sequence(sequence(idlType.USVString)),
+          record(idlType.USVString, idlType.USVString),
+          idlType.USVString,
+        ),
+        {
+          default: '',
+          optional: true,
+        },
+      ),
+    ], bind({
+      invoke(_context, init) {
+        URLSearchParamsImpl.initializeForBinding(
+          this as URLSearchParamsImpl,
+          init as URLSearchParamsInit,
+        );
+      },
+    })),
+    readonlyAttr('size', idlType.unsignedLong),
+    op('append', idlType.undefined, [
+      arg('name', idlType.USVString),
+      arg('value', idlType.USVString),
+    ]),
+    op('delete', idlType.undefined, [
+      arg('name', idlType.USVString),
+      arg('value', idlType.USVString, { optional: true }),
+    ]),
+    op('get', nullable(idlType.USVString), [
+      arg('name', idlType.USVString),
+    ]),
+    op('getAll', sequence(idlType.USVString), [
+      arg('name', idlType.USVString),
+    ]),
+    op('has', idlType.boolean, [
+      arg('name', idlType.USVString),
+      arg('value', idlType.USVString, { optional: true }),
+    ]),
+    op('set', idlType.undefined, [
+      arg('name', idlType.USVString),
+      arg('value', idlType.USVString),
+    ]),
+    op('sort', idlType.undefined),
+    iterable(idlType.USVString, bind({
+      invoke() {
+        return URLSearchParamsImpl.valuePairs(
+          this as URLSearchParamsImpl,
+        ).map(([key, value]) => ({ key, value }));
+      },
+    }, {
+      key: idlType.USVString,
+    })),
+    stringifier(bind({
+      invoke() {
+        return URLSearchParamsImpl.stringify(
+          this as URLSearchParamsImpl,
+        );
+      },
+    })),
+  ],
+  name: 'URLSearchParams',
+});
+
+export const urlIDLDefinitions: Definition[] = [
+  urlIDL,
+  urlSearchParamsIDL,
+];
 
 export type URLSearchParamsInit =
   | Iterable<Iterable<unknown>>

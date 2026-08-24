@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import {
   convertToIDL, convertToJavaScript, createFrozenArray,
   createFrozenArrayFromIterable, type ConversionContext,
@@ -11,10 +11,10 @@ import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions
 import {
   annotated, asyncSequence, decimal, defineDictionary, defineEnumeration,
   defineInterface, frozenArray, idlType, integer, nullable, record, reference,
-  sequence, union,
-} from '../../../src/web-idl/definition';
+  sequence, union, xattr,
+} from '../../../src/web-idl/adapter/definition';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL value conversion', () => {
@@ -50,13 +50,16 @@ describe('Web IDL value conversion', () => {
     expect(convertToIDL(257, idlType.byte, binding)).toBe(1);
     expect(convertToIDL(-1, idlType.octet, binding)).toBe(255);
     expect(convertToIDL(Infinity, idlType.long, binding)).toBe(0);
-    expect(convertToIDL(2.5, annotated(idlType.byte, [clamp]), binding)).toBe(2);
-    expect(convertToIDL(3.5, annotated(idlType.byte, [clamp]), binding)).toBe(4);
-    expect(convertToIDL(NaN, annotated(idlType.byte, [clamp]), binding)).toBe(0);
+    expect(convertToIDL(2.5, annotated(idlType.byte, xattr(clamp)), binding))
+      .toBe(2);
+    expect(convertToIDL(3.5, annotated(idlType.byte, xattr(clamp)), binding))
+      .toBe(4);
+    expect(convertToIDL(NaN, annotated(idlType.byte, xattr(clamp)), binding))
+      .toBe(0);
     expectRealmTypeError(
       () => convertToIDL(
         128,
-        annotated(idlType.byte, [enforceRange]),
+        annotated(idlType.byte, xattr(enforceRange)),
         binding,
       ),
       realm,
@@ -88,12 +91,12 @@ describe('Web IDL value conversion', () => {
     expect(convertToIDL(null, idlType.DOMString, binding)).toBe('null');
     expect(convertToIDL(
       null,
-      annotated(idlType.DOMString, [legacyNull]),
+      annotated(idlType.DOMString, xattr(legacyNull)),
       binding,
     )).toBe('');
     expect(convertToIDL(
       null,
-      annotated(idlType.USVString, [legacyNull]),
+      annotated(idlType.USVString, xattr(legacyNull)),
       binding,
     )).toBe('');
     expect(convertToIDL('\uD800', idlType.USVString, binding)).toBe('\uFFFD');
@@ -403,7 +406,7 @@ describe('Web IDL value conversion', () => {
     );
     expect(convertToIDL(
       resizable,
-      annotated(idlType.ArrayBuffer, [allowResizable]),
+      annotated(idlType.ArrayBuffer, xattr(allowResizable)),
       binding,
     )).toBe(resizable);
 
@@ -415,7 +418,7 @@ describe('Web IDL value conversion', () => {
     );
     expect(convertToIDL(
       growableShared,
-      annotated(idlType.SharedArrayBuffer, [allowResizable]),
+      annotated(idlType.SharedArrayBuffer, xattr(allowResizable)),
       binding,
     )).toBe(growableShared);
     expectRealmTypeError(
@@ -424,20 +427,20 @@ describe('Web IDL value conversion', () => {
     );
     expect(convertToIDL(
       sharedView,
-      annotated(idlType.Uint8Array, [allowShared]),
+      annotated(idlType.Uint8Array, xattr(allowShared)),
       binding,
     )).toBe(sharedView);
     expectRealmTypeError(
       () => convertToIDL(
         growableView,
-        annotated(idlType.Uint8Array, [allowShared]),
+        annotated(idlType.Uint8Array, xattr(allowShared)),
         binding,
       ),
       realm,
     );
     expect(convertToIDL(
       growableView,
-      annotated(idlType.Uint8Array, [allowShared, allowResizable]),
+      annotated(idlType.Uint8Array, xattr(allowShared, allowResizable)),
       binding,
     )).toBe(growableView);
 

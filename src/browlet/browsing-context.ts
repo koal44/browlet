@@ -46,7 +46,8 @@ export class BrowsingContext {
   }
 
   get activeDocument(): DomletDocument | null {
-    return this.activeWindow?.document ?? null;
+    const window = this.activeWindow;
+    return window ? WindowImpl.getAssociatedDocument(window) : null;
   }
 
   // -- Friends ----------------------------------------------------------
@@ -106,7 +107,7 @@ export function createNewBrowsingContextAndDocument(
     settings.crossOriginIsolatedCapability,
   ));
   const bindings = new BrowletBindings(realmExecutionContext.realm);
-  const domlet = new Domlet(bindings.dom);
+  const domlet = new Domlet(bindings.nodeFactory);
   const document = domlet.createDocument();
 
   DocumentImpl.setType(document, 'html');
@@ -151,8 +152,7 @@ export function createNewBrowsingContextAndDocument(
   }
 
   WindowImpl.setAssociatedDocument(window, document);
-  bindings.dom.associateEventTarget(window);
-  bindings.install(window);
+  bindings.projectWindow(window);
   DocumentImpl.markReadyForPostLoadTasks(document);
   populateWithHTMLHeadBody(document);
   makeActive(document);
@@ -382,7 +382,7 @@ function makeActive(
 ): void {
   const realm = getRelevantRealm(document);
   const window = realm.globalObject;
-  if (!(window instanceof WindowImpl)) {
+  if (!WindowImpl.is(window)) {
     throw new Error('Document relevant global object is not a Window');
   }
   const browsingContext = DocumentImpl.getBrowsingContext(document);

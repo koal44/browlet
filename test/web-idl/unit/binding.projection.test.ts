@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   convertToIDL, convertToJavaScript,
@@ -11,8 +11,8 @@ import {
   defineInterfaceMixin, definePartialInterface, frozenArray, idlType, integer,
   negativeInfinity, notANumber, positiveInfinity, reference,
   type AttributeMember, type ConstructorMember, type OperationMember,
-} from '../../../src/web-idl/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import type { SecurityCheckType } from '../../../src/web-idl/javascript-realm';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';

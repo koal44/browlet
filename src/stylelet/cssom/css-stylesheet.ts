@@ -32,7 +32,6 @@ import type { CSSOMString } from './string';
  *   boolean disabled = false;
  * };
  */
-
 export class CSSStyleSheetImpl
   extends StyleSheetImpl
   implements CSSStyleSheet

@@ -1,7 +1,8 @@
 import { withCharacterDataStub } from '../stubs/interfaces';
 import {
-  annotated, defineIncludes, defineInterface, idlType,
-} from '../../web-idl/definition';
+  annotated, attr, defineIncludes, defineInterface, idlType, xattr,
+} from '../../web-idl/adapter/definition';
+import { bind } from '../../web-idl/adapter/projection';
 import { TreeNode } from '../tree/tree-node';
 import {
   childNodeIDL, NodeImpl, type NodeOptions, type NodeType,
@@ -21,41 +22,6 @@ import type { DocumentImpl } from './document';
  *   undefined replaceData(unsigned long offset, unsigned long count, DOMString data);
  * };
  */
-
-export const characterDataIDL = defineInterface({
-  exposed: ['Window'],
-  inherits: 'Node',
-  members: [
-    // The remaining members depend on the DOM replace-data algorithm.
-    {
-      kind: 'attribute',
-      name: 'data',
-      type: annotated(idlType.DOMString, [{
-        kind: 'no-arguments', name: 'LegacyNullToEmptyString',
-      }]),
-    },
-  ],
-  name: 'CharacterData',
-});
-
-/*
- * CharacterData includes ChildNode;
- */
-export const characterDataIncludesChildNodeIDL = defineIncludes({
-  interface: 'CharacterData',
-  mixin: childNodeIDL.name,
-});
-
-/*
- * CharacterData includes NonDocumentTypeChildNode;
- */
-export const characterDataIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
-  interface: 'CharacterData',
-  mixin: nonDocumentTypeChildNodeIDL.name,
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class CharacterDataImpl
   extends withCharacterDataStub(NodeImpl)
   implements CharacterData
@@ -81,3 +47,35 @@ export class CharacterDataImpl
     TreeNode.notifyParentChildrenChanged(this);
   }
 }
+
+// -- Web IDL ------------------------------------------------------------
+
+export const characterDataIDL = defineInterface({
+  binding: bind(CharacterDataImpl),
+  exposed: 'Window',
+  inherits: 'Node',
+  members: [
+    // The remaining members depend on the DOM replace-data algorithm.
+    attr(
+      'data',
+      annotated(idlType.DOMString, xattr('LegacyNullToEmptyString')),
+    ),
+  ],
+  name: 'CharacterData',
+});
+
+/*
+ * CharacterData includes ChildNode;
+ */
+export const characterDataIncludesChildNodeIDL = defineIncludes({
+  interface: 'CharacterData',
+  mixin: childNodeIDL.name,
+});
+
+/*
+ * CharacterData includes NonDocumentTypeChildNode;
+ */
+export const characterDataIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
+  interface: 'CharacterData',
+  mixin: nonDocumentTypeChildNodeIDL.name,
+});

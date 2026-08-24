@@ -1,4 +1,4 @@
-import type { Definition } from '../web-idl/definition';
+import type { Definition } from '../web-idl/adapter/definition';
 import {
   cssomDocumentOrShadowRootIDL, elementCSSInlineStyleIDL, linkStyleIDL,
 } from './css-engine';
@@ -49,21 +49,21 @@ import { textIDL } from './nodes/text';
 
 export const domIDLDefinitions: Definition[] = [
   domHighResTimeStampIDL,
+  eventIDL,
+  eventInitIDL,
+  customEventIDL,
+  customEventInitIDL,
+  eventTargetIDL,
   eventListenerIDL,
   eventListenerOptionsIDL,
   addEventListenerOptionsIDL,
-  eventInitIDL,
-  customEventInitIDL,
-  eventIDL,
-  customEventIDL,
-  eventTargetIDL,
 
-  getRootNodeOptionsIDL,
   parentNodeIDL,
   documentOrShadowRootIDL,
   childNodeIDL,
   nonDocumentTypeChildNodeIDL,
   nodeIDL,
+  getRootNodeOptionsIDL,
   attrIDL,
   characterDataIDL,
   characterDataIncludesChildNodeIDL,
@@ -82,8 +82,8 @@ export const domIDLDefinitions: Definition[] = [
   elementCSSInlineStyleIDL,
   linkStyleIDL,
   cssomDocumentOrShadowRootIDL,
-  elementCreationOptionsIDL,
   documentIDL,
+  elementCreationOptionsIDL,
   documentIncludesParentNodeIDL,
   documentIncludesDocumentOrShadowRootIDL,
   htmlDocumentIDL,

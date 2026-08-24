@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import {
   annotated, defineTypedef, idlType, nullable, reference, sequence, union,
-} from '../../../src/web-idl/definition';
-import { serializeType } from '../../../src/web-idl/serialize';
+  xattr,
+} from '../../../src/web-idl/adapter/definition';
+import { serializeType } from '../../../src/web-idl/adapter/serialize';
 import {
   getFlattenedMemberTypes, getNumberOfNullableMemberTypes,
   includesNullableType, includesUndefined,
@@ -20,7 +21,7 @@ describe('Web IDL types', () => {
         nullable(union(reference('XMLHttpRequest'), idlType.DOMString)),
         sequence(union(sequence(idlType.double), reference('NodeList'))),
       ),
-      [{ kind: 'no-arguments', name: 'XAttr' }],
+      xattr('XAttr'),
     );
 
     expect(
@@ -39,9 +40,7 @@ describe('Web IDL types', () => {
     const definitions = assembleDefinitions([
       defineTypedef({
         name: 'MaybeEvent',
-        type: annotated(nullable(reference('Event')), [{
-          kind: 'no-arguments', name: 'XAttr',
-        }]),
+        type: annotated(nullable(reference('Event')), xattr('XAttr')),
       }),
     ]);
     const type = union(
@@ -61,7 +60,7 @@ describe('Web IDL types', () => {
     ]);
     const type = annotated(
       nullable(union(idlType.DOMString, reference('Nothing'))),
-      [{ kind: 'no-arguments', name: 'XAttr' }],
+      xattr('XAttr'),
     );
 
     expect(includesUndefined(type, definitions)).toBe(true);

@@ -1,8 +1,8 @@
 import { DomletParser } from './parser/parser';
-import { DocumentImpl, type DomletDocument } from './nodes/document';
 import {
-  directDOMNodeFactory, type DOMNodeFactory,
-} from './nodes/factory';
+  directDOMNodeFactory, DocumentImpl, type DOMNodeFactory,
+  type DomletDocument,
+} from './nodes/document';
 import { asDocument } from './stubs/interfaces';
 
 export class Domlet {
@@ -27,6 +27,6 @@ export class Domlet {
   }
 
   createParser(document: DomletDocument): DomletParser {
-    return new DomletParser(document, this.#nodeFactory);
+    return new DomletParser(document);
   }
 }

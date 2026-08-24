@@ -299,7 +299,6 @@ function collectAttributes(value: AttributedDefinition): string[] {
 
 function serializeExposure(exposure: Exposure): string {
   if (typeof exposure === 'string') return exposure;
-  if (exposure.length === 1) return serializeIdentifier(exposure[0]);
   return `(${exposure.map((value) => serializeIdentifier(value)).join(', ')})`;
 }
 

@@ -1,9 +1,7 @@
-import { type AssembledInterface } from '../web-idl/assembly';
-import { type JavaScriptBinding } from '../web-idl/binding';
 import {
-  defineInterface, idlType, reference,
-} from '../web-idl/definition';
-import { registerInterfaceImplementation } from '../web-idl/implementation';
+  arg, ctor, defineInterface, idlType, op, readonlyAttr, reference,
+} from '../web-idl/adapter/definition';
+import { bind } from '../web-idl/adapter/projection';
 import {
   hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost,
   serializeHost, type Host,
@@ -27,35 +25,6 @@ import { obtainURLOrigin, parseURL } from '../url/url';
  *   boolean isSameSite(Origin other);
  * };
  */
-export const originIDL = defineInterface({
-  exposed: '*',
-  members: [
-    { arguments: [], kind: 'constructor' },
-    {
-      arguments: [{ name: 'value', type: idlType.any }],
-      kind: 'operation',
-      name: 'from',
-      returns: reference('Origin'),
-      static: true,
-    },
-    {
-      kind: 'attribute', name: 'opaque', readonly: true,
-      type: idlType.boolean,
-    },
-    {
-      arguments: [{ name: 'other', type: reference('Origin') }],
-      kind: 'operation', name: 'isSameOrigin', returns: idlType.boolean,
-    },
-    {
-      arguments: [{ name: 'other', type: reference('Origin') }],
-      kind: 'operation', name: 'isSameSite', returns: idlType.boolean,
-    },
-  ],
-  name: 'Origin',
-});
-
-// -- Implementation -----------------------------------------------------
-
 export class OriginImpl {
   #origin: Origin = createOpaqueOrigin();
 
@@ -73,8 +42,8 @@ export class OriginImpl {
 
   // -- Friends ----------------------------------------------------------
 
-  static extractOrigin(value: OriginImpl): Origin {
-    return value.#origin;
+  static extractOrigin(value?: OriginImpl): Origin | undefined {
+    return value && value.#origin;
   }
 
   static setOrigin(value: OriginImpl, origin: Origin): void {
@@ -82,26 +51,44 @@ export class OriginImpl {
   }
 }
 
-export function registerOriginImplementation(
-  binding: JavaScriptBinding,
-): void {
-  const interface_ = requireOriginInterface(binding);
+// -- Web IDL ------------------------------------------------------------
 
-  registerInterfaceImplementation(
-    binding.implementations,
-    interface_,
-    OriginImpl,
-    {
-      construct() {},
-      create: {},
-      operations: {
-        static: {
-          from: (value) => createOriginFrom(value, binding, interface_),
-        },
+export const originIDL = defineInterface({
+  binding: bind(OriginImpl),
+  exposed: '*',
+  members: [
+    ctor(bind({ invoke() {} })),
+    op('from', reference('Origin'), [arg('value', idlType.any)], bind({
+      invoke(context, value) {
+        let origin = OriginImpl.extractOrigin(
+          context.objects.getImplementation(value, OriginImpl),
+        ) ?? URLImpl.extractOrigin(
+          context.objects.getImplementation(value, URLImpl),
+        );
+
+        if (origin === undefined && typeof value === 'string') {
+          const url = parseURL(value).url;
+          if (url !== null) origin = obtainURLOrigin(url);
+        }
+        if (origin === undefined) throw new TypeError('Value has no origin');
+
+        const implementation = context.objects.create(OriginImpl);
+        OriginImpl.setOrigin(implementation, origin);
+        return implementation;
       },
-    },
-  );
-}
+    }, {
+      static: true,
+    })),
+    readonlyAttr('opaque', idlType.boolean),
+    op('isSameOrigin', idlType.boolean, [
+      arg('other', reference('Origin')),
+    ]),
+    op('isSameSite', idlType.boolean, [
+      arg('other', reference('Origin')),
+    ]),
+  ],
+  name: 'Origin',
+});
 
 export type SchemeAndHost = [scheme: string, host: Host];
 
@@ -222,51 +209,4 @@ export function areSameSite(a: Origin, b: Origin): boolean {
 
 export function isOrigin(value: Origin | Site): value is Origin {
   return !Array.isArray(value);
-}
-
-function createOriginFrom(
-  value: unknown,
-  binding: JavaScriptBinding,
-  interface_: AssembledInterface,
-): OriginImpl {
-  let origin = extractOrigin(value, binding);
-
-  if (origin === null && typeof value === 'string') {
-    const url = parseURL(value).url;
-    if (url !== null) origin = obtainURLOrigin(url);
-  }
-  if (origin === null) throw new TypeError('Value has no origin');
-
-  const object = binding.createPlatformObject(interface_);
-  const implementation = binding.platformObjects.getImplementationObject(
-    object,
-  ) as OriginImpl | undefined;
-  if (!implementation) throw new Error('Origin object has no implementation');
-  OriginImpl.setOrigin(implementation, origin);
-  return implementation;
-}
-
-function extractOrigin(
-  value: unknown,
-  binding: JavaScriptBinding,
-): Origin | null {
-  const record = binding.getPlatformObjectRecord(value);
-  if (!record) return null;
-
-  switch (record.primaryInterface.definition.name) {
-    case 'Origin':
-      return OriginImpl.extractOrigin(record.implementation as OriginImpl);
-    case 'URL':
-      return URLImpl.extractOrigin(record.implementation as URLImpl);
-    default:
-      return null;
-  }
-}
-
-function requireOriginInterface(
-  binding: JavaScriptBinding,
-): AssembledInterface {
-  const interface_ = binding.definitions.getInterface('Origin');
-  if (!interface_) throw new Error('Missing Origin interface');
-  return interface_;
 }

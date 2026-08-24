@@ -1,3 +1,9 @@
+import type {
+  AttributeBindingDefinition, ConstructorBindingDefinition,
+  InterfaceBindingDefinition, IterableBindingDefinition,
+  OperationBindingDefinition, StringifierBindingDefinition,
+} from './projection';
+
 export function defineInterface(
   definition: InterfaceDefinitionInit,
 ): InterfaceDefinition {
@@ -76,6 +82,124 @@ export function defineIncludes(
   return { kind: 'includes', ...definition };
 }
 
+export function attr(
+  name: string,
+  type: WebIDLType,
+  options: AttributeOptions = {},
+): AttributeMember {
+  return { ...options, kind: 'attribute', name, type };
+}
+
+export function readonlyAttr(
+  name: string,
+  type: WebIDLType,
+  options: ReadonlyAttributeOptions = {},
+): AttributeMember {
+  return attr(name, type, { ...options, readonly: true });
+}
+
+export function constant(
+  name: string,
+  type: WebIDLType,
+  value: ConstantValue,
+  options: ConstantOptions = {},
+): ConstantMember {
+  return { ...options, kind: 'constant', name, type, value };
+}
+
+export function ctor(
+  options?: ConstructorOptions,
+): ConstructorMember;
+export function ctor(
+  argumentsList: ArgumentDefinition[],
+  options?: ConstructorOptions,
+): ConstructorMember;
+export function ctor(
+  argumentsOrOptions: ArgumentDefinition[] | ConstructorOptions = [],
+  options: ConstructorOptions = {},
+): ConstructorMember {
+  if (Array.isArray(argumentsOrOptions)) {
+    return {
+      ...options,
+      arguments: argumentsOrOptions,
+      kind: 'constructor',
+    };
+  }
+  return { ...argumentsOrOptions, arguments: [], kind: 'constructor' };
+}
+
+export function op(
+  name: string | undefined,
+  returns: WebIDLType,
+  argumentsList: ArgumentDefinition[] = [],
+  options: OperationOptions = {},
+): OperationMember {
+  return {
+    ...options,
+    arguments: argumentsList,
+    kind: 'operation',
+    ...(name === undefined ? {} : { name }),
+    returns,
+  };
+}
+
+export function stringifier(
+  options: StringifierOptions = {},
+): StringifierMember {
+  return { ...options, kind: 'stringifier' };
+}
+
+export function iterable(
+  value: WebIDLType,
+  options: IterableOptions = {},
+): IterableMember {
+  return { ...options, kind: 'iterable', value };
+}
+
+export function asyncIterable(
+  value: WebIDLType,
+  options: AsyncIterableOptions = {},
+): AsyncIterableMember {
+  return { ...options, kind: 'async-iterable', value };
+}
+
+export function maplike(
+  key: WebIDLType,
+  value: WebIDLType,
+  options: MaplikeOptions = {},
+): MaplikeMember {
+  return { ...options, key, kind: 'maplike', value };
+}
+
+export function setlike(
+  value: WebIDLType,
+  options: SetlikeOptions = {},
+): SetlikeMember {
+  return { ...options, kind: 'setlike', value };
+}
+
+export function arg(
+  name: string,
+  type: WebIDLType,
+  options: ArgumentOptions = {},
+): ArgumentDefinition {
+  return { ...options, name, type };
+}
+
+export function dictMember(
+  name: string,
+  type: WebIDLType,
+  options: DictionaryMemberOptions = {},
+): DictionaryMember {
+  return { ...options, name, type };
+}
+
+export function xattr(
+  ...attributes: ExtendedAttributeInit[]
+): ExtendedAttributeOptions {
+  return { extendedAttributes: attributes.map(normalizeExtendedAttribute) };
+}
+
 export function reference(name: string): ReferenceType {
   return { kind: 'reference', name };
 }
@@ -119,7 +243,7 @@ export function observableArray(type: WebIDLType): ObservableArrayType {
 
 export function annotated<Type extends WebIDLType>(
   type: Type,
-  extendedAttributes: ExtendedAttribute[],
+  { extendedAttributes }: ExtendedAttributeOptions,
 ): AnnotatedType & { type: Type; } {
   return { kind: 'annotated', extendedAttributes, type };
 }
@@ -206,6 +330,7 @@ export type Definition =
   | IncludesDefinition;
 
 export type InterfaceDefinition = Attributed & {
+  binding?: InterfaceBindingDefinition;
   kind: 'interface';
   name: string;
   inherits?: string;
@@ -351,6 +476,7 @@ export type ConstantMember = Member & {
 };
 
 export type AttributeMember = Member & {
+  binding?: AttributeBindingDefinition;
   kind: 'attribute';
   name: string;
   type: WebIDLType;
@@ -361,6 +487,7 @@ export type AttributeMember = Member & {
 };
 
 export type OperationMember = Member & {
+  binding?: OperationBindingDefinition;
   kind: 'operation';
   name?: string;
   returns: WebIDLType;
@@ -370,15 +497,18 @@ export type OperationMember = Member & {
 };
 
 export type ConstructorMember = Member & {
+  binding?: ConstructorBindingDefinition;
   kind: 'constructor';
   arguments: ArgumentDefinition[];
 };
 
 export type StringifierMember = Member & {
+  binding?: StringifierBindingDefinition;
   kind: 'stringifier';
 };
 
 export type IterableMember = Member & {
+  binding?: IterableBindingDefinition;
   kind: 'iterable';
   key?: WebIDLType;
   value: WebIDLType;
@@ -556,7 +686,7 @@ export type DecimalLiteral = {
   value: string;
 };
 
-export type Exposure = '*' | [string, ...string[]];
+export type Exposure = string | [string, ...string[]];
 
 export type ExtendedAttribute =
   | NoArgumentsExtendedAttribute
@@ -574,6 +704,15 @@ export type ExtendedAttribute =
 export type NoArgumentsExtendedAttribute = {
   kind: 'no-arguments';
   name: string;
+};
+
+export type ExtendedAttributeInit =
+  | string
+  | readonly [name: string, value: string | readonly string[]]
+  | ExtendedAttribute;
+
+export type ExtendedAttributeOptions = {
+  extendedAttributes: ExtendedAttribute[];
 };
 
 export type ArgumentsExtendedAttribute = {
@@ -642,9 +781,55 @@ type Attributed = {
 
 type Member = Attributed;
 
+type AttributeOptions = Omit<AttributeMember, 'kind' | 'name' | 'type'>;
+
+type ReadonlyAttributeOptions = Omit<AttributeOptions, 'readonly'>;
+
+type ConstantOptions = Omit<
+  ConstantMember,
+  'kind' | 'name' | 'type' | 'value'
+>;
+
+type ConstructorOptions = Omit<ConstructorMember, 'arguments' | 'kind'>;
+
+type OperationOptions = Omit<
+  OperationMember,
+  'arguments' | 'kind' | 'name' | 'returns'
+>;
+
+type StringifierOptions = Omit<StringifierMember, 'kind'>;
+
+type IterableOptions = Omit<IterableMember, 'kind' | 'value'>;
+
+type AsyncIterableOptions = Omit<AsyncIterableMember, 'kind' | 'value'>;
+
+type MaplikeOptions = Omit<MaplikeMember, 'key' | 'kind' | 'value'>;
+
+type SetlikeOptions = Omit<SetlikeMember, 'kind' | 'value'>;
+
+type ArgumentOptions = Omit<ArgumentDefinition, 'name' | 'type'>;
+
+type DictionaryMemberOptions = Omit<DictionaryMember, 'name' | 'type'>;
+
 type ContainerType = {
   type: WebIDLType;
 };
+
+function normalizeExtendedAttribute(
+  attribute: ExtendedAttributeInit,
+): ExtendedAttribute {
+  if (typeof attribute === 'string') {
+    return { kind: 'no-arguments', name: attribute };
+  }
+  if ('kind' in attribute) return attribute;
+
+  const [name, value] = attribute;
+  if (typeof value !== 'string') {
+    return { kind: 'identifier-list', name, values: [...value] };
+  }
+  if (value === '*') return { kind: 'wildcard', name };
+  return { kind: 'identifier', name, value };
+}
 
 function simpleType<const Name extends SimpleTypeName>(
   name: Name,

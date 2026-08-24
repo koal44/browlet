@@ -1,10 +1,10 @@
-import type { AssembledInterface } from './assembly';
+import type { AssembledInterface } from './adapter/assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
 import type {
   MaplikeMember, SetlikeMember, WebIDLType,
-} from './definition';
+} from './adapter/definition';
 
 export class CollectionBinding {
   readonly #context: ConversionContext;

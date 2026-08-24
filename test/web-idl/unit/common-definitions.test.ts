@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { invokeCallbackFunction } from '../../../src/web-idl/callback';
 import { isCallbackFunctionValue } from '../../../src/web-idl/callback-value';
@@ -10,9 +10,9 @@ import {
   voidFunctionIDL, webIDLCommonDefinitions,
 } from '../../../src/web-idl/common-definitions';
 import { convertToIDL } from '../../../src/web-idl/conversion';
-import { reference } from '../../../src/web-idl/definition';
+import { reference } from '../../../src/web-idl/adapter/definition';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
-import { serializeDefinitions } from '../../../src/web-idl/serialize';
+import { serializeDefinitions } from '../../../src/web-idl/adapter/serialize';
 
 describe('Web IDL common definitions', () => {
   it('represents the common typedefs and callbacks losslessly', () => {
@@ -64,13 +64,11 @@ callback VoidFunction = undefined();`);
       function_,
       [1, 'two', null],
       'rethrow',
-      binding,
     )).toEqual([1, 'two', null]);
     expect(invokeCallbackFunction(
       voidFunction,
       [],
       'rethrow',
-      binding,
     )).toBeUndefined();
   });
 });

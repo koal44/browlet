@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/realm';
-import { assembleDefinitions } from '../../../src/web-idl/assembly';
+import { assembleDefinitions } from '../../../src/web-idl/adapter/assembly';
 import {
   closeAsyncIterator, convertAsyncSequenceToJavaScript, endOfIteration,
   getAsyncIteratorNextValue, isAsyncSequence, openAsyncSequence,
@@ -11,8 +11,8 @@ import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { convertToIDL } from '../../../src/web-idl/conversion';
 import {
   asyncSequence, defineInterface, idlType, type OperationMember,
-} from '../../../src/web-idl/definition';
-import { ImplementationRegistry } from '../../../src/web-idl/implementation';
+} from '../../../src/web-idl/adapter/definition';
+import { ImplementationRegistry } from '../../../src/web-idl/adapter/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL async sequences', () => {

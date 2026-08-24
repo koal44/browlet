@@ -1,7 +1,7 @@
 import type {
   AssembledInterface, AssembledInterfaceMember, AssembledNamespace,
   AssembledNamespaceMember, DefinitionAssembly,
-} from './assembly';
+} from './adapter/assembly';
 import { AsynchronousIterableBinding } from './async-iterable';
 import {
   CollectionBinding, type IDLMapEntries, type IDLSetEntries,
@@ -12,11 +12,14 @@ import {
 } from './conversion';
 import type {
   AttributeMember, CallbackInterfaceDefinition, ConstantMember,
-  ConstructorMember, ExtendedAttribute, NamedArgumentsExtendedAttribute,
+  ConstructorMember, Exposure, ExtendedAttribute,
+  NamedArgumentsExtendedAttribute,
   OperationMember, StringifierMember, WebIDLType,
-} from './definition';
+} from './adapter/definition';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
-import { ImplementationRegistry } from './implementation';
+import {
+  ImplementationRegistry, type ImplementationConstructor,
+} from './adapter/registry';
 import { SynchronousIterableBinding } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { LegacyPlatformObjectBinding } from './legacy-platform-object';
@@ -487,6 +490,28 @@ export class JavaScriptBinding {
     ).object;
   }
 
+  construct<T extends object>(
+    implementation: ImplementationConstructor<T>,
+    argumentsList: readonly unknown[],
+    primaryInterface?: string | AssembledInterface,
+  ): T {
+    const interface_ = primaryInterface
+      ? this.#resolveInterface(primaryInterface)
+      : this.implementations.getInterfaceForImplementation(implementation);
+    if (!interface_) {
+      throw new Error(
+        'No Web IDL interface is registered for this implementation',
+      );
+    }
+
+    const value = Reflect.construct(
+      implementation,
+      argumentsList,
+      this.getInterfaceObject(interface_),
+    ) as T;
+    return this.projectPlatformObject(value, interface_).object as T;
+  }
+
   isExposed(interface_: string | AssembledInterface): boolean {
     return this.#isConstructExposed(
       this.#resolveInterface(interface_).definition,
@@ -502,6 +527,7 @@ export class JavaScriptBinding {
         `Use projectGlobalObject for ${primaryInterface.definition.name}`,
       );
     }
+    this.#runObjectInitializationSteps(implementation, primaryInterface);
     return this.associatePlatformObject(
       this.#legacyPlatformObjects.createObject(
         implementation,
@@ -537,6 +563,7 @@ export class JavaScriptBinding {
     if (!Reflect.setPrototypeOf(implementation, prototype)) {
       throw new Error('Could not set the global object prototype');
     }
+    this.#runObjectInitializationSteps(implementation, interface_);
     const object = this.#globalPlatformObjects.createObject(implementation);
     const record = this.associatePlatformObject(
       object,
@@ -605,6 +632,17 @@ export class JavaScriptBinding {
     return record;
   }
 
+  #runObjectInitializationSteps(
+    implementation: object,
+    interface_: AssembledInterface,
+  ): void {
+    for (const ancestor of getInheritance(interface_)) {
+      this.implementations.getObjectInitializationSteps(
+        ancestor.definition,
+      )?.(implementation);
+    }
+  }
+
   getPlatformObjectRecord(value: unknown): PlatformObjectRecord | undefined {
     return this.platformObjects.getRecord(value);
   }
@@ -648,8 +686,14 @@ export class JavaScriptBinding {
     return this.platformObjects.isPlatformObject(value);
   }
 
-  implements(value: unknown, interface_: AssembledInterface): boolean {
-    return this.platformObjects.implements(value, interface_);
+  implements(
+    value: unknown,
+    interface_: string | AssembledInterface,
+  ): boolean {
+    return this.platformObjects.implements(
+      value,
+      this.#resolveInterface(interface_),
+    );
   }
 
   #defineConstants(target: object, definition: MemberDefinition): void {
@@ -1433,10 +1477,13 @@ export class JavaScriptBinding {
   }
 
   #isConstructExposed(construct: Exposable): boolean {
+    const exposure = construct.exposed;
     if (
-      construct.exposed !== undefined &&
-      construct.exposed !== '*' &&
-      !construct.exposed.some((name) => this.realm.globalNames.has(name))
+      exposure !== undefined &&
+      exposure !== '*' &&
+      !(typeof exposure === 'string'
+        ? this.realm.globalNames.has(exposure)
+        : exposure.some((name) => this.realm.globalNames.has(name)))
     ) return false;
     if (
       hasExtendedAttribute(construct, 'CrossOriginIsolated') &&
@@ -1527,7 +1574,7 @@ type StringifierEntry = AssembledInterfaceMember & {
   member: StringifierMember | AttributeMember;
 };
 type Exposable = {
-  exposed?: '*' | [string, ...string[]];
+  exposed?: Exposure;
   extendedAttributes?: ExtendedAttribute[];
 };
 

@@ -1,6 +1,7 @@
 import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
-} from './definition';
+} from './adapter/definition';
+import type { ConversionContext } from './conversion';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export function createCallbackFunctionValue(
@@ -8,10 +9,12 @@ export function createCallbackFunctionValue(
   object: object,
   realm: WebIDLRealmHost,
   callbackContext: unknown,
+  conversionContext: ConversionContext,
 ): CallbackFunctionValue {
   return {
     [callbackValueBrand]: true,
     callbackContext,
+    conversionContext,
     definition,
     kind: 'callback-function',
     object,
@@ -24,10 +27,12 @@ export function createCallbackInterfaceValue(
   object: object,
   realm: WebIDLRealmHost,
   callbackContext: unknown,
+  conversionContext: ConversionContext,
 ): CallbackInterfaceValue {
   return {
     [callbackValueBrand]: true,
     callbackContext,
+    conversionContext,
     definition,
     kind: 'callback-interface',
     object,
@@ -62,6 +67,7 @@ export type CallbackInterfaceValue = CallbackValueRecord & {
 type CallbackValueRecord = {
   [callbackValueBrand]: true;
   callbackContext: unknown;
+  conversionContext: ConversionContext;
   object: object;
   realm: WebIDLRealmHost;
 };
