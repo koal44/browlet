@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
-} from '../../../src/browlet/agents';
-import { BrowsingContextGroup } from '../../../src/browlet/browsing-context';
-import { Realm } from '../../../src/browlet/realm';
+} from '../../../src/browlet/scripting/agents';
+import { BrowsingContextGroup } from '../../../src/browlet/navigation/browsing-context';
+import { Realm } from '../../../src/browlet/scripting/realm';
 import type { Domain, Host } from '../../../src/url/host';
 import type { TupleOrigin } from '../../../src/url/origin';
 

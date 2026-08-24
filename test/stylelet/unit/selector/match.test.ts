@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Domlet } from '../../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../../src/browlet/parser/document-construction';
 import { Snapshot } from '../../../../src/stylelet/snapshot';
 import {
   compileSelectorList, matchSelectorList,
@@ -11,7 +13,7 @@ import {
 
 describe('selector matching', () => {
   it('matches a top-level nesting selector like :scope', () => {
-    const document = createDomletDocument('<main id="target"></main>');
+    const document = createDocumentImpl('<main id="target"></main>');
     const root = document.documentElement;
     const target = document.getElementById('target')!;
 
@@ -20,7 +22,7 @@ describe('selector matching', () => {
   });
 
   it('matches a nested selector through its bound parent selector', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <main class="parent">
         <span id="target" class="child"></span>
       </main>
@@ -36,7 +38,7 @@ describe('selector matching', () => {
   });
 
   it('uses the strongest parent-arm specificity for nested matching', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <main><span id="target" class="child"></span></main>
     `);
     const parent = parseSelectorList('#missing, main')!;
@@ -47,7 +49,7 @@ describe('selector matching', () => {
   });
 
   it('matches a compound selector through child and descendant combinators', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <main class="warning">
         <section><span id="target"></span></section>
       </main>
@@ -63,7 +65,7 @@ describe('selector matching', () => {
   });
 
   it('matches adjacent and general element siblings', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <div class="before"></div>
       text
       <div class="middle"></div>
@@ -81,7 +83,7 @@ describe('selector matching', () => {
   });
 
   it('returns the greatest specificity among matching selector-list arms', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<main id="target" class="warning"></main>',
     );
     const target = document.getElementById('target')!;
@@ -99,7 +101,7 @@ describe('selector matching', () => {
   });
 
   it('supports universal selectors and rejects nonmatching compounds', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<main id="target" class="one two"></main>',
     );
     const target = document.getElementById('target')!;
@@ -110,7 +112,7 @@ describe('selector matching', () => {
   });
 
   it('restricts an unprefixed type selector to its default namespace URI', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <circle id="html"></circle>
       <svg><circle id="svg"></circle></svg>
     `);
@@ -128,7 +130,7 @@ describe('selector matching', () => {
   });
 
   it('matches a named type selector by its resolved namespace URI', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<svg><circle id="target"></circle></svg>',
     );
     const target = document.getElementById('target')!;
@@ -142,7 +144,7 @@ describe('selector matching', () => {
   });
 
   it('matches a named attribute selector by its resolved namespace URI', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<svg><use id="target" xlink:href="#icon"></use></svg>',
     );
     const target = document.getElementById('target')!;
@@ -163,7 +165,7 @@ describe('selector matching', () => {
   });
 
   it('matches attributes and structural pseudo-classes', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<main id="target" data-state="ready now"></main>',
     );
     const target = document.getElementById('target')!;
@@ -176,7 +178,7 @@ describe('selector matching', () => {
   });
 
   it('matches semantic identifier values decoded by the Stylelet parser', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       String.raw`<main id="123" class="é foo\bar" data-state="é" data-test="foo\bar"></main>`,
     );
     const target = document.getElementById('123')!;
@@ -187,7 +189,7 @@ describe('selector matching', () => {
   });
 
   it('matches logical and relative pseudo-classes', () => {
-    const document = createDomletDocument(`
+    const document = createDocumentImpl(`
       <main id="target">
         <section><span class="warning"></span></section>
       </main>
@@ -202,7 +204,7 @@ describe('selector matching', () => {
   });
 
   it('syncs the tree cache only for selectors that use it', () => {
-    const document = createDomletDocument('<main id="target"></main>');
+    const document = createDocumentImpl('<main id="target"></main>');
     const target = document.getElementById('target')!;
     const version = vi.fn(() => 1);
     const snapshot = new Snapshot(document, {
@@ -235,7 +237,7 @@ describe('selector matching', () => {
   });
 
   it('uses tri matching only for host and pseudo-element selectors', () => {
-    const document = createDomletDocument('<main></main>');
+    const document = createDocumentImpl('<main></main>');
     const snapshot = new Snapshot(document);
 
     const simple = compileSelectorList(parseSelectorList('main')!, snapshot);
@@ -256,7 +258,7 @@ describe('selector matching', () => {
   });
 
   it('does not match pseudo-elements as element subjects', () => {
-    const document = createDomletDocument('<main id="target"></main>');
+    const document = createDocumentImpl('<main id="target"></main>');
     const target = document.getElementById('target')!;
 
     expect(match('#target::before', target)).toBeNull();
@@ -267,6 +269,6 @@ function match(selector: string, element: Element) {
   return matchSelectorList(parseSelectorList(selector)!, element);
 }
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }

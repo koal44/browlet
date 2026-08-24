@@ -1,7 +1,9 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import { Domlet } from '../../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../../src/browlet/parser/document-construction';
 import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
 import {
   parseStylesheet, type StyleSheetOptions,
@@ -89,7 +91,7 @@ describe('cascade engine', () => {
   });
 
   it('captures a constructed stylesheet location at creation', () => {
-    const document = createDomletDocument('');
+    const document = createDocumentImpl('');
     const location = new URL('https://example.com/constructed/');
     Object.defineProperty(document, 'baseURI', { value: location.href });
     const { engine, scope } = createCascade({
@@ -106,7 +108,7 @@ describe('cascade engine', () => {
   });
 
   it('captures an embedded stylesheet base when its source is parsed', () => {
-    const document = createDomletDocument('');
+    const document = createDocumentImpl('');
     const baseUrl = new URL('https://example.com/embedded/');
     Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
     const { engine, scope } = createCascade({
@@ -175,7 +177,7 @@ describe('cascade engine', () => {
   });
 
   it('matches a target and sorts author declarations by cascade precedence', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<main id="target" class="target"></main>',
     );
     const target = document.getElementById('target')!;
@@ -203,7 +205,7 @@ describe('cascade engine', () => {
 });
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createDomletDocument(''));
+  const snapshot = options.snapshot ?? new Snapshot(createDocumentImpl(''));
   const engine = new CascadeEngine({ ...options, snapshot });
 
   return {
@@ -236,6 +238,6 @@ function addStyleSheet(
   return styleSheet;
 }
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }

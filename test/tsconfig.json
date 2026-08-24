@@ -19,7 +19,6 @@
     { "path": "../src/web-idl" },
     { "path": "../src/selectlet" },
     { "path": "../src/stylelet" },
-    { "path": "../src/domlet" },
     { "path": "../src/browlet" }
   ]
 }

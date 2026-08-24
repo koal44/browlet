@@ -4,7 +4,7 @@ import type {
   ScenarioStep, TestCase,
 } from '../harness';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { DomletDocument } from '../../../src/domlet/nodes/document';
+import { asDocument } from '../../../src/browlet/stubs/interfaces';
 import { isElement } from '../../../src/shared/dom';
 import { createSelectlet, type Selectlet } from '../../../src/selectlet/selectlet';
 
@@ -56,7 +56,7 @@ async function runScenario(scenario: Scenario): Promise<void> {
     : `<!doctype html><html><body>${scenario.markup}</body></html>`;
   const browlet = new Browlet({ route: () => source });
   await browlet.navigate(scenario.url ?? 'https://example.test/');
-  const document = browlet.document;
+  const document = asDocument(browlet.document);
   const selectlet = createSelectlet(document);
 
   try {
@@ -90,7 +90,7 @@ async function runScenario(scenario: Scenario): Promise<void> {
 }
 
 function runCase(
-  document: DomletDocument,
+  document: Document,
   selectlet: Selectlet,
   testCase: TestCase,
 ): void {
@@ -147,7 +147,7 @@ function runCase(
 type QueryContext = Document | Element;
 
 function resolveContext(
-  document: DomletDocument,
+  document: Document,
   selectlet: Selectlet,
   ref?: ContextRef,
 ): QueryContext | null {

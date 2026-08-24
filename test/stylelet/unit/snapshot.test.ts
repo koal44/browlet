@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Domlet } from '../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../src/browlet/parser/document-construction';
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { Snapshot } from '../../../src/stylelet/snapshot';
 
 describe('style snapshot', () => {
   it('normalizes document and element host capabilities', () => {
-    const document = createDomletDocument(
+    const document = createDocumentImpl(
       '<main id="target" class="one two"></main>',
     );
     const target = document.getElementById('target')!;
@@ -24,7 +26,7 @@ describe('style snapshot', () => {
   });
 
   it('owns reusable compiled-selector and regex caches', () => {
-    const document = createDomletDocument('<main></main>');
+    const document = createDocumentImpl('<main></main>');
     const snapshot = new Snapshot(document);
     const selector = {};
     const compiled = () => true;
@@ -40,13 +42,13 @@ describe('style snapshot', () => {
   });
 
   it('is created and retained by the public Stylelet API', () => {
-    const document = createDomletDocument('<main></main>');
+    const document = createDocumentImpl('<main></main>');
     const stylelet = new Stylelet(document);
 
     expect(stylelet.snapshot.document).toBe(document);
   });
 });
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }

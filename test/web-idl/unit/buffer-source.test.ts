@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/realm';
+import { Realm } from '../../../src/browlet/scripting/realm';
 import {
   createArrayBuffer, createArrayBufferView, createSharedArrayBuffer,
   detachArrayBuffer, getBufferSourceByteLength, getBufferSourceCopy,

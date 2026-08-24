@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/realm';
+import { Realm } from '../../../src/browlet/scripting/realm';
 import {
   bind, defineInterface, registerInterfaceBindings,
 } from '../../../src/web-idl/index';

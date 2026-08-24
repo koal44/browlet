@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { Domlet } from '../../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../../src/browlet/parser/document-construction';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
@@ -44,7 +46,7 @@ describe('CSSStyleSheetImpl', () => {
   });
 
   it('creates a stylesheet from specified properties', () => {
-    const document = createDomletDocument('');
+    const document = createDocumentImpl('');
     const stylelet = new Stylelet(document);
     const sheet = CSSStyleSheetImpl.__create(stylelet.snapshot, {
       location: 'https://example.com/style.css',
@@ -191,7 +193,7 @@ describe('CSSStyleSheetImpl', () => {
 function createStyleSheet(
   options: CSSStyleSheetInit = {},
 ): CSSStyleSheet {
-  const document = createDomletDocument('');
+  const document = createDocumentImpl('');
   Object.defineProperty(document, 'baseURI', {
     value: 'https://example.com/document/',
   });
@@ -199,6 +201,6 @@ function createStyleSheet(
   return new Stylelet(document).createStyleSheet(options);
 }
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }

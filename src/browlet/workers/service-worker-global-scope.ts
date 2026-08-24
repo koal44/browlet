@@ -1,6 +1,6 @@
 import {
   EventTargetImpl, type EventTargetVirtuals,
-} from '../../domlet/events/event-target';
+} from '../dom/events/event-target';
 
 // Service Workers §4.7 and DOM §2.7. This is the event-listener portion of a
 // future ServiceWorkerGlobalScope host, kept abstract until Browlet implements

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LocationImpl } from '../../../src/browlet/location';
+import { LocationImpl } from '../../../src/browlet/window/location';
 
 describe('Location', () => {
   it('exposes URL components and stringification', () => {

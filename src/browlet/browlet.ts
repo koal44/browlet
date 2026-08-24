@@ -1,24 +1,25 @@
-import { Domlet } from '../domlet/domlet';
-import { DocumentImpl, type DomletDocument } from '../domlet/nodes/document';
-import type { ElementImpl } from '../domlet/nodes/element';
-import { isText } from '../domlet/nodes/node';
-import { getSourceCodeLocation } from '../domlet/parser/parser';
+import { DocumentImpl } from './dom/nodes/document';
+import type { ElementImpl } from './dom/nodes/element';
+import { isText } from './dom/nodes/node';
+import { getSourceCodeLocation } from './parser/html-tree-adapter';
 import { parseURL } from '../url/url';
-import { browletBindings, getRelevantRealm } from './bindings';
+import { getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
-} from './document-lifecycle';
+} from './navigation/document-lifecycle';
 import {
   createNewTopLevelTraversable, type TopLevelTraversable,
-} from './navigable';
+} from './navigation/navigable';
 import {
   createNavigationHistoryEntry, createNavigationParams,
   finalizeCrossDocumentNavigation, resolveNavigationHistoryBehavior,
-} from './navigation';
-import { BrowletParser, type DocumentWrite } from './parser';
-import type { Realm } from './realm';
-import type { WindowProxy } from './window-proxy';
-import { WindowImpl } from './window';
+} from './navigation/navigation';
+import {
+  BrowletParser, type DocumentWrite,
+} from './parser/streaming-parser';
+import type { Realm } from './scripting/realm';
+import type { WindowProxy } from './window/window-proxy';
+import { WindowImpl } from './window/window';
 import { UserAgent } from './user-agent';
 
 export class Browlet {
@@ -43,7 +44,7 @@ export class Browlet {
     }
   }
 
-  get document(): DomletDocument {
+  get document(): DocumentImpl {
     const document = this.#traversable.activeDocument;
     if (document === null) {
       throw new Error('Top-level traversable has no active Document');
@@ -112,11 +113,7 @@ export class Browlet {
       historyEntry,
     );
 
-    const bindings = browletBindings.forRealm(realm);
-    const domlet = new Domlet(bindings.objects);
-
     const parser = new BrowletParser(
-      domlet,
       document,
       (element, write) => {
         this.executeScript(
@@ -149,7 +146,7 @@ export class Browlet {
     element: ElementImpl,
     documentURL: URL,
     write: DocumentWrite,
-    document: DomletDocument,
+    document: DocumentImpl,
     window: WindowImpl,
     realm: Realm,
   ): void {

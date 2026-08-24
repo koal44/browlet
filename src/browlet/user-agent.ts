@@ -1,5 +1,5 @@
-import { BrowsingContextGroup } from './browsing-context';
-import type { TopLevelTraversable } from './navigable';
+import { BrowsingContextGroup } from './navigation/browsing-context';
+import type { TopLevelTraversable } from './navigation/navigable';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level

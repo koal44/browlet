@@ -13,7 +13,6 @@
     { "path": "../web-idl/declaration" },
     { "path": "../web-idl" },
     { "path": "../url" },
-    { "path": "../domlet" },
     { "path": "../stylelet" }
   ]
 }

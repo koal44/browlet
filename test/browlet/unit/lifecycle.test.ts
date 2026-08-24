@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { BrowsingContext } from '../../../src/browlet/browsing-context';
+import { BrowsingContext } from '../../../src/browlet/navigation/browsing-context';
 import { getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
-} from '../../../src/browlet/agents';
+} from '../../../src/browlet/scripting/agents';
 import {
   EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
-} from '../../../src/browlet/environment';
+} from '../../../src/browlet/scripting/environment';
 import {
   createNewTopLevelTraversable, initializeNavigable, TopLevelTraversable,
-} from '../../../src/browlet/navigable';
-import { createRealm, Realm } from '../../../src/browlet/realm';
-import { createDocumentState } from '../../../src/browlet/session-history';
+} from '../../../src/browlet/navigation/navigable';
+import { createRealm, Realm } from '../../../src/browlet/scripting/realm';
+import { createDocumentState } from '../../../src/browlet/navigation/session-history';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import {
   getWindowProxyWindow, setWindowProxyWindow,
-} from '../../../src/browlet/window-proxy';
-import { WindowImpl } from '../../../src/browlet/window';
+} from '../../../src/browlet/window/window-proxy';
+import { WindowImpl } from '../../../src/browlet/window/window';
 import {
-  DocumentImpl, type DomletDocument, type ModuleMap, type PolicyContainer,
-} from '../../../src/domlet/nodes/document';
+  DocumentImpl, type ModuleMap, type PolicyContainer,
+} from '../../../src/browlet/dom/nodes/document';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../../src/url/url';
 
@@ -57,7 +57,7 @@ describe('browsing context groups', () => {
     expect(context.activeWindow).toBeNull();
     expect(context.activeDocument).toBeNull();
 
-    const document = new DocumentImpl() as DomletDocument;
+    const document = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
     WindowImpl.setAssociatedDocument(window, document);
     setWindowProxyWindow(context.windowProxy, window, window);
@@ -117,7 +117,7 @@ describe('browsing context groups', () => {
 
 describe('navigables', () => {
   it('initializes one pending current and active history entry', () => {
-    const document = new DocumentImpl() as DomletDocument;
+    const document = new DocumentImpl();
     DocumentImpl.setURL(document, requireURL('https://example.test/page'));
     const documentState = createDocumentState(document);
     const traversable = new TopLevelTraversable();
@@ -185,9 +185,9 @@ describe('navigables', () => {
     expect(DocumentImpl.isReadyForPostLoadTasks(document)).toBe(true);
     expect(DocumentImpl.getCurrentDocumentReadiness(document)).toBe('complete');
     expect(DocumentImpl.getCompletelyLoadedTime(document)).not.toBeNull();
-    expect(document.documentElement.localName).toBe('html');
-    expect(document.head.localName).toBe('head');
-    expect(document.body.localName).toBe('body');
+    expect(document.documentElement?.localName).toBe('html');
+    expect(document.head?.localName).toBe('head');
+    expect(document.body?.localName).toBe('body');
 
     expect(settings.executionReady).toBe(true);
     expect(serializeURL(settings.creationURL)).toBe('about:blank');
@@ -239,7 +239,7 @@ describe('environment settings objects', () => {
       creationURL,
       origin,
     );
-    const document = new DocumentImpl() as DomletDocument;
+    const document = new DocumentImpl();
     DocumentImpl.setOrigin(document, origin);
     DocumentImpl.setURL(document, creationURL);
     WindowImpl.setAssociatedDocument(window, document);

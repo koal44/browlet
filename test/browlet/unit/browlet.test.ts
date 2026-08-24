@@ -3,18 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../../src/browlet/browlet';
-import { fireEvent } from '../../../src/domlet/events/event-target';
-import type { EventTargetImpl } from '../../../src/domlet/events/event-target';
-import { DocumentImpl } from '../../../src/domlet/nodes/document';
-import { isHTMLLinkElement } from '../../../src/domlet/nodes/element';
+import { isHTMLLinkElement } from '../../../src/browlet/elements/metadata/html-link-element';
+import { fireEvent } from '../../../src/browlet/dom/events/event-target';
+import type { EventTargetImpl } from '../../../src/browlet/dom/events/event-target';
+import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
+import {
+  MATHML_NAMESPACE, SVG_NAMESPACE,
+} from '../../../src/shared/namespaces';
 import { serializeOrigin } from '../../../src/url/origin';
 
 describe('Browlet', () => {
-  it('coordinates a Domlet document and window', () => {
+  it('coordinates a DOM document and window', () => {
     const browlet = new Browlet({ route: () => '' });
 
     expect(browlet).toBeInstanceOf(Browlet);
-    expect(browlet.document.documentElement.localName).toBe('html');
+    expect(browlet.document.documentElement?.localName).toBe('html');
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);
@@ -123,6 +126,85 @@ describe('Browlet', () => {
       .toBe(CharacterDataConstructor.prototype);
     expect(Reflect.getPrototypeOf(CharacterDataConstructor.prototype))
       .toBe(NodeConstructor.prototype);
+  });
+
+  it('creates specialized HTML elements using its realm interfaces', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const HTMLHeadElementConstructor = Reflect.get(
+      browlet.window,
+      'HTMLHeadElement',
+    ) as typeof HTMLHeadElement;
+    const HTMLStyleElementConstructor = Reflect.get(
+      browlet.window,
+      'HTMLStyleElement',
+    ) as typeof HTMLStyleElement;
+    const HTMLLinkElementConstructor = Reflect.get(
+      browlet.window,
+      'HTMLLinkElement',
+    ) as typeof HTMLLinkElement;
+
+    expect(browlet.document.head).toBeInstanceOf(HTMLHeadElementConstructor);
+    expect(browlet.document.createElement('style'))
+      .toBeInstanceOf(HTMLStyleElementConstructor);
+    expect(browlet.document.createElement('link'))
+      .toBeInstanceOf(HTMLLinkElementConstructor);
+  });
+
+  it('selects element interfaces from parser namespaces', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const SVGElementConstructor = Reflect.get(
+      browlet.window,
+      'SVGElement',
+    ) as typeof SVGElement;
+    const SVGStyleElementConstructor = Reflect.get(
+      browlet.window,
+      'SVGStyleElement',
+    ) as typeof SVGStyleElement;
+    const MathMLElementConstructor = Reflect.get(
+      browlet.window,
+      'MathMLElement',
+    ) as typeof MathMLElement;
+
+    expect(browlet.document.createElementNS(SVG_NAMESPACE, 'svg'))
+      .toBeInstanceOf(SVGElementConstructor);
+    expect(browlet.document.createElementNS(SVG_NAMESPACE, 'style'))
+      .toBeInstanceOf(SVGStyleElementConstructor);
+    expect(browlet.document.createElementNS(MATHML_NAMESPACE, 'math'))
+      .toBeInstanceOf(MathMLElementConstructor);
+  });
+
+  it('creates host element interfaces while parsing foreign content', async () => {
+    const browlet = new Browlet({
+      route: () => [
+        '<style id="style"></style>',
+        '<link id="link">',
+        '<svg id="svg"><style id="svg-style"></style>',
+        '<circle id="circle"></circle>',
+        '<foreignObject><main id="html"></main></foreignObject></svg>',
+        '<math id="math"><mi id="mi"></mi></math>',
+      ].join(''),
+    });
+    await browlet.navigate('https://example.test/');
+
+    const interfaceFor = (name: string) => Reflect.get(
+      browlet.window,
+      name,
+    ) as new (...argumentsList: never[]) => object;
+
+    expect(browlet.document.head)
+      .toBeInstanceOf(interfaceFor('HTMLHeadElement'));
+    expect(browlet.document.getElementById('style'))
+      .toBeInstanceOf(interfaceFor('HTMLStyleElement'));
+    expect(browlet.document.getElementById('link'))
+      .toBeInstanceOf(interfaceFor('HTMLLinkElement'));
+    expect(browlet.document.getElementById('svg'))
+      .toBeInstanceOf(interfaceFor('SVGElement'));
+    expect(browlet.document.getElementById('svg-style'))
+      .toBeInstanceOf(interfaceFor('SVGStyleElement'));
+    expect(browlet.document.getElementById('html'))
+      .toBeInstanceOf(interfaceFor('HTMLElement'));
+    expect(browlet.document.getElementById('math'))
+      .toBeInstanceOf(interfaceFor('MathMLElement'));
   });
 
   it('exposes window events and browser timer IDs', async () => {

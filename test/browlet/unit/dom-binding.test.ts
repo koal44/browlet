@@ -4,7 +4,7 @@ import {
   browletBindings, getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
-import { Realm } from '../../../src/browlet/realm';
+import { Realm } from '../../../src/browlet/scripting/realm';
 
 describe('Browlet DOM binding', () => {
   it('projects the Window global through its Web IDL interface', () => {
@@ -46,7 +46,7 @@ describe('Browlet DOM binding', () => {
     const browlet = createBrowlet();
     const element = browlet.document.createElement('main');
     element.setAttribute('id', 'named');
-    browlet.document.body.appendChild(element);
+    browlet.document.body!.appendChild(element);
 
     expect(Reflect.get(browlet.window, 'named')).toBe(element);
 
@@ -196,7 +196,7 @@ describe('Browlet DOM binding', () => {
     });
     await browlet.navigate('https://example.test/');
     const document = browlet.document;
-    const element = document.documentElement;
+    const element = document.documentElement!;
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
     const detachedAttribute = document.createAttribute('DATA-detached');

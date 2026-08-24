@@ -14,7 +14,6 @@ export default defineConfig({
             'test/url/unit/**/*.test.ts',
             'test/web-idl/unit/**/*.test.ts',
             'test/stylelet/unit/**/*.test.ts',
-            'test/domlet/unit/**/*.test.ts',
             'test/browlet/unit/**/*.test.ts',
           ],
         },

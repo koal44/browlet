@@ -1,7 +1,9 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import { Domlet } from '../../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../../src/browlet/parser/document-construction';
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
@@ -312,7 +314,7 @@ function styleSheet(
 }
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
-  const snapshot = options.snapshot ?? new Snapshot(createDomletDocument(''));
+  const snapshot = options.snapshot ?? new Snapshot(createDocumentImpl(''));
   const engine = new CascadeEngine({ ...options, snapshot });
 
   return {
@@ -344,6 +346,6 @@ function addStyleSheet(
   return styleSheet;
 }
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }

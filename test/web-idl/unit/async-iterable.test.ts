@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Realm } from '../../../src/browlet/realm';
+import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { endOfIteration } from '../../../src/web-idl/async-sequence';
 import { JavaScriptBinding } from '../../../src/web-idl/binding';

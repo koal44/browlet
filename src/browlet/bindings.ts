@@ -1,14 +1,14 @@
-import { domIDLDefinitions } from '../domlet/web-idl';
+import { domIDLDefinitions } from './dom/web-idl';
 import { urlIDLDefinitions } from '../url/api';
 import {
   registerInterfaceBindings, type InterfaceBindingDomain,
   type RegisteredRealmInterfaceBindings,
 } from '../web-idl/index';
-import { Realm } from './realm';
-import type { WindowImpl } from './window';
+import { Realm } from './scripting/realm';
+import type { WindowImpl } from './window/window';
 import {
   isWindowProxy, setWindowProxyWindow, type WindowProxy,
-} from './window-proxy';
+} from './window/window-proxy';
 import { browletIDLDefinitions } from './web-idl';
 
 /*

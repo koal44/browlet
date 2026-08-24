@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { Domlet } from '../../../../src/domlet/domlet';
+import {
+  parseHTMLDocument,
+} from '../../../../src/browlet/parser/document-construction';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
@@ -122,7 +124,7 @@ function createTreeScope(): {
   document: Document;
   scope: TreeScope;
 } {
-  const document = createDomletDocument('');
+  const document = createDocumentImpl('');
   const snapshot = new Snapshot(document);
   const cascade = new CascadeEngine({ snapshot });
   return { document, scope: new TreeScope(document, cascade) };
@@ -161,6 +163,6 @@ type StyleSheetOptions = {
   title?: string;
 };
 
-function createDomletDocument(source: string): Document {
-  return new Domlet().parse(source);
+function createDocumentImpl(source: string): Document {
+  return parseHTMLDocument(source);
 }
