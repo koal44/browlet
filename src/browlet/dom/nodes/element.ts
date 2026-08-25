@@ -22,8 +22,12 @@ import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
 import {
-  childNodeIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL,
-} from './node';
+  ChildNodeMixin, childNodeIDL,
+} from './child-node';
+import {
+  NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL,
+} from './non-document-type-child-node';
+import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin } from './slottable';
 
 /*
@@ -79,12 +83,16 @@ export class ElementImpl
   extends withElementStub(NodeImpl)
   implements Element
 {
-  #inlineStyle: ElementCSSInlineStyleMixin | undefined;
-  readonly #linkStyle: LinkStyleMixin | undefined;
+  readonly #childNodeMixin = new ChildNodeMixin(this);
+  #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
+  readonly #linkStyleMixin: LinkStyleMixin | undefined;
+  readonly #nonDocumentTypeChildNodeMixin =
+    new NonDocumentTypeChildNodeMixin(this);
+  readonly #parentNodeMixin = new ParentNodeMixin(this);
   readonly #attributes: NamedNodeMapImpl;
   readonly #localName: string;
   readonly #namespaceURI: string;
-  readonly #slottable = new SlottableMixin();
+  readonly #slottableMixin = new SlottableMixin();
 
   constructor(
     context: ElementCreationContext,
@@ -95,7 +103,7 @@ export class ElementImpl
     NamedNodeMapImpl.associateElement(this.#attributes, this);
     this.#localName = context.localName;
     this.#namespaceURI = context.namespaceURI;
-    this.#linkStyle = linkStyle
+    this.#linkStyleMixin = linkStyle
       ? new LinkStyleMixin(
         this,
         linkStyle.options,
@@ -114,6 +122,34 @@ export class ElementImpl
 
   get namespaceURI(): string {
     return this.#namespaceURI;
+  }
+
+  get children(): HTMLCollectionOf<Element> {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
+  }
+
+  get previousElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
+  }
+
+  get nextElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
   }
 
   getAttribute(qualifiedName: string): string | null {
@@ -174,7 +210,7 @@ export class ElementImpl
     }
 
     if (qualifiedName === 'style') {
-      this.#inlineStyle?.attributeChanged(value);
+      this.#inlineStyleMixin?.attributeChanged(value);
     }
     this.#attributeChanged(qualifiedName, oldValue, value);
   }
@@ -191,7 +227,7 @@ export class ElementImpl
     const [removed] = this.attributes.splice(index, 1);
     if (removed) AttrImpl.setOwnerElement(removed, null);
     if (qualifiedName === 'style') {
-      this.#inlineStyle?.attributeChanged(null);
+      this.#inlineStyleMixin?.attributeChanged(null);
     }
     this.#attributeChanged(qualifiedName, oldValue, null);
   }
@@ -238,13 +274,13 @@ export class ElementImpl
     }),
     treeVirtuals: {
       insertedInto: (node) => {
-        (node as ElementImpl).#linkStyle?.update();
+        (node as ElementImpl).#linkStyleMixin?.update();
       },
       removedFrom: (node) => {
-        (node as ElementImpl).#linkStyle?.update();
+        (node as ElementImpl).#linkStyleMixin?.update();
       },
       childrenChanged: (node) => {
-        (node as ElementImpl).#linkStyle?.childrenChanged();
+        (node as ElementImpl).#linkStyleMixin?.childrenChanged();
       },
     },
   };
@@ -255,26 +291,27 @@ export class ElementImpl
     element: ElementImpl,
     slot: ElementImpl | null,
   ): void {
-    element.#slottable.setAssignedSlot(slot);
+    element.#slottableMixin.setAssignedSlot(slot);
   }
 
   static getAssignedSlot(element: ElementImpl): ElementImpl | null {
-    return element.#slottable.assignedSlot;
+    return element.#slottableMixin.assignedSlot;
   }
 
   static getEventParent(
     element: ElementImpl,
     _event: Event,
   ): NodeImpl | null {
-    return element.#slottable.assignedSlot ?? NodeImpl.getParentNode(element);
+    return element.#slottableMixin.assignedSlot ??
+      NodeImpl.getParentNode(element);
   }
 
   static beginParsingChildren(element: ElementImpl): void {
-    element.#linkStyle?.beginParsingChildren();
+    element.#linkStyleMixin?.beginParsingChildren();
   }
 
   static finishParsingChildren(element: ElementImpl): void {
-    element.#linkStyle?.finishParsingChildren();
+    element.#linkStyleMixin?.finishParsingChildren();
   }
 
   static appendAttribute(
@@ -288,18 +325,18 @@ export class ElementImpl
     element.#attributes.push(attribute);
     AttrImpl.setOwnerElement(attribute, element);
     if (attribute.localName === 'style') {
-      element.#inlineStyle?.attributeChanged(attribute.value);
+      element.#inlineStyleMixin?.attributeChanged(attribute.value);
     }
     element.#attributeChanged(attribute.localName, null, attribute.value);
   }
 
   static getInlineStyle(element: ElementImpl): CSSStyleDeclaration {
-    return (element.#inlineStyle ??=
+    return (element.#inlineStyleMixin ??=
       new ElementCSSInlineStyleMixin(element)).style;
   }
 
   static getStyleSheet(element: ElementImpl): CSSStyleSheet | null {
-    return element.#linkStyle?.sheet ?? null;
+    return element.#linkStyleMixin?.sheet ?? null;
   }
 
   // -- Private ----------------------------------------------------------
@@ -309,7 +346,7 @@ export class ElementImpl
     _oldValue: string | null,
     _newValue: string | null,
   ): void {
-    this.#linkStyle?.attributeChanged(qualifiedName);
+    this.#linkStyleMixin?.attributeChanged(qualifiedName);
   }
 
   #normalizeAttributeName(qualifiedName: string): string {

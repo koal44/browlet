@@ -27,9 +27,12 @@ import {
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL,
 } from './nodes/element';
 import {
-  childNodeIDL, documentOrShadowRootIDL, getRootNodeOptionsIDL, nodeIDL,
-  nonDocumentTypeChildNodeIDL, parentNodeIDL,
+  getRootNodeOptionsIDL, nodeIDL,
 } from './nodes/node';
+import { childNodeIDL } from './nodes/child-node';
+import { documentOrShadowRootIDL } from './nodes/document-or-shadow-root';
+import { nonDocumentTypeChildNodeIDL } from './nodes/non-document-type-child-node';
+import { parentNodeIDL } from './nodes/parent-node';
 import {
   shadowRootIDL, shadowRootIncludesDocumentOrShadowRootIDL,
   shadowRootModeIDL, slotAssignmentModeIDL,

@@ -125,13 +125,13 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     this.#insertChild(node, null);
   }
 
-  remove(): void {
-    if (!this.#parent) return;
-
-    this.#detach();
-  }
-
   // -- Friends ----------------------------------------------------------
+
+  static remove<TNode extends TreeNode<TNode>>(
+    node: TreeNode<TNode>,
+  ): void {
+    node.#detach();
+  }
 
   static insertSiblingBefore<TNode extends TreeNode<TNode>>(
     reference: TreeNode<TNode>,

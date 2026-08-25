@@ -3,6 +3,7 @@ import type { EventTargetVirtuals } from '../events/event-target';
 import { ctor, defineIncludes, defineInterface } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
+import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 
@@ -18,6 +19,7 @@ export class DocumentFragmentImpl
   implements DocumentFragment
 {
   readonly #host: ElementImpl | null;
+  readonly #parentNodeMixin = new ParentNodeMixin(this);
 
   constructor(
     ownerDocument: DocumentImpl,
@@ -30,6 +32,22 @@ export class DocumentFragmentImpl
       { eventTargetVirtuals },
     );
     this.#host = host;
+  }
+
+  get children(): HTMLCollectionOf<Element> {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
   }
 
   // -- Friends ----------------------------------------------------------
@@ -65,7 +83,7 @@ export const documentFragmentIDL = defineInterface({
 
 export const documentFragmentIncludesParentNodeIDL = defineIncludes({
   interface: 'DocumentFragment',
-  mixin: 'ParentNode',
+  mixin: parentNodeIDL.name,
 });
 
 type DocumentFragmentRealm = {
