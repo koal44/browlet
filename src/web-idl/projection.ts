@@ -1,9 +1,13 @@
 import type { AssembledInterface } from './assembly';
 import type { JavaScriptBinding } from './binding';
 import { callUserObjectOperation } from './callback';
-import { isCallbackInterfaceValue } from './callback-value';
+import { invokeCallbackFunction } from './callback';
 import {
-  hasExtendedAttribute, type AttributeMember, type OperationMember,
+  isCallbackFunctionValue, isCallbackInterfaceValue,
+} from './callback-value';
+import {
+  hasExtendedAttribute, reference, type AttributeMember,
+  type OperationMember, type WebIDLType,
 } from './declaration/definition';
 import type {
   AttributeSteps, ConstructorSteps, ImplementationConstructor,
@@ -13,10 +17,50 @@ import type {
 import type { ValuePair } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { missingArgument } from './overload';
+import { convertToIDL } from './conversion';
+import {
+  createPromise, createRejectedPromise, createResolvedPromise,
+  markPromiseAsHandled, reactToPromise, rejectPromise, resolvePromise,
+} from './promise';
+import { isPromiseValue } from './promise-value';
 
 export type InterfaceBindingContext = {
+  readonly callbacks: CallbackValueAdapter;
+  readonly conversions: ConversionAdapter;
   readonly objects: PlatformObjectAdapter;
+  readonly promises: PromiseValueAdapter;
   readonly realm: WebIDLRealmHost;
+};
+
+export type CallbackValueAdapter = {
+  createFunctionValue(name: string, object: object): unknown;
+  invokeFunction(
+    value: unknown,
+    argumentsList: readonly unknown[],
+    exceptionBehavior?: 'report' | 'rethrow',
+    thisArgument?: unknown,
+  ): unknown;
+};
+
+export type ConversionAdapter = {
+  toIDL(value: unknown, type: WebIDLType): unknown;
+};
+
+export type PromiseValueAdapter = {
+  create(type: WebIDLType): unknown;
+  createRejected(reason: unknown, type: WebIDLType): unknown;
+  createResolved(value: unknown, type: WebIDLType): unknown;
+  markHandled(value: unknown): void;
+  react(
+    value: unknown,
+    resultType: WebIDLType,
+    steps: {
+      fulfilled?(value: unknown): unknown;
+      rejected?(reason: unknown): unknown;
+    },
+  ): unknown;
+  reject(value: unknown, reason: unknown): void;
+  resolve(value: unknown, result: unknown): void;
 };
 
 export type PlatformObjectAdapter = {
@@ -259,7 +303,61 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
     if (!definition.binding) continue;
 
     const context: InterfaceBindingContext = {
+      callbacks: {
+        createFunctionValue(name, object) {
+          return convertToIDL(object, reference(name), binding);
+        },
+        invokeFunction(
+          value,
+          argumentsList,
+          exceptionBehavior,
+          thisArgument,
+        ) {
+          if (!isCallbackFunctionValue(value)) {
+            throw new TypeError('Expected a Web IDL callback function value');
+          }
+          return invokeCallbackFunction(
+            value,
+            argumentsList,
+            exceptionBehavior,
+            thisArgument,
+          );
+        },
+      },
+      conversions: {
+        toIDL(value, type) {
+          return convertToIDL(value, type, binding);
+        },
+      },
       objects,
+      promises: {
+        create(type) {
+          return createPromise(type, binding);
+        },
+        createRejected(reason, type) {
+          return createRejectedPromise(reason, type, binding);
+        },
+        createResolved(value, type) {
+          return createResolvedPromise(value, type, binding);
+        },
+        markHandled(value) {
+          markPromiseAsHandled(requirePromiseValue(value));
+        },
+        react(value, resultType, steps) {
+          return reactToPromise(
+            requirePromiseValue(value),
+            resultType,
+            steps,
+            binding,
+          );
+        },
+        reject(value, reason) {
+          rejectPromise(requirePromiseValue(value), reason);
+        },
+        resolve(value, result) {
+          resolvePromise(requirePromiseValue(value), result, binding);
+        },
+      },
       realm: binding.realm,
     };
     registerDefinedInterface(
@@ -270,6 +368,13 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
       context,
     );
   }
+}
+
+function requirePromiseValue(value: unknown) {
+  if (!isPromiseValue(value)) {
+    throw new TypeError('Expected a Web IDL promise value');
+  }
+  return value;
 }
 
 function registerDefinedInterface(

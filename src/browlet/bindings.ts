@@ -1,5 +1,6 @@
 import { domIDLDefinitions } from './dom/web-idl';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
+import { streamsIDLDefinitions } from '../streams';
 import { urlIDLDefinitions } from '../url/api';
 import {
   registerInterfaceBindings, type InterfaceBindingDomain,
@@ -81,6 +82,7 @@ const browletDefinitions = [
   ...browletIDLDefinitions,
   ...domIDLDefinitions,
   ...styleletIDLDefinitions,
+  ...streamsIDLDefinitions,
   ...urlIDLDefinitions,
 ] as const;
 

@@ -12,6 +12,7 @@
   "references": [
     { "path": "../web-idl/declaration" },
     { "path": "../web-idl" },
+    { "path": "../streams" },
     { "path": "../url" },
     { "path": "../stylelet" }
   ]
