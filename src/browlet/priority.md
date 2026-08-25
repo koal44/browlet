@@ -94,9 +94,10 @@ Primary roadmaps: [performance](performance/roadmap.md),
 1. **Complete:** Implement the shared monotonic clock, coarsening, time origins, and initial
    `Performance` surface (High Resolution Time §§2–8). Route Event timestamps,
    realm timing, and existing navigation timing fields through it.
-2. Implement the synchronous `AbortController`/`AbortSignal` core and replace
-   EventTarget's native-`AbortSignal` shortcut (DOM §3). Defer only
-   `AbortSignal.timeout()` and generic `onabort` handler compilation.
+2. **Complete:** Implement the synchronous `AbortController`/`AbortSignal`
+   core and replace EventTarget's native-`AbortSignal` shortcut (DOM §3).
+   The ordinary `onabort` IDL handler and `timeout()`'s HTML integration seams
+   are also present; defer only observable active-time task delivery.
 3. Make active/current session-history entry relationships and the derived
    active/fully-active Document predicates authoritative (HTML §§7.3–7.5).
    Connect initial Document visibility without adding a second activity flag.

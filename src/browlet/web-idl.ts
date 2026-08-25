@@ -15,6 +15,9 @@ import {
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
 } from './performance/performance';
+import {
+  eventHandlerIDL, eventHandlerNonNullIDL,
+} from './scripting/event-handlers';
 
 export const browletIDLDefinitions: Definition[] = [
   htmlDocumentIDL,
@@ -26,6 +29,8 @@ export const browletIDLDefinitions: Definition[] = [
   domHighResTimeStampIDL,
   epochTimeStampIDL,
   performanceIDL,
+  eventHandlerNonNullIDL,
+  eventHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,
   windowIDL,

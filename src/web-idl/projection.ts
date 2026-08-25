@@ -1,5 +1,6 @@
 import type { AssembledInterface } from './assembly';
 import type { JavaScriptBinding } from './binding';
+import type { DOMExceptionName } from '../shared/dom-exception';
 import { callUserObjectOperation } from './callback';
 import { invokeCallbackFunction } from './callback';
 import {
@@ -27,6 +28,7 @@ import { isPromiseValue } from './promise-value';
 export type InterfaceBindingContext = {
   readonly callbacks: CallbackValueAdapter;
   readonly conversions: ConversionAdapter;
+  readonly exceptions: ExceptionValueAdapter;
   readonly objects: PlatformObjectAdapter;
   readonly promises: PromiseValueAdapter;
   readonly realm: WebIDLRealmHost;
@@ -44,6 +46,13 @@ export type CallbackValueAdapter = {
 
 export type ConversionAdapter = {
   toIDL(value: unknown, type: WebIDLType): unknown;
+};
+
+export type ExceptionValueAdapter = {
+  createDOMException(
+    name: DOMExceptionName,
+    message?: string,
+  ): DOMException;
 };
 
 export type PromiseValueAdapter = {
@@ -327,6 +336,14 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
       conversions: {
         toIDL(value, type) {
           return convertToIDL(value, type, binding);
+        },
+      },
+      exceptions: {
+        createDOMException(name, message = '') {
+          const DOMException_ = binding.getInterfaceObject(
+            'DOMException',
+          ) as unknown as typeof DOMException;
+          return new DOMException_(message, name);
         },
       },
       objects,

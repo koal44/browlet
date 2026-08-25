@@ -7,7 +7,9 @@
 - `event-target.ts`: `EventTarget`, listener records, dispatching, and firing
   (DOM §§2.7 and 2.9–2.10), including shadow-tree retargeting, passive and
   once listeners, activation hooks, callback-realm invocation, and trusted
-  host-created events.
+  host-created events. Signal-bound listeners use Browlet `AbortSignal`
+  implementations and internal abort algorithms, which remove listeners
+  before the signal's public `abort` event.
 - `ui-event.ts`: the currently required UI Events specializations.
 
 The public Browlet tests already cover realm-specific constructors, trusted
@@ -32,18 +34,11 @@ not add a generic `listener-observation.ts` registry in advance.
 
 | Owner | Contract | Specification |
 | --- | --- | --- |
-| `dom/abort/` and existing `event-target.ts` | Bind `AddEventListenerOptions.signal` as `AbortSignal` and remove listeners with internal abort algorithms, which run before the signal's public `abort` event | DOM §§2.7 and 3.2 |
 | `browsing/window/` | Own the legacy Window `event` attribute and default-passive Window/Document/body targets | DOM §§2.3 and 2.7 |
 | concrete HTML elements | Supply activation, legacy pre-activation, and canceled-activation behavior only for the elements that define it | DOM §§2.7 and 2.9; HTML |
 | `scripting/` and Web IDL | Prepare/clean up callback execution and report listener exceptions in the callback's realm | DOM §2.9; HTML §8.1; Web IDL callbacks |
 | `performance/` | Record event-listener timing when the Event Timing and Long Animation Frames producers exist | DOM §2.9; Event Timing; Long Animation Frames |
 | workers/service workers | Apply the late-listener warning and legacy fetch-listener inspection at their specified globals | DOM §§2.7–2.8; Service Workers |
-
-The two abort tests that spy on native `AbortSignal.addEventListener()` encode
-the temporary mechanism, not the DOM contract. Replace them while implementing
-§3 with public behavior that proves an already-aborted signal suppresses
-registration, abort removes a live listener, and internal abort algorithms run
-before `abort` event listeners.
 
 The test which directly exercises activation virtuals is useful only as a
 temporary integration seam. Replace it with observable element activation
@@ -62,5 +57,5 @@ producers own any task that precedes the call into this machinery.
 
 ## Removal condition
 
-Burn this file when the AbortSignal shortcut is gone and each exercised host
-hook has an observable owner without weakening the public event contract.
+Burn this file when each remaining exercised host hook has an observable owner
+without weakening the public event contract.

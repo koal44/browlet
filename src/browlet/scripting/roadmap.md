@@ -77,7 +77,7 @@ timer path.
 | `module-script.ts` | JavaScript module scripts and module graph fetching | HTML §§8.1.4.1–8.1.5 |
 | `module-map.ts` | Module map and fetch coordination shared by settings objects and module host hooks | HTML §§8.1.3 and 8.1.6 |
 | `error-reporting.ts` | `ErrorEvent`, `PromiseRejectionEvent`, runtime error reporting, and rejected-promise notification | HTML §§8.1.4.6–8.1.4.7 |
-| `event-handlers.ts` | Event-handler records, IDL/content attributes, compilation, Window/element targeting, and the global handler mixins | HTML §8.1.8 |
+| existing `event-handlers.ts` | Extend the ordinary IDL-handler core with content-attribute compilation, Window/element targeting, special error/beforeunload processing, and the global handler mixins | HTML §8.1.8 |
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
 | `callback-context.ts` only if realm hooks outgrow environment.ts | Preparing/cleaning callback execution | HTML §8.1.4.4 and Web IDL callback integration |
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
