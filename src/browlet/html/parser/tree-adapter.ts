@@ -101,7 +101,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   detachNode(node: NodeImpl): void {
-    node.remove();
+    TreeNode.remove(node);
   }
 
   insertText(parentNode: NodeImpl, text: string): void {

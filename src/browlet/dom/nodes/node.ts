@@ -8,8 +8,8 @@ import {
   TreeNode, type TreeNodeVirtuals,
 } from '../infra/tree';
 import {
-  arg, defineDictionary, defineInterface, defineInterfaceMixin, dictMember,
-  emptyDictionary, idlType, nullable, op, readonlyAttr, reference,
+  arg, defineDictionary, defineInterface, dictMember, emptyDictionary,
+  idlType, nullable, op, readonlyAttr, reference,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import type { CommentImpl } from './comment';
@@ -17,87 +17,6 @@ import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';
 import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
-import { HTMLCollectionImpl } from './collections';
-
-/*
- * interface mixin ParentNode {
- *   [SameObject] readonly attribute HTMLCollection children;
- *   readonly attribute Element? firstElementChild;
- *   readonly attribute Element? lastElementChild;
- *   readonly attribute unsigned long childElementCount;
- *
- *   [CEReactions, Unscopable] undefined prepend((Node or DOMString)... nodes);
- *   [CEReactions, Unscopable] undefined append((Node or DOMString)... nodes);
- *   [CEReactions, Unscopable] undefined replaceChildren((Node or DOMString)... nodes);
- *
- *   [CEReactions] undefined moveBefore(Node node, Node? child);
- *
- *   Element? querySelector(DOMString selectors);
- *   [NewObject] NodeList querySelectorAll(DOMString selectors);
- * };
- * Document includes ParentNode;
- * DocumentFragment includes ParentNode;
- * Element includes ParentNode;
- */
-export const parentNodeIDL = defineInterfaceMixin({
-  members: [
-    readonlyAttr('children', idlType.object),
-    readonlyAttr('firstElementChild', nullable(reference('Element'))),
-    readonlyAttr('lastElementChild', nullable(reference('Element'))),
-    readonlyAttr('childElementCount', idlType.unsignedLong),
-  ],
-  name: 'ParentNode',
-});
-
-/*
- * interface mixin DocumentOrShadowRoot {
- *   readonly attribute CustomElementRegistry? customElementRegistry;
- * };
- * Document includes DocumentOrShadowRoot;
- * ShadowRoot includes DocumentOrShadowRoot;
- */
-export const documentOrShadowRootIDL = defineInterfaceMixin({
-  members: [readonlyAttr(
-    'customElementRegistry',
-    nullable(reference('CustomElementRegistry')),
-  )],
-  name: 'DocumentOrShadowRoot',
-});
-
-/*
- * interface mixin ChildNode {
- *   [CEReactions, Unscopable] undefined before((Node or DOMString)... nodes);
- *   [CEReactions, Unscopable] undefined after((Node or DOMString)... nodes);
- *   [CEReactions, Unscopable] undefined replaceWith((Node or DOMString)... nodes);
- *   [CEReactions, Unscopable] undefined remove();
- * };
- * DocumentType includes ChildNode;
- * Element includes ChildNode;
- * CharacterData includes ChildNode;
- */
-export const childNodeIDL = defineInterfaceMixin({
-  members: [op('remove', idlType.undefined)],
-  name: 'ChildNode',
-});
-
-/*
- * interface mixin NonDocumentTypeChildNode {
- *   readonly attribute Element? previousElementSibling;
- *   readonly attribute Element? nextElementSibling;
- * };
- * Element includes NonDocumentTypeChildNode;
- * CharacterData includes NonDocumentTypeChildNode;
- */
-export const nonDocumentTypeChildNodeIDL = defineInterfaceMixin({
-  members: [
-    readonlyAttr(
-      'previousElementSibling',
-      nullable(reference('Element')),
-    ),
-    readonlyAttr('nextElementSibling', nullable(reference('Element'))),
-  ],
-  name: 'NonDocumentTypeChildNode',
-});
 
 /*
  * [Exposed=Window]
@@ -209,66 +128,6 @@ export abstract class NodeImpl
   get parentElement(): ElementImpl | null {
     const parent = super.parent;
     return isElement(parent) ? parent : null;
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (isElement(child)) return child;
-    }
-
-    return null;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    for (let child = this.lastChild; child; child = child.previousSibling) {
-      if (isElement(child)) return child;
-    }
-
-    return null;
-  }
-
-  get previousElementSibling(): ElementImpl | null {
-    for (
-      let sibling = this.previousSibling;
-      sibling;
-      sibling = sibling.previousSibling
-    ) {
-      if (isElement(sibling)) return sibling;
-    }
-
-    return null;
-  }
-
-  get nextElementSibling(): ElementImpl | null {
-    for (
-      let sibling = this.nextSibling;
-      sibling;
-      sibling = sibling.nextSibling
-    ) {
-      if (isElement(sibling)) return sibling;
-    }
-
-    return null;
-  }
-
-  get childElementCount(): number {
-    let count = 0;
-
-    for (let child = this.firstElementChild; child; child = child.nextElementSibling) {
-      count++;
-    }
-
-    return count;
-  }
-
-  get children(): HTMLCollectionOf<Element> {
-    const children = new HTMLCollectionImpl();
-
-    for (let child = this.firstElementChild; child; child = child.nextElementSibling) {
-      children.push(child);
-    }
-
-    return children;
   }
 
   get isConnected(): boolean {

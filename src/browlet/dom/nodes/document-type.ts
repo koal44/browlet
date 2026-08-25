@@ -3,7 +3,8 @@ import {
   defineIncludes, defineInterface, idlType, readonlyAttr,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
-import { childNodeIDL, NodeImpl, NodeType } from './node';
+import { NodeImpl, NodeType } from './node';
+import { ChildNodeMixin, childNodeIDL } from './child-node';
 import type { DocumentImpl } from './document';
 
 /*
@@ -18,6 +19,7 @@ export class DocumentTypeImpl
   extends withDocumentTypeStub(NodeImpl)
   implements DocumentType
 {
+  readonly #childNodeMixin = new ChildNodeMixin(this);
   #name: string;
   #publicId: string;
   #systemId: string;
@@ -44,6 +46,10 @@ export class DocumentTypeImpl
 
   get systemId(): string {
     return this.#systemId;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
   }
 
   // -- Friends ----------------------------------------------------------

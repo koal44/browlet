@@ -11,6 +11,9 @@ import {
 } from './document-fragment';
 import type { ElementImpl } from './element';
 import { NodeImpl } from './node';
+import {
+  DocumentOrShadowRootMixin, documentOrShadowRootIDL,
+} from './document-or-shadow-root';
 
 /*
  * enum ShadowRootMode { "open", "closed" };
@@ -45,6 +48,7 @@ export class ShadowRootImpl
   extends withShadowRootStub(DocumentFragmentImpl)
   implements ShadowRoot
 {
+  readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   readonly #mode: ShadowRootMode;
 
   constructor(host: ElementImpl, mode: ShadowRootMode) {
@@ -57,6 +61,12 @@ export class ShadowRootImpl
       ShadowRootImpl.#eventTargetVirtuals,
     );
     this.#mode = mode;
+    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
+      getCustomElementRegistry: () => null,
+      getStyleScope() {
+        throw new Error('Shadow-root style scopes are not implemented');
+      },
+    });
   }
 
   get mode(): ShadowRootMode {
@@ -84,19 +94,19 @@ export class ShadowRootImpl
   }
 
   get customElementRegistry(): CustomElementRegistry | null {
-    return null;
+    return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
-  get styleSheets(): never {
-    throw new Error('Shadow-root style scopes are not implemented');
+  get styleSheets(): StyleSheetList {
+    return this.#documentOrShadowRootMixin.styleSheets;
   }
 
-  get adoptedStyleSheets(): never {
-    throw new Error('Shadow-root style scopes are not implemented');
+  get adoptedStyleSheets(): CSSStyleSheet[] {
+    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
-  set adoptedStyleSheets(_styleSheets: CSSStyleSheet[]) {
-    throw new Error('Shadow-root style scopes are not implemented');
+  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
+    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
   // -- Virtual ----------------------------------------------------------
@@ -172,5 +182,5 @@ export const shadowRootIDL = defineInterface({
 
 export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({
   interface: 'ShadowRoot',
-  mixin: 'DocumentOrShadowRoot',
+  mixin: documentOrShadowRootIDL.name,
 });

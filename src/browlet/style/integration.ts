@@ -4,22 +4,6 @@ import { CSSStyleDeclarationImpl } from '../../stylelet/cssom/declaration';
 import type { CSSStyleSheetImpl } from '../../stylelet/cssom/css-stylesheet';
 import type { TreeScope } from '../../stylelet/engine/tree-scope';
 
-export class DocumentOrShadowRootMixin {
-  constructor(readonly scope: TreeScope) {}
-
-  get styleSheets(): StyleSheetList {
-    return this.scope.styleSheets;
-  }
-
-  get adoptedStyleSheets(): CSSStyleSheet[] {
-    return this.scope.adoptedStyleSheets;
-  }
-
-  set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
-    this.scope.setAdoptedStyleSheets(styleSheets);
-  }
-}
-
 export class ElementCSSInlineStyleMixin {
   readonly style: CSSStyleDeclarationImpl;
 

@@ -22,7 +22,7 @@ export class TextImpl
   extends withTextStub(CharacterDataImpl)
   implements Text
 {
-  readonly #slottable = new SlottableMixin();
+  readonly #slottableMixin = new SlottableMixin();
 
   constructor(data = '', ownerDocument: DocumentImpl | null = null) {
     super(NodeType.Text, data, ownerDocument, TextImpl.#nodeOptions);
@@ -44,18 +44,18 @@ export class TextImpl
   // -- Friends ----------------------------------------------------------
 
   static setAssignedSlot(text: TextImpl, slot: ElementImpl | null): void {
-    text.#slottable.setAssignedSlot(slot);
+    text.#slottableMixin.setAssignedSlot(slot);
   }
 
   static getAssignedSlot(text: TextImpl): ElementImpl | null {
-    return text.#slottable.assignedSlot;
+    return text.#slottableMixin.assignedSlot;
   }
 
   static getEventParent(
     text: TextImpl,
     _event: Event,
   ): NodeImpl | null {
-    return text.#slottable.assignedSlot ?? NodeImpl.getParentNode(text);
+    return text.#slottableMixin.assignedSlot ?? NodeImpl.getParentNode(text);
   }
 }
 

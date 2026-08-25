@@ -1,8 +1,6 @@
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
 import { Stylelet } from '../../../stylelet/stylelet';
-import {
-  DocumentOrShadowRootMixin, type TreeScopeResolver,
-} from '../../style/integration';
+import type { TreeScopeResolver } from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
@@ -42,9 +40,12 @@ import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../shared/namespaces';
 import {
-  documentOrShadowRootIDL, isDocument, isDocumentType, isElement,
-  NodeImpl, type NodeVirtuals, NodeType, parentNodeIDL,
+  isDocument, isDocumentType, isElement, NodeImpl, type NodeVirtuals, NodeType,
 } from './node';
+import {
+  DocumentOrShadowRootMixin, documentOrShadowRootIDL,
+} from './document-or-shadow-root';
+import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { TextImpl } from './text';
 import {
   findElementById, findElementsByClassName, findElementsByTagName,
@@ -148,7 +149,8 @@ export class DocumentImpl
   #readyForPostLoadTasks = false;
   #referrer = '';
   #stylelet: Stylelet | undefined;
-  #documentOrShadowRoot: DocumentOrShadowRootMixin | undefined;
+  readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  readonly #parentNodeMixin: ParentNodeMixin;
   #browsingContextWindow: EventTargetImpl | null = null;
   readonly #treeScopeResolver: TreeScopeResolver;
 
@@ -173,6 +175,11 @@ export class DocumentImpl
     NodeImpl.setNodeDocument(this, this);
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
+    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
+      getCustomElementRegistry: () => this.#customElementRegistry,
+      getStyleScope: () => DocumentImpl.getCSSEngine(this).documentScope,
+    });
+    this.#parentNodeMixin = new ParentNodeMixin(this);
   }
 
   get URL(): string {
@@ -225,7 +232,7 @@ export class DocumentImpl
   }
 
   get customElementRegistry(): CustomElementRegistry | null {
-    return this.#customElementRegistry;
+    return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
   get doctype(): DocumentTypeImpl | null {
@@ -277,16 +284,31 @@ export class DocumentImpl
   }
 
   get styleSheets(): StyleSheetList {
-    return DocumentImpl.#getDocumentOrShadowRootMixin(this).styleSheets;
+    return this.#documentOrShadowRootMixin.styleSheets;
   }
 
   get adoptedStyleSheets(): CSSStyleSheet[] {
-    return DocumentImpl.#getDocumentOrShadowRootMixin(this).adoptedStyleSheets;
+    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
   set adoptedStyleSheets(styleSheets: CSSStyleSheet[]) {
-    DocumentImpl.#getDocumentOrShadowRootMixin(this).adoptedStyleSheets =
-      styleSheets;
+    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
+  }
+
+  get children(): HTMLCollectionOf<Element> {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
   }
 
   createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K];
@@ -773,17 +795,6 @@ export class DocumentImpl
     while (document.#scriptBlockingStyleSheets.size > 0) {
       await document.#scriptBlockingStyleSheetsReady;
     }
-  }
-
-  // -- Private ----------------------------------------------------------
-
-  static #getDocumentOrShadowRootMixin(
-    document: DocumentImpl,
-  ): DocumentOrShadowRootMixin {
-    return document.#documentOrShadowRoot ??=
-      new DocumentOrShadowRootMixin(
-        DocumentImpl.getCSSEngine(document).documentScope,
-      );
   }
 
 }

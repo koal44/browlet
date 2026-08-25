@@ -5,9 +5,12 @@ import {
 import { bind } from '../../../web-idl/index';
 import { TreeNode } from '../infra/tree';
 import {
-  childNodeIDL, NodeImpl, type NodeOptions, type NodeType,
-  nonDocumentTypeChildNodeIDL,
+  NodeImpl, type NodeOptions, type NodeType,
 } from './node';
+import { ChildNodeMixin, childNodeIDL } from './child-node';
+import {
+  NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL,
+} from './non-document-type-child-node';
 import type { DocumentImpl } from './document';
 
 /*
@@ -26,7 +29,10 @@ export class CharacterDataImpl
   extends withCharacterDataStub(NodeImpl)
   implements CharacterData
 {
+  readonly #childNodeMixin = new ChildNodeMixin(this);
   #data: string;
+  readonly #nonDocumentTypeChildNodeMixin =
+    new NonDocumentTypeChildNodeMixin(this);
 
   constructor(
     nodeType: NodeType,
@@ -45,6 +51,18 @@ export class CharacterDataImpl
   set data(value: string) {
     this.#data = value;
     TreeNode.notifyParentChildrenChanged(this);
+  }
+
+  get previousElementSibling(): Element | null {
+    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
+  }
+
+  get nextElementSibling(): Element | null {
+    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
   }
 }
 
