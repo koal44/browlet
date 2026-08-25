@@ -22,6 +22,9 @@ import {
 } from '../../../../src/browlet/browsing/navigation/session-history';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import {
+  Moment, monotonicClock,
+} from '../../../../src/browlet/performance/clock';
+import {
   getWindowProxyWindow, setWindowProxyWindow,
   type WindowProxy as InternalWindowProxy,
 } from '../../../../src/browlet/browsing/window/window-proxy';
@@ -205,7 +208,8 @@ describe('navigables', () => {
     expect(serializeURL(settings.creationURL)).toBe('about:blank');
     expect(serializeURL(settings.topLevelCreationURL!)).toBe('about:blank');
     expect(settings.topLevelOrigin).toBe(DocumentImpl.getOrigin(document));
-    expect(settings.timeOrigin)
+    expect(settings.timeOrigin.clock).toBe(monotonicClock);
+    expect(settings.timeOrigin.milliseconds)
       .toBe(DocumentImpl.getLoadTimingInfo(document).navigationStartTime);
 
     const initialEntry = traversable.activeSessionHistoryEntry;
@@ -261,7 +265,8 @@ describe('environment settings objects', () => {
     expect(settings.moduleMap).toBe(DocumentImpl.getModuleMap(document));
     expect(settings.policyContainer)
       .toBe(DocumentImpl.getPolicyContainer(document));
-    expect(settings.timeOrigin).toBe(0);
+    expect(settings.timeOrigin.clock).toBe(monotonicClock);
+    expect(settings.timeOrigin.milliseconds).toBe(0);
     expect(serializeURL(settings.apiBaseURL)).toBe('https://example.test/');
     expect(settings.crossOriginIsolatedCapability).toBe(false);
     expect(() => settings.hasCrossSiteAncestor)
@@ -359,8 +364,8 @@ class TestEnvironmentSettingsObject extends EnvironmentSettingsObject {
     return this.#policyContainer;
   }
 
-  get timeOrigin(): DOMHighResTimeStamp {
-    return 0;
+  get timeOrigin(): Moment {
+    return new Moment(monotonicClock, 0);
   }
 }
 

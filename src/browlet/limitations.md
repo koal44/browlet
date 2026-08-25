@@ -66,8 +66,3 @@ and storage-shed cloning. The initial `CustomElementRegistry` preserves the
 specified actor and identity, but its Web IDL projection and upgrade behavior
 enter with HTML custom elements. The WebDriver BiDi notification is likewise
 deferred until Browlet exposes that integration.
-
-Initial navigation timing currently uses Node's monotonic `performance.now()`
-without High Resolution Time's implementation-defined coarsening and jitter.
-The coarsening boundary is explicit in browsing-context creation so the clock
-backend can replace that identity operation later.

@@ -11,12 +11,13 @@ import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
   type HostDefinedInterface,
 } from './conversion';
-import type {
-  AttributeMember, CallbackInterfaceDefinition, ConstantMember,
-  ConstructorMember, Exposure, ExtendedAttribute,
-  NamedArgumentsExtendedAttribute,
-  OperationMember, StringifierMember, WebIDLType,
-} from './declaration/index';
+import {
+  hasExtendedAttribute, type AttributeMember,
+  type CallbackInterfaceDefinition, type ConstantMember,
+  type ConstructorMember, type Exposure, type ExtendedAttribute,
+  type NamedArgumentsExtendedAttribute, type OperationMember,
+  type StringifierMember, type WebIDLType,
+} from './declaration/definition';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
 import {
   ImplementationRegistry, type ImplementationConstructor,
@@ -134,7 +135,10 @@ export class JavaScriptBinding {
       this.getInterfacePrototypeObject(interface_);
       this.#initializeMemberObjects(interface_);
       if (
-        !hasExtendedAttribute(definition, 'LegacyNoInterfaceObject') &&
+        !hasExtendedAttribute(
+          definition.extendedAttributes,
+          'LegacyNoInterfaceObject',
+        ) &&
         getIdentifierAttribute(definition, 'LegacyNamespace') === undefined
       ) {
         const object = this.getInterfaceObject(interface_);
@@ -437,7 +441,7 @@ export class JavaScriptBinding {
     this.#defineConstants(prototype, assembled);
 
     if (!hasExtendedAttribute(
-      assembled.definition,
+      assembled.definition.extendedAttributes,
       'LegacyNoInterfaceObject',
     )) {
       defineProperty(prototype, 'constructor', {
@@ -797,7 +801,7 @@ export class JavaScriptBinding {
     const entry = this.#getStringifierEntry(interface_);
     if (!entry) return;
     const unforgeable = hasExtendedAttribute(
-      entry.member,
+      entry.member.extendedAttributes,
       'LegacyUnforgeable',
     );
     if ((placement === 'unforgeable') !== unforgeable) return;
@@ -994,7 +998,10 @@ export class JavaScriptBinding {
               interface_,
               attribute.name,
               'getter',
-              hasExtendedAttribute(attribute, 'LegacyLenientThis'),
+              hasExtendedAttribute(
+                attribute.extendedAttributes,
+                'LegacyLenientThis',
+              ),
             )
             : null;
           if (object === invalidReceiver) return undefined;
@@ -1041,10 +1048,13 @@ export class JavaScriptBinding {
     if (definition.definition.kind === 'namespace') return;
     const interface_ = getMemberInterface(definition);
     if (!interface_) throw new Error('Namespace attribute unexpectedly had a setter');
-    const replaceable = hasExtendedAttribute(attribute, 'Replaceable');
+    const replaceable = hasExtendedAttribute(
+      attribute.extendedAttributes,
+      'Replaceable',
+    );
     const putForwards = getIdentifierAttribute(attribute, 'PutForwards');
     const lenientSetter = hasExtendedAttribute(
-      attribute,
+      attribute.extendedAttributes,
       'LegacyLenientSetter',
     );
     if (attribute.readonly && !replaceable && !putForwards && !lenientSetter) {
@@ -1065,7 +1075,10 @@ export class JavaScriptBinding {
             interface_,
             attribute.name,
             'setter',
-            hasExtendedAttribute(attribute, 'LegacyLenientThis'),
+            hasExtendedAttribute(
+              attribute.extendedAttributes,
+              'LegacyLenientThis',
+            ),
           );
 
         if (replaceable) {
@@ -1175,7 +1188,10 @@ export class JavaScriptBinding {
           const steps = this.implementations.getOperationSteps(
             overload.callable,
           );
-          if (hasExtendedAttribute(overload.callable, 'Default')) {
+          if (hasExtendedAttribute(
+            overload.callable.extendedAttributes,
+            'Default',
+          )) {
             if (!object || !interface_) {
               throw new Error('Default operation used as a static operation');
             }
@@ -1222,7 +1238,7 @@ export class JavaScriptBinding {
       const hasDefaultToJSON = ancestor.members.some(({ member }) =>
         member.kind === 'operation' &&
         member.name === 'toJSON' &&
-        hasExtendedAttribute(member, 'Default'));
+        hasExtendedAttribute(member.extendedAttributes, 'Default'));
       if (!hasDefaultToJSON) continue;
 
       for (const entry of ancestor.members) {
@@ -1383,7 +1399,7 @@ export class JavaScriptBinding {
       if (
         (member.kind !== 'attribute' && member.kind !== 'operation') ||
         member.static || !member.name ||
-        !hasExtendedAttribute(member, 'Unscopable') ||
+        !hasExtendedAttribute(member.extendedAttributes, 'Unscopable') ||
         !this.#isMemberExposed(interface_, entry)
       ) continue;
       names.add(member.name);
@@ -1496,11 +1512,14 @@ export class JavaScriptBinding {
         : exposure.some((name) => this.realm.globalNames.has(name)))
     ) return false;
     if (
-      hasExtendedAttribute(construct, 'CrossOriginIsolated') &&
+      hasExtendedAttribute(
+        construct.extendedAttributes,
+        'CrossOriginIsolated',
+      ) &&
       !this.realm.crossOriginIsolated
     ) return false;
     if (
-      hasExtendedAttribute(construct, 'SecureContext') &&
+      hasExtendedAttribute(construct.extendedAttributes, 'SecureContext') &&
       !this.realm.secureContext
     ) return false;
     return true;
@@ -1647,7 +1666,10 @@ function belongsAt(
 ): boolean {
   if (placement === 'static') return member.static === true;
   if (member.static) return false;
-  const unforgeable = hasExtendedAttribute(member, 'LegacyUnforgeable');
+  const unforgeable = hasExtendedAttribute(
+    member.extendedAttributes,
+    'LegacyUnforgeable',
+  );
   return placement === 'unforgeable' ? unforgeable : !unforgeable;
 }
 
@@ -1691,18 +1713,12 @@ function getMemberInterface(
     : undefined;
 }
 
-function hasExtendedAttribute(
-  construct: { extendedAttributes?: ExtendedAttribute[]; },
-  name: string,
-): boolean {
-  return construct.extendedAttributes?.some(
-    (attribute) => attribute.kind !== 'raw' && attribute.name === name,
-  ) ?? false;
-}
-
 function isGlobalInterface(interface_: AssembledInterface): boolean {
   return [interface_.definition, ...interface_.partials].some(
-    (definition) => hasExtendedAttribute(definition, 'Global'),
+    (definition) => hasExtendedAttribute(
+      definition.extendedAttributes,
+      'Global',
+    ),
   );
 }
 

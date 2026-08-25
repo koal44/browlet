@@ -4,11 +4,13 @@ import {
 } from '../../dom/events/event-target';
 import { asDocument, withWindowStub } from '../../stubs';
 import {
-  arg, defineInterface, definePartialInterface, idlType, op, readonlyAttr,
-  reference, union, xattr,
+  arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
+  readonlyAttr, reference, union, xattr,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { LocationImpl } from './location';
+import { PerformanceImpl } from '../../performance/performance';
+import { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
 
 /*
  * [Global=Window,
@@ -81,6 +83,7 @@ export class WindowImpl
   #document: DocumentImpl | null = null;
   #currentEvent: Event | undefined;
   readonly #location: LocationImpl;
+  #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
   readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
   #nextTimer = 1;
 
@@ -99,6 +102,10 @@ export class WindowImpl
 
   set location(_href: string) {
     throw new Error('Browlet navigation is not implemented');
+  }
+
+  get performance(): Performance {
+    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).performance;
   }
 
   /** @deprecated */
@@ -170,6 +177,27 @@ export class WindowImpl
     return window.#location;
   }
 
+  static getWindowOrWorkerGlobalScopeMixin(
+    window: WindowImpl,
+  ): WindowOrWorkerGlobalScopeMixin {
+    // HTML creates the Window with its realm, then immediately sets up its
+    // environment settings object before projecting or exposing the Window.
+    if (window.#globalScopeMixin === null) {
+      throw new Error('Window global-scope mixin is not initialized');
+    }
+    return window.#globalScopeMixin;
+  }
+
+  static setWindowOrWorkerGlobalScopeMixin(
+    window: WindowImpl,
+    mixin: WindowOrWorkerGlobalScopeMixin,
+  ): void {
+    if (window.#globalScopeMixin !== null) {
+      throw new Error('Window global-scope mixin is already initialized');
+    }
+    window.#globalScopeMixin = mixin;
+  }
+
   static getNamedProperty(
     window: WindowImpl,
     name: string,
@@ -223,9 +251,19 @@ export class WindowImpl
 export const windowIDL = defineInterface({
   binding: bind(WindowImpl, {
     initialize(context, value) {
+      const window = value as WindowImpl;
+      const globalScopeMixin = WindowImpl.getWindowOrWorkerGlobalScopeMixin(
+        window,
+      );
       context.objects.project(
         LocationImpl,
-        WindowImpl.getLocationImplementation(value as WindowImpl),
+        WindowImpl.getLocationImplementation(window),
+      );
+      context.objects.project(
+        PerformanceImpl,
+        WindowOrWorkerGlobalScopeMixin.getPerformanceImplementation(
+          globalScopeMixin,
+        ),
       );
     },
   }),
@@ -275,7 +313,16 @@ export const windowEventIDL = definePartialInterface({
   name: 'Window',
 });
 
+/*
+ * Window includes WindowOrWorkerGlobalScope;
+ */
+export const windowIncludesWindowOrWorkerGlobalScopeIDL = defineIncludes({
+  interface: windowIDL.name,
+  mixin: 'WindowOrWorkerGlobalScope',
+});
+
 // -- Virtual ------------------------------------------------------------
+
 const windowEventTargetVirtuals: EventTargetVirtuals = {
   isDefaultPassiveTarget: () => true,
   isWindow: () => true,

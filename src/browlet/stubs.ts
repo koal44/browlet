@@ -36,6 +36,7 @@ export const withHTMLUnknownElementStub = stub<HTMLUnknownElement>();
 export const withSVGElementStub = stub<SVGElement>();
 export const withSVGStyleElementStub = stub<SVGStyleElement>();
 export const withMathMLElementStub = stub<MathMLElement>();
+export const withPerformanceStub = stub<Performance>();
 export const withWindowStub = stub<Window>();
 
 // TypeScript's lib.dom.d.ts declares Document.documentElement, head, and body

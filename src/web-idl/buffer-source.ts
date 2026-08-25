@@ -1,6 +1,7 @@
-import type {
-  BufferTypeName, BufferViewTypeName, ExtendedAttribute,
-} from './declaration/index';
+import {
+  hasExtendedAttribute, type BufferTypeName, type BufferViewTypeName,
+  type ExtendedAttribute,
+} from './declaration/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export function convertBufferSourceToIDL(
@@ -320,14 +321,6 @@ function hasInternalSlot(
   } catch {
     return false;
   }
-}
-
-function hasExtendedAttribute(
-  attributes: ExtendedAttribute[],
-  name: string,
-): boolean {
-  return attributes.some((attribute) =>
-    attribute.kind !== 'raw' && attribute.name === name);
 }
 
 function throwTypeError(

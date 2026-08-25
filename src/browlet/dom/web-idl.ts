@@ -4,8 +4,7 @@ import {
   eventTargetIDL,
 } from './events/event-target';
 import {
-  customEventIDL, customEventInitIDL, domHighResTimeStampIDL, eventIDL,
-  eventInitIDL,
+  customEventIDL, customEventInitIDL, eventIDL, eventInitIDL,
 } from './events/event';
 import {
   characterDataIDL, characterDataIncludesChildNodeIDL,
@@ -38,7 +37,6 @@ import {
 import { textIDL } from './nodes/text';
 
 export const domIDLDefinitions: Definition[] = [
-  domHighResTimeStampIDL,
   eventIDL,
   eventInitIDL,
   customEventIDL,

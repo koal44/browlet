@@ -2,7 +2,9 @@ import type { AssembledInterface } from './assembly';
 import type { JavaScriptBinding } from './binding';
 import { callUserObjectOperation } from './callback';
 import { isCallbackInterfaceValue } from './callback-value';
-import type { AttributeMember, OperationMember } from './declaration/definition';
+import {
+  hasExtendedAttribute, type AttributeMember, type OperationMember,
+} from './declaration/definition';
 import type {
   AttributeSteps, ConstructorSteps, ImplementationConstructor,
   ImplementationRegistry, OperationSteps, StringificationBehavior,
@@ -321,6 +323,7 @@ function registerDefinedInterface(
         }
         break;
       case 'operation':
+        if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
         if (member.binding) {
           registry.setOperationSteps(
             member,
@@ -345,12 +348,13 @@ function registerDefinedInterface(
             });
           }
         } else {
-          if (!implementation) {
+          if (!implementation || member.name === undefined) {
             throw missingMemberBinding(interface_, member);
           }
           registerOperation(
             registry,
             member,
+            member.name,
             member.static ? implementation : implementation.prototype,
             context,
             javaScriptBinding,
@@ -597,14 +601,15 @@ function registerAttribute(
 function registerOperation(
   registry: ImplementationRegistry,
   member: OperationMember,
+  name: string,
   target: object,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): void {
-  const value: unknown = findDescriptor(target, member.name ?? '')?.value;
+  const value: unknown = findDescriptor(target, name)?.value;
   if (typeof value !== 'function') {
     throw new TypeError(
-      `Web IDL operation ${member.name ?? ''} has no implementation`,
+      `Web IDL operation ${name} has no implementation`,
     );
   }
   const method = value as OperationSteps;

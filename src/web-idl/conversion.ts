@@ -14,10 +14,11 @@ import {
   convertBufferSourceToIDL, convertBufferSourceToJavaScript,
   getBufferTypeName,
 } from './buffer-source';
-import type {
-  AnnotatedType, BufferTypeName, DefaultValue, ExtendedAttribute,
-  SimpleTypeName, WebIDLType,
-} from './declaration/index';
+import {
+  hasExtendedAttribute, type AnnotatedType, type BufferTypeName,
+  type DefaultValue, type ExtendedAttribute, type SimpleTypeName,
+  type WebIDLType,
+} from './declaration/definition';
 import type { WebIDLRealmHost } from './javascript-realm';
 import type { PlatformObjectRegistry } from './platform-object';
 import {
@@ -1154,14 +1155,6 @@ function isObjectType(type: RuntimeType): boolean {
 
 function isSimpleType(type: RuntimeType, name: SimpleTypeName): boolean {
   return type.type.kind === 'simple' && type.type.name === name;
-}
-
-function hasExtendedAttribute(
-  attributes: ExtendedAttribute[],
-  name: string,
-): boolean {
-  return attributes.some((attribute) =>
-    attribute.kind !== 'raw' && attribute.name === name);
 }
 
 function isNullableLegacyCallback(

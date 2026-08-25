@@ -20,6 +20,9 @@ import {
   type SessionHistoryEntry,
 } from './session-history';
 import { WindowImpl } from '../window/window';
+import {
+  coarsenedSharedCurrentTime,
+} from '../../performance/high-resolution-time';
 
 /*
  * HTML's navigation params struct. Browlet's local route supplies a response
@@ -80,6 +83,14 @@ export function createNavigationParams(
   if (browsingContext === null) {
     throw new Error('Navigation requires an active browsing context');
   }
+  const activeWindow = browsingContext.activeWindow;
+  if (activeWindow === null) {
+    throw new Error('Navigation requires an active Window');
+  }
+  const settings = getRelevantRealm(activeWindow).hostDefined;
+  if (settings === null) {
+    throw new Error('Navigation Window has no environment settings object');
+  }
 
   return {
     id: null,
@@ -89,9 +100,11 @@ export function createNavigationParams(
       url,
       body,
       headers: new Map(),
-      // TODO(High Resolution Time): Use the shared monotonic clock and its
-      // coarsening rules when that specification supplies Browlet's clock.
-      timingInfo: { startTime: performance.now() },
+      timingInfo: {
+        startTime: coarsenedSharedCurrentTime(
+          settings.crossOriginIsolatedCapability,
+        ).milliseconds,
+      },
       hasCrossOriginRedirects: false,
     },
     fetchController: null,

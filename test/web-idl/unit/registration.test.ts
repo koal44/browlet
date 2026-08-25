@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import {
-  bind, defineInterface, registerInterfaceBindings,
+  arg, bind, defineInterface, idlType, op, readonlyAttr,
+  registerInterfaceBindings, xattr,
 } from '../../../src/web-idl/index';
 
 describe('Web IDL interface registration', () => {
@@ -41,13 +42,59 @@ describe('Web IDL interface registration', () => {
     expect(second.getPlatformObject(implementation)).toBeUndefined();
     expect(second.getRealm(object)).toBeUndefined();
   });
+
+  it('projects default operations without implementation methods', () => {
+    const interfaces = registerInterfaceBindings([jsonIDL]);
+    const realm = new Realm();
+    const registration = interfaces.register(realm);
+    const implementation = registration.objects.create(JsonImpl);
+    const object = interfaces.getPlatformObject(implementation);
+    if (!object) throw new Error('JSONExample was not projected');
+    const toJSON = Reflect.get(object, 'toJSON') as CallableFunction;
+
+    expect(Reflect.apply(toJSON, object, [])).toEqual({ value: 12 });
+  });
+
+  it('requires explicit bindings for unnamed operations', () => {
+    const interfaces = registerInterfaceBindings([unnamedOperationIDL]);
+
+    expect(() => interfaces.register(new Realm())).toThrow(
+      'Web IDL UnnamedOperationExample.operation has no binding',
+    );
+  });
 });
 
 class ExampleImpl {}
+
+class JsonImpl {
+  get value(): number { return 12; }
+}
 
 const exampleIDL = defineInterface({
   binding: bind(ExampleImpl),
   exposed: '*',
   members: [],
   name: 'Example',
+});
+
+const jsonIDL = defineInterface({
+  binding: bind(JsonImpl),
+  exposed: '*',
+  members: [
+    readonlyAttr('value', idlType.long),
+    op('toJSON', idlType.object, [], xattr('Default')),
+  ],
+  name: 'JSONExample',
+});
+
+const unnamedOperationIDL = defineInterface({
+  binding: bind(ExampleImpl),
+  exposed: '*',
+  members: [op(
+    undefined,
+    idlType.object,
+    [arg('name', idlType.DOMString)],
+    { special: 'getter' },
+  )],
+  name: 'UnnamedOperationExample',
 });

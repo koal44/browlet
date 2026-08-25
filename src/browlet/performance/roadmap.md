@@ -1,16 +1,30 @@
 # Performance and timing roadmap
 
 High Resolution Time is an early browser foundation rather than a late
-observability feature. Browlet already carries time origins and
-`DOMHighResTimeStamp` values through realms, events, navigation, and Document
-loading; this directory should replace those scattered clock decisions with
-one realm-aware timing contract.
+observability feature.
+
+## Present
+
+- `clock.ts` owns the wall and monotonic clocks, unsafe and coarsened moments,
+  clock-neutral durations, and their arithmetic (High Resolution Time §3).
+- `high-resolution-time.ts` owns isolation-sensitive coarsening, the estimated
+  monotonic Unix epoch, relative and shared time, and environment-settings
+  time origins (High Resolution Time §§4–6).
+- `performance.ts` owns the `DOMHighResTimeStamp` and `EpochTimeStamp`
+  declarations, `Performance`, and the `WindowOrWorkerGlobalScope`
+  `performance` contribution (High Resolution Time §§5–8).
+- Realm-created Events, navigation timing records, and Document load timing
+  use this shared clock and the relevant Window's time origin. Each new Window
+  realm gets one stable, replaceable `Performance` platform object.
+
+Worker exposure is already declared. It becomes observable when Browlet gains
+`WorkerGlobalScope`; no second clock or Worker-specific `Performance`
+implementation should be introduced then.
+
+## Missing timing families
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `clock.ts` | Shared monotonic clock, coarsening, isolation-sensitive resolution, and host clock capability | High Resolution Time §§2–3 and §9 |
-| `time-origin.ts` | Time-origin timestamps, timestamp types, unsafe shared current time, relative time, and duration conversion | High Resolution Time §§3–6 |
-| `performance.ts` | `Performance`, `now()`, `timeOrigin`, `toJSON()`, and the global `performance` attribute | High Resolution Time §§7–8 |
 | `timeline.ts` | `PerformanceEntry`, buffers, observers, and entry delivery | Performance Timeline |
 | `navigation.ts` | Document navigation and unload timing entries sourced from lifecycle records | Navigation Timing and HTML §3.1.5 |
 | `resource.ts` | Fetch/loader timing info and resource entries | Resource Timing and Fetch |
@@ -20,7 +34,6 @@ one realm-aware timing contract.
 | `paint.ts` only after rendering exists | Paint timing entries and first-paint notifications | Paint Timing |
 | `element.ts` and contentful-paint producers only after layout/paint exists | Element and contentful-paint observations sourced from rendered output | Element Timing and Largest Contentful Paint |
 | `long-task.ts` and `long-animation-frame.ts` only after scheduling/rendering exists | Main-thread attribution and long-frame/task entries | Long Tasks and Long Animation Frames |
-| `web-idl.ts` | Performance interfaces and global-scope contributions | The corresponding timing specifications |
 
 The host supplies a monotonic clock primitive; it does not supply Browlet's
 public `Performance` objects. All consumers must share the same time-origin and

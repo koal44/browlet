@@ -194,6 +194,15 @@ export function xattr(
   return { extendedAttributes: attributes.map(normalizeExtendedAttribute) };
 }
 
+export function hasExtendedAttribute(
+  attributes: readonly ExtendedAttribute[] | undefined,
+  name: string,
+): boolean {
+  return attributes?.some(
+    (attribute) => attribute.kind !== 'raw' && attribute.name === name,
+  ) ?? false;
+}
+
 export function reference(name: string): ReferenceType {
   return { kind: 'reference', name };
 }

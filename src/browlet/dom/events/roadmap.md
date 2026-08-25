@@ -33,7 +33,6 @@ not add a generic `listener-observation.ts` registry in advance.
 | Owner | Contract | Specification |
 | --- | --- | --- |
 | `dom/abort/` and existing `event-target.ts` | Bind `AddEventListenerOptions.signal` as `AbortSignal` and remove listeners with internal abort algorithms, which run before the signal's public `abort` event | DOM §§2.7 and 3.2 |
-| `performance/` and the event binding | Produce every public event timestamp from the event's relevant global and shared coarse high-resolution clock | DOM §2.5; High Resolution Time |
 | `browsing/window/` | Own the legacy Window `event` attribute and default-passive Window/Document/body targets | DOM §§2.3 and 2.7 |
 | concrete HTML elements | Supply activation, legacy pre-activation, and canceled-activation behavior only for the elements that define it | DOM §§2.7 and 2.9; HTML |
 | `scripting/` and Web IDL | Prepare/clean up callback execution and report listener exceptions in the callback's realm | DOM §2.9; HTML §8.1; Web IDL callbacks |
@@ -63,6 +62,5 @@ producers own any task that precedes the call into this machinery.
 
 ## Removal condition
 
-Burn this file when the AbortSignal shortcut and shared-time source are gone,
-and each exercised host hook has an observable owner without weakening the
-public event contract.
+Burn this file when the AbortSignal shortcut is gone and each exercised host
+hook has an observable owner without weakening the public event contract.

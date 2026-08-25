@@ -6,8 +6,15 @@ import { svgIDLDefinitions } from './svg/web-idl';
 import { locationIDL } from './browsing/window/location';
 import { originIDL } from './browsing/origin';
 import {
-  windowEventIDL, windowIDL,
+  windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';
+import {
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  windowOrWorkerGlobalScopeIDL,
+} from './scripting/global-scope';
+import {
+  domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
+} from './performance/performance';
 
 export const browletIDLDefinitions: Definition[] = [
   htmlDocumentIDL,
@@ -16,6 +23,12 @@ export const browletIDLDefinitions: Definition[] = [
   ...mathMLIDLDefinitions,
   originIDL,
   locationIDL,
+  domHighResTimeStampIDL,
+  epochTimeStampIDL,
+  performanceIDL,
+  windowOrWorkerGlobalScopeIDL,
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
   windowIDL,
   windowEventIDL,
+  windowIncludesWindowOrWorkerGlobalScopeIDL,
 ];

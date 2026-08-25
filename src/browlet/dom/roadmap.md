@@ -8,7 +8,7 @@ more focused roadmaps below are the implementation queues.
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
 | DOM §1, infrastructure | Tree topology, ordered sets, and name validation exist | DOM §1.3 scope matching is not yet exposed through the DOM selector APIs; see `infra/roadmap.md` |
-| DOM §2, events | `Event`, `CustomEvent`, `EventTarget`, listener invocation, dispatch, and firing substantially exist | Replace the temporary native-`AbortSignal` path, finish shared timing ownership, and connect only the concrete HTML host hooks described in `events/roadmap.md` |
+| DOM §2, events | `Event`, `CustomEvent`, `EventTarget`, listener invocation, dispatch, firing, and shared high-resolution timestamps substantially exist | Replace the temporary native-`AbortSignal` path and connect only the concrete HTML host hooks described in `events/roadmap.md` |
 | DOM §3, aborting | Not implemented as Browlet platform objects | Implement the synchronous controller/signal core first; composition, retention, event-listener integration, and HTML-scheduled timeout behavior are mapped in `abort/roadmap.md` |
 
 Event dispatch is synchronous. DOM §2 does not require an event loop merely to
@@ -27,8 +27,7 @@ that directly requires HTML's timeout and global-task machinery.
 3. Change `AddEventListenerOptions.signal` from an unbranded object/native
    `AbortSignal` shortcut to the Browlet interface and its internal abort
    algorithm contract.
-4. Route all event timestamps through the shared High Resolution Time clock.
-5. Add `AbortSignal.timeout()` once HTML's active-time timeout and global timer
+4. Add `AbortSignal.timeout()` once HTML's active-time timeout and global timer
    task destination exist; do not substitute a direct Node timer in DOM.
 
 ## Sections 4-5 audit

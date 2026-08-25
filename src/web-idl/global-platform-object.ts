@@ -2,7 +2,9 @@ import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type { OperationMember } from './declaration/index';
+import {
+  hasExtendedAttribute, type OperationMember,
+} from './declaration/definition';
 import type {
   ImplementationRegistry, NamedPropertySteps,
 } from './registry';
@@ -213,9 +215,9 @@ function implementsExtendedAttribute(
 ): boolean {
   let current: AssembledInterface | undefined = interface_;
   while (current) {
-    if (current.definition.extendedAttributes?.some(
-      (attribute) => attribute.kind !== 'raw' && attribute.name === name,
-    )) return true;
+    if (hasExtendedAttribute(current.definition.extendedAttributes, name)) {
+      return true;
+    }
     current = current.parent;
   }
   return false;

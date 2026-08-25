@@ -24,6 +24,9 @@ import {
   createOpaqueOrigin, serializeOrigin, type Origin,
 } from '../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../url/url';
+import {
+  coarsenTime, currentCoarsenedWallTime, unsafeSharedCurrentTime,
+} from '../performance/high-resolution-time';
 
 /*
  * A browsing context is a programmatic representation of a series of
@@ -107,7 +110,7 @@ export function createNewBrowsingContextAndDocument(
   const loadTimingInfo = createDocumentLoadTimingInfo(coarsenTime(
     unsafeContextCreationTime,
     settings.crossOriginIsolatedCapability,
-  ));
+  ).milliseconds);
   const bindings = browletBindings.register(realmExecutionContext.realm);
   const document = createDocument({
     nodeFactory: bindings.objects,
@@ -403,7 +406,10 @@ function completelyFinishLoading(document: DocumentImpl): void {
   if (DocumentImpl.getBrowsingContext(document) === null) {
     throw new Error('A completely loaded Document needs a browsing context');
   }
-  DocumentImpl.setCompletelyLoadedTime(document, Date.now());
+  DocumentImpl.setCompletelyLoadedTime(
+    document,
+    currentCoarsenedWallTime().milliseconds,
+  );
 
   // A newly-created top-level Document has no container, so the remaining
   // iframe/container load-event steps have no effect.
@@ -421,19 +427,6 @@ function createDocumentLoadTimingInfo(
     loadEventStartTime: 0,
     loadEventEndTime: 0,
   };
-}
-
-function unsafeSharedCurrentTime(): DOMHighResTimeStamp {
-  return performance.now();
-}
-
-function coarsenTime(
-  timestamp: DOMHighResTimeStamp,
-  _crossOriginIsolatedCapability: boolean,
-): DOMHighResTimeStamp {
-  // TODO(High Resolution Time): Apply implementation-defined resolution and
-  // jitter when Browlet owns a monotonic clock for its agent clusters.
-  return timestamp;
 }
 
 function requireURLRecord(input: string): URLRecord {
