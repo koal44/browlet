@@ -1,6 +1,9 @@
 {
   "name": "browlet-monorepo",
   "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "description": "Development workspace for Browlet, Stylelet, and Selectlet",
   "homepage": "https://github.com/koal44/browlet",
   "workspaces": [
@@ -39,7 +42,7 @@
     "@playwright/test": "1.61.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/jsdom": "^28.0.3",
-    "@types/node": "^25.5.2",
+    "@types/node": "^22.19.0",
     "@types/tr46": "^5.0.1",
     "cross-env": "^10.1.0",
     "eslint": "9.31.0",
