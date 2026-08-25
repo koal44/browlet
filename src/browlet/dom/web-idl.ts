@@ -1,4 +1,6 @@
 import type { Definition } from '../../web-idl/declaration/index';
+import { abortControllerIDL } from './abort/abort-controller';
+import { abortSignalIDL } from './abort/abort-signal';
 import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL,
   eventTargetIDL,
@@ -48,6 +50,8 @@ export const domIDLDefinitions: Definition[] = [
   eventListenerIDL,
   eventListenerOptionsIDL,
   addEventListenerOptionsIDL,
+  abortSignalIDL,
+  abortControllerIDL,
 
   parentNodeIDL,
   documentOrShadowRootIDL,

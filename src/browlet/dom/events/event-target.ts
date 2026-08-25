@@ -13,6 +13,9 @@ import { MouseEventImpl } from './ui-event';
 import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
+import {
+  addAbortAlgorithm, type AbortAlgorithmHandle, isAbortedSignal,
+} from '../abort/abort-algorithm';
 
 /*
  * [Exposed=*]
@@ -56,6 +59,7 @@ export class EventTargetImpl implements EventTarget
     const convertedType = toDOMString(type);
     const { capture, passive, once, signal } = flattenMore(options);
     const listener: EventListenerRecord = {
+      abortAlgorithm: null,
       type: convertedType,
       callback: callback === null
         ? null
@@ -149,6 +153,15 @@ export class EventTargetImpl implements EventTarget
     }
 
     return callbacks;
+  }
+
+  static hasEventListener(
+    target: EventTargetImpl,
+    type: string,
+  ): boolean {
+    return target.#eventListenerList.some(
+      (listener) => !listener.removed && listener.type === type,
+    );
   }
 
   static getTreeRoot(target: EventTargetImpl): EventTargetImpl | null {
@@ -350,7 +363,10 @@ export class EventTargetImpl implements EventTarget
   #addListener(listener: EventListenerRecord): void {
     this.#virtuals.addingEventListener?.(this, listener.type);
 
-    if (listener.signal?.aborted || listener.callback === null) return;
+    if (
+      listener.signal && isAbortedSignal(listener.signal) ||
+      listener.callback === null
+    ) return;
 
     listener.passive ??= this.#getDefaultPassiveValue(listener.type);
 
@@ -359,22 +375,30 @@ export class EventTargetImpl implements EventTarget
       sameEventListener(candidate.callback, listener.callback) &&
       candidate.capture === listener.capture);
 
-    if (!duplicate) this.#eventListenerList.push(listener);
+    if (duplicate) return;
 
-    listener.signal?.addEventListener(
-      'abort',
-      () => this.#removeListener(listener),
-      { once: true },
-    );
+    this.#eventListenerList.push(listener);
+    if (listener.signal) {
+      listener.abortAlgorithm = addAbortAlgorithm(
+        listener.signal,
+        () => this.#removeListener(listener),
+      );
+    }
+    this.#virtuals.eventListenerListChanged?.(this, listener.type);
   }
 
   #removeListener(listener: EventListenerRecord): void {
+    if (listener.removed) return;
+
     this.#virtuals.removingEventListener?.(this, listener.type);
 
     listener.removed = true;
+    listener.abortAlgorithm?.remove();
+    listener.abortAlgorithm = null;
 
     const index = this.#eventListenerList.indexOf(listener);
     if (index !== -1) this.#eventListenerList.splice(index, 1);
+    this.#virtuals.eventListenerListChanged?.(this, listener.type);
   }
 }
 
@@ -463,8 +487,7 @@ export const addEventListenerOptionsIDL = defineDictionary({
   members: [
     dictMember('passive', idlType.boolean),
     dictMember('once', idlType.boolean, { default: false }),
-    // TODO(DOM section 3): Use AbortSignal once its interface is bound.
-    dictMember('signal', idlType.object),
+    dictMember('signal', reference('AbortSignal')),
   ],
   name: 'AddEventListenerOptions',
 });
@@ -753,6 +776,10 @@ export type EventTargetVirtuals = {
     target: EventTargetImpl,
     type: string,
   ) => void;
+  readonly eventListenerListChanged?: (
+    target: EventTargetImpl,
+    type: string,
+  ) => void;
   readonly activationBehavior?: (
     target: EventTargetImpl,
     event: Event,
@@ -770,12 +797,13 @@ type EventListenerCallback =
   | EventListenerValue;
 
 type EventListenerRecord = {
+  abortAlgorithm: AbortAlgorithmHandle | null;
   readonly type: string;
   readonly callback: EventListenerValue | null;
   readonly capture: boolean;
   passive: boolean | null;
   readonly once: boolean;
-  readonly signal: AbortSignal | null;
+  readonly signal: object | null;
   removed: boolean;
 };
 
@@ -829,7 +857,7 @@ function flattenMore(
   const capture = flatten(options);
   let passive: boolean | null = null;
   let once = false;
-  let signal: AbortSignal | null = null;
+  let signal: object | null = null;
 
   if (typeof options === 'object' && options !== null) {
     once = Boolean(options.once);
@@ -837,7 +865,9 @@ function flattenMore(
     const signalValue = options.signal;
 
     if (passiveValue !== undefined) passive = Boolean(passiveValue);
-    if (signalValue !== undefined) signal = signalValue;
+    if (signalValue !== undefined) {
+      signal = signalValue;
+    }
   }
 
   return { capture, passive, once, signal };
@@ -847,7 +877,7 @@ type FlattenedEventListenerOptions = {
   readonly capture: boolean;
   readonly passive: boolean | null;
   readonly once: boolean;
-  readonly signal: AbortSignal | null;
+  readonly signal: object | null;
 };
 
 const DEFAULT_PASSIVE_EVENT_TYPES = new Set([

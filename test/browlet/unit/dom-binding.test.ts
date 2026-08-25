@@ -293,6 +293,8 @@ describe('Browlet DOM binding', () => {
       'Event',
       'CustomEvent',
       'EventTarget',
+      'AbortController',
+      'AbortSignal',
       'Node',
       'Document',
       'Element',
@@ -302,6 +304,8 @@ describe('Browlet DOM binding', () => {
       'Event',
       'CustomEvent',
       'EventTarget',
+      'AbortController',
+      'AbortSignal',
     ]);
   });
 

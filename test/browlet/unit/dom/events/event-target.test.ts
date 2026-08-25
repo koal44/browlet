@@ -5,6 +5,9 @@ import {
 import {
   EventTargetImpl,
 } from '../../../../../src/browlet/dom/events/event-target';
+import {
+  AbortSignalImpl,
+} from '../../../../../src/browlet/dom/abort/abort-signal';
 import { EventImpl } from '../../../../../src/browlet/dom/events/event';
 import { ShadowRootImpl } from '../../../../../src/browlet/dom/nodes/shadow-root';
 
@@ -17,36 +20,44 @@ describe('EventTargetImpl', () => {
     expect(document.getElementById('target')).toBeInstanceOf(EventTargetImpl);
   });
 
-  it('does not install abort steps for null callbacks or aborted signals', () => {
+  it('does not register null callbacks or listeners with aborted signals', () => {
     const target = new EventTargetImpl();
-    const liveController = new AbortController();
-    const abortedController = new AbortController();
-    const liveAdd = vi.spyOn(liveController.signal, 'addEventListener');
-    const abortedAdd = vi.spyOn(abortedController.signal, 'addEventListener');
-    abortedController.abort();
+    const liveSignal = new AbortSignalImpl();
+    const abortedSignal = new AbortSignalImpl();
+    const callback = vi.fn();
+    AbortSignalImpl.signalAbort(abortedSignal);
 
-    target.addEventListener('null', null, { signal: liveController.signal });
-    target.addEventListener('aborted', () => {}, {
-      signal: abortedController.signal,
+    target.addEventListener('null', null, {
+      signal: liveSignal as unknown as AbortSignal,
     });
+    target.addEventListener('aborted', () => {}, {
+      signal: abortedSignal as unknown as AbortSignal,
+    });
+    target.addEventListener('aborted', callback, {
+      signal: abortedSignal as unknown as AbortSignal,
+    });
+    target.dispatchEvent(new EventImpl('null'));
+    target.dispatchEvent(new EventImpl('aborted'));
 
-    expect(liveAdd).not.toHaveBeenCalled();
-    expect(abortedAdd).not.toHaveBeenCalled();
+    expect(callback).not.toHaveBeenCalled();
   });
 
-  it('installs abort steps for a registered listener', () => {
+  it('does not let a duplicate listener signal remove the original', () => {
     const target = new EventTargetImpl();
-    const controller = new AbortController();
-    const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+    const firstSignal = new AbortSignalImpl();
+    const duplicateSignal = new AbortSignalImpl();
+    const callback = vi.fn();
 
-    target.addEventListener('ready', () => {}, { signal: controller.signal });
+    target.addEventListener('ready', callback, {
+      signal: firstSignal as unknown as AbortSignal,
+    });
+    target.addEventListener('ready', callback, {
+      signal: duplicateSignal as unknown as AbortSignal,
+    });
+    AbortSignalImpl.signalAbort(duplicateSignal);
+    target.dispatchEvent(new EventImpl('ready'));
 
-    expect(addEventListener).toHaveBeenCalledOnce();
-    expect(addEventListener).toHaveBeenCalledWith(
-      'abort',
-      expect.any(Function),
-      { once: true },
-    );
+    expect(callback).toHaveBeenCalledOnce();
   });
 
   it('dispatches listeners with target state and cancellation', () => {
@@ -226,13 +237,13 @@ describe('EventTargetImpl', () => {
 
   it('removes signal-bound listeners when their signal aborts', () => {
     const target = new EventTargetImpl();
-    const controller = new AbortController();
+    const signal = new AbortSignalImpl();
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
-      signal: controller.signal,
+      signal: signal as unknown as AbortSignal,
     });
-    controller.abort();
+    AbortSignalImpl.signalAbort(signal);
     target.dispatchEvent(new EventImpl('ready'));
 
     expect(callback).not.toHaveBeenCalled();

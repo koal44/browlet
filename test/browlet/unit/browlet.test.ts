@@ -313,7 +313,11 @@ describe('Browlet', () => {
   it('converts event listener option dictionaries at the Web IDL boundary', () => {
     const browlet = new Browlet({ route: () => '' });
     const accesses: string[] = [];
-    const signal = new AbortController().signal;
+    const AbortController_ = Reflect.get(
+      browlet.window,
+      'AbortController',
+    ) as typeof AbortController;
+    const signal = new AbortController_().signal;
     const listener = () => {};
     const options = {
       get capture() { accesses.push('capture'); return 1; },
