@@ -22,6 +22,7 @@
     { "path": "./src/url" },
     { "path": "./src/web-idl/declaration" },
     { "path": "./src/web-idl" },
+    { "path": "./src/streams" },
     { "path": "./src/selectlet" },
     { "path": "./src/stylelet" },
     { "path": "./src/browlet" },
