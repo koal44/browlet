@@ -1,6 +1,9 @@
 {
   "name": "browlet",
   "version": "0.1.0-alpha.0",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "description": "A browser-like TypeScript runtime for JavaScript",
   "homepage": "https://github.com/koal44/browlet/tree/main/packages/browlet",
   "main": "./dist/index.cjs",

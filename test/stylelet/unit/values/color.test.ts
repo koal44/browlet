@@ -1164,18 +1164,24 @@ describe('color values', () => {
     },
   );
 
-  it('chooses white when black and white have equal contrast', () => {
-    const luminance = Math.sqrt(0.0525) - 0.05;
-    const component = 1.055 * luminance ** (1 / 2.4) - 0.055;
-    const color = parseColorValue(
-      `contrast-color(color(srgb ${component} ${component} ${component}))`,
-    )!;
+  it.each([
+    ['below', -0.000001, 'rgb(255, 255, 255)'],
+    ['above', 0.000001, 'rgb(0, 0, 0)'],
+  ])(
+    'chooses the maximum contrast just %s the equality boundary',
+    (_position, offset, expected) => {
+      const luminance = Math.sqrt(0.0525) - 0.05 + offset;
+      const component = 1.055 * luminance ** (1 / 2.4) - 0.055;
+      const color = parseColorValue(
+        `contrast-color(color(srgb ${component} ${component} ${component}))`,
+      )!;
 
-    expect(serializeColorValue(resolveColorValue(
-      color,
-      ValueStage.Computed,
-    ))).toBe('rgb(255, 255, 255)');
-  });
+      expect(serializeColorValue(resolveColorValue(
+        color,
+        ValueStage.Computed,
+      ))).toBe(expected);
+    },
+  );
 
   it('preserves contrast color until its input can be resolved', () => {
     const color = parseColorValue('contrast-color(currentcolor)')!;

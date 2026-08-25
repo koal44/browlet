@@ -20,12 +20,13 @@ machinery or Web IDL feature is implemented.
   stops with an explicit error. Completing that path requires ECMAScript's
   `GetFunctionRealm` behavior and the corresponding target-realm binding from
   the host. The expected-failure contract covers the cross-realm fallback.
-- **DOMException error internals:** The supported Node.js runtime predates the
-  standardized inherited `Error.prototype.stack` accessor and `Error.isError`.
-  Constructing `DOMException` through the realm's native `Error` gives it the
-  engine's error data, but V8 currently exposes `stack` as an own property and
-  provides no public `Error.isError` observation. Expected-failure tests record
-  both host gaps; do not emulate them by weakening the platform-object model.
+- **DOMException error internals:** Constructing `DOMException` through the
+  realm's native `Error` gives it the engine's error data, but V8 currently
+  exposes `stack` as an own property rather than through the standardized
+  inherited `Error.prototype.stack` accessor. Some supported Node.js versions
+  also predate `Error.isError`; the binding uses that operation when the host
+  provides it. Capability-sensitive tests record both host behaviors without
+  weakening the platform-object model.
 
 ## Buffer sources
 

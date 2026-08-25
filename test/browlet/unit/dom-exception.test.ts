@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 
+const errorIsErrorTest = typeof Reflect.get(Error, 'isError') === 'function'
+  ? it
+  : it.fails;
+
 describe('Browlet DOMException binding', () => {
   it('creates Error-like platform objects in their binding realm', () => {
     const browlet = createBrowlet();
@@ -81,20 +85,23 @@ describe('Browlet DOMException binding', () => {
       .toBe(exception.stack);
   });
 
-  it.fails('is recognized by the realm Error.isError operation', () => {
-    const browlet = createBrowlet();
-    const DOMException_ = getConstructor<typeof DOMException>(
-      browlet,
-      'DOMException',
-    );
-    const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
-    const isError: unknown = Reflect.get(Error_, 'isError');
+  errorIsErrorTest(
+    'is recognized by the realm Error.isError operation',
+    () => {
+      const browlet = createBrowlet();
+      const DOMException_ = getConstructor<typeof DOMException>(
+        browlet,
+        'DOMException',
+      );
+      const Error_ = getConstructor<ErrorConstructor>(browlet, 'Error');
+      const isError: unknown = Reflect.get(Error_, 'isError');
 
-    expect(isError).toBeTypeOf('function');
-    expect(Reflect.apply(isError as CallableFunction, Error_, [
-      new DOMException_(),
-    ])).toBe(true);
-  });
+      expect(isError).toBeTypeOf('function');
+      expect(Reflect.apply(isError as CallableFunction, Error_, [
+        new DOMException_(),
+      ])).toBe(true);
+    },
+  );
 
   it('defines every legacy constant on the constructor and prototype', () => {
     const DOMException_ = getConstructor<typeof DOMException>(
