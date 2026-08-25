@@ -6,6 +6,9 @@ import type { PolicyContainer } from '../browsing/policy/container';
 import { WindowImpl } from '../browsing/window/window';
 import type { Origin } from '../../url/origin';
 import { parseURL, type URLRecord } from '../../url/url';
+import { Moment, monotonicClock } from '../performance/clock';
+import { EnvironmentTiming } from '../performance/high-resolution-time';
+import { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 
 /*
  * An environment carries navigation/client state before a realm, global
@@ -38,10 +41,12 @@ export class Environment {
 }
 
 export abstract class EnvironmentSettingsObject extends Environment {
+  readonly timing: EnvironmentTiming;
   readonly realmExecutionContext: JavaScriptExecutionContext;
 
   constructor(initialization: EnvironmentSettingsInitialization) {
     super(initialization);
+    this.timing = new EnvironmentTiming(this);
     this.realmExecutionContext = initialization.realmExecutionContext;
   }
 
@@ -51,7 +56,7 @@ export abstract class EnvironmentSettingsObject extends Environment {
   abstract get hasCrossSiteAncestor(): boolean;
   abstract get policyContainer(): PolicyContainer;
   abstract get crossOriginIsolatedCapability(): boolean;
-  abstract get timeOrigin(): DOMHighResTimeStamp;
+  abstract get timeOrigin(): Moment;
 
   get responsibleEventLoop(): EventLoop {
     return this.realmExecutionContext.realm.agent.eventLoop;
@@ -116,11 +121,13 @@ export class WindowEnvironmentSettingsObject
     );
   }
 
-  get timeOrigin(): DOMHighResTimeStamp {
-    return DocumentImpl.getLoadTimingInfo(
-      WindowImpl.getAssociatedDocument(this.#window),
-    )
-      .navigationStartTime;
+  get timeOrigin(): Moment {
+    return new Moment(
+      monotonicClock,
+      DocumentImpl.getLoadTimingInfo(
+        WindowImpl.getAssociatedDocument(this.#window),
+      ).navigationStartTime,
+    );
   }
 }
 
@@ -132,8 +139,12 @@ export function setupWindowEnvironmentSettingsObject(
   topLevelOrigin: Origin,
 ): WindowEnvironmentSettingsObject {
   const realm = executionContext.realm;
+  const window = realm.globalObject;
+  if (!WindowImpl.is(window)) {
+    throw new Error('Window settings require a Window global object');
+  }
   const settings = new WindowEnvironmentSettingsObject(
-    realm.globalObject as WindowImpl,
+    window,
     {
       activeServiceWorker: reservedEnvironment?.activeServiceWorker ?? null,
       creationURL,
@@ -149,6 +160,10 @@ export function setupWindowEnvironmentSettingsObject(
     settings.id = reservedEnvironment.id;
     reservedEnvironment.id = '';
   }
+  WindowImpl.setWindowOrWorkerGlobalScopeMixin(
+    window,
+    new WindowOrWorkerGlobalScopeMixin(settings.timing),
+  );
   Realm.setHostDefined(realm, settings);
   return settings;
 }

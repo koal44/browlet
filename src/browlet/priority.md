@@ -91,7 +91,7 @@ Primary roadmaps: [performance](performance/roadmap.md),
 [interaction](interaction/roadmap.md), [scripting](scripting/roadmap.md), and
 [HTML microsyntaxes](html/microsyntaxes/roadmap.md).
 
-1. Implement the shared monotonic clock, coarsening, time origins, and initial
+1. **Complete:** Implement the shared monotonic clock, coarsening, time origins, and initial
    `Performance` surface (High Resolution Time §§2–8). Route Event timestamps,
    realm timing, and existing navigation timing fields through it.
 2. Implement the synchronous `AbortController`/`AbortSignal` core and replace

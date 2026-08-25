@@ -10,6 +10,9 @@ import {
   EventImpl, type EventPathItem, toDOMString,
 } from './event';
 import { MouseEventImpl } from './ui-event';
+import {
+  unsafeSharedCurrentTime,
+} from '../../performance/high-resolution-time';
 
 /*
  * [Exposed=*]
@@ -866,7 +869,7 @@ function createStandaloneEvent(
 ): EventImpl {
   const event = Reflect.construct(
     EventConstructor,
-    ['', {}, performance.now()],
+    ['', {}, unsafeSharedCurrentTime().milliseconds],
   ) as EventImpl;
   EventImpl.setTrusted(event, true);
   return event;

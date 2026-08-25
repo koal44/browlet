@@ -18,6 +18,8 @@ import type {
 import { TopLevelTraversable } from './navigable';
 import { createRealm } from '../scripting/realm';
 import { WindowImpl } from './window/window';
+import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
+import { currentCoarsenedWallTime } from '../performance/high-resolution-time';
 
 export function createAndInitializeDocument(
   type: 'html' | 'xml',
@@ -142,7 +144,14 @@ export function completelyFinishLoading(
     throw new Error('Only an active Document can finish loading');
   }
 
-  const now = performance.now();
+  const realm = getRelevantRealm(window);
+  const settings = realm.hostDefined;
+  if (settings === null) {
+    throw new Error('Active Window has no environment settings object');
+  }
+  const now = implicitlyConvertDurationToTimestamp(
+    settings.timing.currentHighResolutionTime(),
+  );
   const timing = DocumentImpl.getLoadTimingInfo(document);
   timing.domInteractiveTime = now;
   timing.domContentLoadedEventStartTime = now;
@@ -152,8 +161,13 @@ export function completelyFinishLoading(
   DocumentImpl.setCurrentDocumentReadiness(document, 'complete');
   DocumentImpl.markReadyForPostLoadTasks(document);
   fireEvent('load', window);
-  timing.loadEventEndTime = performance.now();
-  DocumentImpl.setCompletelyLoadedTime(document, Date.now());
+  timing.loadEventEndTime = implicitlyConvertDurationToTimestamp(
+    settings.timing.currentHighResolutionTime(),
+  );
+  DocumentImpl.setCompletelyLoadedTime(
+    document,
+    currentCoarsenedWallTime().milliseconds,
+  );
 }
 
 function obtainBrowsingContextForNavigationResponse(

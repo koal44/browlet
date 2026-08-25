@@ -2,7 +2,9 @@ import type { AssembledInterface, DefinitionAssembly } from './assembly';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';
-import type { ExtendedAttribute, OperationMember } from './declaration/index';
+import {
+  hasExtendedAttribute, type OperationMember,
+} from './declaration/definition';
 import { isNamedPropertiesObject } from './global-platform-object';
 import type {
   ImplementationRegistry, IndexedPropertySteps, NamedPropertySteps,
@@ -640,8 +642,9 @@ function implementsExtendedAttribute(
   let current: AssembledInterface | undefined = interface_;
   while (current) {
     if (
-      hasExtendedAttribute(current.definition, name) ||
-      current.partials.some((partial) => hasExtendedAttribute(partial, name))
+      hasExtendedAttribute(current.definition.extendedAttributes, name) ||
+      current.partials.some((partial) =>
+        hasExtendedAttribute(partial.extendedAttributes, name))
     ) return true;
     current = current.parent;
   }
@@ -655,7 +658,10 @@ function getUnforgeablePropertyNames(
   let current: AssembledInterface | undefined = interface_;
   while (current) {
     for (const { member } of current.members) {
-      if (!hasExtendedAttribute(member, 'LegacyUnforgeable')) continue;
+      if (!hasExtendedAttribute(
+        member.extendedAttributes,
+        'LegacyUnforgeable',
+      )) continue;
       if (
         member.kind === 'stringifier' ||
         (member.kind === 'attribute' && member.stringifier === true)
@@ -668,15 +674,6 @@ function getUnforgeablePropertyNames(
     current = current.parent;
   }
   return names;
-}
-
-function hasExtendedAttribute(
-  value: { extendedAttributes?: ExtendedAttribute[]; },
-  name: string,
-): boolean {
-  return value.extendedAttributes?.some(
-    (attribute) => attribute.kind !== 'raw' && attribute.name === name,
-  ) ?? false;
 }
 
 function isArrayIndex(property: string): boolean {

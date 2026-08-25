@@ -1,18 +1,12 @@
 import {
-  arg, attr, constant, ctor, defineDictionary, defineInterface, defineTypedef,
-  dictMember, emptyDictionary, idlType, integer, nullable, op, readonlyAttr,
-  reference, sequence, xattr,
+  arg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
+  emptyDictionary, idlType, integer, nullable, op, readonlyAttr, reference,
+  sequence, xattr,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
-
-/*
- * typedef double DOMHighResTimeStamp;
- */
-
-export const domHighResTimeStampIDL = defineTypedef({
-  name: 'DOMHighResTimeStamp',
-  type: idlType.double,
-});
+import {
+  unsafeSharedCurrentTime,
+} from '../../performance/high-resolution-time';
 
 /*
  * [Exposed=*]
@@ -80,7 +74,7 @@ export class EventImpl implements Event
   constructor(
     type: string,
     eventInitDict: EventInit | null = {},
-    timeStamp = performance.now(),
+    timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const convertedType = toDOMString(type);
     const init = eventInitDict ?? {};
@@ -527,7 +521,7 @@ export class CustomEventImpl<T = unknown>
   constructor(
     type: string,
     eventInitDict: CustomEventInit<T> | null = {},
-    timeStamp = performance.now(),
+    timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const init = eventInitDict ?? {};
 

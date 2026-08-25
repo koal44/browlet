@@ -6,6 +6,10 @@ import type { DocumentImpl } from '../dom/nodes/document';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
 import { WindowImpl } from '../browsing/window/window';
+import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
+import {
+  coarsenedSharedCurrentTime,
+} from '../performance/high-resolution-time';
 
 /*
  * HTML owns the Realm's agent, global-object, global-this, and host-defined
@@ -259,9 +263,13 @@ export class Realm implements WebIDLRealmHost {
   }
 
   eventTimeStamp(): DOMHighResTimeStamp {
-    // TODO(High Resolution Time): Apply the realm's time origin and coarse
-    // resolution rather than borrowing the surrounding Node.js realm.
-    return performance.now();
+    const settings = this.#hostDefined;
+    if (settings === null) {
+      return coarsenedSharedCurrentTime().milliseconds;
+    }
+    return implicitlyConvertDurationToTimestamp(
+      settings.timing.currentHighResolutionTime(),
+    );
   }
 
   getAssociatedDocument(): DocumentImpl {
