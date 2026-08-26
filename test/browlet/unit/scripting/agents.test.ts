@@ -8,6 +8,10 @@ import {
   BrowsingContextGroup,
 } from '../../../../src/browlet/browsing/browsing-context';
 import { Realm } from '../../../../src/browlet/scripting/realm';
+import { UserAgent } from '../../../../src/browlet/user-agent';
+import {
+  monotonicClock, UnsafeMoment,
+} from '../../../../src/browlet/performance/clock';
 import type { Domain, Host } from '../../../../src/url/host';
 import type { TupleOrigin } from '../../../../src/url/origin';
 
@@ -16,6 +20,7 @@ describe('WindowAgent', () => {
     const agent = new WindowAgent();
 
     expect(agent.canBlock).toBe(false);
+    expect(agent.eventLoop.started).toBe(false);
     expect(agent.windowObjects).toEqual(new Set());
   });
 });
@@ -47,6 +52,24 @@ describe('Agent', () => {
 });
 
 describe('obtainSimilarOriginWindowAgent', () => {
+  it('starts each host-backed agent when the agent is created', () => {
+    const eventLoopOptions = {
+      requestEventLoopTurn: vi.fn(),
+      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
+      performMicrotaskCheckpoint: vi.fn(),
+    };
+    const userAgent = new UserAgent(eventLoopOptions);
+    const group = userAgent.createBrowsingContextGroup();
+    const origin = createTupleOrigin('https', createHost('example.com'));
+
+    const first = obtainSimilarOriginWindowAgent(origin, group, false);
+    const second = obtainSimilarOriginWindowAgent(origin, group, false);
+
+    expect(first.eventLoop.started).toBe(true);
+    expect(second).toBe(first);
+    expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
+  });
+
   it('creates a site-keyed cluster by default', () => {
     const origin = createTupleOrigin('https', createHost('example.com'));
     const group = new BrowsingContextGroup();

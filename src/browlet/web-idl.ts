@@ -10,6 +10,7 @@ import {
 } from './browsing/window/window';
 import {
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
 } from './scripting/global-scope';
 import {
@@ -31,6 +32,7 @@ export const browletIDLDefinitions: Definition[] = [
   performanceIDL,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
+  timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,
   windowIDL,

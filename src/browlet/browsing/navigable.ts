@@ -1,5 +1,4 @@
 import { DocumentImpl } from '../dom/nodes/document';
-import { NodeImpl } from '../dom/nodes/node';
 import {
   BrowsingContext, createNewTopLevelBrowsingContextAndDocument,
 } from './browsing-context';
@@ -9,10 +8,10 @@ import {
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
-import type { Task } from '../scripting/event-loop';
 
 export class Navigable {
   readonly id = Symbol('Navigable');
+  readonly isTopLevelTraversable: boolean = false;
   parent: Navigable | null = null;
   currentSessionHistoryEntry!: SessionHistoryEntry;
   #activeSessionHistoryEntry: SessionHistoryEntry | null = null;
@@ -27,9 +26,14 @@ export class Navigable {
   }
 
   set activeSessionHistoryEntry(entry: SessionHistoryEntry) {
+    const previousDocument = this.#activeSessionHistoryEntry
+      ?.documentState.document ?? null;
     const document = entry.documentState.document;
     if (document === null) {
       this.#activeSessionHistoryEntry = entry;
+      if (previousDocument !== null) {
+        DocumentImpl.notifyFullyActiveStateChanged(previousDocument);
+      }
       return;
     }
 
@@ -46,6 +50,12 @@ export class Navigable {
 
     this.#activeSessionHistoryEntry = entry;
     BrowsingContext.setNavigable(browsingContext, this);
+    if (previousDocument !== document) {
+      if (previousDocument !== null) {
+        DocumentImpl.notifyFullyActiveStateChanged(previousDocument);
+      }
+      DocumentImpl.notifyFullyActiveStateChanged(document);
+    }
   }
 
   get activeDocument(): DocumentImpl | null {
@@ -77,41 +87,8 @@ export class TraversableNavigable extends Navigable {
   isCreatedByWebContent = false;
 }
 
-export class TopLevelTraversable extends TraversableNavigable {}
-
-/*
- * Return the navigable whose active Document is node's node document.
- * Inactive Documents intentionally have no node navigable, even while their
- * session-history entries retain them for possible later reactivation.
- */
-export function getNodeNavigable(node: NodeImpl): Navigable | null {
-  const document = NodeImpl.getNodeDocument(node);
-  if (document === null) return null;
-
-  const browsingContext = DocumentImpl.getBrowsingContext(document);
-  if (browsingContext === null) return null;
-
-  const navigable = browsingContext.navigable;
-  return navigable?.activeDocument === document ? navigable : null;
-}
-
-export function isFullyActive(document: DocumentImpl): boolean {
-  const navigable = getNodeNavigable(document);
-  if (navigable === null) return false;
-  if (navigable instanceof TopLevelTraversable) return true;
-
-  /*
-   * HTML defines a child navigable's answer recursively through its container
-   * element's node Document. Browlet does not yet implement navigable
-   * containers. Its parent navigable is not an equivalent shortcut: after a
-   * parent navigation, the container can remain in the inactive predecessor
-   * Document while parent.activeDocument refers to its replacement.
-   */
-  return false;
-}
-
-export function isTaskRunnable(task: Task): boolean {
-  return task.document === null || isFullyActive(task.document);
+export class TopLevelTraversable extends TraversableNavigable {
+  override readonly isTopLevelTraversable = true;
 }
 
 /*

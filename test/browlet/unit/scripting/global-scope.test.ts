@@ -57,6 +57,38 @@ describe('WindowOrWorkerGlobalScope', () => {
     expect(report).toHaveBeenCalledWith(exception);
     report.mockRestore();
   });
+
+  it('invokes timer callbacks with arguments and the WindowProxy receiver', async () => {
+    const { window } = createBrowlet();
+    const fired = Promise.withResolvers<void>();
+    let receivedWindowProxy = false;
+    let received: unknown[] = [];
+
+    window.setTimeout(function(this: unknown, ...argumentsList: unknown[]) {
+      receivedWindowProxy = this === window;
+      received = argumentsList;
+      fired.resolve();
+    }, 0, 'first', 2);
+    await fired.promise;
+
+    expect(receivedWindowProxy).toBe(true);
+    expect(received).toEqual(['first', 2]);
+  });
+
+  it('repeats intervals until either clearing operation removes their ID', async () => {
+    const { window } = createBrowlet();
+    const fired = Promise.withResolvers<void>();
+    const callback = vi.fn(() => {
+      window.clearTimeout(id);
+      fired.resolve();
+    });
+    const id = window.setInterval(callback, 0);
+
+    await fired.promise;
+    await new Promise<void>((resolve) => { setTimeout(resolve, 10); });
+
+    expect(callback).toHaveBeenCalledOnce();
+  });
 });
 
 function createBrowlet(): Browlet {

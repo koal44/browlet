@@ -84,8 +84,6 @@ export class WindowImpl
   #currentEvent: Event | undefined;
   readonly #location: LocationImpl;
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
-  readonly #timers = new Map<number, ReturnType<typeof setTimeout>>();
-  #nextTimer = 1;
 
   constructor(url: URL) {
     super(windowEventTargetVirtuals);
@@ -131,29 +129,31 @@ export class WindowImpl
     timeout?: number,
     ...args: unknown[]
   ): number => {
-    const id = this.#nextTimer++;
-    const timer = setTimeout(() => {
-      this.#timers.delete(id);
-
-      if (typeof handler === 'string') {
-        throw new Error('String timer handlers are not implemented');
-      }
-
-      (handler as (...arguments_: unknown[]) => unknown)(...args);
-    }, timeout);
-
-    this.#timers.set(id, timer);
-    return id;
+    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setTimeout(
+      createTimerAction(this, handler),
+      timeout ?? 0,
+      args,
+    );
   };
 
   readonly clearTimeout = (id?: number): void => {
-    if (id === undefined) return;
+    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
+  };
 
-    const timer = this.#timers.get(id);
-    if (!timer) return;
+  readonly setInterval = (
+    handler: TimerHandler,
+    timeout?: number,
+    ...args: unknown[]
+  ): number => {
+    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setInterval(
+      createTimerAction(this, handler),
+      timeout ?? 0,
+      args,
+    );
+  };
 
-    clearTimeout(timer);
-    this.#timers.delete(id);
+  readonly clearInterval = (id?: number): void => {
+    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
   };
 
   // -- Friends ----------------------------------------------------------
@@ -241,6 +241,12 @@ export class WindowImpl
      */
     DocumentImpl.setRelevantGlobalObject(document, window);
     window.#document = document;
+    if (window.#globalScopeMixin !== null) {
+      WindowOrWorkerGlobalScopeMixin.setAssociatedDocument(
+        window.#globalScopeMixin,
+        document,
+      );
+    }
   }
 
   static setCurrentEvent(window: WindowImpl, event: Event | undefined): void {
@@ -332,3 +338,24 @@ const windowEventTargetVirtuals: EventTargetVirtuals = {
     ? WindowImpl.getAssociatedDocument(target)
     : target,
 };
+
+function createTimerAction(
+  window: WindowImpl,
+  handler: TimerHandler,
+): (argumentsList: readonly unknown[]) => void {
+  if (typeof handler === 'string') {
+    return () => {
+      throw new Error(
+        'String timer handlers await Trusted Types, CSP, and classic scripts',
+      );
+    };
+  }
+
+  return (argumentsList) => {
+    Reflect.apply(
+      handler,
+      WindowImpl.getWindowProxy(window),
+      argumentsList,
+    );
+  };
+}

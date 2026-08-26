@@ -21,6 +21,11 @@ import {
 import type { Realm } from './scripting/realm';
 import { WindowImpl } from './browsing/window/window';
 import { UserAgent } from './user-agent';
+import {
+  performNodeMicrotaskCheckpoint, requestNodeEventLoopTurn,
+} from './scripting/event-loop';
+import { unsafeSharedCurrentTime } from
+  './performance/high-resolution-time';
 
 export class Browlet {
   readonly #exposures = new Map<string, unknown>();
@@ -30,7 +35,11 @@ export class Browlet {
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
-    this.#userAgent = new UserAgent();
+    this.#userAgent = new UserAgent({
+      performMicrotaskCheckpoint: performNodeMicrotaskCheckpoint,
+      requestEventLoopTurn: requestNodeEventLoopTurn,
+      unsafeSharedCurrentTime,
+    });
     this.#traversable = createNewTopLevelTraversable(
       this.#userAgent,
       null,

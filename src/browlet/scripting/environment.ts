@@ -162,7 +162,12 @@ export function setupWindowEnvironmentSettingsObject(
   }
   WindowImpl.setWindowOrWorkerGlobalScopeMixin(
     window,
-    new WindowOrWorkerGlobalScopeMixin(settings.timing),
+    new WindowOrWorkerGlobalScopeMixin({
+      eventLoop: realm.agent.eventLoop,
+      global: realm.global,
+      timerThisValue: realm.globalThis,
+      timing: settings.timing,
+    }),
   );
   Realm.setHostDefined(realm, settings);
   return settings;

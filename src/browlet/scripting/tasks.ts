@@ -1,6 +1,7 @@
 import type { DocumentImpl } from '../dom/nodes/document';
 import {
-  createTaskSource, type EventLoop, queueTask, type TaskSource,
+  createTaskSource, type EventLoop, queueTask, type TaskCreationOptions,
+  type TaskSource,
 } from './event-loop';
 
 export { queueTask } from './event-loop';
@@ -14,10 +15,12 @@ export const domManipulationTaskSource =
   createTaskSource('DOM manipulation');
 export const userInteractionTaskSource =
   createTaskSource('user interaction');
-export const networkingTaskSource = createTaskSource('networking');
+export const networkingTaskSource =
+  createTaskSource('networking');
 export const navigationAndTraversalTaskSource =
   createTaskSource('navigation and traversal');
-export const renderingTaskSource = createTaskSource('rendering');
+export const renderingTaskSource =
+  createTaskSource('rendering');
 
 /*
  * HTML's global wrapper derives its destination from the global's relevant
@@ -39,6 +42,7 @@ export function queueGlobalTask(
   source: TaskSource,
   global: object,
   steps: () => void,
+  options: TaskCreationOptions = {},
 ): void {
   const destination = globalTaskDestinations.get(global);
   if (destination === undefined) {
@@ -49,6 +53,7 @@ export function queueGlobalTask(
     destination.eventLoop,
     destination.getDocument(),
     steps,
+    options,
   );
 }
 

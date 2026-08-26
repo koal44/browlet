@@ -45,13 +45,12 @@ contract without moving their cancellation behavior into this directory.
 `AbortSignal.timeout(milliseconds)` now creates the signal in the binding
 realm and calls the HTML-owned "run steps after a timeout" and "queue a global
 task" algorithms with the relevant global and timer task source. HTML §8.1.7
-now supplies the real global-task destination and event-loop queue. The
-remaining §8.7 seam deliberately fails until per-global active timers,
-fully-active-time suspension, ordered completion, host wake-up, and production
-event-loop startup exist; a direct Node `setTimeout()` would produce the wrong
-lifecycle. The scheduled completion closure captures the signal, so the
-eventual global-owned timer entry also supplies the required strong
-reachability while delivery is pending.
+supplies the global-task destination and event-loop queue, while §8.7 supplies
+the per-global ordered timer map, fully-active-time suspension, host wake-up,
+and production loop startup. A direct Node `setTimeout()` is not used for the
+observable lifecycle. The scheduled completion closure captures the signal,
+so the global-owned timer entry also supplies the required strong reachability
+while delivery is pending.
 
 The `onabort` event-handler IDL attribute uses HTML's ordinary event-handler
 core. It preserves listener registration order across replacement, removes

@@ -1,5 +1,6 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
+import type { EventLoopOptions } from './scripting/event-loop';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -9,6 +10,8 @@ import type { TopLevelTraversable } from './browsing/navigable';
 export class UserAgent {
   readonly browsingContextGroupSet = new Set<BrowsingContextGroup>();
   readonly topLevelTraversableSet = new Set<TopLevelTraversable>();
+
+  constructor(readonly eventLoopOptions: EventLoopOptions | null = null) {}
 
   createBrowsingContextGroup(): BrowsingContextGroup {
     const group = new BrowsingContextGroup(this);
