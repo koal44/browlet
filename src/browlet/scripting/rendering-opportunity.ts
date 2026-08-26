@@ -1,9 +1,7 @@
 import { getRelevantRealm } from '../bindings';
-import type { DocumentImpl } from '../dom/nodes/document';
+import { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
-import {
-  getNodeNavigable, isFullyActive, type Navigable,
-} from '../browsing/navigable';
+import type { Navigable } from '../browsing/navigable';
 import { WindowImpl } from '../browsing/window/window';
 import type { WindowAgent } from './agents';
 import { EventLoop } from './event-loop';
@@ -174,9 +172,9 @@ function collectRenderableDocuments(
     }
 
     const document = WindowImpl.getAssociatedDocument(value);
-    if (!isFullyActive(document)) continue;
+    if (!DocumentImpl.isFullyActive(document)) continue;
 
-    const navigable = getNodeNavigable(document);
+    const navigable = DocumentImpl.getNodeNavigable(document);
     if (
       navigable === null ||
       !host.hasRenderingOpportunity(navigable) ||
@@ -195,24 +193,13 @@ function collectRenderableDocuments(
   }
 
   /*
-   * Navigable depth preserves HTML's parent-before-child constraint. Sibling
-   * container tree order enters with child navigable containers; Browlet does
-   * not yet create them.
+   * HTML orders this Document list parent-before-child and orders siblings by
+   * their navigable container elements' shadow-including tree order. Browlet
+   * currently creates only top-level traversables. When child navigable
+   * containers arrive, replace the flat Window enumeration above with a
+   * traversal of that topology; sorting only by depth would not be sufficient.
    */
-  documents.sort((a, b) =>
-    getNavigableDepth(a) - getNavigableDepth(b),
-  );
   return documents;
-}
-
-function getNavigableDepth(document: DocumentImpl): number {
-  let navigable = getNodeNavigable(document);
-  let depth = 0;
-  while (navigable !== null && navigable.parent !== null) {
-    depth++;
-    navigable = navigable.parent;
-  }
-  return depth;
 }
 
 type DocumentPredicate = (

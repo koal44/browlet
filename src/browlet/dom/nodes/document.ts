@@ -5,6 +5,7 @@ import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
+import type { Navigable } from '../../browsing/navigable';
 import type { WindowImpl } from '../../browsing/window/window';
 import {
   createPolicyContainer, type PolicyContainer,
@@ -129,6 +130,7 @@ export class DocumentImpl
   #customElementRegistry: CustomElementRegistry | null = null;
   #duringLoadingNavigationID: string | null = null;
   #encoding = 'UTF-8';
+  readonly #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   #internalAncestorOriginObjectsList: readonly Origin[] | null = null;
   #isInitialAboutBlank = false;
   #loadTimingInfo: DocumentLoadTimingInfo = {
@@ -444,6 +446,47 @@ export class DocumentImpl
     browsingContext: BrowsingContext | null,
   ): void {
     document.#browsingContext = browsingContext;
+  }
+
+  /*
+   * Return the navigable whose active Document is document. Inactive
+   * Documents intentionally have no node navigable, even while session
+   * history retains them for possible later reactivation.
+   */
+  static getNodeNavigable(document: DocumentImpl): Navigable | null {
+    const navigable = document.#browsingContext?.navigable;
+    return navigable?.activeDocument === document ? navigable : null;
+  }
+
+  static isFullyActive(document: DocumentImpl): boolean {
+    const navigable = DocumentImpl.getNodeNavigable(document);
+    if (navigable === null) return false;
+    if (navigable.isTopLevelTraversable) return true;
+
+    /*
+     * HTML defines a child navigable's answer recursively through its
+     * container element's node Document. Browlet does not yet implement
+     * navigable containers. Its parent navigable is not an equivalent
+     * shortcut: after a parent navigation, the container can remain in the
+     * inactive predecessor Document while parent.activeDocument refers to
+     * its replacement.
+     */
+    return false;
+  }
+
+  static observeFullyActiveState(
+    document: DocumentImpl,
+    observer: FullyActiveStateObserver,
+  ): () => void {
+    document.#fullyActiveObservers.add(observer);
+    return () => { document.#fullyActiveObservers.delete(observer); };
+  }
+
+  static notifyFullyActiveStateChanged(document: DocumentImpl): void {
+    const fullyActive = DocumentImpl.isFullyActive(document);
+    for (const observer of document.#fullyActiveObservers) {
+      observer(fullyActive);
+    }
   }
 
   static getMode(document: DocumentImpl): DocumentMode {
@@ -1053,6 +1096,8 @@ export type DocumentLoadTimingInfo = {
   loadEventStartTime: DOMHighResTimeStamp;
   loadEventEndTime: DOMHighResTimeStamp;
 };
+
+type FullyActiveStateObserver = (fullyActive: boolean) => void;
 
 function parseDocumentURL(input: string): URLRecord {
   const url = parseURL(input).url;

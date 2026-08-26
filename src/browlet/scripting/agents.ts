@@ -1,4 +1,4 @@
-import { EventLoop } from './event-loop';
+import { EventLoop, type EventLoopOptions } from './event-loop';
 import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
@@ -19,10 +19,17 @@ export abstract class Agent {
   readonly signifier: symbol;
   #agentCluster: AgentCluster | null = null;
 
-  protected constructor(canBlock: boolean) {
+  protected constructor(
+    canBlock: boolean,
+    eventLoopOptions: EventLoopOptions | null = null,
+  ) {
     this.canBlock = canBlock;
     this.eventLoop = new EventLoop();
     this.signifier = Symbol('Agent');
+
+    if (eventLoopOptions !== null) {
+      this.eventLoop.start(eventLoopOptions);
+    }
   }
 
   get agentCluster(): AgentCluster | null {
@@ -47,8 +54,8 @@ export abstract class Agent {
 export class WindowAgent extends Agent {
   readonly windowObjects = new Set<Window>();
 
-  constructor() {
-    super(false);
+  constructor(eventLoopOptions: EventLoopOptions | null = null) {
+    super(false, eventLoopOptions);
   }
 }
 
@@ -121,7 +128,9 @@ export function obtainSimilarOriginWindowAgent(
       agentCluster.isOriginKeyed = true;
     }
 
-    agentCluster.add(new WindowAgent());
+    agentCluster.add(new WindowAgent(
+      group.userAgent?.eventLoopOptions ?? null,
+    ));
     group.agentClusterMap.set(key, agentCluster);
   }
 

@@ -106,13 +106,14 @@ Primary roadmaps: [performance](performance/roadmap.md),
    Document activity gating, named global/element task destinations, and a
    deterministic test driver (HTML §8.1.7). Node supplies wake-ups, not HTML
    ordering.
-5. Add the ordered timer map, nesting/clamping, active-time timeout steps, and
-   timer-task source on that loop (HTML §8.7). Use it to complete
-   `AbortSignal.timeout()` with relevant-global retention; do not delegate its
-   lifecycle to a bare Node `setTimeout()`. The resulting deadline records are
-   also one prerequisite for Window idle-period computation, but idle periods
-   still wait for animation-frame/render predictions and the Request Idle
-   Callback consumer.
+5. **Complete for Window function callbacks:** Add the ordered timer map,
+   nesting/clamping, active-time timeout steps, and timer-task source on that
+   loop (HTML §8.7). `AbortSignal.timeout()` uses that lifecycle rather than a
+   bare Node `setTimeout()`. Worker suspension and the timer string-handler
+   branch remain with workers, Trusted Types, CSP, and classic scripts. The
+   resulting deadline records are also one prerequisite for Window idle-period
+   computation, but idle periods still wait for animation-frame/render
+   predictions and the Request Idle Callback consumer.
 6. As an independent bounded lane, implement only the boolean, enumerated,
    numeric, and token microsyntaxes needed by the early Document shell and
    reflection work (HTML §2.3). Dates, legacy colors, and unused syntaxes wait

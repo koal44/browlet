@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  EventLoop, createTaskSource, type LongTaskReporter, type Task,
+  EventLoop, createTaskSource, type EventLoopOptions,
+  type LongTaskReporter, performNodeMicrotaskCheckpoint, Task,
   type TaskTimingHooks,
 } from '../../../../src/browlet/scripting/event-loop';
 import {
@@ -10,15 +11,12 @@ import {
   userInteractionTaskSource,
 } from '../../../../src/browlet/scripting/tasks';
 import {
-  createNewTopLevelTraversable, isTaskRunnable,
+  createNewTopLevelTraversable,
 } from '../../../../src/browlet/browsing/navigable';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import {
-  nodeSchedulerHost, type SchedulerHost,
-} from '../../../../src/browlet/scripting/scheduler-host';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../../src/browlet/performance/clock';
@@ -53,6 +51,7 @@ describe('task queues', () => {
     queueTask(source, eventLoop, null, second);
 
     const tasks = [...EventLoop.getTaskQueue(eventLoop, source)];
+    expect(tasks.every((task) => task instanceof Task)).toBe(true);
     expect(tasks.map((task) => task.steps)).toEqual([first, second]);
     expect(tasks.map((task) => task.source)).toEqual([source, source]);
     expect(tasks.map((task) => task.document)).toEqual([null, null]);
@@ -88,7 +87,7 @@ describe('task queues', () => {
       expect(eventLoop.currentlyRunningTask?.steps).toBe(runnableSteps);
       order.push('task');
     });
-    const schedulerHost = createSchedulerHost({
+    const eventLoopOptions = createEventLoopOptions({
       performMicrotaskCheckpoint() {
         expect(eventLoop.currentlyRunningTask).toBeNull();
         order.push('checkpoint');
@@ -98,10 +97,7 @@ describe('task queues', () => {
     queueTask(source, eventLoop, inactiveDocument, inactiveSteps);
     queueTask(source, eventLoop, null, runnableSteps);
 
-    expect(eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost,
-    })).toBe(true);
+    expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(true);
 
     expect(order).toEqual(['task', 'checkpoint']);
     expect(inactiveSteps).not.toHaveBeenCalled();
@@ -125,8 +121,7 @@ describe('task queues', () => {
     queueTask(secondSource, eventLoop, null, second);
 
     eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost: createSchedulerHost(),
+      ...createEventLoopOptions(),
       selectTaskQueue,
     });
 
@@ -139,16 +134,15 @@ describe('task queues', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('inactive');
     const steps = vi.fn();
-    const schedulerHost = createSchedulerHost();
+    const eventLoopOptions = createEventLoopOptions();
 
     queueTask(source, eventLoop, new DocumentImpl(), steps);
 
-    expect(eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost,
-    })).toBe(false);
+    expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(false);
     expect(steps).not.toHaveBeenCalled();
-    expect(schedulerHost.performMicrotaskCheckpoint).not.toHaveBeenCalled();
+    expect(
+      eventLoopOptions.performMicrotaskCheckpoint,
+    ).not.toHaveBeenCalled();
     expect(EventLoop.getTaskQueue(eventLoop, source).size).toBe(1);
   });
 
@@ -156,30 +150,39 @@ describe('task queues', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('throwing');
     const error = new Error('task failed');
-    const schedulerHost = createSchedulerHost();
+    const eventLoopOptions = createEventLoopOptions();
     const longTaskReporter = createLongTaskReporter();
 
     queueTask(source, eventLoop, null, () => { throw error; });
 
     expect(() => eventLoop.runTaskTurn({
-      isTaskRunnable,
+      ...eventLoopOptions,
       longTaskReporter,
-      schedulerHost,
     })).toThrow(error);
     expect(eventLoop.currentlyRunningTask).toBeNull();
-    expect(schedulerHost.performMicrotaskCheckpoint).toHaveBeenCalledOnce();
+    expect(
+      eventLoopOptions.performMicrotaskCheckpoint,
+    ).toHaveBeenCalledOnce();
     expect(longTaskReporter.reportLongTasks).toHaveBeenCalledOnce();
   });
 
   it('accounts for a task around its steps and checkpoint', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('accounting');
-    const document = new DocumentImpl();
+    const traversable = createNewTopLevelTraversable(
+      new UserAgent(),
+      null,
+      '',
+    );
+    const document = traversable.activeDocument;
+    if (document === null) {
+      throw new Error('Expected an active Document');
+    }
     const order: string[] = [];
     const startTime = new UnsafeMoment(monotonicClock, 10);
     const endTime = new UnsafeMoment(monotonicClock, 20);
     const times = [startTime, endTime];
-    const schedulerHost = createSchedulerHost({
+    const eventLoopOptions = createEventLoopOptions({
       unsafeSharedCurrentTime() {
         const time = times.shift();
         if (time === undefined) throw new Error('Unexpected clock read');
@@ -211,9 +214,8 @@ describe('task queues', () => {
     };
 
     eventLoop.runTaskTurn({
-      isTaskRunnable: () => true,
+      ...eventLoopOptions,
       longTaskReporter,
-      schedulerHost,
       taskTiming,
     });
 
@@ -231,9 +233,8 @@ describe('task queues', () => {
 
     queueTask(source, eventLoop, null, vi.fn());
     eventLoop.runTaskTurn({
-      isTaskRunnable,
+      ...createEventLoopOptions(),
       longTaskReporter,
-      schedulerHost: createSchedulerHost(),
       taskTiming,
     });
 
@@ -247,14 +248,14 @@ describe('task queues', () => {
     const source = createTaskSource('scheduled');
     const turns: (() => void)[] = [];
     const order: string[] = [];
-    const schedulerHost = createSchedulerHost({
+    const eventLoopOptions = createEventLoopOptions({
       requestEventLoopTurn(steps) { turns.push(steps); },
       performMicrotaskCheckpoint() { order.push('checkpoint'); },
     });
 
     queueTask(source, eventLoop, null, () => { order.push('first'); });
     queueTask(source, eventLoop, null, () => { order.push('second'); });
-    eventLoop.start({ isTaskRunnable, schedulerHost });
+    eventLoop.start(eventLoopOptions);
 
     expect(turns).toHaveLength(1);
     turns.shift()?.();
@@ -271,11 +272,11 @@ describe('task queues', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('late');
     const turns: (() => void)[] = [];
-    const schedulerHost = createSchedulerHost({
+    const eventLoopOptions = createEventLoopOptions({
       requestEventLoopTurn(steps) { turns.push(steps); },
     });
 
-    eventLoop.start({ isTaskRunnable, schedulerHost });
+    eventLoop.start(eventLoopOptions);
     expect(turns).toEqual([]);
 
     queueTask(source, eventLoop, null, vi.fn());
@@ -286,21 +287,18 @@ describe('task queues', () => {
   it('does not request a host turn for inactive Document work', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('inactive scheduled');
-    const schedulerHost = createSchedulerHost();
+    const eventLoopOptions = createEventLoopOptions();
 
-    eventLoop.start({ isTaskRunnable, schedulerHost });
+    eventLoop.start(eventLoopOptions);
     queueTask(source, eventLoop, new DocumentImpl(), vi.fn());
 
-    expect(schedulerHost.requestEventLoopTurn).not.toHaveBeenCalled();
+    expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
   });
 
   it('does not enter another task turn while one is running', () => {
     const eventLoop = new EventLoop();
     const source = createTaskSource('reentrant');
-    const options = {
-      isTaskRunnable,
-      schedulerHost: createSchedulerHost(),
-    };
+    const options = createEventLoopOptions();
     const second = vi.fn();
 
     queueTask(source, eventLoop, null, () => {
@@ -376,15 +374,21 @@ describe('task queues', () => {
 
   it('suppresses reentrant microtask checkpoints', () => {
     const eventLoop = new EventLoop();
-    const schedulerHost = createSchedulerHost({
+    const eventLoopOptions = createEventLoopOptions({
       performMicrotaskCheckpoint() {
-        eventLoop.performMicrotaskCheckpoint(schedulerHost);
+        eventLoop.performMicrotaskCheckpoint(
+          eventLoopOptions.performMicrotaskCheckpoint,
+        );
       },
     });
 
-    eventLoop.performMicrotaskCheckpoint(schedulerHost);
+    eventLoop.performMicrotaskCheckpoint(
+      eventLoopOptions.performMicrotaskCheckpoint,
+    );
 
-    expect(schedulerHost.performMicrotaskCheckpoint).toHaveBeenCalledOnce();
+    expect(
+      eventLoopOptions.performMicrotaskCheckpoint,
+    ).toHaveBeenCalledOnce();
   });
 
   it('drains shared same-agent Realm promise jobs in FIFO order', async () => {
@@ -411,7 +415,9 @@ describe('task queues', () => {
         'second-realm.js',
       );
 
-      agent.eventLoop.performMicrotaskCheckpoint(nodeSchedulerHost);
+      agent.eventLoop.performMicrotaskCheckpoint(
+        performNodeMicrotaskCheckpoint,
+      );
 
       expect(order).toEqual(['A1', 'B1', 'A2']);
     });
@@ -423,7 +429,9 @@ describe('task queues', () => {
 
       process.nextTick(() => { order.push('ambient next tick'); });
       queueMicrotask(() => { order.push('microtask'); });
-      new EventLoop().performMicrotaskCheckpoint(nodeSchedulerHost);
+      new EventLoop().performMicrotaskCheckpoint(
+        performNodeMicrotaskCheckpoint,
+      );
 
       expect(order).toEqual(['microtask']);
     });
@@ -434,7 +442,9 @@ describe('task queues', () => {
     const order: string[] = [];
 
     queueMicrotask(() => { order.push('nested microtask'); });
-    new EventLoop().performMicrotaskCheckpoint(nodeSchedulerHost);
+    new EventLoop().performMicrotaskCheckpoint(
+      performNodeMicrotaskCheckpoint,
+    );
 
     expect(order).toEqual(['nested microtask']);
   });
@@ -446,7 +456,9 @@ describe('task queues', () => {
 
       setImmediate(() => {
         queueMicrotask(() => { order.push('microtask'); });
-        new EventLoop().performMicrotaskCheckpoint(nodeSchedulerHost);
+        new EventLoop().performMicrotaskCheckpoint(
+          performNodeMicrotaskCheckpoint,
+        );
         expect(order).toEqual(['microtask']);
       });
       vi.runAllTimers();
@@ -469,9 +481,9 @@ describe('task queues', () => {
     const inactiveDocument = new DocumentImpl();
     DocumentImpl.setBrowsingContext(inactiveDocument, browsingContext);
 
-    expect(isTaskRunnable(createTask(null))).toBe(true);
-    expect(isTaskRunnable(createTask(activeDocument))).toBe(true);
-    expect(isTaskRunnable(createTask(inactiveDocument))).toBe(false);
+    expect(createTask(null).isRunnable).toBe(true);
+    expect(createTask(activeDocument).isRunnable).toBe(true);
+    expect(createTask(inactiveDocument).isRunnable).toBe(false);
   });
 });
 
@@ -482,17 +494,12 @@ function requireEventLoop(global: object): EventLoop {
 }
 
 function createTask(document: DocumentImpl | null): Task {
-  return {
-    steps() {},
-    source: createTaskSource('runnable'),
-    document,
-    scriptEvaluationEnvironmentSettingsObjectSet: new Set(),
-  };
+  return new Task(createTaskSource('runnable'), document, () => {});
 }
 
-function createSchedulerHost(
-  overrides: Partial<SchedulerHost> = {},
-): SchedulerHost {
+function createEventLoopOptions(
+  overrides: Partial<EventLoopOptions> = {},
+): EventLoopOptions {
   return {
     requestEventLoopTurn: vi.fn(
       overrides.requestEventLoopTurn ?? (() => {}),

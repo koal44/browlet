@@ -351,17 +351,27 @@ describe('AbortController and AbortSignal', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('projects timeout while HTML scheduling remains provisional', () => {
+  it('aborts after its active-time timeout reaches the timer task source', async () => {
     const { window } = createBrowlet();
     const AbortSignal_ = requireInterface<typeof AbortSignal>(
       window,
       'AbortSignal',
     );
-
-    expect(typeof AbortSignal_.timeout).toBe('function');
-    expect(() => AbortSignal_.timeout(0)).toThrow(
-      'runStepsAfterTimeout awaits HTML section 8.7',
+    const DOMException_ = requireInterface<typeof DOMException>(
+      window,
+      'DOMException',
     );
+
+    const signal = AbortSignal_.timeout(0);
+    if (!signal.aborted) {
+      await new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => { resolve(); }, { once: true });
+      });
+    }
+
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBeInstanceOf(DOMException_);
+    expect((signal.reason as DOMException).name).toBe('TimeoutError');
   });
 });
 

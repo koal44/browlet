@@ -10,9 +10,8 @@
   §7.2.2.5; Window does not carry a second settings-object implementation.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
   queues, deterministic task turns, currently-running-task state, task timing
-  hooks, checkpoint coordination, and coalesced host wake-ups.
-- `scheduler-host.ts`: the replaceable host boundary for later task-turn
-  wake-ups, unsafe shared time, and the provisional Node microtask checkpoint.
+  hooks, checkpoint coordination, coalesced host wake-ups, and the explicit
+  Node operations that request a later turn and bridge a V8 checkpoint.
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
   event loop.
@@ -131,8 +130,8 @@ definition-level state before it runs tasks:
   or idle-period code relies on it.
 - The conceptual microtask queue must preserve ordering between Promise jobs
   and `queueMicrotask()` jobs. Do not add a second TypeScript queue alongside
-  V8's Promise queue. Queueing and synchronous checkpointing instead form one
-  replaceable scheduler-host capability, with the documented Node adapter
+  V8's Promise queue. Queueing and synchronous checkpointing instead enter
+  through explicit event-loop options, with the documented Node checkpoint
   limitation until Node exposes an explicit shareable queue.
 
 The low-level `queue a task` operation should require an explicit event loop
@@ -152,8 +151,10 @@ environment-specific task destination.
 DOM's synchronous event dispatch does not wait for this scheduler.
 `AbortSignal.timeout()` does: it is an early concrete consumer of "run steps
 after a timeout", relevant-global active time, and a task queued on the timer
-task source. Keep those facilities generic to HTML rather than adding a DOM
-timer path.
+task source. `timers.ts` now provides that per-global ordered active-time map,
+and function-based Window timers add shared IDs, nesting/clamping, repetition,
+and clearing above it. Keep those facilities generic to HTML rather than
+adding a DOM timer path.
 
 ## Missing
 
@@ -174,7 +175,7 @@ timer path.
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
 | existing `global-scope.ts` | Complete `WindowOrWorkerGlobalScope` origin, security, base64, `reportError()`, image, and structured-clone contributions | HTML §§8.2–8.3 |
-| `timers.ts` | Ordered timer map, nesting/clamping, active-time timeout steps, timer-task queuing, and clear operations; also consumed by `AbortSignal.timeout()` | HTML §8.7; DOM §3.2 |
+| existing `timers.ts`, `global-scope.ts`, and future script-policy owners | Add worker suspension; timer-handler timing; scripting-disabled checks; and the `TrustedScript`/CSP/classic-script string-handler branch to the implemented Window function-timer core | HTML §8.7; Trusted Types; CSP |
 | `animation-frame.ts` | `AnimationFrameProvider`, callback identity, cancellation, and rendering-opportunity delivery | HTML §8.12 |
 
 Dynamic markup insertion and DOM parsing are mapped under `html/parser/` and
@@ -220,17 +221,18 @@ without queue suppression and event-loop teardown is not worker shutdown.
    policy, remove its oldest runnable task, set and clear the currently-running
    task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
    boundary through a required hook. It is not a blocking `while (true)`.
-4. The checkpoint's reentrancy guard is `EventLoop` state, while
-   `scheduler-host.ts` contains the feature-detected `_tickCallback()` bridge.
-   The event-loop algorithm does not know that Node mechanism. Cross-realm
-   FIFO behavior is covered; the ambient-queue contamination limit remains an
-   explicit host constraint rather than behavior Browlet can isolate or
-   normalize.
+4. The checkpoint's reentrancy guard is `EventLoop` state, while the
+   feature-detected `_tickCallback()` bridge is an explicit Node operation in
+   `event-loop.ts`. The HTML checkpoint receives that operation without
+   knowing its mechanism. Cross-realm FIFO behavior is covered; the
+   ambient-queue contamination limit remains a runtime constraint rather than
+   behavior Browlet can isolate or normalize.
    Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and
    checkpoint timing remain named hooks until their owning subsystems exist.
-5. Let the scheduler host request one later host task, while the event loop
-   coalesces wake-ups and requests another turn only while runnable work
-   remains. Sample unsafe shared start/end times in spec order and expose named
+5. Let the injected turn-request operation schedule one later runtime task,
+   while the event loop coalesces wake-ups and requests another turn only
+   while runnable work remains. Sample unsafe shared start/end times in spec
+   order and expose named
    task-start, long-task-reporting, and task-end hooks. The hook owners remain
    absent until Long Animation Frames and Long Tasks enter; idle-period,
    worker-shutdown, and rendering work remain outside this slice.

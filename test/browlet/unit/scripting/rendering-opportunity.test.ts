@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getRelevantRealm } from '../../../../src/browlet/bindings';
 import {
-  createNewTopLevelTraversable, isTaskRunnable, type Navigable,
+  createNewTopLevelTraversable, type Navigable,
 } from '../../../../src/browlet/browsing/navigable';
 import {
-  EventLoop,
+  EventLoop, type EventLoopOptions,
 } from '../../../../src/browlet/scripting/event-loop';
 import {
   type RenderingOpportunityHost, type RenderingUpdateHooks,
@@ -14,9 +14,6 @@ import {
 import {
   renderingTaskSource,
 } from '../../../../src/browlet/scripting/tasks';
-import type {
-  SchedulerHost,
-} from '../../../../src/browlet/scripting/scheduler-host';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import {
   monotonicClock, UnsafeMoment,
@@ -59,10 +56,7 @@ describe('Window rendering producer', () => {
       renderingTaskSource,
     ).size).toBe(1);
 
-    agent.eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost: createSchedulerHost(),
-    });
+    agent.eventLoop.runTaskTurn(createEventLoopOptions());
 
     expect(phases).toEqual(renderingUpdatePhases);
     expect(contexts.every((context) =>
@@ -94,10 +88,7 @@ describe('Window rendering producer', () => {
     producer.start();
     manualHost.signal([navigable]);
     manualHost.setOpportunities([]);
-    agent.eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost: createSchedulerHost(),
-    });
+    agent.eventLoop.runTaskTurn(createEventLoopOptions());
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
   });
@@ -119,10 +110,7 @@ describe('Window rendering producer', () => {
 
     producer.start();
     manualHost.signal([navigable]);
-    agent.eventLoop.runTaskTurn({
-      isTaskRunnable,
-      schedulerHost: createSchedulerHost(),
-    });
+    agent.eventLoop.runTaskTurn(createEventLoopOptions());
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
   });
@@ -200,7 +188,7 @@ function createManualRenderingHost(times: UnsafeMoment[]): {
   };
 }
 
-function createSchedulerHost(): SchedulerHost {
+function createEventLoopOptions(): EventLoopOptions {
   return {
     requestEventLoopTurn() {},
     unsafeSharedCurrentTime: () =>

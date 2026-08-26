@@ -1,7 +1,6 @@
-import type { DocumentImpl } from '../dom/nodes/document';
+import { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';
-import type { SchedulerHost } from './scheduler-host';
 
 /*
  * Each agent has a unique event loop. A task source is associated with one
@@ -14,7 +13,7 @@ export class EventLoop {
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
-  #schedulingOptions: TaskTurnOptions | null = null;
+  #schedulingOptions: EventLoopOptions | null = null;
   #turnRequested = false;
   readonly #taskQueues = new Set<Set<Task>>();
   readonly #taskQueueBySource = new Map<TaskSource, Set<Task>>();
@@ -27,7 +26,11 @@ export class EventLoop {
     return this.#lastRenderOpportunityTime;
   }
 
-  start(options: TaskTurnOptions): void {
+  get started(): boolean {
+    return this.#schedulingOptions !== null;
+  }
+
+  start(options: EventLoopOptions): void {
     if (this.#schedulingOptions !== null) {
       throw new Error('An event loop scheduler is already running');
     }
@@ -36,21 +39,20 @@ export class EventLoop {
     this.#requestTurnIfNeeded();
   }
 
-  hasRunnableTasks(isTaskRunnable: (task: Task) => boolean): boolean {
+  hasRunnableTasks(): boolean {
     return [...this.#taskQueues].some((queue) =>
-      findFirstRunnableTask(queue, isTaskRunnable) !== undefined,
+      findFirstRunnableTask(queue) !== undefined,
     );
   }
 
-  runTaskTurn(options: TaskTurnOptions): boolean {
+  runTaskTurn(options: EventLoopOptions): boolean {
     if (this.#currentlyRunningTask !== null) {
       throw new Error('An event loop cannot run a task reentrantly');
     }
 
-    const { isTaskRunnable, schedulerHost } = options;
     const runnableTaskQueues = [...this.#taskQueues]
       .filter((queue) =>
-        findFirstRunnableTask(queue, isTaskRunnable) !== undefined,
+        findFirstRunnableTask(queue) !== undefined,
       );
     if (runnableTaskQueues.length === 0) return false;
 
@@ -66,11 +68,8 @@ export class EventLoop {
       throw new Error('Task queue selector returned an unavailable queue');
     }
 
-    const taskStartTime = schedulerHost.unsafeSharedCurrentTime();
-    const oldestTask = findFirstRunnableTask(
-      selectedTaskQueue,
-      isTaskRunnable,
-    );
+    const taskStartTime = options.unsafeSharedCurrentTime();
+    const oldestTask = findFirstRunnableTask(selectedTaskQueue);
     if (oldestTask === undefined) {
       throw new Error('Selected task queue has no runnable task');
     }
@@ -91,10 +90,10 @@ export class EventLoop {
       taskError = { value: error };
     } finally {
       this.#currentlyRunningTask = null;
-      this.performMicrotaskCheckpoint(schedulerHost);
+      this.performMicrotaskCheckpoint(options.performMicrotaskCheckpoint);
     }
 
-    const taskEndTime = schedulerHost.unsafeSharedCurrentTime();
+    const taskEndTime = options.unsafeSharedCurrentTime();
     options.longTaskReporter?.reportLongTasks(
       taskStartTime,
       taskEndTime,
@@ -110,12 +109,14 @@ export class EventLoop {
     return true;
   }
 
-  performMicrotaskCheckpoint(schedulerHost: SchedulerHost): void {
+  performMicrotaskCheckpoint(
+    performJavaScriptMicrotaskCheckpoint: () => void,
+  ): void {
     if (this.#performingMicrotaskCheckpoint) return;
 
     this.#performingMicrotaskCheckpoint = true;
     try {
-      schedulerHost.performMicrotaskCheckpoint();
+      performJavaScriptMicrotaskCheckpoint();
 
       /*
        * TODO(HTML section 8.1.7.3): Notify rejected promises, clean up
@@ -133,7 +134,7 @@ export class EventLoop {
     steps: () => void,
     document: DocumentImpl | null = null,
   ): void {
-    const microtask = createTask(
+    const microtask = new Task(
       microtaskTaskSource,
       document,
       steps,
@@ -158,6 +159,10 @@ export class EventLoop {
 
   static enqueueTask(eventLoop: EventLoop, task: Task): void {
     eventLoop.#getTaskQueue(task.source).add(task);
+    eventLoop.#requestTurnIfNeeded();
+  }
+
+  static notifyTaskRunnabilityChanged(eventLoop: EventLoop): void {
     eventLoop.#requestTurnIfNeeded();
   }
 
@@ -196,11 +201,11 @@ export class EventLoop {
     if (
       options === null ||
       this.#turnRequested ||
-      !this.hasRunnableTasks(options.isTaskRunnable)
+      !this.hasRunnableTasks()
     ) return;
 
     this.#turnRequested = true;
-    options.schedulerHost.requestEventLoopTurn(() => {
+    options.requestEventLoopTurn(() => {
       try {
         this.runTaskTurn(options);
       } finally {
@@ -211,12 +216,16 @@ export class EventLoop {
   }
 }
 
-export type TaskTurnOptions = {
-  readonly isTaskRunnable: (task: Task) => boolean;
+export type EventLoopOptions = {
   readonly longTaskReporter?: LongTaskReporter;
-  readonly schedulerHost: SchedulerHost;
+  readonly performMicrotaskCheckpoint: (this: void) => void;
+  readonly requestEventLoopTurn: (
+    this: void,
+    steps: () => void,
+  ) => void;
   readonly selectTaskQueue?: TaskQueueSelector;
   readonly taskTiming?: TaskTimingHooks;
+  readonly unsafeSharedCurrentTime: (this: void) => UnsafeMoment;
 };
 
 export type TaskTimingHooks = {
@@ -257,12 +266,31 @@ export type TaskQueueSelector = (
   runnableTaskQueues: readonly ReadonlySet<Task>[],
 ) => ReadonlySet<Task>;
 
-export type Task = {
-  readonly steps: () => void;
-  readonly source: TaskSource;
+export class Task {
   readonly document: DocumentImpl | null;
-  readonly scriptEvaluationEnvironmentSettingsObjectSet: Set<EnvironmentSettingsObject>;
-};
+  readonly scriptEvaluationEnvironmentSettingsObjectSet =
+    new Set<EnvironmentSettingsObject>();
+  readonly source: TaskSource;
+  readonly steps: () => void;
+  readonly timerNestingLevel?: number;
+
+  constructor(
+    source: TaskSource,
+    document: DocumentImpl | null,
+    steps: () => void,
+    options: TaskCreationOptions = {},
+  ) {
+    this.document = document;
+    this.source = source;
+    this.steps = steps;
+    this.timerNestingLevel = options.timerNestingLevel;
+  }
+
+  get isRunnable(): boolean {
+    return this.document === null ||
+      DocumentImpl.isFullyActive(this.document);
+  }
+}
 
 /*
  * A source is an opaque identity, not the queue itself. The diagnostic name
@@ -275,24 +303,12 @@ export function createTaskSource(name: string): TaskSource {
   return Object.freeze({ name });
 }
 
-export function createTask(
-  source: TaskSource,
-  document: DocumentImpl | null,
-  steps: () => void,
-): Task {
-  return {
-    steps,
-    source,
-    document,
-    scriptEvaluationEnvironmentSettingsObjectSet: new Set(),
-  };
-}
-
 export function queueTask(
   source: TaskSource,
   eventLoop: EventLoop,
   document: DocumentImpl | null,
   steps: () => void,
+  options: TaskCreationOptions = {},
 ): void {
   /*
    * Require the values which HTML permits specifications to imply. The spec
@@ -301,18 +317,21 @@ export function queueTask(
    */
   EventLoop.enqueueTask(
     eventLoop,
-    createTask(source, document, steps),
+    new Task(source, document, steps, options),
   );
 }
+
+export type TaskCreationOptions = {
+  readonly timerNestingLevel?: number;
+};
 
 const microtaskTaskSource = createTaskSource('microtask');
 
 function findFirstRunnableTask(
   taskQueue: ReadonlySet<Task>,
-  isTaskRunnable: (task: Task) => boolean,
 ): Task | undefined {
   for (const task of taskQueue) {
-    if (isTaskRunnable(task)) return task;
+    if (task.isRunnable) return task;
   }
   return undefined;
 }
@@ -325,4 +344,38 @@ function selectFirstTaskQueue(
     throw new Error('Cannot select from an empty set of task queues');
   }
   return taskQueue;
+}
+
+/*
+ * Node does not expose V8's shared microtask queue through a supported
+ * synchronous API. This drains Node's ambient V8 queue as well as next-tick
+ * and promise-rejection machinery. Keep the provisional operation explicit
+ * and replaceable without allowing it to define Browlet's HTML checkpoint
+ * semantics.
+ *
+ * https://github.com/nodejs/node/issues/65555
+ */
+export function performNodeMicrotaskCheckpoint(): void {
+  getTickCallback()();
+}
+
+export function requestNodeEventLoopTurn(steps: () => void): void {
+  // Enter from a later Node task; never run an HTML turn synchronously.
+  setImmediate(steps);
+}
+
+let tickCallback: (() => void) | undefined;
+
+function getTickCallback(): () => void {
+  if (tickCallback !== undefined) return tickCallback;
+
+  const candidate: unknown = Reflect.get(process, '_tickCallback');
+  if (typeof candidate !== 'function') {
+    throw new Error(
+      'Node does not expose the provisional microtask checkpoint bridge',
+    );
+  }
+
+  tickCallback = () => { Reflect.apply(candidate, process, []); };
+  return tickCallback;
 }

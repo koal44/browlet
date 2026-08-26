@@ -12,8 +12,8 @@ import {
   EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../../src/browlet/scripting/environment';
 import {
-  createNewTopLevelTraversable, getNodeNavigable, initializeNavigable,
-  isFullyActive, Navigable, TopLevelTraversable,
+  createNewTopLevelTraversable, initializeNavigable, Navigable,
+  TopLevelTraversable,
 } from '../../../../src/browlet/browsing/navigable';
 import {
   createRealm, Realm,
@@ -167,19 +167,19 @@ describe('navigables', () => {
     const secondDocument = new DocumentImpl();
     DocumentImpl.setBrowsingContext(secondDocument, browsingContext);
 
-    expect(getNodeNavigable(firstDocument)).toBe(traversable);
-    expect(isFullyActive(firstDocument)).toBe(true);
-    expect(getNodeNavigable(secondDocument)).toBeNull();
-    expect(isFullyActive(secondDocument)).toBe(false);
+    expect(DocumentImpl.getNodeNavigable(firstDocument)).toBe(traversable);
+    expect(DocumentImpl.isFullyActive(firstDocument)).toBe(true);
+    expect(DocumentImpl.getNodeNavigable(secondDocument)).toBeNull();
+    expect(DocumentImpl.isFullyActive(secondDocument)).toBe(false);
 
     traversable.activeSessionHistoryEntry = createSessionHistoryEntry(
       createDocumentState(secondDocument),
     );
 
-    expect(getNodeNavigable(firstDocument)).toBeNull();
-    expect(isFullyActive(firstDocument)).toBe(false);
-    expect(getNodeNavigable(secondDocument)).toBe(traversable);
-    expect(isFullyActive(secondDocument)).toBe(true);
+    expect(DocumentImpl.getNodeNavigable(firstDocument)).toBeNull();
+    expect(DocumentImpl.isFullyActive(firstDocument)).toBe(false);
+    expect(DocumentImpl.getNodeNavigable(secondDocument)).toBe(traversable);
+    expect(DocumentImpl.isFullyActive(secondDocument)).toBe(true);
   });
 
   it('does not mistake a parent association for a container Document', () => {
@@ -198,9 +198,9 @@ describe('navigables', () => {
     const child = new Navigable();
     initializeNavigable(child, createDocumentState(childDocument), parent);
 
-    expect(getNodeNavigable(childDocument)).toBe(child);
-    expect(isFullyActive(parentDocument)).toBe(true);
-    expect(isFullyActive(childDocument)).toBe(false);
+    expect(DocumentImpl.getNodeNavigable(childDocument)).toBe(child);
+    expect(DocumentImpl.isFullyActive(parentDocument)).toBe(true);
+    expect(DocumentImpl.isFullyActive(childDocument)).toBe(false);
   });
 
   it('creates the complete initial top-level about:blank graph', () => {
@@ -348,7 +348,7 @@ describe('navigation lifecycle', () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window as InternalWindowProxy;
     const initialDocument = browlet.document as unknown as DocumentImpl;
-    const navigable = getNodeNavigable(initialDocument);
+    const navigable = DocumentImpl.getNodeNavigable(initialDocument);
     if (navigable === null) {
       throw new Error('Initial Document has no node navigable');
     }
@@ -371,10 +371,10 @@ describe('navigation lifecycle', () => {
     expect(window && WindowImpl.getAssociatedDocument(window)).toBe(document);
     expect(DocumentImpl.getBrowsingContext(document)?.windowProxy)
       .toBe(windowProxy);
-    expect(getNodeNavigable(initialDocument)).toBeNull();
-    expect(isFullyActive(initialDocument)).toBe(false);
-    expect(getNodeNavigable(document)).toBe(navigable);
-    expect(isFullyActive(document)).toBe(true);
+    expect(DocumentImpl.getNodeNavigable(initialDocument)).toBeNull();
+    expect(DocumentImpl.isFullyActive(initialDocument)).toBe(false);
+    expect(DocumentImpl.getNodeNavigable(document)).toBe(navigable);
+    expect(DocumentImpl.isFullyActive(document)).toBe(true);
   });
 
 });

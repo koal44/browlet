@@ -224,11 +224,8 @@ export class BrowsingContextGroup {
   readonly agentClusterMap = new AgentClusterMap();
   readonly historicalAgentClusterKeyMap = new HistoricalAgentClusterKeyMap();
   crossOriginIsolationMode: CrossOriginIsolationMode = 'none';
-  readonly #userAgent: UserAgent | null;
 
-  constructor(userAgent: UserAgent | null = null) {
-    this.#userAgent = userAgent;
-  }
+  constructor(readonly userAgent: UserAgent | null = null) {}
 
   append(browsingContext: BrowsingContext): void {
     if (
@@ -251,7 +248,7 @@ export class BrowsingContextGroup {
     this.browsingContextSet.delete(browsingContext);
 
     if (this.browsingContextSet.size === 0) {
-      this.#userAgent?.removeBrowsingContextGroup(this);
+      this.userAgent?.removeBrowsingContextGroup(this);
     }
   }
 }
