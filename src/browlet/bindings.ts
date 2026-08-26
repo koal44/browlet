@@ -9,7 +9,8 @@ import {
 import { Realm } from './scripting/realm';
 import type { WindowImpl } from './browsing/window/window';
 import {
-  isWindowProxy, setWindowProxyWindow, type WindowProxy,
+  isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow,
+  type WindowProxy,
 } from './browsing/window/window-proxy';
 import { browletIDLDefinitions } from './web-idl';
 
@@ -76,6 +77,7 @@ export function getRelevantRealm(value: object): Realm {
 const hostDefinedInterfaces = [{
   is: isWindowProxy,
   name: 'WindowProxy',
+  resolveReceiver: resolveWindowProxyReceiver,
 }];
 
 const browletDefinitions = [

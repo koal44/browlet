@@ -1,7 +1,8 @@
 import {
-  defineInterfaceMixin, definePartialInterfaceMixin, readonlyAttr, reference,
-  xattr,
+  arg, defineInterfaceMixin, definePartialInterfaceMixin, idlType, op,
+  readonlyAttr, reference, xattr,
 } from '../../web-idl/declaration/index';
+import { bind } from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
 import type { EnvironmentTiming } from '../performance/high-resolution-time';
 
@@ -66,7 +67,18 @@ export class WindowOrWorkerGlobalScopeMixin {
 // -- Web IDL ------------------------------------------------------------
 
 export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
-  members: [],
+  members: [op(
+    'queueMicrotask',
+    idlType.undefined,
+    [arg('callback', reference('VoidFunction'))],
+    bind({
+      invoke(context, callback) {
+        context.realm.queueMicrotask(
+          () => context.callbacks.invokeFunction(callback, [], 'report'),
+        );
+      },
+    }),
+  )],
   name: 'WindowOrWorkerGlobalScope',
 });
 

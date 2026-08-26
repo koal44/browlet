@@ -1431,7 +1431,7 @@ export class JavaScriptBinding {
     lenient: boolean,
   ): object | typeof invalidReceiver {
     const value = this.#resolveThisValue(thisArgument);
-    const record = this.platformObjects.getRecord(value);
+    const record = this.#resolveReceiverRecord(value);
     if (record) {
       this.realm.performSecurityCheck(record.object, identifier, type);
     }
@@ -1440,6 +1440,21 @@ export class JavaScriptBinding {
       return this.#throwTypeError('Illegal invocation');
     }
     return record.implementation;
+  }
+
+  #resolveReceiverRecord(
+    value: unknown,
+  ): PlatformObjectRecord | undefined {
+    const direct = this.platformObjects.getRecord(value);
+    if (direct) return direct;
+
+    for (const interface_ of this.hostDefinedInterfaces.values()) {
+      if (!interface_.is(value)) continue;
+      const platformObject = interface_.resolveReceiver?.(value);
+      const record = this.platformObjects.getRecord(platformObject);
+      if (record) return record;
+    }
+    return undefined;
   }
 
   #resolveThisValue(thisArgument: unknown): unknown {
