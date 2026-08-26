@@ -10,6 +10,7 @@ import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
 import { serializeSite } from './origin';
 import { createRealm } from '../scripting/realm';
 import type { UserAgent } from '../user-agent';
+import type { Navigable } from './navigable';
 import {
   createWindowProxy, getWindowProxyWindow,
 } from './window/window-proxy';
@@ -42,8 +43,20 @@ export class BrowsingContext {
   initialURL: URLRecord | null = null;
   virtualBrowsingContextGroupID = 0;
   #group: BrowsingContextGroup | null = null;
+
+  /*
+   * A navigable can present a series of browsing contexts. This inverse link
+   * lets Document activity follow the existing Document -> browsing context
+   * relationship without maintaining a second per-Document activity index.
+   */
+  #navigable: Navigable | null = null;
+
   get group(): BrowsingContextGroup | null {
     return this.#group;
+  }
+
+  get navigable(): Navigable | null {
+    return this.#navigable;
   }
 
   get activeWindow(): WindowImpl | null {
@@ -62,6 +75,17 @@ export class BrowsingContext {
     group: BrowsingContextGroup | null,
   ): void {
     browsingContext.#group = group;
+  }
+
+  static setNavigable(
+    browsingContext: BrowsingContext,
+    navigable: Navigable,
+  ): void {
+    const existing = browsingContext.#navigable;
+    if (existing !== null && existing !== navigable) {
+      throw new Error('A browsing context cannot belong to two navigables');
+    }
+    browsingContext.#navigable = navigable;
   }
 }
 
@@ -392,8 +416,8 @@ function makeActive(
     throw new Error('Document relevant global object is not a Window');
   }
   const browsingContext = DocumentImpl.getBrowsingContext(document);
-  if (!(browsingContext instanceof BrowsingContext)) {
-    throw new Error('Document has no Browlet browsing context');
+  if (browsingContext === null) {
+    throw new Error('Document has no browsing context');
   }
 
   browletBindings.retargetWindowProxy(browsingContext.windowProxy, window);

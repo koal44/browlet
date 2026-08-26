@@ -10,7 +10,6 @@ import type { Origin } from '../../../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
 import { areSameOrigin } from '../origin';
 import { browletBindings, getRelevantRealm } from '../../bindings';
-import { BrowsingContext } from '../browsing-context';
 import type { Environment } from '../../scripting/environment';
 import {
   TopLevelTraversable, type Navigable, type TraversableNavigable,
@@ -181,8 +180,8 @@ export function finalizeCrossDocumentNavigation(
   }
 
   const browsingContext = DocumentImpl.getBrowsingContext(document);
-  if (!(browsingContext instanceof BrowsingContext)) {
-    throw new Error('Navigation Document has no Browlet browsing context');
+  if (browsingContext === null) {
+    throw new Error('Navigation Document has no browsing context');
   }
   if (
     navigable.parent === null &&
@@ -236,8 +235,8 @@ function applyPushOrReplaceHistoryStep(
   if (document === null) return;
   const browsingContext = DocumentImpl.getBrowsingContext(document);
   const realm = getRelevantRealm(document);
-  if (!(browsingContext instanceof BrowsingContext)) {
-    throw new Error('Navigation Document has no Browlet browsing context');
+  if (browsingContext === null) {
+    throw new Error('Navigation Document has no browsing context');
   }
   if (!WindowImpl.is(realm.globalObject)) {
     throw new Error('Navigation Document global object is not a Window');

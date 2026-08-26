@@ -9,7 +9,7 @@ import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
   browletBindings, getRelevantRealm, projectWindow,
 } from '../bindings';
-import { BrowsingContext } from './browsing-context';
+import type { BrowsingContext } from './browsing-context';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
 import type {
@@ -136,7 +136,7 @@ export function completelyFinishLoading(
   document: DocumentImpl,
 ): void {
   const browsingContext = DocumentImpl.getBrowsingContext(document);
-  if (!(browsingContext instanceof BrowsingContext)) {
+  if (browsingContext === null) {
     throw new Error('A completely loaded Document needs a browsing context');
   }
   const window = browsingContext.activeWindow;

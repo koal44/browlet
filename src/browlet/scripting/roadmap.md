@@ -36,6 +36,20 @@
   element reactions, and JavaScript kept-object cleanup. Calling Node's
   `queueMicrotask()` is therefore a host wake-up mechanism, not the complete
   HTML checkpoint algorithm.
+- Default `vm.Context`s share Node's microtask queue, but `node:vm` has no
+  public synchronous checkpoint. Until an explicit shareable queue reaches the
+  supported Node baseline, keep a feature-detected `process._tickCallback()`
+  bridge isolated in the Node scheduler host. It is a deprecated private hook
+  that drains Node's ambient queue rather than a Browlet-owned queue: unrelated
+  host or dependency promise jobs, work from another Browlet instance in the
+  same isolate, next-tick callbacks, and promise-rejection machinery can run
+  during the checkpoint. It is therefore only a provisional compatibility
+  bridge for a controlled single-scheduler host, not an isolation boundary or
+  the definition of Browlet's checkpoint semantics. Preserve cross-realm FIFO
+  and contamination-limit tests around the bridge, fail explicitly when it is
+  unavailable, and replace it once a public capability exists.
+  `microtaskMode: 'afterEvaluate'` is not a fallback because it gives each
+  context a separate queue.
 - DOM §4 assigns each similar-origin Window agent a
   mutation-observer-microtask-queued flag, pending mutation observers, and
   signal slots. Keep that state on `WindowAgent`; DOM owns record/slot
@@ -83,7 +97,7 @@ timer path.
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
 | existing `event-loop.ts` | Tasks, task queues/sources, global/element task helpers, microtask checkpoints, rendering opportunities, worker/worklet loop restrictions, and loop teardown | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
-| `scheduler-host.ts` when the loop first runs autonomously | Narrow host wake-up, monotonic-clock, and parallel-work capabilities without delegating HTML ordering to Node | HTML §§2.1.1 and 8.1.7; High Resolution Time |
+| `scheduler-host.ts` when the loop first runs autonomously | Narrow host wake-up, synchronous microtask-checkpoint bridge, monotonic-clock, and parallel-work capabilities without delegating HTML ordering to Node | HTML §§2.1.1 and 8.1.7; High Resolution Time |
 | `global-scope.ts` | `WindowOrWorkerGlobalScope`, base64 utilities, `reportError()`, and global API contributions | HTML §§8.2–8.3 |
 | `timers.ts` | Ordered timer map, nesting/clamping, active-time timeout steps, timer-task queuing, and clear operations; also consumed by `AbortSignal.timeout()` | HTML §8.7; DOM §3.2 |
 | `microtasks.ts` only if it outgrows event-loop.ts | The `queueMicrotask()` API and checkpoint integration | HTML §8.8 |

@@ -1,4 +1,5 @@
 import { DocumentImpl } from '../dom/nodes/document';
+import { NodeImpl } from '../dom/nodes/node';
 import {
   BrowsingContext, createNewTopLevelBrowsingContextAndDocument,
 } from './browsing-context';
@@ -13,9 +14,38 @@ export class Navigable {
   readonly id = Symbol('Navigable');
   parent: Navigable | null = null;
   currentSessionHistoryEntry!: SessionHistoryEntry;
-  activeSessionHistoryEntry!: SessionHistoryEntry;
+  #activeSessionHistoryEntry: SessionHistoryEntry | null = null;
   isClosing = false;
   isDelayingLoadEvents = false;
+
+  get activeSessionHistoryEntry(): SessionHistoryEntry {
+    if (this.#activeSessionHistoryEntry === null) {
+      throw new Error('Navigable has not been initialized');
+    }
+    return this.#activeSessionHistoryEntry;
+  }
+
+  set activeSessionHistoryEntry(entry: SessionHistoryEntry) {
+    const document = entry.documentState.document;
+    if (document === null) {
+      this.#activeSessionHistoryEntry = entry;
+      return;
+    }
+
+    const browsingContext = DocumentImpl.getBrowsingContext(document);
+    if (browsingContext === null) {
+      throw new Error('An active Document needs a browsing context');
+    }
+    if (
+      browsingContext.navigable !== null &&
+      browsingContext.navigable !== this
+    ) {
+      throw new Error('A browsing context cannot be active in two navigables');
+    }
+
+    this.#activeSessionHistoryEntry = entry;
+    BrowsingContext.setNavigable(browsingContext, this);
+  }
 
   get activeDocument(): DocumentImpl | null {
     return this.activeSessionHistoryEntry.documentState.document;
@@ -24,10 +54,7 @@ export class Navigable {
   get activeBrowsingContext(): BrowsingContext | null {
     const document = this.activeDocument;
     if (document === null) return null;
-    const browsingContext = DocumentImpl.getBrowsingContext(document);
-    return browsingContext instanceof BrowsingContext
-      ? browsingContext
-      : null;
+    return DocumentImpl.getBrowsingContext(document);
   }
 
   get activeWindow(): WindowImpl | null {
@@ -50,6 +77,37 @@ export class TraversableNavigable extends Navigable {
 }
 
 export class TopLevelTraversable extends TraversableNavigable {}
+
+/*
+ * Return the navigable whose active Document is node's node document.
+ * Inactive Documents intentionally have no node navigable, even while their
+ * session-history entries retain them for possible later reactivation.
+ */
+export function getNodeNavigable(node: NodeImpl): Navigable | null {
+  const document = NodeImpl.getNodeDocument(node);
+  if (document === null) return null;
+
+  const browsingContext = DocumentImpl.getBrowsingContext(document);
+  if (browsingContext === null) return null;
+
+  const navigable = browsingContext.navigable;
+  return navigable?.activeDocument === document ? navigable : null;
+}
+
+export function isFullyActive(document: DocumentImpl): boolean {
+  const navigable = getNodeNavigable(document);
+  if (navigable === null) return false;
+  if (navigable instanceof TopLevelTraversable) return true;
+
+  /*
+   * HTML defines a child navigable's answer recursively through its container
+   * element's node Document. Browlet does not yet implement navigable
+   * containers. Its parent navigable is not an equivalent shortcut: after a
+   * parent navigation, the container can remain in the inactive predecessor
+   * Document while parent.activeDocument refers to its replacement.
+   */
+  return false;
+}
 
 /*
  * HTML's session history traversal parallel queue. Its enqueueing and

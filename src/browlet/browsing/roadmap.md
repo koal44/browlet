@@ -6,6 +6,8 @@
   agents, navigation, and Window security decisions.
 - `browsing-context.ts`, `navigable.ts`, and `document-lifecycle.ts` form the
   bounded top-level navigation spine.
+- `navigable.ts` derives a node's navigable and a top-level Document's
+  fully-active status from the navigable's active session-history entry.
 
 ## Missing structural concepts
 
@@ -15,7 +17,7 @@
 | `site.ts` if origin.ts becomes crowded | Sites and schemeless same-site operations | HTML §7.1.1.1 |
 | `agent-cluster-key.ts` only if it no longer belongs in scripting | Origin-keyed agent-cluster selection | HTML §7.1.2 |
 | `browsing-context-group.ts` if group behavior outgrows browsing-context.ts | Browsing-context groups and related group switching | HTML §§7.1 and 7.3.2 |
-| existing `navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and the derived fully-active-Document predicate | HTML §§7.3.1–7.3.3 |
+| existing `navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and fully-active recursion through the container Document | HTML §§7.3.1–7.3.3 |
 | `target.ts` | Choosing/naming browsing contexts and navigables | HTML §7.3.1 |
 | existing `document-lifecycle.ts` | Shared Document creation plus ordered finish, unload, destroy, abort, event, realm-cleanup, and navigable-detachment behavior | HTML §7.5 |
 | existing `user-agent.ts` plus the future embedder/automation boundary | Browser-UI navigation, reload, stop, traversal, creation, closing, POST confirmation, and cache-bypass requests routed through the ordinary algorithms with `browser UI` involvement | HTML §7.9 |

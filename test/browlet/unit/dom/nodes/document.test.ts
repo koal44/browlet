@@ -13,6 +13,8 @@ import { ShadowRootImpl } from '../../../../../src/browlet/dom/nodes/shadow-root
 import { TextImpl } from '../../../../../src/browlet/dom/nodes/text';
 import { EventImpl } from '../../../../../src/browlet/dom/events/event';
 import { EventTargetImpl } from '../../../../../src/browlet/dom/events/event-target';
+import { BrowsingContext } from '../../../../../src/browlet/browsing/browsing-context';
+import { WindowImpl } from '../../../../../src/browlet/browsing/window/window';
 import { HTML_NAMESPACE } from '../../../../../src/shared/namespaces';
 import { parseURL, type URLRecord } from '../../../../../src/url/url';
 
@@ -74,15 +76,38 @@ describe('Document', () => {
     expect(text.baseURI).toBe(second.baseURI);
   });
 
-  it('uses the relevant global as its event parent except for load', () => {
+  it('uses its relevant Window as its event parent while it has a browsing context', () => {
     const document = new DocumentImpl();
-    const global = new EventTargetImpl();
-    DocumentImpl.setBrowsingContextWindow(document, global);
+    const window = new WindowImpl(new URL('about:blank'));
+    WindowImpl.setAssociatedDocument(window, document);
 
     expect(EventTargetImpl.getParent(document, new EventImpl('ready')))
-      .toBe(global);
+      .toBeNull();
+
+    DocumentImpl.setBrowsingContext(document, new BrowsingContext());
+
+    expect(EventTargetImpl.getParent(document, new EventImpl('ready')))
+      .toBe(window);
     expect(EventTargetImpl.getParent(document, new EventImpl('load')))
       .toBeNull();
+  });
+
+  it('retains the relevant Window when that Window presents a second Document', () => {
+    const browsingContext = new BrowsingContext();
+    const first = new DocumentImpl();
+    const second = new DocumentImpl();
+    const window = new WindowImpl(new URL('about:blank'));
+    DocumentImpl.setBrowsingContext(first, browsingContext);
+    DocumentImpl.setBrowsingContext(second, browsingContext);
+
+    WindowImpl.setAssociatedDocument(window, first);
+    WindowImpl.setAssociatedDocument(window, second);
+
+    expect(WindowImpl.getAssociatedDocument(window)).toBe(second);
+    expect(EventTargetImpl.getParent(first, new EventImpl('ready')))
+      .toBe(window);
+    expect(EventTargetImpl.getParent(second, new EventImpl('ready')))
+      .toBe(window);
   });
 
   it('represents document fragments and shadow-root event topology', () => {

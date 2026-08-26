@@ -234,11 +234,13 @@ export class WindowImpl
     window: WindowImpl,
     document: DocumentImpl,
   ): void {
-    if (window.#document && window.#document !== document) {
-      DocumentImpl.setBrowsingContextWindow(window.#document, null);
-    }
+    /*
+     * The initial about:blank Document and its replacement can share this
+     * Window. Each Document nevertheless retains the Window as its relevant
+     * global object when the Window's associated Document advances.
+     */
+    DocumentImpl.setRelevantGlobalObject(document, window);
     window.#document = document;
-    DocumentImpl.setBrowsingContextWindow(document, window);
   }
 
   static setCurrentEvent(window: WindowImpl, event: Event | undefined): void {
