@@ -178,6 +178,14 @@ export type ConversionContext = {
 export type HostDefinedInterface = {
   is(value: unknown): boolean;
   name: string;
+  /*
+   * Some host-defined exotic objects expose another platform object's Web IDL
+   * members without themselves being registered as that platform object.
+   * Resolve such a value only when it is used as an interface-member receiver;
+   * this hook does not participate in ordinary Web IDL value conversion.
+   * WindowProxy is the motivating and currently sole Browlet case.
+   */
+  resolveReceiver?(value: unknown): object | undefined;
 };
 
 export type ConversionOptions = {

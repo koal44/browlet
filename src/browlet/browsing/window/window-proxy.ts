@@ -26,6 +26,18 @@ export function getWindowProxyWindow(
   return requireWindowProxyHandler(windowProxy).window;
 }
 
+/*
+ * WindowProxy is not a second Window platform object. For Web IDL receiver
+ * checks, resolve its stable exotic identity to the currently wrapped Window
+ * platform object. Navigation can replace that object without replacing the
+ * WindowProxy.
+ */
+export function resolveWindowProxyReceiver(
+  windowProxy: WindowProxy,
+): Window | undefined {
+  return requireWindowProxyHandler(windowProxy).windowObject;
+}
+
 export function setWindowProxyWindow(
   windowProxy: WindowProxy,
   window: WindowImpl,
@@ -50,7 +62,6 @@ const windowProxyHandlers = new WeakMap<WindowProxy, WindowProxyHandler>();
  */
 class WindowProxyHandler implements ProxyHandler<object> {
   readonly windowProxy: WindowProxy;
-  readonly #methods = new Map<PropertyKey, CallableFunction>();
   #window: WindowAssociation | null = null;
 
   constructor() {
@@ -61,12 +72,15 @@ class WindowProxyHandler implements ProxyHandler<object> {
     return this.#window?.implementation ?? null;
   }
 
+  get windowObject(): Window | undefined {
+    return this.#window?.object;
+  }
+
   setWindow(window: WindowImpl, object: Window): void {
     if (!WindowImpl.is(window)) {
       throw new TypeError('WindowProxy target is not a Window implementation');
     }
     this.#window = { implementation: window, object };
-    this.#methods.clear();
   }
 
   defineProperty(
@@ -95,14 +109,6 @@ class WindowProxyHandler implements ProxyHandler<object> {
       !Reflect.has(window, property)
     ) return this.windowProxy;
 
-    if (eventTargetMethods.has(property)) {
-      let method = this.#methods.get(property);
-      if (!method) {
-        method = this.createEventTargetMethod(property);
-        this.#methods.set(property, method);
-      }
-      return method;
-    }
     const value: unknown = Reflect.get(window, property, window);
     return value;
   }
@@ -151,17 +157,6 @@ class WindowProxyHandler implements ProxyHandler<object> {
     }
     return this.#window.object;
   }
-
-  private createEventTargetMethod(property: PropertyKey): CallableFunction {
-    return (...argumentsList: unknown[]) => {
-      const window = this.requireWindowObject();
-      const method = Reflect.get(window, property) as unknown;
-      if (typeof method !== 'function') {
-        throw new TypeError(`${String(property)} is not callable`);
-      }
-      return Reflect.apply(method, window, argumentsList) as unknown;
-    };
-  }
 }
 
 type WindowAssociation = {
@@ -171,10 +166,6 @@ type WindowAssociation = {
 
 const windowProxyReferences = new Set<PropertyKey>([
   'frames', 'parent', 'self', 'top', 'window',
-]);
-
-const eventTargetMethods = new Set<PropertyKey>([
-  'addEventListener', 'dispatchEvent', 'removeEventListener',
 ]);
 
 function requireWindowProxyHandler(

@@ -13,6 +13,9 @@
   hooks, checkpoint coordination, and coalesced host wake-ups.
 - `scheduler-host.ts`: the replaceable host boundary for later task-turn
   wake-ups, unsafe shared time, and the provisional Node microtask checkpoint.
+- `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
+  §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
+  event loop.
 - `tasks.ts`: explicit global-task routing and the five generic task-source
   identities from HTML §8.1.7.4; each event loop owns their queue associations.
 - `rendering-opportunity.ts`: the independently driven Window rendering
@@ -170,9 +173,8 @@ timer path.
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
-| `global-scope.ts` | `WindowOrWorkerGlobalScope`, base64 utilities, `reportError()`, and global API contributions | HTML §§8.2–8.3 |
+| existing `global-scope.ts` | Complete `WindowOrWorkerGlobalScope` origin, security, base64, `reportError()`, image, and structured-clone contributions | HTML §§8.2–8.3 |
 | `timers.ts` | Ordered timer map, nesting/clamping, active-time timeout steps, timer-task queuing, and clear operations; also consumed by `AbortSignal.timeout()` | HTML §8.7; DOM §3.2 |
-| `microtasks.ts` only if it outgrows event-loop.ts | The `queueMicrotask()` API and checkpoint integration | HTML §8.8 |
 | `animation-frame.ts` | `AnimationFrameProvider`, callback identity, cancellation, and rendering-opportunity delivery | HTML §8.12 |
 
 Dynamic markup insertion and DOM parsing are mapped under `html/parser/` and
