@@ -186,7 +186,7 @@ describe('Realm agent', () => {
 
     realm.queueMicrotask(steps);
 
-    expect(queueMicrotask).toHaveBeenCalledWith(steps);
+    expect(queueMicrotask).toHaveBeenCalledWith(steps, null);
   });
 });
 

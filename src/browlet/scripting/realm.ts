@@ -5,6 +5,7 @@ import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
+import { associateGlobalTaskDestination } from './tasks';
 import { WindowImpl } from '../browsing/window/window';
 import { implicitlyConvertDurationToTimestamp } from '../performance/clock';
 import {
@@ -311,7 +312,11 @@ export class Realm implements WebIDLRealmHost {
   }
 
   queueMicrotask(steps: () => void): void {
-    this.agent.eventLoop.queueMicrotask(steps);
+    const window = this.#windowImplementation;
+    const document = window
+      ? WindowImpl.getAssociatedDocument(window)
+      : null;
+    this.agent.eventLoop.queueMicrotask(steps, document);
   }
 
   getCurrentEvent(_global: object): Event | undefined {
@@ -347,6 +352,21 @@ export class Realm implements WebIDLRealmHost {
     }
     realm.#globalObject = globalObject;
     realm.#globalThis = globalThis;
+    const taskDestination = {
+      eventLoop: realm.agent.eventLoop,
+      getDocument: () => {
+        const window = realm.#windowImplementation;
+        return window
+          ? WindowImpl.getAssociatedDocument(window)
+          : null;
+      },
+    };
+    associateGlobalTaskDestination(
+      realm.#hostGlobal,
+      taskDestination,
+    );
+    associateGlobalTaskDestination(globalObject, taskDestination);
+    associateGlobalTaskDestination(globalThis, taskDestination);
     Realm.#installDefaultGlobalBindings(realm);
     // Node cannot make an existing WindowProxy the VM context's actual
     // global-this. Inherit through the specified global-this so free global

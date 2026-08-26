@@ -6,7 +6,7 @@ import {
   arg, defineInterface, idlType, op, readonlyAttr, reference, sequence, xattr,
 } from '../../../web-idl/declaration/index';
 import type { WebIDLRealmHost } from '../../../web-idl/javascript-realm';
-import { queueGlobalTask } from '../../scripting/event-loop';
+import { queueGlobalTask } from '../../scripting/tasks';
 import {
   EventHandlerMap, eventHandlerAttr,
 } from '../../scripting/event-handlers';
