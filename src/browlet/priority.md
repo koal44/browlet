@@ -109,7 +109,10 @@ Primary roadmaps: [performance](performance/roadmap.md),
 5. Add the ordered timer map, nesting/clamping, active-time timeout steps, and
    timer-task source on that loop (HTML §8.7). Use it to complete
    `AbortSignal.timeout()` with relevant-global retention; do not delegate its
-   lifecycle to a bare Node `setTimeout()`.
+   lifecycle to a bare Node `setTimeout()`. The resulting deadline records are
+   also one prerequisite for Window idle-period computation, but idle periods
+   still wait for animation-frame/render predictions and the Request Idle
+   Callback consumer.
 6. As an independent bounded lane, implement only the boolean, enumerated,
    numeric, and token microsyntaxes needed by the early Document shell and
    reflection work (HTML §2.3). Dates, legacy colors, and unused syntaxes wait
@@ -244,6 +247,11 @@ Primary roadmaps: [loader](loader/roadmap.md),
    completion without requiring nested browsing or media playback.
 6. Record navigation/resource timing from the same clock and loader records;
    do not derive it later from events.
+7. Revisit the provisional Node microtask-checkpoint bridge against the
+   accumulated timer, Fetch-completion, parser-script, load-event, and
+   same-agent multi-realm tests. Replace it or define the narrowest documented
+   compatibility downgrade before declaring the Document execution lifecycle
+   stable.
 
 Exit proof: navigating to a basic HTTP(S) or `data:` page creates the response,
 realm, Window, Document, parsed tree, inline/external style, inline/external

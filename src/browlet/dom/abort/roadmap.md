@@ -43,13 +43,15 @@ contract without moving their cancellation behavior into this directory.
 ## HTML-owned pieces
 
 `AbortSignal.timeout(milliseconds)` now creates the signal in the binding
-realm and calls the provisional "run steps after a timeout" and "queue a
-global task" algorithms with the relevant global and timer task source. Those
-seams deliberately fail until HTML §§8.1.7 and 8.7 implement active time,
-suspension, task ordering, and delivery; a direct Node `setTimeout()` would
-produce the wrong lifecycle. The scheduled completion closure captures the
-signal, so the eventual global-owned timer entry also supplies the required
-strong reachability while delivery is pending.
+realm and calls the HTML-owned "run steps after a timeout" and "queue a global
+task" algorithms with the relevant global and timer task source. HTML §8.1.7
+now supplies the real global-task destination and event-loop queue. The
+remaining §8.7 seam deliberately fails until per-global active timers,
+fully-active-time suspension, ordered completion, host wake-up, and production
+event-loop startup exist; a direct Node `setTimeout()` would produce the wrong
+lifecycle. The scheduled completion closure captures the signal, so the
+eventual global-owned timer entry also supplies the required strong
+reachability while delivery is pending.
 
 The `onabort` event-handler IDL attribute uses HTML's ordinary event-handler
 core. It preserves listener registration order across replacement, removes
@@ -77,8 +79,10 @@ until composition warrants a third.
 
 ## Remaining delivery
 
-1. Implement the HTML event loop and timer algorithms behind the existing
-   `AbortSignal.timeout()` seams.
+1. Implement HTML §8.7's active-time timer algorithm and start the owning
+   agent's event loop in production behind the existing
+   `AbortSignal.timeout()` seams. Global task routing and queue ownership are
+   already implemented.
 2. Replace the provisional scheduling-failure test with deterministic
    active-time, timer-task, realm-native `TimeoutError`, and retention coverage.
 

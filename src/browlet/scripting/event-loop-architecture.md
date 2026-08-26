@@ -70,6 +70,28 @@ first runnable task, runs it, performs a microtask checkpoint, and later
 considers rendering and idle work. This grants broad scheduling freedom
 without permitting tasks from one source to be reordered.
 
+“Continually run” describes that semantic repetition; it does not require a
+blocking language-level loop. WebKit makes this especially concrete:
+queueing work coalesces a wake-up, `WindowEventLoop` arms a zero-delay one-shot
+timer, and the callback runs a bounded batch before rescheduling remaining
+work. Its worker loop similarly posts a specially classified host task.
+Blink and Gecko route through different scheduler and thread abstractions, but
+also rely on host event pumps rather than a literal `while (true)`.
+
+Browlet exposes one deterministic task turn. Its event loop coalesces wake-ups
+and asks a scheduler host to invoke the next turn from a later host task while
+runnable work remains. The host may eventually support batching under a
+fairness or time budget, but it must preserve Browlet's per-source ordering and
+perform the semantic checkpoint after every task. The task turn takes that
+checkpoint as a required capability; it does not silently use Node's ambient
+end-of-turn behavior as an approximation.
+
+The same host supplies unsafe shared time because the processing model samples
+it immediately before removing the chosen task and after its checkpoint. The
+event loop preserves that ordering and exposes task-start, long-task-reporting,
+and task-end seams. Long Animation Frames and Long Tasks own the eventual hook
+implementations; the scheduler host does not manufacture those subsystems.
+
 The `Document` field on a task is semantic rather than a queue-storage hint. A
 task is runnable when that field is null or its document is fully active. This
 is why a generic host callback is not, by itself, a complete HTML task record.
@@ -142,6 +164,15 @@ WebKit nevertheless makes deliberate implementation substitutions:
 - Rendering is implemented by `Page` and a display-linked rendering-update
   scheduler. The event loop coordinates with that system, but does not contain
   all style/layout/display code.
+
+`RenderingUpdateScheduler` usefully demonstrates the host-facing producer:
+it coalesces display-refresh or fallback-timer requests before triggering a
+`Page` rendering update. WebKit then calls `Page::updateRendering()` through
+that page/embedder path rather than queueing HTML's rendering-source task on
+`WindowEventLoop`. Browlet adopts the independently driven, coalesced producer
+but intentionally does not copy that routing substitution. A rendering
+opportunity records time and queues a task; the agent-owned event loop remains
+the only authority which runs the ordered update pipeline.
 
 WebKit's node helper illustrates a routing seam, not ownership:
 `Node::queueTaskKeepingNodeAlive()` reaches the node's document, obtains that

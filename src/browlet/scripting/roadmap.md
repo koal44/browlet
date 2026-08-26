@@ -8,8 +8,16 @@
   counterparts (HTML §8.1.3).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
-- `event-loop.ts`: the event loop uniquely owned by each agent; only the
-  currently exercised microtask-delegation skeleton exists.
+- `event-loop.ts`: the event loop uniquely owned by each agent, including task
+  queues, deterministic task turns, currently-running-task state, task timing
+  hooks, checkpoint coordination, and coalesced host wake-ups.
+- `scheduler-host.ts`: the replaceable host boundary for later task-turn
+  wake-ups, unsafe shared time, and the provisional Node microtask checkpoint.
+- `tasks.ts`: explicit global-task routing and the five generic task-source
+  identities from HTML §8.1.7.4; each event loop owns their queue associations.
+- `rendering-opportunity.ts`: the independently driven Window rendering
+  producer, rendering task source, document filtering seams, and spec-ordered
+  update pipeline.
 
 ## Architecture decision
 
@@ -56,8 +64,20 @@ hybrid.
   during the checkpoint. It is therefore only a provisional compatibility
   bridge for a controlled single-scheduler host, not an isolation boundary or
   the definition of Browlet's checkpoint semantics. Preserve cross-realm FIFO
-  and contamination-limit tests around the bridge, fail explicitly when it is
-  unavailable, and replace it once a public capability exists.
+  and contamination-limit tests around the bridge. The private hook also
+  cannot force a nested drain while V8 is already performing a microtask
+  checkpoint, so the Browlet scheduler must enter task turns from a Node task
+  boundary rather than a Promise or microtask callback. Synchronously advanced
+  test clocks do not create that boundary; preserve that integration case as
+  an expected failure rather than claiming ordinary fake-timer compatibility.
+  Fail explicitly when the hook is unavailable, and replace it once a public
+  capability exists.
+  Revisit this bridge after timers, Fetch completion, parser-blocking scripts,
+  load events, and same-agent multi-realm behavior provide representative
+  downstream tests, but before calling the Document execution lifecycle
+  stable. At that review, evaluate candidate hosts or workarounds against the
+  accumulated ordering and isolation tests, then either replace the bridge or
+  record the smallest explicit compatibility downgrade Browlet can support.
   `microtaskMode: 'afterEvaluate'` is not a fallback because it gives each
   context a separate queue.
 - DOM §4 assigns each similar-origin Window agent a
@@ -148,9 +168,8 @@ timer path.
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
 | `callback-context.ts` only if realm hooks outgrow environment.ts | Preparing/cleaning callback execution | HTML §8.1.4.4 and Web IDL callback integration |
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
-| existing `event-loop.ts` and `tasks.ts` | Tasks, task queues/sources, task-routing helpers, microtask checkpoints, rendering opportunities, worker/worklet loop restrictions, and loop teardown | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
+| existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
-| `scheduler-host.ts` when the loop first runs autonomously | Narrow host wake-up, synchronous microtask-checkpoint bridge, monotonic-clock, and parallel-work capabilities without delegating HTML ordering to Node | HTML §§2.1.1 and 8.1.7; High Resolution Time |
 | `global-scope.ts` | `WindowOrWorkerGlobalScope`, base64 utilities, `reportError()`, and global API contributions | HTML §§8.2–8.3 |
 | `timers.ts` | Ordered timer map, nesting/clamping, active-time timeout steps, timer-task queuing, and clear operations; also consumed by `AbortSignal.timeout()` | HTML §8.7; DOM §3.2 |
 | `microtasks.ts` only if it outgrows event-loop.ts | The `queueMicrotask()` API and checkpoint integration | HTML §8.8 |
@@ -160,6 +179,25 @@ Dynamic markup insertion and DOM parsing are mapped under `html/parser/` and
 `dom/parsing/`; sanitization, Navigator, and image objects have their own
 roadmaps. Dialogs and printing require an embedder/UI capability and can wait
 until an observable consumer exists.
+
+## Deferred processing-model tails
+
+The remaining tail of HTML §8.1.7.3 is not one implementation slice. Preserve
+the following distinct prerequisites and introduce each operation with its
+first real consumer:
+
+| Tail | Existing substrate | Missing prerequisite or consumer | Entry point |
+| --- | --- | --- | --- |
+| Window idle periods | Window inventory, high-resolution/coarsened time, rendering opportunities, and the last-render-opportunity time | A no-runnable-task iteration path; the §8.7 ordered timer map and estimated deadlines; animation-frame callback maps; refresh-rate/next-render prediction; `requestIdleCallback()` and `IdleDeadline`; reliable removal of destroyed Windows from the same-loop set | After timers, animation frames, and the Request Idle Callback consumer exist |
+| Worker rendering and shutdown | Worker agent kinds and an ordinary agent-owned `EventLoop` | Real worker globals, realms, and settings; the closing flag; queue rejection/discard; event-loop destruction; the `run a worker` continuation; worker animation-frame callbacks and rendering | With the first complete dedicated-worker lifecycle |
+| `await a stable state` | Microtask queuing and the checkpoint boundary | A continuation contract which suspends work running in parallel, runs its synchronous section as a microtask on the correct loop, and then resumes parallel work; current image, media, and text-track consumers are absent | With the first image/media consumer; this does not require execution-context-stack capture |
+| `spin the event loop` | Currently-running-task/source state, task queuing, and checkpointing | Suspension and later resumption of an arbitrary task or microtask; copy/empty/restore access to the JavaScript execution-context stack; migration of a spinning microtask to a task queue; parser-script consumers | Lower concrete parser algorithms into explicit continuations unless the host eventually exposes a faithful general primitive |
+| `pause` | High-resolution time and rendering seams | A synchronous blocking/embedder contract that keeps browser UI responsive while preventing that event loop from running tasks; modal UI consumers; pause-duration reporting | With dialogs, printing, synchronous fetching, or another real embedder-controlled consumer |
+
+Do not add only the state fields which make these algorithms look present.
+For example, an idle timestamp without deadline-bearing timers and idle
+callbacks is not an idle-period implementation, and a worker closing boolean
+without queue suppression and event-loop teardown is not worker shutdown.
 
 ## Delivery order
 
@@ -179,31 +217,44 @@ until an observable consumer exists.
 3. Add a deterministic one-iteration driver: choose a queue by an injectable
    policy, remove its oldest runnable task, set and clear the currently-running
    task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
-   boundary. Keep long-task, idle-period, worker-shutdown, and rendering work
-   out of this first vertical slice while retaining explicit extension points.
-4. Implement the checkpoint's reentrancy guard through the scheduler host.
-   The provisional Node host may feature-detect `_tickCallback()` in controlled
-   operation, but the event-loop algorithm must not know that mechanism. Cover
-   cross-realm FIFO behavior and the known ambient-queue contamination limit.
+   boundary through a required hook. It is not a blocking `while (true)`.
+4. The checkpoint's reentrancy guard is `EventLoop` state, while
+   `scheduler-host.ts` contains the feature-detected `_tickCallback()` bridge.
+   The event-loop algorithm does not know that Node mechanism. Cross-realm
+   FIFO behavior is covered; the ambient-queue contamination limit remains an
+   explicit host constraint rather than behavior Browlet can isolate or
+   normalize.
    Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and
    checkpoint timing remain named hooks until their owning subsystems exist.
-5. Connect script/callback preparation and cleanup, runtime-error reporting,
+5. Let the scheduler host request one later host task, while the event loop
+   coalesces wake-ups and requests another turn only while runnable work
+   remains. Sample unsafe shared start/end times in spec order and expose named
+   task-start, long-task-reporting, and task-end hooks. The hook owners remain
+   absent until Long Animation Frames and Long Tasks enter; idle-period,
+   worker-shutdown, and rendering work remain outside this slice.
+6. Let a replaceable Window rendering producer observe opportunities
+   independently, set the event loop's render-opportunity time, and queue
+   rendering-source tasks. Run the update algorithm as an ordered pipeline on
+   that loop. Missing CSSOM View, Web Animations, Fullscreen, Canvas,
+   animation-frame, ResizeObserver/layout, focus, View Transition,
+   IntersectionObserver, timing, display, and top-layer owners remain absent
+   named hooks rather than no-op implementations.
+7. Connect script/callback preparation and cleanup, runtime-error reporting,
    rejected promises, MutationObservers, custom-element reactions, and slot
-   signaling to that checkpoint as their owning phases arrive. `await a stable
-   state`, `spin the event loop`, and `pause` also wait for execution-context
-   stack and parallel-work consumers rather than receiving false synchronous
-   implementations.
-6. Preserve the current ordinary §8.1.8 IDL event-handler core used by
+   signaling to that checkpoint as their owning phases arrive. Introduce the
+   deferred processing-model tails according to the prerequisites above rather
+   than giving them false synchronous implementations.
+8. Preserve the current ordinary §8.1.8 IDL event-handler core used by
    `onabort`. Add body/frameset target redirection after their element and
    active-Document integration exists; add raw content-attribute compilation
    with classic scripts, CSP, Trusted Types, and DOM attribute-change steps;
    add special `error` and `beforeunload` processing with their event and
    reporting/navigation owners. Synthetic pointer-event firing waits for the
    PointerEvent and input-device model.
-7. Give Fetch and every asynchronous browser subsystem an explicit task
-   destination, then add timers and rendering opportunities on the same loop.
-   Timers are the first follow-up consumer and complete `AbortSignal.timeout()`.
-8. Run classic parser-inserted scripts through the loader and parser before
+9. Give Fetch and every asynchronous browser subsystem an explicit task
+   destination, then add timers on the same loop. Timers are the first
+   follow-up consumer and complete `AbortSignal.timeout()`.
+10. Run classic parser-inserted scripts through the loader and parser before
    adding the module/import-map graph. Implement remaining global utilities
    only when their owning subsystem exists.
 

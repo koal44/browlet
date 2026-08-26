@@ -82,6 +82,15 @@ active parser and therefore remains here. Its script execution and parser
 pause/resume behavior consume `scripting/` rather than calling JavaScript
 directly from parse5 callbacks.
 
+The parser is the first concrete consumer of HTML's "spin the event loop"
+macro. Node does not expose a supported operation to copy, empty, and restore
+V8's JavaScript execution-context stack, so do not manufacture a synchronous
+general-purpose helper. When parser-inserted scripts enter, lower each spinning
+algorithm into an explicit continuation which checkpoints, stops the current
+parser task, waits outside the event loop, and queues the remaining steps on
+the original task source. Preserve the distinction between blocking this
+parser instance and pausing the entire event loop.
+
 ## Removal condition
 
 Burn this file when the adapter closure, fragment parsing, byte decoding and
