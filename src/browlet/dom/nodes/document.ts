@@ -699,6 +699,10 @@ export class DocumentImpl
     document.#relevantGlobalObject = window;
   }
 
+  static getRelevantGlobalObject(document: DocumentImpl): WindowImpl | null {
+    return document.#relevantGlobalObject;
+  }
+
   static getCSSEngine(document: DocumentImpl): Stylelet {
     return document.#stylelet ??= new Stylelet(asDocument(document));
   }

@@ -9,6 +9,7 @@ import {
 } from './navigation/session-history';
 import type { UserAgent } from '../user-agent';
 import type { WindowImpl } from './window/window';
+import type { Task } from '../scripting/event-loop';
 
 export class Navigable {
   readonly id = Symbol('Navigable');
@@ -107,6 +108,10 @@ export function isFullyActive(document: DocumentImpl): boolean {
    * Document while parent.activeDocument refers to its replacement.
    */
   return false;
+}
+
+export function isTaskRunnable(task: Task): boolean {
+  return task.document === null || isFullyActive(task.document);
 }
 
 /*

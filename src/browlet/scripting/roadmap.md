@@ -11,6 +11,16 @@
 - `event-loop.ts`: the event loop uniquely owned by each agent; only the
   currently exercised microtask-delegation skeleton exists.
 
+## Architecture decision
+
+Before changing task, microtask, rendering, or asynchronous-event ownership,
+read [the event-loop architecture note](./event-loop-architecture.md). Blink,
+Gecko, and WebKit place similar observable behavior behind materially different
+internal boundaries. Browlet intentionally follows HTML's agent-owned semantic
+event loop and puts host scheduling beneath it; copying an engine's routing
+surface without its scheduler and lifecycle model would create an inconsistent
+hybrid.
+
 ## Section 8 execution constraints
 
 - An event loop belongs to an agent, not a realm or Window. Multiple event
@@ -68,6 +78,49 @@
   time-origin answers come from their global and creator. Do not make the
   global scope itself a substitute settings object.
 
+## Section 8.1.7 definition audit
+
+The existing agent boundary is sound: every `Agent` owns one unique
+`EventLoop`, `EnvironmentSettingsObject.responsibleEventLoop` follows its
+realm's agent, and agent classes distinguish Window, worker, and worklet
+loops without equating an event loop with an implementation thread. The
+authoritative fully-active-Document predicate now supplies the task
+runnability rule.
+
+The provisional event-loop surface must be replaced with the remaining
+definition-level state before it runs tasks:
+
+- A task is a record containing steps, a task-source identity, a `Document` or
+  null, and the set of environment settings objects used by script evaluation.
+- A task queue is an insertion-ordered set, not a dequeue-only FIFO. A blocked
+  task stays in place while the loop selects the first runnable task from a
+  chosen queue.
+- A task source is only a logical identity. Its association with a concrete
+  task queue belongs to each event loop; the source itself must not own a
+  process-global queue.
+- The event loop needs its owning agent/kind, its task queues and source
+  associations, its currently-running task, and its performing-checkpoint
+  flag. Window-loop render and idle timestamps can enter with their first
+  rendering or idle-period consumer; High Resolution Time already supplies
+  their value domain.
+- `WindowAgent.windowObjects` is the beginning of the same-loop-Windows
+  relation. Window destruction must eventually remove entries before rendering
+  or idle-period code relies on it.
+- The conceptual microtask queue must preserve ordering between Promise jobs
+  and `queueMicrotask()` jobs. Do not add a second TypeScript queue alongside
+  V8's Promise queue. Queueing and synchronous checkpointing instead form one
+  replaceable scheduler-host capability, with the documented Node adapter
+  limitation until Node exposes an explicit shareable queue.
+
+The low-level `queue a task` operation should require an explicit event loop
+and `Document` in Browlet code. The specification itself warns that implied
+event loops and implied Documents are ambiguous; callers should normally use
+the global- or element-task wrappers that derive both from a relevant global.
+The global wrapper exists. Add the element wrapper with its first production
+caller, after platform-object creation-realm identity is available through a
+cycle-safe seam. Deriving it from an element's current node document would be
+wrong after cross-document adoption.
+
 Fetch records and transport can be implemented before this scheduler is
 complete. Observable Fetch completion cannot: processing a non-blocking
 resource and touching realm-bound objects has to re-enter through an
@@ -95,7 +148,7 @@ timer path.
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
 | `callback-context.ts` only if realm hooks outgrow environment.ts | Preparing/cleaning callback execution | HTML §8.1.4.4 and Web IDL callback integration |
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
-| existing `event-loop.ts` | Tasks, task queues/sources, global/element task helpers, microtask checkpoints, rendering opportunities, worker/worklet loop restrictions, and loop teardown | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
+| existing `event-loop.ts` and `tasks.ts` | Tasks, task queues/sources, task-routing helpers, microtask checkpoints, rendering opportunities, worker/worklet loop restrictions, and loop teardown | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
 | `scheduler-host.ts` when the loop first runs autonomously | Narrow host wake-up, synchronous microtask-checkpoint bridge, monotonic-clock, and parallel-work capabilities without delegating HTML ordering to Node | HTML §§2.1.1 and 8.1.7; High Resolution Time |
 | `global-scope.ts` | `WindowOrWorkerGlobalScope`, base64 utilities, `reportError()`, and global API contributions | HTML §§8.2–8.3 |
@@ -110,22 +163,56 @@ until an observable consumer exists.
 
 ## Delivery order
 
-1. Replace the microtask-only skeleton with task records, task sources,
-   Document activity gating, explicit global/element queuing, and a deterministic
-   test driver. Node supplies wake-ups; tests must not depend on wall-clock races.
-2. Connect script/callback preparation, cleanup, runtime errors, rejected
-   promises, MutationObservers, and custom element reactions at checkpoints.
-3. Run classic parser-inserted scripts through the loader and parser before
-   adding the module/import-map graph.
-4. Give Fetch and every asynchronous browser subsystem an explicit task
+1. Replace the definition skeleton with the `Task` record, insertion-ordered
+   task queues, per-loop task-source associations, the reciprocal Agent/EventLoop
+   relation, currently-running-task state, and checkpoint reentrancy state.
+   Add the generic DOM-manipulation, user-interaction, networking, navigation/
+   traversal, rendering, microtask, and existing timer source identities, but
+   do not yet run them.
+2. Implement explicit low-level task queuing plus the global-task wrapper.
+   Add the element wrapper with a real caller and creation-realm lookup; do not
+   substitute the element's mutable node-document association. Queue wake-up
+   is a host notification only. Test source ordering, per-loop association,
+   inactive-Document retention, and selection of the first runnable task
+   without wall-clock races; defer the discouraged implied event-loop and
+   implied-Document paths until a real caller requires them.
+3. Add a deterministic one-iteration driver: choose a queue by an injectable
+   policy, remove its oldest runnable task, set and clear the currently-running
+   task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
+   boundary. Keep long-task, idle-period, worker-shutdown, and rendering work
+   out of this first vertical slice while retaining explicit extension points.
+4. Implement the checkpoint's reentrancy guard through the scheduler host.
+   The provisional Node host may feature-detect `_tickCallback()` in controlled
+   operation, but the event-loop algorithm must not know that mechanism. Cover
+   cross-realm FIFO behavior and the known ambient-queue contamination limit.
+   Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and
+   checkpoint timing remain named hooks until their owning subsystems exist.
+5. Connect script/callback preparation and cleanup, runtime-error reporting,
+   rejected promises, MutationObservers, custom-element reactions, and slot
+   signaling to that checkpoint as their owning phases arrive. `await a stable
+   state`, `spin the event loop`, and `pause` also wait for execution-context
+   stack and parallel-work consumers rather than receiving false synchronous
+   implementations.
+6. Preserve the current ordinary §8.1.8 IDL event-handler core used by
+   `onabort`. Add body/frameset target redirection after their element and
+   active-Document integration exists; add raw content-attribute compilation
+   with classic scripts, CSP, Trusted Types, and DOM attribute-change steps;
+   add special `error` and `beforeunload` processing with their event and
+   reporting/navigation owners. Synthetic pointer-event firing waits for the
+   PointerEvent and input-device model.
+7. Give Fetch and every asynchronous browser subsystem an explicit task
    destination, then add timers and rendering opportunities on the same loop.
-5. Implement the remaining global utilities only when their owning subsystem
-   exists; they are not prerequisites for the lifecycle spine.
+   Timers are the first follow-up consumer and complete `AbortSignal.timeout()`.
+8. Run classic parser-inserted scripts through the loader and parser before
+   adding the module/import-map graph. Implement remaining global utilities
+   only when their owning subsystem exists.
 
-Blink divides these responsibilities among `core/execution_context`,
-`core/script`, and scheduler code. Browlet should preserve that conceptual
-separation while keeping the number of TypeScript files proportional to real
-behavior.
+The browser comparison and the reasons for Browlet's ownership decision are
+recorded in [the event-loop architecture note](./event-loop-architecture.md).
+Keep the number of TypeScript files proportional to real behavior, but do not
+flatten the agent/event-loop, host-scheduler, document-lifecycle, rendering,
+and synchronous-event boundaries merely because an engine realizes them using
+different physical subsystems.
 
 ## Removal condition
 

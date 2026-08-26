@@ -1,31 +1,111 @@
+import type { DocumentImpl } from '../dom/nodes/document';
+import type { EnvironmentSettingsObject } from './environment';
+
 /*
- * Each agent has a unique event loop. The full event-loop model is defined by
- * HTML section 8.1.7; this boundary currently delegates only the microtasks
- * needed by Browlet to Node's event loop.
+ * Each agent has a unique event loop. A task source is associated with one
+ * task queue per event loop; the association is deliberately private so a
+ * future scheduler can coalesce sources without changing callers.
  *
  * https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
  */
 export class EventLoop {
-  queueMicrotask(steps: () => void): void {
-    globalThis.queueMicrotask(steps);
+  readonly #taskQueues = new Set<Set<Task>>();
+  readonly #taskQueueBySource = new Map<TaskSource, Set<Task>>();
+
+  queueMicrotask(
+    steps: () => void,
+    document: DocumentImpl | null = null,
+  ): void {
+    const microtask = createTask(
+      microtaskTaskSource,
+      document,
+      steps,
+    );
+
+    /*
+     * V8 owns the actual microtask queue. Retain Browlet's task record in the
+     * closure without creating a second queue whose ordering could diverge.
+     * The explicit checkpoint bridge will enter with the processing model.
+     */
+    globalThis.queueMicrotask(() => microtask.steps());
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static enqueueTask(eventLoop: EventLoop, task: Task): void {
+    eventLoop.#getTaskQueue(task.source).add(task);
+  }
+
+  static getTaskQueue(
+    eventLoop: EventLoop,
+    source: TaskSource,
+  ): ReadonlySet<Task> {
+    return eventLoop.#getTaskQueue(source);
+  }
+
+  static getTaskQueues(eventLoop: EventLoop): ReadonlySet<ReadonlySet<Task>> {
+    return eventLoop.#taskQueues;
+  }
+
+  // -- Private ----------------------------------------------------------
+
+  #getTaskQueue(source: TaskSource): Set<Task> {
+    let queue = this.#taskQueueBySource.get(source);
+    if (queue === undefined) {
+      queue = new Set();
+      this.#taskQueueBySource.set(source, queue);
+      this.#taskQueues.add(queue);
+    }
+    return queue;
   }
 }
 
+export type Task = {
+  readonly steps: () => void;
+  readonly source: TaskSource;
+  readonly document: DocumentImpl | null;
+  readonly scriptEvaluationEnvironmentSettingsObjectSet: Set<EnvironmentSettingsObject>;
+};
+
 /*
- * These are provisional seams for HTML section 8.1.7. TaskSource is only an
- * opaque identity for now; its representation may become a class or richer
- * record when Browlet implements task queues and event-loop selection.
+ * A source is an opaque identity, not the queue itself. The diagnostic name
+ * does not participate in equality: two specifications can use the same name
+ * without accidentally serializing their tasks together.
  */
 export type TaskSource = Readonly<{ name: string; }>;
 
 export function createTaskSource(name: string): TaskSource {
-  return { name };
+  return Object.freeze({ name });
 }
 
-export function queueGlobalTask(
-  _source: TaskSource,
-  _global: object,
-  _steps: () => void,
-): void {
-  throw new Error('queueGlobalTask awaits HTML section 8.1.7');
+export function createTask(
+  source: TaskSource,
+  document: DocumentImpl | null,
+  steps: () => void,
+): Task {
+  return {
+    steps,
+    source,
+    document,
+    scriptEvaluationEnvironmentSettingsObjectSet: new Set(),
+  };
 }
+
+export function queueTask(
+  source: TaskSource,
+  eventLoop: EventLoop,
+  document: DocumentImpl | null,
+  steps: () => void,
+): void {
+  /*
+   * Require the values which HTML permits specifications to imply. The spec
+   * warns that those ambient deductions are ambiguous; Browlet callers should
+   * normally enter through the global or element wrapper instead.
+   */
+  EventLoop.enqueueTask(
+    eventLoop,
+    createTask(source, document, steps),
+  );
+}
+
+const microtaskTaskSource = createTaskSource('microtask');
