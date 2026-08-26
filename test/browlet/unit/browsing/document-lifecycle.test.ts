@@ -12,13 +12,14 @@ import {
   EnvironmentSettingsObject, setupWindowEnvironmentSettingsObject,
 } from '../../../../src/browlet/scripting/environment';
 import {
-  createNewTopLevelTraversable, initializeNavigable, TopLevelTraversable,
+  createNewTopLevelTraversable, getNodeNavigable, initializeNavigable,
+  isFullyActive, Navigable, TopLevelTraversable,
 } from '../../../../src/browlet/browsing/navigable';
 import {
   createRealm, Realm,
 } from '../../../../src/browlet/scripting/realm';
 import {
-  createDocumentState,
+  createDocumentState, createSessionHistoryEntry,
 } from '../../../../src/browlet/browsing/navigation/session-history';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import {
@@ -69,6 +70,7 @@ describe('browsing context groups', () => {
     expect(context.isAuxiliary).toBe(false);
     expect(context.initialURL).toBeNull();
     expect(context.virtualBrowsingContextGroupID).toBe(0);
+    expect(context.navigable).toBeNull();
     expect(context.activeWindow).toBeNull();
     expect(context.activeDocument).toBeNull();
 
@@ -133,6 +135,7 @@ describe('browsing context groups', () => {
 describe('navigables', () => {
   it('initializes one pending current and active history entry', () => {
     const document = new DocumentImpl();
+    DocumentImpl.setBrowsingContext(document, new BrowsingContext());
     DocumentImpl.setURL(document, requireURL('https://example.test/page'));
     const documentState = createDocumentState(document);
     const traversable = new TopLevelTraversable();
@@ -148,6 +151,56 @@ describe('navigables', () => {
     expect(serializeURL(traversable.activeSessionHistoryEntry.url))
       .toBe(document.URL);
     expect(traversable.activeDocument).toBe(document);
+  });
+
+  it('derives node-navigable and fully-active status from the active entry', () => {
+    const traversable = createNewTopLevelTraversable(
+      new UserAgent(),
+      null,
+      '',
+    );
+    const firstDocument = traversable.activeDocument;
+    const browsingContext = traversable.activeBrowsingContext;
+    if (firstDocument === null || browsingContext === null) {
+      throw new Error('Expected a complete initial navigable');
+    }
+    const secondDocument = new DocumentImpl();
+    DocumentImpl.setBrowsingContext(secondDocument, browsingContext);
+
+    expect(getNodeNavigable(firstDocument)).toBe(traversable);
+    expect(isFullyActive(firstDocument)).toBe(true);
+    expect(getNodeNavigable(secondDocument)).toBeNull();
+    expect(isFullyActive(secondDocument)).toBe(false);
+
+    traversable.activeSessionHistoryEntry = createSessionHistoryEntry(
+      createDocumentState(secondDocument),
+    );
+
+    expect(getNodeNavigable(firstDocument)).toBeNull();
+    expect(isFullyActive(firstDocument)).toBe(false);
+    expect(getNodeNavigable(secondDocument)).toBe(traversable);
+    expect(isFullyActive(secondDocument)).toBe(true);
+  });
+
+  it('does not mistake a parent association for a container Document', () => {
+    const parent = createNewTopLevelTraversable(
+      new UserAgent(),
+      null,
+      '',
+    );
+    const parentDocument = parent.activeDocument;
+    if (parentDocument === null) {
+      throw new Error('Expected a complete parent navigable');
+    }
+    const childDocument = new DocumentImpl();
+    const childContext = new BrowsingContext();
+    DocumentImpl.setBrowsingContext(childDocument, childContext);
+    const child = new Navigable();
+    initializeNavigable(child, createDocumentState(childDocument), parent);
+
+    expect(getNodeNavigable(childDocument)).toBe(child);
+    expect(isFullyActive(parentDocument)).toBe(true);
+    expect(isFullyActive(childDocument)).toBe(false);
   });
 
   it('creates the complete initial top-level about:blank graph', () => {
@@ -173,6 +226,7 @@ describe('navigables', () => {
       .toEqual(new Set([browsingContext.group]));
     expect(browsingContext.group?.browsingContextSet)
       .toEqual(new Set([browsingContext]));
+    expect(browsingContext.navigable).toBe(traversable);
     expect(browsingContext.popupSandboxingFlagSet).toEqual(new Set());
     expect(browsingContext.activeDocument).toBe(document);
     expect(browsingContext.activeWindow).toBe(window);
@@ -294,6 +348,10 @@ describe('navigation lifecycle', () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window as InternalWindowProxy;
     const initialDocument = browlet.document as unknown as DocumentImpl;
+    const navigable = getNodeNavigable(initialDocument);
+    if (navigable === null) {
+      throw new Error('Initial Document has no node navigable');
+    }
     const initialWindow = getWindowProxyWindow(windowProxy);
     const initialRealm = getRelevantRealm(initialDocument);
     const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
@@ -313,6 +371,10 @@ describe('navigation lifecycle', () => {
     expect(window && WindowImpl.getAssociatedDocument(window)).toBe(document);
     expect(DocumentImpl.getBrowsingContext(document)?.windowProxy)
       .toBe(windowProxy);
+    expect(getNodeNavigable(initialDocument)).toBeNull();
+    expect(isFullyActive(initialDocument)).toBe(false);
+    expect(getNodeNavigable(document)).toBe(navigable);
+    expect(isFullyActive(document)).toBe(true);
   });
 
 });

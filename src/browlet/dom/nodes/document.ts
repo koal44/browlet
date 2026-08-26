@@ -4,6 +4,8 @@ import type { TreeScopeResolver } from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
+import type { BrowsingContext } from '../../browsing/browsing-context';
+import type { WindowImpl } from '../../browsing/window/window';
 import {
   createPolicyContainer, type PolicyContainer,
 } from '../../browsing/policy/container';
@@ -119,7 +121,8 @@ export class DocumentImpl
   readonly #activeSandboxingFlagSet = createSandboxingFlagSet();
   #allowDeclarativeShadowRoots = false;
   #ancestorOriginsList: readonly string[] | null = null;
-  #browsingContext: DocumentBrowsingContext | null = null;
+  #browsingContext: BrowsingContext | null = null;
+  #relevantGlobalObject: WindowImpl | null = null;
   #completelyLoadedTime: number | null = null;
   #contentType = 'application/xml';
   #currentDocumentReadiness: DocumentReadyState = 'complete';
@@ -151,7 +154,6 @@ export class DocumentImpl
   #stylelet: Stylelet | undefined;
   readonly #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   readonly #parentNodeMixin: ParentNodeMixin;
-  #browsingContextWindow: EventTargetImpl | null = null;
   readonly #treeScopeResolver: TreeScopeResolver;
 
   // HTML: a Document's script-blocking style sheet set is an ordered set.
@@ -433,13 +435,13 @@ export class DocumentImpl
 
   static getBrowsingContext(
     document: DocumentImpl,
-  ): DocumentBrowsingContext | null {
+  ): BrowsingContext | null {
     return document.#browsingContext;
   }
 
   static setBrowsingContext(
     document: DocumentImpl,
-    browsingContext: DocumentBrowsingContext | null,
+    browsingContext: BrowsingContext | null,
   ): void {
     document.#browsingContext = browsingContext;
   }
@@ -672,14 +674,29 @@ export class DocumentImpl
     document: DocumentImpl,
     event: Event,
   ): EventTargetImpl | null {
-    return event.type === 'load' ? null : document.#browsingContextWindow;
+    if (event.type === 'load' || document.#browsingContext === null) {
+      return null;
+    }
+
+    if (document.#relevantGlobalObject === null) {
+      throw new Error(
+        'A Document with a browsing context needs a relevant global object',
+      );
+    }
+    return document.#relevantGlobalObject;
   }
 
-  static setBrowsingContextWindow(
+  static setRelevantGlobalObject(
     document: DocumentImpl,
-    window: EventTargetImpl | null,
+    window: WindowImpl,
   ): void {
-    document.#browsingContextWindow = window;
+    if (
+      document.#relevantGlobalObject !== null &&
+      document.#relevantGlobalObject !== window
+    ) {
+      throw new Error('A Document cannot change its relevant global object');
+    }
+    document.#relevantGlobalObject = window;
   }
 
   static getCSSEngine(document: DocumentImpl): Stylelet {
@@ -1005,15 +1022,6 @@ export type DocumentWriter = (markup: string) => void;
 type NewTarget = new (...argumentsList: never[]) => object;
 
 export type DocumentType = 'xml' | 'html';
-
-/*
- * The DOM layer does not own a concrete browsing context. This is the narrow
- * shape required by HTML's Document browsing-context slot; Browlet's concrete
- * BrowsingContext supplies it.
- */
-export type DocumentBrowsingContext = {
-  readonly windowProxy: Window;
-};
 
 export enum DocumentMode {
   NoQuirks = 'no-quirks',
