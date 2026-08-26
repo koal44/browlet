@@ -33,7 +33,7 @@ implementation should be introduced then.
 | `visibility.ts` | `VisibilityStateEntry` creation and timeline exposure sourced from HTML's Document visibility transitions | HTML §6.2 and Performance Timeline |
 | `paint.ts` only after rendering exists | Paint timing entries and first-paint notifications | Paint Timing |
 | `element.ts` and contentful-paint producers only after layout/paint exists | Element and contentful-paint observations sourced from rendered output | Element Timing and Largest Contentful Paint |
-| `long-task.ts` and `long-animation-frame.ts` only after scheduling/rendering exists | Main-thread attribution and long-frame/task entries | Long Tasks and Long Animation Frames |
+| `long-task.ts` and `long-animation-frame.ts` only after scheduling/rendering exists | Main-thread attribution and long-frame/task entries | [Long Tasks editor's draft](https://w3c.github.io/longtasks/) and [Long Animation Frames editor's draft](https://w3c.github.io/long-animation-frames/) |
 
 The host supplies a monotonic clock primitive; it does not supply Browlet's
 public `Performance` objects. All consumers must share the same time-origin and

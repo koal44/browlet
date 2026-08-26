@@ -22,6 +22,11 @@ Intersection Observer, focus visibility, `innerText`, paint timing, and
 screenshots must wait for that real box boundary rather than infer layout from
 DOM shape or computed `display` alone.
 
+The Window rendering-opportunity producer and the spec-ordered update pipeline
+live under `scripting/`. This domain supplies concrete style, layout, display,
+and output phase hooks when those systems exist; it must not replace the
+producer with a second frame scheduler.
+
 Replaced content consumes `loader/` and `graphics/`; nested frames consume
 `browsing/`; widgets consume HTML form/interaction state. Rendering must not
 take ownership of those subsystems merely because it visualizes them. A
