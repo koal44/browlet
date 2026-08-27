@@ -51,20 +51,20 @@ export class ReadableStreamDefaultControllerImpl {
     readableStreamDefaultControllerError(this, error);
   }
 
-  [cancelSteps](reason: unknown): StreamPromise {
+  readonly [cancelSteps] = (reason: unknown): StreamPromise => {
     const state = ReadableStreamDefaultControllerImpl.getState(this);
     state.queue = [];
     state.queueTotalSize = 0;
     const result = requireAlgorithm(state.cancelAlgorithm, 'cancel')(reason);
     readableStreamDefaultControllerClearAlgorithms(this);
     return result;
-  }
+  };
 
-  [pullSteps](request: ReadRequest): void {
+  readonly [pullSteps] = (request: ReadRequest): void => {
     readableStreamDefaultControllerPull(this, request);
-  }
+  };
 
-  [releaseSteps](): void {}
+  readonly [releaseSteps] = (): void => {};
 
   // -- Friends ----------------------------------------------------------
 
@@ -72,6 +72,10 @@ export class ReadableStreamDefaultControllerImpl {
     controller: ReadableStreamDefaultControllerImpl,
   ): StreamEnvironment {
     return controller.#environment;
+  }
+
+  static is(value: unknown): value is ReadableStreamDefaultControllerImpl {
+    return typeof value === 'object' && value !== null && #environment in value;
   }
 
   static getState(

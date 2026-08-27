@@ -1,12 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/unbound-method -- invoked with its ArrayBuffer receiver through Reflect.apply
-const arrayBufferDetached = Object.getOwnPropertyDescriptor(
-  ArrayBuffer.prototype,
-  'detached',
-)?.get;
-const arrayBufferTransferToFixedLength = Reflect.get(
-  ArrayBuffer.prototype,
-  'transferToFixedLength',
-) as ((this: ArrayBuffer) => ArrayBuffer) | undefined;
+import type { StreamEnvironment } from './environment';
 
 export function isObject(value: unknown): value is object {
   return (
@@ -21,34 +13,44 @@ export function createArrayFromList<Value>(
 }
 
 export function copyDataBlockBytes(
-  destination: ArrayBuffer,
+  environment: StreamEnvironment,
+  destination: object,
   destinationOffset: number,
-  source: ArrayBuffer,
+  source: object,
   sourceOffset: number,
   count: number,
 ): void {
-  new Uint8Array(destination).set(
-    new Uint8Array(source, sourceOffset, count),
+  environment.buffers.copy(
+    destination,
     destinationOffset,
+    source,
+    sourceOffset,
+    count,
   );
 }
 
-export function transferArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
-  if (isDetachedBuffer(buffer)) {
+export function transferArrayBuffer(
+  environment: StreamEnvironment,
+  buffer: object,
+): object {
+  if (isDetachedBuffer(environment, buffer)) {
     throw new TypeError('Cannot transfer a detached ArrayBuffer');
   }
-  if (!arrayBufferTransferToFixedLength) {
-    throw new TypeError('ArrayBuffer transfer is not supported by this host');
-  }
-  return Reflect.apply(arrayBufferTransferToFixedLength, buffer, []);
+  return environment.buffers.transfer(buffer);
 }
 
-export function canTransferArrayBuffer(buffer: ArrayBuffer): boolean {
-  return !isDetachedBuffer(buffer) &&
-    arrayBufferTransferToFixedLength !== undefined;
+// JavaScript exposes no non-destructive test for [[ArrayBufferDetachKey]].
+// The actual transfer operation remains authoritative until the host does.
+export function canTransferArrayBuffer(
+  environment: StreamEnvironment,
+  buffer: object,
+): boolean {
+  return !isDetachedBuffer(environment, buffer);
 }
 
-export function isDetachedBuffer(buffer: ArrayBuffer): boolean {
-  if (!arrayBufferDetached) return buffer.byteLength === 0;
-  return Reflect.apply(arrayBufferDetached, buffer, []) === true;
+export function isDetachedBuffer(
+  environment: StreamEnvironment,
+  buffer: object,
+): boolean {
+  return environment.buffers.isDetached(buffer);
 }

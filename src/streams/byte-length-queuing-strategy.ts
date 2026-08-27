@@ -52,7 +52,14 @@ function getByteLengthSizeFunction(
   let size = sizeFunctions.get(environment);
   if (!size) {
     size = environment.callbacks.createFunction(
-      (_thisArgument, [chunk]) => (chunk as ArrayBufferView).byteLength,
+      (_thisArgument, [chunk]) => {
+        if (chunk === undefined || chunk === null) {
+          throw environment.exceptions.createTypeError(
+            'Cannot read byteLength from null or undefined',
+          );
+        }
+        return (chunk as ArrayBufferView).byteLength;
+      },
       { length: 1, name: 'size' },
     );
     sizeFunctions.set(environment, size);

@@ -51,12 +51,18 @@ export class ReadableStreamDefaultReaderImpl {
     );
     readableStreamDefaultReaderRead(this, {
       chunkSteps(chunk) {
-        environment.promises.resolve(promise, { done: false, value: chunk });
+        environment.promises.resolve(promise, environment.dictionaries.create([
+          ['value', chunk],
+          ['done', false],
+        ]));
       },
       closeSteps() {
         environment.promises.resolve(
           promise,
-          { done: true, value: undefined },
+          environment.dictionaries.create([
+            ['value', undefined],
+            ['done', true],
+          ]),
         );
       },
       errorSteps(reason) {
@@ -78,6 +84,10 @@ export class ReadableStreamDefaultReaderImpl {
     reader: ReadableStreamDefaultReaderImpl,
   ): ReadableStreamGenericReaderMixin {
     return reader.#genericReader;
+  }
+
+  static is(value: unknown): value is ReadableStreamDefaultReaderImpl {
+    return typeof value === 'object' && value !== null && #genericReader in value;
   }
 
   static getReadRequests(

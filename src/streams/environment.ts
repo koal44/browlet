@@ -1,8 +1,49 @@
 import {
-  contextValue, type WebIDLType,
+  contextValue, type BufferViewTypeName, type WebIDLType,
 } from '../web-idl/declaration/index';
+import {
+  createArrayBuffer, getBufferSourceByteLength,
+  getBufferSourceByteOffset, getBufferSourceCopy,
+  getBufferSourceUnderlyingBuffer, getBufferTypeName,
+  isBufferSourceDetached, transferArrayBuffer, writeArrayBuffer,
+} from '../web-idl/buffer-source';
+import {
+  closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
+  openAsyncSequence, type IDLAsyncIterator, type IDLAsyncSequence,
+} from '../web-idl/async-sequence';
+import type { WebIDLRealmHost } from '../web-idl/javascript-realm';
 
 export type StreamEnvironment = {
+  readonly abort: {
+    createController(): StreamAbortController;
+  };
+  readonly buffers: {
+    clone(
+      buffer: object,
+      byteOffset: number,
+      byteLength: number,
+    ): object;
+    copy(
+      destination: object,
+      destinationOffset: number,
+      source: object,
+      sourceOffset: number,
+      byteLength: number,
+    ): void;
+    create(byteLength: number): object;
+    createView(
+      type: BufferViewTypeName,
+      buffer: object,
+      byteOffset: number,
+      length: number,
+    ): object;
+    getBuffer(view: object): object;
+    getByteLength(value: object): number;
+    getByteOffset(view: object): number;
+    getViewType(view: object): BufferViewTypeName;
+    isDetached(value: object): boolean;
+    transfer(buffer: object): object;
+  };
   readonly callbacks: {
     createFunction(
       steps: StreamFunctionSteps,
@@ -17,8 +58,22 @@ export type StreamEnvironment = {
   };
   readonly dictionaries: {
     convert(value: unknown, type: WebIDLType): unknown;
+    create(entries: readonly (readonly [string, unknown])[]): unknown;
+  };
+  readonly exceptions: {
+    createTypeError(message: string): TypeError;
+  };
+  readonly iteration: {
+    readonly end: unknown;
+    close(iterator: object, reason: unknown): StreamPromise;
+    getNext(iterator: object): StreamPromise;
+    open(iterable: object): object;
   };
   readonly objects: {
+    construct<Value extends object>(
+      implementation: StreamImplementationConstructor<Value>,
+      argumentsList: readonly unknown[],
+    ): Value;
     create<Value extends object>(
       implementation: StreamImplementationConstructor<Value>,
     ): Value;
@@ -27,6 +82,7 @@ export type StreamEnvironment = {
     create(type: WebIDLType): StreamPromise;
     createRejected(reason: unknown, type: WebIDLType): StreamPromise;
     createResolved(value: unknown, type: WebIDLType): StreamPromise;
+    isPending(value: StreamPromise): boolean;
     markHandled(value: StreamPromise): void;
     react(
       value: StreamPromise,
@@ -35,7 +91,17 @@ export type StreamEnvironment = {
     ): StreamPromise;
     reject(value: StreamPromise, reason: unknown): void;
     resolve(value: StreamPromise, result: unknown): void;
+    waitForAll(
+      values: readonly StreamPromise[],
+      type: WebIDLType,
+    ): StreamPromise;
   };
+  queueMicrotask(steps: () => void): void;
+};
+
+export type StreamAbortController = {
+  abort(reason?: unknown): void;
+  readonly signal: object;
 };
 
 export type StreamPromise = object;
@@ -51,6 +117,68 @@ export function getStreamEnvironment(
   let environment = environments.get(context.callbacks);
   if (!environment) {
     environment = {
+      abort: {
+        createController: () =>
+          context.objects.createForInterface<StreamAbortController>(
+            'AbortController',
+          ),
+      },
+      buffers: {
+        clone(buffer, byteOffset, byteLength) {
+          return createArrayBuffer(
+            getBufferSourceCopy(buffer).slice(
+              byteOffset,
+              byteOffset + byteLength,
+            ),
+            context.realm,
+          );
+        },
+        copy(
+          destination,
+          destinationOffset,
+          source,
+          sourceOffset,
+          byteLength,
+        ) {
+          writeArrayBuffer(
+            destination,
+            getBufferSourceCopy(source).slice(
+              sourceOffset,
+              sourceOffset + byteLength,
+            ),
+            destinationOffset,
+          );
+        },
+        create: (byteLength) => createArrayBuffer(
+          new Uint8Array(byteLength),
+          context.realm,
+        ),
+        createView(type, buffer, byteOffset, length) {
+          const constructor = context.realm.intrinsics.bufferSource.views[
+            type
+          ];
+          if (!constructor) {
+            throw new Error(`The relevant realm has no ${type} intrinsic`);
+          }
+          return Reflect.construct(
+            constructor,
+            [buffer, byteOffset, length],
+          ) as object;
+        },
+        getBuffer: getBufferSourceUnderlyingBuffer,
+        getByteLength: getBufferSourceByteLength,
+        getByteOffset: getBufferSourceByteOffset,
+        getViewType(view) {
+          const type = getBufferTypeName(view);
+          if (!type || type === 'ArrayBuffer' ||
+            type === 'SharedArrayBuffer') {
+            throw new TypeError('Value is not an ArrayBuffer view');
+          }
+          return type;
+        },
+        isDetached: isBufferSourceDetached,
+        transfer: (buffer) => transferArrayBuffer(buffer, context.realm),
+      },
       callbacks: {
         createFunction: (steps, options) =>
           context.realm.createFunction(steps, options),
@@ -63,9 +191,36 @@ export function getStreamEnvironment(
           ),
       },
       dictionaries: {
-        convert: (value, type) => context.conversions.toIDL(value, type),
+        convert: (value, type) => context.conversions.convert(value, type),
+        create: (entries) => new Map(entries),
+      },
+      exceptions: {
+        createTypeError: (message) =>
+          new context.realm.intrinsics.typeError(message),
+      },
+      iteration: {
+        end: endOfIteration,
+        close: (iterator, reason) => closeAsyncIterator(
+          iterator as IDLAsyncIterator,
+          reason,
+          context.realm,
+        ),
+        getNext: (iterator) => getAsyncIteratorNextValue(
+          iterator as IDLAsyncIterator,
+          context.realm,
+          (value, type) => context.conversions.convert(value, type),
+        ),
+        open: (iterable) => openAsyncSequence(
+          iterable as IDLAsyncSequence,
+          context.realm,
+        ),
       },
       objects: {
+        construct: (implementation, argumentsList) =>
+          context.objects.construct(
+            implementation,
+            [environment, ...argumentsList],
+          ),
         create: (implementation) => context.objects.create(implementation),
       },
       promises: {
@@ -74,13 +229,20 @@ export function getStreamEnvironment(
           requireObject(context.promises.createRejected(reason, type)),
         createResolved: (value, type) =>
           requireObject(context.promises.createResolved(value, type)),
+        // Writer promises resolve only with undefined, so capability
+        // resolution and underlying promise settlement are equivalent here.
+        isPending: (value) => context.promises.isUnresolved(value),
         markHandled: (value) => context.promises.markHandled(value),
         react: (value, resultType, steps) => requireObject(
           context.promises.react(value, resultType, steps),
         ),
         reject: (value, reason) => context.promises.reject(value, reason),
         resolve: (value, result) => context.promises.resolve(value, result),
+        waitForAll: (values, type) => requireObject(
+          context.promises.waitForAll(values, type),
+        ),
       },
+      queueMicrotask: (steps) => context.realm.queueMicrotask(steps),
     };
     environments.set(context.callbacks, environment);
   }
@@ -99,17 +261,23 @@ type StreamBindingContext = {
     ): unknown;
   };
   readonly conversions: {
-    toIDL(value: unknown, type: WebIDLType): unknown;
+    convert(value: unknown, type: WebIDLType): unknown;
   };
   readonly objects: {
+    construct<Value extends object>(
+      implementation: StreamImplementationConstructor<Value>,
+      argumentsList: readonly unknown[],
+    ): Value;
     create<Value extends object>(
       implementation: StreamImplementationConstructor<Value>,
     ): Value;
+    createForInterface<Value extends object>(name: string): Value;
   };
   readonly promises: {
     create(type: WebIDLType): unknown;
     createRejected(reason: unknown, type: WebIDLType): unknown;
     createResolved(value: unknown, type: WebIDLType): unknown;
+    isUnresolved(value: unknown): boolean;
     markHandled(value: unknown): void;
     react(
       value: unknown,
@@ -118,13 +286,9 @@ type StreamBindingContext = {
     ): unknown;
     reject(value: unknown, reason: unknown): void;
     resolve(value: unknown, result: unknown): void;
+    waitForAll(values: readonly unknown[], type: WebIDLType): unknown;
   };
-  readonly realm: {
-    createFunction(
-      steps: StreamFunctionSteps,
-      options: StreamFunctionOptions,
-    ): CallableFunction;
-  };
+  readonly realm: WebIDLRealmHost;
 };
 
 type StreamFunctionSteps = (

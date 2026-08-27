@@ -10,8 +10,8 @@ import {
 } from './callback-value';
 import {
   hasExtendedAttribute, reference, type ArgumentDefinition,
-  type AttributeMember, type IterableMember, type OperationMember,
-  type StringifierMember, type WebIDLType,
+  type AsyncIterableMember, type AttributeMember, type IterableMember,
+  type OperationMember, type StringifierMember, type WebIDLType,
 } from './declaration/definition';
 import type {
   CallbackExceptionBehavior, ConstructorDependencyBinding,
@@ -20,9 +20,9 @@ import type {
   PositionedArgument,
 } from './declaration/binding';
 import type {
-  AttributeSteps, ConstructorSteps, ImplementationConstructorSteps,
-  ImplementationRegistry, OperationSteps, StringificationBehavior,
-  ValuePairsSteps,
+  AsyncIteratorSteps, AttributeSteps, ConstructorSteps,
+  ImplementationConstructorSteps, ImplementationRegistry, OperationSteps,
+  StringificationBehavior, ValuePairsSteps,
 } from './registry';
 import type { ValuePair } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
@@ -30,7 +30,8 @@ import { missingArgument } from './overload';
 import { convertToIDL } from './conversion';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
-  markPromiseAsHandled, reactToPromise, rejectPromise, resolvePromise,
+  getPromiseForWaitingForAll, isPromiseUnresolved, markPromiseAsHandled,
+  reactToPromise, rejectPromise, resolvePromise,
 } from './promise';
 import { isPromiseValue } from './promise-value';
 import { getUnannotatedType } from './types';
@@ -55,7 +56,7 @@ export type CallbackValueAdapter = {
 };
 
 export type ConversionAdapter = {
-  toIDL(value: unknown, type: WebIDLType): unknown;
+  convert(value: unknown, type: WebIDLType): unknown;
 };
 
 export type ExceptionValueAdapter = {
@@ -69,6 +70,7 @@ export type PromiseValueAdapter = {
   create(type: WebIDLType): unknown;
   createRejected(reason: unknown, type: WebIDLType): unknown;
   createResolved(value: unknown, type: WebIDLType): unknown;
+  isUnresolved(value: unknown): boolean;
   markHandled(value: unknown): void;
   react(
     value: unknown,
@@ -80,6 +82,7 @@ export type PromiseValueAdapter = {
   ): unknown;
   reject(value: unknown, reason: unknown): void;
   resolve(value: unknown, result: unknown): void;
+  waitForAll(values: readonly unknown[], type: WebIDLType): unknown;
 };
 
 export type PlatformObjectAdapter = {
@@ -90,6 +93,7 @@ export type PlatformObjectAdapter = {
   create<T extends object>(
     implementation: ImplementationClass<T>,
   ): T;
+  createForInterface<T extends object>(name: string): T;
   getImplementation<T extends object>(
     value: unknown,
     implementation: ImplementationClass<T>,
@@ -220,10 +224,25 @@ export type IterableBindingDefinition = {
   invoke: ContextualSteps<object, [], readonly ValuePair[]>;
 };
 
+export type AsyncIterableBindingDefinition = {
+  getNext: (target: object, iterator: object) => unknown;
+  initialize?: (
+    target: object,
+    iterator: object,
+    argumentsList: unknown[],
+  ) => void;
+  return?: (
+    target: object,
+    iterator: object,
+    value: unknown,
+  ) => unknown;
+};
+
 declare module './declaration/definition' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface LanguageBindingDefinitions {
     attribute: AttributeBindingDefinition;
+    'async-iterable': AsyncIterableBindingDefinition;
     'callback-interface': CallbackInterfaceAdapterDefinition;
     constructor: ConstructorBindingDefinition;
     interface: InterfaceImplementationDefinition;
@@ -235,6 +254,7 @@ declare module './declaration/definition' {
 
 type MemberBindingDefinition =
   | AttributeBindingDefinition
+  | AsyncIterableBindingDefinition
   | ConstructorBindingDefinition
   | OperationBindingDefinition
   | StringifierBindingDefinition
@@ -285,6 +305,10 @@ export function createPlatformObjectAdapter(
       return requireImplementation<T>(
         binding.createPlatformObject(getInterface(implementation)),
       );
+    },
+
+    createForInterface<T extends object>(name: string): T {
+      return requireImplementation<T>(binding.createPlatformObject(name));
     },
 
     getImplementation<T extends object>(
@@ -358,8 +382,14 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
         },
       },
       conversions: {
-        toIDL(value, type) {
-          return convertToIDL(value, type, binding);
+        convert(value, type) {
+          return toImplementationValue(
+            convertToIDL(value, type, binding),
+            type,
+            {},
+            context,
+            binding,
+          );
         },
       },
       exceptions: {
@@ -381,6 +411,9 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
         createResolved(value, type) {
           return createResolvedPromise(value, type, binding);
         },
+        isUnresolved(value) {
+          return isPromiseUnresolved(requirePromiseValue(value));
+        },
         markHandled(value) {
           markPromiseAsHandled(requirePromiseValue(value));
         },
@@ -397,6 +430,13 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
         },
         resolve(value, result) {
           resolvePromise(requirePromiseValue(value), result, binding);
+        },
+        waitForAll(values, type) {
+          return getPromiseForWaitingForAll(
+            values.map(requirePromiseValue),
+            type,
+            binding,
+          );
         },
       },
       realm: binding.realm,
@@ -575,6 +615,19 @@ function registerDefinedInterface(
               javaScriptBinding,
             );
           }
+        }
+        break;
+      case 'async-iterable':
+        if (member.binding) {
+          registry.setAsyncIteratorSteps(
+            member,
+            createDefinedAsyncIteratorSteps(
+              member.binding,
+              member,
+              context,
+              javaScriptBinding,
+            ),
+          );
         }
         break;
       case 'stringifier':
@@ -863,6 +916,65 @@ function createDefinedValuePairsSteps(
       [context],
       javaScriptBinding,
     );
+  };
+}
+
+function createDefinedAsyncIteratorSteps(
+  binding: AsyncIterableBindingDefinition,
+  member: AsyncIterableMember,
+  context: InterfaceBindingContext,
+  javaScriptBinding: JavaScriptBinding,
+): AsyncIteratorSteps {
+  return {
+    getNext(target, iterator) {
+      return requirePromiseValue(callImplementation(
+        binding.getNext,
+        undefined,
+        [target, iterator],
+        javaScriptBinding,
+      ));
+    },
+    ...(binding.initialize
+      ? {
+        initialize(
+          target: object,
+          iterator: object,
+          argumentsList: unknown[],
+        ) {
+          callImplementation(
+            binding.initialize!,
+            undefined,
+            [
+              target,
+              iterator,
+              argumentsList.map((value, index) => {
+                const argument = getArgument(member.arguments ?? [], index);
+                return toImplementationValue(
+                  value,
+                  argument?.type,
+                  getArgumentProjection(argument),
+                  context,
+                  javaScriptBinding,
+                );
+              }),
+            ],
+            javaScriptBinding,
+          );
+        },
+      }
+      : {}),
+    ...(binding.return
+      ? {
+        return(target: object, iterator: object, value: unknown) {
+          return requirePromiseValue(callImplementation(
+            binding.return!,
+            undefined,
+            [target, iterator, value],
+            javaScriptBinding,
+          ));
+        },
+      }
+      : {}),
   };
 }
 
@@ -1393,6 +1505,7 @@ function isMemberBindingDefinition(
     | MemberBindingDefinition,
 ): definition is MemberBindingDefinition {
   return 'get' in definition ||
+    'getNext' in definition ||
     'set' in definition ||
     'invoke' in definition ||
     'getSupportedPropertyNames' in definition;

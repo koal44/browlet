@@ -16,16 +16,25 @@ export function createPromiseValue(
     throw new Error('Promise constructor did not initialize its capability');
   }
   const reject_ = reject;
-  return {
+  const resolve_ = resolve;
+  const value: IDLPromise = {
     [promiseValueBrand]: true,
     promise,
     realm,
-    reject: realizeException
-      ? (reason) => reject_(realizeException(reason))
-      : reject_,
-    resolve,
+    reject(reason) {
+      if (value.resolved) return;
+      value.resolved = true;
+      reject_(realizeException ? realizeException(reason) : reason);
+    },
+    resolve(result) {
+      if (value.resolved) return;
+      value.resolved = true;
+      resolve_(result);
+    },
+    resolved: false,
     type,
   };
+  return value;
 }
 
 export function convertJavaScriptValueToPromise(
@@ -58,6 +67,8 @@ export type IDLPromise = {
   realm: WebIDLRealmHost;
   reject: PromiseSettlement;
   resolve: PromiseSettlement;
+  // True once either resolving function has been accepted.
+  resolved: boolean;
   type: WebIDLType;
 };
 
