@@ -2,10 +2,10 @@ import {
   domExceptionCode, domExceptionName,
 } from '../shared/dom-exception';
 import {
-  arg, constant, ctor, defineDictionary, defineInterface, dictMember,
-  emptyDictionary, idlType, integer, nullable, readonlyAttr, reference, xattr,
+  arg, constant, contextValue, ctor, defineDictionary, defineInterface,
+  dictMember, emptyDictionary, idlType, impl, integer, nullable,
+  roAttr, reference, xattr,
 } from './declaration/index';
-import { bind } from './projection';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 /*
@@ -45,18 +45,44 @@ import type { WebIDLRealmHost } from './javascript-realm';
  * };
  */
 
+class DOMExceptionImpl {
+  constructor(
+    realm: WebIDLRealmHost,
+    message = '',
+    name = 'Error',
+  ) {
+    return createDOMExceptionObject(
+      realm,
+      new.target,
+      message,
+      name,
+    ) as DOMExceptionImpl;
+  }
+
+  get name(): string {
+    return getDOMExceptionState(this).name;
+  }
+
+  get message(): string {
+    return getDOMExceptionState(this).message;
+  }
+
+  get code(): number {
+    return legacyCodesByName.get(getDOMExceptionState(this).name) ?? 0;
+  }
+}
+
+const bindingRealm = contextValue(
+  (context: { readonly realm: WebIDLRealmHost; }) => context.realm,
+);
+
 export const domExceptionIDL = defineInterface({
-  binding: bind({
-    create(context, newTarget) {
-      return createDOMExceptionObject(
-        context.realm,
-        newTarget,
-        'Error',
-      );
-    },
-  }),
+  name: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
+  implementation: impl(DOMExceptionImpl, {
+    withArgs: [bindingRealm],
+  }),
   members: [
     ctor([
       arg('message', idlType.DOMString, {
@@ -65,24 +91,10 @@ export const domExceptionIDL = defineInterface({
       arg('name', idlType.DOMString, {
         default: 'Error', optional: true,
       }),
-    ], bind({
-      invoke(_context, message, name) {
-        const state = getDOMExceptionState(this);
-        state.message = message as string;
-        state.name = name as string;
-      },
-    })),
-    readonlyAttr('name', idlType.DOMString, bind({
-      get() { return getDOMExceptionState(this).name; },
-    })),
-    readonlyAttr('message', idlType.DOMString, bind({
-      get() { return getDOMExceptionState(this).message; },
-    })),
-    readonlyAttr('code', idlType.unsignedShort, bind({
-      get() {
-        return legacyCodesByName.get(getDOMExceptionState(this).name) ?? 0;
-      },
-    })),
+    ]),
+    roAttr('name', idlType.DOMString),
+    roAttr('message', idlType.DOMString),
+    roAttr('code', idlType.unsignedShort),
     ...([
       ['INDEX_SIZE_ERR', 1],
       ['DOMSTRING_SIZE_ERR', 2],
@@ -112,7 +124,6 @@ export const domExceptionIDL = defineInterface({
     ] as const).map(([name, value]) =>
       constant(name, idlType.unsignedShort, integer(value))),
   ],
-  name: 'DOMException',
 });
 
 /*
@@ -130,24 +141,52 @@ export const domExceptionIDL = defineInterface({
  * };
  */
 
+class QuotaExceededErrorImpl extends DOMExceptionImpl {
+  constructor(
+    realm: WebIDLRealmHost,
+    message = '',
+    options: QuotaExceededErrorOptions = {},
+  ) {
+    super(realm, message, 'QuotaExceededError');
+
+    const { quota, requested } = options;
+    if (quota !== undefined && quota < 0) {
+      throw new realm.intrinsics.rangeError();
+    }
+    if (requested !== undefined && requested < 0) {
+      throw new realm.intrinsics.rangeError();
+    }
+    if (
+      quota !== undefined &&
+      requested !== undefined &&
+      requested < quota
+    ) {
+      throw new realm.intrinsics.rangeError();
+    }
+
+    quotaExceededErrorStates.set(this, {
+      quota: quota ?? null,
+      requested: requested ?? null,
+    });
+  }
+
+  get quota(): number | null {
+    return getQuotaExceededErrorState(this).quota;
+  }
+
+  get requested(): number | null {
+    return getQuotaExceededErrorState(this).requested;
+  }
+}
+
 export const quotaExceededErrorIDL = defineInterface({
-  binding: bind({
-    create(context, newTarget) {
-      const object = createDOMExceptionObject(
-        context.realm,
-        newTarget,
-        'QuotaExceededError',
-      );
-      quotaExceededErrorStates.set(object, {
-        quota: null,
-        requested: null,
-      });
-      return object;
-    },
-  }),
+  name: 'QuotaExceededError',
+  inherits: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  inherits: 'DOMException',
+  implementation: impl(QuotaExceededErrorImpl, {
+    withArgs: [bindingRealm],
+  }),
   members: [
     ctor([
       arg('message', idlType.DOMString, {
@@ -156,53 +195,18 @@ export const quotaExceededErrorIDL = defineInterface({
       arg('options', reference('QuotaExceededErrorOptions'), {
         default: emptyDictionary, optional: true,
       }),
-    ], bind({
-      invoke(context, message, options) {
-        const domExceptionState = getDOMExceptionState(this);
-        const state = getQuotaExceededErrorState(this);
-        const values = options as Record<PropertyKey, unknown>;
-        const quota = values.quota as number | undefined;
-        const requested = values.requested as number | undefined;
-
-        domExceptionState.name = 'QuotaExceededError';
-        domExceptionState.message = message as string;
-        if (quota !== undefined) {
-          if (quota < 0) {
-            throw new context.realm.intrinsics.rangeError();
-          }
-          state.quota = quota;
-        }
-        if (requested !== undefined) {
-          if (requested < 0) {
-            throw new context.realm.intrinsics.rangeError();
-          }
-          state.requested = requested;
-        }
-        if (
-          state.quota !== null &&
-          state.requested !== null &&
-          state.requested < state.quota
-        ) {
-          throw new context.realm.intrinsics.rangeError();
-        }
-      },
-    })),
-    readonlyAttr('quota', nullable(idlType.double), bind({
-      get() { return getQuotaExceededErrorState(this).quota; },
-    })),
-    readonlyAttr('requested', nullable(idlType.double), bind({
-      get() { return getQuotaExceededErrorState(this).requested; },
-    })),
+    ]),
+    roAttr('quota', nullable(idlType.double)),
+    roAttr('requested', nullable(idlType.double)),
   ],
-  name: 'QuotaExceededError',
 });
 
 export const quotaExceededErrorOptionsIDL = defineDictionary({
+  name: 'QuotaExceededErrorOptions',
   members: [
     dictMember('quota', idlType.double),
     dictMember('requested', idlType.double),
   ],
-  name: 'QuotaExceededErrorOptions',
 });
 
 type DOMExceptionState = {
@@ -213,6 +217,11 @@ type DOMExceptionState = {
 type QuotaExceededErrorState = {
   quota: number | null;
   requested: number | null;
+};
+
+type QuotaExceededErrorOptions = {
+  quota?: number;
+  requested?: number;
 };
 
 const domExceptionStates = new WeakMap<object, DOMExceptionState>();
@@ -245,15 +254,15 @@ function getQuotaExceededErrorState(
 
 function createDOMExceptionObject(
   realm: WebIDLRealmHost,
-  newTarget: object | undefined,
+  newTarget: object,
+  message: string,
   name: string,
 ): object {
-  const target = newTarget ?? realm.intrinsics.error;
   const object = Reflect.construct(
     realm.intrinsics.error,
     [],
-    target as ErrorConstructor,
+    newTarget as ErrorConstructor,
   );
-  domExceptionStates.set(object, { message: '', name });
+  domExceptionStates.set(object, { message, name });
   return object;
 }

@@ -1,7 +1,7 @@
 import {
-  arg, attr, defineInterface, idlType, op, readonlyAttr, xattr,
+  arg, attr, defineInterface, idlType, op, roAttr, xattr,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { withLocationStub } from '../../stubs';
 
 /*
@@ -123,14 +123,15 @@ export class LocationImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const locationIDL = defineInterface({
-  binding: bind(LocationImpl),
+  name: 'Location',
   exposed: 'Window',
+  implementation: impl(LocationImpl),
   members: [
     attr('href', idlType.USVString, {
       ...xattr('LegacyUnforgeable'),
       stringifier: true,
     }),
-    readonlyAttr('origin', idlType.USVString, xattr('LegacyUnforgeable')),
+    roAttr('origin', idlType.USVString, xattr('LegacyUnforgeable')),
     ...[
       'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash',
     ].map((name) => attr(
@@ -146,7 +147,6 @@ export const locationIDL = defineInterface({
     )),
     op('reload', idlType.undefined, [], xattr('LegacyUnforgeable')),
   ],
-  name: 'Location',
 });
 
 function navigationNotImplemented(): never {

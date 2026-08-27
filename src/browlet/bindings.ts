@@ -1,6 +1,6 @@
 import { domIDLDefinitions } from './dom/web-idl';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
-import { streamsIDLDefinitions } from '../streams';
+import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions } from '../url/api';
 import {
   registerInterfaceBindings, type InterfaceBindingDomain,

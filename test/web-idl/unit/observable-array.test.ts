@@ -205,9 +205,9 @@ describe('Web IDL observable arrays', () => {
 
   it('converts interface elements and reflects specification list changes', () => {
     const employee = defineInterface({
+      name: 'Employee',
       exposed: '*',
       members: [],
-      name: 'Employee',
     });
     const workers = {
       kind: 'attribute',
@@ -215,9 +215,9 @@ describe('Web IDL observable arrays', () => {
       type: observableArray(reference('Employee')),
     } satisfies AttributeMember;
     const building = defineInterface({
+      name: 'Building',
       exposed: '*',
       members: [workers],
-      name: 'Building',
     });
     const realm = new Realm();
     const binding = new JavaScriptBinding(
@@ -249,9 +249,9 @@ function createNumberArrayBinding(
     type: observableArray(idlType.long),
   } satisfies AttributeMember;
   const interface_ = defineInterface({
+    name: 'NumberArrays',
     exposed: '*',
     members: [attribute],
-    name: 'NumberArrays',
   });
   const realm = new Realm();
   const binding = new JavaScriptBinding(

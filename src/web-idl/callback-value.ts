@@ -73,8 +73,8 @@ type CallbackValueRecord = {
 };
 
 function isCallbackValue(value: unknown): value is CallbackValue {
-  return typeof value === 'object' &&
-    value !== null &&
+  return (typeof value === 'object' && value !== null ||
+    typeof value === 'function') &&
     callbackValueBrand in value;
 }
 

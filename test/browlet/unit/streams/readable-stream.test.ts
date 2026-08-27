@@ -2,16 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   type StreamEnvironment, type StreamPromise,
 } from '../../../../src/streams/environment';
-import {
+import type {
   ReadableStreamDefaultControllerImpl,
 } from '../../../../src/streams/readable-stream-default-controller';
-import {
-  ReadableStreamDefaultReaderImpl,
-} from '../../../../src/streams/readable-stream-default-reader';
 import { ReadableStreamImpl } from '../../../../src/streams/readable-stream';
-import {
-  setUpReadableStreamDefaultControllerFromUnderlyingSource,
-} from '../../../../src/streams/readable-stream-operations';
 
 describe('ordinary readable-stream implementation', () => {
   it('delivers enqueued chunks and then observes close', async () => {
@@ -59,14 +53,7 @@ function createReadableStream(
   stream: ReadableStreamImpl;
 } {
   const environment = createTestEnvironment();
-  const stream = new ReadableStreamImpl();
-  ReadableStreamImpl.initializeForBinding(stream, environment);
-  setUpReadableStreamDefaultControllerFromUnderlyingSource(
-    stream,
-    source,
-    source,
-    {},
-  );
+  const stream = new ReadableStreamImpl(environment, source);
   const controller = ReadableStreamImpl.getState(stream).controller;
   if (!controller) throw new Error('Readable stream has no controller');
   return { controller, stream };
@@ -87,7 +74,6 @@ function createTestEnvironment(): StreamEnvironment {
           name: { value: options.name },
         },
       ),
-      createFunctionValue: (_name, object) => object,
       invoke: (value, argumentsList, _behavior, thisArgument) => {
         if (typeof value !== 'function') {
           throw new TypeError('Test callback is not callable');
@@ -102,22 +88,10 @@ function createTestEnvironment(): StreamEnvironment {
       create<Value extends object>(
         implementation: TestImplementationConstructor<Value>,
       ): Value {
-        const value = Reflect.construct(
-          implementation,
-          [],
-        ) as unknown as Value;
-        if (value instanceof ReadableStreamDefaultControllerImpl) {
-          ReadableStreamDefaultControllerImpl.initializeForBinding(
-            value,
-            environment,
-          );
-        } else if (value instanceof ReadableStreamDefaultReaderImpl) {
-          ReadableStreamDefaultReaderImpl.initializeForBinding(
-            value,
-            environment,
-          );
-        }
-        return value;
+        return Reflect.construct(
+          implementation as unknown as CallableFunction,
+          [environment],
+        ) as Value;
       },
     },
     promises: {
@@ -174,4 +148,4 @@ type PromiseCapability = {
 
 type TestImplementationConstructor<Value extends object> = {
   readonly prototype: Value;
-} & (abstract new (...argumentsList: never[]) => Value);
+};

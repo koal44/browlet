@@ -52,15 +52,16 @@ describe('Web IDL ordinary interface projection', () => {
       static: true,
     } satisfies AttributeMember;
     const base = defineInterface({
+      name: 'ProjectionBase',
       exposed: ['Window'],
       members: [{
         kind: 'constant', name: 'BASE', type: idlType.long, value: integer(1),
       }],
-      name: 'ProjectionBase',
     });
     const derived = defineInterface({
-      exposed: ['Window'],
+      name: 'ProjectionDerived',
       inherits: 'ProjectionBase',
+      exposed: ['Window'],
       members: [
         constructor,
         { kind: 'constant', name: 'ANSWER', type: idlType.long, value: integer(42) },
@@ -70,15 +71,14 @@ describe('Web IDL ordinary interface projection', () => {
         staticAttribute,
         staticOperation,
       ],
-      name: 'ProjectionDerived',
     });
     const partial = definePartialInterface({
-      members: [partialOperation],
       name: 'ProjectionDerived',
+      members: [partialOperation],
     });
     const mixin = defineInterfaceMixin({
-      members: [mixinOperation],
       name: 'ProjectionMixin',
+      members: [mixinOperation],
     });
     const include = defineIncludes({
       interface: 'ProjectionDerived',
@@ -163,14 +163,16 @@ describe('Web IDL ordinary interface projection', () => {
     const value = attributeMember('value', idlType.long, true);
     const read = operationMember('read', [], idlType.long);
     const mixin = defineInterfaceMixin({
-      members: [value, read],
       name: 'SharedMembers',
+      members: [value, read],
     });
     const first = defineInterface({
-      exposed: '*', members: [firstConstructor], name: 'FirstHost',
+      name: 'FirstHost',
+      exposed: '*', members: [firstConstructor],
     });
     const second = defineInterface({
-      exposed: '*', members: [secondConstructor], name: 'SecondHost',
+      name: 'SecondHost',
+      exposed: '*', members: [secondConstructor],
     });
     const implementations = new ImplementationRegistry();
     implementations.setConstructorSteps(firstConstructor, () => undefined);
@@ -221,6 +223,7 @@ describe('Web IDL ordinary interface projection', () => {
 
   it('materializes constant tokens as their declared IDL values', () => {
     const constants = defineInterface({
+      name: 'ConstantValues',
       exposed: '*',
       members: [
         {
@@ -260,7 +263,6 @@ describe('Web IDL ordinary interface projection', () => {
           type: idlType.unrestrictedDouble, value: notANumber,
         },
       ],
-      name: 'ConstantValues',
     });
     const binding = new JavaScriptBinding(
       assembleDefinitions([constants]),
@@ -286,9 +288,9 @@ describe('Web IDL ordinary interface projection', () => {
     const constructor = constructorMember([]);
     const operation = operationMember('read', [], idlType.DOMString);
     const interfaceIDL = defineInterface({
+      name: 'CrossRealmInterface',
       exposed: '*',
       members: [constructor, operation],
-      name: 'CrossRealmInterface',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
@@ -333,9 +335,9 @@ describe('Web IDL ordinary interface projection', () => {
       reference('SeparatedIdentity'),
     );
     const interfaceIDL = defineInterface({
+      name: 'SeparatedIdentity',
       exposed: '*',
       members: [read, echo],
-      name: 'SeparatedIdentity',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const interface_ = definitions.getInterface('SeparatedIdentity');
@@ -406,15 +408,15 @@ describe('Web IDL ordinary interface projection', () => {
       extendedAttributes: [noArguments('Default')],
     } satisfies OperationMember;
     const base = defineInterface({
+      name: 'JSONBase',
       exposed: '*',
       members: [inheritedValue, baseToJSON],
-      name: 'JSONBase',
     });
     const derived = defineInterface({
-      exposed: '*',
-      inherits: 'JSONBase',
-      members: [constructor, ownValue, nonJSONValue, derivedToJSON],
       name: 'JSONDerived',
+      inherits: 'JSONBase',
+      exposed: '*',
+      members: [constructor, ownValue, nonJSONValue, derivedToJSON],
     });
     const implementations = new ImplementationRegistry();
     implementations.setConstructorSteps(constructor, () => undefined);
@@ -446,7 +448,8 @@ describe('Web IDL ordinary interface projection', () => {
   it('creates default toJSON results in the function realm', () => {
     const pointToJSON = operationMember('toJSON', [], idlType.object);
     const point = defineInterface({
-      exposed: '*', members: [pointToJSON], name: 'JSONPoint',
+      name: 'JSONPoint',
+      exposed: '*', members: [pointToJSON],
     });
     const pointAttribute = attributeMember(
       'point',
@@ -458,9 +461,9 @@ describe('Web IDL ordinary interface projection', () => {
       extendedAttributes: [noArguments('Default')],
     } satisfies OperationMember;
     const holder = defineInterface({
+      name: 'JSONHolder',
       exposed: '*',
       members: [pointAttribute, toJSON],
-      name: 'JSONHolder',
     });
     const definitions = assembleDefinitions([holder, point]);
     const implementations = new ImplementationRegistry();
@@ -502,9 +505,9 @@ describe('Web IDL ordinary interface projection', () => {
       frozenArray(idlType.long),
     );
     const interfaceIDL = defineInterface({
+      name: 'FrozenArrayInterface',
       exposed: '*',
       members: [constructor, values],
-      name: 'FrozenArrayInterface',
     });
     const realm = new Realm();
     const state = new WeakMap<object, readonly unknown[]>();
@@ -545,9 +548,9 @@ describe('Web IDL ordinary interface projection', () => {
       reference('BufferSource'),
     );
     const interfaceIDL = defineInterface({
+      name: 'BufferSourceInterface',
       exposed: '*',
       members: [constructor, echo],
-      name: 'BufferSourceInterface',
     });
     const implementations = new ImplementationRegistry();
     implementations.setConstructorSteps(constructor, () => undefined);
@@ -602,9 +605,9 @@ describe('Web IDL ordinary interface projection', () => {
       values: ['first', 'second'],
     });
     const interfaceIDL = defineInterface({
+      name: 'ExtendedInterface',
       exposed: '*',
       members: [constructor, unforgeable, replaceable, forwards, choice, fixed, scoped],
-      name: 'ExtendedInterface',
     });
     const forwarded = { value: '' };
     const choices = new WeakMap<object, string>();
@@ -682,36 +685,36 @@ describe('Web IDL ordinary interface projection', () => {
     const partialMember = operationMember('partialMember', [], idlType.undefined);
     const mixinMember = operationMember('mixinMember', [], idlType.undefined);
     const interfaceIDL = defineInterface({
+      name: 'ExposedInterface',
       exposed: ['Window'],
       members: [normal, secureMember],
-      name: 'ExposedInterface',
     });
     const secureInterface = defineInterface({
+      name: 'SecureInterface',
       exposed: ['Window'],
       extendedAttributes: [noArguments('SecureContext')],
       members: [],
-      name: 'SecureInterface',
     });
     const isolatedInterface = defineInterface({
+      name: 'IsolatedInterface',
       exposed: ['Window'],
       extendedAttributes: [noArguments('CrossOriginIsolated')],
       members: [],
-      name: 'IsolatedInterface',
     });
     const workerInterface = defineInterface({
+      name: 'WorkerInterface',
       exposed: ['Worker'],
       members: [],
-      name: 'WorkerInterface',
     });
     const partial = definePartialInterface({
+      name: 'ExposedInterface',
       extendedAttributes: [noArguments('SecureContext')],
       members: [partialMember],
-      name: 'ExposedInterface',
     });
     const mixin = defineInterfaceMixin({
+      name: 'SecureMixin',
       extendedAttributes: [noArguments('SecureContext')],
       members: [mixinMember],
-      name: 'SecureMixin',
     });
     const include = defineIncludes({
       interface: 'ExposedInterface',
@@ -765,13 +768,16 @@ describe('Web IDL ordinary interface projection', () => {
 
   it('matches exposure against every global name implemented by the realm', () => {
     const workerInterface = defineInterface({
-      exposed: ['Worker'], members: [], name: 'WorkerInterface',
+      name: 'WorkerInterface',
+      exposed: ['Worker'], members: [],
     });
     const workletInterface = defineInterface({
-      exposed: ['Worklet'], members: [], name: 'WorkletInterface',
+      name: 'WorkletInterface',
+      exposed: ['Worklet'], members: [],
     });
     const windowInterface = defineInterface({
-      exposed: ['Window'], members: [], name: 'WindowInterface',
+      name: 'WindowInterface',
+      exposed: ['Window'], members: [],
     });
     const binding = new JavaScriptBinding(
       assembleDefinitions([

@@ -84,7 +84,7 @@ export function attr(
   return { ...options, kind: 'attribute', name, type };
 }
 
-export function readonlyAttr(
+export function roAttr(
   name: string,
   type: WebIDLType,
   options: ReadonlyAttributeOptions = {},
@@ -143,14 +143,14 @@ export function stringifier(
   return { ...options, kind: 'stringifier' };
 }
 
-export function iterable(
+export function iter(
   value: WebIDLType,
   options: IterableOptions = {},
 ): IterableMember {
   return { ...options, kind: 'iterable', value };
 }
 
-export function asyncIterable(
+export function asyncIter(
   value: WebIDLType,
   options: AsyncIterableOptions = {},
 ): AsyncIterableMember {
@@ -247,7 +247,7 @@ export function observableArray(type: WebIDLType): ObservableArrayType {
 export function annotated<Type extends WebIDLType>(
   type: Type,
   { extendedAttributes }: ExtendedAttributeOptions,
-): AnnotatedType & { type: Type; } {
+): AnnotatedType<Type> {
   return { kind: 'annotated', extendedAttributes, type };
 }
 
@@ -345,123 +345,198 @@ type LanguageBinding<Name extends PropertyKey> =
     ? LanguageBindingDefinitions[Name]
     : object;
 
-export type InterfaceDefinition = Attributed & {
-  binding?: LanguageBinding<'interface'>;
+export type InterfaceDefinition = {
   kind: 'interface';
   name: string;
   inherits?: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  implementation?: LanguageBinding<'interface'>;
   members: InterfaceMember[];
 };
 
-export type PartialInterfaceDefinition = Attributed & {
+export type PartialInterfaceDefinition = {
   kind: 'partial-interface';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   members: PartialInterfaceMember[];
 };
 
-export type InterfaceMixinDefinition = Attributed & {
+export type InterfaceMixinDefinition = {
   kind: 'interface-mixin';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   members: MixinMember[];
 };
 
-export type PartialInterfaceMixinDefinition = Attributed & {
+export type PartialInterfaceMixinDefinition = {
   kind: 'partial-interface-mixin';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   members: MixinMember[];
 };
 
-export type CallbackInterfaceDefinition = Attributed & {
-  binding?: LanguageBinding<'callback-interface'>;
+export type CallbackInterfaceDefinition = {
   kind: 'callback-interface';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  adapter?: LanguageBinding<'callback-interface'>;
   members: CallbackInterfaceMember[];
 };
 
-export type NamespaceDefinition = Attributed & {
+export type NamespaceDefinition = {
   kind: 'namespace';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   members: NamespaceMember[];
 };
 
-export type PartialNamespaceDefinition = Attributed & {
+export type PartialNamespaceDefinition = {
   kind: 'partial-namespace';
   name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   members: NamespaceMember[];
 };
 
-export type DictionaryDefinition = Attributed & {
+export type DictionaryDefinition = {
   kind: 'dictionary';
   name: string;
   inherits?: string;
+  extendedAttributes?: ExtendedAttribute[];
   members: DictionaryMember[];
 };
 
-export type PartialDictionaryDefinition = Attributed & {
+export type PartialDictionaryDefinition = {
   kind: 'partial-dictionary';
   name: string;
+  extendedAttributes?: ExtendedAttribute[];
   members: DictionaryMember[];
 };
 
-export type EnumerationDefinition = Attributed & {
+export type EnumerationDefinition = {
   kind: 'enumeration';
   name: string;
+  extendedAttributes?: ExtendedAttribute[];
   values: string[];
 };
 
-export type CallbackFunctionDefinition = Attributed & {
+export type CallbackFunctionDefinition = {
   kind: 'callback-function';
   name: string;
+  extendedAttributes?: ExtendedAttribute[];
   returns: WebIDLType;
   arguments: ArgumentDefinition[];
 };
 
-export type TypedefDefinition = Attributed & {
+export type TypedefDefinition = {
   kind: 'typedef';
   name: string;
+  extendedAttributes?: ExtendedAttribute[];
   type: WebIDLType;
 };
 
-export type IncludesDefinition = Attributed & {
+export type IncludesDefinition = {
   kind: 'includes';
   interface: string;
   mixin: string;
+  extendedAttributes?: ExtendedAttribute[];
 };
 
-export type InterfaceDefinitionInit = Omit<InterfaceDefinition, 'kind'>;
-export type PartialInterfaceDefinitionInit = Omit<
-  PartialInterfaceDefinition,
-  'kind'
->;
-export type InterfaceMixinDefinitionInit = Omit<
-  InterfaceMixinDefinition,
-  'kind'
->;
-export type PartialInterfaceMixinDefinitionInit = Omit<
-  PartialInterfaceMixinDefinition,
-  'kind'
->;
-export type CallbackInterfaceDefinitionInit = Omit<
-  CallbackInterfaceDefinition,
-  'kind'
->;
-export type NamespaceDefinitionInit = Omit<NamespaceDefinition, 'kind'>;
-export type PartialNamespaceDefinitionInit = Omit<
-  PartialNamespaceDefinition,
-  'kind'
->;
-export type DictionaryDefinitionInit = Omit<DictionaryDefinition, 'kind'>;
-export type PartialDictionaryDefinitionInit = Omit<
-  PartialDictionaryDefinition,
-  'kind'
->;
-export type EnumerationDefinitionInit = Omit<EnumerationDefinition, 'kind'>;
-export type CallbackFunctionDefinitionInit = Omit<
-  CallbackFunctionDefinition,
-  'kind'
->;
-export type TypedefDefinitionInit = Omit<TypedefDefinition, 'kind'>;
-export type IncludesDefinitionInit = Omit<IncludesDefinition, 'kind'>;
+export type InterfaceDefinitionInit = {
+  name: string;
+  inherits?: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  implementation?: LanguageBinding<'interface'>;
+  members: InterfaceMember[];
+};
+
+export type PartialInterfaceDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  members: PartialInterfaceMember[];
+};
+
+export type InterfaceMixinDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  members: MixinMember[];
+};
+
+export type PartialInterfaceMixinDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  members: MixinMember[];
+};
+
+export type CallbackInterfaceDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  adapter?: LanguageBinding<'callback-interface'>;
+  members: CallbackInterfaceMember[];
+};
+
+export type NamespaceDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  members: NamespaceMember[];
+};
+
+export type PartialNamespaceDefinitionInit = {
+  name: string;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  members: NamespaceMember[];
+};
+
+export type DictionaryDefinitionInit = {
+  name: string;
+  inherits?: string;
+  extendedAttributes?: ExtendedAttribute[];
+  members: DictionaryMember[];
+};
+
+export type PartialDictionaryDefinitionInit = {
+  name: string;
+  extendedAttributes?: ExtendedAttribute[];
+  members: DictionaryMember[];
+};
+
+export type EnumerationDefinitionInit = {
+  name: string;
+  extendedAttributes?: ExtendedAttribute[];
+  values: string[];
+};
+
+export type CallbackFunctionDefinitionInit = {
+  name: string;
+  extendedAttributes?: ExtendedAttribute[];
+  returns: WebIDLType;
+  arguments: ArgumentDefinition[];
+};
+
+export type TypedefDefinitionInit = {
+  name: string;
+  extendedAttributes?: ExtendedAttribute[];
+  type: WebIDLType;
+};
+
+export type IncludesDefinitionInit = {
+  interface: string;
+  mixin: string;
+  extendedAttributes?: ExtendedAttribute[];
+};
 
 export type InterfaceMember = PartialInterfaceMember | ConstructorMember;
 
@@ -485,85 +560,107 @@ export type CallbackInterfaceMember = ConstantMember | OperationMember;
 
 export type NamespaceMember = ConstantMember | AttributeMember | OperationMember;
 
-export type ConstantMember = Member & {
+export type ConstantMember = {
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'constant';
   name: string;
   type: WebIDLType;
   value: ConstantValue;
 };
 
-export type AttributeMember = Member & {
+export type AttributeMember = {
   binding?: LanguageBinding<'attribute'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  inherit?: boolean;
   kind: 'attribute';
   name: string;
-  type: WebIDLType;
   readonly?: boolean;
-  inherit?: boolean;
   static?: boolean;
   stringifier?: boolean;
+  type: WebIDLType;
 };
 
-export type OperationMember = Member & {
+export type OperationMember = {
+  arguments: ArgumentDefinition[];
   binding?: LanguageBinding<'operation'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'operation';
   name?: string;
   returns: WebIDLType;
-  arguments: ArgumentDefinition[];
   special?: 'getter' | 'setter' | 'deleter';
   static?: boolean;
 };
 
-export type ConstructorMember = Member & {
-  binding?: LanguageBinding<'constructor'>;
-  kind: 'constructor';
+export type ConstructorMember = {
   arguments: ArgumentDefinition[];
+  binding?: LanguageBinding<'constructor'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  kind: 'constructor';
 };
 
-export type StringifierMember = Member & {
+export type StringifierMember = {
   binding?: LanguageBinding<'stringifier'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'stringifier';
 };
 
-export type IterableMember = Member & {
+export type IterableMember = {
   binding?: LanguageBinding<'iterable'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'iterable';
   key?: WebIDLType;
   value: WebIDLType;
 };
 
-export type AsyncIterableMember = Member & {
+export type AsyncIterableMember = {
+  arguments?: ArgumentDefinition[];
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'async-iterable';
   key?: WebIDLType;
   value: WebIDLType;
-  arguments?: ArgumentDefinition[];
 };
 
-export type MaplikeMember = Member & {
+export type MaplikeMember = {
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'maplike';
   key: WebIDLType;
-  value: WebIDLType;
   readonly?: boolean;
+  value: WebIDLType;
 };
 
-export type SetlikeMember = Member & {
+export type SetlikeMember = {
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
   kind: 'setlike';
-  value: WebIDLType;
   readonly?: boolean;
+  value: WebIDLType;
 };
 
-export type DictionaryMember = Attributed & {
+export type DictionaryMember = {
+  binding?: LanguageBinding<'dictionary-member'>;
+  default?: DefaultValue;
+  extendedAttributes?: ExtendedAttribute[];
   name: string;
-  type: WebIDLType;
   required?: boolean;
-  default?: DefaultValue;
+  type: WebIDLType;
 };
 
-export type ArgumentDefinition = Attributed & {
-  name: string;
-  type: WebIDLType;
-  optional?: boolean;
-  variadic?: boolean;
+export type ArgumentDefinition = {
+  binding?: LanguageBinding<'argument'>;
   default?: DefaultValue;
+  extendedAttributes?: ExtendedAttribute[];
+  name: string;
+  optional?: boolean;
+  type: WebIDLType;
+  variadic?: boolean;
 };
 
 export type WebIDLType =
@@ -577,7 +674,7 @@ export type WebIDLType =
   | PromiseType
   | FrozenArrayType
   | ObservableArrayType
-  | AnnotatedType;
+  | AnnotatedType<WebIDLType>;
 
 export type SimpleType = {
   kind: 'simple';
@@ -599,14 +696,25 @@ export type UnionType = {
   types: [WebIDLType, WebIDLType, ...WebIDLType[]];
 };
 
-export type SequenceType = ContainerType & { kind: 'sequence'; };
-export type AsyncSequenceType = ContainerType & {
-  kind: 'async-sequence';
+export type SequenceType = {
+  kind: 'sequence';
+  type: WebIDLType;
 };
-export type PromiseType = ContainerType & { kind: 'promise'; };
-export type FrozenArrayType = ContainerType & { kind: 'frozen-array'; };
-export type ObservableArrayType = ContainerType & {
+export type AsyncSequenceType = {
+  kind: 'async-sequence';
+  type: WebIDLType;
+};
+export type PromiseType = {
+  kind: 'promise';
+  type: WebIDLType;
+};
+export type FrozenArrayType = {
+  kind: 'frozen-array';
+  type: WebIDLType;
+};
+export type ObservableArrayType = {
   kind: 'observable-array';
+  type: WebIDLType;
 };
 
 export type RecordType = {
@@ -615,11 +723,13 @@ export type RecordType = {
   value: WebIDLType;
 };
 
-export type AnnotatedType = {
+// An interface keeps the recursive WebIDLType relationship lazy.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+export interface AnnotatedType<Type> {
   kind: 'annotated';
   extendedAttributes: ExtendedAttribute[];
-  type: WebIDLType;
-};
+  type: Type;
+}
 
 export type StringType =
   | typeof idlType.DOMString
@@ -791,45 +901,89 @@ export type RawExtendedAttribute = {
   value: string;
 };
 
-type Attributed = {
+type AttributeOptions = {
+  binding?: LanguageBinding<'attribute'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  inherit?: boolean;
+  readonly?: boolean;
+  static?: boolean;
+  stringifier?: boolean;
+};
+
+type ReadonlyAttributeOptions = {
+  binding?: LanguageBinding<'attribute'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  inherit?: boolean;
+  static?: boolean;
+  stringifier?: boolean;
+};
+
+type ConstantOptions = {
   exposed?: Exposure;
   extendedAttributes?: ExtendedAttribute[];
 };
 
-type Member = Attributed;
+type ConstructorOptions = {
+  binding?: LanguageBinding<'constructor'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+};
 
-type AttributeOptions = Omit<AttributeMember, 'kind' | 'name' | 'type'>;
+type OperationOptions = {
+  binding?: LanguageBinding<'operation'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  special?: 'getter' | 'setter' | 'deleter';
+  static?: boolean;
+};
 
-type ReadonlyAttributeOptions = Omit<AttributeOptions, 'readonly'>;
+type StringifierOptions = {
+  binding?: LanguageBinding<'stringifier'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+};
 
-type ConstantOptions = Omit<
-  ConstantMember,
-  'kind' | 'name' | 'type' | 'value'
->;
+type IterableOptions = {
+  binding?: LanguageBinding<'iterable'>;
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  key?: WebIDLType;
+};
 
-type ConstructorOptions = Omit<ConstructorMember, 'arguments' | 'kind'>;
+type AsyncIterableOptions = {
+  arguments?: ArgumentDefinition[];
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  key?: WebIDLType;
+};
 
-type OperationOptions = Omit<
-  OperationMember,
-  'arguments' | 'kind' | 'name' | 'returns'
->;
+type MaplikeOptions = {
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  readonly?: boolean;
+};
 
-type StringifierOptions = Omit<StringifierMember, 'kind'>;
+type SetlikeOptions = {
+  exposed?: Exposure;
+  extendedAttributes?: ExtendedAttribute[];
+  readonly?: boolean;
+};
 
-type IterableOptions = Omit<IterableMember, 'kind' | 'value'>;
+type ArgumentOptions = {
+  binding?: LanguageBinding<'argument'>;
+  default?: DefaultValue;
+  extendedAttributes?: ExtendedAttribute[];
+  optional?: boolean;
+  variadic?: boolean;
+};
 
-type AsyncIterableOptions = Omit<AsyncIterableMember, 'kind' | 'value'>;
-
-type MaplikeOptions = Omit<MaplikeMember, 'key' | 'kind' | 'value'>;
-
-type SetlikeOptions = Omit<SetlikeMember, 'kind' | 'value'>;
-
-type ArgumentOptions = Omit<ArgumentDefinition, 'name' | 'type'>;
-
-type DictionaryMemberOptions = Omit<DictionaryMember, 'name' | 'type'>;
-
-type ContainerType = {
-  type: WebIDLType;
+type DictionaryMemberOptions = {
+  binding?: LanguageBinding<'dictionary-member'>;
+  default?: DefaultValue;
+  extendedAttributes?: ExtendedAttribute[];
+  required?: boolean;
 };
 
 function normalizeExtendedAttribute(

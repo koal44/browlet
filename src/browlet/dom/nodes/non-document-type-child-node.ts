@@ -1,5 +1,5 @@
 import {
-  defineInterfaceMixin, nullable, readonlyAttr, reference,
+  defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import { isElement, type NodeImpl } from './node';
 import type { ElementImpl } from './element';
@@ -45,12 +45,12 @@ export class NonDocumentTypeChildNodeMixin {
 // -- Web IDL ------------------------------------------------------------
 
 export const nonDocumentTypeChildNodeIDL = defineInterfaceMixin({
+  name: 'NonDocumentTypeChildNode',
   members: [
-    readonlyAttr(
+    roAttr(
       'previousElementSibling',
       nullable(reference('Element')),
     ),
-    readonlyAttr('nextElementSibling', nullable(reference('Element'))),
+    roAttr('nextElementSibling', nullable(reference('Element'))),
   ],
-  name: 'NonDocumentTypeChildNode',
 });

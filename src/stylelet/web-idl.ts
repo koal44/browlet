@@ -1,6 +1,6 @@
 import {
   attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
-  readonlyAttr, xattr, type Definition,
+  roAttr, xattr, type Definition,
 } from '../web-idl/declaration/index';
 
 /*
@@ -10,13 +10,13 @@ import {
  * };
  */
 const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
+  name: 'DocumentOrShadowRoot',
   members: [
-    readonlyAttr('styleSheets', idlType.object, xattr('SameObject')),
+    roAttr('styleSheets', idlType.object, xattr('SameObject')),
     // TODO(Web IDL observable arrays): Restore ObservableArray<CSSStyleSheet>
     // when the specialized attribute proxy is available.
     attr('adoptedStyleSheets', idlType.any),
   ],
-  name: 'DocumentOrShadowRoot',
 });
 
 /*
@@ -26,11 +26,11 @@ const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
  * };
  */
 const elementCSSInlineStyleIDL = defineInterfaceMixin({
-  members: [readonlyAttr('style', idlType.object, xattr(
+  name: 'ElementCSSInlineStyle',
+  members: [roAttr('style', idlType.object, xattr(
     'SameObject',
     ['PutForwards', 'cssText'],
   ))],
-  name: 'ElementCSSInlineStyle',
 });
 
 /*
@@ -39,8 +39,8 @@ const elementCSSInlineStyleIDL = defineInterfaceMixin({
  * };
  */
 const linkStyleIDL = defineInterfaceMixin({
-  members: [readonlyAttr('sheet', nullable(idlType.object))],
   name: 'LinkStyle',
+  members: [roAttr('sheet', nullable(idlType.object))],
 });
 
 export const styleletIDLDefinitions: readonly Definition[] = [

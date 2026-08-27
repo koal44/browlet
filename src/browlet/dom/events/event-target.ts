@@ -405,7 +405,11 @@ export class EventTargetImpl implements EventTarget
 // -- Web IDL ------------------------------------------------------------
 
 export const eventTargetIDL = defineInterface({
-  binding: bind(EventTargetImpl, {
+  name: 'EventTarget',
+  exposed: '*',
+  // Projection supplies the realm-correct trusted-event factory to every
+  // implementation whose primary interface inherits EventTarget.
+  implementation: bind(EventTargetImpl, {
     initialize(context, value) {
       const realm = context.realm as typeof context.realm & EventRealm;
       EventTargetImpl.setEventFactory(
@@ -421,9 +425,8 @@ export const eventTargetIDL = defineInterface({
       );
     },
   }),
-  exposed: '*',
   members: [
-    ctor(bind({ invoke() {} })),
+    ctor(),
     op('addEventListener', idlType.undefined, [
       arg('type', idlType.DOMString),
       arg('callback', nullable(reference('EventListener'))),
@@ -452,11 +455,13 @@ export const eventTargetIDL = defineInterface({
       arg('event', reference('Event')),
     ]),
   ],
-  name: 'EventTarget',
 });
 
 export const eventListenerIDL = defineCallbackInterface({
-  binding: bind({
+  name: 'EventListener',
+  // Event dispatch retains the callback realm and original object identity in
+  // addition to the callback-interface invocation steps.
+  adapter: bind({
     adapt(_context, callback) {
       return new EventListenerValue(
         callback.object as EventListenerOrEventListenerObject,
@@ -474,22 +479,21 @@ export const eventListenerIDL = defineCallbackInterface({
   members: [op('handleEvent', idlType.undefined, [
     arg('event', reference('Event')),
   ])],
-  name: 'EventListener',
 });
 
 export const eventListenerOptionsIDL = defineDictionary({
-  members: [dictMember('capture', idlType.boolean, { default: false })],
   name: 'EventListenerOptions',
+  members: [dictMember('capture', idlType.boolean, { default: false })],
 });
 
 export const addEventListenerOptionsIDL = defineDictionary({
+  name: 'AddEventListenerOptions',
   inherits: 'EventListenerOptions',
   members: [
     dictMember('passive', idlType.boolean),
     dictMember('once', idlType.boolean, { default: false }),
     dictMember('signal', reference('AbortSignal')),
   ],
-  name: 'AddEventListenerOptions',
 });
 
 export function fireEvent(

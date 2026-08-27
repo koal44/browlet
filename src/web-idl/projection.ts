@@ -1,17 +1,26 @@
 import type { AssembledInterface } from './assembly';
 import type { JavaScriptBinding } from './binding';
 import type { DOMExceptionName } from '../shared/dom-exception';
-import { callUserObjectOperation } from './callback';
-import { invokeCallbackFunction } from './callback';
+import {
+  callUserObjectOperation, constructCallbackFunction, invokeCallbackFunction,
+} from './callback';
 import {
   isCallbackFunctionValue, isCallbackInterfaceValue,
+  type CallbackFunctionValue,
 } from './callback-value';
 import {
-  hasExtendedAttribute, reference, type AttributeMember,
-  type OperationMember, type WebIDLType,
+  hasExtendedAttribute, reference, type ArgumentDefinition,
+  type AttributeMember, type IterableMember, type OperationMember,
+  type StringifierMember, type WebIDLType,
 } from './declaration/definition';
 import type {
-  AttributeSteps, ConstructorSteps, ImplementationConstructor,
+  CallbackExceptionBehavior, ConstructorDependencyBinding,
+  ContextValue, ImplementationClass, ImplementationDependency,
+  ImplementationDependencyValue, OperationDependencyBinding,
+  PositionedArgument,
+} from './declaration/binding';
+import type {
+  AttributeSteps, ConstructorSteps, ImplementationConstructorSteps,
   ImplementationRegistry, OperationSteps, StringificationBehavior,
   ValuePairsSteps,
 } from './registry';
@@ -24,6 +33,7 @@ import {
   markPromiseAsHandled, reactToPromise, rejectPromise, resolvePromise,
 } from './promise';
 import { isPromiseValue } from './promise-value';
+import { getUnannotatedType } from './types';
 
 export type InterfaceBindingContext = {
   readonly callbacks: CallbackValueAdapter;
@@ -74,29 +84,30 @@ export type PromiseValueAdapter = {
 
 export type PlatformObjectAdapter = {
   construct<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
     argumentsList: readonly unknown[],
   ): T;
   create<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
   ): T;
   getImplementation<T extends object>(
     value: unknown,
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
   ): T | undefined;
   project<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
     value: T,
   ): T;
 };
 
-export type InterfaceBindingDefinition = {
-  implementation?: ImplementationConstructor;
+export type InterfaceImplementationDefinition = {
+  implementation?: ImplementationClass;
   create?: InterfaceObjectCreationSteps;
+  withArgs?: readonly ImplementationDependency[];
   initialize?: (context: InterfaceBindingContext, value: object) => void;
 };
 
-export type CallbackInterfaceBindingDefinition = {
+export type CallbackInterfaceAdapterDefinition = {
   adapt: ContextualSteps<
     undefined,
     [value: CallbackInterfaceBindingValue],
@@ -115,20 +126,20 @@ export type CallbackInterfaceBindingValue = {
 };
 
 type InterfaceBindingOptions = Omit<
-  InterfaceBindingDefinition,
+  InterfaceImplementationDefinition,
   'implementation'
 >;
 
 export function bind(
-  implementation: ImplementationConstructor,
-  options?: InterfaceBindingOptions,
-): InterfaceBindingDefinition;
+  implementation: ImplementationClass,
+  options: InterfaceBindingOptions,
+): InterfaceImplementationDefinition;
 export function bind(
-  definition: InterfaceBindingDefinition,
-): InterfaceBindingDefinition;
+  definition: InterfaceImplementationDefinition,
+): InterfaceImplementationDefinition;
 export function bind(
-  definition: CallbackInterfaceBindingDefinition,
-): CallbackInterfaceBindingDefinition;
+  definition: CallbackInterfaceAdapterDefinition,
+): CallbackInterfaceAdapterDefinition;
 export function bind<
   const Binding extends MemberBindingDefinition,
   const Options extends object = object,
@@ -138,16 +149,16 @@ export function bind<
 ): Options & { binding: Binding; };
 export function bind(
   implementationOrDefinition:
-    | ImplementationConstructor
-    | InterfaceBindingDefinition
-    | CallbackInterfaceBindingDefinition
+    | ImplementationClass
+    | InterfaceImplementationDefinition
+    | CallbackInterfaceAdapterDefinition
     | MemberBindingDefinition,
   options: object = {},
 ):
-  | InterfaceBindingDefinition
-  | CallbackInterfaceBindingDefinition
+  | InterfaceImplementationDefinition
+  | CallbackInterfaceAdapterDefinition
   | (object & { binding: MemberBindingDefinition; }) {
-  if (typeof implementationOrDefinition === 'function') {
+  if (isImplementationClass(implementationOrDefinition)) {
     return {
       ...(options as InterfaceBindingOptions),
       implementation: implementationOrDefinition,
@@ -157,6 +168,16 @@ export function bind(
     return { ...options, binding: implementationOrDefinition };
   }
   return implementationOrDefinition;
+}
+
+function isImplementationClass(
+  value:
+    | ImplementationClass
+    | InterfaceImplementationDefinition
+    | CallbackInterfaceAdapterDefinition
+    | MemberBindingDefinition,
+): value is ImplementationClass {
+  return typeof value === 'function';
 }
 
 export type InterfaceObjectCreationSteps = (
@@ -171,22 +192,25 @@ type ContextualSteps<This, Values extends unknown[], Result> = (
 ) => Result;
 
 export type AttributeBindingDefinition = {
+  callbackExceptionBehavior?: CallbackExceptionBehavior;
   get?: ContextualSteps<object | null, [], unknown>;
   set?: ContextualSteps<object | null, [value: unknown], void>;
 };
 
-export type ConstructorBindingDefinition = {
-  invoke: ContextualSteps<object, unknown[], void>;
-};
+export type ConstructorBindingDefinition =
+  | ConstructorDependencyBinding
+  | { invoke: ContextualSteps<object, unknown[], void>; };
 
-export type OperationBindingDefinition = {
-  getSupportedPropertyNames?: ContextualSteps<
-    object,
-    [],
-    ReadonlySet<string>
-  >;
-  invoke: ContextualSteps<object | null, unknown[], unknown>;
-};
+export type OperationBindingDefinition =
+  | OperationDependencyBinding
+  | {
+    getSupportedPropertyNames?: ContextualSteps<
+      object,
+      [],
+      ReadonlySet<string>
+    >;
+    invoke: ContextualSteps<object | null, unknown[], unknown>;
+  };
 
 export type StringifierBindingDefinition = {
   invoke: ContextualSteps<object, [], unknown>;
@@ -200,9 +224,9 @@ declare module './declaration/definition' {
   // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
   interface LanguageBindingDefinitions {
     attribute: AttributeBindingDefinition;
-    'callback-interface': CallbackInterfaceBindingDefinition;
+    'callback-interface': CallbackInterfaceAdapterDefinition;
     constructor: ConstructorBindingDefinition;
-    interface: InterfaceBindingDefinition;
+    interface: InterfaceImplementationDefinition;
     iterable: IterableBindingDefinition;
     operation: OperationBindingDefinition;
     stringifier: StringifierBindingDefinition;
@@ -220,7 +244,7 @@ export function createPlatformObjectAdapter(
   binding: JavaScriptBinding,
 ): PlatformObjectAdapter {
   function getInterface<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
   ): AssembledInterface {
     const interface_ = binding.implementations.getInterfaceForImplementation(
       implementation,
@@ -247,7 +271,7 @@ export function createPlatformObjectAdapter(
 
   return {
     construct<T extends object>(
-      implementation: ImplementationConstructor<T>,
+      implementation: ImplementationClass<T>,
       argumentsList: readonly unknown[],
     ): T {
       return requireImplementation<T>(
@@ -256,7 +280,7 @@ export function createPlatformObjectAdapter(
     },
 
     create<T extends object>(
-      implementation: ImplementationConstructor<T>,
+      implementation: ImplementationClass<T>,
     ): T {
       return requireImplementation<T>(
         binding.createPlatformObject(getInterface(implementation)),
@@ -265,7 +289,7 @@ export function createPlatformObjectAdapter(
 
     getImplementation<T extends object>(
       value: unknown,
-      implementation: ImplementationConstructor<T>,
+      implementation: ImplementationClass<T>,
     ): T | undefined {
       const interface_ = getInterface(implementation);
       const record = binding.getPlatformObjectRecord(value);
@@ -278,7 +302,7 @@ export function createPlatformObjectAdapter(
     },
 
     project<T extends object>(
-      implementation: ImplementationConstructor<T>,
+      implementation: ImplementationClass<T>,
       value: T,
     ): T {
       const interface_ = getInterface(implementation);
@@ -309,7 +333,7 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
   const objects = createPlatformObjectAdapter(binding);
   for (const interface_ of binding.definitions.getInterfaces()) {
     const { definition } = interface_;
-    if (!definition.binding) continue;
+    if (!definition.implementation) continue;
 
     const context: InterfaceBindingContext = {
       callbacks: {
@@ -381,7 +405,7 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
       binding,
       binding.implementations,
       interface_,
-      definition.binding,
+      definition.implementation,
       context,
     );
   }
@@ -398,10 +422,10 @@ function registerDefinedInterface(
   javaScriptBinding: JavaScriptBinding,
   registry: ImplementationRegistry,
   interface_: AssembledInterface,
-  interfaceBinding: InterfaceBindingDefinition,
+  interfaceImplementation: InterfaceImplementationDefinition,
   context: InterfaceBindingContext,
 ): void {
-  const implementation = interfaceBinding.implementation;
+  const implementation = interfaceImplementation.implementation;
   if (implementation) {
     registry.setInterfaceForImplementation(implementation, interface_);
   }
@@ -409,7 +433,7 @@ function registerDefinedInterface(
   for (const { member } of interface_.members) {
     switch (member.kind) {
       case 'attribute':
-        if (member.binding) {
+        if (member.binding?.get || member.binding?.set) {
           registerDefinedAttribute(
             registry,
             member,
@@ -432,42 +456,90 @@ function registerDefinedInterface(
         break;
       case 'constructor':
         if (member.binding) {
-          registry.setConstructorSteps(
-            member,
-            createDefinedConstructorSteps(
-              member.binding,
-              context,
-              javaScriptBinding,
-            ),
-          );
-        } else if (!implementation) {
-          throw missingMemberBinding(interface_, member);
+          if ('dependencies' in member.binding) {
+            if (!implementation) throw missingMemberBinding(interface_, member);
+            registry.setImplementationConstructorSteps(
+              member,
+              createImplementationConstructorSteps(
+                implementation,
+                member.arguments,
+                context,
+                javaScriptBinding,
+                member.binding.dependencies,
+              ),
+            );
+          } else {
+            registry.setConstructorSteps(
+              member,
+              createDefinedConstructorSteps(
+                member.binding,
+                member.arguments,
+                context,
+                javaScriptBinding,
+              ),
+            );
+          }
+        } else {
+          if (!implementation) throw missingMemberBinding(interface_, member);
+          if (interfaceImplementation.create) {
+            if (member.arguments.length > 0) {
+              throw missingMemberBinding(interface_, member);
+            }
+            registry.setConstructorSteps(member, emptyConstructorSteps);
+          } else {
+            registry.setImplementationConstructorSteps(
+              member,
+              createImplementationConstructorSteps(
+                implementation,
+                member.arguments,
+                context,
+                javaScriptBinding,
+                interfaceImplementation.withArgs,
+              ),
+            );
+          }
         }
         break;
       case 'operation':
         if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
         if (member.binding) {
-          registry.setOperationSteps(
-            member,
-            createDefinedOperationSteps(
-              member.binding,
+          if ('dependencies' in member.binding) {
+            if (!implementation || member.name === undefined) {
+              throw missingMemberBinding(interface_, member);
+            }
+            registerOperation(
+              registry,
+              member,
+              member.name,
+              member.static ? implementation : implementation.prototype,
               context,
               javaScriptBinding,
-            ),
-          );
-          const getSupportedPropertyNames =
-            member.binding.getSupportedPropertyNames;
-          if (getSupportedPropertyNames) {
-            registry.setNamedPropertySteps(member, {
-              getSupportedPropertyNames() {
-                return callImplementation(
-                  getSupportedPropertyNames,
-                  this,
-                  [context],
-                  javaScriptBinding,
-                );
-              },
-            });
+              member.binding.dependencies,
+            );
+          } else {
+            registry.setOperationSteps(
+              member,
+              createDefinedOperationSteps(
+                member.binding,
+                member,
+                context,
+                javaScriptBinding,
+              ),
+            );
+            const getSupportedPropertyNames =
+              member.binding.getSupportedPropertyNames;
+            if (getSupportedPropertyNames) {
+              registry.setNamedPropertySteps(member, {
+                getSupportedPropertyNames() {
+                  return callImplementation(
+                    getSupportedPropertyNames,
+                    this,
+                    [context],
+                    javaScriptBinding,
+                  );
+                },
+              });
+            }
           }
         } else {
           if (!implementation || member.name === undefined) {
@@ -493,8 +565,16 @@ function registerDefinedInterface(
               javaScriptBinding,
             ),
           );
-        } else if (!implementation) {
-          throw missingMemberBinding(interface_, member);
+        } else {
+          if (!implementation) throw missingMemberBinding(interface_, member);
+          if (member.key !== undefined) {
+            registerPairIterable(
+              registry,
+              member,
+              implementation.prototype,
+              javaScriptBinding,
+            );
+          }
         }
         break;
       case 'stringifier':
@@ -507,14 +587,20 @@ function registerDefinedInterface(
               javaScriptBinding,
             ),
           );
-        } else if (!implementation) {
-          throw missingMemberBinding(interface_, member);
+        } else {
+          if (!implementation) throw missingMemberBinding(interface_, member);
+          registerStringifier(
+            registry,
+            member,
+            implementation.prototype,
+            javaScriptBinding,
+          );
         }
         break;
     }
   }
 
-  const create = interfaceBinding.create;
+  const create = interfaceImplementation.create;
   if (create) {
     registry.setObjectCreationSteps(
       interface_.definition,
@@ -531,7 +617,17 @@ function registerDefinedInterface(
       (newTarget) => callImplementation(
         createDefaultImplementationObject,
         undefined,
-        [interface_, implementation, newTarget],
+        [
+          interface_,
+          implementation,
+          newTarget,
+          resolveInjectedArguments(
+            [],
+            interfaceImplementation.withArgs ?? [],
+            (dependency) =>
+              resolveImplementationDependency(dependency, context),
+          ),
+        ],
         javaScriptBinding,
       ),
     );
@@ -540,7 +636,7 @@ function registerDefinedInterface(
       `Web IDL ${interface_.definition.name} has no object creation binding`,
     );
   }
-  const initialize = interfaceBinding.initialize;
+  const initialize = interfaceImplementation.initialize;
   if (initialize) {
     registry.setObjectInitializationSteps(
       interface_.definition,
@@ -556,8 +652,9 @@ function registerDefinedInterface(
 
 function createDefaultImplementationObject(
   interface_: AssembledInterface,
-  implementation: ImplementationConstructor<object>,
+  implementation: ImplementationClass<object>,
   newTarget: object | undefined,
+  argumentsList: readonly unknown[],
 ): object {
   if (!newTarget) {
     throw new Error(
@@ -565,11 +662,13 @@ function createDefaultImplementationObject(
     );
   }
   return Reflect.construct(
-    implementation,
-    [],
-    newTarget as ImplementationConstructor<object>,
-  ) as object;
+    implementation as Constructable,
+    argumentsList,
+    newTarget as Constructable,
+  );
 }
+
+type Constructable = new (...argumentsList: unknown[]) => object;
 
 function missingMemberBinding(
   interface_: AssembledInterface,
@@ -594,10 +693,15 @@ function registerDefinedAttribute(
           `Web IDL attribute ${member.name} has no getter binding`,
         );
       }
-      return callImplementation(
-        binding.get,
-        this,
-        [context],
+      return projectImplementationResult(
+        callImplementation(
+          binding.get,
+          this,
+          [context],
+          javaScriptBinding,
+        ),
+        member.type,
+        context,
         javaScriptBinding,
       );
     },
@@ -608,7 +712,16 @@ function registerDefinedAttribute(
       callImplementation(
         set,
         this,
-        [context, toImplementationValue(value, context, javaScriptBinding)],
+        [
+          context,
+          toImplementationValue(
+            value,
+            member.type,
+            { callbackExceptionBehavior: binding.callbackExceptionBehavior },
+            context,
+            javaScriptBinding,
+          ),
+        ],
         javaScriptBinding,
       );
     };
@@ -617,7 +730,8 @@ function registerDefinedAttribute(
 }
 
 function createDefinedConstructorSteps(
-  binding: ConstructorBindingDefinition,
+  binding: Extract<ConstructorBindingDefinition, { invoke: unknown; }>,
+  arguments_: ArgumentDefinition[],
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): ConstructorSteps {
@@ -627,28 +741,96 @@ function createDefinedConstructorSteps(
       this,
       [
         context,
-        ...values.map((value) =>
-          toImplementationValue(value, context, javaScriptBinding)),
+        ...values.map((value, index) => {
+          const argument = getArgument(arguments_, index);
+          return toImplementationValue(
+            value,
+            argument?.type,
+            getArgumentProjection(argument),
+            context,
+            javaScriptBinding,
+          );
+        }),
       ],
       javaScriptBinding,
     );
   };
 }
 
+function emptyConstructorSteps(): void {}
+
+function createImplementationConstructorSteps(
+  implementation: ImplementationClass,
+  arguments_: ArgumentDefinition[],
+  context: InterfaceBindingContext,
+  javaScriptBinding: JavaScriptBinding,
+  dependencies: readonly ImplementationDependency[] = [],
+): ImplementationConstructorSteps {
+  return (newTarget, values) => callImplementation(
+    constructImplementationObject,
+    undefined,
+    [
+      implementation,
+      newTarget,
+      resolveInjectedArguments(
+        values.map((value, index) => {
+          const argument = getArgument(arguments_, index);
+          return toImplementationValue(
+            value,
+            argument?.type,
+            getArgumentProjection(argument),
+            context,
+            javaScriptBinding,
+          );
+        }),
+        dependencies,
+        (dependency) => resolveImplementationDependency(dependency, context),
+      ),
+    ],
+    javaScriptBinding,
+  );
+}
+
+function constructImplementationObject(
+  implementation: ImplementationClass,
+  newTarget: object,
+  argumentsList: unknown[],
+): object {
+  return Reflect.construct(
+    implementation as Constructable,
+    argumentsList,
+    newTarget as Constructable,
+  );
+}
+
 function createDefinedOperationSteps(
-  binding: OperationBindingDefinition,
+  binding: Extract<OperationBindingDefinition, { invoke: unknown; }>,
+  member: OperationMember,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): OperationSteps {
   return function(...values) {
-    return callImplementation(
-      binding.invoke,
-      this,
-      [
-        context,
-        ...values.map((value) =>
-          toImplementationValue(value, context, javaScriptBinding)),
-      ],
+    return projectImplementationResult(
+      callImplementation(
+        binding.invoke,
+        this,
+        [
+          context,
+          ...values.map((value, index) => {
+            const argument = getArgument(member.arguments, index);
+            return toImplementationValue(
+              value,
+              argument?.type,
+              getArgumentProjection(argument),
+              context,
+              javaScriptBinding,
+            );
+          }),
+        ],
+        javaScriptBinding,
+      ),
+      member.returns,
+      context,
       javaScriptBinding,
     );
   };
@@ -703,7 +885,12 @@ function registerAttribute(
     ((this: object | null, value: unknown) => void) | undefined;
   registry.setAttributeSteps(member, {
     get() {
-      return callImplementation(get, this, [], javaScriptBinding);
+      return projectImplementationResult(
+        callImplementation(get, this, [], javaScriptBinding),
+        member.type,
+        context,
+        javaScriptBinding,
+      );
     },
     ...(set && !member.readonly
       ? {
@@ -711,7 +898,18 @@ function registerAttribute(
           callImplementation(
             set,
             this,
-            [toImplementationValue(value, context, javaScriptBinding)],
+            [
+              toImplementationValue(
+                value,
+                member.type,
+                {
+                  callbackExceptionBehavior:
+                    member.binding?.callbackExceptionBehavior,
+                },
+                context,
+                javaScriptBinding,
+              ),
+            ],
             javaScriptBinding,
           );
         },
@@ -727,6 +925,7 @@ function registerOperation(
   target: object,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
+  dependencies: readonly ImplementationDependency[] = [],
 ): void {
   const value: unknown = findDescriptor(target, name)?.value;
   if (typeof value !== 'function') {
@@ -738,24 +937,154 @@ function registerOperation(
 
   registry.setOperationSteps(
     member,
-    createOperationSteps(method, context, javaScriptBinding),
+    createOperationSteps(
+      method,
+      member,
+      context,
+      javaScriptBinding,
+      dependencies,
+    ),
   );
 }
 
 function createOperationSteps(
   implementation: OperationSteps,
+  member: OperationMember,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
+  dependencies: readonly ImplementationDependency[] = [],
 ): OperationSteps {
   return function(...values) {
-    return callImplementation(
-      implementation,
-      this,
-      values.map((value) =>
-        toImplementationValue(value, context, javaScriptBinding)),
+    return projectImplementationResult(
+      callImplementation(
+        implementation,
+        this,
+        resolveInjectedArguments(
+          values.map((value, index) => {
+            const argument = getArgument(member.arguments, index);
+            return toImplementationValue(
+              value,
+              argument?.type,
+              getArgumentProjection(argument),
+              context,
+              javaScriptBinding,
+            );
+          }),
+          dependencies,
+          (dependency) =>
+            resolveImplementationDependency(dependency, context),
+        ),
+        javaScriptBinding,
+      ),
+      member.returns,
+      context,
       javaScriptBinding,
     );
   };
+}
+
+function resolveImplementationDependency(
+  dependency: ImplementationDependencyValue,
+  context: InterfaceBindingContext,
+): unknown {
+  if (dependency === 'current-global') return context.realm.global;
+  if (isContextValue(dependency)) {
+    return dependency.resolve(context);
+  }
+  return context.objects.create(dependency);
+}
+
+function isContextValue(
+  dependency: ImplementationDependencyValue,
+): dependency is ContextValue {
+  return typeof dependency === 'object';
+}
+
+function resolveInjectedArguments<Value>(
+  argumentsList: unknown[],
+  injected: readonly (PositionedArgument<Value> | Value)[],
+  resolve: (value: Value) => unknown,
+): unknown[] {
+  const leading: Value[] = [];
+  const positioned: PositionedArgument<Value>[] = [];
+  for (const value of injected) {
+    if (isPositionedArgument(value)) positioned.push(value);
+    else leading.push(value);
+  }
+
+  const result = [...leading.map(resolve), ...argumentsList];
+  const occupied = new Set(result.keys());
+  for (const { index, value } of positioned) {
+    if (occupied.has(index)) {
+      throw new TypeError(`Constructor argument ${index} is already occupied`);
+    }
+    result[index] = resolve(value);
+    occupied.add(index);
+  }
+  return result;
+}
+
+function isPositionedArgument<Value>(
+  value: PositionedArgument<Value> | Value,
+): value is PositionedArgument<Value> {
+  return typeof value === 'object' && value !== null &&
+    'index' in value && 'value' in value;
+}
+
+function registerPairIterable(
+  registry: ImplementationRegistry,
+  member: IterableMember,
+  target: object,
+  javaScriptBinding: JavaScriptBinding,
+): void {
+  const value: unknown = findDescriptor(target, 'entries')?.value;
+  if (typeof value !== 'function') {
+    throw new TypeError(
+      'Web IDL pair iterable implementation has no entries method',
+    );
+  }
+  const entries = value as PairEntries;
+  registry.setValuePairsSteps(member, function() {
+    return callImplementation(
+      collectValuePairs,
+      this,
+      [entries],
+      javaScriptBinding,
+    );
+  });
+}
+
+function collectValuePairs(
+  this: object,
+  entries: PairEntries,
+): readonly ValuePair[] {
+  const pairs = Reflect.apply(entries, this, []);
+  return Array.from(pairs, ([key, value]) => ({ key, value }));
+}
+
+type PairEntries = (
+  this: object,
+) => Iterable<readonly [key: unknown, value: unknown]>;
+
+function registerStringifier(
+  registry: ImplementationRegistry,
+  member: StringifierMember,
+  target: object,
+  javaScriptBinding: JavaScriptBinding,
+): void {
+  const value: unknown = findDescriptor(target, 'toString')?.value;
+  if (typeof value !== 'function') {
+    throw new TypeError('Web IDL stringifier has no implementation');
+  }
+  const stringify = value as StringificationBehavior;
+  registry.setStringificationBehavior(member, function() {
+    return callImplementation(
+      stringify,
+      this,
+      [],
+      javaScriptBinding,
+    );
+  });
 }
 
 function callImplementation<This, Values extends unknown[], Result>(
@@ -787,13 +1116,25 @@ function findDescriptor(
 
 function toImplementationValue(
   value: unknown,
+  type: WebIDLType | undefined,
+  projection: ImplementationValueProjection,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): unknown {
   if (value === missingArgument) return undefined;
+  for (const implementation of projection.implementations ?? []) {
+    const resolved = context.objects.getImplementation(value, implementation);
+    if (resolved) return resolved;
+  }
+  if (isCallbackFunctionValue(value)) {
+    return projectCallbackFunction(
+      value,
+      projection.callbackExceptionBehavior,
+    );
+  }
   if (isCallbackInterfaceValue(value)) {
-    const callbackBinding = value.definition.binding;
-    if (!callbackBinding) return value;
+    const callbackAdapter = value.definition.adapter;
+    if (!callbackAdapter) return value;
 
     const callback: CallbackInterfaceBindingValue = {
       callUserObjectOperation: (
@@ -810,19 +1151,46 @@ function toImplementationValue(
       realm: value.realm,
     };
     return callImplementation(
-      callbackBinding.adapt,
+      callbackAdapter.adapt,
       undefined,
       [context, callback],
       javaScriptBinding,
     );
   }
+  if (Array.isArray(value)) {
+    const itemType = type && getArrayItemType(
+      type,
+      javaScriptBinding,
+    );
+    if (!itemType) return value;
+    return value.map((item) =>
+      toImplementationValue(
+        item,
+        itemType,
+        { callbackExceptionBehavior: projection.callbackExceptionBehavior },
+        context,
+        javaScriptBinding,
+      ));
+  }
   if (!(value instanceof Map)) return value;
+
+  const getMemberType = type && getMapMemberType(
+    type,
+    javaScriptBinding,
+  );
+  if (!getMemberType) return value;
 
   const object: Record<PropertyKey, unknown> = {};
   const dictionary = value as Map<PropertyKey, unknown>;
   for (const [name, memberValue] of dictionary) {
     object[name] = toImplementationValue(
       memberValue,
+      getMemberType(name),
+      {
+        callbackExceptionBehavior:
+          getMapMemberExceptionBehavior(type, name, javaScriptBinding) ??
+          projection.callbackExceptionBehavior,
+      },
       context,
       javaScriptBinding,
     );
@@ -830,10 +1198,198 @@ function toImplementationValue(
   return object;
 }
 
+type ImplementationValueProjection = {
+  readonly callbackExceptionBehavior?: CallbackExceptionBehavior;
+  readonly implementations?: readonly ImplementationClass[];
+};
+
+function getArgumentProjection(
+  argument: ArgumentDefinition | undefined,
+): ImplementationValueProjection {
+  const binding = argument?.binding;
+  if (!binding) return {};
+  if ('callbackExceptionBehavior' in binding) {
+    return { callbackExceptionBehavior: binding.callbackExceptionBehavior };
+  }
+  return {
+    implementations: binding.implementations,
+  };
+}
+
+function projectImplementationResult(
+  value: unknown,
+  type: WebIDLType | undefined,
+  context: InterfaceBindingContext,
+  javaScriptBinding: JavaScriptBinding,
+): unknown {
+  if (!type || value === null) return value;
+
+  const resolved = getUnannotatedType(type, javaScriptBinding.definitions);
+  if (resolved.kind === 'nullable') {
+    return projectImplementationResult(
+      value,
+      resolved.type,
+      context,
+      javaScriptBinding,
+    );
+  }
+  if (resolved.kind !== 'reference') return value;
+
+  const definition = javaScriptBinding.definitions.getDefinition(
+    resolved.name,
+  );
+  if (
+    definition?.kind === 'callback-function' &&
+    typeof value === 'function' &&
+    !isCallbackFunctionValue(value)
+  ) {
+    return context.callbacks.createFunctionValue(resolved.name, value);
+  }
+  if (typeof value !== 'object') return value;
+
+  const interface_ = javaScriptBinding.definitions.getInterface(resolved.name);
+  if (!interface_) return value;
+  if (javaScriptBinding.platformObjects.getImplementationRecord(value)) {
+    return value;
+  }
+
+  const registered = javaScriptBinding.implementations
+    .getImplementationForObject(value);
+  if (!registered) return value;
+
+  let implemented: AssembledInterface | undefined = registered.interface_;
+  while (implemented) {
+    if (implemented.definition === interface_.definition) {
+      return context.objects.project(registered.implementation, value);
+    }
+    implemented = implemented.parent;
+  }
+  return value;
+}
+
+function projectCallbackFunction(
+  value: CallbackFunctionValue,
+  exceptionBehavior: CallbackExceptionBehavior | undefined,
+): CallableFunction {
+  const existing = callbackFunctionProjections.get(value);
+  if (existing) return existing;
+
+  /*
+   * Present Web IDL callback machinery to implementations as an ordinary
+   * callable. Copying the callback record onto the wrapper preserves its
+   * Web IDL identity, so returning the callable projects the original
+   * JavaScript function rather than exposing this wrapper.
+   */
+  const adapter = new Proxy(function callback() {}, {
+    apply(_target, thisArgument, argumentsList) {
+      return invokeCallbackFunction(
+        value,
+        argumentsList,
+        exceptionBehavior,
+        thisArgument,
+      );
+    },
+    construct(_target, argumentsList) {
+      return constructCallbackFunction(value, argumentsList) as object;
+    },
+  });
+  Object.defineProperties(adapter, Object.getOwnPropertyDescriptors(value));
+  callbackFunctionProjections.set(value, adapter);
+  return adapter;
+}
+
+const callbackFunctionProjections = new WeakMap<
+  CallbackFunctionValue,
+  CallableFunction
+>();
+
+function getArgument(
+  definitions: ArgumentDefinition[],
+  index: number,
+): ArgumentDefinition | undefined {
+  const definition = definitions[index];
+  if (definition) return definition;
+  const variadic = definitions.at(-1);
+  return variadic?.variadic ? variadic : undefined;
+}
+
+function getArrayItemType(
+  type: WebIDLType,
+  binding: JavaScriptBinding,
+): WebIDLType | undefined {
+  const innerType = getUnannotatedType(type, binding.definitions);
+  switch (innerType.kind) {
+    case 'nullable':
+      return getArrayItemType(innerType.type, binding);
+    case 'union':
+      return innerType.types
+        .map((memberType) => getArrayItemType(memberType, binding))
+        .find((memberType) => memberType !== undefined);
+    case 'sequence':
+      return innerType.type;
+    default:
+      return undefined;
+  }
+}
+
+function getMapMemberType(
+  type: WebIDLType,
+  binding: JavaScriptBinding,
+): ((name: PropertyKey) => WebIDLType | undefined) | undefined {
+  const innerType = getUnannotatedType(type, binding.definitions);
+  switch (innerType.kind) {
+    case 'nullable':
+      return getMapMemberType(innerType.type, binding);
+    case 'union':
+      return innerType.types
+        .map((memberType) => getMapMemberType(memberType, binding))
+        .find((getMemberType) => getMemberType !== undefined);
+    case 'record':
+      return () => innerType.value;
+    case 'reference': {
+      const dictionary = binding.definitions.getDictionary(innerType.name);
+      if (!dictionary) return undefined;
+      return (name) => typeof name === 'string'
+        ? dictionary.members.find((member) => member.name === name)?.type
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function getMapMemberExceptionBehavior(
+  type: WebIDLType,
+  name: PropertyKey,
+  binding: JavaScriptBinding,
+): CallbackExceptionBehavior | undefined {
+  const innerType = getUnannotatedType(type, binding.definitions);
+  switch (innerType.kind) {
+    case 'nullable':
+      return getMapMemberExceptionBehavior(innerType.type, name, binding);
+    case 'union':
+      return innerType.types
+        .map((memberType) => getMapMemberExceptionBehavior(
+          memberType,
+          name,
+          binding,
+        ))
+        .find((behavior) => behavior !== undefined);
+    case 'reference': {
+      if (typeof name !== 'string') return undefined;
+      const dictionary = binding.definitions.getDictionary(innerType.name);
+      return dictionary?.members.find((member) => member.name === name)
+        ?.binding?.callbackExceptionBehavior;
+    }
+    default:
+      return undefined;
+  }
+}
+
 function isMemberBindingDefinition(
   definition:
-    | InterfaceBindingDefinition
-    | CallbackInterfaceBindingDefinition
+    | InterfaceImplementationDefinition
+    | CallbackInterfaceAdapterDefinition
     | MemberBindingDefinition,
 ): definition is MemberBindingDefinition {
   return 'get' in definition ||

@@ -27,6 +27,6 @@ export class ChildNodeMixin {
 // -- Web IDL ------------------------------------------------------------
 
 export const childNodeIDL = defineInterfaceMixin({
-  members: [op('remove', idlType.undefined)],
   name: 'ChildNode',
+  members: [op('remove', idlType.undefined)],
 });

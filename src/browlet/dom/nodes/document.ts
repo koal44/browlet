@@ -25,11 +25,10 @@ import {
   domExceptionName, throwDOMException,
 } from '../../../shared/dom-exception';
 import {
-  arg, ctor, defineDictionary, defineIncludes, defineInterface,
-  definePartialInterface, dictMember, emptyDictionary, idlType, nullable, op,
-  readonlyAttr, reference, union,
+  arg, contextValue, ctor, defineDictionary, defineIncludes, defineInterface,
+  definePartialInterface, dictMember, emptyDictionary, idlType,
+  impl, nullable, op, roAttr, reference, union,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
 import { createOpaqueOrigin, type Origin } from '../../../url/origin';
 import { parseURL, serializeURL, type URLRecord } from '../../../url/url';
 import { AttrImpl } from './attribute';
@@ -865,32 +864,28 @@ export class DocumentImpl
 
 // -- Web IDL ------------------------------------------------------------
 
+const nodeFactory = contextValue(
+  (context: { readonly objects: DOMNodeFactory; }) => context.objects,
+);
+
 export const documentIDL = defineInterface({
-  binding: bind(DocumentImpl, {
-    create(context, newTarget) {
-      if (!newTarget) {
-        throw new Error('Document construction requires newTarget');
-      }
-      return Reflect.construct(
-        DocumentImpl,
-        [context.objects],
-        newTarget as NewTarget,
-      );
-    },
-  }),
-  exposed: 'Window',
+  name: 'Document',
   inherits: 'Node',
+  exposed: 'Window',
+  implementation: impl(DocumentImpl, {
+    withArgs: [nodeFactory],
+  }),
   members: [
-    ctor(bind({ invoke() {} })),
-    readonlyAttr('URL', idlType.USVString),
-    readonlyAttr('documentURI', idlType.USVString),
-    readonlyAttr('characterSet', idlType.DOMString),
-    readonlyAttr('charset', idlType.DOMString),
-    readonlyAttr('inputEncoding', idlType.DOMString),
-    readonlyAttr('doctype', nullable(reference('DocumentType'))),
-    readonlyAttr('documentElement', nullable(reference('Element'))),
-    readonlyAttr('contentType', idlType.DOMString),
-    readonlyAttr('compatMode', idlType.DOMString),
+    ctor(),
+    roAttr('URL', idlType.USVString),
+    roAttr('documentURI', idlType.USVString),
+    roAttr('characterSet', idlType.DOMString),
+    roAttr('charset', idlType.DOMString),
+    roAttr('inputEncoding', idlType.DOMString),
+    roAttr('doctype', nullable(reference('DocumentType'))),
+    roAttr('documentElement', nullable(reference('Element'))),
+    roAttr('contentType', idlType.DOMString),
+    roAttr('compatMode', idlType.DOMString),
     op('getElementsByClassName', idlType.object, [
       arg('classNames', idlType.DOMString),
     ]),
@@ -937,7 +932,6 @@ export const documentIDL = defineInterface({
       arg('elementId', idlType.DOMString),
     ]),
   ],
-  name: 'Document',
 });
 
 /*
@@ -1002,20 +996,20 @@ export const documentIDL = defineInterface({
  * Document includes GlobalEventHandlers;
  */
 export const htmlDocumentIDL = definePartialInterface({
+  name: 'Document',
   members: [
-    readonlyAttr('head', nullable(reference('HTMLHeadElement'))),
-    readonlyAttr('body', nullable(reference('HTMLElement'))),
+    roAttr('head', nullable(reference('HTMLHeadElement'))),
+    roAttr('body', nullable(reference('HTMLElement'))),
     op('write', idlType.undefined, [
       arg('text', idlType.DOMString, { variadic: true }),
     ]),
-    readonlyAttr('defaultView', nullable(reference('WindowProxy'))),
+    roAttr('defaultView', nullable(reference('WindowProxy'))),
   ],
-  name: 'Document',
 });
 
 export const elementCreationOptionsIDL = defineDictionary({
-  members: [dictMember('is', idlType.DOMString)],
   name: 'ElementCreationOptions',
+  members: [dictMember('is', idlType.DOMString)],
 });
 
 /*
@@ -1065,8 +1059,6 @@ export const directDOMNodeFactory: DOMNodeFactory = {
 };
 
 export type DocumentWriter = (markup: string) => void;
-
-type NewTarget = new (...argumentsList: never[]) => object;
 
 export type DocumentType = 'xml' | 'html';
 

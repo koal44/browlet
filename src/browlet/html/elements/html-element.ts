@@ -6,7 +6,7 @@ import { HTML_NAMESPACE } from '../../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { withHTMLElementStub } from '../../stubs';
 
 /*
@@ -69,11 +69,11 @@ export class HTMLElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const htmlElementIDL = defineInterface({
-  binding: bind(HTMLElementImpl),
-  exposed: 'Window',
-  inherits: 'Element',
-  members: [],
   name: 'HTMLElement',
+  inherits: 'Element',
+  exposed: 'Window',
+  implementation: impl(HTMLElementImpl),
+  members: [],
 });
 
 export const htmlElementInterface = defineElementInterface({

@@ -1,9 +1,8 @@
 import {
   arg, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
-  idlType, integer, op, readonlyAttr, reference, union, xattr,
+  idlType, integer, op, roAttr, reference, union, xattr,
 } from '../../web-idl/declaration/index';
-import { bind } from '../../web-idl/index';
-import type { InterfaceBindingContext } from '../../web-idl/projection';
+import { callback } from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
 import type { EnvironmentTiming } from '../performance/high-resolution-time';
 import type { DocumentImpl } from '../dom/nodes/document';
@@ -49,19 +48,18 @@ import { GlobalTimers, type TimerAction } from './timers';
  * };
  */
 export class WindowOrWorkerGlobalScopeMixin {
+  readonly #eventLoop: EventLoop;
   readonly #performance: PerformanceImpl;
-  readonly #timerThisValue: object;
   readonly #timers: GlobalTimers;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
+    this.#eventLoop = initialization.eventLoop;
     this.#performance = new PerformanceImpl(initialization.timing);
-    this.#timerThisValue = initialization.timerThisValue;
     this.#timers = new GlobalTimers({
       eventLoop: initialization.eventLoop,
       global: initialization.global,
       time: initialization.timing,
     });
-    mixinsByGlobal.set(initialization.global, this);
   }
 
   get performance(): Performance {
@@ -88,17 +86,11 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.#timers.clearTimer(id);
   }
 
-  get timerThisValue(): object {
-    return this.#timerThisValue;
+  queueMicrotask(callback: VoidFunction): void {
+    this.#eventLoop.queueMicrotask(() => { callback(); });
   }
 
   // -- Friends ----------------------------------------------------------
-
-  static getPerformanceImplementation(
-    mixin: WindowOrWorkerGlobalScopeMixin,
-  ): PerformanceImpl {
-    return mixin.#performance;
-  }
 
   static setAssociatedDocument(
     mixin: WindowOrWorkerGlobalScopeMixin,
@@ -111,7 +103,6 @@ export class WindowOrWorkerGlobalScopeMixin {
 export type WindowOrWorkerGlobalScopeInitialization = {
   readonly eventLoop: EventLoop;
   readonly global: object;
-  readonly timerThisValue: object;
   readonly timing: EnvironmentTiming;
 };
 
@@ -127,107 +118,38 @@ export const timerHandlerIDL = defineTypedef({
 });
 
 export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
+  name: 'WindowOrWorkerGlobalScope',
   members: [
     op('setTimeout', idlType.long, [
-      arg('handler', reference('TimerHandler')),
+      arg('handler', reference('TimerHandler'), callback('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),
       arg('arguments', idlType.any, { variadic: true }),
-    ], bind({
-      invoke(context, handler, timeout, ...argumentsList) {
-        const mixin = requireMixin(context.realm.global);
-        return mixin.setTimeout(
-          createTimerAction(context, handler, mixin.timerThisValue),
-          timeout as number,
-          argumentsList,
-        );
-      },
-    })),
+    ]),
     op('clearTimeout', idlType.undefined, [
       arg('id', idlType.long, { default: integer(0), optional: true }),
-    ], bind({
-      invoke(context, id) {
-        requireMixin(context.realm.global).clearTimer(id as number);
-      },
-    })),
+    ]),
     op('setInterval', idlType.long, [
-      arg('handler', reference('TimerHandler')),
+      arg('handler', reference('TimerHandler'), callback('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),
       arg('arguments', idlType.any, { variadic: true }),
-    ], bind({
-      invoke(context, handler, timeout, ...argumentsList) {
-        const mixin = requireMixin(context.realm.global);
-        return mixin.setInterval(
-          createTimerAction(context, handler, mixin.timerThisValue),
-          timeout as number,
-          argumentsList,
-        );
-      },
-    })),
+    ]),
     op('clearInterval', idlType.undefined, [
       arg('id', idlType.long, { default: integer(0), optional: true }),
-    ], bind({
-      invoke(context, id) {
-        requireMixin(context.realm.global).clearTimer(id as number);
-      },
-    })),
+    ]),
     op(
       'queueMicrotask',
       idlType.undefined,
-      [arg('callback', reference('VoidFunction'))],
-      bind({
-        invoke(context, callback) {
-          context.realm.queueMicrotask(
-            () => context.callbacks.invokeFunction(callback, [], 'report'),
-          );
-        },
-      }),
+      [arg('callback', reference('VoidFunction'), callback('report'))],
     ),
   ],
-  name: 'WindowOrWorkerGlobalScope',
 });
 
 export const highResolutionTimeWindowOrWorkerGlobalScopeIDL =
   definePartialInterfaceMixin({
-    members: [readonlyAttr(
+    name: windowOrWorkerGlobalScopeIDL.name,
+    members: [roAttr(
       'performance',
       reference('Performance'),
       xattr('Replaceable'),
     )],
-    name: windowOrWorkerGlobalScopeIDL.name,
   });
-
-const mixinsByGlobal = new WeakMap<
-  object,
-  WindowOrWorkerGlobalScopeMixin
->();
-
-function requireMixin(global: object): WindowOrWorkerGlobalScopeMixin {
-  const mixin = mixinsByGlobal.get(global);
-  if (mixin === undefined) {
-    throw new Error('A global object must have a WindowOrWorkerGlobalScope mixin');
-  }
-  return mixin;
-}
-
-function createTimerAction(
-  context: InterfaceBindingContext,
-  handler: unknown,
-  thisValue: object,
-): TimerAction {
-  if (typeof handler === 'string') {
-    return () => {
-      throw new Error(
-        'String timer handlers await Trusted Types, CSP, and classic scripts',
-      );
-    };
-  }
-
-  return (argumentsList) => {
-    context.callbacks.invokeFunction(
-      handler,
-      argumentsList,
-      'report',
-      thisValue,
-    );
-  };
-}

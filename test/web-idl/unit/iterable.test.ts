@@ -114,12 +114,13 @@ describe('Web IDL synchronous iterable declarations', () => {
       value: reference('PairValue'),
     } satisfies IterableMember;
     const valueInterface = defineInterface({
-      exposed: ['Window'], members: [], name: 'PairValue',
+      name: 'PairValue',
+      exposed: ['Window'], members: [],
     });
     const collectionInterface = defineInterface({
+      name: 'InterfacePairCollection',
       exposed: ['Window'],
       members: [iterable],
-      name: 'InterfacePairCollection',
     });
     const implementations = new ImplementationRegistry();
     const definitions = assembleDefinitions([
@@ -178,9 +179,9 @@ describe('Web IDL synchronous iterable declarations', () => {
       value: idlType.long,
     } satisfies IterableMember;
     const hidden = defineInterface({
+      name: 'HiddenIterable',
       exposed: ['Window'],
       members: [hiddenIterable],
-      name: 'HiddenIterable',
     });
     const realm = new Realm();
     const binding = new JavaScriptBinding(
@@ -216,9 +217,9 @@ function createPairBinding(): {
     value: idlType.long,
   } satisfies IterableMember;
   const interface_ = defineInterface({
+    name: 'PairCollection',
     exposed: ['Window'],
     members: [iterable],
-    name: 'PairCollection',
   });
   const implementations = new ImplementationRegistry();
   const realm = new Realm();

@@ -7,6 +7,7 @@ import {
 import type {
   ArgumentDefinition, OperationMember, WebIDLType,
 } from './declaration/index';
+import type { CallbackExceptionBehavior } from './declaration/binding';
 import { isPromiseValue, type IDLPromise } from './promise-value';
 import {
   getTypeWithApplicableExtendedAttributes, getUnannotatedType,
@@ -163,7 +164,6 @@ export function convertWebIDLArguments(
   return result;
 }
 
-export type CallbackExceptionBehavior = 'report' | 'rethrow';
 export type WebIDLArgumentsList = readonly unknown[];
 
 export const missingArgument: unique symbol = Symbol(

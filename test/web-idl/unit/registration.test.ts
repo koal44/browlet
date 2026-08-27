@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import {
-  arg, bind, defineInterface, idlType, op, readonlyAttr,
+  arg, defineInterface, idlType, impl, op, roAttr,
   registerInterfaceBindings, xattr,
 } from '../../../src/web-idl/index';
 
@@ -71,30 +71,30 @@ class JsonImpl {
 }
 
 const exampleIDL = defineInterface({
-  binding: bind(ExampleImpl),
-  exposed: '*',
-  members: [],
   name: 'Example',
+  exposed: '*',
+  implementation: impl(ExampleImpl),
+  members: [],
 });
 
 const jsonIDL = defineInterface({
-  binding: bind(JsonImpl),
+  name: 'JSONExample',
   exposed: '*',
+  implementation: impl(JsonImpl),
   members: [
-    readonlyAttr('value', idlType.long),
+    roAttr('value', idlType.long),
     op('toJSON', idlType.object, [], xattr('Default')),
   ],
-  name: 'JSONExample',
 });
 
 const unnamedOperationIDL = defineInterface({
-  binding: bind(ExampleImpl),
+  name: 'UnnamedOperationExample',
   exposed: '*',
+  implementation: impl(ExampleImpl),
   members: [op(
     undefined,
     idlType.object,
     [arg('name', idlType.DOMString)],
     { special: 'getter' },
   )],
-  name: 'UnnamedOperationExample',
 });

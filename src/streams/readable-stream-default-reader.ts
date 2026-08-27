@@ -1,10 +1,9 @@
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
-  idlType, op, promise, reference,
+  idlType, impl, op, promise, reference,
 } from '../web-idl/declaration/index';
-import { bind } from '../web-idl';
 import {
-  getStreamEnvironment, type StreamEnvironment, type StreamPromise,
+  streamEnvironment, type StreamEnvironment, type StreamPromise,
 } from './environment';
 import type { ReadableStreamImpl } from './readable-stream';
 import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
@@ -14,8 +13,16 @@ import {
 } from './readable-stream-operations';
 
 export class ReadableStreamDefaultReaderImpl {
-  #genericReader?: ReadableStreamGenericReaderMixin;
+  readonly #genericReader: ReadableStreamGenericReaderMixin;
   #readRequests: ReadRequest[] = [];
+
+  constructor(
+    environment: StreamEnvironment,
+    stream?: ReadableStreamImpl,
+  ) {
+    this.#genericReader = new ReadableStreamGenericReaderMixin(environment);
+    if (stream) setUpReadableStreamDefaultReader(this, stream);
+  }
 
   get closed(): StreamPromise {
     return ReadableStreamDefaultReaderImpl.getGenericReader(this).closed;
@@ -70,9 +77,6 @@ export class ReadableStreamDefaultReaderImpl {
   static getGenericReader(
     reader: ReadableStreamDefaultReaderImpl,
   ): ReadableStreamGenericReaderMixin {
-    if (!reader.#genericReader) {
-      throw new Error('ReadableStreamDefaultReader has no reader mixin');
-    }
     return reader.#genericReader;
   }
 
@@ -80,13 +84,6 @@ export class ReadableStreamDefaultReaderImpl {
     reader: ReadableStreamDefaultReaderImpl,
   ): ReadRequest[] {
     return reader.#readRequests;
-  }
-
-  static initializeForBinding(
-    reader: ReadableStreamDefaultReaderImpl,
-    environment: StreamEnvironment,
-  ): void {
-    reader.#genericReader = new ReadableStreamGenericReaderMixin(environment);
   }
 
   static resetReadRequests(reader: ReadableStreamDefaultReaderImpl): void {
@@ -103,28 +100,16 @@ export type ReadRequest = {
 // -- Web IDL ------------------------------------------------------------
 
 export const readableStreamDefaultReaderIDL = defineInterface({
-  binding: bind(ReadableStreamDefaultReaderImpl, {
-    initialize(context, value) {
-      ReadableStreamDefaultReaderImpl.initializeForBinding(
-        value as ReadableStreamDefaultReaderImpl,
-        getStreamEnvironment(context),
-      );
-    },
-  }),
+  name: 'ReadableStreamDefaultReader',
   exposed: '*',
+  implementation: impl(ReadableStreamDefaultReaderImpl, {
+    withArgs: [streamEnvironment],
+  }),
   members: [
-    ctor([arg('stream', reference('ReadableStream'))], bind({
-      invoke(_context, stream) {
-        setUpReadableStreamDefaultReader(
-          this as ReadableStreamDefaultReaderImpl,
-          stream as ReadableStreamImpl,
-        );
-      },
-    })),
+    ctor([arg('stream', reference('ReadableStream'))]),
     op('read', promise(reference('ReadableStreamReadResult'))),
     op('releaseLock', idlType.undefined),
   ],
-  name: 'ReadableStreamDefaultReader',
 });
 
 export const readableStreamDefaultReaderIncludesGenericReaderIDL =
@@ -134,9 +119,9 @@ export const readableStreamDefaultReaderIncludesGenericReaderIDL =
   });
 
 export const readableStreamReadResultIDL = defineDictionary({
+  name: 'ReadableStreamReadResult',
   members: [
     dictMember('value', idlType.any),
     dictMember('done', idlType.boolean),
   ],
-  name: 'ReadableStreamReadResult',
 });

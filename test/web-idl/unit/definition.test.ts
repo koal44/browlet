@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  annotated, arg, asyncIterable, asyncSequence, attr, constant, ctor, decimal,
+  annotated, arg, asyncIter, asyncSequence, attr, constant, ctor, decimal,
   defineCallbackFunction,
   defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin,
   defineNamespace, definePartialDictionary, definePartialInterface,
   definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
-  emptyDictionary, emptySequence, frozenArray, idlType, integer, iterable,
-  maplike, nullable, observableArray, op, promise, readonlyAttr, record,
+  emptyDictionary, emptySequence, frozenArray, idlType, integer, iter,
+  maplike, nullable, observableArray, op, promise, roAttr, record,
   reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
 } from '../../../src/web-idl/declaration/index';
 import {
@@ -20,6 +20,7 @@ describe('Web IDL definitions', () => {
   it('represents the EventTarget fragment as structurally lossless data', () => {
     const definitions = [
       defineInterface({
+        name: 'EventTarget',
         exposed: '*',
         members: [
           ctor(),
@@ -45,26 +46,25 @@ describe('Web IDL definitions', () => {
             arg('event', reference('Event')),
           ]),
         ],
-        name: 'EventTarget',
       }),
       defineCallbackInterface({
+        name: 'EventListener',
         members: [op('handleEvent', idlType.undefined, [
           arg('event', reference('Event')),
         ])],
-        name: 'EventListener',
       }),
       defineDictionary({
-        members: [dictMember('capture', idlType.boolean, { default: false })],
         name: 'EventListenerOptions',
+        members: [dictMember('capture', idlType.boolean, { default: false })],
       }),
       defineDictionary({
+        name: 'AddEventListenerOptions',
         inherits: 'EventListenerOptions',
         members: [
           dictMember('passive', idlType.boolean),
           dictMember('once', idlType.boolean, { default: false }),
           dictMember('signal', reference('AbortSignal')),
         ],
-        name: 'AddEventListenerOptions',
       }),
     ];
 
@@ -96,28 +96,32 @@ dictionary AddEventListenerOptions : EventListenerOptions {
   it('serializes every definition form', () => {
     const definitions = [
       defineInterface({
-        exposed: ['Window', 'Worker'],
-        inherits: 'Parent',
-        members: [],
         name: 'Interface',
+        inherits: 'Parent',
+        exposed: ['Window', 'Worker'],
+        members: [],
       }),
-      definePartialInterface({ members: [], name: 'Interface' }),
-      defineInterfaceMixin({ members: [], name: 'Mixin' }),
-      definePartialInterfaceMixin({ members: [], name: 'Mixin' }),
+      definePartialInterface({ name: 'Interface', members: [] }),
+      defineInterfaceMixin({ name: 'Mixin', members: [] }),
+      definePartialInterfaceMixin({ name: 'Mixin', members: [] }),
       defineCallbackInterface({
-        exposed: 'Window', members: [], name: 'CallbackInterface',
+        name: 'CallbackInterface',
+        exposed: 'Window', members: [],
       }),
       defineNamespace({
-        exposed: ['Window'], members: [], name: 'Namespace',
+        name: 'Namespace',
+        exposed: ['Window'], members: [],
       }),
-      definePartialNamespace({ members: [], name: 'Namespace' }),
-      defineDictionary({ inherits: 'ParentDictionary', members: [], name: 'D' }),
-      definePartialDictionary({ members: [], name: 'D' }),
+      definePartialNamespace({ name: 'Namespace', members: [] }),
+      defineDictionary({
+        name: 'D', inherits: 'ParentDictionary', members: [],
+      }),
+      definePartialDictionary({ name: 'D', members: [] }),
       defineEnumeration({ name: 'Choice', values: ['one', 'two'] }),
       defineCallbackFunction({
-        arguments: [{ name: 'value', type: idlType.long }],
         name: 'Callback',
         returns: idlType.boolean,
+        arguments: [{ name: 'value', type: idlType.long }],
       }),
       defineTypedef({ name: 'Alias', type: idlType.DOMString }),
       defineIncludes({ interface: 'Interface', mixin: 'Mixin' }),
@@ -142,11 +146,12 @@ dictionary AddEventListenerOptions : EventListenerOptions {
 
   it('serializes every interface member form without losing ordered overloads', () => {
     const definition = defineInterface({
+      name: 'Interface',
       members: [
         ctor(),
         constant('ANSWER', idlType.long, integer(42)),
         attr('value', idlType.DOMString),
-        readonlyAttr('fixed', idlType.DOMString),
+        roAttr('fixed', idlType.DOMString),
         attr('inherited', idlType.DOMString, { inherit: true }),
         attr('shared', idlType.DOMString, { static: true }),
         attr('text', idlType.DOMString, { stringifier: true }),
@@ -157,14 +162,13 @@ dictionary AddEventListenerOptions : EventListenerOptions {
         }),
         op('create', reference('Interface'), [], { static: true }),
         stringifier(),
-        iterable(idlType.DOMString),
-        iterable(idlType.long, { key: idlType.DOMString }),
-        asyncIterable(idlType.DOMString),
-        asyncIterable(idlType.DOMString, { arguments: [] }),
+        iter(idlType.DOMString),
+        iter(idlType.long, { key: idlType.DOMString }),
+        asyncIter(idlType.DOMString),
+        asyncIter(idlType.DOMString, { arguments: [] }),
         maplike(idlType.DOMString, idlType.long, { readonly: true }),
         setlike(idlType.DOMString),
       ],
-      name: 'Interface',
     });
 
     expect(serializeDefinition(definition)).toContain(`
@@ -248,6 +252,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
     ]);
 
     const dictionary = defineDictionary({
+      name: 'dictionary',
       members: [
         { name: 'requiredValue', required: true, type: idlType.long },
         { name: 'integer', type: idlType.long, default: integer('0x10') },
@@ -258,7 +263,6 @@ dictionary AddEventListenerOptions : EventListenerOptions {
         { name: 'items', type: sequence(idlType.long), default: emptySequence },
         { name: 'options', type: reference('Options'), default: emptyDictionary },
       ],
-      name: 'dictionary',
     });
 
     expect(serializeDefinition(dictionary)).toContain(`

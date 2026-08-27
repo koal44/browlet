@@ -355,13 +355,13 @@ describe('Web IDL callbacks', () => {
 
   it('applies legacy callback conversion at the attribute binding boundary', () => {
     const callback = defineCallbackFunction({
-      arguments: [],
+      name: 'LegacyAttributeHandler',
       extendedAttributes: [{
         kind: 'no-arguments',
         name: 'LegacyTreatNonObjectAsNull',
       }],
-      name: 'LegacyAttributeHandler',
       returns: idlType.undefined,
+      arguments: [],
     });
     const attribute = {
       kind: 'attribute' as const,
@@ -369,8 +369,8 @@ describe('Web IDL callbacks', () => {
       type: nullable(reference('LegacyAttributeHandler')),
     };
     const interface_ = defineInterface({
-      members: [attribute],
       name: 'CallbackOwner',
+      members: [attribute],
     });
     const realm = new Realm();
     const implementations = new ImplementationRegistry();
@@ -463,53 +463,54 @@ function createCallbackBinding(): {
   const targetRealm = new Realm();
   const definitions = assembleDefinitions([
     defineCallbackFunction({
-      arguments: [{ name: 'value', type: idlType.long }],
       name: 'Increment',
       returns: idlType.long,
+      arguments: [{ name: 'value', type: idlType.long }],
     }),
     defineCallbackFunction({
-      arguments: [],
       name: 'Notification',
       returns: idlType.undefined,
+      arguments: [],
     }),
     defineCallbackFunction({
-      arguments: [],
       name: 'PromiseIncrement',
       returns: promiseType(idlType.long),
+      arguments: [],
     }),
     defineCallbackFunction({
-      arguments: [{ name: 'value', type: idlType.long }],
       name: 'Builder',
       returns: idlType.object,
+      arguments: [{ name: 'value', type: idlType.long }],
     }),
     defineCallbackFunction({
-      arguments: [],
+      name: 'LegacyHandler',
       extendedAttributes: [{
         kind: 'no-arguments',
         name: 'LegacyTreatNonObjectAsNull',
       }],
-      name: 'LegacyHandler',
       returns: idlType.undefined,
+      arguments: [],
     }),
     defineCallbackInterface({
+      name: 'PromiseHandler',
       members: [{
         arguments: [],
         kind: 'operation',
         name: 'handleEvent',
         returns: promiseType(idlType.long),
       }],
-      name: 'PromiseHandler',
     }),
     defineCallbackInterface({
+      name: 'NumberHandler',
       members: [{
         arguments: [{ name: 'value', type: idlType.long }],
         kind: 'operation',
         name: 'handleEvent',
         returns: idlType.long,
       }],
-      name: 'NumberHandler',
     }),
     defineCallbackInterface({
+      name: 'ConstantHandler',
       exposed: ['Window'],
       members: [
         {
@@ -525,7 +526,6 @@ function createCallbackBinding(): {
           returns: idlType.undefined,
         },
       ],
-      name: 'ConstantHandler',
     }),
   ]);
   return {

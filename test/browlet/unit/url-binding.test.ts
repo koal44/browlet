@@ -51,6 +51,26 @@ describe('Browlet URL bindings', () => {
     expect([...params]).toEqual([['c', '3']]);
     expect(url.href).toBe('https://example.test/?c=3');
   });
+
+  it('constructs URL subclasses through the declarative implementation', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const URL_ = getConstructor(browlet, 'URL') as unknown as typeof URL;
+    class DerivedURL extends URL_ {}
+    let conversions = 0;
+    const input = {
+      toString() {
+        conversions++;
+        return 'https://example.test/path';
+      },
+    };
+
+    const url = new DerivedURL(input as unknown as string);
+
+    expect(url).toBeInstanceOf(DerivedURL);
+    expect(Object.getPrototypeOf(url)).toBe(DerivedURL.prototype);
+    expect(url.href).toBe('https://example.test/path');
+    expect(conversions).toBe(1);
+  });
 });
 
 function getConstructor(browlet: Browlet, name: string): CallableFunction {

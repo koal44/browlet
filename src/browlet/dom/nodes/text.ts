@@ -1,6 +1,6 @@
 import { withTextStub } from '../../stubs';
 import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
   isText, NodeImpl, type NodeOptions, NodeType,
 } from './node';
@@ -62,15 +62,11 @@ export class TextImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const textIDL = defineInterface({
-  binding: bind(TextImpl),
-  exposed: 'Window',
+  name: 'Text',
   inherits: 'CharacterData',
+  exposed: 'Window',
+  implementation: impl(TextImpl),
   members: [ctor([
     arg('data', idlType.DOMString, { default: '', optional: true }),
-  ], bind({
-    invoke(_context, data) {
-      (this as TextImpl).data = data as string;
-    },
-  }))],
-  name: 'Text',
+  ])],
 });

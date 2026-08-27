@@ -142,9 +142,9 @@ describe('Web IDL async sequences', () => {
       returns: idlType.DOMString,
     } satisfies OperationMember;
     const interface_ = defineInterface({
+      name: 'AsyncSequenceConsumer',
       exposed: ['Window'],
       members: [asyncOperation, stringOperation],
-      name: 'AsyncSequenceConsumer',
     });
     const implementations = new ImplementationRegistry();
     implementations.setOperationSteps(asyncOperation, (_value) => 'async');

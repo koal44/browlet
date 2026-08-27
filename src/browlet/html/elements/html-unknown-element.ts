@@ -3,7 +3,7 @@ import {
   defineElementInterface, type ElementCreationContext,
 } from '../../dom/nodes/element';
 import { defineInterface } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { withHTMLUnknownElementStub } from '../../stubs';
 import { HTMLElementImpl } from './html-element';
 
@@ -25,11 +25,11 @@ export class HTMLUnknownElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const htmlUnknownElementIDL = defineInterface({
-  binding: bind(HTMLUnknownElementImpl),
-  exposed: 'Window',
-  inherits: 'HTMLElement',
-  members: [],
   name: 'HTMLUnknownElement',
+  inherits: 'HTMLElement',
+  exposed: 'Window',
+  implementation: impl(HTMLUnknownElementImpl),
+  members: [],
 });
 
 export const htmlUnknownElementInterface = defineElementInterface({

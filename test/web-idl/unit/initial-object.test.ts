@@ -13,7 +13,8 @@ import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 describe('Web IDL initial objects', () => {
   it('uses an interface\'s overridden constructor steps', () => {
     const interfaceIDL = defineInterface({
-      exposed: '*', members: [], name: 'OverriddenConstructor',
+      name: 'OverriddenConstructor',
+      exposed: '*', members: [],
     });
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
@@ -52,7 +53,8 @@ describe('Web IDL initial objects', () => {
 
   it('rejects calls and construction without a constructor operation', () => {
     const interfaceIDL = defineInterface({
-      exposed: '*', members: [], name: 'IllegalConstructor',
+      name: 'IllegalConstructor',
+      exposed: '*', members: [],
     });
     const realm = new Realm();
     const binding = new JavaScriptBinding(
@@ -74,12 +76,12 @@ describe('Web IDL initial objects', () => {
 
   it('keeps a legacy-hidden interface prototype accessible through instances', () => {
     const interfaceIDL = defineInterface({
+      name: 'HiddenInterface',
       exposed: '*',
       extendedAttributes: [{
         kind: 'no-arguments', name: 'LegacyNoInterfaceObject',
       }],
       members: [],
-      name: 'HiddenInterface',
     });
     const realm = new Realm();
     const binding = new JavaScriptBinding(
@@ -104,6 +106,7 @@ describe('Web IDL initial objects', () => {
 
   it('installs legacy window aliases only in Window realms', () => {
     const interfaceIDL = defineInterface({
+      name: 'Widget',
       exposed: '*',
       extendedAttributes: [{
         kind: 'identifier-list',
@@ -111,7 +114,6 @@ describe('Web IDL initial objects', () => {
         values: ['LegacyWidget'],
       }],
       members: [],
-      name: 'Widget',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const windowRealm = new Realm({ globalNames: ['Window'] });
@@ -138,10 +140,10 @@ describe('Web IDL initial objects', () => {
   it('creates legacy factory functions in the realm', () => {
     const factory = legacyFactory('LegacyWidget', idlType.unsignedLong);
     const interfaceIDL = defineInterface({
+      name: 'Widget',
       exposed: '*',
       extendedAttributes: [factory],
       members: [],
-      name: 'Widget',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
@@ -193,12 +195,13 @@ describe('Web IDL initial objects', () => {
   it('includes legacy factory functions declared on partial interfaces', () => {
     const factory = legacyFactory('LegacyPartialWidget', idlType.DOMString);
     const interfaceIDL = defineInterface({
-      exposed: '*', members: [], name: 'PartialWidget',
+      name: 'PartialWidget',
+      exposed: '*', members: [],
     });
     const partial = definePartialInterface({
+      name: 'PartialWidget',
       extendedAttributes: [factory],
       members: [],
-      name: 'PartialWidget',
     });
     const implementations = new ImplementationRegistry();
     implementations.setObjectCreationSteps(interfaceIDL, (newTarget) => {
@@ -242,10 +245,10 @@ describe('Web IDL initial objects', () => {
       returns: idlType.DOMString,
     };
     const interfaceIDL = defineInterface({
+      name: 'Thing',
       exposed: '*',
       extendedAttributes: [factory],
       members: [attribute, operation],
-      name: 'Thing',
     });
     const definitions = assembleDefinitions([interfaceIDL]);
     const platformObjects = new PlatformObjectRegistry();
@@ -302,14 +305,14 @@ describe('Web IDL initial objects', () => {
       type: idlType.DOMString,
     };
     const declaredIDL = defineInterface({
+      name: 'DeclaredStringifier',
       exposed: '*',
       members: [stringifier],
-      name: 'DeclaredStringifier',
     });
     const attributedIDL = defineInterface({
+      name: 'AttributedStringifier',
       exposed: '*',
       members: [attribute],
-      name: 'AttributedStringifier',
     });
     const definitions = assembleDefinitions([declaredIDL, attributedIDL]);
     const implementations = new ImplementationRegistry();

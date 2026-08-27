@@ -9,9 +9,9 @@ import {
 } from '../infra/tree';
 import {
   arg, defineDictionary, defineInterface, dictMember, emptyDictionary,
-  idlType, nullable, op, readonlyAttr, reference,
+  idlType, nullable, op, roAttr, reference,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentTypeImpl } from './document-type';
@@ -280,20 +280,21 @@ export abstract class NodeImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const nodeIDL = defineInterface({
-  binding: bind(NodeImpl),
-  exposed: 'Window',
+  name: 'Node',
   inherits: 'EventTarget',
+  exposed: 'Window',
+  implementation: impl(NodeImpl),
   members: [
-    readonlyAttr('nodeType', idlType.unsignedShort),
-    readonlyAttr('baseURI', idlType.DOMString),
-    readonlyAttr('ownerDocument', nullable(reference('Document'))),
-    readonlyAttr('parentNode', nullable(reference('Node'))),
-    readonlyAttr('parentElement', nullable(reference('Element'))),
-    readonlyAttr('firstChild', nullable(reference('Node'))),
-    readonlyAttr('lastChild', nullable(reference('Node'))),
-    readonlyAttr('previousSibling', nullable(reference('Node'))),
-    readonlyAttr('nextSibling', nullable(reference('Node'))),
-    readonlyAttr('isConnected', idlType.boolean),
+    roAttr('nodeType', idlType.unsignedShort),
+    roAttr('baseURI', idlType.DOMString),
+    roAttr('ownerDocument', nullable(reference('Document'))),
+    roAttr('parentNode', nullable(reference('Node'))),
+    roAttr('parentElement', nullable(reference('Element'))),
+    roAttr('firstChild', nullable(reference('Node'))),
+    roAttr('lastChild', nullable(reference('Node'))),
+    roAttr('previousSibling', nullable(reference('Node'))),
+    roAttr('nextSibling', nullable(reference('Node'))),
+    roAttr('isConnected', idlType.boolean),
     op('getRootNode', reference('Node'), [arg(
       'options',
       reference('GetRootNodeOptions'),
@@ -316,12 +317,11 @@ export const nodeIDL = defineInterface({
       arg('other', reference('Node')),
     ]),
   ],
-  name: 'Node',
 });
 
 export const getRootNodeOptionsIDL = defineDictionary({
-  members: [dictMember('composed', idlType.boolean, { default: false })],
   name: 'GetRootNodeOptions',
+  members: [dictMember('composed', idlType.boolean, { default: false })],
 });
 
 // -- Virtual ------------------------------------------------------------

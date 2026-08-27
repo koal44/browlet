@@ -63,7 +63,7 @@ describe('Web IDL effective overload sets', () => {
   });
 
   it('selects by value category and converts the selected arguments', () => {
-    const options = defineDictionary({ members: [], name: 'Options' });
+    const options = defineDictionary({ name: 'Options', members: [] });
     const binding = createBinding([options]);
     const string = namedOperation('string', idlType.DOMString);
     const boolean = namedOperation('boolean', idlType.boolean);

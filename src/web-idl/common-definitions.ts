@@ -11,9 +11,9 @@ import {
  */
 
 export const functionIDL = defineCallbackFunction({
-  arguments: [arg('arguments', idlType.any, { variadic: true })],
   name: 'Function',
   returns: idlType.any,
+  arguments: [arg('arguments', idlType.any, { variadic: true })],
 });
 
 /*
@@ -21,9 +21,9 @@ export const functionIDL = defineCallbackFunction({
  */
 
 export const voidFunctionIDL = defineCallbackFunction({
-  arguments: [],
   name: 'VoidFunction',
   returns: idlType.undefined,
+  arguments: [],
 });
 
 /*

@@ -2,11 +2,11 @@ import {
   arg, defineCallbackFunction, defineDictionary, dictMember, idlType,
   reference,
 } from '../web-idl/declaration/index';
-import type { StreamEnvironment } from './environment';
+import { callback } from '../web-idl/index';
 
 export type QueuingStrategy = {
   readonly highWaterMark?: number;
-  readonly size?: unknown;
+  readonly size?: QueuingStrategySize;
 };
 
 export type QueuingStrategySize<Value = unknown> = (chunk: Value) => number;
@@ -26,38 +26,37 @@ export function extractHighWaterMark(
 
 export function extractSizeAlgorithm<Value>(
   strategy: QueuingStrategy,
-  environment: StreamEnvironment,
 ): QueuingStrategySize<Value> {
   const { size } = strategy;
   if (size === undefined) return () => 1;
 
   // The standard distinguishes the extracted algorithm from its callback.
-  return (chunk) => environment.callbacks.invoke(
-    size,
-    [chunk],
-    'rethrow',
-  ) as number;
+  return (chunk) => size(chunk);
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const queuingStrategySizeIDL = defineCallbackFunction({
-  arguments: [arg('chunk', idlType.any)],
   name: 'QueuingStrategySize',
   returns: idlType.unrestrictedDouble,
+  arguments: [arg('chunk', idlType.any)],
 });
 
 export const queuingStrategyIDL = defineDictionary({
+  name: 'QueuingStrategy',
   members: [
     dictMember('highWaterMark', idlType.unrestrictedDouble),
-    dictMember('size', reference('QueuingStrategySize')),
+    dictMember(
+      'size',
+      reference('QueuingStrategySize'),
+      callback('rethrow'),
+    ),
   ],
-  name: 'QueuingStrategy',
 });
 
 export const queuingStrategyInitIDL = defineDictionary({
+  name: 'QueuingStrategyInit',
   members: [dictMember('highWaterMark', idlType.unrestrictedDouble, {
     required: true,
   })],
-  name: 'QueuingStrategyInit',
 });

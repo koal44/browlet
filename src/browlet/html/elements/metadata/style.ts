@@ -5,7 +5,7 @@ import { HTML_NAMESPACE } from '../../../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../../../web-idl/declaration/index';
-import { bind } from '../../../../web-idl/index';
+import { impl } from '../../../../web-idl/index';
 import { withHTMLStyleElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
 
@@ -49,11 +49,11 @@ export class HTMLStyleElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const htmlStyleElementIDL = defineInterface({
-  binding: bind(HTMLStyleElementImpl),
-  exposed: 'Window',
-  inherits: 'HTMLElement',
-  members: [],
   name: 'HTMLStyleElement',
+  inherits: 'HTMLElement',
+  exposed: 'Window',
+  implementation: impl(HTMLStyleElementImpl),
+  members: [],
 });
 
 export const htmlStyleElementInterface = defineElementInterface({

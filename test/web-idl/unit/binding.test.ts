@@ -152,9 +152,9 @@ describe('Web IDL JavaScript binding foundation', () => {
       values: ['first', 'second'],
     });
     const callback = defineCallbackFunction({
-      arguments: [],
       name: 'AuditCallback',
       returns: idlType.undefined,
+      arguments: [],
     });
     const alias = defineTypedef({
       name: 'AuditAlias',
@@ -185,9 +185,9 @@ describe('Web IDL JavaScript binding foundation', () => {
       value: idlType.long,
     } satisfies MaplikeMember;
     const interfaceIDL = defineInterface({
+      name: 'RealmMutable',
       exposed: '*',
       members: [numbers, entries],
-      name: 'RealmMutable',
     });
     const { first, second } = createRealmBindings(interfaceIDL);
     const object = first.createPlatformObject('RealmMutable');
@@ -216,7 +216,8 @@ describe('Web IDL JavaScript binding foundation', () => {
 
   it.fails('uses the newTarget realm when its prototype is not an object', () => {
     const interfaceIDL = defineInterface({
-      exposed: '*', members: [], name: 'RealmPrototypeFallback',
+      name: 'RealmPrototypeFallback',
+      exposed: '*', members: [],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
     const newTarget = second.realm.createFunction(

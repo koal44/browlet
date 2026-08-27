@@ -1,4 +1,6 @@
-import type { WebIDLType } from '../web-idl/declaration/index';
+import {
+  contextValue, type WebIDLType,
+} from '../web-idl/declaration/index';
 
 export type StreamEnvironment = {
   readonly callbacks: {
@@ -6,7 +8,6 @@ export type StreamEnvironment = {
       steps: StreamFunctionSteps,
       options: StreamFunctionOptions,
     ): CallableFunction;
-    createFunctionValue(name: string, object: object): unknown;
     invoke(
       value: unknown,
       argumentsList: readonly unknown[],
@@ -53,8 +54,6 @@ export function getStreamEnvironment(
       callbacks: {
         createFunction: (steps, options) =>
           context.realm.createFunction(steps, options),
-        createFunctionValue: (name, object) =>
-          context.callbacks.createFunctionValue(name, object),
         invoke: (value, argumentsList, exceptionBehavior, thisArgument) =>
           context.callbacks.invokeFunction(
             value,
@@ -88,9 +87,10 @@ export function getStreamEnvironment(
   return environment;
 }
 
+export const streamEnvironment = contextValue(getStreamEnvironment);
+
 type StreamBindingContext = {
   readonly callbacks: object & {
-    createFunctionValue(name: string, object: object): unknown;
     invokeFunction(
       value: unknown,
       argumentsList: readonly unknown[],
@@ -141,7 +141,7 @@ type StreamFunctionOptions = {
 
 type StreamImplementationConstructor<Value extends object> = {
   readonly prototype: Value;
-} & (abstract new (...argumentsList: never[]) => Value);
+};
 
 function requireObject(value: unknown): object {
   if ((typeof value !== 'object' || value === null) &&

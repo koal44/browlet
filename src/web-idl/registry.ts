@@ -4,22 +4,19 @@ import type {
   InterfaceDefinition, IterableMember, NamedArgumentsExtendedAttribute,
   OperationMember, StringifierMember,
 } from './declaration/definition';
+import type { ImplementationClass } from './declaration/binding';
 import type { ValuePair } from './iterable';
 import type { IDLPromise } from './promise-value';
-
-export type ImplementationConstructor<T extends object = object> = {
-  readonly prototype: T;
-} & (abstract new (...argumentsList: never[]) => T);
 
 export class ImplementationRegistry {
   #attributes = new WeakMap<AttributeMember, AttributeSteps>();
   #asyncIterators = new WeakMap<AsyncIterableMember, AsyncIteratorSteps>();
   #constructors = new WeakMap<
     ConstructorMember | NamedArgumentsExtendedAttribute,
-    ConstructorSteps
+    ConstructorBehavior
   >();
   #interfaces = new WeakMap<
-    ImplementationConstructor<object>,
+    ImplementationClass<object>,
     AssembledInterface
   >();
   #indexedProperties = new WeakMap<
@@ -62,11 +59,18 @@ export class ImplementationRegistry {
     constructor: ConstructorMember | NamedArgumentsExtendedAttribute,
     steps: ConstructorSteps,
   ): void {
-    this.#constructors.set(constructor, steps);
+    this.#constructors.set(constructor, { kind: 'initialize', steps });
+  }
+
+  setImplementationConstructorSteps(
+    constructor: ConstructorMember,
+    steps: ImplementationConstructorSteps,
+  ): void {
+    this.#constructors.set(constructor, { kind: 'construct', steps });
   }
 
   setInterfaceForImplementation(
-    implementation: ImplementationConstructor<object>,
+    implementation: ImplementationClass<object>,
     interface_: AssembledInterface,
   ): void {
     this.#interfaces.set(implementation, interface_);
@@ -145,16 +149,36 @@ export class ImplementationRegistry {
     return this.#asyncIterators.get(declaration);
   }
 
-  getConstructorSteps(
+  getConstructorBehavior(
     constructor: ConstructorMember | NamedArgumentsExtendedAttribute,
-  ): ConstructorSteps | undefined {
+  ): ConstructorBehavior | undefined {
     return this.#constructors.get(constructor);
   }
 
   getInterfaceForImplementation(
-    implementation: ImplementationConstructor<object>,
+    implementation: ImplementationClass<object>,
   ): AssembledInterface | undefined {
     return this.#interfaces.get(implementation);
+  }
+
+  getImplementationForObject(
+    value: object,
+  ): RegisteredImplementation | undefined {
+    for (
+      let prototype = Reflect.getPrototypeOf(value);
+      prototype;
+      prototype = Reflect.getPrototypeOf(prototype)
+    ) {
+      const candidate: unknown = Reflect.getOwnPropertyDescriptor(
+        prototype,
+        'constructor',
+      )?.value;
+      if (typeof candidate !== 'function') continue;
+
+      const implementation = candidate as ImplementationClass<object>;
+      const interface_ = this.#interfaces.get(implementation);
+      if (interface_) return { implementation, interface_ };
+    }
   }
 
   getOverriddenConstructorSteps(
@@ -208,6 +232,11 @@ export class ImplementationRegistry {
   }
 }
 
+export type RegisteredImplementation = {
+  readonly implementation: ImplementationClass<object>;
+  readonly interface_: AssembledInterface;
+};
+
 export type AttributeSteps = {
   get(this: object | null): unknown;
   set?(this: object | null, value: unknown): void;
@@ -231,6 +260,21 @@ export type ConstructorSteps = (
   this: object,
   ...values: unknown[]
 ) => void;
+
+export type ImplementationConstructorSteps = (
+  newTarget: object,
+  values: readonly unknown[],
+) => object;
+
+export type ConstructorBehavior =
+  | {
+    readonly kind: 'construct';
+    readonly steps: ImplementationConstructorSteps;
+  }
+  | {
+    readonly kind: 'initialize';
+    readonly steps: ConstructorSteps;
+  };
 
 export type StringificationBehavior = (
   this: object,

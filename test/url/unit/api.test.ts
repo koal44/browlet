@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { URLImpl } from '../../../src/url/api';
 import { urlConstructors } from './contract';
 
 describe('URL Standard section 6.1: URL class', () => {
+  it('parses standalone implementation objects', () => {
+    expect(URLImpl.parse('relative')).toBeNull();
+    expect(URLImpl.parse('child', 'https://example.org/base/')?.href)
+      .toBe('https://example.org/base/child');
+  });
+
   it('constructs with and without a base URL', () => {
     const { URL } = urlConstructors();
 

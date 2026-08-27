@@ -1,9 +1,8 @@
 import {
-  arg, defineInterface, idlType, nullable, op, readonlyAttr,
+  arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
-import { bind } from '../web-idl';
 import {
-  getStreamEnvironment, type StreamEnvironment, type StreamPromise,
+  streamEnvironment, type StreamEnvironment, type StreamPromise,
 } from './environment';
 import {
   cancelSteps, pullSteps, releaseSteps,
@@ -23,8 +22,12 @@ import {
 } from './readable-stream-operations';
 
 export class ReadableStreamDefaultControllerImpl {
-  #environment?: StreamEnvironment;
+  readonly #environment: StreamEnvironment;
   #state?: ReadableStreamDefaultControllerState;
+
+  constructor(environment: StreamEnvironment) {
+    this.#environment = environment;
+  }
 
   get desiredSize(): number | null {
     return readableStreamDefaultControllerGetDesiredSize(this);
@@ -68,9 +71,6 @@ export class ReadableStreamDefaultControllerImpl {
   static getEnvironment(
     controller: ReadableStreamDefaultControllerImpl,
   ): StreamEnvironment {
-    if (!controller.#environment) {
-      throw new Error('ReadableStreamDefaultController has no environment');
-    }
     return controller.#environment;
   }
 
@@ -81,13 +81,6 @@ export class ReadableStreamDefaultControllerImpl {
       throw new Error('ReadableStreamDefaultController is not set up');
     }
     return controller.#state;
-  }
-
-  static initializeForBinding(
-    controller: ReadableStreamDefaultControllerImpl,
-    environment: StreamEnvironment,
-  ): void {
-    controller.#environment = environment;
   }
 
   static setState(
@@ -114,17 +107,13 @@ export type ReadableStreamDefaultControllerState =
 // -- Web IDL ------------------------------------------------------------
 
 export const readableStreamDefaultControllerIDL = defineInterface({
-  binding: bind(ReadableStreamDefaultControllerImpl, {
-    initialize(context, value) {
-      ReadableStreamDefaultControllerImpl.initializeForBinding(
-        value as ReadableStreamDefaultControllerImpl,
-        getStreamEnvironment(context),
-      );
-    },
-  }),
+  name: 'ReadableStreamDefaultController',
   exposed: '*',
+  implementation: impl(ReadableStreamDefaultControllerImpl, {
+    withArgs: [streamEnvironment],
+  }),
   members: [
-    readonlyAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
+    roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
     op('close', idlType.undefined),
     op('enqueue', idlType.undefined, [
       arg('chunk', idlType.any, { optional: true }),
@@ -133,7 +122,6 @@ export const readableStreamDefaultControllerIDL = defineInterface({
       arg('e', idlType.any, { optional: true }),
     ]),
   ],
-  name: 'ReadableStreamDefaultController',
 });
 
 function requireAlgorithm<Algorithm>(

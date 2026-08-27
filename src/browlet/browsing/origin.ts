@@ -1,7 +1,7 @@
 import {
-  arg, ctor, defineInterface, idlType, op, readonlyAttr, reference,
+  arg, ctor, defineInterface, idlType, op, roAttr, reference,
 } from '../../web-idl/declaration/index';
-import { bind } from '../../web-idl/index';
+import { impl, resolveArgs } from '../../web-idl/index';
 import {
   hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost,
   serializeHost, type Host,
@@ -26,7 +26,24 @@ import { obtainURLOrigin, parseURL } from '../../url/url';
  * };
  */
 export class OriginImpl {
-  #origin: Origin = createOpaqueOrigin();
+  readonly #origin: Origin;
+
+  constructor(origin: Origin = createOpaqueOrigin()) {
+    this.#origin = origin;
+  }
+
+  static from(value: unknown): OriginImpl {
+    let origin = OriginImpl.extractOrigin(value) ??
+      URLImpl.extractOrigin(value);
+
+    if (origin === undefined && typeof value === 'string') {
+      const url = parseURL(value).url;
+      if (url !== null) origin = obtainURLOrigin(url);
+    }
+    if (origin === undefined) throw new TypeError('Value has no origin');
+
+    return new OriginImpl(origin);
+  }
 
   get opaque(): boolean {
     return this.#origin.kind === 'opaque';
@@ -42,44 +59,31 @@ export class OriginImpl {
 
   // -- Friends ----------------------------------------------------------
 
-  static extractOrigin(value?: OriginImpl): Origin | undefined {
-    return value && value.#origin;
-  }
-
-  static setOrigin(value: OriginImpl, origin: Origin): void {
-    value.#origin = origin;
+  static extractOrigin(value: unknown): Origin | undefined {
+    return value !== null && typeof value === 'object' && #origin in value
+      ? value.#origin
+      : undefined;
   }
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const originIDL = defineInterface({
-  binding: bind(OriginImpl),
+  name: 'Origin',
   exposed: '*',
+  implementation: impl(OriginImpl),
   members: [
-    ctor(bind({ invoke() {} })),
-    op('from', reference('Origin'), [arg('value', idlType.any)], bind({
-      invoke(context, value) {
-        let origin = OriginImpl.extractOrigin(
-          context.objects.getImplementation(value, OriginImpl),
-        ) ?? URLImpl.extractOrigin(
-          context.objects.getImplementation(value, URLImpl),
-        );
-
-        if (origin === undefined && typeof value === 'string') {
-          const url = parseURL(value).url;
-          if (url !== null) origin = obtainURLOrigin(url);
-        }
-        if (origin === undefined) throw new TypeError('Value has no origin');
-
-        const implementation = context.objects.create(OriginImpl);
-        OriginImpl.setOrigin(implementation, origin);
-        return implementation;
-      },
-    }, {
+    ctor(),
+    op('from', reference('Origin'), [
+      arg(
+        'value',
+        idlType.any,
+        resolveArgs(OriginImpl, URLImpl),
+      ),
+    ], {
       static: true,
-    })),
-    readonlyAttr('opaque', idlType.boolean),
+    }),
+    roAttr('opaque', idlType.boolean),
     op('isSameOrigin', idlType.boolean, [
       arg('other', reference('Origin')),
     ]),
@@ -87,7 +91,6 @@ export const originIDL = defineInterface({
       arg('other', reference('Origin')),
     ]),
   ],
-  name: 'Origin',
 });
 
 export type SchemeAndHost = [scheme: string, host: Host];

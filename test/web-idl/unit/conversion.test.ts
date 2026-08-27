@@ -117,19 +117,19 @@ describe('Web IDL value conversion', () => {
 
   it('reads inherited dictionary members in specification order', () => {
     const parent = defineDictionary({
+      name: 'ParentOptions',
       members: [
         { name: 'z', type: idlType.long },
         { name: 'a', type: idlType.long },
       ],
-      name: 'ParentOptions',
     });
     const child = defineDictionary({
+      name: 'Options',
       inherits: 'ParentOptions',
       members: [
         { name: 'y', type: idlType.long },
         { default: false, name: 'b', type: idlType.boolean },
       ],
-      name: 'Options',
     });
     const { binding } = createBinding([child, parent]);
     const reads: string[] = [];
@@ -167,11 +167,11 @@ describe('Web IDL value conversion', () => {
 
   it('applies dictionary defaults and reports missing required members', () => {
     const options = defineDictionary({
+      name: 'Options',
       members: [
         { default: false, name: 'enabled', type: idlType.boolean },
         { name: 'name', required: true, type: idlType.DOMString },
       ],
-      name: 'Options',
     });
     const { binding, realm } = createBinding([options]);
 
@@ -191,12 +191,12 @@ describe('Web IDL value conversion', () => {
 
   it('associates applicable dictionary-member attributes with their types', () => {
     const options = defineDictionary({
+      name: 'Options',
       members: [{
         extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
         name: 'value',
         type: idlType.byte,
       }],
-      name: 'Options',
     });
     const { binding } = createBinding([options]);
 
@@ -209,6 +209,7 @@ describe('Web IDL value conversion', () => {
 
   it('materializes numeric dictionary defaults in their declared IDL types', () => {
     const options = defineDictionary({
+      name: 'Options',
       members: [
         { default: decimal('1.337'), name: 'single', type: idlType.float },
         {
@@ -217,7 +218,6 @@ describe('Web IDL value conversion', () => {
           type: idlType.bigint,
         },
       ],
-      name: 'Options',
     });
     const { binding } = createBinding([options]);
 
@@ -473,8 +473,8 @@ describe('Web IDL value conversion', () => {
   it('selects union members from the JavaScript value category', () => {
     const node = defineInterface({ name: 'Node', members: [] });
     const options = defineDictionary({
-      members: [{ default: false, name: 'capture', type: idlType.boolean }],
       name: 'Options',
+      members: [{ default: false, name: 'capture', type: idlType.boolean }],
     });
     const { binding } = createBinding([node, options]);
     const interface_ = binding.definitions.getInterface('Node');
