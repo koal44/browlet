@@ -3,7 +3,7 @@ import {
   defineElementInterface, type ElementCreationContext,
 } from '../../../dom/nodes/element';
 import { defineInterface } from '../../../../web-idl/declaration/index';
-import { bind } from '../../../../web-idl/index';
+import { impl } from '../../../../web-idl/index';
 import { withHTMLHeadElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
 
@@ -25,11 +25,11 @@ export class HTMLHeadElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const htmlHeadElementIDL = defineInterface({
-  binding: bind(HTMLHeadElementImpl),
-  exposed: 'Window',
-  inherits: 'HTMLElement',
-  members: [],
   name: 'HTMLHeadElement',
+  inherits: 'HTMLElement',
+  exposed: 'Window',
+  implementation: impl(HTMLHeadElementImpl),
+  members: [],
 });
 
 export const htmlHeadElementInterface = defineElementInterface({

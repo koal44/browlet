@@ -1,7 +1,7 @@
 export {
   annotated,
   arg,
-  asyncIterable,
+  asyncIter,
   asyncSequence,
   attr,
   constant,
@@ -26,7 +26,7 @@ export {
   frozenArray,
   idlType,
   integer,
-  iterable,
+  iter,
   maplike,
   negativeInfinity,
   notANumber,
@@ -35,7 +35,7 @@ export {
   op,
   positiveInfinity,
   promise,
-  readonlyAttr,
+  roAttr,
   record,
   reference,
   sequence,
@@ -45,6 +45,15 @@ export {
   union,
   xattr,
 } from './definition';
+export {
+  atArg, callback, contextValue, impl, resolveArgs, withArgs,
+  withNew,
+} from './binding';
+export type {
+  ArgumentBinding, CallbackExceptionBehavior, ContextValue,
+  ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
+  ImplementationDeclaration, ImplementationOptions, PositionedArgument,
+} from './binding';
 export type {
   AnnotatedType,
   ArgumentDefinition,

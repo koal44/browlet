@@ -169,9 +169,9 @@ describe('Web IDL asynchronously iterable declarations', () => {
       value: idlType.long,
     } satisfies AsyncIterableMember;
     const interface_ = defineInterface({
+      name: 'AsyncValues',
       exposed: ['Window'],
       members: [declaration],
-      name: 'AsyncValues',
     });
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
@@ -226,9 +226,9 @@ function createPairBinding(): {
     value: idlType.long,
   } satisfies AsyncIterableMember;
   const interface_ = defineInterface({
+    name: 'AsyncPairs',
     exposed: ['Window'],
     members: [declaration],
-    name: 'AsyncPairs',
   });
   const implementations = new ImplementationRegistry();
   const realm = new Realm();

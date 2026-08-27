@@ -1,8 +1,8 @@
 import { withDocumentTypeStub } from '../../stubs';
 import {
-  defineIncludes, defineInterface, idlType, readonlyAttr,
+  defineIncludes, defineInterface, idlType, roAttr,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { NodeImpl, NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import type { DocumentImpl } from './document';
@@ -69,15 +69,15 @@ export class DocumentTypeImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const documentTypeIDL = defineInterface({
-  binding: bind(DocumentTypeImpl),
-  exposed: 'Window',
-  inherits: 'Node',
-  members: [
-    readonlyAttr('name', idlType.DOMString),
-    readonlyAttr('publicId', idlType.DOMString),
-    readonlyAttr('systemId', idlType.DOMString),
-  ],
   name: 'DocumentType',
+  inherits: 'Node',
+  exposed: 'Window',
+  implementation: impl(DocumentTypeImpl),
+  members: [
+    roAttr('name', idlType.DOMString),
+    roAttr('publicId', idlType.DOMString),
+    roAttr('systemId', idlType.DOMString),
+  ],
 });
 
 /*

@@ -370,7 +370,7 @@ export function setUpReadableStreamDefaultControllerFromUnderlyingSource(
     ReadableStreamDefaultControllerImpl,
   );
   const highWaterMark = extractHighWaterMark(strategy, 1);
-  const sizeAlgorithm = extractSizeAlgorithm(strategy, environment);
+  const sizeAlgorithm = extractSizeAlgorithm(strategy);
 
   const startAlgorithm = source.start === undefined
     ? () => undefined

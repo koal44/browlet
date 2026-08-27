@@ -1,6 +1,6 @@
 import { withCommentStub } from '../../stubs';
 import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
@@ -26,15 +26,11 @@ export class CommentImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const commentIDL = defineInterface({
-  binding: bind(CommentImpl),
-  exposed: 'Window',
+  name: 'Comment',
   inherits: 'CharacterData',
+  exposed: 'Window',
+  implementation: impl(CommentImpl),
   members: [ctor([
     arg('data', idlType.DOMString, { default: '', optional: true }),
-  ], bind({
-    invoke(_context, data) {
-      (this as CommentImpl).data = data as string;
-    },
-  }))],
-  name: 'Comment',
+  ])],
 });

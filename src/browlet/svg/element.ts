@@ -6,7 +6,7 @@ import { SVG_NAMESPACE } from '../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../web-idl/declaration/index';
-import { bind } from '../../web-idl/index';
+import { impl } from '../../web-idl/index';
 import { withSVGElementStub } from '../stubs';
 
 /*
@@ -40,11 +40,11 @@ export class SVGElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const svgElementIDL = defineInterface({
-  binding: bind(SVGElementImpl),
-  exposed: 'Window',
-  inherits: 'Element',
-  members: [],
   name: 'SVGElement',
+  inherits: 'Element',
+  exposed: 'Window',
+  implementation: impl(SVGElementImpl),
+  members: [],
 });
 
 export const svgElementInterface = defineElementInterface({

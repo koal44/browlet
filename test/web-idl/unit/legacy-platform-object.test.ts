@@ -182,10 +182,10 @@ describe('Web IDL legacy platform objects', () => {
     const constructor = constructorMember();
     const base = legacyInterface('IndexedBase', [baseGetter]);
     const derived = defineInterface({
-      exposed: '*',
-      inherits: 'IndexedBase',
-      members: [constructor, derivedGetter],
       name: 'IndexedDerived',
+      inherits: 'IndexedBase',
+      exposed: '*',
+      members: [constructor, derivedGetter],
     });
     const implementations = new ImplementationRegistry();
     implementations.setConstructorSteps(constructor, () => undefined);
@@ -273,12 +273,12 @@ describe('Web IDL legacy platform objects', () => {
     const globalGetter = namedGetter('globalItem', idlType.DOMString);
     const legacyGetter = namedGetter('legacyItem', idlType.DOMString);
     const window = defineInterface({
+      name: 'Window',
       exposed: ['Window'],
       extendedAttributes: [{
         kind: 'identifier', name: 'Global', value: 'Window',
       }],
       members: [globalGetter],
-      name: 'Window',
     });
     const legacy = legacyInterface(
       'LegacyNamed',
@@ -336,13 +336,13 @@ describe('Web IDL legacy platform objects', () => {
       type: idlType.DOMString,
     } satisfies AttributeMember;
     const interfaceIDL = defineInterface({
+      name: 'OverridingNamed',
       exposed: '*',
       extendedAttributes: [
         noArguments('LegacyOverrideBuiltIns'),
         noArguments('LegacyUnenumerableNamedProperties'),
       ],
       members: [constructor, getter, setter, deleter, length, fixed],
-      name: 'OverridingNamed',
     });
     const values = new WeakMap<object, Map<string, unknown>>();
     const implementations = new ImplementationRegistry();
@@ -544,7 +544,7 @@ function legacyInterface(
   name: string,
   members: InterfaceDefinition['members'],
 ): InterfaceDefinition {
-  return defineInterface({ exposed: '*', members, name });
+  return defineInterface({ name, exposed: '*', members });
 }
 
 function constructorMember(): ConstructorMember {

@@ -5,7 +5,7 @@ import { MATHML_NAMESPACE } from '../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../web-idl/declaration/index';
-import { bind } from '../../web-idl/index';
+import { impl } from '../../web-idl/index';
 import { withMathMLElementStub } from '../stubs';
 
 /*
@@ -29,11 +29,11 @@ export class MathMLElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const mathMLElementIDL = defineInterface({
-  binding: bind(MathMLElementImpl),
-  exposed: 'Window',
-  inherits: 'Element',
-  members: [],
   name: 'MathMLElement',
+  inherits: 'Element',
+  exposed: 'Window',
+  implementation: impl(MathMLElementImpl),
+  members: [],
 });
 
 export const mathMLElementInterface = defineElementInterface({

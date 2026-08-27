@@ -1,7 +1,6 @@
-import { bind } from '../../web-idl/index';
 import {
-  arg, attr, defineCallbackFunction, defineTypedef, idlType, nullable,
-  reference, type AttributeMember, xattr,
+  arg, attr, callback, defineCallbackFunction, defineTypedef, idlType,
+  nullable, reference, type AttributeMember, xattr,
 } from '../../web-idl/declaration/index';
 import type { EventTargetImpl } from '../dom/events/event-target';
 
@@ -26,22 +25,17 @@ export class EventHandlerMap {
     for (const { name, type } of handlers) {
       this.#handlers.set(name, {
         callback: null,
-        invoke: null,
         listener: null,
         type,
       });
     }
   }
 
-  get(name: string): object | null {
+  get(name: string): EventHandlerCallback | null {
     return this.#handlers.get(name)?.callback ?? null;
   }
 
-  set(
-    name: string,
-    callback: object | null,
-    invoke: EventHandlerInvocation,
-  ): void {
+  set(name: string, callback: EventHandlerCallback | null): void {
     const handler = this.#handlers.get(name);
     if (!handler) throw new Error(`Unknown event handler ${name}`);
 
@@ -51,7 +45,6 @@ export class EventHandlerMap {
     }
 
     handler.callback = callback;
-    handler.invoke = invoke;
     this.#activate(handler);
   }
 
@@ -60,13 +53,12 @@ export class EventHandlerMap {
 
     handler.listener = (event) => {
       const callback = handler.callback;
-      const invoke = handler.invoke;
       const currentTarget = event.currentTarget;
-      if (callback === null || invoke === null || currentTarget === null) {
+      if (callback === null || currentTarget === null) {
         return;
       }
 
-      const result = invoke(callback, event, currentTarget);
+      const result = Reflect.apply(callback, currentTarget, [event]);
       if (result === false) event.preventDefault();
     };
     this.#target.addEventListener(handler.type, handler.listener);
@@ -74,7 +66,6 @@ export class EventHandlerMap {
 
   #deactivate(handler: EventHandlerRecord): void {
     handler.callback = null;
-    handler.invoke = null;
     if (handler.listener === null) return;
 
     this.#target.removeEventListener(handler.type, handler.listener);
@@ -82,37 +73,23 @@ export class EventHandlerMap {
   }
 }
 
-export function eventHandlerAttr<Target extends object>(
+export function eventHandlerAttr(
   name: string,
-  getEventHandlers: (target: Target) => EventHandlerMap,
 ): AttributeMember {
-  return attr(name, reference('EventHandler'), bind({
-    get() {
-      return getEventHandlers(this as Target).get(name);
-    },
-    set(context, value) {
-      getEventHandlers(this as Target).set(
-        name,
-        value as object | null,
-        (callback, event, currentTarget) =>
-          context.callbacks.invokeFunction(
-            callback,
-            [event],
-            'report',
-            currentTarget,
-          ),
-      );
-    },
-  }));
+  return attr(
+    name,
+    reference('EventHandler'),
+    callback('report'),
+  );
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const eventHandlerNonNullIDL = defineCallbackFunction({
-  arguments: [arg('event', reference('Event'))],
   name: 'EventHandlerNonNull',
-  returns: idlType.any,
   ...xattr('LegacyTreatNonObjectAsNull'),
+  returns: idlType.any,
+  arguments: [arg('event', reference('Event'))],
 });
 
 export const eventHandlerIDL = defineTypedef({
@@ -126,14 +103,12 @@ type EventHandlerDefinition = {
 };
 
 type EventHandlerRecord = {
-  callback: object | null;
-  invoke: EventHandlerInvocation | null;
+  callback: EventHandlerCallback | null;
   listener: EventListener | null;
   readonly type: string;
 };
 
-type EventHandlerInvocation = (
-  callback: object,
+export type EventHandlerCallback = (
+  this: EventTarget,
   event: Event,
-  currentTarget: EventTarget,
 ) => unknown;

@@ -11,9 +11,9 @@ import {
 } from '../../style/integration';
 import {
   arg, defineIncludes, defineInterface, idlType, nullable, op,
-  readonlyAttr, type InterfaceDefinition,
+  roAttr, type InterfaceDefinition,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
 } from '../../../shared/namespaces';
@@ -359,13 +359,14 @@ export class ElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const elementIDL = defineInterface({
-  binding: bind(ElementImpl),
-  exposed: 'Window',
+  name: 'Element',
   inherits: 'Node',
+  exposed: 'Window',
+  implementation: impl(ElementImpl),
   members: [
-    readonlyAttr('namespaceURI', nullable(idlType.DOMString)),
-    readonlyAttr('localName', idlType.DOMString),
-    readonlyAttr('attributes', idlType.object),
+    roAttr('namespaceURI', nullable(idlType.DOMString)),
+    roAttr('localName', idlType.DOMString),
+    roAttr('attributes', idlType.object),
     op('getAttribute', nullable(idlType.DOMString), [
       arg('qualifiedName', idlType.DOMString),
     ]),
@@ -398,13 +399,12 @@ export const elementIDL = defineInterface({
       arg('qualifiedName', idlType.DOMString),
     ]),
   ],
-  name: 'Element',
 });
 
 export function defineElementInterface(
   options: ElementInterfaceOptions,
 ): ElementInterface {
-  const implementation = options.definition.binding?.implementation;
+  const implementation = options.definition.implementation?.implementation;
   if (!implementation) {
     throw new TypeError(
       `Element interface ${options.definition.name} has no implementation`,

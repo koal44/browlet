@@ -1,14 +1,19 @@
 import {
-  arg, ctor, defineInterface, idlType, readonlyAttr, reference,
+  arg, ctor, defineInterface, idlType, impl, roAttr,
+  reference,
 } from '../web-idl/declaration/index';
-import { bind } from '../web-idl';
 import {
-  getStreamEnvironment, type StreamEnvironment,
+  streamEnvironment, type StreamEnvironment,
 } from './environment';
 
 export class CountQueuingStrategyImpl {
-  #highWaterMark = 0;
-  #size: CallableFunction = () => 1;
+  readonly #highWaterMark: number;
+  readonly #size: CallableFunction;
+
+  constructor(environment: StreamEnvironment, init: QueuingStrategyInit) {
+    this.#highWaterMark = init.highWaterMark;
+    this.#size = getCountSizeFunction(environment);
+  }
 
   get highWaterMark(): number {
     return this.#highWaterMark;
@@ -18,63 +23,21 @@ export class CountQueuingStrategyImpl {
     return this.#size;
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static initializeForBinding(
-    strategy: CountQueuingStrategyImpl,
-    highWaterMark: number,
-  ): void {
-    strategy.#highWaterMark = highWaterMark;
-  }
-
-  static getSizeForBinding(
-    strategy: CountQueuingStrategyImpl,
-  ): CallableFunction {
-    return strategy.#size;
-  }
-
-  static setSizeFunction(
-    strategy: CountQueuingStrategyImpl,
-    size: CallableFunction,
-  ): void {
-    strategy.#size = size;
-  }
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const countQueuingStrategyIDL = defineInterface({
-  binding: bind(CountQueuingStrategyImpl, {
-    initialize(context, value) {
-      CountQueuingStrategyImpl.setSizeFunction(
-        value as CountQueuingStrategyImpl,
-        getCountSizeFunction(getStreamEnvironment(context)),
-      );
-    },
-  }),
-  exposed: ['Window', 'Worker', 'Worklet'],
-  members: [
-    ctor([arg('init', reference('QueuingStrategyInit'))], bind({
-      invoke(_context, init) {
-        CountQueuingStrategyImpl.initializeForBinding(
-          this as CountQueuingStrategyImpl,
-          (init as QueuingStrategyInit).highWaterMark,
-        );
-      },
-    })),
-    readonlyAttr('highWaterMark', idlType.unrestrictedDouble),
-    readonlyAttr('size', reference('Function'), bind({
-      get(context) {
-        return getStreamEnvironment(context).callbacks.createFunctionValue(
-          'Function',
-          CountQueuingStrategyImpl.getSizeForBinding(
-            this as CountQueuingStrategyImpl,
-          ),
-        );
-      },
-    })),
-  ],
   name: 'CountQueuingStrategy',
+  exposed: ['Window', 'Worker', 'Worklet'],
+  implementation: impl(CountQueuingStrategyImpl, {
+    withArgs: [streamEnvironment],
+  }),
+  members: [
+    ctor([arg('init', reference('QueuingStrategyInit'))]),
+    roAttr('highWaterMark', idlType.unrestrictedDouble),
+    roAttr('size', reference('Function')),
+  ],
 });
 
 type QueuingStrategyInit = {

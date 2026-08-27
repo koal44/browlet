@@ -1,14 +1,19 @@
 import {
-  arg, ctor, defineInterface, idlType, readonlyAttr, reference,
+  arg, ctor, defineInterface, idlType, impl, roAttr,
+  reference,
 } from '../web-idl/declaration/index';
-import { bind } from '../web-idl';
 import {
-  getStreamEnvironment, type StreamEnvironment,
+  streamEnvironment, type StreamEnvironment,
 } from './environment';
 
 export class ByteLengthQueuingStrategyImpl {
-  #highWaterMark = 0;
-  #size: CallableFunction = () => 0;
+  readonly #highWaterMark: number;
+  readonly #size: CallableFunction;
+
+  constructor(environment: StreamEnvironment, init: QueuingStrategyInit) {
+    this.#highWaterMark = init.highWaterMark;
+    this.#size = getByteLengthSizeFunction(environment);
+  }
 
   get highWaterMark(): number {
     return this.#highWaterMark;
@@ -18,63 +23,21 @@ export class ByteLengthQueuingStrategyImpl {
     return this.#size;
   }
 
-  // -- Friends ----------------------------------------------------------
-
-  static initializeForBinding(
-    strategy: ByteLengthQueuingStrategyImpl,
-    highWaterMark: number,
-  ): void {
-    strategy.#highWaterMark = highWaterMark;
-  }
-
-  static getSizeForBinding(
-    strategy: ByteLengthQueuingStrategyImpl,
-  ): CallableFunction {
-    return strategy.#size;
-  }
-
-  static setSizeFunction(
-    strategy: ByteLengthQueuingStrategyImpl,
-    size: CallableFunction,
-  ): void {
-    strategy.#size = size;
-  }
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const byteLengthQueuingStrategyIDL = defineInterface({
-  binding: bind(ByteLengthQueuingStrategyImpl, {
-    initialize(context, value) {
-      ByteLengthQueuingStrategyImpl.setSizeFunction(
-        value as ByteLengthQueuingStrategyImpl,
-        getByteLengthSizeFunction(getStreamEnvironment(context)),
-      );
-    },
-  }),
-  exposed: ['Window', 'Worker', 'Worklet'],
-  members: [
-    ctor([arg('init', reference('QueuingStrategyInit'))], bind({
-      invoke(_context, init) {
-        ByteLengthQueuingStrategyImpl.initializeForBinding(
-          this as ByteLengthQueuingStrategyImpl,
-          (init as QueuingStrategyInit).highWaterMark,
-        );
-      },
-    })),
-    readonlyAttr('highWaterMark', idlType.unrestrictedDouble),
-    readonlyAttr('size', reference('Function'), bind({
-      get(context) {
-        return getStreamEnvironment(context).callbacks.createFunctionValue(
-          'Function',
-          ByteLengthQueuingStrategyImpl.getSizeForBinding(
-            this as ByteLengthQueuingStrategyImpl,
-          ),
-        );
-      },
-    })),
-  ],
   name: 'ByteLengthQueuingStrategy',
+  exposed: ['Window', 'Worker', 'Worklet'],
+  implementation: impl(ByteLengthQueuingStrategyImpl, {
+    withArgs: [streamEnvironment],
+  }),
+  members: [
+    ctor([arg('init', reference('QueuingStrategyInit'))]),
+    roAttr('highWaterMark', idlType.unrestrictedDouble),
+    roAttr('size', reference('Function')),
+  ],
 });
 
 type QueuingStrategyInit = {

@@ -1,8 +1,8 @@
 import { withAttrStub } from '../../stubs';
 import {
-  attr, defineInterface, idlType, nullable, readonlyAttr, reference, xattr,
+  attr, defineInterface, idlType, nullable, roAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';
@@ -94,17 +94,17 @@ export class AttrImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const attrIDL = defineInterface({
-  binding: bind(AttrImpl),
-  exposed: 'Window',
-  inherits: 'Node',
-  members: [
-    readonlyAttr('namespaceURI', nullable(idlType.DOMString)),
-    readonlyAttr('prefix', nullable(idlType.DOMString)),
-    readonlyAttr('localName', idlType.DOMString),
-    readonlyAttr('name', idlType.DOMString),
-    attr('value', idlType.DOMString, xattr('CEReactions')),
-    readonlyAttr('ownerElement', nullable(reference('Element'))),
-    readonlyAttr('specified', idlType.boolean),
-  ],
   name: 'Attr',
+  inherits: 'Node',
+  exposed: 'Window',
+  implementation: impl(AttrImpl),
+  members: [
+    roAttr('namespaceURI', nullable(idlType.DOMString)),
+    roAttr('prefix', nullable(idlType.DOMString)),
+    roAttr('localName', idlType.DOMString),
+    roAttr('name', idlType.DOMString),
+    attr('value', idlType.DOMString, xattr('CEReactions')),
+    roAttr('ownerElement', nullable(reference('Element'))),
+    roAttr('specified', idlType.boolean),
+  ],
 });

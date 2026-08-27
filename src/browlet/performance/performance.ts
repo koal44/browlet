@@ -1,9 +1,9 @@
 import { EventTargetImpl } from '../dom/events/event-target';
 import { withPerformanceStub } from '../stubs';
 import {
-  defineInterface, defineTypedef, idlType, op, readonlyAttr, reference, xattr,
+  defineInterface, defineTypedef, idlType, op, roAttr, reference, xattr,
 } from '../../web-idl/declaration/index';
-import { bind } from '../../web-idl/index';
+import { impl } from '../../web-idl/index';
 import type { EnvironmentTiming } from './high-resolution-time';
 import { implicitlyConvertDurationToTimestamp } from './clock';
 
@@ -55,13 +55,13 @@ export const epochTimeStampIDL = defineTypedef({
 });
 
 export const performanceIDL = defineInterface({
-  binding: bind(PerformanceImpl),
-  exposed: ['Window', 'Worker'],
+  name: 'Performance',
   inherits: 'EventTarget',
+  exposed: ['Window', 'Worker'],
+  implementation: impl(PerformanceImpl),
   members: [
     op('now', reference('DOMHighResTimeStamp')),
-    readonlyAttr('timeOrigin', reference('DOMHighResTimeStamp')),
+    roAttr('timeOrigin', reference('DOMHighResTimeStamp')),
     op('toJSON', idlType.object, [], xattr('Default')),
   ],
-  name: 'Performance',
 });

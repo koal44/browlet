@@ -165,7 +165,6 @@ export function setupWindowEnvironmentSettingsObject(
     new WindowOrWorkerGlobalScopeMixin({
       eventLoop: realm.agent.eventLoop,
       global: realm.global,
-      timerThisValue: realm.globalThis,
       timing: settings.timing,
     }),
   );

@@ -127,7 +127,7 @@ export function resolveTypedef(
   return resolvedType;
 }
 
-type AnnotatedUnionType = AnnotatedType & { type: UnionType; };
+type AnnotatedUnionType = AnnotatedType<UnionType>;
 
 const typeExtendedAttributeNames = new Set([
   'AllowResizable',

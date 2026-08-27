@@ -1,5 +1,5 @@
 import {
-  defineInterfaceMixin, nullable, readonlyAttr, reference,
+  defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
 
@@ -37,11 +37,11 @@ export class DocumentOrShadowRootMixin {
 // -- Web IDL ------------------------------------------------------------
 
 export const documentOrShadowRootIDL = defineInterfaceMixin({
-  members: [readonlyAttr(
+  name: 'DocumentOrShadowRoot',
+  members: [roAttr(
     'customElementRegistry',
     nullable(reference('CustomElementRegistry')),
   )],
-  name: 'DocumentOrShadowRoot',
 });
 
 type DocumentOrShadowRootMixinOptions = {

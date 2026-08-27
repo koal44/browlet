@@ -1,6 +1,6 @@
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
-  arg, ctor, defineInterface, idlType, op, readonlyAttr, reference, xattr,
+  arg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
 import { AbortSignalImpl } from './abort-signal';
 
@@ -16,51 +16,34 @@ import { AbortSignalImpl } from './abort-signal';
  */
 export class AbortControllerImpl
 {
-  #signal: AbortSignalImpl | null = null;
+  readonly #signal: AbortSignalImpl;
+
+  constructor(signal: AbortSignalImpl = new AbortSignalImpl()) {
+    this.#signal = signal;
+  }
 
   get signal(): AbortSignalImpl {
-    return this.#requireSignal();
+    return this.#signal;
   }
 
   abort(reason: unknown = undefined): void {
-    AbortSignalImpl.signalAbort(this.#requireSignal(), reason);
-  }
-
-  // -- Friends ----------------------------------------------------------
-
-  static initialize(
-    controller: AbortControllerImpl,
-    signal: AbortSignalImpl,
-  ): void {
-    controller.#signal = signal;
-  }
-
-  #requireSignal(): AbortSignalImpl {
-    if (!this.#signal) {
-      throw new Error('AbortController signal has not been initialized');
-    }
-    return this.#signal;
+    AbortSignalImpl.signalAbort(this.#signal, reason);
   }
 }
 
 // -- Web IDL ------------------------------------------------------------
 
 export const abortControllerIDL = defineInterface({
-  binding: bind(AbortControllerImpl),
+  name: 'AbortController',
   exposed: '*',
+  implementation: impl(AbortControllerImpl, {
+    withArgs: [AbortSignalImpl],
+  }),
   members: [
-    ctor(bind({
-      invoke(context) {
-        AbortControllerImpl.initialize(
-          this as AbortControllerImpl,
-          context.objects.create(AbortSignalImpl),
-        );
-      },
-    })),
-    readonlyAttr('signal', reference('AbortSignal'), xattr('SameObject')),
+    ctor(),
+    roAttr('signal', reference('AbortSignal'), xattr('SameObject')),
     op('abort', idlType.undefined, [
       arg('reason', idlType.any, { optional: true }),
     ]),
   ],
-  name: 'AbortController',
 });

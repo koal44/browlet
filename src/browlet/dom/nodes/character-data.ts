@@ -2,7 +2,7 @@ import { withCharacterDataStub } from '../../stubs';
 import {
   annotated, attr, defineIncludes, defineInterface, idlType, xattr,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import { TreeNode } from '../infra/tree';
 import {
   NodeImpl, type NodeOptions, type NodeType,
@@ -69,9 +69,10 @@ export class CharacterDataImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const characterDataIDL = defineInterface({
-  binding: bind(CharacterDataImpl),
-  exposed: 'Window',
+  name: 'CharacterData',
   inherits: 'Node',
+  exposed: 'Window',
+  implementation: impl(CharacterDataImpl),
   members: [
     // The remaining members depend on the DOM replace-data algorithm.
     attr(
@@ -79,7 +80,6 @@ export const characterDataIDL = defineInterface({
       annotated(idlType.DOMString, xattr('LegacyNullToEmptyString')),
     ),
   ],
-  name: 'CharacterData',
 });
 
 /*

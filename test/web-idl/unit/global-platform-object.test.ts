@@ -19,23 +19,24 @@ describe('Web IDL global platform objects', () => {
     const ping = operation('ping', idlType.DOMString);
     const namedItem = namedGetter('namedItem');
     const base = defineInterface({
+      name: 'GlobalBase',
       exposed: ['Window'],
       members: [baseMethod],
-      name: 'GlobalBase',
     });
     const window = defineInterface({
+      name: 'Window',
+      inherits: 'GlobalBase',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
-      inherits: 'GlobalBase',
       members: [
         { kind: 'constant', name: 'ANSWER', type: idlType.long, value: integer(42) },
         title,
         ping,
         namedItem,
       ],
-      name: 'Window',
     });
     const widget = defineInterface({
+      name: 'Widget',
       exposed: ['Window'],
       extendedAttributes: [{
         kind: 'identifier-list',
@@ -43,7 +44,6 @@ describe('Web IDL global platform objects', () => {
         values: ['LegacyWidget', 'OldWidget'],
       }],
       members: [],
-      name: 'Widget',
     });
     const values = new Map([
       ['alpha', 'named alpha'],
@@ -140,19 +140,19 @@ describe('Web IDL global platform objects', () => {
   it('inherits unenumerable named properties', () => {
     const namedItem = namedGetter('namedItem');
     const base = defineInterface({
+      name: 'NamedBase',
       exposed: ['Window'],
       extendedAttributes: [
         noArguments('LegacyUnenumerableNamedProperties'),
       ],
       members: [namedItem],
-      name: 'NamedBase',
     });
     const window = defineInterface({
+      name: 'Window',
+      inherits: 'NamedBase',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
-      inherits: 'NamedBase',
       members: [],
-      name: 'Window',
     });
     const implementations = new ImplementationRegistry();
     implementations.setOperationSteps(namedItem, () => 'named value');
@@ -194,10 +194,10 @@ describe('Web IDL global platform objects', () => {
       kind: 'identifier', name: 'PutForwards', value: 'value',
     }]);
     const interface_ = defineInterface({
+      name: 'Window',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
       members: [value, replaceable, forwarded],
-      name: 'Window',
     });
     const values = new WeakMap<object, string>();
     const forwardedTarget = { value: 'original' };
@@ -247,10 +247,10 @@ describe('Web IDL global platform objects', () => {
   it('rejects nullish global stringifier receivers', () => {
     const stringifier = { kind: 'stringifier' } satisfies StringifierMember;
     const interface_ = defineInterface({
+      name: 'Window',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'Window')],
       members: [stringifier],
-      name: 'Window',
     });
     const implementations = new ImplementationRegistry();
     implementations.setStringificationBehavior(
@@ -305,14 +305,15 @@ describe('Web IDL global platform objects', () => {
 
   it('omits the named-properties layer without a named getter', () => {
     const base = defineInterface({
-      exposed: ['Window'], members: [], name: 'PlainBase',
+      name: 'PlainBase',
+      exposed: ['Window'], members: [],
     });
     const globalIDL = defineInterface({
+      name: 'PlainGlobal',
+      inherits: 'PlainBase',
       exposed: ['Window'],
       extendedAttributes: [identifier('Global', 'PlainGlobal')],
-      inherits: 'PlainBase',
       members: [],
-      name: 'PlainGlobal',
     });
     const realm = new Realm();
     const binding = new JavaScriptBinding(
@@ -333,14 +334,14 @@ describe('Web IDL global platform objects', () => {
   it('projects a global declared by the partial containing its named getter', () => {
     const getter = namedGetter(undefined);
     const interface_ = defineInterface({
+      name: 'PartialGlobal',
       exposed: ['PartialGlobal'],
       members: [],
-      name: 'PartialGlobal',
     });
     const partial = definePartialInterface({
+      name: 'PartialGlobal',
       extendedAttributes: [identifier('Global', 'PartialGlobal')],
       members: [getter],
-      name: 'PartialGlobal',
     });
     const implementations = new ImplementationRegistry();
     implementations.setOperationSteps(getter, (name) =>
@@ -393,10 +394,10 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
 } {
   const getter = namedGetter(undefined);
   const interface_ = defineInterface({
+    name: 'TestGlobal',
     exposed: ['Window'],
     extendedAttributes: [identifier('Global', 'TestGlobal')],
     members: [getter],
-    name: 'TestGlobal',
   });
   const implementations = new ImplementationRegistry();
   implementations.setOperationSteps(getter, () => undefined);

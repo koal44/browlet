@@ -3,9 +3,9 @@ import type { EventTargetImpl } from '../events/event-target';
 import { withShadowRootStub } from '../../stubs';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType,
-  readonlyAttr, reference,
+  roAttr, reference,
 } from '../../../web-idl/declaration/index';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
   DocumentFragmentImpl,
 } from './document-fragment';
@@ -165,19 +165,19 @@ export class ShadowRootImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const shadowRootIDL = defineInterface({
-  binding: bind(ShadowRootImpl),
-  exposed: 'Window',
+  name: 'ShadowRoot',
   inherits: 'DocumentFragment',
+  exposed: 'Window',
+  implementation: impl(ShadowRootImpl),
   members: [
-    readonlyAttr('mode', reference('ShadowRootMode')),
-    readonlyAttr('delegatesFocus', idlType.boolean),
-    readonlyAttr('slotAssignment', reference('SlotAssignmentMode')),
-    readonlyAttr('clonable', idlType.boolean),
-    readonlyAttr('serializable', idlType.boolean),
-    readonlyAttr('host', reference('Element')),
+    roAttr('mode', reference('ShadowRootMode')),
+    roAttr('delegatesFocus', idlType.boolean),
+    roAttr('slotAssignment', reference('SlotAssignmentMode')),
+    roAttr('clonable', idlType.boolean),
+    roAttr('serializable', idlType.boolean),
+    roAttr('host', reference('Element')),
     // EventHandler binding awaits the HTML event-handler infrastructure.
   ],
-  name: 'ShadowRoot',
 });
 
 export const shadowRootIncludesDocumentOrShadowRootIDL = defineIncludes({

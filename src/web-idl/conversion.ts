@@ -1292,7 +1292,7 @@ type RuntimeType = {
   type: RuntimeBaseType;
 };
 
-type RuntimeBaseType = Exclude<WebIDLType, AnnotatedType>;
+type RuntimeBaseType = Exclude<WebIDLType, AnnotatedType<WebIDLType>>;
 
 type Primitive = bigint | boolean | null | number | string | symbol | undefined;
 

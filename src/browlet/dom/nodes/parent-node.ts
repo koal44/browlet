@@ -1,5 +1,5 @@
 import {
-  defineInterfaceMixin, idlType, nullable, readonlyAttr, reference,
+  defineInterfaceMixin, idlType, nullable, roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import { HTMLCollectionImpl } from './collections';
 import { isElement, type NodeImpl } from './node';
@@ -85,11 +85,11 @@ export class ParentNodeMixin {
 // -- Web IDL ------------------------------------------------------------
 
 export const parentNodeIDL = defineInterfaceMixin({
-  members: [
-    readonlyAttr('children', idlType.object),
-    readonlyAttr('firstElementChild', nullable(reference('Element'))),
-    readonlyAttr('lastElementChild', nullable(reference('Element'))),
-    readonlyAttr('childElementCount', idlType.unsignedLong),
-  ],
   name: 'ParentNode',
+  members: [
+    roAttr('children', idlType.object),
+    roAttr('firstElementChild', nullable(reference('Element'))),
+    roAttr('lastElementChild', nullable(reference('Element'))),
+    roAttr('childElementCount', idlType.unsignedLong),
+  ],
 });

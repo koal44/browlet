@@ -30,6 +30,7 @@ describe('Web IDL namespace objects', () => {
       returns: idlType.undefined,
     };
     const namespace = defineNamespace({
+      name: 'Tools',
       exposed: ['Window'],
       members: [
         version,
@@ -39,20 +40,19 @@ describe('Web IDL namespace objects', () => {
           value: integer(7),
         },
       ],
-      name: 'Tools',
     });
     const partial = definePartialNamespace({
+      name: 'Tools',
       exposed: ['Worker'],
       members: [hidden],
-      name: 'Tools',
     });
     const nested = defineInterface({
+      name: 'Nested',
       exposed: ['Window'],
       extendedAttributes: [{
         kind: 'identifier', name: 'LegacyNamespace', value: 'Tools',
       }],
       members: [],
-      name: 'Nested',
     });
     const definitions = assembleDefinitions([partial, nested, namespace]);
     const implementations = new ImplementationRegistry();

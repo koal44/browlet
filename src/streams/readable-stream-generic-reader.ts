@@ -1,5 +1,5 @@
 import {
-  arg, defineInterfaceMixin, idlType, op, promise, readonlyAttr,
+  arg, defineInterfaceMixin, idlType, op, promise, roAttr,
 } from '../web-idl/declaration/index';
 import type {
   StreamEnvironment, StreamPromise,
@@ -65,11 +65,11 @@ export type ReadableStreamGenericReaderState = {
 // -- Web IDL ------------------------------------------------------------
 
 export const readableStreamGenericReaderIDL = defineInterfaceMixin({
+  name: 'ReadableStreamGenericReader',
   members: [
-    readonlyAttr('closed', promise(idlType.undefined)),
+    roAttr('closed', promise(idlType.undefined)),
     op('cancel', promise(idlType.undefined), [
       arg('reason', idlType.any, { optional: true }),
     ]),
   ],
-  name: 'ReadableStreamGenericReader',
 });

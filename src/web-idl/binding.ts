@@ -19,8 +19,9 @@ import {
   type StringifierMember, type WebIDLType,
 } from './declaration/definition';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
+import type { ImplementationClass } from './declaration/binding';
 import {
-  ImplementationRegistry, type ImplementationConstructor,
+  ImplementationRegistry, type ConstructorBehavior,
 } from './registry';
 import { SynchronousIterableBinding } from './iterable';
 import type { WebIDLRealmHost } from './javascript-realm';
@@ -210,24 +211,18 @@ export class JavaScriptBinding {
           argumentsList,
           this,
         );
-        const platformObject = this.createPlatformObject(
-          assembled,
-          newTarget,
-        );
-        const implementation = this.platformObjects.getImplementationObject(
-          platformObject,
-        );
-        if (!implementation) {
-          throw new Error('New platform object has no implementation target');
-        }
-        const steps = this.implementations.getConstructorSteps(
+        const behavior = this.implementations.getConstructorBehavior(
           overload.callable,
         );
-        if (!steps) {
+        if (!behavior) {
           throw missingImplementation(assembled, 'constructor');
         }
-        Reflect.apply(steps, implementation, overload.values);
-        return platformObject;
+        return this.#constructPlatformObject(
+          assembled,
+          behavior,
+          overload.values,
+          newTarget,
+        );
       },
       {
         constructible: true,
@@ -326,27 +321,20 @@ export class JavaScriptBinding {
           argumentsList,
           this,
         );
-        const platformObject = this.createPlatformObject(
-          assembled,
-          newTarget,
-        );
-        const implementation = this.platformObjects
-          .getImplementationObject(platformObject);
-        if (!implementation) {
-          throw new Error(
-            'New platform object has no implementation target',
-          );
-        }
-        const steps = this.implementations.getConstructorSteps(
+        const behavior = this.implementations.getConstructorBehavior(
           overload.callable,
         );
-        if (!steps) {
+        if (!behavior) {
           throw new Error(
             `Web IDL ${assembled.definition.name} legacy factory function ${id} has no implementation steps`,
           );
         }
-        Reflect.apply(steps, implementation, overload.values);
-        return platformObject;
+        return this.#constructPlatformObject(
+          assembled,
+          behavior,
+          overload.values,
+          newTarget,
+        );
       },
       {
         constructible: true,
@@ -476,16 +464,7 @@ export class JavaScriptBinding {
       );
     }
 
-    let prototype = this.getInterfacePrototypeObject(assembled);
-    if (newTarget) {
-      const candidate = Reflect.get(newTarget, 'prototype') as unknown;
-      if (!isObject(candidate)) {
-        throw new Error(
-          'A non-object newTarget prototype requires deferred GetFunctionRealm support',
-        );
-      }
-      prototype = candidate;
-    }
+    const prototype = this.#getPlatformObjectPrototype(assembled, newTarget);
 
     const create = this.implementations.getObjectCreationSteps(
       assembled.definition,
@@ -504,8 +483,51 @@ export class JavaScriptBinding {
     ).object;
   }
 
+  #constructPlatformObject(
+    interface_: AssembledInterface,
+    behavior: ConstructorBehavior,
+    values: readonly unknown[],
+    newTarget: object,
+  ): object {
+    if (behavior.kind === 'initialize') {
+      const platformObject = this.createPlatformObject(interface_, newTarget);
+      const implementation = this.platformObjects.getImplementationObject(
+        platformObject,
+      );
+      if (!implementation) {
+        throw new Error('New platform object has no implementation target');
+      }
+      Reflect.apply(behavior.steps, implementation, values);
+      return platformObject;
+    }
+
+    const prototype = this.#getPlatformObjectPrototype(interface_, newTarget);
+    const implementation = behavior.steps(newTarget, values);
+    if (Reflect.getPrototypeOf(implementation) !== prototype) {
+      throw new Error(
+        `Implementation object for ${interface_.definition.name} has the wrong prototype`,
+      );
+    }
+    return this.projectPlatformObject(implementation, interface_).object;
+  }
+
+  #getPlatformObjectPrototype(
+    interface_: AssembledInterface,
+    newTarget?: object,
+  ): object {
+    if (!newTarget) return this.getInterfacePrototypeObject(interface_);
+
+    const candidate = Reflect.get(newTarget, 'prototype') as unknown;
+    if (!isObject(candidate)) {
+      throw new Error(
+        'A non-object newTarget prototype requires deferred GetFunctionRealm support',
+      );
+    }
+    return candidate;
+  }
+
   construct<T extends object>(
-    implementation: ImplementationConstructor<T>,
+    implementation: ImplementationClass<T>,
     argumentsList: readonly unknown[],
     primaryInterface?: string | AssembledInterface,
   ): T {
@@ -519,10 +541,10 @@ export class JavaScriptBinding {
     }
 
     const value = Reflect.construct(
-      implementation,
+      implementation as Constructable<T>,
       argumentsList,
-      this.getInterfaceObject(interface_),
-    ) as T;
+      this.getInterfaceObject(interface_) as unknown as Constructable,
+    );
     return this.projectPlatformObject(value, interface_).object as T;
   }
 
@@ -1592,6 +1614,9 @@ export class JavaScriptBinding {
     throw new this.realm.intrinsics.typeError(message);
   }
 }
+
+type Constructable<T extends object = object> =
+  new (...argumentsList: unknown[]) => T;
 
 type JavaScriptFunction = ReturnType<WebIDLRealmHost['createFunction']>;
 type InterfaceObject = JavaScriptFunction & { prototype: object; };

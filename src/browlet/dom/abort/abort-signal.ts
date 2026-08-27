@@ -1,14 +1,14 @@
 import {
   createDOMException, domExceptionName, type DOMExceptionName,
 } from '../../../shared/dom-exception';
-import { bind } from '../../../web-idl/index';
+import { impl } from '../../../web-idl/index';
 import {
-  arg, defineInterface, idlType, op, readonlyAttr, reference, sequence, xattr,
+  arg, defineInterface, idlType, op, roAttr, reference, resolveArgs,
+  sequence, withNew, xattr,
 } from '../../../web-idl/declaration/index';
-import type { WebIDLRealmHost } from '../../../web-idl/javascript-realm';
 import { queueGlobalTask } from '../../scripting/tasks';
 import {
-  EventHandlerMap, eventHandlerAttr,
+  EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
 } from '../../scripting/event-handlers';
 import { runStepsAfterTimeout, timerTaskSource } from '../../scripting/timers';
 import {
@@ -35,19 +35,21 @@ import {
 export class AbortSignalImpl extends EventTargetImpl
 {
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
-  #createDOMException: DOMExceptionFactory = createDOMException;
   #dependent = false;
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
   readonly #eventHandlers = new EventHandlerMap(this, [{
     name: 'onabort',
     type: 'abort',
   }]);
+  readonly #global: object;
   #reason: unknown = undefined;
-  #retention = new AbortSignalRetention();
+  readonly #retention: AbortSignalRetention;
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
-  constructor() {
+  constructor(global: object = globalThis) {
     super(abortSignalEventTargetVirtuals);
+    this.#global = global;
+    this.#retention = getAbortSignalRetention(global);
     registerAbortSignal(this, {
       add: (algorithm) => AbortSignalImpl.addAbortAlgorithm(this, algorithm),
       isAborted: () => this.#isAborted(),
@@ -62,20 +64,52 @@ export class AbortSignalImpl extends EventTargetImpl
     return this.#reason;
   }
 
+  get onabort(): EventHandlerCallback | null {
+    return this.#eventHandlers.get('onabort');
+  }
+
+  set onabort(callback: EventHandlerCallback | null) {
+    this.#eventHandlers.set('onabort', callback);
+  }
+
   throwIfAborted(): void {
     if (this.#isAborted()) throw this.#reason;
   }
 
   // -- Friends ----------------------------------------------------------
 
-  static initializeForBinding(
+  static abort(
     signal: AbortSignalImpl,
-    createException: DOMExceptionFactory,
-    retention: AbortSignalRetention,
-  ): void {
-    signal.#createDOMException = createException;
-    signal.#retention = retention;
-    signal.#updateRetention();
+    reason: unknown = undefined,
+  ): AbortSignalImpl {
+    AbortSignalImpl.createAborted(signal, reason);
+    return signal;
+  }
+
+  static timeout(
+    signal: AbortSignalImpl,
+    milliseconds: number,
+  ): AbortSignalImpl {
+    runStepsAfterTimeout(
+      signal.#global,
+      'AbortSignal-timeout',
+      milliseconds,
+      () => {
+        queueGlobalTask(
+          timerTaskSource,
+          signal.#global,
+          () => AbortSignalImpl.signalTimeout(signal),
+        );
+      },
+    );
+    return signal;
+  }
+
+  static any(
+    signal: AbortSignalImpl,
+    signals: readonly AbortSignalImpl[],
+  ): AbortSignalImpl {
+    return AbortSignalImpl.createDependent(signals, () => signal);
   }
 
   static createDependent(
@@ -116,10 +150,6 @@ export class AbortSignalImpl extends EventTargetImpl
 
   static updateRetention(signal: AbortSignalImpl): void {
     signal.#updateRetention();
-  }
-
-  static getEventHandlers(signal: AbortSignalImpl): EventHandlerMap {
-    return signal.#eventHandlers;
   }
 
   static isAborted(signal: AbortSignalImpl): boolean {
@@ -172,12 +202,22 @@ export class AbortSignalImpl extends EventTargetImpl
   static signalTimeout(signal: AbortSignalImpl): void {
     AbortSignalImpl.signalAbort(
       signal,
-      signal.#createDOMException(domExceptionName.timeout),
+      signal.#createException(domExceptionName.timeout),
     );
   }
 
   #createAbortError(): DOMException {
-    return this.#createDOMException(domExceptionName.abort);
+    return this.#createException(domExceptionName.abort);
+  }
+
+  #createException(
+    name: DOMExceptionName,
+    message = '',
+  ): DOMException {
+    const DOMException_: unknown = Reflect.get(this.#global, 'DOMException');
+    return typeof DOMException_ === 'function'
+      ? Reflect.construct(DOMException_, [message, name]) as DOMException
+      : createDOMException(name, message);
   }
 
   #dependOn(source: AbortSignalImpl): void {
@@ -232,84 +272,48 @@ export class AbortSignalImpl extends EventTargetImpl
 
 export const abortSignalIDL = defineInterface({
   name: 'AbortSignal',
-  binding: bind(AbortSignalImpl, {
-    initialize(context, value) {
-      AbortSignalImpl.initializeForBinding(
-        value as AbortSignalImpl,
-        (name, message) =>
-          context.exceptions.createDOMException(name, message),
-        getAbortSignalRetention(context.realm),
-      );
-    },
-  }),
-  exposed: '*',
   inherits: 'EventTarget',
+  exposed: '*',
+  implementation: impl(AbortSignalImpl, {
+    withArgs: ['current-global'],
+  }),
   members: [
     op('abort', reference('AbortSignal'), [
       arg('reason', idlType.any, { optional: true }),
-    ], bind({
-      invoke(context, reason) {
-        const signal = context.objects.create(AbortSignalImpl);
-        AbortSignalImpl.createAborted(signal, reason);
-        return signal;
-      },
-    }, {
+    ], {
+      ...withNew(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
-    })),
+    }),
     op('timeout', reference('AbortSignal'), [
       arg(
         'milliseconds',
         idlType.unsignedLongLong,
         xattr('EnforceRange'),
       ),
-    ], bind({
-      invoke(context, milliseconds) {
-        const signal = context.objects.create(AbortSignalImpl);
-        const global = context.realm.global;
-
-        runStepsAfterTimeout(
-          global,
-          'AbortSignal-timeout',
-          milliseconds as number,
-          () => {
-            queueGlobalTask(
-              timerTaskSource,
-              global,
-              () => AbortSignalImpl.signalTimeout(signal),
-            );
-          },
-        );
-
-        return signal;
-      },
-    }, {
+    ], {
+      ...withNew(AbortSignalImpl),
       static: true,
       ...xattr(
         ['Exposed', ['Window', 'Worker']],
         'NewObject',
       ),
-    })),
+    }),
     op('any', reference('AbortSignal'), [
-      arg('signals', sequence(reference('AbortSignal'))),
-    ], bind({
-      invoke(context, signals) {
-        return AbortSignalImpl.createDependent(
-          signals as AbortSignalImpl[],
-          () => context.objects.create(AbortSignalImpl),
-        );
-      },
-    }, {
+      arg(
+        'signals',
+        sequence(reference('AbortSignal')),
+        resolveArgs(AbortSignalImpl),
+      ),
+    ], {
+      ...withNew(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
-    })),
-    readonlyAttr('aborted', idlType.boolean),
-    readonlyAttr('reason', idlType.any),
+    }),
+    roAttr('aborted', idlType.boolean),
+    roAttr('reason', idlType.any),
     op('throwIfAborted', idlType.undefined),
-    eventHandlerAttr<AbortSignalImpl>(
-      'onabort',
-      (signal) => AbortSignalImpl.getEventHandlers(signal),
-    ),
+    eventHandlerAttr('onabort'),
   ],
 });
 
@@ -389,23 +393,15 @@ class WeakOrderedSet<T extends object>
   }
 }
 
-type DOMExceptionFactory = (
-  name: DOMExceptionName,
-  message?: string,
-) => DOMException;
-
-const abortSignalRetentions = new WeakMap<
-  WebIDLRealmHost,
-  AbortSignalRetention
->();
+const abortSignalRetentions = new WeakMap<object, AbortSignalRetention>();
 
 function getAbortSignalRetention(
-  realm: WebIDLRealmHost,
+  global: object,
 ): AbortSignalRetention {
-  let retention = abortSignalRetentions.get(realm);
+  let retention = abortSignalRetentions.get(global);
   if (!retention) {
     retention = new AbortSignalRetention();
-    abortSignalRetentions.set(realm, retention);
+    abortSignalRetentions.set(global, retention);
   }
   return retention;
 }

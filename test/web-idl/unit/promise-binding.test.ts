@@ -23,6 +23,7 @@ describe('Web IDL promise member binding', () => {
     const resolvedOperation = operation('resolve', promiseType(idlType.long));
     const rejectedOperation = operation('reject', promiseType(idlType.long));
     const interface_ = defineInterface({
+      name: 'PromiseOwner',
       exposed: ['Window'],
       members: [
         resolvedAttribute,
@@ -30,7 +31,6 @@ describe('Web IDL promise member binding', () => {
         resolvedOperation,
         rejectedOperation,
       ],
-      name: 'PromiseOwner',
     });
     const implementations = new ImplementationRegistry();
     const reason = new Error('implementation failed');
@@ -79,9 +79,9 @@ describe('Web IDL promise member binding', () => {
   it('turns receiver errors from promise-returning operations into rejections', async () => {
     const read = operation('read', promiseType(idlType.long));
     const interface_ = defineInterface({
+      name: 'PromiseReceiver',
       exposed: ['Window'],
       members: [read],
-      name: 'PromiseReceiver',
     });
     const realm = new Realm();
     const implementations = new ImplementationRegistry();
@@ -109,9 +109,9 @@ describe('Web IDL promise member binding', () => {
       promiseType(idlType.undefined),
     );
     const interface_ = defineInterface({
+      name: 'PromiseExceptionSource',
       exposed: ['Window'],
       members: [reject, rejectArbitrary],
-      name: 'PromiseExceptionSource',
     });
     const realm = new Realm();
     const implementations = new ImplementationRegistry();

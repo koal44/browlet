@@ -5,11 +5,10 @@ import {
 import { asDocument, withWindowStub } from '../../stubs';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
-  readonlyAttr, reference, union, xattr,
+  impl, roAttr, reference, union, xattr,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { LocationImpl } from './location';
-import { PerformanceImpl } from '../../performance/performance';
 import { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
 
 /*
@@ -90,6 +89,14 @@ export class WindowImpl
     this.#location = new LocationImpl(url);
   }
 
+  get window(): Window & typeof globalThis {
+    return WindowImpl.getWindowProxy(this) as Window & typeof globalThis;
+  }
+
+  get self(): Window & typeof globalThis {
+    return WindowImpl.getWindowProxy(this) as Window & typeof globalThis;
+  }
+
   get document(): Document {
     return asDocument(WindowImpl.getAssociatedDocument(this));
   }
@@ -124,37 +131,42 @@ export class WindowImpl
     ).getComputedStyle(element);
   };
 
-  readonly setTimeout = (
+  setTimeout(
     handler: TimerHandler,
     timeout?: number,
     ...args: unknown[]
-  ): number => {
+  ): number {
     return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setTimeout(
       createTimerAction(this, handler),
       timeout ?? 0,
       args,
     );
-  };
+  }
 
-  readonly clearTimeout = (id?: number): void => {
+  clearTimeout(id?: number): void {
     WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
-  };
+  }
 
-  readonly setInterval = (
+  setInterval(
     handler: TimerHandler,
     timeout?: number,
     ...args: unknown[]
-  ): number => {
+  ): number {
     return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).setInterval(
       createTimerAction(this, handler),
       timeout ?? 0,
       args,
     );
-  };
+  }
 
-  readonly clearInterval = (id?: number): void => {
+  clearInterval(id?: number): void {
     WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).clearTimer(id ?? 0);
-  };
+  }
+
+  queueMicrotask(callback: VoidFunction): void {
+    WindowImpl.getWindowOrWorkerGlobalScopeMixin(this)
+      .queueMicrotask(callback);
+  }
 
   // -- Friends ----------------------------------------------------------
 
@@ -171,10 +183,6 @@ export class WindowImpl
 
   static getCurrentEvent(window: WindowImpl): Event | undefined {
     return window.#currentEvent;
-  }
-
-  static getLocationImplementation(window: WindowImpl): LocationImpl {
-    return window.#location;
   }
 
   static getWindowOrWorkerGlobalScopeMixin(
@@ -257,47 +265,33 @@ export class WindowImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const windowIDL = defineInterface({
-  binding: bind(WindowImpl, {
-    initialize(context, value) {
-      const window = value as WindowImpl;
-      const globalScopeMixin = WindowImpl.getWindowOrWorkerGlobalScopeMixin(
-        window,
-      );
-      context.objects.project(
-        LocationImpl,
-        WindowImpl.getLocationImplementation(window),
-      );
-      context.objects.project(
-        PerformanceImpl,
-        WindowOrWorkerGlobalScopeMixin.getPerformanceImplementation(
-          globalScopeMixin,
-        ),
-      );
-    },
-  }),
+  name: 'Window',
+  inherits: 'EventTarget',
   exposed: 'Window',
   ...xattr(
     ['Global', 'Window'],
     'LegacyUnenumerableNamedProperties',
   ),
-  inherits: 'EventTarget',
+  implementation: impl(WindowImpl),
   members: [
-    readonlyAttr('window', reference('WindowProxy'), bind({
-      get() { return WindowImpl.getWindowProxy(this as WindowImpl); },
-    }, xattr('LegacyUnforgeable'))),
-    readonlyAttr('self', reference('WindowProxy'), bind({
-      get() { return WindowImpl.getWindowProxy(this as WindowImpl); },
-    }, xattr('Replaceable'))),
-    readonlyAttr(
+    roAttr(
+      'window',
+      reference('WindowProxy'),
+      xattr('LegacyUnforgeable'),
+    ),
+    roAttr('self', reference('WindowProxy'), xattr('Replaceable')),
+    roAttr(
       'document',
       reference('Document'),
       xattr('LegacyUnforgeable'),
     ),
-    readonlyAttr(
+    roAttr(
       'location',
       reference('Location'),
       xattr(['PutForwards', 'href'], 'LegacyUnforgeable'),
     ),
+    // Web IDL's unnamed getter has no implementation member name to bind
+    // automatically, and Window supplies its dynamic supported-name set.
     op(undefined, idlType.object, [arg('name', idlType.DOMString)], bind({
       getSupportedPropertyNames() {
         return WindowImpl.getSupportedPropertyNames(this as WindowImpl);
@@ -309,16 +303,15 @@ export const windowIDL = defineInterface({
       special: 'getter',
     })),
   ],
-  name: 'Window',
 });
 
 export const windowEventIDL = definePartialInterface({
+  name: 'Window',
   exposed: 'Window',
-  members: [readonlyAttr('event', union(
+  members: [roAttr('event', union(
     reference('Event'),
     idlType.undefined,
   ), xattr('Replaceable'))],
-  name: 'Window',
 });
 
 /*
@@ -351,11 +344,8 @@ function createTimerAction(
     };
   }
 
+  const callbackThisValue = WindowImpl.getWindowProxy(window);
   return (argumentsList) => {
-    Reflect.apply(
-      handler,
-      WindowImpl.getWindowProxy(window),
-      argumentsList,
-    );
+    Reflect.apply(handler, callbackThisValue, argumentsList);
   };
 }

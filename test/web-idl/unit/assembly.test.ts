@@ -11,18 +11,18 @@ import {
 describe('Web IDL definition assembly', () => {
   it('resolves inheritance and partial interfaces independently of order', () => {
     const partial = definePartialInterface({
+      name: 'Child',
       members: [{
         arguments: [], kind: 'operation', name: 'partialOperation',
         returns: idlType.undefined,
       }],
-      name: 'Child',
     });
     const child = defineInterface({
+      name: 'Child',
       inherits: 'Parent',
       members: [],
-      name: 'Child',
     });
-    const parent = defineInterface({ members: [], name: 'Parent' });
+    const parent = defineInterface({ name: 'Parent', members: [] });
 
     const definitions = assembleDefinitions([partial, child, parent]);
     const assembled = definitions.getInterface('Child');
@@ -37,15 +37,15 @@ describe('Web IDL definition assembly', () => {
   });
 
   it('assembles partial mixins in includes-statement order', () => {
-    const host = defineInterface({ members: [], name: 'Host' });
-    const first = defineInterfaceMixin({ members: [], name: 'First' });
-    const second = defineInterfaceMixin({ members: [], name: 'Second' });
+    const host = defineInterface({ name: 'Host', members: [] });
+    const first = defineInterfaceMixin({ name: 'First', members: [] });
+    const second = defineInterfaceMixin({ name: 'Second', members: [] });
     const secondPartial = definePartialInterfaceMixin({
+      name: 'Second',
       members: [{
         arguments: [], kind: 'operation', name: 'extended',
         returns: idlType.undefined,
       }],
-      name: 'Second',
     });
     const includeSecond = defineIncludes({ interface: 'Host', mixin: 'Second' });
     const includeFirst = defineIncludes({ interface: 'Host', mixin: 'First' });
@@ -73,11 +73,11 @@ describe('Web IDL definition assembly', () => {
 
   it('keeps callback interfaces distinct from interfaces', () => {
     const callback = defineCallbackInterface({
+      name: 'EventListener',
       members: [{
         arguments: [], kind: 'operation', name: 'handleEvent',
         returns: idlType.undefined,
       }],
-      name: 'EventListener',
     });
     const definitions = assembleDefinitions([callback]);
 
@@ -88,18 +88,18 @@ describe('Web IDL definition assembly', () => {
 
   it('assembles primary and partial namespace members without reordering', () => {
     const primary = defineNamespace({
+      name: 'Namespace',
       members: [{
         arguments: [], kind: 'operation', name: 'first',
         returns: idlType.undefined,
       }],
-      name: 'Namespace',
     });
     const partial = definePartialNamespace({
+      name: 'Namespace',
       members: [{
         arguments: [], kind: 'operation', name: 'second',
         returns: idlType.undefined,
       }],
-      name: 'Namespace',
     });
 
     const definitions = assembleDefinitions([partial, primary]);
@@ -117,22 +117,22 @@ describe('Web IDL definition assembly', () => {
 
   it('orders inherited and partial dictionary members per Web IDL', () => {
     const b = defineDictionary({
+      name: 'B',
       inherits: 'A',
       members: [member('b'), member('a')],
-      name: 'B',
     });
     const a = defineDictionary({
-      members: [member('c'), member('g')],
       name: 'A',
+      members: [member('c'), member('g')],
     });
     const c = defineDictionary({
+      name: 'C',
       inherits: 'B',
       members: [member('e'), member('f')],
-      name: 'C',
     });
     const partialA = definePartialDictionary({
-      members: [member('h'), member('d')],
       name: 'A',
+      members: [member('h'), member('d')],
     });
 
     const definitions = assembleDefinitions([b, a, c, partialA]);

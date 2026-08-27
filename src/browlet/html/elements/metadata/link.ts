@@ -5,7 +5,7 @@ import { HTML_NAMESPACE } from '../../../../shared/namespaces';
 import {
   defineIncludes, defineInterface,
 } from '../../../../web-idl/declaration/index';
-import { bind } from '../../../../web-idl/index';
+import { impl } from '../../../../web-idl/index';
 import { withHTMLLinkElementStub } from '../../../stubs';
 import { HTMLElementImpl } from '../html-element';
 
@@ -64,11 +64,11 @@ export class HTMLLinkElementImpl
 // -- Web IDL ------------------------------------------------------------
 
 export const htmlLinkElementIDL = defineInterface({
-  binding: bind(HTMLLinkElementImpl),
-  exposed: 'Window',
-  inherits: 'HTMLElement',
-  members: [],
   name: 'HTMLLinkElement',
+  inherits: 'HTMLElement',
+  exposed: 'Window',
+  implementation: impl(HTMLLinkElementImpl),
+  members: [],
 });
 
 export const htmlLinkElementInterface = defineElementInterface({
