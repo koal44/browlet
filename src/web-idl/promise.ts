@@ -54,6 +54,10 @@ export function rejectPromise(
   promise.reject(reason);
 }
 
+export function isPromiseUnresolved(promise: IDLPromise): boolean {
+  return !promise.resolved;
+}
+
 export function reactToPromise(
   promise: IDLPromise,
   resultType: WebIDLType,

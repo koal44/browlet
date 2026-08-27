@@ -10,7 +10,8 @@ import {
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 import {
   createPromise, createRejectedPromise, createResolvedPromise,
-  getPromiseForWaitingForAll, markPromiseAsHandled, reactToPromise,
+  getPromiseForWaitingForAll, isPromiseUnresolved, markPromiseAsHandled,
+  reactToPromise, resolvePromise,
   uponPromiseFulfillment, uponPromiseRejection, waitForAll,
 } from '../../../src/web-idl/promise';
 import {
@@ -83,6 +84,28 @@ describe('Web IDL promises', () => {
     );
     await expect(toJavaScriptPromise(failedConversion)).rejects
       .toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it('tracks capability resolution rather than native promise settlement', async () => {
+    const { binding } = createBinding();
+    let resolveAdopted: ((value: string) => void) | undefined;
+    const adopted = new Promise<string>((resolve) => {
+      resolveAdopted = resolve;
+    });
+    const capability = createPromise(idlType.any, binding);
+    let settled = false;
+    void toJavaScriptPromise(capability).then(() => {
+      settled = true;
+    });
+
+    expect(isPromiseUnresolved(capability)).toBe(true);
+    resolvePromise(capability, adopted, binding);
+    expect(isPromiseUnresolved(capability)).toBe(false);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveAdopted?.('adopted');
+    await expect(toJavaScriptPromise(capability)).resolves.toBe('adopted');
   });
 
   it('runs fulfillment and rejection steps in the promise realm', async () => {

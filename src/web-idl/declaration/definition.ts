@@ -620,6 +620,7 @@ export type IterableMember = {
 
 export type AsyncIterableMember = {
   arguments?: ArgumentDefinition[];
+  binding?: LanguageBinding<'async-iterable'>;
   exposed?: Exposure;
   extendedAttributes?: ExtendedAttribute[];
   kind: 'async-iterable';
@@ -954,6 +955,7 @@ type IterableOptions = {
 
 type AsyncIterableOptions = {
   arguments?: ArgumentDefinition[];
+  binding?: LanguageBinding<'async-iterable'>;
   exposed?: Exposure;
   extendedAttributes?: ExtendedAttribute[];
   key?: WebIDLType;

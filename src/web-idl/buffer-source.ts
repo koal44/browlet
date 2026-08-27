@@ -245,7 +245,7 @@ function getViewedArrayBuffer(
   ) as object;
 }
 
-function getBufferSourceByteOffset(value: object): number {
+export function getBufferSourceByteOffset(value: object): number {
   const name = requireBufferTypeName(value);
   if (!isBufferViewTypeName(name)) return 0;
   return Reflect.apply(
