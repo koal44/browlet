@@ -1,3 +1,4 @@
+// @rollup-cycle streams-readable
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   idlType, impl, op, promise, reference,

@@ -38,6 +38,12 @@ comment.
   import cycle; symbol-keyed data properties would be reflectable. Cache a slot
   record within hot algorithms, and benchmark sustained writable and byte-stream
   workloads before considering a different representation.
+- The Readable/BYOB and Transform module cycles are inherited from the WHATWG
+  reference implementation's class/algorithm split, not introduced by Browlet.
+  Imported class bindings are dereferenced only after module evaluation, when a
+  stream operation runs; there is no top-level cross-cycle execution.
+  Participating modules acknowledge their cycle group on their first line. The
+  build accepts a cycle only when every module names the same group.
 - Ambient `Promise`, `queueMicrotask`, errors, buffer constructors, and
   `AbortController` must be replaced by relevant-realm or injected host
   capabilities as their algorithms are ported.

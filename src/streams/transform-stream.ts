@@ -1,3 +1,4 @@
+// @rollup-cycle streams-transform
 import {
   arg, callback, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, promise,
