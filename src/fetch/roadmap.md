@@ -68,9 +68,9 @@ When an algorithm reaches a missing external dependency:
 | DOM abort algorithms | Fetch §§2.2 and 5.4–5.6 | Implemented through DOM §3 | Consume through a narrow Fetch host capability; never expose Node's `AbortSignal` |
 | HTML structured data | Fetch §2 controller abort steps | Implemented through HTML §2.7 | Serialize abort reasons through the existing capability boundary |
 | Streams | Fetch §2.2.4 | Ordinary Readable, Writable, and Transform Streams are implemented; Fetch's cross-specification tee clone is connected to HTML structured cloning | Transferable Streams and MessagePort are not Fetch prerequisites |
-| Parallel queues and task destinations | Fetch §§2.2 and 2.2.4 | Global task destinations and the networking task source exist; HTML §2.1.1 parallel queues do not | Add the generic serial parallel-queue primitive under `scripting/`; Fetch retains its own task-destination union and queue-fetch-task algorithm |
+| Parallel queues and task destinations | Fetch §§2.2 and 2.2.4 | HTML §2.1.1 parallel queues are implemented in `src/shared`; global task destinations and the networking task source also exist | Fetch retains its own task-destination union and queue-fetch-task algorithm |
 | Encoding | Fetch §§2.2.4 and 5.2–5.3 | `@exodus/bytes` supplies useful encoding algorithms, but Browlet has no Encoding-owned projection | Establish UTF-8 encode/decode hooks for body work; add a Browlet `TextDecoderStream` before exposing `Body.textStream()` |
-| MIME types | Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6 | MIME Sniffing §4 is implemented in `src/mime` | Consume the host-neutral MIME records and algorithms directly; defer signature sniffing until a consuming Fetch branch reaches it |
+| MIME types | Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6 | MIME Sniffing §§1–8 are implemented in `src/mime` | Consume the host-neutral MIME records and algorithms directly; consumer-specific missing-type policy remains with its loader |
 | Blob and File | Fetch §§2.2.4, 4.3, and 5.2–5.3 | Not implemented | Add the File API objects, stream access, slicing, type/size state, and HTML structured-data capabilities before exposing the complete Body family or `blob:` fetching |
 | FormData and multipart data | Fetch §§2.2.4 and 5.2–5.3 | Not implemented | Add XHR's FormData entry-list model and multipart encoding/parsing as a bounded prerequisite to the complete Body family |
 | High Resolution Time | Fetch §2 timing records and §4 timing steps | Environment timing and a shared monotonic clock exist | Keep Fetch timing records host-neutral; Browlet supplies the clock and later Resource Timing reporting |
@@ -288,11 +288,11 @@ Complete these bounded prerequisites before beginning Fetch Slice 1. Keep each
 step independently reviewable and committable; do not fold unrelated platform
 work into a generic Fetch-foundations commit.
 
-### Preflight 1 — MIME type core
+### Preflight 1 — MIME sniffing
 
 **Status:** Complete in `src/mime`.
 
-**Specification:** MIME Sniffing §4, “MIME types”, especially §§4.1–4.6.
+**Specification:** MIME Sniffing §§1–8.
 **First Fetch consumers:** Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6.
 
 Implement:
@@ -311,20 +311,14 @@ records and algorithms; it must not grow a private MIME parser.
 parameters, essence, and required group predicates agree with focused WPTs and
 browser oracles.
 
-After the core passes, explicitly choose whether to stop or continue through
-the remaining MIME Sniffing sections. Continuing is allowed, but is an optional
-MIME project rather than a Fetch prerequisite. A full continuation should
-remain in document order:
-
-1. MIME Sniffing §5, handling a resource and interpreting metadata.
-2. MIME Sniffing §6, matching MIME type patterns and binary signatures.
-3. MIME Sniffing §7, determining a resource's computed MIME type.
-4. MIME Sniffing §8, context-specific sniffing.
-
-Do not make Fetch wait for those later sections unless an implemented Fetch
-algorithm actually consumes one of them.
+The implementation continued through resource metadata, bounded resource
+headers, byte-pattern matching, computed types, and context-specific sniffing.
+Fetch should consume only the algorithms reached by its normative branches;
+the completed surface does not make every loader policy a Fetch concern.
 
 ### Preflight 2 — parallel queue
+
+**Status:** Complete in `src/shared/parallel-queue.ts`.
 
 **Specification:** HTML §2.1.1, “Parallelism”.
 **First Fetch consumers:** Fetch's opening §2 task-destination and
