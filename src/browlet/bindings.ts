@@ -1,18 +1,21 @@
 import { domIDLDefinitions } from './dom/web-idl';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
+import { streamStructuredData } from '../streams/environment';
 import { urlIDLDefinitions } from '../url/api';
 import {
-  registerInterfaceBindings, type InterfaceBindingDomain,
-  type RegisteredRealmInterfaceBindings,
+  createBindings, type Bindings, type RealmBindings,
 } from '../web-idl/index';
 import { Realm } from './scripting/realm';
-import type { WindowImpl } from './browsing/window/window';
+import { WindowImpl, windowIDL } from './browsing/window/window';
 import {
   isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow,
   type WindowProxy,
 } from './browsing/window/window-proxy';
 import { browletIDLDefinitions } from './web-idl';
+import {
+  domExceptionCapabilities,
+} from './scripting/structured-data/platform-objects/dom-exception';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -21,21 +24,24 @@ import { browletIDLDefinitions } from './web-idl';
  * installed on its Window environment.
  */
 export class BrowletBindings {
-  readonly #domain: InterfaceBindingDomain;
+  readonly #bindings: Bindings;
 
   constructor() {
-    this.#domain = registerInterfaceBindings(
+    this.#bindings = createBindings(
       browletDefinitions,
-      { hostDefinedInterfaces },
+      {
+        capabilities: structuredDataCapabilities,
+        hostDefinedInterfaces,
+      },
     );
   }
 
-  register(realm: Realm): RegisteredRealmInterfaceBindings {
-    return this.#domain.register(realm);
+  register(realm: Realm): RealmBindings {
+    return this.#bindings.register(realm);
   }
 
-  forRealm(realm: Realm): RegisteredRealmInterfaceBindings {
-    const bindings = this.#domain.forRealm(realm);
+  forRealm(realm: Realm): RealmBindings {
+    const bindings = this.#bindings.forRealm(realm);
     if (!bindings) throw new Error('Realm has no Browlet binding');
     return bindings;
   }
@@ -44,7 +50,7 @@ export class BrowletBindings {
     windowProxy: WindowProxy,
     window: WindowImpl,
   ): void {
-    const windowObject = this.#domain.getPlatformObject(window);
+    const windowObject = this.#bindings.getPlatformObject(window);
     if (!windowObject) throw new Error('Window has not been projected');
     setWindowProxyWindow(
       windowProxy,
@@ -54,7 +60,7 @@ export class BrowletBindings {
   }
 
   getRelevantRealm(value: object): Realm {
-    const platformRealm = this.#domain.getRealm(value);
+    const platformRealm = this.#bindings.getRealm(value);
     if (platformRealm instanceof Realm) return platformRealm;
 
     const realm = Realm.getAssociatedRealm(value);
@@ -64,7 +70,7 @@ export class BrowletBindings {
 }
 
 export function projectWindow(
-  bindings: RegisteredRealmInterfaceBindings,
+  bindings: RealmBindings,
   window: WindowImpl,
 ): Window {
   return bindings.projectGlobalObject(window, 'Window') as Window;
@@ -79,6 +85,19 @@ const hostDefinedInterfaces = [{
   name: 'WindowProxy',
   resolveReceiver: resolveWindowProxyReceiver,
 }];
+
+const structuredDataCapabilities = [
+  ...domExceptionCapabilities,
+  streamStructuredData.for(windowIDL, {
+    clone(global, value) {
+      if (!WindowImpl.is(global)) {
+        throw new TypeError('Streams structured data requires a Window global');
+      }
+      return WindowImpl.getWindowOrWorkerGlobalScopeMixin(global)
+        .structuredClone(value);
+    },
+  }),
+];
 
 const browletDefinitions = [
   ...browletIDLDefinitions,

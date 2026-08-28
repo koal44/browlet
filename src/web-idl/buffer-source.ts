@@ -48,10 +48,13 @@ export function convertBufferSourceToJavaScript(
 export function createArrayBuffer(
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
+  maxByteLength?: number,
 ): object {
   const buffer = Reflect.construct(
     realm.intrinsics.bufferSource.arrayBuffer,
-    [bytes.length],
+    maxByteLength === undefined
+      ? [bytes.length]
+      : [bytes.length, { maxByteLength }],
   ) as object;
   writeArrayBuffer(buffer, bytes);
   return buffer;
@@ -60,14 +63,41 @@ export function createArrayBuffer(
 export function createSharedArrayBuffer(
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
+  maxByteLength?: number,
 ): object {
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
   if (!constructor) {
     throw new Error('The target realm has no SharedArrayBuffer intrinsic');
   }
-  const buffer = Reflect.construct(constructor, [bytes.length]) as object;
+  const buffer = Reflect.construct(
+    constructor,
+    maxByteLength === undefined
+      ? [bytes.length]
+      : [bytes.length, { maxByteLength }],
+  ) as object;
   writeArrayBuffer(buffer, bytes);
   return buffer;
+}
+
+export function cloneSharedArrayBuffer(
+  buffer: object,
+  realm: WebIDLRealmHost,
+): object {
+  if (getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
+    throw new Error('Only a SharedArrayBuffer can share its backing store');
+  }
+  const clone = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
+  if (getBufferTypeName(clone) !== 'SharedArrayBuffer') {
+    throw new Error('The host did not clone a SharedArrayBuffer');
+  }
+  const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
+  if (!constructor) {
+    throw new Error('The target realm has no SharedArrayBuffer intrinsic');
+  }
+  if (!Reflect.setPrototypeOf(clone, constructor.prototype)) {
+    throw new Error('Could not apply the target SharedArrayBuffer prototype');
+  }
+  return clone;
 }
 
 export function createArrayBufferView(
@@ -83,9 +113,44 @@ export function createArrayBufferView(
   if (!constructor) {
     throw new Error(`The target realm has no ${name} intrinsic`);
   }
+  return createArrayBufferViewFromBuffer(
+    name,
+    createArrayBuffer(bytes, realm),
+    0,
+    bytes.length,
+    name === 'DataView' ? undefined : bytes.length / elementSize,
+    realm,
+  );
+}
+
+export function createArrayBufferViewFromBuffer(
+  name: BufferViewTypeName,
+  buffer: object,
+  byteOffset: number,
+  byteLength: number | 'auto',
+  arrayLength: number | 'auto' | undefined,
+  realm: WebIDLRealmHost,
+): object {
+  const constructor = realm.intrinsics.bufferSource.views[name];
+  if (!constructor) {
+    throw new Error(`The target realm has no ${name} intrinsic`);
+  }
+  if (name === 'DataView') {
+    return Reflect.construct(
+      constructor,
+      byteLength === 'auto'
+        ? [buffer, byteOffset]
+        : [buffer, byteOffset, byteLength],
+    ) as object;
+  }
+  if (arrayLength === undefined) {
+    throw new Error(`${name} has no serialized array length`);
+  }
   return Reflect.construct(
     constructor,
-    [createArrayBuffer(bytes, realm)],
+    arrayLength === 'auto'
+      ? [buffer, byteOffset]
+      : [buffer, byteOffset, arrayLength],
   ) as object;
 }
 
@@ -118,6 +183,70 @@ export function getBufferSourceByteLength(value: object): number {
     value,
     [],
   ) as number;
+}
+
+/** Reads the backing buffer's resizability metadata for HTML §2.7.3. */
+export function getBufferSourceMaxByteLength(
+  value: object,
+): number | undefined {
+  const buffer = getBufferSourceUnderlyingBuffer(value);
+  if (!isResizableBuffer(buffer)) return;
+  return Reflect.apply(
+    isSharedArrayBuffer(buffer)
+      ? requireSharedArrayBufferMaxByteLengthAccessor()
+      : arrayBufferMaxByteLength,
+    buffer,
+    [],
+  ) as number;
+}
+
+/** Reads a typed array's current numeric [[ArrayLength]] for HTML §2.7.3. */
+export function getBufferSourceArrayLength(
+  value: object,
+): number | undefined {
+  const name = requireBufferTypeName(value);
+  if (!isBufferViewTypeName(name) || name === 'DataView') return;
+  return Reflect.apply(typedArrayLength, value, []) as number;
+}
+
+/** Reads the view length slots serialized by HTML §2.7.3. */
+export function getBufferSourceViewLengths(
+  value: object,
+): BufferSourceViewLengths {
+  const name = requireBufferTypeName(value);
+  if (!isBufferViewTypeName(name)) {
+    throw new Error(`${name} is not a buffer view type`);
+  }
+  if (isLengthTrackingResizableArrayBufferView(value, name)) {
+    return name === 'DataView'
+      ? { byteLength: 'auto' }
+      : { byteLength: 'auto', arrayLength: 'auto' };
+  }
+  return name === 'DataView'
+    ? { byteLength: getBufferSourceByteLength(value) }
+    : {
+      byteLength: getBufferSourceByteLength(value),
+      arrayLength: getBufferSourceArrayLength(value),
+    };
+}
+
+/** Implements IsArrayBufferViewOutOfBounds for HTML §2.7.3. */
+export function isBufferSourceViewOutOfBounds(value: object): boolean {
+  const name = requireBufferTypeName(value);
+  if (!isBufferViewTypeName(name)) return false;
+  try {
+    if (name === 'DataView') {
+      Reflect.apply(dataViewByteLength, value, []);
+    } else {
+      // The numeric view accessors collapse out-of-bounds views to zero. The
+      // intrinsic setter performs ValidateTypedArray before observing the
+      // empty source and therefore validates without allocating or mutating.
+      Reflect.apply(typedArraySet, value, [emptyArray]);
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 export function getBufferSourceUnderlyingBuffer(value: object): object {
@@ -214,6 +343,11 @@ export function transferArrayBuffer(
 
 export type ByteSequence = Uint8Array | readonly number[];
 
+export type BufferSourceViewLengths = {
+  byteLength: number | 'auto';
+  arrayLength?: number | 'auto';
+};
+
 export function getBufferTypeName(value: object): BufferTypeName | undefined {
   if (hasInternalSlot(value, arrayBufferByteLength)) return 'ArrayBuffer';
   if (
@@ -302,6 +436,64 @@ function isResizableBuffer(value: object): boolean {
     : false;
 }
 
+function isLengthTrackingResizableArrayBufferView(
+  value: object,
+  name: BufferViewTypeName,
+): boolean {
+  const buffer = getViewedArrayBuffer(value, name);
+  if (isSharedArrayBuffer(buffer) || !isResizableBuffer(buffer)) return false;
+
+  const bufferByteLength = getBufferSourceByteLength(buffer);
+  const byteOffset = getBufferSourceByteOffset(value);
+  const byteLength = getBufferSourceByteLength(value);
+  const elementSize = bufferViewElementSizes[name];
+  const automaticByteLength = Math.floor(
+    (bufferByteLength - byteOffset) / elementSize,
+  ) * elementSize;
+  if (byteLength !== automaticByteLength) return false;
+
+  const maxByteLength = getBufferSourceMaxByteLength(buffer);
+  if (maxByteLength === undefined) {
+    throw new Error('A resizable ArrayBuffer has no maximum byte length');
+  }
+
+  const remainder = (bufferByteLength - byteOffset) % elementSize;
+  const growth = elementSize - remainder;
+  if (bufferByteLength + growth <= maxByteLength) {
+    resizeArrayBuffer(buffer, bufferByteLength + growth);
+    try {
+      return getBufferSourceByteLength(value) !== byteLength;
+    } finally {
+      resizeArrayBuffer(buffer, bufferByteLength);
+    }
+  }
+
+  // A fixed and an auto-length zero-sized view are observably equivalent when
+  // the buffer can never grow enough to contain another complete element.
+  if (byteLength === 0) return false;
+
+  const probeByteLength = byteOffset + byteLength - 1;
+  const removedBytes = Uint8Array.from(new Uint8Array(
+    buffer as ArrayBuffer,
+    probeByteLength,
+    bufferByteLength - probeByteLength,
+  ));
+  resizeArrayBuffer(buffer, probeByteLength);
+  try {
+    return !isBufferSourceViewOutOfBounds(value);
+  } finally {
+    resizeArrayBuffer(buffer, bufferByteLength);
+    writeArrayBuffer(buffer, removedBytes, probeByteLength);
+  }
+}
+
+function resizeArrayBuffer(buffer: object, byteLength: number): void {
+  if (!arrayBufferResize) {
+    throw new Error('Resizable ArrayBuffer operations are unavailable');
+  }
+  Reflect.apply(arrayBufferResize, buffer, [byteLength]);
+}
+
 function isSharedArrayBuffer(value: object): boolean {
   return sharedArrayBufferByteLength !== undefined &&
     hasInternalSlot(value, sharedArrayBufferByteLength);
@@ -362,6 +554,16 @@ const arrayBufferResizable = getOptionalAccessor(
   'resizable',
 );
 
+const arrayBufferMaxByteLength = getAccessor(
+  ArrayBuffer.prototype,
+  'maxByteLength',
+);
+
+const arrayBufferResize = Reflect.get(
+  ArrayBuffer.prototype,
+  'resize',
+) as ((this: object, byteLength: number) => void) | undefined;
+
 const arrayBufferDetached = getOptionalAccessor(
   ArrayBuffer.prototype,
   'detached',
@@ -380,6 +582,14 @@ const sharedArrayBufferGrowable = typeof SharedArrayBuffer === 'undefined'
     SharedArrayBuffer.prototype,
     'growable',
   );
+
+const sharedArrayBufferMaxByteLength =
+  typeof SharedArrayBuffer === 'undefined'
+    ? undefined
+    : getOptionalAccessor(
+      SharedArrayBuffer.prototype,
+      'maxByteLength',
+    );
 
 const dataViewBuffer = getAccessor(
   DataView.prototype,
@@ -415,6 +625,18 @@ const typedArrayByteOffset = getAccessor(
   'byteOffset',
 );
 
+const typedArrayLength = getAccessor(
+  typedArrayPrototype,
+  'length',
+);
+
+const typedArraySet = Reflect.get(
+  typedArrayPrototype,
+  'set',
+) as (this: object, source: readonly unknown[]) => void;
+
+const emptyArray = Object.freeze([]);
+
 const typedArrayName = getAccessor(
   typedArrayPrototype,
   Symbol.toStringTag,
@@ -434,6 +656,15 @@ function requireSharedArrayBufferAccessor(): (this: object) => unknown {
     throw new Error('SharedArrayBuffer is unavailable');
   }
   return sharedArrayBufferByteLength;
+}
+
+function requireSharedArrayBufferMaxByteLengthAccessor(): (
+  this: object,
+) => unknown {
+  if (!sharedArrayBufferMaxByteLength) {
+    throw new Error('SharedArrayBuffer maxByteLength is unavailable');
+  }
+  return sharedArrayBufferMaxByteLength;
 }
 
 function getOptionalAccessor(

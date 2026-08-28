@@ -168,6 +168,14 @@ export class WindowImpl
       .queueMicrotask(callback);
   }
 
+  structuredClone<T>(
+    value: T,
+    options?: StructuredSerializeOptions,
+  ): T {
+    return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this)
+      .structuredClone(value, options) as T;
+  }
+
   // -- Friends ----------------------------------------------------------
 
   static is(value: unknown): value is WindowImpl {

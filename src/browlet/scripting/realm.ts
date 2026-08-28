@@ -80,12 +80,41 @@ export class Realm implements WebIDLRealmHost {
       this.#hostGlobal,
       'ArrayBuffer',
     ) as ArrayBufferConstructor;
+    const Boolean_ = Reflect.get(
+      this.#hostGlobal,
+      'Boolean',
+    ) as BooleanConstructor;
+    const Date_ = Reflect.get(this.#hostGlobal, 'Date') as DateConstructor;
     const Error_ = Reflect.get(this.#hostGlobal, 'Error') as ErrorConstructor;
+    const errorStack = Reflect.getOwnPropertyDescriptor(
+      Reflect.construct(Error_, []),
+      'stack',
+    )?.get;
+    const EvalError_ = Reflect.get(
+      this.#hostGlobal,
+      'EvalError',
+    ) as EvalErrorConstructor;
     const Array_ = Reflect.get(this.#hostGlobal, 'Array') as ArrayConstructor;
     const Object_ = Reflect.get(this.#hostGlobal, 'Object') as ObjectConstructor;
     const Promise_ = Reflect.get(this.#hostGlobal, 'Promise') as PromiseConstructor;
+    const ReferenceError_ = Reflect.get(
+      this.#hostGlobal,
+      'ReferenceError',
+    ) as ReferenceErrorConstructor;
+    const RegExp_ = Reflect.get(
+      this.#hostGlobal,
+      'RegExp',
+    ) as RegExpConstructor;
     const Map_ = Reflect.get(this.#hostGlobal, 'Map') as MapConstructor;
     const Set_ = Reflect.get(this.#hostGlobal, 'Set') as SetConstructor;
+    const SyntaxError_ = Reflect.get(
+      this.#hostGlobal,
+      'SyntaxError',
+    ) as SyntaxErrorConstructor;
+    const URIError_ = Reflect.get(
+      this.#hostGlobal,
+      'URIError',
+    ) as URIErrorConstructor;
     const arrayPrototype = Array_.prototype;
     const arrayValues = Reflect.get(
       arrayPrototype,
@@ -133,12 +162,14 @@ export class Realm implements WebIDLRealmHost {
     this.intrinsics = {
       array: Array_,
       bigInt: Reflect.get(this.#hostGlobal, 'BigInt') as BigIntConstructor,
+      boolean: Boolean_,
       bufferSource: {
         arrayBuffer: ArrayBuffer_,
         arrayBufferTransfer: Reflect.get(
           ArrayBuffer_.prototype,
           'transfer',
         ) as WebIDLRealmHost['intrinsics']['bufferSource']['arrayBufferTransfer'],
+        cloneSharedArrayBuffer: (buffer) => structuredClone(buffer),
         sharedArrayBuffer: Reflect.get(
           this.#hostGlobal,
           'SharedArrayBuffer',
@@ -150,8 +181,11 @@ export class Realm implements WebIDLRealmHost {
             : [];
         })),
       },
+      date: Date_,
       error: Error_,
       errorPrototype: Error_.prototype,
+      errorStack,
+      evalError: EvalError_,
       function: Function_,
       functionPrototype: Function_.prototype,
       iteration: {
@@ -173,6 +207,7 @@ export class Realm implements WebIDLRealmHost {
         mapIteratorPrototype,
         setIteratorPrototype,
       },
+      map: Map_,
       number: Reflect.get(this.#hostGlobal, 'Number') as NumberConstructor,
       object: Object_,
       objectPrototype: Object_.prototype,
@@ -186,8 +221,13 @@ export class Realm implements WebIDLRealmHost {
         ]['promise']['then'],
       },
       rangeError: Reflect.get(this.#hostGlobal, 'RangeError') as typeof RangeError,
+      referenceError: ReferenceError_,
+      regExp: RegExp_,
+      set: Set_,
       string: Reflect.get(this.#hostGlobal, 'String') as StringConstructor,
+      syntaxError: SyntaxError_,
       typeError: Reflect.get(this.#hostGlobal, 'TypeError') as typeof TypeError,
+      uriError: URIError_,
     };
     // TODO(HTML sections 8.1.4 and 8.1.5): Replace the synchronous
     // callback-context model and script no-ops with environment-settings and

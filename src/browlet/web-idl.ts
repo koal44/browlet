@@ -19,6 +19,9 @@ import {
 import {
   eventHandlerIDL, eventHandlerNonNullIDL,
 } from './scripting/event-handlers';
+import {
+  structuredSerializeOptionsIDL,
+} from './scripting/structured-data/web-idl';
 
 export const browletIDLDefinitions: Definition[] = [
   htmlDocumentIDL,
@@ -32,6 +35,7 @@ export const browletIDLDefinitions: Definition[] = [
   performanceIDL,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
+  structuredSerializeOptionsIDL,
   timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,

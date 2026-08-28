@@ -17,14 +17,19 @@ export type WebIDLRealmHost = {
   intrinsics: {
     array: ArrayConstructor;
     bigInt: BigIntConstructor;
+    boolean: BooleanConstructor;
     bufferSource: {
       arrayBuffer: ArrayBufferConstructor;
       arrayBufferTransfer: JavaScriptMethod;
+      cloneSharedArrayBuffer(buffer: object): object;
       sharedArrayBuffer?: SharedArrayBufferConstructor;
       views: Partial<Record<BufferViewTypeName, BufferViewConstructor>>;
     };
+    date: DateConstructor;
     error: ErrorConstructor;
     errorPrototype: object;
+    errorStack?: (this: object) => unknown;
+    evalError: EvalErrorConstructor;
     function: FunctionConstructor;
     functionPrototype: object;
     iteration: {
@@ -37,6 +42,7 @@ export type WebIDLRealmHost = {
       mapIteratorPrototype: object;
       setIteratorPrototype: object;
     };
+    map: MapConstructor;
     number: NumberConstructor;
     object: ObjectConstructor;
     objectPrototype: object;
@@ -46,8 +52,13 @@ export type WebIDLRealmHost = {
       then: JavaScriptMethod;
     };
     rangeError: typeof RangeError;
+    referenceError: ReferenceErrorConstructor;
+    regExp: RegExpConstructor;
+    set: SetConstructor;
     string: StringConstructor;
+    syntaxError: SyntaxErrorConstructor;
     typeError: typeof TypeError;
+    uriError: URIErrorConstructor;
   };
   readonly secureContext: boolean;
   createFunction(

@@ -1,0 +1,201 @@
+import { domExceptionName, throwDOMException } from '../../../shared/dom-exception';
+import {
+  getBufferSourceByteLength, getBufferSourceMaxByteLength,
+  getBufferTypeName, isBufferSourceDetached, transferArrayBuffer,
+} from '../../../web-idl/buffer-source';
+import type { StructuredDataEnvironment } from './environment';
+import {
+  createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
+  type StructuredDeserializeMemory, type StructuredSerializeMemory,
+  type StructuredSerializeWithTransferResult, type TransferDataHolder,
+  type TransferPlaceholderSerializedRecord,
+} from './records';
+import { structuredDeserialize } from './deserialize';
+import { structuredSerializeInternal } from './serialize';
+import {
+  isTransferableDetached, markTransferableDetached, transferable,
+  type TransferableSteps,
+} from './transferable';
+
+/** HTML §2.7.7, StructuredSerializeWithTransfer. */
+export function structuredSerializeWithTransfer(
+  value: unknown,
+  transferList: readonly unknown[],
+  environment: StructuredDataEnvironment,
+): StructuredSerializeWithTransferResult {
+  const memory: StructuredSerializeMemory = new Map();
+  const preparedTransfers: PreparedTransfer[] = [];
+
+  for (const valueToTransfer of transferList) {
+    const prepared = prepareTransfer(valueToTransfer, environment);
+    if (memory.has(valueToTransfer)) return throwDataCloneError();
+    memory.set(valueToTransfer, prepared.placeholder);
+    preparedTransfers.push(prepared);
+  }
+
+  const serialized = structuredSerializeInternal(
+    value,
+    false,
+    environment,
+    memory,
+  );
+  const transferDataHolders: TransferDataHolder[] = [];
+
+  for (const prepared of preparedTransfers) {
+    transferDataHolders.push(performTransfer(prepared, environment));
+  }
+
+  return { serialized, transferDataHolders };
+}
+
+/** HTML §2.7.8, StructuredDeserializeWithTransfer. */
+export function structuredDeserializeWithTransfer(
+  result: StructuredSerializeWithTransferResult,
+  environment: StructuredDataEnvironment,
+): StructuredDeserializeWithTransferResult {
+  const memory: StructuredDeserializeMemory = new Map();
+  const transferredValues: unknown[] = [];
+
+  for (const dataHolder of result.transferDataHolders) {
+    const value = receiveTransfer(dataHolder, environment);
+    memory.set(dataHolder.placeholder, value);
+    transferredValues.push(value);
+  }
+
+  return {
+    deserialized: structuredDeserialize(
+      result.serialized,
+      environment,
+      memory,
+    ),
+    transferredValues,
+  };
+}
+
+function prepareTransfer(
+  value: unknown,
+  environment: StructuredDataEnvironment,
+): PreparedTransfer {
+  if (!isObject(value)) return throwDataCloneError();
+  const bufferType = getBufferTypeName(value);
+  const placeholder: TransferPlaceholderSerializedRecord = {
+    type: 'transfer-placeholder',
+  };
+  if (bufferType === 'ArrayBuffer') {
+    return { kind: 'ArrayBuffer', placeholder, value };
+  }
+  if (bufferType === 'SharedArrayBuffer') return throwDataCloneError();
+  if (bufferType !== undefined) return throwDataCloneError();
+
+  const platformObject = environment.interfaces.resolve(value);
+  if (!platformObject) return throwDataCloneError();
+  const steps = environment.interfaces.getCapability(
+    platformObject.primaryInterface,
+    transferable,
+  );
+  if (!steps) return throwDataCloneError();
+  return {
+    implementation: platformObject.implementation,
+    interfaceName: platformObject.primaryInterface.name,
+    kind: 'platform-object',
+    placeholder,
+    steps,
+  };
+}
+
+function performTransfer(
+  prepared: PreparedTransfer,
+  environment: StructuredDataEnvironment,
+): TransferDataHolder {
+  if (prepared.kind === 'ArrayBuffer') {
+    if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
+    const byteLength = getBufferSourceByteLength(prepared.value);
+    const maxByteLength = getBufferSourceMaxByteLength(prepared.value);
+    return {
+      type: maxByteLength === undefined
+        ? 'ArrayBuffer'
+        : 'ResizableArrayBuffer',
+      placeholder: prepared.placeholder,
+      buffer: transferArrayBuffer(prepared.value, environment.realm),
+      byteLength,
+      ...(maxByteLength === undefined ? {} : { maxByteLength }),
+    };
+  }
+
+  if (isTransferableDetached(prepared.implementation)) {
+    return throwDataCloneError();
+  }
+  const fields = createStructuredDataRecord();
+  prepared.steps.transferSteps(prepared.implementation, fields);
+  markTransferableDetached(prepared.implementation);
+  return {
+    type: 'platform-object',
+    placeholder: prepared.placeholder,
+    interfaceName: prepared.interfaceName,
+    fields,
+  };
+}
+
+function receiveTransfer(
+  dataHolder: TransferDataHolder,
+  environment: StructuredDataEnvironment,
+): unknown {
+  if (dataHolder.type === 'platform-object') {
+    const interface_ = environment.interfaces.getDefinition(
+      dataHolder.interfaceName,
+    );
+    if (!interface_ || !environment.interfaces.isExposed(interface_)) {
+      return throwDataCloneError();
+    }
+    const platformObject = environment.interfaces.create(interface_);
+    const steps = environment.interfaces.getCapability(
+      platformObject.primaryInterface,
+      transferable,
+    );
+    if (!steps) {
+      throw new Error(
+        `${platformObject.primaryInterface.name} has no Transferable capability`,
+      );
+    }
+    steps.transferReceivingSteps(
+      dataHolder.fields,
+      platformObject.implementation,
+    );
+    return platformObject.object;
+  }
+
+  const value = transferArrayBuffer(dataHolder.buffer, environment.realm);
+  if (
+    getBufferSourceByteLength(value) !== dataHolder.byteLength ||
+    getBufferSourceMaxByteLength(value) !== dataHolder.maxByteLength
+  ) {
+    throw new Error('Received ArrayBuffer does not match its data holder');
+  }
+  return value;
+}
+
+type PreparedTransfer = PreparedArrayBufferTransfer | PreparedPlatformTransfer;
+
+type PreparedArrayBufferTransfer = {
+  kind: 'ArrayBuffer';
+  placeholder: TransferPlaceholderSerializedRecord;
+  value: object;
+};
+
+type PreparedPlatformTransfer = {
+  implementation: object;
+  interfaceName: string;
+  kind: 'platform-object';
+  placeholder: TransferPlaceholderSerializedRecord;
+  steps: TransferableSteps;
+};
+
+function isObject(value: unknown): value is object {
+  return value !== null && (
+    typeof value === 'object' || typeof value === 'function'
+  );
+}
+
+function throwDataCloneError(): never {
+  return throwDOMException(domExceptionName.dataClone);
+}

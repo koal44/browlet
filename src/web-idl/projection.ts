@@ -11,7 +11,8 @@ import {
 import {
   hasExtendedAttribute, reference, type ArgumentDefinition,
   type AsyncIterableMember, type AttributeMember, type IterableMember,
-  type OperationMember, type StringifierMember, type WebIDLType,
+  type InterfaceDefinition, type OperationMember, type StringifierMember,
+  type WebIDLType,
 } from './declaration/definition';
 import type {
   CallbackExceptionBehavior, ConstructorDependencyBinding,
@@ -35,13 +36,34 @@ import {
 } from './promise';
 import { isPromiseValue } from './promise-value';
 import { getUnannotatedType } from './types';
+import type { Capability } from './capability';
+import type { PlatformObjectRecord } from './platform-object';
 
 export type InterfaceBindingContext = {
   readonly callbacks: CallbackValueAdapter;
   readonly conversions: ConversionAdapter;
   readonly exceptions: ExceptionValueAdapter;
+  readonly interfaces: InterfaceAdapter;
   readonly objects: PlatformObjectAdapter;
   readonly promises: PromiseValueAdapter;
+  readonly realm: WebIDLRealmHost;
+};
+
+export type InterfaceAdapter = {
+  create(interface_: InterfaceDefinition): BoundPlatformObject;
+  getCapability<Value>(
+    interface_: InterfaceDefinition,
+    capability: Capability<Value>,
+  ): Value | undefined;
+  getDefinition(name: string): InterfaceDefinition | undefined;
+  isExposed(interface_: InterfaceDefinition): boolean;
+  resolve(value: unknown): BoundPlatformObject | undefined;
+};
+
+export type BoundPlatformObject = {
+  readonly implementation: object;
+  readonly object: object;
+  readonly primaryInterface: InterfaceDefinition;
   readonly realm: WebIDLRealmHost;
 };
 
@@ -64,6 +86,7 @@ export type ExceptionValueAdapter = {
     name: DOMExceptionName,
     message?: string,
   ): DOMException;
+  realize(value: unknown): unknown;
 };
 
 export type PromiseValueAdapter = {
@@ -353,7 +376,61 @@ export function createPlatformObjectAdapter(
   };
 }
 
+export function createInterfaceAdapter(
+  binding: JavaScriptBinding,
+): InterfaceAdapter {
+  function resolveInterface(
+    definition: InterfaceDefinition,
+  ): AssembledInterface {
+    const interface_ = binding.definitions.getInterface(definition.name);
+    if (interface_?.definition !== definition) {
+      throw new TypeError(
+        `Unknown Web IDL interface definition ${definition.name}`,
+      );
+    }
+    return interface_;
+  }
+
+  function describe(record: PlatformObjectRecord): BoundPlatformObject {
+    return {
+      implementation: record.implementation,
+      object: record.object,
+      primaryInterface: record.primaryInterface.definition,
+      realm: record.realm,
+    };
+  }
+
+  return {
+    create(definition) {
+      const object = binding.createPlatformObject(resolveInterface(definition));
+      const record = binding.getPlatformObjectRecord(object);
+      if (!record) throw new Error('Created platform object has no record');
+      return describe(record);
+    },
+
+    getCapability(definition, capability) {
+      resolveInterface(definition);
+      return binding.capabilities.get(definition, capability);
+    },
+
+    getDefinition(name) {
+      return binding.definitions.getInterface(name)?.definition;
+    },
+
+    isExposed(definition) {
+      return binding.isExposed(resolveInterface(definition));
+    },
+
+    resolve(value) {
+      const record = binding.platformObjects.getRecord(value) ??
+        binding.platformObjects.getImplementationRecord(value);
+      return record && describe(record);
+    },
+  };
+}
+
 export function registerDefinitionBindings(binding: JavaScriptBinding): void {
+  const interfaces = createInterfaceAdapter(binding);
   const objects = createPlatformObjectAdapter(binding);
   for (const interface_ of binding.definitions.getInterfaces()) {
     const { definition } = interface_;
@@ -399,7 +476,9 @@ export function registerDefinitionBindings(binding: JavaScriptBinding): void {
           ) as unknown as typeof DOMException;
           return new DOMException_(message, name);
         },
+        realize: (value) => binding.realizeException(value),
       },
+      interfaces,
       objects,
       promises: {
         create(type) {

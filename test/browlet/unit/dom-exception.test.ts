@@ -242,7 +242,7 @@ describe('Browlet DOMException binding', () => {
     expect((exception as DOMException).name).toBe('InvalidStateError');
   });
 
-  it.fails('serializes and deserializes DOMException through structuredClone', () => {
+  it('serializes and deserializes DOMException through structuredClone', () => {
     const browlet = createBrowlet();
     const DOMException_ = getConstructor<typeof DOMException>(
       browlet,

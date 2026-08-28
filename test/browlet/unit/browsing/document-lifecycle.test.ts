@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BrowsingContext,
 } from '../../../../src/browlet/browsing/browsing-context';
-import { getRelevantRealm } from '../../../../src/browlet/bindings';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../../../src/browlet/bindings';
 import { Browlet } from '../../../../src/browlet/browlet';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
@@ -301,6 +303,7 @@ describe('environment settings objects', () => {
       createGlobalObject: () => window,
       createGlobalThisValue: () => new BrowsingContext().windowProxy,
     });
+    const bindings = browletBindings.register(executionContext.realm);
 
     const settings = setupWindowEnvironmentSettingsObject(
       creationURL,
@@ -308,6 +311,7 @@ describe('environment settings objects', () => {
       null,
       creationURL,
       origin,
+      bindings,
     );
     const document = new DocumentImpl();
     DocumentImpl.setOrigin(document, origin);

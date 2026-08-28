@@ -1,8 +1,12 @@
 export * from './declaration/index';
 
 export { bind } from './projection';
-export { registerInterfaceBindings } from './registration';
+export {
+  defineCapability, type Capability, type CapabilityImplementation,
+  type CapabilityOptions,
+} from './capability';
+export { createBindings } from './registration';
 export type {
-  InterfaceBindingDomain, RegisteredRealmInterfaceBindings,
+  Bindings, InterfaceRegistrationOptions, RealmBindings,
 } from './registration';
 export type { WebIDLRealmHost } from './javascript-realm';

@@ -1,43 +1,49 @@
 import { assembleDefinitions, type DefinitionAssembly } from './assembly';
 import { JavaScriptBinding } from './binding';
 import { webIDLCommonDefinitions } from './common-definitions';
+import {
+  type CapabilityImplementation, CapabilityRegistry,
+} from './capability';
 import type { Definition } from './declaration/index';
 import type { HostDefinedInterface } from './conversion';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { PlatformObjectRegistry } from './platform-object';
 import {
-  createPlatformObjectAdapter, registerDefinitionBindings,
+  createInterfaceAdapter, createPlatformObjectAdapter,
+  registerDefinitionBindings, type InterfaceAdapter,
   type PlatformObjectAdapter,
 } from './projection';
 import { ImplementationRegistry } from './registry';
 
 /*
  * Prepare one specification contribution for installation in any number of
- * realms. The returned binding domain owns platform-object identity across
- * those realms while each realm registration owns its initial objects and
+ * realms. The returned bindings own platform-object identity across those
+ * realms while each realm registration owns its initial objects and
  * implementation steps.
  */
-export function registerInterfaceBindings(
+export function createBindings(
   definitions: readonly Definition[],
   options: InterfaceRegistrationOptions = {},
-): InterfaceBindingDomain {
-  return new InterfaceBindingDomain(
+): Bindings {
+  return new Bindings(
     getDefinitionAssembly(definitions),
     options,
   );
 }
 
-type InterfaceRegistrationOptions = {
+export type InterfaceRegistrationOptions = {
+  readonly capabilities?: readonly CapabilityImplementation[];
   readonly hostDefinedInterfaces?: readonly HostDefinedInterface[];
 };
 
-export class InterfaceBindingDomain {
+export class Bindings {
   readonly #definitions: DefinitionAssembly;
   readonly #hostDefinedInterfaces: readonly HostDefinedInterface[];
+  readonly #capabilities: CapabilityRegistry;
   readonly #platformObjects = new PlatformObjectRegistry();
   readonly #realms = new WeakMap<
     WebIDLRealmHost,
-    RegisteredRealmInterfaceBindings
+    RealmBindings
   >();
 
   constructor(
@@ -46,9 +52,13 @@ export class InterfaceBindingDomain {
   ) {
     this.#definitions = definitions;
     this.#hostDefinedInterfaces = options.hostDefinedInterfaces ?? [];
+    this.#capabilities = new CapabilityRegistry(
+      definitions,
+      options.capabilities ?? [],
+    );
   }
 
-  register(realm: WebIDLRealmHost): RegisteredRealmInterfaceBindings {
+  register(realm: WebIDLRealmHost): RealmBindings {
     let registered = this.#realms.get(realm);
     if (registered) return registered;
 
@@ -58,16 +68,17 @@ export class InterfaceBindingDomain {
       this.#platformObjects,
       new ImplementationRegistry(),
       [...this.#hostDefinedInterfaces],
+      this.#capabilities,
     );
     registerDefinitionBindings(binding);
-    registered = new RegisteredRealmInterfaceBindings(binding);
+    registered = new RealmBindings(binding);
     this.#realms.set(realm, registered);
     return registered;
   }
 
   forRealm(
     realm: WebIDLRealmHost,
-  ): RegisteredRealmInterfaceBindings | undefined {
+  ): RealmBindings | undefined {
     return this.#realms.get(realm);
   }
 
@@ -87,12 +98,14 @@ export class InterfaceBindingDomain {
   }
 }
 
-export class RegisteredRealmInterfaceBindings {
+export class RealmBindings {
+  readonly interfaces: InterfaceAdapter;
   readonly objects: PlatformObjectAdapter;
   readonly #binding: JavaScriptBinding;
 
   constructor(binding: JavaScriptBinding) {
     this.#binding = binding;
+    this.interfaces = createInterfaceAdapter(binding);
     this.objects = createPlatformObjectAdapter(binding);
   }
 

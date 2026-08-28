@@ -112,7 +112,7 @@ describe('writable-stream implementation', () => {
 });
 
 describe('writable-stream projection', () => {
-  it('creates its AbortSignal through the assembled binding domain', () => {
+  it('creates its AbortSignal through the assembled bindings', () => {
     const window = new Browlet({ route: () => '' }).window;
     const WritableStream_ = requireConstructor(window, 'WritableStream');
     const AbortSignal_ = requireConstructor(window, 'AbortSignal');

@@ -209,6 +209,54 @@ export const quotaExceededErrorOptionsIDL = defineDictionary({
   ],
 });
 
+/*
+ * Web IDL defines DOMException's structured-data algorithms, while HTML owns
+ * the records and graph which carry this state. These friends expose only the
+ * semantic state needed by that integration boundary.
+ */
+export function getDOMExceptionSerializationState(
+  value: object,
+): DOMExceptionSerializationState {
+  const state = getDOMExceptionState(value);
+  return {
+    message: state.message,
+    name: state.name,
+  };
+}
+
+export function setDOMExceptionSerializationState(
+  value: object,
+  state: DOMExceptionSerializationState,
+): void {
+  domExceptionStates.set(value, {
+    message: state.message,
+    name: state.name,
+  });
+}
+
+export function getQuotaExceededErrorSerializationState(
+  value: object,
+): QuotaExceededErrorSerializationState {
+  return { ...getQuotaExceededErrorState(value) };
+}
+
+export function setQuotaExceededErrorSerializationState(
+  value: object,
+  state: QuotaExceededErrorSerializationState,
+): void {
+  quotaExceededErrorStates.set(value, { ...state });
+}
+
+export type DOMExceptionSerializationState = {
+  message: string;
+  name: string;
+};
+
+export type QuotaExceededErrorSerializationState = {
+  quota: number | null;
+  requested: number | null;
+};
+
 type DOMExceptionState = {
   message: string;
   name: string;

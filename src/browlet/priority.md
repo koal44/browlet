@@ -201,7 +201,7 @@ order. Their public completion must use the Priority 1 task and realm model.
 1. Implement Fetch header, body, request, response, controller, and filtered
    response records plus author-facing `Headers`, `Request`, and `Response`
    without network I/O (Fetch §§2 and 5).
-2. Implement structured serialization/deserialization, cycles, storage mode,
+2. **Complete:** Implement structured serialization/deserialization, cycles, storage mode,
    platform-object registration, target-realm reconstruction, and
    `structuredClone()` (HTML §2.7). Retain explicit buffer-detachment
    limitations rather than pretending native cloning closes every contract.

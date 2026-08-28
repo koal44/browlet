@@ -7,7 +7,7 @@
   `ElementCSSInlineStyle`, and `LinkStyle` host behavior.
 - Stylelet exports those mixins' neutral declarations through
   `styleletIDLDefinitions`; Browlet contributes only their host behavior and
-  assembles the declarations into its binding domain.
+  assembles the declarations into its Web IDL bindings.
 
 ## Next boundary change
 

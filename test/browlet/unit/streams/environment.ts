@@ -73,6 +73,9 @@ export function createTestEnvironment(
     exceptions: {
       createTypeError: (message) => new TypeError(message),
     },
+    structuredData: {
+      clone: options.structuredClone ?? structuredClone,
+    },
     iteration: {
       end: endOfIteration,
       close(iterator, reason) {
@@ -231,6 +234,7 @@ function callOptionalIteratorReturn(
 
 type TestEnvironmentOptions = {
   readonly createAbortController?: () => StreamAbortController;
+  readonly structuredClone?: (value: unknown) => unknown;
 };
 
 function createPromise(

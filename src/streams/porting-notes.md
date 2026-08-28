@@ -13,7 +13,7 @@ comment.
   `streamsIDLDefinitions` declaration contribution and does not install
   globals. Semantic implementation modules remain package-private.
 - Web IDL declarations remain beside their implementation modules. The entry
-  aggregates them for Browlet's binding domain.
+  aggregates them for Browlet's bindings.
 - Reference-implementation calls to generated `.new(globalThis)` wrappers
   must become explicit platform-object creation through the active binding
   context. The semantic implementation must never import Browlet's Window.
@@ -22,9 +22,14 @@ comment.
   semantic operation is sufficient.
 - Stream implementations receive `StreamEnvironment` directly and remain
   independently unit-testable. In production, its Abort capability asks the
-  assembled Web IDL binding domain to internally create `AbortController`;
+  assembled Web IDL bindings to internally create `AbortController`;
   Streams never imports Browlet's DOM implementation or reaches for an
   ambient global.
+- Cross-specification cloning is another explicit host capability. Browlet
+  registers HTML's semantic structured-data operation for each supported
+  global interface; Streams never calls the projected author-facing
+  `structuredClone()` method. Exceptions from that semantic boundary are
+  realized by Web IDL in the stream realm before they reject stream promises.
 - Writable-stream internal slots live in a module-private `WeakMap` family.
   Cross-module algorithms use that slot boundary directly rather than copying
   symbol-keyed friend methods onto every projected implementation object.
