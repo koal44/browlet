@@ -1,3 +1,4 @@
+// @rollup-cycle streams-readable
 import { idlType } from '../web-idl/declaration/index';
 import type { StreamEnvironment, StreamPromise } from './environment';
 import {

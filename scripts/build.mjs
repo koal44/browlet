@@ -73,6 +73,7 @@ async function buildPackage(name) {
   const moduleBundle = await rollup({
     input: path.join(entryDir, 'index.js'),
     external: isExternal,
+    onLog: handleRollupLog,
     plugins,
   });
 
@@ -94,6 +95,7 @@ async function buildPackage(name) {
   if (manifest.browser) {
     const browserBundle = await rollup({
       input: path.join(entryDir, 'browser.js'),
+      onLog: handleRollupLog,
       plugins,
     });
 
@@ -110,6 +112,7 @@ async function buildPackage(name) {
 
   const dtsBundle = await rollup({
     input: path.join(entryDir, 'index.d.ts'),
+    onLog: handleRollupLog,
     plugins: [dts()],
   });
 
@@ -133,4 +136,22 @@ function createBanner(name, version) {
     : ['Copyright (c) 2026 Eric Knowlton'];
 
   return `/*\n * ${name} v${version} | MIT\n * ${copyrights.join('\n * ')}\n */\n`;
+}
+
+function handleRollupLog(level, log, handler) {
+  if (level === 'warn' && log.code === 'CIRCULAR_DEPENDENCY' &&
+    isAcknowledgedCycle(log.ids)) {
+    return;
+  }
+  handler(level, log);
+}
+
+function isAcknowledgedCycle(ids) {
+  if (!ids) return false;
+  const groups = new Set(ids.map(id => {
+    const [firstLine] = fs.readFileSync(id, 'utf8').split(/\r?\n/, 1);
+    return /^\/\/ @rollup-cycle (\S+)$/.exec(firstLine)?.[1];
+  }));
+  const [group] = groups;
+  return group !== undefined && groups.size === 1;
 }

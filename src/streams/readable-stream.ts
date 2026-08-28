@@ -1,3 +1,4 @@
+// @rollup-cycle streams-readable
 import {
   arg, asyncIter, asyncSequence, callback, ctor, defineCallbackFunction,
   defineDictionary, defineEnumeration, defineInterface, defineTypedef,

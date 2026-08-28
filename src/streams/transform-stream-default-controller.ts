@@ -1,3 +1,4 @@
+// @rollup-cycle streams-transform
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';

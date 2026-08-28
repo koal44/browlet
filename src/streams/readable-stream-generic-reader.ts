@@ -1,3 +1,4 @@
+// @rollup-cycle streams-readable
 import {
   arg, defineInterfaceMixin, idlType, op, promise, roAttr,
 } from '../web-idl/declaration/index';

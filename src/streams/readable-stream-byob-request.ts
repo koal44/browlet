@@ -1,3 +1,4 @@
+// @rollup-cycle streams-readable
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr, reference,
   xattr,
