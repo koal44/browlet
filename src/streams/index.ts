@@ -3,6 +3,7 @@ import {
   byteLengthQueuingStrategyIDL,
 } from './byte-length-queuing-strategy';
 import { countQueuingStrategyIDL } from './count-queuing-strategy';
+import { genericTransformStreamIDL } from './generic-transform-stream';
 import {
   queuingStrategyIDL, queuingStrategyInitIDL, queuingStrategySizeIDL,
 } from './queuing-strategy';
@@ -52,6 +53,7 @@ export const streamsIDLDefinitions: readonly Definition[] = [
   queuingStrategyInitIDL,
   byteLengthQueuingStrategyIDL,
   countQueuingStrategyIDL,
+  genericTransformStreamIDL,
   underlyingSourceStartCallbackIDL,
   underlyingSourcePullCallbackIDL,
   underlyingSourceCancelCallbackIDL,

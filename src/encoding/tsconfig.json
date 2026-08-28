@@ -4,17 +4,13 @@
     "composite": true,
     "module": "preserve",
     "moduleResolution": "Bundler",
-    "types": ["node"],
-    "outDir": "../../dist/.typecheck/browlet",
-    "tsBuildInfoFile": "../../dist/.typecheck/browlet.tsbuildinfo"
+    "outDir": "../../dist/.typecheck/encoding",
+    "tsBuildInfoFile": "../../dist/.typecheck/encoding.tsbuildinfo"
   },
   "include": ["./**/*.ts"],
   "references": [
-    { "path": "../encoding" },
     { "path": "../web-idl/declaration" },
     { "path": "../web-idl" },
-    { "path": "../streams" },
-    { "path": "../url" },
-    { "path": "../stylelet" }
+    { "path": "../streams" }
   ]
 }

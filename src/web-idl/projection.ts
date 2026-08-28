@@ -557,6 +557,7 @@ function registerDefinedInterface(
             registry,
             member,
             member.binding,
+            interface_,
             context,
             javaScriptBinding,
           );
@@ -568,6 +569,7 @@ function registerDefinedInterface(
             registry,
             member,
             member.static ? implementation : implementation.prototype,
+            interface_,
             context,
             javaScriptBinding,
           );
@@ -631,6 +633,7 @@ function registerDefinedInterface(
               member,
               member.name,
               member.static ? implementation : implementation.prototype,
+              interface_,
               context,
               javaScriptBinding,
               member.binding.dependencies,
@@ -644,6 +647,7 @@ function registerDefinedInterface(
                 context,
                 javaScriptBinding,
               ),
+              interface_,
             );
             const getSupportedPropertyNames =
               member.binding.getSupportedPropertyNames;
@@ -669,6 +673,7 @@ function registerDefinedInterface(
             member,
             member.name,
             member.static ? implementation : implementation.prototype,
+            interface_,
             context,
             javaScriptBinding,
           );
@@ -718,6 +723,7 @@ function registerDefinedInterface(
               context,
               javaScriptBinding,
             ),
+            interface_,
           );
         } else {
           if (!implementation) throw missingMemberBinding(interface_, member);
@@ -725,6 +731,7 @@ function registerDefinedInterface(
             registry,
             member,
             implementation.prototype,
+            interface_,
             javaScriptBinding,
           );
         }
@@ -815,6 +822,7 @@ function registerDefinedAttribute(
   registry: ImplementationRegistry,
   member: AttributeMember,
   binding: AttributeBindingDefinition,
+  interface_: AssembledInterface,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): void {
@@ -858,7 +866,7 @@ function registerDefinedAttribute(
       );
     };
   }
-  registry.setAttributeSteps(member, steps);
+  registry.setAttributeSteps(member, steps, interface_);
 }
 
 function createDefinedConstructorSteps(
@@ -1061,6 +1069,7 @@ function registerAttribute(
   registry: ImplementationRegistry,
   member: AttributeMember,
   target: object,
+  interface_: AssembledInterface,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
 ): void {
@@ -1106,7 +1115,7 @@ function registerAttribute(
         },
       }
       : {}),
-  });
+  }, interface_);
 }
 
 function registerOperation(
@@ -1114,6 +1123,7 @@ function registerOperation(
   member: OperationMember,
   name: string,
   target: object,
+  interface_: AssembledInterface,
   context: InterfaceBindingContext,
   javaScriptBinding: JavaScriptBinding,
   dependencies: readonly ImplementationDependency[] = [],
@@ -1135,6 +1145,7 @@ function registerOperation(
       javaScriptBinding,
       dependencies,
     ),
+    interface_,
   );
 }
 
@@ -1261,6 +1272,7 @@ function registerStringifier(
   registry: ImplementationRegistry,
   member: StringifierMember,
   target: object,
+  interface_: AssembledInterface,
   javaScriptBinding: JavaScriptBinding,
 ): void {
   const value: unknown = findDescriptor(target, 'toString')?.value;
@@ -1275,7 +1287,7 @@ function registerStringifier(
       [],
       javaScriptBinding,
     );
-  });
+  }, interface_);
 }
 
 function callImplementation<This, Values extends unknown[], Result>(

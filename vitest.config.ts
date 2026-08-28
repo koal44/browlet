@@ -12,6 +12,7 @@ export default defineConfig({
             'test/selectlet/unit/**/*.test.ts',
             'test/shared/unit/**/*.test.ts',
             'test/mime/unit/**/*.test.ts',
+            'test/encoding/unit/**/*.test.ts',
             'test/url/unit/**/*.test.ts',
             'test/web-idl/unit/**/*.test.ts',
             'test/stylelet/unit/**/*.test.ts',

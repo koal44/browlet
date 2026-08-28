@@ -160,7 +160,10 @@ export class LegacyPlatformObjectBinding {
     const index = toArrayIndex(property);
     if (!this.#getSupportedIndices(target, properties).has(index)) return;
 
-    const steps = this.#implementations.getOperationSteps(properties.getter);
+    const steps = this.#implementations.getOperationSteps(
+      properties.getter,
+      properties.interface_,
+    );
     if (!steps) {
       throw new Error('Missing indexed property getter implementation');
     }
@@ -182,7 +185,10 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#implementations.getOperationSteps(properties.getter);
+    const steps = this.#implementations.getOperationSteps(
+      properties.getter,
+      properties.interface_,
+    );
     if (!steps) {
       throw new Error('Missing named property getter implementation');
     }
@@ -359,7 +365,10 @@ export class LegacyPlatformObjectBinding {
     const converted = this.#convertSetterValue(setter, value);
 
     if (setter.name) {
-      const steps = this.#implementations.getOperationSteps(setter);
+      const steps = this.#implementations.getOperationSteps(
+        setter,
+        properties.interface_,
+      );
       if (!steps) {
         throw new Error('Missing indexed property setter implementation');
       }
@@ -389,7 +398,10 @@ export class LegacyPlatformObjectBinding {
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
     if (setter.name) {
-      const steps = this.#implementations.getOperationSteps(setter);
+      const steps = this.#implementations.getOperationSteps(
+        setter,
+        properties.interface_,
+      );
       if (!steps) {
         throw new Error('Missing named property setter implementation');
       }
@@ -438,7 +450,10 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#implementations.getOperationSteps(deleter);
+    const steps = this.#implementations.getOperationSteps(
+      deleter,
+      properties.interface_,
+    );
     if (!steps) throw new Error('Missing named property deleter implementation');
     const result = Reflect.apply(steps, target, [property]);
     const returnType = getUnannotatedType(
@@ -520,6 +535,7 @@ export class LegacyPlatformObjectBinding {
       }
       indexed = {
         getter: indexedGetter,
+        interface_,
         setter: findDerivedSpecialOperation(
           interface_,
           'setter',
@@ -544,6 +560,7 @@ export class LegacyPlatformObjectBinding {
           this.#context.definitions,
         ),
         getter: namedGetter,
+        interface_,
         overrideBuiltIns: implementsExtendedAttribute(
           interface_,
           'LegacyOverrideBuiltIns',
@@ -573,6 +590,7 @@ type LegacyProperties = {
 
 type IndexedProperties = {
   getter: OperationMember;
+  interface_: AssembledInterface;
   setter: OperationMember | undefined;
   steps: IndexedPropertySteps;
 };
@@ -580,6 +598,7 @@ type IndexedProperties = {
 type NamedProperties = {
   deleter: OperationMember | undefined;
   getter: OperationMember;
+  interface_: AssembledInterface;
   overrideBuiltIns: boolean;
   setter: OperationMember | undefined;
   steps: NamedPropertySteps;

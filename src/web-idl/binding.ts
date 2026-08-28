@@ -889,6 +889,7 @@ export class JavaScriptBinding {
               : stringifier;
             const steps = this.implementations.getAttributeSteps(
               implementation,
+              interface_,
             );
             if (!steps) {
               throw missingImplementation(
@@ -900,7 +901,7 @@ export class JavaScriptBinding {
             value = Reflect.apply(steps.get, object, []);
           } else {
             const behavior = this.implementations
-              .getStringificationBehavior(stringifier);
+              .getStringificationBehavior(stringifier, interface_);
             if (!behavior) {
               throw missingImplementation(interface_, 'stringifier');
             }
@@ -1050,7 +1051,10 @@ export class JavaScriptBinding {
           const implementation = interface_ && attribute.inherit
             ? this.#findInheritedAttribute(interface_, attribute)
             : attribute;
-          const steps = this.implementations.getAttributeSteps(implementation);
+          const steps = this.implementations.getAttributeSteps(
+            implementation,
+            interface_,
+          );
           if (!steps) {
             throw missingImplementation(
               definition,
@@ -1165,7 +1169,10 @@ export class JavaScriptBinding {
             attributeAssignment: true,
           })
           : enumValue;
-        const steps = this.implementations.getAttributeSteps(attribute);
+        const steps = this.implementations.getAttributeSteps(
+          attribute,
+          interface_,
+        );
         if (!steps?.set) {
           throw missingImplementation(
             definition,
@@ -1213,6 +1220,7 @@ export class JavaScriptBinding {
           );
           const steps = this.implementations.getOperationSteps(
             overload.callable,
+            interface_,
           );
           if (hasExtendedAttribute(
             overload.callable.extendedAttributes,
@@ -1279,7 +1287,10 @@ export class JavaScriptBinding {
         const implementation = attribute.inherit
           ? this.#findInheritedAttribute(ancestor, attribute)
           : attribute;
-        const steps = this.implementations.getAttributeSteps(implementation);
+        const steps = this.implementations.getAttributeSteps(
+          implementation,
+          ancestor,
+        );
         if (!steps) {
           throw missingImplementation(
             ancestor,

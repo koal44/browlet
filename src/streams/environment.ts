@@ -89,6 +89,7 @@ export type StreamEnvironment = {
     create<Value extends object>(
       implementation: StreamImplementationConstructor<Value>,
     ): Value;
+    createForInterface<Value extends object>(name: string): Value;
   };
   readonly promises: {
     create(type: WebIDLType): StreamPromise;
@@ -253,6 +254,7 @@ export function getStreamEnvironment(
             [environment, ...argumentsList],
           ),
         create: (implementation) => context.objects.create(implementation),
+        createForInterface: (name) => context.objects.createForInterface(name),
       },
       promises: {
         create: (type) => requireObject(context.promises.create(type)),
