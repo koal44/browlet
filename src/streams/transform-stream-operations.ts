@@ -1,5 +1,5 @@
 import { idlType } from '../web-idl/declaration/index';
-import type { StreamPromise } from './environment';
+import type { StreamEnvironment, StreamPromise } from './environment';
 import type { QueuingStrategySize } from './queuing-strategy';
 import {
   createReadableStream, readableStreamDefaultControllerCanCloseOrEnqueue,
@@ -16,7 +16,7 @@ import {
   TransformStreamDefaultControllerImpl,
 } from './transform-stream-default-controller';
 import {
-  TransformStreamImpl, type Transformer,
+  TransformStreamImpl, type Transformer, type TransformStreamAlgorithms,
 } from './transform-stream';
 import {
   createWritableStream, type WritableStreamImpl,
@@ -120,6 +120,32 @@ export function setUpTransformStreamDefaultControllerFromTransformer(
   );
 }
 
+export function setUpTransformStreamDefaultControllerFromAlgorithms(
+  stream: TransformStreamImpl,
+  algorithms: TransformStreamAlgorithms,
+): void {
+  const environment = TransformStreamImpl.getEnvironment(stream);
+  const controller = environment.objects.create(
+    TransformStreamDefaultControllerImpl,
+  );
+  setUpTransformStreamDefaultController(
+    stream,
+    controller,
+    (chunk) => runTransformAlgorithm(
+      environment,
+      () => algorithms.transform(chunk, controller),
+    ),
+    () => runTransformAlgorithm(
+      environment,
+      () => algorithms.flush?.(controller),
+    ),
+    (reason) => runTransformAlgorithm(
+      environment,
+      () => algorithms.cancel?.(reason),
+    ),
+  );
+}
+
 export function transformStreamDefaultControllerGetDesiredSize(
   controller: TransformStreamDefaultControllerImpl,
 ): number | null {
@@ -206,6 +232,23 @@ function setUpTransformStreamDefaultController(
     transformAlgorithm,
   });
   state.controller = controller;
+}
+
+function runTransformAlgorithm(
+  environment: StreamEnvironment,
+  steps: () => unknown,
+): StreamPromise {
+  try {
+    return environment.promises.createResolved(
+      steps(),
+      idlType.undefined,
+    );
+  } catch (exception) {
+    return environment.promises.createRejected(
+      exception,
+      idlType.undefined,
+    );
+  }
 }
 
 function transformStreamError(

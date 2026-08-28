@@ -133,7 +133,10 @@ export class GlobalPlatformObjectBinding {
     const target = record?.implementation;
     if (!target) throw new Error('Global object is not a platform object');
 
-    const steps = this.#implementations.getOperationSteps(properties.getter);
+    const steps = this.#implementations.getOperationSteps(
+      properties.getter,
+      properties.interface_,
+    );
     if (!steps) throw new Error('Missing named property getter implementation');
     const value = Reflect.apply(steps, target, [property]);
     return {
@@ -194,6 +197,7 @@ export class GlobalPlatformObjectBinding {
     }
     return {
       getter,
+      interface_,
       steps,
       unenumerable: implementsExtendedAttribute(
         interface_,
@@ -205,6 +209,7 @@ export class GlobalPlatformObjectBinding {
 
 type NamedProperties = {
   getter: OperationMember;
+  interface_: AssembledInterface;
   steps: NamedPropertySteps;
   unenumerable: boolean;
 };

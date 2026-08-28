@@ -1,4 +1,5 @@
 import { domIDLDefinitions } from './dom/web-idl';
+import { encodingIDLDefinitions } from '../encoding/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
 import { streamStructuredData } from '../streams/environment';
@@ -104,6 +105,7 @@ const browletDefinitions = [
   ...domIDLDefinitions,
   ...styleletIDLDefinitions,
   ...streamsIDLDefinitions,
+  ...encodingIDLDefinitions,
   ...urlIDLDefinitions,
 ] as const;
 

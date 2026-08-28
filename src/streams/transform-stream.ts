@@ -12,6 +12,7 @@ import {
 import type { ReadableStreamImpl } from './readable-stream';
 import {
   initializeTransformStream,
+  setUpTransformStreamDefaultControllerFromAlgorithms,
   setUpTransformStreamDefaultControllerFromTransformer,
 } from './transform-stream-operations';
 import type { TransformStreamDefaultControllerImpl } from './transform-stream-default-controller';
@@ -26,8 +27,24 @@ export class TransformStreamImpl {
     transformer?: object,
     writableStrategy: QueuingStrategy = {},
     readableStrategy: QueuingStrategy = {},
+    algorithms?: TransformStreamAlgorithms,
   ) {
     this.#environment = environment;
+    const startPromise = environment.promises.create(idlType.any);
+    initializeTransformStream(
+      this,
+      startPromise,
+      extractHighWaterMark(writableStrategy, 1),
+      extractSizeAlgorithm(writableStrategy),
+      extractHighWaterMark(readableStrategy, 0),
+      extractSizeAlgorithm(readableStrategy),
+    );
+    if (algorithms) {
+      setUpTransformStreamDefaultControllerFromAlgorithms(this, algorithms);
+      environment.promises.resolve(startPromise, undefined);
+      return;
+    }
+
     const transformerObject = transformer ?? null;
     const transformerDictionary = environment.dictionaries.convert(
       transformerObject,
@@ -39,16 +56,6 @@ export class TransformStreamImpl {
     if ('writableType' in transformerDictionary) {
       throw new RangeError('Invalid writableType specified');
     }
-
-    const startPromise = environment.promises.create(idlType.any);
-    initializeTransformStream(
-      this,
-      startPromise,
-      extractHighWaterMark(writableStrategy, 1),
-      extractSizeAlgorithm(writableStrategy),
-      extractHighWaterMark(readableStrategy, 0),
-      extractSizeAlgorithm(readableStrategy),
-    );
     setUpTransformStreamDefaultControllerFromTransformer(
       this,
       transformerObject,
@@ -67,6 +74,20 @@ export class TransformStreamImpl {
     environment.promises.resolve(startPromise, startResult);
   }
 
+  /** Set up a custom transform stream for another specification. */
+  static fromAlgorithms(
+    environment: StreamEnvironment,
+    algorithms: TransformStreamAlgorithms,
+  ): TransformStreamImpl {
+    return new TransformStreamImpl(
+      environment,
+      undefined,
+      {},
+      {},
+      algorithms,
+    );
+  }
+
   get readable(): ReadableStreamImpl {
     return requireStateMember(this.#state.readable, 'readable');
   }
@@ -83,6 +104,15 @@ export class TransformStreamImpl {
     return stream.#state;
   }
 }
+
+export type TransformStreamAlgorithms = {
+  cancel?(reason: unknown): unknown;
+  flush?(controller: TransformStreamDefaultControllerImpl): unknown;
+  transform(
+    chunk: unknown,
+    controller: TransformStreamDefaultControllerImpl,
+  ): unknown;
+};
 
 export type TransformStreamState = {
   backpressure?: boolean;

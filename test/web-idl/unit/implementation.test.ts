@@ -7,8 +7,9 @@ import { JavaScriptBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   arg, atArg, attr, callback as projectCallback, ctor,
-  defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
-  dictMember, idlType, contextValue, impl, iter,
+  defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
+  defineInterfaceMixin, defineTypedef, dictMember, idlType, contextValue,
+  impl, iter,
   op, roAttr, record, reference, resolveArgs, sequence, stringifier,
   union, withArgs, withNew,
 } from '../../../src/web-idl/declaration/index';
@@ -19,6 +20,59 @@ import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
 describe('Web IDL implementation registration', () => {
+  it('resolves shared mixin members through each including implementation', () => {
+    class FirstImpl {
+      readonly #value = 'first';
+      get value(): string { return this.#value; }
+      read(): string { return this.#value; }
+    }
+    class SecondImpl {
+      readonly #value = 'second';
+      get value(): string { return this.#value; }
+      read(): string { return this.#value; }
+    }
+    const common = defineInterfaceMixin({
+      name: 'Common',
+      members: [
+        roAttr('value', idlType.DOMString),
+        op('read', idlType.DOMString),
+      ],
+    });
+    const first = defineInterface({
+      name: 'First',
+      exposed: 'Window',
+      implementation: impl(FirstImpl),
+      members: [ctor()],
+    });
+    const second = defineInterface({
+      name: 'Second',
+      exposed: 'Window',
+      implementation: impl(SecondImpl),
+      members: [ctor()],
+    });
+    const realm = new Realm();
+    const binding = new JavaScriptBinding(
+      assembleDefinitions([
+        common,
+        first,
+        second,
+        defineIncludes({ interface: first.name, mixin: common.name }),
+        defineIncludes({ interface: second.name, mixin: common.name }),
+      ]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+    registerDefinitionBindings(binding);
+    binding.install();
+    const First = Reflect.get(realm.global, first.name) as new() => FirstImpl;
+    const Second = Reflect.get(realm.global, second.name) as new() => SecondImpl;
+
+    expect(new First().value).toBe('first');
+    expect(new Second().value).toBe('second');
+    expect(new First().read()).toBe('first');
+    expect(new Second().read()).toBe('second');
+  });
+
   it('constructs declared implementations with converted arguments and newTarget', () => {
     class AutomaticConstructorImpl {
       readonly #value: string;

@@ -9,7 +9,10 @@ import type { ValuePair } from './iterable';
 import type { IDLPromise } from './promise-value';
 
 export class ImplementationRegistry {
-  #attributes = new WeakMap<AttributeMember, AttributeSteps>();
+  #attributes = new WeakMap<
+    AttributeMember,
+    InterfaceScopedSteps<AttributeSteps>
+  >();
   #asyncIterators = new WeakMap<AsyncIterableMember, AsyncIteratorSteps>();
   #constructors = new WeakMap<
     ConstructorMember | NamedArgumentsExtendedAttribute,
@@ -33,19 +36,26 @@ export class ImplementationRegistry {
     AttributeMember,
     ObservableArraySteps
   >();
-  #operations = new WeakMap<OperationMember, OperationSteps>();
+  #operations = new WeakMap<
+    OperationMember,
+    InterfaceScopedSteps<OperationSteps>
+  >();
   #overriddenConstructors = new WeakMap<
     InterfaceDefinition,
     OverriddenConstructorSteps
   >();
-  #stringifiers = new WeakMap<StringifierMember, StringificationBehavior>();
+  #stringifiers = new WeakMap<
+    StringifierMember,
+    InterfaceScopedSteps<StringificationBehavior>
+  >();
   #valuePairs = new WeakMap<IterableMember, ValuePairsSteps>();
 
   setAttributeSteps(
     attribute: AttributeMember,
     steps: AttributeSteps,
+    interface_?: AssembledInterface,
   ): void {
-    this.#attributes.set(attribute, steps);
+    setInterfaceScopedSteps(this.#attributes, attribute, steps, interface_);
   }
 
   setAsyncIteratorSteps(
@@ -86,8 +96,14 @@ export class ImplementationRegistry {
   setStringificationBehavior(
     stringifier: StringifierMember,
     behavior: StringificationBehavior,
+    interface_?: AssembledInterface,
   ): void {
-    this.#stringifiers.set(stringifier, behavior);
+    setInterfaceScopedSteps(
+      this.#stringifiers,
+      stringifier,
+      behavior,
+      interface_,
+    );
   }
 
   setIndexedPropertySteps(
@@ -107,8 +123,9 @@ export class ImplementationRegistry {
   setOperationSteps(
     operation: OperationMember,
     steps: OperationSteps,
+    interface_?: AssembledInterface,
   ): void {
-    this.#operations.set(operation, steps);
+    setInterfaceScopedSteps(this.#operations, operation, steps, interface_);
   }
 
   setObjectCreationSteps(
@@ -139,8 +156,11 @@ export class ImplementationRegistry {
     this.#valuePairs.set(iterable, steps);
   }
 
-  getAttributeSteps(attribute: AttributeMember): AttributeSteps | undefined {
-    return this.#attributes.get(attribute);
+  getAttributeSteps(
+    attribute: AttributeMember,
+    interface_?: AssembledInterface,
+  ): AttributeSteps | undefined {
+    return getInterfaceScopedSteps(this.#attributes, attribute, interface_);
   }
 
   getAsyncIteratorSteps(
@@ -189,8 +209,13 @@ export class ImplementationRegistry {
 
   getStringificationBehavior(
     stringifier: StringifierMember,
+    interface_?: AssembledInterface,
   ): StringificationBehavior | undefined {
-    return this.#stringifiers.get(stringifier);
+    return getInterfaceScopedSteps(
+      this.#stringifiers,
+      stringifier,
+      interface_,
+    );
   }
 
   getIndexedPropertySteps(
@@ -205,8 +230,11 @@ export class ImplementationRegistry {
     return this.#namedProperties.get(getter);
   }
 
-  getOperationSteps(operation: OperationMember): OperationSteps | undefined {
-    return this.#operations.get(operation);
+  getOperationSteps(
+    operation: OperationMember,
+    interface_?: AssembledInterface,
+  ): OperationSteps | undefined {
+    return getInterfaceScopedSteps(this.#operations, operation, interface_);
   }
 
   getObjectCreationSteps(
@@ -230,6 +258,44 @@ export class ImplementationRegistry {
   getValuePairsSteps(iterable: IterableMember): ValuePairsSteps | undefined {
     return this.#valuePairs.get(iterable);
   }
+}
+
+type InterfaceScopedSteps<T> = {
+  default?: T;
+  readonly interfaces: WeakMap<AssembledInterface, T>;
+};
+
+function setInterfaceScopedSteps<K extends object, T>(
+  registry: WeakMap<K, InterfaceScopedSteps<T>>,
+  key: K,
+  steps: T,
+  interface_: AssembledInterface | undefined,
+): void {
+  let scoped = registry.get(key);
+  if (!scoped) {
+    scoped = { interfaces: new WeakMap() };
+    registry.set(key, scoped);
+  }
+  if (interface_) scoped.interfaces.set(interface_, steps);
+  else scoped.default = steps;
+}
+
+function getInterfaceScopedSteps<K extends object, T>(
+  registry: WeakMap<K, InterfaceScopedSteps<T>>,
+  key: K,
+  interface_: AssembledInterface | undefined,
+): T | undefined {
+  const scoped = registry.get(key);
+  if (!scoped) return;
+  for (
+    let current = interface_;
+    current;
+    current = current.parent
+  ) {
+    const steps = scoped.interfaces.get(current);
+    if (steps) return steps;
+  }
+  return scoped.default;
 }
 
 export type RegisteredImplementation = {
