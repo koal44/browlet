@@ -47,6 +47,15 @@ import {
   writableStreamDefaultWriterIDL,
 } from './writable-stream-default-writer';
 
+export {
+  createReadableStreamWithByteReadingSupport,
+} from './readable-byte-stream-operations';
+export {
+  closeReadableStream, enqueueReadableStream, errorReadableStream,
+  getReadableStreamReader, readAllBytes,
+} from './readable-stream-cross-spec';
+export type { ReadableStreamImpl } from './readable-stream';
+
 export const streamsIDLDefinitions: readonly Definition[] = [
   queuingStrategySizeIDL,
   queuingStrategyIDL,

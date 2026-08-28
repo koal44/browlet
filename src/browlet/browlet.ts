@@ -24,6 +24,7 @@ import { UserAgent } from './user-agent';
 import {
   performNodeMicrotaskCheckpoint, requestNodeEventLoopTurn,
 } from './scripting/event-loop';
+import type { NativeLineEnding } from '../file/index';
 import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 
@@ -35,11 +36,17 @@ export class Browlet {
 
   constructor(config: BrowletConfig) {
     this.#route = config.route;
-    this.#userAgent = new UserAgent({
-      performMicrotaskCheckpoint: performNodeMicrotaskCheckpoint,
-      requestEventLoopTurn: requestNodeEventLoopTurn,
-      unsafeSharedCurrentTime,
-    });
+    this.#userAgent = new UserAgent(
+      {
+        performMicrotaskCheckpoint: performNodeMicrotaskCheckpoint,
+        requestEventLoopTurn: requestNodeEventLoopTurn,
+        unsafeSharedCurrentTime,
+      },
+      {
+        nativeLineEnding: config.nativeLineEnding ?? '\n',
+        scheduleParallelSteps: requestNodeEventLoopTurn,
+      },
+    );
     this.#traversable = createNewTopLevelTraversable(
       this.#userAgent,
       null,
@@ -189,6 +196,7 @@ export class Browlet {
 export type BrowletRoute = (url: string) => string;
 
 export type BrowletConfig = {
+  nativeLineEnding?: NativeLineEnding;
   route: BrowletRoute;
 };
 

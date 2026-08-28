@@ -15,6 +15,7 @@
     { "path": "../web-idl" },
     { "path": "../streams" },
     { "path": "../url" },
+    { "path": "../file" },
     { "path": "../stylelet" }
   ]
 }

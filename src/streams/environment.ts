@@ -39,6 +39,7 @@ export type StreamEnvironment = {
       sourceOffset: number,
       byteLength: number,
     ): void;
+    copyBytes(value: object): Uint8Array;
     create(byteLength: number): object;
     createView(
       type: BufferViewTypeName,
@@ -166,6 +167,7 @@ export function getStreamEnvironment(
             destinationOffset,
           );
         },
+        copyBytes: getBufferSourceCopy,
         create: (byteLength) => createArrayBuffer(
           new Uint8Array(byteLength),
           context.realm,

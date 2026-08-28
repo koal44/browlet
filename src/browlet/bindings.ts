@@ -1,5 +1,6 @@
 import { domIDLDefinitions } from './dom/web-idl';
 import { encodingIDLDefinitions } from '../encoding/index';
+import { fileIDLDefinitions } from '../file/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
 import { streamStructuredData } from '../streams/environment';
@@ -17,6 +18,10 @@ import { browletIDLDefinitions } from './web-idl';
 import {
   domExceptionCapabilities,
 } from './scripting/structured-data/platform-objects/dom-exception';
+import {
+  blobCapabilities,
+} from './scripting/structured-data/platform-objects/blob';
+import { fileHostCapability } from './file-api';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -31,7 +36,7 @@ export class BrowletBindings {
     this.#bindings = createBindings(
       browletDefinitions,
       {
-        capabilities: structuredDataCapabilities,
+        capabilities: browletCapabilities,
         hostDefinedInterfaces,
       },
     );
@@ -87,8 +92,10 @@ const hostDefinedInterfaces = [{
   resolveReceiver: resolveWindowProxyReceiver,
 }];
 
-const structuredDataCapabilities = [
+const browletCapabilities = [
   ...domExceptionCapabilities,
+  ...blobCapabilities,
+  fileHostCapability,
   streamStructuredData.for(windowIDL, {
     clone(global, value) {
       if (!WindowImpl.is(global)) {
@@ -106,6 +113,7 @@ const browletDefinitions = [
   ...styleletIDLDefinitions,
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,
+  ...fileIDLDefinitions,
   ...urlIDLDefinitions,
 ] as const;
 

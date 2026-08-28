@@ -1,0 +1,244 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
+} from '../../../src/file/index';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../../src/browlet/bindings';
+import { Browlet } from '../../../src/browlet/browlet';
+import {
+  structuredDeserialize,
+} from '../../../src/browlet/scripting/structured-data/deserialize';
+import {
+  structuredSerializeForStorage,
+} from '../../../src/browlet/scripting/structured-data/serialize';
+
+describe('File API Blob projection', () => {
+  it('constructs Blob state with the host native line ending', async () => {
+    const window = createWindow('\r\n');
+    const blob = constructBlob(window, ['a\nb'], {
+      endings: 'native',
+      type: 'Text/PLAIN',
+    });
+
+    expect(blob).toBeInstanceOf(requireFunction(window, 'Blob'));
+    expect(Reflect.get(blob, 'size')).toBe(4);
+    expect(Reflect.get(blob, 'type')).toBe('text/plain');
+    await expect(call(blob, 'text')).resolves.toBe('a\r\nb');
+  });
+
+  it('returns realm-owned streams, promises, and byte objects', async () => {
+    const window = createWindow();
+    const blob = constructBlob(window, ['hello']);
+    const stream = call(blob, 'stream') as object;
+    const bytesPromise = call(blob, 'bytes') as Promise<unknown>;
+    const arrayBufferPromise = call(blob, 'arrayBuffer') as Promise<unknown>;
+
+    expect(stream).toBeInstanceOf(requireFunction(window, 'ReadableStream'));
+    expect(bytesPromise).toBeInstanceOf(requireFunction(window, 'Promise'));
+    expect(arrayBufferPromise)
+      .toBeInstanceOf(requireFunction(window, 'Promise'));
+
+    const bytes = await bytesPromise as object;
+    const buffer = await arrayBufferPromise as object;
+    expect(bytes).toBeInstanceOf(requireFunction(window, 'Uint8Array'));
+    expect(buffer).toBeInstanceOf(requireFunction(window, 'ArrayBuffer'));
+    expect(Array.from(bytes as Uint8Array)).toEqual([104, 101, 108, 108, 111]);
+  });
+
+  it('keeps the Blob relevant realm when a method is borrowed', async () => {
+    const first = createWindow();
+    const second = createWindow();
+    const blob = constructBlob(first, ['A']);
+    const bytesMethod = Reflect.get(
+      requireFunction(second, 'Blob').prototype,
+      'bytes',
+    ) as unknown;
+    if (typeof bytesMethod !== 'function') {
+      throw new Error('Blob.prototype.bytes is not a function');
+    }
+
+    const promise = Reflect.apply(bytesMethod, blob, []) as Promise<object>;
+    expect(promise).toBeInstanceOf(requireFunction(first, 'Promise'));
+    expect(promise).not.toBeInstanceOf(requireFunction(second, 'Promise'));
+    const bytes = await promise;
+    expect(bytes).toBeInstanceOf(requireFunction(first, 'Uint8Array'));
+    expect(bytes).not.toBeInstanceOf(requireFunction(second, 'Uint8Array'));
+  });
+
+  it('streams implementation-defined chunks in order and then closes', async () => {
+    const window = createWindow();
+    const source = Uint8Array.from(
+      { length: 128 * 1024 + 3 },
+      (_, index) => index % 251,
+    );
+    const blob = constructBlob(window, [source]);
+    const reader = call(call(blob, 'stream') as object, 'getReader') as object;
+    const chunks: Uint8Array[] = [];
+
+    while (true) {
+      const result = await call(reader, 'read') as {
+        done: boolean;
+        value?: Uint8Array;
+      };
+      if (result.done) break;
+      if (!result.value) throw new Error('Blob stream returned no chunk');
+      expect(result.value)
+        .toBeInstanceOf(requireFunction(window, 'Uint8Array'));
+      chunks.push(result.value);
+    }
+
+    expect(chunks.map((chunk) => chunk.byteLength))
+      .toEqual([64 * 1024, 64 * 1024, 3]);
+    expect(concatenate(chunks)).toEqual(source);
+  });
+
+  it('decodes through a realm-owned TextDecoderStream', async () => {
+    const window = createWindow();
+    const blob = constructBlob(window, [Uint8Array.of(
+      0x41,
+      0xf0,
+      0x9f,
+      0x98,
+      0x80,
+    )]);
+    const stream = call(blob, 'textStream') as object;
+    const reader = call(stream, 'getReader') as object;
+
+    await expect(call(reader, 'read')).resolves.toEqual({
+      done: false,
+      value: 'A😀',
+    });
+    await expect(call(reader, 'read')).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  it('cancels before scheduled Blob reading begins', async () => {
+    const window = createWindow();
+    const blob = constructBlob(window, ['unused']);
+    const stream = call(blob, 'stream') as object;
+
+    await expect(call(stream, 'cancel', ['stop'])).resolves.toBeUndefined();
+    const reader = call(stream, 'getReader') as object;
+    await expect(call(reader, 'read')).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  it('maps backing-source failures into the Blob realm', async () => {
+    const window = createWindow();
+    const source: BlobByteSource = {
+      size: 1,
+      snapshotState: { version: 1 },
+      read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
+    };
+    const implementation = BlobImpl.create(
+      { nativeLineEnding: '\n' },
+      BlobData.fromSource(source),
+      '',
+      source.snapshotState,
+    );
+    const blob = projectBlob(window, implementation);
+
+    await expect(call(blob, 'bytes')).rejects.toMatchObject({
+      name: 'NotReadableError',
+    });
+    await expect(call(blob, 'bytes')).rejects
+      .toBeInstanceOf(requireFunction(window, 'DOMException'));
+  });
+
+  it('structured-clones Blob data into a distinct wrapper', async () => {
+    const window = createWindow();
+    const blob = constructBlob(window, ['payload'], { type: 'Text/PLAIN' });
+    const clone = window.structuredClone(blob);
+
+    expect(clone).not.toBe(blob);
+    expect(clone).toBeInstanceOf(requireFunction(window, 'Blob'));
+    expect(Reflect.get(clone, 'size')).toBe(7);
+    expect(Reflect.get(clone, 'type')).toBe('text/plain');
+    await expect(call(clone, 'text')).resolves.toBe('payload');
+  });
+
+  it('storage-clones bytes into a Blob in the target realm', async () => {
+    const sourceWindow = createWindow();
+    const targetWindow = createWindow();
+    const sourceRealm = getRelevantRealm(sourceWindow);
+    const targetRealm = getRelevantRealm(targetWindow);
+    const agentCluster = {};
+    const serialized = structuredSerializeForStorage(
+      constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
+      {
+        agentCluster,
+        interfaces: browletBindings.forRealm(sourceRealm).interfaces,
+        realm: sourceRealm,
+      },
+    );
+    const clone = structuredDeserialize(serialized, {
+      agentCluster,
+      interfaces: browletBindings.forRealm(targetRealm).interfaces,
+      realm: targetRealm,
+    }) as object;
+
+    expect(clone).toBeInstanceOf(requireFunction(targetWindow, 'Blob'));
+    expect(clone).not.toBeInstanceOf(requireFunction(sourceWindow, 'Blob'));
+    expect(Reflect.get(clone, 'type')).toBe('text/plain');
+    await expect(call(clone, 'text')).resolves.toBe('stored');
+  });
+});
+
+function createWindow(
+  nativeLineEnding: '\n' | '\r\n' = '\n',
+): Window & typeof globalThis {
+  return new Browlet({
+    nativeLineEnding,
+    route: () => '',
+  }).window as Window & typeof globalThis;
+}
+
+function constructBlob(
+  window: object,
+  parts: unknown[] = [],
+  options: object = {},
+): object {
+  return Reflect.construct(
+    requireFunction(window, 'Blob'),
+    [parts, options],
+  ) as object;
+}
+
+function projectBlob(window: object, implementation: BlobImpl): object {
+  const realm = getRelevantRealm(window);
+  return browletBindings.forRealm(realm).objects.project(
+    BlobImpl,
+    implementation,
+  );
+}
+
+function call(
+  object: object,
+  name: string,
+  argumentsList: unknown[] = [],
+): unknown {
+  return Reflect.apply(requireFunction(object, name), object, argumentsList);
+}
+
+function requireFunction(object: object, name: string): CallableFunction {
+  const value = Reflect.get(object, name) as unknown;
+  if (typeof value !== 'function') throw new Error(`${name} is not a function`);
+  return value;
+}
+
+function concatenate(chunks: readonly Uint8Array[]): Uint8Array {
+  const byteLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
+}
