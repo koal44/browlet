@@ -71,6 +71,7 @@ When an algorithm reaches a missing external dependency:
 | Parallel queues and task destinations | Fetch §§2.2 and 2.2.4 | HTML §2.1.1 parallel queues are implemented in `src/shared`; global task destinations and the networking task source also exist | Fetch retains its own task-destination union and queue-fetch-task algorithm |
 | Encoding | Fetch §§2.2.4 and 5.2–5.3 | `@exodus/bytes` supplies useful encoding algorithms, but Browlet has no Encoding-owned projection | Establish UTF-8 encode/decode hooks for body work; add a Browlet `TextDecoderStream` before exposing `Body.textStream()` |
 | MIME types | Fetch §§2.2.2, 2.10, 3.5–3.6, 5.3, and 6 | MIME Sniffing §§1–8 are implemented in `src/mime` | Consume the host-neutral MIME records and algorithms directly; consumer-specific missing-type policy remains with its loader |
+| Forgiving Base64 | Fetch §7 | Infra §7 encode and forgiving decode are implemented in `src/shared/base64.ts` | Consume the host-neutral algorithms directly from the `data:` URL processor |
 | Blob and File | Fetch §§2.2.4, 4.3, and 5.2–5.3 | Not implemented | Add the File API objects, stream access, slicing, type/size state, and HTML structured-data capabilities before exposing the complete Body family or `blob:` fetching |
 | FormData and multipart data | Fetch §§2.2.4 and 5.2–5.3 | Not implemented | Add XHR's FormData entry-list model and multipart encoding/parsing as a bounded prerequisite to the complete Body family |
 | High Resolution Time | Fetch §2 timing records and §4 timing steps | Environment timing and a shared monotonic clock exist | Keep Fetch timing records host-neutral; Browlet supplies the clock and later Resource Timing reporting |
@@ -343,6 +344,8 @@ ordering.
 
 ### Preflight 3 — host-neutral origin operations
 
+**Status:** Complete in `src/url/origin.ts` and `src/url/origin-api.ts`.
+
 **Specification:** Fetch §§2.1 and 2.2.5, consuming URL and HTML origin
 concepts.
 
@@ -358,7 +361,9 @@ use the same single implementation.
 
 ### Preflight completion audit
 
-Before opening Fetch Slice 1, verify:
+**Status:** Passed.
+
+The audit verified:
 
 - the MIME type core is executable from a host-neutral module;
 - HTML parallel queues have a deterministic test host and no hidden Node
@@ -368,9 +373,11 @@ Before opening Fetch Slice 1, verify:
 - Streams teeing and HTML structured cloning remain connected;
 - DOM abort, High Resolution Time, global task destinations, and the networking
   task source remain available through explicit integration seams; and
-- Encoding, Blob/File, FormData, forgiving-base64 decoding, CSP, cookies,
-  caches, Resource Timing, Referrer Policy, and Service Workers remain assigned
-  to their later first consumers rather than being pulled into preflight.
+- Infra forgiving Base64 is available from a host-neutral shared module.
+
+Encoding, Blob/File, FormData, CSP, cookies, caches, Resource Timing, Referrer
+Policy, and Service Workers remain assigned to their later first consumers
+rather than being pulled into preflight.
 
 The preflight is complete when these three changes are landed and the audit
 passes. At that point begin Fetch Slice 1 even if the optional full MIME
