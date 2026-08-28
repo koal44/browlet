@@ -160,7 +160,6 @@ adding a DOM timer path.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `parallel-queue.ts` when first consumed | Serialized ordering for algorithm steps that run in parallel with event-loop work | HTML §2.1.1 |
 | existing `agents.ts` | Obtain worker/worklet agents with the specified new/shared agent-cluster and `[[CanBlock]]` rules | HTML §8.1.2.2 |
 | existing `environment.ts` | Complete Window, worker, and worklet environment/settings algorithms, scripting enablement, secure-context integration, policy, and execution readiness | HTML §8.1.3; HTML §§10.2.6.2 and 11.3.1.3; Secure Contexts |
 | `script.ts` | Script records and shared script state | HTML §8.1.4 |

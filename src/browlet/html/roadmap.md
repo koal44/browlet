@@ -21,7 +21,7 @@ there is no catch-all `html/infra` module.
 
 | Section | Owner |
 | --- | --- |
-| §2.1.1 parallelism | `scripting/` for parallel queues and host scheduling; each calling algorithm retains its own state |
+| §2.1.1 parallelism | `src/shared/parallel-queue.ts` for the cross-project serial queue; each consumer supplies host scheduling and retains its own algorithm state |
 | §2.1.2 resources | `loader/` for resource lifecycles and critical subresources; the user-agent/transport boundary reports supported formats |
 | §2.1.3 XML compatibility | `dom/` for namespace-aware trees; an eventual XML parser boundary, not the HTML parser, owns XML syntax |
 | §2.1.4 DOM trees | `dom/` mutation primitives plus HTML insertion, post-connection, removing, and moving hooks |
