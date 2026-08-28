@@ -615,10 +615,10 @@ runScenarios('mixed-dom', 'normal', [
           </root>
         `, 'text/xml');
 
-        const x1 = document.importNode(xml.documentElement.children[0], true);
-        const x3 = document.importNode(xml.documentElement.children[1], true);
-        const x6 = document.importNode(xml.documentElement.children[2], true);
-        const x8 = document.importNode(xml.documentElement.children[3], true);
+        const x1 = document.importNode(xml.documentElement.children[0]!, true);
+        const x3 = document.importNode(xml.documentElement.children[1]!, true);
+        const x6 = document.importNode(xml.documentElement.children[2]!, true);
+        const x8 = document.importNode(xml.documentElement.children[3]!, true);
 
         const h2 = document.createElement('foo'); h2.id = 'h2';
         const h4 = document.createElement('FOO'); h4.id = 'h4';
@@ -637,4 +637,3 @@ runScenarios('mixed-dom', 'normal', [
   },
 
 ]);
-

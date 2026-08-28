@@ -59,11 +59,8 @@ async function runScenario(scenario: Scenario): Promise<void> {
   const document = asDocument(browlet.document);
   const selectlet = createSelectlet(document);
 
-  for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-    const step = steps[stepIndex];
-
-    for (let caseIndex = 0; caseIndex < step.cases.length; caseIndex++) {
-      const testCase = step.cases[caseIndex];
+  for (const [stepIndex, step] of steps.entries()) {
+    for (const [caseIndex, testCase] of step.cases.entries()) {
       if (hasOnlyCases && testCase.status !== 'only') continue;
       if (shouldSkipCase(testCase)) continue;
 

@@ -132,14 +132,12 @@ async function runScenario(s: Scenario, pages: Record<BrowserName, Page>): Promi
     await initPage(wrappedPage, s);
 
     let stepCaseIndex = 0;
-    for (let stepIndex = 0; stepIndex < steps.length; ++stepIndex) {
-      const step = steps[stepIndex];
+    for (const [stepIndex, step] of steps.entries()) {
       if (step.setupPage) {
         await step.setupPage(wrappedPage);
         await ensureHarnessInstalled(wrappedPage);
       }
-      for (let caseIndex = 0; caseIndex < step.cases.length; ++caseIndex) {
-        const c = step.cases[caseIndex];
+      for (const [caseIndex, c] of step.cases.entries()) {
         if (hasOnlyCases && c.status !== 'only') continue;
         await runCase(
           page,

@@ -216,7 +216,7 @@ function buildTable(all: Partial<Record<EngineName, BenchResult[]>>, currentName
 
     row.probe = JSON.stringify(pickProbe(cur.probe, probeKeys));
 
-    return [displayLabels[i], row];
+    return [displayLabels[i]!, row];
   }));
 
   return { rows, failedMaxRatio };
@@ -454,8 +454,8 @@ async function installPerfHelpers(page: Page) {
         return () => { clearCache!(); return fn(); };
       }
 
-      return benches.map((b, i) => {
-        const label = labels[i];
+      return benches.map((b) => {
+        const label = benchLabel(b);
         const ctx = resolveContext(b.ref);
         const iters = options.focused
           ? b.iters

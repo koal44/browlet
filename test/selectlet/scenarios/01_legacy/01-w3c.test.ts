@@ -168,7 +168,7 @@ runScenarios('w3c iframes', 'normal', [
         };
 
         [win, quirks, xml].forEach(function(global) {
-          const style = global.document.getElementsByTagName('style')[0];
+          const style = global.document.getElementsByTagName('style')[0]!;
           const elm = global.document.getElementById('test')!;
           function clean_slate(testName: string) {
             style.textContent = '';
@@ -940,14 +940,12 @@ runScenarios('w3c iframes 3', 'normal', [
             doc.createElementNS('http://www.example.org/ns', 'div'),
           ];
 
-          div[0].id = 'any-namespace-div1';
-          div[1].id = 'any-namespace-div2';
-          div[2].setAttribute('id', 'any-namespace-div3'); // Non-HTML elements can't use .id property
-          div[3].setAttribute('id', 'any-namespace-div4');
+          div[0]!.id = 'any-namespace-div1';
+          div[1]!.id = 'any-namespace-div2';
+          div[2]!.setAttribute('id', 'any-namespace-div3'); // Non-HTML elements can't use .id property
+          div[3]!.setAttribute('id', 'any-namespace-div4');
 
-          for (let i = 0; i < div.length; i++) {
-            anyNS.appendChild(div[i]);
-          }
+          for (const element of div) anyNS.appendChild(element);
 
           div = [
             doc.createElement('div'),
@@ -956,14 +954,12 @@ runScenarios('w3c iframes 3', 'normal', [
             doc.createElementNS('http://www.example.org/ns', 'div'),
           ];
 
-          div[0].id = 'no-namespace-div1';
-          div[1].id = 'no-namespace-div2';
-          div[2].setAttribute('id', 'no-namespace-div3'); // Non-HTML elements can't use .id property
-          div[3].setAttribute('id', 'no-namespace-div4');
+          div[0]!.id = 'no-namespace-div1';
+          div[1]!.id = 'no-namespace-div2';
+          div[2]!.setAttribute('id', 'no-namespace-div3'); // Non-HTML elements can't use .id property
+          div[3]!.setAttribute('id', 'no-namespace-div4');
 
-          for (let i = 0; i < div.length; i++) {
-            noNS.appendChild(div[i]);
-          }
+          for (const element of div) noNS.appendChild(element);
 
           parent.appendChild(anyNS);
           parent.appendChild(noNS);
@@ -2682,9 +2678,9 @@ runScenarios('w3c iframes 3', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => {
           const elems = document.querySelectorAll('#styleTests form');
-          const empty = elems[0];
-          const valid = elems[1];
-          const invalid = elems[2];
+          const empty = elems[0]!;
+          const valid = elems[1]!;
+          const invalid = elems[2]!;
           const validInput = valid.querySelector('input')!;
           const invalidInput = invalid.querySelector('input')!;
 
@@ -2709,9 +2705,9 @@ runScenarios('w3c iframes 3', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => {
           const elems = document.querySelectorAll('#styleTests fieldset');
-          const empty = elems[0];
-          const valid = elems[1];
-          const invalid = elems[2];
+          const empty = elems[0]!;
+          const valid = elems[1]!;
+          const invalid = elems[2]!;
           const validInput = valid.querySelector('input')!;
           const invalidInput = invalid.querySelector('input')!;
 
@@ -3457,7 +3453,6 @@ runScenarios('w3c iframes 3', 'normal', [
 
 
 ]);
-
 
 
 

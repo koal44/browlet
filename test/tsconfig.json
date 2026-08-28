@@ -5,7 +5,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"],
-    "noUncheckedIndexedAccess": false,
+    "noUncheckedIndexedAccess": true,
     "outDir": "../dist/.typecheck/test",
     "tsBuildInfoFile": "../dist/.typecheck/test.tsbuildinfo"
   },

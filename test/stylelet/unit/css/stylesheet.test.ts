@@ -63,7 +63,7 @@ describe('CSS stylesheet', () => {
       }],
     };
 
-    const rule = sheet.rules[0];
+    const rule = sheet.rules[0]!;
     expect(rule.type).toBe('style-rule');
     if (rule.type !== 'style-rule') throw new Error('Expected a style rule');
 
@@ -103,7 +103,7 @@ describe('CSS stylesheet', () => {
       }],
     });
     expect(sheet.originalText).toContain('--Accent: red !important');
-    const rule = sheet.rules[0];
+    const rule = sheet.rules[0]!;
     expect(rule.type).toBe('style-rule');
     if (rule.type !== 'style-rule') throw new Error('Expected a style rule');
 
@@ -164,9 +164,9 @@ describe('CSS stylesheet', () => {
       }],
     });
 
-    const parent = sheet.rules[0];
+    const parent = sheet.rules[0]!;
     if (parent.type !== 'style-rule') throw new Error('Expected a style rule');
-    const nested = parent.block[1];
+    const nested = parent.block[1]!;
     if (nested.type !== 'style-rule') throw new Error('Expected a nested style rule');
 
     expect(serializeSelectorList(nested.selectors)).toBe('&:hover');
@@ -180,11 +180,11 @@ describe('CSS stylesheet', () => {
         }
       }
     `);
-    const parent = sheet.rules[0];
+    const parent = sheet.rules[0]!;
     if (parent.type !== 'style-rule') throw new Error('Expected a style rule');
-    const child = parent.block[0];
+    const child = parent.block[0]!;
     if (child.type !== 'style-rule') throw new Error('Expected a nested style rule');
-    const grandchild = child.block[0];
+    const grandchild = child.block[0]!;
     if (grandchild.type !== 'style-rule') throw new Error('Expected a nested style rule');
 
     expect(serializeSelectorList(child.selectors)).toBe('& .item');

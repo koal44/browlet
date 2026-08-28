@@ -562,16 +562,19 @@ runScenarios('jquery', 'normal', [
         if (!api) throw new Error('selectlet not found');
         let ps = api.select('p:first-child');
 
-        for (let i = 0; i < ps.length; i++) {
-          ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i].nextSibling);
+        for (const p of ps) {
+          p.parentNode?.insertBefore(div.cloneNode(false), p.nextSibling);
         }
 
         ps = api.select('p:first-child');
 
-        for (let i = 0; i < ps.length; i++) {
-          const insertedDiv = ps[i].parentNode?.insertBefore(div.cloneNode(false), ps[i]);
-          const p = insertedDiv?.nextSibling;
-          p?.parentNode?.removeChild(p);
+        for (const paragraph of ps) {
+          const insertedDiv = paragraph.parentNode?.insertBefore(
+            div.cloneNode(false),
+            paragraph,
+          );
+          const next = insertedDiv?.nextSibling;
+          next?.parentNode?.removeChild(next);
         }
       });
     },

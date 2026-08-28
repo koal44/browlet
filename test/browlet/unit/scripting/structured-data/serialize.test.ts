@@ -257,11 +257,11 @@ describe('HTML structured serialization', () => {
     if (serializedMutual.type !== 'Object') {
       throw new Error('Object serialized to the wrong record');
     }
-    const serializedSecond = serializedMutual.properties[0].value;
+    const serializedSecond = serializedMutual.properties[0]!.value;
     if (serializedSecond.type !== 'Object') {
       throw new Error('Nested object serialized to the wrong record');
     }
-    expect(serializedSecond.properties[0].value).toBe(serializedMutual);
+    expect(serializedSecond.properties[0]!.value).toBe(serializedMutual);
 
     const sparse: unknown[] = [];
     sparse.length = 4;
