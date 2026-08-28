@@ -9,6 +9,8 @@ import { parseURL, type URLRecord } from '../../url/url';
 import { Moment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { WindowOrWorkerGlobalScopeMixin } from './global-scope';
+import type { RealmBindings } from '../../web-idl/index';
+import { structuredClone as cloneStructuredData } from './structured-data/structured-clone';
 
 /*
  * An environment carries navigation/client state before a realm, global
@@ -137,6 +139,7 @@ export function setupWindowEnvironmentSettingsObject(
   reservedEnvironment: Environment | null,
   topLevelCreationURL: URLRecord,
   topLevelOrigin: Origin,
+  bindings: RealmBindings,
 ): WindowEnvironmentSettingsObject {
   const realm = executionContext.realm;
   const window = realm.globalObject;
@@ -165,6 +168,17 @@ export function setupWindowEnvironmentSettingsObject(
     new WindowOrWorkerGlobalScopeMixin({
       eventLoop: realm.agent.eventLoop,
       global: realm.global,
+      structuredClone(value, transferList) {
+        const agentCluster = realm.agent.agentCluster;
+        if (!agentCluster) {
+          throw new Error('Realm agent has no agent cluster');
+        }
+        return cloneStructuredData(value, transferList, {
+          agentCluster,
+          interfaces: bindings.interfaces,
+          realm,
+        });
+      },
       timing: settings.timing,
     }),
   );

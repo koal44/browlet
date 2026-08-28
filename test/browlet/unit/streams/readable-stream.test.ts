@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../../../src/browlet/bindings';
 import { ReadableStreamDefaultControllerImpl } from '../../../../src/streams/readable-stream-default-controller';
 import type { ReadableByteStreamControllerImpl } from '../../../../src/streams/readable-byte-stream-controller';
 import { ReadableStreamImpl } from '../../../../src/streams/readable-stream';
+import {
+  readableStreamDefaultTee,
+} from '../../../../src/streams/readable-stream-operations';
 import { WritableStreamImpl } from '../../../../src/streams/writable-stream';
 import { createTestEnvironment } from './environment';
 
@@ -152,6 +158,78 @@ describe('ordinary readable-stream implementation', () => {
       done: true,
       value: undefined,
     });
+  });
+
+  it('clones the second branch for cross-specification teeing', async () => {
+    const { controller, stream } = createReadableStream();
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const reader1 = branch1.getReader({});
+    const reader2 = branch2.getReader({});
+    const read1 = reader1.read() as Promise<ReadableStreamReadResult>;
+    const read2 = reader2.read() as Promise<ReadableStreamReadResult>;
+    const chunk = { nested: { value: 'chunk' } };
+
+    controller.enqueue(chunk);
+
+    const [result1, result2] = await Promise.all([read1, read2]);
+    expect(result1.value).toBe(chunk);
+    expect(result2.value).toEqual(chunk);
+    expect(result2.value).not.toBe(chunk);
+    expect((result2.value as typeof chunk).nested).not.toBe(chunk.nested);
+  });
+
+  it('errors both tee branches when cross-specification cloning fails', async () => {
+    const error = new DOMException('', 'DataCloneError');
+    const cancel = vi.fn(() => Promise.resolve(undefined));
+    const environment = createTestEnvironment({
+      structuredClone: () => { throw error; },
+    });
+    let controller: ReadableStreamDefaultControllerImpl | undefined;
+    const stream = new ReadableStreamImpl(environment, {
+      cancel,
+      start(value: ReadableStreamDefaultControllerImpl) {
+        controller = value;
+      },
+    });
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const read1 = branch1.getReader({}).read() as Promise<unknown>;
+    const read2 = branch2.getReader({}).read() as Promise<unknown>;
+
+    requireDefaultController(controller).enqueue(() => undefined);
+
+    await expect(read1).rejects.toBe(error);
+    await expect(read2).rejects.toBe(error);
+    expect(cancel).toHaveBeenCalledWith(error);
+  });
+
+  it('realizes cross-specification clone failures in the stream realm', async () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const realm = getRelevantRealm(window);
+    const bindings = browletBindings.forRealm(realm);
+    const ReadableStream_ = requireFunction(window, 'ReadableStream');
+    const projected = Reflect.construct(ReadableStream_, []) as object;
+    const resolved = bindings.interfaces.resolve(projected);
+    if (resolved?.primaryInterface.name !== 'ReadableStream') {
+      throw new Error('ReadableStream did not resolve to its implementation');
+    }
+    const stream = resolved.implementation as ReadableStreamImpl;
+    const [branch1, branch2] = readableStreamDefaultTee(stream, true);
+    const read1 = branch1.getReader({}).read() as Promise<unknown>;
+    const read2 = branch2.getReader({}).read() as Promise<unknown>;
+    const controller = requireDefaultController(
+      ReadableStreamImpl.getState(stream).controller,
+    );
+
+    controller.enqueue(() => undefined);
+
+    const [error1, error2] = await Promise.all([
+      read1.catch((error: unknown) => error),
+      read2.catch((error: unknown) => error),
+    ]);
+    const DOMException_ = requireFunction(window, 'DOMException');
+    expect(error1).toBeInstanceOf(DOMException_);
+    expect(error2).toBe(error1);
+    expect(Reflect.get(error1 as object, 'name')).toBe('DataCloneError');
   });
 
   it('cancels a tee source after both branches cancel', async () => {
@@ -401,7 +479,7 @@ function createReadableStream(
   const environment = createTestEnvironment();
   const stream = new ReadableStreamImpl(environment, source);
   const controller = ReadableStreamImpl.getState(stream).controller;
-  if (!(controller instanceof ReadableStreamDefaultControllerImpl)) {
+  if (!ReadableStreamDefaultControllerImpl.is(controller)) {
     throw new Error('Readable stream has no default controller');
   }
   return { controller, stream };
@@ -415,9 +493,12 @@ function requireByteController(
 }
 
 function requireDefaultController(
-  controller: ReadableStreamDefaultControllerImpl | undefined,
+  controller: ReadableStreamDefaultControllerImpl |
+    ReadableByteStreamControllerImpl | undefined,
 ): ReadableStreamDefaultControllerImpl {
-  if (!controller) throw new Error('Missing readable stream controller');
+  if (!ReadableStreamDefaultControllerImpl.is(controller)) {
+    throw new Error('Missing readable stream default controller');
+  }
   return controller;
 }
 

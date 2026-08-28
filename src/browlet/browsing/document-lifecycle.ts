@@ -73,14 +73,15 @@ export function createAndInitializeDocument(
       createGlobalObject: () => window,
       createGlobalThisValue: () => browsingContext.windowProxy,
     });
+    bindings = browletBindings.register(realmExecutionContext.realm);
     setupWindowEnvironmentSettingsObject(
       creationURL,
       realmExecutionContext,
       navigationParams.reservedEnvironment,
       creationURL,
       navigationParams.origin,
+      bindings,
     );
-    bindings = browletBindings.register(realmExecutionContext.realm);
     installBindings = true;
   }
 

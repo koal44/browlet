@@ -4,11 +4,12 @@ import * as declaration from '../../../src/web-idl/declaration/index';
 import * as webIDL from '../../../src/web-idl/index';
 
 describe('Web IDL package surface', () => {
-  it('exposes declarations, binding metadata, and registration only', () => {
+  it('exposes declarations, binding metadata, and binding seams', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(declaration),
       'bind',
-      'registerInterfaceBindings',
+      'createBindings',
+      'defineCapability',
     ].sort());
   });
 });

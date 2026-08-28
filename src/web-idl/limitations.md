@@ -30,6 +30,12 @@ machinery or Web IDL feature is implemented.
 
 ## Buffer sources
 
+- **Growable SharedArrayBuffer view length:** Node exposes a view's current
+  numeric length but not its internal fixed-versus-auto length mode. Ordinary
+  resizable ArrayBuffers permit a reversible intrinsic resize probe; growable
+  SharedArrayBuffers cannot shrink back after an equivalent probe. An
+  ambiguous fixed-at-end or auto-length shared view therefore remains fixed
+  when structured data reconstructs it.
 - **Detached view byte length:** Web IDL reads a buffer view's internal
   `[[ByteLength]]`, while JavaScript's public view accessors return zero or
   throw after detachment. The original length cannot be recovered for an
@@ -92,11 +98,12 @@ immutable prototype behavior, member placement, property visibility, and
 legacy Window aliases.
 
 - **Serializable platform objects:** Declarative definitions preserve the
-  `[Serializable]` extended attribute, but Browlet does not yet expose HTML's
-  structured-clone machinery or dispatch to interface serialization and
-  deserialization steps. The `DOMException` expected-failure test records the
-  missing public contract. Implement this at HTML's structured serialization
-  boundary rather than special-casing cloning in the Web IDL binding.
+  `[Serializable]` extended attribute, and Web IDL now provides a generic,
+  realm-bound capability and internal-creation seam. Browlet registers the
+  DOMException and QuotaExceededError steps through that seam and implements
+  HTML's recursive serialization, transfer, target-realm deserialization, and
+  public `structuredClone()` API. Remaining platform-transfer coverage belongs
+  to Browlet's future MessagePort implementation, not to Web IDL.
 
 Observable array exotic objects and their specialized attribute behavior are
 implemented. CSSOM's `adoptedStyleSheets` declaration remains temporarily typed

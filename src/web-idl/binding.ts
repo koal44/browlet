@@ -35,11 +35,13 @@ import type {
 } from './platform-object';
 import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
+import { CapabilityRegistry } from './capability';
 
 export class JavaScriptBinding {
   readonly definitions: DefinitionAssembly;
   readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   readonly implementations: ImplementationRegistry;
+  readonly capabilities: CapabilityRegistry;
   readonly platformObjects: PlatformObjectRegistry;
   readonly realizeException: (value: unknown) => unknown;
   readonly realm: WebIDLRealmHost;
@@ -58,12 +60,14 @@ export class JavaScriptBinding {
     platformObjects: PlatformObjectRegistry,
     implementations = new ImplementationRegistry(),
     hostDefinedInterfaces: HostDefinedInterface[] = [],
+    capabilities = new CapabilityRegistry(definitions, []),
   ) {
     this.definitions = definitions;
     this.hostDefinedInterfaces = new Map(
       hostDefinedInterfaces.map((interface_) => [interface_.name, interface_]),
     );
     this.implementations = implementations;
+    this.capabilities = capabilities;
     this.realm = realm;
     this.platformObjects = platformObjects;
     this.realizeException = (value) => {

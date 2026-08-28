@@ -11,7 +11,16 @@ import {
   closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
   openAsyncSequence, type IDLAsyncIterator, type IDLAsyncSequence,
 } from '../web-idl/async-sequence';
-import type { WebIDLRealmHost } from '../web-idl/javascript-realm';
+import { defineCapability } from '../web-idl/capability';
+import type { InterfaceBindingContext } from '../web-idl/projection';
+
+export const streamStructuredData = defineCapability<StreamStructuredData>(
+  'Streams structured data',
+);
+
+export type StreamStructuredData = {
+  clone(global: object, value: unknown): unknown;
+};
 
 export type StreamEnvironment = {
   readonly abort: {
@@ -62,6 +71,9 @@ export type StreamEnvironment = {
   };
   readonly exceptions: {
     createTypeError(message: string): TypeError;
+  };
+  readonly structuredData: {
+    clone(value: unknown): unknown;
   };
   readonly iteration: {
     readonly end: unknown;
@@ -116,6 +128,11 @@ export function getStreamEnvironment(
 ): StreamEnvironment {
   let environment = environments.get(context.callbacks);
   if (!environment) {
+    const global = context.interfaces.resolve(context.realm.global);
+    const structuredData = global && context.interfaces.getCapability(
+      global.primaryInterface,
+      streamStructuredData,
+    );
     environment = {
       abort: {
         createController: () =>
@@ -198,6 +215,20 @@ export function getStreamEnvironment(
         createTypeError: (message) =>
           new context.realm.intrinsics.typeError(message),
       },
+      structuredData: {
+        clone(value) {
+          if (!global || !structuredData) {
+            throw new Error(
+              'The stream realm has no structured-data capability',
+            );
+          }
+          try {
+            return structuredData.clone(global.implementation, value);
+          } catch (exception) {
+            throw context.exceptions.realize(exception);
+          }
+        },
+      },
       iteration: {
         end: endOfIteration,
         close: (iterator, reason) => closeAsyncIterator(
@@ -251,45 +282,7 @@ export function getStreamEnvironment(
 
 export const streamEnvironment = contextValue(getStreamEnvironment);
 
-type StreamBindingContext = {
-  readonly callbacks: object & {
-    invokeFunction(
-      value: unknown,
-      argumentsList: readonly unknown[],
-      exceptionBehavior?: 'report' | 'rethrow',
-      thisArgument?: unknown,
-    ): unknown;
-  };
-  readonly conversions: {
-    convert(value: unknown, type: WebIDLType): unknown;
-  };
-  readonly objects: {
-    construct<Value extends object>(
-      implementation: StreamImplementationConstructor<Value>,
-      argumentsList: readonly unknown[],
-    ): Value;
-    create<Value extends object>(
-      implementation: StreamImplementationConstructor<Value>,
-    ): Value;
-    createForInterface<Value extends object>(name: string): Value;
-  };
-  readonly promises: {
-    create(type: WebIDLType): unknown;
-    createRejected(reason: unknown, type: WebIDLType): unknown;
-    createResolved(value: unknown, type: WebIDLType): unknown;
-    isUnresolved(value: unknown): boolean;
-    markHandled(value: unknown): void;
-    react(
-      value: unknown,
-      resultType: WebIDLType,
-      steps: StreamPromiseReactionSteps,
-    ): unknown;
-    reject(value: unknown, reason: unknown): void;
-    resolve(value: unknown, result: unknown): void;
-    waitForAll(values: readonly unknown[], type: WebIDLType): unknown;
-  };
-  readonly realm: WebIDLRealmHost;
-};
+type StreamBindingContext = InterfaceBindingContext;
 
 type StreamFunctionSteps = (
   thisArgument: unknown,

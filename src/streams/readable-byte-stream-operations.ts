@@ -37,8 +37,9 @@ export function setUpReadableStreamBYOBReader(
       'This stream has already been locked for exclusive reading',
     );
   }
-  if (!(ReadableStreamImpl.getState(stream).controller instanceof
-    ReadableByteStreamControllerImpl)) {
+  if (!ReadableByteStreamControllerImpl.is(
+    ReadableStreamImpl.getState(stream).controller,
+  )) {
     throw new TypeError(
       'A BYOB reader requires a stream constructed with a byte source',
     );
@@ -435,15 +436,17 @@ export function readableStreamGetNumReadRequests(
 export function readableStreamHasBYOBReader(
   stream: ReadableStreamImpl,
 ): boolean {
-  return ReadableStreamImpl.getState(stream).reader instanceof
-    ReadableStreamBYOBReaderImpl;
+  return ReadableStreamBYOBReaderImpl.is(
+    ReadableStreamImpl.getState(stream).reader,
+  );
 }
 
 export function readableStreamHasDefaultReader(
   stream: ReadableStreamImpl,
 ): boolean {
-  return ReadableStreamImpl.getState(stream).reader instanceof
-    ReadableStreamDefaultReaderImpl;
+  return ReadableStreamDefaultReaderImpl.is(
+    ReadableStreamImpl.getState(stream).reader,
+  );
 }
 
 export function readableByteStreamControllerCallPullIfNeeded(

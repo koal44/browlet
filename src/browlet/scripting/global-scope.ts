@@ -1,6 +1,6 @@
 import {
   arg, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
-  idlType, integer, op, roAttr, reference, union, xattr,
+  emptyDictionary, idlType, integer, op, roAttr, reference, union, xattr,
 } from '../../web-idl/declaration/index';
 import { callback } from '../../web-idl/index';
 import { PerformanceImpl } from '../performance/performance';
@@ -8,6 +8,7 @@ import type { EnvironmentTiming } from '../performance/high-resolution-time';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventLoop } from './event-loop';
 import { GlobalTimers, type TimerAction } from './timers';
+import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
 
 /*
  * typedef (DOMString or Function or TrustedScript) TimerHandler;
@@ -50,11 +51,15 @@ import { GlobalTimers, type TimerAction } from './timers';
 export class WindowOrWorkerGlobalScopeMixin {
   readonly #eventLoop: EventLoop;
   readonly #performance: PerformanceImpl;
+  readonly #structuredClone: WindowOrWorkerGlobalScopeInitialization[
+    'structuredClone'
+  ];
   readonly #timers: GlobalTimers;
 
   constructor(initialization: WindowOrWorkerGlobalScopeInitialization) {
     this.#eventLoop = initialization.eventLoop;
     this.#performance = new PerformanceImpl(initialization.timing);
+    this.#structuredClone = initialization.structuredClone;
     this.#timers = new GlobalTimers({
       eventLoop: initialization.eventLoop,
       global: initialization.global,
@@ -90,6 +95,13 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.#eventLoop.queueMicrotask(() => { callback(); });
   }
 
+  structuredClone(
+    value: unknown,
+    options: StructuredSerializeOptions = { transfer: [] },
+  ): unknown {
+    return this.#structuredClone(value, options.transfer ?? []);
+  }
+
   // -- Friends ----------------------------------------------------------
 
   static setAssociatedDocument(
@@ -103,6 +115,10 @@ export class WindowOrWorkerGlobalScopeMixin {
 export type WindowOrWorkerGlobalScopeInitialization = {
   readonly eventLoop: EventLoop;
   readonly global: object;
+  readonly structuredClone: (
+    value: unknown,
+    transferList: readonly object[],
+  ) => unknown;
   readonly timing: EnvironmentTiming;
 };
 
@@ -141,6 +157,14 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
       idlType.undefined,
       [arg('callback', reference('VoidFunction'), callback('report'))],
     ),
+    // HTML §2.7.10 contributes the structured-cloning API to this mixin.
+    op('structuredClone', idlType.any, [
+      arg('value', idlType.any),
+      arg('options', reference(structuredSerializeOptionsIDL.name), {
+        default: emptyDictionary,
+        optional: true,
+      }),
+    ]),
   ],
 });
 

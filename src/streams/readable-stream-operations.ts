@@ -519,10 +519,25 @@ export function readableStreamDefaultTee(
       chunkSteps(chunk) {
         environment.queueMicrotask(() => {
           readAgain = false;
+          let chunk2 = chunk;
           if (cloneForBranch2 && !canceled2) {
-            throw new Error(
-              'Structured cloning for generic stream teeing is not available',
-            );
+            try {
+              chunk2 = environment.structuredData.clone(chunk);
+            } catch (error) {
+              readableStreamDefaultControllerError(
+                requireDefaultController(branch1),
+                error,
+              );
+              readableStreamDefaultControllerError(
+                requireDefaultController(branch2),
+                error,
+              );
+              environment.promises.resolve(
+                cancelPromise,
+                readableStreamCancel(stream, error),
+              );
+              return;
+            }
           }
           if (!canceled1) {
             readableStreamDefaultControllerEnqueue(
@@ -533,7 +548,7 @@ export function readableStreamDefaultTee(
           if (!canceled2) {
             readableStreamDefaultControllerEnqueue(
               requireDefaultController(branch2),
-              chunk,
+              chunk2,
             );
           }
           reading = false;

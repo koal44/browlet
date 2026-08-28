@@ -124,18 +124,19 @@ export function createNewBrowsingContextAndDocument(
   const topLevelOrigin = embedder === null
     ? origin
     : getEmbedderTopLevelOrigin(embedder);
+  const bindings = browletBindings.register(realmExecutionContext.realm);
   const settings = setupWindowEnvironmentSettingsObject(
     aboutBlankURL,
     realmExecutionContext,
     null,
     topLevelCreationURL,
     topLevelOrigin,
+    bindings,
   );
   const loadTimingInfo = createDocumentLoadTimingInfo(coarsenTime(
     unsafeContextCreationTime,
     settings.crossOriginIsolatedCapability,
   ).milliseconds);
-  const bindings = browletBindings.register(realmExecutionContext.realm);
   const document = createDocument({
     nodeFactory: bindings.objects,
   });
