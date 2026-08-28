@@ -64,7 +64,7 @@ When an algorithm reaches a missing external dependency:
 
 | Dependency | First required by | Present state | Delivery decision |
 | --- | --- | --- | --- |
-| URL records, parsing, hosts, and origins | Fetch §§2.1 and 2.2.5 | Implemented in `src/url`; pure same-origin and same-site operations currently sit too high in Browlet's browsing layer | Move or expose the pure operations below Browlet before host-neutral Fetch needs them; do not create a second parser or IDNA path |
+| URL records, parsing, hosts, and origins | Fetch §§2.1 and 2.2.5 | Implemented in `src/url`, including the host-neutral origin and site operations | Consume the existing records and algorithms directly; do not create a second parser or IDNA path |
 | DOM abort algorithms | Fetch §§2.2 and 5.4–5.6 | Implemented through DOM §3 | Consume through a narrow Fetch host capability; never expose Node's `AbortSignal` |
 | HTML structured data | Fetch §2 controller abort steps | Implemented through HTML §2.7 | Serialize abort reasons through the existing capability boundary |
 | Streams | Fetch §2.2.4 | Ordinary Readable, Writable, and Transform Streams are implemented; Fetch's cross-specification tee clone is connected to HTML structured cloning | Transferable Streams and MessagePort are not Fetch prerequisites |
@@ -346,15 +346,11 @@ ordering.
 **Specification:** Fetch §§2.1 and 2.2.5, consuming URL and HTML origin
 concepts.
 
-Move or expose the pure origin operations currently housed under Browlet's
-browsing layer at the same low-level boundary as the origin records. Include
-same-origin, same-origin-domain, same-site, schemelessly same-site, effective
-domain, site construction, and serialization only to the extent that they are
-host-neutral.
-
-Keep the author-facing `Origin` platform object and browsing-context policy in
-Browlet. This is an ownership correction, not permission to move browser
-semantics into `src/url`.
+Complete. Origin records, site types, comparisons, effective-domain handling,
+and serialization live in `src/url/origin.ts`. The standalone `Origin`
+implementation and declaration live beside them in `src/url/origin-api.ts`;
+Browlet remains responsible only for selecting and exposing that declaration in
+its assembled Web IDL environment. Browsing-context policy remains in Browlet.
 
 **Exit proof:** `src/fetch` can compare and serialize origin records without
 importing from `src/browlet`, and existing Browlet origin behavior continues to

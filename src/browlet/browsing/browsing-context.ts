@@ -7,7 +7,7 @@ import {
 } from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import { setupWindowEnvironmentSettingsObject } from '../scripting/environment';
-import { serializeSite } from './origin';
+import { serializeSite } from '../../url/origin';
 import { createRealm } from '../scripting/realm';
 import type { UserAgent } from '../user-agent';
 import type { Navigable } from './navigable';

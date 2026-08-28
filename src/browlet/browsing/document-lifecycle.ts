@@ -3,8 +3,8 @@ import {
   createDocument, DocumentImpl, type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
+import { areSameOriginDomain } from '../../url/origin';
 import { serializeURL } from '../../url/url';
-import { areSameOriginDomain } from './origin';
 import { obtainSimilarOriginWindowAgent } from '../scripting/agents';
 import {
   browletBindings, getRelevantRealm, projectWindow,
