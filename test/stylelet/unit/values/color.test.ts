@@ -1012,7 +1012,7 @@ describe('color values', () => {
     });
     expectComponentsCloseTo(computed.components, [0.1, 0.2, 0.3], 12);
     expect(inputs).toHaveLength(1);
-    expectComponentsCloseTo(inputs[0], [0.1, 0.2, 0.3, 0.4], 12);
+    expectComponentsCloseTo(inputs[0]!, [0.1, 0.2, 0.3, 0.4], 12);
   });
 
   it('parses and serializes the light-dark color production', () => {
@@ -1268,7 +1268,7 @@ describe('color values', () => {
     });
     expectComponentsCloseTo(converted.components, [0.2, 0.4, 0.6], 12);
     expect(inputs).toHaveLength(1);
-    expectComponentsCloseTo(inputs[0], [0.2, 0.4, 0.6, 0.8], 12);
+    expectComponentsCloseTo(inputs[0]!, [0.2, 0.4, 0.6, 0.8], 12);
     expect(interpolateColors(
       custom,
       converted,
@@ -1317,7 +1317,7 @@ describe('color values', () => {
 
     expectComponentsCloseTo(resolved.components, [0.2, 0.4, 0.6], 12);
     expect(inputs).toHaveLength(1);
-    expectComponentsCloseTo(inputs[0], [0.2, 0.4, 0.6, 0.8], 12);
+    expectComponentsCloseTo(inputs[0]!, [0.2, 0.4, 0.6, 0.8], 12);
   });
 
   it('converts a resolved predefined color to an explicit target', () => {
@@ -3246,7 +3246,7 @@ describe('color values', () => {
   });
 
   it('serializes parsed color functions with canonical spelling and spacing', () => {
-    const cases = [
+    const cases: [string, string][] = [
       [' RGBa( 1 ,  2, 3 , 50% ) ', 'rgba(1, 2, 3, 0.5)'],
       ['rgb(0\t,  51 ,255)', 'rgb(0, 51, 255)'],
       [' HSLa( .5turn , 25% , 75% , 20% ) ', 'rgba(175.3125, 207.1875, 207.1875, 0.2)'],

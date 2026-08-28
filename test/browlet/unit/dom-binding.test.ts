@@ -201,7 +201,7 @@ describe('Browlet DOM binding', () => {
     const comment = document.createComment('note');
     const detachedAttribute = document.createAttribute('DATA-detached');
     element.setAttribute('id', 'target');
-    const attribute = element.attributes[0];
+    const attribute = element.attributes[0]!;
 
     expect(Object.keys(document)).toEqual([]);
     expect(Object.keys(element)).toEqual([]);

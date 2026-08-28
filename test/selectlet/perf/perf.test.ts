@@ -16,8 +16,8 @@ const shuffled = (n: number) => {
   for (let i = n - 1; i > 0; --i) {
     x = (x * 1664525 + 1013904223) >>> 0;
     const j = x % (i + 1);
-    const t = xs[i];
-    xs[i] = xs[j];
+    const t = xs[i]!;
+    xs[i] = xs[j]!;
     xs[j] = t;
   }
 

@@ -4083,8 +4083,7 @@ runScenarios('CSS radial gradient used geometry oracle', 'skip', [
       `).join('')}
     `,
     setupPage: async (page) => {
-      for (let index = 0; index < radialGradientGeometryPairs.length; ++index) {
-        const pair = radialGradientGeometryPairs[index];
+      for (const [index, pair] of radialGradientGeometryPairs.entries()) {
         const derived = page.locator(`#radial-derived-${index}`);
         const explicit = page.locator(`#radial-explicit-${index}`);
 
@@ -4118,7 +4117,7 @@ runScenarios('CSS radial gradient used geometry oracle', 'skip', [
           for (let offset = 0; offset < leftPixels.data.length; ++offset) {
             maxChannelDifference = Math.max(
               maxChannelDifference,
-              Math.abs(leftPixels.data[offset] - rightPixels.data[offset]),
+              Math.abs(leftPixels.data[offset]! - rightPixels.data[offset]!),
             );
           }
 

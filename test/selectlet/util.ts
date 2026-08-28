@@ -67,8 +67,7 @@ export function describeList(list: SelectorList): string {
 export function describeComplex(complex: ComplexSelector): string {
   let out = '';
 
-  for (let i = 0; i < complex.parts.length; i++) {
-    const part = complex.parts[i];
+  for (const [i, part] of complex.parts.entries()) {
 
     if (i > 0) {
       out += part.combinator === ' ' ? ' ' : ` ${part.combinator} `;
@@ -92,14 +91,13 @@ export function describeCompound(c: CompoundSelector): string {
   }
 
   if (c.classes) {
-    for (let i = 0; i < c.classes.length; i++) {
-      const cls = c.classes[i];
+    for (const cls of c.classes) {
       out += `.${cls.raw}${cls.seed ? '{seed}' : ''}`;
     }
   }
 
-  for (let i = 0; i < c.tests.length; i++) {
-    out += describeCandidateTest(c.tests[i]);
+  for (const test of c.tests) {
+    out += describeCandidateTest(test);
   }
 
   return out || '*';
@@ -112,8 +110,7 @@ function describeRelativeList(list: RelativeSelectorList): string {
 function describeRelativeArm(arm: RelativeComplexSelector): string {
   let out = '';
 
-  for (let i = 0; i < arm.steps.length; i++) {
-    const step = arm.steps[i];
+  for (const [i, step] of arm.steps.entries()) {
 
     if (i === 0 && step.combinator === ' ') {
       out += describeRelativeCompound(step.compound);

@@ -117,12 +117,12 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const returned = callIterator(iterator, 'return', ['stop']);
     expect(calls).toEqual(['next']);
 
-    resolvePromise(pending[0], ['one', 1], binding);
+    resolvePromise(pending[0]!, ['one', 1], binding);
     await expect(first).resolves.toMatchObject({ done: false });
     await Promise.resolve();
     expect(calls).toEqual(['next', 'next']);
 
-    resolvePromise(pending[1], ['two', 2], binding);
+    resolvePromise(pending[1]!, ['two', 2], binding);
     await expect(second).resolves.toMatchObject({ done: false });
     await expect(returned).resolves.toEqual({ done: true, value: 'stop' });
     expect(calls).toEqual(['next', 'next', 'return:stop']);

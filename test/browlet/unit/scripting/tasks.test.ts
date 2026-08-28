@@ -114,7 +114,7 @@ describe('task queues', () => {
     const firstQueue = EventLoop.getTaskQueue(eventLoop, firstSource);
     const secondQueue = EventLoop.getTaskQueue(eventLoop, secondSource);
     const selectTaskQueue = vi.fn(
-      (queues: readonly ReadonlySet<Task>[]) => queues[1],
+      (queues: readonly ReadonlySet<Task>[]) => queues[1]!,
     );
 
     queueTask(firstSource, eventLoop, null, first);
@@ -330,7 +330,7 @@ describe('task queues', () => {
     queueGlobalTask(source, window, vi.fn());
 
     const [task] = EventLoop.getTaskQueue(requireEventLoop(window), source);
-    expect(task.document).toBe(document);
+    expect(task!.document).toBe(document);
   });
 
   it('captures the surrounding Window Realm Document for a microtask', () => {

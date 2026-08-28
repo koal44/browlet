@@ -69,7 +69,7 @@ describe('Performance', () => {
 
     expect(times.at(-1)).not.toBe(times[0]);
     for (let index = 1; index < times.length; ++index) {
-      const differenceInMicroseconds = (times[index] - times[index - 1]) *
+      const differenceInMicroseconds = (times[index]! - times[index - 1]!) *
         1_000;
 
       expect(

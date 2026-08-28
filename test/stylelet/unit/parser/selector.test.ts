@@ -35,7 +35,7 @@ function expectComplexSelector(css: string, context: SelectorParserContext = {})
 
     expect(result.arms, `Expected exactly one selector for: ${css}`).toHaveLength(1);
 
-    return result.arms[0];
+    return result.arms[0]!;
   } catch (error) {
     rethrowFromCaller(error, expectComplexSelector);
   }
@@ -1317,15 +1317,15 @@ describe('pseudo-element selectors', () => {
       function expectForgivingTailIsNames(css: string, expectedNames: string[]): void {
         try {
           const selector = expectComplexSelector(css);
-          const pseudoClasses = selector.parts[0].unit.pseudoCompounds[0].pseudoClasses;
+          const pseudoClasses = selector.parts[0]!.unit.pseudoCompounds[0]!.pseudoClasses;
 
           expect(pseudoClasses, css).toHaveLength(1);
-          expect(pseudoClasses[0].name, css).toBe('is');
-          expect(pseudoClasses[0].argument, css).toMatchObject({
+          expect(pseudoClasses[0]!.name, css).toBe('is');
+          expect(pseudoClasses[0]!.argument, css).toMatchObject({
             kind: PseudoArgumentKind.ForgivingSelectorList,
           });
 
-          const argument = pseudoClasses[0].argument;
+          const argument = pseudoClasses[0]!.argument;
 
           if (argument?.kind !== PseudoArgumentKind.ForgivingSelectorList) {
             throw new Error(`Expected :is() forgiving argument for ${css}`);
@@ -1336,11 +1336,11 @@ describe('pseudo-element selectors', () => {
 
             expect(arm.parts, `${css} arm ${index}`).toHaveLength(1);
 
-            const part = arm.parts[0];
+            const part = arm.parts[0]!;
             expect(part.compound.typeSelector, `${css} arm ${index}`).toBeNull();
             expect(part.compound.subclasses, `${css} arm ${index}`).toHaveLength(1);
 
-            const subclass = part.compound.subclasses[0];
+            const subclass = part.compound.subclasses[0]!;
 
             if (subclass.kind !== SelectorKind.PseudoClassSelector) {
               throw new Error(`Expected pseudo-class in ${css} arm ${index}`);
@@ -1767,7 +1767,7 @@ describe('AST representation', () => {
         ],
       });
 
-      const pseudo = selector.parts[0].unit.pseudoCompounds[0].pseudoElement;
+      const pseudo = selector.parts[0]!.unit.pseudoCompounds[0]!.pseudoElement;
 
       expect(pseudo).not.toHaveProperty('legacy');
     }

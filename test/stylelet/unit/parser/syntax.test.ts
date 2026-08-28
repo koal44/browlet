@@ -104,7 +104,7 @@ describe('5.4 parser entry points', () => {
 
     const style = expectQualifiedRule(rules[1]);
     expect(expectDeclarations(style.block[0])).toHaveLength(1);
-    expect(expectDeclarations(style.block[0])[0].name).toBe('color');
+    expect(expectDeclarations(style.block[0])[0]!.name).toBe('color');
   });
 
   test('ignores whitespace, CDO, and CDC in stylesheet contents', () => {
@@ -123,9 +123,9 @@ describe('5.4 parser entry points', () => {
     expect(contents).toHaveLength(5);
     expect(expectDeclarations(contents[0])).toHaveLength(2);
     expectQualifiedRule(contents[1]);
-    expect(expectDeclarations(contents[2])[0].name).toBe('height');
+    expect(expectDeclarations(contents[2])[0]!.name).toBe('height');
     expectStatementAtRule(contents[3]);
-    expect(expectDeclarations(contents[4])[0].name).toBe('opacity');
+    expect(expectDeclarations(contents[4])[0]!.name).toBe('opacity');
   });
 
   test('retains the final declaration run at EOF', () => {
@@ -183,8 +183,8 @@ describe('5.4 parser entry points', () => {
 
     const groups = parseCommaSeparatedListOfComponentValues('fn(a, b), [c, d], e');
     expect(groups).toHaveLength(3);
-    expectFunctionBlock(groups[0][0], 'fn');
-    expectSimpleBlock(groups[1][1], TokenKind.BracketBlock);
+    expectFunctionBlock(groups[0]![0], 'fn');
+    expectSimpleBlock(groups[1]![1], TokenKind.BracketBlock);
   });
 
   test('preserves leading and consecutive empty comma groups but omits a trailing one', () => {
@@ -192,9 +192,9 @@ describe('5.4 parser entry points', () => {
 
     expect(groups).toHaveLength(4);
     expect(groups[0]).toEqual([]);
-    expect(preservedKinds(groups[1])).toEqual([TokenKind.Ident]);
+    expect(preservedKinds(groups[1]!)).toEqual([TokenKind.Ident]);
     expect(groups[2]).toEqual([]);
-    expect(preservedKinds(groups[3])).toEqual([TokenKind.Ident]);
+    expect(preservedKinds(groups[3]!)).toEqual([TokenKind.Ident]);
   });
 });
 
@@ -255,9 +255,9 @@ describe('5.5 rule consumers', () => {
     expect(rule.block).toHaveLength(5);
     expect(expectDeclarations(rule.block[0]).map(({ name }) => name)).toEqual(['color']);
     expectQualifiedRule(rule.block[1]);
-    expect(expectDeclarations(rule.block[2])[0].name).toBe('height');
+    expect(expectDeclarations(rule.block[2])[0]!.name).toBe('height');
     expectStatementAtRule(rule.block[3]);
-    expect(expectDeclarations(rule.block[4])[0].name).toBe('opacity');
+    expect(expectDeclarations(rule.block[4])[0]!.name).toBe('opacity');
   });
 
   test('parses declarations inside nested qualified rules', () => {
@@ -265,7 +265,7 @@ describe('5.5 rule consumers', () => {
     const nested = expectQualifiedRule(outer.block[0]);
 
     expect(expectDeclarations(nested.block[0])).toHaveLength(1);
-    expect(expectDeclarations(nested.block[0])[0].name).toBe('color');
+    expect(expectDeclarations(nested.block[0])[0]!.name).toBe('color');
   });
 
   test('does not reinterpret a custom-property-shaped construct as a rule', () => {
@@ -407,8 +407,8 @@ describe('5.5 component-value consumers', () => {
     const declarations = expectDeclarations(contents[0]);
 
     expect(declarations.map(({ name }) => name)).toEqual(['font-family', 'x', 'width']);
-    expect(preservedKinds(declarations[0].value)).toEqual([TokenKind.String]);
-    expectFunctionBlock(declarations[1].value[0], 'fn');
+    expect(preservedKinds(declarations[0]!.value)).toEqual([TokenKind.String]);
+    expectFunctionBlock(declarations[1]!.value[0], 'fn');
   });
 
   test('an unterminated comment consumes the rest of the input', () => {
@@ -428,7 +428,7 @@ describe('5.5 component-value consumers', () => {
       'background-image',
       'margin-left',
     ]);
-    expect(preservedKinds(declarations[0].value)).toEqual([TokenKind.BadUrl]);
+    expect(preservedKinds(declarations[0]!.value)).toEqual([TokenKind.BadUrl]);
   });
 
   test('recovers after a bad string reaches a declaration boundary', () => {
@@ -441,7 +441,7 @@ describe('5.5 component-value consumers', () => {
       'font-family',
       'margin-left',
     ]);
-    expect(preservedKinds(declarations[0].value)).toContain(TokenKind.BadString);
+    expect(preservedKinds(declarations[0]!.value)).toContain(TokenKind.BadString);
   });
 
   test('does not treat a brace inside an attribute string as the rule block', () => {
@@ -457,7 +457,7 @@ describe('mixed token and component-value input', () => {
     const components = parseListOfComponentValues('red fn(x) [y]');
 
     expect(parseListOfComponentValues(components)).toEqual(components);
-    expect(parseComponentValue([components[2]])).toBe(components[2]);
+    expect(parseComponentValue([components[2]!])).toBe(components[2]);
   });
 
   test('parses rule bodies supplied as an existing brace block', () => {
