@@ -1,10 +1,10 @@
 import type { Definition } from '../web-idl/declaration/index';
+import { originIDL } from '../url/origin-api';
 import { htmlDocumentIDL } from './dom/nodes/document';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import { svgIDLDefinitions } from './svg/web-idl';
 import { locationIDL } from './browsing/window/location';
-import { originIDL } from './browsing/origin';
 import {
   windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
 } from './browsing/window/window';

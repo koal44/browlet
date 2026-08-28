@@ -1,4 +1,7 @@
-import { serializeHost, type Domain, type Host } from './host';
+import {
+  hostsEqual, obtainPublicSuffix, obtainRegistrableDomain, parseHost,
+  serializeHost, type Domain, type Host,
+} from './host';
 
 /*
  * Origins are defined by HTML, while the URL Standard defines how a URL's
@@ -21,6 +24,10 @@ export type TupleOrigin = {
   domain: Domain | null;
 };
 
+export type SchemeAndHost = [scheme: string, host: Host];
+
+export type Site = OpaqueOrigin | SchemeAndHost;
+
 /*
  * New opaque origin.
  *
@@ -41,4 +48,119 @@ export function serializeOrigin(origin: Origin): string {
   let result = `${origin.scheme}://${serializeHost(origin.host)}`;
   if (origin.port !== null) result += `:${origin.port}`;
   return result;
+}
+
+export function effectiveDomain(origin: Origin): Host | null {
+  if (origin.kind === 'opaque') return null;
+  return origin.domain ?? origin.host;
+}
+
+export function areSameOrigin(a: Origin, b: Origin): boolean {
+  if (a.kind === 'opaque' || b.kind === 'opaque') {
+    return a.kind === 'opaque' && b.kind === 'opaque' &&
+      a.identity === b.identity;
+  }
+
+  return a.scheme === b.scheme &&
+    hostsEqual(a.host, b.host) &&
+    a.port === b.port;
+}
+
+export function areSameOriginDomain(a: Origin, b: Origin): boolean {
+  if (a.kind === 'opaque' || b.kind === 'opaque') {
+    return a.kind === 'opaque' && b.kind === 'opaque' &&
+      a.identity === b.identity;
+  }
+
+  if (
+    a.scheme === b.scheme &&
+    a.domain !== null &&
+    b.domain !== null &&
+    hostsEqual(a.domain, b.domain)
+  ) {
+    return true;
+  }
+
+  return a.domain === null && b.domain === null && areSameOrigin(a, b);
+}
+
+export function isRegistrableDomainSuffixOfOrEqualTo(
+  hostSuffixString: string,
+  originalHost: Host,
+): boolean {
+  if (hostSuffixString === '') return false;
+
+  const hostSuffix = parseHost(hostSuffixString).host;
+  if (hostSuffix === null) return false;
+  if (hostsEqual(hostSuffix, originalHost)) return true;
+  if (hostSuffix.kind !== 'domain' || originalHost.kind !== 'domain') {
+    return false;
+  }
+  if (!originalHost.value.endsWith(`.${hostSuffix.value}`)) return false;
+
+  const hostSuffixPublicSuffix = obtainPublicSuffix(hostSuffix);
+  if (
+    hostSuffixPublicSuffix !== null &&
+    hostsEqual(hostSuffix, hostSuffixPublicSuffix)
+  ) {
+    return false;
+  }
+
+  const originalHostPublicSuffix = obtainPublicSuffix(originalHost);
+  return originalHostPublicSuffix !== null &&
+    hostSuffix.value.endsWith(`.${originalHostPublicSuffix.value}`);
+}
+
+export function obtainSite(origin: Origin): Site {
+  if (origin.kind === 'opaque') return origin;
+  return [
+    origin.scheme,
+    obtainRegistrableDomain(origin.host) ?? origin.host,
+  ];
+}
+
+export function sitesAreSameSite(a: Site, b: Site): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) {
+    return !Array.isArray(a) && !Array.isArray(b) &&
+      a.identity === b.identity;
+  }
+
+  return a[0] === b[0] && hostsEqual(a[1], b[1]);
+}
+
+export function serializeSite(site: Site): string {
+  if (!Array.isArray(site)) return 'null';
+  return `${site[0]}://${serializeHost(site[1])}`;
+}
+
+export function areSchemelesslySameSite(a: Origin, b: Origin): boolean {
+  if (a.kind === 'opaque' || b.kind === 'opaque') {
+    return a.kind === 'opaque' && b.kind === 'opaque' &&
+      a.identity === b.identity;
+  }
+
+  const hostA = a.host;
+  const hostB = b.host;
+  const registrableDomainA = obtainRegistrableDomain(hostA);
+  const registrableDomainB = obtainRegistrableDomain(hostB);
+
+  if (
+    hostsEqual(hostA, hostB) &&
+    registrableDomainA === null &&
+    registrableDomainB === null
+  ) {
+    return true;
+  }
+
+  return registrableDomainA !== null &&
+    registrableDomainB !== null &&
+    hostsEqual(registrableDomainA, registrableDomainB);
+}
+
+export function areSameSite(a: Origin, b: Origin): boolean {
+  return sitesAreSameSite(obtainSite(a), obtainSite(b));
+}
+
+export function isOrigin(value: Origin | Site): value is Origin {
+  return !Array.isArray(value);
 }

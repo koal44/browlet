@@ -2,8 +2,8 @@ import { EventLoop, type EventLoopOptions } from './event-loop';
 import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
-} from '../browsing/origin';
-import type { Origin } from '../../url/origin';
+  type Origin,
+} from '../../url/origin';
 
 /*
  * An agent owns the execution boundary shared by one or more realms. V8 owns

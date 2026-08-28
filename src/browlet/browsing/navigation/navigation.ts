@@ -6,9 +6,8 @@ import {
   createOpenerPolicy, type OpenerPolicy,
 } from '../policy/coop';
 import type { SandboxingFlagSet } from '../policy/sandbox';
-import type { Origin } from '../../../url/origin';
+import { areSameOrigin, type Origin } from '../../../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
-import { areSameOrigin } from '../origin';
 import { browletBindings, getRelevantRealm } from '../../bindings';
 import type { Environment } from '../../scripting/environment';
 import {
