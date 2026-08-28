@@ -23,6 +23,16 @@ export function createTestEnvironment(
           destinationOffset,
         );
       },
+      copyBytes(value) {
+        if (ArrayBuffer.isView(value)) {
+          return new Uint8Array(
+            value.buffer,
+            value.byteOffset,
+            value.byteLength,
+          ).slice();
+        }
+        return new Uint8Array(value as ArrayBuffer).slice();
+      },
       create: (byteLength) => new ArrayBuffer(byteLength),
       createView: (type, buffer, byteOffset, length) => {
         const constructor = globalThis[type] as unknown as new (

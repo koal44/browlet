@@ -24,6 +24,7 @@ import {
   setUpReadableStreamDefaultReader,
 } from './readable-stream-operations';
 import type { StreamEnvironment, StreamPromise } from './environment';
+import { internalStreamSetup } from './internal-methods';
 import {
   canTransferArrayBuffer, copyDataBlockBytes, isDetachedBuffer,
   transferArrayBuffer,
@@ -844,6 +845,35 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
   );
 }
 
+/** Streams §9.1, create and set up a stream with byte reading support. */
+export function createReadableStreamWithByteReadingSupport(
+  environment: StreamEnvironment,
+  pullAlgorithm?: () => unknown,
+  cancelAlgorithm?: (reason: unknown) => unknown,
+  highWaterMark = 0,
+): ReadableStreamImpl {
+  const stream = environment.objects.construct(
+    ReadableStreamImpl,
+    [internalStreamSetup],
+  );
+  const controller = environment.objects.create(
+    ReadableByteStreamControllerImpl,
+  );
+  setUpReadableByteStreamController(
+    stream,
+    controller,
+    () => undefined,
+    () => runAlgorithm(environment, () => pullAlgorithm?.()),
+    (reason) => runAlgorithm(
+      environment,
+      () => cancelAlgorithm?.(reason),
+    ),
+    highWaterMark,
+    undefined,
+  );
+  return stream;
+}
+
 function setUpReadableByteStreamController(
   stream: ReadableStreamImpl,
   controller: ReadableByteStreamControllerImpl,
@@ -888,6 +918,20 @@ function setUpReadableByteStreamController(
       },
     },
   );
+}
+
+function runAlgorithm(
+  environment: StreamEnvironment,
+  algorithm: () => unknown,
+): StreamPromise {
+  try {
+    return environment.promises.createResolved(
+      algorithm(),
+      idlType.undefined,
+    );
+  } catch (error) {
+    return environment.promises.createRejected(error, idlType.undefined);
+  }
 }
 
 function commitPullIntoDescriptor(

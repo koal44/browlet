@@ -1,6 +1,7 @@
 import { BrowsingContextGroup } from './browsing/browsing-context';
 import type { TopLevelTraversable } from './browsing/navigable';
 import type { EventLoopOptions } from './scripting/event-loop';
+import type { NativeLineEnding } from '../file/index';
 
 /*
  * HTML's user agent owns browsing context groups and the top-level
@@ -11,7 +12,10 @@ export class UserAgent {
   readonly browsingContextGroupSet = new Set<BrowsingContextGroup>();
   readonly topLevelTraversableSet = new Set<TopLevelTraversable>();
 
-  constructor(readonly eventLoopOptions: EventLoopOptions | null = null) {}
+  constructor(
+    readonly eventLoopOptions: EventLoopOptions | null = null,
+    readonly fileHostOptions: UserAgentFileHostOptions | null = null,
+  ) {}
 
   createBrowsingContextGroup(): BrowsingContextGroup {
     const group = new BrowsingContextGroup(this);
@@ -35,3 +39,8 @@ export class UserAgent {
     this.browsingContextGroupSet.delete(group);
   }
 }
+
+export type UserAgentFileHostOptions = {
+  readonly nativeLineEnding: NativeLineEnding;
+  scheduleParallelSteps(steps: () => void): void;
+};
