@@ -4,6 +4,7 @@ import {
   areSameOrigin, isOrigin, obtainSite, type Site,
   type Origin,
 } from '../../url/origin';
+import type { WindowImpl } from '../browsing/window/window';
 
 /*
  * An agent owns the execution boundary shared by one or more realms. V8 owns
@@ -52,7 +53,7 @@ export abstract class Agent {
  * potentially reach each other, either directly or through document.domain.
  */
 export class WindowAgent extends Agent {
-  readonly windowObjects = new Set<Window>();
+  readonly windowObjects = new Set<WindowImpl>();
 
   constructor(eventLoopOptions: EventLoopOptions | null = null) {
     super(false, eventLoopOptions);

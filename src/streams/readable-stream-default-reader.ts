@@ -3,9 +3,11 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   idlType, impl, op, promise, reference,
 } from '../web-idl/declaration/index';
+import { createDictionaryValue } from '../web-idl/conversion';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import type { ReadableStreamImpl } from './readable-stream';
 import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
 import {
@@ -18,10 +20,10 @@ export class ReadableStreamDefaultReaderImpl {
   #readRequests: ReadRequest[] = [];
 
   constructor(
-    environment: StreamEnvironment,
+    context: BindingContext,
     stream?: ReadableStreamImpl,
   ) {
-    this.#genericReader = new ReadableStreamGenericReaderMixin(environment);
+    this.#genericReader = new ReadableStreamGenericReaderMixin(context);
     if (stream) setUpReadableStreamDefaultReader(this, stream);
   }
 
@@ -37,37 +39,39 @@ export class ReadableStreamDefaultReaderImpl {
 
   read(): StreamPromise {
     const generic = ReadableStreamDefaultReaderImpl.getGenericReader(this);
-    const environment = ReadableStreamGenericReaderMixin.getEnvironment(
+    const context = ReadableStreamGenericReaderMixin.getContext(
       generic,
     );
     if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
-      return environment.promises.createRejected(
-        new TypeError('Cannot read from a stream using a released reader'),
+      return context.createRejectedPromise(
+        new context.realm.intrinsics.typeError(
+          'Cannot read from a stream using a released reader',
+        ),
         reference('ReadableStreamReadResult'),
       );
     }
 
-    const promise = environment.promises.create(
+    const promise = context.createPromise(
       reference('ReadableStreamReadResult'),
     );
     readableStreamDefaultReaderRead(this, {
       chunkSteps(chunk) {
-        environment.promises.resolve(promise, environment.dictionaries.create([
+        context.resolvePromise(promise, createDictionaryValue([
           ['value', chunk],
           ['done', false],
         ]));
       },
       closeSteps() {
-        environment.promises.resolve(
+        context.resolvePromise(
           promise,
-          environment.dictionaries.create([
+          createDictionaryValue([
             ['value', undefined],
             ['done', true],
           ]),
         );
       },
       errorSteps(reason) {
-        environment.promises.reject(promise, reason);
+        context.rejectPromise(promise, reason);
       },
     });
     return promise;
@@ -114,7 +118,7 @@ export const readableStreamDefaultReaderIDL = defineInterface({
   name: 'ReadableStreamDefaultReader',
   exposed: '*',
   implementation: impl(ReadableStreamDefaultReaderImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),

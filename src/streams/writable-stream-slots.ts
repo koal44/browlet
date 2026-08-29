@@ -1,4 +1,4 @@
-import type { StreamEnvironment } from './environment';
+import type { BindingContext } from '../web-idl/projection';
 import type {
   WritableStreamDefaultControllerImpl,
   WritableStreamDefaultControllerState,
@@ -10,7 +10,7 @@ import type {
 import type { WritableStreamImpl, WritableStreamState } from './writable-stream';
 
 type WritableStreamSlots = {
-  readonly environment: StreamEnvironment;
+  readonly context: BindingContext;
   readonly state: WritableStreamState;
 };
 
@@ -19,7 +19,7 @@ type WritableStreamDefaultControllerSlots = {
 };
 
 type WritableStreamDefaultWriterSlots = {
-  readonly environment: StreamEnvironment;
+  readonly context: BindingContext;
   state?: WritableStreamDefaultWriterState;
 };
 
@@ -31,16 +31,16 @@ const writableStreamDefaultWriterSlots =
 
 export function initializeWritableStreamSlots(
   stream: WritableStreamImpl,
-  environment: StreamEnvironment,
+  context: BindingContext,
   state: WritableStreamState,
 ): void {
-  writableStreamSlots.set(stream, { environment, state });
+  writableStreamSlots.set(stream, { context, state });
 }
 
-export function getWritableStreamEnvironment(
+export function getWritableStreamContext(
   stream: WritableStreamImpl,
-): StreamEnvironment {
-  return requireSlots(writableStreamSlots, stream, 'WritableStream').environment;
+): BindingContext {
+  return requireSlots(writableStreamSlots, stream, 'WritableStream').context;
 }
 
 export function getWritableStreamState(
@@ -80,19 +80,19 @@ export function setWritableStreamDefaultControllerState(
 
 export function initializeWritableStreamDefaultWriterSlots(
   writer: WritableStreamDefaultWriterImpl,
-  environment: StreamEnvironment,
+  context: BindingContext,
 ): void {
-  writableStreamDefaultWriterSlots.set(writer, { environment });
+  writableStreamDefaultWriterSlots.set(writer, { context });
 }
 
-export function getWritableStreamDefaultWriterEnvironment(
+export function getWritableStreamDefaultWriterContext(
   writer: WritableStreamDefaultWriterImpl,
-): StreamEnvironment {
+): BindingContext {
   return requireSlots(
     writableStreamDefaultWriterSlots,
     writer,
     'WritableStreamDefaultWriter',
-  ).environment;
+  ).context;
 }
 
 export function getWritableStreamDefaultWriterState(

@@ -58,7 +58,7 @@ specification's physical file layout. The likely boundary is:
 | `host.ts` | Relevant global and settings access, fully-active checks, event creation and dispatch, listener observation, task and timer scheduling, clocks, document parsing, and Fetch entry points | §§3.1–3.7 and 5.1 |
 | `form-data.ts` | Entry-list state, construction helpers, mutation and lookup operations, iteration, and Blob/File normalization | §4 |
 | `progress-event.ts` | `ProgressEventInit`, progress data, the IDL contribution, and the fire-a-progress-event algorithm | §§5.1–5.2 |
-| `xml-http-request.ts` | XMLHttpRequest and upload state, ready states, author-facing properties, and the semantic implementation objects | §§3.1–3.4 |
+| `xml-http-request.ts` | XMLHttpRequest and upload state, ready states, author-facing properties, and the implementation objects | §§3.1–3.4 |
 | `request.ts` | `open()`, request headers, `send()`, `abort()`, Fetch callbacks, timeout handling, and request-error/end algorithms | §§3.5 and 3.7 |
 | `response.ts` | Response metadata, headers, MIME/encoding selection, bytes, and response materialization | §3.6 |
 | `web-idl.ts` | Lossless XHR declarations and cross-package contributions assembled by Browlet | §§3–5 |
@@ -70,7 +70,7 @@ only when the implementation establishes the responsibility.
 
 | Dependency | First required by | Present state | Delivery decision |
 | --- | --- | --- | --- |
-| File API `Blob` and `File` | §§3.5.6, 3.6, and 4 | Not implemented | Implement File API first. Do not substitute Node's `Blob` or `File`; XHR and Fetch must share the projected File API objects and semantic implementations |
+| File API `Blob` and `File` | §§3.5.6, 3.6, and 4 | Not implemented | Implement File API first. Do not substitute Node's `Blob` or `File`; XHR and Fetch must share the projected File API objects and implementations |
 | Fetch records and algorithms | §§3.5–3.7 | Fetch has a detailed roadmap but no implementation | Keep local state independently testable, then stop before `send()` until Fetch supplies headers, bodies, requests, responses, controllers, filtered responses, and callback-driven fetching |
 | DOM `Event` and `EventTarget` | §§3.2–3.3, 3.5–3.7, and 5 | Implemented in Browlet | Export declaration and integration contributions rather than importing Browlet. Add a narrow internal listener-observation seam because upload-listener presence affects CORS preflighting and garbage-collection reachability |
 | HTML event handlers | §3.3 | Ordinary handler machinery exists | Contribute the named `on*` attributes through the established event-handler integration path; do not create duplicate listener storage |

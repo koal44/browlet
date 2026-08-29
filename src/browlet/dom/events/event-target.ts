@@ -6,16 +6,14 @@ import {
   arg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, nullable, op, reference, union,
 } from '../../../web-idl/declaration/index';
-import {
-  EventImpl, type EventPathItem, toDOMString,
-} from './event';
+import { EventImpl, type EventPathItem } from './event';
 import { MouseEventImpl } from './ui-event';
 import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
 import {
-  addAbortAlgorithm, type AbortAlgorithmHandle, isAbortedSignal,
-} from '../abort/abort-algorithm';
+  type AbortAlgorithmHandle, type AbortSignalImpl,
+} from '../abort/abort-signal';
 
 /*
  * [Exposed=*]
@@ -41,8 +39,7 @@ import {
  *   AbortSignal signal;
  * };
  */
-export class EventTargetImpl implements EventTarget
-{
+export class EventTargetImpl {
   #eventListenerList: EventListenerRecord[] = [];
   #createEvent: EventFactory = createStandaloneEvent;
   readonly #virtuals: EventTargetVirtuals;
@@ -53,14 +50,13 @@ export class EventTargetImpl implements EventTarget
 
   addEventListener(
     type: string,
-    callback: EventListenerCallback | null,
-    options: AddEventListenerOptions | boolean | null = {},
+    callback: EventListenerInput | null,
+    options: AddEventListenerOptionsRecord | boolean | null = {},
   ): void {
-    const convertedType = toDOMString(type);
     const { capture, passive, once, signal } = flattenMore(options);
     const listener: EventListenerRecord = {
       abortAlgorithm: null,
-      type: convertedType,
+      type,
       callback: callback === null
         ? null
         : EventListenerValue.from(callback),
@@ -76,27 +72,22 @@ export class EventTargetImpl implements EventTarget
 
   removeEventListener(
     type: string,
-    callback: EventListenerCallback | null,
-    options: EventListenerOptions | boolean | null = {},
+    callback: EventListenerInput | null,
+    options: EventListenerOptionsRecord | boolean | null = {},
   ): void {
-    const convertedType = toDOMString(type);
     const capture = flatten(options);
     const callbackValue = callback === null
       ? null
       : EventListenerValue.from(callback);
     const listener = this.#eventListenerList.find((candidate) =>
-      candidate.type === convertedType &&
+      candidate.type === type &&
       sameEventListener(candidate.callback, callbackValue) &&
       candidate.capture === capture);
 
     if (listener) this.#removeListener(listener);
   }
 
-  dispatchEvent(event: Event): boolean {
-    if (!EventImpl.is(event)) {
-      throw new TypeError('The event is not a DOM Event implementation');
-    }
-
+  dispatchEvent(event: EventImpl): boolean {
     if (EventImpl.isDispatching(event) || !EventImpl.isInitialized(event)) {
       throwDOMException(domExceptionName.invalidState);
     }
@@ -122,7 +113,7 @@ export class EventTargetImpl implements EventTarget
 
   static createEvent(
     target: EventTargetImpl,
-    eventConstructor?: EventImplementationConstructor,
+    eventConstructor?: EventImplConstructor,
   ): EventImpl {
     return target.#createEvent(eventConstructor);
   }
@@ -135,7 +126,7 @@ export class EventTargetImpl implements EventTarget
 
   static getParent(
     target: EventTargetImpl,
-    event: Event,
+    event: EventImpl,
   ): EventTargetImpl | null {
     return target.#virtuals.getParent?.(target, event) ?? null;
   }
@@ -148,7 +139,11 @@ export class EventTargetImpl implements EventTarget
 
     for (const listener of target.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
-        callbacks.push(listener.callback.object);
+        // This legacy algorithm returns the original author callback objects,
+        // not EventTarget or EventListener implementation objects.
+        callbacks.push(
+          listener.callback.object as EventListenerOrEventListenerObject,
+        );
       }
     }
 
@@ -232,10 +227,6 @@ export class EventTargetImpl implements EventTarget
     if (EventImpl.propagationStopped(event)) return;
 
     const currentTarget = pathItem.invocationTarget;
-    if (!EventTargetImpl.is(currentTarget)) {
-      throw new Error('An event path target must be an EventTarget implementation');
-    }
-
     EventImpl.setCurrentTarget(event, currentTarget);
     const listeners = [...currentTarget.#eventListenerList];
     const found = EventTargetImpl.#innerInvoke(
@@ -267,7 +258,7 @@ export class EventTargetImpl implements EventTarget
 
   static runActivationBehavior(
     target: EventTargetImpl,
-    event: Event,
+    event: EventImpl,
   ): void {
     target.#virtuals.activationBehavior?.(target, event);
   }
@@ -309,7 +300,7 @@ export class EventTargetImpl implements EventTarget
 
       const currentTarget = EventImpl.getCurrentTarget(event);
       const callback = listener.callback;
-      if (!EventTargetImpl.is(currentTarget) || callback === null) continue;
+      if (currentTarget === null || callback === null) continue;
 
       if (listener.once) currentTarget.#removeListener(listener);
 
@@ -364,7 +355,7 @@ export class EventTargetImpl implements EventTarget
     this.#virtuals.addingEventListener?.(this, listener.type);
 
     if (
-      listener.signal && isAbortedSignal(listener.signal) ||
+      listener.signal?.aborted ||
       listener.callback === null
     ) return;
 
@@ -379,8 +370,7 @@ export class EventTargetImpl implements EventTarget
 
     this.#eventListenerList.push(listener);
     if (listener.signal) {
-      listener.abortAlgorithm = addAbortAlgorithm(
-        listener.signal,
+      listener.abortAlgorithm = listener.signal.addAlgorithm(
         () => this.#removeListener(listener),
       );
     }
@@ -410,14 +400,14 @@ export const eventTargetIDL = defineInterface({
   // Projection supplies the realm-correct trusted-event factory to every
   // implementation whose primary interface inherits EventTarget.
   implementation: bind(EventTargetImpl, {
-    initialize(context, value) {
-      const realm = context.realm as typeof context.realm & EventRealm;
+    initializeImplementation(context, value) {
       EventTargetImpl.setEventFactory(
         value as EventTargetImpl,
         (EventConstructor = EventImpl) => {
-          const event = context.objects.construct(
+          const event = context.construct(
             EventConstructor,
-            ['', {}, realm.eventTimeStamp()],
+            '',
+            {},
           );
           EventImpl.setTrusted(event, true);
           return event;
@@ -464,7 +454,7 @@ export const eventListenerIDL = defineCallbackInterface({
   adapter: bind({
     adapt(_context, callback) {
       return new EventListenerValue(
-        callback.object as EventListenerOrEventListenerObject,
+        callback.object,
         callback.realm,
         (event, currentTarget) => {
           callback.callUserObjectOperation(
@@ -499,7 +489,7 @@ export const addEventListenerOptionsIDL = defineDictionary({
 export function fireEvent(
   name: string,
   target: EventTargetImpl,
-  eventConstructor?: EventImplementationConstructor,
+  eventConstructor?: EventImplConstructor,
   initialize?: (event: EventImpl) => void,
   legacyTargetOverride = false,
 ): boolean {
@@ -691,8 +681,8 @@ function appendToEventPath(
   event: EventImpl,
   invocationTarget: EventTargetImpl,
   shadowAdjustedTarget: EventTargetImpl | null,
-  relatedTarget: EventTarget | null,
-  touchTargetList: readonly (EventTarget | null)[],
+  relatedTarget: EventTargetImpl | null,
+  touchTargetList: readonly (EventTargetImpl | null)[],
   slotInClosedTree: boolean,
 ): void {
   const root = EventTargetImpl.getTreeRoot(invocationTarget);
@@ -711,12 +701,12 @@ function appendToEventPath(
 }
 
 function retarget(
-  initialTarget: EventTarget | null,
+  initialTarget: EventTargetImpl | null,
   against: EventTargetImpl,
-): EventTarget | null {
+): EventTargetImpl | null {
   let target = initialTarget;
 
-  while (EventTargetImpl.is(target) && EventTargetImpl.isNode(target)) {
+  while (target !== null && EventTargetImpl.isNode(target)) {
     const root = EventTargetImpl.getTreeRoot(target);
     if (root === null) return target;
 
@@ -736,8 +726,8 @@ function retarget(
   return target;
 }
 
-function isNodeInShadowTree(target: EventTarget | null): boolean {
-  if (!EventTargetImpl.is(target) || !EventTargetImpl.isNode(target)) {
+function isNodeInShadowTree(target: EventTargetImpl | null): boolean {
+  if (target === null || !EventTargetImpl.isNode(target)) {
     return false;
   }
 
@@ -748,7 +738,7 @@ function isNodeInShadowTree(target: EventTarget | null): boolean {
 export type EventTargetVirtuals = {
   readonly getParent?: (
     target: EventTargetImpl,
-    event: Event,
+    event: EventImpl,
   ) => EventTargetImpl | null;
   readonly isDefaultPassiveTarget?: (target: EventTargetImpl) => boolean;
   readonly isNode?: (target: EventTargetImpl) => boolean;
@@ -786,7 +776,7 @@ export type EventTargetVirtuals = {
   ) => void;
   readonly activationBehavior?: (
     target: EventTargetImpl,
-    event: Event,
+    event: EventImpl,
   ) => void;
   readonly legacyPreActivationBehavior?: (
     target: EventTargetImpl,
@@ -796,8 +786,9 @@ export type EventTargetVirtuals = {
   ) => void;
 };
 
-type EventListenerCallback =
-  | EventListenerOrEventListenerObject
+type EventListenerInput =
+  | ((this: EventTargetImpl, event: EventImpl) => void)
+  | { handleEvent(event: EventImpl): void; }
   | EventListenerValue;
 
 type EventListenerRecord = {
@@ -807,11 +798,11 @@ type EventListenerRecord = {
   readonly capture: boolean;
   passive: boolean | null;
   readonly once: boolean;
-  readonly signal: object | null;
+  readonly signal: AbortSignalImpl | null;
   removed: boolean;
 };
 
-export type EventImplementationConstructor = {
+export type EventImplConstructor = {
   readonly prototype: EventImpl;
 } & (abstract new (
   type: string,
@@ -822,12 +813,8 @@ export type EventImplementationConstructor = {
 type EventPhase = 'capturing' | 'bubbling';
 
 type EventFactory = (
-  eventConstructor?: EventImplementationConstructor,
+  eventConstructor?: EventImplConstructor,
 ) => EventImpl;
-
-type EventRealm = {
-  eventTimeStamp(): DOMHighResTimeStamp;
-};
 
 type EventListenerRealm = {
   readonly callbacks: {
@@ -838,40 +825,38 @@ type EventListenerRealm = {
 };
 
 type WindowEventListenerRealm = EventListenerRealm & {
-  getCurrentEvent(global: object): Event | undefined;
+  getCurrentEvent(global: object): EventImpl | undefined;
   recordTimingInfo(
     global: object,
-    event: Event,
-    callback: EventListenerOrEventListenerObject,
+    event: EventImpl,
+    callback: object,
   ): void;
-  setCurrentEvent(global: object, event: Event | undefined): void;
+  setCurrentEvent(global: object, event: EventImpl | undefined): void;
 };
 
 function flatten(
-  options: EventListenerOptions | boolean | null,
+  options: EventListenerOptionsRecord | boolean | null,
 ): boolean {
   return typeof options === 'boolean'
     ? options
-    : Boolean(options?.capture);
+    : options?.capture ?? false;
 }
 
 function flattenMore(
-  options: AddEventListenerOptions | boolean | null,
+  options: AddEventListenerOptionsRecord | boolean | null,
 ): FlattenedEventListenerOptions {
   const capture = flatten(options);
   let passive: boolean | null = null;
   let once = false;
-  let signal: object | null = null;
+  let signal: AbortSignalImpl | null = null;
 
   if (typeof options === 'object' && options !== null) {
-    once = Boolean(options.once);
+    once = options.once ?? false;
     const passiveValue = options.passive;
     const signalValue = options.signal;
 
-    if (passiveValue !== undefined) passive = Boolean(passiveValue);
-    if (signalValue !== undefined) {
-      signal = signalValue;
-    }
+    if (passiveValue !== undefined) passive = passiveValue;
+    if (signalValue !== undefined) signal = signalValue;
   }
 
   return { capture, passive, once, signal };
@@ -881,7 +866,17 @@ type FlattenedEventListenerOptions = {
   readonly capture: boolean;
   readonly passive: boolean | null;
   readonly once: boolean;
-  readonly signal: object | null;
+  readonly signal: AbortSignalImpl | null;
+};
+
+type EventListenerOptionsRecord = {
+  readonly capture?: boolean;
+};
+
+type AddEventListenerOptionsRecord = EventListenerOptionsRecord & {
+  readonly once?: boolean;
+  readonly passive?: boolean;
+  readonly signal?: AbortSignalImpl;
 };
 
 const DEFAULT_PASSIVE_EVENT_TYPES = new Set([
@@ -899,7 +894,7 @@ const LEGACY_EVENT_TYPES = new Map([
 ]);
 
 function createStandaloneEvent(
-  EventConstructor: EventImplementationConstructor = EventImpl,
+  EventConstructor: EventImplConstructor = EventImpl,
 ): EventImpl {
   const event = Reflect.construct(
     EventConstructor,
@@ -910,25 +905,28 @@ function createStandaloneEvent(
 }
 
 class EventListenerValue {
-  readonly object: EventListenerOrEventListenerObject;
+  readonly object: object;
   readonly realm: EventListenerRealm | undefined;
-  readonly #invoke: (event: Event, currentTarget: EventTarget) => void;
+  readonly #invoke: (
+    event: EventImpl,
+    currentTarget: EventTargetImpl,
+  ) => void;
 
   constructor(
-    object: EventListenerOrEventListenerObject,
+    object: object,
     realm: EventListenerRealm | undefined,
-    invoke: (event: Event, currentTarget: EventTarget) => void,
+    invoke: (event: EventImpl, currentTarget: EventTargetImpl) => void,
   ) {
     this.object = object;
     this.realm = realm;
     this.#invoke = invoke;
   }
 
-  invoke(event: Event, currentTarget: EventTarget): void {
+  invoke(event: EventImpl, currentTarget: EventTargetImpl): void {
     this.#invoke(event, currentTarget);
   }
 
-  static from(callback: EventListenerCallback): EventListenerValue {
+  static from(callback: EventListenerInput): EventListenerValue {
     if (callback instanceof EventListenerValue) return callback;
 
     return new EventListenerValue(

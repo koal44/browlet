@@ -4,6 +4,7 @@ import {
 import {
   type EventTargetVirtuals, EventTargetImpl,
 } from '../events/event-target';
+import type { EventImpl } from '../events/event';
 import {
   TreeNode, type TreeNodeVirtuals,
 } from '../infra/tree';
@@ -138,26 +139,18 @@ export abstract class NodeImpl
     return NodeImpl.getRootNode(this, options?.composed);
   }
 
-  appendChild<T extends Node>(node: T): T {
-    if (!NodeImpl.is(node)) {
-      throwDOMException(domExceptionName.hierarchyRequest);
-    }
-
+  appendChild<T extends NodeImpl>(node: T): T {
     super.appendTreeChild(node);
     return node;
   }
 
-  insertBefore<T extends Node>(node: T, child: Node | null): T {
-    if (!NodeImpl.is(node)) {
-      throwDOMException(domExceptionName.hierarchyRequest);
-    }
-
+  insertBefore<T extends NodeImpl>(node: T, child: NodeImpl | null): T {
     if (child === null) {
       super.appendTreeChild(node);
       return node;
     }
 
-    if (!NodeImpl.is(child) || NodeImpl.getParentNode(child) !== this) {
+    if (NodeImpl.getParentNode(child) !== this) {
       throwDOMException(domExceptionName.notFound);
     }
 
@@ -168,12 +161,7 @@ export abstract class NodeImpl
     return node;
   }
 
-  compareDocumentPosition(other: Node): number {
-    if (!NodeImpl.is(other)) {
-      return DOCUMENT_POSITION_DISCONNECTED |
-        DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
-    }
-
+  compareDocumentPosition(other: NodeImpl): number {
     const position = super.comparePosition(other);
 
     if (position === null) {
@@ -215,7 +203,7 @@ export abstract class NodeImpl
 
   static getEventParent(
     node: NodeImpl,
-    _event: Event,
+    _event: EventImpl,
   ): EventTargetImpl | null {
     return NodeImpl.getParentNode(node);
   }

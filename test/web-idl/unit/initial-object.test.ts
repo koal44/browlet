@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, definePartialInterface, idlType, type AttributeMember,
   type NamedArgumentsExtendedAttribute, type OperationMember,
@@ -18,7 +18,7 @@ describe('Web IDL initial objects', () => {
     });
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -57,7 +57,7 @@ describe('Web IDL initial objects', () => {
       exposed: '*', members: [],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -84,7 +84,7 @@ describe('Web IDL initial objects', () => {
       members: [],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -118,12 +118,12 @@ describe('Web IDL initial objects', () => {
     const definitions = assembleDefinitions([interfaceIDL]);
     const windowRealm = new Realm({ globalNames: ['Window'] });
     const workerRealm = new Realm({ globalNames: ['Worker'] });
-    const windowBinding = new JavaScriptBinding(
+    const windowBinding = new RealmBinding(
       definitions,
       windowRealm,
       new PlatformObjectRegistry(),
     );
-    const workerBinding = new JavaScriptBinding(
+    const workerBinding = new RealmBinding(
       definitions,
       workerRealm,
       new PlatformObjectRegistry(),
@@ -148,18 +148,12 @@ describe('Web IDL initial objects', () => {
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
-    implementations.setObjectCreationSteps(interfaceIDL, (newTarget) => {
-      if (!newTarget) throw new Error('Missing legacy factory newTarget');
-      return Object.create(
-        Reflect.get(newTarget, 'prototype') as object,
-      ) as object;
-    });
     implementations.setConstructorSteps(factory, function(value) {
       Reflect.set(this, 'value', value);
     });
@@ -204,17 +198,11 @@ describe('Web IDL initial objects', () => {
       members: [],
     });
     const implementations = new ImplementationRegistry();
-    implementations.setObjectCreationSteps(interfaceIDL, (newTarget) => {
-      if (!newTarget) throw new Error('Missing legacy factory newTarget');
-      return Object.create(
-        Reflect.get(newTarget, 'prototype') as object,
-      ) as object;
-    });
     implementations.setConstructorSteps(factory, function(value) {
       Reflect.set(this, 'value', value);
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL, partial]),
       realm,
       new PlatformObjectRegistry(),
@@ -254,7 +242,7 @@ describe('Web IDL initial objects', () => {
     const platformObjects = new PlatformObjectRegistry();
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       platformObjects,
@@ -283,7 +271,7 @@ describe('Web IDL initial objects', () => {
       .toBe(firstGetter);
     expect(Reflect.get(secondPrototype, 'read')).toBe(firstOperation);
 
-    const foreign = new JavaScriptBinding(
+    const foreign = new RealmBinding(
       definitions,
       new Realm(),
       platformObjects,
@@ -328,7 +316,7 @@ describe('Web IDL initial objects', () => {
       },
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
@@ -385,7 +373,7 @@ function legacyFactory(
 }
 
 function project(
-  binding: JavaScriptBinding,
+  binding: RealmBinding,
   name: string,
   properties: Record<string, unknown>,
 ): object {
@@ -398,7 +386,7 @@ function project(
       { configurable: true, enumerable: true, value, writable: true },
     ])),
   ) as object;
-  return binding.projectPlatformObject(implementation, interface_).object;
+  return binding.projectPlatformObject(implementation, interface_).platformObject;
 }
 
 function requireFunction(value: unknown): RealmFunction {

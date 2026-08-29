@@ -142,7 +142,7 @@ describe('custom property registration', () => {
     });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
-    const sheet = engine.createStyleSheet() as CSSStyleSheetImpl;
+    const sheet = engine.createStyleSheet();
     sheet.replaceSync('* { --image: url("#paint") }');
     documentScope.adoptedStyleSheets.push(sheet);
     shadowScope.adoptedStyleSheets.push(sheet);

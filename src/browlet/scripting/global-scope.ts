@@ -67,7 +67,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     });
   }
 
-  get performance(): Performance {
+  get performance(): PerformanceImpl {
     return this.#performance;
   }
 

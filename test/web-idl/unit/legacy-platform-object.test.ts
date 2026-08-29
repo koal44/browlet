@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
   type InterfaceDefinition, type OperationMember, type StringifierMember,
@@ -198,7 +198,7 @@ describe('Web IDL legacy platform objects', () => {
     implementations.setOperationSteps(baseGetter, () => 'base');
     implementations.setOperationSteps(derivedGetter, () => 'derived');
 
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([derived, base]),
       new Realm(),
       new PlatformObjectRegistry(),
@@ -296,19 +296,22 @@ describe('Web IDL legacy platform objects', () => {
     implementations.setOperationSteps(legacyGetter, () => 'legacy');
 
     const definitions = assembleDefinitions([window, legacy]);
-    const globalBinding = new JavaScriptBinding(
+    const globalBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new PlatformObjectRegistry(),
       implementations,
     );
-    const legacyBinding = new JavaScriptBinding(
+    const legacyBinding = new RealmBinding(
       definitions,
       new Realm({ globalNames: ['Window'] }),
       new PlatformObjectRegistry(),
       implementations,
     );
-    const global = globalBinding.projectGlobalObject({}, 'Window').object;
+    const global = globalBinding.projectGlobalObject(
+      {},
+      'Window',
+    ).platformObject;
     const globalPrototype = Reflect.getPrototypeOf(global);
     const namedProperties = globalPrototype &&
       Reflect.getPrototypeOf(globalPrototype);
@@ -630,10 +633,10 @@ function noArguments(name: string) {
 function createBinding(
   interfaceIDL: InterfaceDefinition,
   implementations: ImplementationRegistry,
-): { binding: JavaScriptBinding; realm: Realm; } {
+): { binding: RealmBinding; realm: Realm; } {
   const realm = new Realm();
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),

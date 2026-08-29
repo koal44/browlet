@@ -166,12 +166,8 @@ function collectRenderableDocuments(
   filters: RenderingDocumentFilters = {},
 ): DocumentImpl[] {
   const documents: DocumentImpl[] = [];
-  for (const value of agent.windowObjects) {
-    if (!WindowImpl.is(value)) {
-      throw new Error('A Window agent contains a non-Window global object');
-    }
-
-    const document = WindowImpl.getAssociatedDocument(value);
+  for (const window of agent.windowObjects) {
+    const document = WindowImpl.getAssociatedDocument(window);
     if (!DocumentImpl.isFullyActive(document)) continue;
 
     const navigable = DocumentImpl.getNodeNavigable(document);

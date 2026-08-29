@@ -5,8 +5,9 @@ import {
   roAttr, reference, xattr,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategy,
 } from './queuing-strategy';
@@ -20,42 +21,54 @@ import type { TransformStreamDefaultControllerImpl } from './transform-stream-de
 import type { WritableStreamImpl } from './writable-stream';
 
 export class TransformStreamImpl {
-  readonly #environment: StreamEnvironment;
+  readonly #context: BindingContext;
   readonly #state: TransformStreamState = {};
 
   constructor(
-    environment: StreamEnvironment,
+    context: BindingContext,
     transformer?: object,
     writableStrategy: QueuingStrategy = {},
     readableStrategy: QueuingStrategy = {},
     algorithms?: TransformStreamAlgorithms,
   ) {
-    this.#environment = environment;
-    const startPromise = environment.promises.create(idlType.any);
+    this.#context = context;
+    const startPromise = context.createPromise(idlType.any);
     initializeTransformStream(
       this,
       startPromise,
-      extractHighWaterMark(writableStrategy, 1),
+      extractHighWaterMark(
+        writableStrategy,
+        1,
+        context.realm.intrinsics.rangeError,
+      ),
       extractSizeAlgorithm(writableStrategy),
-      extractHighWaterMark(readableStrategy, 0),
+      extractHighWaterMark(
+        readableStrategy,
+        0,
+        context.realm.intrinsics.rangeError,
+      ),
       extractSizeAlgorithm(readableStrategy),
     );
     if (algorithms) {
       setUpTransformStreamDefaultControllerFromAlgorithms(this, algorithms);
-      environment.promises.resolve(startPromise, undefined);
+      context.resolvePromise(startPromise, undefined);
       return;
     }
 
     const transformerObject = transformer ?? null;
-    const transformerDictionary = environment.dictionaries.convert(
+    const transformerDictionary = context.convert(
       transformerObject,
       reference('Transformer'),
     ) as Transformer;
     if ('readableType' in transformerDictionary) {
-      throw new RangeError('Invalid readableType specified');
+      throw new context.realm.intrinsics.rangeError(
+        'Invalid readableType specified',
+      );
     }
     if ('writableType' in transformerDictionary) {
-      throw new RangeError('Invalid writableType specified');
+      throw new context.realm.intrinsics.rangeError(
+        'Invalid writableType specified',
+      );
     }
     setUpTransformStreamDefaultControllerFromTransformer(
       this,
@@ -66,22 +79,21 @@ export class TransformStreamImpl {
     const controller = requireStateMember(this.#state.controller, 'controller');
     const startResult = transformerDictionary.start === undefined
       ? undefined
-      : environment.callbacks.invoke(
+      : Reflect.apply(
         transformerDictionary.start,
-        [controller],
-        'rethrow',
         transformerObject,
+        [controller],
       );
-    environment.promises.resolve(startPromise, startResult);
+    context.resolvePromise(startPromise, startResult);
   }
 
   /** Set up a custom transform stream for another specification. */
   static fromAlgorithms(
-    environment: StreamEnvironment,
+    context: BindingContext,
     algorithms: TransformStreamAlgorithms,
   ): TransformStreamImpl {
-    return new TransformStreamImpl(
-      environment,
+    return context.construct(
+      TransformStreamImpl,
       undefined,
       {},
       {},
@@ -97,8 +109,8 @@ export class TransformStreamImpl {
     return requireStateMember(this.#state.writable, 'writable');
   }
 
-  static getEnvironment(stream: TransformStreamImpl): StreamEnvironment {
-    return stream.#environment;
+  static getContext(stream: TransformStreamImpl): BindingContext {
+    return stream.#context;
   }
 
   static getState(stream: TransformStreamImpl): TransformStreamState {
@@ -144,7 +156,7 @@ export const transformStreamIDL = defineInterface({
   exposed: ['Window', 'Worker', 'Worklet'],
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([
@@ -201,12 +213,9 @@ export const transformerIDL = defineDictionary({
   members: [
     dictMember('start', reference('TransformerStartCallback'),
       callback('rethrow')),
-    dictMember('transform', reference('TransformerTransformCallback'),
-      callback('rethrow')),
-    dictMember('flush', reference('TransformerFlushCallback'),
-      callback('rethrow')),
-    dictMember('cancel', reference('TransformerCancelCallback'),
-      callback('rethrow')),
+    dictMember('transform', reference('TransformerTransformCallback')),
+    dictMember('flush', reference('TransformerFlushCallback')),
+    dictMember('cancel', reference('TransformerCancelCallback')),
     dictMember('readableType', idlType.any),
     dictMember('writableType', idlType.any),
   ],

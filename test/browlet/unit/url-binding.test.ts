@@ -31,11 +31,17 @@ describe('Browlet URL bindings', () => {
     const url = URL_.parse('path', 'https://example.test/root/');
     const params = new URLSearchParams_({ '\uD835x': 1, '\uD83Dx': 2 } as
       unknown as Record<string, string>);
+    const sequence = new URLSearchParams_({
+      *[Symbol.iterator]() {
+        yield [1, 2];
+      },
+    } as unknown as string[][]);
 
     expect(url?.href).toBe('https://example.test/root/path');
     expect(URL_.canParse('/relative')).toBe(false);
     expect([...params]).toEqual([['�x', '2']]);
     expect(String(params)).toBe('%EF%BF%BDx=2');
+    expect([...sequence]).toEqual([['1', '2']]);
   });
 
   it('keeps the same projected searchParams object while URLs mutate', () => {

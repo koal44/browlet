@@ -6,7 +6,7 @@ import {
 } from '../../../src/web-idl/declaration/index';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import type { HostDefinedInterface } from '../../../src/web-idl/conversion';
 import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import {
@@ -234,8 +234,8 @@ function namedOperation(
 function createBinding(
   definitions: Parameters<typeof assembleDefinitions>[0],
   hostDefinedInterfaces: HostDefinedInterface[] = [],
-): JavaScriptBinding {
-  return new JavaScriptBinding(
+): RealmBinding {
+  return new RealmBinding(
     assembleDefinitions(definitions),
     new Realm(),
     new PlatformObjectRegistry(),
@@ -247,7 +247,7 @@ function createBinding(
 function resolve(
   callables: OperationMember[],
   argumentsList: unknown[],
-  binding: JavaScriptBinding,
+  binding: RealmBinding,
 ) {
   return resolveOverload(
     computeEffectiveOverloadSet(callables, argumentsList.length),

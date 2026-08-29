@@ -1,3 +1,5 @@
+import type { CSSStyleDeclarationImpl } from './cssom/declaration';
+import type { CSSStyleSheetImpl } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { Snapshot, type SnapshotOptions } from './snapshot';
@@ -23,11 +25,11 @@ export class Stylelet {
     this.documentScope = new TreeScope(document, this.#cascade);
   }
 
-  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheet {
+  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheetImpl {
     return this.#cascade.createStyleSheet(options);
   }
 
-  getComputedStyle(element: Element): CSSStyleDeclaration {
+  getComputedStyle(element: Element): CSSStyleDeclarationImpl {
     return this.#cascade.getComputedStyle(element, this.documentScope);
   }
 }

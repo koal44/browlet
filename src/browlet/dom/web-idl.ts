@@ -13,6 +13,8 @@ import {
   characterDataIncludesNonDocumentTypeChildNodeIDL,
 } from './nodes/character-data';
 import { attrIDL } from './nodes/attribute';
+import { namedNodeMapIDL } from './nodes/named-node-map';
+import { htmlCollectionIDL } from './nodes/collections';
 import { commentIDL } from './nodes/comment';
 import {
   documentFragmentIDL, documentFragmentIncludesParentNodeIDL,
@@ -59,6 +61,8 @@ export const domIDLDefinitions: Definition[] = [
   nonDocumentTypeChildNodeIDL,
   nodeIDL,
   getRootNodeOptionsIDL,
+  htmlCollectionIDL,
+  namedNodeMapIDL,
   attrIDL,
   characterDataIDL,
   characterDataIncludesChildNodeIDL,

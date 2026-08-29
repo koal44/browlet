@@ -10,7 +10,6 @@ and task-queuing seams, which remain the only unfinished dependency.
 | --- | --- | --- |
 | `abort-controller.ts` | `AbortController`, its same-object signal, and idempotent `abort(reason)` | DOM §3.1, `#interface-abortcontroller` |
 | `abort-signal.ts` | `AbortSignal` state, static `abort()`/`any()`/`timeout()`, `throwIfAborted()`, `onabort`, internal abort algorithms, dependent-signal composition, and abort-event ordering | DOM §3.2, `#interface-AbortSignal` |
-| `abort-algorithm.ts` | Cycle-free implementation seam used by EventTarget and future abortable APIs | DOM §§2.7 and 3.2 |
 | `scripting/event-handlers.ts` | Ordinary event-handler IDL state, activation, replacement, deactivation, and callback processing used by `onabort` | HTML §8.1.8; DOM §3.2 |
 
 Both interfaces have declarative Web IDL definitions and realm-specific
@@ -21,13 +20,15 @@ flattens dependent sources as specified.
 
 ## Internal abort contract
 
-`abort-algorithm.ts` exposes narrow implementation-facing operations to add
-and remove an abort algorithm without creating an EventTarget/AbortSignal
-module cycle. Signaling abort sets source and dependent reasons first, then
-runs and clears each signal's internal algorithms, and only then fires its
-public `abort` event. Promise-based consumers reject with the stored reason,
-but each consumer owns that promise and its cleanup; DOM does not grow a
-generic "abort a promise" utility.
+`AbortSignalImpl` directly exposes its internal add/remove-algorithm contract
+to post-conversion implementation code. The public `AbortSignal` wrapper does
+not expose those methods. A type-only EventTarget dependency preserves the
+acyclic runtime graph without a secondary registry or reverse platform-object
+lookup. Signaling abort sets source and dependent reasons first, then runs and
+clears each signal's internal algorithms, and only then fires its public
+`abort` event. Promise-based consumers reject with the stored reason, but each
+consumer owns that promise and its cleanup; DOM does not grow a generic
+"abort a promise" utility.
 
 `EventTarget.addEventListener()` is the first consumer. It now:
 
@@ -37,8 +38,9 @@ generic "abort a promise" utility.
 - registers listener removal as an internal abort algorithm; and
 - removes that algorithm when listener cleanup makes it unnecessary.
 
-Fetch, streams, loaders, and other APIs later consume the same internal
-contract without moving their cancellation behavior into this directory.
+Streams consumes that structural post-conversion contract directly. Fetch,
+loaders, and other APIs can do the same without importing their cancellation
+behavior into this directory.
 
 ## HTML-owned pieces
 

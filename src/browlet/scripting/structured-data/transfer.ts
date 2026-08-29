@@ -87,16 +87,16 @@ function prepareTransfer(
   if (bufferType === 'SharedArrayBuffer') return throwDataCloneError();
   if (bufferType !== undefined) return throwDataCloneError();
 
-  const platformObject = environment.interfaces.resolve(value);
+  const platformObject = environment.context.resolvePlatformObject(value);
   if (!platformObject) return throwDataCloneError();
-  const steps = environment.interfaces.getCapability(
-    platformObject.primaryInterface,
+  const steps = environment.context.getCapability(
+    platformObject.primaryInterface.definition,
     transferable,
   );
   if (!steps) return throwDataCloneError();
   return {
     implementation: platformObject.implementation,
-    interfaceName: platformObject.primaryInterface.name,
+    interfaceName: platformObject.primaryInterface.definition.name,
     kind: 'platform-object',
     placeholder,
     steps,
@@ -141,27 +141,27 @@ function receiveTransfer(
   environment: StructuredDataEnvironment,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
-    const interface_ = environment.interfaces.getDefinition(
+    const interface_ = environment.context.getInterface(
       dataHolder.interfaceName,
     );
-    if (!interface_ || !environment.interfaces.isExposed(interface_)) {
+    if (!interface_ || !environment.context.isInterfaceExposed(interface_)) {
       return throwDataCloneError();
     }
-    const platformObject = environment.interfaces.create(interface_);
-    const steps = environment.interfaces.getCapability(
-      platformObject.primaryInterface,
+    const platformObject = environment.context.createPlatformObject(interface_);
+    const steps = environment.context.getCapability(
+      platformObject.primaryInterface.definition,
       transferable,
     );
     if (!steps) {
       throw new Error(
-        `${platformObject.primaryInterface.name} has no Transferable capability`,
+        `${platformObject.primaryInterface.definition.name} has no Transferable capability`,
       );
     }
     steps.transferReceivingSteps(
       dataHolder.fields,
       platformObject.implementation,
     );
-    return platformObject.object;
+    return platformObject.platformObject;
   }
 
   const value = transferArrayBuffer(dataHolder.buffer, environment.realm);

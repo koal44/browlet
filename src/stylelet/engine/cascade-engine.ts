@@ -2,6 +2,7 @@ import type {
   CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry,
   PropertyContext, PropertyDeclaration,
 } from '../css/property';
+import type { CSSStyleDeclarationImpl } from '../cssom/declaration';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
 import type { Snapshot } from '../snapshot';
 import { computeStyle } from './computed-style';
@@ -30,7 +31,7 @@ export class CascadeEngine {
     this.snapshot = options.snapshot;
   }
 
-  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheet {
+  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheetImpl {
     return new CSSStyleSheetImpl(this.snapshot, options);
   }
 
@@ -45,7 +46,7 @@ export class CascadeEngine {
   getComputedStyle(
     element: Element,
     scope: TreeScope,
-  ): CSSStyleDeclaration {
+  ): CSSStyleDeclarationImpl {
     return computeStyle(this, element, scope);
   }
 

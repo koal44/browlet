@@ -3,12 +3,14 @@ import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
-import { streamStructuredData } from '../streams/environment';
+import { streamAbortController } from '../streams/abort';
+import { streamStructuredData } from '../streams/structured-data';
 import { urlIDLDefinitions } from '../url/api';
 import {
-  createBindings, type Bindings, type RealmBindings,
+  createBindings, type BindingWorld, type RealmBindings,
 } from '../web-idl/index';
 import { Realm } from './scripting/realm';
+import { AbortControllerImpl } from './dom/abort/abort-controller';
 import { WindowImpl, windowIDL } from './browsing/window/window';
 import {
   isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow,
@@ -27,13 +29,14 @@ import { fileHostCapability } from './file-api';
  * The browser environment owns the final Web IDL assembly for its realm.
  * Defining specifications contribute declarations and implementation steps;
  * Browlet decides which contributions coexist and which initial objects are
- * installed on its Window environment.
+ * installed on its Window environment. One main binding world spans the realms
+ * hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
  */
 export class BrowletBindings {
-  readonly #bindings: Bindings;
+  readonly #world: BindingWorld;
 
   constructor() {
-    this.#bindings = createBindings(
+    this.#world = createBindings(
       browletDefinitions,
       {
         capabilities: browletCapabilities,
@@ -43,11 +46,11 @@ export class BrowletBindings {
   }
 
   register(realm: Realm): RealmBindings {
-    return this.#bindings.register(realm);
+    return this.#world.register(realm);
   }
 
   forRealm(realm: Realm): RealmBindings {
-    const bindings = this.#bindings.forRealm(realm);
+    const bindings = this.#world.forRealm(realm);
     if (!bindings) throw new Error('Realm has no Browlet binding');
     return bindings;
   }
@@ -56,7 +59,7 @@ export class BrowletBindings {
     windowProxy: WindowProxy,
     window: WindowImpl,
   ): void {
-    const windowObject = this.#bindings.getPlatformObject(window);
+    const windowObject = this.#world.getPlatformObject(window);
     if (!windowObject) throw new Error('Window has not been projected');
     setWindowProxyWindow(
       windowProxy,
@@ -66,12 +69,24 @@ export class BrowletBindings {
   }
 
   getRelevantRealm(value: object): Realm {
-    const platformRealm = this.#bindings.getRealm(value);
+    const platformRealm = this.#world.getRealm(value);
     if (platformRealm instanceof Realm) return platformRealm;
 
     const realm = Realm.getAssociatedRealm(value);
     if (!realm) throw new Error('Object has no relevant Realm');
     return realm;
+  }
+
+  getPlatformObject(value: object): object {
+    const object = this.#world.getPlatformObject(value);
+    if (!object) throw new Error('Implementation has not been projected');
+    return object;
+  }
+
+  getImplementation<Value extends object>(value: object): Value {
+    const implementation = this.#world.getImplementationObject(value);
+    if (!implementation) throw new Error('Value is not a platform object');
+    return implementation as Value;
   }
 }
 
@@ -96,6 +111,18 @@ const browletCapabilities = [
   ...domExceptionCapabilities,
   ...blobCapabilities,
   fileHostCapability,
+  streamAbortController.for(windowIDL, {
+    create(global) {
+      if (!WindowImpl.is(global)) {
+        throw new TypeError(
+          'Streams AbortController requires a Window global',
+        );
+      }
+      const realm = browletBindings.getRelevantRealm(global);
+      const context = browletBindings.forRealm(realm).context;
+      return context.construct(AbortControllerImpl);
+    },
+  }),
   streamStructuredData.for(windowIDL, {
     clone(global, value) {
       if (!WindowImpl.is(global)) {

@@ -31,7 +31,7 @@ describe('Document', () => {
     expect(document.contentType).toBe('application/xml');
     expect(document.compatMode).toBe('CSS1Compat');
     expect(document.customElementRegistry).toBeNull();
-    expect(DocumentImpl.getType(document)).toBe('xml');
+    expect(document.type).toBe('xml');
     expect(DocumentImpl.getOrigin(document).kind).toBe('opaque');
     expect(DocumentImpl.allowsDeclarativeShadowRoots(document)).toBe(false);
     expect(DocumentImpl.getModuleMap(document)).toEqual({ entries: [] });

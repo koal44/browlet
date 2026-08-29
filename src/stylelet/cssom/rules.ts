@@ -1,4 +1,5 @@
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
+import type { CSSStyleSheetImpl } from './css-stylesheet';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 
@@ -32,7 +33,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
     });
   }
 
-  get cssRules(): CSSRuleList {
+  get cssRules(): CSSRuleListImpl {
     return this._cssRules;
   }
 
@@ -56,7 +57,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
     return null;
   }
 
-  get parentStyleSheet(): CSSStyleSheet | null {
+  get parentStyleSheet(): CSSStyleSheetImpl | null {
     return null;
   }
 
@@ -64,7 +65,7 @@ export class SelectletCSSStyleRule implements CSSStyleRule {
     return 1;
   }
 
-  get style(): CSSStyleDeclaration {
+  get style(): CSSStyleDeclarationImpl {
     return this._style;
   }
 

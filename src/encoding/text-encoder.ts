@@ -1,12 +1,15 @@
 import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
 import {
+  createArrayBufferView, getBufferSourceByteLength, writeArrayBufferView,
+} from '../web-idl/buffer-source';
+import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, op, roAttr, reference,
   xattr,
 } from '../web-idl/declaration/index';
 import {
-  encodingEnvironment, type EncodingEnvironment,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
 
 /*
  * interface mixin TextEncoderCommon {
@@ -30,27 +33,31 @@ import {
  */
 export class TextEncoderImpl {
   readonly #encoder = new ExodusTextEncoder();
-  readonly #environment: EncodingEnvironment;
+  readonly #context: BindingContext;
 
-  constructor(environment: EncodingEnvironment) {
-    this.#environment = environment;
+  constructor(context: BindingContext) {
+    this.#context = context;
   }
 
   get encoding(): string {
     return 'utf-8';
   }
 
-  encode(input = ''): object {
-    return this.#environment.createUint8Array(this.#encoder.encode(input));
+  encode(input: string): object {
+    return createArrayBufferView(
+      'Uint8Array',
+      this.#encoder.encode(input),
+      this.#context.realm,
+    );
   }
 
   encodeInto(
     source: string,
     destination: object,
   ): Map<keyof TextEncoderEncodeIntoResult, number> {
-    const bytes = new Uint8Array(this.#environment.getByteLength(destination));
+    const bytes = new Uint8Array(getBufferSourceByteLength(destination));
     const result = this.#encoder.encodeInto(source, bytes);
-    this.#environment.writeBytes(
+    writeArrayBufferView(
       destination,
       bytes.subarray(0, result.written),
     );
@@ -75,7 +82,7 @@ export const textEncoderIDL = defineInterface({
   name: 'TextEncoder',
   exposed: '*',
   implementation: impl(TextEncoderImpl, {
-    withArgs: [encodingEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor(),

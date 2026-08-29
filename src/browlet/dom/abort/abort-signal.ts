@@ -4,7 +4,7 @@ import {
 import { impl } from '../../../web-idl/index';
 import {
   arg, defineInterface, idlType, op, roAttr, reference, resolveArgs,
-  sequence, withNew, xattr,
+  sequence, invokeWithNew, xattr,
 } from '../../../web-idl/declaration/index';
 import { queueGlobalTask } from '../../scripting/tasks';
 import {
@@ -14,9 +14,10 @@ import { runStepsAfterTimeout, timerTaskSource } from '../../scripting/timers';
 import {
   EventTargetImpl, type EventTargetVirtuals, fireEvent,
 } from '../events/event-target';
-import {
-  type AbortAlgorithmHandle, registerAbortSignal,
-} from './abort-algorithm';
+
+export type AbortAlgorithmHandle = {
+  remove(): void;
+};
 
 /*
  * [Exposed=*]
@@ -46,14 +47,10 @@ export class AbortSignalImpl extends EventTargetImpl
   readonly #retention: AbortSignalRetention;
   #sourceSignals = new WeakOrderedSet<AbortSignalImpl>();
 
-  constructor(global: object = globalThis) {
+  constructor(global: object) {
     super(abortSignalEventTargetVirtuals);
     this.#global = global;
     this.#retention = getAbortSignalRetention(global);
-    registerAbortSignal(this, {
-      add: (algorithm) => AbortSignalImpl.addAbortAlgorithm(this, algorithm),
-      isAborted: () => this.#isAborted(),
-    });
   }
 
   get aborted(): boolean {
@@ -74,6 +71,24 @@ export class AbortSignalImpl extends EventTargetImpl
 
   throwIfAborted(): void {
     if (this.#isAborted()) throw this.#reason;
+  }
+
+  addAlgorithm(
+    algorithm: () => void,
+  ): AbortAlgorithmHandle | null {
+    if (this.#isAborted()) return null;
+
+    const handle = new AbortAlgorithmHandleImpl(this, algorithm);
+    this.#abortAlgorithms.add(handle);
+    this.#updateRetention();
+    return handle;
+  }
+
+  removeAlgorithm(handle: AbortAlgorithmHandleImpl): void {
+    if (!this.#abortAlgorithms.delete(handle)) return;
+
+    handle.detach();
+    this.#updateRetention();
   }
 
   // -- Friends ----------------------------------------------------------
@@ -149,32 +164,6 @@ export class AbortSignalImpl extends EventTargetImpl
   }
 
   static updateRetention(signal: AbortSignalImpl): void {
-    signal.#updateRetention();
-  }
-
-  static isAborted(signal: AbortSignalImpl): boolean {
-    return signal.#isAborted();
-  }
-
-  static addAbortAlgorithm(
-    signal: AbortSignalImpl,
-    algorithm: () => void,
-  ): AbortAlgorithmHandle | null {
-    if (signal.#isAborted()) return null;
-
-    const handle = new AbortAlgorithmHandleImpl(signal, algorithm);
-    signal.#abortAlgorithms.add(handle);
-    signal.#updateRetention();
-    return handle;
-  }
-
-  static removeAbortAlgorithm(
-    signal: AbortSignalImpl,
-    handle: AbortAlgorithmHandleImpl,
-  ): void {
-    if (!signal.#abortAlgorithms.delete(handle)) return;
-
-    handle.detach();
     signal.#updateRetention();
   }
 
@@ -275,13 +264,13 @@ export const abortSignalIDL = defineInterface({
   inherits: 'EventTarget',
   exposed: '*',
   implementation: impl(AbortSignalImpl, {
-    withArgs: ['current-global'],
+    constructWith: ['current-global'],
   }),
   members: [
     op('abort', reference('AbortSignal'), [
       arg('reason', idlType.any, { optional: true }),
     ], {
-      ...withNew(AbortSignalImpl),
+      ...invokeWithNew(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
     }),
@@ -292,7 +281,7 @@ export const abortSignalIDL = defineInterface({
         xattr('EnforceRange'),
       ),
     ], {
-      ...withNew(AbortSignalImpl),
+      ...invokeWithNew(AbortSignalImpl),
       static: true,
       ...xattr(
         ['Exposed', ['Window', 'Worker']],
@@ -306,7 +295,7 @@ export const abortSignalIDL = defineInterface({
         resolveArgs(AbortSignalImpl),
       ),
     ], {
-      ...withNew(AbortSignalImpl),
+      ...invokeWithNew(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
     }),
@@ -329,7 +318,7 @@ class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
 
   remove(): void {
     const signal = this.#signal?.deref();
-    if (signal) AbortSignalImpl.removeAbortAlgorithm(signal, this);
+    if (signal) signal.removeAlgorithm(this);
     else this.detach();
   }
 

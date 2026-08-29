@@ -13,7 +13,7 @@ import {
   type AttributeMember, type ConstructorMember, type OperationMember,
 } from '../../../src/web-idl/declaration/index';
 import { ImplementationRegistry } from '../../../src/web-idl/registry';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import type { SecurityCheckType } from '../../../src/web-idl/javascript-realm';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
@@ -107,7 +107,7 @@ describe('Web IDL ordinary interface projection', () => {
     });
 
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([partial, include, derived, mixin, base]),
       realm,
       new PlatformObjectRegistry(),
@@ -180,7 +180,7 @@ describe('Web IDL ordinary interface projection', () => {
     implementations.setAttributeSteps(value, { get: () => 1 });
     implementations.setOperationSteps(read, () => 2);
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([
         first,
         second,
@@ -264,7 +264,7 @@ describe('Web IDL ordinary interface projection', () => {
         },
       ],
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([constants]),
       new Realm(),
       new PlatformObjectRegistry(),
@@ -299,13 +299,13 @@ describe('Web IDL ordinary interface projection', () => {
     const platformObjects = new PlatformObjectRegistry();
     const firstRealm = new RecordingRealm();
     const secondRealm = new RecordingRealm();
-    const first = new JavaScriptBinding(
+    const first = new RealmBinding(
       definitions,
       firstRealm,
       platformObjects,
       implementations,
     );
-    const second = new JavaScriptBinding(
+    const second = new RealmBinding(
       definitions,
       secondRealm,
       platformObjects,
@@ -357,24 +357,23 @@ describe('Web IDL ordinary interface projection', () => {
     });
 
     const realm = new RecordingRealm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
       implementations,
     );
     const prototype = binding.getInterfacePrototypeObject(interface_);
-    Object.setPrototypeOf(implementation, prototype);
-    const object = new Proxy(implementation, {});
-    const record = binding.associatePlatformObject(
-      object,
-      interface_,
-      implementation,
-    );
+    const record = binding.projectPlatformObject(implementation, interface_);
+    const { platformObject: object } = record;
 
     expect(binding.isPlatformObject(object)).toBe(true);
     expect(binding.isPlatformObject(implementation)).toBe(false);
-    expect(record.object).toBe(object);
+    expect(Object.getPrototypeOf(object)).toBe(prototype);
+    expect(Object.getPrototypeOf(implementation))
+      .toBe(PrivateStateImplementation.prototype);
+    expect(implementation).toBeInstanceOf(PrivateStateImplementation);
+    expect(record.platformObject).toBe(object);
     expect(record.implementation).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
@@ -430,7 +429,7 @@ describe('Web IDL ordinary interface projection', () => {
       get() { return Symbol('not JSON'); },
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([derived, base]),
       realm,
       new PlatformObjectRegistry(),
@@ -468,13 +467,13 @@ describe('Web IDL ordinary interface projection', () => {
     const definitions = assembleDefinitions([holder, point]);
     const implementations = new ImplementationRegistry();
     const platformObjects = new PlatformObjectRegistry();
-    const local = new JavaScriptBinding(
+    const local = new RealmBinding(
       definitions,
       new Realm(),
       platformObjects,
       implementations,
     );
-    const foreign = new JavaScriptBinding(
+    const foreign = new RealmBinding(
       definitions,
       new Realm(),
       platformObjects,
@@ -519,7 +518,7 @@ describe('Web IDL ordinary interface projection', () => {
       get() { return state.get(this as object); },
       set(value) { state.set(this as object, value as readonly unknown[]); },
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -556,7 +555,7 @@ describe('Web IDL ordinary interface projection', () => {
     implementations.setConstructorSteps(constructor, () => undefined);
     implementations.setOperationSteps(echo, (source) => source);
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -630,7 +629,7 @@ describe('Web IDL ordinary interface projection', () => {
     });
     implementations.setOperationSteps(fixed, () => 'fixed');
     implementations.setOperationSteps(scoped, () => undefined);
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([enumeration, interfaceIDL]),
       new Realm(),
       new PlatformObjectRegistry(),
@@ -730,7 +729,7 @@ describe('Web IDL ordinary interface projection', () => {
       include,
     ]);
 
-    const insecure = new JavaScriptBinding(
+    const insecure = new RealmBinding(
       definitions,
       new Realm(),
       new PlatformObjectRegistry(),
@@ -746,7 +745,7 @@ describe('Web IDL ordinary interface projection', () => {
     expect(Reflect.ownKeys(insecurePrototype)).not.toContain('partialMember');
     expect(Reflect.ownKeys(insecurePrototype)).not.toContain('mixinMember');
 
-    const privileged = new JavaScriptBinding(
+    const privileged = new RealmBinding(
       definitions,
       new Realm({ crossOriginIsolated: true, secureContext: true }),
       new PlatformObjectRegistry(),
@@ -779,7 +778,7 @@ describe('Web IDL ordinary interface projection', () => {
       name: 'WindowInterface',
       exposed: ['Window'], members: [],
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([
         workerInterface, workletInterface, windowInterface,
       ]),

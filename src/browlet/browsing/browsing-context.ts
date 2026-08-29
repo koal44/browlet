@@ -16,8 +16,10 @@ import {
 } from './window/window-proxy';
 import { WindowImpl } from './window/window';
 import {
-  createDocument, DocumentImpl, DocumentMode, type DocumentLoadTimingInfo,
+  createDocument, createProjectedDOMNodeFactory, DocumentImpl, DocumentMode,
+  type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
+import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
 import { HTML_NAMESPACE } from '../../shared/namespaces';
@@ -91,7 +93,7 @@ export class BrowsingContext {
 
 export function createNewBrowsingContextAndDocument(
   creator: DocumentImpl | null,
-  embedder: Element | null,
+  embedder: ElementImpl | null,
   group: BrowsingContextGroup,
 ): [browsingContext: BrowsingContext, document: DocumentImpl] {
   const browsingContext = new BrowsingContext();
@@ -138,7 +140,7 @@ export function createNewBrowsingContextAndDocument(
     settings.crossOriginIsolatedCapability,
   ).milliseconds);
   const document = createDocument({
-    nodeFactory: bindings.objects,
+    nodeFactory: createProjectedDOMNodeFactory(bindings.context),
   });
 
   DocumentImpl.setType(document, 'html');
@@ -301,7 +303,7 @@ function obtainOriginMapKey(origin: Origin): string | symbol {
 
 function determineCreationSandboxingFlags(
   browsingContext: BrowsingContext,
-  embedder: Element | null,
+  embedder: ElementImpl | null,
 ): SandboxingFlagSet {
   if (embedder !== null) {
     throw new Error('Embedded browsing-context sandboxing is not implemented');
@@ -329,7 +331,7 @@ function determineAboutBlankOrigin(
 }
 
 function createPermissionsPolicy(
-  embedder: Element | null,
+  embedder: ElementImpl | null,
   _origin: Origin,
 ): PermissionsPolicy {
   if (embedder !== null) {
@@ -338,16 +340,16 @@ function createPermissionsPolicy(
   return {};
 }
 
-function getEmbedderTopLevelCreationURL(_embedder: Element): URLRecord {
+function getEmbedderTopLevelCreationURL(_embedder: ElementImpl): URLRecord {
   throw new Error('Embedder environment inheritance is not implemented');
 }
 
-function getEmbedderTopLevelOrigin(_embedder: Element): Origin {
+function getEmbedderTopLevelOrigin(_embedder: ElementImpl): Origin {
   throw new Error('Embedder environment inheritance is not implemented');
 }
 
 function determineIframeElementReferrerPolicy(
-  embedder: Element | null,
+  embedder: ElementImpl | null,
 ): string {
   if (embedder !== null) {
     throw new Error('iframe referrer-policy lookup is not implemented');
@@ -358,7 +360,7 @@ function determineIframeElementReferrerPolicy(
 function createInternalAncestorOriginObjectsList(
   _document: DocumentImpl,
   _referrerPolicy: string,
-  embedder: Element | null,
+  embedder: ElementImpl | null,
 ): readonly Origin[] {
   if (embedder !== null) {
     throw new Error('Nested Document ancestry is not implemented');

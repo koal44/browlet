@@ -107,7 +107,7 @@ export class LocationImpl
     navigationNotImplemented();
   }
 
-  assign(_url: string | URL): void {
+  assign(_url: string): void {
     navigationNotImplemented();
   }
 
@@ -115,7 +115,7 @@ export class LocationImpl
     navigationNotImplemented();
   }
 
-  replace(_url: string | URL): void {
+  replace(_url: string): void {
     navigationNotImplemented();
   }
 }

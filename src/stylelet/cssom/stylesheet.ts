@@ -1,4 +1,5 @@
 import { MediaListImpl } from './media-list';
+import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
 
 /*
@@ -17,7 +18,7 @@ export abstract class StyleSheetImpl implements StyleSheet {
   readonly #type: CSSOMString;
   #location: string | null;
   #ownerNode: Element | ProcessingInstruction | null;
-  #parentStyleSheet: CSSStyleSheet | null;
+  #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
   readonly #media: MediaListImpl;
   #disabled: boolean;
@@ -48,7 +49,7 @@ export abstract class StyleSheetImpl implements StyleSheet {
     return this.#ownerNode;
   }
 
-  get parentStyleSheet(): CSSStyleSheet | null {
+  get parentStyleSheet(): CSSStyleSheetImpl | null {
     return this.#parentStyleSheet;
   }
 
@@ -56,7 +57,7 @@ export abstract class StyleSheetImpl implements StyleSheet {
     return this.#title === '' ? null : this.#title;
   }
 
-  get media(): MediaList {
+  get media(): MediaListImpl {
     return this.#media;
   }
 
@@ -83,7 +84,7 @@ export abstract class StyleSheetImpl implements StyleSheet {
   }
 
   protected setParentStyleSheet(
-    parentStyleSheet: CSSStyleSheet | null,
+    parentStyleSheet: CSSStyleSheetImpl | null,
   ): void {
     this.#parentStyleSheet = parentStyleSheet;
   }

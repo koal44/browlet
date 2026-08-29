@@ -1,5 +1,14 @@
 // @rollup-cycle streams-readable
-import { idlType } from '../web-idl/declaration/index';
+import {
+  createArrayBuffer, createArrayBufferViewFromBuffer,
+  getBufferSourceByteLength, getBufferSourceByteOffset,
+  getBufferSourceCopy, getBufferSourceUnderlyingBuffer, getBufferTypeName,
+  isBufferSourceDetached, transferArrayBuffer, writeArrayBuffer,
+} from '../web-idl/buffer-source';
+import {
+  idlType, type BufferViewTypeName,
+} from '../web-idl/declaration/index';
+import type { BindingContext } from '../web-idl/projection';
 import {
   ReadableByteStreamControllerImpl,
   type PullIntoDescriptor,
@@ -23,26 +32,23 @@ import {
   readableStreamReaderGenericInitialize, readableStreamReaderGenericRelease,
   setUpReadableStreamDefaultReader,
 } from './readable-stream-operations';
-import type { StreamEnvironment, StreamPromise } from './environment';
+import type { StreamPromise } from './promise';
 import { internalStreamSetup } from './internal-methods';
-import {
-  canTransferArrayBuffer, copyDataBlockBytes, isDetachedBuffer,
-  transferArrayBuffer,
-} from './ecmascript';
 
 export function setUpReadableStreamBYOBReader(
   reader: ReadableStreamBYOBReaderImpl,
   stream: ReadableStreamImpl,
 ): void {
+  const context = ReadableStreamImpl.getContext(stream);
   if (isReadableStreamLocked(stream)) {
-    throw new TypeError(
+    throw new context.realm.intrinsics.typeError(
       'This stream has already been locked for exclusive reading',
     );
   }
   if (!ReadableByteStreamControllerImpl.is(
     ReadableStreamImpl.getState(stream).controller,
   )) {
-    throw new TypeError(
+    throw new context.realm.intrinsics.typeError(
       'A BYOB reader requires a stream constructed with a byte source',
     );
   }
@@ -55,9 +61,8 @@ export function setUpReadableStreamBYOBReader(
 export function acquireReadableStreamBYOBReader(
   stream: ReadableStreamImpl,
 ): ReadableStreamBYOBReaderImpl {
-  const reader = ReadableStreamImpl.getEnvironment(stream).objects.create(
-    ReadableStreamBYOBReaderImpl,
-  );
+  const context = ReadableStreamImpl.getContext(stream);
+  const reader = context.construct(ReadableStreamBYOBReaderImpl);
   setUpReadableStreamBYOBReader(reader, stream);
   return reader;
 }
@@ -65,11 +70,9 @@ export function acquireReadableStreamBYOBReader(
 export function readableByteStreamTee(
   stream: ReadableStreamImpl,
 ): [ReadableStreamImpl, ReadableStreamImpl] {
-  const environment = ReadableStreamImpl.getEnvironment(stream);
+  const context = ReadableStreamImpl.getContext(stream);
   let reader: ReadableStreamDefaultReaderImpl | ReadableStreamBYOBReaderImpl =
-    ReadableStreamImpl.getEnvironment(stream).objects.create(
-      ReadableStreamDefaultReaderImpl,
-    );
+    context.construct(ReadableStreamDefaultReaderImpl);
   setUpReadableStreamDefaultReader(reader, stream);
   let readAgainForBranch1 = false;
   let readAgainForBranch2 = false;
@@ -78,7 +81,7 @@ export function readableByteStreamTee(
   let canceled2 = false;
   let reason1: unknown = undefined;
   let reason2: unknown = undefined;
-  const cancelPromise = environment.promises.create(idlType.undefined);
+  const cancelPromise = context.createPromise(idlType.undefined);
 
   const forwardReaderError = (
     currentReader: ReadableStreamDefaultReaderImpl |
@@ -87,7 +90,7 @@ export function readableByteStreamTee(
     const generic = ReadableStreamDefaultReaderImpl.is(currentReader)
       ? ReadableStreamDefaultReaderImpl.getGenericReader(currentReader)
       : ReadableStreamBYOBReaderImpl.getGenericReader(currentReader);
-    environment.promises.react(
+    context.reactToPromise(
       ReadableStreamGenericReaderMixin.getState(generic).closedPromise,
       idlType.undefined,
       {
@@ -103,7 +106,7 @@ export function readableByteStreamTee(
             reason,
           );
           if (!canceled1 || !canceled2) {
-            environment.promises.resolve(cancelPromise, undefined);
+            context.resolvePromise(cancelPromise, undefined);
           }
         },
       },
@@ -114,9 +117,7 @@ export function readableByteStreamTee(
     if (ReadableStreamBYOBReaderImpl.is(reader)) {
       assert(ReadableStreamBYOBReaderImpl.getReadIntoRequests(reader).length === 0);
       readableStreamBYOBReaderRelease(reader);
-      reader = ReadableStreamImpl.getEnvironment(stream).objects.create(
-        ReadableStreamDefaultReaderImpl,
-      );
+      reader = context.construct(ReadableStreamDefaultReaderImpl);
       setUpReadableStreamDefaultReader(reader, stream);
       forwardReaderError(reader);
     }
@@ -124,13 +125,13 @@ export function readableByteStreamTee(
     readableStreamDefaultReaderRead(reader, {
       chunkSteps(chunk) {
         const byteChunk = requireObject(chunk);
-        environment.queueMicrotask(() => {
+        context.realm.queueMicrotask(() => {
           readAgainForBranch1 = false;
           readAgainForBranch2 = false;
           let chunk2 = byteChunk;
           if (!canceled1 && !canceled2) {
             try {
-              chunk2 = cloneAsUint8Array(environment, byteChunk);
+              chunk2 = cloneAsUint8Array(context, byteChunk);
             } catch (error) {
               readableByteStreamControllerError(
                 requireByteController(branch1),
@@ -181,7 +182,7 @@ export function readableByteStreamTee(
           readableByteStreamControllerRespond(controller2, 0);
         }
         if (!canceled1 || !canceled2) {
-          environment.promises.resolve(cancelPromise, undefined);
+          context.resolvePromise(cancelPromise, undefined);
         }
       },
       errorSteps() {
@@ -205,7 +206,7 @@ export function readableByteStreamTee(
     const otherBranch = forBranch2 ? branch1 : branch2;
     readableStreamBYOBReaderRead(reader, view, 1, {
       chunkSteps(chunk) {
-        environment.queueMicrotask(() => {
+        context.realm.queueMicrotask(() => {
           readAgainForBranch1 = false;
           readAgainForBranch2 = false;
           const byobCanceled = forBranch2 ? canceled2 : canceled1;
@@ -213,7 +214,7 @@ export function readableByteStreamTee(
           if (!otherCanceled) {
             let clonedChunk: object;
             try {
-              clonedChunk = cloneAsUint8Array(environment, chunk);
+              clonedChunk = cloneAsUint8Array(context, chunk);
             } catch (error) {
               readableByteStreamControllerError(
                 requireByteController(byobBranch),
@@ -259,7 +260,7 @@ export function readableByteStreamTee(
         if (!byobCanceled) readableByteStreamControllerClose(byobController);
         if (!otherCanceled) readableByteStreamControllerClose(otherController);
         if (chunk !== undefined) {
-          assert(environment.buffers.getByteLength(chunk) === 0);
+          assert(getBufferSourceByteLength(chunk) === 0);
           if (!byobCanceled) {
             readableByteStreamControllerRespondWithNewView(
               byobController,
@@ -273,7 +274,7 @@ export function readableByteStreamTee(
           }
         }
         if (!byobCanceled || !otherCanceled) {
-          environment.promises.resolve(cancelPromise, undefined);
+          context.resolvePromise(cancelPromise, undefined);
         }
       },
       errorSteps() {
@@ -285,7 +286,7 @@ export function readableByteStreamTee(
   const pull1Algorithm = (): StreamPromise => {
     if (reading) {
       readAgainForBranch1 = true;
-      return resolvedUndefined(environment);
+      return resolvedUndefined(context);
     }
     reading = true;
     const request = readableByteStreamControllerGetBYOBRequest(
@@ -294,12 +295,12 @@ export function readableByteStreamTee(
     const view = request?.view;
     if (view) pullWithBYOBReader(view, false);
     else pullWithDefaultReader();
-    return resolvedUndefined(environment);
+    return resolvedUndefined(context);
   };
   const pull2Algorithm = (): StreamPromise => {
     if (reading) {
       readAgainForBranch2 = true;
-      return resolvedUndefined(environment);
+      return resolvedUndefined(context);
     }
     reading = true;
     const request = readableByteStreamControllerGetBYOBRequest(
@@ -308,7 +309,7 @@ export function readableByteStreamTee(
     const view = request?.view;
     if (view) pullWithBYOBReader(view, true);
     else pullWithDefaultReader();
-    return resolvedUndefined(environment);
+    return resolvedUndefined(context);
   };
   const cancel1Algorithm = (reason: unknown): StreamPromise => {
     canceled1 = true;
@@ -334,21 +335,27 @@ export function readableByteStreamTee(
     start: () => undefined,
     type: 'bytes',
   };
-  const branch1 = environment.objects.construct(ReadableStreamImpl, [source1]);
-  const branch2 = environment.objects.construct(ReadableStreamImpl, [source2]);
+  const branch1 = context.construct(
+    ReadableStreamImpl,
+    source1,
+  );
+  const branch2 = context.construct(
+    ReadableStreamImpl,
+    source2,
+  );
   forwardReaderError(reader);
   return [branch1, branch2];
 
   function settleCancelPromise(reason: unknown): void {
-    environment.promises.react(
+    context.reactToPromise(
       readableStreamCancel(stream, reason),
       idlType.undefined,
       {
-        fulfilled: () => environment.promises.resolve(
+        fulfilled: () => context.resolvePromise(
           cancelPromise,
           undefined,
         ),
-        rejected: (error) => environment.promises.reject(
+        rejected: (error) => context.rejectPromise(
           cancelPromise,
           error,
         ),
@@ -390,7 +397,11 @@ export function readableStreamBYOBReaderRelease(
 ): void {
   const generic = ReadableStreamBYOBReaderImpl.getGenericReader(reader);
   readableStreamReaderGenericRelease(generic, reader);
-  errorReadIntoRequests(reader, new TypeError('Reader was released'));
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
+  errorReadIntoRequests(
+    reader,
+    new context.realm.intrinsics.typeError('Reader was released'),
+  );
 }
 
 export function readableStreamAddReadIntoRequest(
@@ -462,11 +473,11 @@ export function readableByteStreamControllerCallPullIfNeeded(
   }
 
   state.pulling = true;
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
   const promise = requireAlgorithm(state.pullAlgorithm, 'pull')();
-  environment.promises.react(promise, idlType.undefined, {
+  context.reactToPromise(promise, idlType.undefined, {
     fulfilled() {
       state.pulling = false;
       if (state.pullAgain) {
@@ -508,7 +519,8 @@ export function readableByteStreamControllerClose(
 
   const first = state.pendingPullIntos[0];
   if (first && first.bytesFilled % first.elementSize !== 0) {
-    const error = new TypeError(
+    const context = ReadableByteStreamControllerImpl.getContext(controller);
+    const error = new context.realm.intrinsics.typeError(
       'Insufficient bytes to fill elements in the supplied buffer',
     );
     readableByteStreamControllerError(controller, error);
@@ -526,25 +538,28 @@ export function readableByteStreamControllerEnqueue(
   const streamState = ReadableStreamImpl.getState(state.stream);
   if (state.closeRequested || streamState.state !== 'readable') return;
 
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
-  const { buffers } = environment;
-  const buffer = buffers.getBuffer(chunk);
-  const byteOffset = buffers.getByteOffset(chunk);
-  const byteLength = buffers.getByteLength(chunk);
-  if (isDetachedBuffer(environment, buffer)) {
-    throw new TypeError('chunk\'s buffer is detached');
+  const buffer = getBufferSourceUnderlyingBuffer(chunk);
+  const byteOffset = getBufferSourceByteOffset(chunk);
+  const byteLength = getBufferSourceByteLength(chunk);
+  if (isBufferSourceDetached(buffer)) {
+    throw new context.realm.intrinsics.typeError(
+      'chunk\'s buffer is detached',
+    );
   }
-  const transferredBuffer = transferArrayBuffer(environment, buffer);
+  const transferredBuffer = transferArrayBuffer(buffer, context.realm);
 
   const first = state.pendingPullIntos[0];
   if (first) {
-    if (isDetachedBuffer(environment, first.buffer)) {
-      throw new TypeError('The BYOB request\'s buffer is detached');
+    if (isBufferSourceDetached(first.buffer)) {
+      throw new context.realm.intrinsics.typeError(
+        'The BYOB request\'s buffer is detached',
+      );
     }
     invalidateBYOBRequest(controller);
-    first.buffer = transferArrayBuffer(environment, first.buffer);
+    first.buffer = transferArrayBuffer(first.buffer, context.realm);
     if (first.readerType === 'none') {
       enqueueDetachedPullIntoToQueue(controller, first);
     }
@@ -563,7 +578,8 @@ export function readableByteStreamControllerEnqueue(
     } else {
       assert(state.queue.length === 0);
       if (state.pendingPullIntos.length > 0) shiftPendingPullInto(controller);
-      const view = buffers.createView(
+      const view = createBufferView(
+        context,
         'Uint8Array',
         transferredBuffer,
         byteOffset,
@@ -616,9 +632,8 @@ export function readableByteStreamControllerFillReadRequestFromQueue(
   state.queueTotalSize -= entry.byteLength;
   handleQueueDrain(controller);
 
-  const view = ReadableByteStreamControllerImpl.getEnvironment(
-    controller,
-  ).buffers.createView(
+  const view = createBufferView(
+    ReadableByteStreamControllerImpl.getContext(controller),
     'Uint8Array',
     entry.buffer,
     entry.byteOffset,
@@ -634,16 +649,17 @@ export function readableByteStreamControllerGetBYOBRequest(
   if (!state.byobRequest && state.pendingPullIntos.length > 0) {
     const first = state.pendingPullIntos[0];
     assert(first !== undefined);
-    const environment = ReadableByteStreamControllerImpl.getEnvironment(
+    const context = ReadableByteStreamControllerImpl.getContext(
       controller,
     );
-    const view = environment.buffers.createView(
+    const view = createBufferView(
+      context,
       'Uint8Array',
       first.buffer,
       first.byteOffset + first.bytesFilled,
       first.byteLength - first.bytesFilled,
     );
-    const request = environment.objects.create(ReadableStreamBYOBRequestImpl);
+    const request = context.construct(ReadableStreamBYOBRequestImpl);
     ReadableStreamBYOBRequestImpl.initialize(request, controller, view);
     state.byobRequest = request;
   }
@@ -667,21 +683,20 @@ export function readableByteStreamControllerPullInto(
   request: ReadIntoRequest,
 ): void {
   const state = ReadableByteStreamControllerImpl.getState(controller);
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
-  const buffers = environment.buffers;
-  const viewType = buffers.getViewType(view);
+  const viewType = requireBufferViewType(view);
   const elementSize = bufferViewElementSizes[viewType];
   const minimumFill = minimum * elementSize;
-  const byteOffset = buffers.getByteOffset(view);
-  const byteLength = buffers.getByteLength(view);
-  const originalBuffer = buffers.getBuffer(view);
-  const bufferByteLength = buffers.getByteLength(originalBuffer);
+  const byteOffset = getBufferSourceByteOffset(view);
+  const byteLength = getBufferSourceByteLength(view);
+  const originalBuffer = getBufferSourceUnderlyingBuffer(view);
+  const bufferByteLength = getBufferSourceByteLength(originalBuffer);
 
   let buffer: object;
   try {
-    buffer = transferArrayBuffer(environment, originalBuffer);
+    buffer = transferArrayBuffer(originalBuffer, context.realm);
   } catch (error) {
     request.errorSteps(error);
     return;
@@ -704,7 +719,7 @@ export function readableByteStreamControllerPullInto(
     return;
   }
   if (ReadableStreamImpl.getState(state.stream).state === 'closed') {
-    request.closeSteps(createDescriptorView(environment, descriptor, 0));
+    request.closeSteps(createDescriptorView(context, descriptor, 0));
     return;
   }
   if (state.queueTotalSize > 0) {
@@ -715,7 +730,7 @@ export function readableByteStreamControllerPullInto(
       return;
     }
     if (state.closeRequested) {
-      const error = new TypeError(
+      const error = new context.realm.intrinsics.typeError(
         'Insufficient bytes to fill elements in the supplied buffer',
       );
       readableByteStreamControllerError(controller, error);
@@ -736,24 +751,28 @@ export function readableByteStreamControllerRespond(
   const state = ReadableByteStreamControllerImpl.getState(controller);
   const first = state.pendingPullIntos[0];
   assert(first !== undefined);
+  const context = ReadableByteStreamControllerImpl.getContext(controller);
   const streamState = ReadableStreamImpl.getState(state.stream).state;
   if (streamState === 'closed') {
     if (bytesWritten !== 0) {
-      throw new TypeError('bytesWritten must be 0 for a closed stream');
+      throw new context.realm.intrinsics.typeError(
+        'bytesWritten must be 0 for a closed stream',
+      );
     }
   } else {
     assert(streamState === 'readable');
     if (bytesWritten === 0) {
-      throw new TypeError('bytesWritten must be greater than 0');
+      throw new context.realm.intrinsics.typeError(
+        'bytesWritten must be greater than 0',
+      );
     }
     if (first.bytesFilled + bytesWritten > first.byteLength) {
-      throw new RangeError('bytesWritten is out of range');
+      throw new context.realm.intrinsics.rangeError(
+        'bytesWritten is out of range',
+      );
     }
   }
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
-    controller,
-  );
-  first.buffer = transferArrayBuffer(environment, first.buffer);
+  first.buffer = transferArrayBuffer(first.buffer, context.realm);
   respondInternal(controller, bytesWritten);
 }
 
@@ -764,34 +783,44 @@ export function readableByteStreamControllerRespondWithNewView(
   const state = ReadableByteStreamControllerImpl.getState(controller);
   const first = state.pendingPullIntos[0];
   assert(first !== undefined);
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
-  const buffers = environment.buffers;
-  assert(!isDetachedBuffer(environment, buffers.getBuffer(view)));
-  const viewByteLength = buffers.getByteLength(view);
+  assert(!isBufferSourceDetached(getBufferSourceUnderlyingBuffer(view)));
+  const viewByteLength = getBufferSourceByteLength(view);
   const streamState = ReadableStreamImpl.getState(state.stream).state;
   if (streamState === 'closed') {
     if (viewByteLength !== 0) {
-      throw new TypeError('The view must be empty for a closed stream');
+      throw new context.realm.intrinsics.typeError(
+        'The view must be empty for a closed stream',
+      );
     }
   } else {
     assert(streamState === 'readable');
     if (viewByteLength === 0) {
-      throw new TypeError('The view must not be empty');
+      throw new context.realm.intrinsics.typeError(
+        'The view must not be empty',
+      );
     }
   }
-  if (first.byteOffset + first.bytesFilled !== buffers.getByteOffset(view)) {
-    throw new RangeError('The view region does not match the BYOB request');
+  if (first.byteOffset + first.bytesFilled !==
+    getBufferSourceByteOffset(view)) {
+    throw new context.realm.intrinsics.rangeError(
+      'The view region does not match the BYOB request',
+    );
   }
-  const viewBuffer = buffers.getBuffer(view);
-  if (first.bufferByteLength !== buffers.getByteLength(viewBuffer)) {
-    throw new RangeError('The view buffer has a different capacity');
+  const viewBuffer = getBufferSourceUnderlyingBuffer(view);
+  if (first.bufferByteLength !== getBufferSourceByteLength(viewBuffer)) {
+    throw new context.realm.intrinsics.rangeError(
+      'The view buffer has a different capacity',
+    );
   }
   if (first.bytesFilled + viewByteLength > first.byteLength) {
-    throw new RangeError('The view region is larger than the BYOB request');
+    throw new context.realm.intrinsics.rangeError(
+      'The view region is larger than the BYOB request',
+    );
   }
-  first.buffer = transferArrayBuffer(environment, viewBuffer);
+  first.buffer = transferArrayBuffer(viewBuffer, context.realm);
   respondInternal(controller, viewByteLength);
 }
 
@@ -801,38 +830,32 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
   source: UnderlyingSource,
   highWaterMark: number,
 ): void {
-  const environment = ReadableStreamImpl.getEnvironment(stream);
-  const controller = environment.objects.create(
+  const context = ReadableStreamImpl.getContext(stream);
+  const controller = context.construct(
     ReadableByteStreamControllerImpl,
   );
-  const startAlgorithm = source.start === undefined
+  const startCallback = source.start;
+  const pullCallback = source.pull;
+  const cancelCallback = source.cancel;
+  const startAlgorithm = startCallback === undefined
     ? () => undefined
-    : () => environment.callbacks.invoke(
-      source.start,
-      [controller],
-      'rethrow',
+    : () => Reflect.apply(startCallback, underlyingSource, [controller]);
+  const pullAlgorithm = pullCallback === undefined
+    ? () => context.createResolvedPromise(undefined, idlType.undefined)
+    : () => Reflect.apply(pullCallback, underlyingSource, [controller]);
+  const cancelAlgorithm = cancelCallback === undefined
+    ? () => context.createResolvedPromise(undefined, idlType.undefined)
+    : (reason: unknown) => Reflect.apply(
+      cancelCallback,
       underlyingSource,
-    );
-  const pullAlgorithm = source.pull === undefined
-    ? () => environment.promises.createResolved(undefined, idlType.undefined)
-    : () => requirePromise(environment.callbacks.invoke(
-      source.pull,
-      [controller],
-      undefined,
-      underlyingSource,
-    ));
-  const cancelAlgorithm = source.cancel === undefined
-    ? () => environment.promises.createResolved(undefined, idlType.undefined)
-    : (reason: unknown) => requirePromise(environment.callbacks.invoke(
-      source.cancel,
       [reason],
-      undefined,
-      underlyingSource,
-    ));
+    );
 
   const autoAllocateChunkSize = source.autoAllocateChunkSize;
   if (autoAllocateChunkSize === 0) {
-    throw new TypeError('autoAllocateChunkSize must be greater than 0');
+    throw new context.realm.intrinsics.typeError(
+      'autoAllocateChunkSize must be greater than 0',
+    );
   }
   setUpReadableByteStreamController(
     stream,
@@ -847,25 +870,25 @@ export function setUpReadableByteStreamControllerFromUnderlyingSource(
 
 /** Streams §9.1, create and set up a stream with byte reading support. */
 export function createReadableStreamWithByteReadingSupport(
-  environment: StreamEnvironment,
+  context: BindingContext,
   pullAlgorithm?: () => unknown,
   cancelAlgorithm?: (reason: unknown) => unknown,
   highWaterMark = 0,
 ): ReadableStreamImpl {
-  const stream = environment.objects.construct(
+  const stream = context.construct(
     ReadableStreamImpl,
-    [internalStreamSetup],
+    internalStreamSetup,
   );
-  const controller = environment.objects.create(
+  const controller = context.construct(
     ReadableByteStreamControllerImpl,
   );
   setUpReadableByteStreamController(
     stream,
     controller,
     () => undefined,
-    () => runAlgorithm(environment, () => pullAlgorithm?.()),
+    () => runAlgorithm(context, () => pullAlgorithm?.()),
     (reason) => runAlgorithm(
-      environment,
+      context,
       () => cancelAlgorithm?.(reason),
     ),
     highWaterMark,
@@ -904,9 +927,9 @@ function setUpReadableByteStreamController(
   ReadableByteStreamControllerImpl.setState(controller, state);
   ReadableStreamImpl.getState(stream).controller = controller;
 
-  const environment = ReadableStreamImpl.getEnvironment(stream);
-  environment.promises.react(
-    environment.promises.createResolved(startAlgorithm(), idlType.any),
+  const context = ReadableStreamImpl.getContext(stream);
+  context.reactToPromise(
+    context.createResolvedPromise(startAlgorithm(), idlType.any),
     idlType.undefined,
     {
       fulfilled() {
@@ -921,16 +944,16 @@ function setUpReadableByteStreamController(
 }
 
 function runAlgorithm(
-  environment: StreamEnvironment,
+  context: BindingContext,
   algorithm: () => unknown,
 ): StreamPromise {
   try {
-    return environment.promises.createResolved(
+    return context.createResolvedPromise(
       algorithm(),
       idlType.undefined,
     );
   } catch (error) {
-    return environment.promises.createRejected(error, idlType.undefined);
+    return context.createRejectedPromise(error, idlType.undefined);
   }
 }
 
@@ -958,25 +981,24 @@ function convertPullIntoDescriptor(
 ): object {
   assert(descriptor.bytesFilled <= descriptor.byteLength);
   assert(descriptor.bytesFilled % descriptor.elementSize === 0);
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
-  descriptor.buffer = transferArrayBuffer(environment, descriptor.buffer);
+  descriptor.buffer = transferArrayBuffer(descriptor.buffer, context.realm);
   return createDescriptorView(
-    environment,
+    context,
     descriptor,
     descriptor.bytesFilled / descriptor.elementSize,
   );
 }
 
 function createDescriptorView(
-  environment: ReturnType<
-    typeof ReadableByteStreamControllerImpl.getEnvironment
-  >,
+  context: BindingContext,
   descriptor: PullIntoDescriptor,
   length: number,
 ): object {
-  return environment.buffers.createView(
+  return createBufferView(
+    context,
     descriptor.viewType,
     descriptor.buffer,
     descriptor.byteOffset,
@@ -1001,12 +1023,12 @@ function enqueueClonedChunkToQueue(
   byteOffset: number,
   byteLength: number,
 ): void {
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
+  const context = ReadableByteStreamControllerImpl.getContext(
     controller,
   );
   let clone: object;
   try {
-    clone = environment.buffers.clone(buffer, byteOffset, byteLength);
+    clone = cloneArrayBuffer(context, buffer, byteOffset, byteLength);
   } catch (error) {
     readableByteStreamControllerError(controller, error);
     throw error;
@@ -1060,15 +1082,11 @@ function fillPullIntoFromQueue(
     ready = true;
   }
 
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
-    controller,
-  );
   while (remaining > 0) {
     const head = state.queue[0];
     assert(head !== undefined);
     const count = Math.min(remaining, head.byteLength);
     copyDataBlockBytes(
-      environment,
       descriptor.buffer,
       descriptor.byteOffset + descriptor.bytesFilled,
       head.buffer,
@@ -1145,10 +1163,7 @@ function respondInternal(
   const state = ReadableByteStreamControllerImpl.getState(controller);
   const first = state.pendingPullIntos[0];
   assert(first !== undefined);
-  const environment = ReadableByteStreamControllerImpl.getEnvironment(
-    controller,
-  );
-  assert(canTransferArrayBuffer(environment, first.buffer));
+  assert(!isBufferSourceDetached(first.buffer));
   invalidateBYOBRequest(controller);
   const streamState = ReadableStreamImpl.getState(state.stream).state;
   if (streamState === 'closed') {
@@ -1281,16 +1296,18 @@ function errorReadIntoRequests(
 }
 
 function cloneAsUint8Array(
-  environment: StreamEnvironment,
+  context: BindingContext,
   view: object,
 ): object {
-  const byteLength = environment.buffers.getByteLength(view);
-  const buffer = environment.buffers.clone(
-    environment.buffers.getBuffer(view),
-    environment.buffers.getByteOffset(view),
+  const byteLength = getBufferSourceByteLength(view);
+  const buffer = cloneArrayBuffer(
+    context,
+    getBufferSourceUnderlyingBuffer(view),
+    getBufferSourceByteOffset(view),
     byteLength,
   );
-  return environment.buffers.createView(
+  return createBufferView(
+    context,
     'Uint8Array',
     buffer,
     0,
@@ -1298,10 +1315,70 @@ function cloneAsUint8Array(
   );
 }
 
+function cloneArrayBuffer(
+  context: BindingContext,
+  buffer: object,
+  byteOffset: number,
+  byteLength: number,
+): object {
+  return createArrayBuffer(
+    getBufferSourceCopy(buffer).slice(
+      byteOffset,
+      byteOffset + byteLength,
+    ),
+    context.realm,
+  );
+}
+
+function copyDataBlockBytes(
+  destination: object,
+  destinationOffset: number,
+  source: object,
+  sourceOffset: number,
+  byteLength: number,
+): void {
+  writeArrayBuffer(
+    destination,
+    getBufferSourceCopy(source).slice(
+      sourceOffset,
+      sourceOffset + byteLength,
+    ),
+    destinationOffset,
+  );
+}
+
+function createBufferView(
+  context: BindingContext,
+  type: BufferViewTypeName,
+  buffer: object,
+  byteOffset: number,
+  length: number,
+): object {
+  const byteLength = type === 'DataView'
+    ? length
+    : length * bufferViewElementSizes[type];
+  return createArrayBufferViewFromBuffer(
+    type,
+    buffer,
+    byteOffset,
+    byteLength,
+    type === 'DataView' ? undefined : length,
+    context.realm,
+  );
+}
+
+function requireBufferViewType(view: object): BufferViewTypeName {
+  const type = getBufferTypeName(view);
+  if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
+    throw new Error('ArrayBuffer view has no recognized view type');
+  }
+  return type;
+}
+
 function requireByteController(
   stream: ReadableStreamImpl,
 ): ReadableByteStreamControllerImpl {
-  const controller = ReadableStreamImpl.getState(stream).controller;
+  const controller = ReadableStreamImpl.getController(stream);
   if (!ReadableByteStreamControllerImpl.is(controller)) {
     throw new Error('ReadableStream has no byte controller');
   }
@@ -1315,8 +1392,8 @@ function requireObject(value: unknown): object {
   return value;
 }
 
-function resolvedUndefined(environment: StreamEnvironment): StreamPromise {
-  return environment.promises.createResolved(undefined, idlType.undefined);
+function resolvedUndefined(context: BindingContext): StreamPromise {
+  return context.createResolvedPromise(undefined, idlType.undefined);
 }
 
 function requireAlgorithm<Algorithm>(
@@ -1325,14 +1402,6 @@ function requireAlgorithm<Algorithm>(
 ): Algorithm {
   if (!algorithm) throw new Error(`Readable stream ${name} algorithm is gone`);
   return algorithm;
-}
-
-function requirePromise(value: unknown): StreamPromise {
-  if ((typeof value !== 'object' || value === null) &&
-    typeof value !== 'function') {
-    throw new TypeError('Stream callback did not return a Web IDL promise');
-  }
-  return value;
 }
 
 function assert(condition: unknown): asserts condition {

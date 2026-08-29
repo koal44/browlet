@@ -1,10 +1,9 @@
 import { DocumentImpl } from './dom/nodes/document';
 import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
-import { asDocument } from './stubs';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
-import { getRelevantRealm } from './bindings';
+import { browletBindings, getRelevantRealm } from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
 } from './browsing/document-lifecycle';
@@ -65,7 +64,7 @@ export class Browlet {
     if (document === null) {
       throw new Error('Top-level traversable has no active Document');
     }
-    return asDocument(document);
+    return browletBindings.getPlatformObject(document) as Document;
   }
 
   get window(): WindowProxy {

@@ -2,6 +2,9 @@ import {
   arg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType,
   impl, reference,
 } from '../web-idl/declaration/index';
+import {
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
 import { GenericTransformStreamMixin } from '../streams/generic-transform-stream';
 import { TransformStreamImpl } from '../streams/transform-stream';
 import type { ReadableStreamImpl } from '../streams/readable-stream';
@@ -9,9 +12,6 @@ import {
   transformStreamDefaultControllerEnqueue,
 } from '../streams/transform-stream-operations';
 import type { WritableStreamImpl } from '../streams/writable-stream';
-import {
-  encodingEnvironment, type EncodingEnvironment,
-} from './environment';
 import {
   TextDecoderCommonMixin, type TextDecoderOptions,
 } from './text-decoder';
@@ -29,19 +29,19 @@ export class TextDecoderStreamImpl {
   readonly #generic: GenericTransformStreamMixin;
 
   constructor(
-    environment: EncodingEnvironment,
-    label = 'utf-8',
-    options: TextDecoderOptions = {},
+    context: BindingContext,
+    label: string,
+    options: TextDecoderOptions,
   ) {
     this.#common = new TextDecoderCommonMixin(
-      environment,
+      context,
       label,
       options,
     );
     this.#generic = new GenericTransformStreamMixin(
-      TransformStreamImpl.fromAlgorithms(environment.streams, {
+      TransformStreamImpl.fromAlgorithms(context, {
         transform: (chunk, controller) => {
-          const input = environment.convert(
+          const input = context.convert(
             chunk,
             reference('AllowSharedBufferSource'),
           ) as object;
@@ -85,7 +85,7 @@ export const textDecoderStreamIDL = defineInterface({
   name: 'TextDecoderStream',
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
-    withArgs: [encodingEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [ctor([
     arg('label', idlType.DOMString, {

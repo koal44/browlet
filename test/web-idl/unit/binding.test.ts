@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineCallbackFunction, defineEnumeration, defineInterface, defineTypedef,
   idlType, observableArray, type AttributeMember, type MaplikeMember,
@@ -108,12 +108,12 @@ describe('Web IDL JavaScript binding foundation', () => {
     const derived = firstDefinitions.getInterface('Derived');
     const secondDerived = secondDefinitions.getInterface('Derived');
     const platformObjects = new PlatformObjectRegistry();
-    const first = new JavaScriptBinding(
+    const first = new RealmBinding(
       firstDefinitions,
       new Realm(),
       platformObjects,
     );
-    const second = new JavaScriptBinding(
+    const second = new RealmBinding(
       secondDefinitions,
       new Realm(),
       platformObjects,
@@ -132,7 +132,7 @@ describe('Web IDL JavaScript binding foundation', () => {
     expect(second.implements(object, base)).toBe(true);
     expect(second.getPlatformObjectRecord(object)).toBe(record);
     expect(record.implementation).toBe(object);
-    expect(record.object).toBe(object);
+    expect(record.platformObject).toBe(object);
     expect(record.primaryInterface).toBe(derived);
     expect(record.realm).toBe(first.realm);
     expect(Reflect.ownKeys(object)).toEqual([]);
@@ -161,7 +161,7 @@ describe('Web IDL JavaScript binding foundation', () => {
       type: idlType.DOMString,
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([choice, callback, alias]),
       realm,
       new PlatformObjectRegistry(),
@@ -237,8 +237,8 @@ describe('Web IDL JavaScript binding foundation', () => {
   });
 });
 
-function createBinding(realm: Realm): JavaScriptBinding {
-  return new JavaScriptBinding(
+function createBinding(realm: Realm): RealmBinding {
+  return new RealmBinding(
     assembleDefinitions([]),
     realm,
     new PlatformObjectRegistry(),
@@ -247,15 +247,15 @@ function createBinding(realm: Realm): JavaScriptBinding {
 
 function createRealmBindings(
   interfaceIDL: ReturnType<typeof defineInterface>,
-): { first: JavaScriptBinding; second: JavaScriptBinding; } {
+): { first: RealmBinding; second: RealmBinding; } {
   const platformObjects = new PlatformObjectRegistry();
   return {
-    first: new JavaScriptBinding(
+    first: new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       new Realm(),
       platformObjects,
     ),
-    second: new JavaScriptBinding(
+    second: new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       new Realm(),
       platformObjects,

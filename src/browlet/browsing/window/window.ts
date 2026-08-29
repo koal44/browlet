@@ -1,14 +1,16 @@
 import { DocumentImpl } from '../../dom/nodes/document';
+import { ElementImpl } from '../../dom/nodes/element';
+import type { EventImpl } from '../../dom/events/event';
 import {
   EventTargetImpl, type EventTargetVirtuals,
 } from '../../dom/events/event-target';
-import { asDocument, withWindowStub } from '../../stubs';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
   impl, roAttr, reference, union, xattr,
 } from '../../../web-idl/declaration/index';
 import { bind } from '../../../web-idl/index';
 import { LocationImpl } from './location';
+import type { PerformanceImpl } from '../../performance/performance';
 import { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
 
 /*
@@ -76,11 +78,10 @@ import { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
  * };
  */
 export class WindowImpl
-  extends withWindowStub(EventTargetImpl)
-  implements Window
+  extends EventTargetImpl
 {
   #document: DocumentImpl | null = null;
-  #currentEvent: Event | undefined;
+  #currentEvent: EventImpl | undefined;
   readonly #location: LocationImpl;
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
@@ -97,11 +98,11 @@ export class WindowImpl
     return WindowImpl.getWindowProxy(this) as Window & typeof globalThis;
   }
 
-  get document(): Document {
-    return asDocument(WindowImpl.getAssociatedDocument(this));
+  get document(): DocumentImpl {
+    return WindowImpl.getAssociatedDocument(this);
   }
 
-  get location(): Location {
+  get location(): LocationImpl {
     return this.#location;
   }
 
@@ -109,19 +110,21 @@ export class WindowImpl
     throw new Error('Browlet navigation is not implemented');
   }
 
-  get performance(): Performance {
+  get performance(): PerformanceImpl {
     return WindowImpl.getWindowOrWorkerGlobalScopeMixin(this).performance;
   }
 
   /** @deprecated */
-  get event(): Event | undefined {
+  get event(): EventImpl | undefined {
     return this.#currentEvent;
   }
 
   readonly getComputedStyle = (
-    element: Element,
+    element: ElementImpl,
     pseudoElement?: string | null,
   ): CSSStyleDeclaration => {
+    // TODO(CSSOM Web IDL): Move this author operation onto Stylelet's Window
+    // partial once CSSStyleDeclaration has a projected interface.
     if (pseudoElement !== null && pseudoElement !== undefined) {
       throw new Error('Pseudo-element computed style is not implemented');
     }
@@ -189,7 +192,7 @@ export class WindowImpl
     return window.#document;
   }
 
-  static getCurrentEvent(window: WindowImpl): Event | undefined {
+  static getCurrentEvent(window: WindowImpl): EventImpl | undefined {
     return window.#currentEvent;
   }
 
@@ -217,7 +220,7 @@ export class WindowImpl
   static getNamedProperty(
     window: WindowImpl,
     name: string,
-  ): Element {
+  ): ElementImpl {
     const element = WindowImpl.getAssociatedDocument(window)
       .getElementById(name);
     if (!element) throw new Error(`Window named property ${name} disappeared`);
@@ -265,7 +268,10 @@ export class WindowImpl
     }
   }
 
-  static setCurrentEvent(window: WindowImpl, event: Event | undefined): void {
+  static setCurrentEvent(
+    window: WindowImpl,
+    event: EventImpl | undefined,
+  ): void {
     window.#currentEvent = event;
   }
 }
@@ -304,8 +310,11 @@ export const windowIDL = defineInterface({
       getSupportedPropertyNames() {
         return WindowImpl.getSupportedPropertyNames(this as WindowImpl);
       },
-      invoke(_context, name) {
-        return WindowImpl.getNamedProperty(this as WindowImpl, name as string);
+      invoke(context, name) {
+        return context.project(
+          ElementImpl,
+          WindowImpl.getNamedProperty(this as WindowImpl, name as string),
+        );
       },
     }, {
       special: 'getter',

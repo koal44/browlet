@@ -33,7 +33,7 @@ export class TreeScope {
     });
   }
 
-  get styleSheets(): StyleSheetList {
+  get styleSheets(): StyleSheetListImpl<CSSStyleSheetImpl> {
     return this.#styleSheets;
   }
 
@@ -171,7 +171,7 @@ export type StyleElementStyleSheetOptions = {
 };
 
 function findStyleSheetInsertionIndex(
-  styleSheets: StyleSheetList,
+  styleSheets: StyleSheetListImpl<CSSStyleSheetImpl>,
   ownerNode: Node,
 ): number {
   let index = 0;
@@ -195,8 +195,8 @@ function findStyleSheetInsertionIndex(
 const DOCUMENT_POSITION_FOLLOWING = 0x04;
 
 function findStyleSheetIndex(
-  styleSheets: StyleSheetList,
-  target: CSSStyleSheet,
+  styleSheets: StyleSheetListImpl<CSSStyleSheetImpl>,
+  target: CSSStyleSheetImpl,
 ): number {
   let index = 0;
   for (const styleSheet of styleSheets) {

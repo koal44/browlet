@@ -3,16 +3,16 @@ import {
   reference,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
 
 export class ByteLengthQueuingStrategyImpl {
   readonly #highWaterMark: number;
   readonly #size: CallableFunction;
 
-  constructor(environment: StreamEnvironment, init: QueuingStrategyInit) {
+  constructor(context: BindingContext, init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
-    this.#size = getByteLengthSizeFunction(environment);
+    this.#size = getByteLengthSizeFunction(context);
   }
 
   get highWaterMark(): number {
@@ -31,7 +31,7 @@ export const byteLengthQueuingStrategyIDL = defineInterface({
   name: 'ByteLengthQueuingStrategy',
   exposed: ['Window', 'Worker', 'Worklet'],
   implementation: impl(ByteLengthQueuingStrategyImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([arg('init', reference('QueuingStrategyInit'))]),
@@ -44,17 +44,20 @@ type QueuingStrategyInit = {
   readonly highWaterMark: number;
 };
 
-const sizeFunctions = new WeakMap<StreamEnvironment, CallableFunction>();
+const sizeFunctions = new WeakMap<
+  BindingContext,
+  CallableFunction
+>();
 
 function getByteLengthSizeFunction(
-  environment: StreamEnvironment,
+  context: BindingContext,
 ): CallableFunction {
-  let size = sizeFunctions.get(environment);
+  let size = sizeFunctions.get(context);
   if (!size) {
-    size = environment.callbacks.createFunction(
+    size = context.realm.createFunction(
       (_thisArgument, [chunk]) => {
         if (chunk === undefined || chunk === null) {
-          throw environment.exceptions.createTypeError(
+          throw new context.realm.intrinsics.typeError(
             'Cannot read byteLength from null or undefined',
           );
         }
@@ -62,7 +65,7 @@ function getByteLengthSizeFunction(
       },
       { length: 1, name: 'size' },
     );
-    sizeFunctions.set(environment, size);
+    sizeFunctions.set(context, size);
   }
   return size;
 }

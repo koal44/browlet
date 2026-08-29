@@ -1,30 +1,30 @@
-import type { StreamEnvironment } from './environment';
-import { isDetachedBuffer } from './ecmascript';
+import {
+  createArrayBuffer, createArrayBufferViewFromBuffer,
+  getBufferSourceByteLength, getBufferSourceCopy, isBufferSourceDetached,
+} from '../web-idl/buffer-source';
+import type { BindingContext } from '../web-idl/projection';
 
 export function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === 'number' && !Number.isNaN(value) && value >= 0;
 }
 
 export function cloneAsUint8Array(
-  environment: StreamEnvironment,
+  context: BindingContext,
   value: object,
 ): object {
-  const buffer = environment.buffers.getBuffer(value);
-  const clone = environment.buffers.clone(
-    buffer,
-    environment.buffers.getByteOffset(value),
-    environment.buffers.getByteLength(value),
-  );
-  return environment.buffers.createView(
+  const bytes = getBufferSourceCopy(value);
+  const buffer = createArrayBuffer(bytes, context.realm);
+  return createArrayBufferViewFromBuffer(
     'Uint8Array',
-    clone,
+    buffer,
     0,
-    environment.buffers.getByteLength(clone),
+    bytes.length,
+    bytes.length,
+    context.realm,
   );
 }
 
 export function canCopyDataBlockBytes(
-  environment: StreamEnvironment,
   destination: object,
   destinationOffset: number,
   source: object,
@@ -32,10 +32,8 @@ export function canCopyDataBlockBytes(
   count: number,
 ): boolean {
   return destination !== source &&
-    !isDetachedBuffer(environment, destination) &&
-    !isDetachedBuffer(environment, source) &&
-    destinationOffset + count <= environment.buffers.getByteLength(
-      destination,
-    ) &&
-    sourceOffset + count <= environment.buffers.getByteLength(source);
+    !isBufferSourceDetached(destination) &&
+    !isBufferSourceDetached(source) &&
+    destinationOffset + count <= getBufferSourceByteLength(destination) &&
+    sourceOffset + count <= getBufferSourceByteLength(source);
 }

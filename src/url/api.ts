@@ -57,18 +57,18 @@ export class URLImpl {
       : url;
     if (parsed === null) throw new TypeError('Invalid URL');
     this.#url = parsed;
-    this.#queryObject = new URLSearchParamsImpl();
+    this.#queryObject = new URLSearchParamsImpl('');
     this.#initialize(parsed);
   }
 
-  static parse(url: unknown, base?: unknown): URLImpl | null {
-    const parsed = parseAPIURL(toUSVString(url), optionalUSVString(base));
+  static parse(url: string, base?: string): URLImpl | null {
+    const parsed = parseAPIURL(url, base);
     if (parsed === null) return null;
     return URLImpl.fromRecord(parsed);
   }
 
-  static canParse(url: unknown, base?: unknown): boolean {
-    return parseAPIURL(toUSVString(url), optionalUSVString(base)) !== null;
+  static canParse(url: string, base?: string): boolean {
+    return parseAPIURL(url, base) !== null;
   }
 
   get href(): string {
@@ -76,7 +76,7 @@ export class URLImpl {
   }
 
   set href(value: string) {
-    const parsed = parseURL(toUSVString(value)).url;
+    const parsed = parseURL(value).url;
     if (parsed === null) throw new TypeError('Invalid URL');
     this.#initialize(parsed);
   }
@@ -90,7 +90,7 @@ export class URLImpl {
   }
 
   set protocol(value: string) {
-    basicURLParse(`${toUSVString(value)}:`, {
+    basicURLParse(`${value}:`, {
       stateOverride: 'scheme start',
       url: this.#url,
     });
@@ -102,7 +102,7 @@ export class URLImpl {
 
   set username(value: string) {
     if (cannotHaveUsernamePasswordPort(this.#url)) return;
-    setURLUsername(this.#url, toUSVString(value));
+    setURLUsername(this.#url, value);
   }
 
   get password(): string {
@@ -111,7 +111,7 @@ export class URLImpl {
 
   set password(value: string) {
     if (cannotHaveUsernamePasswordPort(this.#url)) return;
-    setURLPassword(this.#url, toUSVString(value));
+    setURLPassword(this.#url, value);
   }
 
   get host(): string {
@@ -122,7 +122,7 @@ export class URLImpl {
 
   set host(value: string) {
     if (hasOpaquePath(this.#url)) return;
-    basicURLParse(toUSVString(value), {
+    basicURLParse(value, {
       stateOverride: 'host',
       url: this.#url,
     });
@@ -134,7 +134,7 @@ export class URLImpl {
 
   set hostname(value: string) {
     if (hasOpaquePath(this.#url)) return;
-    basicURLParse(toUSVString(value), {
+    basicURLParse(value, {
       stateOverride: 'hostname',
       url: this.#url,
     });
@@ -146,7 +146,6 @@ export class URLImpl {
 
   set port(value: string) {
     if (cannotHaveUsernamePasswordPort(this.#url)) return;
-    value = toUSVString(value);
     if (value === '') this.#url.port = null;
     else basicURLParse(value, { stateOverride: 'port', url: this.#url });
   }
@@ -157,7 +156,6 @@ export class URLImpl {
 
   set pathname(value: string) {
     if (hasOpaquePath(this.#url)) return;
-    value = toUSVString(value);
     this.#url.path = [];
     basicURLParse(value, { stateOverride: 'path start', url: this.#url });
   }
@@ -168,7 +166,6 @@ export class URLImpl {
   }
 
   set search(value: string) {
-    value = toUSVString(value);
     if (value === '') {
       this.#url.query = null;
       URLSearchParamsImpl.replaceList(this.#queryObject, []);
@@ -194,7 +191,6 @@ export class URLImpl {
   }
 
   set hash(value: string) {
-    value = toUSVString(value);
     if (value === '') {
       this.#url.fragment = null;
       return;
@@ -302,7 +298,7 @@ export class URLSearchParamsImpl implements URLSearchParams {
   #list: FormTuple[] = [];
   #urlObject: URLImpl | null = null;
 
-  constructor(init: URLSearchParamsInit = '') {
+  constructor(init: URLSearchParamsInit) {
     this.#initialize(init);
   }
 
@@ -311,50 +307,42 @@ export class URLSearchParamsImpl implements URLSearchParams {
   }
 
   append(name: string, value: string): void {
-    this.#list.push([toUSVString(name), toUSVString(value)]);
+    this.#list.push([name, value]);
     this.#update();
   }
 
   delete(name: string, value?: string): void {
-    const convertedName = toUSVString(name);
-    const convertedValue = value === undefined ? undefined : toUSVString(value);
     removeMatching(this.#list, (tuple) =>
-      tuple[0] === convertedName &&
-      (convertedValue === undefined || tuple[1] === convertedValue));
+      tuple[0] === name &&
+      (value === undefined || tuple[1] === value));
     this.#update();
   }
 
   get(name: string): string | null {
-    const convertedName = toUSVString(name);
-    return this.#list.find((tuple) => tuple[0] === convertedName)?.[1] ?? null;
+    return this.#list.find((tuple) => tuple[0] === name)?.[1] ?? null;
   }
 
   getAll(name: string): string[] {
-    const convertedName = toUSVString(name);
     return this.#list
-      .filter((tuple) => tuple[0] === convertedName)
+      .filter((tuple) => tuple[0] === name)
       .map((tuple) => tuple[1]);
   }
 
   has(name: string, value?: string): boolean {
-    const convertedName = toUSVString(name);
-    const convertedValue = value === undefined ? undefined : toUSVString(value);
     return this.#list.some((tuple) =>
-      tuple[0] === convertedName &&
-      (convertedValue === undefined || tuple[1] === convertedValue));
+      tuple[0] === name &&
+      (value === undefined || tuple[1] === value));
   }
 
   set(name: string, value: string): void {
-    const convertedName = toUSVString(name);
-    const convertedValue = toUSVString(value);
-    const first = this.#list.findIndex((tuple) => tuple[0] === convertedName);
+    const first = this.#list.findIndex((tuple) => tuple[0] === name);
 
     if (first === -1) {
-      this.#list.push([convertedName, convertedValue]);
+      this.#list.push([name, value]);
     } else {
-      this.#list[first] = [convertedName, convertedValue];
+      this.#list[first] = [name, value];
       for (let index = this.#list.length - 1; index > first; index--) {
-        if (this.#list[index]![0] === convertedName) this.#list.splice(index, 1);
+        if (this.#list[index]![0] === name) this.#list.splice(index, 1);
       }
     }
     this.#update();
@@ -384,7 +372,11 @@ export class URLSearchParamsImpl implements URLSearchParams {
   }
 
   forEach(
-    callback: (value: string, key: string, parent: URLSearchParams) => void,
+    callback: (
+      value: string,
+      key: string,
+      parent: URLSearchParamsImpl,
+    ) => void,
     thisArg?: unknown,
   ): void {
     for (let index = 0; index < this.#list.length; index++) {
@@ -420,35 +412,23 @@ export class URLSearchParamsImpl implements URLSearchParams {
       return;
     }
 
-    if (isObject(init)) {
-      const iterator = Reflect.get(init, Symbol.iterator);
-      if (iterator !== undefined && iterator !== null) {
-        if (typeof iterator !== 'function') throw new TypeError('Value is not iterable');
-        for (const entry of init as Iterable<unknown>) {
-          if (!isObject(entry)) throw new TypeError('Sequence entry is not iterable');
-          const values = Array.from(entry as Iterable<unknown>, toUSVString);
-          if (values.length !== 2) {
-            throw new TypeError('Sequence entry must contain exactly two items');
-          }
-          this.#list.push([values[0]!, values[1]!]);
+    const iterator = Reflect.get(init, Symbol.iterator);
+    if (iterator !== undefined && iterator !== null) {
+      for (const entry of init as Iterable<Iterable<string>>) {
+        const values = Array.from(entry);
+        if (values.length !== 2) {
+          throw new TypeError('Sequence entry must contain exactly two items');
         }
-        return;
+        this.#list.push([values[0]!, values[1]!]);
       }
-
-      const converted = new Map<string, string>();
-      for (const key of Reflect.ownKeys(init)) {
-        const descriptor = Reflect.getOwnPropertyDescriptor(init, key);
-        if (!descriptor?.enumerable) continue;
-        converted.set(toUSVString(key), toUSVString(Reflect.get(init, key)));
-      }
-      this.#list.push(...converted);
       return;
     }
 
-    URLSearchParamsImpl.replaceList(
-      this,
-      parseFormUrlEncodedString(toUSVString(init)),
-    );
+    for (const key of Reflect.ownKeys(init)) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(init, key);
+      if (!descriptor?.enumerable) continue;
+      this.#list.push([key as string, Reflect.get(init, key) as string]);
+    }
   }
 
   #update(): void {
@@ -516,12 +496,9 @@ export const urlIDLDefinitions: Definition[] = [
 ];
 
 export type URLSearchParamsInit =
-  | Iterable<Iterable<unknown>>
-  | Map<string, string>
-  | Record<PropertyKey, unknown>
-  | string
-  | null
-  | undefined;
+  | Iterable<Iterable<string>>
+  | Record<PropertyKey, string>
+  | string;
 
 export function parseAPIURL(input: string, base?: string): URLRecord | null {
   let parsedBase: URLRecord | null = null;
@@ -540,11 +517,6 @@ function hasOpaquePath(url: URLRecord): boolean {
   return typeof url.path === 'string';
 }
 
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null ||
-    typeof value === 'function';
-}
-
 function removeMatching(
   list: FormTuple[],
   matches: (tuple: FormTuple) => boolean,
@@ -552,13 +524,4 @@ function removeMatching(
   for (let index = list.length - 1; index >= 0; index--) {
     if (matches(list[index]!)) list.splice(index, 1);
   }
-}
-
-function optionalUSVString(value: unknown): string | undefined {
-  return value === undefined ? undefined : toUSVString(value);
-}
-
-function toUSVString(value: unknown): string {
-  if (typeof value === 'symbol') throw new TypeError('Cannot convert a symbol to a string');
-  return String(value).toWellFormed();
 }

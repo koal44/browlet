@@ -25,7 +25,7 @@ export function callUserObjectOperation(
   try {
     return runCallback(value, () => {
       let function_: unknown = value.object;
-      let receiver = thisArgument;
+      let receiver = projectCallbackReceiver(thisArgument, callbackContext);
 
       if (!isCallable(function_)) {
         function_ = Reflect.get(value.object, operationName) as unknown;
@@ -77,7 +77,7 @@ export function invokeCallbackFunction(
     return runCallback(callable, () => {
       const result = Reflect.apply(
         function_,
-        thisArgument,
+        projectCallbackReceiver(thisArgument, callbackContext),
         convertWebIDLArguments(
           argumentsList,
           definition.arguments,
@@ -169,6 +169,14 @@ export type WebIDLArgumentsList = readonly unknown[];
 export const missingArgument: unique symbol = Symbol(
   'missing Web IDL argument',
 );
+
+function projectCallbackReceiver(
+  value: unknown,
+  context: ConversionContext,
+): unknown {
+  return context.platformObjects.getImplementationRecord(value)?.platformObject ??
+    value;
+}
 
 function runCallback(
   value: CallbackValue,
@@ -272,6 +280,7 @@ function withCallbackRealm(
     definitions: context.definitions,
     hostDefinedInterfaces: context.hostDefinedInterfaces,
     platformObjects: context.platformObjects,
+    projectImplementationObject: context.projectImplementationObject,
     realizeException: context.realizeException,
     realm: value.realm,
   };

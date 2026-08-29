@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, reference, type IterableMember,
@@ -128,7 +128,7 @@ describe('Web IDL synchronous iterable declarations', () => {
       collectionInterface,
       valueInterface,
     ]);
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       new Realm(),
       new PlatformObjectRegistry(),
@@ -184,7 +184,7 @@ describe('Web IDL synchronous iterable declarations', () => {
       members: [hiddenIterable],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, hidden]),
       realm,
       new PlatformObjectRegistry(),
@@ -206,7 +206,7 @@ describe('Web IDL synchronous iterable declarations', () => {
 });
 
 function createPairBinding(): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   implementations: ImplementationRegistry;
   iterable: IterableMember;
   realm: Realm;
@@ -224,7 +224,7 @@ function createPairBinding(): {
   const implementations = new ImplementationRegistry();
   const realm = new Realm();
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interface_]),
       realm,
       new PlatformObjectRegistry(),

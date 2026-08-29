@@ -22,15 +22,26 @@ export class ImplementationRegistry {
     ImplementationClass<object>,
     AssembledInterface
   >();
+  #interfaceImplementations = new WeakMap<
+    InterfaceDefinition,
+    ImplementationClass<object>
+  >();
   #indexedProperties = new WeakMap<
     OperationMember,
     IndexedPropertySteps
   >();
   #namedProperties = new WeakMap<OperationMember, NamedPropertySteps>();
-  #objects = new WeakMap<InterfaceDefinition, ObjectCreationSteps>();
-  #objectInitializers = new WeakMap<
+  #implementationCreators = new WeakMap<
     InterfaceDefinition,
-    ObjectInitializationSteps
+    ImplementationCreationSteps
+  >();
+  #implementationInitializers = new WeakMap<
+    InterfaceDefinition,
+    ImplementationInitializationSteps
+  >();
+  #platformObjectAllocators = new WeakMap<
+    InterfaceDefinition,
+    PlatformObjectAllocationSteps
   >();
   #observableArrays = new WeakMap<
     AttributeMember,
@@ -84,6 +95,7 @@ export class ImplementationRegistry {
     interface_: AssembledInterface,
   ): void {
     this.#interfaces.set(implementation, interface_);
+    this.#interfaceImplementations.set(interface_.definition, implementation);
   }
 
   setOverriddenConstructorSteps(
@@ -128,18 +140,25 @@ export class ImplementationRegistry {
     setInterfaceScopedSteps(this.#operations, operation, steps, interface_);
   }
 
-  setObjectCreationSteps(
+  setImplementationCreationSteps(
     interface_: InterfaceDefinition,
-    steps: ObjectCreationSteps,
+    steps: ImplementationCreationSteps,
   ): void {
-    this.#objects.set(interface_, steps);
+    this.#implementationCreators.set(interface_, steps);
   }
 
-  setObjectInitializationSteps(
+  setImplementationInitializationSteps(
     interface_: InterfaceDefinition,
-    steps: ObjectInitializationSteps,
+    steps: ImplementationInitializationSteps,
   ): void {
-    this.#objectInitializers.set(interface_, steps);
+    this.#implementationInitializers.set(interface_, steps);
+  }
+
+  setPlatformObjectAllocationSteps(
+    interface_: InterfaceDefinition,
+    steps: PlatformObjectAllocationSteps,
+  ): void {
+    this.#platformObjectAllocators.set(interface_, steps);
   }
 
   setObservableArraySteps(
@@ -179,6 +198,12 @@ export class ImplementationRegistry {
     implementation: ImplementationClass<object>,
   ): AssembledInterface | undefined {
     return this.#interfaces.get(implementation);
+  }
+
+  getImplementationForInterface(
+    interface_: InterfaceDefinition,
+  ): ImplementationClass<object> | undefined {
+    return this.#interfaceImplementations.get(interface_);
   }
 
   getImplementationForObject(
@@ -237,16 +262,29 @@ export class ImplementationRegistry {
     return getInterfaceScopedSteps(this.#operations, operation, interface_);
   }
 
-  getObjectCreationSteps(
+  getImplementationCreationSteps(
     interface_: InterfaceDefinition,
-  ): ObjectCreationSteps | undefined {
-    return this.#objects.get(interface_);
+  ): ImplementationCreationSteps | undefined {
+    return this.#implementationCreators.get(interface_);
   }
 
-  getObjectInitializationSteps(
+  getImplementationInitializationSteps(
     interface_: InterfaceDefinition,
-  ): ObjectInitializationSteps | undefined {
-    return this.#objectInitializers.get(interface_);
+  ): ImplementationInitializationSteps | undefined {
+    return this.#implementationInitializers.get(interface_);
+  }
+
+  getPlatformObjectAllocationSteps(
+    interface_: AssembledInterface,
+  ): PlatformObjectAllocationSteps | undefined {
+    for (
+      let current: AssembledInterface | undefined = interface_;
+      current;
+      current = current.parent
+    ) {
+      const steps = this.#platformObjectAllocators.get(current.definition);
+      if (steps) return steps;
+    }
   }
 
   getObservableArraySteps(
@@ -328,7 +366,6 @@ export type ConstructorSteps = (
 ) => void;
 
 export type ImplementationConstructorSteps = (
-  newTarget: object,
   values: readonly unknown[],
 ) => object;
 
@@ -364,11 +401,11 @@ export type OperationSteps = (
   ...values: unknown[]
 ) => unknown;
 
-export type ObjectCreationSteps = (
-  newTarget: object | undefined,
-) => object;
+export type ImplementationCreationSteps = () => object;
 
-export type ObjectInitializationSteps = (value: object) => void;
+export type ImplementationInitializationSteps = (value: object) => void;
+
+export type PlatformObjectAllocationSteps = (prototype: object) => object;
 
 export type OverriddenConstructorSteps = (
   argumentsList: unknown[],

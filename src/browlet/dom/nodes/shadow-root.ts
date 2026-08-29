@@ -10,6 +10,7 @@ import {
   DocumentFragmentImpl,
 } from './document-fragment';
 import type { ElementImpl } from './element';
+import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { NodeImpl } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
@@ -93,7 +94,7 @@ export class ShadowRootImpl
     return ShadowRootImpl.getHost(this);
   }
 
-  get customElementRegistry(): CustomElementRegistry | null {
+  get customElementRegistry(): CustomElementRegistryImpl | null {
     return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
@@ -141,17 +142,12 @@ export class ShadowRootImpl
 
   static getEventParent(
     root: ShadowRootImpl,
-    event: Event,
+    event: EventImpl,
   ): EventTargetImpl | null {
-    const firstTarget = EventImpl.is(event)
-      ? EventImpl.getFirstPathInvocationTarget(event)
-      : null;
-    const composed = EventImpl.is(event)
-      ? EventImpl.isComposed(event)
-      : event.composed;
+    const firstTarget = EventImpl.getFirstPathInvocationTarget(event);
 
     if (
-      !composed &&
+      !EventImpl.isComposed(event) &&
       NodeImpl.is(firstTarget) &&
       NodeImpl.getRootNode(firstTarget) === root
     ) {

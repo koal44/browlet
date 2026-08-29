@@ -3,8 +3,9 @@ import {
   reference,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import type { WritableStreamImpl } from './writable-stream';
 import {
   setUpWritableStreamDefaultWriter, writableStreamCloseQueuedOrInFlight,
@@ -13,17 +14,17 @@ import {
   writableStreamDefaultWriterRelease, writableStreamDefaultWriterWrite,
 } from './writable-stream-operations';
 import {
-  getWritableStreamDefaultWriterEnvironment,
+  getWritableStreamDefaultWriterContext,
   getWritableStreamDefaultWriterState,
   initializeWritableStreamDefaultWriterSlots,
 } from './writable-stream-slots';
 
 export class WritableStreamDefaultWriterImpl {
   constructor(
-    environment: StreamEnvironment,
+    context: BindingContext,
     stream?: WritableStreamImpl,
   ) {
-    initializeWritableStreamDefaultWriterSlots(this, environment);
+    initializeWritableStreamDefaultWriterSlots(this, context);
     if (stream) setUpWritableStreamDefaultWriter(this, stream);
   }
 
@@ -33,7 +34,7 @@ export class WritableStreamDefaultWriterImpl {
 
   get desiredSize(): number | null {
     if (!getWritableStreamDefaultWriterState(this).stream) {
-      throw defaultWriterLockException('get the desired size of');
+      throw defaultWriterLockException(this, 'get the desired size of');
     }
     return writableStreamDefaultWriterGetDesiredSize(this);
   }
@@ -43,31 +44,32 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   abort(reason?: unknown): StreamPromise {
+    const context = getWritableStreamDefaultWriterContext(this);
     if (!getWritableStreamDefaultWriterState(this).stream) {
-      return getWritableStreamDefaultWriterEnvironment(this).promises
-        .createRejected(
-          defaultWriterLockException('abort'),
-          idlType.undefined,
-        );
+      return context.createRejectedPromise(
+        defaultWriterLockException(this, 'abort'),
+        idlType.undefined,
+      );
     }
     return writableStreamDefaultWriterAbort(this, reason);
   }
 
   close(): StreamPromise {
+    const context = getWritableStreamDefaultWriterContext(this);
     const stream = getWritableStreamDefaultWriterState(this).stream;
     if (!stream) {
-      return getWritableStreamDefaultWriterEnvironment(this).promises
-        .createRejected(
-          defaultWriterLockException('close'),
-          idlType.undefined,
-        );
+      return context.createRejectedPromise(
+        defaultWriterLockException(this, 'close'),
+        idlType.undefined,
+      );
     }
     if (writableStreamCloseQueuedOrInFlight(stream)) {
-      return getWritableStreamDefaultWriterEnvironment(this).promises
-        .createRejected(
-          new TypeError('Cannot close an already-closing stream'),
-          idlType.undefined,
-        );
+      return context.createRejectedPromise(
+        new context.realm.intrinsics.typeError(
+          'Cannot close an already-closing stream',
+        ),
+        idlType.undefined,
+      );
     }
     return writableStreamDefaultWriterClose(this);
   }
@@ -78,12 +80,12 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   write(chunk?: unknown): StreamPromise {
+    const context = getWritableStreamDefaultWriterContext(this);
     if (!getWritableStreamDefaultWriterState(this).stream) {
-      return getWritableStreamDefaultWriterEnvironment(this).promises
-        .createRejected(
-          defaultWriterLockException('write to'),
-          idlType.undefined,
-        );
+      return context.createRejectedPromise(
+        defaultWriterLockException(this, 'write to'),
+        idlType.undefined,
+      );
     }
     return writableStreamDefaultWriterWrite(this, chunk);
   }
@@ -101,7 +103,7 @@ export const writableStreamDefaultWriterIDL = defineInterface({
   name: 'WritableStreamDefaultWriter',
   exposed: '*',
   implementation: impl(WritableStreamDefaultWriterImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([arg('stream', reference('WritableStream'))]),
@@ -119,8 +121,12 @@ export const writableStreamDefaultWriterIDL = defineInterface({
   ],
 });
 
-function defaultWriterLockException(operation: string): TypeError {
-  return new TypeError(
+function defaultWriterLockException(
+  writer: WritableStreamDefaultWriterImpl,
+  operation: string,
+): TypeError {
+  const context = getWritableStreamDefaultWriterContext(writer);
+  return new context.realm.intrinsics.typeError(
     `Cannot ${operation} a stream using a released writer`,
   );
 }

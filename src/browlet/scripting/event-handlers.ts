@@ -3,6 +3,7 @@ import {
   nullable, reference, type AttributeMember, xattr,
 } from '../../web-idl/declaration/index';
 import type { EventTargetImpl } from '../dom/events/event-target';
+import type { EventImpl } from '../dom/events/event';
 
 /*
  * [LegacyTreatNonObjectAsNull]
@@ -58,7 +59,7 @@ export class EventHandlerMap {
         return;
       }
 
-      const result = Reflect.apply(callback, currentTarget, [event]);
+      const result: unknown = Reflect.apply(callback, currentTarget, [event]);
       if (result === false) event.preventDefault();
     };
     this.#target.addEventListener(handler.type, handler.listener);
@@ -104,7 +105,7 @@ type EventHandlerDefinition = {
 
 type EventHandlerRecord = {
   callback: EventHandlerCallback | null;
-  listener: EventListener | null;
+  listener: ((this: EventTargetImpl, event: EventImpl) => void) | null;
   readonly type: string;
 };
 

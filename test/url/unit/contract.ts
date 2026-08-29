@@ -72,7 +72,7 @@ export function urlAlgorithms(): URLAlgorithms {
 
 export function urlConstructors(): URLConstructors {
   return {
-    URL: URLImpl as unknown as typeof URL,
+    URL: URLImpl,
     URLSearchParams: URLSearchParamsImpl,
   };
 }
@@ -100,8 +100,8 @@ export type URLAlgorithms = {
 };
 
 export type URLConstructors = {
-  URL: typeof URL;
-  URLSearchParams: typeof URLSearchParams;
+  URL: typeof URLImpl;
+  URLSearchParams: typeof URLSearchParamsImpl;
 };
 
 export type HostParseResult = {

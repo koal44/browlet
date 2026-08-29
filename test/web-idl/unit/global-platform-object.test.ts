@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, definePartialInterface, idlType, integer,
   type AttributeMember, type OperationMember, type StringifierMember,
@@ -62,7 +62,7 @@ describe('Web IDL global platform objects', () => {
     });
 
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([widget, window, base]),
       realm,
       new PlatformObjectRegistry(),
@@ -70,7 +70,7 @@ describe('Web IDL global platform objects', () => {
     );
     const implementation = Reflect.construct(realm.intrinsics.object, []);
     const record = binding.projectGlobalObject(implementation, 'Window');
-    const global = record.object;
+    const global = record.platformObject;
     const Window = binding.getInterfaceObject('Window');
     const Base = binding.getInterfaceObject('GlobalBase');
     const Widget = binding.getInterfaceObject('Widget');
@@ -160,7 +160,7 @@ describe('Web IDL global platform objects', () => {
       getSupportedPropertyNames: () => new Set(['named']),
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([window, base]),
       realm,
       new PlatformObjectRegistry(),
@@ -169,7 +169,7 @@ describe('Web IDL global platform objects', () => {
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       'Window',
-    ).object;
+    ).platformObject;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -213,7 +213,7 @@ describe('Web IDL global platform objects', () => {
       get: () => forwardedTarget,
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -224,7 +224,7 @@ describe('Web IDL global platform objects', () => {
     const global = binding.projectGlobalObject(
       implementation,
       'Window',
-    ).object;
+    ).platformObject;
     const valueDescriptor = requireAccessor(global, 'value');
     const replaceableDescriptor = requireAccessor(global, 'replaceable');
     const forwardedDescriptor = requireAccessor(global, 'forwarded');
@@ -258,7 +258,7 @@ describe('Web IDL global platform objects', () => {
       () => 'global stringifier',
     );
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -267,7 +267,7 @@ describe('Web IDL global platform objects', () => {
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       'Window',
-    ).object;
+    ).platformObject;
     const toString = Reflect.get(global, 'toString') as unknown;
     if (typeof toString !== 'function') {
       throw new Error('Missing global stringifier');
@@ -286,7 +286,7 @@ describe('Web IDL global platform objects', () => {
       Reflect.construct(realm.intrinsics.object, []),
       'TestGlobal',
     );
-    const global = record.object;
+    const global = record.platformObject;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -316,7 +316,7 @@ describe('Web IDL global platform objects', () => {
       members: [],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([globalIDL, base]),
       realm,
       new PlatformObjectRegistry(),
@@ -324,7 +324,7 @@ describe('Web IDL global platform objects', () => {
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       'PlainGlobal',
-    ).object;
+    ).platformObject;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
 
     expect(Reflect.getPrototypeOf(globalPrototype))
@@ -350,7 +350,7 @@ describe('Web IDL global platform objects', () => {
       getSupportedPropertyNames: () => new Set(['answer']),
     });
     const realm = new Realm({ globalNames: ['PartialGlobal'] });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_, partial]),
       realm,
       new PlatformObjectRegistry(),
@@ -359,7 +359,7 @@ describe('Web IDL global platform objects', () => {
     const global = binding.projectGlobalObject(
       Reflect.construct(realm.intrinsics.object, []),
       'PartialGlobal',
-    ).object;
+    ).platformObject;
 
     expect(Reflect.get(global, 'answer')).toBe('named answer');
   });
@@ -370,7 +370,7 @@ describe('Web IDL global platform objects', () => {
       Reflect.construct(realm.intrinsics.object, []),
       'TestGlobal',
     );
-    const global = record.object;
+    const global = record.platformObject;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
     const namedProperties = requireObject(
       Reflect.getPrototypeOf(globalPrototype),
@@ -389,7 +389,7 @@ describe('Web IDL global platform objects', () => {
 });
 
 function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   realm: Realm;
 } {
   const getter = namedGetter(undefined);
@@ -406,7 +406,7 @@ function createGlobalBinding(isGlobalPrototypeChainMutable = false): {
   });
   const realm = new Realm({ isGlobalPrototypeChainMutable });
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),

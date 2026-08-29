@@ -14,12 +14,13 @@ export type QueuingStrategySize<Value = unknown> = (chunk: Value) => number;
 export function extractHighWaterMark(
   strategy: QueuingStrategy,
   defaultHighWaterMark: number,
+  RangeError_: typeof RangeError,
 ): number {
   if (strategy.highWaterMark === undefined) return defaultHighWaterMark;
 
   const { highWaterMark } = strategy;
   if (Number.isNaN(highWaterMark) || highWaterMark < 0) {
-    throw new RangeError('Invalid highWaterMark');
+    throw new RangeError_('Invalid highWaterMark');
   }
   return highWaterMark;
 }

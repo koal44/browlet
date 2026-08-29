@@ -2,6 +2,10 @@ import { TextEncoder as ExodusTextEncoder } from '@exodus/bytes/encoding.js';
 import {
   ctor, defineIncludes, defineInterface, idlType, impl,
 } from '../web-idl/declaration/index';
+import {
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import { createArrayBufferView } from '../web-idl/buffer-source';
 import { GenericTransformStreamMixin } from '../streams/generic-transform-stream';
 import type { ReadableStreamImpl } from '../streams/readable-stream';
 import { TransformStreamImpl } from '../streams/transform-stream';
@@ -9,9 +13,6 @@ import {
   transformStreamDefaultControllerEnqueue,
 } from '../streams/transform-stream-operations';
 import type { WritableStreamImpl } from '../streams/writable-stream';
-import {
-  encodingEnvironment, type EncodingEnvironment,
-} from './environment';
 
 /*
  * [Exposed=*]
@@ -23,17 +24,17 @@ import {
  */
 export class TextEncoderStreamImpl {
   readonly #encoder = new ExodusTextEncoder();
-  readonly #environment: EncodingEnvironment;
+  readonly #context: BindingContext;
   readonly #generic: GenericTransformStreamMixin;
   #leadingSurrogate = '';
 
-  constructor(environment: EncodingEnvironment) {
-    this.#environment = environment;
+  constructor(context: BindingContext) {
+    this.#context = context;
     this.#generic = new GenericTransformStreamMixin(
-      TransformStreamImpl.fromAlgorithms(environment.streams, {
+      TransformStreamImpl.fromAlgorithms(context, {
         transform: (chunk, controller) => {
           this.#encodeAndEnqueue(
-            environment.convert(chunk, idlType.DOMString) as string,
+            context.convert(chunk, idlType.DOMString) as string,
             (value) => transformStreamDefaultControllerEnqueue(
               controller,
               value,
@@ -81,7 +82,11 @@ export class TextEncoderStreamImpl {
   }
 
   #encode(input: string): object {
-    return this.#environment.createUint8Array(this.#encoder.encode(input));
+    return createArrayBufferView(
+      'Uint8Array',
+      this.#encoder.encode(input),
+      this.#context.realm,
+    );
   }
 }
 
@@ -89,7 +94,7 @@ export const textEncoderStreamIDL = defineInterface({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    withArgs: [encodingEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [ctor()],
 });

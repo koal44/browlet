@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../../src/browlet/browlet';
+import { browletBindings } from '../../../src/browlet/bindings';
 import {
   isHTMLLinkElement,
 } from '../../../src/browlet/html/elements/metadata/link';
 import { fireEvent } from '../../../src/browlet/dom/events/event-target';
-import type { EventTargetImpl } from '../../../src/browlet/dom/events/event-target';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
@@ -40,32 +40,35 @@ describe('Browlet', () => {
     const browlet = new Browlet({ route: () => '' });
 
     await browlet.navigate('https://example.test/path?query#fragment');
-    const document = browlet.document as unknown as DocumentImpl;
+    const document = browlet.document;
+    const documentImpl = browletBindings.getImplementation<DocumentImpl>(
+      document,
+    );
 
     expect(document.URL).toBe(
       'https://example.test/path?query#fragment',
     );
     expect(document.baseURI).toBe(document.URL);
     expect(document.contentType).toBe('text/html');
-    expect(serializeOrigin(DocumentImpl.getOrigin(document))).toBe(
+    expect(serializeOrigin(DocumentImpl.getOrigin(documentImpl))).toBe(
       'https://example.test',
     );
-    expect(DocumentImpl.allowsDeclarativeShadowRoots(document))
+    expect(DocumentImpl.allowsDeclarativeShadowRoots(documentImpl))
       .toBe(true);
-    expect(DocumentImpl.getCurrentDocumentReadiness(document))
+    expect(DocumentImpl.getCurrentDocumentReadiness(documentImpl))
       .toBe('complete');
-    expect(DocumentImpl.isReadyForPostLoadTasks(document)).toBe(true);
-    expect(DocumentImpl.getCompletelyLoadedTime(document))
+    expect(DocumentImpl.isReadyForPostLoadTasks(documentImpl)).toBe(true);
+    expect(DocumentImpl.getCompletelyLoadedTime(documentImpl))
       .not.toBeNull();
-    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(document))
+    expect(DocumentImpl.wasCreatedViaCrossOriginRedirects(documentImpl))
       .toBe(false);
-    expect(DocumentImpl.getDuringLoadingNavigationID(document))
+    expect(DocumentImpl.getDuringLoadingNavigationID(documentImpl))
       .toBeNull();
-    expect(DocumentImpl.getCustomElementRegistry(document))
+    expect(DocumentImpl.getCustomElementRegistry(documentImpl))
       .not.toBeNull();
-    expect(DocumentImpl.getInternalAncestorOriginObjectsList(document))
+    expect(DocumentImpl.getInternalAncestorOriginObjectsList(documentImpl))
       .toEqual([]);
-    expect(DocumentImpl.getAncestorOriginsList(document)).toEqual([]);
+    expect(DocumentImpl.getAncestorOriginsList(documentImpl)).toEqual([]);
   });
 
   it('installs realm-specific DOM constructors on the window', () => {
@@ -268,7 +271,7 @@ describe('Browlet', () => {
 
     expect(fireEvent(
       'ready',
-      browlet.document as unknown as EventTargetImpl,
+      browletBindings.getImplementation<DocumentImpl>(browlet.document),
     )).toBe(true);
     expect(received).toBeInstanceOf(EventConstructor);
     expect(received?.isTrusted).toBe(true);

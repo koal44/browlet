@@ -14,8 +14,7 @@ export {
   type BlobReadFailureReason, type BlobSnapshotState,
 } from './blob-data';
 export {
-  fileEnvironment, fileHost, getFileEnvironment, type BlobEnvironment,
-  type FileEnvironment, type FileHost, type NativeLineEnding,
+  fileHost, type FileHost, type NativeLineEnding,
 } from './environment';
 
 export const fileIDLDefinitions: readonly Definition[] = [

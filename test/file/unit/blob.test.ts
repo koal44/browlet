@@ -2,15 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   BlobData, BlobImpl, BlobReadFailure, convertLineEndingsToNative,
-  readBlobBytes, type BlobByteSource, type BlobEnvironment,
+  readBlobBytes, type BlobByteSource,
 } from '../../../src/file';
 
-const lfEnvironment: BlobEnvironment = { nativeLineEnding: '\n' };
-const crlfEnvironment: BlobEnvironment = { nativeLineEnding: '\r\n' };
+const lf = '\n';
+const crlf = '\r\n';
 
 describe('File API §3: Blob', () => {
   it('constructs the empty Blob', async () => {
-    const blob = new BlobImpl(lfEnvironment);
+    const blob = new BlobImpl(lf);
 
     expect(blob.size).toBe(0);
     expect(blob.type).toBe('');
@@ -19,17 +19,10 @@ describe('File API §3: Blob', () => {
 
   it('copies only the represented BufferSource bytes', async () => {
     const source = Uint8Array.of(0, 1, 2, 3, 4);
-    const blob = new BlobImpl(lfEnvironment, [source.subarray(1, 4)]);
+    const blob = new BlobImpl(lf, [source.subarray(1, 4)]);
     source.fill(9);
 
     expect([...await readBlobBytes(blob)]).toEqual([1, 2, 3]);
-  });
-
-  it('UTF-8 encodes USVStrings and replaces unmatched surrogates', async () => {
-    const blob = new BlobImpl(lfEnvironment, ['A\ud800B']);
-
-    expect([...await readBlobBytes(blob)])
-      .toEqual([0x41, 0xef, 0xbf, 0xbd, 0x42]);
   });
 
   it('normalizes native line endings through the File environment', async () => {
@@ -37,39 +30,39 @@ describe('File API §3: Blob', () => {
     const options = { endings: 'native' as const };
 
     expect(new TextDecoder().decode(
-      await readBlobBytes(new BlobImpl(lfEnvironment, parts, options)),
+      await readBlobBytes(new BlobImpl(lf, parts, options)),
     )).toBe('a\nb\nc\nd');
     expect(new TextDecoder().decode(
-      await readBlobBytes(new BlobImpl(crlfEnvironment, parts, options)),
+      await readBlobBytes(new BlobImpl(crlf, parts, options)),
     )).toBe('a\r\nb\r\nc\r\nd');
   });
 
   it('leaves transparent line endings unchanged', async () => {
-    const blob = new BlobImpl(crlfEnvironment, ['a\rb\nc\r\nd']);
+    const blob = new BlobImpl(crlf, ['a\rb\nc\r\nd']);
 
     expect(new TextDecoder().decode(await readBlobBytes(blob)))
       .toBe('a\rb\nc\r\nd');
   });
 
   it('normalizes ASCII Blob types and rejects non-ASCII values', () => {
-    expect(new BlobImpl(lfEnvironment, [], { type: 'Text/PLAIN;X=Y' }).type)
+    expect(new BlobImpl(lf, [], { type: 'Text/PLAIN;X=Y' }).type)
       .toBe('text/plain;x=y');
-    expect(new BlobImpl(lfEnvironment, [], { type: 'text/\u007fplain' }).type)
+    expect(new BlobImpl(lf, [], { type: 'text/\u007fplain' }).type)
       .toBe('');
-    expect(new BlobImpl(lfEnvironment, [], { type: 'text/\u001fplain' }).type)
+    expect(new BlobImpl(lf, [], { type: 'text/\u001fplain' }).type)
       .toBe('');
-    expect(new BlobImpl(lfEnvironment, [], { type: 'text/pl\u00e4in' }).type)
+    expect(new BlobImpl(lf, [], { type: 'text/pl\u00e4in' }).type)
       .toBe('');
   });
 
   it('concatenates mixed parts and ignores nested Blob types', async () => {
     const nested = new BlobImpl(
-      lfEnvironment,
+      lf,
       ['bc'],
       { type: 'text/plain' },
     );
     const blob = new BlobImpl(
-      lfEnvironment,
+      lf,
       ['a', nested, Uint8Array.of(100)],
       { type: 'Application/Example' },
     );
@@ -88,13 +81,13 @@ describe('File API §3: Blob', () => {
       read,
     };
     const nested = BlobImpl.create(
-      lfEnvironment,
+      lf,
       BlobData.fromSource(source),
       '',
       source.snapshotState,
     );
 
-    const blob = new BlobImpl(lfEnvironment, [nested]);
+    const blob = new BlobImpl(lf, [nested]);
     expect(read).not.toHaveBeenCalled();
     expect([...await readBlobBytes(blob)]).toEqual([10, 11, 12]);
     expect(read).toHaveBeenCalledOnce();
@@ -103,7 +96,7 @@ describe('File API §3: Blob', () => {
 
 describe('File API §2: slice blob', () => {
   const blob = new BlobImpl(
-    lfEnvironment,
+    lf,
     [Uint8Array.from({ length: 10 }, (_, index) => index)],
     { type: 'application/example' },
   );
@@ -143,7 +136,7 @@ describe('File API §2: slice blob', () => {
       read,
     };
     const original = BlobImpl.create(
-      lfEnvironment,
+      lf,
       BlobData.fromSource(source),
       '',
       undefined,
@@ -165,7 +158,7 @@ describe('File API §7: Blob read failures', () => {
       read: () => Promise.reject(failure),
     };
     const blob = BlobImpl.create(
-      lfEnvironment,
+      lf,
       BlobData.fromSource(source),
       '',
       source.snapshotState,
@@ -181,7 +174,7 @@ describe('File API §7: Blob read failures', () => {
       read: () => Promise.resolve(Uint8Array.of(1)),
     };
     const blob = BlobImpl.create(
-      lfEnvironment,
+      lf,
       BlobData.fromSource(source),
       '',
       undefined,

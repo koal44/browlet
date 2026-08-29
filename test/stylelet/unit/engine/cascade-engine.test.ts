@@ -98,7 +98,7 @@ describe('cascade engine', () => {
       environmentBaseUrl: new URL('https://example.com/environment/'),
       snapshot: new Snapshot(document),
     });
-    const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
+    const styleSheet = engine.createStyleSheet();
     styleSheet.replaceSync('* { color: red }');
     scope.adoptedStyleSheets.push(styleSheet);
 
@@ -132,7 +132,7 @@ describe('cascade engine', () => {
     const { engine } = createCascade({ snapshot: new Snapshot(document) });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
-    const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
+    const styleSheet = engine.createStyleSheet();
     styleSheet.replaceSync('* { color: red }');
     documentScope.adoptedStyleSheets.push(styleSheet);
     shadowScope.adoptedStyleSheets.push(styleSheet);
@@ -155,7 +155,7 @@ describe('cascade engine', () => {
 
   it('observes CSSOM rule replacement, insertion, and deletion', () => {
     const { engine, scope } = createCascade();
-    const styleSheet = engine.createStyleSheet() as CSSStyleSheetImpl;
+    const styleSheet = engine.createStyleSheet();
     scope.adoptedStyleSheets.push(styleSheet);
 
     styleSheet.replaceSync('* { color: red }');

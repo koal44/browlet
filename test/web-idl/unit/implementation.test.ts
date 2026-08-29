@@ -3,19 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { throwDOMException } from '../../../src/shared/dom-exception';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   arg, atArg, attr, callback as projectCallback, ctor,
   defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, defineTypedef, dictMember, idlType, contextValue,
-  impl, iter,
-  op, roAttr, record, reference, resolveArgs, sequence, stringifier,
-  union, withArgs, withNew,
+  impl, indexedGetter, iter, namedGetter, nullable, op,
+  promise as promiseType, roAttr, record, reference, resolveArgs, sequence,
+  stringifier,
+  union, constructWith, invokeWithNew,
 } from '../../../src/web-idl/declaration/index';
-import {
-  bind, registerDefinitionBindings,
-} from '../../../src/web-idl/projection';
+import { bind, registerDefinitionBindings } from '../../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../../src/web-idl/registry';
 import { PlatformObjectRegistry } from '../../../src/web-idl/platform-object';
 
@@ -51,7 +50,7 @@ describe('Web IDL implementation registration', () => {
       members: [ctor()],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([
         common,
         first,
@@ -96,7 +95,7 @@ describe('Web IDL implementation registration', () => {
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -117,14 +116,22 @@ describe('Web IDL implementation registration', () => {
     };
 
     const instance = new Derived(input);
+    const implementation = binding.platformObjects.getImplementationObject(
+      instance,
+    );
 
     expect(instance).toBeInstanceOf(Derived);
     expect(Object.getPrototypeOf(instance)).toBe(Derived.prototype);
+    expect(instance).not.toBe(implementation);
+    expect(instance).not.toBeInstanceOf(AutomaticConstructorImpl);
+    expect(implementation).toBeInstanceOf(AutomaticConstructorImpl);
+    expect(Object.getPrototypeOf(implementation))
+      .toBe(AutomaticConstructorImpl.prototype);
     expect(instance.value).toBe('converted');
     expect(conversions).toBe(1);
   });
 
-  it('uses contextual creation for a declaration-only empty constructor', () => {
+  it('uses contextual implementation creation for an empty constructor', () => {
     const token = Symbol('context-created');
     class ContextCreatedImpl {
       constructor(readonly value: symbol) {}
@@ -133,20 +140,15 @@ describe('Web IDL implementation registration', () => {
       name: 'ContextCreated',
       exposed: 'Window',
       implementation: {
-        create(_context, newTarget) {
-          if (!newTarget) throw new Error('Missing newTarget');
-          return Reflect.construct(
-            ContextCreatedImpl,
-            [token],
-            newTarget as InterfaceConstructor,
-          );
+        createImplementation() {
+          return new ContextCreatedImpl(token);
         },
         implementation: ContextCreatedImpl,
       },
       members: [ctor()],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -159,8 +161,12 @@ describe('Web IDL implementation registration', () => {
     ) as InterfaceConstructor;
 
     const instance = new ContextCreated() as ContextCreatedImpl;
+    const implementation = binding.platformObjects.getImplementationObject(
+      instance,
+    ) as ContextCreatedImpl | undefined;
 
-    expect(instance.value).toBe(token);
+    expect(implementation?.value).toBe(token);
+    expect(Reflect.get(instance, 'value')).toBeUndefined();
   });
 
   it('constructs implementations with realm-created dependencies', () => {
@@ -187,12 +193,12 @@ describe('Web IDL implementation registration', () => {
       exposed: 'Window',
       implementation: impl(OwnerImpl),
       members: [
-        ctor(withArgs(DependencyImpl)),
+        ctor(constructWith(DependencyImpl)),
         roAttr('dependency', reference(dependencyIDL.name)),
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([dependencyIDL, ownerIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -248,12 +254,12 @@ describe('Web IDL implementation registration', () => {
       name: 'ContextualDependency',
       exposed: 'Window',
       implementation: impl(ContextualDependencyImpl, {
-        withArgs: [atArg(1, environment)],
+        constructWith: [atArg(1, environment)],
       }),
       members: [
         ctor([arg('value', idlType.DOMString)]),
         op('create', reference('ContextualDependency'), [], {
-          ...withNew(ContextualDependencyImpl),
+          ...invokeWithNew(ContextualDependencyImpl),
           static: true,
         }),
         roAttr('environment', idlType.object),
@@ -261,7 +267,7 @@ describe('Web IDL implementation registration', () => {
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -305,18 +311,18 @@ describe('Web IDL implementation registration', () => {
       name: 'Result',
       exposed: 'Window',
       implementation: impl(ResultImpl, {
-        withArgs: ['current-global'],
+        constructWith: ['current-global'],
       }),
       members: [
         op('create', reference('Result'), [], {
-          ...withNew(ResultImpl),
+          ...invokeWithNew(ResultImpl),
           static: true,
         }),
         roAttr('global', idlType.object),
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([resultIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -330,6 +336,203 @@ describe('Web IDL implementation registration', () => {
     const result = Result.create();
 
     expect(result.global).toBe(realm.global);
+  });
+
+  it('projects nested implementation results without exposing their identity', async () => {
+    class NestedResultImpl {
+      readonly #label: string;
+
+      constructor(label: string) {
+        this.#label = label;
+      }
+
+      get label(): string {
+        return this.#label;
+      }
+    }
+    class NestedResultOwnerImpl {}
+
+    const nestedResultIDL = defineInterface({
+      name: 'NestedResult',
+      exposed: 'Window',
+      implementation: impl(NestedResultImpl),
+      members: [roAttr('label', idlType.DOMString)],
+    });
+    const resultType = reference(nestedResultIDL.name);
+    const nestedResultCallbackIDL = defineCallbackFunction({
+      name: 'NestedResultCallback',
+      returns: idlType.undefined,
+      arguments: [
+        arg('direct', resultType),
+        arg('union', union(resultType, idlType.DOMString)),
+      ],
+    });
+    const resultDictionaryIDL = defineDictionary({
+      name: 'NestedResultDictionary',
+      members: [
+        dictMember('first', resultType),
+        dictMember('second', resultType),
+      ],
+    });
+    const implementations = new Map<string, NestedResultImpl>();
+    const createResult = (label: string): NestedResultImpl => {
+      const value = new NestedResultImpl(label);
+      implementations.set(label, value);
+      return value;
+    };
+    const ownerIDL = defineInterface({
+      name: 'NestedResultOwner',
+      exposed: 'Window',
+      implementation: impl(NestedResultOwnerImpl),
+      members: [
+        ctor(),
+        op('nullableResult', nullable(resultType), [], bind({
+          invoke() { return createResult('nullable'); },
+        })),
+        op('unionResult', union(resultType, idlType.DOMString), [], bind({
+          invoke() { return createResult('union'); },
+        })),
+        op('sequenceResult', sequence(resultType), [], bind({
+          invoke() {
+            const value = createResult('sequence');
+            return [value, value];
+          },
+        })),
+        op('dictionaryResult', reference(resultDictionaryIDL.name), [], bind({
+          invoke() {
+            const value = createResult('dictionary');
+            return new Map([
+              ['first', value],
+              ['second', value],
+            ]);
+          },
+        })),
+        op('createdPromiseResult', promiseType(resultType), [], bind({
+          invoke(context) {
+            return context.createResolvedPromise(
+              createResult('created promise'),
+              resultType,
+            );
+          },
+        })),
+        op('resolvedPromiseResult', promiseType(resultType), [], bind({
+          invoke(context) {
+            const promise = context.createPromise(resultType);
+            context.resolvePromise(
+              promise,
+              createResult('resolved promise'),
+            );
+            return promise;
+          },
+        })),
+        op('reactedPromiseResult', promiseType(resultType), [], bind({
+          invoke(context) {
+            return context.reactToPromise(
+              context.createResolvedPromise(
+                undefined,
+                idlType.undefined,
+              ),
+              resultType,
+              { fulfilled: () => createResult('reacted promise') },
+            );
+          },
+        })),
+        op('callbackArguments', idlType.undefined, [
+          arg(
+            'callback',
+            reference(nestedResultCallbackIDL.name),
+            projectCallback('rethrow'),
+          ),
+        ], bind({
+          invoke(_context, callback) {
+            (callback as (
+              direct: NestedResultImpl,
+              union: NestedResultImpl,
+            ) => void)(
+              createResult('callback direct'),
+              createResult('callback union'),
+            );
+          },
+        })),
+      ],
+    });
+    const realm = new Realm();
+    const binding = new RealmBinding(
+      assembleDefinitions([
+        nestedResultIDL,
+        nestedResultCallbackIDL,
+        resultDictionaryIDL,
+        ownerIDL,
+      ]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+    registerDefinitionBindings(binding);
+    binding.install();
+    type NestedResult = { readonly label: string; };
+    const NestedResultOwner = Reflect.get(realm.global, ownerIDL.name) as {
+      new(): {
+        callbackArguments(
+          callback: (
+            direct: NestedResult,
+            union: NestedResult | string,
+          ) => void,
+        ): void;
+        createdPromiseResult(): Promise<NestedResult>;
+        dictionaryResult(): { first: NestedResult; second: NestedResult; };
+        nullableResult(): NestedResult | null;
+        reactedPromiseResult(): Promise<NestedResult>;
+        resolvedPromiseResult(): Promise<NestedResult>;
+        sequenceResult(): NestedResult[];
+        unionResult(): NestedResult | string;
+      };
+    };
+    const owner = new NestedResultOwner();
+    const expectProjection = (label: string, object: NestedResult): void => {
+      const implementation = implementations.get(label);
+      expect(implementation).toBeInstanceOf(NestedResultImpl);
+      expect(object).not.toBe(implementation);
+      expect(binding.platformObjects.getImplementationObject(object))
+        .toBe(implementation);
+      expect(object.label).toBe(label);
+    };
+
+    const nullableResult = owner.nullableResult();
+    if (!nullableResult) throw new Error('Missing nullable result');
+    expectProjection('nullable', nullableResult);
+
+    const unionResult = owner.unionResult();
+    if (typeof unionResult === 'string') throw new Error('Wrong union result');
+    expectProjection('union', unionResult);
+
+    const sequenceResult = owner.sequenceResult();
+    expect(sequenceResult[0]).toBe(sequenceResult[1]);
+    expectProjection('sequence', sequenceResult[0]!);
+
+    const dictionaryResult = owner.dictionaryResult();
+    expect(dictionaryResult.first).toBe(dictionaryResult.second);
+    expectProjection('dictionary', dictionaryResult.first);
+
+    expectProjection(
+      'created promise',
+      await owner.createdPromiseResult(),
+    );
+    expectProjection(
+      'resolved promise',
+      await owner.resolvedPromiseResult(),
+    );
+    expectProjection(
+      'reacted promise',
+      await owner.reactedPromiseResult(),
+    );
+
+    owner.callbackArguments((direct, unionResult) => {
+      expectProjection('callback direct', direct);
+      if (typeof unionResult === 'string') {
+        throw new Error('Wrong callback union value');
+      }
+      expectProjection('callback union', unionResult);
+    });
   });
 
   it('declaratively connects an implementation to its interface behavior', () => {
@@ -357,13 +560,8 @@ describe('Web IDL implementation registration', () => {
       name: 'DeclarativeExample',
       exposed: 'Window',
       implementation: bind(DeclarativeExampleImpl, {
-        create(_context, newTarget) {
-          if (!newTarget) throw new Error('Missing implementation newTarget');
-          return Reflect.construct(
-            DeclarativeExampleImpl,
-            [constructionToken],
-            newTarget as InterfaceConstructor,
-          );
+        createImplementation() {
+          return new DeclarativeExampleImpl(constructionToken);
         },
       }),
       members: [
@@ -380,7 +578,7 @@ describe('Web IDL implementation registration', () => {
     const definitions = assembleDefinitions([interfaceIDL]);
     const implementations = new ImplementationRegistry();
 
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
@@ -448,7 +646,7 @@ describe('Web IDL implementation registration', () => {
     const implementations = new ImplementationRegistry();
 
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
@@ -481,6 +679,10 @@ describe('Web IDL implementation registration', () => {
 
       get nativeCallback(): Increment {
         return (value) => value + 2;
+      }
+
+      get nativeCallbackUnion(): Increment {
+        return (value) => value + 3;
       }
 
       get callback(): Increment {
@@ -571,6 +773,7 @@ describe('Web IDL implementation registration', () => {
         ctor([], bind({ invoke() {} })),
         roAttr('callback', reference(increment.name)),
         roAttr('nativeCallback', reference(increment.name)),
+        roAttr('nativeCallbackUnion', reference(callbackOrString.name)),
         op('invoke', idlType.long, [
           arg(
             'callback',
@@ -625,7 +828,7 @@ describe('Web IDL implementation registration', () => {
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([
         increment,
         voidCallback,
@@ -651,6 +854,7 @@ describe('Web IDL implementation registration', () => {
       invokeSequence(callbacks: unknown[]): number;
       invokeUnion(callback: unknown): number;
       readonly nativeCallback: (value: number) => number;
+      readonly nativeCallbackUnion: (value: number) => number;
       preserveAny(value: unknown): unknown;
       report(callback: unknown): void;
       rethrow(callback: unknown): void;
@@ -667,6 +871,7 @@ describe('Web IDL implementation registration', () => {
     expect(receivedExpectedThis).toBe(true);
     expect(instance.callback).toBe(callback);
     expect(instance.nativeCallback(4)).toBe(6);
+    expect(instance.nativeCallbackUnion(4)).toBe(7);
     expect(instance.invokeUnion(callback)).toBe(3);
     expect(instance.invokeUnion('word')).toBe(4);
     expect(instance.invokeDictionary({ callback })).toBe(4);
@@ -765,7 +970,7 @@ describe('Web IDL implementation registration', () => {
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),
@@ -787,16 +992,84 @@ describe('Web IDL implementation registration', () => {
     expect(() => Product.copy({ value: 'impostor' })).toThrow(TypeError);
   });
 
+  it('combines declarative legacy hooks with automatic operation binding', () => {
+    class CollectionImpl {
+      readonly #values = ['first', 'second'];
+
+      getSupportedPropertyIndices(): ReadonlySet<number> {
+        return new Set(this.#values.keys());
+      }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(['first']);
+      }
+
+      item(index: number): string | null {
+        return this.#values[index] ?? null;
+      }
+
+      namedItem(name: string): string | null {
+        return name === 'first' ? this.#values[0]! : null;
+      }
+    }
+
+    const collectionIDL = defineInterface({
+      name: 'Collection',
+      exposed: 'Window',
+      implementation: impl(CollectionImpl),
+      members: [
+        ctor(),
+        op('item', nullable(idlType.DOMString), [
+          arg('index', idlType.unsignedLong),
+        ], indexedGetter(
+          (collection: CollectionImpl) =>
+            collection.getSupportedPropertyIndices(),
+        )),
+        op('namedItem', nullable(idlType.DOMString), [
+          arg('name', idlType.DOMString),
+        ], namedGetter(
+          (collection: CollectionImpl) =>
+            collection.getSupportedPropertyNames(),
+        )),
+      ],
+    });
+    const realm = new Realm();
+    const binding = new RealmBinding(
+      assembleDefinitions([collectionIDL]),
+      realm,
+      new PlatformObjectRegistry(),
+    );
+    registerDefinitionBindings(binding);
+    binding.install();
+    const Collection = Reflect.get(realm.global, collectionIDL.name) as {
+      new(): {
+        readonly [index: number]: string;
+        readonly [name: string]: unknown;
+        item(index: number): string | null;
+        namedItem(name: string): string | null;
+      };
+    };
+
+    const collection = new Collection();
+
+    expect(collection.item(1)).toBe('second');
+    expect(collection.namedItem('first')).toBe('first');
+    expect(collection[1]).toBe('second');
+    expect(collection.first).toBe('first');
+  });
+
   it('runs inherited interface lifecycle steps from parent to child', () => {
+    const contexts: object[] = [];
     const lifecycle: string[] = [];
     const realm = new Realm();
     const parentIDL = defineInterface({
       name: 'ParentLifecycle',
       exposed: ['Window'],
       implementation: {
-        initialize(context, value) {
+        initializeImplementation(context, value) {
           expect(context.realm).toBe(realm);
           expect(value).toBeTypeOf('object');
+          contexts.push(context);
           lifecycle.push('parent');
         },
         implementation: ParentLifecycleImpl,
@@ -808,9 +1081,10 @@ describe('Web IDL implementation registration', () => {
       inherits: 'ParentLifecycle',
       exposed: ['Window'],
       implementation: {
-        initialize(context, value) {
+        initializeImplementation(context, value) {
           expect(context.realm).toBe(realm);
           expect(value).toBeTypeOf('object');
+          contexts.push(context);
           lifecycle.push('child');
         },
         implementation: ChildLifecycleImpl,
@@ -822,7 +1096,7 @@ describe('Web IDL implementation registration', () => {
       }],
     });
     const definitions = assembleDefinitions([parentIDL, childIDL]);
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),
@@ -837,7 +1111,27 @@ describe('Web IDL implementation registration', () => {
     const object = new ChildLifecycle();
 
     expect(object).toBeInstanceOf(ChildLifecycle);
+    expect(contexts[0]).toBe(contexts[1]);
     expect(lifecycle).toEqual(['parent', 'child']);
+  });
+
+  it('keeps binding contexts distinct within the same realm', () => {
+    const definitions = assembleDefinitions([]);
+    const realm = new Realm();
+    const first = new RealmBinding(
+      definitions,
+      realm,
+      new PlatformObjectRegistry(),
+    );
+    const second = new RealmBinding(
+      definitions,
+      realm,
+      new PlatformObjectRegistry(),
+    );
+
+    expect(registerDefinitionBindings(first)).not.toBe(
+      registerDefinitionBindings(second),
+    );
   });
 
   it('materializes only requested DOMExceptions in the binding realm', () => {
@@ -859,7 +1153,7 @@ describe('Web IDL implementation registration', () => {
       ],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interfaceIDL]),
       realm,
       new PlatformObjectRegistry(),

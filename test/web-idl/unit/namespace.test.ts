@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, defineNamespace, definePartialNamespace, idlType, integer,
 } from '../../../src/web-idl/declaration/index';
@@ -68,7 +68,7 @@ describe('Web IDL namespace objects', () => {
       return value;
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       realm,
       new PlatformObjectRegistry(),

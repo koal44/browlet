@@ -16,14 +16,15 @@ import {
   readableStreamDefaultControllerError,
   readableStreamDefaultReaderRead,
 } from './readable-stream-operations';
-import type {
-  ReadableStreamDefaultControllerImpl,
-} from './readable-stream-default-controller';
 import { ReadableStreamImpl } from './readable-stream';
+import { isObject } from './ecmascript';
+import {
+  getBufferSourceCopy, getBufferTypeName,
+} from '../web-idl/buffer-source';
 
 /** Streams §9.1, close a ReadableStream from another specification. */
 export function closeReadableStream(stream: ReadableStreamImpl): void {
-  const controller = requireController(stream);
+  const controller = ReadableStreamImpl.getController(stream);
   if (ReadableByteStreamControllerImpl.is(controller)) {
     readableByteStreamControllerClose(controller);
     if (ReadableByteStreamControllerImpl.getState(
@@ -41,7 +42,7 @@ export function errorReadableStream(
   stream: ReadableStreamImpl,
   error: unknown,
 ): void {
-  const controller = requireController(stream);
+  const controller = ReadableStreamImpl.getController(stream);
   if (ReadableByteStreamControllerImpl.is(controller)) {
     readableByteStreamControllerError(controller, error);
   } else {
@@ -52,10 +53,13 @@ export function errorReadableStream(
 /** Streams §9.1, enqueue a chunk from another specification. */
 export function enqueueReadableStream(
   stream: ReadableStreamImpl,
-  chunk: object,
+  chunk: unknown,
 ): void {
-  const controller = requireController(stream);
+  const controller = ReadableStreamImpl.getController(stream);
   if (ReadableByteStreamControllerImpl.is(controller)) {
+    if (!isObject(chunk)) {
+      throw new Error('A byte stream chunk must be an ArrayBufferView');
+    }
     readableByteStreamControllerEnqueue(controller, chunk);
   } else {
     readableStreamDefaultControllerEnqueue(controller, chunk);
@@ -75,8 +79,8 @@ export function readAllBytes(
   successSteps: (bytes: Uint8Array) => void,
   failureSteps: (reason: unknown) => void,
 ): void {
-  const environment = ReadableStreamImpl.getEnvironment(
-    requireReaderStream(reader),
+  const context = ReadableStreamGenericReaderMixin.getContext(
+    ReadableStreamDefaultReaderImpl.getGenericReader(reader),
   );
   const chunks: Uint8Array[] = [];
   let byteLength = 0;
@@ -90,16 +94,18 @@ export function readAllBytes(
         try {
           if (
             typeof chunk !== 'object' || chunk === null ||
-            environment.buffers.getViewType(chunk) !== 'Uint8Array'
+            getBufferTypeName(chunk) !== 'Uint8Array'
           ) {
-            failureSteps(environment.exceptions.createTypeError(
+            failureSteps(new context.realm.intrinsics.typeError(
               'A byte stream produced a non-Uint8Array chunk',
             ));
             return;
           }
-          bytes = environment.buffers.copyBytes(chunk);
+          bytes = getBufferSourceCopy(chunk);
           if (bytes.length > Number.MAX_SAFE_INTEGER - byteLength) {
-            throw new RangeError('Readable stream byte length is too large');
+            throw new context.realm.intrinsics.rangeError(
+              'Readable stream byte length is too large',
+            );
           }
         } catch (error) {
           failureSteps(error);
@@ -107,7 +113,7 @@ export function readAllBytes(
         }
         chunks.push(bytes);
         byteLength += bytes.length;
-        environment.queueMicrotask(readLoop);
+        context.realm.queueMicrotask(readLoop);
       },
       closeSteps() {
         const bytes = new Uint8Array(byteLength);
@@ -121,21 +127,4 @@ export function readAllBytes(
       errorSteps: failureSteps,
     });
   }
-}
-
-function requireController(
-  stream: ReadableStreamImpl,
-): ReadableByteStreamControllerImpl | ReadableStreamDefaultControllerImpl {
-  const controller = ReadableStreamImpl.getState(stream).controller;
-  if (!controller) throw new Error('ReadableStream has no controller');
-  return controller;
-}
-
-function requireReaderStream(
-  reader: ReadableStreamDefaultReaderImpl,
-): ReadableStreamImpl {
-  const generic = ReadableStreamDefaultReaderImpl.getGenericReader(reader);
-  const stream = ReadableStreamGenericReaderMixin.getState(generic).stream;
-  if (!stream) throw new Error('ReadableStream reader has been released');
-  return stream;
 }

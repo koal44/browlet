@@ -1,5 +1,5 @@
 import {
-  defineInterfaceMixin, idlType, nullable, roAttr, reference,
+  defineInterfaceMixin, idlType, nullable, roAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
 import { HTMLCollectionImpl } from './collections';
 import { isElement, type NodeImpl } from './node';
@@ -23,24 +23,17 @@ import type { ElementImpl } from './element';
  * };
  */
 export class ParentNodeMixin {
+  readonly #children: HTMLCollectionImpl<ElementImpl>;
   readonly #node: NodeImpl;
 
   constructor(node: NodeImpl) {
     this.#node = node;
+    this.#children = new HTMLCollectionImpl(() => collectChildren(node));
   }
 
-  get children(): HTMLCollectionOf<Element> {
-    const children = new HTMLCollectionImpl();
-
-    for (
-      let child = this.firstElementChild;
-      child;
-      child = child.nextElementSibling
-    ) {
-      children.push(child);
-    }
-
-    return children;
+  get children(): HTMLCollectionOf<ElementImpl> {
+    this.#children.refresh();
+    return this.#children;
   }
 
   get firstElementChild(): ElementImpl | null {
@@ -87,9 +80,21 @@ export class ParentNodeMixin {
 export const parentNodeIDL = defineInterfaceMixin({
   name: 'ParentNode',
   members: [
-    roAttr('children', idlType.object),
+    roAttr(
+      'children',
+      reference('HTMLCollection'),
+      xattr('SameObject'),
+    ),
     roAttr('firstElementChild', nullable(reference('Element'))),
     roAttr('lastElementChild', nullable(reference('Element'))),
     roAttr('childElementCount', idlType.unsignedLong),
   ],
 });
+
+function collectChildren(node: NodeImpl): ElementImpl[] {
+  const children: ElementImpl[] = [];
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (isElement(child)) children.push(child);
+  }
+  return children;
+}

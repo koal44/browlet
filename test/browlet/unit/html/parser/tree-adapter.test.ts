@@ -28,7 +28,7 @@ describe('Parser tree adapter', () => {
     const quirks = createParser().parse('<main>content</main>');
 
     expect(DocumentImpl.getMode(standards)).toBe(DocumentMode.NoQuirks);
-    expect(DocumentImpl.getType(standards)).toBe('html');
+    expect(standards.type).toBe('html');
     expect(standards.contentType).toBe('text/html');
     expect(standards.URL).toBe('about:blank');
     expect(standards.characterSet).toBe('UTF-8');

@@ -53,7 +53,7 @@ export function structuredSerializeInternal(
   if (isPrimitive(value)) return { type: 'primitive', value };
   if (typeof value === 'symbol') return throwDataCloneError();
 
-  const platformObject = environment.interfaces.resolve(value);
+  const platformObject = environment.context.resolvePlatformObject(value);
   let serialized: SerializedRecord;
   let deep = false;
 
@@ -138,8 +138,8 @@ export function structuredSerializeInternal(
       serialized = { type: 'Array', length, properties: [] };
       deep = true;
     } else if (platformObject) {
-      const steps = environment.interfaces.getCapability(
-        platformObject.primaryInterface,
+      const steps = environment.context.getCapability(
+        platformObject.primaryInterface.definition,
         serializable,
       );
       if (!steps) return throwDataCloneError();
@@ -148,7 +148,7 @@ export function structuredSerializeInternal(
       }
       serialized = {
         type: 'platform-object',
-        interfaceName: platformObject.primaryInterface.name,
+        interfaceName: platformObject.primaryInterface.definition.name,
         fields: createStructuredDataRecord(),
       };
       deep = true;
@@ -292,12 +292,12 @@ function serializePlatformObject(
   environment: StructuredSerializationEnvironment,
   memory: StructuredSerializeMemory,
 ): void {
-  const platformObject = environment.interfaces.resolve(value);
+  const platformObject = environment.context.resolvePlatformObject(value);
   if (!platformObject) {
     throw new Error('A resolved platform object became unavailable');
   }
-  const steps = environment.interfaces.getCapability(
-    platformObject.primaryInterface,
+  const steps = environment.context.getCapability(
+    platformObject.primaryInterface.definition,
     serializable,
   );
   if (!steps) {

@@ -78,8 +78,9 @@ describe('browsing context groups', () => {
 
     const document = new DocumentImpl();
     const window = new WindowImpl(new URL('about:blank'));
+    const windowObject = { addEventListener() {} } as unknown as Window;
     WindowImpl.setAssociatedDocument(window, document);
-    setWindowProxyWindow(context.windowProxy, window, window);
+    setWindowProxyWindow(context.windowProxy, window, windowObject);
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);
@@ -239,7 +240,7 @@ describe('navigables', () => {
     expect(realm.agent.agentCluster).not.toBeNull();
     expect(WindowImpl.getAssociatedDocument(window)).toBe(document);
 
-    expect(DocumentImpl.getType(document)).toBe('html');
+    expect(document.type).toBe('html');
     expect(DocumentImpl.getMode(document)).toBe('quirks');
     expect(document.contentType).toBe('text/html');
     expect(document.URL).toBe('about:blank');
@@ -351,8 +352,11 @@ describe('navigation lifecycle', () => {
   it('keeps the WindowProxy while replacing the Window and realm', async () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window as InternalWindowProxy;
-    const initialDocument = browlet.document as unknown as DocumentImpl;
-    const navigable = DocumentImpl.getNodeNavigable(initialDocument);
+    const initialDocument = browlet.document;
+    const initialDocumentImpl = browletBindings.getImplementation<DocumentImpl>(
+      initialDocument,
+    );
+    const navigable = DocumentImpl.getNodeNavigable(initialDocumentImpl);
     if (navigable === null) {
       throw new Error('Initial Document has no node navigable');
     }
@@ -362,7 +366,10 @@ describe('navigation lifecycle', () => {
 
     await browlet.navigate('https://example.test/');
 
-    const document = browlet.document as unknown as DocumentImpl;
+    const document = browlet.document;
+    const documentImpl = browletBindings.getImplementation<DocumentImpl>(
+      document,
+    );
     const window = getWindowProxyWindow(windowProxy);
     const realm = getRelevantRealm(document);
     expect(browlet.window).toBe(windowProxy);
@@ -372,13 +379,13 @@ describe('navigation lifecycle', () => {
     expect(realm.globalObject).toBe(window);
     expect(realm.globalThis).toBe(windowProxy);
     expect(Reflect.get(windowProxy, 'Event')).not.toBe(InitialEvent);
-    expect(window && WindowImpl.getAssociatedDocument(window)).toBe(document);
-    expect(DocumentImpl.getBrowsingContext(document)?.windowProxy)
+    expect(window && WindowImpl.getAssociatedDocument(window)).toBe(documentImpl);
+    expect(DocumentImpl.getBrowsingContext(documentImpl)?.windowProxy)
       .toBe(windowProxy);
-    expect(DocumentImpl.getNodeNavigable(initialDocument)).toBeNull();
-    expect(DocumentImpl.isFullyActive(initialDocument)).toBe(false);
-    expect(DocumentImpl.getNodeNavigable(document)).toBe(navigable);
-    expect(DocumentImpl.isFullyActive(document)).toBe(true);
+    expect(DocumentImpl.getNodeNavigable(initialDocumentImpl)).toBeNull();
+    expect(DocumentImpl.isFullyActive(initialDocumentImpl)).toBe(false);
+    expect(DocumentImpl.getNodeNavigable(documentImpl)).toBe(navigable);
+    expect(DocumentImpl.isFullyActive(documentImpl)).toBe(true);
   });
 
 });
