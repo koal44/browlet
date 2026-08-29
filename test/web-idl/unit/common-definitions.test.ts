@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { invokeCallbackFunction } from '../../../src/web-idl/callback';
 import { isCallbackFunctionValue } from '../../../src/web-idl/callback-value';
 import {
@@ -35,7 +35,7 @@ callback VoidFunction = undefined();`);
 
   it('invokes Function and VoidFunction with their common contracts', () => {
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions(webIDLCommonDefinitions),
       realm,
       new PlatformObjectRegistry(),

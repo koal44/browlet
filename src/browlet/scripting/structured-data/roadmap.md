@@ -268,7 +268,7 @@ context-free.
 
 Status: complete for the available platform surface. The projected
 `WindowOrWorkerGlobalScope` API uses the receiver's realm, ArrayBuffer transfer
-and Serializable platform objects share the same semantic implementation, and
+and Serializable platform objects share the same implementation, and
 Streams cross-specification tee clones its second branch through the realm
 global's structured-data seam. Fetch body cloning is unblocked; MessagePort,
 workers, history, and messaging remain with their owning future slices.
@@ -293,7 +293,7 @@ built-ins, ArrayBuffer transfer, duplicate transfers, failure atomicity, and
 The first cross-specification consumer is connected:
 
 - Streams' cross-specification tee with `cloneForBranch2 = true` uses the same
-  semantic implementation and realizes clone failures in the stream realm; and
+  implementation and realizes clone failures in the stream realm; and
 - Fetch body cloning and abort-reason serialization are unblocked.
 
 Remaining consumers:

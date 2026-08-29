@@ -3,6 +3,7 @@ import {
 } from 'node:vm';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
+import type { EventImpl } from '../dom/events/event';
 import { type Agent, WindowAgent } from './agents';
 import type { EnvironmentSettingsObject } from './environment';
 import { associateGlobalTaskDestination } from './tasks';
@@ -34,7 +35,10 @@ export function createRealm(
     if (!status) throw new Error('Could not remove SharedArrayBuffer');
   }
   if (agent instanceof WindowAgent) {
-    agent.windowObjects.add(globalObject as Window);
+    if (!WindowImpl.is(globalObject)) {
+      throw new Error('A Window realm requires a Window implementation');
+    }
+    agent.windowObjects.add(globalObject);
   }
   return { realm };
 }
@@ -359,22 +363,22 @@ export class Realm implements WebIDLRealmHost {
     this.agent.eventLoop.queueMicrotask(steps, document);
   }
 
-  getCurrentEvent(_global: object): Event | undefined {
+  getCurrentEvent(_global: object): EventImpl | undefined {
     const window = this.#windowImplementation;
     return window
       ? WindowImpl.getCurrentEvent(window)
       : undefined;
   }
 
-  setCurrentEvent(_global: object, event: Event | undefined): void {
+  setCurrentEvent(_global: object, event: EventImpl | undefined): void {
     const window = this.#windowImplementation;
     if (window) WindowImpl.setCurrentEvent(window, event);
   }
 
   recordTimingInfo(
     _global: object,
-    _event: Event,
-    _callback: EventListenerOrEventListenerObject,
+    _event: EventImpl,
+    _callback: object,
   ): void {
     // TODO(Long Animation Frames section 3.2.2): Record event-listener timing
     // once Browlet has the HTML performance timeline machinery.

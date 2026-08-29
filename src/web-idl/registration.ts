@@ -1,5 +1,5 @@
 import { assembleDefinitions, type DefinitionAssembly } from './assembly';
-import { JavaScriptBinding } from './binding';
+import { RealmBinding } from './binding';
 import { webIDLCommonDefinitions } from './common-definitions';
 import {
   type CapabilityImplementation, CapabilityRegistry,
@@ -9,34 +9,31 @@ import type { HostDefinedInterface } from './conversion';
 import type { WebIDLRealmHost } from './javascript-realm';
 import { PlatformObjectRegistry } from './platform-object';
 import {
-  createInterfaceAdapter, createPlatformObjectAdapter,
-  registerDefinitionBindings, type InterfaceAdapter,
-  type PlatformObjectAdapter,
+  registerDefinitionBindings, type BindingContext,
 } from './projection';
 import { ImplementationRegistry } from './registry';
 
 /*
- * Prepare one specification contribution for installation in any number of
- * realms. The returned bindings own platform-object identity across those
- * realms while each realm registration owns its initial objects and
- * implementation steps.
+ * Create one binding world for a specification contribution. A binding world
+ * owns platform-object identity across its registered realms while each realm
+ * registration owns its initial objects and implementation steps.
  */
 export function createBindings(
   definitions: readonly Definition[],
-  options: InterfaceRegistrationOptions = {},
-): Bindings {
-  return new Bindings(
+  options: BindingOptions = {},
+): BindingWorld {
+  return new BindingWorld(
     getDefinitionAssembly(definitions),
     options,
   );
 }
 
-export type InterfaceRegistrationOptions = {
+export type BindingOptions = {
   readonly capabilities?: readonly CapabilityImplementation[];
   readonly hostDefinedInterfaces?: readonly HostDefinedInterface[];
 };
 
-export class Bindings {
+export class BindingWorld {
   readonly #definitions: DefinitionAssembly;
   readonly #hostDefinedInterfaces: readonly HostDefinedInterface[];
   readonly #capabilities: CapabilityRegistry;
@@ -48,7 +45,7 @@ export class Bindings {
 
   constructor(
     definitions: DefinitionAssembly,
-    options: InterfaceRegistrationOptions,
+    options: BindingOptions,
   ) {
     this.#definitions = definitions;
     this.#hostDefinedInterfaces = options.hostDefinedInterfaces ?? [];
@@ -62,7 +59,7 @@ export class Bindings {
     let registered = this.#realms.get(realm);
     if (registered) return registered;
 
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       this.#definitions,
       realm,
       this.#platformObjects,
@@ -70,8 +67,8 @@ export class Bindings {
       [...this.#hostDefinedInterfaces],
       this.#capabilities,
     );
-    registerDefinitionBindings(binding);
-    registered = new RealmBindings(binding);
+    const context = registerDefinitionBindings(binding);
+    registered = new RealmBindings(binding, context);
     this.#realms.set(realm, registered);
     return registered;
   }
@@ -87,26 +84,31 @@ export class Bindings {
   }
 
   getPlatformObject(value: object): object | undefined {
-    return this.#platformObjects.getPlatformObject(value);
+    return this.#platformObjects.getPlatformObject(value) ??
+      (this.#platformObjects.getImplementationOrigin(value)
+        ? this.#platformObjects.projectImplementationOrigin(value)
+        : undefined);
   }
 
   getRealm(value: object): WebIDLRealmHost | undefined {
     return (
       this.#platformObjects.getRecord(value) ??
-      this.#platformObjects.getImplementationRecord(value)
+      this.#platformObjects.getImplementationRecord(value) ??
+      this.#platformObjects.getImplementationOrigin(value)
     )?.realm;
   }
 }
 
 export class RealmBindings {
-  readonly interfaces: InterfaceAdapter;
-  readonly objects: PlatformObjectAdapter;
-  readonly #binding: JavaScriptBinding;
+  readonly context: BindingContext;
+  readonly #binding: RealmBinding;
 
-  constructor(binding: JavaScriptBinding) {
+  constructor(
+    binding: RealmBinding,
+    context: BindingContext,
+  ) {
     this.#binding = binding;
-    this.interfaces = createInterfaceAdapter(binding);
-    this.objects = createPlatformObjectAdapter(binding);
+    this.context = context;
   }
 
   install(target: object): void {
@@ -114,7 +116,7 @@ export class RealmBindings {
   }
 
   projectGlobalObject(value: object, interfaceName: string): object {
-    return this.#binding.projectGlobalObject(value, interfaceName).object;
+    return this.#binding.projectGlobalObject(value, interfaceName).platformObject;
   }
 }
 

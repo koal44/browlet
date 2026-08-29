@@ -7,25 +7,43 @@ This is a temporary working journal. Burn this file after every retained
 deviation and host requirement has a permanent test, limitation, or code
 comment.
 
+Follow the project-wide order in
+[priority.md](../browlet/priority.md), the composition rules in
+[subsystem-architecture.md](../subsystem-architecture.md), and the object
+boundary rules in
+[platform-object-architecture.md](../platform-object-architecture.md).
+
 ## Contract decisions
 
-- `src/streams/index.ts` is the private project entry. It exports one
-  `streamsIDLDefinitions` declaration contribution and does not install
-  globals. Semantic implementation modules remain package-private.
+- `src/streams/index.ts` is the private project entry. It exports the
+  `streamsIDLDefinitions` declaration contribution plus intentional
+  cross-specification operations and types, and it does not install globals.
+  Semantic implementation modules remain package-private.
 - Web IDL declarations remain beside their implementation modules. The entry
   aggregates them for Browlet's bindings.
 - Reference-implementation calls to generated `.new(globalThis)` wrappers
-  must become explicit platform-object creation through the active binding
-  context. The semantic implementation must never import Browlet's Window.
-- Grow `StreamEnvironment` from observed requirements. Do not expose an
-  entire Realm, platform-object adapter, or callback subsystem when one
-  semantic operation is sufficient.
-- Stream implementations receive `StreamEnvironment` directly and remain
-  independently unit-testable. In production, its Abort capability asks the
-  assembled Web IDL bindings to internally create `AbortController`;
-  Streams never imports Browlet's DOM implementation or reaches for an
-  ambient global.
-- Cross-specification cloning is another explicit host capability. Browlet
+  must become direct implementation construction using the shared per-realm
+  context. Binding projects the result only when it crosses an author-visible
+  boundary, while retaining the construction realm across borrowed methods.
+  The implementation must never import Browlet's Window.
+- The former `StreamEnvironment` façade has been removed. Realm-sensitive
+  runtime services use the shared Realm Context, realm-neutral algorithms are
+  direct imports, and the two genuine cross-specification dependencies--HTML
+  structured cloning and DOM `AbortController` creation--are narrow,
+  independently registered capabilities. Do not recreate a Streams-specific
+  service bag.
+- Stream implementations remain independently testable with the shared Realm
+  Context and narrow fakes for genuine external dependencies. Streams never
+  imports Browlet's DOM implementation or reaches for an ambient global. A
+  converted signal already is the implementation, so piping reads its state
+  and registers its internal abort algorithm directly through a host-neutral
+  structural contract. It does not reverse through Web IDL or call the
+  projected `AbortSignal` event-listener API.
+- The focused implementation tests use Browlet's real Realm Context, Web IDL
+  promise records, conversions, and projections. They fake only structured
+  cloning and AbortController creation, the two external capabilities under
+  test; do not restore a miniature Streams runtime.
+- Cross-specification cloning is an explicit HTML-owned capability. Browlet
   registers HTML's semantic structured-data operation for each supported
   global interface; Streams never calls the projected author-facing
   `structuredClone()` method. Exceptions from that semantic boundary are
@@ -44,9 +62,10 @@ comment.
   stream operation runs; there is no top-level cross-cycle execution.
   Participating modules acknowledge their cycle group on their first line. The
   build accepts a cycle only when every module names the same group.
-- Ambient `Promise`, `queueMicrotask`, errors, buffer constructors, and
-  `AbortController` must be replaced by relevant-realm or injected host
-  capabilities as their algorithms are ported.
+- Ambient `Promise`, `queueMicrotask`, errors, and buffer constructors must use
+  the shared Realm Context where the specification requires the relevant
+  realm. `AbortController` construction remains a narrow cross-specification
+  capability. Do not group these unrelated dependencies into a host façade.
 - Transferable-stream steps are deliberately deferred. They belong to the
   HTML structured-data and MessagePort integration, not the Streams core.
 - Keep incomplete implementation families private. `streamsIDLDefinitions`
@@ -55,10 +74,21 @@ comment.
 
 ## Port progress
 
+- [ ] Audit the current implementation in document order against the WHATWG
+  Streams Living Standard. Treat the reference implementation as secondary
+  evidence, not as the architectural source of truth. Account for every
+  interface and normative algorithm, then expand focused WPT coverage for the
+  retained surface.
+- [ ] Reassess the acknowledged Readable/BYOB and Transform import cycles
+  during that audit. Remove cycles produced only by the reference
+  implementation's file layout; retain a cycle only when the resulting module
+  ownership is clearer than an acyclic alternative, and keep its no-top-level
+  execution invariant tested.
 - [x] Project boundary, license, and declaration aggregation
 - [x] Queue-with-sizes and queuing-strategy extraction algorithms
 - [x] `ByteLengthQueuingStrategy` and `CountQueuingStrategy`
-- [x] Narrow callback, conversion, platform-object, and promise capabilities
+- [x] Replace `StreamEnvironment` with the shared Realm Context, direct shared
+  algorithms, and narrow cross-specification capabilities
 - [x] Ordinary stream state, default controller, and default reader
 - [x] Byte readable streams and BYOB readers
 - [x] Piping and ordinary/byte teeing
@@ -76,12 +106,6 @@ comment.
 - Generic default-stream tee cloning requires HTML's serializable-object
   framework. Public `tee()` does not request that clone; byte-stream teeing
   clones bytes without the structured-data framework.
-- A writable stream default controller obtains its `AbortController` through
-  `StreamEnvironment`. Browlet's production environment resolves the standard
-  interface through the assembled Web IDL domain, while implementation tests
-  inject a structural controller directly. The host-neutral Streams project
-  must not import Browlet, use an ambient Node signal, or create a Streams-local
-  lookalike.
 - Transferable streams remain blocked on HTML structured serialization and
   `MessagePort`. Ordinary readable, writable, transform, byte, BYOB, tee, and
   piping behavior does not wait for that integration.

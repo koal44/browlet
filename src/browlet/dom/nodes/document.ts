@@ -2,11 +2,13 @@ import type { TreeScope } from '../../../stylelet/engine/tree-scope';
 import { Stylelet } from '../../../stylelet/stylelet';
 import type { TreeScopeResolver } from '../../style/integration';
 import type { EventTargetImpl } from '../events/event-target';
+import type { EventImpl } from '../events/event';
 import { asDocument } from '../../stubs';
 import { isValidAttributeLocalName } from '../infra/name-validation';
 import type { BrowsingContext } from '../../browsing/browsing-context';
 import type { Navigable } from '../../browsing/navigable';
 import type { WindowImpl } from '../../browsing/window/window';
+import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import {
   createPolicyContainer, type PolicyContainer,
 } from '../../browsing/policy/container';
@@ -59,7 +61,7 @@ export function createDocument(
   options: DocumentConstructionOptions = {},
 ): DocumentImpl {
   const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
-  return nodeFactory.construct(DocumentImpl, [nodeFactory]);
+  return nodeFactory.constructNode(DocumentImpl, [nodeFactory]);
 }
 
 export type DocumentConstructionOptions = {
@@ -126,7 +128,7 @@ export class DocumentImpl
   #completelyLoadedTime: number | null = null;
   #contentType = 'application/xml';
   #currentDocumentReadiness: DocumentReadyState = 'complete';
-  #customElementRegistry: CustomElementRegistry | null = null;
+  #customElementRegistry: CustomElementRegistryImpl | null = null;
   #duringLoadingNavigationID: string | null = null;
   #encoding = 'UTF-8';
   readonly #fullyActiveObservers = new Set<FullyActiveStateObserver>();
@@ -216,6 +218,10 @@ export class DocumentImpl
     return this.#contentType;
   }
 
+  get type(): DocumentType {
+    return this.#type;
+  }
+
   get defaultView(): Window | null {
     return this.#browsingContext?.windowProxy ?? null;
   }
@@ -234,7 +240,7 @@ export class DocumentImpl
       : 'CSS1Compat';
   }
 
-  get customElementRegistry(): CustomElementRegistry | null {
+  get customElementRegistry(): CustomElementRegistryImpl | null {
     return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
@@ -298,7 +304,7 @@ export class DocumentImpl
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
-  get children(): HTMLCollectionOf<Element> {
+  get children(): HTMLCollectionOf<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 
@@ -314,29 +320,29 @@ export class DocumentImpl
     return this.#parentNodeMixin.childElementCount;
   }
 
-  createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K];
-  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementDeprecatedTagNameMap[K];
-  createElement(tagName: string, options?: ElementCreationOptions): HTMLElement;
+  createElement<K extends keyof HTMLElementTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementTagNameMap[K] & ElementImpl;
+  createElement<K extends keyof HTMLElementDeprecatedTagNameMap>(tagName: K, options?: ElementCreationOptions): HTMLElementDeprecatedTagNameMap[K] & ElementImpl;
+  createElement(tagName: string, options?: ElementCreationOptions): HTMLElement & ElementImpl;
   createElement(
     localName: string,
     _options?: ElementCreationOptions,
-  ): HTMLElement {
+  ): HTMLElement & ElementImpl {
     if (this.#type === 'html') localName = asciiLower(localName);
     return DocumentImpl.createElementNode(this, localName, HTML_NAMESPACE);
   }
 
-  createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement;
-  createElementNS<K extends keyof SVGElementTagNameMap>(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: K): SVGElementTagNameMap[K];
-  createElementNS(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: string): SVGElement;
-  createElementNS<K extends keyof MathMLElementTagNameMap>(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: K): MathMLElementTagNameMap[K];
-  createElementNS(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: string): MathMLElement;
-  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: ElementCreationOptions): Element;
-  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: string | ElementCreationOptions): Element;
+  createElementNS(namespaceURI: typeof HTML_NAMESPACE, qualifiedName: string): HTMLElement & ElementImpl;
+  createElementNS<K extends keyof SVGElementTagNameMap>(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: K): SVGElementTagNameMap[K] & ElementImpl;
+  createElementNS(namespaceURI: typeof SVG_NAMESPACE, qualifiedName: string): SVGElement & ElementImpl;
+  createElementNS<K extends keyof MathMLElementTagNameMap>(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: K): MathMLElementTagNameMap[K] & ElementImpl;
+  createElementNS(namespaceURI: typeof MATHML_NAMESPACE, qualifiedName: string): MathMLElement & ElementImpl;
+  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: ElementCreationOptions): Element & ElementImpl;
+  createElementNS(namespaceURI: string | null, qualifiedName: string, options?: string | ElementCreationOptions): Element & ElementImpl;
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
     _options?: string | ElementCreationOptions,
-  ): Element {
+  ): Element & ElementImpl {
     return DocumentImpl.createElementNode(
       this,
       qualifiedName,
@@ -345,11 +351,11 @@ export class DocumentImpl
   }
 
   createTextNode(data: string): TextImpl {
-    return this.#nodeFactory.construct(TextImpl, [data, this]);
+    return this.#nodeFactory.constructNode(TextImpl, [data, this]);
   }
 
   createComment(data: string): CommentImpl {
-    return this.#nodeFactory.construct(CommentImpl, [data, this]);
+    return this.#nodeFactory.constructNode(CommentImpl, [data, this]);
   }
 
   createAttribute(localName: string): AttrImpl {
@@ -496,10 +502,6 @@ export class DocumentImpl
     document.#mode = mode;
   }
 
-  static getType(document: DocumentImpl): DocumentType {
-    return document.#type;
-  }
-
   static setType(document: DocumentImpl, type: DocumentType): void {
     document.#type = type;
   }
@@ -613,13 +615,13 @@ export class DocumentImpl
 
   static getCustomElementRegistry(
     document: DocumentImpl,
-  ): CustomElementRegistry | null {
+  ): CustomElementRegistryImpl | null {
     return document.#customElementRegistry;
   }
 
   static setCustomElementRegistry(
     document: DocumentImpl,
-    registry: CustomElementRegistry,
+    registry: CustomElementRegistryImpl,
   ): void {
     document.#customElementRegistry = registry;
   }
@@ -714,7 +716,7 @@ export class DocumentImpl
 
   static getEventParent(
     document: DocumentImpl,
-    event: Event,
+    event: EventImpl,
   ): EventTargetImpl | null {
     if (event.type === 'load' || document.#browsingContext === null) {
       return null;
@@ -778,7 +780,7 @@ export class DocumentImpl
     namespaceURI: string,
   ): ElementImpl {
     const interface_ = resolveElementInterface(namespaceURI, localName);
-    return document.#nodeFactory.construct<ElementImpl>(
+    return document.#nodeFactory.constructNode<ElementImpl>(
       interface_.implementation,
       [{
         document,
@@ -792,7 +794,7 @@ export class DocumentImpl
   static createDocumentFragment(
     document: DocumentImpl,
   ): DocumentFragmentImpl {
-    return document.#nodeFactory.construct(
+    return document.#nodeFactory.constructNode(
       DocumentFragmentImpl,
       [document],
     );
@@ -805,7 +807,7 @@ export class DocumentImpl
     namespaceURI: string | null,
     prefix: string | null,
   ): AttrImpl {
-    return document.#nodeFactory.construct(AttrImpl, [
+    return document.#nodeFactory.constructNode(AttrImpl, [
       localName,
       value,
       namespaceURI,
@@ -820,7 +822,7 @@ export class DocumentImpl
     publicId: string,
     systemId: string,
   ): DocumentTypeImpl {
-    return document.#nodeFactory.construct(
+    return document.#nodeFactory.constructNode(
       DocumentTypeImpl,
       [name, publicId, systemId, document],
     );
@@ -865,7 +867,8 @@ export class DocumentImpl
 // -- Web IDL ------------------------------------------------------------
 
 const nodeFactory = contextValue(
-  (context: { readonly objects: DOMNodeFactory; }) => context.objects,
+  (context: DOMNodeProjector) =>
+    createProjectedDOMNodeFactory(context),
 );
 
 export const documentIDL = defineInterface({
@@ -873,7 +876,7 @@ export const documentIDL = defineInterface({
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentImpl, {
-    withArgs: [nodeFactory],
+    constructWith: [nodeFactory],
   }),
   members: [
     ctor(),
@@ -886,13 +889,13 @@ export const documentIDL = defineInterface({
     roAttr('documentElement', nullable(reference('Element'))),
     roAttr('contentType', idlType.DOMString),
     roAttr('compatMode', idlType.DOMString),
-    op('getElementsByClassName', idlType.object, [
+    op('getElementsByClassName', reference('HTMLCollection'), [
       arg('classNames', idlType.DOMString),
     ]),
-    op('getElementsByTagName', idlType.object, [
+    op('getElementsByTagName', reference('HTMLCollection'), [
       arg('qualifiedName', idlType.DOMString),
     ]),
-    op('getElementsByTagNameNS', idlType.object, [
+    op('getElementsByTagNameNS', reference('HTMLCollection'), [
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),
     ]),
@@ -1041,10 +1044,32 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 }
 
 export type DOMNodeFactory = {
-  construct<T extends object>(
+  constructNode<T extends object>(
     implementation: ImplementationConstructor<T>,
     argumentsList: readonly unknown[],
   ): T;
+};
+
+export function createProjectedDOMNodeFactory(
+  projector: DOMNodeProjector,
+): DOMNodeFactory {
+  return {
+    constructNode(implementation, argumentsList) {
+      const value = directDOMNodeFactory.constructNode(
+        implementation,
+        argumentsList,
+      );
+      projector.project(implementation, value);
+      return value;
+    },
+  };
+}
+
+type DOMNodeProjector = {
+  project<T extends object>(
+    implementation: ImplementationConstructor<T>,
+    value: T,
+  ): object;
 };
 
 type ImplementationConstructor<T extends object> = {
@@ -1052,7 +1077,7 @@ type ImplementationConstructor<T extends object> = {
 } & (abstract new (...argumentsList: never[]) => T);
 
 export const directDOMNodeFactory: DOMNodeFactory = {
-  construct: <T extends object>(
+  constructNode: <T extends object>(
     implementation: ImplementationConstructor<T>,
     argumentsList: readonly unknown[],
   ) => Reflect.construct(implementation, argumentsList) as T,

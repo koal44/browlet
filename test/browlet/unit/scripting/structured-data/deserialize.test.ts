@@ -403,20 +403,20 @@ describe('HTML structured deserialization', () => {
     const agentCluster = {};
     const source: StructuredSerializationEnvironment = {
       agentCluster,
-      interfaces: sourceRegistration.interfaces,
+      context: sourceRegistration.context,
       realm: sourceRealm,
     };
     const target: StructuredDeserializationEnvironment = {
       agentCluster,
-      interfaces: targetRegistration.interfaces,
+      context: targetRegistration.context,
       realm: targetRealm,
     };
-    const original = sourceRegistration.interfaces.create(containerIDL);
-    (original.implementation as ContainerImpl).child = original.object;
+    const original = sourceRegistration.context.createPlatformObject(containerIDL);
+    (original.implementation as ContainerImpl).child = original.platformObject;
 
-    const clone = cloneValue(original.object, source, target);
-    const resolved = targetRegistration.interfaces.resolve(clone);
-    expect(resolved?.primaryInterface).toBe(containerIDL);
+    const clone = cloneValue(original.platformObject, source, target);
+    const resolved = targetRegistration.context.resolvePlatformObject(clone);
+    expect(resolved?.primaryInterface.definition).toBe(containerIDL);
     expect((resolved?.implementation as ContainerImpl).child).toBe(clone);
   });
 
@@ -457,13 +457,13 @@ function createEnvironments(options: {
   return {
     source: {
       agentCluster,
-      interfaces: sourceRegistration.interfaces,
+      context: sourceRegistration.context,
       realm: sourceRealm,
     },
     sourceRealm,
     target: {
       agentCluster,
-      interfaces: targetRegistration.interfaces,
+      context: targetRegistration.context,
       realm: targetRealm,
     },
     targetRealm,

@@ -191,36 +191,36 @@ describe('HTML structured transfer', () => {
     const agentCluster = {};
     const source: StructuredDataEnvironment = {
       agentCluster,
-      interfaces: sourceRegistration.interfaces,
+      context: sourceRegistration.context,
       realm: sourceRealm,
     };
     const target: StructuredDataEnvironment = {
       agentCluster,
-      interfaces: targetRegistration.interfaces,
+      context: targetRegistration.context,
       realm: targetRealm,
     };
-    const original = sourceRegistration.interfaces.create(transferBoxIDL);
+    const original = sourceRegistration.context.createPlatformObject(transferBoxIDL);
     (original.implementation as TransferBoxImpl).value = 'transferred';
 
     expectDataCloneError(() => structuredSerializeWithTransfer(
-      original.object,
-      [original.object, original.object],
+      original.platformObject,
+      [original.platformObject, original.platformObject],
       source,
     ));
     expect(isTransferableDetached(original.implementation)).toBe(false);
 
     const serialized = structuredSerializeWithTransfer(
-      original.object,
-      [original.object],
+      original.platformObject,
+      [original.platformObject],
       source,
     );
     expect(isTransferableDetached(original.implementation)).toBe(true);
 
     const result = structuredDeserializeWithTransfer(serialized, target);
     const transferred = result.transferredValues[0];
-    const resolved = targetRegistration.interfaces.resolve(transferred);
+    const resolved = targetRegistration.context.resolvePlatformObject(transferred);
     expect(result.deserialized).toBe(transferred);
-    expect(resolved?.primaryInterface).toBe(transferBoxIDL);
+    expect(resolved?.primaryInterface.definition).toBe(transferBoxIDL);
     expect((resolved?.implementation as TransferBoxImpl).value)
       .toBe('transferred');
     expect(isTransferableDetached(resolved!.implementation)).toBe(false);
@@ -229,13 +229,13 @@ describe('HTML structured transfer', () => {
     const hiddenRegistration = bindings.register(hiddenRealm);
     const hiddenTarget: StructuredDataEnvironment = {
       agentCluster,
-      interfaces: hiddenRegistration.interfaces,
+      context: hiddenRegistration.context,
       realm: hiddenRealm,
     };
-    const hiddenOriginal = sourceRegistration.interfaces.create(transferBoxIDL);
+    const hiddenOriginal = sourceRegistration.context.createPlatformObject(transferBoxIDL);
     const hiddenSerialized = structuredSerializeWithTransfer(
-      hiddenOriginal.object,
-      [hiddenOriginal.object],
+      hiddenOriginal.platformObject,
+      [hiddenOriginal.platformObject],
       source,
     );
     expectDataCloneError(() => structuredDeserializeWithTransfer(
@@ -260,13 +260,13 @@ function createEnvironments(): {
   return {
     source: {
       agentCluster,
-      interfaces: sourceRegistration.interfaces,
+      context: sourceRegistration.context,
       realm: sourceRealm,
     },
     sourceRealm,
     target: {
       agentCluster,
-      interfaces: targetRegistration.interfaces,
+      context: targetRegistration.context,
       realm: targetRealm,
     },
     targetRealm,

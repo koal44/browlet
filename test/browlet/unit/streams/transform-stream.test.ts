@@ -1,25 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../../../src/browlet/bindings';
 import { TransformStreamImpl } from '../../../../src/streams/transform-stream';
 import type { TransformStreamDefaultControllerImpl } from '../../../../src/streams/transform-stream-default-controller';
-import { createTestEnvironment } from './environment';
+import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('transform-stream implementation', () => {
   it('uses the default identity transform', async () => {
-    const stream = new TransformStreamImpl(createTestEnvironment());
+    const stream = new TransformStreamImpl(createTestContext());
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = reader.read() as Promise<unknown>;
+    const read = unwrapStreamPromise(reader.read());
 
-    await expect(writer.write('chunk') as Promise<unknown>).resolves
+    await expect(unwrapStreamPromise(writer.write('chunk'))).resolves
       .toBeUndefined();
-    await expect(read).resolves.toEqual({ done: false, value: 'chunk' });
+    await expect(read).resolves.toEqual(readResult('chunk', false));
 
-    await expect(writer.close() as Promise<unknown>).resolves.toBeUndefined();
-    await expect(reader.read() as Promise<unknown>).resolves.toEqual({
-      done: true,
-      value: undefined,
-    });
+    await expect(unwrapStreamPromise(writer.close())).resolves.toBeUndefined();
+    await expect(unwrapStreamPromise(reader.read())).resolves
+      .toEqual(readResult(undefined, true));
   });
 
   it('runs custom transform and flush algorithms', async () => {
@@ -35,26 +36,20 @@ describe('transform-stream implementation', () => {
       return Promise.resolve(undefined);
     });
     const stream = new TransformStreamImpl(
-      createTestEnvironment(),
+      createTestContext(),
       { flush, transform },
     );
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const firstRead = reader.read() as Promise<unknown>;
+    const firstRead = unwrapStreamPromise(reader.read());
 
-    await expect(writer.write('hello') as Promise<unknown>).resolves
+    await expect(unwrapStreamPromise(writer.write('hello'))).resolves
       .toBeUndefined();
-    await expect(firstRead).resolves.toEqual({
-      done: false,
-      value: 'HELLO',
-    });
+    await expect(firstRead).resolves.toEqual(readResult('HELLO', false));
 
-    const flushRead = reader.read() as Promise<unknown>;
-    const close = writer.close() as Promise<unknown>;
-    await expect(flushRead).resolves.toEqual({
-      done: false,
-      value: 'DONE',
-    });
+    const flushRead = unwrapStreamPromise(reader.read());
+    const close = unwrapStreamPromise(writer.close());
+    await expect(flushRead).resolves.toEqual(readResult('DONE', false));
     await expect(close).resolves.toBeUndefined();
     expect(transform).toHaveBeenCalledOnce();
     expect(flush).toHaveBeenCalledOnce();
@@ -69,11 +64,11 @@ describe('transform-stream implementation', () => {
       return Promise.resolve(undefined);
     });
     const stream = new TransformStreamImpl(
-      createTestEnvironment(),
+      createTestContext(),
       { transform },
     );
     const writer = stream.writable.getWriter();
-    const write = writer.write('waiting') as Promise<unknown>;
+    const write = unwrapStreamPromise(writer.write('waiting'));
     let settled = false;
     void write.then(() => {
       settled = true;
@@ -84,55 +79,60 @@ describe('transform-stream implementation', () => {
     expect(settled).toBe(false);
     expect(transform).not.toHaveBeenCalled();
 
-    const read = stream.readable.getReader({}).read() as Promise<unknown>;
+    const read = unwrapStreamPromise(stream.readable.getReader({}).read());
     await expect(write).resolves.toBeUndefined();
-    await expect(read).resolves.toEqual({ done: false, value: 'waiting' });
+    await expect(read).resolves.toEqual(readResult('waiting', false));
     expect(transform).toHaveBeenCalledOnce();
   });
 
   it('errors both sides when transform rejects', async () => {
     const failure = new Error('transform failed');
-    const stream = new TransformStreamImpl(createTestEnvironment(), {
+    const stream = new TransformStreamImpl(createTestContext(), {
       transform: () => Promise.reject(failure),
     });
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader({});
-    const read = reader.read() as Promise<unknown>;
+    const read = unwrapStreamPromise(reader.read());
 
-    await expect(writer.write('chunk') as Promise<unknown>).rejects
+    await expect(unwrapStreamPromise(writer.write('chunk'))).rejects
       .toBe(failure);
     await expect(read).rejects.toBe(failure);
-    await expect(writer.closed as Promise<unknown>).rejects.toBe(failure);
-    await expect(reader.closed as Promise<unknown>).rejects.toBe(failure);
+    await expect(unwrapStreamPromise(writer.closed)).rejects.toBe(failure);
+    await expect(unwrapStreamPromise(reader.closed)).rejects.toBe(failure);
   });
 
   it('runs the transformer cancel algorithm from either side', async () => {
     const readableReason = new Error('readable cancelled');
     const readableCancel = vi.fn(() => Promise.resolve(undefined));
     const readable = new TransformStreamImpl(
-      createTestEnvironment(),
+      createTestContext(),
       { cancel: readableCancel },
     );
 
-    await expect(readable.readable.cancel(readableReason) as Promise<unknown>)
+    await expect(unwrapStreamPromise(
+      readable.readable.cancel(readableReason),
+    ))
       .resolves.toBeUndefined();
     expect(readableCancel).toHaveBeenCalledWith(readableReason);
 
     const writableReason = new Error('writable aborted');
     const writableCancel = vi.fn(() => Promise.resolve(undefined));
     const writable = new TransformStreamImpl(
-      createTestEnvironment(),
+      createTestContext(),
       { cancel: writableCancel },
     );
 
-    await expect(writable.writable.abort(writableReason) as Promise<unknown>)
+    await expect(unwrapStreamPromise(
+      writable.writable.abort(writableReason),
+    ))
       .resolves.toBeUndefined();
     expect(writableCancel).toHaveBeenCalledWith(writableReason);
   });
 
   it('closes the readable and errors the writable when terminated', async () => {
+    const context = createTestContext();
     let controller: TransformStreamDefaultControllerImpl | undefined;
-    const stream = new TransformStreamImpl(createTestEnvironment(), {
+    const stream = new TransformStreamImpl(context, {
       start(value: TransformStreamDefaultControllerImpl) {
         controller = value;
       },
@@ -142,16 +142,38 @@ describe('transform-stream implementation', () => {
 
     requireController(controller).terminate();
 
-    await expect(reader.read() as Promise<unknown>).resolves.toEqual({
-      done: true,
-      value: undefined,
-    });
-    await expect(writer.closed as Promise<unknown>).rejects
-      .toBeInstanceOf(TypeError);
+    await expect(unwrapStreamPromise(reader.read())).resolves
+      .toEqual(readResult(undefined, true));
+    await expect(unwrapStreamPromise(writer.closed)).rejects
+      .toBeInstanceOf(context.realm.intrinsics.typeError);
   });
 });
 
 describe('transform-stream projection', () => {
+  it('projects a cross-specification transform at the binding boundary', () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const bindings = browletBindings.forRealm(getRelevantRealm(window));
+    const TransformStream_ = requireFunction(window, 'TransformStream');
+    const projected = Reflect.construct(TransformStream_, []) as object;
+    const resolved = bindings.context.resolvePlatformObject(projected);
+    if (resolved?.primaryInterface.definition.name !== 'TransformStream') {
+      throw new Error('TransformStream did not resolve to its implementation');
+    }
+    const stream = TransformStreamImpl.fromAlgorithms(
+      TransformStreamImpl.getContext(
+        resolved.implementation as TransformStreamImpl,
+      ),
+      { transform() {} },
+    );
+
+    expect(bindings.context.resolvePlatformObject(stream)).toBeUndefined();
+    const object = bindings.context.project(TransformStreamImpl, stream);
+    const projectedStream = bindings.context.resolvePlatformObject(object);
+    expect(projectedStream?.primaryInterface.definition.name)
+      .toBe('TransformStream');
+    expect(projectedStream?.implementation).toBe(stream);
+  });
+
   it('connects its projected writable and readable sides', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const TransformStream_ = requireFunction(window, 'TransformStream');
@@ -207,4 +229,8 @@ function requireController(
 ): TransformStreamDefaultControllerImpl {
   if (!controller) throw new Error('Transform stream did not start');
   return controller;
+}
+
+function readResult(value: unknown, done: boolean): object {
+  return { done, value };
 }

@@ -113,7 +113,7 @@ export class CSSStyleSheetImpl
     return this.#ownerRule;
   }
 
-  get cssRules(): CSSRuleList {
+  get cssRules(): CSSRuleListImpl {
     this.assertOriginClean();
     return this.#rules;
   }
@@ -166,7 +166,7 @@ export class CSSStyleSheetImpl
     this.#rules.remove(index);
   }
 
-  replace(text: string): Promise<CSSStyleSheet> {
+  replace(text: string): Promise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
       return Promise.reject(createDOMException(
         domExceptionName.notAllowed,
@@ -226,7 +226,7 @@ export class CSSStyleSheetImpl
   // Deprecated CSSStyleSheet members ----------------------------------------
 
   /** @deprecated Use cssRules instead. */
-  get rules(): CSSRuleList {
+  get rules(): CSSRuleListImpl {
     return this.cssRules;
   }
 
@@ -287,7 +287,7 @@ export class CSSStyleSheetImpl
 
 type CSSStyleSheetProperties = {
   location: string | null;
-  parentStyleSheet: CSSStyleSheet | null;
+  parentStyleSheet: CSSStyleSheetImpl | null;
   ownerNode: Element | ProcessingInstruction | null;
   ownerRule: CSSRule | null;
   media: CSSOMString | MediaList;

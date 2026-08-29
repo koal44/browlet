@@ -198,6 +198,20 @@ Primary roadmaps: [Fetch](../fetch/roadmap.md) and
 These two projects are independent internally and can be developed in either
 order. Their public completion must use the Priority 1 task and realm model.
 
+Current implementation sequence:
+
+1. Audit Streams directly against the WHATWG Living Standard in document
+   order, including the inherited module cycles; use the reference
+   implementation only as secondary evidence.
+2. Resume the Fetch-independent File API work, beginning with File and FileList.
+3. Implement the Fetch-independent XHR prerequisites consumed by File and
+   Fetch, especially `ProgressEvent` and `FormData`.
+4. Implement Fetch's records, author APIs, and first transport slices.
+5. Return to the File API and XHR tails whose normative algorithms consume
+   Fetch, rather than approximating those dependencies early.
+
+Priority deliverables:
+
 1. Implement Fetch header, body, request, response, controller, and filtered
    response records plus author-facing `Headers`, `Request`, and `Response`
    without network I/O (Fetch §§2 and 5).

@@ -22,19 +22,19 @@ describe('EventTargetImpl', () => {
 
   it('does not register null callbacks or listeners with aborted signals', () => {
     const target = new EventTargetImpl();
-    const liveSignal = new AbortSignalImpl();
-    const abortedSignal = new AbortSignalImpl();
+    const liveSignal = new AbortSignalImpl(globalThis);
+    const abortedSignal = new AbortSignalImpl(globalThis);
     const callback = vi.fn();
     AbortSignalImpl.signalAbort(abortedSignal);
 
     target.addEventListener('null', null, {
-      signal: liveSignal as unknown as AbortSignal,
+      signal: liveSignal,
     });
     target.addEventListener('aborted', () => {}, {
-      signal: abortedSignal as unknown as AbortSignal,
+      signal: abortedSignal,
     });
     target.addEventListener('aborted', callback, {
-      signal: abortedSignal as unknown as AbortSignal,
+      signal: abortedSignal,
     });
     target.dispatchEvent(new EventImpl('null'));
     target.dispatchEvent(new EventImpl('aborted'));
@@ -44,15 +44,15 @@ describe('EventTargetImpl', () => {
 
   it('does not let a duplicate listener signal remove the original', () => {
     const target = new EventTargetImpl();
-    const firstSignal = new AbortSignalImpl();
-    const duplicateSignal = new AbortSignalImpl();
+    const firstSignal = new AbortSignalImpl(globalThis);
+    const duplicateSignal = new AbortSignalImpl(globalThis);
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
-      signal: firstSignal as unknown as AbortSignal,
+      signal: firstSignal,
     });
     target.addEventListener('ready', callback, {
-      signal: duplicateSignal as unknown as AbortSignal,
+      signal: duplicateSignal,
     });
     AbortSignalImpl.signalAbort(duplicateSignal);
     target.dispatchEvent(new EventImpl('ready'));
@@ -66,7 +66,7 @@ describe('EventTargetImpl', () => {
     const observations: unknown[] = [];
 
     target.addEventListener('ready', function(
-      this: EventTarget,
+      this: EventTargetImpl,
       received,
     ) {
       observations.push(
@@ -165,10 +165,13 @@ describe('EventTargetImpl', () => {
     const host = document.getElementById('host')!;
     const root = new ShadowRootImpl(host, 'closed');
     const target = document.createElement('button');
-    const targets: (EventTarget | null)[] = [];
+    const targets: (EventTargetImpl | null)[] = [];
 
     root.appendChild(target);
-    target.addEventListener('ready', (event) => targets.push(event.target));
+    target.addEventListener(
+      'ready',
+      (event: EventImpl) => targets.push(event.target),
+    );
     root.addEventListener('ready', (event) => targets.push(event.target));
     host.addEventListener('ready', (event) => targets.push(event.target));
     document.addEventListener('ready', (event) => targets.push(event.target));
@@ -237,11 +240,11 @@ describe('EventTargetImpl', () => {
 
   it('removes signal-bound listeners when their signal aborts', () => {
     const target = new EventTargetImpl();
-    const signal = new AbortSignalImpl();
+    const signal = new AbortSignalImpl(globalThis);
     const callback = vi.fn();
 
     target.addEventListener('ready', callback, {
-      signal: signal as unknown as AbortSignal,
+      signal,
     });
     AbortSignalImpl.signalAbort(signal);
     target.dispatchEvent(new EventImpl('ready'));

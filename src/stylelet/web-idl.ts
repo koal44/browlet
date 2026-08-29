@@ -3,6 +3,10 @@ import {
   roAttr, xattr, type Definition,
 } from '../web-idl/declaration/index';
 
+// These object-typed CSSOM members are provisional. Stylelet must define and
+// export the CSSOM interfaces before Browlet can project their semantic
+// implementations; do not patch individual host returns around that boundary.
+
 /*
  * partial interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;

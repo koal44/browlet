@@ -26,6 +26,9 @@ describe('File API Blob projection', () => {
     expect(Reflect.get(blob, 'size')).toBe(4);
     expect(Reflect.get(blob, 'type')).toBe('text/plain');
     await expect(call(blob, 'text')).resolves.toBe('a\r\nb');
+
+    const repaired = constructBlob(window, ['A\ud800B']);
+    await expect(call(repaired, 'text')).resolves.toBe('A\uFFFDB');
   });
 
   it('returns realm-owned streams, promises, and byte objects', async () => {
@@ -65,6 +68,49 @@ describe('File API Blob projection', () => {
     const bytes = await promise;
     expect(bytes).toBeInstanceOf(requireFunction(first, 'Uint8Array'));
     expect(bytes).not.toBeInstanceOf(requireFunction(second, 'Uint8Array'));
+
+    const secondBlobPrototype = requireObject(
+      requireFunction(second, 'Blob'),
+      'prototype',
+    );
+    const streamMethod = Reflect.get(secondBlobPrototype, 'stream') as unknown;
+    const sliceMethod = Reflect.get(secondBlobPrototype, 'slice') as unknown;
+    if (typeof streamMethod !== 'function' || typeof sliceMethod !== 'function') {
+      throw new Error('Blob stream or slice method is missing');
+    }
+    const stream = Reflect.apply(streamMethod, blob, []) as object;
+    const slice = Reflect.apply(sliceMethod, blob, []) as object;
+
+    expect(stream).toBeInstanceOf(requireFunction(first, 'ReadableStream'));
+    expect(stream).not.toBeInstanceOf(requireFunction(second, 'ReadableStream'));
+    expect(slice).toBeInstanceOf(requireFunction(first, 'Blob'));
+    expect(slice).not.toBeInstanceOf(requireFunction(second, 'Blob'));
+  });
+
+  it('adopts the projection realm for a host-created Blob', () => {
+    const first = createWindow();
+    const second = createWindow();
+    const blob = projectBlob(
+      first,
+      new BlobImpl('\n', ['A']),
+    );
+    const secondBlobPrototype = requireObject(
+      requireFunction(second, 'Blob'),
+      'prototype',
+    );
+    const streamMethod = Reflect.get(secondBlobPrototype, 'stream') as unknown;
+    const sliceMethod = Reflect.get(secondBlobPrototype, 'slice') as unknown;
+    if (typeof streamMethod !== 'function' || typeof sliceMethod !== 'function') {
+      throw new Error('Blob stream or slice method is missing');
+    }
+
+    const stream = Reflect.apply(streamMethod, blob, []) as object;
+    const slice = Reflect.apply(sliceMethod, blob, []) as object;
+
+    expect(stream).toBeInstanceOf(requireFunction(first, 'ReadableStream'));
+    expect(stream).not.toBeInstanceOf(requireFunction(second, 'ReadableStream'));
+    expect(slice).toBeInstanceOf(requireFunction(first, 'Blob'));
+    expect(slice).not.toBeInstanceOf(requireFunction(second, 'Blob'));
   });
 
   it('streams implementation-defined chunks in order and then closes', async () => {
@@ -137,7 +183,7 @@ describe('File API Blob projection', () => {
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
     const implementation = BlobImpl.create(
-      { nativeLineEnding: '\n' },
+      '\n',
       BlobData.fromSource(source),
       '',
       source.snapshotState,
@@ -173,13 +219,13 @@ describe('File API Blob projection', () => {
       constructBlob(sourceWindow, ['stored'], { type: 'text/plain' }),
       {
         agentCluster,
-        interfaces: browletBindings.forRealm(sourceRealm).interfaces,
+        context: browletBindings.forRealm(sourceRealm).context,
         realm: sourceRealm,
       },
     );
     const clone = structuredDeserialize(serialized, {
       agentCluster,
-      interfaces: browletBindings.forRealm(targetRealm).interfaces,
+      context: browletBindings.forRealm(targetRealm).context,
       realm: targetRealm,
     }) as object;
 
@@ -212,7 +258,7 @@ function constructBlob(
 
 function projectBlob(window: object, implementation: BlobImpl): object {
   const realm = getRelevantRealm(window);
-  return browletBindings.forRealm(realm).objects.project(
+  return browletBindings.forRealm(realm).context.project(
     BlobImpl,
     implementation,
   );
@@ -229,6 +275,14 @@ function call(
 function requireFunction(object: object, name: string): CallableFunction {
   const value = Reflect.get(object, name) as unknown;
   if (typeof value !== 'function') throw new Error(`${name} is not a function`);
+  return value;
+}
+
+function requireObject(object: object, name: string): object {
+  const value = Reflect.get(object, name) as unknown;
+  if (typeof value !== 'object' || value === null) {
+    throw new Error(`${name} is not an object`);
+  }
   return value;
 }
 

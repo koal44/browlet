@@ -2,8 +2,9 @@ import {
   arg, defineInterface, idlType, impl, op, roAttr, reference,
 } from '../web-idl/declaration/index';
 import {
-  type StreamAbortController, type StreamPromise,
-} from './environment';
+  type StreamAbortController, type StreamAbortSignal,
+} from './abort';
+import type { StreamPromise } from './promise';
 import type { QueueContainer } from './queue-with-sizes';
 import type { QueuingStrategySize } from './queuing-strategy';
 import type { WritableStreamImpl } from './writable-stream';
@@ -21,7 +22,7 @@ export class WritableStreamDefaultControllerImpl {
     initializeWritableStreamDefaultControllerSlots(this);
   }
 
-  get signal(): object {
+  get signal(): StreamAbortSignal {
     return getWritableStreamDefaultControllerState(this).abortController.signal;
   }
 

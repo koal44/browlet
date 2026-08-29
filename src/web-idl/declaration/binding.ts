@@ -1,9 +1,9 @@
 /**
- * Identify the semantic implementation projected by an interface.
+ * Identify the implementation projected by an interface.
  *
  * Interface construction dependencies apply both when the binding creates an
  * implementation internally and when an automatically bound IDL constructor
- * constructs it. Constructor-level `withArgs()` metadata overrides them.
+ * constructs it. Constructor-level `constructWith()` metadata overrides them.
  */
 export function impl(
   implementationClass: ImplementationClass,
@@ -12,10 +12,17 @@ export function impl(
   return { ...options, implementation: implementationClass };
 }
 
-/** Supply hidden arguments to this automatically bound implementation constructor. */
-export function withArgs(
+/** Supply hidden arguments to an automatically bound implementation constructor. */
+export function constructWith(
   ...dependencies: ImplementationDependency[]
-): { readonly binding: ConstructorDependencyBinding; } {
+): { readonly binding: ArgumentInjectionBinding; } {
+  return { binding: { dependencies } };
+}
+
+/** Supply hidden arguments to an automatically bound operation. */
+export function invokeWith(
+  ...dependencies: ImplementationDependency[]
+): { readonly binding: ArgumentInjectionBinding; } {
   return { binding: { dependencies } };
 }
 
@@ -23,10 +30,48 @@ export function withArgs(
  * Prepend newly created semantic platform-object implementations to an
  * automatically bound operation.
  */
-export function withNew(
-  ...dependencies: ImplementationDependency[]
-): { readonly binding: OperationDependencyBinding; } {
-  return { binding: { dependencies } };
+export function invokeWithNew(
+  ...implementations: ImplementationClass[]
+): { readonly binding: ArgumentInjectionBinding; } {
+  return { binding: { dependencies: implementations } };
+}
+
+/**
+ * Declare an indexed getter whose implementation supplies the supported
+ * property indices while ordinary operation binding supplies invocation.
+ */
+export function indexedGetter<Implementation extends object>(
+  getSupportedPropertyIndices: (
+    implementation: Implementation,
+  ) => ReadonlySet<number>,
+): LegacyGetterOptions {
+  return {
+    binding: {
+      getSupportedPropertyIndices() {
+        return getSupportedPropertyIndices(this as Implementation);
+      },
+    },
+    special: 'getter',
+  };
+}
+
+/**
+ * Declare a named getter whose implementation supplies the supported property
+ * names while ordinary operation binding supplies invocation.
+ */
+export function namedGetter<Implementation extends object>(
+  getSupportedPropertyNames: (
+    implementation: Implementation,
+  ) => ReadonlySet<string>,
+): LegacyGetterOptions {
+  return {
+    binding: {
+      getSupportedPropertyNames() {
+        return getSupportedPropertyNames(this as Implementation);
+      },
+    },
+    special: 'getter',
+  };
 }
 
 /** Resolve a semantic constructor dependency from the active binding context. */
@@ -60,7 +105,7 @@ export function callback(
 }
 
 /**
- * Resolve an argument to one of the listed semantic implementations, while
+ * Resolve an argument to one of the listed implementations, while
  * preserving values which implement none of them.
  */
 export function resolveArgs(
@@ -74,12 +119,12 @@ export type ArgumentBinding =
   | ImplementationArgumentBinding;
 
 export type ImplementationDeclaration = {
-  readonly withArgs?: readonly ImplementationDependency[];
+  readonly constructWith?: readonly ImplementationDependency[];
   readonly implementation: ImplementationClass;
 };
 
 export type ImplementationOptions = {
-  readonly withArgs?: readonly ImplementationDependency[];
+  readonly constructWith?: readonly ImplementationDependency[];
 };
 
 export type ImplementationDependency =
@@ -100,13 +145,22 @@ export type ContextValue<Value = unknown> = {
   readonly resolve: (context: unknown) => Value;
 };
 
-export type ConstructorDependencyBinding = {
+export type ArgumentInjectionBinding = {
   readonly dependencies: readonly ImplementationDependency[];
 };
 
-export type OperationDependencyBinding = {
-  readonly dependencies: readonly ImplementationDependency[];
+export type LegacyGetterHooks = {
+  readonly getSupportedPropertyIndices?: SupportedPropertyIndicesSteps;
+  readonly getSupportedPropertyNames?: SupportedPropertyNamesSteps;
 };
+
+export type LegacyGetterBinding =
+  | LegacyGetterHooks & {
+    readonly getSupportedPropertyIndices: SupportedPropertyIndicesSteps;
+  }
+  | LegacyGetterHooks & {
+    readonly getSupportedPropertyNames: SupportedPropertyNamesSteps;
+  };
 
 type CallbackArgumentBinding = {
   readonly callbackExceptionBehavior: CallbackExceptionBehavior;
@@ -118,8 +172,23 @@ type ImplementationArgumentBinding = {
 
 export type CallbackExceptionBehavior = 'report' | 'rethrow';
 
+type LegacyGetterOptions = {
+  readonly binding: LegacyGetterBinding;
+  readonly special: 'getter';
+};
+
+type SupportedPropertyIndicesSteps = (
+  this: object,
+  context: unknown,
+) => ReadonlySet<number>;
+
+type SupportedPropertyNamesSteps = (
+  this: object,
+  context: unknown,
+) => ReadonlySet<string>;
+
 /**
- * A semantic implementation class known to the Web IDL binding.
+ * An implementation class known to the Web IDL binding.
  *
  * Declarations need only its identity and prototype. Its concrete constructor
  * signature belongs to the implementation and can vary by platform object.

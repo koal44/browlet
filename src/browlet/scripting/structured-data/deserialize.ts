@@ -24,7 +24,7 @@ export function structuredDeserialize(
   let value: unknown;
   let deep = false;
   let platformObject: ReturnType<
-    StructuredDataEnvironment['interfaces']['create']
+    StructuredDataEnvironment['context']['createPlatformObject']
   > | undefined;
   const { realm } = environment;
 
@@ -108,14 +108,14 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'platform-object': {
-      const interface_ = environment.interfaces.getDefinition(
+      const interface_ = environment.context.getInterface(
         serialized.interfaceName,
       );
-      if (!interface_ || !environment.interfaces.isExposed(interface_)) {
+      if (!interface_ || !environment.context.isInterfaceExposed(interface_)) {
         return throwDataCloneError();
       }
-      platformObject = environment.interfaces.create(interface_);
-      value = platformObject.object;
+      platformObject = environment.context.createPlatformObject(interface_);
+      value = platformObject.platformObject;
       deep = true;
       break;
     }
@@ -147,13 +147,13 @@ export function structuredDeserialize(
     if (!platformObject) {
       throw new Error('A platform-object record was not created');
     }
-    const steps = environment.interfaces.getCapability(
-      platformObject.primaryInterface,
+    const steps = environment.context.getCapability(
+      platformObject.primaryInterface.definition,
       serializable,
     );
     if (!steps) {
       throw new Error(
-        `${platformObject.primaryInterface.name} has no Serializable capability`,
+        `${platformObject.primaryInterface.definition.name} has no Serializable capability`,
       );
     }
     steps.deserializationSteps(

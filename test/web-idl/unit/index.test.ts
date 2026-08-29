@@ -8,6 +8,7 @@ describe('Web IDL package surface', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(declaration),
       'bind',
+      'bindingContext',
       'createBindings',
       'defineCapability',
     ].sort());

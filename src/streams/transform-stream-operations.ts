@@ -1,6 +1,7 @@
 // @rollup-cycle streams-transform
 import { idlType } from '../web-idl/declaration/index';
-import type { StreamEnvironment, StreamPromise } from './environment';
+import type { BindingContext } from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import type { QueuingStrategySize } from './queuing-strategy';
 import {
   createReadableStream, readableStreamDefaultControllerCanCloseOrEnqueue,
@@ -35,10 +36,10 @@ export function initializeTransformStream(
   readableHighWaterMark: number,
   readableSizeAlgorithm: QueuingStrategySize,
 ): void {
-  const environment = TransformStreamImpl.getEnvironment(stream);
+  const context = TransformStreamImpl.getContext(stream);
   const state = TransformStreamImpl.getState(stream);
   state.writable = createWritableStream(
-    environment,
+    context,
     () => undefined,
     (chunk) => transformStreamDefaultSinkWriteAlgorithm(stream, chunk),
     () => transformStreamDefaultSinkCloseAlgorithm(stream),
@@ -48,7 +49,7 @@ export function initializeTransformStream(
     startPromise,
   );
   state.readable = createReadableStream(
-    environment,
+    context,
     () => undefined,
     () => transformStreamDefaultSourcePullAlgorithm(stream),
     (reason) => transformStreamDefaultSourceCancelAlgorithm(stream, reason),
@@ -64,53 +65,53 @@ export function setUpTransformStreamDefaultControllerFromTransformer(
   transformer: object | null,
   transformerDictionary: Transformer,
 ): void {
-  const environment = TransformStreamImpl.getEnvironment(stream);
-  const controller = environment.objects.create(
+  const context = TransformStreamImpl.getContext(stream);
+  const controller = context.construct(
     TransformStreamDefaultControllerImpl,
   );
-  const transformAlgorithm = transformerDictionary.transform === undefined
+  const transformCallback = transformerDictionary.transform;
+  const flushCallback = transformerDictionary.flush;
+  const cancelCallback = transformerDictionary.cancel;
+  const transformAlgorithm = transformCallback === undefined
     ? (chunk: unknown) => {
       try {
         transformStreamDefaultControllerEnqueue(controller, chunk);
-        return environment.promises.createResolved(
+        return context.createResolvedPromise(
           undefined,
           idlType.undefined,
         );
       } catch (exception) {
-        return environment.promises.createRejected(
+        return context.createRejectedPromise(
           exception,
           idlType.undefined,
         );
       }
     }
-    : (chunk: unknown) => requirePromise(environment.callbacks.invoke(
-      transformerDictionary.transform,
+    : (chunk: unknown) => Reflect.apply(
+      transformCallback,
+      transformer,
       [chunk, controller],
-      undefined,
-      transformer,
-    ));
-  const flushAlgorithm = transformerDictionary.flush === undefined
-    ? () => environment.promises.createResolved(
+    );
+  const flushAlgorithm = flushCallback === undefined
+    ? () => context.createResolvedPromise(
       undefined,
       idlType.undefined,
     )
-    : () => requirePromise(environment.callbacks.invoke(
-      transformerDictionary.flush,
+    : () => Reflect.apply(
+      flushCallback,
+      transformer,
       [controller],
-      undefined,
-      transformer,
-    ));
-  const cancelAlgorithm = transformerDictionary.cancel === undefined
-    ? () => environment.promises.createResolved(
+    );
+  const cancelAlgorithm = cancelCallback === undefined
+    ? () => context.createResolvedPromise(
       undefined,
       idlType.undefined,
     )
-    : (reason: unknown) => requirePromise(environment.callbacks.invoke(
-      transformerDictionary.cancel,
-      [reason],
-      undefined,
+    : (reason: unknown) => Reflect.apply(
+      cancelCallback,
       transformer,
-    ));
+      [reason],
+    );
 
   setUpTransformStreamDefaultController(
     stream,
@@ -125,23 +126,23 @@ export function setUpTransformStreamDefaultControllerFromAlgorithms(
   stream: TransformStreamImpl,
   algorithms: TransformStreamAlgorithms,
 ): void {
-  const environment = TransformStreamImpl.getEnvironment(stream);
-  const controller = environment.objects.create(
+  const context = TransformStreamImpl.getContext(stream);
+  const controller = context.construct(
     TransformStreamDefaultControllerImpl,
   );
   setUpTransformStreamDefaultController(
     stream,
     controller,
     (chunk) => runTransformAlgorithm(
-      environment,
+      context,
       () => algorithms.transform(chunk, controller),
     ),
     () => runTransformAlgorithm(
-      environment,
+      context,
       () => algorithms.flush?.(controller),
     ),
     (reason) => runTransformAlgorithm(
-      environment,
+      context,
       () => algorithms.cancel?.(reason),
     ),
   );
@@ -164,9 +165,12 @@ export function transformStreamDefaultControllerEnqueue(
   const stream = TransformStreamDefaultControllerImpl.getState(
     controller,
   ).stream;
+  const context = TransformStreamImpl.getContext(stream);
   const readableController = getReadableController(stream);
   if (!readableStreamDefaultControllerCanCloseOrEnqueue(readableController)) {
-    throw new TypeError('Readable side is not in a state that permits enqueue');
+    throw new context.realm.intrinsics.typeError(
+      'Readable side is not in a state that permits enqueue',
+    );
   }
 
   try {
@@ -208,10 +212,13 @@ export function transformStreamDefaultControllerTerminate(
   const stream = TransformStreamDefaultControllerImpl.getState(
     controller,
   ).stream;
+  const context = TransformStreamImpl.getContext(stream);
   readableStreamDefaultControllerClose(getReadableController(stream));
   transformStreamErrorWritableAndUnblockWrite(
     stream,
-    new TypeError('TransformStream terminated'),
+    new context.realm.intrinsics.typeError(
+      'TransformStream terminated',
+    ),
   );
 }
 
@@ -236,16 +243,16 @@ function setUpTransformStreamDefaultController(
 }
 
 function runTransformAlgorithm(
-  environment: StreamEnvironment,
+  context: BindingContext,
   steps: () => unknown,
 ): StreamPromise {
   try {
-    return environment.promises.createResolved(
+    return context.createResolvedPromise(
       steps(),
       idlType.undefined,
     );
   } catch (exception) {
-    return environment.promises.createRejected(
+    return context.createRejectedPromise(
       exception,
       idlType.undefined,
     );
@@ -287,11 +294,11 @@ function transformStreamSetBackpressure(
   if (state.backpressure === backpressure) {
     throw new Error('Transform stream backpressure did not change');
   }
-  const environment = TransformStreamImpl.getEnvironment(stream);
+  const context = TransformStreamImpl.getContext(stream);
   if (state.backpressureChangePromise) {
-    environment.promises.resolve(state.backpressureChangePromise, undefined);
+    context.resolvePromise(state.backpressureChangePromise, undefined);
   }
-  state.backpressureChangePromise = environment.promises.create(
+  state.backpressureChangePromise = context.createPromise(
     idlType.undefined,
   );
   state.backpressure = backpressure;
@@ -302,8 +309,8 @@ function transformStreamDefaultControllerPerformTransform(
   chunk: unknown,
 ): StreamPromise {
   const state = TransformStreamDefaultControllerImpl.getState(controller);
-  const environment = TransformStreamImpl.getEnvironment(state.stream);
-  return environment.promises.react(
+  const context = TransformStreamImpl.getContext(state.stream);
+  return context.reactToPromise(
     requireAlgorithm(state.transformAlgorithm, 'transform')(chunk),
     idlType.undefined,
     {
@@ -332,8 +339,8 @@ function transformStreamDefaultSinkWriteAlgorithm(
     );
   }
 
-  const environment = TransformStreamImpl.getEnvironment(stream);
-  return environment.promises.react(
+  const context = TransformStreamImpl.getContext(stream);
+  return context.reactToPromise(
     requireStateMember(
       state.backpressureChangePromise,
       'backpressure change promise',
@@ -364,31 +371,31 @@ function transformStreamDefaultSinkAbortAlgorithm(
   );
   if (controllerState.finishPromise) return controllerState.finishPromise;
 
-  const environment = TransformStreamImpl.getEnvironment(stream);
+  const context = TransformStreamImpl.getContext(stream);
   const readable = requireStateMember(state.readable, 'readable');
-  const finishPromise = environment.promises.create(idlType.undefined);
+  const finishPromise = context.createPromise(idlType.undefined);
   controllerState.finishPromise = finishPromise;
   const cancelPromise = requireAlgorithm(
     controllerState.cancelAlgorithm,
     'cancel',
   )(reason);
   clearAlgorithms(controller);
-  environment.promises.react(cancelPromise, idlType.undefined, {
+  context.reactToPromise(cancelPromise, idlType.undefined, {
     fulfilled() {
       const readableState = ReadableStreamImpl.getState(readable);
       if (readableState.state === 'errored') {
-        environment.promises.reject(finishPromise, readableState.storedError);
+        context.rejectPromise(finishPromise, readableState.storedError);
       } else {
         readableStreamDefaultControllerError(
           getReadableController(stream),
           reason,
         );
-        environment.promises.resolve(finishPromise, undefined);
+        context.resolvePromise(finishPromise, undefined);
       }
     },
     rejected(error) {
       readableStreamDefaultControllerError(getReadableController(stream), error);
-      environment.promises.reject(finishPromise, error);
+      context.rejectPromise(finishPromise, error);
     },
   });
   return finishPromise;
@@ -404,28 +411,28 @@ function transformStreamDefaultSinkCloseAlgorithm(
   );
   if (controllerState.finishPromise) return controllerState.finishPromise;
 
-  const environment = TransformStreamImpl.getEnvironment(stream);
+  const context = TransformStreamImpl.getContext(stream);
   const readable = requireStateMember(state.readable, 'readable');
-  const finishPromise = environment.promises.create(idlType.undefined);
+  const finishPromise = context.createPromise(idlType.undefined);
   controllerState.finishPromise = finishPromise;
   const flushPromise = requireAlgorithm(
     controllerState.flushAlgorithm,
     'flush',
   )();
   clearAlgorithms(controller);
-  environment.promises.react(flushPromise, idlType.undefined, {
+  context.reactToPromise(flushPromise, idlType.undefined, {
     fulfilled() {
       const readableState = ReadableStreamImpl.getState(readable);
       if (readableState.state === 'errored') {
-        environment.promises.reject(finishPromise, readableState.storedError);
+        context.rejectPromise(finishPromise, readableState.storedError);
       } else {
         readableStreamDefaultControllerClose(getReadableController(stream));
-        environment.promises.resolve(finishPromise, undefined);
+        context.resolvePromise(finishPromise, undefined);
       }
     },
     rejected(error) {
       readableStreamDefaultControllerError(getReadableController(stream), error);
-      environment.promises.reject(finishPromise, error);
+      context.rejectPromise(finishPromise, error);
     },
   });
   return finishPromise;
@@ -456,27 +463,27 @@ function transformStreamDefaultSourceCancelAlgorithm(
   );
   if (controllerState.finishPromise) return controllerState.finishPromise;
 
-  const environment = TransformStreamImpl.getEnvironment(stream);
+  const context = TransformStreamImpl.getContext(stream);
   const writable = requireStateMember(state.writable, 'writable');
-  const finishPromise = environment.promises.create(idlType.undefined);
+  const finishPromise = context.createPromise(idlType.undefined);
   controllerState.finishPromise = finishPromise;
   const cancelPromise = requireAlgorithm(
     controllerState.cancelAlgorithm,
     'cancel',
   )(reason);
   clearAlgorithms(controller);
-  environment.promises.react(cancelPromise, idlType.undefined, {
+  context.reactToPromise(cancelPromise, idlType.undefined, {
     fulfilled() {
       const writableState = getWritableStreamState(writable);
       if (writableState.state === 'errored') {
-        environment.promises.reject(finishPromise, writableState.storedError);
+        context.rejectPromise(finishPromise, writableState.storedError);
       } else {
         writableStreamDefaultControllerErrorIfNeeded(
           requireWritableController(writable),
           reason,
         );
         transformStreamUnblockWrite(stream);
-        environment.promises.resolve(finishPromise, undefined);
+        context.resolvePromise(finishPromise, undefined);
       }
     },
     rejected(error) {
@@ -485,7 +492,7 @@ function transformStreamDefaultSourceCancelAlgorithm(
         error,
       );
       transformStreamUnblockWrite(stream);
-      environment.promises.reject(finishPromise, error);
+      context.rejectPromise(finishPromise, error);
     },
   });
   return finishPromise;
@@ -548,14 +555,6 @@ function requireAlgorithm<Algorithm>(
 ): Algorithm {
   if (!algorithm) throw new Error(`Transform stream ${name} algorithm is gone`);
   return algorithm;
-}
-
-function requirePromise(value: unknown): StreamPromise {
-  if ((typeof value !== 'object' || value === null) &&
-    typeof value !== 'function') {
-    throw new TypeError('Transformer callback did not return a Web IDL promise');
-  }
-  return value;
 }
 
 function requireStateMember<Value>(

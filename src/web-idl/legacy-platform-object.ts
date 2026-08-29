@@ -27,11 +27,12 @@ export class LegacyPlatformObjectBinding {
   }
 
   createObject(
+    target: object,
     implementation: object,
     interface_: AssembledInterface,
   ): object {
     const properties = this.#getLegacyProperties(interface_);
-    if (!properties) return implementation;
+    if (!properties) return target;
 
     const handler = Object.assign(
       Object.create(null) as ProxyHandler<object>,
@@ -42,24 +43,40 @@ export class LegacyPlatformObjectBinding {
           descriptor: PropertyDescriptor,
         ) => this.#defineOwnProperty(
           target,
+          implementation,
           property,
           descriptor,
           properties,
         ),
         deleteProperty: (target: object, property: string | symbol) =>
-          this.#delete(target, property, properties),
+          this.#delete(target, implementation, property, properties),
         get: (
           target: object,
           property: string | symbol,
           receiver: unknown,
-        ) => this.#get(target, property, receiver, properties),
+        ) => this.#get(
+          target,
+          implementation,
+          property,
+          receiver,
+          properties,
+        ),
         getOwnPropertyDescriptor: (
           target: object,
           property: string | symbol,
-        ) => this.#getOwnProperty(target, property, properties),
+        ) => this.#getOwnProperty(
+          target,
+          implementation,
+          property,
+          properties,
+        ),
         has: (target: object, property: string | symbol) =>
-          this.#has(target, property, properties),
-        ownKeys: (target: object) => this.#ownPropertyKeys(target, properties),
+          this.#has(target, implementation, property, properties),
+        ownKeys: (target: object) => this.#ownPropertyKeys(
+          target,
+          implementation,
+          properties,
+        ),
         preventExtensions: () => false,
         set: (
           target: object,
@@ -68,6 +85,7 @@ export class LegacyPlatformObjectBinding {
           receiver: unknown,
         ) => this.#set(
           target,
+          implementation,
           property,
           value,
           receiver,
@@ -75,7 +93,7 @@ export class LegacyPlatformObjectBinding {
         ),
       } satisfies ProxyHandler<object>,
     );
-    return new Proxy(implementation, handler);
+    return new Proxy(target, handler);
   }
 
   supportsIndexedProperties(interface_: AssembledInterface): boolean {
@@ -97,6 +115,7 @@ export class LegacyPlatformObjectBinding {
 
   #get(
     target: object,
+    implementation: object,
     property: string | symbol,
     receiver: unknown,
     properties: LegacyProperties,
@@ -104,7 +123,12 @@ export class LegacyPlatformObjectBinding {
     if (typeof property === 'symbol') {
       return Reflect.get(target, property, receiver);
     }
-    const descriptor = this.#getOwnProperty(target, property, properties);
+    const descriptor = this.#getOwnProperty(
+      target,
+      implementation,
+      property,
+      properties,
+    );
     if (!descriptor) return Reflect.get(target, property, receiver);
     if (!isAccessorDescriptor(descriptor)) return descriptor.value;
     if (!descriptor.get) return undefined;
@@ -114,17 +138,24 @@ export class LegacyPlatformObjectBinding {
 
   #has(
     target: object,
+    implementation: object,
     property: string | symbol,
     properties: LegacyProperties,
   ): boolean {
     if (typeof property === 'symbol') return Reflect.has(target, property);
-    if (this.#getOwnProperty(target, property, properties)) return true;
+    if (this.#getOwnProperty(
+      target,
+      implementation,
+      property,
+      properties,
+    )) return true;
     const parent = Reflect.getPrototypeOf(target);
     return parent ? Reflect.has(parent, property) : false;
   }
 
   #getOwnProperty(
     target: object,
+    implementation: object,
     property: string | symbol,
     properties: LegacyProperties,
     ignoreNamedProperties = false,
@@ -135,7 +166,7 @@ export class LegacyPlatformObjectBinding {
 
     if (properties.indexed && isArrayIndex(property)) {
       const descriptor = this.#getIndexedProperty(
-        target,
+        implementation,
         property,
         properties.indexed,
       );
@@ -145,9 +176,18 @@ export class LegacyPlatformObjectBinding {
     if (
       properties.named &&
       !ignoreNamedProperties &&
-      this.#namedPropertyVisible(target, property, properties.named)
+      this.#namedPropertyVisible(
+        target,
+        implementation,
+        property,
+        properties.named,
+      )
     ) {
-      return this.#getNamedProperty(target, property, properties.named);
+      return this.#getNamedProperty(
+        implementation,
+        property,
+        properties.named,
+      );
     }
     return Reflect.getOwnPropertyDescriptor(target, property);
   }
@@ -207,17 +247,18 @@ export class LegacyPlatformObjectBinding {
 
   #set(
     target: object,
+    implementation: object,
     property: string | symbol,
     value: unknown,
     receiver: unknown,
     properties: LegacyProperties,
   ): boolean {
     const receiverTargetsObject = this.#context.platformObjects
-      .getImplementationObject(receiver) === target;
+      .getImplementationObject(receiver) === implementation;
     if (receiverTargetsObject && typeof property === 'string') {
       if (properties.indexed?.setter && isArrayIndex(property)) {
         this.#invokeIndexedSetter(
-          target,
+          implementation,
           property,
           value,
           properties.indexed,
@@ -225,13 +266,19 @@ export class LegacyPlatformObjectBinding {
         return true;
       }
       if (properties.named?.setter) {
-        this.#invokeNamedSetter(target, property, value, properties.named);
+        this.#invokeNamedSetter(
+          implementation,
+          property,
+          value,
+          properties.named,
+        );
         return true;
       }
     }
 
     const descriptor = this.#getOwnProperty(
       target,
+      implementation,
       property,
       properties,
       true,
@@ -247,6 +294,7 @@ export class LegacyPlatformObjectBinding {
 
   #defineOwnProperty(
     target: object,
+    implementation: object,
     property: string | symbol,
     descriptor: PropertyDescriptor,
     properties: LegacyProperties,
@@ -260,7 +308,7 @@ export class LegacyPlatformObjectBinding {
         return false;
       }
       this.#invokeIndexedSetter(
-        target,
+        implementation,
         property,
         descriptor.value,
         properties.indexed,
@@ -274,7 +322,10 @@ export class LegacyPlatformObjectBinding {
       typeof property === 'string' &&
       !named.unforgeableNames.has(property)
     ) {
-      const creating = !this.#getSupportedNames(target, named).has(property);
+      const creating = !this.#getSupportedNames(
+        implementation,
+        named,
+      ).has(property);
       if (
         named.overrideBuiltIns ||
         !Reflect.getOwnPropertyDescriptor(target, property)
@@ -282,7 +333,12 @@ export class LegacyPlatformObjectBinding {
         if (!creating && !named.setter) return false;
         if (named.setter) {
           if (!isDataDescriptor(descriptor)) return false;
-          this.#invokeNamedSetter(target, property, descriptor.value, named);
+          this.#invokeNamedSetter(
+            implementation,
+            property,
+            descriptor.value,
+            named,
+          );
           return true;
         }
       }
@@ -292,6 +348,7 @@ export class LegacyPlatformObjectBinding {
 
   #delete(
     target: object,
+    implementation: object,
     property: string | symbol,
     properties: LegacyProperties,
   ): boolean {
@@ -301,36 +358,52 @@ export class LegacyPlatformObjectBinding {
       isArrayIndex(property)
     ) {
       return !this.#getSupportedIndices(
-        target,
+        implementation,
         properties.indexed,
       ).has(toArrayIndex(property));
     }
     if (
       properties.named &&
       typeof property === 'string' &&
-      this.#namedPropertyVisible(target, property, properties.named)
+      this.#namedPropertyVisible(
+        target,
+        implementation,
+        property,
+        properties.named,
+      )
     ) {
       if (!properties.named.deleter) return false;
-      return this.#invokeNamedDeleter(target, property, properties.named);
+      return this.#invokeNamedDeleter(
+        implementation,
+        property,
+        properties.named,
+      );
     }
     return Reflect.deleteProperty(target, property);
   }
 
   #ownPropertyKeys(
     target: object,
+    implementation: object,
     properties: LegacyProperties,
   ): (string | symbol)[] {
     const keys = new Set<string | symbol>();
     if (properties.indexed) {
-      const indices = [...this.#getSupportedIndices(target, properties.indexed)];
+      const indices = [
+        ...this.#getSupportedIndices(implementation, properties.indexed),
+      ];
       indices.sort((left, right) => left - right);
       for (const index of indices) keys.add(String(index));
     }
     if (properties.named) {
-      const names = this.#getSupportedNames(target, properties.named);
+      const names = this.#getSupportedNames(
+        implementation,
+        properties.named,
+      );
       for (const name of names) {
         if (this.#namedPropertyVisible(
           target,
+          implementation,
           name,
           properties.named,
           names,
@@ -467,9 +540,10 @@ export class LegacyPlatformObjectBinding {
 
   #namedPropertyVisible(
     target: object,
+    implementation: object,
     property: string,
     properties: NamedProperties,
-    supportedNames = this.#getSupportedNames(target, properties),
+    supportedNames = this.#getSupportedNames(implementation, properties),
   ): boolean {
     if (!supportedNames.has(property)) return false;
     if (Reflect.getOwnPropertyDescriptor(target, property)) return false;

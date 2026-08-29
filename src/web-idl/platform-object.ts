@@ -4,27 +4,84 @@ import type { AttributeMember } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
 
 export class PlatformObjectRegistry {
+  // One registry belongs to one binding world. A separate world can therefore
+  // associate its own platform object without weakening this identity boundary.
+  #implementationOrigins = new WeakMap<object, PlatformImplementationOrigin>();
   #implementationRecords = new WeakMap<object, PlatformObjectRecord>();
   #objectRecords = new WeakMap<object, PlatformObjectRecord>();
+  #realmProjectors = new WeakMap<WebIDLRealmHost, PlatformObjectProjector>();
+
+  registerRealm(
+    realm: WebIDLRealmHost,
+    project: PlatformObjectProjector,
+  ): void {
+    if (this.#realmProjectors.has(realm)) {
+      throw new TypeError('Realm already has a platform-object projector');
+    }
+    this.#realmProjectors.set(realm, project);
+  }
+
+  associateOrigin(
+    implementation: object,
+    primaryInterface: AssembledInterface,
+    realm: WebIDLRealmHost,
+  ): void {
+    if (
+      this.#objectRecords.has(implementation) ||
+      this.#implementationRecords.has(implementation) ||
+      this.#implementationOrigins.has(implementation)
+    ) {
+      throw new TypeError('Implementation object is already associated');
+    }
+    this.#implementationOrigins.set(implementation, {
+      primaryInterface,
+      realm,
+    });
+  }
+
+  projectImplementationOrigin(implementation: object): object {
+    const origin = this.#implementationOrigins.get(implementation);
+    if (!origin) throw new TypeError('Implementation object has no origin');
+    const project = this.#realmProjectors.get(origin.realm);
+    if (!project) {
+      throw new TypeError('Implementation origin has no registered realm');
+    }
+    return project(implementation, origin.primaryInterface);
+  }
 
   associate(
-    object: object,
+    platformObject: object,
     implementation: object,
     primaryInterface: AssembledInterface,
     realm: WebIDLRealmHost,
   ): PlatformObjectRecord {
     if (
-      this.#objectRecords.has(object) ||
-      this.#implementationRecords.has(object) ||
+      this.#objectRecords.has(platformObject) ||
+      this.#implementationRecords.has(platformObject) ||
+      this.#implementationOrigins.has(platformObject) ||
       this.#objectRecords.has(implementation) ||
       this.#implementationRecords.has(implementation)
     ) {
       throw new TypeError('Platform object is already associated');
     }
 
-    const record = { implementation, object, primaryInterface, realm };
+    const origin = this.#implementationOrigins.get(implementation);
+    if (origin && (
+      origin.primaryInterface !== primaryInterface ||
+      origin.realm !== realm
+    )) {
+      throw new TypeError('Implementation object has another originating realm');
+    }
+
+    const record = {
+      implementation,
+      platformObject,
+      primaryInterface,
+      realm,
+    };
+    this.#implementationOrigins.delete(implementation);
     this.#implementationRecords.set(implementation, record);
-    this.#objectRecords.set(object, record);
+    this.#objectRecords.set(platformObject, record);
     return record;
   }
 
@@ -40,12 +97,20 @@ export class PlatformObjectRegistry {
       : undefined;
   }
 
+  getImplementationOrigin(
+    value: unknown,
+  ): PlatformImplementationOrigin | undefined {
+    return isObject(value)
+      ? this.#implementationOrigins.get(value)
+      : undefined;
+  }
+
   getImplementationObject(value: unknown): object | undefined {
     return this.getRecord(value)?.implementation;
   }
 
   getPlatformObject(value: unknown): object | undefined {
-    return this.getImplementationRecord(value)?.object;
+    return this.getImplementationRecord(value)?.platformObject;
   }
 
   changeRealm(
@@ -70,7 +135,14 @@ export class PlatformObjectRegistry {
     record: PlatformObjectRecord,
     interface_: AssembledInterface,
   ): boolean {
-    let current: AssembledInterface | undefined = record.primaryInterface;
+    return this.interfaceImplements(record.primaryInterface, interface_);
+  }
+
+  interfaceImplements(
+    primaryInterface: AssembledInterface,
+    interface_: AssembledInterface,
+  ): boolean {
+    let current: AssembledInterface | undefined = primaryInterface;
 
     while (current) {
       if (current.definition === interface_.definition) return true;
@@ -81,11 +153,21 @@ export class PlatformObjectRegistry {
   }
 }
 
+export type PlatformImplementationOrigin = {
+  primaryInterface: AssembledInterface;
+  realm: WebIDLRealmHost;
+};
+
+type PlatformObjectProjector = (
+  implementation: object,
+  primaryInterface: AssembledInterface,
+) => object;
+
 export type PlatformObjectRecord = {
   implementation: object;
   // Per-object IDL state follows the object when its associated realm changes.
   mapEntries?: Map<unknown, unknown>;
-  object: object;
+  platformObject: object;
   observableArrays?: WeakMap<
     AttributeMember,
     ObservableArrayHandle<unknown, unknown>

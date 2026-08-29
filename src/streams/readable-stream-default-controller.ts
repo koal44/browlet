@@ -3,8 +3,9 @@ import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import {
   cancelSteps, pullSteps, releaseSteps,
 } from './internal-methods';
@@ -23,11 +24,11 @@ import {
 } from './readable-stream-operations';
 
 export class ReadableStreamDefaultControllerImpl {
-  readonly #environment: StreamEnvironment;
+  readonly #context: BindingContext;
   #state?: ReadableStreamDefaultControllerState;
 
-  constructor(environment: StreamEnvironment) {
-    this.#environment = environment;
+  constructor(context: BindingContext) {
+    this.#context = context;
   }
 
   get desiredSize(): number | null {
@@ -36,14 +37,18 @@ export class ReadableStreamDefaultControllerImpl {
 
   close(): void {
     if (!readableStreamDefaultControllerCanCloseOrEnqueue(this)) {
-      throw new TypeError('The stream is not in a state that permits close');
+      throw new this.#context.realm.intrinsics.typeError(
+        'The stream is not in a state that permits close',
+      );
     }
     readableStreamDefaultControllerClose(this);
   }
 
   enqueue(chunk?: unknown): void {
     if (!readableStreamDefaultControllerCanCloseOrEnqueue(this)) {
-      throw new TypeError('The stream is not in a state that permits enqueue');
+      throw new this.#context.realm.intrinsics.typeError(
+        'The stream is not in a state that permits enqueue',
+      );
     }
     readableStreamDefaultControllerEnqueue(this, chunk);
   }
@@ -69,14 +74,14 @@ export class ReadableStreamDefaultControllerImpl {
 
   // -- Friends ----------------------------------------------------------
 
-  static getEnvironment(
+  static getContext(
     controller: ReadableStreamDefaultControllerImpl,
-  ): StreamEnvironment {
-    return controller.#environment;
+  ): BindingContext {
+    return controller.#context;
   }
 
   static is(value: unknown): value is ReadableStreamDefaultControllerImpl {
-    return typeof value === 'object' && value !== null && #environment in value;
+    return typeof value === 'object' && value !== null && #context in value;
   }
 
   static getState(
@@ -115,7 +120,7 @@ export const readableStreamDefaultControllerIDL = defineInterface({
   name: 'ReadableStreamDefaultController',
   exposed: '*',
   implementation: impl(ReadableStreamDefaultControllerImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),

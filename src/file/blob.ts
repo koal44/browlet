@@ -1,22 +1,29 @@
 import { utf8Decode, utf8Encode } from '../encoding/utf-8';
+import { TextDecoderStreamImpl } from '../encoding/text-decoder-stream';
 import { domExceptionName, createDOMException } from '../shared/dom-exception';
 import {
   closeReadableStream, enqueueReadableStream, errorReadableStream,
   createReadableStreamWithByteReadingSupport, getReadableStreamReader,
   readAllBytes, type ReadableStreamImpl,
 } from '../streams/index';
-import { getBufferSourceCopy } from '../web-idl/buffer-source';
+import {
+  createArrayBuffer, createArrayBufferView, getBufferSourceCopy,
+} from '../web-idl/buffer-source';
 import {
   arg, ctor, defineDictionary, defineEnumeration, defineInterface,
-  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, impl, op,
-  promise, reference, roAttr, sequence, union, withArgs, xattr,
+  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, op,
+  promise, reference, roAttr, sequence, union, invokeWith, xattr,
   type WebIDLType,
 } from '../web-idl/declaration/index';
+import {
+  bind, bindingContext, type BindingContext,
+} from '../web-idl/projection';
 import {
   BlobData, BlobReadFailure, type BlobSnapshotState,
 } from './blob-data';
 import {
-  fileEnvironment, type BlobEnvironment, type FileEnvironment,
+  getNativeLineEnding, queueFileReadingTask, runFileStepsInParallel,
+  type NativeLineEnding,
 } from './environment';
 
 /*
@@ -49,22 +56,26 @@ import {
  * typedef (BufferSource or Blob or USVString) BlobPart;
  */
 export class BlobImpl {
+  #context: BindingContext | null;
   #data: BlobData;
-  #environment: BlobEnvironment;
-  #fileEnvironment: FileEnvironment | null;
+  #nativeLineEnding: NativeLineEnding;
   #snapshotState: BlobSnapshotState;
   #type: string;
 
   constructor(
-    environment: BlobEnvironment,
+    contextOrLineEnding: BindingContext | NativeLineEnding,
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
   ) {
-    this.#environment = environment;
-    this.#fileEnvironment = isFileEnvironment(environment)
-      ? environment
-      : null;
-    this.#data = processBlobParts(blobParts, options, environment);
+    const context = typeof contextOrLineEnding === 'string'
+      ? null
+      : contextOrLineEnding;
+    const nativeLineEnding = context === null
+      ? contextOrLineEnding as NativeLineEnding
+      : getNativeLineEnding(context);
+    this.#context = context;
+    this.#nativeLineEnding = nativeLineEnding;
+    this.#data = processBlobParts(blobParts, options, nativeLineEnding);
     this.#snapshotState = this.#data.captureSnapshotState();
     this.#type = normalizeBlobType(options.type ?? '');
   }
@@ -85,59 +96,67 @@ export class BlobImpl {
     return sliceBlob(this, start, end, contentType);
   }
 
-  stream(environment: FileEnvironment): ReadableStreamImpl {
-    return getBlobStream(this, this.#fileEnvironment ?? environment);
+  stream(context: BindingContext): ReadableStreamImpl {
+    return getBlobStream(this, this.#context ?? context);
   }
 
-  text(environment: FileEnvironment): object {
+  text(context: BindingContext): object {
     return readBlob(
       this,
-      this.#fileEnvironment ?? environment,
+      this.#context ?? context,
       idlType.USVString,
       utf8Decode,
     );
   }
 
-  arrayBuffer(environment: FileEnvironment): object {
-    environment = this.#fileEnvironment ?? environment;
+  arrayBuffer(context: BindingContext): object {
+    context = this.#context ?? context;
     return readBlob(
       this,
-      environment,
+      context,
       idlType.ArrayBuffer,
-      (bytes) => environment.createArrayBuffer(bytes),
+      (bytes) => createArrayBuffer(bytes, context.realm),
     );
   }
 
-  textStream(environment: FileEnvironment): ReadableStreamImpl {
-    environment = this.#fileEnvironment ?? environment;
-    const stream = getBlobStream(this, environment);
-    const decoder = environment.createTextDecoderStream();
+  textStream(context: BindingContext): ReadableStreamImpl {
+    context = this.#context ?? context;
+    const stream = getBlobStream(this, context);
+    const decoder = context.construct(TextDecoderStreamImpl);
     return stream.pipeThrough({
       readable: decoder.readable,
       writable: decoder.writable,
+    }, {
+      preventAbort: false,
+      preventCancel: false,
+      preventClose: false,
     });
   }
 
-  bytes(environment: FileEnvironment): object {
-    environment = this.#fileEnvironment ?? environment;
+  bytes(context: BindingContext): object {
+    context = this.#context ?? context;
     return readBlob(
       this,
-      environment,
+      context,
       idlType.Uint8Array,
-      (bytes) => environment.createUint8Array(bytes),
+      (bytes) => createArrayBufferView('Uint8Array', bytes, context.realm),
     );
   }
 
   // -- Friends ----------------------------------------------------------
 
   static create(
-    environment: BlobEnvironment,
+    nativeLineEnding: NativeLineEnding,
     data: BlobData,
     type: string,
     snapshotState: BlobSnapshotState,
+    context: BindingContext | null = null,
   ): BlobImpl {
-    const blob = new BlobImpl(environment);
+    const blob = context
+      ? context.construct(BlobImpl)
+      : new BlobImpl(nativeLineEnding);
     blob.#data = data;
+    blob.#nativeLineEnding = nativeLineEnding;
     blob.#snapshotState = snapshotState;
     blob.#type = type;
     return blob;
@@ -147,8 +166,22 @@ export class BlobImpl {
     return blob.#data;
   }
 
-  static getEnvironment(blob: BlobImpl): BlobEnvironment {
-    return blob.#environment;
+  static getContext(blob: BlobImpl): BindingContext | null {
+    return blob.#context;
+  }
+
+  static adoptContext(
+    blob: BlobImpl,
+    context: BindingContext,
+  ): void {
+    if (blob.#context && blob.#context !== context) {
+      throw new TypeError('Blob already belongs to another binding context');
+    }
+    blob.#context = context;
+  }
+
+  static getNativeLineEnding(blob: BlobImpl): NativeLineEnding {
+    return blob.#nativeLineEnding;
   }
 
   static getSnapshotState(blob: BlobImpl): BlobSnapshotState {
@@ -196,13 +229,13 @@ export type BlobSerializationState = {
 export function processBlobParts(
   parts: Iterable<BlobPart>,
   options: BlobPropertyBag,
-  environment: BlobEnvironment,
+  nativeLineEnding: NativeLineEnding,
 ): BlobData {
   const data: BlobData[] = [];
   for (const element of parts) {
     if (typeof element === 'string') {
       const string = options.endings === 'native'
-        ? convertLineEndingsToNative(element, environment.nativeLineEnding)
+        ? convertLineEndingsToNative(element, nativeLineEnding)
         : element;
       data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
     } else if (BlobImpl.is(element)) {
@@ -235,10 +268,11 @@ export function sliceBlob(
   const span = Math.max(relativeEnd - relativeStart, 0);
 
   return BlobImpl.create(
-    BlobImpl.getEnvironment(blob),
+    BlobImpl.getNativeLineEnding(blob),
     BlobImpl.getData(blob).slice(relativeStart, span),
     normalizeBlobType(contentType ?? ''),
     BlobImpl.getSnapshotState(blob),
+    BlobImpl.getContext(blob),
   );
 }
 
@@ -254,16 +288,16 @@ export function readBlobBytes(
 /** File API §3, get stream. */
 export function getBlobStream(
   blob: BlobImpl,
-  environment: FileEnvironment,
+  context: BindingContext,
 ): ReadableStreamImpl {
   let canceled = false;
   const stream = createReadableStreamWithByteReadingSupport(
-    environment.streams,
+    context,
     undefined,
     () => { canceled = true; },
   );
 
-  environment.runInParallel(() => { void readChunks(); });
+  runFileStepsInParallel(context, () => { void readChunks(); });
   return stream;
 
   async function readChunks(): Promise<void> {
@@ -273,34 +307,34 @@ export function getBlobStream(
         const byteLength = Math.min(blob.size - offset, blobReadChunkSize);
         const bytes = await readBlobBytes(blob, offset, byteLength);
         offset += bytes.length;
-        environment.queueFileReadingTask(() => {
+        queueFileReadingTask(context, () => {
           if (canceled) return;
           try {
             enqueueReadableStream(
               stream,
-              environment.createUint8Array(bytes),
+              createArrayBufferView('Uint8Array', bytes, context.realm),
             );
           } catch (error) {
             canceled = true;
             errorReadableStream(
               stream,
-              environment.realizeException(error),
+              context.realizeException(error),
             );
           }
         });
       }
       if (!canceled) {
-        environment.queueFileReadingTask(() => {
+        queueFileReadingTask(context, () => {
           if (!canceled) closeReadableStream(stream);
         });
       }
     } catch (error) {
-      environment.queueFileReadingTask(() => {
+      queueFileReadingTask(context, () => {
         if (canceled) return;
         canceled = true;
         errorReadableStream(
           stream,
-          environment.realizeException(realizeReadFailure(error)),
+          context.realizeException(realizeReadFailure(error)),
         );
       });
     }
@@ -309,32 +343,26 @@ export function getBlobStream(
 
 function readBlob(
   blob: BlobImpl,
-  environment: FileEnvironment,
+  context: BindingContext,
   resultType: WebIDLType,
   transform: (bytes: Uint8Array) => unknown,
 ): object {
-  const promise = environment.promises.create(resultType);
+  const promise = context.createPromise(resultType);
   try {
-    const reader = getReadableStreamReader(getBlobStream(blob, environment));
+    const reader = getReadableStreamReader(getBlobStream(blob, context));
     readAllBytes(
       reader,
       (bytes) => {
         try {
-          environment.promises.resolve(promise, transform(bytes));
+          context.resolvePromise(promise, transform(bytes));
         } catch (error) {
-          environment.promises.reject(
-            promise,
-            environment.realizeException(error),
-          );
+          context.rejectPromise(promise, error);
         }
       },
-      (reason) => environment.promises.reject(promise, reason),
+      (reason) => context.rejectPromise(promise, reason),
     );
   } catch (error) {
-    environment.promises.reject(
-      promise,
-      environment.realizeException(error),
-    );
+    context.rejectPromise(promise, error);
   }
   return promise;
 }
@@ -368,12 +396,6 @@ function normalizeBlobType(value: string): string {
   return value.toLowerCase();
 }
 
-function isFileEnvironment(
-  environment: BlobEnvironment,
-): environment is FileEnvironment {
-  return 'streams' in environment;
-}
-
 // -- Web IDL ------------------------------------------------------------
 
 export const endingTypeIDL = defineEnumeration({
@@ -404,7 +426,12 @@ export const blobIDL = defineInterface({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  implementation: impl(BlobImpl, { withArgs: [fileEnvironment] }),
+  implementation: bind(BlobImpl, {
+    constructWith: [bindingContext],
+    initializeImplementation(context, value) {
+      BlobImpl.adoptContext(value as BlobImpl, context);
+    },
+  }),
   members: [
     ctor([
       arg('blobParts', sequence(reference(blobPartIDL.name)), {
@@ -430,23 +457,23 @@ export const blobIDL = defineInterface({
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
     op('stream', reference('ReadableStream'), [], {
-      ...withArgs(fileEnvironment),
+      ...invokeWith(bindingContext),
       ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
-      ...withArgs(fileEnvironment),
+      ...invokeWith(bindingContext),
       ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
-      ...withArgs(fileEnvironment),
+      ...invokeWith(bindingContext),
       ...xattr('NewObject'),
     }),
     op('textStream', reference('ReadableStream'), [], {
-      ...withArgs(fileEnvironment),
+      ...invokeWith(bindingContext),
       ...xattr('NewObject'),
     }),
     op('bytes', promise(idlType.Uint8Array), [], {
-      ...withArgs(fileEnvironment),
+      ...invokeWith(bindingContext),
       ...xattr('NewObject'),
     }),
   ],

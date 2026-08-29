@@ -73,7 +73,7 @@ Create modules only as their behavior arrives. The likely final division is:
 | `blob-url-store.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
 | `file-reader.ts` | Asynchronous reader state, methods, cancellation, stream consumption, and event sequencing | §§6.1–6.4 and 7 |
 | `package-data.ts` | Data URL, text, ArrayBuffer, and binary-string materialization | §6.3 |
-| `environment.ts` | Realm object creation, native line endings, wall time, task/clock/event services, UUIDs, and host-file reading | Cross-cutting |
+| `environment.ts` | Current narrow `FileHost` integration, including native-line-ending lookup. Split future HTML task semantics, clocks, UUIDs, and host-file I/O by their actual capability or Host Port owner rather than growing a service bag | Cross-cutting |
 | `web-idl.ts` | Lossless File API definitions and cross-package contributions assembled by Browlet | §§3–6 and 8.4 |
 
 The HTML structured-data implementation will own the registered Serializable

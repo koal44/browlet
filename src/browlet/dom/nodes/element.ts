@@ -1,4 +1,5 @@
 import { withElementStub } from '../../stubs';
+import type { EventImpl } from '../events/event';
 import {
   isElement, NodeImpl, type NodeOptions, NodeType,
 } from './node';
@@ -10,8 +11,8 @@ import {
   type TreeScopeResolver,
 } from '../../style/integration';
 import {
-  arg, defineIncludes, defineInterface, idlType, nullable, op,
-  roAttr, type InterfaceDefinition,
+  arg, defineIncludes, defineInterface, idlType, nullable, op, reference,
+  roAttr, type InterfaceDefinition, xattr,
 } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
 import {
@@ -124,7 +125,7 @@ export class ElementImpl
     return this.#namespaceURI;
   }
 
-  get children(): HTMLCollectionOf<Element> {
+  get children(): HTMLCollectionOf<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 
@@ -300,7 +301,7 @@ export class ElementImpl
 
   static getEventParent(
     element: ElementImpl,
-    _event: Event,
+    _event: EventImpl,
   ): NodeImpl | null {
     return element.#slottableMixin.assignedSlot ??
       NodeImpl.getParentNode(element);
@@ -366,7 +367,7 @@ export const elementIDL = defineInterface({
   members: [
     roAttr('namespaceURI', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
-    roAttr('attributes', idlType.object),
+    roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),
     op('getAttribute', nullable(idlType.DOMString), [
       arg('qualifiedName', idlType.DOMString),
     ]),
@@ -374,13 +375,13 @@ export const elementIDL = defineInterface({
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),
     ]),
-    op('getElementsByClassName', idlType.object, [
+    op('getElementsByClassName', reference('HTMLCollection'), [
       arg('classNames', idlType.DOMString),
     ]),
-    op('getElementsByTagName', idlType.object, [
+    op('getElementsByTagName', reference('HTMLCollection'), [
       arg('qualifiedName', idlType.DOMString),
     ]),
-    op('getElementsByTagNameNS', idlType.object, [
+    op('getElementsByTagNameNS', reference('HTMLCollection'), [
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),
     ]),

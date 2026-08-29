@@ -520,16 +520,16 @@ describe('HTML structured serialization', () => {
     const bindings = createBindings([containerIDL], { capabilities });
     const realm = new Realm();
     const registration = bindings.register(realm);
-    const container = registration.interfaces.create(containerIDL);
+    const container = registration.context.createPlatformObject(containerIDL);
     const implementation = container.implementation as ContainerImpl;
-    implementation.child = container.object;
+    implementation.child = container.platformObject;
     const environment: StructuredSerializationEnvironment = {
       agentCluster: {},
-      interfaces: registration.interfaces,
+      context: registration.context,
       realm,
     };
     const serialized = structuredSerializeForStorage(
-      container.object,
+      container.platformObject,
       environment,
     );
 
@@ -581,7 +581,7 @@ function createEnvironment(options: {
   return {
     environment: {
       agentCluster: options.agentCluster ?? {},
-      interfaces: registration.interfaces,
+      context: registration.context,
       realm,
     },
     realm,

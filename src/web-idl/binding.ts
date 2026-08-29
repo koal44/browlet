@@ -19,7 +19,6 @@ import {
   type StringifierMember, type WebIDLType,
 } from './declaration/definition';
 import { GlobalPlatformObjectBinding } from './global-platform-object';
-import type { ImplementationClass } from './declaration/binding';
 import {
   ImplementationRegistry, type ConstructorBehavior,
 } from './registry';
@@ -37,12 +36,46 @@ import { createRejectedPromise } from './promise';
 import { getUnannotatedType } from './types';
 import { CapabilityRegistry } from './capability';
 
-export class JavaScriptBinding {
+export class RealmBinding {
   readonly definitions: DefinitionAssembly;
   readonly hostDefinedInterfaces: ReadonlyMap<string, HostDefinedInterface>;
   readonly implementations: ImplementationRegistry;
   readonly capabilities: CapabilityRegistry;
   readonly platformObjects: PlatformObjectRegistry;
+  readonly projectImplementationObject = (
+    value: object,
+    expectedInterface: AssembledInterface,
+  ): object | undefined => {
+    const existing = this.platformObjects.getImplementationRecord(value);
+    if (existing) {
+      return this.platformObjects.recordImplements(existing, expectedInterface)
+        ? existing.platformObject
+        : undefined;
+    }
+
+    const origin = this.platformObjects.getImplementationOrigin(value);
+    if (origin) {
+      return this.platformObjects.interfaceImplements(
+        origin.primaryInterface,
+        expectedInterface,
+      )
+        ? this.platformObjects.projectImplementationOrigin(value)
+        : undefined;
+    }
+
+    const registered = this.implementations.getImplementationForObject(value);
+    if (
+      !registered ||
+      !this.platformObjects.interfaceImplements(
+        registered.interface_,
+        expectedInterface,
+      )
+    ) return;
+    return this.projectPlatformObject(
+      value,
+      registered.interface_,
+    ).platformObject;
+  };
   readonly realizeException: (value: unknown) => unknown;
   readonly realm: WebIDLRealmHost;
   readonly #collections: CollectionBinding;
@@ -111,7 +144,7 @@ export class JavaScriptBinding {
   }
 
   install(
-    target: object = this.#globalObject?.object ?? this.realm.global,
+    target: object = this.#globalObject?.platformObject ?? this.realm.global,
   ): Map<string, object> {
     const installed = this.getExposedGlobalProperties();
 
@@ -470,21 +503,46 @@ export class JavaScriptBinding {
 
     const prototype = this.#getPlatformObjectPrototype(assembled, newTarget);
 
-    const create = this.implementations.getObjectCreationSteps(
-      assembled.definition,
-    );
-    const implementation = create
-      ? create(newTarget ?? this.getInterfaceObject(assembled))
-      : createRealmObject(this.realm, prototype);
+    const createImplementation = this.implementations
+      .getImplementationCreationSteps(
+        assembled.definition,
+      );
+    const implementationClass = this.implementations
+      .getImplementationForInterface(assembled.definition);
+    if (implementationClass) {
+      if (!createImplementation) {
+        throw new Error(
+          `Interface ${assembled.definition.name} has no implementation creation steps`,
+        );
+      }
+      return this.projectPlatformObject(
+        createImplementation(),
+        assembled,
+        prototype,
+      ).platformObject;
+    }
+
+    const implementation = createImplementation
+      ? createImplementation()
+      : createRealmObject(
+        this.realm,
+        prototype,
+      );
     if (Reflect.getPrototypeOf(implementation) !== prototype) {
       throw new Error(
         `Implementation object for ${assembled.definition.name} has the wrong prototype`,
       );
     }
-    return this.projectPlatformObject(
-      implementation,
+    this.#runImplementationInitializationSteps(implementation, assembled);
+    return this.associatePlatformObject(
+      this.#legacyPlatformObjects.createObject(
+        implementation,
+        implementation,
+        assembled,
+      ),
       assembled,
-    ).object;
+      implementation,
+    ).platformObject;
   }
 
   #constructPlatformObject(
@@ -506,13 +564,12 @@ export class JavaScriptBinding {
     }
 
     const prototype = this.#getPlatformObjectPrototype(interface_, newTarget);
-    const implementation = behavior.steps(newTarget, values);
-    if (Reflect.getPrototypeOf(implementation) !== prototype) {
-      throw new Error(
-        `Implementation object for ${interface_.definition.name} has the wrong prototype`,
-      );
-    }
-    return this.projectPlatformObject(implementation, interface_).object;
+    const implementation = behavior.steps(values);
+    return this.projectPlatformObject(
+      implementation,
+      interface_,
+      prototype,
+    ).platformObject;
   }
 
   #getPlatformObjectPrototype(
@@ -530,28 +587,6 @@ export class JavaScriptBinding {
     return candidate;
   }
 
-  construct<T extends object>(
-    implementation: ImplementationClass<T>,
-    argumentsList: readonly unknown[],
-    primaryInterface?: string | AssembledInterface,
-  ): T {
-    const interface_ = primaryInterface
-      ? this.#resolveInterface(primaryInterface)
-      : this.implementations.getInterfaceForImplementation(implementation);
-    if (!interface_) {
-      throw new Error(
-        'No Web IDL interface is registered for this implementation',
-      );
-    }
-
-    const value = Reflect.construct(
-      implementation as Constructable<T>,
-      argumentsList,
-      this.getInterfaceObject(interface_) as unknown as Constructable,
-    );
-    return this.projectPlatformObject(value, interface_).object as T;
-  }
-
   isExposed(interface_: string | AssembledInterface): boolean {
     return this.#isConstructExposed(
       this.#resolveInterface(interface_).definition,
@@ -561,15 +596,30 @@ export class JavaScriptBinding {
   projectPlatformObject(
     implementation: object,
     primaryInterface: AssembledInterface,
+    prototype = this.getInterfacePrototypeObject(primaryInterface),
   ): PlatformObjectRecord {
     if (isGlobalInterface(primaryInterface)) {
       throw new Error(
         `Use projectGlobalObject for ${primaryInterface.definition.name}`,
       );
     }
-    this.#runObjectInitializationSteps(implementation, primaryInterface);
+    this.#runImplementationInitializationSteps(
+      implementation,
+      primaryInterface,
+    );
+    const allocatePlatformObject = this.implementations
+      .getPlatformObjectAllocationSteps(primaryInterface);
+    const backingObject = allocatePlatformObject
+      ? allocatePlatformObject(prototype)
+      : createRealmObject(this.realm, prototype);
+    if (Reflect.getPrototypeOf(backingObject) !== prototype) {
+      throw new Error(
+        `Platform object for ${primaryInterface.definition.name} has the wrong prototype`,
+      );
+    }
     return this.associatePlatformObject(
       this.#legacyPlatformObjects.createObject(
+        backingObject,
         implementation,
         primaryInterface,
       ),
@@ -603,7 +653,7 @@ export class JavaScriptBinding {
     if (!Reflect.setPrototypeOf(implementation, prototype)) {
       throw new Error('Could not set the global object prototype');
     }
-    this.#runObjectInitializationSteps(implementation, interface_);
+    this.#runImplementationInitializationSteps(implementation, interface_);
     const object = this.#globalPlatformObjects.createObject(implementation);
     const record = this.associatePlatformObject(
       object,
@@ -636,13 +686,9 @@ export class JavaScriptBinding {
     }
 
     const prototype = this.getInterfacePrototypeObject(primaryInterface);
-    if (!Reflect.setPrototypeOf(record.implementation, prototype)) {
-      throw new TypeError('Could not change the platform object prototype');
-    }
     if (
-      record.object !== record.implementation &&
-      Reflect.getPrototypeOf(record.object) !== prototype &&
-      !Reflect.setPrototypeOf(record.object, prototype)
+      Reflect.getPrototypeOf(record.platformObject) !== prototype &&
+      !Reflect.setPrototypeOf(record.platformObject, prototype)
     ) {
       throw new TypeError('Could not change the public platform object prototype');
     }
@@ -672,12 +718,12 @@ export class JavaScriptBinding {
     return record;
   }
 
-  #runObjectInitializationSteps(
+  #runImplementationInitializationSteps(
     implementation: object,
     interface_: AssembledInterface,
   ): void {
     for (const ancestor of getInheritance(interface_)) {
-      this.implementations.getObjectInitializationSteps(
+      this.implementations.getImplementationInitializationSteps(
         ancestor.definition,
       )?.(implementation);
     }
@@ -1389,7 +1435,7 @@ export class JavaScriptBinding {
     const object = this.#globalPlatformObjects.createNamedPropertiesObject(
       interface_,
       parent,
-      () => this.#globalObject?.object,
+      () => this.#globalObject?.platformObject,
     );
     initial.namedPropertiesObject = object;
     return object;
@@ -1470,7 +1516,7 @@ export class JavaScriptBinding {
     const value = this.#resolveThisValue(thisArgument);
     const record = this.#resolveReceiverRecord(value);
     if (record) {
-      this.realm.performSecurityCheck(record.object, identifier, type);
+      this.realm.performSecurityCheck(record.platformObject, identifier, type);
     }
     if (!record || !this.platformObjects.recordImplements(record, interface_)) {
       if (lenient) return invalidReceiver;
@@ -1495,7 +1541,7 @@ export class JavaScriptBinding {
   }
 
   #resolveThisValue(thisArgument: unknown): unknown {
-    return thisArgument ?? this.#globalObject?.object ?? this.realm.global;
+    return thisArgument ?? this.#globalObject?.platformObject ?? this.realm.global;
   }
 
   #findInheritedAttribute(
@@ -1629,9 +1675,6 @@ export class JavaScriptBinding {
     throw new this.realm.intrinsics.typeError(message);
   }
 }
-
-type Constructable<T extends object = object> =
-  new (...argumentsList: unknown[]) => T;
 
 type JavaScriptFunction = ReturnType<WebIDLRealmHost['createFunction']>;
 type InterfaceObject = JavaScriptFunction & { prototype: object; };

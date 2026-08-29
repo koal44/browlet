@@ -6,6 +6,7 @@ import {
 import {
   unsafeSharedCurrentTime,
 } from '../../performance/high-resolution-time';
+import type { EventTargetImpl } from './event-target';
 
 /*
  * [Exposed=*]
@@ -47,13 +48,12 @@ import {
  *   boolean composed = false;
  * };
  */
-export class EventImpl implements Event
-{
+export class EventImpl {
   #type = '';
-  #target: EventTarget | null = null;
-  #relatedTarget: EventTarget | null = null;
-  #touchTargetList: (EventTarget | null)[] = [];
-  #currentTarget: EventTarget | null = null;
+  #target: EventTargetImpl | null = null;
+  #relatedTarget: EventTargetImpl | null = null;
+  #touchTargetList: (EventTargetImpl | null)[] = [];
+  #currentTarget: EventTargetImpl | null = null;
   #path: EventPathItem[] = [];
   #eventPhase: 0 | 1 | 2 | 3 = EventImpl.NONE;
 
@@ -71,40 +71,40 @@ export class EventImpl implements Event
   #timeStamp: DOMHighResTimeStamp;
 
   constructor(
-    type = '',
+    type: string,
     eventInitDict: EventInit | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
-    const convertedType = toDOMString(type);
     const init = eventInitDict ?? {};
-    const bubbles = Boolean(init.bubbles);
-    const cancelable = Boolean(init.cancelable);
-    const composed = Boolean(init.composed);
 
     this.#timeStamp = timeStamp;
-    this.#initialize(convertedType, bubbles, cancelable);
-    this.#composed = composed;
+    this.#initialize(
+      type,
+      init.bubbles ?? false,
+      init.cancelable ?? false,
+    );
+    this.#composed = init.composed ?? false;
   }
 
   get type(): string {
     return this.#type;
   }
 
-  get target(): EventTarget | null {
+  get target(): EventTargetImpl | null {
     return this.#target;
   }
 
   /** @deprecated */
-  get srcElement(): EventTarget | null {
+  get srcElement(): EventTargetImpl | null {
     return this.#target;
   }
 
-  get currentTarget(): EventTarget | null {
+  get currentTarget(): EventTargetImpl | null {
     return this.#currentTarget;
   }
 
-  composedPath(): EventTarget[] {
-    const composedPath: EventTarget[] = [];
+  composedPath(): EventTargetImpl[] {
+    const composedPath: EventTargetImpl[] = [];
     const path = this.#path;
     if (path.length === 0) return composedPath;
 
@@ -251,13 +251,9 @@ export class EventImpl implements Event
 
   /** @deprecated */
   initEvent(type: string, bubbles = false, cancelable = false): void {
-    const convertedType = toDOMString(type);
-    const convertedBubbles = Boolean(bubbles);
-    const convertedCancelable = Boolean(cancelable);
-
     if (this.#dispatching) return;
 
-    this.#initialize(convertedType, convertedBubbles, convertedCancelable);
+    this.#initialize(type, bubbles, cancelable);
   }
 
   static get NONE(): 0 { return 0; }
@@ -287,11 +283,11 @@ export class EventImpl implements Event
     event.#dispatching = true;
   }
 
-  static getRelatedTarget(event: EventImpl): EventTarget | null {
+  static getRelatedTarget(event: EventImpl): EventTargetImpl | null {
     return event.#relatedTarget;
   }
 
-  static getCurrentTarget(event: EventImpl): EventTarget | null {
+  static getCurrentTarget(event: EventImpl): EventTargetImpl | null {
     return event.#currentTarget;
   }
 
@@ -299,7 +295,9 @@ export class EventImpl implements Event
     return event.#composed;
   }
 
-  static getTouchTargetList(event: EventImpl): readonly (EventTarget | null)[] {
+  static getTouchTargetList(
+    event: EventImpl,
+  ): readonly (EventTargetImpl | null)[] {
     return event.#touchTargetList;
   }
 
@@ -311,27 +309,27 @@ export class EventImpl implements Event
     event.#path.push(item);
   }
 
-  static setTarget(event: EventImpl, target: EventTarget | null): void {
+  static setTarget(event: EventImpl, target: EventTargetImpl | null): void {
     event.#target = target;
   }
 
   static setRelatedTarget(
     event: EventImpl,
-    relatedTarget: EventTarget | null,
+    relatedTarget: EventTargetImpl | null,
   ): void {
     event.#relatedTarget = relatedTarget;
   }
 
   static setTouchTargetList(
     event: EventImpl,
-    targets: readonly (EventTarget | null)[],
+    targets: readonly (EventTargetImpl | null)[],
   ): void {
     event.#touchTargetList = [...targets];
   }
 
   static setCurrentTarget(
     event: EventImpl,
-    target: EventTarget | null,
+    target: EventTargetImpl | null,
   ): void {
     event.#currentTarget = target;
   }
@@ -377,7 +375,7 @@ export class EventImpl implements Event
 
   static getFirstPathInvocationTarget(
     event: EventImpl,
-  ): EventTarget | null {
+  ): EventTargetImpl | null {
     return event.#path[0]?.invocationTarget ?? null;
   }
 
@@ -417,7 +415,7 @@ export const eventIDL = defineInterface({
   name: 'Event',
   exposed: '*',
   implementation: impl(EventImpl, {
-    withArgs: [atArg(2, eventTimeStamp)],
+    constructWith: [atArg(2, eventTimeStamp)],
   }),
   members: [
     ctor([
@@ -484,12 +482,11 @@ export const eventInitIDL = defineDictionary({
  */
 export class CustomEventImpl<T = unknown>
   extends EventImpl
-  implements CustomEvent<T>
 {
   #detail: T;
 
   constructor(
-    type = '',
+    type: string,
     eventInitDict: CustomEventInit<T> | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
@@ -510,13 +507,9 @@ export class CustomEventImpl<T = unknown>
     cancelable = false,
     detail: T = null as T,
   ): void {
-    const convertedType = toDOMString(type);
-    const convertedBubbles = Boolean(bubbles);
-    const convertedCancelable = Boolean(cancelable);
-
     if (EventImpl.isDispatching(this)) return;
 
-    this.initEvent(convertedType, convertedBubbles, convertedCancelable);
+    this.initEvent(type, bubbles, cancelable);
     this.#detail = detail;
   }
 
@@ -529,7 +522,7 @@ export const customEventIDL = defineInterface({
   inherits: 'Event',
   exposed: '*',
   implementation: impl(CustomEventImpl, {
-    withArgs: [atArg(2, eventTimeStamp)],
+    constructWith: [atArg(2, eventTimeStamp)],
   }),
   members: [
     ctor([
@@ -559,22 +552,14 @@ export const customEventInitIDL = defineDictionary({
 });
 
 export type EventPathItem = {
-  readonly invocationTarget: EventTarget;
+  readonly invocationTarget: EventTargetImpl;
   readonly invocationTargetInShadowTree: boolean;
-  readonly shadowAdjustedTarget: EventTarget | null;
-  readonly relatedTarget: EventTarget | null;
-  readonly touchTargetList: readonly (EventTarget | null)[];
+  readonly shadowAdjustedTarget: EventTargetImpl | null;
+  readonly relatedTarget: EventTargetImpl | null;
+  readonly touchTargetList: readonly (EventTargetImpl | null)[];
   readonly rootOfClosedTree: boolean;
   readonly slotInClosedTree: boolean;
 };
-
-export function toDOMString(value: unknown): string {
-  if (typeof value === 'symbol') {
-    throw new TypeError('A Symbol value cannot be converted to a DOMString');
-  }
-
-  return String(value);
-}
 
 type EventRealm = {
   eventTimeStamp(): DOMHighResTimeStamp;

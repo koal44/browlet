@@ -1,6 +1,7 @@
 import { fireEvent } from '../dom/events/event-target';
 import {
-  createDocument, DocumentImpl, type DocumentLoadTimingInfo,
+  createDocument, createProjectedDOMNodeFactory, DocumentImpl,
+  type DocumentLoadTimingInfo,
 } from '../dom/nodes/document';
 import type { PermissionsPolicy } from './policy/permissions';
 import { areSameOriginDomain } from '../../url/origin';
@@ -86,7 +87,7 @@ export function createAndInitializeDocument(
   }
 
   const document = createDocument({
-    nodeFactory: bindings.objects,
+    nodeFactory: createProjectedDOMNodeFactory(bindings.context),
   });
   const loadTimingInfo = createDocumentLoadTimingInfo(
     navigationParams.response.timingInfo.startTime,

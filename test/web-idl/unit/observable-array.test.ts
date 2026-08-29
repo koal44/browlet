@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, idlType, observableArray, reference,
   type AttributeMember,
@@ -220,7 +220,7 @@ describe('Web IDL observable arrays', () => {
       members: [workers],
     });
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([employee, building]),
       realm,
       new PlatformObjectRegistry(),
@@ -254,7 +254,7 @@ function createNumberArrayBinding(
     members: [attribute],
   });
   const realm = new Realm();
-  const binding = new JavaScriptBinding(
+  const binding = new RealmBinding(
     assembleDefinitions([interface_]),
     realm,
     new PlatformObjectRegistry(),
@@ -280,7 +280,7 @@ function getArray(object: object, name: string): unknown[] {
 
 type NumberArrayFixture = {
   attribute: AttributeMember;
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   object: object;
   realm: Realm;
 };

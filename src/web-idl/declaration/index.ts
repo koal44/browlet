@@ -46,13 +46,15 @@ export {
   xattr,
 } from './definition';
 export {
-  atArg, callback, contextValue, impl, resolveArgs, withArgs,
-  withNew,
+  atArg, callback, constructWith, contextValue, impl, indexedGetter,
+  invokeWith, invokeWithNew, namedGetter, resolveArgs,
 } from './binding';
 export type {
-  ArgumentBinding, CallbackExceptionBehavior, ContextValue,
+  ArgumentBinding, ArgumentInjectionBinding, CallbackExceptionBehavior,
+  ContextValue,
   ImplementationClass, ImplementationDependency, ImplementationDependencyValue,
-  ImplementationDeclaration, ImplementationOptions, PositionedArgument,
+  ImplementationDeclaration, ImplementationOptions, LegacyGetterBinding,
+  LegacyGetterHooks, PositionedArgument,
 } from './binding';
 export type {
   AnnotatedType,

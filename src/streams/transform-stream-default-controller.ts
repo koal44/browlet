@@ -2,7 +2,7 @@
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
-import type { StreamPromise } from './environment';
+import type { StreamPromise } from './promise';
 import {
   transformStreamDefaultControllerEnqueue,
   transformStreamDefaultControllerError,

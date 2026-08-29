@@ -14,7 +14,7 @@ export function computeStyle(
   engine: CascadeEngine,
   element: Element,
   scope: TreeScope,
-): CSSStyleDeclaration {
+): CSSStyleDeclarationImpl {
   const declarations = 'style' in element &&
     element.style instanceof CSSStyleDeclarationImpl
     ? element.style.__declarations

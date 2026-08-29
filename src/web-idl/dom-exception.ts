@@ -3,10 +3,11 @@ import {
 } from '../shared/dom-exception';
 import {
   arg, constant, contextValue, ctor, defineDictionary, defineInterface,
-  dictMember, emptyDictionary, idlType, impl, integer, nullable,
+  dictMember, emptyDictionary, idlType, integer, nullable,
   roAttr, reference, xattr,
 } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
+import { bind, type BindingContext } from './projection';
 
 /*
  * [Exposed=*,
@@ -47,16 +48,11 @@ import type { WebIDLRealmHost } from './javascript-realm';
 
 class DOMExceptionImpl {
   constructor(
-    realm: WebIDLRealmHost,
+    _realm: WebIDLRealmHost,
     message = '',
     name = 'Error',
   ) {
-    return createDOMExceptionObject(
-      realm,
-      new.target,
-      message,
-      name,
-    ) as DOMExceptionImpl;
+    domExceptionStates.set(this, { message, name });
   }
 
   get name(): string {
@@ -80,8 +76,9 @@ export const domExceptionIDL = defineInterface({
   name: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  implementation: impl(DOMExceptionImpl, {
-    withArgs: [bindingRealm],
+  implementation: bind(DOMExceptionImpl, {
+    allocatePlatformObject: allocateErrorPlatformObject,
+    constructWith: [bindingRealm],
   }),
   members: [
     ctor([
@@ -184,8 +181,9 @@ export const quotaExceededErrorIDL = defineInterface({
   inherits: 'DOMException',
   exposed: '*',
   ...xattr('Serializable'),
-  implementation: impl(QuotaExceededErrorImpl, {
-    withArgs: [bindingRealm],
+  implementation: bind(QuotaExceededErrorImpl, {
+    allocatePlatformObject: allocateErrorPlatformObject,
+    constructWith: [bindingRealm],
   }),
   members: [
     ctor([
@@ -300,17 +298,13 @@ function getQuotaExceededErrorState(
   return state;
 }
 
-function createDOMExceptionObject(
-  realm: WebIDLRealmHost,
-  newTarget: object,
-  message: string,
-  name: string,
+function allocateErrorPlatformObject(
+  context: BindingContext,
+  prototype: object,
 ): object {
-  const object = Reflect.construct(
-    realm.intrinsics.error,
-    [],
-    newTarget as ErrorConstructor,
-  );
-  domExceptionStates.set(object, { message, name });
+  const object = Reflect.construct(context.realm.intrinsics.error, []);
+  if (!Reflect.setPrototypeOf(object, prototype)) {
+    throw new TypeError('Could not set DOMException platform-object prototype');
+  }
   return object;
 }

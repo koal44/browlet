@@ -1,4 +1,5 @@
 import { withTextStub } from '../../stubs';
+import type { EventImpl } from '../events/event';
 import { arg, ctor, defineInterface, idlType } from '../../../web-idl/declaration/index';
 import { impl } from '../../../web-idl/index';
 import {
@@ -24,7 +25,7 @@ export class TextImpl
 {
   readonly #slottableMixin = new SlottableMixin();
 
-  constructor(data = '', ownerDocument: DocumentImpl | null = null) {
+  constructor(data: string, ownerDocument: DocumentImpl | null = null) {
     super(NodeType.Text, data, ownerDocument, TextImpl.#nodeOptions);
   }
 
@@ -53,7 +54,7 @@ export class TextImpl
 
   static getEventParent(
     text: TextImpl,
-    _event: Event,
+    _event: EventImpl,
   ): NodeImpl | null {
     return text.#slottableMixin.assignedSlot ?? NodeImpl.getParentNode(text);
   }

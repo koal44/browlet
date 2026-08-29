@@ -23,9 +23,10 @@ export function enqueueValueWithSize<Value>(
   container: QueueContainer<Value>,
   value: Value,
   size: number,
+  RangeError_: typeof RangeError,
 ): void {
   if (!isNonNegativeNumber(size) || size === Infinity) {
-    throw new RangeError(
+    throw new RangeError_(
       'Size must be a finite, non-NaN, non-negative number.',
     );
   }

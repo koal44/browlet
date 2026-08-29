@@ -35,7 +35,7 @@ export class DocumentFragmentImpl
     this.#host = host;
   }
 
-  get children(): HTMLCollectionOf<Element> {
+  get children(): HTMLCollectionOf<ElementImpl> {
     return this.#parentNodeMixin.children;
   }
 
@@ -70,7 +70,7 @@ export const documentFragmentIDL = defineInterface({
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentFragmentImpl, {
-    withArgs: [associatedDocument],
+    constructWith: [associatedDocument],
   }),
   members: [ctor()],
 });

@@ -2,6 +2,7 @@ import {
   defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/declaration/index';
 import type { TreeScope } from '../../../stylelet/engine/tree-scope';
+import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 
 /*
  * interface mixin DocumentOrShadowRoot {
@@ -17,7 +18,7 @@ export class DocumentOrShadowRootMixin {
     this.#options = options;
   }
 
-  get customElementRegistry(): CustomElementRegistry | null {
+  get customElementRegistry(): CustomElementRegistryImpl | null {
     return this.#options.getCustomElementRegistry();
   }
 
@@ -45,6 +46,6 @@ export const documentOrShadowRootIDL = defineInterfaceMixin({
 });
 
 type DocumentOrShadowRootMixinOptions = {
-  getCustomElementRegistry(): CustomElementRegistry | null;
+  getCustomElementRegistry(): CustomElementRegistryImpl | null;
   getStyleScope(): TreeScope;
 };

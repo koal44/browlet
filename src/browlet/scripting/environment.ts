@@ -175,7 +175,7 @@ export function setupWindowEnvironmentSettingsObject(
         }
         return cloneStructuredData(value, transferList, {
           agentCluster,
-          interfaces: bindings.interfaces,
+          context: bindings.context,
           realm,
         });
       },

@@ -2,20 +2,19 @@
 import {
   arg, defineInterfaceMixin, idlType, op, promise, roAttr,
 } from '../web-idl/declaration/index';
-import type {
-  StreamEnvironment, StreamPromise,
-} from './environment';
+import type { BindingContext } from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import type { ReadableStreamImpl } from './readable-stream';
 import {
   readableStreamReaderGenericCancel,
 } from './readable-stream-operations';
 
 export class ReadableStreamGenericReaderMixin {
-  readonly #environment: StreamEnvironment;
+  readonly #context: BindingContext;
   #state?: ReadableStreamGenericReaderState;
 
-  constructor(environment: StreamEnvironment) {
-    this.#environment = environment;
+  constructor(context: BindingContext) {
+    this.#context = context;
   }
 
   get closed(): StreamPromise {
@@ -25,8 +24,10 @@ export class ReadableStreamGenericReaderMixin {
   cancel(reason?: unknown): StreamPromise {
     const state = ReadableStreamGenericReaderMixin.getState(this);
     if (!state.stream) {
-      return this.#environment.promises.createRejected(
-        new TypeError('Cannot cancel a stream using a released reader'),
+      return this.#context.createRejectedPromise(
+        new this.#context.realm.intrinsics.typeError(
+          'Cannot cancel a stream using a released reader',
+        ),
         idlType.undefined,
       );
     }
@@ -35,10 +36,10 @@ export class ReadableStreamGenericReaderMixin {
 
   // -- Friends ----------------------------------------------------------
 
-  static getEnvironment(
+  static getContext(
     reader: ReadableStreamGenericReaderMixin,
-  ): StreamEnvironment {
-    return reader.#environment;
+  ): BindingContext {
+    return reader.#context;
   }
 
   static getState(

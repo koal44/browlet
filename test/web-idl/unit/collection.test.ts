@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   defineInterface, idlType, type MaplikeMember, type OperationMember,
   type SetlikeMember,
@@ -132,18 +132,21 @@ describe('Web IDL maplike declarations', () => {
     const interface_ = definitions.getInterface('SeparatedMaplike');
     if (!interface_) throw new Error('Missing assembled interface');
 
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       definitions,
       new Realm(),
       new PlatformObjectRegistry(),
     );
-    const implementation = Object.create(
-      binding.getInterfacePrototypeObject(interface_),
-    ) as object;
-    const object = new Proxy(implementation, {});
-    binding.associatePlatformObject(object, interface_, implementation);
+    class CollectionImplementation {}
+    const implementation = new CollectionImplementation();
+    const { platformObject: object } = binding.projectPlatformObject(
+      implementation,
+      interface_,
+    );
 
     expect(call(object, 'set', [1, 'one'])).toBe(object);
+    expect(Object.getPrototypeOf(implementation))
+      .toBe(CollectionImplementation.prototype);
     expect(binding.getMapEntries(object).get(1)).toBe('one');
     const seen: unknown[] = [];
     call(object, 'forEach', [(
@@ -279,7 +282,7 @@ describe('Web IDL setlike declarations', () => {
       exposed: ['Window'],
       members: [{ kind: 'setlike', readonly: true, value: idlType.long }],
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([readonlyMap, readonlySet]),
       new Realm(),
       new PlatformObjectRegistry(),
@@ -331,7 +334,7 @@ describe('Web IDL setlike declarations', () => {
 });
 
 function createMaplikeBinding(): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   object: object;
   realm: Realm;
 } {
@@ -355,7 +358,7 @@ function createMaplikeBinding(): {
 }
 
 function createSetlikeBinding(): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   object: object;
   realm: Realm;
 } {
@@ -381,8 +384,8 @@ function createBinding(
   interface_: ReturnType<typeof defineInterface>,
   implementations?: ImplementationRegistry,
   realm = new Realm(),
-): JavaScriptBinding {
-  return new JavaScriptBinding(
+): RealmBinding {
+  return new RealmBinding(
     assembleDefinitions([interface_]),
     realm,
     new PlatformObjectRegistry(),

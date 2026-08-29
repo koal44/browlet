@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { createDOMException } from '../../../src/shared/dom-exception';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, promise as promiseType,
@@ -49,7 +49,7 @@ describe('Web IDL promise member binding', () => {
     });
 
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -88,7 +88,7 @@ describe('Web IDL promise member binding', () => {
     implementations.setOperationSteps(read, () => {
       throw new Error('unreachable');
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -115,7 +115,7 @@ describe('Web IDL promise member binding', () => {
     });
     const realm = new Realm();
     const implementations = new ImplementationRegistry();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interface_]),
       realm,
       new PlatformObjectRegistry(),

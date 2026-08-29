@@ -1,6 +1,15 @@
 // @rollup-cycle streams-readable
 import { idlType } from '../web-idl/declaration/index';
-import type { StreamEnvironment, StreamPromise } from './environment';
+import {
+  closeAsyncIterator, endOfIteration, getAsyncIteratorNextValue,
+  openAsyncSequence, type IDLAsyncSequence,
+} from '../web-idl/async-sequence';
+import type { BindingContext } from '../web-idl/projection';
+import type {
+  StreamAbortAlgorithmHandle, StreamAbortSignal,
+} from './abort';
+import type { StreamPromise } from './promise';
+import { cloneStreamValue } from './structured-data';
 import {
   cancelSteps, internalStreamSetup, pullSteps, releaseSteps,
 } from './internal-methods';
@@ -21,10 +30,12 @@ import {
   ReadableStreamGenericReaderMixin,
 } from './readable-stream-generic-reader';
 import {
-  ReadableStreamImpl, type ReadableStreamState, type StreamAbortSignal,
+  ReadableStreamImpl, type ReadableStreamState,
   type ReadableStreamIteratorOptions, type UnderlyingSource,
 } from './readable-stream';
-import type { WritableStreamImpl } from './writable-stream';
+import {
+  acquireWritableStreamDefaultWriter, type WritableStreamImpl,
+} from './writable-stream';
 import {
   isWritableStreamWritable, writableStreamAbort,
   writableStreamCloseQueuedOrInFlight,
@@ -44,7 +55,7 @@ export function initializeReadableStream(): ReadableStreamState {
 }
 
 export function createReadableStream(
-  environment: StreamEnvironment,
+  context: BindingContext,
   startAlgorithm: () => unknown,
   pullAlgorithm: () => StreamPromise,
   cancelAlgorithm: (reason: unknown) => StreamPromise,
@@ -52,11 +63,11 @@ export function createReadableStream(
   sizeAlgorithm: QueuingStrategySize = () => 1,
   startPromise?: StreamPromise,
 ): ReadableStreamImpl {
-  const stream = environment.objects.construct(
+  const stream = context.construct(
     ReadableStreamImpl,
-    [internalStreamSetup],
+    internalStreamSetup,
   );
-  const controller = environment.objects.create(
+  const controller = context.construct(
     ReadableStreamDefaultControllerImpl,
   );
   setUpReadableStreamDefaultController(
@@ -79,9 +90,8 @@ export function isReadableStreamLocked(stream: ReadableStreamImpl): boolean {
 export function acquireReadableStreamDefaultReader(
   stream: ReadableStreamImpl,
 ): ReadableStreamDefaultReaderImpl {
-  const reader = ReadableStreamImpl.getEnvironment(stream).objects.create(
-    ReadableStreamDefaultReaderImpl,
-  );
+  const context = ReadableStreamImpl.getContext(stream);
+  const reader = context.construct(ReadableStreamDefaultReaderImpl);
   setUpReadableStreamDefaultReader(reader, stream);
   return reader;
 }
@@ -91,17 +101,17 @@ export function readableStreamCancel(
   reason: unknown,
 ): StreamPromise {
   const state = ReadableStreamImpl.getState(stream);
-  const environment = ReadableStreamImpl.getEnvironment(stream);
+  const context = ReadableStreamImpl.getContext(stream);
   state.disturbed = true;
 
   if (state.state === 'closed') {
-    return environment.promises.createResolved(
+    return context.createResolvedPromise(
       undefined,
       idlType.undefined,
     );
   }
   if (state.state === 'errored') {
-    return environment.promises.createRejected(
+    return context.createRejectedPromise(
       state.storedError,
       idlType.undefined,
     );
@@ -114,8 +124,10 @@ export function readableStreamCancel(
     ReadableStreamBYOBReaderImpl.resetReadIntoRequests(reader);
     for (const request of requests) request.closeSteps(undefined);
   }
-  const sourceCancelPromise = requireController(state)[cancelSteps](reason);
-  return environment.promises.react(
+  const sourceCancelPromise = ReadableStreamImpl.getController(stream)[
+    cancelSteps
+  ](reason);
+  return context.reactToPromise(
     sourceCancelPromise,
     idlType.undefined,
     { fulfilled: () => undefined },
@@ -123,20 +135,24 @@ export function readableStreamCancel(
 }
 
 export function readableStreamFromIterable(
-  environment: StreamEnvironment,
-  asyncIterable: object,
+  context: BindingContext,
+  asyncIterable: IDLAsyncSequence,
 ): ReadableStreamImpl {
-  const iterator = environment.iteration.open(asyncIterable);
+  const iterator = openAsyncSequence(asyncIterable, context.realm);
   const source: UnderlyingSource = {
     start: () => undefined,
     pull() {
-      return environment.promises.react(
-        environment.iteration.getNext(iterator),
+      return context.reactToPromise(
+        getAsyncIteratorNextValue(
+          iterator,
+          context.realm,
+          (value, type) => context.convert(value, type),
+        ),
         idlType.undefined,
         {
           fulfilled(value) {
             const controller = requireDefaultController(stream);
-            if (value === environment.iteration.end) {
+            if (value === endOfIteration) {
               readableStreamDefaultControllerClose(controller);
             } else {
               readableStreamDefaultControllerEnqueue(controller, value);
@@ -146,16 +162,17 @@ export function readableStreamFromIterable(
       );
     },
     cancel(reason) {
-      return environment.promises.react(
-        environment.iteration.close(iterator, reason),
+      return context.reactToPromise(
+        closeAsyncIterator(iterator, reason, context.realm),
         idlType.undefined,
         { fulfilled: () => undefined },
       );
     },
   };
-  const stream = environment.objects.construct(
+  const stream = context.construct(
     ReadableStreamImpl,
-    [source, { highWaterMark: 0 }],
+    source,
+    { highWaterMark: 0 },
   );
   return stream;
 }
@@ -179,21 +196,21 @@ export function readableStreamAsyncIteratorGetNext(
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(
     state.reader,
   );
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
   if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
     throw new Error('Readable stream async iterator reader was released');
   }
 
-  const promise = environment.promises.create(idlType.any);
+  const promise = context.createPromise(idlType.any);
   readableStreamDefaultReaderRead(state.reader, {
-    chunkSteps: (chunk) => environment.promises.resolve(promise, chunk),
+    chunkSteps: (chunk) => context.resolvePromise(promise, chunk),
     closeSteps() {
       readableStreamDefaultReaderRelease(state.reader);
-      environment.promises.resolve(promise, environment.iteration.end);
+      context.resolvePromise(promise, endOfIteration);
     },
     errorSteps(reason) {
       readableStreamDefaultReaderRelease(state.reader);
-      environment.promises.reject(promise, reason);
+      context.rejectPromise(promise, reason);
     },
   });
   return promise;
@@ -208,7 +225,7 @@ export function readableStreamAsyncIteratorReturn(
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(
     state.reader,
   );
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
   if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
     throw new Error('Readable stream async iterator reader was released');
   }
@@ -220,7 +237,7 @@ export function readableStreamAsyncIteratorReturn(
   }
 
   readableStreamDefaultReaderRelease(state.reader);
-  return environment.promises.createResolved(undefined, idlType.undefined);
+  return context.createResolvedPromise(undefined, idlType.undefined);
 }
 
 export function readableStreamPipeTo(
@@ -231,9 +248,9 @@ export function readableStreamPipeTo(
   preventCancel: boolean,
   signal?: StreamAbortSignal,
 ): StreamPromise {
-  const environment = ReadableStreamImpl.getEnvironment(source);
+  const context = ReadableStreamImpl.getContext(source);
   const reader = acquireReadableStreamDefaultReader(source);
-  const writer = destination.getWriter();
+  const writer = acquireWritableStreamDefaultWriter(destination);
   const sourceState = ReadableStreamImpl.getState(source);
   const destinationState = getWritableStreamState(destination);
   const readerState = ReadableStreamGenericReaderMixin.getState(
@@ -243,21 +260,21 @@ export function readableStreamPipeTo(
   sourceState.disturbed = true;
 
   let shuttingDown = false;
-  let currentWrite = environment.promises.createResolved(
+  let currentWrite = context.createResolvedPromise(
     undefined,
     idlType.undefined,
   );
-  const result = environment.promises.create(idlType.undefined);
-  let abortAlgorithm: (() => void) | undefined;
+  const result = context.createPromise(idlType.undefined);
+  let abortAlgorithmHandle: StreamAbortAlgorithmHandle | null | undefined;
 
   if (signal) {
-    abortAlgorithm = () => {
+    const abortAlgorithm = () => {
       const error = signal.reason;
       const actions: Array<() => StreamPromise> = [];
       if (!preventAbort) {
         actions.push(() => isWritableStreamWritable(destination)
           ? writableStreamAbort(destination, error)
-          : environment.promises.createResolved(
+          : context.createResolvedPromise(
             undefined,
             idlType.undefined,
           ));
@@ -265,13 +282,13 @@ export function readableStreamPipeTo(
       if (!preventCancel) {
         actions.push(() => sourceState.state === 'readable'
           ? readableStreamCancel(source, error)
-          : environment.promises.createResolved(
+          : context.createResolvedPromise(
             undefined,
             idlType.undefined,
           ));
       }
       shutdownWithAction(
-        () => environment.promises.waitForAll(
+        () => context.waitForAllPromises(
           actions.map((action) => action()),
           idlType.undefined,
         ),
@@ -284,7 +301,7 @@ export function readableStreamPipeTo(
       abortAlgorithm();
       return result;
     }
-    signal.addEventListener('abort', abortAlgorithm);
+    abortAlgorithmHandle = signal.addAlgorithm(abortAlgorithm);
   }
 
   isOrBecomesErrored(
@@ -329,7 +346,7 @@ export function readableStreamPipeTo(
 
   if (writableStreamCloseQueuedOrInFlight(destination) ||
     destinationState.state === 'closed') {
-    const error = new TypeError(
+    const error = new context.realm.intrinsics.typeError(
       'The destination WritableStream closed before all data could be piped to it',
     );
     if (!preventCancel) {
@@ -343,19 +360,19 @@ export function readableStreamPipeTo(
     }
   }
 
-  environment.promises.markHandled(pipeLoop());
+  context.markPromiseHandled(pipeLoop());
   return result;
 
   function pipeLoop(): StreamPromise {
-    const loop = environment.promises.create(idlType.undefined);
+    const loop = context.createPromise(idlType.undefined);
     const next = (done: unknown): void => {
       if (done) {
-        environment.promises.resolve(loop, undefined);
+        context.resolvePromise(loop, undefined);
         return;
       }
-      environment.promises.react(pipeStep(), idlType.undefined, {
+      context.reactToPromise(pipeStep(), idlType.undefined, {
         fulfilled: next,
-        rejected: (reason) => environment.promises.reject(loop, reason),
+        rejected: (reason) => context.rejectPromise(loop, reason),
       });
     };
     next(false);
@@ -364,26 +381,26 @@ export function readableStreamPipeTo(
 
   function pipeStep(): StreamPromise {
     if (shuttingDown) {
-      return environment.promises.createResolved(true, idlType.boolean);
+      return context.createResolvedPromise(true, idlType.boolean);
     }
 
-    return environment.promises.react(
+    return context.reactToPromise(
       writerState.readyPromise,
       idlType.boolean,
       {
         fulfilled() {
-          const read = environment.promises.create(idlType.boolean);
+          const read = context.createPromise(idlType.boolean);
           readableStreamDefaultReaderRead(reader, {
             chunkSteps(chunk) {
-              currentWrite = environment.promises.react(
+              currentWrite = context.reactToPromise(
                 writableStreamDefaultWriterWrite(writer, chunk),
                 idlType.undefined,
                 { rejected: () => undefined },
               );
-              environment.promises.resolve(read, false);
+              context.resolvePromise(read, false);
             },
-            closeSteps: () => environment.promises.resolve(read, true),
-            errorSteps: (reason) => environment.promises.reject(read, reason),
+            closeSteps: () => context.resolvePromise(read, true),
+            errorSteps: (reason) => context.rejectPromise(read, reason),
           });
           return read;
         },
@@ -393,7 +410,7 @@ export function readableStreamPipeTo(
 
   function waitForWritesToFinish(): StreamPromise {
     const oldCurrentWrite = currentWrite;
-    return environment.promises.react(
+    return context.reactToPromise(
       currentWrite,
       idlType.undefined,
       {
@@ -412,7 +429,7 @@ export function readableStreamPipeTo(
     if (state.state === 'errored') {
       action(state.storedError);
     } else {
-      environment.promises.react(
+      context.reactToPromise(
         promise,
         idlType.undefined,
         { rejected: action },
@@ -428,7 +445,7 @@ export function readableStreamPipeTo(
     if (state.state === 'closed') {
       action();
     } else {
-      environment.promises.react(
+      context.reactToPromise(
         promise,
         idlType.undefined,
         {
@@ -448,14 +465,14 @@ export function readableStreamPipeTo(
     shuttingDown = true;
 
     const doTheRest = (): void => {
-      environment.promises.react(action(), idlType.undefined, {
+      context.reactToPromise(action(), idlType.undefined, {
         fulfilled: () => finalize(originalIsError, originalError),
         rejected: (newError) => finalize(true, newError),
       });
     };
     if (isWritableStreamWritable(destination) &&
       !writableStreamCloseQueuedOrInFlight(destination)) {
-      environment.promises.react(
+      context.reactToPromise(
         waitForWritesToFinish(),
         idlType.undefined,
         { fulfilled: doTheRest },
@@ -471,7 +488,7 @@ export function readableStreamPipeTo(
 
     if (isWritableStreamWritable(destination) &&
       !writableStreamCloseQueuedOrInFlight(destination)) {
-      environment.promises.react(
+      context.reactToPromise(
         waitForWritesToFinish(),
         idlType.undefined,
         { fulfilled: () => finalize(isError, error) },
@@ -484,11 +501,9 @@ export function readableStreamPipeTo(
   function finalize(isError: boolean, error?: unknown): void {
     writableStreamDefaultWriterRelease(writer);
     readableStreamDefaultReaderRelease(reader);
-    if (signal && abortAlgorithm) {
-      signal.removeEventListener('abort', abortAlgorithm);
-    }
-    if (isError) environment.promises.reject(result, error);
-    else environment.promises.resolve(result, undefined);
+    abortAlgorithmHandle?.remove();
+    if (isError) context.rejectPromise(result, error);
+    else context.resolvePromise(result, undefined);
   }
 }
 
@@ -496,7 +511,7 @@ export function readableStreamDefaultTee(
   stream: ReadableStreamImpl,
   cloneForBranch2: boolean,
 ): [ReadableStreamImpl, ReadableStreamImpl] {
-  const environment = ReadableStreamImpl.getEnvironment(stream);
+  const context = ReadableStreamImpl.getContext(stream);
   const reader = acquireReadableStreamDefaultReader(stream);
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(reader);
   let reading = false;
@@ -505,12 +520,12 @@ export function readableStreamDefaultTee(
   let canceled2 = false;
   let reason1: unknown = undefined;
   let reason2: unknown = undefined;
-  const cancelPromise = environment.promises.create(idlType.undefined);
+  const cancelPromise = context.createPromise(idlType.undefined);
 
   const pullAlgorithm = (): StreamPromise => {
     if (reading) {
       readAgain = true;
-      return environment.promises.createResolved(
+      return context.createResolvedPromise(
         undefined,
         idlType.undefined,
       );
@@ -518,12 +533,12 @@ export function readableStreamDefaultTee(
     reading = true;
     readableStreamDefaultReaderRead(reader, {
       chunkSteps(chunk) {
-        environment.queueMicrotask(() => {
+        context.realm.queueMicrotask(() => {
           readAgain = false;
           let chunk2 = chunk;
           if (cloneForBranch2 && !canceled2) {
             try {
-              chunk2 = environment.structuredData.clone(chunk);
+              chunk2 = cloneStreamValue(context, chunk);
             } catch (error) {
               readableStreamDefaultControllerError(
                 requireDefaultController(branch1),
@@ -533,7 +548,7 @@ export function readableStreamDefaultTee(
                 requireDefaultController(branch2),
                 error,
               );
-              environment.promises.resolve(
+              context.resolvePromise(
                 cancelPromise,
                 readableStreamCancel(stream, error),
               );
@@ -571,14 +586,14 @@ export function readableStreamDefaultTee(
           );
         }
         if (!canceled1 || !canceled2) {
-          environment.promises.resolve(cancelPromise, undefined);
+          context.resolvePromise(cancelPromise, undefined);
         }
       },
       errorSteps() {
         reading = false;
       },
     });
-    return environment.promises.createResolved(
+    return context.createResolvedPromise(
       undefined,
       idlType.undefined,
     );
@@ -606,10 +621,16 @@ export function readableStreamDefaultTee(
     pull: pullAlgorithm,
     start: () => undefined,
   };
-  const branch1 = environment.objects.construct(ReadableStreamImpl, [source1]);
-  const branch2 = environment.objects.construct(ReadableStreamImpl, [source2]);
+  const branch1 = context.construct(
+    ReadableStreamImpl,
+    source1,
+  );
+  const branch2 = context.construct(
+    ReadableStreamImpl,
+    source2,
+  );
 
-  environment.promises.react(
+  context.reactToPromise(
     ReadableStreamGenericReaderMixin.getState(generic).closedPromise,
     idlType.undefined,
     {
@@ -624,7 +645,7 @@ export function readableStreamDefaultTee(
           reason,
         );
         if (!canceled1 || !canceled2) {
-          environment.promises.resolve(cancelPromise, undefined);
+          context.resolvePromise(cancelPromise, undefined);
         }
       },
     },
@@ -632,15 +653,15 @@ export function readableStreamDefaultTee(
   return [branch1, branch2];
 
   function settleCancelPromise(reason: readonly unknown[]): void {
-    environment.promises.react(
+    context.reactToPromise(
       readableStreamCancel(stream, [...reason]),
       idlType.undefined,
       {
-        fulfilled: () => environment.promises.resolve(
+        fulfilled: () => context.resolvePromise(
           cancelPromise,
           undefined,
         ),
-        rejected: (error) => environment.promises.reject(
+        rejected: (error) => context.rejectPromise(
           cancelPromise,
           error,
         ),
@@ -660,8 +681,8 @@ export function readableStreamClose(stream: ReadableStreamImpl): void {
   if (!reader) return;
 
   const generic = getGenericReader(reader);
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
-  environment.promises.resolve(
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
+  context.resolvePromise(
     ReadableStreamGenericReaderMixin.getState(generic).closedPromise,
     undefined,
   );
@@ -688,12 +709,12 @@ export function readableStreamError(
   if (!reader) return;
 
   const generic = getGenericReader(reader);
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
   const closedPromise = ReadableStreamGenericReaderMixin.getState(
     generic,
   ).closedPromise;
-  environment.promises.reject(closedPromise, error);
-  environment.promises.markHandled(closedPromise);
+  context.rejectPromise(closedPromise, error);
+  context.markPromiseHandled(closedPromise);
   if (ReadableStreamDefaultReaderImpl.is(reader)) {
     readableStreamDefaultReaderErrorReadRequests(reader, error);
   } else {
@@ -716,8 +737,9 @@ export function setUpReadableStreamDefaultReader(
   reader: ReadableStreamDefaultReaderImpl,
   stream: ReadableStreamImpl,
 ): void {
+  const context = ReadableStreamImpl.getContext(stream);
   if (isReadableStreamLocked(stream)) {
-    throw new TypeError(
+    throw new context.realm.intrinsics.typeError(
       'This stream has already been locked for exclusive reading by another reader',
     );
   }
@@ -729,25 +751,25 @@ export function setUpReadableStreamDefaultReader(
 
 export function readableStreamReaderGenericInitialize(
   generic: ReadableStreamGenericReaderMixin,
-  reader: ReadableStreamState['reader'] & object,
+  reader: NonNullable<ReadableStreamState['reader']>,
   stream: ReadableStreamImpl,
 ): void {
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
   const streamState = ReadableStreamImpl.getState(stream);
   let closedPromise: StreamPromise;
   if (streamState.state === 'readable') {
-    closedPromise = environment.promises.create(idlType.undefined);
+    closedPromise = context.createPromise(idlType.undefined);
   } else if (streamState.state === 'closed') {
-    closedPromise = environment.promises.createResolved(
+    closedPromise = context.createResolvedPromise(
       undefined,
       idlType.undefined,
     );
   } else {
-    closedPromise = environment.promises.createRejected(
+    closedPromise = context.createRejectedPromise(
       streamState.storedError,
       idlType.undefined,
     );
-    environment.promises.markHandled(closedPromise);
+    context.markPromiseHandled(closedPromise);
   }
 
   ReadableStreamGenericReaderMixin.setState(
@@ -772,7 +794,7 @@ export function readableStreamDefaultReaderRead(
   } else if (streamState.state === 'errored') {
     request.errorSteps(streamState.storedError);
   } else {
-    requireController(streamState)[pullSteps](request);
+    ReadableStreamImpl.getController(stream)[pullSteps](request);
   }
 }
 
@@ -780,17 +802,18 @@ export function readableStreamDefaultReaderRelease(
   reader: ReadableStreamDefaultReaderImpl,
 ): void {
   const generic = ReadableStreamDefaultReaderImpl.getGenericReader(reader);
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
   readableStreamReaderGenericRelease(generic, reader);
 
   readableStreamDefaultReaderErrorReadRequests(
     reader,
-    new TypeError('Reader was released'),
+    new context.realm.intrinsics.typeError('Reader was released'),
   );
 }
 
 export function readableStreamReaderGenericRelease(
   generic: ReadableStreamGenericReaderMixin,
-  reader: ReadableStreamState['reader'] & object,
+  reader: NonNullable<ReadableStreamState['reader']>,
 ): void {
   const genericState = ReadableStreamGenericReaderMixin.getState(generic);
   const stream = genericState.stream;
@@ -800,21 +823,21 @@ export function readableStreamReaderGenericRelease(
   if (streamState.reader !== reader) {
     throw new Error('Readable stream is locked by a different reader');
   }
-  const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
-  const error = new TypeError(
+  const context = ReadableStreamGenericReaderMixin.getContext(generic);
+  const error = new context.realm.intrinsics.typeError(
     'Reader was released and can no longer monitor the stream\'s closedness',
   );
   if (streamState.state === 'readable') {
-    environment.promises.reject(genericState.closedPromise, error);
+    context.rejectPromise(genericState.closedPromise, error);
   } else {
-    genericState.closedPromise = environment.promises.createRejected(
+    genericState.closedPromise = context.createRejectedPromise(
       error,
       idlType.undefined,
     );
   }
-  environment.promises.markHandled(genericState.closedPromise);
+  context.markPromiseHandled(genericState.closedPromise);
 
-  requireController(streamState)[releaseSteps]();
+  ReadableStreamImpl.getController(stream)[releaseSteps]();
   streamState.reader = undefined;
   genericState.stream = undefined;
 }
@@ -831,11 +854,11 @@ export function readableStreamDefaultControllerCallPullIfNeeded(
   }
 
   state.pulling = true;
-  const environment = ReadableStreamDefaultControllerImpl.getEnvironment(
+  const context = ReadableStreamDefaultControllerImpl.getContext(
     controller,
   );
   const pullPromise = requireAlgorithm(state.pullAlgorithm, 'pull')();
-  environment.promises.react(pullPromise, idlType.undefined, {
+  context.reactToPromise(pullPromise, idlType.undefined, {
     fulfilled() {
       state.pulling = false;
       if (state.pullAgain) {
@@ -899,7 +922,13 @@ export function readableStreamDefaultControllerEnqueue(
     }
 
     try {
-      enqueueValueWithSize(state, chunk, chunkSize);
+      enqueueValueWithSize(
+        state,
+        chunk,
+        chunkSize,
+        ReadableStreamDefaultControllerImpl.getContext(controller)
+          .realm.intrinsics.rangeError,
+      );
     } catch (error) {
       readableStreamDefaultControllerError(controller, error);
       throw error;
@@ -969,43 +998,39 @@ export function setUpReadableStreamDefaultControllerFromUnderlyingSource(
   source: UnderlyingSource,
   strategy: QueuingStrategy,
 ): void {
-  const environment = ReadableStreamImpl.getEnvironment(stream);
-  const controller = environment.objects.create(
+  const context = ReadableStreamImpl.getContext(stream);
+  const controller = context.construct(
     ReadableStreamDefaultControllerImpl,
   );
-  const highWaterMark = extractHighWaterMark(strategy, 1);
+  const highWaterMark = extractHighWaterMark(
+    strategy,
+    1,
+    context.realm.intrinsics.rangeError,
+  );
   const sizeAlgorithm = extractSizeAlgorithm(strategy);
 
-  const startAlgorithm = source.start === undefined
+  const startCallback = source.start;
+  const pullCallback = source.pull;
+  const cancelCallback = source.cancel;
+  const startAlgorithm = startCallback === undefined
     ? () => undefined
-    : () => environment.callbacks.invoke(
-      source.start,
-      [controller],
-      'rethrow',
-      underlyingSource,
-    );
-  const pullAlgorithm = source.pull === undefined
-    ? () => environment.promises.createResolved(
+    : () => Reflect.apply(startCallback, underlyingSource, [controller]);
+  const pullAlgorithm = pullCallback === undefined
+    ? () => context.createResolvedPromise(
       undefined,
       idlType.undefined,
     )
-    : () => requirePromise(environment.callbacks.invoke(
-      source.pull,
-      [controller],
-      undefined,
-      underlyingSource,
-    ));
-  const cancelAlgorithm = source.cancel === undefined
-    ? () => environment.promises.createResolved(
+    : () => Reflect.apply(pullCallback, underlyingSource, [controller]);
+  const cancelAlgorithm = cancelCallback === undefined
+    ? () => context.createResolvedPromise(
       undefined,
       idlType.undefined,
     )
-    : (reason: unknown) => requirePromise(environment.callbacks.invoke(
-      source.cancel,
+    : (reason: unknown) => Reflect.apply(
+      cancelCallback,
+      underlyingSource,
       [reason],
-      undefined,
-      underlyingSource,
-    ));
+    );
 
   setUpReadableStreamDefaultController(
     stream,
@@ -1049,10 +1074,10 @@ function setUpReadableStreamDefaultController(
   ReadableStreamDefaultControllerImpl.setState(controller, state);
   streamState.controller = controller;
 
-  const environment = ReadableStreamImpl.getEnvironment(stream);
+  const context = ReadableStreamImpl.getContext(stream);
   const startPromise = suppliedStartPromise ??
-    environment.promises.createResolved(startAlgorithm(), idlType.any);
-  environment.promises.react(startPromise, idlType.undefined, {
+    context.createResolvedPromise(startAlgorithm(), idlType.any);
+  context.reactToPromise(startPromise, idlType.undefined, {
     fulfilled() {
       state.started = true;
       readableStreamDefaultControllerCallPullIfNeeded(controller);
@@ -1093,13 +1118,6 @@ function readableStreamDefaultReaderErrorReadRequests(
   for (const request of requests) request.errorSteps(error);
 }
 
-function requireController(
-  state: ReadableStreamState,
-): NonNullable<ReadableStreamState['controller']> {
-  if (!state.controller) throw new Error('ReadableStream has no controller');
-  return state.controller;
-}
-
 function requireAsyncIteratorState(
   stream: ReadableStreamImpl,
   iterator: object,
@@ -1116,7 +1134,7 @@ function requireAsyncIteratorState(
 function requireDefaultController(
   stream: ReadableStreamImpl,
 ): ReadableStreamDefaultControllerImpl {
-  const controller = ReadableStreamImpl.getState(stream).controller;
+  const controller = ReadableStreamImpl.getController(stream);
   if (!ReadableStreamDefaultControllerImpl.is(controller)) {
     throw new Error('ReadableStream has no default controller');
   }
@@ -1137,14 +1155,6 @@ function requireAlgorithm<Algorithm>(
 ): Algorithm {
   if (!algorithm) throw new Error(`Readable stream ${name} algorithm is gone`);
   return algorithm;
-}
-
-function requirePromise(value: unknown): StreamPromise {
-  if ((typeof value !== 'object' || value === null) &&
-    typeof value !== 'function') {
-    throw new TypeError('Stream callback did not return a Web IDL promise');
-  }
-  return value;
 }
 
 type ReadableStreamAsyncIteratorState = {

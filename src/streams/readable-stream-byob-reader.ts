@@ -2,10 +2,17 @@
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, op, promise, reference, xattr,
+  type BufferViewTypeName,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  getBufferSourceByteLength, getBufferSourceUnderlyingBuffer,
+  getBufferTypeName, isBufferSourceDetached,
+} from '../web-idl/buffer-source';
+import { createDictionaryValue } from '../web-idl/conversion';
+import {
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import type { ReadableStreamImpl } from './readable-stream';
 import { ReadableStreamGenericReaderMixin } from './readable-stream-generic-reader';
 import {
@@ -17,8 +24,8 @@ export class ReadableStreamBYOBReaderImpl {
   readonly #genericReader: ReadableStreamGenericReaderMixin;
   #readIntoRequests: ReadIntoRequest[] = [];
 
-  constructor(environment: StreamEnvironment, stream?: ReadableStreamImpl) {
-    this.#genericReader = new ReadableStreamGenericReaderMixin(environment);
+  constructor(context: BindingContext, stream?: ReadableStreamImpl) {
+    this.#genericReader = new ReadableStreamGenericReaderMixin(context);
     if (stream) setUpReadableStreamBYOBReader(this, stream);
   }
 
@@ -32,34 +39,33 @@ export class ReadableStreamBYOBReaderImpl {
 
   read(view: object, options: ReadableStreamBYOBReaderReadOptions): StreamPromise {
     const generic = ReadableStreamBYOBReaderImpl.getGenericReader(this);
-    const environment = ReadableStreamGenericReaderMixin.getEnvironment(generic);
-    const buffers = environment.buffers;
-    const viewByteLength = buffers.getByteLength(view);
-    const buffer = buffers.getBuffer(view);
+    const context = ReadableStreamGenericReaderMixin.getContext(generic);
+    const viewByteLength = getBufferSourceByteLength(view);
+    const buffer = getBufferSourceUnderlyingBuffer(view);
     if (viewByteLength === 0) {
-      return rejectedTypeError(environment, 'view must have non-zero byteLength');
+      return rejectedTypeError(context, 'view must have non-zero byteLength');
     }
-    if (buffers.getByteLength(buffer) === 0) {
+    if (getBufferSourceByteLength(buffer) === 0) {
       return rejectedTypeError(
-        environment,
+        context,
         'view\'s buffer must have non-zero byteLength',
       );
     }
-    if (buffers.isDetached(buffer)) {
-      return rejectedTypeError(environment, 'view\'s buffer is detached');
+    if (isBufferSourceDetached(buffer)) {
+      return rejectedTypeError(context, 'view\'s buffer is detached');
     }
     if (options.min === 0) {
-      return rejectedTypeError(environment, 'options.min must be greater than 0');
+      return rejectedTypeError(context, 'options.min must be greater than 0');
     }
 
-    const type = buffers.getViewType(view);
+    const type = requireBufferViewType(view);
     const elementSize = bufferViewElementSizes[type];
     const viewLength = type === 'DataView'
       ? viewByteLength
       : viewByteLength / elementSize;
     if (options.min > viewLength) {
-      return environment.promises.createRejected(
-        new RangeError(
+      return context.createRejectedPromise(
+        new context.realm.intrinsics.rangeError(
           `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
           }`,
@@ -69,30 +75,30 @@ export class ReadableStreamBYOBReaderImpl {
     }
     if (!ReadableStreamGenericReaderMixin.getState(generic).stream) {
       return rejectedTypeError(
-        environment,
+        context,
         'Cannot read from a stream using a released reader',
       );
     }
 
-    const promise = environment.promises.create(
+    const promise = context.createPromise(
       reference('ReadableStreamReadResult'),
     );
     readableStreamBYOBReaderRead(this, view, options.min, {
-      chunkSteps: (chunk) => environment.promises.resolve(
+      chunkSteps: (chunk) => context.resolvePromise(
         promise,
-        environment.dictionaries.create([
+        createDictionaryValue([
           ['value', chunk],
           ['done', false],
         ]),
       ),
-      closeSteps: (chunk) => environment.promises.resolve(
+      closeSteps: (chunk) => context.resolvePromise(
         promise,
-        environment.dictionaries.create([
+        createDictionaryValue([
           ['value', chunk],
           ['done', true],
         ]),
       ),
-      errorSteps: (reason) => environment.promises.reject(promise, reason),
+      errorSteps: (reason) => context.rejectPromise(promise, reason),
     });
     return promise;
   }
@@ -140,7 +146,7 @@ export const readableStreamBYOBReaderIDL = defineInterface({
   name: 'ReadableStreamBYOBReader',
   exposed: ['Window', 'Worker', 'Worklet'],
   implementation: impl(ReadableStreamBYOBReaderImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),
@@ -186,11 +192,19 @@ const bufferViewElementSizes = {
 } as const;
 
 function rejectedTypeError(
-  environment: StreamEnvironment,
+  context: BindingContext,
   message: string,
 ): StreamPromise {
-  return environment.promises.createRejected(
-    new TypeError(message),
+  return context.createRejectedPromise(
+    new context.realm.intrinsics.typeError(message),
     reference('ReadableStreamReadResult'),
   );
+}
+
+function requireBufferViewType(view: object): BufferViewTypeName {
+  const type = getBufferTypeName(view);
+  if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
+    throw new Error('ArrayBuffer view has no recognized view type');
+  }
+  return type;
 }

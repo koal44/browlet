@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
 import { endOfIteration } from '../../../src/web-idl/async-sequence';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { webIDLCommonDefinitions } from '../../../src/web-idl/common-definitions';
 import {
   defineInterface, idlType, type AsyncIterableMember,
@@ -175,7 +175,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
     });
     const implementations = new ImplementationRegistry();
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -201,7 +201,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
 });
 
 function createPairBinding(): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   declaration: AsyncIterableMember;
   implementations: ImplementationRegistry;
   realm: Realm;
@@ -233,7 +233,7 @@ function createPairBinding(): {
   const implementations = new ImplementationRegistry();
   const realm = new Realm();
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([...webIDLCommonDefinitions, interface_]),
       realm,
       new PlatformObjectRegistry(),

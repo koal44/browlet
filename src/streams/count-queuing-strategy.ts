@@ -3,16 +3,16 @@ import {
   reference,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment,
-} from './environment';
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
 
 export class CountQueuingStrategyImpl {
   readonly #highWaterMark: number;
   readonly #size: CallableFunction;
 
-  constructor(environment: StreamEnvironment, init: QueuingStrategyInit) {
+  constructor(context: BindingContext, init: QueuingStrategyInit) {
     this.#highWaterMark = init.highWaterMark;
-    this.#size = getCountSizeFunction(environment);
+    this.#size = getCountSizeFunction(context);
   }
 
   get highWaterMark(): number {
@@ -31,7 +31,7 @@ export const countQueuingStrategyIDL = defineInterface({
   name: 'CountQueuingStrategy',
   exposed: ['Window', 'Worker', 'Worklet'],
   implementation: impl(CountQueuingStrategyImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     ctor([arg('init', reference('QueuingStrategyInit'))]),
@@ -44,18 +44,21 @@ type QueuingStrategyInit = {
   readonly highWaterMark: number;
 };
 
-const sizeFunctions = new WeakMap<StreamEnvironment, CallableFunction>();
+const sizeFunctions = new WeakMap<
+  BindingContext,
+  CallableFunction
+>();
 
 function getCountSizeFunction(
-  environment: StreamEnvironment,
+  context: BindingContext,
 ): CallableFunction {
-  let size = sizeFunctions.get(environment);
+  let size = sizeFunctions.get(context);
   if (!size) {
-    size = environment.callbacks.createFunction(
+    size = context.realm.createFunction(
       () => 1,
       { length: 0, name: 'size' },
     );
-    sizeFunctions.set(environment, size);
+    sizeFunctions.set(context, size);
   }
   return size;
 }

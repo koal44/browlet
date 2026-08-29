@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
 import {
-  addAbortAlgorithm, type AbortAlgorithmHandle,
-} from '../../../../src/browlet/dom/abort/abort-algorithm';
-import {
-  AbortSignalImpl,
+  AbortSignalImpl, type AbortAlgorithmHandle,
 } from '../../../../src/browlet/dom/abort/abort-signal';
 
 /*
@@ -282,6 +279,39 @@ describe('AbortController and AbortSignal', () => {
     expect(controller.signal.reason).not.toBeInstanceOf(DOMException);
   });
 
+  it('keeps a nested signal in its controller realm when borrowed', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const FirstAbortController = requireInterface<typeof AbortController>(
+      first.window,
+      'AbortController',
+    );
+    const FirstAbortSignal = requireInterface<typeof AbortSignal>(
+      first.window,
+      'AbortSignal',
+    );
+    const SecondAbortController = requireInterface<typeof AbortController>(
+      second.window,
+      'AbortController',
+    );
+    const SecondAbortSignal = requireInterface<typeof AbortSignal>(
+      second.window,
+      'AbortSignal',
+    );
+    const controller = new FirstAbortController();
+    const getter = Reflect.getOwnPropertyDescriptor(
+      SecondAbortController.prototype,
+      'signal',
+    )?.get;
+    if (!getter) throw new Error('AbortController.signal has no getter');
+
+    const signal = Reflect.apply(getter, controller, []);
+
+    expect(signal).toBe(controller.signal);
+    expect(signal).toBeInstanceOf(FirstAbortSignal);
+    expect(signal).not.toBeInstanceOf(SecondAbortSignal);
+  });
+
   it('supports replacement and ordering for the onabort IDL handler', () => {
     const { window } = createBrowlet();
     const AbortController_ = requireInterface<typeof AbortController>(
@@ -377,15 +407,15 @@ describe('AbortController and AbortSignal', () => {
 
 describe('AbortSignal internal algorithms', () => {
   it('runs in order and permits an earlier algorithm to remove a later one', () => {
-    const signal = new AbortSignalImpl();
+    const signal = new AbortSignalImpl(globalThis);
     const order: string[] = [];
     let later: AbortAlgorithmHandle | null = null;
 
-    addAbortAlgorithm(signal, () => {
+    signal.addAlgorithm(() => {
       order.push('first');
       later?.remove();
     });
-    later = addAbortAlgorithm(signal, () => { order.push('later'); });
+    later = signal.addAlgorithm(() => { order.push('later'); });
     signal.addEventListener('abort', () => { order.push('event'); });
 
     AbortSignalImpl.signalAbort(signal, 'reason');

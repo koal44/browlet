@@ -4,6 +4,8 @@ import {
   browletBindings, getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
+import { AttrImpl } from '../../../src/browlet/dom/nodes/attribute';
+import type { ElementImpl } from '../../../src/browlet/dom/nodes/element';
 import { Realm } from '../../../src/browlet/scripting/realm';
 
 describe('Browlet DOM binding', () => {
@@ -52,6 +54,74 @@ describe('Browlet DOM binding', () => {
 
     element.remove();
     expect(Reflect.has(browlet.window, 'named')).toBe(false);
+  });
+
+  it('projects ParentNode children with stable author identity', () => {
+    const browlet = createBrowlet();
+    const document = browlet.document;
+    const parent = document.createElement('main');
+    const first = document.createElement('section');
+    const second = document.createElement('aside');
+    first.setAttribute('id', 'first');
+    parent.appendChild(first);
+    document.body.appendChild(parent);
+    const children = parent.children;
+
+    expect(children).toBe(parent.children);
+    expect(children).toBeInstanceOf(getConstructor(browlet, 'HTMLCollection'));
+    expect(children[0]).toBe(first);
+    expect(children.item(0)).toBe(first);
+    expect(children.namedItem('first')).toBe(first);
+    expect(Reflect.get(children, 'first')).toBe(first);
+
+    parent.appendChild(second);
+
+    expect(children.length).toBe(2);
+    expect(children[1]).toBe(second);
+  });
+
+  it('projects getElementsByTagName results and their elements', () => {
+    const browlet = createBrowlet();
+    const document = browlet.document;
+    const first = document.createElement('main');
+    const second = document.createElement('main');
+    document.body.appendChild(first);
+    document.body.appendChild(second);
+
+    const elements = document.getElementsByTagName('main');
+
+    expect(elements).toBeInstanceOf(getConstructor(browlet, 'HTMLCollection'));
+    expect(elements).not.toBe(document.getElementsByTagName('main'));
+    expect(elements[0]).toBe(first);
+    expect(elements.item(1)).toBe(second);
+    expect([...elements]).toEqual([first, second]);
+  });
+
+  it('projects a stable NamedNodeMap with HTML attribute-name rules', () => {
+    const browlet = createBrowlet();
+    const document = browlet.document;
+    const element = document.createElement('main');
+    const attributes = element.attributes;
+    const elementImpl = browletBindings.getImplementation<ElementImpl>(element);
+    const uppercase = new AttrImpl(
+      'UPPER',
+      '',
+      null,
+      null,
+      elementImpl.ownerDocument,
+    );
+    const plain = document.createAttribute('plain');
+
+    elementImpl.attributes.setNamedItem(uppercase);
+    attributes.setNamedItem(plain);
+
+    expect(attributes).toBe(element.attributes);
+    expect(attributes).toBeInstanceOf(getConstructor(browlet, 'NamedNodeMap'));
+    expect(attributes.getNamedItem('UPPER')).toBeNull();
+    expect(Reflect.has(attributes, 'UPPER')).toBe(false);
+    expect(Object.getOwnPropertyNames(attributes)).not.toContain('UPPER');
+    expect(attributes.getNamedItemNS('', 'plain')).toBe(plain);
+    expect(attributes.removeNamedItemNS('', 'plain')).toBe(plain);
   });
 
   it('projects only described Web IDL members onto DOM prototypes', () => {

@@ -7,7 +7,7 @@ import {
   getAsyncIteratorNextValue, isAsyncSequence, openAsyncSequence,
   type IDLAsyncIterator, type IDLAsyncSequence,
 } from '../../../src/web-idl/async-sequence';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { convertToIDL } from '../../../src/web-idl/conversion';
 import {
   asyncSequence, defineInterface, idlType, type OperationMember,
@@ -150,7 +150,7 @@ describe('Web IDL async sequences', () => {
     implementations.setOperationSteps(asyncOperation, (_value) => 'async');
     implementations.setOperationSteps(stringOperation, (_value) => 'string');
     const realm = new Realm();
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -171,10 +171,10 @@ describe('Web IDL async sequences', () => {
   });
 });
 
-function createBinding(): { binding: JavaScriptBinding; realm: Realm; } {
+function createBinding(): { binding: RealmBinding; realm: Realm; } {
   const realm = new Realm();
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([]),
       realm,
       new PlatformObjectRegistry(),
@@ -192,7 +192,7 @@ function requireAsyncSequence(
 
 function nextValue(
   iterator: IDLAsyncIterator,
-  binding: JavaScriptBinding,
+  binding: RealmBinding,
 ): Promise<unknown> {
   return getAsyncIteratorNextValue(
     iterator,

@@ -25,28 +25,28 @@ export function findElementsByClassName(
   classNames: string,
 ): HTMLCollectionImpl {
   const names = parseOrderedSet(classNames);
-  if (names.size === 0) return new HTMLCollectionImpl();
+  return new HTMLCollectionImpl(() => names.size === 0
+    ? []
+    : collectElements(root, (element) => {
+      const value = element.getAttribute('class');
+      if (value === null) return false;
 
-  return collectElements(root, (element) => {
-    const value = element.getAttribute('class');
-    if (value === null) return false;
-
-    const classes = parseOrderedSet(value);
-    for (const name of names) {
-      if (!classes.has(name)) return false;
-    }
-    return true;
-  });
+      const classes = parseOrderedSet(value);
+      for (const name of names) {
+        if (!classes.has(name)) return false;
+      }
+      return true;
+    }));
 }
 
 export function findElementsByTagName(
   root: NodeImpl,
   qualifiedName: string,
 ): HTMLCollectionImpl {
-  return collectElements(
+  return new HTMLCollectionImpl(() => collectElements(
     root,
     (element) => qualifiedName === '*' || element.localName === qualifiedName,
-  );
+  ));
 }
 
 export function findElementsByTagNameNS(
@@ -54,19 +54,19 @@ export function findElementsByTagNameNS(
   namespaceURI: string | null,
   localName: string,
 ): HTMLCollectionImpl {
-  return collectElements(
+  return new HTMLCollectionImpl(() => collectElements(
     root,
     (element) =>
       (namespaceURI === '*' || element.namespaceURI === namespaceURI) &&
       (localName === '*' || element.localName === localName),
-  );
+  ));
 }
 
 function collectElements(
   root: NodeImpl,
   matches: (element: ElementImpl) => boolean,
-): HTMLCollectionImpl {
-  const elements = new HTMLCollectionImpl();
+): ElementImpl[] {
+  const elements: ElementImpl[] = [];
 
   walkElements(root, (element) => {
     if (matches(element)) elements.push(element);

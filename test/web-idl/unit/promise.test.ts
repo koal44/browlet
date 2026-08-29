@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import { convertToIDL, convertToJavaScript } from '../../../src/web-idl/conversion';
 import {
   idlType, promise as promiseType,
@@ -228,10 +228,10 @@ describe('Web IDL promises', () => {
   });
 });
 
-function createBinding(): { binding: JavaScriptBinding; realm: Realm; } {
+function createBinding(): { binding: RealmBinding; realm: Realm; } {
   const realm = new Realm();
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       assembleDefinitions([]),
       realm,
       new PlatformObjectRegistry(),

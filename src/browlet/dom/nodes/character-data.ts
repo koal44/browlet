@@ -12,6 +12,7 @@ import {
   NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL,
 } from './non-document-type-child-node';
 import type { DocumentImpl } from './document';
+import type { ElementImpl } from './element';
 
 /*
  * [Exposed=Window]
@@ -53,11 +54,11 @@ export class CharacterDataImpl
     TreeNode.notifyParentChildrenChanged(this);
   }
 
-  get previousElementSibling(): Element | null {
+  get previousElementSibling(): ElementImpl | null {
     return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
   }
 
-  get nextElementSibling(): Element | null {
+  get nextElementSibling(): ElementImpl | null {
     return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
   }
 

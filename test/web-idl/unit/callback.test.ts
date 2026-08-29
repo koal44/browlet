@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { assembleDefinitions } from '../../../src/web-idl/assembly';
-import { JavaScriptBinding } from '../../../src/web-idl/binding';
+import { RealmBinding } from '../../../src/web-idl/binding';
 import {
   callUserObjectOperation, constructCallbackFunction,
   convertWebIDLArguments, invokeCallbackFunction, missingArgument,
@@ -379,7 +379,7 @@ describe('Web IDL callbacks', () => {
       get: () => stored,
       set: (value) => { stored = value; },
     });
-    const binding = new JavaScriptBinding(
+    const binding = new RealmBinding(
       assembleDefinitions([callback, interface_]),
       realm,
       new PlatformObjectRegistry(),
@@ -455,7 +455,7 @@ describe('Web IDL callbacks', () => {
 });
 
 function createCallbackBinding(): {
-  binding: JavaScriptBinding;
+  binding: RealmBinding;
   callbackRealm: Realm;
   targetRealm: Realm;
 } {
@@ -529,7 +529,7 @@ function createCallbackBinding(): {
     }),
   ]);
   return {
-    binding: new JavaScriptBinding(
+    binding: new RealmBinding(
       definitions,
       targetRealm,
       new PlatformObjectRegistry(),

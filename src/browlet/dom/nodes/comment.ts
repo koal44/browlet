@@ -16,7 +16,7 @@ export class CommentImpl
   implements Comment
 {
   constructor(
-    data = '',
+    data: string,
     ownerDocument: DocumentImpl | null = null,
   ) {
     super(NodeType.Comment, data, ownerDocument);

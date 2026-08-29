@@ -1,10 +1,16 @@
 // @rollup-cycle streams-readable
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr, reference,
+  type BufferViewTypeName,
 } from '../web-idl/declaration/index';
 import {
-  streamEnvironment, type StreamEnvironment, type StreamPromise,
-} from './environment';
+  createArrayBuffer, getBufferSourceByteLength,
+  getBufferSourceUnderlyingBuffer,
+} from '../web-idl/buffer-source';
+import {
+  bindingContext, type BindingContext,
+} from '../web-idl/projection';
+import type { StreamPromise } from './promise';
 import {
   cancelSteps, pullSteps, releaseSteps,
 } from './internal-methods';
@@ -25,14 +31,13 @@ import {
   readableStreamGetNumReadRequests,
   readableStreamHasDefaultReader,
 } from './readable-byte-stream-operations';
-import type { BufferViewTypeName } from '../web-idl/declaration/index';
 
 export class ReadableByteStreamControllerImpl {
-  readonly #environment: StreamEnvironment;
+  readonly #context: BindingContext;
   #state?: ReadableByteStreamControllerState;
 
-  constructor(environment: StreamEnvironment) {
-    this.#environment = environment;
+  constructor(context: BindingContext) {
+    this.#context = context;
   }
 
   get byobRequest(): ReadableStreamBYOBRequestImpl | null {
@@ -46,11 +51,13 @@ export class ReadableByteStreamControllerImpl {
   close(): void {
     const state = ReadableByteStreamControllerImpl.getState(this);
     if (state.closeRequested) {
-      throw new TypeError('The stream has already been closed');
+      throw new this.#context.realm.intrinsics.typeError(
+        'The stream has already been closed',
+      );
     }
     const streamState = ReadableStreamImpl.getState(state.stream).state;
     if (streamState !== 'readable') {
-      throw new TypeError(
+      throw new this.#context.realm.intrinsics.typeError(
         `A stream in the ${streamState} state cannot be closed`,
       );
     }
@@ -58,21 +65,28 @@ export class ReadableByteStreamControllerImpl {
   }
 
   enqueue(chunk: object): void {
-    const buffers = this.#environment.buffers;
-    if (buffers.getByteLength(chunk) === 0) {
-      throw new TypeError('chunk must have non-zero byteLength');
+    if (getBufferSourceByteLength(chunk) === 0) {
+      throw new this.#context.realm.intrinsics.typeError(
+        'chunk must have non-zero byteLength',
+      );
     }
-    if (buffers.getByteLength(buffers.getBuffer(chunk)) === 0) {
-      throw new TypeError('chunk\'s buffer must have non-zero byteLength');
+    if (getBufferSourceByteLength(
+      getBufferSourceUnderlyingBuffer(chunk),
+    ) === 0) {
+      throw new this.#context.realm.intrinsics.typeError(
+        'chunk\'s buffer must have non-zero byteLength',
+      );
     }
 
     const state = ReadableByteStreamControllerImpl.getState(this);
     if (state.closeRequested) {
-      throw new TypeError('The stream is closed or draining');
+      throw new this.#context.realm.intrinsics.typeError(
+        'The stream is closed or draining',
+      );
     }
     const streamState = ReadableStreamImpl.getState(state.stream).state;
     if (streamState !== 'readable') {
-      throw new TypeError(
+      throw new this.#context.realm.intrinsics.typeError(
         `A stream in the ${streamState} state cannot be enqueued to`,
       );
     }
@@ -111,7 +125,10 @@ export class ReadableByteStreamControllerImpl {
     if (autoAllocateChunkSize !== undefined) {
       let buffer: object;
       try {
-        buffer = this.#environment.buffers.create(autoAllocateChunkSize);
+        buffer = createArrayBuffer(
+          new Uint8Array(autoAllocateChunkSize),
+          this.#context.realm,
+        );
       } catch (error) {
         request.errorSteps(error);
         return;
@@ -144,14 +161,14 @@ export class ReadableByteStreamControllerImpl {
 
   // -- Friends ----------------------------------------------------------
 
-  static getEnvironment(
+  static getContext(
     controller: ReadableByteStreamControllerImpl,
-  ): StreamEnvironment {
-    return controller.#environment;
+  ): BindingContext {
+    return controller.#context;
   }
 
   static is(value: unknown): value is ReadableByteStreamControllerImpl {
-    return typeof value === 'object' && value !== null && #environment in value;
+    return typeof value === 'object' && value !== null && #context in value;
   }
 
   static getState(
@@ -210,7 +227,7 @@ export const readableByteStreamControllerIDL = defineInterface({
   name: 'ReadableByteStreamController',
   exposed: ['Window', 'Worker', 'Worklet'],
   implementation: impl(ReadableByteStreamControllerImpl, {
-    withArgs: [streamEnvironment],
+    constructWith: [bindingContext],
   }),
   members: [
     roAttr('byobRequest', nullable(reference('ReadableStreamBYOBRequest'))),
