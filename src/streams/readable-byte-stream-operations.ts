@@ -32,8 +32,11 @@ import {
   readableStreamReaderGenericInitialize, readableStreamReaderGenericRelease,
   setUpReadableStreamDefaultReader,
 } from './readable-stream-operations';
-import type { StreamPromise } from './promise';
+import { runPromiseAlgorithm, type StreamPromise } from './promise';
 import { internalStreamSetup } from './internal-methods';
+import {
+  canCopyDataBlockBytes, cloneAsUint8Array,
+} from './miscellaneous';
 
 export function setUpReadableStreamBYOBReader(
   reader: ReadableStreamBYOBReaderImpl,
@@ -65,6 +68,31 @@ export function acquireReadableStreamBYOBReader(
   const reader = context.construct(ReadableStreamBYOBReaderImpl);
   setUpReadableStreamBYOBReader(reader, stream);
   return reader;
+}
+
+function createReadableByteStream(
+  context: BindingContext,
+  startAlgorithm: () => unknown,
+  pullAlgorithm: () => StreamPromise,
+  cancelAlgorithm: (reason: unknown) => StreamPromise,
+): ReadableStreamImpl {
+  const stream = context.construct(
+    ReadableStreamImpl,
+    internalStreamSetup,
+  );
+  const controller = context.construct(
+    ReadableByteStreamControllerImpl,
+  );
+  setUpReadableByteStreamController(
+    stream,
+    controller,
+    startAlgorithm,
+    pullAlgorithm,
+    cancelAlgorithm,
+    0,
+    undefined,
+  );
+  return stream;
 }
 
 export function readableByteStreamTee(
@@ -323,25 +351,17 @@ export function readableByteStreamTee(
     if (canceled1) settleCancelPromise([reason1, reason2]);
     return cancelPromise;
   };
-  const source1: UnderlyingSource = {
-    cancel: cancel1Algorithm,
-    pull: pull1Algorithm,
-    start: () => undefined,
-    type: 'bytes',
-  };
-  const source2: UnderlyingSource = {
-    cancel: cancel2Algorithm,
-    pull: pull2Algorithm,
-    start: () => undefined,
-    type: 'bytes',
-  };
-  const branch1 = context.construct(
-    ReadableStreamImpl,
-    source1,
+  const branch1 = createReadableByteStream(
+    context,
+    () => undefined,
+    pull1Algorithm,
+    cancel1Algorithm,
   );
-  const branch2 = context.construct(
-    ReadableStreamImpl,
-    source2,
+  const branch2 = createReadableByteStream(
+    context,
+    () => undefined,
+    pull2Algorithm,
+    cancel2Algorithm,
   );
   forwardReaderError(reader);
   return [branch1, branch2];
@@ -886,8 +906,8 @@ export function createReadableStreamWithByteReadingSupport(
     stream,
     controller,
     () => undefined,
-    () => runAlgorithm(context, () => pullAlgorithm?.()),
-    (reason) => runAlgorithm(
+    () => runPromiseAlgorithm(context, () => pullAlgorithm?.()),
+    (reason) => runPromiseAlgorithm(
       context,
       () => cancelAlgorithm?.(reason),
     ),
@@ -941,20 +961,6 @@ function setUpReadableByteStreamController(
       },
     },
   );
-}
-
-function runAlgorithm(
-  context: BindingContext,
-  algorithm: () => unknown,
-): StreamPromise {
-  try {
-    return context.createResolvedPromise(
-      algorithm(),
-      idlType.undefined,
-    );
-  } catch (error) {
-    return context.createRejectedPromise(error, idlType.undefined);
-  }
 }
 
 function commitPullIntoDescriptor(
@@ -1086,6 +1092,13 @@ function fillPullIntoFromQueue(
     const head = state.queue[0];
     assert(head !== undefined);
     const count = Math.min(remaining, head.byteLength);
+    assert(canCopyDataBlockBytes(
+      descriptor.buffer,
+      descriptor.byteOffset + descriptor.bytesFilled,
+      head.buffer,
+      head.byteOffset,
+      count,
+    ));
     copyDataBlockBytes(
       descriptor.buffer,
       descriptor.byteOffset + descriptor.bytesFilled,
@@ -1293,26 +1306,6 @@ function errorReadIntoRequests(
   const requests = ReadableStreamBYOBReaderImpl.getReadIntoRequests(reader);
   ReadableStreamBYOBReaderImpl.resetReadIntoRequests(reader);
   for (const request of requests) request.errorSteps(error);
-}
-
-function cloneAsUint8Array(
-  context: BindingContext,
-  view: object,
-): object {
-  const byteLength = getBufferSourceByteLength(view);
-  const buffer = cloneArrayBuffer(
-    context,
-    getBufferSourceUnderlyingBuffer(view),
-    getBufferSourceByteOffset(view),
-    byteLength,
-  );
-  return createBufferView(
-    context,
-    'Uint8Array',
-    buffer,
-    0,
-    byteLength,
-  );
 }
 
 function cloneArrayBuffer(

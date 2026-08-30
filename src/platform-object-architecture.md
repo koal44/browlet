@@ -91,6 +91,13 @@ interfaces merely to satisfy TypeScript's `lib.dom` declarations or direct
 tests. They also need not `implements Foo` when doing so would falsely require
 the implementation object to have the platform signature.
 
+Because the implementation and platform object are distinct identities,
+implementation state does not need a sidecar map merely to hide it from an
+author. Prefer direct implementation-owned fields when cross-module algorithms
+need that state, and use type-only reverse imports to keep the runtime module
+graph acyclic. Retain private fields or static friends only when their internal
+boundary is independently useful.
+
 ### Binding layer
 
 Web IDL owns the boundary into the Platform layer:

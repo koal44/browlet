@@ -3,11 +3,20 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import {
   browletBindings, getRelevantRealm,
 } from '../../../../src/browlet/bindings';
+import { createTransformStream } from '../../../../src/streams/index';
 import { TransformStreamImpl } from '../../../../src/streams/transform-stream';
 import type { TransformStreamDefaultControllerImpl } from '../../../../src/streams/transform-stream-default-controller';
 import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('transform-stream implementation', () => {
+  it('validates transformer types before strategy high-water marks', () => {
+    expect(() => new TransformStreamImpl(
+      createTestContext(),
+      { readableType: 'bytes' },
+      { highWaterMark: -1 },
+    )).toThrow('Invalid readableType specified');
+  });
+
   it('uses the default identity transform', async () => {
     const stream = new TransformStreamImpl(createTestContext());
     const writer = stream.writable.getWriter();
@@ -159,11 +168,9 @@ describe('transform-stream projection', () => {
     if (resolved?.primaryInterface.definition.name !== 'TransformStream') {
       throw new Error('TransformStream did not resolve to its implementation');
     }
-    const stream = TransformStreamImpl.fromAlgorithms(
-      TransformStreamImpl.getContext(
-        resolved.implementation as TransformStreamImpl,
-      ),
-      { transform() {} },
+    const stream = createTransformStream(
+      (resolved.implementation as TransformStreamImpl).context,
+      () => undefined,
     );
 
     expect(bindings.context.resolvePlatformObject(stream)).toBeUndefined();
@@ -172,6 +179,23 @@ describe('transform-stream projection', () => {
     expect(projectedStream?.primaryInterface.definition.name)
       .toBe('TransformStream');
     expect(projectedStream?.implementation).toBe(stream);
+  });
+
+  it('keeps implementation state off the platform objects', () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const TransformStream_ = requireFunction(window, 'TransformStream');
+    let controller: object | undefined;
+    const stream = Reflect.construct(TransformStream_, [{
+      start(value: object) { controller = value; },
+    }]) as object;
+    const readable = requireObject(stream, 'readable');
+    const writable = requireObject(stream, 'writable');
+
+    if (!controller) throw new Error('Transform stream did not start');
+    for (const value of [stream, controller, readable, writable]) {
+      expect(Reflect.has(value, 'state')).toBe(false);
+      expect(Reflect.has(value, 'context')).toBe(false);
+    }
   });
 
   it('connects its projected writable and readable sides', async () => {

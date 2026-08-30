@@ -13,39 +13,35 @@ import {
   writableStreamDefaultWriterGetDesiredSize,
   writableStreamDefaultWriterRelease, writableStreamDefaultWriterWrite,
 } from './writable-stream-operations';
-import {
-  getWritableStreamDefaultWriterContext,
-  getWritableStreamDefaultWriterState,
-  initializeWritableStreamDefaultWriterSlots,
-} from './writable-stream-slots';
 
 export class WritableStreamDefaultWriterImpl {
+  state!: WritableStreamDefaultWriterState;
+
   constructor(
-    context: BindingContext,
+    readonly context: BindingContext,
     stream?: WritableStreamImpl,
   ) {
-    initializeWritableStreamDefaultWriterSlots(this, context);
     if (stream) setUpWritableStreamDefaultWriter(this, stream);
   }
 
   get closed(): StreamPromise {
-    return getWritableStreamDefaultWriterState(this).closedPromise;
+    return this.state.closedPromise;
   }
 
   get desiredSize(): number | null {
-    if (!getWritableStreamDefaultWriterState(this).stream) {
+    if (!this.state.stream) {
       throw defaultWriterLockException(this, 'get the desired size of');
     }
     return writableStreamDefaultWriterGetDesiredSize(this);
   }
 
   get ready(): StreamPromise {
-    return getWritableStreamDefaultWriterState(this).readyPromise;
+    return this.state.readyPromise;
   }
 
   abort(reason?: unknown): StreamPromise {
-    const context = getWritableStreamDefaultWriterContext(this);
-    if (!getWritableStreamDefaultWriterState(this).stream) {
+    const context = this.context;
+    if (!this.state.stream) {
       return context.createRejectedPromise(
         defaultWriterLockException(this, 'abort'),
         idlType.undefined,
@@ -55,8 +51,8 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   close(): StreamPromise {
-    const context = getWritableStreamDefaultWriterContext(this);
-    const stream = getWritableStreamDefaultWriterState(this).stream;
+    const context = this.context;
+    const stream = this.state.stream;
     if (!stream) {
       return context.createRejectedPromise(
         defaultWriterLockException(this, 'close'),
@@ -75,13 +71,13 @@ export class WritableStreamDefaultWriterImpl {
   }
 
   releaseLock(): void {
-    if (!getWritableStreamDefaultWriterState(this).stream) return;
+    if (!this.state.stream) return;
     writableStreamDefaultWriterRelease(this);
   }
 
   write(chunk?: unknown): StreamPromise {
-    const context = getWritableStreamDefaultWriterContext(this);
-    if (!getWritableStreamDefaultWriterState(this).stream) {
+    const context = this.context;
+    if (!this.state.stream) {
       return context.createRejectedPromise(
         defaultWriterLockException(this, 'write to'),
         idlType.undefined,
@@ -125,7 +121,7 @@ function defaultWriterLockException(
   writer: WritableStreamDefaultWriterImpl,
   operation: string,
 ): TypeError {
-  const context = getWritableStreamDefaultWriterContext(writer);
+  const context = writer.context;
   return new context.realm.intrinsics.typeError(
     `Cannot ${operation} a stream using a released writer`,
   );

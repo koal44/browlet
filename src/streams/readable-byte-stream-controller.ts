@@ -225,7 +225,7 @@ export type PullIntoDescriptor = {
 
 export const readableByteStreamControllerIDL = defineInterface({
   name: 'ReadableByteStreamController',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(ReadableByteStreamControllerImpl, {
     constructWith: [bindingContext],
   }),

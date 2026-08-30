@@ -42,9 +42,6 @@ import {
   writableStreamDefaultWriterCloseWithErrorPropagation,
   writableStreamDefaultWriterRelease, writableStreamDefaultWriterWrite,
 } from './writable-stream-operations';
-import {
-  getWritableStreamDefaultWriterState, getWritableStreamState,
-} from './writable-stream-slots';
 
 export function initializeReadableStream(): ReadableStreamState {
   return {
@@ -61,7 +58,6 @@ export function createReadableStream(
   cancelAlgorithm: (reason: unknown) => StreamPromise,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
-  startPromise?: StreamPromise,
 ): ReadableStreamImpl {
   const stream = context.construct(
     ReadableStreamImpl,
@@ -78,7 +74,6 @@ export function createReadableStream(
     cancelAlgorithm,
     highWaterMark,
     sizeAlgorithm,
-    startPromise,
   );
   return stream;
 }
@@ -139,40 +134,41 @@ export function readableStreamFromIterable(
   asyncIterable: IDLAsyncSequence,
 ): ReadableStreamImpl {
   const iterator = openAsyncSequence(asyncIterable, context.realm);
-  const source: UnderlyingSource = {
-    start: () => undefined,
-    pull() {
-      return context.reactToPromise(
-        getAsyncIteratorNextValue(
-          iterator,
-          context.realm,
-          (value, type) => context.convert(value, type),
-        ),
-        idlType.undefined,
-        {
-          fulfilled(value) {
-            const controller = requireDefaultController(stream);
-            if (value === endOfIteration) {
-              readableStreamDefaultControllerClose(controller);
-            } else {
-              readableStreamDefaultControllerEnqueue(controller, value);
-            }
-          },
-        },
-      );
+  const pullAlgorithm = () => context.reactToPromise(
+    getAsyncIteratorNextValue(
+      iterator,
+      context.realm,
+      (value, type) => context.convert(value, type),
+    ),
+    idlType.undefined,
+    {
+      fulfilled(value) {
+        const controller = requireDefaultController(stream);
+        if (value === endOfIteration) {
+          readableStreamDefaultControllerClose(controller);
+        } else {
+          readableStreamDefaultControllerEnqueue(controller, value);
+        }
+      },
+      rejected(reason) {
+        readableStreamDefaultControllerError(
+          requireDefaultController(stream),
+          reason,
+        );
+      },
     },
-    cancel(reason) {
-      return context.reactToPromise(
-        closeAsyncIterator(iterator, reason, context.realm),
-        idlType.undefined,
-        { fulfilled: () => undefined },
-      );
-    },
-  };
-  const stream = context.construct(
-    ReadableStreamImpl,
-    source,
-    { highWaterMark: 0 },
+  );
+  const cancelAlgorithm = (reason: unknown) => context.reactToPromise(
+    closeAsyncIterator(iterator, reason, context.realm),
+    idlType.undefined,
+    { fulfilled: () => undefined },
+  );
+  const stream = createReadableStream(
+    context,
+    () => undefined,
+    pullAlgorithm,
+    cancelAlgorithm,
+    0,
   );
   return stream;
 }
@@ -252,11 +248,11 @@ export function readableStreamPipeTo(
   const reader = acquireReadableStreamDefaultReader(source);
   const writer = acquireWritableStreamDefaultWriter(destination);
   const sourceState = ReadableStreamImpl.getState(source);
-  const destinationState = getWritableStreamState(destination);
+  const destinationState = destination.state;
   const readerState = ReadableStreamGenericReaderMixin.getState(
     ReadableStreamDefaultReaderImpl.getGenericReader(reader),
   );
-  const writerState = getWritableStreamDefaultWriterState(writer);
+  const writerState = writer.state;
   sourceState.disturbed = true;
 
   let shuttingDown = false;
@@ -392,8 +388,18 @@ export function readableStreamPipeTo(
           const read = context.createPromise(idlType.boolean);
           readableStreamDefaultReaderRead(reader, {
             chunkSteps(chunk) {
+              const write = context.reactToPromise(
+                context.createResolvedPromise(undefined, idlType.undefined),
+                idlType.undefined,
+                {
+                  fulfilled: () => writableStreamDefaultWriterWrite(
+                    writer,
+                    chunk,
+                  ),
+                },
+              );
               currentWrite = context.reactToPromise(
-                writableStreamDefaultWriterWrite(writer, chunk),
+                write,
                 idlType.undefined,
                 { rejected: () => undefined },
               );
@@ -611,23 +617,17 @@ export function readableStreamDefaultTee(
     if (canceled1) settleCancelPromise([reason1, reason2]);
     return cancelPromise;
   };
-  const source1: UnderlyingSource = {
-    cancel: cancel1Algorithm,
-    pull: pullAlgorithm,
-    start: () => undefined,
-  };
-  const source2: UnderlyingSource = {
-    cancel: cancel2Algorithm,
-    pull: pullAlgorithm,
-    start: () => undefined,
-  };
-  const branch1 = context.construct(
-    ReadableStreamImpl,
-    source1,
+  const branch1 = createReadableStream(
+    context,
+    () => undefined,
+    pullAlgorithm,
+    cancel1Algorithm,
   );
-  const branch2 = context.construct(
-    ReadableStreamImpl,
-    source2,
+  const branch2 = createReadableStream(
+    context,
+    () => undefined,
+    pullAlgorithm,
+    cancel2Algorithm,
   );
 
   context.reactToPromise(
@@ -959,6 +959,12 @@ export function readableStreamDefaultControllerGetDesiredSize(
   return state.strategyHighWaterMark - state.queueTotalSize;
 }
 
+export function readableStreamDefaultControllerHasBackpressure(
+  controller: ReadableStreamDefaultControllerImpl,
+): boolean {
+  return !readableStreamDefaultControllerShouldCallPull(controller);
+}
+
 export function readableStreamDefaultControllerCanCloseOrEnqueue(
   controller: ReadableStreamDefaultControllerImpl,
 ): boolean {
@@ -1051,7 +1057,6 @@ function setUpReadableStreamDefaultController(
   cancelAlgorithm: (reason: unknown) => StreamPromise,
   highWaterMark: number,
   sizeAlgorithm: QueuingStrategySize,
-  suppliedStartPromise?: StreamPromise,
 ): void {
   const streamState = ReadableStreamImpl.getState(stream);
   if (streamState.controller) {
@@ -1075,8 +1080,10 @@ function setUpReadableStreamDefaultController(
   streamState.controller = controller;
 
   const context = ReadableStreamImpl.getContext(stream);
-  const startPromise = suppliedStartPromise ??
-    context.createResolvedPromise(startAlgorithm(), idlType.any);
+  const startPromise = context.createResolvedPromise(
+    startAlgorithm(),
+    idlType.any,
+  );
   context.reactToPromise(startPromise, idlType.undefined, {
     fulfilled() {
       state.started = true;

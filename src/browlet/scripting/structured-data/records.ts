@@ -72,7 +72,8 @@ export type SharedArrayBufferSerializedRecord = {
 export type ArrayBufferViewSerializedRecord = {
   type: 'ArrayBufferView';
   constructor: BufferViewTypeName;
-  buffer: ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord;
+  buffer: ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord |
+    TransferPlaceholderSerializedRecord;
   byteLength: number | 'auto';
   byteOffset: number;
   arrayLength?: number | 'auto';

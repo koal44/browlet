@@ -15,15 +15,6 @@ import type {
 import type {
   WritableStreamDefaultWriterImpl,
 } from './writable-stream-default-writer';
-import {
-  getWritableStreamDefaultControllerState,
-  getWritableStreamDefaultWriterContext,
-  getWritableStreamDefaultWriterState,
-  getWritableStreamContext,
-  getWritableStreamState,
-  setWritableStreamDefaultControllerState,
-  setWritableStreamDefaultWriterState,
-} from './writable-stream-slots';
 
 export function initializeWritableStream(): WritableStreamState {
   return {
@@ -34,26 +25,23 @@ export function initializeWritableStream(): WritableStreamState {
 }
 
 export function isWritableStreamLocked(stream: WritableStreamImpl): boolean {
-  return getWritableStreamState(stream).writer !== undefined;
+  return stream.state.writer !== undefined;
 }
 
 export function isWritableStreamWritable(stream: WritableStreamImpl): boolean {
-  return getWritableStreamState(stream).state === 'writable';
+  return stream.state.state === 'writable';
 }
 
 export function writableStreamAbort(
   stream: WritableStreamImpl,
   reason: unknown,
 ): StreamPromise {
-  const state = getWritableStreamState(stream);
-  const context = getWritableStreamContext(stream);
+  const { context, state } = stream;
   if (isWritableStreamFinished(state)) {
     return context.createResolvedPromise(undefined, idlType.undefined);
   }
 
-  getWritableStreamDefaultControllerState(
-    requireController(state),
-  ).abortController.abort(reason);
+  requireController(state).state.abortController.abort(reason);
   if (isWritableStreamFinished(state)) {
     return context.createResolvedPromise(undefined, idlType.undefined);
   }
@@ -71,8 +59,7 @@ export function writableStreamAbort(
 }
 
 export function writableStreamClose(stream: WritableStreamImpl): StreamPromise {
-  const state = getWritableStreamState(stream);
-  const context = getWritableStreamContext(stream);
+  const { context, state } = stream;
   if (state.state === 'closed' || state.state === 'errored') {
     return context.createRejectedPromise(
       new context.realm.intrinsics.typeError(
@@ -89,7 +76,7 @@ export function writableStreamClose(stream: WritableStreamImpl): StreamPromise {
   state.closeRequest = promise;
   if (state.writer && state.backpressure && state.state === 'writable') {
     context.resolvePromise(
-      getWritableStreamDefaultWriterState(state.writer).readyPromise,
+      state.writer.state.readyPromise,
       undefined,
     );
   }
@@ -100,7 +87,7 @@ export function writableStreamClose(stream: WritableStreamImpl): StreamPromise {
 export function writableStreamCloseQueuedOrInFlight(
   stream: WritableStreamImpl,
 ): boolean {
-  const state = getWritableStreamState(stream);
+  const { state } = stream;
   return state.closeRequest !== undefined ||
     state.inFlightCloseRequest !== undefined;
 }
@@ -109,14 +96,14 @@ export function setUpWritableStreamDefaultWriter(
   writer: WritableStreamDefaultWriterImpl,
   stream: WritableStreamImpl,
 ): void {
-  const context = getWritableStreamDefaultWriterContext(writer);
+  const { context } = writer;
   if (isWritableStreamLocked(stream)) {
     throw new context.realm.intrinsics.typeError(
       'This stream has already been locked for exclusive writing',
     );
   }
 
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   let readyPromise: StreamPromise;
   let closedPromise: StreamPromise;
   if (streamState.state === 'writable') {
@@ -154,11 +141,11 @@ export function setUpWritableStreamDefaultWriter(
     context.markPromiseHandled(closedPromise);
   }
 
-  setWritableStreamDefaultWriterState(writer, {
+  writer.state = {
     closedPromise,
     readyPromise,
     stream,
-  });
+  };
   streamState.writer = writer;
 }
 
@@ -179,8 +166,7 @@ export function writableStreamDefaultWriterCloseWithErrorPropagation(
   writer: WritableStreamDefaultWriterImpl,
 ): StreamPromise {
   const stream = requireWriterStream(writer);
-  const streamState = getWritableStreamState(stream);
-  const context = getWritableStreamContext(stream);
+  const { context, state: streamState } = stream;
   if (writableStreamCloseQueuedOrInFlight(stream) ||
     streamState.state === 'closed') {
     return context.createResolvedPromise(undefined, idlType.undefined);
@@ -198,7 +184,7 @@ export function writableStreamDefaultWriterGetDesiredSize(
   writer: WritableStreamDefaultWriterImpl,
 ): number | null {
   const stream = requireWriterStream(writer);
-  const state = getWritableStreamState(stream);
+  const { state } = stream;
   if (state.state === 'errored' || state.state === 'erroring') return null;
   if (state.state === 'closed') return 0;
   return writableStreamDefaultControllerGetDesiredSize(
@@ -209,14 +195,14 @@ export function writableStreamDefaultWriterGetDesiredSize(
 export function writableStreamDefaultWriterRelease(
   writer: WritableStreamDefaultWriterImpl,
 ): void {
-  const writerState = getWritableStreamDefaultWriterState(writer);
+  const writerState = writer.state;
   const stream = requireWriterStream(writer);
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (streamState.writer !== writer) {
     throw new Error('Writable stream is locked by another writer');
   }
 
-  const context = getWritableStreamDefaultWriterContext(writer);
+  const { context } = writer;
   const releasedError = new context.realm.intrinsics.typeError(
     'Writer was released and can no longer monitor the stream',
   );
@@ -237,15 +223,14 @@ export function writableStreamDefaultWriterWrite(
   chunk: unknown,
 ): StreamPromise {
   const stream = requireWriterStream(writer);
-  const streamState = getWritableStreamState(stream);
-  const context = getWritableStreamContext(stream);
+  const { context, state: streamState } = stream;
   const controller = requireController(streamState);
   const chunkSize = writableStreamDefaultControllerGetChunkSize(
     controller,
     chunk,
   );
 
-  if (stream !== getWritableStreamDefaultWriterState(writer).stream) {
+  if (stream !== writer.state.stream) {
     return context.createRejectedPromise(
       new context.realm.intrinsics.typeError(
         'Cannot write using a released writer',
@@ -253,8 +238,7 @@ export function writableStreamDefaultWriterWrite(
       idlType.undefined,
     );
   }
-  if (streamState.state === 'errored' ||
-    streamState.state === 'erroring') {
+  if (streamState.state === 'errored') {
     return context.createRejectedPromise(
       streamState.storedError,
       idlType.undefined,
@@ -266,6 +250,12 @@ export function writableStreamDefaultWriterWrite(
       new context.realm.intrinsics.typeError(
         'The stream is closing or closed',
       ),
+      idlType.undefined,
+    );
+  }
+  if (streamState.state === 'erroring') {
+    return context.createRejectedPromise(
+      streamState.storedError,
       idlType.undefined,
     );
   }
@@ -283,9 +273,8 @@ export function setUpWritableStreamDefaultControllerFromUnderlyingSink(
   sink: UnderlyingSink,
   highWaterMark: number,
   sizeAlgorithm: QueuingStrategySize,
-  suppliedStartPromise?: StreamPromise,
 ): void {
-  const context = getWritableStreamContext(stream);
+  const { context } = stream;
   const startCallback = sink.start;
   const writeCallback = sink.write;
   const closeCallback = sink.close;
@@ -329,14 +318,13 @@ export function setUpWritableStreamDefaultControllerFromUnderlyingSink(
     abortAlgorithm,
     highWaterMark,
     sizeAlgorithm,
-    suppliedStartPromise,
   );
 }
 
 export function writableStreamDefaultControllerClearAlgorithms(
   controller: WritableStreamDefaultControllerImpl,
 ): void {
-  const state = getWritableStreamDefaultControllerState(controller);
+  const { state } = controller;
   state.writeAlgorithm = undefined;
   state.closeAlgorithm = undefined;
   state.abortAlgorithm = undefined;
@@ -347,8 +335,8 @@ export function writableStreamDefaultControllerError(
   controller: WritableStreamDefaultControllerImpl,
   error: unknown,
 ): void {
-  const state = getWritableStreamDefaultControllerState(controller);
-  if (getWritableStreamState(state.stream).state !== 'writable') {
+  const { state } = controller;
+  if (state.stream.state.state !== 'writable') {
     throw new Error('Only a writable stream can start erroring');
   }
   writableStreamDefaultControllerClearAlgorithms(controller);
@@ -359,10 +347,8 @@ export function writableStreamDefaultControllerErrorIfNeeded(
   controller: WritableStreamDefaultControllerImpl,
   error: unknown,
 ): void {
-  const stream = getWritableStreamDefaultControllerState(
-    controller,
-  ).stream;
-  if (getWritableStreamState(stream).state === 'writable') {
+  const { stream } = controller.state;
+  if (stream.state.state === 'writable') {
     writableStreamDefaultControllerError(controller, error);
   }
 }
@@ -376,13 +362,12 @@ export function setUpWritableStreamDefaultController(
   abortAlgorithm: (reason: unknown) => StreamPromise,
   highWaterMark: number,
   sizeAlgorithm: QueuingStrategySize,
-  suppliedStartPromise?: StreamPromise,
 ): void {
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (streamState.controller) {
     throw new Error('WritableStream already has a controller');
   }
-  const context = getWritableStreamContext(stream);
+  const { context } = stream;
   const state: WritableStreamDefaultControllerState = {
     abortAlgorithm,
     abortController: createStreamAbortController(context),
@@ -395,15 +380,17 @@ export function setUpWritableStreamDefaultController(
     stream,
     writeAlgorithm,
   };
-  setWritableStreamDefaultControllerState(controller, state);
+  controller.state = state;
   streamState.controller = controller;
 
   writableStreamUpdateBackpressure(
     stream,
     writableStreamDefaultControllerGetBackpressure(controller),
   );
-  const startPromise = suppliedStartPromise ??
-    context.createResolvedPromise(startAlgorithm(), idlType.any);
+  const startPromise = context.createResolvedPromise(
+    startAlgorithm(),
+    idlType.any,
+  );
   context.reactToPromise(startPromise, idlType.undefined, {
     fulfilled() {
       state.started = true;
@@ -419,13 +406,11 @@ export function setUpWritableStreamDefaultController(
 function writableStreamDefaultControllerAdvanceQueueIfNeeded(
   controller: WritableStreamDefaultControllerImpl,
 ): void {
-  const controllerState = getWritableStreamDefaultControllerState(
-    controller,
-  );
+  const controllerState = controller.state;
   if (!controllerState.started) return;
 
   const stream = controllerState.stream;
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (streamState.inFlightWriteRequest) return;
   if (streamState.state === 'erroring') {
     writableStreamFinishErroring(stream);
@@ -444,12 +429,12 @@ function writableStreamDefaultControllerAdvanceQueueIfNeeded(
 function writableStreamDefaultControllerClose(
   controller: WritableStreamDefaultControllerImpl,
 ): void {
-  const controllerState = getWritableStreamDefaultControllerState(controller);
+  const controllerState = controller.state;
   enqueueValueWithSize(
     controllerState,
     closeSentinel,
     0,
-    getWritableStreamContext(controllerState.stream).realm.intrinsics.rangeError,
+    controllerState.stream.context.realm.intrinsics.rangeError,
   );
   writableStreamDefaultControllerAdvanceQueueIfNeeded(controller);
 }
@@ -464,7 +449,7 @@ function writableStreamDefaultControllerGetChunkSize(
   controller: WritableStreamDefaultControllerImpl,
   chunk: unknown,
 ): number {
-  const state = getWritableStreamDefaultControllerState(controller);
+  const { state } = controller;
   if (!state.strategySizeAlgorithm) return 1;
   try {
     return state.strategySizeAlgorithm(chunk);
@@ -477,18 +462,16 @@ function writableStreamDefaultControllerGetChunkSize(
 function writableStreamDefaultControllerGetDesiredSize(
   controller: WritableStreamDefaultControllerImpl,
 ): number {
-  const state = getWritableStreamDefaultControllerState(controller);
+  const { state } = controller;
   return state.strategyHighWaterMark - state.queueTotalSize;
 }
 
 function writableStreamDefaultControllerProcessClose(
   controller: WritableStreamDefaultControllerImpl,
 ): void {
-  const controllerState = getWritableStreamDefaultControllerState(
-    controller,
-  );
+  const controllerState = controller.state;
   const stream = controllerState.stream;
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (!streamState.closeRequest || streamState.inFlightCloseRequest) {
     throw new Error('Writable stream has no pending close request');
   }
@@ -504,7 +487,7 @@ function writableStreamDefaultControllerProcessClose(
     'close',
   )();
   writableStreamDefaultControllerClearAlgorithms(controller);
-  getWritableStreamContext(stream).reactToPromise(
+  stream.context.reactToPromise(
     closePromise,
     idlType.undefined,
     {
@@ -519,11 +502,9 @@ function writableStreamDefaultControllerProcessWrite(
   controller: WritableStreamDefaultControllerImpl,
   chunk: unknown,
 ): void {
-  const controllerState = getWritableStreamDefaultControllerState(
-    controller,
-  );
+  const controllerState = controller.state;
   const stream = controllerState.stream;
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (streamState.inFlightWriteRequest ||
     streamState.writeRequests.length === 0) {
     throw new Error('Writable stream has no queued write request');
@@ -534,7 +515,7 @@ function writableStreamDefaultControllerProcessWrite(
     controllerState.writeAlgorithm,
     'write',
   )(chunk);
-  getWritableStreamContext(stream).reactToPromise(
+  stream.context.reactToPromise(
     writePromise,
     idlType.undefined,
     {
@@ -565,16 +546,13 @@ function writableStreamDefaultControllerWrite(
   chunk: unknown,
   chunkSize: number,
 ): void {
-  const controllerState = getWritableStreamDefaultControllerState(
-    controller,
-  );
+  const controllerState = controller.state;
   try {
     enqueueValueWithSize(
       controllerState,
       chunk,
       chunkSize,
-      getWritableStreamContext(controllerState.stream)
-        .realm.intrinsics.rangeError,
+      controllerState.stream.context.realm.intrinsics.rangeError,
     );
   } catch (error) {
     writableStreamDefaultControllerErrorIfNeeded(controller, error);
@@ -582,7 +560,7 @@ function writableStreamDefaultControllerWrite(
   }
 
   const stream = controllerState.stream;
-  const streamState = getWritableStreamState(stream);
+  const streamState = stream.state;
   if (!writableStreamCloseQueuedOrInFlight(stream) &&
     streamState.state === 'writable') {
     writableStreamUpdateBackpressure(
@@ -597,7 +575,7 @@ function writableStreamDealWithRejection(
   stream: WritableStreamImpl,
   error: unknown,
 ): void {
-  if (getWritableStreamState(stream).state === 'writable') {
+  if (stream.state.state === 'writable') {
     writableStreamStartErroring(stream, error);
   } else {
     writableStreamFinishErroring(stream);
@@ -605,14 +583,14 @@ function writableStreamDealWithRejection(
 }
 
 function writableStreamFinishErroring(stream: WritableStreamImpl): void {
-  const state = getWritableStreamState(stream);
+  const { state } = stream;
   if (state.state !== 'erroring' || writableStreamHasOperationInFlight(state)) {
     throw new Error('Writable stream cannot finish erroring yet');
   }
   state.state = 'errored';
   writableStreamDefaultControllerErrorSteps(requireController(state));
 
-  const context = getWritableStreamContext(stream);
+  const { context } = stream;
   for (const request of state.writeRequests) {
     context.rejectPromise(request, state.storedError);
   }
@@ -647,10 +625,9 @@ function writableStreamFinishErroring(stream: WritableStreamImpl): void {
 }
 
 function writableStreamFinishInFlightClose(stream: WritableStreamImpl): void {
-  const state = getWritableStreamState(stream);
+  const { context, state } = stream;
   const request = state.inFlightCloseRequest;
   if (!request) throw new Error('Writable stream has no in-flight close');
-  const context = getWritableStreamContext(stream);
   context.resolvePromise(request, undefined);
   state.inFlightCloseRequest = undefined;
 
@@ -667,7 +644,7 @@ function writableStreamFinishInFlightClose(stream: WritableStreamImpl): void {
   state.state = 'closed';
   if (state.writer) {
     context.resolvePromise(
-      getWritableStreamDefaultWriterState(state.writer).closedPromise,
+      state.writer.state.closedPromise,
       undefined,
     );
   }
@@ -677,7 +654,7 @@ function writableStreamDefaultControllerAbortSteps(
   controller: WritableStreamDefaultControllerImpl,
   reason: unknown,
 ): StreamPromise {
-  const state = getWritableStreamDefaultControllerState(controller);
+  const { state } = controller;
   const promise = requireAlgorithm(state.abortAlgorithm, 'abort')(reason);
   writableStreamDefaultControllerClearAlgorithms(controller);
   return promise;
@@ -686,7 +663,7 @@ function writableStreamDefaultControllerAbortSteps(
 function writableStreamDefaultControllerErrorSteps(
   controller: WritableStreamDefaultControllerImpl,
 ): void {
-  const state = getWritableStreamDefaultControllerState(controller);
+  const { state } = controller;
   state.queue = [];
   state.queueTotalSize = 0;
 }
@@ -695,10 +672,9 @@ function writableStreamFinishInFlightCloseWithError(
   stream: WritableStreamImpl,
   error: unknown,
 ): void {
-  const state = getWritableStreamState(stream);
+  const { context, state } = stream;
   const request = state.inFlightCloseRequest;
   if (!request) throw new Error('Writable stream has no in-flight close');
-  const context = getWritableStreamContext(stream);
   context.rejectPromise(request, error);
   state.inFlightCloseRequest = undefined;
   if (state.pendingAbortRequest) {
@@ -709,13 +685,10 @@ function writableStreamFinishInFlightCloseWithError(
 }
 
 function writableStreamFinishInFlightWrite(stream: WritableStreamImpl): void {
-  const state = getWritableStreamState(stream);
+  const { context, state } = stream;
   const request = state.inFlightWriteRequest;
   if (!request) throw new Error('Writable stream has no in-flight write');
-  getWritableStreamContext(stream).resolvePromise(
-    request,
-    undefined,
-  );
+  context.resolvePromise(request, undefined);
   state.inFlightWriteRequest = undefined;
 }
 
@@ -723,10 +696,10 @@ function writableStreamFinishInFlightWriteWithError(
   stream: WritableStreamImpl,
   error: unknown,
 ): void {
-  const state = getWritableStreamState(stream);
+  const { context, state } = stream;
   const request = state.inFlightWriteRequest;
   if (!request) throw new Error('Writable stream has no in-flight write');
-  getWritableStreamContext(stream).rejectPromise(request, error);
+  context.rejectPromise(request, error);
   state.inFlightWriteRequest = undefined;
   writableStreamDealWithRejection(stream, error);
 }
@@ -734,16 +707,13 @@ function writableStreamFinishInFlightWriteWithError(
 function writableStreamRejectCloseAndClosedPromiseIfNeeded(
   stream: WritableStreamImpl,
 ): void {
-  const state = getWritableStreamState(stream);
-  const context = getWritableStreamContext(stream);
+  const { context, state } = stream;
   if (state.closeRequest) {
     context.rejectPromise(state.closeRequest, state.storedError);
     state.closeRequest = undefined;
   }
   if (state.writer) {
-    const closedPromise = getWritableStreamDefaultWriterState(
-      state.writer,
-    ).closedPromise;
+    const { closedPromise } = state.writer.state;
     context.rejectPromise(closedPromise, state.storedError);
     context.markPromiseHandled(closedPromise);
   }
@@ -753,7 +723,7 @@ function writableStreamStartErroring(
   stream: WritableStreamImpl,
   reason: unknown,
 ): void {
-  const state = getWritableStreamState(stream);
+  const { state } = stream;
   if (state.state !== 'writable') {
     throw new Error('Only a writable stream can start erroring');
   }
@@ -766,9 +736,7 @@ function writableStreamStartErroring(
     );
   }
   if (!writableStreamHasOperationInFlight(state) &&
-    getWritableStreamDefaultControllerState(
-      requireController(state),
-    ).started) {
+    requireController(state).state.started) {
     writableStreamFinishErroring(stream);
   }
 }
@@ -777,10 +745,9 @@ function writableStreamUpdateBackpressure(
   stream: WritableStreamImpl,
   backpressure: boolean,
 ): void {
-  const state = getWritableStreamState(stream);
+  const { context, state } = stream;
   if (state.writer && backpressure !== state.backpressure) {
-    const writerState = getWritableStreamDefaultWriterState(state.writer);
-    const context = getWritableStreamContext(stream);
+    const writerState = state.writer.state;
     if (backpressure) {
       writerState.readyPromise = context.createPromise(
         idlType.undefined,
@@ -796,8 +763,7 @@ function writableStreamDefaultWriterEnsureClosedPromiseRejected(
   writer: WritableStreamDefaultWriterImpl,
   error: unknown,
 ): void {
-  const state = getWritableStreamDefaultWriterState(writer);
-  const context = getWritableStreamDefaultWriterContext(writer);
+  const { context, state } = writer;
   if (context.isPromiseUnresolved(state.closedPromise)) {
     context.rejectPromise(state.closedPromise, error);
   } else {
@@ -813,8 +779,7 @@ function writableStreamDefaultWriterEnsureReadyPromiseRejected(
   writer: WritableStreamDefaultWriterImpl,
   error: unknown,
 ): void {
-  const state = getWritableStreamDefaultWriterState(writer);
-  const context = getWritableStreamDefaultWriterContext(writer);
+  const { context, state } = writer;
   if (context.isPromiseUnresolved(state.readyPromise)) {
     context.rejectPromise(state.readyPromise, error);
   } else {
@@ -847,7 +812,7 @@ function requireController(
 function requireWriterStream(
   writer: WritableStreamDefaultWriterImpl,
 ): WritableStreamImpl {
-  const stream = getWritableStreamDefaultWriterState(writer).stream;
+  const { stream } = writer.state;
   if (!stream) throw new Error('WritableStream writer has been released');
   return stream;
 }

@@ -6,13 +6,10 @@ import {
   bindingContext, type BindingContext,
 } from '../web-idl/projection';
 import { createArrayBufferView } from '../web-idl/buffer-source';
-import { GenericTransformStreamMixin } from '../streams/generic-transform-stream';
-import type { ReadableStreamImpl } from '../streams/readable-stream';
-import { TransformStreamImpl } from '../streams/transform-stream';
 import {
-  transformStreamDefaultControllerEnqueue,
-} from '../streams/transform-stream-operations';
-import type { WritableStreamImpl } from '../streams/writable-stream';
+  createTransformStream, enqueueTransformStream, GenericTransformStreamMixin,
+  type ReadableStreamImpl, type TransformStreamImpl, type WritableStreamImpl,
+} from '../streams/index';
 
 /*
  * [Exposed=*]
@@ -30,26 +27,22 @@ export class TextEncoderStreamImpl {
 
   constructor(context: BindingContext) {
     this.#context = context;
+    const transform: TransformStreamImpl = createTransformStream(
+      context,
+      (chunk) => {
+        this.#encodeAndEnqueue(
+          context.convert(chunk, idlType.DOMString) as string,
+          (value) => enqueueTransformStream(transform, value),
+        );
+      },
+      () => {
+        if (this.#leadingSurrogate === '') return;
+        enqueueTransformStream(transform, this.#encode('\uFFFD'));
+        this.#leadingSurrogate = '';
+      },
+    );
     this.#generic = new GenericTransformStreamMixin(
-      TransformStreamImpl.fromAlgorithms(context, {
-        transform: (chunk, controller) => {
-          this.#encodeAndEnqueue(
-            context.convert(chunk, idlType.DOMString) as string,
-            (value) => transformStreamDefaultControllerEnqueue(
-              controller,
-              value,
-            ),
-          );
-        },
-        flush: (controller) => {
-          if (this.#leadingSurrogate === '') return;
-          transformStreamDefaultControllerEnqueue(
-            controller,
-            this.#encode('\uFFFD'),
-          );
-          this.#leadingSurrogate = '';
-        },
-      }),
+      transform,
     );
   }
 

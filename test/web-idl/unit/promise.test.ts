@@ -108,6 +108,30 @@ describe('Web IDL promises', () => {
     await expect(toJavaScriptPromise(capability)).resolves.toBe('adopted');
   });
 
+  it('adopts an internal promise capability when resolving a promise', async () => {
+    const { binding } = createBinding();
+    const inner = createPromise(idlType.any, binding);
+    const created = createResolvedPromise(inner, idlType.any, binding);
+    const resolved = createPromise(idlType.any, binding);
+    resolvePromise(resolved, inner, binding);
+
+    let settled = false;
+    void Promise.all([
+      toJavaScriptPromise(created),
+      toJavaScriptPromise(resolved),
+    ]).then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolvePromise(inner, 'adopted', binding);
+    await expect(Promise.all([
+      toJavaScriptPromise(created),
+      toJavaScriptPromise(resolved),
+    ])).resolves.toEqual(['adopted', 'adopted']);
+  });
+
   it('runs fulfillment and rejection steps in the promise realm', async () => {
     const { binding } = createBinding();
     let fulfilledValue: unknown;

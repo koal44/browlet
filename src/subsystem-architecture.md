@@ -139,6 +139,15 @@ A cross-specification capability is a narrow semantic operation owned by one
 specification and required by another. It is an explicit dependency edge, not
 a general runtime layer.
 
+When the owning subsystem is an allowed direct dependency, import its explicit
+other-specifications entry point. File and Encoding use `src/streams/index.ts`
+this way; Streams retains the state and controller invariants behind that
+surface. Introduce an injected capability only when a direct import would
+invert the package dependency, create a cycle, or make a standalone subsystem
+depend on a concrete host composition. Streams therefore imports neither HTML
+structured cloning nor Browlet's DOM AbortController implementation; those
+reverse edges remain capabilities.
+
 A good capability:
 
 - is named for the behavior it supplies;
@@ -230,8 +239,9 @@ Classify a new dependency in this order:
 2. **Is it stateless and realm-neutral?** Import a shared algorithm directly.
 3. **Is it generic JavaScript/Web IDL behavior tied to the current world?** Use
    the shared Realm Context.
-4. **Does another specification subsystem own the semantic behavior?** Define
-   a narrow cross-specification capability.
+4. **Does another specification subsystem own the semantic behavior?** Import
+   its narrow other-specifications entry point when it is an allowed dependency;
+   otherwise define a narrow cross-specification capability.
 5. **Is it an actual embedder or external effect?** Define a narrow Host Port.
 6. **Is it author-facing conversion, identity, or projection?** Keep it in the
    Binding and Platform layers.

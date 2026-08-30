@@ -11,12 +11,15 @@ function installWpt(): void {
     readFileSync(resolve(wptDir, 'wpt-lock.json'), 'utf8'),
   ) as WptLock;
 
-  const selectedPaths = readSelection(resolve(wptDir, 'selection.txt'));
+  const { supportPaths, testPaths } = readSelection(
+    resolve(wptDir, 'selection.txt'),
+  );
   const sparsePaths = unique([
     'LICENSE.md',
     'resources/testharness.js',
     'resources/testharnessreport.js',
-    ...selectedPaths,
+    ...testPaths,
+    ...supportPaths,
   ]);
 
   prepareCheckout(lock.repository);
@@ -36,7 +39,7 @@ function installWpt(): void {
     );
   }
 
-  console.log(`[wpt] installed ${selectedPaths.length} selected path(s)`);
+  console.log(`[wpt] installed ${testPaths.length} selected test(s)`);
   console.log(`[wpt] revision ${installedRevision}`);
   console.log(`[wpt] checkout ${checkoutDir}`);
 }
@@ -48,12 +51,25 @@ type WptLock = {
   revision: string;
 };
 
-function readSelection(path: string): string[] {
-  return readFileSync(path, 'utf8')
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
-    .map(normalizeSelection);
+type WptSelection = {
+  supportPaths: string[];
+  testPaths: string[];
+};
+
+function readSelection(path: string): WptSelection {
+  const supportPaths: string[] = [];
+  const testPaths: string[] = [];
+
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('# support:')) {
+      supportPaths.push(normalizeSelection(trimmed.slice(10).trim()));
+    } else if (trimmed !== '' && !trimmed.startsWith('#')) {
+      testPaths.push(normalizeSelection(trimmed));
+    }
+  }
+
+  return { supportPaths, testPaths };
 }
 
 function normalizeSelection(path: string): string {

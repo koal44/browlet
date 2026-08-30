@@ -29,7 +29,7 @@ export class ByteLengthQueuingStrategyImpl {
 
 export const byteLengthQueuingStrategyIDL = defineInterface({
   name: 'ByteLengthQueuingStrategy',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(ByteLengthQueuingStrategyImpl, {
     constructWith: [bindingContext],
   }),

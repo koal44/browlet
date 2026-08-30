@@ -48,20 +48,17 @@ boundary rules in
   global interface; Streams never calls the projected author-facing
   `structuredClone()` method. Exceptions from that semantic boundary are
   realized by Web IDL in the stream realm before they reject stream promises.
-- Writable-stream internal slots live in a module-private `WeakMap` family.
-  Cross-module algorithms use that slot boundary directly rather than copying
-  symbol-keyed friend methods onto every projected implementation object.
-  This costs more per access and entry than direct private fields, but preserves
-  true author-invisible state without restoring the implementation/operations
-  import cycle; symbol-keyed data properties would be reflectable. Cache a slot
-  record within hot algorithms, and benchmark sustained writable and byte-stream
-  workloads before considering a different representation.
+- Writable-stream state and Realm Context live directly on the stream, writer,
+  and controller implementations. Separate platform objects already keep that
+  state author-invisible; a sidecar `WeakMap` would duplicate the Binding
+  boundary. Operations import those implementation types only, so their direct
+  field access does not restore a runtime module cycle.
 - The Readable/BYOB and Transform module cycles are inherited from the WHATWG
-  reference implementation's class/algorithm split, not introduced by Browlet.
-  Imported class bindings are dereferenced only after module evaluation, when a
-  stream operation runs; there is no top-level cross-cycle execution.
-  Participating modules acknowledge their cycle group on their first line. The
-  build accepts a cycle only when every module names the same group.
+  reference implementation's class/algorithm split. Their normative object
+  graph, browser comparisons, Browlet-specific edges, and removal threshold are
+  recorded in the [cycle analysis](cycle.md). Participating modules acknowledge
+  their cycle group on their first line, and no cross-cycle binding may execute
+  during module initialization.
 - Ambient `Promise`, `queueMicrotask`, errors, and buffer constructors must use
   the shared Realm Context where the specification requires the relevant
   realm. `AbortController` construction remains a narrow cross-specification
@@ -72,18 +69,179 @@ boundary rules in
   must not expose `ReadableStream` until every interface referenced by its
   public operations exists in the assembled definition graph.
 
-## Port progress
+## Living Standard audit
 
-- [ ] Audit the current implementation in document order against the WHATWG
-  Streams Living Standard. Treat the reference implementation as secondary
-  evidence, not as the architectural source of truth. Account for every
-  interface and normative algorithm, then expand focused WPT coverage for the
-  retained surface.
-- [ ] Reassess the acknowledged Readable/BYOB and Transform import cycles
-  during that audit. Remove cycles produced only by the reference
-  implementation's file layout; retain a cycle only when the resulting module
-  ownership is clearer than an acyclic alternative, and keep its no-top-level
-  execution invariant tested.
+Audit the current implementation in document order against the WHATWG Streams
+Living Standard. The standard is authoritative; the reference implementation
+and browsers are secondary evidence when an algorithm or ownership boundary is
+unclear. For each slice, account for its Web IDL, internal state, normative
+algorithms, exception and realm behavior, retained deferrals, and focused WPT
+coverage.
+
+1. [x] **Sections 1–3 and 4.1–4.2 — model, conventions, and
+   `ReadableStream`.** Verify the public class, underlying-source contract,
+   asynchronous iteration, and transfer declaration. Follow referenced
+   abstract operations far enough to verify each public boundary, leaving the
+   full reader/controller machinery to the next slice.
+2. [x] **Sections 4.3–4.9 — readers, controllers, BYOB, and readable-stream
+   abstract operations.** Audit every reader and controller family, ordinary
+   and byte teeing, piping, and the Readable/BYOB cycle group.
+3. [x] **Section 5 — writable streams.** Audit the stream, writer, controller,
+   abort-signal behavior, abstract operations, and writable state ownership.
+4. [x] **Sections 6–8 — transform streams, queuing strategies, and supporting
+   operations.** Audit transform backpressure and cancellation, both strategy
+   classes, queue-with-sizes, transfer helpers, miscellaneous operations, and
+   the Transform cycle group.
+5. [x] **Sections 9–10 — other-specification operations and closure.** Audit
+   the cross-specification construction, reading, writing, wrapping, pairing,
+   and piping APIs; use the non-normative examples as integration checks; then
+   reconcile the WPT inventory and the deferred MessagePort-backed transfer
+   steps.
+
+Reassess each acknowledged import cycle when its owning slice is audited.
+Remove cycles inherited only from the reference implementation's file layout;
+retain one only when its module ownership is clearer than an acyclic
+alternative, and keep the no-top-level-execution invariant tested.
+
+### Slice 1 result
+
+- Sections 1–3 introduce the common model and conventions rather than another
+  runtime owner. Their stream state, queue, locking, direct-algorithm, and
+  promise rules map to the existing implementation boundaries.
+- The section 4.1–4.2 Web IDL, `ReadableStream` state, underlying-source
+  conversion, public methods, and asynchronous iterator agree with the
+  standard. The locked WPT constructor-order, invalid source and strategy, and
+  async-iterator suites are now selected and pass.
+- The audit restored the explicit rejected-next-promise branch in
+  `ReadableStreamFromIterable`: iterator failures now error the stream's
+  controller directly, as specified, instead of incidentally propagating
+  through the controller's generic pull-promise rejection path.
+- `ReadableStream` remains declared transferable, while its MessagePort-backed
+  transfer and transfer-receiving steps remain the explicit cross-specification
+  deferral below.
+- The initially stalled `streams/readable-streams/from.any.js` exposed a
+  Streams boundary error rather than a host limitation: the internal algorithm
+  was sending an already-converted underlying source back through the public
+  constructor. The complete WPT is now selected and passes.
+
+### Slice 2 result
+
+- Sections 4.3–4.8's default and BYOB reader/controller interfaces, state, and
+  operations agree with the Living Standard. The three byte-stream interfaces
+  now carry the standard's current `Exposed=*` declaration.
+- Internal `ReadableStreamFromIterable`, ordinary tee, and byte tee construction
+  now uses the section 4.9 creation algorithms directly. Internal callback and
+  promise records no longer cross the author-facing constructor conversion
+  boundary a second time.
+- The audit restored `ReadableStreamDefaultControllerHasBackpressure` and made
+  TransformStream consume that predicate instead of approximating it from
+  desired size. Piping also defers each write past `enqueue()` as required by
+  `ReadableStreamPipeTo` and its focused WPT.
+- BYOB transfer coverage exposed an HTML structured-data representation detail:
+  an ArrayBufferView may refer to the transfer placeholder for its backing
+  buffer until the transfer phase fills that record. That graph edge is now
+  accepted and covered by a focused transfer test.
+- The selected reader, controller, byte-stream, tee, and piping WPTs pass. A
+  trial of `streams/readable-streams/tee.any.js` passed 25 of 26 subtests; the
+  remaining subtest depends on a source-promise rejection winning over the tee
+  algorithm's explicitly queued microtask while the WPT runs inside Browlet's
+  parser/event-loop turn. Node's provisional nested checkpoint bridge cannot
+  enforce that ordering. Keep the complete file out of the passing selection
+  until the documented event-loop bridge review; ordinary and byte tee
+  behavior remains covered by focused implementation tests and the passing
+  byte-tee WPT.
+- The Readable/BYOB import cycle remains under the documented
+  [cycle decision](cycle.md). The new internal creation functions remove a
+  wrong Binding round trip, but do not themselves remove an import edge, so no
+  cycle-only refactor belongs in this slice.
+
+### Slice 3 result
+
+- Section 5's `WritableStream`, default writer, default controller, abort
+  integration, state transitions, and abstract operations agree with the
+  Living Standard. The selected constructor, sink, start, write, close, abort,
+  error, reentrancy, queue-size, and property WPTs pass all 186 subtests.
+- `WritableStreamDefaultWriterWrite` now preserves the standard's observable
+  rejection precedence: an errored stream rejects with its stored error, a
+  closing or closed stream rejects with a `TypeError`, and only then does an
+  erroring stream reject with its stored error.
+- Resolving a Web IDL promise capability now adopts another internal promise
+  capability just as it adopts a JavaScript promise. Readable, writable, and
+  transform setup can therefore use the standard's direct `startAlgorithm`
+  contract; the Streams-only `startPromise` bypass has been removed.
+- Writable state now lives directly on its implementation objects, matching its
+  specification ownership and the native-engine model. Since Binding projects
+  separate platform objects, authors cannot observe those fields. Type-only
+  reverse imports keep the TypeScript runtime graph acyclic without a sidecar
+  slot protocol.
+- Writable transfer and transfer-receiving steps remain deferred with the
+  shared MessagePort dependency. Their `Transferable` declaration and HTML
+  detached-state ownership remain intact.
+
+### Slice 4 result
+
+- TransformStream backpressure, cancellation, errors, flushing, termination,
+  strategies, and reentrancy pass the 133 selected non-transfer WPT subtests.
+  The interfaces now use the Living Standard's current `Exposed=*`; the
+  reference implementation's checked-in IDL is older here.
+- The author constructor now follows the standard's internal order: convert
+  and validate the transformer, extract the readable strategy, then extract
+  the writable strategy before initialization.
+- Transform stream and controller state now lives directly on their
+  implementations. Moving controller allocation to the implementation
+  boundary made the reverse operation imports type-only and removed the
+  acknowledged Transform import cycle. Blink and Gecko likewise keep this
+  state on their interface classes; WebKit uses equivalent private slots.
+- Section 8's queue-with-sizes arithmetic remains covered by the selected
+  readable and writable floating-point WPTs. Byte-stream cloning now uses the
+  single shared `CloneAsUint8Array` operation, and the copy path checks the
+  shared `CanCopyDataBlockBytes` predicate rather than leaving both helpers
+  disconnected.
+- Buffer transfer remains Web IDL-owned, structured cloning remains an HTML
+  capability, and MessagePort-backed transferable streams remain deferred.
+  The per-global strategy WPT requires iframe lifecycle support; the unit suite
+  covers the same realm-identity rule with two Browlet globals.
+
+### Slice 5 result
+
+- `src/streams/index.ts` is the stable §9 entry for other specifications.
+  Readable, writable, and transform creation goes through the Realm Context's
+  internal implementation-construction path, while operations that merely
+  rename an existing abstract operation are direct aliases rather than wrapper
+  functions. No subsystem-private environment or service registry was added.
+- The transform setup boundary now accepts the standard's semantic transform,
+  flush, and cancel algorithms. It no longer exposes a controller-shaped
+  `TransformStreamImpl.fromAlgorithms()` escape hatch. Encoding consequently
+  imports only the Streams entry point and uses §9 enqueueing, leaving
+  controller ownership entirely inside Streams.
+- Cross-specification callback results are normalized through the stream Realm
+  Context, including native promises returned by a host algorithm. Focused
+  tests verify that writable completion does not run ahead of such a promise.
+- Readable byte enqueueing now implements the current-BYOB-view fast path: a
+  chunk over the requested buffer responds to the pending pull-into instead of
+  enqueueing and transferring the same buffer. `pull from bytes` represents
+  Infra's prefix removal by returning an updated `Uint8Array` offset, matching
+  WebKit's bounded buffer-plus-offset implementation without copying the
+  remainder.
+- Blink, Gecko, and WebKit all expose purposeful native/private entry points
+  for other specifications rather than making consumers call the public Web
+  IDL API. Gecko's readable public-operations surface is the closest direct
+  analogue; Blink combines allocation and setup in static factories, and
+  WebKit implements both the byte-pull offset and identity-transform proxy
+  patterns used here.
+- Section 9.4's duplex and endpoint pairs are specification guidance, not a new
+  runtime abstraction. Existing `readable`/`writable` surfaces already follow
+  its naming rule. Section 10 adds no normative algorithms; its push, pull,
+  BYOB, writable-backpressure, shared-pair, and transform patterns are covered
+  by the selected WPTs and focused implementation tests.
+- Five additional ordinary Streams WPT files add strategy-integration and
+  patched-global coverage. All 65 selected WPT files pass 1137 subtests.
+  Transfer WPTs still wait for MessagePort, worker-only variants wait for
+  worker globals, the IDL harness waits for its general harness integration,
+  and the known ordinary-tee ordering case waits for the Node microtask bridge
+  review.
+
+## Port progress
 - [x] Project boundary, license, and declaration aggregation
 - [x] Queue-with-sizes and queuing-strategy extraction algorithms
 - [x] `ByteLengthQueuingStrategy` and `CountQueuingStrategy`
@@ -96,7 +254,7 @@ boundary rules in
 - [x] Writable streams
 - [x] Transform streams
 - [x] Window `.any.js` WPT harness support
-- [ ] Broader focused Streams WPT coverage
+- [x] Broader focused Streams WPT coverage
 
 ## Known upstream limitations to preserve explicitly
 
@@ -106,9 +264,9 @@ boundary rules in
 - Generic default-stream tee cloning requires HTML's serializable-object
   framework. Public `tee()` does not request that clone; byte-stream teeing
   clones bytes without the structured-data framework.
-- Transferable streams remain blocked on HTML structured serialization and
-  `MessagePort`. Ordinary readable, writable, transform, byte, BYOB, tee, and
-  piping behavior does not wait for that integration.
+- Transferable streams remain blocked on `MessagePort`; HTML structured
+  serialization is now present. Ordinary readable, writable, transform, byte,
+  BYOB, tee, and piping behavior does not wait for that integration.
 - Browlet's WPT runner synthesizes the Window document that wptserve normally
   generates for selected `.any.js` files. Worker variants remain deferred
   until Browlet has the corresponding worker globals.
