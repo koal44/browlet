@@ -109,7 +109,8 @@ export function structuredSerializeInternal(
         environment,
         memory,
       );
-      if (!isBufferSerializedRecord(bufferSerialized)) {
+      if (!isBufferSerializedRecord(bufferSerialized) &&
+        bufferSerialized.type !== 'transfer-placeholder') {
         throw new Error('A buffer view did not serialize its backing buffer');
       }
       serialized = {

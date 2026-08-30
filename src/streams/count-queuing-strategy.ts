@@ -29,7 +29,7 @@ export class CountQueuingStrategyImpl {
 
 export const countQueuingStrategyIDL = defineInterface({
   name: 'CountQueuingStrategy',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(CountQueuingStrategyImpl, {
     constructWith: [bindingContext],
   }),

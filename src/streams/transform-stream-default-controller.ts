@@ -1,4 +1,3 @@
-// @rollup-cycle streams-transform
 import {
   arg, defineInterface, idlType, impl, nullable, op, roAttr,
 } from '../web-idl/declaration/index';
@@ -12,7 +11,7 @@ import {
 import type { TransformStreamImpl } from './transform-stream';
 
 export class TransformStreamDefaultControllerImpl {
-  #state?: TransformStreamDefaultControllerState;
+  state!: TransformStreamDefaultControllerState;
 
   get desiredSize(): number | null {
     return transformStreamDefaultControllerGetDesiredSize(this);
@@ -29,22 +28,6 @@ export class TransformStreamDefaultControllerImpl {
   terminate(): void {
     transformStreamDefaultControllerTerminate(this);
   }
-
-  static getState(
-    controller: TransformStreamDefaultControllerImpl,
-  ): TransformStreamDefaultControllerState {
-    if (!controller.#state) {
-      throw new Error('TransformStreamDefaultController is not set up');
-    }
-    return controller.#state;
-  }
-
-  static setState(
-    controller: TransformStreamDefaultControllerImpl,
-    state: TransformStreamDefaultControllerState,
-  ): void {
-    controller.#state = state;
-  }
 }
 
 export type TransformStreamDefaultControllerState = {
@@ -57,7 +40,7 @@ export type TransformStreamDefaultControllerState = {
 
 export const transformStreamDefaultControllerIDL = defineInterface({
   name: 'TransformStreamDefaultController',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(TransformStreamDefaultControllerImpl),
   members: [
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),

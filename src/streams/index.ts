@@ -48,13 +48,33 @@ import {
 } from './writable-stream-default-writer';
 
 export {
-  createReadableStreamWithByteReadingSupport,
-} from './readable-byte-stream-operations';
-export {
-  closeReadableStream, enqueueReadableStream, errorReadableStream,
-  getReadableStreamReader, readAllBytes,
+  cancelReadableStream, cancelReadableStreamReader, closeReadableStream,
+  createReadableStream, createReadableStreamFromAsyncSequence,
+  createReadableStreamProxy, createReadableStreamWithByteReadingSupport,
+  enqueueReadableStream, errorReadableStream,
+  getReadableStreamBYOBRequestView, getReadableStreamDesiredSize,
+  getReadableStreamReader, isReadableStreamClosed,
+  isReadableStreamDisturbed, isReadableStreamErrored,
+  isReadableStreamLocked, isReadableStreamReadable,
+  pipeReadableStreamThrough, pipeReadableStreamTo,
+  pullReadableStreamFromBytes, readAllBytes, readableStreamNeedsMoreData,
+  readReadableStreamChunk, releaseReadableStreamReader,
+  setUpReadableStreamReader, teeReadableStream,
 } from './readable-stream-cross-spec';
 export type { ReadableStreamImpl } from './readable-stream';
+export { GenericTransformStreamMixin } from './generic-transform-stream';
+export {
+  createIdentityTransformStream, createTransformStream,
+  enqueueTransformStream, errorTransformStream, terminateTransformStream,
+} from './transform-stream-cross-spec';
+export type { TransformStreamImpl } from './transform-stream';
+export {
+  abortWritableStream, closeWritableStream, createWritableStream,
+  errorWritableStream, getWritableStreamSignal, getWritableStreamWriter,
+  releaseWritableStreamWriter, setUpWritableStreamWriter,
+  writeWritableStreamChunk,
+} from './writable-stream-cross-spec';
+export type { WritableStreamImpl } from './writable-stream';
 
 export const streamsIDLDefinitions: readonly Definition[] = [
   queuingStrategySizeIDL,

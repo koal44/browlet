@@ -5,7 +5,8 @@ import {
   createBindings, defineInterface, impl, xattr,
 } from '../../../../../src/web-idl/index';
 import {
-  detachArrayBuffer, getBufferSourceCopy, isBufferSourceDetached,
+  detachArrayBuffer, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
+  isBufferSourceDetached,
 } from '../../../../../src/web-idl/buffer-source';
 import { Realm } from '../../../../../src/browlet/scripting/realm';
 import type { StructuredDataEnvironment } from '../../../../../src/browlet/scripting/structured-data/environment';
@@ -46,6 +47,31 @@ describe('HTML structured transfer', () => {
     );
     expect(clone.first).toBe(transferred);
     expect(clone.second).toBe(transferred);
+  });
+
+  it('transfers the backing buffer referenced by an ArrayBuffer view', () => {
+    const { source, sourceRealm, target, targetRealm } = createEnvironments();
+    const view = sourceRealm.evaluate(`(() => {
+      const value = new Uint8Array([1, 2, 3, 4]);
+      return value.subarray(1, 3);
+    })()`, 'structured-transfer-array-buffer-view.js') as object;
+    const buffer = getBufferSourceUnderlyingBuffer(view);
+
+    const serialized = structuredSerializeWithTransfer(
+      view,
+      [buffer],
+      source,
+    );
+    const result = structuredDeserializeWithTransfer(serialized, target);
+    const clone = result.deserialized as object;
+    const transferred = result.transferredValues[0] as object;
+
+    expect(isBufferSourceDetached(buffer)).toBe(true);
+    expect(getBufferSourceUnderlyingBuffer(clone)).toBe(transferred);
+    expect(getBufferSourceCopy(clone)).toEqual(Uint8Array.from([2, 3]));
+    expect(transferred).toBeInstanceOf(
+      targetRealm.intrinsics.bufferSource.arrayBuffer,
+    );
   });
 
   it('preserves resizable ArrayBuffer bounds while transferring', () => {

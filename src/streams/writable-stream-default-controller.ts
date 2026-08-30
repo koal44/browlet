@@ -12,24 +12,16 @@ import {
   isWritableStreamWritable,
   writableStreamDefaultControllerError,
 } from './writable-stream-operations';
-import {
-  getWritableStreamDefaultControllerState,
-  initializeWritableStreamDefaultControllerSlots,
-} from './writable-stream-slots';
 
 export class WritableStreamDefaultControllerImpl {
-  constructor() {
-    initializeWritableStreamDefaultControllerSlots(this);
-  }
+  state!: WritableStreamDefaultControllerState;
 
   get signal(): StreamAbortSignal {
-    return getWritableStreamDefaultControllerState(this).abortController.signal;
+    return this.state.abortController.signal;
   }
 
   error(error?: unknown): void {
-    if (!isWritableStreamWritable(
-      getWritableStreamDefaultControllerState(this).stream,
-    )) return;
+    if (!isWritableStreamWritable(this.state.stream)) return;
     writableStreamDefaultControllerError(this, error);
   }
 }

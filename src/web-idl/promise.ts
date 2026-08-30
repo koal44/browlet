@@ -19,9 +19,8 @@ export function createResolvedPromise(
   type: WebIDLType,
   context: ConversionContext,
 ): IDLPromise {
-  const javaScriptValue = convertToJavaScript(value, type, context);
   const promise = createPromise(type, context);
-  promise.resolve(javaScriptValue);
+  promise.resolve(toPromiseResolution(value, type, context));
   return promise;
 }
 
@@ -40,7 +39,7 @@ export function resolvePromise(
   value: unknown,
   context: ConversionContext,
 ): void {
-  promise.resolve(convertToJavaScript(
+  promise.resolve(toPromiseResolution(
     value,
     promise.type,
     withPromiseRealm(context, promise),
@@ -215,9 +214,17 @@ function settleReaction(
   resultType: WebIDLType,
   context: ConversionContext,
 ): void {
-  promise.resolve(isPromiseValue(result)
-    ? result.promise
-    : convertToJavaScript(result, resultType, context));
+  promise.resolve(toPromiseResolution(result, resultType, context));
+}
+
+function toPromiseResolution(
+  value: unknown,
+  type: WebIDLType,
+  context: ConversionContext,
+): unknown {
+  return isPromiseValue(value)
+    ? value.promise
+    : convertToJavaScript(value, type, context);
 }
 
 function withPromiseRealm(

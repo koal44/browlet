@@ -5,13 +5,10 @@ import {
 import {
   bindingContext, type BindingContext,
 } from '../web-idl/projection';
-import { GenericTransformStreamMixin } from '../streams/generic-transform-stream';
-import { TransformStreamImpl } from '../streams/transform-stream';
-import type { ReadableStreamImpl } from '../streams/readable-stream';
 import {
-  transformStreamDefaultControllerEnqueue,
-} from '../streams/transform-stream-operations';
-import type { WritableStreamImpl } from '../streams/writable-stream';
+  createTransformStream, enqueueTransformStream, GenericTransformStreamMixin,
+  type ReadableStreamImpl, type TransformStreamImpl, type WritableStreamImpl,
+} from '../streams/index';
 import {
   TextDecoderCommonMixin, type TextDecoderOptions,
 } from './text-decoder';
@@ -38,25 +35,23 @@ export class TextDecoderStreamImpl {
       label,
       options,
     );
+    const transform: TransformStreamImpl = createTransformStream(
+      context,
+      (chunk) => {
+        const input = context.convert(
+          chunk,
+          reference('AllowSharedBufferSource'),
+        ) as object;
+        const output = this.#common.decode(input, true);
+        if (output !== '') enqueueTransformStream(transform, output);
+      },
+      () => {
+        const output = this.#common.decode();
+        if (output !== '') enqueueTransformStream(transform, output);
+      },
+    );
     this.#generic = new GenericTransformStreamMixin(
-      TransformStreamImpl.fromAlgorithms(context, {
-        transform: (chunk, controller) => {
-          const input = context.convert(
-            chunk,
-            reference('AllowSharedBufferSource'),
-          ) as object;
-          const output = this.#common.decode(input, true);
-          if (output !== '') {
-            transformStreamDefaultControllerEnqueue(controller, output);
-          }
-        },
-        flush: (controller) => {
-          const output = this.#common.decode();
-          if (output !== '') {
-            transformStreamDefaultControllerEnqueue(controller, output);
-          }
-        },
-      }),
+      transform,
     );
   }
 

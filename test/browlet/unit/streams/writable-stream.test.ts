@@ -2,9 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { WritableStreamImpl } from '../../../../src/streams/writable-stream';
 import type { WritableStreamDefaultControllerImpl } from '../../../../src/streams/writable-stream-default-controller';
-import {
-  getWritableStreamContext, getWritableStreamState,
-} from '../../../../src/streams/writable-stream-slots';
 import { idlType } from '../../../../src/web-idl/declaration/index';
 import { createTestContext, unwrapStreamPromise } from './environment';
 
@@ -18,16 +15,14 @@ describe('writable-stream implementation', () => {
     expect(context.isPromiseUnresolved(promise)).toBe(false);
   });
 
-  it('keeps writable state in per-instance slots', () => {
+  it('keeps writable state per implementation instance', () => {
     const context = createTestContext();
     const first = new WritableStreamImpl(context);
     const second = new WritableStreamImpl(context);
 
-    expect(getWritableStreamContext(first)).toBe(context);
-    expect(getWritableStreamContext(second)).toBe(context);
-    expect(getWritableStreamState(first)).not.toBe(
-      getWritableStreamState(second),
-    );
+    expect(first.context).toBe(context);
+    expect(second.context).toBe(context);
+    expect(first.state).not.toBe(second.state);
   });
 
   it('writes queued chunks and closes the underlying sink', async () => {
@@ -109,6 +104,29 @@ describe('writable-stream implementation', () => {
     await expect(ready).resolves.toBeUndefined();
     expect(writer.desiredSize).toBe(1);
   });
+
+  it('rejects writes with a TypeError once close is queued while erroring', async () => {
+    const context = createTestContext();
+    const failure = new Error('stream failure');
+    let controller: WritableStreamDefaultControllerImpl | undefined;
+    const stream = new WritableStreamImpl(context, {
+      start(value: WritableStreamDefaultControllerImpl) {
+        controller = value;
+        return new Promise(() => undefined);
+      },
+    });
+    const writer = stream.getWriter();
+
+    void unwrapStreamPromise(writer.close());
+    if (!controller) throw new Error('Writable stream did not start');
+    controller.error(failure);
+
+    const writing = unwrapStreamPromise(writer.write('late'));
+    await expect(writing).rejects.toBeInstanceOf(
+      context.realm.intrinsics.typeError,
+    );
+    await expect(writing).rejects.not.toBe(failure);
+  });
 });
 
 describe('writable-stream projection', () => {
@@ -126,6 +144,26 @@ describe('writable-stream projection', () => {
 
     if (!controller) throw new Error('Writable stream did not start');
     expect(Reflect.get(controller, 'signal')).toBeInstanceOf(AbortSignal_);
+  });
+
+  it('keeps implementation state off the platform objects', () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const WritableStream_ = requireConstructor(window, 'WritableStream');
+    let controller: object | undefined;
+    const stream = Reflect.construct(WritableStream_, [{
+      start(value: object) { controller = value; },
+    }]) as object;
+    const writer = Reflect.apply(
+      requireMethod(stream, 'getWriter'),
+      stream,
+      [],
+    ) as object;
+
+    if (!controller) throw new Error('Writable stream did not start');
+    for (const value of [stream, writer, controller]) {
+      expect(Reflect.has(value, 'state')).toBe(false);
+      expect(Reflect.has(value, 'context')).toBe(false);
+    }
   });
 
   it('writes through the projected writer surface', async () => {
@@ -217,7 +255,7 @@ function createAbortController() {
 function requireController(
   stream: WritableStreamImpl,
 ): WritableStreamDefaultControllerImpl {
-  const controller = getWritableStreamState(stream).controller;
+  const { controller } = stream.state;
   if (!controller) throw new Error('Writable stream has no controller');
   return controller;
 }

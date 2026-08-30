@@ -80,7 +80,7 @@ export class ReadableStreamBYOBRequestImpl {
 
 export const readableStreamBYOBRequestIDL = defineInterface({
   name: 'ReadableStreamBYOBRequest',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(ReadableStreamBYOBRequestImpl, {
     constructWith: [bindingContext],
   }),

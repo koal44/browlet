@@ -1,4 +1,3 @@
-// @rollup-cycle streams-transform
 import {
   arg, callback, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, promise,
@@ -14,46 +13,22 @@ import {
 import type { ReadableStreamImpl } from './readable-stream';
 import {
   initializeTransformStream,
-  setUpTransformStreamDefaultControllerFromAlgorithms,
   setUpTransformStreamDefaultControllerFromTransformer,
 } from './transform-stream-operations';
-import type { TransformStreamDefaultControllerImpl } from './transform-stream-default-controller';
+import { TransformStreamDefaultControllerImpl } from './transform-stream-default-controller';
 import type { WritableStreamImpl } from './writable-stream';
+import { internalStreamSetup } from './internal-methods';
 
 export class TransformStreamImpl {
-  readonly #context: BindingContext;
-  readonly #state: TransformStreamState = {};
+  readonly state: TransformStreamState = {};
 
   constructor(
-    context: BindingContext,
-    transformer?: object,
+    readonly context: BindingContext,
+    transformer?: object | typeof internalStreamSetup,
     writableStrategy: QueuingStrategy = {},
     readableStrategy: QueuingStrategy = {},
-    algorithms?: TransformStreamAlgorithms,
   ) {
-    this.#context = context;
-    const startPromise = context.createPromise(idlType.any);
-    initializeTransformStream(
-      this,
-      startPromise,
-      extractHighWaterMark(
-        writableStrategy,
-        1,
-        context.realm.intrinsics.rangeError,
-      ),
-      extractSizeAlgorithm(writableStrategy),
-      extractHighWaterMark(
-        readableStrategy,
-        0,
-        context.realm.intrinsics.rangeError,
-      ),
-      extractSizeAlgorithm(readableStrategy),
-    );
-    if (algorithms) {
-      setUpTransformStreamDefaultControllerFromAlgorithms(this, algorithms);
-      context.resolvePromise(startPromise, undefined);
-      return;
-    }
+    if (transformer === internalStreamSetup) return;
 
     const transformerObject = transformer ?? null;
     const transformerDictionary = context.convert(
@@ -70,13 +45,38 @@ export class TransformStreamImpl {
         'Invalid writableType specified',
       );
     }
+
+    const readableHighWaterMark = extractHighWaterMark(
+      readableStrategy,
+      0,
+      context.realm.intrinsics.rangeError,
+    );
+    const readableSizeAlgorithm = extractSizeAlgorithm(readableStrategy);
+    const writableHighWaterMark = extractHighWaterMark(
+      writableStrategy,
+      1,
+      context.realm.intrinsics.rangeError,
+    );
+    const writableSizeAlgorithm = extractSizeAlgorithm(writableStrategy);
+    const startPromise = context.createPromise(idlType.any);
+    initializeTransformStream(
+      this,
+      startPromise,
+      writableHighWaterMark,
+      writableSizeAlgorithm,
+      readableHighWaterMark,
+      readableSizeAlgorithm,
+    );
+    const controller = context.construct(
+      TransformStreamDefaultControllerImpl,
+    );
     setUpTransformStreamDefaultControllerFromTransformer(
       this,
+      controller,
       transformerObject,
       transformerDictionary,
     );
 
-    const controller = requireStateMember(this.#state.controller, 'controller');
     const startResult = transformerDictionary.start === undefined
       ? undefined
       : Reflect.apply(
@@ -87,45 +87,14 @@ export class TransformStreamImpl {
     context.resolvePromise(startPromise, startResult);
   }
 
-  /** Set up a custom transform stream for another specification. */
-  static fromAlgorithms(
-    context: BindingContext,
-    algorithms: TransformStreamAlgorithms,
-  ): TransformStreamImpl {
-    return context.construct(
-      TransformStreamImpl,
-      undefined,
-      {},
-      {},
-      algorithms,
-    );
-  }
-
   get readable(): ReadableStreamImpl {
-    return requireStateMember(this.#state.readable, 'readable');
+    return requireStateMember(this.state.readable, 'readable');
   }
 
   get writable(): WritableStreamImpl {
-    return requireStateMember(this.#state.writable, 'writable');
-  }
-
-  static getContext(stream: TransformStreamImpl): BindingContext {
-    return stream.#context;
-  }
-
-  static getState(stream: TransformStreamImpl): TransformStreamState {
-    return stream.#state;
+    return requireStateMember(this.state.writable, 'writable');
   }
 }
-
-export type TransformStreamAlgorithms = {
-  cancel?(reason: unknown): unknown;
-  flush?(controller: TransformStreamDefaultControllerImpl): unknown;
-  transform(
-    chunk: unknown,
-    controller: TransformStreamDefaultControllerImpl,
-  ): unknown;
-};
 
 export type TransformStreamState = {
   backpressure?: boolean;
@@ -153,7 +122,7 @@ export type Transformer = {
 
 export const transformStreamIDL = defineInterface({
   name: 'TransformStream',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
     constructWith: [bindingContext],

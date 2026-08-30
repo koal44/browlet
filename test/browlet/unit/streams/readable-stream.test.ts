@@ -261,9 +261,68 @@ describe('ordinary readable-stream implementation', () => {
     ]);
     expect(cancel).toHaveBeenCalledWith(['one', 'two']);
   });
+
+  it('rejects both tee cancellations when source cancellation fails', async () => {
+    const error = new Error('cancel failed');
+    const cancel = vi.fn(() => Promise.reject(error));
+    const { stream } = createReadableStream({ cancel });
+    const [branch1, branch2] = stream.tee();
+    const cancel1 = unwrapStreamPromise(branch1.cancel('one'));
+    const cancel2 = unwrapStreamPromise(branch2.cancel('two'));
+
+    await Promise.all([
+      expect(cancel1).rejects.toBe(error),
+      expect(cancel2).rejects.toBe(error),
+    ]);
+  });
+
+  it('errors both tee branches when their source errors', async () => {
+    const { controller, stream } = createReadableStream();
+    const [branch1, branch2] = stream.tee();
+    const reader1 = branch1.getReader({});
+    const reader2 = branch2.getReader({});
+    const error = new Error('source failed');
+
+    controller.error(error);
+
+    await Promise.all([
+      expect(unwrapStreamPromise(reader1.closed)).rejects.toBe(error),
+      expect(unwrapStreamPromise(reader2.closed)).rejects.toBe(error),
+    ]);
+  });
+
 });
 
 describe('readable-stream projection', () => {
+  it('rejects both tee cancellations when projected source cancellation fails', async () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const error = new Error('cancel failed');
+    const stream = Reflect.construct(
+      requireFunction(window, 'ReadableStream'),
+      [{ cancel() { throw error; } }],
+    ) as object;
+    const [branch1, branch2] = Reflect.apply(
+      requireFunction(stream, 'tee'),
+      stream,
+      [],
+    ) as object[];
+    const cancel1 = Reflect.apply(
+      requireFunction(branch1 as object, 'cancel'),
+      branch1,
+      ['one'],
+    ) as Promise<unknown>;
+    const cancel2 = Reflect.apply(
+      requireFunction(branch2 as object, 'cancel'),
+      branch2,
+      ['two'],
+    ) as Promise<unknown>;
+
+    await Promise.all([
+      expect(cancel1).rejects.toBe(error),
+      expect(cancel2).rejects.toBe(error),
+    ]);
+  });
+
   it('pipes through DOM abort algorithms with defaulted options', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const cancel = vi.fn(() => Promise.resolve(undefined));
@@ -340,6 +399,41 @@ describe('readable-stream projection', () => {
       value: undefined,
     });
     expect(Reflect.get(stream, 'locked')).toBe(false);
+  });
+
+  it('errors ReadableStream.from() when the iterator throws', async () => {
+    const window = new Browlet({ route: () => '' }).window;
+    const ReadableStream_ = requireFunction(window, 'ReadableStream');
+    const error = new Error('next failed');
+    const iterator = {
+      next() {
+        throw error;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+    const stream = Reflect.apply(
+      requireFunction(ReadableStream_, 'from'),
+      ReadableStream_,
+      [iterator],
+    ) as object;
+    const reader = Reflect.apply(
+      requireFunction(stream, 'getReader'),
+      stream,
+      [],
+    ) as object;
+    const read = Reflect.apply(
+      requireFunction(reader, 'read'),
+      reader,
+      [],
+    ) as Promise<unknown>;
+    const closed = Reflect.get(reader, 'closed') as Promise<unknown>;
+
+    await Promise.all([
+      expect(read).rejects.toBe(error),
+      expect(closed).rejects.toBe(error),
+    ]);
   });
 
   it('cancels iteration unless preventCancel is true', async () => {

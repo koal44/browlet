@@ -23,17 +23,15 @@ import {
 } from './writable-stream-default-controller';
 import { WritableStreamDefaultWriterImpl } from './writable-stream-default-writer';
 import { internalStreamSetup } from './internal-methods';
-import {
-  getWritableStreamContext, initializeWritableStreamSlots,
-} from './writable-stream-slots';
 
 export class WritableStreamImpl {
+  readonly state = initializeWritableStream();
+
   constructor(
-    context: BindingContext,
+    readonly context: BindingContext,
     underlyingSink?: object | typeof internalStreamSetup,
     strategy: QueuingStrategy = {},
   ) {
-    initializeWritableStreamSlots(this, context, initializeWritableStream());
     if (underlyingSink === internalStreamSetup) return;
 
     const sinkObject = underlyingSink ?? null;
@@ -71,7 +69,7 @@ export class WritableStreamImpl {
   }
 
   abort(reason?: unknown): StreamPromise {
-    const context = getWritableStreamContext(this);
+    const context = this.context;
     if (isWritableStreamLocked(this)) {
       return context.createRejectedPromise(
         new context.realm.intrinsics.typeError(
@@ -84,7 +82,7 @@ export class WritableStreamImpl {
   }
 
   close(): StreamPromise {
-    const context = getWritableStreamContext(this);
+    const context = this.context;
     if (isWritableStreamLocked(this)) {
       return context.createRejectedPromise(
         new context.realm.intrinsics.typeError(
@@ -112,7 +110,7 @@ export class WritableStreamImpl {
 export function acquireWritableStreamDefaultWriter(
   stream: WritableStreamImpl,
 ): WritableStreamDefaultWriterImpl {
-  const context = getWritableStreamContext(stream);
+  const context = stream.context;
   const writer = context.construct(WritableStreamDefaultWriterImpl);
   setUpWritableStreamDefaultWriter(writer, stream);
   return writer;
@@ -126,7 +124,6 @@ export function createWritableStream(
   abortAlgorithm: (reason: unknown) => StreamPromise,
   highWaterMark = 1,
   sizeAlgorithm: QueuingStrategySize = () => 1,
-  startPromise?: StreamPromise,
 ): WritableStreamImpl {
   const stream = context.construct(
     WritableStreamImpl,
@@ -144,7 +141,6 @@ export function createWritableStream(
     abortAlgorithm,
     highWaterMark,
     sizeAlgorithm,
-    startPromise,
   );
   return stream;
 }

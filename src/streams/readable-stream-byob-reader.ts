@@ -144,7 +144,7 @@ export type ReadableStreamBYOBReaderReadOptions = {
 
 export const readableStreamBYOBReaderIDL = defineInterface({
   name: 'ReadableStreamBYOBReader',
-  exposed: ['Window', 'Worker', 'Worklet'],
+  exposed: '*',
   implementation: impl(ReadableStreamBYOBReaderImpl, {
     constructWith: [bindingContext],
   }),
