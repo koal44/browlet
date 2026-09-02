@@ -1,9 +1,10 @@
 # Event-loop architecture
 
-This note records how Browlet interprets HTML §§8.1.7–8.1.8 and how that
-interpretation differs from the internal organization of Blink, Gecko, and
-WebKit. Read it before moving task queues, microtask checkpoints, rendering
-updates, or asynchronous event dispatch between modules.
+This note records how Browlet interprets HTML §§8.1.3.3, 8.1.4.4, and
+8.1.7–8.1.8, and how that interpretation differs from the internal
+organization of Blink, Gecko, and WebKit. Read it before moving task queues,
+microtask checkpoints, rendering updates, or asynchronous event dispatch
+between modules.
 
 The implementation comparison is evidence, not an invitation to combine the
 most convenient-looking fragment from each engine. Each engine's routing,
@@ -118,6 +119,142 @@ content-attribute compilation, handler targets, and callback processing.
 dispatch algorithm. An event becomes asynchronous only where its owning
 algorithm says to queue a task; user-input events, for example, use the user
 interaction task source. “Event” and “event-loop task” are not synonyms.
+
+### Callback and script entries
+
+HTML §8.1.3.3 assigns the backup incumbent settings object stack to the event
+loop. Web IDL §§3.11–3.12 surround each callback invocation with HTML's
+script- and callback-preparation algorithms, using the callback's relevant
+settings object and its stored incumbent settings object respectively.
+`EventLoop` therefore owns this stack; it is not Realm-static or
+process-global.
+
+HTML §8.1.4.4 manipulates ECMAScript's execution-context stack, which Node does
+not expose. Browlet mirrors only entries it controls. `Realm.evaluate()` is an
+explicit host entry: it supplies a temporary task when necessary, records the
+settings object on that task, and checkpoints after its last mirrored entry
+exits. A Web IDL callback entered from an engine-owned Promise job still gets
+its relevant realm and backup incumbent bookkeeping, but Browlet does not
+invent a task or infer that V8's unseen stack is empty. This is the
+`node-v8-execution-contexts` accommodation recorded below.
+
+This boundary is enough for FileReader's callback-to-promise sequencing, but
+it is not a substitute for HTML §8.1.4.1 Script records or the §8.1.6.2
+`HostEnqueuePromiseJob` hook. In particular, Browlet cannot reconstruct an
+arbitrary function execution context's hidden `ScriptOrModule` component.
+Tests of stored incumbents must use the bound-platform-callback case for which
+the backup stack is decisive, rather than pretending that an ordinary author
+function has no script-having context.
+
+## Runtime accommodations
+
+These entries use the project-wide `ACCOMMODATION(identifier)` convention from
+[the subsystem architecture](../../subsystem-architecture.md#accommodations-limitations-and-deviations).
+They identify runtime-shaped implementation boundaries, not additional HTML
+algorithms. Specification-required event-loop state remains unmarked.
+
+### `node-v8-execution-contexts`
+
+**Intended behavior:** HTML §§8.1.3.3 and 8.1.4.4 inspect ECMAScript execution
+contexts while choosing an incumbent settings object and deciding whether
+script cleanup has emptied the stack. HTML §8.1.6.2 associates Promise jobs
+with their HTML microtask tasks.
+
+**Unavailable primitive:** Node does not expose V8's execution-context stack,
+the `ScriptOrModule` component of arbitrary entries, or
+`HostEnqueuePromiseJob`.
+
+**Accommodation:** `EventLoop` mirrors the realm and script entries Browlet
+controls. A nullable task on a mirrored realm entry distinguishes a visible
+Browlet task from an engine-owned entry. Cleanup checkpoints only for the
+former. Direct `Realm.evaluate()` calls without a current task receive a
+temporary host-entry task, and incumbent selection falls back to the explicit
+entry settings when neither a mirrored script entry nor the backup incumbent
+stack supplies one.
+
+**Consequence:** Callbacks entered by arbitrary V8 code still receive their
+stored and relevant settings, but Browlet cannot reconstruct the entire stack
+or infer that an unseen stack is empty. This is also recorded as the callback
+lifecycle limitation in [Web IDL limitations](../../web-idl/limitations.md).
+
+**Affected code and tests:** Script preparation, cleanup, incumbent selection,
+and direct evaluation entry live in [`event-loop.ts`](./event-loop.ts) and
+[`realm.ts`](./realm.ts). Their controlled behavior is exercised by
+[`callback-lifecycle.test.ts`](../../../test/browlet/unit/scripting/callback-lifecycle.test.ts).
+
+**Replacement condition:** A supported Node API or direct V8 embedding must
+expose execution entries and Promise-job association. At that point reevaluate
+the mirrored stack, the nullable task and cleanup gate, the temporary
+host-entry task, and the incumbent fallback together; do not leave those
+pieces behind independently.
+
+### `node-v8-microtask-queue`
+
+**Intended behavior:** HTML §8.1.7 associates a microtask queue with each event
+loop and identifies the queued microtask as the currently running task while
+its steps execute.
+
+**Unavailable primitive:** Node does not expose a shareable, explicitly owned
+V8 microtask queue which Browlet can associate with one HTML event loop. The
+default VM contexts use V8's ambient queue.
+
+**Accommodation:** `EventLoop.queueMicrotask()` uses the ambient
+`queueMicrotask()`, retains Browlet's `Task` in the closure, and marks the HTML
+checkpoint flag while that callback runs. Browlet does not create a second
+JavaScript queue whose ordering could diverge from Promise jobs.
+
+**Consequence:** Promise and microtask FIFO ordering uses V8's real queue, but
+work from unrelated code or another Browlet event loop in the same isolate is
+not isolated. A public drain operation alone would not remove this
+accommodation.
+
+**Affected code and tests:** The boundary is
+[`EventLoop.queueMicrotask()`](./event-loop.ts). Task identity and reentrant
+checkpoint suppression are covered by [`tasks.test.ts`](../../../test/browlet/unit/scripting/tasks.test.ts).
+
+**Replacement condition:** Node must expose suitable microtask-queue ownership
+or Browlet must use a direct V8 embedder. Replace the ambient enqueue operation
+and its callback bookkeeping as one unit while retaining HTML's event-loop
+checkpoint flag.
+
+### `node-v8-checkpoint`
+
+**Intended behavior:** HTML §8.1.7.3 drains the event loop's microtask queue
+inside a non-reentrant checkpoint, then performs the remaining HTML
+post-checkpoint phases.
+
+**Unavailable primitive:** Node exposes no supported synchronous operation for
+draining the shared V8 microtask queue.
+
+**Accommodation:** The Node scheduler supplies
+`performNodeMicrotaskCheckpoint()` through `EventLoopOptions`. That one
+provider feature-detects and invokes the private `process._tickCallback()`;
+the HTML checkpoint knows only the injected operation.
+
+**Consequences:** `_tickCallback()` also drains ambient next-tick work and runs
+Node's promise-rejection bookkeeping. While V8 is already performing a
+checkpoint, it refuses a nested V8 drain, but `_tickCallback()` can continue to
+rejection reporting. Node can consequently report a rejected Promise returned
+by a Streams callback before a cross-realm promise-resolution job marks it
+handled, then emit `PromiseRejectionHandledWarning` later. Do not install a
+process-wide `async_hooks` heuristic, suppress rejection events, or change Web
+IDL promise conversion to hide this artifact.
+
+**Affected code and tests:** The private hook is isolated at the bottom of
+[`event-loop.ts`](./event-loop.ts). Cross-realm draining and the ambient,
+nested, fake-clock, and adopted-rejection limitations are recorded in
+[`tasks.test.ts`](../../../test/browlet/unit/scripting/tasks.test.ts). HTML
+§13.2.6.4 separately requires a conditional, explicit pre-script checkpoint
+before its conditional wait for style sheets and script readiness. The current
+parser conflates those boundaries; its replacement belongs to the
+[parser script-runner plan](../html/parser/roadmap.md), not to this Node bridge.
+
+**Replacement condition:** Replace only the injected Node checkpoint provider
+when a supported synchronous operation becomes available. Delete
+`performNodeMicrotaskCheckpoint()`, `getTickCallback()`, and their cached
+private function together. Preserve HTML's checkpoint algorithm and its
+reentrancy guard. Faithful §8.1.6.2 integration may separately remove the
+execution-context accommodation above.
 
 ## Engine comparison
 

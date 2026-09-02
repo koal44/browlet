@@ -430,6 +430,53 @@ Use these role names consistently:
 - `FooContext` only for cohesive contextual state whose members share an
   identity and lifecycle.
 
+## Accommodations, limitations, and deviations
+
+These labels answer different questions and must not be used interchangeably:
+
+| Label | Question | Required record |
+| --- | --- | --- |
+| **Accommodation** | Which implementation structure exists because the runtime or embedder does not expose a required primitive? | A searchable code marker and an entry in the owning architecture or limitations note |
+| **Limitation** | Which observable requirement can Browlet not currently provide? | The owning `limitations.md` or roadmap plus a focused expected-failure test when practical |
+| **Deviation** | Where does Browlet deliberately behave differently from the governing specification? | The owning architecture or roadmap with the rationale, relevant interoperability evidence, and a regression test |
+
+An accommodation can preserve all observable behavior, or it can cause a
+limitation. It is not automatically a deviation. A Host Port or
+cross-specification capability is likewise not automatically an accommodation:
+use that label only when the implementation would materially change if the
+missing runtime or embedder primitive became available.
+
+Mark the smallest surprising code boundary with a stable, kebab-case
+identifier:
+
+```ts
+/*
+ * ACCOMMODATION(node-v8-checkpoint): Node does not expose a supported
+ * synchronous V8 microtask checkpoint operation.
+ */
+```
+
+One identifier can mark several affected sites. Do not mark every caller, and
+do not mark specification-required state merely because it borders an
+accommodation. Use the parallel `DEVIATION(identifier)` marker when a code path
+deliberately implements behavior other than the specification's requirement;
+a browser's divergence is evidence, not a Browlet deviation when Browlet still
+follows the specification. Limitations remain primarily documentation and
+expected-failure records because a missing operation may have no code boundary
+to mark. Search the complete source tree with:
+
+```powershell
+rg -n "(ACCOMMODATION|DEVIATION)\(" src
+```
+
+The owning Markdown entry must identify the intended specification behavior,
+the unavailable primitive, Browlet's substitute, observable consequences,
+affected code and tests, and the condition for replacement. Its replacement
+notes must say which implementation pieces are deleted or reevaluated so the
+substitute does not survive after its cause disappears. If the accommodation
+also creates an observable limitation or deliberate deviation, cross-reference
+that separate record rather than weakening the distinction.
+
 ## Testing consequences
 
 - Test pure, realm-neutral algorithms without constructing Binding machinery.

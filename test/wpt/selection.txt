@@ -16,12 +16,9 @@ FileAPI/reading-data-section/filereader_readAsText.any.js
 FileAPI/reading-data-section/filereader_readystate.any.js
 FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js
 FileAPI/reading-data-section/FileReader-multiple-reads.any.js
-# These three files contain promise-wait sequences between events which File
-# API fires synchronously in one task. They require HTML §8.1.4's cleanup-
-# after-running-script checkpoint, not different FileReader event scheduling:
-# FileAPI/reading-data-section/filereader_abort.any.js
-# FileAPI/reading-data-section/filereader_events.any.js
-# FileAPI/reading-data-section/filereader_result.any.js
+FileAPI/reading-data-section/filereader_abort.any.js
+FileAPI/reading-data-section/filereader_events.any.js
+FileAPI/reading-data-section/filereader_result.any.js
 streams/queuing-strategies.any.js
 streams/readable-streams/constructor.any.js
 streams/readable-streams/count-queuing-strategy-integration.any.js

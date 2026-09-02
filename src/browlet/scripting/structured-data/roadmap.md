@@ -255,14 +255,13 @@ or ArrayBuffer transfer. Do not claim platform-transfer coverage until a real
 registered consumer exists.
 
 Section 2.7.9 adds no new graph algorithm. It fixes the reusable operation
-boundary: other specifications call these semantic operations rather than the
+boundary: other specifications call these operations rather than the
 author-facing `structuredClone()` method or a caller-specific clone path.
 An asynchronous caller serializing arbitrary objects must first prepare to run
 script and a callback because serialization can invoke author accessors. That
-lifecycle requirement remains deferred with HTML sections 8.1.4 and 8.1.5;
-their current Realm hooks are deliberately no-ops. Cross-specification callers
-must preserve this obligation rather than treating the semantic operation as
-context-free.
+lifecycle boundary is now available through the HTML §§8.1.3.3 and 8.1.4.4
+Realm hooks. Cross-specification callers must enter it rather than treating the
+serialization operation as context-free.
 
 ### 5. Expose `structuredClone()` and connect the first consumers
 

@@ -178,6 +178,7 @@ function projectCallbackReceiver(
     value;
 }
 
+/* Web IDL §§3.11–3.12; HTML §§8.1.3.3 and 8.1.4.4. */
 function runCallback(
   value: CallbackValue,
   steps: () => unknown,

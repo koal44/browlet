@@ -192,11 +192,13 @@ checkpoint delivers everything.
 
 ## Priority 4 — portable data and Fetch foundations
 
-Primary roadmaps: [Fetch](../fetch/roadmap.md) and
+Primary roadmaps: [Fetch](../fetch/roadmap.md), [File API](../file/roadmap.md),
+[XHR](../xhr/roadmap.md), and
 [structured data](scripting/structured-data/roadmap.md).
 
-These two projects are independent internally and can be developed in either
-order. Their public completion must use the Priority 1 task and realm model.
+These roadmaps retain distinct internal ownership; the dependency front and
+execution order are recorded below. Their public completion must use the
+Priority 1 task and realm model.
 
 Current implementation sequence:
 
@@ -204,11 +206,14 @@ Current implementation sequence:
    document order, including the inherited module cycles; use the reference
    implementation only as secondary evidence.
 2. **Complete:** Implement the Fetch-independent File API through File and
-   FileList.
-3. Implement the Fetch-independent XHR prerequisites consumed by File and
-   Fetch. `ProgressEvent` and the no-form `FormData` entry-list core are
-   complete; `FormData(form, submitter)` waits for HTML forms.
-4. Implement Fetch's records, author APIs, and first transport slices.
+   FileList. The later FileReader §§6.1–6.4 work is also complete except for
+   shared global teardown; `FileReaderSync` waits for workers.
+3. **Complete for the current dependency front:** Implement the
+   Fetch-independent XHR prerequisites consumed by File and Fetch.
+   `ProgressEvent` and the no-form `FormData` entry-list core are complete;
+   `FormData(form, submitter)` waits for HTML forms.
+4. **Next:** Implement Fetch's records, author APIs, and first transport
+   slices.
 5. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.
 
