@@ -11,13 +11,16 @@ provider may know both sides of that boundary, but it must not import the
 assembled `browletBindings` singleton or rediscover a Binding Context already
 available to the consuming algorithm.
 
-Integration modules contain cross-owner behavior and wiring, not the core state
-or algorithms of either subsystem. Domain behavior remains with its owning
-specification, and substantial domain-local integrations such as Stylelet
-remain with that domain rather than moving into this directory.
+Integration modules contain cross-owner behavior and wiring. They may also
+contain Browlet's completion of a standalone subsystem when one concrete
+platform implementation inherently depends on Browlet-owned facilities. Keep
+that implementation whole on the Browlet side of the boundary rather than
+splitting its state into a host-neutral facade and a browser-specific object.
+Domain-local behavior still remains with its owning subsystem.
 
 - `file/` connects File API algorithms to HTML scheduling and structured data,
-  plus platform line ending policy.
+  supplies platform line ending policy, and owns `FileReader`, whose concrete
+  implementation depends on Browlet's EventTarget, tasks, timing, and events.
 - `streams.ts` connects Streams to DOM AbortController construction and HTML
   structured cloning.
 - `xhr.ts` supplies the realm-sensitive File construction used by HTML's form

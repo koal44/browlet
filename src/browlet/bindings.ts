@@ -22,6 +22,7 @@ import { domIDLDefinitions } from './dom/web-idl';
 import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
+import { fileReaderIDL } from './integration/file/file-reader';
 import { streamsCapabilities } from './integration/streams';
 import { xhrCapabilities } from './integration/xhr';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
@@ -155,6 +156,7 @@ const browletDefinitions = [
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,
   ...fileIDLDefinitions,
+  fileReaderIDL,
   ...xhrIDLDefinitions,
   ...urlIDLDefinitions,
 ];

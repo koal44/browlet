@@ -67,9 +67,11 @@ either divergence.
 
 FileReader similarly does not need a private network loader. Browser engines
 reuse loader-style infrastructure because their Blob backends span files,
-processes, and IPC. Browlet can implement the normative stream/read loop over
-the byte-source and Streams boundaries, with Browlet supplying EventTarget,
-task, clock, and global-lifecycle integration.
+processes, and IPC. Browlet implements the normative stream/read loop over the
+host-neutral byte-source and Streams boundaries in
+`src/browlet/integration/file/file-reader.ts`, where the concrete object can
+use Browlet's EventTarget, task, clock, and global-lifecycle facilities without
+making `src/file` depend on Browlet.
 
 The blob URL store belongs to the User Agent, not to a module-global map, a
 Realm, or an individual Window. Entries strongly retain their object and the
@@ -87,7 +89,7 @@ Create modules only as their behavior arrives. The likely final division is:
 | `file.ts` | File construction, name, modification time, file type, host-file source integration, and declaration | §4 |
 | `file-list.ts` | Owner-mutable ordered File collection, indexed getter, serialization state, and declaration | §5 |
 | `blob-url-store.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
-| `file-reader.ts` | Asynchronous reader state, methods, cancellation, stream consumption, and event sequencing | §§6.1–6.4 and 7 |
+| `browlet/integration/file/file-reader.ts` | Browlet's concrete asynchronous reader state, methods, cancellation, stream consumption, declaration, and event sequencing | §§6.1–6.4 and 7 |
 | `package-data.ts` | Data URL, text, ArrayBuffer, and binary-string materialization | §6.3 |
 | `integration.ts` | Native-line-ending policy plus the File-reading scheduler capability. Keep future UUID and host-I/O effects with their actual owner rather than rebuilding a service bag | Cross-cutting |
 | `web-idl.ts` | Lossless File API definitions and cross-package contributions assembled by Browlet | §§3–6 and 8.4 |
@@ -106,8 +108,9 @@ and deserialization steps without duplicating Blob state.
 | Infra byte sequences, lists, and Base64 | §§2–6 | Byte/list representations and forgiving Base64 encoding exist in `src/shared` | Reuse the Base64 encoder for Data URLs; do not route through `Buffer` or `btoa()` |
 | Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding`, including internal access to a `TextDecoderStream`'s associated actual `TransformStream` | Blob text APIs are always UTF-8; FileReader text decoding instead honors labels and MIME parameters |
 | Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, read-all-bytes, and piping through an actual `TransformStream` | Reuse these exact boundaries. Do not widen the transform helper to an arbitrary readable/writable pair or call projected author methods from internal algorithms |
-| HTML parallel work, global tasks, event loop, and time | §§3, 6.1–6.4 | Blob reads use a narrow File-reading capability for Browlet's shared `runInParallel()` policy and the file-reading task source; native line endings come from the Node platform and File's wall-clock default uses `Date.now()` | FileReader still needs an owner/cancellation identity for removing only its queued tasks and monotonic progress timing. Do not scan or mutate private queues from File code |
-| DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader's read state in `src/file`; Browlet supplies the EventTarget implementation, handler composition, realm-correct exceptions, and dispatch |
+| HTML parallel work, global tasks, event loop, and time | §§3, 6.1–6.4 | Blob and FileReader reads use a narrow File-reading capability for Browlet's shared `runInParallel()` policy and the file-reading task source; FileReader retains removable handles only for its active operation; native line endings come from the Node platform and File's wall-clock default uses `Date.now()` | Cancellation removes only the active reader's tasks and cancels its Streams reader. Do not scan or mutate private queues from File code |
+| HTML script/callback cleanup and global lifecycle | §§6.2–6.4 | Web IDL invokes callbacks through Browlet's realm hooks, but HTML §8.1.4 cleanup-after-running-script checkpoints and Window/worker destruction are deliberately incomplete | Keep FileReader's specified synchronous event order. Do not split `load`/`loadend` into extra tasks to satisfy promise-based WPT sequencing; enable those tests with the shared callback lifecycle, then cancel outstanding reads from the shared global-destruction hook |
+| DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader as one concrete EventTarget implementation in `src/browlet/integration/file`; do not split its state into a File facade plus a Browlet event object merely to reproduce the specification boundary |
 | XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Implemented in `src/browlet/dom/events/progress-event.ts`, with XHR contributing its declaration | Reuse that event and helper when implementing FileReader; File API must not create a private lookalike event |
 | HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
 | MIME parsing and file-type policy | §§3.2, 4, and 6.3 | MIME parsing/sniffing is implemented; host-selected file type discovery is not | Constructed type normalization is entirely File API-owned. A future file-selection host may provide a validated MIME type under the file-type guidelines; never sniff an encoding statistically |
@@ -266,33 +269,73 @@ cross-global same-partition use, cross-partition denial, environment cleanup,
 strong retention, and already-started reads pass deterministic multi-global
 tests. Fetch can resolve a Blob entry without using Node object URLs.
 
-### Slice 5 — Asynchronous FileReader
+### Slice 5 — FileReader foundation (FileReader slice 1)
 
-**Scope:** File API §§6.1–6.4 and 7, after XHR §5 `ProgressEvent` exists.
+**Scope:** File API §6.1; the declaration, state, constructor, and getters in
+§6.2; and §§6.2.1–6.2.2. The §6.2 read-operation algorithm remains in the next
+slice.
 
-- Add the file-reading task source and a scheduler cancellation identity that
-  can remove only one FileReader operation's queued tasks.
-- Implement FileReader state, result, error, constants, methods, and ordinary
-  event-handler contributions over a Browlet-owned EventTarget composition.
-- Implement the parallel stream-read loop, roughly-50-ms progress throttle,
-  result packaging, read failure, and success/error completion.
+- Add the concrete `FileReader` EventTarget implementation, its three states,
+  result and error storage, constants, getters, and six event-handler
+  attributes.
+- Give queued file-reading tasks removable identities so one read operation
+  can later cancel only its own pending work.
+- Fix the later roughly-50-ms progress boundary on Browlet's existing shared
+  monotonic clock; do not add a File-specific clock façade.
+- Preserve the complete declaration without installing a partially functional
+  author API before the remaining asynchronous algorithms exist.
+
+**Exit proof:** implementation-level tests prove initial state, constant and
+getter values, independent event-handler slots, EventTarget behavior, and
+selective removal of queued file-reading tasks.
+
+### Slice 6 — Asynchronous reads and result packaging (FileReader slice 2; implemented)
+
+**Scope:** the read-operation algorithm in File API §6.2;
+§§6.2.3–6.2.3.4; §6.3; and §§6.4–6.4.1.
+
+- Implement the parallel stream-reader loop and the `readAsDataURL()`,
+  `readAsText()`, `readAsArrayBuffer()`, and `readAsBinaryString()` entry
+  points.
 - Implement Data URL packaging with the shared Base64 encoder. Because the
   editor's draft still carries an underspecified Data URL issue, verify exact
   syntax against WPT and interoperable browser behavior and record the chosen
   interpretation near the algorithm.
 - Implement text encoding-label precedence, MIME charset fallback, UTF-8
-  fallback, ArrayBuffer packaging, and the legacy binary-string path.
-- Implement abort by canceling the active stream reader and queued tasks, then
-  firing `abort` and conditional `loadend` in the specified order.
-- Exercise reentrant read chaining from load, error, and abort handlers; the
-  old operation must not fire a stale loadend after a new read begins.
-- Tie outstanding work to global destruction without treating garbage
-  collection as lifecycle.
+  fallback, realm-correct ArrayBuffer packaging, and the legacy binary-string
+  path.
+- Fire `loadstart`, throttled `progress`, `load`, `error`, and ordinary
+  `loadend` events through XHR §5 `ProgressEvent`.
 
-**Exit proof:** state guards, all result modes, progress timing boundaries,
-event order, read errors, abort, stale-task cancellation, reentrant reads,
-wrong-Realm objects, and global teardown pass focused tests and applicable
-FileAPI WPT groups.
+**Exit proof:** every result mode, read failure, first/final chunk, progress
+timing boundary, event payload, and target-Realm result passes focused tests.
+
+### Slice 7 — Abort, reentrancy, and public exposure (FileReader slice 3;
+implemented except shared lifecycle integration)
+
+**Scope:** File API §6.2.3.5, §6.4.2, and the asynchronous failure mappings in
+§7.
+
+- Implement abort by canceling the active stream reader and only that
+  operation's queued tasks, then firing `abort` and conditional `loadend` in
+  the specified order.
+- Exercise reentrant read chaining from load, error, and abort handlers; an old
+  operation must not fire stale progress or `loadend` events after a new read
+  begins.
+- Verify all five §7 failure reasons and their realm-correct DOMException
+  mappings.
+- Install the complete `FileReader` declaration in Browlet. Tie outstanding
+  work to global destruction once HTML supplies the shared Window/worker
+  destruction hook; inactive-document task gating prevents event delivery in
+  the meantime, but garbage collection is not lifecycle.
+
+**Exit proof:** state guards, abort, stale-task cancellation, reentrant reads,
+wrong-Realm objects, and the independently runnable FileAPI WPT groups pass.
+The WPT sequences which await between `load`, `error`, or `progress` and
+`loadend` remain selected as comments until HTML §8.1.4 cleanup after running
+script performs its required microtask checkpoint. Global teardown remains the
+other shared-lifecycle tail; neither gap belongs in FileReader-specific
+machinery.
 
 ## Deferred worker tail
 

@@ -16,8 +16,12 @@ export const fileReading =
   defineCapability<FileReadingCapability>('File reading');
 
 export type FileReadingCapability = {
-  queueTask(global: object, steps: () => void): void;
+  queueTask(global: object, steps: () => void): FileReadingTaskHandle;
   runInParallel(steps: () => void): void;
+};
+
+export type FileReadingTaskHandle = {
+  remove(): void;
 };
 
 export type NativeLineEnding = '\n' | '\r\n';
@@ -25,7 +29,7 @@ export type NativeLineEnding = '\n' | '\r\n';
 export function getFileReading(
   context: BindingContext,
 ): {
-  queueTask(steps: () => void): void;
+  queueTask(steps: () => void): FileReadingTaskHandle;
   runInParallel(steps: () => void): void;
 } {
   const [global, capability] = getGlobalCapability(context, fileReading);

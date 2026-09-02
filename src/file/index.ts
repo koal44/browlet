@@ -17,13 +17,15 @@ export {
 } from './blob-data';
 export {
   fileReading, getFileReading, nativeLineEnding,
-  type FileReadingCapability, type NativeLineEnding,
+  type FileReadingCapability, type FileReadingTaskHandle,
+  type NativeLineEnding,
 } from './integration';
 export {
   createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,
 } from './file';
 export { fileListIDL, FileListImpl } from './file-list';
+export { packageData, type FileReadType } from './package-data';
 
 export const fileIDLDefinitions: Definition[] = [
   endingTypeIDL,

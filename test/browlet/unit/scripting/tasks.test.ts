@@ -60,6 +60,30 @@ describe('task queues', () => {
     )).toBe(true);
   });
 
+  it('removes only the queued global task identified by a handle', () => {
+    const traversable = createNewTopLevelTraversable(
+      new UserAgent(),
+      null,
+      '',
+    );
+    const window = traversable.activeWindow;
+    if (window === null) throw new Error('Expected an active Window');
+    const first = vi.fn();
+    const second = vi.fn();
+    const source = createTaskSource('removable');
+    const firstTask = queueGlobalTask(source, window, first);
+
+    queueGlobalTask(source, window, second);
+
+    expect(firstTask.remove()).toBe(true);
+    expect(firstTask.remove()).toBe(false);
+    expect(requireEventLoop(window).runTaskTurn(
+      createEventLoopOptions(),
+    )).toBe(true);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+  });
+
   it('associates sources independently on each event loop', () => {
     const firstLoop = new EventLoop();
     const secondLoop = new EventLoop();

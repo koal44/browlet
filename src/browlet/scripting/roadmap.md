@@ -165,11 +165,12 @@ adding a DOM timer path.
 | `script.ts` | Script records and shared script state | HTML §8.1.4 |
 | `classic-script.ts` | Creating/fetching/running classic scripts | HTML §§8.1.4.1–8.1.4.5 |
 | `module-script.ts` | JavaScript module scripts and module graph fetching | HTML §§8.1.4.1–8.1.5 |
-| `module-map.ts` | Module map and fetch coordination shared by settings objects and module host hooks | HTML §§8.1.3 and 8.1.6 |
+| `module-map.ts` | Module map, import-map parse-result registration, and fetch coordination shared by settings objects and module host hooks | HTML §§8.1.3, 8.1.4.8, and 8.1.6 |
 | `error-reporting.ts` | `ErrorEvent`, `PromiseRejectionEvent`, runtime error reporting, and rejected-promise notification | HTML §§8.1.4.6–8.1.4.7 |
+| loader `speculation.ts` | Speculation-rules parse-result registration | HTML §8.1.4.9 and §7.6 |
 | existing `event-handlers.ts` | Extend the ordinary IDL-handler core with content-attribute compilation, Window/element targeting, special error/beforeunload processing, and the global handler mixins | HTML §8.1.8 |
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
-| `callback-context.ts` only if realm hooks outgrow environment.ts | Preparing/cleaning callback execution | HTML §8.1.4.4 and Web IDL callback integration |
+| existing `environment.ts`, `realm.ts`, `agents.ts`, and `event-loop.ts`; add `callback-context.ts` only if those hooks outgrow their owners | Incumbent callback bookkeeping plus script/callback preparation and cleanup | HTML §§8.1.3.3 and 8.1.4.4; Web IDL callback integration |
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
@@ -181,6 +182,28 @@ Dynamic markup insertion and DOM parsing are mapped under `html/parser/` and
 `dom/parsing/`; sanitization, Navigator, and image objects have their own
 roadmaps. Dialogs and printing require an embedder/UI capability and can wait
 until an observable consumer exists.
+
+### Section 8.1.4 staging
+
+HTML §8.1.4 is not one delivery unit. Its parts enter in the following order:
+
+| Section | Earliest sound delivery | Current gate |
+| --- | --- | --- |
+| §8.1.4.1 Scripts | With classic-script creation | Script records and explicit host-to-JavaScript entry tracking |
+| §8.1.4.2 Fetching scripts | After the Fetch and loader foundations | Requests, responses, bodies, CORS, MIME and encoding policy, referrer policy, integrity, module maps, and worker/worklet lifecycle |
+| §8.1.4.3 Creating scripts | Classic-script subset after script records; module subsets later | A classic-script compiler seam is available through `node:vm`; stable module compilation is not |
+| §8.1.4.4 Calling scripts | Prepare/cleanup subset with the first callback-checkpoint consumer; complete classic path after script creation | Host-visible execution-context tracking, the responsible event loop's checkpoint, scripting-enabled/fully-active checks, and error reporting |
+| §8.1.4.5 Killing scripts | With the first enforceable host quota or termination policy | Node does not expose general termination of arbitrary running JavaScript |
+| §8.1.4.6 Runtime script errors | With complete classic-script execution | `ErrorEvent`, Window reporting, muted-error handling, and host source-location extraction; worker propagation waits for workers |
+| §8.1.4.7 Unhandled promise rejections | After a faithful promise-rejection host hook exists | Node's process-wide rejection events do not expose HTML's per-realm promise bookkeeping |
+| §8.1.4.8 Import map parse results | With modules and import maps | Module map, parser, fetching, and registration machinery |
+| §8.1.4.9 Speculation rules parse results | With speculation-rules loading | Document speculation-rule state and the loader policy that consumes it |
+
+The early §8.1.4.4 slice is intentionally narrow: implement the script/callback
+entry boundary and the empty-stack microtask checkpoint needed by current
+callback consumers. It must also implement the incumbent-settings bookkeeping
+from §8.1.3.3. Do not pull script records, fetching, modules, WebDriver BiDi,
+runtime-error reporting, or rejected-promise tracking into that slice.
 
 ## Deferred processing-model tails
 

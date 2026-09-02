@@ -49,13 +49,13 @@ export function createArrayBuffer(
   bytes: ByteSequence,
   realm: WebIDLRealmHost,
   maxByteLength?: number,
-): object {
+): ArrayBuffer {
   const buffer = Reflect.construct(
     realm.intrinsics.bufferSource.arrayBuffer,
     maxByteLength === undefined
       ? [bytes.length]
       : [bytes.length, { maxByteLength }],
-  ) as object;
+  );
   writeArrayBuffer(buffer, bytes);
   return buffer;
 }
