@@ -78,7 +78,7 @@ The cycle is therefore inherited in architecture, not merely copied as a
 warning. Browlet contributes its concrete TypeScript module split and the
 static access needed to reach class-private state, but the audit found no
 Browlet-only import edge whose removal would break the cycle. Type-only imports
-do not participate, and the Realm Context, HTML structured-cloning capability,
+do not participate, and the Binding Context, HTML structured-cloning capability,
 and DOM abort capability do not add edges to this cycle.
 
 The recent `ReadableStream.from()` and tee failures were a separate boundary
@@ -87,7 +87,7 @@ path into construction through an author-style underlying-source record. That
 sent already-converted callbacks and promises through Web IDL conversion a
 second time. The corrected `createReadableStream()` and
 `createReadableByteStream()` operations allocate an implementation in the
-proper Realm Context and run the specification setup algorithms directly.
+proper Binding Context and run the specification setup algorithms directly.
 This removed the wrong Binding round trip, but it did not create or remove an
 import edge.
 

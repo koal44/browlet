@@ -2,13 +2,11 @@
 import {
   arg, asyncIter, asyncSequence, callback, ctor, defineCallbackFunction,
   defineDictionary, defineEnumeration, defineInterface, defineTypedef,
-  dictMember, emptyDictionary, idlType, impl, op, promise, roAttr, reference,
-  sequence, union, invokeWith, xattr,
+  dictMember, emptyDictionary, idlType, impl, invokeWith, op, promise, roAttr,
+  reference, sequence, union, xattr,
 } from '../web-idl/declaration/index';
 import type { IDLAsyncSequence } from '../web-idl/async-sequence';
-import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
+import { bindingContext, type BindingContext } from '../web-idl/projection';
 import type { StreamAbortSignal } from './abort';
 import type { StreamPromise } from './promise';
 import {
@@ -265,9 +263,10 @@ export const readableStreamIDL = defineInterface({
         optional: true,
       }),
     ]),
-    op('from', reference('ReadableStream'), [
-      arg('asyncIterable', asyncSequence(idlType.any)),
-    ], { ...invokeWith(bindingContext), static: true }),
+    op('from', reference('ReadableStream'),
+      [arg('asyncIterable', asyncSequence(idlType.any))],
+      { ...invokeWith(bindingContext), static: true }
+    ),
     roAttr('locked', idlType.boolean),
     op('cancel', promise(idlType.undefined), [
       arg('reason', idlType.any, { optional: true }),

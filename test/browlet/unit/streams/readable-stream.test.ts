@@ -374,10 +374,12 @@ describe('readable-stream projection', () => {
 
   it('projects ReadableStream.from() and asynchronous iteration', async () => {
     const window = new Browlet({ route: () => '' }).window;
+    const otherWindow = new Browlet({ route: () => '' }).window;
     const ReadableStream_ = requireFunction(window, 'ReadableStream');
+    const OtherReadableStream = requireFunction(otherWindow, 'ReadableStream');
     const stream = Reflect.apply(
       requireFunction(ReadableStream_, 'from'),
-      ReadableStream_,
+      OtherReadableStream,
       [['first', 'second']],
     ) as object;
     const iterator = Reflect.apply(
@@ -386,6 +388,8 @@ describe('readable-stream projection', () => {
       [],
     ) as object;
 
+    expect(stream).toBeInstanceOf(ReadableStream_);
+    expect(stream).not.toBeInstanceOf(OtherReadableStream);
     await expect(callIterator(iterator, 'next')).resolves.toEqual({
       done: false,
       value: 'first',

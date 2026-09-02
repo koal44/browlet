@@ -60,9 +60,6 @@ export type BindingContext = {
     implementation: ImplementationClass<T>,
     ...argumentsList: unknown[]
   ): T;
-  createImplementation<T extends object>(
-    implementation: ImplementationClass<T>,
-  ): T;
   getImplementation<T extends object>(
     value: unknown,
     implementation: ImplementationClass<T>,
@@ -94,15 +91,14 @@ export const bindingContext: ContextValue<BindingContext> = {
   resolve: (context) => context as BindingContext,
 };
 
-export type InterfaceBindingDefinition = {
+type InterfaceBindingDefinition = {
   implementation?: ImplementationClass;
-  createImplementation?: ImplementationCreationBinding;
   allocatePlatformObject?: PlatformObjectAllocationBinding;
   constructWith?: readonly ImplementationDependency[];
   initializeImplementation?: (context: BindingContext, value: object) => void;
 };
 
-export type CallbackInterfaceBindingDefinition = {
+type CallbackInterfaceBindingDefinition = {
   adapt: ContextualSteps<
     undefined,
     [value: CallbackInterfaceBindingValue],
@@ -110,7 +106,7 @@ export type CallbackInterfaceBindingDefinition = {
   >;
 };
 
-export type CallbackInterfaceBindingValue = {
+type CallbackInterfaceBindingValue = {
   readonly object: object;
   readonly realm: WebIDLRealmHost;
   callUserObjectOperation(
@@ -175,11 +171,7 @@ function isImplementationClass(
   return typeof value === 'function';
 }
 
-export type ImplementationCreationBinding = (
-  context: BindingContext,
-) => object;
-
-export type PlatformObjectAllocationBinding = (
+type PlatformObjectAllocationBinding = (
   context: BindingContext,
   prototype: object,
 ) => object;
@@ -190,32 +182,32 @@ type ContextualSteps<This, Values extends unknown[], Result> = (
   ...values: Values
 ) => Result;
 
-export type AttributeBindingDefinition = {
+type AttributeBindingDefinition = {
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   get?: ContextualSteps<object | null, [], unknown>;
   set?: ContextualSteps<object | null, [value: unknown], void>;
 };
 
-export type ConstructorBindingDefinition =
+type ConstructorBindingDefinition =
   | ArgumentInjectionBinding
   | { invoke: ContextualSteps<object, unknown[], void>; };
 
-export type OperationBindingDefinition =
+type OperationBindingDefinition =
   | ArgumentInjectionBinding
   | (LegacyGetterHooks & {
     invoke: ContextualSteps<object | null, unknown[], unknown>;
   })
   | LegacyGetterBinding;
 
-export type StringifierBindingDefinition = {
+type StringifierBindingDefinition = {
   invoke: ContextualSteps<object, [], unknown>;
 };
 
-export type IterableBindingDefinition = {
+type IterableBindingDefinition = {
   invoke: ContextualSteps<object, [], readonly ValuePair[]>;
 };
 
-export type AsyncIterableBindingDefinition = {
+type AsyncIterableBindingDefinition = {
   getNext: (target: object, iterator: object) => unknown;
   initialize?: (
     target: object,
@@ -269,16 +261,16 @@ function createPlatformObjectOperations(
     return interface_;
   }
 
-  function requireImplementation<T extends object>(
-    object: object,
+  function associateOrigin<T extends object>(
+    implementation: ImplementationClass<T>,
+    value: T,
   ): T {
-    const implementation = binding.platformObjects.getImplementationObject(
-      object,
+    binding.platformObjects.associateOrigin(
+      value,
+      getInterface(implementation),
+      binding.realm,
     );
-    if (!implementation) {
-      throw new Error('Platform object has no implementation target');
-    }
-    return implementation as T;
+    return value;
   }
 
   return {
@@ -296,20 +288,7 @@ function createPlatformObjectOperations(
           getContext(),
         ),
       );
-      binding.platformObjects.associateOrigin(
-        value,
-        interface_,
-        binding.realm,
-      );
-      return value;
-    },
-
-    createImplementation<T extends object>(
-      implementation: ImplementationClass<T>,
-    ): T {
-      return requireImplementation<T>(
-        binding.createPlatformObject(getInterface(implementation)),
-      );
+      return associateOrigin(implementation, value);
     },
 
     getImplementation<T extends object>(
@@ -411,6 +390,7 @@ export function registerDefinitionBindings(
   }
   binding.platformObjects.registerRealm(
     binding.realm,
+    context,
     (implementation, primaryInterface) => binding.projectPlatformObject(
       implementation,
       primaryInterface,
@@ -557,23 +537,16 @@ function registerDefinedInterface(
           }
         } else {
           if (!implementation) throw missingMemberBinding(interface_, member);
-          if (interfaceBinding.createImplementation) {
-            if (member.arguments.length > 0) {
-              throw missingMemberBinding(interface_, member);
-            }
-            registry.setConstructorSteps(member, emptyConstructorSteps);
-          } else {
-            registry.setImplementationConstructorSteps(
-              member,
-              createImplementationConstructorSteps(
-                implementation,
-                member.arguments,
-                context,
-                realmBinding,
-                interfaceBinding.constructWith,
-              ),
-            );
-          }
+          registry.setImplementationConstructorSteps(
+            member,
+            createImplementationConstructorSteps(
+              implementation,
+              member.arguments,
+              context,
+              realmBinding,
+              interfaceBinding.constructWith,
+            ),
+          );
         }
         break;
       case 'operation':
@@ -723,18 +696,7 @@ function registerDefinedInterface(
     }
   }
 
-  const createImplementation = interfaceBinding.createImplementation;
-  if (createImplementation) {
-    registry.setImplementationCreationSteps(
-      interface_.definition,
-      () => callImplementation(
-        createImplementation,
-        undefined,
-        [context],
-        realmBinding,
-      ),
-    );
-  } else if (implementation) {
+  if (implementation) {
     registry.setImplementationCreationSteps(
       interface_.definition,
       () => callImplementation(
@@ -869,8 +831,6 @@ function createDefinedConstructorSteps(
   };
 }
 
-function emptyConstructorSteps(): void {}
-
 function createImplementationConstructorSteps(
   implementation: ImplementationClass,
   arguments_: ArgumentDefinition[],
@@ -920,11 +880,17 @@ function createDefinedOperationSteps(
   realmBinding: RealmBinding,
 ): OperationSteps {
   return function(...values) {
+    const operationContext = getOperationBindingContext(
+      member,
+      this,
+      context,
+      realmBinding,
+    );
     return callImplementation(
       invoke,
       this,
       [
-        context,
+        operationContext,
         ...values.map((value, index) => {
           const argument = getArgument(member.arguments, index);
           return toImplementationValue(
@@ -1117,6 +1083,12 @@ function createOperationSteps(
   dependencies: readonly ImplementationDependency[] = [],
 ): OperationSteps {
   return function(...values) {
+    const operationContext = getOperationBindingContext(
+      member,
+      this,
+      context,
+      realmBinding,
+    );
     return callImplementation(
       implementation,
       this,
@@ -1132,11 +1104,32 @@ function createOperationSteps(
           );
         }),
         dependencies,
-        context,
+        operationContext,
       ),
       realmBinding,
     );
   };
+}
+
+function getOperationBindingContext(
+  member: OperationMember,
+  receiver: object | null,
+  installedContext: BindingContext,
+  realmBinding: RealmBinding,
+): BindingContext {
+  if (member.static) return installedContext;
+  if (!receiver) {
+    throw new Error('Instance operation has no implementation receiver');
+  }
+  const record = realmBinding.platformObjects.getImplementationRecord(receiver);
+  if (!record) {
+    throw new Error('Instance operation receiver has no platform-object record');
+  }
+  const context = realmBinding.platformObjects.getBindingContext(record.realm);
+  if (!context) {
+    throw new Error('Operation receiver realm has no binding context');
+  }
+  return context;
 }
 
 function resolveImplementationDependency(
@@ -1147,7 +1140,7 @@ function resolveImplementationDependency(
   if (isContextValue(dependency)) {
     return dependency.resolve(context);
   }
-  return context.createImplementation(dependency);
+  return context.construct(dependency);
 }
 
 function resolveImplementationArguments(

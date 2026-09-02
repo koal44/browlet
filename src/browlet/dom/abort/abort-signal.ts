@@ -4,7 +4,7 @@ import {
 import { impl } from '../../../web-idl/index';
 import {
   arg, defineInterface, idlType, op, roAttr, reference, resolveArgs,
-  sequence, invokeWithNew, xattr,
+  sequence, invokeWith, xattr,
 } from '../../../web-idl/declaration/index';
 import { queueGlobalTask } from '../../scripting/tasks';
 import {
@@ -270,7 +270,7 @@ export const abortSignalIDL = defineInterface({
     op('abort', reference('AbortSignal'), [
       arg('reason', idlType.any, { optional: true }),
     ], {
-      ...invokeWithNew(AbortSignalImpl),
+      ...invokeWith(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
     }),
@@ -281,7 +281,7 @@ export const abortSignalIDL = defineInterface({
         xattr('EnforceRange'),
       ),
     ], {
-      ...invokeWithNew(AbortSignalImpl),
+      ...invokeWith(AbortSignalImpl),
       static: true,
       ...xattr(
         ['Exposed', ['Window', 'Worker']],
@@ -295,7 +295,7 @@ export const abortSignalIDL = defineInterface({
         resolveArgs(AbortSignalImpl),
       ),
     ], {
-      ...invokeWithNew(AbortSignalImpl),
+      ...invokeWith(AbortSignalImpl),
       static: true,
       ...xattr('NewObject'),
     }),

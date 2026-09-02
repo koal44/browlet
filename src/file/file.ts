@@ -1,13 +1,12 @@
 import { parseMIMEType } from '../mime/index';
 import {
-  arg, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary,
-  idlType, impl, reference, roAttr, sequence, xattr,
+  arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
+  emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
 } from '../web-idl/declaration/index';
+import type { BindingContext } from '../web-idl/projection';
 import {
-  bindingContext, type BindingContext,
-} from '../web-idl/projection';
-import {
-  BlobImpl, type BlobPart, type BlobPropertyBag,
+  BlobImpl, nativeLineEndingForConstruction, type BlobPart,
+  type BlobPropertyBag,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
 import type { NativeLineEnding } from './integration';
@@ -31,13 +30,13 @@ export class FileImpl extends BlobImpl {
   #name: string;
 
   constructor(
-    contextOrLineEnding: BindingContext | NativeLineEnding,
     fileBits: Iterable<BlobPart> = [],
     fileName = '',
     options: FilePropertyBag = {},
+    nativeLineEnding?: NativeLineEnding,
     readCurrentTime: () => number = Date.now,
   ) {
-    super(contextOrLineEnding, fileBits, options);
+    super(fileBits, options, nativeLineEnding);
     this.#name = fileName;
     this.#lastModified = options.lastModified ?? readCurrentTime();
   }
@@ -97,7 +96,7 @@ export type HostFileMetadata = {
   type: string;
 };
 
-/** File API §4, create a File for a host-selected byte source. */
+/** Browlet host integration for File API §4 host-selected storage. */
 export function createFileFromHost(
   context: BindingContext,
   source: BlobByteSource,
@@ -154,7 +153,9 @@ export const fileIDL = defineInterface({
   inherits: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  implementation: impl(FileImpl, { constructWith: [bindingContext] }),
+  implementation: impl(FileImpl, {
+    constructWith: [atArg(3, nativeLineEndingForConstruction)],
+  }),
   members: [
     ctor([
       arg('fileBits', sequence(reference('BlobPart'))),

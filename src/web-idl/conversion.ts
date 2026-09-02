@@ -1,3 +1,4 @@
+import { toScalarValueString } from '../shared/strings';
 import type {
   AssembledDictionary, AssembledInterface, DefinitionAssembly,
 } from './assembly';
@@ -433,8 +434,8 @@ function convertJavaScriptValueToSimpleType(
       if (
         value === null &&
         hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString')
-      ) return '';
-      return toString(value, context).toWellFormed();
+      ) return toScalarValueString('');
+      return toScalarValueString(toString(value, context));
     case 'object':
       if (!isObject(value)) {
         throwTypeError(context, 'Value is not an object');

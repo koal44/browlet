@@ -1,7 +1,7 @@
 import { EOL as nodeLineEnding } from 'node:os';
 
 import {
-  fileReading, nativeLineEnding, type NativeLineEnding,
+  blobIDL, fileReading, nativeLineEnding, type NativeLineEnding,
 } from '../../../file/index';
 import type { CapabilityRegistration } from '../../../web-idl/capability';
 import { windowIDL } from '../../browsing/window/window';
@@ -16,7 +16,7 @@ import {
 } from './structured-data/file-list';
 
 export const fileCapabilities = [
-  nativeLineEnding.for(windowIDL, normalizeNativeLineEnding(nodeLineEnding)),
+  nativeLineEnding.for(blobIDL, normalizeNativeLineEnding(nodeLineEnding)),
   fileReading.for(windowIDL, {
     queueTask(global, steps) {
       queueGlobalTask(fileReadingTaskSource, global, steps);

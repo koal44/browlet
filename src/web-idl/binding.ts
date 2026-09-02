@@ -9,7 +9,7 @@ import {
 } from './collection';
 import {
   convertToIDL, convertToJavaScript, materializeDefaultValue,
-  type HostDefinedInterface,
+  type ConversionContext, type HostDefinedInterface,
 } from './conversion';
 import {
   hasExtendedAttribute, type AttributeMember,
@@ -45,7 +45,27 @@ export class RealmBinding {
   readonly projectImplementationObject = (
     value: object,
     expectedInterface: AssembledInterface,
-  ): object | undefined => {
+  ): object | undefined => this.#projectInRealm(
+    value,
+    expectedInterface,
+    this.realm,
+  );
+  readonly realizeException: (value: unknown) => unknown;
+  readonly realm: WebIDLRealmHost;
+  readonly #collections: CollectionBinding;
+  readonly #asyncIterables: AsynchronousIterableBinding;
+  readonly #initialObjects = new WeakMap<object, DefinitionInitialObjects>();
+  readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
+  #globalObject: PlatformObjectRecord | undefined;
+  readonly #iterables: SynchronousIterableBinding;
+  readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
+  readonly #observableArrays: ObservableArrayBinding;
+
+  #projectInRealm(
+    value: object,
+    expectedInterface: AssembledInterface,
+    realm: WebIDLRealmHost,
+  ): object | undefined {
     const existing = this.platformObjects.getImplementationRecord(value);
     if (existing) {
       return this.platformObjects.recordImplements(existing, expectedInterface)
@@ -71,21 +91,19 @@ export class RealmBinding {
         expectedInterface,
       )
     ) return;
+    if (realm !== this.realm) {
+      this.platformObjects.associateOrigin(
+        value,
+        registered.interface_,
+        realm,
+      );
+      return this.platformObjects.projectImplementationOrigin(value);
+    }
     return this.projectPlatformObject(
       value,
       registered.interface_,
     ).platformObject;
-  };
-  readonly realizeException: (value: unknown) => unknown;
-  readonly realm: WebIDLRealmHost;
-  readonly #collections: CollectionBinding;
-  readonly #asyncIterables: AsynchronousIterableBinding;
-  readonly #initialObjects = new WeakMap<object, DefinitionInitialObjects>();
-  readonly #globalPlatformObjects: GlobalPlatformObjectBinding;
-  #globalObject: PlatformObjectRecord | undefined;
-  readonly #iterables: SynchronousIterableBinding;
-  readonly #legacyPlatformObjects: LegacyPlatformObjectBinding;
-  readonly #observableArrays: ObservableArrayBinding;
+  }
 
   constructor(
     definitions: DefinitionAssembly,
@@ -917,16 +935,17 @@ export class RealmBinding {
           const identifier = stringifier.kind === 'attribute'
             ? stringifier.name
             : 'toString';
-          const object = this.#implementationObject(
+          const receiver = this.#implementationRecord(
             thisArgument,
             interface_,
             identifier,
             'method',
             false,
           );
-          if (object === invalidReceiver) {
+          if (receiver === invalidReceiver) {
             throw new Error('Stringifier receiver unexpectedly became lenient');
           }
+          const object = receiver.implementation;
 
           let value: unknown;
           if (stringifier.kind === 'attribute') {
@@ -1063,10 +1082,11 @@ export class RealmBinding {
       definition.definition,
       attribute,
       () => this.realm.createFunction((thisArgument) => {
+        let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
-          const object = interface_ && !attribute.static
-            ? this.#implementationObject(
+          const receiver = interface_ && !attribute.static
+            ? this.#implementationRecord(
               thisArgument,
               interface_,
               attribute.name,
@@ -1077,7 +1097,9 @@ export class RealmBinding {
               ),
             )
             : null;
-          if (object === invalidReceiver) return undefined;
+          if (receiver === invalidReceiver) return undefined;
+          const object = receiver?.implementation ?? null;
+          receiverRealm = receiver?.realm;
 
           const elementType = getObservableArrayElementType(
             attribute.type,
@@ -1109,9 +1131,17 @@ export class RealmBinding {
           }
           // eslint-disable-next-line @typescript-eslint/unbound-method -- getter steps use the platform object as their specified this value
           const value = Reflect.apply(steps.get, object, []);
-          return convertToJavaScript(value, attribute.type, this);
+          return convertToJavaScript(
+            value,
+            attribute.type,
+            this.#resultContext(receiverRealm),
+          );
         } catch (exception) {
-          return this.#handlePromiseException(attribute.type, exception);
+          return this.#handlePromiseException(
+            attribute.type,
+            exception,
+            this.#resultContext(receiverRealm),
+          );
         }
       }, { length: 0, name: `get ${attribute.name}` }),
     );
@@ -1144,9 +1174,9 @@ export class RealmBinding {
       () => this.realm.createFunction((thisArgument, argumentsList) => {
         const value = argumentsList[0];
         const jsValue = this.#resolveThisValue(thisArgument);
-        const object = attribute.static
+        const receiver = attribute.static
           ? null
-          : this.#implementationObject(
+          : this.#implementationRecord(
             jsValue,
             interface_,
             attribute.name,
@@ -1156,6 +1186,9 @@ export class RealmBinding {
               'LegacyLenientThis',
             ),
           );
+        const object = receiver === invalidReceiver
+          ? invalidReceiver
+          : receiver?.implementation ?? null;
 
         if (replaceable) {
           if (!isObject(jsValue)) return this.#throwTypeError('Invalid receiver');
@@ -1244,10 +1277,11 @@ export class RealmBinding {
       definition.definition,
       source,
       () => this.realm.createFunction((thisArgument, argumentsList) => {
+        let receiverRealm: WebIDLRealmHost | undefined;
         try {
           const interface_ = getMemberInterface(definition);
-          const object = interface_ && !operations[0]?.static
-            ? this.#implementationObject(
+          const receiver = interface_ && !operations[0]?.static
+            ? this.#implementationRecord(
               thisArgument,
               interface_,
               name,
@@ -1255,9 +1289,12 @@ export class RealmBinding {
               false,
             )
             : null;
-          if (object === invalidReceiver) {
+          if (receiver === invalidReceiver) {
             throw new Error('Operation receiver unexpectedly became lenient');
           }
+          const object = receiver?.implementation ?? null;
+          receiverRealm = receiver?.realm;
+          const resultContext = this.#resultContext(receiverRealm);
 
           const overload = resolveOverload(
             computeEffectiveOverloadSet(operations, argumentsList.length),
@@ -1285,23 +1322,35 @@ export class RealmBinding {
             throw missingImplementation(definition, `operation ${name}`);
           }
           const result = Reflect.apply(steps, object, overload.values);
-          return convertToJavaScript(result, overload.callable.returns, this);
+          return convertToJavaScript(
+            result,
+            overload.callable.returns,
+            resultContext,
+          );
         } catch (exception) {
           const returnType = operations[0]?.returns;
           if (!returnType) throw exception;
-          return this.#handlePromiseException(returnType, exception);
+          return this.#handlePromiseException(
+            returnType,
+            exception,
+            this.#resultContext(receiverRealm),
+          );
         }
       }, { length: getCallableLength(operations), name }),
     );
   }
 
-  #handlePromiseException(type: WebIDLType, exception: unknown): unknown {
+  #handlePromiseException(
+    type: WebIDLType,
+    exception: unknown,
+    context: ConversionContext,
+  ): unknown {
     const promiseType = getUnannotatedType(type, this.definitions);
     if (promiseType.kind !== 'promise') throw exception;
     return convertToJavaScript(
-      createRejectedPromise(exception, promiseType.type, this),
+      createRejectedPromise(exception, promiseType.type, context),
       type,
-      this,
+      context,
     );
   }
 
@@ -1506,13 +1555,13 @@ export class RealmBinding {
     });
   }
 
-  #implementationObject(
+  #implementationRecord(
     thisArgument: unknown,
     interface_: AssembledInterface,
     identifier: string,
     type: 'getter' | 'method' | 'setter',
     lenient: boolean,
-  ): object | typeof invalidReceiver {
+  ): PlatformObjectRecord | typeof invalidReceiver {
     const value = this.#resolveThisValue(thisArgument);
     const record = this.#resolveReceiverRecord(value);
     if (record) {
@@ -1522,7 +1571,20 @@ export class RealmBinding {
       if (lenient) return invalidReceiver;
       return this.#throwTypeError('Illegal invocation');
     }
-    return record.implementation;
+    return record;
+  }
+
+  #resultContext(realm: WebIDLRealmHost | undefined): ConversionContext {
+    if (!realm || realm === this.realm) return this;
+    return {
+      definitions: this.definitions,
+      hostDefinedInterfaces: this.hostDefinedInterfaces,
+      platformObjects: this.platformObjects,
+      projectImplementationObject: (value, interface_) =>
+        this.#projectInRealm(value, interface_, realm),
+      realizeException: this.realizeException,
+      realm,
+    };
   }
 
   #resolveReceiverRecord(

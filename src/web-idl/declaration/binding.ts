@@ -27,16 +27,6 @@ export function invokeWith(
 }
 
 /**
- * Prepend newly created semantic platform-object implementations to an
- * automatically bound operation.
- */
-export function invokeWithNew(
-  ...implementations: ImplementationClass[]
-): { readonly binding: ArgumentInjectionBinding; } {
-  return { binding: { dependencies: implementations } };
-}
-
-/**
  * Declare an indexed getter whose implementation supplies the supported
  * property indices while ordinary operation binding supplies invocation.
  */

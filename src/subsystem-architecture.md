@@ -26,7 +26,7 @@ Browlet has three object-model layers:
 | **Binding** | Web IDL conversion, realm selection, identity, and projection |
 | **Platform** | The realm-owned JavaScript objects visible to authors |
 
-The flow is **Implementation -> Binding -> Platform**. A Realm Context,
+The flow is **Implementation -> Binding -> Platform**. A Binding Context,
 cross-specification capability, Host Port, or Composition Root can supply a
 dependency to the Implementation or Binding layer, but none of them creates an
 additional object-model layer.
@@ -88,9 +88,9 @@ contains the interface objects, prototypes, properties, and exotic objects
 required by the specifications. It is the result of projection, not the value
 which internal algorithms should pass around.
 
-### Realm Context
+### Binding Context
 
-A Realm Context is one cohesive handle to a particular JavaScript/Web IDL realm.
+A Binding Context is one cohesive handle to a particular JavaScript/Web IDL realm.
 Subsystems operating in that realm share its context. It carries
 generic services whose behavior inherently depends on that realm, for example:
 
@@ -103,12 +103,12 @@ generic services whose behavior inherently depends on that realm, for example:
 - microtask integration; and
 - realm-sensitive buffer allocation.
 
-The current concrete type is `BindingContext`, created once for each
-registered Web IDL realm. “Realm Context” names its architectural role; the
-concrete name records that Binding assembles and owns it.
+The concrete type is `BindingContext`, created once for each registered Web IDL
+realm. Its `realm` property identifies that realm; Binding assembles and owns
+the rest of the operations on the context.
 
 The exact TypeScript shape may evolve. The important property is its identity:
-one shared context describes one binding realm. Several Realm Contexts can
+one shared context describes one binding realm. Several Binding Contexts can
 belong to one Binding World. A subsystem must not
 copy selected context operations into a private `FooEnvironment` merely to
 rename or forward them.
@@ -116,9 +116,9 @@ rename or forward them.
 Declared-member conversion and callback-adapter creation remain Binding work.
 A converted callback adapter is a post-conversion value passed to an
 implementation, not a service which that implementation recreates through the
-Realm Context.
+Binding Context.
 
-A Realm Context is also not a service locator for unrelated specification
+A Binding Context is also not a service locator for unrelated specification
 subsystems. If an operation belongs to another owner, use a cross-specification
 capability. If it reaches outside the runtime, use a Host Port.
 
@@ -211,7 +211,7 @@ individual packages, but implementation algorithms must not replace them with
 ambient runtime discovery. A Composition Root assembles:
 
 - Web IDL definitions and binding contributions;
-- Realm Contexts;
+- Binding Contexts;
 - cross-specification capability registrations;
 - Host Ports; and
 - the globals and implementation roots which consume them.
@@ -225,14 +225,14 @@ Browlet's concrete composition root is
 [`browlet/integration/`](browlet/integration/README.md) modules may import both
 a standalone subsystem's capability contract and the Browlet-owned
 implementation that satisfies it. Integrations must remain acyclic: they
-consume the Realm Context or global passed by the calling algorithm and must
+consume the Binding Context or global passed by the calling algorithm and must
 not import the assembled `browletBindings` singleton to rediscover either.
 
 ## Composition map
 
 ```text
 Composition Root(s)
-  |-- Realm Context ----------------+--> Implementation
+  |-- Binding Context --------------+--> Implementation
   |                                 `--> Binding
   |-- Cross-specification capabilities --> Implementation
   `-- Host Ports -----------------------> Implementation
@@ -271,7 +271,7 @@ Classify a new dependency in this order:
    Implementation object or in its algorithms.
 2. **Is it stateless and realm-neutral?** Import a shared algorithm directly.
 3. **Is it generic JavaScript/Web IDL behavior tied to the current world?** Use
-   the shared Realm Context.
+   the shared Binding Context.
 4. **Does another specification subsystem own the semantic behavior?** Import
    its narrow other-specifications entry point when it is an allowed dependency;
    otherwise define a narrow cross-specification capability.
@@ -305,7 +305,7 @@ Prefer:
 Implementation
   |-- direct implementation relationships
   |-- direct shared algorithms
-  |-- one Realm Context
+  |-- one Binding Context
   |-- explicit cross-specification capabilities
   `-- explicit Host Ports
 ```
@@ -335,7 +335,7 @@ or capability at the Composition Root.
 
 A large object containing buffers, promises, callbacks, dictionaries,
 exceptions, iteration, scheduling, and unrelated host operations is not one
-capability. It is usually a Realm Context partially copied into a subsystem,
+capability. It is usually a Binding Context partially copied into a subsystem,
 mixed with cross-specification capabilities and Host Ports. Classify and route
 the members independently.
 
@@ -352,7 +352,7 @@ author-facing conversion through the Binding layer.
 33-operation façade over promises, buffers, callbacks, dictionaries,
 exceptions, iteration, object construction, DOM aborting, and HTML structured
 cloning. The architectural violation was not merely its size: it copied the
-Realm Context, mixed several dependency roles, and made a consumer-specific
+Binding Context, mixed several dependency roles, and made a consumer-specific
 call graph around services which already had owners.
 
 The removal established a repeatable diagnosis:
@@ -363,7 +363,7 @@ The removal established a repeatable diagnosis:
   to unwrap it immediately, Binding has entered an implementation relationship
   which should remain direct.
 - **Transitive environment nesting:** `FooEnvironment -> BarEnvironment ->
-  Realm Context` means packages are copying access paths rather than composing
+  Binding Context` means packages are copying access paths rather than composing
   dependencies.
 - **Facade displacement:** deleting a subsystem environment is not a
   simplification if its forwarding methods reappear on the shared context or
@@ -376,6 +376,10 @@ The removal established a repeatable diagnosis:
   can be legitimate when the receiver and argument have distinct roles, but it
   is a strong sign that the API has failed to encode ownership or automatic
   context injection cleanly. Review it rather than normalizing the repetition.
+- **Surrogate construction dependency:** do not accept a host policy value in
+  place of the Binding Context and repair ownership later. Require the context
+  when a realm-owned implementation is created; consult transient policy such
+  as native line endings only while the operation that needs it is running.
 - **Split declaration authority:** if author construction and internal
   construction repeat the same hidden realm dependencies independently, they
   will drift. Declarative implementation dependencies must govern both paths;
@@ -389,7 +393,7 @@ The successful removal sequence was:
 
 1. classify every façade member by semantic owner;
 2. turn realm-neutral services back into direct imports;
-3. use the one shared Realm Context for generic realm-sensitive behavior;
+3. use the one shared Binding Context for generic realm-sensitive behavior;
 4. retain only narrow capabilities for genuine cross-specification work;
 5. construct implementation objects directly and project only at an actual
    Platform boundary; and
@@ -423,7 +427,7 @@ Use these role names consistently:
 
 - Test pure, realm-neutral algorithms without constructing Binding machinery.
 - Test implementation algorithms with post-conversion implementation values.
-- Use the real shared Realm Context when realm identity, promises, callbacks,
+- Use the real shared Binding Context when realm identity, promises, callbacks,
   exceptions, or buffers are part of the behavior.
 - Fake only the narrow cross-specification capability or Host Port whose effect
   the test must control.

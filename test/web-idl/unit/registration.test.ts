@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import {
   arg, atArg, bind, bindingContext, contextValue, createBindings, ctor,
-  defineCapability, defineInterface, idlType, impl, namedGetter, op, roAttr,
-  xattr, type BindingContext,
+  defineCapability, defineInterface, idlType, impl, invokeWith, namedGetter, op,
+  reference, roAttr, xattr, type BindingContext,
 } from '../../../src/web-idl/index';
 
 describe('Web IDL interface registration', () => {
@@ -18,7 +18,7 @@ describe('Web IDL interface registration', () => {
     first.install(firstRealm.global);
     second.install(secondRealm.global);
 
-    const implementation = first.context.createImplementation(ExampleImpl);
+    const implementation = first.context.construct(ExampleImpl);
     const object = interfaces.getPlatformObject(implementation);
     if (!object) throw new Error('Example was not projected');
 
@@ -58,6 +58,93 @@ describe('Web IDL interface registration', () => {
     expect(object).toBeInstanceOf(FirstExample);
     expect(object).not.toBeInstanceOf(SecondExample);
     expect(first.context.project(ExampleImpl, implementation)).toBe(object);
+  });
+
+  it('projects new member results in the receiver realm', () => {
+    class ResultImpl {}
+    class FactoryImpl {
+      get result(): ResultImpl { return new ResultImpl(); }
+      createResult(): ResultImpl { return new ResultImpl(); }
+      createContextualResult(context: BindingContext): ResultImpl {
+        return context.construct(ResultImpl);
+      }
+    }
+    const resultIDL = defineInterface({
+      name: 'RealmResult',
+      exposed: '*',
+      implementation: impl(ResultImpl),
+      members: [],
+    });
+    const factoryIDL = defineInterface({
+      name: 'RealmFactory',
+      exposed: '*',
+      implementation: impl(FactoryImpl),
+      members: [
+        roAttr('result', reference(resultIDL.name)),
+        op('createResult', reference(resultIDL.name), []),
+        op('createContextualResult', reference(resultIDL.name), [], {
+          ...invokeWith(bindingContext),
+        }),
+        op('createBoundResult', reference(resultIDL.name), [], bind({
+          invoke(context) {
+            return context.construct(ResultImpl);
+          },
+        })),
+      ],
+    });
+    const bindings = createBindings([resultIDL, factoryIDL]);
+    const receiverRealm = new Realm();
+    const functionRealm = new Realm();
+    const receiverBinding = bindings.register(receiverRealm);
+    const functionBinding = bindings.register(functionRealm);
+    receiverBinding.install(receiverRealm.global);
+    functionBinding.install(functionRealm.global);
+
+    const factory = bindings.getPlatformObject(
+      receiverBinding.context.construct(FactoryImpl),
+    );
+    if (!factory) throw new Error('RealmFactory was not projected');
+    const ForeignFactory = Reflect.get(
+      functionRealm.global,
+      factoryIDL.name,
+    ) as { prototype: object; };
+    const createResult = Reflect.get(
+      ForeignFactory.prototype,
+      'createResult',
+    ) as CallableFunction;
+    const createContextualResult = Reflect.get(
+      ForeignFactory.prototype,
+      'createContextualResult',
+    ) as CallableFunction;
+    const createBoundResult = Reflect.get(
+      ForeignFactory.prototype,
+      'createBoundResult',
+    ) as CallableFunction;
+    const getResult = Reflect.getOwnPropertyDescriptor(
+      ForeignFactory.prototype,
+      'result',
+    )?.get;
+    if (!getResult) throw new Error('RealmFactory.result has no getter');
+    const results = [
+      Reflect.apply(getResult, factory, []) as object,
+      Reflect.apply(createResult, factory, []) as object,
+      Reflect.apply(createContextualResult, factory, []) as object,
+      Reflect.apply(createBoundResult, factory, []) as object,
+    ];
+    const ReceiverResult = Reflect.get(
+      receiverRealm.global,
+      resultIDL.name,
+    ) as { new(): object; };
+    const ForeignResult = Reflect.get(
+      functionRealm.global,
+      resultIDL.name,
+    ) as { new(): object; };
+
+    for (const result of results) {
+      expect(result).toBeInstanceOf(ReceiverResult);
+      expect(result).not.toBeInstanceOf(ForeignResult);
+      expect(bindings.getRealm(result)).toBe(receiverRealm);
+    }
   });
 
   it('injects declared dependencies into internal construction', () => {
@@ -141,7 +228,7 @@ describe('Web IDL interface registration', () => {
     const first = createBindings([exampleIDL]);
     const second = createBindings([exampleIDL]);
     const realm = new Realm();
-    const implementation = first.register(realm).context.createImplementation(ExampleImpl);
+    const implementation = first.register(realm).context.construct(ExampleImpl);
     const object = first.getPlatformObject(implementation);
     if (!object) throw new Error('Example was not projected');
 
@@ -154,7 +241,7 @@ describe('Web IDL interface registration', () => {
     const interfaces = createBindings([jsonIDL]);
     const realm = new Realm();
     const registration = interfaces.register(realm);
-    const implementation = registration.context.createImplementation(JsonImpl);
+    const implementation = registration.context.construct(JsonImpl);
     const object = interfaces.getPlatformObject(implementation);
     if (!object) throw new Error('JSONExample was not projected');
     const toJSON = Reflect.get(object, 'toJSON') as CallableFunction;
