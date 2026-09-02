@@ -16,7 +16,7 @@ import {
   textEncoderStreamIncludesGenericTransformStreamIDL,
 } from './text-encoder-stream';
 
-export const encodingIDLDefinitions: readonly Definition[] = [
+export const encodingIDLDefinitions: Definition[] = [
   textDecoderCommonIDL,
   textDecoderOptionsIDL,
   textDecodeOptionsIDL,

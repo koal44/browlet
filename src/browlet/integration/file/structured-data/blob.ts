@@ -4,8 +4,10 @@ import {
 import {
   domExceptionName, throwDOMException,
 } from '../../../../shared/dom-exception';
-import type { StructuredDataRecord } from '../records';
-import { serializable, type SerializableSteps } from '../serializable';
+import type { StructuredDataRecord } from '../../../scripting/structured-data/records';
+import {
+  serializable, type SerializableSteps,
+} from '../../../scripting/structured-data/serializable';
 
 /*
  * File API defines Blob's record fields. HTML owns their registration and
@@ -51,9 +53,9 @@ export const blobSerializable: SerializableSteps = {
   },
 };
 
-export const blobCapabilities = [
+export const blobSerializableCapabilities = [
   serializable.for(blobIDL, blobSerializable),
-] as const;
+];
 
 function requireBlobData(
   record: StructuredDataRecord,

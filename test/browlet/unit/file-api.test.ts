@@ -1,3 +1,5 @@
+import { EOL as nodeLineEnding } from 'node:os';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -17,16 +19,17 @@ import {
 
 describe('File API Blob projection', () => {
   it('constructs Blob state with the host native line ending', async () => {
-    const window = createWindow('\r\n');
+    const window = createWindow();
     const blob = constructBlob(window, ['a\nb'], {
       endings: 'native',
       type: 'Text/PLAIN',
     });
+    const expected = `a${nodeLineEnding}b`;
 
     expect(blob).toBeInstanceOf(requireFunction(window, 'Blob'));
-    expect(Reflect.get(blob, 'size')).toBe(4);
+    expect(Reflect.get(blob, 'size')).toBe(expected.length);
     expect(Reflect.get(blob, 'type')).toBe('text/plain');
-    await expect(call(blob, 'text')).resolves.toBe('a\r\nb');
+    await expect(call(blob, 'text')).resolves.toBe(expected);
 
     const repaired = constructBlob(window, ['A\ud800B']);
     await expect(call(repaired, 'text')).resolves.toBe('A\uFFFDB');
@@ -240,7 +243,7 @@ describe('File API Blob projection', () => {
 describe('File API File and FileList projection', () => {
   it('constructs File as a Blob with converted metadata', async () => {
     const before = Date.now();
-    const window = createWindow('\r\n');
+    const window = createWindow();
     const file = constructFile(window, ['a\nb'], 'A\ud800B.txt', {
       endings: 'native',
       type: 'Text/PLAIN;CHARSET=UTF-8',
@@ -253,7 +256,7 @@ describe('File API File and FileList projection', () => {
     expect(Reflect.get(file, 'type')).toBe('text/plain;charset=utf-8');
     expect(Reflect.get(file, 'lastModified')).toBeGreaterThanOrEqual(before);
     expect(Reflect.get(file, 'lastModified')).toBeLessThanOrEqual(after);
-    await expect(call(file, 'text')).resolves.toBe('a\r\nb');
+    await expect(call(file, 'text')).resolves.toBe(`a${nodeLineEnding}b`);
   });
 
   it('enforces required arguments and propagates conversion exceptions', () => {
@@ -399,13 +402,9 @@ describe('File API File and FileList projection', () => {
   });
 });
 
-function createWindow(
-  nativeLineEnding: '\n' | '\r\n' = '\n',
-): Window & typeof globalThis {
-  return new Browlet({
-    nativeLineEnding,
-    route: () => '',
-  }).window as Window & typeof globalThis;
+function createWindow(): Window & typeof globalThis {
+  return new Browlet({ route: () => '' }).window as
+    Window & typeof globalThis;
 }
 
 function constructBlob(

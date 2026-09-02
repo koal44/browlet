@@ -8,7 +8,9 @@ import {
 import type { SandboxingFlagSet } from '../policy/sandbox';
 import { areSameOrigin, type Origin } from '../../../url/origin';
 import { obtainURLOrigin, urlsEqual, type URLRecord } from '../../../url/url';
-import { browletBindings, getRelevantRealm } from '../../bindings';
+import {
+  browletBindings, getRelevantRealm,
+} from '../../bindings';
 import type { Environment } from '../../scripting/environment';
 import {
   TopLevelTraversable, type Navigable, type TraversableNavigable,

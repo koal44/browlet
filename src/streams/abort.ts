@@ -7,7 +7,7 @@ export const streamAbortController = defineCapability<
 >('Streams AbortController');
 
 export type StreamAbortControllerCapability = {
-  create(global: object): StreamAbortController;
+  create(context: BindingContext): StreamAbortController;
 };
 
 export type StreamAbortController = {
@@ -38,5 +38,5 @@ export function createStreamAbortController(
   if (!global || !capability) {
     throw new Error('The stream realm has no AbortController capability');
   }
-  return capability.create(global.implementation);
+  return capability.create(context);
 }

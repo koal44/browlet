@@ -10,7 +10,7 @@ import {
 } from '../../../../../src/browlet/scripting/structured-data/serializable';
 import {
   domExceptionCapabilities,
-} from '../../../../../src/browlet/scripting/structured-data/platform-objects/dom-exception';
+} from '../../../../../src/browlet/integration/dom-exception';
 import {
   isTransferableDetached, markTransferableDetached, transferable,
 } from '../../../../../src/browlet/scripting/structured-data/transferable';

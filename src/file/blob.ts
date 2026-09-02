@@ -22,9 +22,9 @@ import {
   BlobData, BlobReadFailure, type BlobSnapshotState,
 } from './blob-data';
 import {
-  getNativeLineEnding, queueFileReadingTask, runFileStepsInParallel,
+  getFileReading, getNativeLineEnding,
   type NativeLineEnding,
-} from './environment';
+} from './integration';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -287,13 +287,14 @@ export function getBlobStream(
   context: BindingContext,
 ): ReadableStreamImpl {
   let canceled = false;
+  const fileReading = getFileReading(context);
   const stream = createReadableStreamWithByteReadingSupport(
     context,
     undefined,
     () => { canceled = true; },
   );
 
-  runFileStepsInParallel(context, () => { void readChunks(); });
+  fileReading.runInParallel(() => { void readChunks(); });
   return stream;
 
   async function readChunks(): Promise<void> {
@@ -303,7 +304,7 @@ export function getBlobStream(
         const byteLength = Math.min(blob.size - offset, blobReadChunkSize);
         const bytes = await readBlobBytes(blob, offset, byteLength);
         offset += bytes.length;
-        queueFileReadingTask(context, () => {
+        fileReading.queueTask(() => {
           if (canceled) return;
           try {
             enqueueReadableStream(
@@ -320,12 +321,12 @@ export function getBlobStream(
         });
       }
       if (!canceled) {
-        queueFileReadingTask(context, () => {
+        fileReading.queueTask(() => {
           if (!canceled) closeReadableStream(stream);
         });
       }
     } catch (error) {
-      queueFileReadingTask(context, () => {
+      fileReading.queueTask(() => {
         if (canceled) return;
         canceled = true;
         errorReadableStream(

@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../../src/browlet/browlet';
-import { browletBindings } from '../../../src/browlet/bindings';
+import {
+  browletBindings,
+} from '../../../src/browlet/bindings';
 import {
   isHTMLLinkElement,
 } from '../../../src/browlet/html/elements/metadata/link';

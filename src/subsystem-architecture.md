@@ -70,7 +70,7 @@ which makes a subsystem work.
 
 A Binding World is the lifecycle boundary for platform-object identity. It owns
 one platform-object registry and can contain several realm registrations.
-Definitions and capability implementations can be shared across worlds, but a
+Definitions and capability registrations can be shared across worlds, but a
 platform-object association belongs to exactly one world.
 
 Browlet's composition root currently owns one main `BindingWorld` spanning the
@@ -161,6 +161,13 @@ AbortController owned by DOM/Browlet, or queueing work on HTML's event loop.
 The provider retains ownership of the behavior; the consumer retains ownership
 of its own state and algorithms.
 
+File reading demonstrates why these roles must stay separate. Running read
+steps in parallel and queueing results on File's task source form one narrow
+HTML scheduling capability. The underlying platform's native line ending is
+an immutable composition value, while File's wall-clock default is the
+directly available ECMAScript `Date.now()` operation. Neither needs a
+subsystem-wide host facade.
+
 ### Host Port
 
 A Host Port represents a genuine effect supplied by the embedder or execution
@@ -178,6 +185,9 @@ capabilities; reading a monotonic native clock is a Host Port. HTML timer/task
 ordering and Fetch semantics remain specification behavior even when they use
 host primitives underneath.
 
+Likewise, do not promote an immutable host configuration value or an operation
+already supplied by ECMAScript into a Host Port merely to make it injectable.
+
 ### Composition Root
 
 The Composition Root is the logical role allowed to know the complete concrete
@@ -187,13 +197,21 @@ ambient runtime discovery. A Composition Root assembles:
 
 - Web IDL definitions and binding contributions;
 - Realm Contexts;
-- cross-specification capability implementations;
+- cross-specification capability registrations;
 - Host Ports; and
 - the globals and implementation roots which consume them.
 
 Resolve dependencies at one of these explicit integration boundaries.
 Implementation algorithms must not perform ambient discovery of the same
 objects later.
+
+Browlet's concrete composition root is
+[`browlet/bindings.ts`](browlet/bindings.ts). Its
+[`browlet/integration/`](browlet/integration/README.md) modules may import both
+a standalone subsystem's capability contract and the Browlet-owned
+implementation that satisfies it. Integrations must remain acyclic: they
+consume the Realm Context or global passed by the calling algorithm and must
+not import the assembled `browletBindings` singleton to rediscover either.
 
 ## Composition map
 

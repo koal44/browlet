@@ -1,8 +1,10 @@
 import {
   fileListIDL, FileImpl, FileListImpl,
 } from '../../../../file/index';
-import type { StructuredDataRecord } from '../records';
-import { serializable, type SerializableSteps } from '../serializable';
+import type { StructuredDataRecord } from '../../../scripting/structured-data/records';
+import {
+  serializable, type SerializableSteps,
+} from '../../../scripting/structured-data/serializable';
 
 /*
  * FileList sub-serialization uses HTML's shared memory so a File repeated in
@@ -38,9 +40,9 @@ const fileListSerializable: SerializableSteps = {
   },
 };
 
-export const fileListCapabilities = [
+export const fileListSerializableCapabilities = [
   serializable.for(fileListIDL, fileListSerializable),
-] as const;
+];
 
 function requireFiles(record: StructuredDataRecord): unknown[] {
   const value = record.get('Files');
@@ -49,4 +51,3 @@ function requireFiles(record: StructuredDataRecord): unknown[] {
   }
   return value;
 }
-

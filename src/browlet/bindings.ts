@@ -1,37 +1,44 @@
-import { domIDLDefinitions } from './dom/web-idl';
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
-import { streamAbortController } from '../streams/abort';
-import { streamStructuredData } from '../streams/structured-data';
 import { urlIDLDefinitions } from '../url/api';
+import { originIDL } from '../url/origin-api';
 import {
   createBindings, type BindingWorld, type RealmBindings,
 } from '../web-idl/index';
-import { Realm } from './scripting/realm';
-import { AbortControllerImpl } from './dom/abort/abort-controller';
-import { WindowImpl, windowIDL } from './browsing/window/window';
+import { locationIDL } from './browsing/window/location';
+import {
+  type WindowImpl, windowEventIDL, windowIDL,
+  windowIncludesWindowOrWorkerGlobalScopeIDL,
+} from './browsing/window/window';
 import {
   isWindowProxy, resolveWindowProxyReceiver, setWindowProxyWindow,
   type WindowProxy,
 } from './browsing/window/window-proxy';
-import { browletIDLDefinitions } from './web-idl';
+import { htmlDocumentIDL } from './dom/nodes/document';
+import { domIDLDefinitions } from './dom/web-idl';
+import { htmlIDLDefinitions } from './html/web-idl';
+import { domExceptionCapabilities } from './integration/dom-exception';
+import { fileCapabilities } from './integration/file/capabilities';
+import { streamsCapabilities } from './integration/streams';
+import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
-  domExceptionCapabilities,
-} from './scripting/structured-data/platform-objects/dom-exception';
+  domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
+} from './performance/performance';
 import {
-  blobCapabilities,
-} from './scripting/structured-data/platform-objects/blob';
+  eventHandlerIDL, eventHandlerNonNullIDL,
+} from './scripting/event-handlers';
 import {
-  fileCapabilities,
-} from './scripting/structured-data/platform-objects/file';
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  timerHandlerIDL,
+  windowOrWorkerGlobalScopeIDL,
+} from './scripting/global-scope';
+import { Realm } from './scripting/realm';
 import {
-  fileListCapabilities,
-} from './scripting/structured-data/platform-objects/file-list';
-import {
-  fileClockHostCapability, fileHostCapability,
-} from './file-api';
+  structuredSerializeOptionsIDL,
+} from './scripting/structured-data/web-idl';
+import { svgIDLDefinitions } from './svg/web-idl';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -117,42 +124,35 @@ const hostDefinedInterfaces = [{
 
 const browletCapabilities = [
   ...domExceptionCapabilities,
-  ...blobCapabilities,
   ...fileCapabilities,
-  ...fileListCapabilities,
-  fileClockHostCapability,
-  fileHostCapability,
-  streamAbortController.for(windowIDL, {
-    create(global) {
-      if (!WindowImpl.is(global)) {
-        throw new TypeError(
-          'Streams AbortController requires a Window global',
-        );
-      }
-      const realm = browletBindings.getRelevantRealm(global);
-      const context = browletBindings.forRealm(realm).context;
-      return context.construct(AbortControllerImpl);
-    },
-  }),
-  streamStructuredData.for(windowIDL, {
-    clone(global, value) {
-      if (!WindowImpl.is(global)) {
-        throw new TypeError('Streams structured data requires a Window global');
-      }
-      return WindowImpl.getWindowOrWorkerGlobalScopeMixin(global)
-        .structuredClone(value);
-    },
-  }),
+  ...streamsCapabilities,
 ];
 
 const browletDefinitions = [
-  ...browletIDLDefinitions,
+  htmlDocumentIDL,
+  ...htmlIDLDefinitions,
+  ...svgIDLDefinitions,
+  ...mathMLIDLDefinitions,
+  originIDL,
+  locationIDL,
+  domHighResTimeStampIDL,
+  epochTimeStampIDL,
+  performanceIDL,
+  eventHandlerNonNullIDL,
+  eventHandlerIDL,
+  structuredSerializeOptionsIDL,
+  timerHandlerIDL,
+  windowOrWorkerGlobalScopeIDL,
+  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  windowIDL,
+  windowEventIDL,
+  windowIncludesWindowOrWorkerGlobalScopeIDL,
   ...domIDLDefinitions,
   ...styleletIDLDefinitions,
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,
   ...fileIDLDefinitions,
   ...urlIDLDefinitions,
-] as const;
+];
 
 export const browletBindings = new BrowletBindings();

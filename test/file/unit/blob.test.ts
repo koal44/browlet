@@ -25,7 +25,7 @@ describe('File API §3: Blob', () => {
     expect([...await readBlobBytes(blob)]).toEqual([1, 2, 3]);
   });
 
-  it('normalizes native line endings through the File environment', async () => {
+  it('normalizes native line endings using the supplied convention', async () => {
     const parts = ['a\rb\r\nc\nd'];
     const options = { endings: 'native' as const };
 

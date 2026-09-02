@@ -3,7 +3,7 @@ export * from './declaration/index';
 export { bind, bindingContext } from './projection';
 export type { BindingContext } from './projection';
 export {
-  defineCapability, type Capability, type CapabilityImplementation,
+  defineCapability, type Capability, type CapabilityRegistration,
   type CapabilityOptions,
 } from './capability';
 export { createBindings } from './registration';

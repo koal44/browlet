@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getRelevantRealm } from '../../../../src/browlet/bindings';
+import {
+  getRelevantRealm,
+} from '../../../../src/browlet/bindings';
 import {
   createNewTopLevelTraversable, type Navigable,
 } from '../../../../src/browlet/browsing/navigable';

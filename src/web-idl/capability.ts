@@ -5,9 +5,9 @@ import type { InterfaceDefinition } from './declaration/definition';
  * Define a typed capability which specifications can implement for exact
  * primary interface definitions.
  *
- * Web IDL preserves and indexes each implementation without interpreting its
- * value. The specification which defines the capability owns that value's
- * type and behavior.
+ * Web IDL preserves and indexes each registered value without interpreting
+ * it. The specification which defines the capability owns that value's type
+ * and behavior.
  */
 export function defineCapability<Value>(
   name: string,
@@ -28,11 +28,11 @@ export type Capability<Value> = {
   for(
     interface_: InterfaceDefinition,
     value: Value,
-  ): CapabilityImplementation;
+  ): CapabilityRegistration;
   readonly [capabilityValueType]: Value;
 };
 
-export type CapabilityImplementation = {
+export type CapabilityRegistration = {
   readonly capability: Capability<unknown>;
   readonly interface_: InterfaceDefinition;
   readonly value: unknown;
@@ -50,31 +50,31 @@ export class CapabilityRegistry {
 
   constructor(
     definitions: DefinitionAssembly,
-    implementations: readonly CapabilityImplementation[],
+    registrations: readonly CapabilityRegistration[],
   ) {
-    for (const implementation of implementations) {
+    for (const registration of registrations) {
       const interface_ = definitions.getInterface(
-        implementation.interface_.name,
+        registration.interface_.name,
       );
-      if (interface_?.definition !== implementation.interface_) {
+      if (interface_?.definition !== registration.interface_) {
         throw new TypeError(
-          `Capability ${implementation.capability.name} targets unknown ` +
-          `interface definition ${implementation.interface_.name}`,
+          `Capability ${registration.capability.name} targets unknown ` +
+          `interface definition ${registration.interface_.name}`,
         );
       }
 
-      let values = this.#values.get(implementation.interface_);
+      let values = this.#values.get(registration.interface_);
       if (!values) {
         values = new Map();
-        this.#values.set(implementation.interface_, values);
+        this.#values.set(registration.interface_, values);
       }
-      if (values.has(implementation.capability)) {
+      if (values.has(registration.capability)) {
         throw new TypeError(
-          `Interface ${implementation.interface_.name} has a duplicate ` +
-          `${implementation.capability.name} capability implementation`,
+          `Interface ${registration.interface_.name} has a duplicate ` +
+          `${registration.capability.name} capability registration`,
         );
       }
-      values.set(implementation.capability, implementation.value);
+      values.set(registration.capability, registration.value);
     }
   }
 

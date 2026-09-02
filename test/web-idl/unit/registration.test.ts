@@ -290,7 +290,7 @@ describe('Web IDL interface registration', () => {
           capability.for(restrictedIDL, 'second'),
         ],
       },
-    )).toThrow('has a duplicate Restricted capability implementation');
+    )).toThrow('has a duplicate Restricted capability registration');
 
     const registration = createBindings(
       [restrictedIDL],

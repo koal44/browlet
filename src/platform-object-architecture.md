@@ -117,7 +117,7 @@ the implementation state which makes a partial interface or mixin function.
 ### Binding worlds
 
 A `BindingWorld` owns one platform-object registry and the realm registrations
-which share that identity. Definitions and capability implementations may be
+which share that identity. Definitions and capability registrations may be
 reused by many worlds; platform-object associations may not. Within one world,
 an implementation always recovers the same platform object. Another world may
 project its own platform object for the same underlying implementation.

@@ -47,7 +47,7 @@ const linkStyleIDL = defineInterfaceMixin({
   members: [roAttr('sheet', nullable(idlType.object))],
 });
 
-export const styleletIDLDefinitions: readonly Definition[] = [
+export const styleletIDLDefinitions: Definition[] = [
   cssomDocumentOrShadowRootIDL,
   elementCSSInlineStyleIDL,
   linkStyleIDL,

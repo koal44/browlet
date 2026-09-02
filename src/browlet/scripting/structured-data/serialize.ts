@@ -54,6 +54,9 @@ export function structuredSerializeInternal(
   if (typeof value === 'symbol') return throwDataCloneError();
 
   const platformObject = environment.context.resolvePlatformObject(value);
+  if (!platformObject && nodeTypes.isProxy(value)) {
+    return throwDataCloneError();
+  }
   let serialized: SerializedRecord;
   let deep = false;
 
@@ -144,8 +147,6 @@ export function structuredSerializeInternal(
         fields: createStructuredDataRecord(),
       };
       deep = true;
-    } else if (nodeTypes.isProxy(value)) {
-      return throwDataCloneError();
     } else if (Array.isArray(value)) {
       const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
       if (typeof length !== 'number') {
