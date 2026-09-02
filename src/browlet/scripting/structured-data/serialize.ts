@@ -129,15 +129,6 @@ export function structuredSerializeInternal(
     } else if (nodeTypes.isNativeError(value) && !platformObject) {
       serialized = serializeError(value, environment.realm);
       deep = true;
-    } else if (nodeTypes.isProxy(value)) {
-      return throwDataCloneError();
-    } else if (Array.isArray(value)) {
-      const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
-      if (typeof length !== 'number') {
-        throw new Error('An Array exotic object has no numeric length');
-      }
-      serialized = { type: 'Array', length, properties: [] };
-      deep = true;
     } else if (platformObject) {
       const steps = environment.context.getCapability(
         platformObject.primaryInterface.definition,
@@ -152,6 +143,15 @@ export function structuredSerializeInternal(
         interfaceName: platformObject.primaryInterface.definition.name,
         fields: createStructuredDataRecord(),
       };
+      deep = true;
+    } else if (nodeTypes.isProxy(value)) {
+      return throwDataCloneError();
+    } else if (Array.isArray(value)) {
+      const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
+      if (typeof length !== 'number') {
+        throw new Error('An Array exotic object has no numeric length');
+      }
+      serialized = { type: 'Array', length, properties: [] };
       deep = true;
     } else if (typeof value === 'function') {
       return throwDataCloneError();
@@ -309,12 +309,17 @@ function serializePlatformObject(
     serialized.fields,
     forStorage,
     {
-      subserialize: (subValue) => structuredSerializeInternal(
-        subValue,
-        forStorage,
-        environment,
-        memory,
-      ),
+      subserialize: (subValue) => {
+        const platformObject = environment.context.resolvePlatformObject(
+          subValue,
+        )?.platformObject ?? subValue;
+        return structuredSerializeInternal(
+          platformObject,
+          forStorage,
+          environment,
+          memory,
+        );
+      },
     },
   );
 }

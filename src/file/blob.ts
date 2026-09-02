@@ -4,7 +4,7 @@ import { domExceptionName, createDOMException } from '../shared/dom-exception';
 import {
   closeReadableStream, enqueueReadableStream, errorReadableStream,
   createReadableStreamWithByteReadingSupport, getReadableStreamReader,
-  readAllBytes, type ReadableStreamImpl,
+  pipeReadableStreamThrough, readAllBytes, type ReadableStreamImpl,
 } from '../streams/index';
 import {
   createArrayBuffer, createArrayBufferView, getBufferSourceCopy,
@@ -123,14 +123,10 @@ export class BlobImpl {
     context = this.#context ?? context;
     const stream = getBlobStream(this, context);
     const decoder = context.construct(TextDecoderStreamImpl);
-    return stream.pipeThrough({
-      readable: decoder.readable,
-      writable: decoder.writable,
-    }, {
-      preventAbort: false,
-      preventCancel: false,
-      preventClose: false,
-    });
+    return pipeReadableStreamThrough(
+      stream,
+      TextDecoderStreamImpl.getAssociatedTransform(decoder),
+    );
   }
 
   bytes(context: BindingContext): object {

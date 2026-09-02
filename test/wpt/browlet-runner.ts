@@ -69,6 +69,7 @@ export function createWindowAnyTest(testPath: string): WindowAnyTest {
     '<!doctype html>',
     '<meta charset="utf-8">',
     `<title>${escapeHtml(title)}</title>`,
+    '<body>',
     ...scripts.map((script) =>
       `<script src="${escapeHtml(script)}"></script>`),
   ].join('\n');

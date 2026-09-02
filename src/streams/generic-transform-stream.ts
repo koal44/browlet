@@ -8,8 +8,8 @@ import type { WritableStreamImpl } from './writable-stream';
 /**
  * Streams Standard, "Wrapping into a custom class".
  *
- * Other specifications compose this semantic mixin when they expose a custom
- * transform stream with additional API surface.
+ * Other specifications compose this mixin when they expose a custom transform
+ * stream with additional API surface.
  */
 export class GenericTransformStreamMixin {
   readonly #transform: TransformStreamImpl;
@@ -24,6 +24,14 @@ export class GenericTransformStreamMixin {
 
   get writable(): WritableStreamImpl {
     return this.#transform.writable;
+  }
+
+  // -- Friends ----------------------------------------------------------
+
+  static getAssociatedTransform(
+    stream: GenericTransformStreamMixin,
+  ): TransformStreamImpl {
+    return stream.#transform;
   }
 }
 

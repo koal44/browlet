@@ -74,6 +74,14 @@ export class TextDecoderStreamImpl {
   get writable(): WritableStreamImpl {
     return this.#generic.writable;
   }
+
+  // -- Friends ----------------------------------------------------------
+
+  static getAssociatedTransform(
+    stream: TextDecoderStreamImpl,
+  ): TransformStreamImpl {
+    return GenericTransformStreamMixin.getAssociatedTransform(stream.#generic);
+  }
 }
 
 export const textDecoderStreamIDL = defineInterface({

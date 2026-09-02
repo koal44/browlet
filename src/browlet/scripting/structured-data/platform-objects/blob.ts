@@ -11,7 +11,7 @@ import { serializable, type SerializableSteps } from '../serializable';
  * File API defines Blob's record fields. HTML owns their registration and
  * execution through the generic Serializable machinery.
  */
-const blobSerializable: SerializableSteps = {
+export const blobSerializable: SerializableSteps = {
   serializationSteps(value, serialized, forStorage) {
     if (!BlobImpl.is(value)) {
       throw new TypeError('Blob serialization requires a Blob implementation');

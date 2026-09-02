@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   closeReadableStream, closeWritableStream, createReadableStream,
   createReadableStreamProxy, createReadableStreamWithByteReadingSupport,
-  createWritableStream, enqueueReadableStream, errorWritableStream,
+  createTransformStream, createWritableStream, enqueueReadableStream,
+  errorWritableStream, GenericTransformStreamMixin,
   getReadableStreamBYOBRequestView, getReadableStreamDesiredSize,
   getReadableStreamReader, getWritableStreamSignal, getWritableStreamWriter,
   isReadableStreamClosed, isReadableStreamDisturbed,
@@ -21,6 +22,17 @@ import {
 import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('Streams operations for other specifications', () => {
+  it('retains the actual transform associated with a generic transform', () => {
+    const context = createTestContext();
+    const transform = createTransformStream(context, () => undefined);
+    const generic = new GenericTransformStreamMixin(transform);
+
+    expect(GenericTransformStreamMixin.getAssociatedTransform(generic))
+      .toBe(transform);
+    expect(generic.readable).toBe(transform.readable);
+    expect(generic.writable).toBe(transform.writable);
+  });
+
   it('creates, reads, and introspects an ordinary readable stream', async () => {
     const context = createTestContext();
     let pulled = false;

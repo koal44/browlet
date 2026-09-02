@@ -23,7 +23,15 @@ import {
 import {
   blobCapabilities,
 } from './scripting/structured-data/platform-objects/blob';
-import { fileHostCapability } from './file-api';
+import {
+  fileCapabilities,
+} from './scripting/structured-data/platform-objects/file';
+import {
+  fileListCapabilities,
+} from './scripting/structured-data/platform-objects/file-list';
+import {
+  fileClockHostCapability, fileHostCapability,
+} from './file-api';
 
 /*
  * The browser environment owns the final Web IDL assembly for its realm.
@@ -110,6 +118,9 @@ const hostDefinedInterfaces = [{
 const browletCapabilities = [
   ...domExceptionCapabilities,
   ...blobCapabilities,
+  ...fileCapabilities,
+  ...fileListCapabilities,
+  fileClockHostCapability,
   fileHostCapability,
   streamAbortController.for(windowIDL, {
     create(global) {
