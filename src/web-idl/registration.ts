@@ -2,7 +2,7 @@ import { assembleDefinitions, type DefinitionAssembly } from './assembly';
 import { RealmBinding } from './binding';
 import { webIDLCommonDefinitions } from './common-definitions';
 import {
-  type CapabilityImplementation, CapabilityRegistry,
+  type CapabilityRegistration, CapabilityRegistry,
 } from './capability';
 import type { Definition } from './declaration/index';
 import type { HostDefinedInterface } from './conversion';
@@ -29,7 +29,7 @@ export function createBindings(
 }
 
 export type BindingOptions = {
-  readonly capabilities?: readonly CapabilityImplementation[];
+  readonly capabilities?: readonly CapabilityRegistration[];
   readonly hostDefinedInterfaces?: readonly HostDefinedInterface[];
 };
 

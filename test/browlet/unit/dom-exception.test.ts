@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { browletBindings } from '../../../src/browlet/bindings';
+import {
+  browletBindings,
+} from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
 
 const errorIsErrorTest = typeof Reflect.get(Error, 'isError') === 'function'

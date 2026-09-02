@@ -3,9 +3,11 @@ import {
   getQuotaExceededErrorSerializationState, quotaExceededErrorIDL,
   setDOMExceptionSerializationState,
   setQuotaExceededErrorSerializationState,
-} from '../../../../web-idl/dom-exception';
-import type { StructuredDataRecord } from '../records';
-import { serializable, type SerializableSteps } from '../serializable';
+} from '../../web-idl/dom-exception';
+import type { StructuredDataRecord } from '../scripting/structured-data/records';
+import {
+  serializable, type SerializableSteps,
+} from '../scripting/structured-data/serializable';
 
 /*
  * Web IDL owns DOMException's semantic state. This HTML integration owns the
@@ -56,7 +58,7 @@ const quotaExceededErrorSerializable: SerializableSteps = {
 export const domExceptionCapabilities = [
   serializable.for(domExceptionIDL, domExceptionSerializable),
   serializable.for(quotaExceededErrorIDL, quotaExceededErrorSerializable),
-] as const;
+];
 
 function requireString(
   record: StructuredDataRecord,

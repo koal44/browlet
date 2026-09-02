@@ -10,9 +10,7 @@ import {
   BlobImpl, type BlobPart, type BlobPropertyBag,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
-import {
-  currentUnixTime, type NativeLineEnding,
-} from './environment';
+import type { NativeLineEnding } from './integration';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -37,15 +35,11 @@ export class FileImpl extends BlobImpl {
     fileBits: Iterable<BlobPart> = [],
     fileName = '',
     options: FilePropertyBag = {},
-    readCurrentTime?: () => number,
+    readCurrentTime: () => number = Date.now,
   ) {
     super(contextOrLineEnding, fileBits, options);
     this.#name = fileName;
-    this.#lastModified = options.lastModified ?? (
-      typeof contextOrLineEnding === 'string'
-        ? requireCurrentTime(readCurrentTime)
-        : currentUnixTime(contextOrLineEnding)
-    );
+    this.#lastModified = options.lastModified ?? readCurrentTime();
   }
 
   get name(): string {
@@ -54,11 +48,7 @@ export class FileImpl extends BlobImpl {
 
   get lastModified(): number {
     if (this.#lastModified !== null) return this.#lastModified;
-    const context = BlobImpl.getContext(this);
-    if (!context) {
-      throw new Error('A host File with unknown metadata has no Realm context');
-    }
-    return currentUnixTime(context);
+    return Date.now();
   }
 
   // -- Friends ----------------------------------------------------------
@@ -127,13 +117,6 @@ export function createFileFromHost(
   });
   FileImpl.setHostMetadata(file, metadata.name, metadata.lastModified);
   return file;
-}
-
-function requireCurrentTime(readCurrentTime?: () => number): number {
-  if (!readCurrentTime) {
-    throw new Error('Direct File construction requires a wall-clock reader');
-  }
-  return readCurrentTime();
 }
 
 function requireHostFileType(value: string): string {

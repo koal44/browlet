@@ -16,16 +16,16 @@ export {
   type BlobReadFailureReason, type BlobSnapshotState,
 } from './blob-data';
 export {
-  fileClockHost, fileHost, type FileClockHost, type FileHost,
-  type NativeLineEnding,
-} from './environment';
+  fileReading, getFileReading, nativeLineEnding,
+  type FileReadingCapability, type NativeLineEnding,
+} from './integration';
 export {
   createFileFromHost, fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,
 } from './file';
 export { fileListIDL, FileListImpl } from './file-list';
 
-export const fileIDLDefinitions: readonly Definition[] = [
+export const fileIDLDefinitions: Definition[] = [
   endingTypeIDL,
   blobPropertyBagIDL,
   blobPartIDL,

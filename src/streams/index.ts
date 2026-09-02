@@ -76,7 +76,7 @@ export {
 } from './writable-stream-cross-spec';
 export type { WritableStreamImpl } from './writable-stream';
 
-export const streamsIDLDefinitions: readonly Definition[] = [
+export const streamsIDLDefinitions: Definition[] = [
   queuingStrategySizeIDL,
   queuingStrategyIDL,
   queuingStrategyInitIDL,

@@ -66,7 +66,7 @@ boundary. Do not create an otherwise empty module merely to satisfy this table.
 | `records.ts` | Serialized record families and graph-memory types | HTML §§2.7.3–2.7.8 |
 | `serializable.ts` | Per-interface serialization/deserialization capabilities and lookup | HTML §§2.7.1, 2.7.3, 2.7.6 |
 | `transferable.ts` | Per-interface transfer/receiving capabilities and detached state | HTML §§2.7.2, 2.7.7–2.7.8 |
-| `platform-objects/` | HTML capability adapters for interfaces owned by lower-level specifications | HTML §§2.7.1–2.7.2 and the defining specification |
+| `../../integration/` | Serializable and Transferable providers organized with the subsystem they connect to HTML | HTML §§2.7.1–2.7.2 and the defining specification |
 | `serialize.ts` | Structured serialization and storage mode | HTML §§2.7.3–2.7.5 |
 | `deserialize.ts` | Target-realm reconstruction and graph population | HTML §2.7.6 |
 | `transfer.ts` | Serialization and deserialization with transfer lists | HTML §§2.7.7–2.7.8 |
@@ -81,7 +81,7 @@ Status: complete. The generic Web IDL capability seam is keyed by exact
 interface-definition identity; registered realms expose target-realm creation,
 exposure checks, and primary-interface resolution. HTML owns the hook contracts
 and detached state. DOMException and QuotaExceededError provide the first
-standalone Serializable capability implementations and cross-realm proof.
+standalone Serializable capability registrations and cross-realm proof.
 
 Controlling sections: HTML §§2.7.1–2.7.2, "Serializable objects" and
 "Transferable objects"; Web IDL §3.8, "Platform objects implementing
@@ -100,7 +100,7 @@ First establish the boundary that every later platform-object branch needs:
    is exposed in a target realm, and create a target-realm instance through the
    registered realm binding.
 4. Register the `DOMException` and `QuotaExceededError` Serializable
-   capability implementations without implementing the recursive graph yet.
+   capability registrations without implementing the recursive graph yet.
 
 Proof: synthetic interface tests show exact-primary-interface lookup, inherited
 interface behavior, target-realm identity, and that internal creation does not

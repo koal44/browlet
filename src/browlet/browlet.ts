@@ -3,7 +3,9 @@ import type { ElementImpl } from './dom/nodes/element';
 import { isText } from './dom/nodes/node';
 import { getSourceCodeLocation } from './html/parser/tree-adapter';
 import { parseURL } from '../url/url';
-import { browletBindings, getRelevantRealm } from './bindings';
+import {
+  browletBindings, getRelevantRealm,
+} from './bindings';
 import {
   completelyFinishLoading, createAndInitializeDocument,
 } from './browsing/document-lifecycle';
@@ -23,7 +25,6 @@ import { UserAgent } from './user-agent';
 import {
   performNodeMicrotaskCheckpoint, requestNodeEventLoopTurn,
 } from './scripting/event-loop';
-import type { NativeLineEnding } from '../file/index';
 import { unsafeSharedCurrentTime } from
   './performance/high-resolution-time';
 
@@ -40,10 +41,6 @@ export class Browlet {
         performMicrotaskCheckpoint: performNodeMicrotaskCheckpoint,
         requestEventLoopTurn: requestNodeEventLoopTurn,
         unsafeSharedCurrentTime,
-      },
-      {
-        nativeLineEnding: config.nativeLineEnding ?? '\n',
-        scheduleParallelSteps: requestNodeEventLoopTurn,
       },
     );
     this.#traversable = createNewTopLevelTraversable(
@@ -195,7 +192,6 @@ export class Browlet {
 export type BrowletRoute = (url: string) => string;
 
 export type BrowletConfig = {
-  nativeLineEnding?: NativeLineEnding;
   route: BrowletRoute;
 };
 

@@ -89,7 +89,7 @@ Create modules only as their behavior arrives. The likely final division is:
 | `blob-url-store.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
 | `file-reader.ts` | Asynchronous reader state, methods, cancellation, stream consumption, and event sequencing | §§6.1–6.4 and 7 |
 | `package-data.ts` | Data URL, text, ArrayBuffer, and binary-string materialization | §6.3 |
-| `environment.ts` | Current narrow `FileHost` integration, including native-line-ending lookup. Split future HTML task semantics, clocks, UUIDs, and host-file I/O by their actual capability or Host Port owner rather than growing a service bag | Cross-cutting |
+| `integration.ts` | Separate native-line-ending and wall-clock Host Ports plus the File-reading scheduler capability. Keep future UUID and host-I/O effects with their actual owner rather than rebuilding a service bag | Cross-cutting |
 | `web-idl.ts` | Lossless File API definitions and cross-package contributions assembled by Browlet | §§3–6 and 8.4 |
 
 The HTML structured-data implementation will own the registered Serializable
@@ -106,7 +106,7 @@ and deserialization steps without duplicating semantic state.
 | Infra byte sequences, lists, and Base64 | §§2–6 | Byte/list representations and forgiving Base64 encoding exist in `src/shared` | Reuse the Base64 encoder for Data URLs; do not route through `Buffer` or `btoa()` |
 | Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding`, including internal access to a `TextDecoderStream`'s associated actual `TransformStream` | Blob text APIs are always UTF-8; FileReader text decoding instead honors labels and MIME parameters |
 | Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, read-all-bytes, and piping through an actual `TransformStream` | Reuse these exact boundaries. Do not widen the transform helper to an arbitrary readable/writable pair or call projected author methods from internal algorithms |
-| HTML parallel work, global tasks, event loop, and monotonic time | §§3, 6.1–6.4 | Blob reads use the Browlet host's parallel scheduling seam and the file-reading task source; shared monotonic time also exists | FileReader still needs an owner/cancellation identity for removing only its queued tasks. Do not scan or mutate private queues from File code |
+| HTML parallel work, global tasks, event loop, and time | §§3, 6.1–6.4 | Blob reads use a narrow File-reading capability for Browlet's shared `runInParallel()` policy and the file-reading task source; native line endings come from the Node platform and File's wall-clock default uses `Date.now()` | FileReader still needs an owner/cancellation identity for removing only its queued tasks and monotonic progress timing. Do not scan or mutate private queues from File code |
 | DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader's semantic read state in `src/file`; Browlet supplies the EventTarget implementation, handler composition, realm-correct exceptions, and dispatch |
 | XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Roadmapped as XHR slice 1, not implemented | Implement that bounded XHR slice before exposing FileReader. File API must not create a private lookalike event |
 | HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
@@ -138,8 +138,8 @@ in §7.
 - Copy BufferSource bytes at construction time, UTF-8 encode USVStrings, share
   existing immutable Blob data, and flatten segment references enough to avoid
   recursive read chains.
-- Implement native line-ending conversion through a host-neutral platform
-  convention, with deterministic tests for LF and CRLF hosts.
+- Implement native line-ending conversion from an explicitly supplied
+  platform convention, with deterministic tests for LF and CRLF.
 - Implement Blob type normalization, size, construction, processing blob
   parts, slice blob, and `slice()`.
 - Preserve metadata independently from backing data so slices can share bytes

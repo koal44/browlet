@@ -9,7 +9,7 @@ import {
 import { Realm } from '../../../../../src/browlet/scripting/realm';
 import {
   domExceptionCapabilities,
-} from '../../../../../src/browlet/scripting/structured-data/platform-objects/dom-exception';
+} from '../../../../../src/browlet/integration/dom-exception';
 import type {
   SerializedRecord,
 } from '../../../../../src/browlet/scripting/structured-data/records';

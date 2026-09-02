@@ -1,8 +1,10 @@
 import {
   fileIDL, FileImpl,
 } from '../../../../file/index';
-import type { StructuredDataRecord } from '../records';
-import { serializable, type SerializableSteps } from '../serializable';
+import type { StructuredDataRecord } from '../../../scripting/structured-data/records';
+import {
+  serializable, type SerializableSteps,
+} from '../../../scripting/structured-data/serializable';
 import { blobSerializable } from './blob';
 
 /*
@@ -42,9 +44,9 @@ const fileSerializable: SerializableSteps = {
   },
 };
 
-export const fileCapabilities = [
+export const fileSerializableCapabilities = [
   serializable.for(fileIDL, fileSerializable),
-] as const;
+];
 
 function requireNumber(
   record: StructuredDataRecord,
