@@ -12,7 +12,7 @@ import {
   impl, indexedGetter, iter, namedGetter, nullable, op,
   promise as promiseType, roAttr, record, reference, resolveArgs, sequence,
   stringifier,
-  union, constructWith, invokeWithNew,
+  union, constructWith, invokeWith,
 } from '../../../src/web-idl/declaration/index';
 import { bind, registerDefinitionBindings } from '../../../src/web-idl/projection';
 import { ImplementationRegistry } from '../../../src/web-idl/registry';
@@ -131,7 +131,7 @@ describe('Web IDL implementation registration', () => {
     expect(conversions).toBe(1);
   });
 
-  it('uses contextual implementation creation for an empty constructor', () => {
+  it('injects contextual dependencies into an empty constructor', () => {
     const token = Symbol('context-created');
     class ContextCreatedImpl {
       constructor(readonly value: symbol) {}
@@ -139,12 +139,9 @@ describe('Web IDL implementation registration', () => {
     const interfaceIDL = defineInterface({
       name: 'ContextCreated',
       exposed: 'Window',
-      implementation: {
-        createImplementation() {
-          return new ContextCreatedImpl(token);
-        },
-        implementation: ContextCreatedImpl,
-      },
+      implementation: impl(ContextCreatedImpl, {
+        constructWith: [contextValue(() => token)],
+      }),
       members: [ctor()],
     });
     const realm = new Realm();
@@ -259,7 +256,7 @@ describe('Web IDL implementation registration', () => {
       members: [
         ctor([arg('value', idlType.DOMString)]),
         op('create', reference('ContextualDependency'), [], {
-          ...invokeWithNew(ContextualDependencyImpl),
+          ...invokeWith(ContextualDependencyImpl),
           static: true,
         }),
         roAttr('environment', idlType.object),
@@ -315,7 +312,7 @@ describe('Web IDL implementation registration', () => {
       }),
       members: [
         op('create', reference('Result'), [], {
-          ...invokeWithNew(ResultImpl),
+          ...invokeWith(ResultImpl),
           static: true,
         }),
         roAttr('global', idlType.object),
@@ -559,10 +556,8 @@ describe('Web IDL implementation registration', () => {
     const interfaceIDL = defineInterface({
       name: 'DeclarativeExample',
       exposed: 'Window',
-      implementation: bind(DeclarativeExampleImpl, {
-        createImplementation() {
-          return new DeclarativeExampleImpl(constructionToken);
-        },
+      implementation: impl(DeclarativeExampleImpl, {
+        constructWith: [contextValue(() => constructionToken)],
       }),
       members: [
         constructor,

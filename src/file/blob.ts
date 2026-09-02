@@ -10,19 +10,18 @@ import {
   createArrayBuffer, createArrayBufferView, getBufferSourceCopy,
 } from '../web-idl/buffer-source';
 import {
-  arg, ctor, defineDictionary, defineEnumeration, defineInterface,
-  defineTypedef, dictMember, emptyDictionary, emptySequence, idlType, op,
-  promise, reference, roAttr, sequence, union, invokeWith, xattr,
+  arg, atArg, contextValue, ctor, defineDictionary, defineEnumeration,
+  defineInterface, defineTypedef, dictMember, emptyDictionary, emptySequence,
+  idlType, impl, invokeWith, op, promise, reference, roAttr, sequence, union,
+  xattr,
   type WebIDLType,
 } from '../web-idl/declaration/index';
-import {
-  bind, bindingContext, type BindingContext,
-} from '../web-idl/projection';
+import { bindingContext, type BindingContext } from '../web-idl/projection';
 import {
   BlobData, BlobReadFailure, type BlobSnapshotState,
 } from './blob-data';
 import {
-  getFileReading, getNativeLineEnding,
+  getFileReading, nativeLineEnding as nativeLineEndingCapability,
   type NativeLineEnding,
 } from './integration';
 
@@ -56,25 +55,15 @@ import {
  * typedef (BufferSource or Blob or USVString) BlobPart;
  */
 export class BlobImpl {
-  #context: BindingContext | null;
   #data: BlobData;
-  #nativeLineEnding: NativeLineEnding;
   #snapshotState: BlobSnapshotState;
   #type: string;
 
   constructor(
-    contextOrLineEnding: BindingContext | NativeLineEnding,
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
+    nativeLineEnding?: NativeLineEnding,
   ) {
-    const context = typeof contextOrLineEnding === 'string'
-      ? null
-      : contextOrLineEnding;
-    const nativeLineEnding = context === null
-      ? contextOrLineEnding as NativeLineEnding
-      : getNativeLineEnding(context);
-    this.#context = context;
-    this.#nativeLineEnding = nativeLineEnding;
     this.#data = processBlobParts(blobParts, options, nativeLineEnding);
     this.#snapshotState = this.#data.captureSnapshotState();
     this.#type = normalizeBlobType(options.type ?? '');
@@ -97,20 +86,19 @@ export class BlobImpl {
   }
 
   stream(context: BindingContext): ReadableStreamImpl {
-    return getBlobStream(this, this.#context ?? context);
+    return getBlobStream(this, context);
   }
 
   text(context: BindingContext): object {
     return readBlob(
       this,
-      this.#context ?? context,
+      context,
       idlType.USVString,
       utf8Decode,
     );
   }
 
   arrayBuffer(context: BindingContext): object {
-    context = this.#context ?? context;
     return readBlob(
       this,
       context,
@@ -120,7 +108,6 @@ export class BlobImpl {
   }
 
   textStream(context: BindingContext): ReadableStreamImpl {
-    context = this.#context ?? context;
     const stream = getBlobStream(this, context);
     const decoder = context.construct(TextDecoderStreamImpl);
     return pipeReadableStreamThrough(
@@ -130,7 +117,6 @@ export class BlobImpl {
   }
 
   bytes(context: BindingContext): object {
-    context = this.#context ?? context;
     return readBlob(
       this,
       context,
@@ -142,17 +128,12 @@ export class BlobImpl {
   // -- Friends ----------------------------------------------------------
 
   static create(
-    nativeLineEnding: NativeLineEnding,
     data: BlobData,
     type: string,
     snapshotState: BlobSnapshotState,
-    context: BindingContext | null = null,
   ): BlobImpl {
-    const blob = context
-      ? context.construct(BlobImpl)
-      : new BlobImpl(nativeLineEnding);
+    const blob = new BlobImpl();
     blob.#data = data;
-    blob.#nativeLineEnding = nativeLineEnding;
     blob.#snapshotState = snapshotState;
     blob.#type = type;
     return blob;
@@ -160,24 +141,6 @@ export class BlobImpl {
 
   static getData(blob: BlobImpl): BlobData {
     return blob.#data;
-  }
-
-  static getContext(blob: BlobImpl): BindingContext | null {
-    return blob.#context;
-  }
-
-  static adoptContext(
-    blob: BlobImpl,
-    context: BindingContext,
-  ): void {
-    if (blob.#context && blob.#context !== context) {
-      throw new TypeError('Blob already belongs to another binding context');
-    }
-    blob.#context = context;
-  }
-
-  static getNativeLineEnding(blob: BlobImpl): NativeLineEnding {
-    return blob.#nativeLineEnding;
   }
 
   static getSnapshotState(blob: BlobImpl): BlobSnapshotState {
@@ -225,13 +188,16 @@ export type BlobSerializationState = {
 export function processBlobParts(
   parts: Iterable<BlobPart>,
   options: BlobPropertyBag,
-  nativeLineEnding: NativeLineEnding,
+  nativeLineEnding?: NativeLineEnding,
 ): BlobData {
   const data: BlobData[] = [];
   for (const element of parts) {
     if (typeof element === 'string') {
       const string = options.endings === 'native'
-        ? convertLineEndingsToNative(element, nativeLineEnding)
+        ? convertLineEndingsToNative(
+          element,
+          requireNativeLineEnding(nativeLineEnding),
+        )
         : element;
       data.push(BlobData.fromOwnedBytes(utf8Encode(string)));
     } else if (BlobImpl.is(element)) {
@@ -251,6 +217,27 @@ export function convertLineEndingsToNative(
   return value.replace(/\r\n|\r|\n/g, nativeLineEnding);
 }
 
+function getNativeLineEnding(context: BindingContext): NativeLineEnding {
+  const value = context.getCapability(blobIDL, nativeLineEndingCapability);
+  if (value === undefined) {
+    throw new Error('Blob has no native line-ending capability');
+  }
+  return value;
+}
+
+function requireNativeLineEnding(
+  value: NativeLineEnding | undefined,
+): NativeLineEnding {
+  if (value === undefined) {
+    throw new Error('Native Blob line ending was not supplied');
+  }
+  return value;
+}
+
+export const nativeLineEndingForConstruction = contextValue(
+  getNativeLineEnding,
+);
+
 /** File API §2, slice blob. */
 export function sliceBlob(
   blob: BlobImpl,
@@ -264,11 +251,9 @@ export function sliceBlob(
   const span = Math.max(relativeEnd - relativeStart, 0);
 
   return BlobImpl.create(
-    BlobImpl.getNativeLineEnding(blob),
     BlobImpl.getData(blob).slice(relativeStart, span),
     normalizeBlobType(contentType ?? ''),
     BlobImpl.getSnapshotState(blob),
-    BlobImpl.getContext(blob),
   );
 }
 
@@ -423,11 +408,8 @@ export const blobIDL = defineInterface({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),
-  implementation: bind(BlobImpl, {
-    constructWith: [bindingContext],
-    initializeImplementation(context, value) {
-      BlobImpl.adoptContext(value as BlobImpl, context);
-    },
+  implementation: impl(BlobImpl, {
+    constructWith: [atArg(2, nativeLineEndingForConstruction)],
   }),
   members: [
     ctor([
@@ -454,24 +436,19 @@ export const blobIDL = defineInterface({
       arg('contentType', idlType.DOMString, { optional: true }),
     ]),
     op('stream', reference('ReadableStream'), [], {
-      ...invokeWith(bindingContext),
-      ...xattr('NewObject'),
+      ...invokeWith(bindingContext), ...xattr('NewObject'),
     }),
     op('text', promise(idlType.USVString), [], {
-      ...invokeWith(bindingContext),
-      ...xattr('NewObject'),
+      ...invokeWith(bindingContext), ...xattr('NewObject'),
     }),
     op('arrayBuffer', promise(idlType.ArrayBuffer), [], {
-      ...invokeWith(bindingContext),
-      ...xattr('NewObject'),
+      ...invokeWith(bindingContext), ...xattr('NewObject'),
     }),
     op('textStream', reference('ReadableStream'), [], {
-      ...invokeWith(bindingContext),
-      ...xattr('NewObject'),
+      ...invokeWith(bindingContext), ...xattr('NewObject'),
     }),
     op('bytes', promise(idlType.Uint8Array), [], {
-      ...invokeWith(bindingContext),
-      ...xattr('NewObject'),
+      ...invokeWith(bindingContext), ...xattr('NewObject'),
     }),
   ],
 });

@@ -3,9 +3,10 @@ import type { BindingContext } from '../web-idl/projection';
 
 /*
  * File's integration boundary. File defines the capabilities it consumes;
- * the composing browser registers their values for each exposed global
- * interface. File reading bridges to HTML scheduling, while the native line
- * ending carries platform policy. The composing browser may delegate
+ * the composing browser registers their values against the interface which
+ * consumes them. File reading bridges through the relevant global to HTML
+ * scheduling, while the native line ending is immutable platform policy read
+ * directly by Blob. The composing browser may delegate
  * runInParallel to its shared HTML policy or supply a feature-specific
  * implementation without File importing either one.
  */
@@ -20,13 +21,6 @@ export type FileReadingCapability = {
 };
 
 export type NativeLineEnding = '\n' | '\r\n';
-
-export function getNativeLineEnding(
-  context: BindingContext,
-): NativeLineEnding {
-  const [, value] = getGlobalCapability(context, nativeLineEnding);
-  return value;
-}
 
 export function getFileReading(
   context: BindingContext,

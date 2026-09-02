@@ -47,7 +47,7 @@ export {
 } from './definition';
 export {
   atArg, callback, constructWith, contextValue, impl, indexedGetter,
-  invokeWith, invokeWithNew, namedGetter, resolveArgs,
+  invokeWith, namedGetter, resolveArgs,
 } from './binding';
 export type {
   ArgumentBinding, ArgumentInjectionBinding, CallbackExceptionBehavior,

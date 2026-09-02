@@ -8,7 +8,7 @@ interfaces, and realm bindings.
 A standalone subsystem owns the contract for each capability it consumes. A
 provider module here connects that contract to Browlet-owned behavior. The
 provider may know both sides of that boundary, but it must not import the
-assembled `browletBindings` singleton or rediscover a Realm Context already
+assembled `browletBindings` singleton or rediscover a Binding Context already
 available to the consuming algorithm.
 
 Integration modules contain cross-owner behavior and wiring, not the core state
@@ -20,5 +20,7 @@ remain with that domain rather than moving into this directory.
   plus platform line ending policy.
 - `streams.ts` connects Streams to DOM AbortController construction and HTML
   structured cloning.
+- `xhr.ts` supplies the realm-sensitive File construction used by HTML's form
+  entry algorithms when XHR's FormData entry-list operations invoke them.
 - `dom-exception.ts` connects Web IDL DOMException records to HTML structured
   data.

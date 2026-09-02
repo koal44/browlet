@@ -9,9 +9,9 @@ request and response records, bodies, CORS, filtering, controllers, and network
 transport.
 
 The Fetch-independent File API foundation is implemented through `Blob`,
-`File`, and `FileList`. XHR §5 `ProgressEvent` is also implemented, including
-realm-correct construction and the fire-a-progress-event operation. The next
-slice is the §4 `FormData` entry-list core.
+`File`, and `FileList`. XHR §5 `ProgressEvent` and the no-form portion of §4
+`FormData` are also implemented. `FormData(form, submitter)` remains blocked
+on HTML forms; multipart encoding remains a Fetch responsibility.
 
 Do not expose `XMLHttpRequest` merely because its declaration can be assembled:
 its useful behavior begins at the Fetch integration boundary.
@@ -120,28 +120,41 @@ dispatch machinery.
 
 **Exit proof:** complete. No XMLHttpRequest interface is exposed yet.
 
-### Slice 2 — FormData entry-list core
+### Slice 2 — FormData entry-list core — implemented
 
 **Scope:** XHR §4, after the File API implementation exists.
 
-- Implement entry records and the ordered entry list.
-- Implement the no-argument constructor, `append`, `delete`, `get`, `getAll`,
+- Implemented entry records and the ordered entry list.
+- Implemented the no-argument constructor, `append`, `delete`, `get`, `getAll`,
   `has`, `set`, and iterable behavior in specification order.
-- Apply the HTML create-an-entry algorithm for strings and Blob/File values,
+- Applied the HTML create-an-entry algorithm for strings and Blob/File values,
   including default filename and supplied filename behavior, through a narrow
-  declared capability rather than copied HTML logic.
-- Project the overloads and iterable declaratively through Web IDL.
-- Export the semantic entry-list access that Fetch needs for Body extraction;
+  declared capability rather than copied HTML logic. The algorithm and the
+  deferred construct-the-entry-list boundary live together under
+  `src/browlet/html/forms/entry-list.ts`.
+- Projected the overloads and iterable declaratively through Web IDL.
+- Exported the implementation entry-list access that Fetch needs for Body
+  extraction;
   do not expose mutable storage as public API.
-- Leave `FormData(form, submitter)` visibly unavailable until HTML forms can
+- Kept `FormData(form, submitter)` visibly unavailable until HTML forms can
   construct an entry list and validate the submitter.
+
+The declaration deliberately retains the normative `HTMLFormElement` and
+`HTMLElement?` argument types. `HTMLFormElement` is not yet defined, so a
+supplied form fails at Web IDL conversion; an implementation guard preserves
+the same stopping point after that interface exists but before HTML's form
+ownership, successful-controls, `formdata` event, and construct-the-entry-list
+algorithms are complete. This is a dependency marker, not a substitute form
+implementation.
 
 Multipart encoding and parsing do not belong in this slice. They are Fetch
 algorithms consuming this entry-list model.
 
-**Exit proof:** order, duplicates, replacement position, Blob/File naming,
-conversion, iteration, and realm-correct projection pass focused tests. Fetch
-can consume the entry list without calling author-facing methods.
+**Exit proof:** complete for the no-form core. Order, duplicates, replacement
+position, Blob/File naming and identity, conversion, live iteration, and
+realm-correct projection pass focused tests. Fetch can consume the entry list
+without calling author-facing methods. The form constructor remains attributed
+to the HTML forms dependency above.
 
 ### Slice 3 — XMLHttpRequest local state and synchronous-free surface
 

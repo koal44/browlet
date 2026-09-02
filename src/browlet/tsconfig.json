@@ -16,6 +16,7 @@
     { "path": "../streams" },
     { "path": "../url" },
     { "path": "../file" },
+    { "path": "../xhr" },
     { "path": "../stylelet" }
   ]
 }

@@ -4,6 +4,7 @@ import { styleletIDLDefinitions } from '../stylelet/web-idl';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions } from '../url/api';
 import { originIDL } from '../url/origin-api';
+import { xhrIDLDefinitions } from '../xhr/index';
 import {
   createBindings, type BindingWorld, type RealmBindings,
 } from '../web-idl/index';
@@ -22,6 +23,7 @@ import { htmlIDLDefinitions } from './html/web-idl';
 import { domExceptionCapabilities } from './integration/dom-exception';
 import { fileCapabilities } from './integration/file/capabilities';
 import { streamsCapabilities } from './integration/streams';
+import { xhrCapabilities } from './integration/xhr';
 import { mathMLIDLDefinitions } from './mathml/web-idl';
 import {
   domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
@@ -126,6 +128,7 @@ const browletCapabilities = [
   ...domExceptionCapabilities,
   ...fileCapabilities,
   ...streamsCapabilities,
+  ...xhrCapabilities,
 ];
 
 const browletDefinitions = [
@@ -152,6 +155,7 @@ const browletDefinitions = [
   ...streamsIDLDefinitions,
   ...encodingIDLDefinitions,
   ...fileIDLDefinitions,
+  ...xhrIDLDefinitions,
   ...urlIDLDefinitions,
 ];
 

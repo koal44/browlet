@@ -91,12 +91,13 @@ describe('File API Blob projection', () => {
     expect(slice).not.toBeInstanceOf(requireFunction(second, 'Blob'));
   });
 
-  it('adopts the projection realm for a host-created Blob', () => {
+  it('preserves the construction realm for a host-created Blob', () => {
     const first = createWindow();
     const second = createWindow();
+    const context = browletBindings.forRealm(getRelevantRealm(first)).context;
     const blob = projectBlob(
       first,
-      new BlobImpl('\n', ['A']),
+      context.construct(BlobImpl, ['A']),
     );
     const secondBlobPrototype = requireObject(
       requireFunction(second, 'Blob'),
@@ -187,7 +188,6 @@ describe('File API Blob projection', () => {
       read: () => Promise.reject(new BlobReadFailure('SnapshotState')),
     };
     const implementation = BlobImpl.create(
-      '\n',
       BlobData.fromSource(source),
       '',
       source.snapshotState,

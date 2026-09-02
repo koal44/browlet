@@ -2,6 +2,7 @@ import type { ObservableArrayHandle } from '../shared/observable-array';
 import type { AssembledInterface } from './assembly';
 import type { AttributeMember } from './declaration/index';
 import type { WebIDLRealmHost } from './javascript-realm';
+import type { BindingContext } from './projection';
 
 export class PlatformObjectRegistry {
   // One registry belongs to one binding world. A separate world can therefore
@@ -9,16 +10,17 @@ export class PlatformObjectRegistry {
   #implementationOrigins = new WeakMap<object, PlatformImplementationOrigin>();
   #implementationRecords = new WeakMap<object, PlatformObjectRecord>();
   #objectRecords = new WeakMap<object, PlatformObjectRecord>();
-  #realmProjectors = new WeakMap<WebIDLRealmHost, PlatformObjectProjector>();
+  #realmBindings = new WeakMap<WebIDLRealmHost, RealmPlatformBinding>();
 
   registerRealm(
     realm: WebIDLRealmHost,
+    context: BindingContext,
     project: PlatformObjectProjector,
   ): void {
-    if (this.#realmProjectors.has(realm)) {
+    if (this.#realmBindings.has(realm)) {
       throw new TypeError('Realm already has a platform-object projector');
     }
-    this.#realmProjectors.set(realm, project);
+    this.#realmBindings.set(realm, { context, project });
   }
 
   associateOrigin(
@@ -42,11 +44,11 @@ export class PlatformObjectRegistry {
   projectImplementationOrigin(implementation: object): object {
     const origin = this.#implementationOrigins.get(implementation);
     if (!origin) throw new TypeError('Implementation object has no origin');
-    const project = this.#realmProjectors.get(origin.realm);
-    if (!project) {
+    const binding = this.#realmBindings.get(origin.realm);
+    if (!binding) {
       throw new TypeError('Implementation origin has no registered realm');
     }
-    return project(implementation, origin.primaryInterface);
+    return binding.project(implementation, origin.primaryInterface);
   }
 
   associate(
@@ -103,6 +105,10 @@ export class PlatformObjectRegistry {
     return isObject(value)
       ? this.#implementationOrigins.get(value)
       : undefined;
+  }
+
+  getBindingContext(realm: WebIDLRealmHost): BindingContext | undefined {
+    return this.#realmBindings.get(realm)?.context;
   }
 
   getImplementationObject(value: unknown): object | undefined {
@@ -162,6 +168,11 @@ type PlatformObjectProjector = (
   implementation: object,
   primaryInterface: AssembledInterface,
 ) => object;
+
+type RealmPlatformBinding = {
+  context: BindingContext;
+  project: PlatformObjectProjector;
+};
 
 export type PlatformObjectRecord = {
   implementation: object;

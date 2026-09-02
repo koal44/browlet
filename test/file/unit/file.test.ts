@@ -7,7 +7,6 @@ import {
 describe('File API §4: File', () => {
   it('extends Blob with captured name and modification metadata', async () => {
     const file = new FileImpl(
-      '\n',
       ['a\nb'],
       'notes.txt',
       {
@@ -15,6 +14,7 @@ describe('File API §4: File', () => {
         lastModified: 42,
         type: 'Text/PLAIN',
       },
+      '\n',
     );
 
     expect(file).toBeInstanceOf(BlobImpl);
@@ -27,10 +27,10 @@ describe('File API §4: File', () => {
   it('captures its default modification time once during construction', () => {
     let currentTime = 100;
     const file = new FileImpl(
-      '\n',
       [],
       'empty',
       {},
+      undefined,
       () => currentTime++,
     );
 
@@ -41,13 +41,11 @@ describe('File API §4: File', () => {
 
   it('shares File parts through inherited Blob processing', async () => {
     const first = new FileImpl(
-      '\n',
       ['first'],
       'first.txt',
       { lastModified: 1 },
     );
     const second = new FileImpl(
-      '\n',
       [first, '-second'],
       'second.txt',
       { lastModified: 2 },
@@ -60,13 +58,11 @@ describe('File API §4: File', () => {
 
 describe('File API §5: FileList', () => {
   const first = new FileImpl(
-    '\n',
     [],
     'first',
     { lastModified: 1 },
   );
   const second = new FileImpl(
-    '\n',
     [],
     'second',
     { lastModified: 2 },
@@ -92,4 +88,3 @@ describe('File API §5: FileList', () => {
     expect([...list]).toEqual([second, first]);
   });
 });
-

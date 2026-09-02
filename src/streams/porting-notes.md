@@ -27,7 +27,7 @@ boundary rules in
   boundary, while retaining the construction realm across borrowed methods.
   The implementation must never import Browlet's Window.
 - The former `StreamEnvironment` façade has been removed. Realm-sensitive
-  runtime services use the shared Realm Context, realm-neutral algorithms are
+  runtime services use the shared Binding Context, realm-neutral algorithms are
   direct imports, and the two genuine cross-specification dependencies--HTML
   structured cloning and DOM `AbortController` creation--are narrow,
   independently registered capabilities. Do not recreate a Streams-specific
@@ -39,7 +39,7 @@ boundary rules in
   and registers its internal abort algorithm directly through a host-neutral
   structural contract. It does not reverse through Web IDL or call the
   projected `AbortSignal` event-listener API.
-- The focused implementation tests use Browlet's real Realm Context, Web IDL
+- The focused implementation tests use Browlet's real Binding Context, Web IDL
   promise records, conversions, and projections. They fake only structured
   cloning and AbortController creation, the two external capabilities under
   test; do not restore a miniature Streams runtime.
@@ -48,7 +48,7 @@ boundary rules in
   global interface; Streams never calls the projected author-facing
   `structuredClone()` method. Exceptions from that semantic boundary are
   realized by Web IDL in the stream realm before they reject stream promises.
-- Writable-stream state and Realm Context live directly on the stream, writer,
+- Writable-stream state and Binding Context live directly on the stream, writer,
   and controller implementations. Separate platform objects already keep that
   state author-invisible; a sidecar `WeakMap` would duplicate the Binding
   boundary. Operations import those implementation types only, so their direct
@@ -60,7 +60,7 @@ boundary rules in
   their cycle group on their first line, and no cross-cycle binding may execute
   during module initialization.
 - Ambient `Promise`, `queueMicrotask`, errors, and buffer constructors must use
-  the shared Realm Context where the specification requires the relevant
+  the shared Binding Context where the specification requires the relevant
   realm. `AbortController` construction remains a narrow cross-specification
   capability. Do not group these unrelated dependencies into a host façade.
 - Transferable-stream steps are deliberately deferred. They belong to the
@@ -205,7 +205,7 @@ alternative, and keep the no-top-level-execution invariant tested.
 ### Slice 5 result
 
 - `src/streams/index.ts` is the stable §9 entry for other specifications.
-  Readable, writable, and transform creation goes through the Realm Context's
+  Readable, writable, and transform creation goes through the Binding Context's
   internal implementation-construction path, while operations that merely
   rename an existing abstract operation are direct aliases rather than wrapper
   functions. No subsystem-private environment or service registry was added.
@@ -245,7 +245,7 @@ alternative, and keep the no-top-level-execution invariant tested.
 - [x] Project boundary, license, and declaration aggregation
 - [x] Queue-with-sizes and queuing-strategy extraction algorithms
 - [x] `ByteLengthQueuingStrategy` and `CountQueuingStrategy`
-- [x] Replace `StreamEnvironment` with the shared Realm Context, direct shared
+- [x] Replace `StreamEnvironment` with the shared Binding Context, direct shared
   algorithms, and narrow cross-specification capabilities
 - [x] Ordinary stream state, default controller, and default reader
 - [x] Byte readable streams and BYOB readers

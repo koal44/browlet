@@ -89,14 +89,14 @@ Create modules only as their behavior arrives. The likely final division is:
 | `blob-url-store.ts` | User-agent store, entry generation/removal/resolution, partition checks, and environment cleanup | §§8.2–8.4 |
 | `file-reader.ts` | Asynchronous reader state, methods, cancellation, stream consumption, and event sequencing | §§6.1–6.4 and 7 |
 | `package-data.ts` | Data URL, text, ArrayBuffer, and binary-string materialization | §6.3 |
-| `integration.ts` | Separate native-line-ending and wall-clock Host Ports plus the File-reading scheduler capability. Keep future UUID and host-I/O effects with their actual owner rather than rebuilding a service bag | Cross-cutting |
+| `integration.ts` | Native-line-ending policy plus the File-reading scheduler capability. Keep future UUID and host-I/O effects with their actual owner rather than rebuilding a service bag | Cross-cutting |
 | `web-idl.ts` | Lossless File API definitions and cross-package contributions assembled by Browlet | §§3–6 and 8.4 |
 
 The HTML structured-data implementation will own the registered Serializable
 capabilities for Blob, File, and FileList because HTML defines the generic
 serialization machinery. `src/file` will export narrow state accessors so that
 the Browlet integration can implement the File API's normative serialization
-and deserialization steps without duplicating semantic state.
+and deserialization steps without duplicating Blob state.
 
 ## Dependency ledger
 
@@ -107,8 +107,8 @@ and deserialization steps without duplicating semantic state.
 | Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding`, including internal access to a `TextDecoderStream`'s associated actual `TransformStream` | Blob text APIs are always UTF-8; FileReader text decoding instead honors labels and MIME parameters |
 | Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, read-all-bytes, and piping through an actual `TransformStream` | Reuse these exact boundaries. Do not widen the transform helper to an arbitrary readable/writable pair or call projected author methods from internal algorithms |
 | HTML parallel work, global tasks, event loop, and time | §§3, 6.1–6.4 | Blob reads use a narrow File-reading capability for Browlet's shared `runInParallel()` policy and the file-reading task source; native line endings come from the Node platform and File's wall-clock default uses `Date.now()` | FileReader still needs an owner/cancellation identity for removing only its queued tasks and monotonic progress timing. Do not scan or mutate private queues from File code |
-| DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader's semantic read state in `src/file`; Browlet supplies the EventTarget implementation, handler composition, realm-correct exceptions, and dispatch |
-| XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Roadmapped as XHR slice 1, not implemented | Implement that bounded XHR slice before exposing FileReader. File API must not create a private lookalike event |
+| DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader's read state in `src/file`; Browlet supplies the EventTarget implementation, handler composition, realm-correct exceptions, and dispatch |
+| XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Implemented in `src/browlet/dom/events/progress-event.ts`, with XHR contributing its declaration | Reuse that event and helper when implementing FileReader; File API must not create a private lookalike event |
 | HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
 | MIME parsing and file-type policy | §§3.2, 4, and 6.3 | MIME parsing/sniffing is implemented; host-selected file type discovery is not | Constructed type normalization is entirely File API-owned. A future file-selection host may provide a validated MIME type under the file-type guidelines; never sniff an encoding statistically |
 | URL records, parsing, origins, and serialization | §8 | Implemented in `src/url`; blob-entry lookup is explicitly provisional and always null | Add an explicit resolver seam so a host parse can attach the User Agent's entry without making URL depend on File. Remove the provisional private entry shape rather than adding a second parser |
@@ -119,7 +119,7 @@ and deserialization steps without duplicating semantic state.
 | MediaSource | §8 and the partial `URL` interface | Not implemented | Keep MediaSource-capable store typing extensible, but do not invent MediaSource or publish a knowingly false Blob-only signature for the normative union. Reassess declaration assembly when exposing `createObjectURL()` |
 | Worker globals | §§3–6 and 8 | Worker execution/lifecycle is roadmapped but incomplete | Preserve exposure metadata. Blob/File core remains usable in Window; FileReaderSync and executable worker installation wait for real worker globals |
 | Native file selection and filesystem access | §§4, 7, and 9 | Constructed Files and the opaque host-source factory exist; HTML selection, drag-and-drop, permission UI, and a host-file backend do not | The future selecting host supplies sanitized metadata and an existing byte source; never read arbitrary paths or expose a path-based constructor |
-| Wall-clock time | §4.1 | Implemented as a narrow File clock capability over Browlet's wall clock | Capture a constructed File's default once; read again only for a host file whose modification time remains unknown |
+| Wall-clock time | §4.1 | Uses the directly available ECMAScript `Date.now()` operation | Capture a constructed File's default once; read again only for a host file whose modification time remains unknown |
 | UUID generation | §8.2 | The runtime can generate UUIDs, but `src/file` has no narrow composition seam for it | Add the operation with the blob-URL store; do not import Node crypto into the project |
 
 ## Delivery order
