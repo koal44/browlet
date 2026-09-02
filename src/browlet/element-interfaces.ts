@@ -1,6 +1,6 @@
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
-} from '../shared/namespaces';
+} from '../infra/index';
 import {
   elementInterface, type ElementInterface,
 } from './dom/nodes/element';

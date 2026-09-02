@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AttrImpl } from '../../../../../src/browlet/dom/nodes/attribute';
 import { DocumentImpl } from '../../../../../src/browlet/dom/nodes/document';
-import { XML_NAMESPACE } from '../../../../../src/shared/namespaces';
+import { XML_NAMESPACE } from '../../../../../src/infra/index';
 
 describe('Element attributes', () => {
   it('looks up unnamespaced attributes by qualified name', () => {

@@ -7,7 +7,7 @@ import {
   isHtmlOption, isHtmlProgress, isHtmlSelect, isHtmlSvgOrMathElement, isHtmlTextArea, isIFrame,
   type FormStateElement,
 } from '../../shared/dom';
-import { XML_NAMESPACE } from '../../shared/namespaces';
+import { XML_NAMESPACE } from '../../infra/index';
 import type { Snapshot } from '../snapshot';
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,

@@ -6,7 +6,7 @@ import {
 } from '../../../../../src/browlet/dom/infra/name-validation';
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
-} from '../../../../../src/shared/namespaces';
+} from '../../../../../src/infra/index';
 
 describe('DOM name validation', () => {
   it('validates namespace prefixes', () => {

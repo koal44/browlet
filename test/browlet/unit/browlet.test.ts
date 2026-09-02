@@ -13,7 +13,7 @@ import { fireEvent } from '../../../src/browlet/dom/events/event-target';
 import { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
-} from '../../../src/shared/namespaces';
+} from '../../../src/infra/index';
 import { serializeOrigin } from '../../../src/url/origin';
 
 describe('Browlet', () => {

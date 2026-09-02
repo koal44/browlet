@@ -7,7 +7,7 @@ import type {
 } from './selectlet';
 import { escapeRegExp } from '../shared/css';
 import { isDocument, isElement, isHtmlDoc, isQuirksMode } from '../shared/dom';
-import { HTML_NAMESPACE } from '../shared/namespaces';
+import { HTML_NAMESPACE } from '../infra/index';
 import { TextCursorError } from '../shared/text-cursor';
 import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';

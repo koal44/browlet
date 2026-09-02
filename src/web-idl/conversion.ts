@@ -1,4 +1,4 @@
-import { toScalarValueString } from '../shared/strings';
+import { toScalarValueString } from '../infra/index';
 import type {
   AssembledDictionary, AssembledInterface, DefinitionAssembly,
 } from './assembly';

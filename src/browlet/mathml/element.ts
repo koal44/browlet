@@ -1,7 +1,7 @@
 import {
   defineElementInterface, type ElementCreationContext, ElementImpl,
 } from '../dom/nodes/element';
-import { MATHML_NAMESPACE } from '../../shared/namespaces';
+import { MATHML_NAMESPACE } from '../../infra/index';
 import {
   defineIncludes, defineInterface,
 } from '../../web-idl/declaration/index';

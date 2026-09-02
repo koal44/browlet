@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE } from '../../../shared/namespaces';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   defineElementInterface, type ElementCreationContext,
 } from '../../dom/nodes/element';

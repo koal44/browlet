@@ -1,6 +1,6 @@
 import type { BlobImpl } from '../file/blob';
 import type { FileImpl } from '../file/file';
-import type { ScalarValueString } from '../shared/strings';
+import type { ScalarValueString } from '../infra/index';
 import { defineCapability } from '../web-idl/capability';
 import {
   arg, contextValue, ctor, defineInterface, defineTypedef, idlType, impl, iter,

@@ -2,7 +2,7 @@ import { isomorphicDecode } from '@exodus/bytes/encoding-lite.js';
 
 import { decode, getEncoding } from '../encoding/hooks';
 import { parseMIMEType } from '../mime/index';
-import { forgivingBase64Encode } from '../shared/base64';
+import { forgivingBase64Encode } from '../infra/index';
 import { createArrayBuffer } from '../web-idl/buffer-source';
 import type { BindingContext } from '../web-idl/projection';
 

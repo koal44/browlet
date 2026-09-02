@@ -2,7 +2,7 @@ import {
   defineElementInterface, type ElementCreationContext, ElementImpl,
   type LinkStyleInit,
 } from '../../dom/nodes/element';
-import { HTML_NAMESPACE } from '../../../shared/namespaces';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   defineIncludes, defineInterface,
 } from '../../../web-idl/declaration/index';

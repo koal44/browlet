@@ -17,7 +17,7 @@ import {
 import { impl } from '../../../web-idl/index';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
-} from '../../../shared/namespaces';
+} from '../../../infra/index';
 import { asciiLower } from '../../../shared/css';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,

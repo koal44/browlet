@@ -22,7 +22,7 @@ import {
 import type { ElementImpl } from '../dom/nodes/element';
 import type { PermissionsPolicy } from './policy/permissions';
 import type { SandboxingFlagSet } from './policy/sandbox';
-import { HTML_NAMESPACE } from '../../shared/namespaces';
+import { HTML_NAMESPACE } from '../../infra/index';
 import {
   createOpaqueOrigin, serializeOrigin, type Origin,
 } from '../../url/origin';
