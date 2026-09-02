@@ -5,7 +5,7 @@ import {
 } from '../../../shared/dom-exception';
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
-} from '../../../shared/namespaces';
+} from '../../../infra/index';
 
 const INVALID_NAMESPACE_PREFIX_RE = /[\t\n\f\r \0/>]/;
 const INVALID_ATTRIBUTE_LOCAL_NAME_RE = /[\t\n\f\r \0/=>]/;

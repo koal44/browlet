@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   forgivingBase64Decode, forgivingBase64Encode,
-} from '../../../src/shared/base64';
+} from '../../../src/infra/index';
 
 describe('Infra section 7 forgiving base64', () => {
   it.each([

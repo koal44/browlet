@@ -8,7 +8,7 @@ import {
 } from '../../../../src/browlet/html/elements/html-element';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
-} from '../../../../src/shared/namespaces';
+} from '../../../../src/infra/index';
 
 describe('ElementCSSInlineStyle', () => {
   it('exposes a same-object declaration block initialized from the attribute', () => {

@@ -10,6 +10,7 @@ export default defineConfig({
           environment: 'node',
           include: [
             'test/selectlet/unit/**/*.test.ts',
+            'test/infra/unit/**/*.test.ts',
             'test/shared/unit/**/*.test.ts',
             'test/mime/unit/**/*.test.ts',
             'test/encoding/unit/**/*.test.ts',

@@ -1,5 +1,5 @@
 import { escapeRegExp } from '../shared/css';
-import { HTML_NAMESPACE } from '../shared/namespaces';
+import { HTML_NAMESPACE } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
 
 export class Snapshot {

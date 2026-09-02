@@ -15,7 +15,7 @@ import { EventImpl } from '../../../../../src/browlet/dom/events/event';
 import { EventTargetImpl } from '../../../../../src/browlet/dom/events/event-target';
 import { BrowsingContext } from '../../../../../src/browlet/browsing/browsing-context';
 import { WindowImpl } from '../../../../../src/browlet/browsing/window/window';
-import { HTML_NAMESPACE } from '../../../../../src/shared/namespaces';
+import { HTML_NAMESPACE } from '../../../../../src/infra/index';
 import { parseURL, type URLRecord } from '../../../../../src/url/url';
 
 describe('Document', () => {

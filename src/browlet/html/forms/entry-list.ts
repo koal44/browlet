@@ -1,5 +1,5 @@
 import { FileImpl } from '../../../file/file';
-import { toScalarValueString } from '../../../shared/strings';
+import { toScalarValueString } from '../../../infra/index';
 import type { CreateFormDataEntry } from '../../../xhr/form-data';
 
 /**

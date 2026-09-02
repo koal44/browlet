@@ -7,7 +7,7 @@ import {
 } from '../../../web-idl/declaration/index';
 import { bind, impl } from '../../../web-idl/index';
 import { asciiLower } from '../../../shared/css';
-import { HTML_NAMESPACE } from '../../../shared/namespaces';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
 

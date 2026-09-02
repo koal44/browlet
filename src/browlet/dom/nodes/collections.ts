@@ -3,7 +3,7 @@ import {
   roAttr, reference, xattr,
 } from '../../../web-idl/declaration/index';
 import { bind, impl } from '../../../web-idl/index';
-import { HTML_NAMESPACE } from '../../../shared/namespaces';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import type { ElementImpl } from './element';
 
 export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl>

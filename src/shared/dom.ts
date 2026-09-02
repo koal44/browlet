@@ -1,6 +1,6 @@
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
-} from './namespaces';
+} from '../infra/index';
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;

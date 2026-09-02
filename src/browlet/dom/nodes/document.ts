@@ -42,7 +42,7 @@ import {
 } from './element';
 import {
   HTML_NAMESPACE, type MATHML_NAMESPACE, type SVG_NAMESPACE,
-} from '../../../shared/namespaces';
+} from '../../../infra/index';
 import {
   isDocument, isDocumentType, isElement, NodeImpl, type NodeVirtuals, NodeType,
 } from './node';
