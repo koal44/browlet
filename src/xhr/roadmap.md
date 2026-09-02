@@ -8,15 +8,13 @@ settings, documents, tasks, and other browser-host state. Fetch will supply
 request and response records, bodies, CORS, filtering, controllers, and network
 transport.
 
-This roadmap is intentionally being written before the File API roadmap even
-though implementation should proceed in the opposite order. File API is a
-direct prerequisite of both `FormData` and XMLHttpRequest responses, so its
-analysis should be freshest when implementation begins.
+The Fetch-independent File API foundation is implemented through `Blob`,
+`File`, and `FileList`. XHR §5 `ProgressEvent` is also implemented, including
+realm-correct construction and the fire-a-progress-event operation. The next
+slice is the §4 `FormData` entry-list core.
 
-Do not add a TypeScript project reference or package entry until the first
-implemented slice makes this boundary executable. Do not expose
-`XMLHttpRequest` merely because its declaration can be assembled: its useful
-behavior begins at the Fetch integration boundary.
+Do not expose `XMLHttpRequest` merely because its declaration can be assembled:
+its useful behavior begins at the Fetch integration boundary.
 
 ## Controlling architecture
 
@@ -37,8 +35,10 @@ The three major responsibilities have different owners:
   constructing an entry list from a form. Fetch owns multipart encoding and
   parsing.
 - The XHR Standard defines `ProgressEvent` and the progress-event firing
-  algorithm. Browlet's DOM event subsystem owns the projected `Event` state,
-  dispatch machinery, and inheritance integration.
+  algorithm. Browlet colocates the reusable interface, implementation, and IDL
+  with its DOM event infrastructure, while the nearby XHR citation preserves
+  specification ownership. XHR and FileReader own their respective event
+  sequencing and throttling.
 - The XHR Standard owns the XMLHttpRequest state machine. Fetch owns all
   network policy and I/O below the callbacks supplied by `send()`.
 
@@ -55,9 +55,9 @@ specification's physical file layout. The likely boundary is:
 
 | Planned area | Responsibility | XHR sections |
 | --- | --- | --- |
-| `host.ts` | Relevant global and settings access, fully-active checks, event creation and dispatch, listener observation, task and timer scheduling, clocks, document parsing, and Fetch entry points | §§3.1–3.7 and 5.1 |
 | `form-data.ts` | Entry-list state, construction helpers, mutation and lookup operations, iteration, and Blob/File normalization | §4 |
-| `progress-event.ts` | `ProgressEventInit`, progress data, the IDL contribution, and the fire-a-progress-event algorithm | §§5.1–5.2 |
+| Browlet DOM events | `ProgressEvent`, its IDL, and realm-correct event creation and dispatch | §5 |
+| Browlet integration | Later dependencies remain separate capabilities or Host Ports rather than one XHR service bag | §§3–4 |
 | `xml-http-request.ts` | XMLHttpRequest and upload state, ready states, author-facing properties, and the implementation objects | §§3.1–3.4 |
 | `request.ts` | `open()`, request headers, `send()`, `abort()`, Fetch callbacks, timeout handling, and request-error/end algorithms | §§3.5 and 3.7 |
 | `response.ts` | Response metadata, headers, MIME/encoding selection, bytes, and response materialization | §3.6 |
@@ -70,9 +70,9 @@ only when the implementation establishes the responsibility.
 
 | Dependency | First required by | Present state | Delivery decision |
 | --- | --- | --- | --- |
-| File API `Blob` and `File` | §§3.5.6, 3.6, and 4 | Not implemented | Implement File API first. Do not substitute Node's `Blob` or `File`; XHR and Fetch must share the projected File API objects and implementations |
+| File API `Blob` and `File` | §§3.5.6, 3.6, and 4 | Implemented | Reuse the projected File API objects and implementations shared with Fetch; do not substitute Node's `Blob` or `File` |
 | Fetch records and algorithms | §§3.5–3.7 | Fetch has a detailed roadmap but no implementation | Keep local state independently testable, then stop before `send()` until Fetch supplies headers, bodies, requests, responses, controllers, filtered responses, and callback-driven fetching |
-| DOM `Event` and `EventTarget` | §§3.2–3.3, 3.5–3.7, and 5 | Implemented in Browlet | Export declaration and integration contributions rather than importing Browlet. Add a narrow internal listener-observation seam because upload-listener presence affects CORS preflighting and garbage-collection reachability |
+| DOM `Event` and `EventTarget` | §§3.2–3.3, 3.5–3.7, and 5 | Implemented; `ProgressEvent` is colocated with DOM events | Add listener observation only with the future upload-listener and garbage-collection algorithms that consume it |
 | HTML event handlers | §3.3 | Ordinary handler machinery exists | Contribute the named `on*` attributes through the established event-handler integration path; do not create duplicate listener storage |
 | HTML environment settings and relevant globals | §§3.1 and 3.5.1 | Window realms and settings exist; workers are incomplete | Implement and test Window ownership first through a host contract. Defer worker exposure without changing the core records |
 | Fully-active documents | §§3.5.1 and 3.5.6 | Implemented for the current browsing lifecycle | Ask the host for the relevant Document; do not move navigable or Document state into XHR |
@@ -95,24 +95,30 @@ Implement algorithms in specification order within each slice. Keep normative
 algorithm names and step order where practical. Each slice must be reviewable
 and testable without pretending that a later dependency exists.
 
-### Slice 1 — ProgressEvent foundation
+### Slice 1 — ProgressEvent foundation — implemented
 
-**Scope:** XHR §§5.1–5.2, plus the declarations in §§3.2–3.3 needed to prove
-the event inheritance boundary.
+**Scope:** XHR §5.
 
-- Add `ProgressEventInit` and the `ProgressEvent` declaration contribution.
-- Add semantic storage for `lengthComputable`, `loaded`, and `total` without
-  duplicating base `Event` state.
-- Implement fire a progress event using the target realm's constructor and
-  Browlet's existing dispatch machinery.
-- Establish the internal listener-observation capability needed later by the
-  upload-listener and garbage-collection rules.
-- Preserve the standard's loaded/total rules; do not infer a total when no
-  length is available.
+- Browlet's DOM event subsystem colocates `ProgressEventInit`, the
+  `ProgressEvent` declaration, and `ProgressEventImpl` because it is a reusable
+  concrete `EventImpl` subtype. The XHR §5 citation records the defining
+  specification without manufacturing a package boundary.
+- Event firing reuses the target's trusted-event factory and dispatch
+  machinery.
+- The fire-a-progress-event operation preserves the standard's loaded/total
+  rules and does not infer a total when the supplied length is zero.
+- Projected construction, inherited initialization, Web IDL conversion,
+  target-realm identity, trusted dispatch, and progress values have focused
+  coverage.
 
-**Exit proof:** projected construction, inheritance, initialization defaults,
-realm identity, dispatch, and progress values pass focused tests. No
-XMLHttpRequest interface is exposed yet.
+XHR §5.2 is non-normative guidance for specifications choosing progress-event
+names and ordering; it adds no behavior to `ProgressEvent`. Section 5.3 requires
+a cross-origin consumer to establish an opt-in such as CORS before dispatching
+revealing progress information. That policy belongs to the consuming Fetch/XHR
+algorithm before it calls the firing operation, not to the reusable event or
+dispatch machinery.
+
+**Exit proof:** complete. No XMLHttpRequest interface is exposed yet.
 
 ### Slice 2 — FormData entry-list core
 

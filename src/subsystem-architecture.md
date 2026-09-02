@@ -133,6 +133,21 @@ realm, global, embedder, or author-visible object identity.
 Do not hide an ordinary import behind an environment field. Doing so obscures
 ownership and creates a second call graph without adding an abstraction.
 
+### Source placement and specification provenance
+
+A specification defining an interface does not by itself require a separate
+source package. When a reusable platform type is structurally part of an
+existing implementation family and introduces no independent subsystem
+lifecycle, colocate its implementation and IDL with that family and preserve
+the contributing specification in a nearby citation. `ProgressEvent`, for
+example, is an `EventImpl` subtype shared by XHR and FileReader; its consumers
+own their event sequencing and throttling, but the event type lives with DOM
+events.
+
+Do not split a declaration from its implementation merely to reproduce the
+document boundary between specifications. Introduce an integration seam only
+for a genuine dependency edge or composition decision.
+
 ### Cross-specification capability
 
 A cross-specification capability is a narrow semantic operation owned by one

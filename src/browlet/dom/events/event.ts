@@ -406,7 +406,7 @@ export class EventImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-const eventTimeStamp = contextValue(
+export const eventTimeStamp = contextValue(
   (context: { readonly realm: EventRealm; }) =>
     context.realm.eventTimeStamp(),
 );
