@@ -162,6 +162,10 @@ export class EventLoop {
     eventLoop.#requestTurnIfNeeded();
   }
 
+  static removeTask(eventLoop: EventLoop, task: Task): boolean {
+    return eventLoop.#getTaskQueue(task.source).delete(task);
+  }
+
   static notifyTaskRunnabilityChanged(eventLoop: EventLoop): void {
     eventLoop.#requestTurnIfNeeded();
   }
@@ -309,16 +313,15 @@ export function queueTask(
   document: DocumentImpl | null,
   steps: () => void,
   options: TaskCreationOptions = {},
-): void {
+): Task {
   /*
    * Require the values which HTML permits specifications to imply. The spec
    * warns that those ambient deductions are ambiguous; Browlet callers should
    * normally enter through the global or element wrapper instead.
    */
-  EventLoop.enqueueTask(
-    eventLoop,
-    new Task(source, document, steps, options),
-  );
+  const task = new Task(source, document, steps, options);
+  EventLoop.enqueueTask(eventLoop, task);
+  return task;
 }
 
 export type TaskCreationOptions = {

@@ -7,6 +7,21 @@ css/cssom/StyleSheetList.html
 FileAPI/file/File-constructor-endings.any.js
 # FileAPI/file/File-constructor.any.js otherwise passes; its Window variant
 # additionally requires the separately roadmapped HTMLBodyElement identity.
+FileAPI/reading-data-section/Determining-Encoding.any.js
+FileAPI/reading-data-section/filereader_error.any.js
+FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js
+FileAPI/reading-data-section/filereader_readAsBinaryString.any.js
+FileAPI/reading-data-section/filereader_readAsDataURL.any.js
+FileAPI/reading-data-section/filereader_readAsText.any.js
+FileAPI/reading-data-section/filereader_readystate.any.js
+FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js
+FileAPI/reading-data-section/FileReader-multiple-reads.any.js
+# These three files contain promise-wait sequences between events which File
+# API fires synchronously in one task. They require HTML §8.1.4's cleanup-
+# after-running-script checkpoint, not different FileReader event scheduling:
+# FileAPI/reading-data-section/filereader_abort.any.js
+# FileAPI/reading-data-section/filereader_events.any.js
+# FileAPI/reading-data-section/filereader_result.any.js
 streams/queuing-strategies.any.js
 streams/readable-streams/constructor.any.js
 streams/readable-streams/count-queuing-strategy-integration.any.js

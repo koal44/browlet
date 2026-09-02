@@ -19,7 +19,7 @@ export const fileCapabilities = [
   nativeLineEnding.for(blobIDL, normalizeNativeLineEnding(nodeLineEnding)),
   fileReading.for(windowIDL, {
     queueTask(global, steps) {
-      queueGlobalTask(fileReadingTaskSource, global, steps);
+      return queueGlobalTask(fileReadingTaskSource, global, steps);
     },
     runInParallel,
   }),

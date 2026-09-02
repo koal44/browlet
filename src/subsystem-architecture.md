@@ -148,6 +148,11 @@ Do not split a declaration from its implementation merely to reproduce the
 document boundary between specifications. Introduce an integration seam only
 for a genuine dependency edge or composition decision.
 
+When a complete platform implementation spans a host-neutral subsystem and
+Browlet-owned facilities, keep its implementation state and IDL together on
+the Browlet side of that seam. Do not invent separate facade and browser
+objects solely so each specification can retain a source directory.
+
 ### Cross-specification capability
 
 A cross-specification capability is a narrow semantic operation owned by one
@@ -224,9 +229,11 @@ Browlet's concrete composition root is
 [`browlet/bindings.ts`](browlet/bindings.ts). Its
 [`browlet/integration/`](browlet/integration/README.md) modules may import both
 a standalone subsystem's capability contract and the Browlet-owned
-implementation that satisfies it. Integrations must remain acyclic: they
-consume the Binding Context or global passed by the calling algorithm and must
-not import the assembled `browletBindings` singleton to rediscover either.
+implementation that satisfies it. They may also complete a platform
+implementation which cannot remain host-neutral, as FileReader does with DOM
+events and HTML tasks. Integrations must remain acyclic: they consume the
+Binding Context or global passed by the calling algorithm and must not import
+the assembled `browletBindings` singleton to rediscover either.
 
 ## Composition map
 

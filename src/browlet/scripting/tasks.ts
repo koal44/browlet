@@ -1,6 +1,6 @@
 import type { DocumentImpl } from '../dom/nodes/document';
 import {
-  createTaskSource, type EventLoop, queueTask, type TaskCreationOptions,
+  createTaskSource, EventLoop, queueTask, type TaskCreationOptions,
   type TaskSource,
 } from './event-loop';
 
@@ -43,19 +43,26 @@ export function queueGlobalTask(
   global: object,
   steps: () => void,
   options: TaskCreationOptions = {},
-): void {
+): QueuedTaskHandle {
   const destination = globalTaskDestinations.get(global);
   if (destination === undefined) {
     throw new Error('A global object must have a task destination');
   }
-  queueTask(
+  const task = queueTask(
     source,
     destination.eventLoop,
     destination.getDocument(),
     steps,
     options,
   );
+  return {
+    remove: () => EventLoop.removeTask(destination.eventLoop, task),
+  };
 }
+
+export type QueuedTaskHandle = {
+  remove(): boolean;
+};
 
 export type GlobalTaskDestination = {
   readonly eventLoop: EventLoop;
