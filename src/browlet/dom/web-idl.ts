@@ -9,6 +9,9 @@ import {
   customEventIDL, customEventInitIDL, eventIDL, eventInitIDL,
 } from './events/event';
 import {
+  progressEventIDL, progressEventInitIDL,
+} from './events/progress-event';
+import {
   characterDataIDL, characterDataIncludesChildNodeIDL,
   characterDataIncludesNonDocumentTypeChildNodeIDL,
 } from './nodes/character-data';
@@ -48,6 +51,8 @@ export const domIDLDefinitions: Definition[] = [
   eventInitIDL,
   customEventIDL,
   customEventInitIDL,
+  progressEventIDL,
+  progressEventInitIDL,
   eventTargetIDL,
   eventListenerIDL,
   eventListenerOptionsIDL,

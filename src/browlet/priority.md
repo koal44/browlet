@@ -206,7 +206,7 @@ Current implementation sequence:
 2. **Complete:** Implement the Fetch-independent File API through File and
    FileList.
 3. Implement the Fetch-independent XHR prerequisites consumed by File and
-   Fetch, especially `ProgressEvent` and `FormData`.
+   Fetch. `ProgressEvent` is complete; the `FormData` entry-list core is next.
 4. Implement Fetch's records, author APIs, and first transport slices.
 5. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.
