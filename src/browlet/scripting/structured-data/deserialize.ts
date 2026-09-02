@@ -161,6 +161,8 @@ export function structuredDeserialize(
       platformObject.implementation,
       realm,
       {
+        getImplementation: (value, implementation) =>
+          environment.context.getImplementation(value, implementation),
         subdeserialize: (subSerialized) => {
           if (!isSerializedRecord(subSerialized)) {
             throw new TypeError('Sub-deserialization requires a serialized record');

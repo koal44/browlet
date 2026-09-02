@@ -1,4 +1,4 @@
-import { fileHost } from '../file/index';
+import { fileClockHost, fileHost } from '../file/index';
 import type { CapabilityImplementation } from '../web-idl/capability';
 import { DocumentImpl } from './dom/nodes/document';
 import { WindowImpl, windowIDL } from './browsing/window/window';
@@ -7,6 +7,14 @@ import {
 } from './scripting/event-loop';
 import { queueGlobalTask } from './scripting/tasks';
 import type { UserAgentFileHostOptions } from './user-agent';
+import { wallClock } from './performance/clock';
+
+export const fileClockHostCapability = fileClockHost.for(windowIDL, {
+  currentUnixTime(global) {
+    requireWindow(global);
+    return wallClock.unsafeCurrentTime().milliseconds;
+  },
+}) satisfies CapabilityImplementation;
 
 export const fileHostCapability = fileHost.for(windowIDL, {
   getNativeLineEnding(global) {

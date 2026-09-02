@@ -195,6 +195,9 @@ const unusedSerializationContext: SerializationContext = {
 };
 
 const unusedDeserializationContext: DeserializationContext = {
+  getImplementation() {
+    throw new Error('DOMException steps do not resolve implementations');
+  },
   subdeserialize() {
     throw new Error('DOMException steps do not subdeserialize');
   },

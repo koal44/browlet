@@ -8,19 +8,18 @@ user-agent lifetime, storage partitions, and browser-selected file sources.
 Fetch and XHR will consume the resulting semantic objects; neither should
 redefine them or substitute Node's similarly named globals.
 
-Slices 1 and 2 are implemented. Blob now has immutable segmented backing,
-construction and slicing, projected stream and promise reads, realm-correct
-result objects, cancellation and failure routing, and HTML Serializable
-integration. File, FileList, blob URLs, and FileReader remain below.
+Slices 1 through 3 are implemented. Blob and File now share immutable segmented
+backing, projected stream and promise reads, realm-correct result objects,
+cancellation and failure routing, and HTML Serializable integration. FileList
+preserves owner-controlled mutation, indexed access, and graph identity. Blob
+URLs and FileReader remain below.
 
 The roadmap deliberately puts the Fetch-enabling data model before
 `FileReader`. This is the one departure from specification order. Blob, File,
-FileList, and blob-URL resolution are direct Fetch prerequisites, while
-FileReader is not. FileReader also consumes `ProgressEvent`, which is defined
-by XHR §5 and is therefore a small, genuine cross-specification prerequisite.
-
-Do not add a TypeScript project reference or public package entry until the
-first slice establishes the byte-source contract and executable Blob state.
+and blob-URL resolution are direct Fetch prerequisites; FileList completes the
+file-selection model consumed by HTML and FormData. FileReader is not a Fetch
+prerequisite and also consumes `ProgressEvent`, which is defined by XHR §5 and
+is therefore a small, genuine cross-specification prerequisite.
 
 ## Controlling architecture
 
@@ -48,6 +47,23 @@ a browser-side blob service, and Gecko uses a family of `BlobImpl` backends.
 Those process and IPC architectures are not Browlet requirements. The useful
 lesson is the shared immutable backing-data boundary, not any engine's
 registry topology.
+
+For §§4–5, use WebKit as the primary structural comparison. Its constructed
+`File` delegates Blob-part processing to `Blob`, adds only name and captured
+last-modified state, and its `FileList` keeps mutation private to owners such
+as file inputs and `DataTransfer`. Blink is useful secondary evidence for
+constructor conversion, wall-clock defaults, and current `textStream()`
+integration. Gecko is most useful when designing a future host-file backend
+and read-failure boundary. Its polymorphic file backends, and both engines'
+path, IPC, and registry state, are browser infrastructure rather than a model
+to reproduce in Browlet.
+
+Two engine details are evidence, not precedent. WebKit's host-file
+`lastModified` getter still performs synchronous filesystem I/O and says that
+the result should instead be cached and monitored. Blink's serializer admits
+that a File repeated inside and outside a FileList is not deduplicated. Follow
+the File snapshot model and HTML sub-serialization memory instead of copying
+either divergence.
 
 FileReader similarly does not need a private network loader. Browser engines
 reuse loader-style infrastructure because their Blob backends span files,
@@ -88,12 +104,12 @@ and deserialization steps without duplicating semantic state.
 | --- | --- | --- | --- |
 | Web IDL BufferSource, USVString, dictionaries, promises, indexed properties, and projection | §§3–6 | Implemented | Use declarative definitions and existing BufferSource copy/detachment machinery. Keep realm selection, conversion, and promise projection at the boundary |
 | Infra byte sequences, lists, and Base64 | §§2–6 | Byte/list representations and forgiving Base64 encoding exist in `src/shared` | Reuse the Base64 encoder for Data URLs; do not route through `Buffer` or `btoa()` |
-| Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding` | Reuse the semantic codec operations and projected TextDecoderStream. FileReader text decoding honors labels and MIME parameters; Blob text APIs are always UTF-8 |
-| Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, and read-all-bytes | Reuse this boundary for FileReader; do not call projected author methods from internal algorithms |
+| Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding`, including internal access to a `TextDecoderStream`'s associated actual `TransformStream` | Blob text APIs are always UTF-8; FileReader text decoding instead honors labels and MIME parameters |
+| Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, read-all-bytes, and piping through an actual `TransformStream` | Reuse these exact boundaries. Do not widen the transform helper to an arbitrary readable/writable pair or call projected author methods from internal algorithms |
 | HTML parallel work, global tasks, event loop, and monotonic time | §§3, 6.1–6.4 | Blob reads use the Browlet host's parallel scheduling seam and the file-reading task source; shared monotonic time also exists | FileReader still needs an owner/cancellation identity for removing only its queued tasks. Do not scan or mutate private queues from File code |
 | DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader's semantic read state in `src/file`; Browlet supplies the EventTarget implementation, handler composition, realm-correct exceptions, and dispatch |
 | XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Roadmapped as XHR slice 1, not implemented | Implement that bounded XHR slice before exposing FileReader. File API must not create a private lookalike event |
-| HTML structured data | Serializable declarations in §§3–5 | Blob is registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Register File and FileList when their semantic state arrives. Preserve sub-serialization for FileList |
+| HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
 | MIME parsing and file-type policy | §§3.2, 4, and 6.3 | MIME parsing/sniffing is implemented; host-selected file type discovery is not | Constructed type normalization is entirely File API-owned. A future file-selection host may provide a validated MIME type under the file-type guidelines; never sniff an encoding statistically |
 | URL records, parsing, origins, and serialization | §8 | Implemented in `src/url`; blob-entry lookup is explicitly provisional and always null | Add an explicit resolver seam so a host parse can attach the User Agent's entry without making URL depend on File. Remove the provisional private entry shape rather than adding a second parser |
 | Environment settings and origins | §§8.2–8.4 | Window settings and origins exist; worker settings are incomplete | Blob URL entries retain the creating settings object through a Browlet-owned store. URL generation uses its origin, including implementation-defined serialization for opaque origins |
@@ -102,8 +118,9 @@ and deserialization steps without duplicating semantic state.
 | Document and worker cleanup | §8.3.3 | Full unload/destroy cleanup and worker lifecycle are incomplete | Add one environment-destruction hook that removes matching store entries. Never rely on wrapper garbage collection to revoke URLs |
 | MediaSource | §8 and the partial `URL` interface | Not implemented | Keep MediaSource-capable store typing extensible, but do not invent MediaSource or publish a knowingly false Blob-only signature for the normative union. Reassess declaration assembly when exposing `createObjectURL()` |
 | Worker globals | §§3–6 and 8 | Worker execution/lifecycle is roadmapped but incomplete | Preserve exposure metadata. Blob/File core remains usable in Window; FileReaderSync and executable worker installation wait for real worker globals |
-| Native file selection and filesystem access | §§4, 7, and 9 | HTML file inputs, drag-and-drop selection, permission UI, and a host-file backend do not exist | Implement constructed in-memory Files now. Define the backend contract, snapshot validation, and failure mapping, but do not read arbitrary paths or expose a path-based constructor |
-| Wall-clock time and UUID generation | §§4.1 and 8.2 | The host can supply both; only monotonic timing is centralized today | Add narrow host operations for Unix-epoch milliseconds and UUID generation. Do not use the monotonic clock for `lastModified` or import Node crypto into the project |
+| Native file selection and filesystem access | §§4, 7, and 9 | Constructed Files and the opaque host-source factory exist; HTML selection, drag-and-drop, permission UI, and a host-file backend do not | The future selecting host supplies sanitized metadata and an existing byte source; never read arbitrary paths or expose a path-based constructor |
+| Wall-clock time | §4.1 | Implemented as a narrow File clock capability over Browlet's wall clock | Capture a constructed File's default once; read again only for a host file whose modification time remains unknown |
+| UUID generation | §8.2 | The runtime can generate UUIDs, but `src/file` has no narrow composition seam for it | Add the operation with the blob-URL store; do not import Node crypto into the project |
 
 ## Delivery order
 
@@ -160,28 +177,65 @@ produces identical bytes across chunking strategies, remains independent of
 source BufferSource mutation, propagates read failures, and survives
 structured cloning with distinct wrappers and equivalent immutable data.
 
-### Slice 3 — File and FileList
+#### Generic-transform piping seam (complete)
+
+**Scope:** File API §3.3.6, Streams §9.3's `GenericTransformStream` wrapping
+model and §9.5 piping operation, and Encoding §7.5 `TextDecoderStream`.
+
+File API creates a `TextDecoderStream`, while Streams defines every object
+including `GenericTransformStream` as owning an associated actual
+`TransformStream`. A narrow implementation-only friend operation now exposes
+that association to cross-specification algorithms. `Blob.textStream()` passes
+the actual transform to `pipeReadableStreamThrough()` rather than reconstructing
+its readable/writable pair or calling the projected author API. The binding
+continues to expose only the public `readable` and `writable` attributes.
+
+Blink independently creates the UTF-8 transform and passes its readable and
+writable sides to `pipeThrough()`, confirming the wrapper/underlying-transform
+distinction. WebKit and Gecko do not yet contain `Blob.textStream()` in the
+reviewed checkouts, so they provide no stronger evidence for this new method.
+
+### Slice 3 — File and FileList (implemented)
 
 **Scope:** File API §§4–5.
 
-- Implement File as a Blob semantic subtype with name and last-modified state.
-- Reuse processing blob parts and type normalization; obtain the default
-  modification time from the host wall clock.
+- Implement `FileImpl` as a real `BlobImpl` subtype. Reuse Blob-part
+  processing, immutable backing state, snapshot state, and type normalization
+  rather than copying the Blob model into File.
+- Let Web IDL convert the `USVString` name and inherited `FilePropertyBag`
+  members. For a constructed File, capture the default host wall-clock value
+  once during construction; its `lastModified` is stored state, not a live
+  clock getter.
 - Add an internal factory for host-selected files that accepts an opaque byte
-  source, safe name, validated type, modification time, and captured snapshot.
+  source, safe name, validated type, a known or unknown modification time, and
+  captured snapshot. Only the unknown host-file case reads the wall clock from
+  the getter, as §4 requires.
+- Keep filesystem paths and type discovery in the future selecting host. The
+  File API factory accepts only the already-sanitized metadata and existing
+  byte-source boundary.
 - Implement FileList as an ordered owner-mutable list with `length`, `item()`,
-  supported property indices, and no author constructor.
+  a declarative `indexedGetter()`, exact File identity, and no author
+  constructor. Its "at risk" status does not authorize substituting an Array.
 - Give HTML file inputs and future DataTransfer code explicit owner operations;
   do not make author-facing FileList mutation possible.
-- Register File and FileList Serializable capabilities, including FileList
-  sub-serialization and creation in the target Realm.
+- Register File and FileList Serializable capabilities. File serialization
+  composes the existing Blob state, including its observable MIME type, with
+  name and the current value of `lastModified`. FileList uses HTML
+  sub-serialization rather than copying entries so structured-data graph
+  identity remains intact.
 - Map missing, changed, unsafe, locked, or unreadable host sources to the §7
   failure reasons and DOMException names at the Browlet boundary.
 
-**Exit proof:** constructed File inheritance, metadata defaults, FileList
-indices/identity/order, owner mutation, structured cloning, snapshot failure,
-and target-realm behavior pass focused tests. At this checkpoint XHR FormData
-and Fetch Body can consume Blob and File without FileReader.
+**Exit proof:** the endings WPT and all File-specific constructor assertions
+pass, including required arguments, sequence conversion, inherited dictionary
+members, exception propagation, USVString names, type normalization, and
+explicit/default modification times. The constructor WPT remains unselected
+only because its Window variant also asserts the separately roadmapped
+`HTMLBodyElement` identity. Focused tests cover File inheritance, FileList
+indices/null/identity/order and owner mutation, snapshot failure, target-Realm
+cloning, and repeated File identity through FileList sub-serialization. At this
+checkpoint XHR FormData and Fetch Body can consume Blob and File without
+FileReader.
 
 ### Slice 4 — Blob URL store and URL/Fetch integration
 

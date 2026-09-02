@@ -1,5 +1,6 @@
 import {
-  defineCapability, type InterfaceDefinition, type WebIDLRealmHost,
+  defineCapability, type ImplementationClass, type InterfaceDefinition,
+  type WebIDLRealmHost,
 } from '../../../web-idl/index';
 import type { StructuredDataRecord } from './records';
 
@@ -28,6 +29,10 @@ export type SerializationContext = {
 };
 
 export type DeserializationContext = {
+  getImplementation<T extends object>(
+    value: unknown,
+    implementation: ImplementationClass<T>,
+  ): T | undefined;
   subdeserialize(serialized: unknown): unknown;
 };
 

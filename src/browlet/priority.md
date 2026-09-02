@@ -200,10 +200,11 @@ order. Their public completion must use the Priority 1 task and realm model.
 
 Current implementation sequence:
 
-1. Audit Streams directly against the WHATWG Living Standard in document
-   order, including the inherited module cycles; use the reference
+1. **Complete:** Audit Streams directly against the WHATWG Living Standard in
+   document order, including the inherited module cycles; use the reference
    implementation only as secondary evidence.
-2. Resume the Fetch-independent File API work, beginning with File and FileList.
+2. **Complete:** Implement the Fetch-independent File API through File and
+   FileList.
 3. Implement the Fetch-independent XHR prerequisites consumed by File and
    Fetch, especially `ProgressEvent` and `FormData`.
 4. Implement Fetch's records, author APIs, and first transport slices.
