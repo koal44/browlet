@@ -58,11 +58,11 @@ export class Realm implements WebIDLRealmHost {
   #globalThis: object;
   #hostDefined: EnvironmentSettingsObject | null = null;
   readonly #hostGlobal: RealmGlobal;
-  static #callbackContexts: unknown[] = [];
+  /*
+   * ACCOMMODATION(node-v8-object-realms): ECMAScript does not expose [[Realm]]
+   * for arbitrary objects, so retain associations for objects Browlet sees.
+   */
   static #evaluatingRealm: Realm | undefined;
-  // Provisional userland substitute for ECMAScript's inaccessible [[Realm]].
-  // Every Realm shares this weak association for callback lookup; it should
-  // move or narrow when HTML section 8.1 owns the full realm environment.
   static #objectRealms = new WeakMap<object, Realm>();
 
   constructor(options: RealmOptions = {}) {
@@ -233,25 +233,41 @@ export class Realm implements WebIDLRealmHost {
       typeError: Reflect.get(this.#hostGlobal, 'TypeError') as typeof TypeError,
       uriError: URIError_,
     };
-    // TODO(HTML sections 8.1.4 and 8.1.5): Replace the synchronous
-    // callback-context model and script no-ops with environment-settings and
-    // execution-context machinery when Browlet implements those sections.
     this.callbacks = {
-      captureContext: () => Realm.#callbackContexts.at(-1) ??
-        Realm.#evaluatingRealm ?? this,
-      cleanUpAfterRunningCallback: (context) => {
-        if (Realm.#callbackContexts.at(-1) !== context) {
-          throw new Error('Web IDL callback contexts were cleaned up out of order');
-        }
-        Realm.#callbackContexts.pop();
+      /* Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3. */
+      captureContext: () => {
+        const settings = this.#hostDefined;
+        if (settings === null) return this;
+        return settings.responsibleEventLoop
+          .getIncumbentSettingsObject(settings);
       },
-      cleanUpAfterRunningScript: () => {},
+      cleanUpAfterRunningCallback: (context) => {
+        const settings = this.#getCallbackSettings(context);
+        if (settings !== null) {
+          settings.responsibleEventLoop
+            .cleanUpAfterRunningCallback(settings);
+        }
+      },
+      cleanUpAfterRunningScript: () => {
+        const settings = this.#hostDefined;
+        if (settings !== null) {
+          settings.responsibleEventLoop.cleanUpAfterRunningScript(settings);
+        }
+      },
       getAssociatedRealm: (value) =>
         Realm.#getAssociatedRealm(value) ?? this,
       prepareToRunCallback: (context) => {
-        Realm.#callbackContexts.push(context);
+        const settings = this.#getCallbackSettings(context);
+        if (settings !== null) {
+          this.agent.eventLoop.prepareToRunCallback(settings);
+        }
       },
-      prepareToRunScript: () => {},
+      prepareToRunScript: () => {
+        const settings = this.#hostDefined;
+        if (settings !== null) {
+          settings.responsibleEventLoop.prepareToRunScript(settings);
+        }
+      },
       reportException: (exception) => {
         // TODO(HTML section 8.1.5): Report through the realm's error-reporting
         // machinery once Browlet implements it.
@@ -292,19 +308,28 @@ export class Realm implements WebIDLRealmHost {
   }
 
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    const previous = Realm.#evaluatingRealm;
-    Realm.#evaluatingRealm = this;
-    try {
-      const result = runInContext(source, this.#context, {
-        displayErrors: false,
-        filename,
-        lineOffset,
-      }) as unknown;
-      if (isObject(result)) Realm.#objectRealms.set(result, this);
-      return result;
-    } finally {
-      Realm.#evaluatingRealm = previous;
-    }
+    const evaluate = (): unknown => {
+      const previous = Realm.#evaluatingRealm;
+      Realm.#evaluatingRealm = this;
+      try {
+        const result = runInContext(source, this.#context, {
+          displayErrors: false,
+          filename,
+          lineOffset,
+        }) as unknown;
+        if (isObject(result)) Realm.#objectRealms.set(result, this);
+        return result;
+      } finally {
+        Realm.#evaluatingRealm = previous;
+      }
+    };
+
+    const settings = this.#hostDefined;
+    if (settings === null) return evaluate();
+    return settings.responsibleEventLoop.runScriptEvaluation(
+      settings,
+      evaluate,
+    );
   }
 
   eventTimeStamp(): DOMHighResTimeStamp {
@@ -412,10 +437,12 @@ export class Realm implements WebIDLRealmHost {
     associateGlobalTaskDestination(globalObject, taskDestination);
     associateGlobalTaskDestination(globalThis, taskDestination);
     Realm.#installDefaultGlobalBindings(realm);
-    // Node cannot make an existing WindowProxy the VM context's actual
-    // global-this. Inherit through the specified global-this so free global
-    // names still reach the modeled Window graph; top-level `this` remains
-    // the documented host limitation.
+    /*
+     * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing
+     * WindowProxy the VM context's actual global-this. Inherit through the
+     * specified global-this so free global names still reach the modeled
+     * Window graph; top-level `this` remains the documented limitation.
+     */
     Reflect.setPrototypeOf(realm.#hostGlobal, globalThis);
     Object.defineProperty(realm.#hostGlobal, 'globalThis', {
       configurable: true,
@@ -443,6 +470,17 @@ export class Realm implements WebIDLRealmHost {
     return WindowImpl.is(this.#globalObject)
       ? this.#globalObject
       : undefined;
+  }
+
+  #getCallbackSettings(
+    context: object,
+  ): EnvironmentSettingsObject | null {
+    if (this.#hostDefined === null && context instanceof Realm) return null;
+    const settings = context as EnvironmentSettingsObject;
+    if (settings.realmExecutionContext.realm.hostDefined === settings) {
+      return settings;
+    }
+    throw new Error('A JavaScript callback context is not a settings object');
   }
 
   static #installDefaultGlobalBindings(realm: Realm): void {

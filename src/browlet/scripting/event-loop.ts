@@ -10,6 +10,11 @@ import type { EnvironmentSettingsObject } from './environment';
  * https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
  */
 export class EventLoop {
+  /* HTML §8.1.3.3 — Backup incumbent settings object stack. */
+  readonly #backupIncumbentSettingsObjectStack:
+  EnvironmentSettingsObject[] = [];
+  readonly #javaScriptExecutionContextStack: TrackedExecutionContext[] = [];
+  #activeJavaScriptMicrotaskCheckpoint: (() => void) | null = null;
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
@@ -84,13 +89,19 @@ export class EventLoop {
 
     let taskError: { readonly value: unknown; } | null = null;
     this.#currentlyRunningTask = oldestTask;
+    this.#activeJavaScriptMicrotaskCheckpoint =
+      options.performMicrotaskCheckpoint;
     try {
       oldestTask.steps();
     } catch (error) {
       taskError = { value: error };
     } finally {
       this.#currentlyRunningTask = null;
-      this.performMicrotaskCheckpoint(options.performMicrotaskCheckpoint);
+      try {
+        this.performMicrotaskCheckpoint(options.performMicrotaskCheckpoint);
+      } finally {
+        this.#activeJavaScriptMicrotaskCheckpoint = null;
+      }
     }
 
     const taskEndTime = options.unsafeSharedCurrentTime();
@@ -107,6 +118,145 @@ export class EventLoop {
     }
     if (taskError !== null) throw taskError.value;
     return true;
+  }
+
+  /* HTML §8.1.3.3 — The incumbent settings object. */
+  getIncumbentSettingsObject(
+    hostEntrySettings: EnvironmentSettingsObject,
+  ): EnvironmentSettingsObject {
+    const context = findTopmostScriptHavingExecutionContext(
+      this.#javaScriptExecutionContextStack,
+    );
+    if (
+      context !== undefined &&
+      context.skipWhenDeterminingIncumbent === 0
+    ) {
+      return context.settings;
+    }
+
+    const backup = this.#backupIncumbentSettingsObjectStack.at(-1);
+    if (backup !== undefined) return backup;
+
+    /*
+     * ACCOMMODATION(node-v8-execution-contexts):
+     * HTML's algorithm asserts here. A call directly from Browlet's embedder
+     * has no engine-visible ScriptOrModule for userland to inspect, so its
+     * binding realm is the explicit entry boundary.
+     */
+    return hostEntrySettings;
+  }
+
+  /* HTML §8.1.3.3 — Prepare to run a callback. */
+  prepareToRunCallback(settings: EnvironmentSettingsObject): void {
+    if (settings.responsibleEventLoop !== this) {
+      throw new Error('A callback context belongs to another event loop');
+    }
+
+    this.#backupIncumbentSettingsObjectStack.push(settings);
+    const context = findTopmostScriptHavingExecutionContext(
+      this.#javaScriptExecutionContextStack,
+    );
+    if (context !== undefined) context.skipWhenDeterminingIncumbent++;
+  }
+
+  /* HTML §8.1.3.3 — Clean up after running a callback. */
+  cleanUpAfterRunningCallback(settings: EnvironmentSettingsObject): void {
+    const context = findTopmostScriptHavingExecutionContext(
+      this.#javaScriptExecutionContextStack,
+    );
+    if (context !== undefined) {
+      if (context.skipWhenDeterminingIncumbent === 0) {
+        throw new Error('A callback incumbent counter is already zero');
+      }
+      context.skipWhenDeterminingIncumbent--;
+    }
+
+    if (this.#backupIncumbentSettingsObjectStack.at(-1) !== settings) {
+      throw new Error('Callback settings were cleaned up out of order');
+    }
+    this.#backupIncumbentSettingsObjectStack.pop();
+  }
+
+  /* HTML §8.1.4.4 — Prepare to run script. */
+  prepareToRunScript(settings: EnvironmentSettingsObject): void {
+    if (settings.responsibleEventLoop !== this) {
+      throw new Error('Script settings belong to another event loop');
+    }
+
+    const task = this.#currentlyRunningTask;
+    /*
+     * ACCOMMODATION(node-v8-execution-contexts):
+     * HTML §§8.1.4.4 and 8.1.6.2 expect an engine-owned Promise job to have
+     * installed its microtask task before this point. Node does not expose
+     * HostEnqueuePromiseJob, so retain the realm entry when that outer task is
+     * invisible, but do not invent a task or infer that V8's stack is empty.
+     */
+    this.#javaScriptExecutionContextStack.push({
+      kind: 'realm',
+      settings,
+      task,
+    });
+    task?.scriptEvaluationEnvironmentSettingsObjectSet.add(settings);
+  }
+
+  /* HTML §8.1.4.4 — Clean up after running script. */
+  cleanUpAfterRunningScript(settings: EnvironmentSettingsObject): void {
+    const entry = this.#javaScriptExecutionContextStack.at(-1);
+    if (
+      entry?.kind !== 'realm' ||
+      entry.settings !== settings
+    ) {
+      throw new Error('Script settings were cleaned up out of order');
+    }
+    this.#javaScriptExecutionContextStack.pop();
+
+    /*
+     * ACCOMMODATION(node-v8-execution-contexts): A null task means the entry
+     * came from engine-owned work whose surrounding execution stack is hidden.
+     */
+    if (
+      entry.task !== null &&
+      this.#javaScriptExecutionContextStack.length === 0
+    ) {
+      this.#performConfiguredMicrotaskCheckpoint();
+    }
+  }
+
+  /*
+   * HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
+   * The settings and skip counter are the host-visible portion needed for
+   * incumbent selection; the eventual Script record remains §8.1.4.1 work.
+   * ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
+   * a temporary task because Node exposes no surrounding execution context.
+   */
+  runScriptEvaluation<Result>(
+    settings: EnvironmentSettingsObject,
+    steps: () => Result,
+  ): Result {
+    const hostEntryTask = this.#currentlyRunningTask === null
+      ? new Task(hostEntryTaskSource, null, () => {})
+      : null;
+    if (hostEntryTask !== null) this.#currentlyRunningTask = hostEntryTask;
+
+    try {
+      this.prepareToRunScript(settings);
+      const context: ScriptHavingExecutionContext = {
+        kind: 'script',
+        settings,
+        skipWhenDeterminingIncumbent: 0,
+      };
+      this.#javaScriptExecutionContextStack.push(context);
+      try {
+        return steps();
+      } finally {
+        this.#popScriptExecutionContext(context);
+        this.cleanUpAfterRunningScript(settings);
+      }
+    } finally {
+      if (hostEntryTask !== null) {
+        this.#finishHostScriptEntry(hostEntryTask);
+      }
+    }
   }
 
   performMicrotaskCheckpoint(
@@ -141,16 +291,23 @@ export class EventLoop {
     );
 
     /*
+     * ACCOMMODATION(node-v8-microtask-queue):
      * V8 owns the actual microtask queue. Retain Browlet's task record in the
      * closure without creating a second queue whose ordering could diverge.
      * The explicit checkpoint bridge will enter with the processing model.
      */
     globalThis.queueMicrotask(() => {
+      /* HTML §8.1.7.3 — Suppress checkpoints requested by scripted callbacks. */
+      const wasPerformingMicrotaskCheckpoint =
+        this.#performingMicrotaskCheckpoint;
+      this.#performingMicrotaskCheckpoint = true;
       this.#currentlyRunningTask = microtask;
       try {
         microtask.steps();
       } finally {
         this.#currentlyRunningTask = null;
+        this.#performingMicrotaskCheckpoint =
+          wasPerformingMicrotaskCheckpoint;
       }
     });
   }
@@ -198,6 +355,29 @@ export class EventLoop {
       this.#taskQueues.add(queue);
     }
     return queue;
+  }
+
+  #popScriptExecutionContext(context: ScriptHavingExecutionContext): void {
+    if (this.#javaScriptExecutionContextStack.at(-1) !== context) {
+      throw new Error('Script execution contexts were cleaned up out of order');
+    }
+    this.#javaScriptExecutionContextStack.pop();
+  }
+
+  #finishHostScriptEntry(task: Task): void {
+    if (this.#currentlyRunningTask !== task) {
+      throw new Error('A host script entry left another task running');
+    }
+    this.#currentlyRunningTask = null;
+  }
+
+  #performConfiguredMicrotaskCheckpoint(): void {
+    const checkpoint = this.#activeJavaScriptMicrotaskCheckpoint ??
+      this.#schedulingOptions?.performMicrotaskCheckpoint;
+    if (checkpoint === undefined) {
+      throw new Error('The event loop has no microtask checkpoint host');
+    }
+    this.performMicrotaskCheckpoint(checkpoint);
   }
 
   #requestTurnIfNeeded(): void {
@@ -329,6 +509,29 @@ export type TaskCreationOptions = {
 };
 
 const microtaskTaskSource = createTaskSource('microtask');
+const hostEntryTaskSource = createTaskSource('host script entry');
+
+type TrackedExecutionContext =
+  | RealmExecutionContextEntry
+  | ScriptHavingExecutionContext;
+
+type RealmExecutionContextEntry = {
+  readonly kind: 'realm';
+  readonly settings: EnvironmentSettingsObject;
+  readonly task: Task | null;
+};
+
+type ScriptHavingExecutionContext = {
+  readonly kind: 'script';
+  readonly settings: EnvironmentSettingsObject;
+  skipWhenDeterminingIncumbent: number;
+};
+
+function findTopmostScriptHavingExecutionContext(
+  stack: readonly TrackedExecutionContext[],
+): ScriptHavingExecutionContext | undefined {
+  return stack.findLast((context) => context.kind === 'script');
+}
 
 function findFirstRunnableTask(
   taskQueue: ReadonlySet<Task>,
@@ -350,6 +553,7 @@ function selectFirstTaskQueue(
 }
 
 /*
+ * ACCOMMODATION(node-v8-checkpoint):
  * Node does not expose V8's shared microtask queue through a supported
  * synchronous API. This drains Node's ambient V8 queue as well as next-tick
  * and promise-rejection machinery. Keep the provisional operation explicit

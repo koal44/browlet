@@ -10,19 +10,31 @@ through their shared platform-object association. WindowProxy still supplies
 stable event-method forwarding because the userland outer proxy cannot itself
 carry the Window platform-object brand.
 
-Node's VM creates an inaccessible global proxy for every context and cannot
-currently reuse Browlet's WindowProxy as a replacement context's actual
-global-this. The Node adapter therefore keeps that VM global private, points
-its `globalThis` property at the modeled WindowProxy, and inherits free global
-names through it. Ordinary Browlet scripts can reach the modeled Window graph,
-but top-level `this` remains the private VM global. A focused expected-failure
-test records the mismatch.
+### `node-vm-global-proxy`
 
-The provisional JavaScript WindowProxy must report forwarded own descriptors
-as configurable to satisfy `Proxy` target invariants while its Window can be
+Node's VM creates an inaccessible global proxy for every context and cannot
+reuse Browlet's WindowProxy as the context's actual global-this. As an
+accommodation, the Node adapter keeps that VM global private, points its
+`globalThis` property at the modeled WindowProxy, and inherits free global
+names through it.
+
+This accommodation has two observable limitations. Ordinary Browlet scripts
+can reach the modeled Window graph, but top-level `this` remains the private VM
+global. A focused expected-failure test records that mismatch. The provisional
+JavaScript WindowProxy must also report forwarded own descriptors as
+configurable to satisfy `Proxy` target invariants while its Window can be
 replaced. Exact nonconfigurable `[LegacyUnforgeable]` descriptors across
-retargeting require native global-proxy machinery. A focused expected-failure
-test records that mismatch.
+retargeting require native global-proxy machinery, and a second focused
+expected-failure test records that mismatch.
+
+Replace the private VM global, inheritance bridge, and proxy-invariant
+compromises together only when Node exposes a compatible global-proxy API or
+Browlet uses a direct V8 embedder. The Window/WindowProxy identity and
+cross-navigation lifecycle tests remain the required contract. The boundary is
+implemented in [`realm.ts`](./scripting/realm.ts); the observable mismatches
+are recorded in
+[`document-lifecycle.test.ts`](../../test/browlet/unit/browsing/document-lifecycle.test.ts)
+and [`dom-binding.test.ts`](../../test/browlet/unit/dom-binding.test.ts).
 
 The current handler implements only the same-origin, top-level lifecycle
 foundation. Indexed child navigables, cross-origin access checks, and the
@@ -33,6 +45,26 @@ Window named properties currently preserve Browlet's implemented ID-based
 surface, now dynamically through Web IDL's named-properties object. Element
 `name` contributions, child navigables, and the multiple-match HTMLCollection
 result remain for their corresponding HTML machinery.
+
+## Node/V8 event-loop integration
+
+The `node-v8-microtask-queue` accommodation preserves V8's real Promise and
+microtask FIFO order by using its ambient queue, but Browlet cannot isolate the
+queue per HTML event loop. Unrelated host work and work from another Browlet
+instance in the same isolate can therefore interleave.
+
+The `node-v8-checkpoint` accommodation uses private
+`process._tickCallback()` because Node exposes no supported synchronous V8
+checkpoint operation. Besides draining the ambient queue, that function runs
+next-tick and promise-rejection machinery. A nested call made while V8 is
+already draining microtasks can consequently report a temporarily unhandled
+rejection before its adoption job runs. Focused expected-failure tests preserve
+the ambient, nested, fake-clock, and rejection-reporting mismatches.
+
+These are Node integration limitations, not changes to HTML's checkpoint
+algorithm or permission to alter Web IDL promise conversion. Their affected
+code and removal conditions are recorded in
+[the event-loop architecture](./scripting/event-loop-architecture.md#runtime-accommodations).
 
 ## Bounded cross-document navigation
 

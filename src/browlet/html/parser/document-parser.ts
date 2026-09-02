@@ -44,6 +44,9 @@ export class BrowletParser {
     resume: () => void,
   ): Promise<void> {
     try {
+      // TODO(HTML §13.2.6.4): Separate the conditional pre-script microtask
+      // checkpoint from the style-sheet/script-readiness continuation. This
+      // unconditional Promise hop is neither specified boundary.
       // Browlet has no nested navigables, so only this Document can block.
       await DocumentImpl.waitForScriptBlockingStyleSheets(this.document);
       await this.#handleScript(element, write);

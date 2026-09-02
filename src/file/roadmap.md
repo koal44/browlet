@@ -8,18 +8,22 @@ user-agent lifetime, storage partitions, and browser-selected file sources.
 Fetch and XHR will consume the resulting semantic objects; neither should
 redefine them or substitute Node's similarly named globals.
 
-Slices 1 through 3 are implemented. Blob and File now share immutable segmented
+Slices 1–3 and 5–7 are implemented. Blob and File share immutable segmented
 backing, projected stream and promise reads, realm-correct result objects,
 cancellation and failure routing, and HTML Serializable integration. FileList
-preserves owner-controlled mutation, indexed access, and graph identity. Blob
-URLs and FileReader remain below.
+preserves owner-controlled mutation, indexed access, and graph identity.
+FileReader is implemented through §6.4 except for shared global teardown.
+Slice 4, the Blob URL work in §§8.2–8.4, remains deferred until its storage-key
+and Fetch dependencies exist; §6.5 `FileReaderSync` waits for real workers.
 
-The roadmap deliberately puts the Fetch-enabling data model before
-`FileReader`. This is the one departure from specification order. Blob, File,
-and blob-URL resolution are direct Fetch prerequisites; FileList completes the
-file-selection model consumed by HTML and FormData. FileReader is not a Fetch
-prerequisite and also consumes `ProgressEvent`, which is defined by XHR §5 and
-is therefore a small, genuine cross-specification prerequisite.
+The roadmap deliberately put the Fetch-enabling data model before
+`FileReader`. This is the one departure from specification order. Blob and File
+are direct Fetch prerequisites; FileList completes the file-selection model
+consumed by HTML and FormData. FileReader is not a Fetch prerequisite and also
+consumes `ProgressEvent`, which is defined by XHR §5 and was therefore a small,
+genuine cross-specification prerequisite. Blob URL resolution is later
+File/URL/Fetch integration and does not block Fetch's foundational records and
+network-independent APIs.
 
 ## Controlling architecture
 
@@ -109,7 +113,7 @@ and deserialization steps without duplicating Blob state.
 | Encoding labels, UTF-8 operations, and TextDecoderStream | §§3.1, 3.3.3, 3.3.6, and 6.3 | Implemented in `src/encoding`, including internal access to a `TextDecoderStream`'s associated actual `TransformStream` | Blob text APIs are always UTF-8; FileReader text decoding instead honors labels and MIME parameters |
 | Streams byte streams and read-all-bytes operations | §§3 and 6 | Implemented, including the cross-specification byte-stream factory, enqueue/error/close operations, default-reader acquisition, read-all-bytes, and piping through an actual `TransformStream` | Reuse these exact boundaries. Do not widen the transform helper to an arbitrary readable/writable pair or call projected author methods from internal algorithms |
 | HTML parallel work, global tasks, event loop, and time | §§3, 6.1–6.4 | Blob and FileReader reads use a narrow File-reading capability for Browlet's shared `runInParallel()` policy and the file-reading task source; FileReader retains removable handles only for its active operation; native line endings come from the Node platform and File's wall-clock default uses `Date.now()` | Cancellation removes only the active reader's tasks and cancels its Streams reader. Do not scan or mutate private queues from File code |
-| HTML script/callback cleanup and global lifecycle | §§6.2–6.4 | Web IDL invokes callbacks through Browlet's realm hooks, but HTML §8.1.4 cleanup-after-running-script checkpoints and Window/worker destruction are deliberately incomplete | Keep FileReader's specified synchronous event order. Do not split `load`/`loadend` into extra tasks to satisfy promise-based WPT sequencing; enable those tests with the shared callback lifecycle, then cancel outstanding reads from the shared global-destruction hook |
+| HTML script/callback cleanup and global lifecycle | §§6.2–6.4 | HTML §§8.1.3.3 and 8.1.4.4 callback/script preparation, cleanup, and the checkpoint boundary are implemented for Browlet-controlled entries; Window/worker destruction remains incomplete | Keep FileReader's specified synchronous event order. The promise-based event-sequencing WPTs run through the shared lifecycle; later cancel outstanding reads from the shared global-destruction hook |
 | DOM Event, EventTarget, event handlers, and DOMException | §§6–7 | Implemented in Browlet | Keep FileReader as one concrete EventTarget implementation in `src/browlet/integration/file`; do not split its state into a File facade plus a Browlet event object merely to reproduce the specification boundary |
 | XHR `ProgressEvent` and fire-a-progress-event | §6.4 | Implemented in `src/browlet/dom/events/progress-event.ts`, with XHR contributing its declaration | Reuse that event and helper when implementing FileReader; File API must not create a private lookalike event |
 | HTML structured data | Serializable declarations in §§3–5 | Blob, File, and FileList are registered and tested for ordinary, storage, and target-realm cloning through HTML §2.7 | Preserve sub-serialization for FileList so repeated File references retain graph identity |
@@ -240,7 +244,7 @@ cloning, and repeated File identity through FileList sub-serialization. At this
 checkpoint XHR FormData and Fetch Body can consume Blob and File without
 FileReader.
 
-### Slice 4 — Blob URL store and URL/Fetch integration
+### Slice 4 — Blob URL store and URL/Fetch integration (deferred)
 
 **Scope:** File API §§8.2–8.4, after the bounded storage-key prerequisite.
 
@@ -269,7 +273,7 @@ cross-global same-partition use, cross-partition denial, environment cleanup,
 strong retention, and already-started reads pass deterministic multi-global
 tests. Fetch can resolve a Blob entry without using Node object URLs.
 
-### Slice 5 — FileReader foundation (FileReader slice 1)
+### Slice 5 — FileReader foundation (FileReader slice 1; implemented)
 
 **Scope:** File API §6.1; the declaration, state, constructor, and getters in
 §6.2; and §§6.2.1–6.2.2. The §6.2 read-operation algorithm remains in the next
@@ -310,8 +314,7 @@ selective removal of queued file-reading tasks.
 **Exit proof:** every result mode, read failure, first/final chunk, progress
 timing boundary, event payload, and target-Realm result passes focused tests.
 
-### Slice 7 — Abort, reentrancy, and public exposure (FileReader slice 3;
-implemented except shared lifecycle integration)
+### Slice 7 — Abort, reentrancy, and public exposure (FileReader slice 3; implemented except global teardown)
 
 **Scope:** File API §6.2.3.5, §6.4.2, and the asynchronous failure mappings in
 §7.
@@ -332,10 +335,9 @@ implemented except shared lifecycle integration)
 **Exit proof:** state guards, abort, stale-task cancellation, reentrant reads,
 wrong-Realm objects, and the independently runnable FileAPI WPT groups pass.
 The WPT sequences which await between `load`, `error`, or `progress` and
-`loadend` remain selected as comments until HTML §8.1.4 cleanup after running
-script performs its required microtask checkpoint. Global teardown remains the
-other shared-lifecycle tail; neither gap belongs in FileReader-specific
-machinery.
+`loadend` are enabled through HTML §8.1.4.4's cleanup checkpoint. Global
+teardown remains the shared-lifecycle tail and does not belong in
+FileReader-specific machinery.
 
 ## Deferred worker tail
 

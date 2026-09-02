@@ -8,7 +8,7 @@ export function createCallbackFunctionValue(
   definition: CallbackFunctionDefinition,
   object: object,
   realm: WebIDLRealmHost,
-  callbackContext: unknown,
+  callbackContext: object,
   conversionContext: ConversionContext,
 ): CallbackFunctionValue {
   return {
@@ -26,7 +26,7 @@ export function createCallbackInterfaceValue(
   definition: CallbackInterfaceDefinition,
   object: object,
   realm: WebIDLRealmHost,
-  callbackContext: unknown,
+  callbackContext: object,
   conversionContext: ConversionContext,
 ): CallbackInterfaceValue {
   return {
@@ -66,7 +66,8 @@ export type CallbackInterfaceValue = CallbackValueRecord & {
 
 type CallbackValueRecord = {
   [callbackValueBrand]: true;
-  callbackContext: unknown;
+  /* Web IDL §§3.2.16 and 3.2.19 — Callback context. */
+  callbackContext: object;
   conversionContext: ConversionContext;
   object: object;
   realm: WebIDLRealmHost;

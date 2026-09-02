@@ -6,14 +6,27 @@ machinery or Web IDL feature is implemented.
 
 ## Host and ECMAScript internal slots
 
-- **Associated realms:** ECMAScript does not expose an object's `[[Realm]]`.
-  Browlet currently maintains a shared weak association for globals,
-  intrinsics, created functions, and evaluated objects, then falls back to the
-  active realm for unknown objects. Replace this with HTML section 8.1 realm
-  and environment-settings machinery when that layer exists.
-- **Callback lifecycle:** Browlet's prepare/cleanup hooks model callback nesting,
-  but script preparation, environment settings, and exception reporting are
-  placeholders for HTML sections 8.1.4 and 8.1.5.
+- **Associated realms — `node-v8-object-realms` accommodation:** ECMAScript
+  does not expose an object's `[[Realm]]`. Browlet maintains a shared weak
+  association for globals, intrinsics, created functions, and evaluated
+  objects, then falls back to the active evaluation realm for unknown objects.
+  HTML's environment-settings layer owns callback context and controlled
+  script entries, but it cannot recover arbitrary objects' internal realm.
+  Replace the associations and fallback together if a future runtime API or
+  direct V8 embedding exposes that slot; borrowed-operation and callback realm
+  tests must continue to determine the result. The accommodation lives in
+  [`realm.ts`](../browlet/scripting/realm.ts), with integrated realm behavior
+  covered by [`file-api.test.ts`](../../test/browlet/unit/file-api.test.ts) and
+  callback conversion covered by
+  [`callback.test.ts`](../../test/web-idl/unit/callback.test.ts).
+- **Callback lifecycle — `node-v8-execution-contexts` accommodation:** Browlet
+  implements the HTML §8.1.3.3 backup incumbent stack and the §8.1.4.4
+  preparation, cleanup, task settings-set, and checkpoint boundary for entries
+  it controls. Node does not expose the complete execution-context stack,
+  `ScriptOrModule`, or HTML §8.1.6.2 `HostEnqueuePromiseJob`; arbitrary V8
+  entries therefore cannot be mirrored, and exception reporting remains future
+  HTML §8.1.5 work. The affected code and replacement boundary are recorded in
+  [the event-loop architecture](../browlet/scripting/event-loop-architecture.md#node-v8-execution-contexts).
 - **Security checks:** The Web IDL call sites exist, but Browlet's hook is a
   no-op until HTML's cross-origin `WindowProxy` and `Location` behavior exists.
 - **Constructor realm fallback:** A non-object `newTarget.prototype` currently

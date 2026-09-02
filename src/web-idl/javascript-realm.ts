@@ -2,11 +2,11 @@ import type { BufferViewTypeName } from './declaration/index';
 
 export type WebIDLRealmHost = {
   callbacks: {
-    captureContext(): unknown;
-    cleanUpAfterRunningCallback(context: unknown): void;
+    captureContext(): object;
+    cleanUpAfterRunningCallback(context: object): void;
     cleanUpAfterRunningScript(): void;
     getAssociatedRealm(value: object): WebIDLRealmHost;
-    prepareToRunCallback(context: unknown): void;
+    prepareToRunCallback(context: object): void;
     prepareToRunScript(): void;
     reportException(exception: unknown): void;
   };

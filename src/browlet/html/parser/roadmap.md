@@ -91,6 +91,20 @@ parser task, waits outside the event loop, and queues the remaining steps on
 the original task source. Preserve the distinction between blocking this
 parser instance and pausing the entire event loop.
 
+HTML §13.2.6.4 places two distinct boundaries before a parser-inserted script
+runs. With no active speculative parser, it first performs a microtask
+checkpoint when the JavaScript execution-context stack is empty. Only after
+preparing the script does it spin the event loop when a style sheet blocks
+scripts or the script is not ready.
+`document-parser.ts` currently conflates those boundaries by unconditionally
+awaiting its style-sheet promise. Do not make the no-blocker path synchronous
+merely to avoid Node's nested-checkpoint rejection artifact. The future
+`script-runner.ts` must issue the explicit checkpoint under the specified
+condition, then suspend through a separate continuation only when blocking or
+readiness requires it. This is incomplete parser integration, not a Node
+accommodation; correcting it will not by itself reveal whether parsing was
+entered from an otherwise invisible V8 Promise job.
+
 ## Removal condition
 
 Burn this file when the adapter closure, fragment parsing, byte decoding and

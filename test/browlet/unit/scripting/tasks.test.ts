@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -415,6 +416,22 @@ describe('task queues', () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it('identifies host-queued microtask execution as a checkpoint', () => {
+    const eventLoop = new EventLoop();
+    let queuedSteps: (() => void) | undefined;
+    const hostQueueMicrotask = vi.spyOn(globalThis, 'queueMicrotask')
+      .mockImplementation((steps) => { queuedSteps = steps; });
+    const checkpoint = vi.fn();
+
+    eventLoop.queueMicrotask(() => {
+      eventLoop.performMicrotaskCheckpoint(checkpoint);
+    });
+    queuedSteps?.();
+
+    expect(checkpoint).not.toHaveBeenCalled();
+    hostQueueMicrotask.mockRestore();
+  });
+
   it('drains shared same-agent Realm promise jobs in FIFO order', async () => {
     await runInHostTask(() => {
       const agent = new WindowAgent();
@@ -472,6 +489,40 @@ describe('task queues', () => {
 
     expect(order).toEqual(['nested microtask']);
   });
+
+  it.fails(
+    'does not report an adopted Stream start rejection as unhandled',
+    () => {
+      /*
+       * The parser enters this script from a host Promise job. V8 declines the
+       * nested checkpoint, but Node's `_tickCallback` still reports rejected
+       * promises, producing `unhandled boo!`, `handled later`, then `done`.
+       */
+      const events = runNodeProbe(`
+        const { Browlet } = require('./src/browlet/browlet.ts');
+        process.on('unhandledRejection', reason => {
+          console.log('unhandled', reason.name);
+        });
+        process.on('rejectionHandled', () => console.log('handled later'));
+
+        void (async () => {
+          const browlet = new Browlet({
+            route: () => \`<script>
+              new ReadableStream({
+                start() {
+                  return Promise.reject({ name: 'boo!' });
+                }
+              });
+            </script>\`,
+          });
+          await browlet.navigate('http://example.test/');
+          setImmediate(() => console.log('done'));
+        })();
+      `);
+
+      expect(events).toEqual(['done']);
+    },
+  );
 
   it.fails('drains jobs when a test clock runs a host task synchronously', () => {
     vi.useFakeTimers();
@@ -562,4 +613,19 @@ function runInHostTask(steps: () => void): Promise<void> {
       }
     });
   });
+}
+
+function runNodeProbe(source: string): string[] {
+  const result = spawnSync(
+    process.execPath,
+    ['--import=tsx', '--eval', source],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error('Node checkpoint probe failed', {
+      cause: result.stderr,
+    });
+  }
+  return result.stdout.split(/\r?\n/u).filter((line) => line !== '');
 }

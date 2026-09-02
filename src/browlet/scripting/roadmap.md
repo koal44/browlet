@@ -10,8 +10,10 @@
   §7.2.2.5; Window does not carry a second settings-object implementation.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
   queues, deterministic task turns, currently-running-task state, task timing
-  hooks, checkpoint coordination, coalesced host wake-ups, and the explicit
-  Node operations that request a later turn and bridge a V8 checkpoint.
+  hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,
+  Browlet-controlled script entries from §8.1.4.4, coalesced host wake-ups,
+  and the explicit Node operations that request a later turn and bridge a V8
+  checkpoint.
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
   event loop.
@@ -81,7 +83,10 @@ hybrid.
   accumulated ordering and isolation tests, then either replace the bridge or
   record the smallest explicit compatibility downgrade Browlet can support.
   `microtaskMode: 'afterEvaluate'` is not a fallback because it gives each
-  context a separate queue.
+  context a separate queue. These are the `node-v8-microtask-queue` and
+  `node-v8-checkpoint` accommodations; their affected code and replacement
+  conditions are recorded in
+  [the event-loop architecture](./event-loop-architecture.md#runtime-accommodations).
 - DOM §4 assigns each similar-origin Window agent a
   mutation-observer-microtask-queued flag, pending mutation observers, and
   signal slots. Keep that state on `WindowAgent`; DOM owns record/slot
@@ -170,7 +175,6 @@ adding a DOM timer path.
 | loader `speculation.ts` | Speculation-rules parse-result registration | HTML §8.1.4.9 and §7.6 |
 | existing `event-handlers.ts` | Extend the ordinary IDL-handler core with content-attribute compilation, Window/element targeting, special error/beforeunload processing, and the global handler mixins | HTML §8.1.8 |
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
-| existing `environment.ts`, `realm.ts`, `agents.ts`, and `event-loop.ts`; add `callback-context.ts` only if those hooks outgrow their owners | Incumbent callback bookkeeping plus script/callback preparation and cleanup | HTML §§8.1.3.3 and 8.1.4.4; Web IDL callback integration |
 | `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
@@ -192,18 +196,21 @@ HTML §8.1.4 is not one delivery unit. Its parts enter in the following order:
 | §8.1.4.1 Scripts | With classic-script creation | Script records and explicit host-to-JavaScript entry tracking |
 | §8.1.4.2 Fetching scripts | After the Fetch and loader foundations | Requests, responses, bodies, CORS, MIME and encoding policy, referrer policy, integrity, module maps, and worker/worklet lifecycle |
 | §8.1.4.3 Creating scripts | Classic-script subset after script records; module subsets later | A classic-script compiler seam is available through `node:vm`; stable module compilation is not |
-| §8.1.4.4 Calling scripts | Prepare/cleanup subset with the first callback-checkpoint consumer; complete classic path after script creation | Host-visible execution-context tracking, the responsible event loop's checkpoint, scripting-enabled/fully-active checks, and error reporting |
+| §8.1.4.4 Calling scripts | Callback/script preparation, cleanup, task settings-set population, and the empty-stack checkpoint are implemented for Browlet-controlled entries; complete classic path after script creation | Scripting-enabled/fully-active checks, formal Script records, and error reporting |
 | §8.1.4.5 Killing scripts | With the first enforceable host quota or termination policy | Node does not expose general termination of arbitrary running JavaScript |
 | §8.1.4.6 Runtime script errors | With complete classic-script execution | `ErrorEvent`, Window reporting, muted-error handling, and host source-location extraction; worker propagation waits for workers |
 | §8.1.4.7 Unhandled promise rejections | After a faithful promise-rejection host hook exists | Node's process-wide rejection events do not expose HTML's per-realm promise bookkeeping |
 | §8.1.4.8 Import map parse results | With modules and import maps | Module map, parser, fetching, and registration machinery |
 | §8.1.4.9 Speculation rules parse results | With speculation-rules loading | Document speculation-rule state and the loader policy that consumes it |
 
-The early §8.1.4.4 slice is intentionally narrow: implement the script/callback
-entry boundary and the empty-stack microtask checkpoint needed by current
-callback consumers. It must also implement the incumbent-settings bookkeeping
-from §8.1.3.3. Do not pull script records, fetching, modules, WebDriver BiDi,
-runtime-error reporting, or rejected-promise tracking into that slice.
+The early §8.1.4.4 slice is intentionally narrow and now complete. It connects
+Web IDL callback invocation to the §8.1.3.3 incumbent-settings bookkeeping and
+performs the required empty-stack checkpoint for Browlet-controlled script
+entries. The `node-v8-execution-contexts` accommodation explicitly limits that
+claim to entries Browlet controls; it does not claim access to V8's complete
+execution-context stack or `ScriptOrModule` state. Script records, fetching,
+modules, WebDriver BiDi, runtime-error reporting, and rejected-promise tracking
+remain later work.
 
 ## Deferred processing-model tails
 
@@ -265,11 +272,11 @@ without queue suppression and event-loop teardown is not worker shutdown.
    animation-frame, ResizeObserver/layout, focus, View Transition,
    IntersectionObserver, timing, display, and top-layer owners remain absent
    named hooks rather than no-op implementations.
-7. Connect script/callback preparation and cleanup, runtime-error reporting,
-   rejected promises, MutationObservers, custom-element reactions, and slot
-   signaling to that checkpoint as their owning phases arrive. Introduce the
-   deferred processing-model tails according to the prerequisites above rather
-   than giving them false synchronous implementations.
+7. Extend the implemented script/callback preparation and cleanup boundary
+   with runtime-error reporting, rejected promises, MutationObservers,
+   custom-element reactions, and slot signaling as their owning phases arrive.
+   Introduce the deferred processing-model tails according to the prerequisites
+   above rather than giving them false synchronous implementations.
 8. Preserve the current ordinary §8.1.8 IDL event-handler core used by
    `onabort`. Add body/frameset target redirection after their element and
    active-Document integration exists; add raw content-attribute compilation

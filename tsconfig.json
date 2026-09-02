@@ -8,7 +8,7 @@
     "tsBuildInfoFile": "./dist/.typecheck/root.tsbuildinfo"
   },
   "files": [
-    "vitest.config.ts",
+    "vitest.config.mts",
     "playwright.config.ts",
     // Public package entries belong here for typechecking and type-aware linting.
     "packages/browlet/index.ts",
