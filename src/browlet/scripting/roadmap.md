@@ -6,7 +6,7 @@
   realms (HTML §8.1.2).
 - `realm.ts` and `environment.ts`: the HTML Realm policy and environment
   settings counterparts (HTML §8.1.3), layered on the engine substrate in
-  [`../../javascript/`](../../javascript/README.md).
+  [`../../js-engine/`](../../js-engine/README.md).
 - `environment.ts` also supplies Window script settings reached from HTML
   §7.2.2.5; Window does not carry a second settings-object implementation.
 - `event-loop.ts`: the event loop uniquely owned by each agent, including task
@@ -36,7 +36,7 @@ surface without its scheduler and lifecycle model would create an inconsistent
 hybrid.
 
 Before adding an ECMAScript host hook or another mirror of inaccessible engine
-state, read the [JavaScript embedding roadmap](../../javascript/roadmap.md).
+state, read the [JS Engine roadmap](../../js-engine/roadmap.md).
 Its HTML §2.1.9 inventory is the authoritative distinction between operations
 which remain inside V8, engine facts Browlet can observe only partially, and
 hooks which neither stock nor Browlet-compatible Node exposes. The compatible
@@ -181,7 +181,7 @@ adding a DOM timer path.
 | loader `speculation.ts` | Speculation-rules parse-result registration | HTML §8.1.4.9 and §7.6 |
 | existing `event-handlers.ts` | Extend the ordinary IDL-handler core with content-attribute compilation, Window/element targeting, special error/beforeunload processing, and the global handler mixins | HTML §8.1.8 |
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
-| JavaScript runtime plus the owning script, Promise, module, or policy source | ECMAScript host hooks, delivered as vertical consumer slices rather than a preselected catch-all module | HTML §8.1.6; [JavaScript embedding roadmap](../../javascript/roadmap.md) |
+| JS Engine plus the owning script, Promise, module, or policy source | ECMAScript host hooks, delivered as vertical consumer slices rather than a preselected catch-all module | HTML §8.1.6; [JS Engine roadmap](../../js-engine/roadmap.md) |
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
 | existing `global-scope.ts` | Complete `WindowOrWorkerGlobalScope` origin, security, base64, `reportError()`, image, and structured-clone contributions | HTML §§8.2–8.3 |
@@ -261,7 +261,7 @@ without queue suppression and event-loop teardown is not worker shutdown.
    explicit V8 queue per EventLoop; stock Node uses the ambient backend whose
    checkpoint remains the
    feature-detected `_tickCallback()` operation in
-   [`../../javascript/node-runtime.ts`](../../javascript/node-runtime.ts).
+   [`../../js-engine/node-runtime.ts`](../../js-engine/node-runtime.ts).
    Test exact isolation and FIFO behavior in compatible mode and preserve the
    ambient contamination downgrade explicitly in stock mode.
    Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and

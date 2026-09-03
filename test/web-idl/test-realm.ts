@@ -1,6 +1,6 @@
 import {
   type JavaScriptMicrotaskQueue, NodeRealm, nodeRuntime,
-} from '../../src/javascript/index';
+} from '../../src/js-engine/index';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../../src/web-idl/javascript-realm';

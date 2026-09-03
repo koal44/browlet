@@ -1,4 +1,4 @@
-import { NodeRealm, nodeRuntime } from '../../javascript/index';
+import { NodeRealm, nodeRuntime } from '../../js-engine/index';
 import type { WebIDLRealmHost } from '../../web-idl/index';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
@@ -13,7 +13,7 @@ import {
 
 /*
  * HTML owns the Realm's Agent, settings object, callback lifecycle, and global
- * task associations. NodeRealm supplies the lower JavaScript execution backend.
+ * task associations. NodeRealm supplies the lower JS Engine backend.
  */
 export function createRealm(
   agent: Agent,

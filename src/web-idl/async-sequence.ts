@@ -1,6 +1,6 @@
 import {
   createIteratorResultObject, getMethod, installPromiseReactions, isObject,
-} from '../javascript/index';
+} from '../js-engine/index';
 import {
   idlType, type AsyncSequenceType, type WebIDLType,
 } from './declaration/index';

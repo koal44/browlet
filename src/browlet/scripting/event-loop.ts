@@ -1,4 +1,4 @@
-import type { JavaScriptMicrotaskQueue } from '../../javascript/index';
+import type { JavaScriptMicrotaskQueue } from '../../js-engine/index';
 import { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';

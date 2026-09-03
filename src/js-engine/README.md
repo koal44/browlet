@@ -1,10 +1,10 @@
-# JavaScript runtime boundary
+# JS Engine boundary
 
 This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
-The [JavaScript embedding roadmap](./roadmap.md) inventories HTML's complete
+The [JS Engine roadmap](./roadmap.md) inventories HTML's complete
 ECMAScript dependency list and separates ordinary engine behavior from the
 small set of inaccessible runtime facts and genuine host hooks.
 Its work proceeds by coherent consumers. The first runtime slice established
@@ -20,7 +20,7 @@ Classify code by ownership before extracting it:
 
 | Home | Admission test | Examples |
 | --- | --- | --- |
-| `javascript/` | An ECMAScript abstract operation, realm or isolate fact, captured intrinsic, or bounded substitute for an inaccessible engine operation whose contract does not import another platform subsystem | `IsObject`, realm-owned function creation, ArrayBuffer slot inspection |
+| `js-engine/` | An ECMAScript abstract operation, realm or isolate fact, captured intrinsic, or bounded substitute for an inaccessible engine operation whose contract does not import another platform subsystem | `IsObject`, realm-owned function creation, ArrayBuffer slot inspection |
 | `shared/` | A specification-, realm-, and engine-neutral convenience with genuine cross-domain reuse | `assertNever`, tuple mapping, text cursors |
 | Owning subsystem | Policy, state, or lifecycle defined by that specification | Web IDL conversion and overload policy, HTML task and serialization policy, Streams queues, File behavior |
 | Integration or Host Port | An external effect supplied by the embedder or composition root | clocks, native line endings, scheduling, parser input and output |
@@ -81,7 +81,7 @@ belonging to its Agent, and uses it for both HTML `queueMicrotask()` and
 checkpointing. The factory selects an explicit queue under compatible Node or
 the one ambient queue backed by `queueMicrotask()` and the checkpoint
 accommodation below under stock Node. The upper layer owns the queue according to
-its lifecycle; the JavaScript project supplies its engine implementation
+its lifecycle; the JS Engine project supplies its engine implementation
 without importing HTML.
 
 ## Node/V8 accommodations
@@ -143,14 +143,14 @@ and captured intrinsic methods read or update built-in state without invoking
 author methods. Node does not expose an exhaustive internal-slot or
 exotic-object query, so a native structured-clone probe is safe only for
 propertyless objects; a decorated Array or String iterator can still resemble
-an ordinary object. The JavaScript module reports or updates these engine
+an ordinary object. The JS Engine project reports or updates these engine
 facts, while HTML retains serializability decisions, graph traversal,
 platform-object dispatch, and `DataCloneError` creation. Replace the
 predicates, intrinsic probes, and native probe together if Node exposes
 complete object-kind inspection or Browlet moves to a direct V8 embedder. The
 bounded operation and its known limit are
 exercised in
-[`built-in-primitives.test.ts`](../../test/javascript/unit/built-in-primitives.test.ts)
+[`built-in-primitives.test.ts`](../../test/js-engine/unit/built-in-primitives.test.ts)
 and
 [`serialize.test.ts`](../../test/browlet/unit/scripting/structured-data/serialize.test.ts).
 
@@ -171,10 +171,10 @@ before returning. Growable SharedArrayBuffer views cannot be probed this way
 because growth is irreversible. Replace only these engine-fact operations if
 Node or a direct V8 embedder exposes the missing slots. The boundary is covered
 by
-[`array-buffer-primitives.test.ts`](../../test/javascript/unit/array-buffer-primitives.test.ts)
+[`array-buffer-primitives.test.ts`](../../test/js-engine/unit/array-buffer-primitives.test.ts)
 and the HTML structured-data tests.
 
 The runtime contracts, explicit-queue behavior, and known ambient fallback
 limits are exercised in
-[`node-realm.test.ts`](../../test/javascript/unit/node-realm.test.ts) and
-[`node-runtime.test.ts`](../../test/javascript/unit/node-runtime.test.ts).
+[`node-realm.test.ts`](../../test/js-engine/unit/node-realm.test.ts) and
+[`node-runtime.test.ts`](../../test/js-engine/unit/node-runtime.test.ts).

@@ -1,4 +1,4 @@
-import { isObject } from '../javascript/index';
+import { isObject } from '../js-engine/index';
 import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition,
 } from './declaration/index';

@@ -1,4 +1,4 @@
-import { isObject } from '../javascript/index';
+import { isObject } from '../js-engine/index';
 import type { ObservableArrayHandle } from '../shared/observable-array';
 import type { AssembledInterface } from './assembly';
 import type { AttributeMember } from './declaration/index';

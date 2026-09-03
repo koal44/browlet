@@ -24,7 +24,7 @@ Domain-local behavior still remains with its owning subsystem.
 - `streams.ts` connects Streams to DOM AbortController construction and HTML
   structured cloning.
 - `scripting.ts` supplies the Node task-turn request beneath HTML's event-loop
-  scheduling policy; the JavaScript runtime separately supplies the selected
+  scheduling policy; JS Engine separately supplies the selected
   microtask-queue backend, including its enqueue and checkpoint operations.
 - `xhr.ts` supplies the realm-sensitive File construction used by HTML's form
   entry algorithms when XHR's FormData entry-list operations invoke them.

@@ -1,4 +1,4 @@
-import { installPromiseReactions } from '../javascript/index';
+import { installPromiseReactions } from '../js-engine/index';
 import {
   convertToIDL, convertToJavaScript, type ConversionContext,
 } from './conversion';

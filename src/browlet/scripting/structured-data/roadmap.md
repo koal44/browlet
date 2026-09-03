@@ -116,7 +116,7 @@ interface-level `create` binding.
 ### 2. Implement structured serialization
 
 Status: complete, subject to the host limitations below. The implementation
-uses the JavaScript runtime's V8-backed primitives for exposed built-in slot
+uses JS Engine's V8-backed primitives for exposed built-in slot
 tests, keeps the HTML graph and storage mode independent of Node's native clone
 serializer, and inserts shallow records into memory before every recursive
 traversal.
@@ -147,7 +147,7 @@ Brand checks must work across Browlet realms and must not rely on `instanceof`
 against the active Node realm. Add narrow realm/host intrinsic operations when
 JavaScript does not expose the specification's internal-slot test directly.
 
-Use the JavaScript runtime's ArrayBuffer and view operations for engine facts.
+Use JS Engine's ArrayBuffer and view operations for engine facts.
 Keep Web IDL's conversion, realm-owned allocation, copying, detachment, and
 transfer algorithms at the binding boundary. Keep inaccessible
 `[[ArrayBufferDetachKey]]` and detached-view limitations explicit rather than
@@ -160,7 +160,7 @@ storage-mode differences, DOMException records, and exact failure types.
 
 JavaScript does not expose a general “has unsupported internal slots” query.
 The `node-v8-exotic-object-slots` accommodation in
-[`built-in-primitives.ts`](../../../javascript/built-in-primitives.ts)
+[`built-in-primitives.ts`](../../../js-engine/built-in-primitives.ts)
 exposes predicates for the available V8-branded families (including Promise,
 WeakMap/WeakSet, generators, Map and Set iterators, WeakRef,
 FinalizationRegistry, proxies, and crypto-key objects), but an unrecognized
@@ -174,7 +174,7 @@ failure to the wrong object.
 
 V8 records a resizable-buffer view's internal length-tracking bit, but neither
 its public API nor Node exposes that bit. The
-[`node-v8-array-buffer-slots`](../../../javascript/README.md#nodev8-accommodations)
+[`node-v8-array-buffer-slots`](../../../js-engine/README.md#nodev8-accommodations)
 accommodation recovers it for ordinary resizable ArrayBuffers with a
 synchronous, reversible intrinsic resize probe. The probe grows or truncates
 at most one element, restores both size and bytes, and runs no author code.

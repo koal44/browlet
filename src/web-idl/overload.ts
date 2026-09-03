@@ -1,6 +1,6 @@
 import {
   getMethod, hasStringData, isObject, type JavaScriptMethod,
-} from '../javascript/index';
+} from '../js-engine/index';
 import type { DefinitionAssembly } from './assembly';
 import { createAsyncSequenceValue } from './async-sequence';
 import { getBufferTypeName } from './buffer-source';

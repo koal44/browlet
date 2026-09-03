@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { NodeRealm, nodeRuntime } from '../../../src/javascript/index';
+import { NodeRealm, nodeRuntime } from '../../../src/js-engine/index';
 import { itCompatPasses } from '../../test-runtime';
 
-describe('Node JavaScript runtime', () => {
+describe('Node runtime', () => {
   itCompatPasses(
     'reuses a detached global proxy in a replacement Realm',
     () => {

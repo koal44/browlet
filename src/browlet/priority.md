@@ -215,7 +215,7 @@ Current implementation sequence:
    `ProgressEvent` and the no-form `FormData` entry-list core are complete;
    `FormData(form, submitter)` waits for HTML forms.
 4. **Complete:** Integrate the explicit microtask queue from the
-   [JavaScript embedding roadmap](../javascript/roadmap.md). A configured HTML
+   [JS Engine roadmap](../js-engine/roadmap.md). A configured HTML
    EventLoop receives one queue shared by all Realms of its Agent under a
    Browlet-compatible Node. The full current unit suite and all 1,193 selected
    WPT assertions pass on that path with a clean process exit. Stock Node
@@ -234,7 +234,7 @@ Current implementation sequence:
 6. Continue the Promise-job and execution-context host-hook audit without
    treating explicit queue ownership as `HostEnqueuePromiseJob`.
 7. Implement Fetch's records, author APIs, and first transport slices only
-   after those JavaScript boundary decisions are stable.
+   after those JS Engine boundary decisions are stable.
 8. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.
 

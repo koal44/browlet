@@ -51,9 +51,9 @@ It must not:
 - reach through a registry to rediscover an implementation dependency which
   composition could have supplied explicitly.
 
-### JavaScript runtime
+### JS Engine
 
-[`javascript/`](./javascript/README.md) is the engine substrate beneath Web
+[`js-engine/`](./js-engine/README.md) is the engine substrate beneath Web
 IDL. A `JavaScriptRealm` exposes realm-owned globals, intrinsics, function
 creation, and evaluation. The concrete `NodeRealm` owns one `node:vm` context,
 while the isolate-scoped `NodeRuntime` owns feature selection and the
@@ -70,7 +70,7 @@ the consuming specification retains the decisions it makes from those facts.
 This is a dependency layer, not a fourth platform-object identity. Web IDL
 extends the JavaScript realm contract with binding policy, and Browlet's HTML
 `Realm` subclasses `NodeRealm` to add its Agent, environment settings object,
-callback lifecycle, and global task associations. The JavaScript project must
+callback lifecycle, and global task associations. The JS Engine project must
 not import Web IDL or HTML, and HTML event-loop state must not move into the
 runtime merely because its concrete checkpoint primitive is Node-specific.
 

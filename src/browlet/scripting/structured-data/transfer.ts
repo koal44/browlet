@@ -1,4 +1,4 @@
-import * as JavaScript from '../../../javascript/index';
+import * as JSEngine from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../shared/dom-exception';
 import {
   getBufferSourceByteLength, isBufferSourceDetached, transferArrayBuffer,
@@ -76,8 +76,8 @@ function prepareTransfer(
   value: unknown,
   environment: StructuredDataEnvironment,
 ): PreparedTransfer {
-  if (!JavaScript.isObject(value)) return throwDataCloneError();
-  const bufferType = JavaScript.getBufferTypeName(value);
+  if (!JSEngine.isObject(value)) return throwDataCloneError();
+  const bufferType = JSEngine.getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
   };
@@ -110,7 +110,7 @@ function performTransfer(
   if (prepared.kind === 'ArrayBuffer') {
     if (isBufferSourceDetached(prepared.value)) return throwDataCloneError();
     const byteLength = getBufferSourceByteLength(prepared.value);
-    const maxByteLength = JavaScript.getArrayBufferMaxByteLength(
+    const maxByteLength = JSEngine.getArrayBufferMaxByteLength(
       prepared.value,
     );
     return {
@@ -169,7 +169,7 @@ function receiveTransfer(
   const value = transferArrayBuffer(dataHolder.buffer, environment.realm);
   if (
     getBufferSourceByteLength(value) !== dataHolder.byteLength ||
-    JavaScript.getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
+    JSEngine.getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
     throw new Error('Received ArrayBuffer does not match its data holder');
   }

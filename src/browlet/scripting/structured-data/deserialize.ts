@@ -1,4 +1,4 @@
-import * as JavaScript from '../../../javascript/index';
+import * as JSEngine from '../../../js-engine/index';
 import { throwDataCloneError } from '../../../shared/dom-exception';
 import {
   createArrayBuffer, createArrayBufferViewFromBuffer,
@@ -74,7 +74,7 @@ export function structuredDeserialize(
         environment,
         memory,
       );
-      if (!JavaScript.isObject(buffer)) {
+      if (!JSEngine.isObject(buffer)) {
         throw new Error('An ArrayBufferView record has no backing buffer');
       }
       value = createArrayBufferViewFromBuffer(
@@ -125,13 +125,13 @@ export function structuredDeserialize(
 
   memory.set(serialized, value);
   if (!deep) return value;
-  if (!JavaScript.isObject(value)) {
+  if (!JSEngine.isObject(value)) {
     throw new Error('A deep record has no object value');
   }
 
   if (serialized.type === 'Map') {
     for (const entry of serialized.entries) {
-      JavaScript.appendMapData(
+      JSEngine.appendMapData(
         value,
         structuredDeserialize(entry.key, environment, memory),
         structuredDeserialize(entry.value, environment, memory),
@@ -139,7 +139,7 @@ export function structuredDeserialize(
     }
   } else if (serialized.type === 'Set') {
     for (const entry of serialized.entries) {
-      JavaScript.appendSetData(
+      JSEngine.appendSetData(
         value,
         structuredDeserialize(entry, environment, memory),
       );
@@ -192,11 +192,11 @@ function deserializeSharedArrayBuffer(
   buffer: object,
   realm: WebIDLRealmHost,
 ): object {
-  if (JavaScript.getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
+  if (JSEngine.getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
     throw new Error('Only a SharedArrayBuffer can share its backing store');
   }
   const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
-  if (JavaScript.getBufferTypeName(value) !== 'SharedArrayBuffer') {
+  if (JSEngine.getBufferTypeName(value) !== 'SharedArrayBuffer') {
     throw new Error('The host did not clone a SharedArrayBuffer');
   }
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
@@ -257,7 +257,7 @@ function deserializeError(
     constructor,
     serialized.message === undefined ? [] : [serialized.message],
   ) as object;
-  JavaScript.writeErrorStack(value, serialized.stack);
+  JSEngine.writeErrorStack(value, serialized.stack);
   return value;
 }
 
@@ -294,6 +294,6 @@ function getErrorConstructor(
 }
 
 function isSerializedRecord(value: unknown): value is SerializedRecord {
-  return JavaScript.isObject(value) &&
+  return JSEngine.isObject(value) &&
     typeof Reflect.get(value, 'type') === 'string';
 }

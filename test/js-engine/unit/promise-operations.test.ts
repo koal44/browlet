@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   installPromiseReactions, NodeRealm, nodeRuntime,
-} from '../../../src/javascript/index';
+} from '../../../src/js-engine/index';
 
 describe('JavaScript promise operations', () => {
   it('installs reactions through the captured realm intrinsic', async () => {

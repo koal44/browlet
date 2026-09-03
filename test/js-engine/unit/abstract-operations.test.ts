@@ -3,7 +3,7 @@ import {
   createIteratorResultObject, getMethod, isAccessorDescriptor, isCallable,
   isConstructor, isDataDescriptor, isObject, NodeRealm,
   ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
-} from '../../../src/javascript/index';
+} from '../../../src/js-engine/index';
 
 describe('ECMAScript abstract operations', () => {
   it('recognizes ECMAScript Object values', () => {

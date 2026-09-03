@@ -62,7 +62,7 @@ passes old-Realm closure access through real same-/cross-origin checks,
 checkpoint-before-reuse, Window/WindowProxy identity, non-extensibility, and
 cross-navigation lifecycle tests. The
 engine bridge is implemented in
-[`node-realm.ts`](../javascript/node-realm.ts), below Web IDL; Browlet's
+[`node-realm.ts`](../js-engine/node-realm.ts), below Web IDL; Browlet's
 [`realm.ts`](./scripting/realm.ts) retains the HTML global and task
 associations. The current observable mismatches are recorded in
 [`document-lifecycle.test.ts`](../../test/browlet/unit/browsing/document-lifecycle.test.ts)

@@ -1,5 +1,5 @@
 import { EventLoop, type EventLoopOptions } from './event-loop';
-import { nodeRuntime } from '../../javascript/index';
+import { nodeRuntime } from '../../js-engine/index';
 import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,

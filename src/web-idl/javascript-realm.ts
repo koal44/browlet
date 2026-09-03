@@ -1,4 +1,4 @@
-import type { JavaScriptRealm } from '../javascript/index';
+import type { JavaScriptRealm } from '../js-engine/index';
 
 export type WebIDLRealmHost = JavaScriptRealm & {
   callbacks: {
