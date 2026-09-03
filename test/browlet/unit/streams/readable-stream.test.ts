@@ -16,6 +16,9 @@ import {
   enqueueReadableStream,
 } from '../../../../src/streams/readable-stream-cross-spec';
 import { WritableStreamImpl } from '../../../../src/streams/writable-stream';
+import {
+  observeBrowletPromise, performTestMicrotaskCheckpoint,
+} from '../test-runtime';
 import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('ordinary readable-stream implementation', () => {
@@ -228,13 +231,20 @@ describe('ordinary readable-stream implementation', () => {
     const [branch1, branch2] = readableStreamDefaultTee(stream, true);
     const branch1Object = bindings.context.project(ReadableStreamImpl, branch1);
     const branch2Object = bindings.context.project(ReadableStreamImpl, branch2);
-    const read1 = readProjectedStream(branch1Object);
-    const read2 = readProjectedStream(branch2Object);
+    const read1 = observeBrowletPromise(
+      window,
+      readProjectedStream(branch1Object),
+    );
+    const read2 = observeBrowletPromise(
+      window,
+      readProjectedStream(branch2Object),
+    );
     const controller = requireDefaultController(
       ReadableStreamImpl.getState(stream).controller,
     );
 
     controller.enqueue(() => undefined);
+    performTestMicrotaskCheckpoint(window);
 
     const [error1, error2] = await Promise.all([
       read1.catch((error: unknown) => error),
@@ -306,16 +316,13 @@ describe('readable-stream projection', () => {
       stream,
       [],
     ) as object[];
-    const cancel1 = Reflect.apply(
-      requireFunction(branch1 as object, 'cancel'),
-      branch1,
-      ['one'],
-    ) as Promise<unknown>;
-    const cancel2 = Reflect.apply(
-      requireFunction(branch2 as object, 'cancel'),
-      branch2,
-      ['two'],
-    ) as Promise<unknown>;
+    const cancel1 = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(branch1 as object, 'cancel'), branch1, ['one'],
+    ) as Promise<unknown>);
+    const cancel2 = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(branch2 as object, 'cancel'), branch2, ['two'],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
 
     await Promise.all([
       expect(cancel1).rejects.toBe(error),
@@ -325,8 +332,8 @@ describe('readable-stream projection', () => {
 
   it('pipes through DOM abort algorithms with defaulted options', async () => {
     const window = new Browlet({ route: () => '' }).window;
-    const cancel = vi.fn(() => Promise.resolve(undefined));
-    const abort = vi.fn(() => Promise.resolve(undefined));
+    const cancel = vi.fn();
+    const abort = vi.fn();
     const source = Reflect.construct(
       requireFunction(window, 'ReadableStream'),
       [{ cancel }],
@@ -353,19 +360,20 @@ describe('readable-stream projection', () => {
     expect(typeof Reflect.get(resolved.implementation, 'addAlgorithm')).toBe(
       'function',
     );
-    const piping = Reflect.apply(
+    const piping = observeBrowletPromise(window, Reflect.apply(
       requireFunction(source, 'pipeTo'),
       source,
       [destination, {
         signal,
       }],
-    ) as Promise<unknown>;
+    ) as Promise<unknown>);
 
     Reflect.apply(
       requireFunction(controller, 'abort'),
       controller,
       ['stop'],
     );
+    performTestMicrotaskCheckpoint(window);
 
     await expect(piping).rejects.toBe('stop');
     expect(cancel).toHaveBeenCalledWith('stop');
@@ -390,15 +398,30 @@ describe('readable-stream projection', () => {
 
     expect(stream).toBeInstanceOf(ReadableStream_);
     expect(stream).not.toBeInstanceOf(OtherReadableStream);
-    await expect(callIterator(iterator, 'next')).resolves.toEqual({
+    const first = observeBrowletPromise(
+      window,
+      callIterator(iterator, 'next'),
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(first).resolves.toEqual({
       done: false,
       value: 'first',
     });
-    await expect(callIterator(iterator, 'next')).resolves.toEqual({
+    const second = observeBrowletPromise(
+      window,
+      callIterator(iterator, 'next'),
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(second).resolves.toEqual({
       done: false,
       value: 'second',
     });
-    await expect(callIterator(iterator, 'next')).resolves.toEqual({
+    const last = observeBrowletPromise(
+      window,
+      callIterator(iterator, 'next'),
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(last).resolves.toEqual({
       done: true,
       value: undefined,
     });
@@ -427,12 +450,14 @@ describe('readable-stream projection', () => {
       stream,
       [],
     ) as object;
-    const read = Reflect.apply(
-      requireFunction(reader, 'read'),
-      reader,
-      [],
-    ) as Promise<unknown>;
-    const closed = Reflect.get(reader, 'closed') as Promise<unknown>;
+    const read = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(reader, 'read'), reader, [],
+    ) as Promise<unknown>);
+    const closed = observeBrowletPromise(
+      window,
+      Reflect.get(reader, 'closed') as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
 
     await Promise.all([
       expect(read).rejects.toBe(error),
@@ -443,7 +468,7 @@ describe('readable-stream projection', () => {
   it('cancels iteration unless preventCancel is true', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const ReadableStream_ = requireFunction(window, 'ReadableStream');
-    const returned = vi.fn(() => Promise.resolve({ done: true }));
+    const returned = vi.fn(() => ({ done: true }));
     const source = {
       [Symbol.asyncIterator]: () => ({
         next: () => new Promise(() => {}),
@@ -461,7 +486,12 @@ describe('readable-stream projection', () => {
       [],
     ) as object;
 
-    await expect(callIterator(cancelingIterator, 'return', ['stop']))
+    const canceled = observeBrowletPromise(
+      window,
+      callIterator(cancelingIterator, 'return', ['stop']),
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(canceled)
       .resolves.toEqual({ done: true, value: 'stop' });
     expect(returned).toHaveBeenCalledWith('stop');
 
@@ -475,7 +505,12 @@ describe('readable-stream projection', () => {
       retainingStream,
       [{ preventCancel: true }],
     ) as object;
-    await expect(callIterator(retainingIterator, 'return'))
+    const retained = observeBrowletPromise(
+      window,
+      callIterator(retainingIterator, 'return'),
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(retained)
       .resolves.toEqual({ done: true, value: undefined });
     expect(returned).toHaveBeenCalledOnce();
     expect(Reflect.get(retainingStream, 'locked')).toBe(false);

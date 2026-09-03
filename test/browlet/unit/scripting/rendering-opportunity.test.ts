@@ -192,9 +192,13 @@ function createManualRenderingHost(times: UnsafeMoment[]): {
 
 function createEventLoopOptions(): EventLoopOptions {
   return {
+    createMicrotaskQueue: () => ({
+      kind: 'ambient',
+      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
+      performMicrotaskCheckpoint() {},
+    }),
     requestEventLoopTurn() {},
     unsafeSharedCurrentTime: () =>
       new UnsafeMoment(monotonicClock, 0),
-    performMicrotaskCheckpoint() {},
   };
 }

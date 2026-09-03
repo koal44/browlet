@@ -1,4 +1,6 @@
-import { NodeRealm, nodeRuntime } from '../../src/javascript/index';
+import {
+  type JavaScriptMicrotaskQueue, NodeRealm, nodeRuntime,
+} from '../../src/javascript/index';
 import type {
   SecurityCheckType, WebIDLRealmHost,
 } from '../../src/web-idl/javascript-realm';
@@ -16,7 +18,8 @@ export class TestRealm extends NodeRealm implements WebIDLRealmHost {
   readonly secureContext: boolean;
 
   constructor(options: TestRealmOptions = {}) {
-    super();
+    /* Vitest owns this unit harness's asynchronous lifecycle. */
+    super(testMicrotaskQueue);
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
@@ -43,7 +46,7 @@ export class TestRealm extends NodeRealm implements WebIDLRealmHost {
   ): void {}
 
   queueMicrotask(steps: () => void): void {
-    nodeRuntime.enqueueMicrotask(steps);
+    this.enqueueMicrotask(steps);
   }
 }
 
@@ -52,4 +55,12 @@ type TestRealmOptions = {
   globalNames?: readonly string[];
   isGlobalPrototypeChainMutable?: boolean;
   secureContext?: boolean;
+};
+
+const testMicrotaskQueue: JavaScriptMicrotaskQueue = {
+  kind: 'ambient',
+  enqueueMicrotask: (steps) => { globalThis.queueMicrotask(steps); },
+  performMicrotaskCheckpoint: () => {
+    throw new Error('The Web IDL test Realm does not own host checkpoints');
+  },
 };

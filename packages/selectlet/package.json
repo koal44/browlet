@@ -43,6 +43,6 @@
   },
   "scripts": {
     "build": "node ../../scripts/build.mjs selectlet",
-    "prepack": "npm run build"
+    "prepack": "node --run build"
   }
 }

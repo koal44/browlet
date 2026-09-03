@@ -1,11 +1,10 @@
-import {
-  constants, createContext, runInContext, type Context,
-} from 'node:vm';
+import { runInContext, type Context } from 'node:vm';
 import { isObject } from './abstract-operations';
 import { nodeRuntime } from './node-runtime';
 import type {
   JavaScriptBufferViewName, JavaScriptFunction, JavaScriptIntrinsics,
-  JavaScriptRealm, JavaScriptRuntime, RealmFunctionOptions, RealmFunctionSteps,
+  JavaScriptMicrotaskQueue, JavaScriptRealm, JavaScriptRuntime,
+  RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 
 /*
@@ -21,10 +20,24 @@ export class NodeRealm implements JavaScriptRealm {
   #globalObject: object;
   #globalThis: object;
   readonly #hostGlobal: RealmGlobal;
+  readonly #microtaskQueue: JavaScriptMicrotaskQueue;
 
-  constructor() {
-    this.#context = createContext(constants.DONT_CONTEXTIFY);
-    this.#hostGlobal = runInContext('this', this.#context) as RealmGlobal;
+  constructor(
+    microtaskQueue: JavaScriptMicrotaskQueue =
+      nodeRuntime.createMicrotaskQueue(),
+    options: NodeRealmOptions = {},
+  ) {
+    this.#microtaskQueue = microtaskQueue;
+    const reuseGlobalProxyFrom = options.reuseGlobalProxyFrom === undefined
+      ? undefined
+      : options.reuseGlobalProxyFrom.#context;
+    this.#context = nodeRuntime.createContext(
+      microtaskQueue,
+      reuseGlobalProxyFrom,
+    );
+    this.#hostGlobal = nodeRuntime.getContextGlobal(
+      this.#context,
+    ) as RealmGlobal;
     this.#globalObject = this.#hostGlobal;
     this.#globalThis = this.#hostGlobal;
 
@@ -230,6 +243,10 @@ export class NodeRealm implements JavaScriptRealm {
     return this.#hostGlobal;
   }
 
+  detachGlobal(): object {
+    return nodeRuntime.detachContext(this.#context);
+  }
+
   createFunction(
     steps: RealmFunctionSteps,
     options: RealmFunctionOptions,
@@ -274,6 +291,10 @@ export class NodeRealm implements JavaScriptRealm {
     });
   }
 
+  protected enqueueMicrotask(steps: () => void): void {
+    this.#microtaskQueue.enqueueMicrotask(steps);
+  }
+
   protected initializeGlobalObjects(
     globalObject: object,
     globalThis: object,
@@ -299,6 +320,10 @@ export class NodeRealm implements JavaScriptRealm {
     });
     nodeRuntime.associateRealm(globalObject, this);
     nodeRuntime.associateRealm(globalThis, this);
+  }
+
+  protected makeHostGlobalPrototypeImmutable(): void {
+    nodeRuntime.makePrototypeImmutable(this.#hostGlobal);
   }
 
   #installDefaultGlobalBindings(): void {
@@ -328,6 +353,10 @@ export class NodeRealm implements JavaScriptRealm {
 }
 
 type RealmGlobal = Record<PropertyKey, unknown>;
+
+export type NodeRealmOptions = {
+  reuseGlobalProxyFrom?: NodeRealm;
+};
 
 type RealmFunctionFactory = (
   steps: RealmFunctionSteps,

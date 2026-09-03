@@ -232,7 +232,11 @@ function createEventLoopOptions(
   performMicrotaskCheckpoint: () => void = () => {},
 ): EventLoopOptions {
   return {
-    performMicrotaskCheckpoint,
+    createMicrotaskQueue: () => ({
+      kind: 'ambient',
+      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
+      performMicrotaskCheckpoint,
+    }),
     requestEventLoopTurn: () => {},
     unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
   };

@@ -16,9 +16,15 @@ export type JavaScriptRealm = {
 };
 
 export type JavaScriptRuntime = {
-  readonly enqueueMicrotask: (steps: () => void) => void;
+  readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;
+  readonly hasExplicitMicrotaskQueues: boolean;
   getAssociatedRealm(value: object): JavaScriptRealm | undefined;
-  readonly performMicrotaskCheckpoint: () => void;
+};
+
+export type JavaScriptMicrotaskQueue = {
+  readonly kind: 'ambient' | 'explicit';
+  enqueueMicrotask(steps: () => void): void;
+  performMicrotaskCheckpoint(): void;
 };
 
 export type JavaScriptIntrinsics = {

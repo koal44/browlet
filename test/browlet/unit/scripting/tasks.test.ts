@@ -2,6 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  type JavaScriptMicrotaskQueue,
+} from '../../../../src/javascript/index';
+import {
   EventLoop, createTaskSource, type EventLoopOptions,
   type LongTaskReporter, Task, type TaskTimingHooks,
 } from '../../../../src/browlet/scripting/event-loop';
@@ -19,6 +22,7 @@ import { Realm } from '../../../../src/browlet/scripting/realm';
 import {
   monotonicClock, UnsafeMoment,
 } from '../../../../src/browlet/performance/clock';
+import { itCompatPasses } from '../../../test-runtime';
 
 describe('task queues', () => {
   it('defines distinct shared identities for the generic task sources', () => {
@@ -41,7 +45,7 @@ describe('task queues', () => {
   });
 
   it('appends tasks from one source in insertion order', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const source = createTaskSource('test');
     const first = vi.fn();
     const second = vi.fn();
@@ -84,8 +88,8 @@ describe('task queues', () => {
   });
 
   it('associates sources independently on each event loop', () => {
-    const firstLoop = new EventLoop();
-    const secondLoop = new EventLoop();
+    const firstLoop = createEventLoop();
+    const secondLoop = createEventLoop();
     const firstSource = createTaskSource('same diagnostic name');
     const secondSource = createTaskSource('same diagnostic name');
 
@@ -101,7 +105,13 @@ describe('task queues', () => {
   });
 
   it('runs the oldest runnable task and then reaches its checkpoint', () => {
-    const eventLoop = new EventLoop();
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint() {
+        expect(eventLoop.currentlyRunningTask).toBeNull();
+        order.push('checkpoint');
+      },
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('turn');
     const inactiveDocument = new DocumentImpl();
     const inactiveSteps = vi.fn();
@@ -110,12 +120,7 @@ describe('task queues', () => {
       expect(eventLoop.currentlyRunningTask?.steps).toBe(runnableSteps);
       order.push('task');
     });
-    const eventLoopOptions = createEventLoopOptions({
-      performMicrotaskCheckpoint() {
-        expect(eventLoop.currentlyRunningTask).toBeNull();
-        order.push('checkpoint');
-      },
-    });
+    const eventLoopOptions = createEventLoopOptions();
 
     queueTask(source, eventLoop, inactiveDocument, inactiveSteps);
     queueTask(source, eventLoop, null, runnableSteps);
@@ -129,7 +134,7 @@ describe('task queues', () => {
   });
 
   it('lets scheduling policy choose among runnable task queues', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const firstSource = createTaskSource('first');
     const secondSource = createTaskSource('second');
     const first = vi.fn();
@@ -154,7 +159,11 @@ describe('task queues', () => {
   });
 
   it('leaves unrunnable tasks queued without checkpointing', () => {
-    const eventLoop = new EventLoop();
+    const checkpoint = vi.fn();
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint: checkpoint,
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('inactive');
     const steps = vi.fn();
     const eventLoopOptions = createEventLoopOptions();
@@ -163,14 +172,16 @@ describe('task queues', () => {
 
     expect(eventLoop.runTaskTurn(eventLoopOptions)).toBe(false);
     expect(steps).not.toHaveBeenCalled();
-    expect(
-      eventLoopOptions.performMicrotaskCheckpoint,
-    ).not.toHaveBeenCalled();
+    expect(checkpoint).not.toHaveBeenCalled();
     expect(EventLoop.getTaskQueue(eventLoop, source).size).toBe(1);
   });
 
   it('clears the current task and checkpoints when task steps throw', () => {
-    const eventLoop = new EventLoop();
+    const checkpoint = vi.fn();
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint: checkpoint,
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('throwing');
     const error = new Error('task failed');
     const eventLoopOptions = createEventLoopOptions();
@@ -183,14 +194,16 @@ describe('task queues', () => {
       longTaskReporter,
     })).toThrow(error);
     expect(eventLoop.currentlyRunningTask).toBeNull();
-    expect(
-      eventLoopOptions.performMicrotaskCheckpoint,
-    ).toHaveBeenCalledOnce();
+    expect(checkpoint).toHaveBeenCalledOnce();
     expect(longTaskReporter.reportLongTasks).toHaveBeenCalledOnce();
   });
 
   it('accounts for a task around its steps and checkpoint', () => {
-    const eventLoop = new EventLoop();
+    const order: string[] = [];
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint() { order.push('checkpoint'); },
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('accounting');
     const traversable = createNewTopLevelTraversable(
       new UserAgent(),
@@ -201,7 +214,6 @@ describe('task queues', () => {
     if (document === null) {
       throw new Error('Expected an active Document');
     }
-    const order: string[] = [];
     const startTime = new UnsafeMoment(monotonicClock, 10);
     const endTime = new UnsafeMoment(monotonicClock, 20);
     const times = [startTime, endTime];
@@ -211,7 +223,6 @@ describe('task queues', () => {
         if (time === undefined) throw new Error('Unexpected clock read');
         return time;
       },
-      performMicrotaskCheckpoint() { order.push('checkpoint'); },
     });
     queueTask(source, eventLoop, document, () => { order.push('task'); });
     const [task] = EventLoop.getTaskQueue(eventLoop, source);
@@ -249,7 +260,7 @@ describe('task queues', () => {
   });
 
   it('omits Document timing hooks for a null-Document task', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const source = createTaskSource('null Document');
     const longTaskReporter = createLongTaskReporter();
     const taskTiming = createTaskTimingHooks();
@@ -267,13 +278,15 @@ describe('task queues', () => {
   });
 
   it('coalesces host wake-ups and requests one later turn per task', () => {
-    const eventLoop = new EventLoop();
+    const order: string[] = [];
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint() { order.push('checkpoint'); },
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const source = createTaskSource('scheduled');
     const turns: (() => void)[] = [];
-    const order: string[] = [];
     const eventLoopOptions = createEventLoopOptions({
       requestEventLoopTurn(steps) { turns.push(steps); },
-      performMicrotaskCheckpoint() { order.push('checkpoint'); },
     });
 
     queueTask(source, eventLoop, null, () => { order.push('first'); });
@@ -292,7 +305,7 @@ describe('task queues', () => {
   });
 
   it('requests a host turn when runnable work arrives after startup', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const source = createTaskSource('late');
     const turns: (() => void)[] = [];
     const eventLoopOptions = createEventLoopOptions({
@@ -308,7 +321,7 @@ describe('task queues', () => {
   });
 
   it('does not request a host turn for inactive Document work', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const source = createTaskSource('inactive scheduled');
     const eventLoopOptions = createEventLoopOptions();
 
@@ -319,7 +332,7 @@ describe('task queues', () => {
   });
 
   it('does not enter another task turn while one is running', () => {
-    const eventLoop = new EventLoop();
+    const eventLoop = createEventLoop();
     const source = createTaskSource('reentrant');
     const options = createEventLoopOptions();
     const second = vi.fn();
@@ -379,10 +392,11 @@ describe('task queues', () => {
   });
 
   it('identifies a microtask as the currently running task', () => {
-    const eventLoop = new EventLoop();
     let queuedSteps: (() => void) | undefined;
-    const hostQueueMicrotask = vi.spyOn(globalThis, 'queueMicrotask')
-      .mockImplementation((steps) => { queuedSteps = steps; });
+    const microtaskQueue = createMicrotaskQueue({
+      enqueueMicrotask(steps) { queuedSteps = steps; },
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
     const steps = vi.fn(() => {
       expect(eventLoop.currentlyRunningTask?.steps).toBe(steps);
     });
@@ -392,45 +406,61 @@ describe('task queues', () => {
 
     expect(steps).toHaveBeenCalledOnce();
     expect(eventLoop.currentlyRunningTask).toBeNull();
-    hostQueueMicrotask.mockRestore();
   });
 
   it('suppresses reentrant microtask checkpoints', () => {
-    const eventLoop = new EventLoop();
-    const eventLoopOptions = createEventLoopOptions({
-      performMicrotaskCheckpoint() {
-        eventLoop.performMicrotaskCheckpoint(
-          eventLoopOptions.performMicrotaskCheckpoint,
-        );
-      },
+    const checkpoint = vi.fn();
+    const microtaskQueue = createMicrotaskQueue({
+      performMicrotaskCheckpoint: checkpoint,
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
+    checkpoint.mockImplementation(() => {
+      eventLoop.performMicrotaskCheckpoint();
     });
 
-    eventLoop.performMicrotaskCheckpoint(
-      eventLoopOptions.performMicrotaskCheckpoint,
-    );
+    eventLoop.performMicrotaskCheckpoint();
 
-    expect(
-      eventLoopOptions.performMicrotaskCheckpoint,
-    ).toHaveBeenCalledOnce();
+    expect(checkpoint).toHaveBeenCalledOnce();
   });
 
   it('identifies host-queued microtask execution as a checkpoint', () => {
-    const eventLoop = new EventLoop();
     let queuedSteps: (() => void) | undefined;
-    const hostQueueMicrotask = vi.spyOn(globalThis, 'queueMicrotask')
-      .mockImplementation((steps) => { queuedSteps = steps; });
     const checkpoint = vi.fn();
+    const microtaskQueue = createMicrotaskQueue({
+      enqueueMicrotask(steps) { queuedSteps = steps; },
+      performMicrotaskCheckpoint: checkpoint,
+    });
+    const eventLoop = new EventLoop(microtaskQueue);
 
     eventLoop.queueMicrotask(() => {
-      eventLoop.performMicrotaskCheckpoint(checkpoint);
+      eventLoop.performMicrotaskCheckpoint();
     });
     queuedSteps?.();
 
     expect(checkpoint).not.toHaveBeenCalled();
-    hostQueueMicrotask.mockRestore();
   });
 
-  it.fails(
+  it('clears an outer task after a nested microtask runs', () => {
+    let queuedSteps: (() => void) | undefined;
+    const eventLoop = new EventLoop(createMicrotaskQueue({
+      enqueueMicrotask(steps) { queuedSteps = steps; },
+    }));
+    const source = createTaskSource('outer');
+    const microtask = vi.fn();
+    const outer = vi.fn(() => {
+      eventLoop.queueMicrotask(microtask);
+      queuedSteps?.();
+      expect(eventLoop.currentlyRunningTask).toBeNull();
+    });
+
+    queueTask(source, eventLoop, null, outer);
+    eventLoop.runTaskTurn(createEventLoopOptions());
+
+    expect(microtask).toHaveBeenCalledOnce();
+    expect(eventLoop.currentlyRunningTask).toBeNull();
+  });
+
+  itCompatPasses(
     'does not report an adopted Stream start rejection as unhandled',
     () => {
       /*
@@ -494,19 +524,34 @@ function createTask(document: DocumentImpl | null): Task {
   return new Task(createTaskSource('runnable'), document, () => {});
 }
 
+function createEventLoop(): EventLoop {
+  return new EventLoop(createMicrotaskQueue());
+}
+
+function createMicrotaskQueue(
+  overrides: Partial<JavaScriptMicrotaskQueue> = {},
+): JavaScriptMicrotaskQueue {
+  return {
+    kind: overrides.kind ?? 'explicit',
+    enqueueMicrotask: vi.fn(overrides.enqueueMicrotask ?? (() => {})),
+    performMicrotaskCheckpoint: vi.fn(
+      overrides.performMicrotaskCheckpoint ?? (() => {}),
+    ),
+  };
+}
+
 function createEventLoopOptions(
   overrides: Partial<EventLoopOptions> = {},
 ): EventLoopOptions {
   return {
+    createMicrotaskQueue: overrides.createMicrotaskQueue ??
+      (() => createMicrotaskQueue()),
     requestEventLoopTurn: vi.fn(
       overrides.requestEventLoopTurn ?? (() => {}),
     ),
     unsafeSharedCurrentTime: vi.fn(
       overrides.unsafeSharedCurrentTime ??
       (() => new UnsafeMoment(monotonicClock, 0)),
-    ),
-    performMicrotaskCheckpoint: vi.fn(
-      overrides.performMicrotaskCheckpoint ?? (() => {}),
     ),
   };
 }

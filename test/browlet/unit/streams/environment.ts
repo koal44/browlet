@@ -1,4 +1,3 @@
-import { Realm } from '../../../../src/browlet/scripting/realm';
 import {
   streamAbortController, type StreamAbortController,
 } from '../../../../src/streams/abort';
@@ -10,6 +9,7 @@ import {
   type BindingContext,
 } from '../../../../src/web-idl/index';
 import { isPromiseValue } from '../../../../src/web-idl/promise-value';
+import { TestRealm } from '../../../web-idl/test-realm';
 
 export function createTestContext(
   options: TestContextOptions = {},
@@ -27,7 +27,7 @@ export function createTestContext(
       }),
     ],
   });
-  const realm = new Realm();
+  const realm = new TestRealm();
   const realmBindings = bindings.register(realm);
   realmBindings.projectGlobalObject(realm.global, testGlobalIDL.name);
   return realmBindings.context;

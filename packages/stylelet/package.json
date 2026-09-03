@@ -46,6 +46,6 @@
   },
   "scripts": {
     "build": "node ../../scripts/build.mjs stylelet",
-    "prepack": "npm run build"
+    "prepack": "node --run build"
   }
 }

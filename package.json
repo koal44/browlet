@@ -22,8 +22,9 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "lint": "npm run typecheck && eslint src test scripts packages",
+    "lint": "node --run typecheck && eslint src test scripts packages",
     "typecheck": "tsc -b",
+    "with-node": "node scripts/with-node.mjs",
     "install:vendor": "node scripts/build.mjs selectlet && tsx scripts/vendor.ts",
     "install:wpt": "tsx scripts/install-wpt.ts",
     "test:unit": "vitest run --project=unit",
@@ -35,8 +36,8 @@
     "test:stylelet:oracle": "cross-env HARNESS_MODE=normal playwright test --project=stylelet",
     "test:stylelet:oracle:fixme": "cross-env HARNESS_MODE=fixme playwright test --project=stylelet",
     "test:selectlet:perf": "playwright test --project=perf --workers=1",
-    "test:quick": "npm run lint && npm run build && npm run test:unit && npm run test:artifact",
-    "test:all": "npm run test:quick && npm run test:browlet:wpt && npm run test:selectlet:oracle && npm run test:stylelet:oracle"
+    "test:quick": "node --run lint && node --run build && node --run test:unit && node --run test:artifact",
+    "test:all": "node --run test:quick && node --run test:browlet:wpt && node --run test:selectlet:oracle && node --run test:stylelet:oracle"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

@@ -56,9 +56,14 @@ It must not:
 [`javascript/`](./javascript/README.md) is the engine substrate beneath Web
 IDL. A `JavaScriptRealm` exposes realm-owned globals, intrinsics, function
 creation, and evaluation. The concrete `NodeRealm` owns one `node:vm` context,
-while the isolate-scoped `NodeRuntime` owns engine facilities shared across
-those realms, including raw microtask enqueueing, the provisional
-object-to-realm associations, and the synchronous checkpoint operation.
+while the isolate-scoped `NodeRuntime` owns feature selection and the
+provisional object-to-realm associations shared across those realms. It also
+supplies `JavaScriptMicrotaskQueue` backends without owning their HTML
+lifecycle: each EventLoop asks the runtime factory for one queue and shares it
+with all Realms of its Agent. The factory selects an explicit queue under
+compatible Node or the one ambient fallback queue under stock Node. Enqueue and
+checkpoint operations travel together on that contract so the event loop
+cannot mix queue backends.
 Engine-specific built-in branding and internal-slot access also belong here;
 the consuming specification retains the decisions it makes from those facts.
 
@@ -471,8 +476,7 @@ identifier:
 
 ```ts
 /*
- * ACCOMMODATION(node-v8-checkpoint): Node does not expose a supported
- * synchronous V8 microtask checkpoint operation.
+ * ACCOMMODATION(node-v8-error-stack): Node does not expose Error [[Stack]].
  */
 ```
 

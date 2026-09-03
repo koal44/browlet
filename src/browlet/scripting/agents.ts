@@ -1,4 +1,5 @@
 import { EventLoop, type EventLoopOptions } from './event-loop';
+import { nodeRuntime } from '../../javascript/index';
 import type { BrowsingContextGroup } from '../browsing/browsing-context';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
@@ -25,7 +26,10 @@ export abstract class Agent {
     eventLoopOptions: EventLoopOptions | null = null,
   ) {
     this.canBlock = canBlock;
-    this.eventLoop = new EventLoop();
+    this.eventLoop = new EventLoop(
+      eventLoopOptions?.createMicrotaskQueue() ??
+      nodeRuntime.createMicrotaskQueue(),
+    );
     this.signifier = Symbol('Agent');
 
     if (eventLoopOptions !== null) {

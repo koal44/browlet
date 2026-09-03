@@ -37,7 +37,7 @@ export class Browlet {
     this.#route = config.route;
     this.#userAgent = new UserAgent(
       {
-        performMicrotaskCheckpoint: nodeRuntime.performMicrotaskCheckpoint,
+        createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
         requestEventLoopTurn: requestNodeEventLoopTurn,
         unsafeSharedCurrentTime,
       },

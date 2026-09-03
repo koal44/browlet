@@ -4,6 +4,16 @@ This project owns Browlet's JavaScript-engine substrate. It sits below Web IDL
 and has no knowledge of HTML Agents, environment settings objects, tasks,
 Documents, Windows, or platform-object projection.
 
+The [JavaScript embedding roadmap](./roadmap.md) inventories HTML's complete
+ECMAScript dependency list and separates ordinary engine behavior from the
+small set of inaccessible runtime facts and genuine host hooks.
+Its work proceeds by coherent consumers. The first runtime slice established
+explicit versus ambient microtask-queue backends. Browlet-compatible Node now
+also supplies the `ContextHandle` and global-proxy lifecycle; the current slice
+adopts that substrate in Browlet before the Promise-job host-hook audit
+continues. It does not implement imported ECMAScript terms or host hooks as
+undifferentiated families.
+
 ## Admission rule
 
 Classify code by ownership before extracting it:
@@ -22,8 +32,8 @@ effects at the composition boundary.
 An engine effect can occupy both sides of a Host Port without merging their
 ownership. The stable engine operation and its concrete Node accommodation
 belong here; the consuming subsystem injects that narrow operation and retains
-the specification policy which decides when to use it. The microtask-checkpoint
-bridge below is the model.
+the specification policy which decides when to use it. The microtask-queue
+backend below is the model.
 
 Passing this rule permits an operation to live here; it does not require a
 wrapper around every `Reflect` call, type test, or built-in conversion. Add a
@@ -41,10 +51,11 @@ that operation independently of Web IDL records and conversion policy.
 The stable contract uses JavaScript vocabulary. The concrete backend remains
 explicitly Node-shaped:
 
-- `NodeRuntime` is the isolate-scoped owner of engine facilities and the
+- `NodeRuntime` is the isolate-scoped owner of engine feature selection and the
   object-to-realm associations Node cannot expose directly;
 - `NodeRealm` owns one Node VM context, its captured intrinsics, evaluation,
-  function creation, and global-object bridge; and
+  function creation, and global-object bridge, and receives the selected
+  microtask queue when its context is created; and
 - Web IDL or HTML hosts subclass `NodeRealm` to add their own policy without
   introducing a forwarding realm object.
 
@@ -52,6 +63,26 @@ There is one exported `nodeRuntime` instance per module instance. Node workers
 load separate module instances and therefore receive separate runtime owners.
 Do not construct per-Agent, per-AgentCluster, or per-BindingWorld realm maps:
 objects can cross those boundaries synchronously within one isolate.
+
+The JavaScript-facing queue contract is deliberately independent of Node's VM
+handle:
+
+```ts
+interface JavaScriptMicrotaskQueue {
+  readonly kind: 'explicit' | 'ambient';
+  enqueueMicrotask(steps: () => void): void;
+  performMicrotaskCheckpoint(): void;
+}
+```
+
+A Browlet-compatible Node supplies an explicit V8 queue. Each HTML EventLoop
+asks the runtime factory for one queue, passes that same queue to every realm
+belonging to its Agent, and uses it for both HTML `queueMicrotask()` and
+checkpointing. The factory selects an explicit queue under compatible Node or
+the one ambient queue backed by `queueMicrotask()` and the checkpoint
+accommodation below under stock Node. The upper layer owns the queue according to
+its lifecycle; the JavaScript project supplies its engine implementation
+without importing HTML.
 
 ## Node/V8 accommodations
 
@@ -62,16 +93,40 @@ Replace the associations and fallback together if Node exposes arbitrary
 objects' `[[Realm]]` or Browlet moves to a direct V8 embedder.
 
 `node-vm-global-proxy` bridges a supplied global object and global-this value
-through Node's context global. Node cannot install an existing WindowProxy as
-the VM context's true global-this, so free names reach the modeled global graph
-while top-level `this` remains the VM global. Replace this bridge as one unit if
-the embedder gains control of the true global proxy.
+through Node's context global. Stock Node cannot install an existing
+WindowProxy as the VM context's true global-this, so free names reach the
+modeled global graph while top-level `this` remains the VM global. A
+Browlet-compatible Node instead exposes an opaque `ContextHandle` for the
+replaceable execution context and a separate `globalProxy` identity. The
+handle can detach that proxy; supplying the detached handle as
+`reuseGlobalProxyFrom` transfers the proxy once to a fresh Realm with fresh
+intrinsics and global state. The handle itself proves provenance, so the
+runtime needs no global proxy registry. `NodeRealm` uses this handle whenever
+the compatible surface is available, and the runtime's
+`makePrototypeImmutable()` operation seals each fresh backing global after
+Browlet installs its global graph. This follows Gecko's create, project, then
+seal ordering; Blink instead creates its global from a generated V8 template
+which already contains the binding graph.
 
-`node-v8-checkpoint` uses private `process._tickCallback()` because Node has no
-supported synchronous V8 microtask-checkpoint operation. The operation belongs
-to `nodeRuntime`; HTML injects it into its event-loop processing model. Replace
-only this runtime operation when Node exposes the required primitive—HTML's
-checkpoint guard and post-checkpoint work remain specification behavior.
+The experimental contexts deliberately use Node's ordinary VM principal token
+so host code can configure the global proxy. That is an embedder-access choice,
+not browser origin isolation: `origin` remains inspector metadata, and the API
+does not supply WindowProxy cross-origin access callbacks. V8 also cancels jobs
+still queued for an old Realm when its global is detached. Browlet must reach
+the required HTML checkpoint before reuse, give Web IDL a distinct native
+global-proxy exposure target, and implement the remaining WindowProxy exotic
+and origin-policy contracts before navigation can adopt this substrate. The
+API cannot accept Browlet's existing arbitrary JavaScript `Proxy` as a
+shortcut.
+
+`node-v8-checkpoint` is now the stock/ambient fallback. Stock Node has no
+supported synchronous V8 microtask-checkpoint operation, so that backend uses
+private `process._tickCallback()`. A Browlet-compatible Node instead gives an
+explicit queue both `enqueueMicrotask()` and `runMicrotasks()`; the runtime maps
+those to the queue contract above. Replace or remove only
+the ambient backend when the supported stock baseline gains the same complete
+surface—HTML's checkpoint guard and post-checkpoint work remain specification
+behavior in either mode.
 
 `node-v8-promise-reactions` supplies `installPromiseReactions()`, Browlet's
 approximation of `PerformPromiseThen` without a result capability. JavaScript
@@ -119,6 +174,7 @@ by
 [`array-buffer-primitives.test.ts`](../../test/javascript/unit/array-buffer-primitives.test.ts)
 and the HTML structured-data tests.
 
-The runtime contracts and their known checkpoint limits are exercised in
+The runtime contracts, explicit-queue behavior, and known ambient fallback
+limits are exercised in
 [`node-realm.test.ts`](../../test/javascript/unit/node-realm.test.ts) and
 [`node-runtime.test.ts`](../../test/javascript/unit/node-runtime.test.ts).

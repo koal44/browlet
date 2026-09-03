@@ -16,6 +16,9 @@ import {
 import {
   structuredSerializeForStorage,
 } from '../../../src/browlet/scripting/structured-data/serialize';
+import {
+  observeBrowletPromise, performTestMicrotaskCheckpoint,
+} from './test-runtime';
 
 describe('File API Blob projection', () => {
   it('constructs Blob state with the host native line ending', async () => {
@@ -172,9 +175,19 @@ describe('File API Blob projection', () => {
     const blob = constructBlob(window, ['unused']);
     const stream = call(blob, 'stream') as object;
 
-    await expect(call(stream, 'cancel', ['stop'])).resolves.toBeUndefined();
+    const cancellation = observeBrowletPromise(
+      window,
+      call(stream, 'cancel', ['stop']) as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(cancellation).resolves.toBeUndefined();
     const reader = call(stream, 'getReader') as object;
-    await expect(call(reader, 'read')).resolves.toEqual({
+    const reading = observeBrowletPromise(
+      window,
+      call(reader, 'read') as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(reading).resolves.toEqual({
       done: true,
       value: undefined,
     });

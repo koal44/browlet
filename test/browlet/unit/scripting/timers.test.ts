@@ -117,7 +117,8 @@ function createTimerFixture() {
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active Document');
 
-  const eventLoop = new EventLoop();
+  const eventLoop = new EventLoop(createEventLoopOptions()
+    .createMicrotaskQueue());
   const global = {};
   const host = new ManualTimerHost();
   const timers = new GlobalTimers({
@@ -143,9 +144,13 @@ function runNextTask(eventLoop: EventLoop): void {
 
 function createEventLoopOptions(): EventLoopOptions {
   return {
+    createMicrotaskQueue: () => ({
+      kind: 'ambient',
+      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
+      performMicrotaskCheckpoint: vi.fn(),
+    }),
     requestEventLoopTurn: vi.fn(),
     unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    performMicrotaskCheckpoint: vi.fn(),
   };
 }
 
