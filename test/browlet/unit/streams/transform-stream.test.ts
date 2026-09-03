@@ -6,6 +6,9 @@ import {
 import { createTransformStream } from '../../../../src/streams/index';
 import { TransformStreamImpl } from '../../../../src/streams/transform-stream';
 import type { TransformStreamDefaultControllerImpl } from '../../../../src/streams/transform-stream-default-controller';
+import {
+  observeBrowletPromise, performTestMicrotaskCheckpoint,
+} from '../test-runtime';
 import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('transform-stream implementation', () => {
@@ -214,17 +217,15 @@ describe('transform-stream projection', () => {
       readable,
       [],
     ) as object;
-    const read = Reflect.apply(
-      requireFunction(reader, 'read'),
-      reader,
-      [],
-    ) as Promise<unknown>;
+    const read = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(reader, 'read'), reader, [],
+    ) as Promise<unknown>);
 
-    await expect(Reflect.apply(
-      requireFunction(writer, 'write'),
-      writer,
-      ['projected'],
-    ) as Promise<unknown>).resolves.toBeUndefined();
+    const writing = observeBrowletPromise(window, Reflect.apply(
+      requireFunction(writer, 'write'), writer, ['projected'],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
+    await expect(writing).resolves.toBeUndefined();
     await expect(read).resolves.toEqual({
       done: false,
       value: 'projected',

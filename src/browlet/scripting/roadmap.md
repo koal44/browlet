@@ -13,8 +13,9 @@
   queues, deterministic task turns, currently-running-task state, task timing
   hooks, checkpoint coordination, the HTML §8.1.3.3 backup-incumbent stack,
   Browlet-controlled script entries from §8.1.4.4 and coalesced host wake-ups.
-  Browlet integration supplies the Node turn request, and the lower JavaScript
-  runtime supplies the injected V8-checkpoint operation.
+  Browlet integration supplies the Node turn request. The current queue slice
+  gives the loop a lower-level `JavaScriptMicrotaskQueue` for both enqueue and
+  checkpoint operations and gives its realms the same queue.
 - `global-scope.ts`: the composed `WindowOrWorkerGlobalScope` state and HTML
   §8.8 `queueMicrotask()` API, routed through the relevant realm's agent-owned
   event loop.
@@ -33,6 +34,14 @@ internal boundaries. Browlet intentionally follows HTML's agent-owned semantic
 event loop and puts host scheduling beneath it; copying an engine's routing
 surface without its scheduler and lifecycle model would create an inconsistent
 hybrid.
+
+Before adding an ECMAScript host hook or another mirror of inaccessible engine
+state, read the [JavaScript embedding roadmap](../../javascript/roadmap.md).
+Its HTML §2.1.9 inventory is the authoritative distinction between operations
+which remain inside V8, engine facts Browlet can observe only partially, and
+hooks which neither stock nor Browlet-compatible Node exposes. The compatible
+runtime's queue and global-proxy APIs are substrates for that work, not the
+host hooks themselves.
 
 ## Section 8 execution constraints
 
@@ -56,45 +65,39 @@ hybrid.
   sources once the lifecycle supplies them.
 - The microtask queue is separate from task queues. A microtask checkpoint also
   coordinates rejected-promise reporting, MutationObserver delivery, custom
-  element reactions, and JavaScript kept-object cleanup. Calling Node's
-  `queueMicrotask()` is therefore a host wake-up mechanism, not the complete
-  HTML checkpoint algorithm.
-- Default `vm.Context`s share Node's microtask queue, but `node:vm` has no
-  public synchronous checkpoint. Until an explicit shareable queue reaches the
-  supported Node baseline, keep a feature-detected `process._tickCallback()`
-  bridge isolated in the JavaScript runtime's Node backend. It is a deprecated
-  private hook that drains Node's ambient queue rather than a Browlet-owned
-  queue: unrelated host or dependency promise jobs, work from another Browlet
-  instance in the same isolate, next-tick callbacks, and promise-rejection
-  machinery can run during the checkpoint. It is therefore only a provisional
-  compatibility bridge for a controlled single-scheduler host, not an
-  isolation boundary or the definition of Browlet's checkpoint semantics.
-  Preserve cross-realm FIFO
-  and contamination-limit tests around the bridge. The private hook also
-  cannot force a nested drain while V8 is already performing a microtask
-  checkpoint, so the Browlet scheduler must enter task turns from a Node task
-  boundary rather than a Promise or microtask callback. Synchronously advanced
-  test clocks do not create that boundary; preserve that integration case as
-  an expected failure rather than claiming ordinary fake-timer compatibility.
-  Fail explicitly when the hook is unavailable, and replace it once a public
-  capability exists.
-  Revisit this bridge after timers, Fetch completion, parser-blocking scripts,
-  load events, and same-agent multi-realm behavior provide representative
-  downstream tests, but before calling the Document execution lifecycle
-  stable. At that review, evaluate candidate hosts or workarounds against the
-  accumulated ordering and isolation tests, then either replace the bridge or
-  record the smallest explicit compatibility downgrade Browlet can support.
-  `microtaskMode: 'afterEvaluate'` is not a fallback because it gives each
-  context a separate queue. These are the `node-v8-microtask-queue` and
-  `node-v8-checkpoint` accommodations; their affected code and replacement
-  conditions are recorded in
-  [the event-loop architecture](./event-loop-architecture.md#runtime-accommodations).
+  element reactions, and JavaScript kept-object cleanup. Stock Node's ambient
+  `queueMicrotask()` is only that backend's enqueue primitive, not an event-loop
+  wake-up or the complete HTML checkpoint algorithm. Compatible mode instead
+  enqueues directly on the EventLoop's explicit V8 queue.
+- `JavaScriptMicrotaskQueue` has one complete consumer-facing contract:
+  `kind` is `explicit` or `ambient`, `enqueueMicrotask()` adds work, and
+  `performMicrotaskCheckpoint()` drains it. Each EventLoop asks the runtime
+  factory for one queue and passes it to every Realm belonging to that Agent.
+  Under a Browlet-compatible Node the factory creates an explicit V8 queue used
+  for both HTML microtasks and Promise-job checkpoints.
+- Under stock Node the factory returns the one ambient queue. That backend
+  delegates enqueue to `queueMicrotask()` and checkpointing to the
+  feature-detected private `process._tickCallback()`. Unrelated host or
+  dependency jobs, work from another Browlet instance, next-tick callbacks,
+  and promise-rejection machinery can therefore run during a fallback
+  checkpoint. Preserve cross-realm FIFO, contamination, nested-checkpoint,
+  rejection, and fake-clock tests specifically around this fallback.
+  `microtaskMode: 'afterEvaluate'` is not an alternative because it gives each
+  context a separate queue. These are the stock manifestations of the
+  `node-v8-microtask-queue` and `node-v8-checkpoint` accommodations recorded in
+  [the event-loop architecture](./event-loop-architecture.md#runtime-integration-and-accommodations).
+- An explicit queue still does not implement `HostMakeJobCallback`,
+  `HostCallJobCallback`, or `HostEnqueuePromiseJob`. V8 selects the queue for
+  native Promise jobs but does not expose each job closure, Realm Record, or
+  callback preparation/cleanup boundary. Keep the
+  `node-v8-execution-contexts` accommodation and continue that host-hook audit
+  separately.
 - DOM §4 assigns each similar-origin Window agent a
   mutation-observer-microtask-queued flag, pending mutation observers, and
   signal slots. Keep that state on `WindowAgent`; DOM owns record/slot
   notification semantics, while the event loop schedules and performs the one
-  checkpoint delivery. This is the first concrete consumer with which to
-  replace the current microtask-delegation skeleton.
+  checkpoint delivery. This is the first concrete consumer which will extend
+  the existing checkpoint's post-processing tail.
 - The Window event-loop processing model eventually owns rendering
   opportunities and animation-frame callbacks. Style/layout/rendering should
   plug into that opportunity; they must not start a competing frame scheduler.
@@ -116,8 +119,9 @@ loops without equating an event loop with an implementation thread. The
 authoritative fully-active-Document predicate now supplies the task
 runnability rule.
 
-The provisional event-loop surface must be replaced with the remaining
-definition-level state before it runs tasks:
+The task kernel now implements the following definition-level state. Preserve
+these boundaries while adding the remaining element-task destination,
+checkpoint post-processing, rendering, and worker consumers:
 
 - A task is a record containing steps, a task-source identity, a `Document` or
   null, and the set of environment settings objects used by script evaluation.
@@ -137,9 +141,9 @@ definition-level state before it runs tasks:
   or idle-period code relies on it.
 - The conceptual microtask queue must preserve ordering between Promise jobs
   and `queueMicrotask()` jobs. Do not add a second TypeScript queue alongside
-  V8's Promise queue. Queueing and synchronous checkpointing instead enter
-  through explicit event-loop options, with the documented Node checkpoint
-  limitation until Node exposes an explicit shareable queue.
+  V8's Promise queue. Queueing and synchronous checkpointing enter through the
+  same `JavaScriptMicrotaskQueue`: an explicit per-EventLoop V8 queue under
+  compatible Node, or the documented ambient fallback under stock Node.
 
 The low-level `queue a task` operation should require an explicit event loop
 and `Document` in Browlet code. The specification itself warns that implied
@@ -177,7 +181,7 @@ adding a DOM timer path.
 | loader `speculation.ts` | Speculation-rules parse-result registration | HTML §8.1.4.9 and §7.6 |
 | existing `event-handlers.ts` | Extend the ordinary IDL-handler core with content-attribute compilation, Window/element targeting, special error/beforeunload processing, and the global handler mixins | HTML §8.1.8 |
 | `structured-data/` | Structured serialization, transfer, target-realm reconstruction, and `structuredClone()`; see its narrower roadmap | HTML §2.7 |
-| `host-hooks.ts` | ECMAScript host hooks used by HTML | HTML §8.1.6 |
+| JavaScript runtime plus the owning script, Promise, module, or policy source | ECMAScript host hooks, delivered as vertical consumer slices rather than a preselected catch-all module | HTML §8.1.6; [JavaScript embedding roadmap](../../javascript/roadmap.md) |
 | existing `event-loop.ts` and `tasks.ts` | Remaining worker/worklet loop restrictions and loop teardown around the implemented tasks, routing, and checkpoints | HTML §8.1.7; HTML §§10.2.2 and 11.3.1.1 |
 | existing `agents.ts` and `event-loop.ts` | MutationObserver pending state, signal-slot state, single-microtask suppression, and checkpoint delivery | DOM §§4.2.2 and 4.3; HTML §8.1.7 |
 | existing `global-scope.ts` | Complete `WindowOrWorkerGlobalScope` origin, security, base64, `reportError()`, image, and structured-clone contributions | HTML §§8.2–8.3 |
@@ -252,13 +256,14 @@ without queue suppression and event-loop teardown is not worker shutdown.
    policy, remove its oldest runnable task, set and clear the currently-running
    task in `try`/`finally`, run its steps, and reach the microtask-checkpoint
    boundary through a required hook. It is not a blocking `while (true)`.
-4. The checkpoint's reentrancy guard is `EventLoop` state, while the
-   feature-detected `_tickCallback()` bridge is an explicit `NodeRuntime`
-   operation in [`../../javascript/node-runtime.ts`](../../javascript/node-runtime.ts).
-   The HTML checkpoint receives that operation without
-   knowing its mechanism. Cross-realm FIFO behavior is covered; the
-   ambient-queue contamination limit remains a runtime constraint rather than
-   behavior Browlet can isolate or normalize.
+4. Give the event loop and all Realms of its Agent the same
+   `JavaScriptMicrotaskQueue`. A Browlet-compatible Node uses a distinct
+   explicit V8 queue per EventLoop; stock Node uses the ambient backend whose
+   checkpoint remains the
+   feature-detected `_tickCallback()` operation in
+   [`../../javascript/node-runtime.ts`](../../javascript/node-runtime.ts).
+   Test exact isolation and FIFO behavior in compatible mode and preserve the
+   ambient contamination downgrade explicitly in stock mode.
    Rejected-promise notification, IndexedDB cleanup, `ClearKeptObjects`, and
    checkpoint timing remain named hooks until their owning subsystems exist.
 5. Let the injected turn-request operation schedule one later runtime task,

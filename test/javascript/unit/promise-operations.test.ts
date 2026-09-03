@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  installPromiseReactions, NodeRealm,
+  installPromiseReactions, NodeRealm, nodeRuntime,
 } from '../../../src/javascript/index';
 
 describe('JavaScript promise operations', () => {
   it('installs reactions through the captured realm intrinsic', async () => {
-    const realm = new NodeRealm();
+    const microtaskQueue = nodeRuntime.createMicrotaskQueue();
+    const realm = new NodeRealm(microtaskQueue);
     const promise = new realm.intrinsics.promise.constructor((resolve) => {
       resolve('fulfilled');
     });
@@ -20,6 +21,7 @@ describe('JavaScript promise operations', () => {
     })).toBe(true);
 
     installPromiseReactions(realm, promise, onFulfilled, undefined);
+    microtaskQueue.performMicrotaskCheckpoint();
     await Promise.resolve();
 
     expect(values).toEqual(['fulfilled']);

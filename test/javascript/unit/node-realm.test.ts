@@ -86,6 +86,8 @@ describe('Node JavaScript Realm', () => {
     first.evaluate('globalThis.answer = 41', 'first.js');
     second.evaluate('globalThis.answer = 42', 'second.js');
 
+    expect(first.evaluate('this', 'first-global.js')).toBe(first.global);
+    expect(second.evaluate('this', 'second-global.js')).toBe(second.global);
     expect(first.evaluate('answer', 'first.js')).toBe(41);
     expect(second.evaluate('answer', 'second.js')).toBe(42);
     expect(first.intrinsics.object).not.toBe(second.intrinsics.object);

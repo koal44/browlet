@@ -3,6 +3,9 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { WritableStreamImpl } from '../../../../src/streams/writable-stream';
 import type { WritableStreamDefaultControllerImpl } from '../../../../src/streams/writable-stream-default-controller';
 import { idlType } from '../../../../src/web-idl/declaration/index';
+import {
+  observeBrowletPromise, performTestMicrotaskCheckpoint,
+} from '../test-runtime';
 import { createTestContext, unwrapStreamPromise } from './environment';
 
 describe('writable-stream implementation', () => {
@@ -26,7 +29,7 @@ describe('writable-stream implementation', () => {
   });
 
   it('writes queued chunks and closes the underlying sink', async () => {
-    const write = vi.fn(() => Promise.resolve(undefined));
+    const write = vi.fn();
     const close = vi.fn(() => Promise.resolve(undefined));
     const stream = new WritableStreamImpl(createTestContext(), {
       close,
@@ -169,7 +172,7 @@ describe('writable-stream projection', () => {
   it('writes through the projected writer surface', async () => {
     const window = new Browlet({ route: () => '' }).window;
     const WritableStream_ = requireConstructor(window, 'WritableStream');
-    const write = vi.fn(() => Promise.resolve(undefined));
+    const write = vi.fn();
     const stream = Reflect.construct(WritableStream_, [{ write }]) as object;
     const writer = Reflect.apply(
       requireMethod(stream, 'getWriter'),
@@ -177,11 +180,11 @@ describe('writable-stream projection', () => {
       [],
     ) as object;
 
-    await expect(Reflect.apply(
-      requireMethod(writer, 'write'),
-      writer,
-      ['chunk'],
-    ) as Promise<unknown>).resolves.toBeUndefined();
+    const writing = observeBrowletPromise(window, Reflect.apply(
+      requireMethod(writer, 'write'), writer, ['chunk'],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
+    await expect(writing).resolves.toBeUndefined();
     expect(write).toHaveBeenCalledWith('chunk', expect.any(Object));
   });
 
@@ -198,11 +201,10 @@ describe('writable-stream projection', () => {
       [],
     ) as object;
 
-    const writing = Reflect.apply(
-      requireMethod(writer, 'write'),
-      writer,
-      ['chunk'],
-    ) as Promise<unknown>;
+    const writing = observeBrowletPromise(window, Reflect.apply(
+      requireMethod(writer, 'write'), writer, ['chunk'],
+    ) as Promise<unknown>);
+    performTestMicrotaskCheckpoint(window);
     await expect(writing).rejects.toBe(failure);
   });
 

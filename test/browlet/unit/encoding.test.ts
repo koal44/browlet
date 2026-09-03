@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import {
+  observeBrowletPromise, performTestMicrotaskCheckpoint,
+} from './test-runtime';
 
 describe('Encoding projection', () => {
   it('decodes labels, options, and streaming input', () => {
@@ -73,14 +76,27 @@ describe('Encoding projection', () => {
       requireObject(decoder, 'readable'),
       'getReader',
     ) as object;
-    const read = call(reader, 'read') as Promise<unknown>;
+    const read = observeBrowletPromise(
+      window,
+      call(reader, 'read') as Promise<unknown>,
+    );
 
-    await expect(call(writer, 'write', [
-      Uint8Array.of(0xF0, 0x9F),
-    ])).resolves.toBeUndefined();
-    await expect(call(writer, 'write', [
-      Uint8Array.of(0x98, 0x80),
-    ])).resolves.toBeUndefined();
+    const firstWrite = observeBrowletPromise(
+      window,
+      call(writer, 'write', [
+        Uint8Array.of(0xF0, 0x9F),
+      ]) as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(firstWrite).resolves.toBeUndefined();
+    const secondWrite = observeBrowletPromise(
+      window,
+      call(writer, 'write', [
+        Uint8Array.of(0x98, 0x80),
+      ]) as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(secondWrite).resolves.toBeUndefined();
     await expect(read).resolves.toEqual({ done: false, value: '😀' });
   });
 
@@ -98,22 +114,38 @@ describe('Encoding projection', () => {
       requireObject(encoder, 'readable'),
       'getReader',
     ) as object;
-    const firstRead = call(reader, 'read') as Promise<{
-      done: boolean;
-      value: Uint8Array;
-    }>;
+    const firstRead = observeBrowletPromise(
+      window,
+      call(reader, 'read') as Promise<{
+        done: boolean;
+        value: Uint8Array;
+      }>,
+    );
 
-    await expect(call(writer, 'write', ['A\uD83D'])).resolves.toBeUndefined();
+    const firstWrite = observeBrowletPromise(
+      window,
+      call(writer, 'write', ['A\uD83D']) as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(firstWrite).resolves.toBeUndefined();
     const first = await firstRead;
     expect(first.done).toBe(false);
     expect(first.value).toBeInstanceOf(requireFunction(window, 'Uint8Array'));
     expect(Array.from(first.value)).toEqual([65]);
 
-    const secondRead = call(reader, 'read') as Promise<{
-      done: boolean;
-      value: Uint8Array;
-    }>;
-    await expect(call(writer, 'write', ['\uDE00'])).resolves.toBeUndefined();
+    const secondRead = observeBrowletPromise(
+      window,
+      call(reader, 'read') as Promise<{
+        done: boolean;
+        value: Uint8Array;
+      }>,
+    );
+    const secondWrite = observeBrowletPromise(
+      window,
+      call(writer, 'write', ['\uDE00']) as Promise<unknown>,
+    );
+    performTestMicrotaskCheckpoint(window);
+    await expect(secondWrite).resolves.toBeUndefined();
     const second = await secondRead;
     expect(second.done).toBe(false);
     expect(Array.from(second.value)).toEqual([240, 159, 152, 128]);

@@ -42,6 +42,7 @@ import { createOpaqueOrigin } from '../../../../src/url/origin';
 import {
   parseURL, serializeURL, type URLRecord,
 } from '../../../../src/url/url';
+import { itCompatPasses } from '../../../test-runtime';
 
 describe('browsing context groups', () => {
   it('keeps the user-agent and browsing-context associations reciprocal', () => {
@@ -132,6 +133,21 @@ describe('browsing context groups', () => {
 
     expect(executionContext.realm.evaluate('this', 'global-this.js'))
       .toBe(context.windowProxy);
+  });
+
+  itCompatPasses('makes the Window realm global prototype immutable', () => {
+    const executionContext = createRealm(new WindowAgent(), {
+      createGlobalObject: () => new WindowImpl(new URL('about:blank')),
+    });
+
+    expect(executionContext.realm.evaluate(
+      'Reflect.setPrototypeOf(this, Object.getPrototypeOf(this))',
+      'same-global-prototype.js',
+    )).toBe(true);
+    expect(executionContext.realm.evaluate(
+      'Reflect.setPrototypeOf(this, {})',
+      'different-global-prototype.js',
+    )).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { nodeRuntime } from '../../../../src/javascript/index';
 import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
@@ -14,6 +15,7 @@ import {
 } from '../../../../src/browlet/performance/clock';
 import type { Domain, Host } from '../../../../src/url/host';
 import type { TupleOrigin } from '../../../../src/url/origin';
+import { itCompatPasses } from '../../../test-runtime';
 
 describe('WindowAgent', () => {
   it('contains window objects and cannot block', () => {
@@ -54,9 +56,9 @@ describe('Agent', () => {
 describe('obtainSimilarOriginWindowAgent', () => {
   it('starts each host-backed agent when the agent is created', () => {
     const eventLoopOptions = {
+      createMicrotaskQueue: vi.fn(nodeRuntime.createMicrotaskQueue),
       requestEventLoopTurn: vi.fn(),
       unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-      performMicrotaskCheckpoint: vi.fn(),
     };
     const userAgent = new UserAgent(eventLoopOptions);
     const group = userAgent.createBrowsingContextGroup();
@@ -67,6 +69,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
     expect(first.eventLoop.started).toBe(true);
     expect(second).toBe(first);
+    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledOnce();
     expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
   });
 
@@ -211,12 +214,56 @@ describe('Realm agent', () => {
 
     expect(queueMicrotask).toHaveBeenCalledWith(steps, null);
   });
+
+  itCompatPasses(
+    'shares one explicit queue between its realms and isolates other agents',
+    () => {
+      const firstAgent = new WindowAgent(createEventLoopOptions());
+      const secondAgent = new WindowAgent(createEventLoopOptions());
+      const firstRealm = new Realm({ agent: firstAgent });
+      const secondRealm = new Realm({ agent: firstAgent });
+      const isolatedRealm = new Realm({ agent: secondAgent });
+      const order: string[] = [];
+
+      for (const realm of [firstRealm, secondRealm, isolatedRealm]) {
+        Reflect.set(realm.global, 'record', (value: string) => {
+          order.push(value);
+        });
+      }
+      firstRealm.evaluate(
+        `Promise.resolve().then(() => record('first'))`,
+        'first-realm.js',
+      );
+      secondRealm.evaluate(
+        `Promise.resolve().then(() => record('second'))`,
+        'second-realm.js',
+      );
+      isolatedRealm.evaluate(
+        `Promise.resolve().then(() => record('isolated'))`,
+        'isolated-realm.js',
+      );
+
+      firstAgent.eventLoop.performMicrotaskCheckpoint();
+      expect(order).toEqual(['first', 'second']);
+
+      secondAgent.eventLoop.performMicrotaskCheckpoint();
+      expect(order).toEqual(['first', 'second', 'isolated']);
+    },
+  );
 });
 
 class TestAgent extends Agent {
   constructor() {
     super(false);
   }
+}
+
+function createEventLoopOptions() {
+  return {
+    createMicrotaskQueue: nodeRuntime.createMicrotaskQueue,
+    requestEventLoopTurn: () => {},
+    unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
+  };
 }
 
 function createTupleOrigin(

@@ -1,21 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
+import { getRelevantRealm } from '../../../../src/browlet/bindings';
+import { performTestMicrotaskCheckpoint } from '../test-runtime';
+import { itCompatPasses } from '../../../test-runtime';
 
 describe('WindowOrWorkerGlobalScope', () => {
-  it('queues its callback after synchronous code', async () => {
-    const { window } = createBrowlet();
-    const order = ['synchronous'];
+  itCompatPasses('shares the Agent queue with Promise jobs', () => {
+    const browlet = createBrowlet();
+    const { window } = browlet;
+    const order: string[] = [];
+    browlet.expose('record', (value: string) => { order.push(value); });
 
-    window.queueMicrotask(() => { order.push('microtask'); });
-    const promise = Promise.resolve().then(() => { order.push('promise'); });
-    order.push('still synchronous');
+    getRelevantRealm(window).evaluate(`
+      queueMicrotask(() => record('microtask'));
+      Promise.resolve().then(() => record('promise'));
+      record('synchronous');
+    `, 'shared-agent-queue.js');
 
-    expect(order).toEqual(['synchronous', 'still synchronous']);
-    await promise;
     expect(order).toEqual([
       'synchronous',
-      'still synchronous',
       'microtask',
       'promise',
     ]);
@@ -30,6 +34,7 @@ describe('WindowOrWorkerGlobalScope', () => {
 
     Reflect.apply(queueMicrotask, window, [throughProxy]);
     Reflect.apply(queueMicrotask, undefined, [throughImplicitGlobal]);
+    performTestMicrotaskCheckpoint(window);
     await Promise.resolve();
 
     expect(throughProxy).toHaveBeenCalledOnce();
@@ -52,6 +57,7 @@ describe('WindowOrWorkerGlobalScope', () => {
     const report = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     window.queueMicrotask(() => { throw exception; });
+    performTestMicrotaskCheckpoint(window);
     await Promise.resolve();
 
     expect(report).toHaveBeenCalledWith(exception);

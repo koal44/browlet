@@ -141,15 +141,14 @@ alternative, and keep the no-top-level-execution invariant tested.
   an ArrayBufferView may refer to the transfer placeholder for its backing
   buffer until the transfer phase fills that record. That graph edge is now
   accepted and covered by a focused transfer test.
-- The selected reader, controller, byte-stream, tee, and piping WPTs pass. A
-  trial of `streams/readable-streams/tee.any.js` passed 25 of 26 subtests; the
-  remaining subtest depends on a source-promise rejection winning over the tee
-  algorithm's explicitly queued microtask while the WPT runs inside Browlet's
-  parser/event-loop turn. Node's provisional nested checkpoint bridge cannot
-  enforce that ordering. Keep the complete file out of the passing selection
-  until the documented event-loop bridge review; ordinary and byte tee
-  behavior remains covered by focused implementation tests and the passing
-  byte-tee WPT.
+- The selected reader, controller, byte-stream, byte-tee, and piping WPT
+  assertions pass under the explicit compatible-Node queue. A prior trial of
+  `streams/readable-streams/tee.any.js` passed 25 of 26 subtests because stock
+  Node's ambient nested-checkpoint bridge could not enforce source-rejection
+  ordering. The compatible-mode unit reproduction now passes, but the complete
+  ordinary-tee file is not in the current WPT selection and has not been rerun
+  as part of that suite. Keep the fallback mismatch explicit rather than
+  changing the Streams algorithms around it.
 - The Readable/BYOB import cycle remains under the documented
   [cycle decision](cycle.md). The new internal creation functions remove a
   wrong Binding round trip, but do not themselves remove an import edge, so no
@@ -234,12 +233,13 @@ alternative, and keep the no-top-level-execution invariant tested.
   its naming rule. Section 10 adds no normative algorithms; its push, pull,
   BYOB, writable-backpressure, shared-pair, and transform patterns are covered
   by the selected WPTs and focused implementation tests.
-- Five additional ordinary Streams WPT files add strategy-integration and
-  patched-global coverage. All 65 selected WPT files pass 1137 subtests.
+- Additional ordinary Streams WPT files add strategy-integration and
+  patched-global coverage. Under the rebuilt compatible Node runtime, all
+  1,193 selected assertions pass and the WPT command exits cleanly without the
+  parser/Promise-job `boo!` rejection leak. Stock Node completes the same
+  assertions but still reports that rejection as unhandled and exits nonzero.
   Transfer WPTs still wait for MessagePort, worker-only variants wait for
-  worker globals, the IDL harness waits for its general harness integration,
-  and the known ordinary-tee ordering case waits for the Node microtask bridge
-  review.
+  worker globals, and the IDL harness waits for its general harness integration.
 
 ## Port progress
 - [x] Project boundary, license, and declaration aggregation

@@ -38,7 +38,7 @@ domains. They are completeness indexes, not independently finishable gates.
 | Stable host boundary | Stylelet-owned declarations and Browlet-owned binding adapters | Every future CSSOM contribution can serve Browlet and jsdom without duplication |
 | Deterministic host | One clock, authoritative Document activity, cancellation, task records, and a test driver | Timers, callbacks, Fetch completion, loading, and navigation can share one lifecycle |
 | Normative DOM | One mutation path with live Range and NodeIterator adjustment | Parsing, custom elements, observers, collections, selectors, and style see the same tree |
-| Reaction checkpoint | MutationObserver, custom-element, and slot delivery on the owning agent's microtask checkpoint | Parser-created and script-created trees have the same observable reactions |
+| Reaction checkpoint | MutationObserver, custom-element, and slot delivery at the owning event loop's microtask checkpoint | Parser-created and script-created trees have the same observable reactions |
 | Response-bearing execution | Fetch records/transport, loader, parser bytes, and classic scripts | A URL can produce an executable Document rather than a synchronous source-string fixture |
 | Browsing topology | Child navigables, cross-origin Window/Location rules, messaging, and history | `iframe`, traversal, auxiliary contexts, workers, and automation have a real browser graph |
 | Rendered document | UA style input, boxes, layout, rendering opportunities, and output | Browlet can advance from DOM host to deterministic headless browser |
@@ -102,10 +102,12 @@ Primary roadmaps: [performance](performance/roadmap.md),
    the derived active/fully-active Document predicates authoritative (HTML
    §§7.3–7.5). Connect initial Document visibility without adding a second
    activity flag.
-4. Replace the microtask-delegation skeleton with task records, task sources,
-   Document activity gating, named global/element task destinations, and a
-   deterministic test driver (HTML §8.1.7). Node supplies wake-ups, not HTML
-   ordering.
+4. **Complete for the current task kernel:** Task records, task sources,
+   Document activity gating, the global task destination, deterministic test
+   driving, and the event-loop-owned JavaScript microtask queue are present
+   (HTML §8.1.7). Add the element task destination with its first consumer and
+   extend checkpoint post-processing with observers and custom elements; Node
+   supplies wake-ups, not HTML ordering.
 5. **Complete for Window function callbacks:** Add the ordered timer map,
    nesting/clamping, active-time timeout steps, and timer-task source on that
    loop (HTML §8.7). `AbortSignal.timeout()` uses that lifecycle rather than a
@@ -212,9 +214,28 @@ Current implementation sequence:
    Fetch-independent XHR prerequisites consumed by File and Fetch.
    `ProgressEvent` and the no-form `FormData` entry-list core are complete;
    `FormData(form, submitter)` waits for HTML forms.
-4. **Next:** Implement Fetch's records, author APIs, and first transport
-   slices.
-5. Return to the File API and XHR tails whose normative algorithms consume
+4. **Complete:** Integrate the explicit microtask queue from the
+   [JavaScript embedding roadmap](../javascript/roadmap.md). A configured HTML
+   EventLoop receives one queue shared by all Realms of its Agent under a
+   Browlet-compatible Node. The full current unit suite and all 1,193 selected
+   WPT assertions pass on that path with a clean process exit. Stock Node
+   completes the WPT assertions but still exits nonzero on the retained
+   parser/Promise-job unhandled-rejection artifact; stock Node retains the
+   explicitly tested ambient fallback.
+5. **Next:** Integrate the implemented `ContextHandle` boundary into Browlet's
+   HTML Realm/navigation path. Compatible Node now provides an opaque context
+   handle, separately stable global proxy, explicit detach/reattach, and
+   post-projection prototype sealing; `NodeRealm` already selects it. Browlet
+   still needs the distinct Web IDL global exposure target,
+   checkpoint-before-reuse, `[[PreventExtensions]]`, same- and cross-origin
+   access, old-Realm behavior, and navigation tests before the native proxy can
+   replace the modeled one. The shared Node principal token permits embedder
+   access but is not origin policy.
+6. Continue the Promise-job and execution-context host-hook audit without
+   treating explicit queue ownership as `HostEnqueuePromiseJob`.
+7. Implement Fetch's records, author APIs, and first transport slices only
+   after those JavaScript boundary decisions are stable.
+8. Return to the File API and XHR tails whose normative algorithms consume
    Fetch, rather than approximating those dependencies early.
 
 Priority deliverables:
@@ -269,11 +290,11 @@ Primary roadmaps: [loader](loader/roadmap.md),
    completion without requiring nested browsing or media playback.
 6. Record navigation/resource timing from the same clock and loader records;
    do not derive it later from events.
-7. Revisit the provisional Node microtask-checkpoint bridge against the
-   accumulated timer, Fetch-completion, parser-script, load-event, and
-   same-agent multi-realm tests. Replace it or define the narrowest documented
-   compatibility downgrade before declaring the Document execution lifecycle
-   stable.
+7. Exercise both JavaScript microtask backends against accumulated timer,
+   Fetch-completion, parser-script, load-event, and same-agent multi-realm
+   tests. Compatible Node must preserve per-Agent queue isolation; stock Node's
+   ambient `_tickCallback()` path remains an explicit compatibility downgrade,
+   not the definition of HTML checkpoint behavior.
 
 Exit proof: navigating to a basic HTTP(S) or `data:` page creates the response,
 realm, Window, Document, parsed tree, inline/external style, inline/external
@@ -317,8 +338,14 @@ Primary roadmaps: [browsing](browsing/roadmap.md),
    removal, `contentWindow` identity, `contentDocument`, `src`/`srcdoc`, child
    load propagation, sandbox/referrer/permissions inputs, and destruction.
 2. Complete same-/cross-origin WindowProxy, Window, and Location exotic
-   behavior and security checks. Preserve the current Node global-proxy
-   expected failure as an engine limitation.
+   behavior and security checks. Continue to preserve the current true-global
+   expected failure: stock Node cannot reuse the proxy. Compatible Node now
+   preserves proxy identity through `ContextHandle` detach/reattach, but HTML
+   navigation does not yet drive that lifecycle. Its shared Node principal
+   token provides embedder accessibility and bypasses browser-origin checks.
+   Production adoption remains blocked on checkpoint placement,
+   `[[PreventExtensions]]`, same- and cross-origin callbacks and policy,
+   old-Realm behavior, and Web IDL exposure.
 3. Extend visibility, focus chains, and user activation across nested
    navigables; use the same state for popup/navigation gating and future
    automation input.

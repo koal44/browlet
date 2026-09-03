@@ -50,8 +50,9 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
   #hostDefined: EnvironmentSettingsObject | null = null;
 
   constructor(options: RealmOptions = {}) {
-    super();
-    this.agent = options.agent ?? new WindowAgent();
+    const agent = options.agent ?? new WindowAgent();
+    super(agent.eventLoop.microtaskQueue);
+    this.agent = agent;
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? ['Window']);
     this.isGlobalPrototypeChainMutable =
@@ -175,6 +176,9 @@ export class Realm extends NodeRealm implements WebIDLRealmHost {
     globalThis: object,
   ): void {
     realm.initializeGlobalObjects(globalObject, globalThis);
+    if (!realm.isGlobalPrototypeChainMutable) {
+      realm.makeHostGlobalPrototypeImmutable();
+    }
     const taskDestination = {
       eventLoop: realm.agent.eventLoop,
       getDocument: () => {

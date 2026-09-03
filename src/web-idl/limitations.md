@@ -25,7 +25,7 @@ machinery or Web IDL feature is implemented.
   implements the HTML §8.1.3.3 backup incumbent stack and the §8.1.4.4
   preparation, cleanup, task settings-set, and checkpoint boundary for entries
   it controls. Node does not expose the complete execution-context stack,
-  `ScriptOrModule`, or HTML §8.1.6.2 `HostEnqueuePromiseJob`; arbitrary V8
+  `ScriptOrModule`, or HTML §8.1.6.6.4 `HostEnqueuePromiseJob`; arbitrary V8
   entries therefore cannot be mirrored, and exception reporting remains future
   HTML §8.1.5 work. The affected code and replacement boundary are recorded in
   [the event-loop architecture](../browlet/scripting/event-loop-architecture.md#node-v8-execution-contexts).

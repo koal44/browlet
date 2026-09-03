@@ -49,7 +49,7 @@ Range implementations into the low-level tree store.
 | --- | --- | --- |
 | Live ranges | Boundary points are adjusted during insert, remove, move, character-data replacement, and text splitting | `../ranges/roadmap.md`, DOM §5 |
 | Traversal | NodeIterator pre-removing steps run before removal; traversal owns iterator state | `../traversal/roadmap.md`, DOM §6.2 |
-| MutationObserver and slots | Observer queues and signal slots live on the similar-origin Window agent and are delivered by its microtask checkpoint | `../../scripting/roadmap.md`, DOM §§4.2.2 and 4.3 |
+| MutationObserver and slots | Observer queues and signal slots live on the similar-origin Window agent and are delivered at its event loop's microtask checkpoint | `../../scripting/roadmap.md`, DOM §§4.2.2 and 4.3 |
 | Custom elements | Attribute, insertion, removal, adoption, and upgrade reactions use the same operations as script and parsing | `../../html/custom-elements/roadmap.md`, HTML §4.13 |
 | DOMTokenList | Every token update and external attribute change uses the same attribute-value and attribute-change paths | `../roadmap.md`, DOM §7 |
 | Parsing | Tree builders call the same mutation and element-creation contracts, with only the explicitly specified parser suppressions | `../../html/parser/roadmap.md`, HTML §§13–14 |

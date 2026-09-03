@@ -12,28 +12,59 @@ carry the Window platform-object brand.
 
 ### `node-vm-global-proxy`
 
-Node's VM creates an inaccessible global proxy for every context and cannot
-reuse Browlet's WindowProxy as the context's actual global-this. As an
+Stock Node's VM creates an inaccessible global proxy for every context and
+cannot reuse Browlet's WindowProxy as the context's actual global-this. As an
 accommodation, `NodeRealm` keeps that VM global private, points its
 `globalThis` property at the modeled WindowProxy, and inherits free global
 names through it.
 
+A Browlet-compatible Node now exposes an opaque `ContextHandle` for one
+execution context and a separately stable `globalProxy`. Detaching a handle and
+passing that handle once as `reuseGlobalProxyFrom` preserves the proxy identity
+while creating fresh intrinsics and global state. The handle carries the reuse
+provenance without a global proxy registry. It also exposes
+`makePrototypeImmutable()`, which Browlet applies after installing each realm's
+global graph. The ordering follows
+Gecko's dynamic prototype installation and `JS_SetImmutablePrototype` model;
+Blink instead uses generated V8 templates which contain the binding graph
+before context creation.
+
+The experimental handle contexts use Node's ordinary VM principal token so
+host code can configure the proxy. This is not a same-origin implementation:
+the `origin` option remains inspector metadata, and Node supplies none of the
+authoritative WindowProxy access callbacks that browsers apply before a shared
+security token can be used as an optimization. Compatible Node therefore proves
+the identity and lifecycle substrate without yet proving retained old-Realm
+same- or cross-origin access.
+
+V8 also cancels microtasks still queued for a Realm when its global is detached.
+Browlet must therefore place reuse after the checkpoint required by the HTML
+navigation lifecycle rather than asking the generic VM primitive to drain work.
+Production adoption remains blocked on WindowProxy's `[[PreventExtensions]]`
+and cross-origin access contracts, checkpoint-before-reuse placement, and a
+Web IDL exposure seam for the externally allocated proxy. The stable proxy must
+expose each successive Window platform record without itself becoming that
+record; the API cannot accept Browlet's existing arbitrary JavaScript `Proxy`.
+
 This accommodation has two observable limitations. Ordinary Browlet scripts
-can reach the modeled Window graph, but top-level `this` remains the private VM
-global. A focused expected-failure test records that mismatch. The provisional
-JavaScript WindowProxy must also report forwarded own descriptors as
+can reach the modeled Window graph, but top-level `this` remains the VM global
+proxy rather than Browlet's modeled WindowProxy. A focused expected-failure
+test records that mismatch. The provisional JavaScript WindowProxy must also
+report forwarded own descriptors as
 configurable to satisfy `Proxy` target invariants while its Window can be
 replaced. Exact nonconfigurable `[LegacyUnforgeable]` descriptors across
 retargeting require native global-proxy machinery, and a second focused
 expected-failure test records that mismatch.
 
-Replace the private VM global, inheritance bridge, and proxy-invariant
-compromises together only when Node exposes a compatible global-proxy API or
-Browlet uses a direct V8 embedder. The Window/WindowProxy identity and
-cross-navigation lifecycle tests remain the required contract. The engine
-bridge is implemented in [`node-realm.ts`](../javascript/node-realm.ts), below
-Web IDL; Browlet's [`realm.ts`](./scripting/realm.ts) retains the HTML global
-and task associations. The observable mismatches are recorded in
+Replace the modeled WindowProxy, inheritance bridge, and proxy-invariant
+compromises together only after the native context/global-proxy substrate also
+passes old-Realm closure access through real same-/cross-origin checks,
+checkpoint-before-reuse, Window/WindowProxy identity, non-extensibility, and
+cross-navigation lifecycle tests. The
+engine bridge is implemented in
+[`node-realm.ts`](../javascript/node-realm.ts), below Web IDL; Browlet's
+[`realm.ts`](./scripting/realm.ts) retains the HTML global and task
+associations. The current observable mismatches are recorded in
 [`document-lifecycle.test.ts`](../../test/browlet/unit/browsing/document-lifecycle.test.ts)
 and [`dom-binding.test.ts`](../../test/browlet/unit/dom-binding.test.ts).
 
@@ -49,25 +80,45 @@ result remain for their corresponding HTML machinery.
 
 ## Node/V8 event-loop integration
 
-The `node-v8-microtask-queue` accommodation preserves V8's real Promise and
-microtask FIFO order by using its ambient queue, but Browlet cannot isolate the
-queue per HTML event loop. Unrelated host work and work from another Browlet
-instance in the same isolate can therefore interleave.
+The completed integration introduces one
+`JavaScriptMicrotaskQueue` contract with `explicit` and `ambient` backends. A
+Browlet-compatible Node creates one explicit V8 queue for each configured HTML
+EventLoop and gives every Realm of its Agent the same queue. HTML
+microtasks and native Promise jobs then share one FIFO, and a checkpoint drains
+only that EventLoop's queue.
 
-The JavaScript runtime's `node-v8-checkpoint` accommodation uses private
-`process._tickCallback()` because Node exposes no supported synchronous V8
-checkpoint operation. Besides draining the ambient queue, that function runs
-next-tick and promise-rejection machinery. A nested call made while V8 is
-already draining microtasks can consequently report a temporarily unhandled
-rejection before its adoption job runs. Focused expected-failure tests preserve
-the ambient, nested, fake-clock, and rejection-reporting mismatches.
+Stock Node retains the `node-v8-microtask-queue` and `node-v8-checkpoint`
+accommodations. Its runtime factory gives every EventLoop the one ambient queue
+and uses private `process._tickCallback()`. Besides draining
+unrelated isolate work, that function runs next-tick and promise-rejection
+machinery. A nested call made while V8 is already draining microtasks can
+consequently report a temporarily unhandled rejection before its adoption job
+runs. Focused stock-mode expected-failure tests preserve the ambient, nested,
+fake-clock, and rejection-reporting mismatches. The corresponding
+compatible-mode unit suite passes, and all 1,193 selected WPT assertions pass
+with a clean process exit. Stock Node completes those assertions but still
+reports the parser/Promise-job `boo!` rejection as unhandled and exits nonzero.
+Explicit queue ownership therefore fixes the observed queue-isolation and
+checkpoint-control defect without pretending to expose the still-missing
+Promise-job lifecycle hook.
 
-These are Node integration limitations, not changes to HTML's checkpoint
-algorithm or permission to alter Web IDL promise conversion. The private drain
-operation lives in [`node-runtime.ts`](../javascript/node-runtime.ts), while
-the HTML checkpoint guard and post-checkpoint work remain in Browlet. Their
-affected code and removal conditions are recorded in
-[the event-loop architecture](./scripting/event-loop-architecture.md#runtime-accommodations).
+These fallback limitations are not changes to HTML's checkpoint algorithm or
+permission to alter Web IDL promise conversion. Both backends remain below the
+HTML checkpoint guard and post-checkpoint work in Browlet. An explicit queue
+still does not expose Promise-job closures, Realm Records, or callback
+lifecycle, so `HostEnqueuePromiseJob` and the execution-context accommodation
+remain unresolved. Affected code and removal conditions are recorded in
+[the event-loop architecture](./scripting/event-loop-architecture.md#runtime-integration-and-accommodations).
+
+Direct calls from a Node host into a projected Browlet API are not, by
+themselves, HTML tasks or script-evaluation entries. An explicit queue therefore
+does not automatically checkpoint merely because such a call returned a
+Promise, and a Promise supplied by the host can require another Browlet event
+loop boundary before its continuation runs. Unit tests which deliberately make
+these out-of-model calls attach a host observer and explicitly finish the
+test-controlled queue. A future general embedder API must define that entry and
+Promise-interoperability contract; production code must not hide it by
+checkpointing after every Web IDL operation.
 
 ## Bounded cross-document navigation
 

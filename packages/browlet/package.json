@@ -47,7 +47,7 @@
   },
   "scripts": {
     "build": "node ../../scripts/build.mjs browlet",
-    "prepack": "npm run build"
+    "prepack": "node --run build"
   },
   "dependencies": {
     "@exodus/bytes": "^1.15.1",

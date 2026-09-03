@@ -1,3 +1,4 @@
+import type { JavaScriptMicrotaskQueue } from '../../javascript/index';
 import { DocumentImpl } from '../dom/nodes/document';
 import type { UnsafeMoment } from '../performance/clock';
 import type { EnvironmentSettingsObject } from './environment';
@@ -14,7 +15,6 @@ export class EventLoop {
   readonly #backupIncumbentSettingsObjectStack:
   EnvironmentSettingsObject[] = [];
   readonly #javaScriptExecutionContextStack: TrackedExecutionContext[] = [];
-  #activeJavaScriptMicrotaskCheckpoint: (() => void) | null = null;
   #currentlyRunningTask: Task | null = null;
   #lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
@@ -22,6 +22,8 @@ export class EventLoop {
   #turnRequested = false;
   readonly #taskQueues = new Set<Set<Task>>();
   readonly #taskQueueBySource = new Map<TaskSource, Set<Task>>();
+
+  constructor(readonly microtaskQueue: JavaScriptMicrotaskQueue) {}
 
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
@@ -89,19 +91,13 @@ export class EventLoop {
 
     let taskError: { readonly value: unknown; } | null = null;
     this.#currentlyRunningTask = oldestTask;
-    this.#activeJavaScriptMicrotaskCheckpoint =
-      options.performMicrotaskCheckpoint;
     try {
       oldestTask.steps();
     } catch (error) {
       taskError = { value: error };
     } finally {
       this.#currentlyRunningTask = null;
-      try {
-        this.performMicrotaskCheckpoint(options.performMicrotaskCheckpoint);
-      } finally {
-        this.#activeJavaScriptMicrotaskCheckpoint = null;
-      }
+      this.performMicrotaskCheckpoint();
     }
 
     const taskEndTime = options.unsafeSharedCurrentTime();
@@ -186,7 +182,7 @@ export class EventLoop {
     const task = this.#currentlyRunningTask;
     /*
      * ACCOMMODATION(node-v8-execution-contexts):
-     * HTML §§8.1.4.4 and 8.1.6.2 expect an engine-owned Promise job to have
+     * HTML §§8.1.4.4 and 8.1.6.6.4 expect an engine-owned Promise job to have
      * installed its microtask task before this point. Node does not expose
      * HostEnqueuePromiseJob, so retain the realm entry when that outer task is
      * invisible, but do not invent a task or infer that V8's stack is empty.
@@ -218,7 +214,7 @@ export class EventLoop {
       entry.task !== null &&
       this.#javaScriptExecutionContextStack.length === 0
     ) {
-      this.#performConfiguredMicrotaskCheckpoint();
+      this.performMicrotaskCheckpoint();
     }
   }
 
@@ -259,14 +255,12 @@ export class EventLoop {
     }
   }
 
-  performMicrotaskCheckpoint(
-    performJavaScriptMicrotaskCheckpoint: () => void,
-  ): void {
+  performMicrotaskCheckpoint(): void {
     if (this.#performingMicrotaskCheckpoint) return;
 
     this.#performingMicrotaskCheckpoint = true;
     try {
-      performJavaScriptMicrotaskCheckpoint();
+      this.microtaskQueue.performMicrotaskCheckpoint();
 
       /*
        * TODO(HTML section 8.1.7.3): Notify rejected promises, clean up
@@ -290,13 +284,7 @@ export class EventLoop {
       steps,
     );
 
-    /*
-     * ACCOMMODATION(node-v8-microtask-queue):
-     * V8 owns the actual microtask queue. Retain Browlet's task record in the
-     * closure without creating a second queue whose ordering could diverge.
-     * The explicit checkpoint bridge will enter with the processing model.
-     */
-    globalThis.queueMicrotask(() => {
+    this.microtaskQueue.enqueueMicrotask(() => {
       /* HTML §8.1.7.3 — Suppress checkpoints requested by scripted callbacks. */
       const wasPerformingMicrotaskCheckpoint =
         this.#performingMicrotaskCheckpoint;
@@ -365,19 +353,13 @@ export class EventLoop {
   }
 
   #finishHostScriptEntry(task: Task): void {
-    if (this.#currentlyRunningTask !== task) {
+    if (
+      this.#currentlyRunningTask !== null &&
+      this.#currentlyRunningTask !== task
+    ) {
       throw new Error('A host script entry left another task running');
     }
     this.#currentlyRunningTask = null;
-  }
-
-  #performConfiguredMicrotaskCheckpoint(): void {
-    const checkpoint = this.#activeJavaScriptMicrotaskCheckpoint ??
-      this.#schedulingOptions?.performMicrotaskCheckpoint;
-    if (checkpoint === undefined) {
-      throw new Error('The event loop has no microtask checkpoint host');
-    }
-    this.performMicrotaskCheckpoint(checkpoint);
   }
 
   #requestTurnIfNeeded(): void {
@@ -401,8 +383,8 @@ export class EventLoop {
 }
 
 export type EventLoopOptions = {
+  readonly createMicrotaskQueue: () => JavaScriptMicrotaskQueue;
   readonly longTaskReporter?: LongTaskReporter;
-  readonly performMicrotaskCheckpoint: (this: void) => void;
   readonly requestEventLoopTurn: (
     this: void,
     steps: () => void,
